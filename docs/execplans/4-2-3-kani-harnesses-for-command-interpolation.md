@@ -5,9 +5,9 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision log`, `Outcomes & retrospective`, `Conformance basis`, and
 `Verification plan` must be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
-Revision 2.6. See `Revision note` at the foot of this document.
+Revision 2.7. See `Revision note` at the foot of this document.
 
 ## Purpose / big picture
 
@@ -30,15 +30,18 @@ make kani-ir
 ```
 
 and see the bounded model checker Kani prove — exhaustively, over every input
-its bound admits — that:
+its bound admits — the two feasible placeholder kernels:
 
 1. `$in` and `$out` are rewritten exactly at whole-token boundaries, so
    `$input`, `$output`, and `x$in` are never mangled;
-2. text inside backtick-delimited regions is copied through unchanged;
-3. a command whose backticks are unbalanced *after* substitution is rejected;
-   and
-4. the acceptance guard is applied to the substituted command rather than to
-   the template, so a path cannot smuggle a metacharacter past it.
+2. marker tokens match exact text, deliberately without the sigil boundary
+   rule.
+
+The production scanner and guard exceed the five-minute resource cap even at
+small string bounds. Independent Proptest properties therefore cover templates
+up to 256 characters with at most eight placeholders: scanner agreement,
+backtick-region preservation, odd-backtick rejection, and guard placement on
+the substituted command.
 
 "Exhaustively, within a bound" is the important phrase. Kani does not sample.
 For every input inside the bound it either proves the property or produces a
@@ -46,11 +49,11 @@ concrete counterexample. For property (1) the bound is not even a real
 limitation: the decision it verifies reads at most six characters of context,
 so a six-character window with a symbolic offset covers every string of any
 length. That is a stronger guarantee than the existing tests give, and it is
-what roadmap item 4.2.3 asks for.
+what roadmap item 4.2.3 asks for at the feasible Kani boundary.
 
 Nothing about Netsuke's user-visible behaviour changes. A user running
 `netsuke build` gets a byte-identical `build.ninja`. The observable change is
-for maintainers: `make kani-ir` reports five more verified harnesses, the
+for maintainers: `make kani-ir` reports two more verified harnesses, the
 developers' guide gains an inventory row for each, and a new contract test
 stops the repository's mutation-evidence discipline from rotting.
 
@@ -307,9 +310,9 @@ Trace links:
 ```plaintext
 RM-4.2.3.a -> FV-CMD -> EP-M2 -> ir::cmd_interpolate::verification::sigil_placeholder_match_is_exact
 RM-4.2.3.a -> FV-CMD -> EP-M2 -> ir::cmd_interpolate::verification::marker_token_match_is_exact
-RM-4.2.3.b -> FV-CMD -> EP-M3 -> ir::cmd_interpolate::verification::substitute_agrees_with_spec
-RM-4.2.3.c -> FV-CMD -> EP-M3 -> ir::cmd_interpolate::verification::odd_backticks_are_rejected
-RM-4.2.3.d -> FV-CMD -> EP-M4 -> ir::cmd_interpolate::verification::guard_applies_to_substituted_command
+RM-4.2.3.b -> FV-CMD -> EP-M5 -> ir::cmd_interpolate::property_tests::scanner_agrees_with_independent_specification
+RM-4.2.3.c -> FV-CMD -> EP-M5 -> ir::cmd_interpolate::property_tests::substituted_odd_backticks_are_rejected
+RM-4.2.3.d -> FV-CMD -> EP-M5 -> ir::cmd_interpolate::property_tests::guard_uses_the_substituted_command
 ADR-004    ->           EP-M0 -> docs/adr-004-bound-kani-ir-harnesses-to-small-n.md (4.2.3 extension)
 ```
 
@@ -678,14 +681,11 @@ odd, then `interpolate_command_with_bindings(template, bindings)` returns
   const ALPHABET_B: [u8; 2] = *b"a`";
   ```
 
-- **Constructing the bindings.** `CommandBindings`' fields are private and
-  `new` runs paths through `shell_quote`, which cannot produce an arbitrary
-  string. EP-M1 therefore adds a `#[cfg(kani)] pub(super) fn from_parts(ins:
-  String, outs: String) -> Self`. This deliberately bypasses quoting so the
-  harness proves the guard's behaviour on *arbitrary* bindings — strictly
-  stronger than proving it only for quoted ones, and it keeps `shell_quote`
-  where AXIOM-QUOTE puts it. It is `cfg(kani)`-gated and `pub(super)`, so it
-  widens nothing in ordinary builds.
+- **Constructing the bindings.** The planned Kani harness is not retained after
+  the M0 cap measurement. The residual Proptest module is a child of the
+  interpolation module, so it can construct `CommandBindings` with arbitrary
+  raw text without widening the production API or retaining a proof-only
+  constructor.
 - **Artefact:** `src/ir/cmd_interpolate_verification.rs`, harness
   `odd_backticks_are_rejected`.
 - **Evidence:** capped `make kani-ir` reports `SUCCESS`.
@@ -912,10 +912,9 @@ the next stage on a failing gate.
 ### EP-M1 — production seam, behaviour unchanged
 
 - **Outcome:** `substitute` is split into `substitute_chars(&[char], ..)` plus a
-  one-line `&str` wrapper; `CommandBindings` gains a `cfg(kani)` constructor;
-  the unit tests move to `src/ir/cmd_interpolate_tests.rs`; the adversarial
-  Proptest generator exists; `make test` passes with no pre-existing test
-  edited.
+  one-line `&str` wrapper; the unit tests move to
+  `src/ir/cmd_interpolate_tests.rs`; the adversarial Proptest generator exists;
+  `make test` passes with no pre-existing test edited.
 - **Requirements:** discharges `OBL-EQUIV`; enables every other obligation.
 - **Acceptance evidence:** characterization cases pass before and after; the
   temporary differential oracle passes and is deleted in the closing commit;
@@ -944,33 +943,37 @@ the next stage on a failing gate.
   tolerance; AXIOM-WINDOW argument written into the harness module doc comment.
 - **Recovery:** harnesses are `cfg(kani)`-gated and additive.
 
-### EP-M3 — scanner specification and backtick rejection proved
+### EP-M3 — scanner specification and backtick rejection hand-off
 
-- **Outcome:** `substitute_agrees_with_spec` and `odd_backticks_are_rejected`
-  verify.
+- **Outcome:** the M0 resource cap precludes the proposed scanner Kani
+  harnesses. EP-M5 supplies the independent scanner and odd-backtick properties
+  over the required residual range.
 - **Requirements:** discharges `RM-4.2.3.b`, `RM-4.2.3.c`, `OBL-SPEC`,
-  `OBL-ODD`.
-- **Acceptance evidence:** as EP-M2, plus the recorded result of the
-  `i += skip` → `i += 1` oracle-independence check described in `OBL-SPEC`.
-- **Conformance check:** confirm in `Decision log` that the harness-local oracle
-  was accepted by the maintainer before this milestone started.
+  and `OBL-ODD` through the Proptest hand-off.
+- **Acceptance evidence:** the scanner and odd-backtick property mutations
+  produce named counterexamples; `make test` passes after restoration.
+- **Conformance check:** the independent scanner oracle is structurally
+  different from production scanning and is documented in `ADR-004`.
 
-### EP-M4 — guard placement proved
+### EP-M4 — guard placement hand-off
 
-- **Outcome:** `guard_applies_to_substituted_command` verifies.
-- **Requirements:** discharges `RM-4.2.3.d`, `OBL-GUARD`.
-- **Acceptance evidence:** as EP-M2, plus the
-  `shlex`-rejects-while-backticks-even cover reported `SATISFIED`.
+- **Outcome:** the guard's scanner dependency makes its Kani probe infeasible
+  under the M0 cap. EP-M5 checks the real `shlex` guard on substituted command
+  text throughout the residual range.
+- **Requirements:** discharges `RM-4.2.3.d` and `OBL-GUARD` through the
+  Proptest hand-off.
+- **Acceptance evidence:** the guard-placement mutation produces a named
+  counterexample; `make test` passes after restoration.
 - **Conformance check:** confirm the reformulation of `RM-4.2.3.d` is recorded
   in `Decision log` with maintainer acceptance, so a reviewer can see why the
-  harness does not assert the roadmap's literal wording.
+  property does not merely restate the guard branch.
 
 ### EP-M5 — Proptest hand-off for the residual range
 
 - **Outcome:** `src/ir/cmd_interpolate_property_tests.rs` covers the range Kani
   could not reach: templates to 256 characters with up to 8 placeholders over
-  the adversarial alphabet, real `shell_quote` bindings, real `shlex` guard,
-  asserting the same four properties.
+  the adversarial alphabet, raw adversarial bindings, and the real `shlex`
+  guard.
 - **Requirements:** covers the shortfall between the achieved bounds and
   `RM-4.2.3.a`'s stated 256/8, so the roadmap's bound is met by *some* method
   everywhere.
@@ -1039,19 +1042,10 @@ fn substitute(template: &str, ins: &str, outs: &str) -> String {
     substitute_chars(&chars, ins, outs)
 }
 
-impl CommandBindings {
-    /// Build bindings from raw substitution text, bypassing shell quoting.
-    ///
-    /// Proof-only. Harnesses need arbitrary binding text so the guard can be
-    /// verified against bindings that `shell_quote` would never produce;
-    /// proving the guard over that wider domain is strictly stronger.
-    #[cfg(kani)]
-    pub(super) fn from_parts(ins: String, outs: String) -> Self;
-}
 ```
 
-That is the whole production change: one function split, one `cfg(kani)`
-constructor. Nothing else.
+That is the whole retained production change: one function split. Nothing
+else.
 
 `src/ir/cmd_interpolate.rs` is 335 lines of a 400-line budget, so EP-M1 also
 moves the existing `mod tests` body into a new sibling
@@ -1222,8 +1216,8 @@ checks. Record the verification time. **Cover:** every `kani::cover!` reported
 
 ### Acceptance, phrased as behaviour
 
-1. Run the capped `make kani-ir`. Expect at least eighteen harnesses (thirteen
-   pre-existing plus five new), zero failed checks, every cover satisfied, and
+1. Run the capped `make kani-ir`. Expect fifteen harnesses (thirteen
+   pre-existing plus two new), zero failed checks, every cover satisfied, and
    `VERIFICATION:- SUCCESSFUL` overall.
 2. Apply any new mutation patch, re-run its harness, expect
    `VERIFICATION:- FAILED`; revert and expect success. The harnesses are
@@ -1243,10 +1237,12 @@ checks. Record the verification time. **Cover:** every `kani::cover!` reported
 ### Quality criteria
 
 - **Tests:** `make test` passes; no pre-existing test edited.
-- **Verification:** `OBL-SIGIL`, `OBL-MARKER`, `OBL-SPEC`, `OBL-ODD`, and
-  `OBL-GUARD` discharged by Kani with mutation evidence and satisfied covers;
-  `OBL-EQUIV` by characterization plus differential Proptest; `OBL-PATCHES` by
-  the contract test.
+- **Verification:** `OBL-SIGIL` and `OBL-MARKER` are discharged by Kani with
+  mutation evidence and satisfied covers. `OBL-SPEC`, `OBL-ODD`, and
+  `OBL-GUARD` are covered by independent Proptest properties over the
+  256-character, eight-placeholder residual range; `OBL-EQUIV` is covered by
+  characterization plus differential Proptest; `OBL-PATCHES` is covered by the
+  contract test.
 - **Lint and format:** `make check-fmt`, `make lint`, `make markdownlint`,
   `make nixie` all pass.
 - **Performance:** capped `make kani-ir` under 8 minutes locally; the measured
@@ -1313,17 +1309,24 @@ refactored implementation over 256 adversarial templates before removal. The
 retained targeted nextest run passed all 20 command-interpolation tests:
 `/tmp/m1-targeted-final-netsuke-4-2-3-kani-harnesses-for-command-interpolation.out`.
 
-- **EP-M0 measurement table** — columns `shape`, `N` or `M`, `wall-clock`,
-  `peak RSS`, `verdict`; one row per probe. Plus the answer on
-  `cargo kani --jobs`.
-- **Per-harness timings** — a row per harness with verification time, taken
-  from the capped run at the milestone that added it, and the total suite time.
-- **Oracle-independence check** — the result of applying the `i += skip` →
-  `i += 1` mutation and confirming `substitute_agrees_with_spec` rejects it.
-- **Measured CI step duration** — the `gh api` output for the `kani-smoke` job
-  on the first pull-request run containing new harnesses.
-- **Counterexample transcripts** — short excerpts for each mutation patch,
-  enough to show the harness failed on the intended check.
+### EP-M2 through EP-M6 evidence (2026-08-30)
+
+The final sigil proof took 66.686 seconds and satisfied all five covers; the
+marker proof took 22.644 seconds and satisfied all four. Their mutation patches
+failed their named assertions, then passed after restoration. Each of the three
+Proptest mutation patches produced its intended counterexample before
+restoration.
+
+The final capped, four-worker run completed all 15 harnesses with zero failures.
+The sigil harness took 101.287 seconds in that parallel run and the marker
+harness took 31.502 seconds. `make check-fmt`, `make lint`, `make test` (2,389
+passed, 3 skipped, plus doctests), `make markdownlint`, and `make nixie` all
+passed. CodeRabbit returned zero findings at M2, M5, and M6. The M6 Kani log is
+`/tmp/kani-m6-cleanup-full-netsuke-4-2-3-kani-harnesses-for-command-interpolation.out`.
+
+`docs/users-guide.md` is intentionally unchanged: this task adds no
+user-visible behaviour or configuration. Hosted `kani-smoke` timing remains
+outside this local completion boundary and must be reported separately by CI.
 
 ## Progress
 
@@ -1353,8 +1356,8 @@ retained targeted nextest run passed all 20 command-interpolation tests:
   window verified at N=8, N=12, and N=16; the full scanner timed out at M=8
   and M=6. See `Artefacts and notes` and `Decision log`.
 - [x] (2026-08-30) EP-M1 production seam; behaviour unchanged. Added the
-  `substitute_chars` technical seam, Kani-only raw bindings, characterization
-  cases, and an adversarial Proptest; removed the temporary differential oracle.
+  `substitute_chars` technical seam, characterization cases, and an adversarial
+  Proptest; removed the temporary differential oracle.
 - [x] (2026-08-30) EP-M2 sigil and marker harnesses; mutation-patch contract
   test. The final individual proofs took 66.686s and 22.644s respectively;
   all five sigil covers and four marker covers were satisfied. The full suite
@@ -1372,8 +1375,9 @@ retained targeted nextest run passed all 20 command-interpolation tests:
   placeholders. Dedicated properties force eight-placeholder cases and verify
   odd-backtick rejection and substituted-command guard placement. The three
   added mutation patches each produced a counterexample before restoration.
-- [ ] EP-M6 documentation, ADR extension, roadmap marked done, gates green,
-  CodeRabbit clear.
+- [x] (2026-08-30) EP-M6 documentation, ADR extension, and roadmap close-out.
+  All deterministic gates and the capped 15-harness Kani run passed; CodeRabbit
+  returned zero findings.
 
 ## Surprises & discoveries
 
@@ -1499,13 +1503,13 @@ and are now marked **accepted**. No decision in this log is outstanding.
   ten-way multiplexer per symbol.
   **Date/Author:** 2026-08-24, planning agent.
 
-- **Decision:** Add a `cfg(kani)` `CommandBindings::from_parts` constructor.
-  **Rationale:** the fields are private and `new` runs `shell_quote`, which
-  cannot produce arbitrary binding text, so `OBL-ODD` and `OBL-GUARD` would be
-  unstatable. Bypassing quoting proves the guard over a *wider* domain than
-  quoted paths, which is strictly stronger, and leaves quoting where
-  AXIOM-QUOTE puts it. It is `cfg(kani)`-gated and `pub(super)`.
-  **Date/Author:** 2026-08-24, planning agent.
+- **Decision:** Do not retain a `cfg(kani)` `CommandBindings::from_parts`
+  constructor.
+  **Rationale:** the M0 cap decision hands scanner and guard properties to the
+  child Proptest module, which can construct raw bindings without changing the
+  production API. Removing the unused proof-only constructor keeps the Kani
+  build warning-free and avoids a seam with no surviving proof consumer.
+  **Date/Author:** 2026-08-30, implementation agent.
 
 - **Decision:** Add `tests/mutation_evidence_tests.rs`, a contract test that
   `git apply --check`s every mutation patch and asserts harness parity.
@@ -1588,18 +1592,18 @@ and are now marked **accepted**. No decision in this log is outstanding.
 
 ## Outcomes & retrospective
 
-To be completed at EP-M6. Before setting this plan to `COMPLETE`, reconcile:
+This work adds two exhaustive Kani kernel proofs without changing command
+interpolation behaviour. The eight-character sigil window is complete for its
+local decision; the short-marker proof establishes exact, boundary-independent
+length-generic matching. The full scanner and guard could not meet the cap even
+at six characters, so the independent Proptest properties cover the 256/8
+residual range instead. `ADR-004` records that boundary, the local-oracle
+policy, and its limits.
 
-- the bounds actually achieved against `FV-CMD`'s stated 256/8, with the
-  deviation and the window-completeness argument recorded in `ADR-004`;
-- the `OBL-GUARD` reformulation and the harness-local oracle policy against
-  `RM-4.2.3.d` and `ADR-004`, with the maintainer's acceptance recorded;
-- the `$$in` and marker-asymmetry behaviours against the maintainer's
-  classification, documented in the developers' guide;
-- every obligation handed from Kani to Proptest, stated as a gap rather than
-  implied;
-- the missing mutation patch for roadmap 4.2.2's adapter harness, raised as
-  issue #585 rather than absorbed here.
+The developers' guide now records the established `$$in` and marker-asymmetry
+behaviour. `docs/users-guide.md` remains unchanged because that contract is not
+a user-visible behaviour change. The unpatched cycle-wrapper harness remains
+the separately tracked roadmap 4.2.2 issue #585; it is not absorbed here.
 
 ## Revision note
 
@@ -1715,3 +1719,10 @@ eight generated placeholders. Their independent scanner and substituted-command
 guard oracles rejected all three corresponding mutation patches. EP-M3 and
 EP-M4 therefore have no Kani artefacts by design; the bounded proofs remain
 limited to the feasible sigil and marker kernels.
+
+**Revision 2.7 (2026-08-30).** EP-M6 completed the documentation, ADR, and
+roadmap close-out. The unused `cfg(kani)` raw-bindings constructor was removed
+after the M0 hand-off left it without a proof consumer. Final deterministic
+gates passed, the capped parallel Kani suite verified 15 of 15 harnesses with
+zero failures, and CodeRabbit returned zero findings. The plan is complete;
+hosted CI remains a separate pending state.

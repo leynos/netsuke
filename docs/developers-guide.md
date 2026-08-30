@@ -1803,12 +1803,20 @@ N=2, N=3, and N=4, plus one direct adapter harness that checks
 path cycle. Larger path-bearing canonicalization coverage remains owned by the
 `cycle_property_tests.rs` Proptest suite.
 
+Command-interpolation Kani proofs drive the allocation-free placeholder
+matching helpers, not the full scanner. `substitute_chars` is the private
+`&[char]` seam that avoids symbolic UTF-8 encoding in those proofs. Scanner,
+backtick, and guard behaviour remains covered by the adversarial Proptest suite
+over the documented 256-character, eight-placeholder range.
+
 | Harness                                                     | Module                                 | Property                                                                                                | Bound                 | Notes                                                                                                                                                                     |
 | ----------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `duplicate_output_always_rejected`                          | `src/ir/from_manifest_verification.rs` | A duplicate path in one target is detected and the reported duplicate path is preserved.                | `#[kani::unwind(12)]` | Drives production `find_duplicates` with symbolic duplicate names. Full manifest lowering reaches action hashing before duplicate assertions become tractable under Kani. |
 | `empty_rule_shape_is_rejected`                              | `src/ir/from_manifest_verification.rs` | An empty rule selector reaches `IrGenError::EmptyRule` and preserves the target name.                   | `#[kani::unwind(6)]`  | Drives production `resolve_rule` with a symbolic target name and a minimal rule map.                                                                                      |
 | `multiple_rule_shape_is_rejected`                           | `src/ir/from_manifest_verification.rs` | A multi-rule selector reaches `IrGenError::MultipleRules` and preserves sorted rule names.              | `#[kani::unwind(8)]`  | Drives production `resolve_rule` with symbolic rule ordering over short bounded names.                                                                                    |
 | `missing_rule_shape_is_rejected`                            | `src/ir/from_manifest_verification.rs` | A missing single rule reaches `IrGenError::RuleNotFound` and preserves target and rule names.           | `#[kani::unwind(6)]`  | Drives production `resolve_rule` with symbolic target and rule names and an empty rule map.                                                                               |
+| `sigil_placeholder_match_is_exact`                          | src/ir/cmd_interpolate_verification.rs | `$in` and `$out` match exactly at valid identifier boundaries.                                          | `#[kani::unwind(32)]` | An eight-character symbolic window is complete for the sigil matcher, which reads no wider context.                                                                       |
+| `marker_token_match_is_exact`                               | src/ir/cmd_interpolate_verification.rs | A marker matches exact text, irrespective of adjacent identifier characters.                            | `#[kani::unwind(32)]` | Drives the length-generic production matcher with a tractable short marker; the real markers remain property-tested.                                                      |
 | `self_dependency_reports_cycle`                             | `src/ir/cycle_verification.rs`         | A self-dependency is reported as a cycle by production traversal.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`, which reuses `CycleDetector::visit` in boolean mode.                                                                                  |
 | `two_node_cycle_reports_cycle_a_first`                      | `src/ir/cycle_verification.rs`         | A two-node cycle is reported when the `a` node is inserted first.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`; the separate insertion-order harnesses cover deterministic map-entry traversal under the Kani map.                                    |
 | `two_node_cycle_reports_cycle_b_first`                      | `src/ir/cycle_verification.rs`         | A two-node cycle is reported when the `b` node is inserted first.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`; this complements the `a`-first harness, so the proof is not tied to one insertion order.                                              |
@@ -2293,6 +2301,24 @@ accepted manifest markers, `{{ ins }}` and `{{ outs }}`. Literal shell variables
 `$ins` and `$outs` are not Netsuke markers and must pass through as shell text
 for the backend to escape. Keep the constants and their recognition limited to
 this two-stage recipe pipeline and its direct IR recipe tests.
+
+### Command interpolation contract
+
+The scanner substitutes `$in` and `$out` only when neither adjacent character
+is an ASCII letter, digit, or underscore. Thus `x$in`, `$input`, and `$output`
+remain unchanged. A preceding dollar is not an identifier character, so `$$in`
+becomes `$` followed by the input substitution; this existing behaviour is
+intentional for the current contract.
+
+`INS_TOKEN` and `OUTS_TOKEN` are machine-generated markers. They match exact
+text without the sigil forms' boundary rule, so an adjacent identifier character
+does not suppress a marker substitution. The scanner copies every character in
+a backtick-delimited region without substitution. It then validates the
+substituted command: odd backticks reject the command, and the `shlex` guard
+also evaluates that substituted text. The odd-backtick and guard properties are
+complementary: one proves rejection of odd substituted backtick counts, while
+the other proves that the guard's success or failure and returned command agree
+with the substituted command.
 
 Generated strategies that are reusable across crate boundaries belong in
 `test_support`. Because `test_support` is compiled as a library, dependencies

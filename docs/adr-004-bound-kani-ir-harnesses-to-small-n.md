@@ -10,10 +10,13 @@ delegate larger graph coverage to the future Proptest layer. Extended on
 2026-06-23 to cover cycle canonicalization with a private production-owned
 kernel proved over small integer cycles, plus path-wrapper coverage outside the
 kernel proof.
+Extended on 2026-08-30 for command interpolation: prove feasible local
+placeholder kernels in Kani and hand the full scanner and guard range to
+Proptest.
 
 ## Date
 
-2026-06-23.
+2026-08-30.
 
 ## Context and problem statement
 
@@ -123,6 +126,21 @@ using the path comparator. A small direct adapter harness checks the
 wrapper/kernel connection for two-node path cycles, and Proptest continues to
 exercise path-bearing canonicalization up to the larger randomized bounds.
 
+Roadmap item `4.2.3` follows the same boundary. Kani proves the production
+sigil matcher through an eight-character symbolic window and proves the
+length-generic marker matcher through a six-character short-marker array. The
+sigil proof is complete for its contract because the production decision reads
+only the preceding character and the four following characters. The full
+scanner timed out under the five-minute, 8 GiB cap at both six and eight
+characters, and the guard invokes that scanner. Proptest therefore owns scanner
+agreement, backtick handling, odd-backtick rejection, and guard placement for
+templates up to 256 characters with at most eight placeholders.
+
+The interpolation properties may use independent local oracles as assertion
+targets. They do not replace a production path or widen its API: the properties
+continue to invoke production code, and the oracle provides a separately
+written contract against which its result is compared.
+
 ## Known risks and limitations
 
 - The duplicate-output harness does not prove that full manifest lowering
@@ -150,11 +168,22 @@ exercise path-bearing canonicalization up to the larger randomized bounds.
   strings, the Kani bound should be re-evaluated instead of copied forward.
 - The sibling-file harness layout is a project-local constraint caused by the
   400-line source-file limit, not a general Kani requirement.
+- The command-interpolation Kani proofs do not execute the full scanner,
+  backtick state machine, or `shlex` guard. Their 256-character,
+  eight-placeholder coverage is randomized Proptest evidence, not an
+  exhaustive proof.
+- The marker proof establishes the length-generic matcher with a short token,
+  not the two concrete 27-character marker constants. Property tests exercise
+  those constants through the production scanner.
+- Harness-local interpolation oracles can contain transcription errors. Their
+  structural difference from production scanning and mutation evidence reduce
+  that risk but do not make them a second implementation boundary.
 
 ## Related documents
 
 - [`docs/developers-guide.md`](developers-guide.md)
 - [`docs/execplans/4-2-1-kani-harnesses-for-manifest-to-ir-safety-checks.md`](execplans/4-2-1-kani-harnesses-for-manifest-to-ir-safety-checks.md)
 - [`docs/execplans/4-2-2-kani-harnesses-for-cycle-canonicalization.md`](execplans/4-2-2-kani-harnesses-for-cycle-canonicalization.md)
+- [`docs/execplans/4-2-3-kani-harnesses-for-command-interpolation.md`](execplans/4-2-3-kani-harnesses-for-command-interpolation.md)
 - [`docs/formal-verification-methods-in-netsuke.md`](formal-verification-methods-in-netsuke.md)
 - [`docs/roadmap.md`](roadmap.md)

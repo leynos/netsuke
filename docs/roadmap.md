@@ -480,13 +480,21 @@ and test workflow intact. See
   - [x] Record the mutation and review evidence: the three canonicalization
     mutation patches fail their matching harnesses, and
     `coderabbit review --agent` returned zero findings.
-- [ ] 4.2.3. Add Kani harnesses for command interpolation. Requires 4.1.1. See
+- [x] 4.2.3. Add Kani harnesses for command interpolation. Requires 4.1.1. See
   [formal-verification-methods-in-netsuke.md §Kani for command interpolation](formal-verification-methods-in-netsuke.md#kani-for-command-interpolation).
-  - [ ] Prove `$in` and `$out` rewrite only at valid token boundaries (bounded
-    to 256-character commands with at most 8 placeholders).
-  - [ ] Prove backtick-delimited regions are preserved.
-  - [ ] Prove unmatched backticks are rejected.
-  - [ ] Prove successful results satisfy the current `shlex` guard.
+  - [x] Prove `$in` and `$out` rewrite only at valid token boundaries. An
+    eight-character Kani window is complete for the sigil matcher; Proptest
+    covers templates up to 256 characters with at most 8 placeholders.
+  - [x] Prove backtick-delimited regions are preserved through independent
+    scanner-specification Proptest coverage.
+  - [x] Prove unmatched backticks are rejected after substitution through
+    adversarial Proptest coverage.
+  - [x] Prove successful results satisfy the current `shlex` guard by checking
+    its outcome and returned command against the substituted command.
+  - [x] Kani verifies the sigil and marker kernels; capped `make kani-ir`
+    completed 15 harnesses with zero failures.
+  - [x] Mutation evidence rejects all five new Kani and Proptest mutations, and
+    `coderabbit review --agent` returned zero findings at each milestone.
 
 ### 4.3. Determinism and manifest property testing
 

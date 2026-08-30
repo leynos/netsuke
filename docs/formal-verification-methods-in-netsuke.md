@@ -66,16 +66,18 @@ load-bearing, and security-sensitive. `interpolate_command` replaces `$in` and
 `$out`, avoids rewriting inside backticks, and rejects commands when backticks
 are unmatched or the interpolated result fails the current `shlex` guard.[^8]
 
-The initial Kani properties should assert that (bounded to command strings up
-to 256 characters with at most 8 placeholder occurrences):
+Kani proves two allocation-free kernels. An eight-character symbolic window
+with a symbolic offset proves `$in` and `$out` matching exactly at identifier
+boundaries; this is complete for the sigil matcher because it reads no wider
+context. A six-character symbolic array proves exact, boundary-independent
+matching for a short marker through the length-generic production matcher.
 
-- Only whole-word `$in` and `$out` placeholders are rewritten.
-- Identifier-containing strings such as `$input` or `$output` are not
-  rewritten accidentally.
-- Backtick-delimited regions are preserved.
-- Odd numbers of backticks are rejected.
-- Successful interpolation always returns a string that passes the current
-  syntactic guard.
+The production scanner exceeded the five-minute, 8 GiB Kani cap at six and
+eight characters, and the guard necessarily drives that scanner. Adversarial
+Proptest properties therefore cover templates of up to 256 characters with at
+most eight placeholders. They independently specify scanner behaviour, verify
+backtick preservation and odd-backtick rejection, and verify that the real
+`shlex` guard evaluates the substituted command.
 
 ### Proptest for determinism and manifest semantics
 
@@ -244,8 +246,8 @@ The `kani-smoke` job is a dedicated, pull-request-only job (it runs only when
 - installs `uv` and then installs the pinned Kani toolchain through
   `make install-kani`,
 - runs `make kani-check` and then the bounded harness suite through
-  `make kani-ir` (13 harnesses across the manifest-verification and
-  cycle-verification modules),
+  `make kani-ir` (15 harnesses across the manifest, cycle, and
+  command-interpolation verification modules),
 - caches tool downloads separately from the ordinary Rust build artefacts, and
 - is bounded by a 20-minute job timeout (`timeout-minutes: 20`).
 
