@@ -648,9 +648,9 @@ workflow, job, and step helpers in
 workflow-specific projections and assertions, so parsing and structural
 validation remain consistent across the workflows under test.
 
-`make test` runs the non-doctest suite through
-[cargo-nextest](https://nexte.st/) and then runs the doctests separately. CI
-pins the runner version in `NEXTEST_VERSION` in `.github/workflows/ci.yml`.
+`make test` runs `make test-env-mutation-gate` first, then runs the non-doctest
+suite through [cargo-nextest](https://nexte.st/) and the doctests separately.
+CI pins the runner version in `NEXTEST_VERSION` in `.github/workflows/ci.yml`.
 Install that same version locally so local runs match CI; read the pin from the
 workflow rather than copying the number, so the two cannot drift:
 
@@ -658,7 +658,6 @@ workflow rather than copying the number, so the two cannot drift:
 NEXTEST_VERSION="$(sed -n "s/.*NEXTEST_VERSION: '\(.*\)'.*/\1/p" \
   .github/workflows/ci.yml)"
 cargo install cargo-nextest --locked --version "$NEXTEST_VERSION"
-
 # or, for a prebuilt binary:
 cargo binstall --no-confirm --locked \
   "cargo-nextest@$NEXTEST_VERSION"
@@ -1974,8 +1973,11 @@ Cargo home plus Kani support-file home.
 
 ## Test execution
 
-`make test` is the canonical entry point and composes two passes:
+`make test` is the canonical entry point and composes three stages:
 
+- `make test-env-mutation-gate` — runs the isolated Python/uv fixture checks
+  for `scripts/check_env_mutation.py`, ensuring forbidden in-process
+  environment mutation remains rejected.
 - `make test-nextest` —
   `cargo nextest run --workspace --all-targets --all-features`, with
   `RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings"` (the
@@ -1988,7 +1990,7 @@ Cargo home plus Kani support-file home.
   doctests, so they need their own pass; the separate target is what makes a
   broken documentation example fail the gate.
 
-If either pass fails, `make test` fails. Run the individual targets when
+If any stage fails, `make test` fails. Run the individual targets when
 iterating, but treat `make test` as the gate.
 
 ### Required real-Ninja coverage
@@ -3246,8 +3248,9 @@ accepts an explicit directory for configuration discovery, and environment
 readers are injected into the functions that need them. None of these depend on
 the process working directory or process-global environment state.
 
-`make lint` runs the environment-mutation gate before its rustdoc, Clippy, and
-Whitaker stages. The gate and Clippy's `disallowed-methods` configuration reject
+`make lint` runs `make lint-env-mutation`, the environment-mutation gate, before
+its rustdoc, Clippy, and Whitaker stages. The gate and Clippy's
+`disallowed-methods` configuration reject
 `std::env::set_var`, `std::env::remove_var`, and `std::env::set_current_dir`
 anywhere under `src/`, `tests/`, and `test_support/`. Child-process
 configuration stays confined to the `Command` builders: `Command::env`,

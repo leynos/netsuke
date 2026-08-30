@@ -3,8 +3,9 @@
 //!
 //! `make test` is the single command local development and continuous
 //! integration (CI) both run. These tests pin the runner contract it encodes:
-//! non-doctest tests go through cargo-nextest, and doctests run separately
-//! because nextest cannot execute them.
+//! the mutation gate completes before non-doctest tests go through
+//! cargo-nextest and doctests run separately because nextest cannot execute
+//! them.
 //!
 //! They also pin the `RUSTFLAGS` contract shared by every recipe that sets the
 //! variable. Each such recipe adds `-D warnings` and prepends any value the
@@ -28,17 +29,23 @@ use makefile::{phony_targets, read_repo_file, target_prerequisites, target_recip
 use toml::Value;
 
 #[test]
-fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()> {
+fn behavioural_make_test_stages_the_mutation_gate_before_rust_tests() -> Result<()> {
     let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
 
     let prerequisites =
         target_prerequisites(&makefile, "test").context("Makefile should declare a test target")?;
-    for expected in ["test-env-mutation-gate", "test-nextest", "doctest"] {
-        ensure!(
-            prerequisites.iter().any(|name| name == expected),
-            "make test should depend on {expected}, found {prerequisites:?}"
-        );
-    }
+    ensure!(
+        prerequisites == ["test-env-mutation-gate"],
+        "make test must stage the mutation gate before its recursive test pass, found {prerequisites:?}"
+    );
+    let test_recipe =
+        target_recipe(&makefile, "test").context("Makefile should declare a test recipe")?;
+    ensure!(
+        test_recipe.contains("$(MAKE)")
+            && test_recipe.contains("test-nextest")
+            && test_recipe.contains("doctest"),
+        "make test must run nextest and doctests through a staged recursive make, found {test_recipe:?}"
+    );
 
     let nextest_recipe = target_recipe(&makefile, "test-nextest")
         .context("Makefile should declare a test-nextest target")?;

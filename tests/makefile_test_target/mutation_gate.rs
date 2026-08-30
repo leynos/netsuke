@@ -17,6 +17,8 @@ struct MakeFixture {
     workspace: TempDir,
     /// Stubbed Python runner used by the mutation gate.
     uv: PathBuf,
+    /// Stubbed Python runner that records its invocation before failing.
+    failing_uv: PathBuf,
     /// Stubbed Cargo command used by test, lint, and typecheck recipes.
     cargo: PathBuf,
     /// Stubbed Whitaker command used by lint recipes.
@@ -48,12 +50,14 @@ impl MakeFixture {
         }
         let log = workspace.path().join("invocations.log");
         let uv = write_logging_stub(&bin, "uv")?;
+        let failing_uv = write_failing_uv_stub(&bin)?;
         let cargo = write_logging_stub(&bin, "cargo")?;
         let whitaker = write_logging_stub(&bin, "whitaker")?;
         let makefile = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Makefile");
         Ok(Self {
             workspace,
             uv,
+            failing_uv,
             cargo,
             whitaker,
             log,
@@ -63,16 +67,31 @@ impl MakeFixture {
 
     /// Run one repository Makefile target with every external tool stubbed.
     fn run(&self, target: &str) -> Result<Output> {
-        Command::new("make")
+        self.run_with_uv(target, &self.uv, false)
+    }
+
+    /// Run one target in parallel with a failing mutation-gate stub.
+    fn run_in_parallel_with_failing_uv(&self, target: &str) -> Result<Output> {
+        self.run_with_uv(target, &self.failing_uv, true)
+    }
+
+    /// Run one target with a selected mutation-gate stub and parallelism setting.
+    fn run_with_uv(&self, target: &str, uv: &Path, parallel: bool) -> Result<Output> {
+        let mut command = Command::new("make");
+        command
             .arg("--no-print-directory")
             .arg("-f")
             .arg(&self.makefile)
-            .arg(format!("UV={}", self.uv.display()))
+            .arg(format!("UV={}", uv.display()))
             .arg(format!("CARGO={}", self.cargo.display()))
             .arg(format!("WHITAKER={}", self.whitaker.display()))
             .arg(target)
             .current_dir(self.workspace.path())
-            .env("MAKE_INVOCATIONS", &self.log)
+            .env("MAKE_INVOCATIONS", &self.log);
+        if parallel {
+            command.arg("-j2");
+        }
+        command
             .output()
             .with_context(|| format!("run make {target} with disposable tool stubs"))
     }
@@ -94,6 +113,13 @@ fn write_logging_stub(directory: &Path, name: &str) -> Result<PathBuf> {
         format!("#!/bin/sh\nprintf '%s:%s\\n' '{name}' \"$*\" >> \"$MAKE_INVOCATIONS\"\n");
     write_exec_with_content(directory, name, &content)
         .with_context(|| format!("write {name} Makefile-tool stub"))
+}
+
+/// Write a failing Python-runner stub that records the gate invocation.
+fn write_failing_uv_stub(directory: &Path) -> Result<PathBuf> {
+    let content = "#!/bin/sh\nprintf '%s:%s\\n' 'uv' \"$*\" >> \"$MAKE_INVOCATIONS\"\nexit 1\n";
+    write_exec_with_content(directory, "failing-uv", content)
+        .context("write failing mutation-gate stub")
 }
 
 /// Verify that `output` reports a successful stubbed Make target.
@@ -156,5 +182,25 @@ fn mutation_gate_prerequisites_execute_in_an_isolated_make_fixture() -> Result<(
             == 2,
         "lint should run both Whitaker scopes after the mutation gate, got {lint_invocations:?}"
     );
+    Ok(())
+}
+
+#[test]
+fn failed_mutation_gates_block_parallel_dependents() -> Result<()> {
+    let fixture = MakeFixture::new()?;
+    for target in ["test", "lint"] {
+        let output = fixture.run_in_parallel_with_failing_uv(target)?;
+        ensure!(
+            !output.status.success(),
+            "parallel make {target} should fail when its mutation gate fails"
+        );
+        let invocations = fixture.invocations()?;
+        ensure!(
+            invocations.lines().count() == 1
+                && invocations.lines().all(|line| line.starts_with("uv:run")),
+            "a failed mutation gate must block parallel {target} dependents, got {invocations:?}"
+        );
+        fixture.clear_invocations()?;
+    }
     Ok(())
 }
