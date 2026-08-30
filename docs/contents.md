@@ -38,8 +38,8 @@ operator, user, and contributor references are easier to find.
   Proposed structured command blocks, shell-free argv templates, typed Jinja
   interpolation, stream routing, and pipeline semantics.
 - [rfcs/0007-netsukefile-testing-framework.md](rfcs/0007-netsukefile-testing-framework.md):
-  Proposed Netsukefile testing framework: the `netsuke test` command, the
-  YAML test dialect, and its mocking model.
+  Proposed Netsukefile testing framework: the `netsuke test` command, the YAML
+  test dialect, and its mocking model.
 
 ## Decision records
 

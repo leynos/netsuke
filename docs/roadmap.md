@@ -27,8 +27,8 @@ Each phase validates a product hypothesis:
   to write without weakening determinism or the capability boundary, including
   proportionate quality-gate selection from a deterministic Git changeset.
 - Phase 7 validates that Netsukefile authors adopt manifest-time testing when
-  it is deterministic, mock-friendly, and runs through the same compiler as
-  the build.
+  it is deterministic, mock-friendly, and runs through the same compiler as the
+  build.
 
 Each phase carries one hypothesis, and Phase 6 is the capability track for
 template standard-library work. Phases 3 to 5 predate that separation: each
@@ -1250,8 +1250,8 @@ Hypothesis: Netsukefile authors adopt manifest-time testing when it is
 deterministic, mock-friendly, and runs through the same compiler pipeline as
 the build.
 
-Objective: deliver the `netsuke test` command and YAML test dialect specified
-in [RFC 0007](rfcs/0007-netsukefile-testing-framework.md), the
+Objective: deliver the `netsuke test` command and YAML test dialect specified in
+[RFC 0007](rfcs/0007-netsukefile-testing-framework.md), the
 [UX and semantic design](netsuke-test-framework-ux-design.md), and the
 [technical design](netsuke-test-framework-technical-design.md).
 
