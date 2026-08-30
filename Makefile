@@ -116,6 +116,7 @@ SPELLING_HELPER_FILES = scripts/generate_typos_config.py \
 MD_FILES_FIND = find . -type f -name '*.md' \
 	-not -path './target/*' -not -path './.venv/*' \
 	-not -path './.vtcode/*' -not -path './memories/*' \
+	-not -path './.pytest_cache/*' \
 	-not -path './.uv-cache/*' \
 	-not -path './.uv-tools/*' \
 	-not -path './node_modules/*' -print0

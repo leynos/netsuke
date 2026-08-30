@@ -1,17 +1,16 @@
 """Exercise the Markdown formatter checker at its process boundary."""
 
-from __future__ import annotations
-
 import json
 import os
-import subprocess
+import subprocess  # ruff: ignore[suspicious-subprocess-import] - the boundary is under test.
 import sys
 import tempfile
 import textwrap
 from pathlib import Path
 
 import pytest
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 CHECKER = REPOSITORY_ROOT / "scripts" / "check-markdown-format.sh"
@@ -93,7 +92,7 @@ def _run_checker(
         "MDTABLEFIX": str(formatter),
         "MDTABLEFIX_CALL_LOG": str(call_log),
     }
-    return subprocess.run(  # noqa: S603 - executes the controlled fixture.
+    return subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - executes the controlled fixture.
         [str(CHECKER), *(str(file) for file in files)],
         capture_output=True,
         check=False,
@@ -108,9 +107,9 @@ def test_requires_at_least_one_markdown_file(formatter: tuple[Path, Path]) -> No
 
     result = _run_checker(executable, call_log)
 
-    assert result.returncode == 64
-    assert "Usage:" in result.stderr
-    assert not call_log.exists()
+    assert result.returncode == 64, result.stderr
+    assert "Usage:" in result.stderr, result.stderr
+    assert not call_log.exists(), "the formatter must not run for an empty file list"
 
 
 def test_reports_a_missing_formatter(tmp_path: Path) -> None:
@@ -120,8 +119,8 @@ def test_reports_a_missing_formatter(tmp_path: Path) -> None:
 
     result = _run_checker(tmp_path / "missing-mdtablefix", tmp_path / "calls", source)
 
-    assert result.returncode == 127
-    assert "is not installed or not on PATH" in result.stderr
+    assert result.returncode == 127, result.stderr
+    assert "is not installed or not on PATH" in result.stderr, result.stderr
 
 
 def test_accepts_lf_and_crlf_without_modifying_sources(
@@ -137,17 +136,27 @@ def test_accepts_lf_and_crlf_without_modifying_sources(
 
     result = _run_checker(executable, call_log, lf_source, crlf_source)
 
-    assert result.returncode == 0
-    assert lf_source.read_bytes() == b"formatted\n"
-    assert crlf_source.read_bytes() == b"formatted\r\n"
+    assert result.returncode == 0, result.stderr
+    assert lf_source.read_bytes() == b"formatted\n", (
+        "the checker modified the LF source"
+    )
+    assert crlf_source.read_bytes() == b"formatted\r\n", (
+        "the checker modified the CRLF source"
+    )
     calls = [
         json.loads(line) for line in call_log.read_text(encoding="utf-8").splitlines()
     ]
-    assert len(calls) == 1
-    assert calls[0][: len(FORMATTER_FLAGS)] == FORMATTER_FLAGS
+    assert len(calls) == 1, "the checker must invoke the formatter once per batch"
+    assert calls[0][: len(FORMATTER_FLAGS)] == FORMATTER_FLAGS, (
+        "the checker must pass the canonical formatter flags"
+    )
     staged_paths = [Path(path) for path in calls[0][len(FORMATTER_FLAGS) :]]
-    assert [path.name for path in staged_paths] == ["0.md", "1.md"]
-    assert all(path.parent != tmp_path for path in staged_paths)
+    assert [path.name for path in staged_paths] == ["0.md", "1.md"], (
+        "the formatter must receive staged source copies"
+    )
+    assert all(path.parent != tmp_path for path in staged_paths), (
+        "the formatter must not receive tracked source paths"
+    )
 
 
 def test_reports_each_noncanonical_source_without_modifying_it(
@@ -171,18 +180,26 @@ def test_reports_each_noncanonical_source_without_modifying_it(
         canonical_source,
     )
 
-    assert result.returncode == 1
-    assert str(unformatted_source) in result.stderr
-    assert str(mixed_source) in result.stderr
-    assert str(canonical_source) not in result.stderr
-    assert unformatted_source.read_bytes() == b"unformatted\n"
-    assert mixed_source.read_bytes() == b"formatted\r\nsecond line\n"
-    assert canonical_source.read_bytes() == b"formatted\n"
+    assert result.returncode == 1, result.stderr
+    assert str(unformatted_source) in result.stderr, result.stderr
+    assert str(mixed_source) in result.stderr, result.stderr
+    assert str(canonical_source) not in result.stderr, result.stderr
+    assert unformatted_source.read_bytes() == b"unformatted\n", (
+        "the checker modified the unformatted source"
+    )
+    assert mixed_source.read_bytes() == b"formatted\r\nsecond line\n", (
+        "the checker modified the mixed-ending source"
+    )
+    assert canonical_source.read_bytes() == b"formatted\n", (
+        "the checker modified the canonical source"
+    )
     calls = [
         json.loads(line) for line in call_log.read_text(encoding="utf-8").splitlines()
     ]
-    assert len(calls) == 1
-    assert len(calls[0]) == len(FORMATTER_FLAGS) + 3
+    assert len(calls) == 1, "the checker must invoke the formatter once per batch"
+    assert len(calls[0]) == len(FORMATTER_FLAGS) + 3, (
+        "the formatter must receive every source in the batch"
+    )
 
 
 @given(
@@ -207,6 +224,6 @@ def test_accepts_only_uniform_canonical_line_endings(lines: list[str]) -> None:
         passing = _run_checker(executable, call_log, lf_source, crlf_source)
         failing = _run_checker(executable, call_log, mixed_source)
 
-    assert passing.returncode == 0
-    assert failing.returncode == 1
-    assert str(mixed_source) in failing.stderr
+    assert passing.returncode == 0, passing.stderr
+    assert failing.returncode == 1, failing.stderr
+    assert str(mixed_source) in failing.stderr, failing.stderr

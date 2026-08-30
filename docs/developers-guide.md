@@ -482,8 +482,7 @@ from the `bin-name` field that
   nested paths and re-raises the original failure after a successful rollback.
   If an `OSError` prevents rollback, the original and rollback failures are
   combined in a `BaseExceptionGroup`; another rollback exception propagates
-  unchanged.
-  `tests/binstall_metadata_tests.rs` and
+  unchanged. `tests/binstall_metadata_tests.rs` and
   `tests/workflow_contracts/hoist_binstall_archives_test.py` hold this contract.
 
 Only the two registry installation commands name `netsuke-build`, and
@@ -633,9 +632,9 @@ doc build). Rustdoc writes the coverage JSON to its reported generated file,
 which the script reads immediately after each successful invocation. That
 path-extraction helper belongs only to the
 `--show-coverage --output-format json` collector; do not reuse it for general
-Rustdoc output. `scripts/doc_coverage_model.py` defines the shared
-`Coverage`/`DocTarget` values. `scripts/doc_coverage_runner.py` owns toolchain
-pin parsing, Cargo metadata validation, target selection, and measurement
+Rustdoc output. `scripts/doc_coverage_model.py` defines the shared `Coverage`/
+`DocTarget` values. `scripts/doc_coverage_runner.py` owns toolchain pin
+parsing, Cargo metadata validation, target selection, and measurement
 orchestration; its `ToolchainPinError` and `WorkspaceMetadataError` preserve
 those input-validation boundaries. `scripts/doc_coverage_cargo.py` owns Cargo
 and Rustdoc process handling, generated-path extraction, and coverage-payload
@@ -892,8 +891,8 @@ their test suites under `scripts/tests/`, and the workflow contract tests under
 `tests/workflow_contracts/` — targets a **Python 3.14 baseline**. The Makefile
 pins the interpreter in `PYTHON_BASELINE`, `pyproject.toml` sets
 `target-version = "py314"` for Ruff and `py-version = "3.14"` for Pylint, and
-the CI and release workflows install the same version through `setup-uv`.
-Write to the baseline: deferred annotation evaluation is the default, so
+the CI and release workflows install the same version through `setup-uv`. Write
+to the baseline: deferred annotation evaluation is the default, so
 `from __future__ import annotations` must not appear, and PEP 758
 unparenthesized `except` clauses and PEP 695 `type` statements are the
 preferred forms.
@@ -918,24 +917,23 @@ source, with the message set enabled in `pyproject.toml`; the
 discipline, and the baseline-gated R9112/C9112 checks) need CPython 3.14 and
 run as a second pass pinned to `DF12_PYTHON_LINTS_REF`.
 
-Tool versions are pinned twice by design: the Makefile defaults
-(`RUFF_VERSION`, `TY_VERSION`, `PYTHON_BASELINE`) drive local runs, and the
-`env` block of `.github/workflows/ci.yml` re-declares the same values, which
-override the Makefile's `?=` assignments in CI.
+Tool versions are pinned twice by design: the Makefile defaults (`RUFF_VERSION`,
+`TY_VERSION`, `PYTHON_BASELINE`) drive local runs, and the `env` block of
+`.github/workflows/ci.yml` re-declares the same values, which override the
+Makefile's `?=` assignments in CI.
 `tests/workflow_contracts/python_toolchain_sync_test.py` asserts the pairs
 agree — without asserting any specific version — so a bump must land in both
 files in the same commit.
 
-The shared spelling-policy rollout helpers
-(`scripts/generate_typos_config.py` and the `typos_rollout*` modules and
-tests) are estate-synchronized and keep their own pinned, isolated Ruff policy
-enforced by `make spelling-helper-test`; they are excluded from the
-repository-wide Ruff and Pylint configuration so the two policies cannot
-disagree about the same file.
+The shared spelling-policy rollout helpers (`scripts/generate_typos_config.py`
+and the `typos_rollout*` modules and tests) are estate-synchronized and keep
+their own pinned, isolated Ruff policy enforced by `make spelling-helper-test`;
+they are excluded from the repository-wide Ruff and Pylint configuration so the
+two policies cannot disagree about the same file.
 
 Lint and typecheck suppressions are a last resort, tightly scoped, and every
-one must carry a reason on the line — the df12 messages C9106 and C9107 fail
-any `noqa`, `pylint: disable`, or `type: ignore` pragma that does not.
+one must carry a reason on the line — the df12 messages C9106 and C9107 fail any
+`noqa`, `pylint: disable`, or `type: ignore` pragma that does not.
 
 ## Mutation-testing workflow contract tests
 
@@ -1086,10 +1084,10 @@ compose it with dictionary validation; application and release code must not
 reuse these spelling-policy internals.
 
 The `RemoteResponse` protocol is a context-managed response boundary: callers
-read the body within the context and exit it to release the underlying
-response. `atomic_write` writes complete content to a temporary file beside
-the destination, atomically replaces the destination on the same filesystem,
-and removes the temporary file when writing or replacement fails. The existing
+read the body within the context and exit it to release the underlying response.
+`atomic_write` writes complete content to a temporary file beside the
+destination, atomically replaces the destination on the same filesystem, and
+removes the temporary file when writing or replacement fails. The existing
 destination is therefore left intact unless replacement succeeds.
 
 Pull-request CI restores the untracked dictionary and metadata before the
