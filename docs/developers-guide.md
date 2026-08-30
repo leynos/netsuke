@@ -515,6 +515,13 @@ path, `push` event, branch, migration head SHA, candidate name, completed
 status, and successful conclusion. A changed candidate SHA therefore requires
 fresh downstream evidence.
 
+`run-release-admission` is a reusable-workflow boolean input with a default of
+`true`. A tag-triggered release always runs admission because it is not a
+reusable-workflow call. A trusted reusable caller may set
+`run-release-admission: false` for a dry run that must not execute admission.
+When publication is enabled, the `release` job still depends on a successful
+`release-admission-canaries` job.
+
 ## Toolchain and borrow checker
 
 Netsuke builds on the dated nightly toolchain pinned in `rust-toolchain.toml`

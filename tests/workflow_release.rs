@@ -44,8 +44,8 @@ fn release_workflow_job<'a>(jobs: &'a Mapping, name: &str) -> Result<&'a Mapping
         .with_context(|| format!("release workflow should define the {name} job"))
 }
 
-/// Return the shell command that invokes downstream canary admission.
-fn release_admission_command(workflow: &YamlValue) -> Result<&str> {
+/// Return the step that invokes downstream canary admission.
+fn release_admission_step(workflow: &YamlValue) -> Result<&Mapping> {
     let jobs = release_workflow_jobs(workflow)?;
     let admission = release_workflow_job(jobs, "release-admission-canaries")?;
     let steps = mapping_value(admission, "steps")
@@ -60,7 +60,12 @@ fn release_admission_command(workflow: &YamlValue) -> Result<&str> {
         })
         .context("canary admission should query downstream runs")?;
 
-    mapping_value(admission_step, "run")
+    Ok(admission_step)
+}
+
+/// Return the shell command that invokes downstream canary admission.
+fn release_admission_command(workflow: &YamlValue) -> Result<&str> {
+    mapping_value(release_admission_step(workflow)?, "run")
         .and_then(YamlValue::as_str)
         .context("canary admission query should be a shell script")
 }
@@ -74,14 +79,13 @@ fn release_admission_script() -> Result<String> {
     .context("read release-admission canary script")
 }
 
-/// Require the release workflow to invoke the canary admission boundary.
-fn require_release_admission_workflow_wiring(
+/// Require release publication and invocation conditions to retain admission control.
+fn require_release_admission_control(
     workflow: &YamlValue,
-    admission_command: &str,
+    jobs: &Mapping,
+    admission: &Mapping,
+    release: &Mapping,
 ) -> Result<()> {
-    let jobs = release_workflow_jobs(workflow)?;
-    let admission = release_workflow_job(jobs, "release-admission-canaries")?;
-    let release = release_workflow_job(jobs, "release")?;
     let release_needs = mapping_value(release, "needs")
         .and_then(YamlValue::as_sequence)
         .context("release job should declare dependencies")?;
@@ -116,10 +120,6 @@ fn require_release_admission_workflow_wiring(
         "release publication should require successful downstream admission"
     );
     ensure!(
-        admission_command == "bash .github/scripts/require-release-admission-canaries.sh",
-        "release workflow should execute the tested canary-admission script"
-    );
-    ensure!(
         admission_condition
             == Some("github.event_name != 'workflow_call' || inputs.run-release-admission"),
         "trusted release events should run downstream canary admission"
@@ -141,6 +141,94 @@ fn require_release_admission_workflow_wiring(
     );
 
     Ok(())
+}
+
+/// Require the admission command to use an isolated pinned Python environment.
+fn require_hermetic_admission_command(admission_command: &str) -> Result<()> {
+    ensure!(
+        admission_command.contains("uv run --no-project")
+            && admission_command.contains("--python \"${NETSUKE_ADMISSION_PYTHON_VERSION}\"")
+            && admission_command.contains("--with \"pyyaml==${NETSUKE_ADMISSION_PYYAML_VERSION}\"")
+            && admission_command
+                .contains("bash .github/scripts/require-release-admission-canaries.sh"),
+        "release workflow should execute the tested canary-admission script through uv"
+    );
+
+    Ok(())
+}
+
+/// Require the admission job to provision pinned dependencies and scope its token.
+fn require_hermetic_admission_runtime(workflow: &YamlValue, admission: &Mapping) -> Result<()> {
+    let admission_environment = mapping_value(admission, "env")
+        .and_then(YamlValue::as_mapping)
+        .context("canary admission should pin its Python environment")?;
+    let admission_step = release_admission_step(workflow)?;
+    let admission_step_environment = mapping_value(admission_step, "env")
+        .and_then(YamlValue::as_mapping)
+        .context("canary admission command should declare its token")?;
+    let steps = mapping_value(admission, "steps")
+        .and_then(YamlValue::as_sequence)
+        .context("canary admission should define steps")?;
+    let setup_python_step = steps
+        .iter()
+        .filter_map(YamlValue::as_mapping)
+        .find(|step| {
+            mapping_value(step, "name").and_then(YamlValue::as_str)
+                == Some("Set up admission Python")
+        })
+        .context("canary admission should install Python")?;
+    let setup_python_reference = mapping_value(setup_python_step, "uses")
+        .and_then(YamlValue::as_str)
+        .context("canary admission should use setup-python")?;
+
+    ensure!(
+        admission_environment.len() == 2
+            && mapping_value(admission_environment, "NETSUKE_ADMISSION_PYTHON_VERSION")
+                .and_then(YamlValue::as_str)
+                == Some("3.13")
+            && mapping_value(admission_environment, "NETSUKE_ADMISSION_PYYAML_VERSION")
+                .and_then(YamlValue::as_str)
+                == Some("6.0.2"),
+        "canary admission should pin Python and PyYAML versions"
+    );
+    ensure!(
+        setup_python_reference
+            .strip_prefix("actions/setup-python@")
+            .is_some_and(|revision| {
+                revision.len() == 40
+                    && revision
+                        .chars()
+                        .all(|character| character.is_ascii_hexdigit())
+            })
+            && mapping_value(setup_python_step, "with")
+                .and_then(YamlValue::as_mapping)
+                .and_then(|inputs| mapping_value(inputs, "python-version"))
+                .and_then(YamlValue::as_str)
+                == Some("${{ env.NETSUKE_ADMISSION_PYTHON_VERSION }}"),
+        "canary admission should install its pinned Python runtime"
+    );
+    ensure!(
+        admission_step_environment.len() == 1
+            && mapping_value(admission_step_environment, "GH_TOKEN").and_then(YamlValue::as_str)
+                == Some("${{ secrets.GITHUB_TOKEN }}"),
+        "canary admission should scope its token to the admission step"
+    );
+
+    Ok(())
+}
+
+/// Require the release workflow to invoke the canary admission boundary.
+fn require_release_admission_workflow_wiring(
+    workflow: &YamlValue,
+    admission_command: &str,
+) -> Result<()> {
+    let jobs = release_workflow_jobs(workflow)?;
+    let admission = release_workflow_job(jobs, "release-admission-canaries")?;
+    let release = release_workflow_job(jobs, "release")?;
+
+    require_release_admission_control(workflow, jobs, admission, release)?;
+    require_hermetic_admission_command(admission_command)?;
+    require_hermetic_admission_runtime(workflow, admission)
 }
 
 /// Require every release build job to request only checkout and workflow-read scopes.

@@ -17,6 +17,14 @@ use test_support::{fs as test_fs, write_exec_with_content};
 const CANDIDATE_REVISION: &str = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
 const CANDIDATE_VERSION: &str = "0.1.0-beta2";
 const TEST_PATH: &str = "/usr/bin:/bin";
+const TEST_TOKEN: &str = "installer-test-token";
+const INSTALLER_OPERATIONS: [&str; 5] = [
+    "candidate_revision_validation",
+    "git_fetch",
+    "candidate_revision_verification",
+    "locked_cargo_build",
+    "candidate_version_check",
+];
 
 /// Represent controlled installer inputs for one harness invocation.
 struct InstallerRun<'a> {
@@ -80,6 +88,7 @@ impl InstallerHarness {
             .env("NETSUKE_CANDIDATE_VERSION", CANDIDATE_VERSION)
             .env("NETSUKE_CARGO_ARGS", &self.cargo_args_path)
             .env("NETSUKE_GIT_ARGS", &self.git_args_path)
+            .env("GH_TOKEN", TEST_TOKEN)
             .env("NETSUKE_FAKE_BINARY_NAME", binary_name(inputs.runner_os))
             .env("NETSUKE_FAKE_RESOLVED_REVISION", inputs.resolved_revision)
             .env("NETSUKE_FAKE_VERSION", inputs.version)
@@ -128,6 +137,44 @@ fn binary_name(runner_os: &str) -> &'static str {
     } else {
         "netsuke"
     }
+}
+
+/// Require successful installer events to cover every bounded operation.
+fn require_successful_events(output: &Output) -> Result<()> {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    for operation in INSTALLER_OPERATIONS {
+        ensure!(
+            stderr.contains(&format!(
+                "release_candidate operation={operation} outcome=started"
+            )) && stderr.contains(&format!(
+                "release_candidate operation={operation} outcome=success"
+            )),
+            "installer should emit started and success events for {operation}"
+        );
+    }
+    ensure!(
+        !stderr.contains(TEST_TOKEN),
+        "installer events should not expose the test token"
+    );
+
+    Ok(())
+}
+
+/// Require a controlled installer failure to retain its fixed event category.
+fn require_failure_event(output: &Output, operation: &str, error_category: &str) -> Result<()> {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    ensure!(
+        stderr.contains(&format!(
+            "release_candidate operation={operation} outcome=failure error_category={error_category}"
+        )),
+        "installer should emit a fixed failure event for {operation}"
+    );
+    ensure!(
+        !stderr.contains(TEST_TOKEN),
+        "installer events should not expose the test token"
+    );
+
+    Ok(())
 }
 
 /// Return the YAML value stored under `key` in one mapping.
@@ -310,6 +357,7 @@ fn installer_builds_the_expected_platform_binary(#[case] runner_os: &str) -> Res
             .contains(&format!("fetch --depth 1 origin -- {CANDIDATE_REVISION}")),
         "installer should fetch the validated candidate revision after an option terminator"
     );
+    require_successful_events(&output)?;
 
     let outputs = harness.outputs()?;
     ensure!(
@@ -359,6 +407,11 @@ fn installer_rejects_non_commit_candidate_revisions(
         !harness.git_args_path.exists(),
         "installer should reject a malformed candidate revision before running Git"
     );
+    require_failure_event(
+        &output,
+        "candidate_revision_validation",
+        "invalid_candidate_revision",
+    )?;
 
     Ok(())
 }
@@ -394,6 +447,12 @@ fn installer_rejects_an_invalid_candidate_identity(
         harness.cargo_args_path.exists() == should_build_cargo,
         "installer Cargo build should match the candidate identity failure"
     );
+    let (operation, error_category) = if should_build_cargo {
+        ("candidate_version_check", "candidate_version_mismatch")
+    } else {
+        ("candidate_revision_verification", "revision_mismatch")
+    };
+    require_failure_event(&output, operation, error_category)?;
 
     Ok(())
 }
