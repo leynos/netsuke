@@ -1252,9 +1252,9 @@ network operations.
 The standard-library registration boundary installs one MiniJinja value
 formatter for all helpers. Boolean results interpolated into string fields
 retain the historical lowercase `true`/`false` spelling; every non-Boolean
-value continues through MiniJinja's `escape_formatter`. This formatter is
-owned by standard-library registration and is reused across calls, so helpers
-must not introduce per-helper or per-call formatter variants.
+value continues through MiniJinja's `escape_formatter`. This formatter is owned
+by standard-library registration and is reused across calls, so helpers must
+not introduce per-helper or per-call formatter variants.
 
 #### File-system tests
 

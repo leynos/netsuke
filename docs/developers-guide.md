@@ -116,12 +116,11 @@ script recipe bodies untouched. This boundary is what permits a recipe to
 contain a build-only helper without causing `help targets` to execute or
 otherwise evaluate that helper; it does not alter full-render behaviour.
 
-The standard-library registration boundary owns MiniJinja's value formatter.
-It preserves the historical lowercase `true` and `false` spelling when a
-Boolean helper result is interpolated into a string field, while delegating
-all non-Boolean values to MiniJinja's `escape_formatter`. Keep this as one
-registration-wide policy: do not add per-helper or per-call formatter
-variants.
+The standard-library registration boundary owns MiniJinja's value formatter. It
+preserves the historical lowercase `true` and `false` spelling when a Boolean
+helper result is interpolated into a string field, while delegating all
+non-Boolean values to MiniJinja's `escape_formatter`. Keep this as one
+registration-wide policy: do not add per-helper or per-call formatter variants.
 
 Helpers excluded from the query allowlist are registered as deliberate
 query-disabled stubs by the standard-library adapter. The stubs return a
