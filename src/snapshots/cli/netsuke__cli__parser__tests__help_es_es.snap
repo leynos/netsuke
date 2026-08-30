@@ -1,6 +1,5 @@
 ---
 source: src/cli/parser_tests.rs
-assertion_line: 48
 expression: normalized_help
 ---
 Netsuke transforma manifiestos YAML + Jinja en grafos Ninja reproducibles y ejecuta Ninja con valores seguros.
@@ -9,6 +8,7 @@ Usage: netsuke [OPTIONS] [COMMAND]
 
 Commands:
   build     Compila objetivos definidos en el manifiesto (predeterminado).
+  check     Analiza el manifiesto sin generar ni ejecutar una compilación.
   clean     Elimina artefactos de compilación mediante Ninja.
   graph     Emite el grafo de dependencias de compilación. El formato predeterminado es DOT.
   generate  Genera el manifiesto Ninja sin ejecutar Ninja.

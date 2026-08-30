@@ -169,12 +169,36 @@ pub struct BuildConfig {
     pub targets: Vec<String>,
 }
 
+/// Layered defaults for the `check` subcommand.
+///
+/// Lint policy belongs in configuration rather than only on the command line:
+/// a project's rule selection is a property of the project, and repeating it in
+/// every continuous-integration invocation is how the two drift apart.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct CheckConfig {
+    /// Rule and category severity selectors, as `NAME=SEVERITY`.
+    #[serde(default)]
+    pub rule: Vec<String>,
+
+    /// Severity at which findings fail the command.
+    #[serde(default)]
+    pub fail_on: Option<String>,
+
+    /// Maximum findings to report; `0` reports all of them.
+    #[serde(default)]
+    pub limit: Option<usize>,
+}
+
 /// Subcommand-specific layered defaults.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct CommandConfigs {
     /// Configuration that applies only to the `build` subcommand.
     #[serde(default)]
     pub build: BuildConfig,
+
+    /// Configuration that applies only to the `check` subcommand.
+    #[serde(default)]
+    pub check: CheckConfig,
 }
 
 /// Authoritative schema for layered CLI configuration.

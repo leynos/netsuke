@@ -425,8 +425,8 @@ example.errors_found = { $count ->
 }
 
 # Análisis del manifiesto (`netsuke check`).
-cli.subcommand.check.about = Analizar el manifiesto sin generar ni ejecutar una compilación.
-cli.subcommand.check.long_about = Analizar el manifiesto seleccionado en busca de construcciones que se analizan correctamente pero probablemente sean erróneas, inseguras, no portables u hostiles a la caché.
+cli.subcommand.check.about = Analiza el manifiesto sin generar ni ejecutar una compilación.
+cli.subcommand.check.long_about = Analiza el manifiesto seleccionado en busca de construcciones que se analizan correctamente pero probablemente sean erróneas, inseguras, no portables u hostiles a la caché.
 cli.subcommand.check.flag.rule.help = Establecer la severidad de una regla o categoría, escrita como NAME=SEVERITY.
 cli.subcommand.check.flag.fail_on.help = Severidad a partir de la cual los hallazgos hacen fallar el comando.
 cli.subcommand.check.flag.limit.help = Número máximo de hallazgos informados; 0 los informa todos.
