@@ -50,23 +50,23 @@ Netsuke’s philosophy that error messages should guide the user constructively.
 
 From the very first run, Netsuke aims to be welcoming. The **help output**
 (invoked via `netsuke --help` or `netsuke help`) will be **concise and
-useful**, listing available subcommands (e.g. `build`, `check`, `clean`, `graph`,
-`generate`) with one-line descriptions of each. Clap auto-generates this usage
-text, and the wording remains newcomer-friendly. For example, the help summary
-for the default `build` command might say: “`build` – Build specified targets
-(or the default targets defined in the Netsukefile).” A **“Hello World”**
-example should appear in documentation: for instance, creating a minimal
-Netsukefile and running `netsuke` to show how quickly the tool produces a
-result. This immediate feedback is crucial for a positive first impression.
-
+useful**, listing available subcommands (e.g. `build`, `check`, `clean`,
+`graph`, `generate`) with one-line descriptions of each. Clap auto-generates
+this usage text, and the wording remains newcomer-friendly. For example, the
+help summary for the default `build` command might say: “`build` – Build
+specified targets (or the default targets defined in the Netsukefile).” A
+**“Hello World”** example should appear in documentation: for instance,
+creating a minimal Netsukefile and running `netsuke` to show how quickly the
+tool produces a result. This immediate feedback is crucial for a positive first
+impression.
 
 ### Check a manifest before building it
 
 `netsuke check` analyses the selected manifest for constructs that parse and
 lower cleanly but are likely erroneous, unsafe, non-portable, or hostile to
-caching. It uses the same manifest-query loading path as `netsuke help
-targets`, so it evaluates no impure helper, runs no recipe, and creates no
-build output.
+caching. It uses the same manifest-query loading path as
+`netsuke help targets`, so it evaluates no impure helper, runs no recipe, and
+creates no build output.
 
 Findings are the command's result rather than its failure mode. `--fail-on`
 sets the severity at which they fail the command, defaulting to `error`, so an
@@ -82,8 +82,8 @@ diagnostic document whose top-level entry is the threshold summary and whose
 every other Netsuke diagnostic, so the envelope contract is unchanged and a
 consumer parses one representation.
 
-The [manifest linter design](netsuke-linter-design.md) specifies the rule
-model and the output schemas, and
+The [manifest linter design](netsuke-linter-design.md) specifies the rule model
+and the output schemas, and
 [ADR-015](adr-015-manifest-linting-under-netsuke-check.md) records why linting
 lives under `check` rather than under a new noun.
 

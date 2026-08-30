@@ -66,23 +66,39 @@ fn the_reference_documents_every_registered_rule() -> Result<()> {
 #[test]
 fn the_reference_lists_every_rule_in_its_catalogue_table() -> Result<()> {
     let text = reference()?;
+    let rows = catalogue_rows(&text);
     for meta in catalogue() {
-        let row = format!(
-            "| [`{}`](#{}) | {} | {} | {} | {} |",
-            meta.name,
-            meta.name,
-            meta.category.as_str(),
-            meta.stage.as_str(),
-            meta.default_severity.as_str(),
-            meta.summary
-        );
+        let expected = vec![
+            format!("[`{}`](#{})", meta.name, meta.name),
+            meta.category.as_str().to_owned(),
+            meta.stage.as_str().to_owned(),
+            meta.default_severity.as_str().to_owned(),
+            meta.summary.to_owned(),
+        ];
         ensure!(
-            text.contains(&row),
-            "the catalogue table is missing or disagrees about `{}`; expected the row `{row}`",
+            rows.contains(&expected),
+            "the catalogue table is missing or disagrees about `{}`; expected the cells {expected:?}",
             meta.name
         );
     }
     Ok(())
+}
+
+/// Split the catalogue table into one trimmed cell list per row.
+///
+/// The Markdown formatter owns the padding inside a table, so the contract is
+/// on the cells rather than on the rendered row: comparing raw text would make
+/// this test fail whenever `make fmt` re-pads a column.
+fn catalogue_rows(text: &str) -> Vec<Vec<String>> {
+    text.lines()
+        .filter(|line| line.starts_with("| [`"))
+        .map(|line| {
+            line.trim_matches('|')
+                .split('|')
+                .map(|cell| cell.trim().to_owned())
+                .collect()
+        })
+        .collect()
 }
 
 /// Every rule's own section must restate its registry text verbatim.

@@ -48,45 +48,46 @@ targets:
 
 A directive on its own line governs the declaration beneath it, together with
 everything indented under that declaration. A directive at the end of a line
-governs that line's declaration. `# netsuke-lint-file: allow <rule> -- <reason>`
-governs the whole manifest, and exists for findings that could not be resolved
-to a source span.
+governs that line's declaration.
+`# netsuke-lint-file: allow <rule> -- <reason>` governs the whole manifest, and
+exists for findings that could not be resolved to a source span.
 
-Three rules keep suppressions honest: [unknown-suppression](#unknown-suppression),
-[suppression-without-reason](#suppression-without-reason), and
-[unused-suppression](#unused-suppression).
+Three rules keep suppressions honest:
+[unknown-suppression](#unknown-suppression), [suppression-without-reason](#suppression-without-reason),
+and [unused-suppression](#unused-suppression).
 
 ## Rule catalogue
 
 <!-- markdownlint-disable-next-line MD013 -->
-Table: every rule `netsuke check` ships, with its category, stage, and default severity
+Table: every rule `netsuke check` ships, with its category, stage, and default
+severity
 
-| Rule | Category | Stage | Default | Detects |
-| --- | --- | --- | --- | --- |
-| [`undeclared-target-input`](#undeclared-target-input) | correctness | graph | warning | recipe names another target's output without depending on it |
-| [`directory-dep-not-order-only`](#directory-dep-not-order-only) | caching | manifest | warning | directory-creating target used as a content dependency |
-| [`phony-dep-of-file-target`](#phony-dep-of-file-target) | caching | manifest | warning | file target depends on a phony target through `sources` or `deps` |
-| [`bashism`](#bashism) | portability | document | warning | recipe uses a construct `/bin/sh` does not promise |
-| [`background-job`](#background-job) | determinism | document | warning | recipe detaches a process with a trailing `&` |
-| [`recursive-build-invocation`](#recursive-build-invocation) | determinism | document | warning | recipe invokes a build tool |
-| [`builtin-clean-action`](#builtin-clean-action) | redundancy | document | advice | action named `clean` duplicates the built-in `netsuke clean` |
-| [`duplicate-rule-recipe`](#duplicate-rule-recipe) | redundancy | manifest | warning | two rules declare identical recipes |
-| [`redundant-always`](#redundant-always) | redundancy | document | advice | `always` declared on a target that is already phony |
-| [`redundant-dependency`](#redundant-dependency) | redundancy | manifest | advice | path declared under more than one dependency key |
-| [`serial-order-without-deps`](#serial-order-without-deps) | redundancy | document | advice | `dependency_order: serial` declared with fewer than two `deps` |
-| [`unused-macro`](#unused-macro) | hygiene | document | warning | declared macro that nothing calls |
-| [`unused-rule`](#unused-rule) | hygiene | manifest | warning | declared rule that no target or action references |
-| [`unused-var`](#unused-var) | hygiene | document | warning | global `vars` entry that no template references |
-| [`action-without-description`](#action-without-description) | clarity | document | advice | action declares no `description` |
-| [`command-chain-not-list`](#command-chain-not-list) | clarity | document | advice | scalar `command` chains steps with `&&` |
-| [`literal-recipe-path`](#literal-recipe-path) | clarity | document | warning | recipe repeats a path the target already declares |
-| [`rule-without-description`](#rule-without-description) | clarity | document | off | rule declares no `description` |
-| [`unreachable-target`](#unreachable-target) | clarity | graph | off | target reachable from no default and no other target |
-| [`legacy-placeholder`](#legacy-placeholder) | migration | document | warning | recipe uses the undocumented `$in` or `$out` placeholder |
-| [`manual-ninja-escape`](#manual-ninja-escape) | migration | document | warning | recipe doubles a dollar to escape it for Ninja |
-| [`suppression-without-reason`](#suppression-without-reason) | suppression | directive | warning | lint directive states no reason |
-| [`unknown-suppression`](#unknown-suppression) | suppression | directive | warning | lint directive names a rule that does not exist |
-| [`unused-suppression`](#unused-suppression) | suppression | directive | advice | lint directive suppressed no finding |
+| Rule                                                            | Category    | Stage     | Default | Detects                                                           |
+| --------------------------------------------------------------- | ----------- | --------- | ------- | ----------------------------------------------------------------- |
+| [`undeclared-target-input`](#undeclared-target-input)           | correctness | graph     | warning | recipe names another target's output without depending on it      |
+| [`directory-dep-not-order-only`](#directory-dep-not-order-only) | caching     | manifest  | warning | directory-creating target used as a content dependency            |
+| [`phony-dep-of-file-target`](#phony-dep-of-file-target)         | caching     | manifest  | warning | file target depends on a phony target through `sources` or `deps` |
+| [`bashism`](#bashism)                                           | portability | document  | warning | recipe uses a construct `/bin/sh` does not promise                |
+| [`background-job`](#background-job)                             | determinism | document  | warning | recipe detaches a process with a trailing `&`                     |
+| [`recursive-build-invocation`](#recursive-build-invocation)     | determinism | document  | warning | recipe invokes a build tool                                       |
+| [`builtin-clean-action`](#builtin-clean-action)                 | redundancy  | document  | advice  | action named `clean` duplicates the built-in `netsuke clean`      |
+| [`duplicate-rule-recipe`](#duplicate-rule-recipe)               | redundancy  | manifest  | warning | two rules declare identical recipes                               |
+| [`redundant-always`](#redundant-always)                         | redundancy  | document  | advice  | `always` declared on a target that is already phony               |
+| [`redundant-dependency`](#redundant-dependency)                 | redundancy  | manifest  | advice  | path declared under more than one dependency key                  |
+| [`serial-order-without-deps`](#serial-order-without-deps)       | redundancy  | document  | advice  | `dependency_order: serial` declared with fewer than two `deps`    |
+| [`unused-macro`](#unused-macro)                                 | hygiene     | document  | warning | declared macro that nothing calls                                 |
+| [`unused-rule`](#unused-rule)                                   | hygiene     | manifest  | warning | declared rule that no target or action references                 |
+| [`unused-var`](#unused-var)                                     | hygiene     | document  | warning | global `vars` entry that no template references                   |
+| [`action-without-description`](#action-without-description)     | clarity     | document  | advice  | action declares no `description`                                  |
+| [`command-chain-not-list`](#command-chain-not-list)             | clarity     | document  | advice  | scalar `command` chains steps with `&&`                           |
+| [`literal-recipe-path`](#literal-recipe-path)                   | clarity     | document  | warning | recipe repeats a path the target already declares                 |
+| [`rule-without-description`](#rule-without-description)         | clarity     | document  | off     | rule declares no `description`                                    |
+| [`unreachable-target`](#unreachable-target)                     | clarity     | graph     | off     | target reachable from no default and no other target              |
+| [`legacy-placeholder`](#legacy-placeholder)                     | migration   | document  | warning | recipe uses the undocumented `$in` or `$out` placeholder          |
+| [`manual-ninja-escape`](#manual-ninja-escape)                   | migration   | document  | warning | recipe doubles a dollar to escape it for Ninja                    |
+| [`suppression-without-reason`](#suppression-without-reason)     | suppression | directive | warning | lint directive states no reason                                   |
+| [`unknown-suppression`](#unknown-suppression)                   | suppression | directive | warning | lint directive names a rule that does not exist                   |
+| [`unused-suppression`](#unused-suppression)                     | suppression | directive | advice  | lint directive suppressed no finding                              |
 
 ## Correctness
 
@@ -94,8 +95,8 @@ The manifest is likely to behave differently from what it says.
 
 ### undeclared-target-input
 
-Stage `graph`, default severity `warning`,
-diagnostic code `netsuke::lint::undeclared_target_input`.
+Stage `graph`, default severity `warning`, diagnostic code
+`netsuke::lint::undeclared_target_input`.
 
 Recipe names another target's output without depending on it.
 
@@ -135,15 +136,15 @@ The declaration defeats change detection or forces needless rebuilds.
 
 ### directory-dep-not-order-only
 
-Stage `manifest`, default severity `warning`,
-diagnostic code `netsuke::lint::directory_dep_not_order_only`.
+Stage `manifest`, default severity `warning`, diagnostic code
+`netsuke::lint::directory_dep_not_order_only`.
 
 Directory-creating target used as a content dependency.
 
-A directory's modification time changes whenever any entry is created or removed
-inside it. A target that depends on a directory through `sources` or `deps`
-therefore rebuilds whenever a sibling output is written, even though nothing it
-reads has changed.
+A directory's modification time changes whenever any entry is created or
+removed inside it. A target that depends on a directory through `sources` or
+`deps` therefore rebuilds whenever a sibling output is written, even though
+nothing it reads has changed.
 
 Reported:
 
@@ -172,15 +173,15 @@ exists first without tracking its timestamp.
 
 ### phony-dep-of-file-target
 
-Stage `manifest`, default severity `warning`,
-diagnostic code `netsuke::lint::phony_dep_of_file_target`.
+Stage `manifest`, default severity `warning`, diagnostic code
+`netsuke::lint::phony_dep_of_file_target`.
 
 File target depends on a phony target through `sources` or `deps`.
 
 A phony target is always considered out of date. A file target that depends on
 one through a content key is therefore also always out of date, and so is
-everything downstream, which removes incremental rebuilds from that whole branch
-of the graph.
+everything downstream, which removes incremental rebuilds from that whole
+branch of the graph.
 
 Reported:
 
@@ -215,8 +216,8 @@ The construct depends on a shell or platform Netsuke does not promise.
 
 ### bashism
 
-Stage `document`, default severity `warning`,
-diagnostic code `netsuke::lint::bashism`.
+Stage `document`, default severity `warning`, diagnostic code
+`netsuke::lint::bashism`.
 
 Recipe uses a construct `/bin/sh` does not promise.
 
@@ -256,13 +257,13 @@ The recipe's result depends on something other than its declared inputs.
 
 ### background-job
 
-Stage `document`, default severity `warning`,
-diagnostic code `netsuke::lint::background_job`.
+Stage `document`, default severity `warning`, diagnostic code
+`netsuke::lint::background_job`.
 
 Recipe detaches a process with a trailing `&`.
 
-A detached process outlives the recipe that started it. Netsuke marks the target
-complete as soon as the shell returns, so a later target can consume a
+A detached process outlives the recipe that started it. Netsuke marks the
+target complete as soon as the shell returns, so a later target can consume a
 half-written output, and the build can finish while work is still running.
 
 Reported:
@@ -289,8 +290,8 @@ outside the build into a separate command.
 
 ### recursive-build-invocation
 
-Stage `document`, default severity `warning`,
-diagnostic code `netsuke::lint::recursive_build_invocation`.
+Stage `document`, default severity `warning`, diagnostic code
+`netsuke::lint::recursive_build_invocation`.
 
 Recipe invokes a build tool.
 
@@ -325,15 +326,15 @@ The declaration is unnecessary, inert, or duplicated.
 
 ### builtin-clean-action
 
-Stage `document`, default severity `advice`,
-diagnostic code `netsuke::lint::builtin_clean_action`.
+Stage `document`, default severity `advice`, diagnostic code
+`netsuke::lint::builtin_clean_action`.
 
 Action named `clean` duplicates the built-in `netsuke clean`.
 
-`netsuke clean` removes exactly the outputs the graph declares, by asking Ninja.
-A handwritten `clean` action removes whatever its recipe names, which drifts
-from the graph as targets are added and typically reaches for a wildcard that
-can delete more than it should.
+`netsuke clean` removes exactly the outputs the graph declares, by asking
+Ninja. A handwritten `clean` action removes whatever its recipe names, which
+drifts from the graph as targets are added and typically reaches for a wildcard
+that can delete more than it should.
 
 Reported:
 
@@ -355,8 +356,8 @@ from the graph.
 
 ### duplicate-rule-recipe
 
-Stage `manifest`, default severity `warning`,
-diagnostic code `netsuke::lint::duplicate_rule_recipe`.
+Stage `manifest`, default severity `warning`, diagnostic code
+`netsuke::lint::duplicate_rule_recipe`.
 
 Two rules declare identical recipes.
 
@@ -388,8 +389,8 @@ rules:
 
 ### redundant-always
 
-Stage `document`, default severity `advice`,
-diagnostic code `netsuke::lint::redundant_always`.
+Stage `document`, default severity `advice`, diagnostic code
+`netsuke::lint::redundant_always`.
 
 `always` declared on a target that is already phony.
 
@@ -420,16 +421,16 @@ requested.
 
 ### redundant-dependency
 
-Stage `manifest`, default severity `advice`,
-diagnostic code `netsuke::lint::redundant_dependency`.
+Stage `manifest`, default severity `advice`, diagnostic code
+`netsuke::lint::redundant_dependency`.
 
 Path declared under more than one dependency key.
 
 `sources`, `deps`, and `order_only_deps` are ordered by strength: a source
-rebuilds the target and becomes `{{ ins }}`, an implicit dependency rebuilds it,
-and an order-only dependency only sequences it. Declaring one path under two
-keys leaves the weaker declaration with no effect, and hides which behaviour the
-author wanted.
+rebuilds the target and becomes `{{ ins }}`, an implicit dependency rebuilds
+it, and an order-only dependency only sequences it. Declaring one path under
+two keys leaves the weaker declaration with no effect, and hides which
+behaviour the author wanted.
 
 Reported:
 
@@ -455,15 +456,15 @@ other.
 
 ### serial-order-without-deps
 
-Stage `document`, default severity `advice`,
-diagnostic code `netsuke::lint::serial_order_without_deps`.
+Stage `document`, default severity `advice`, diagnostic code
+`netsuke::lint::serial_order_without_deps`.
 
 `dependency_order: serial` declared with fewer than two `deps`.
 
-Serial ordering sequences the entries of a `deps` list. With no dependencies, or
-one, there is nothing to sequence, so the declaration has no effect. It usually
-means the dependencies were meant to be listed under `deps` and were written
-under `sources` instead.
+Serial ordering sequences the entries of a `deps` list. With no dependencies,
+or one, there is nothing to sequence, so the declaration has no effect. It
+usually means the dependencies were meant to be listed under `deps` and were
+written under `sources` instead.
 
 Reported:
 
@@ -495,8 +496,8 @@ The declaration is never used.
 
 ### unused-macro
 
-Stage `document`, default severity `warning`,
-diagnostic code `netsuke::lint::unused_macro`.
+Stage `document`, default severity `warning`, diagnostic code
+`netsuke::lint::unused_macro`.
 
 Declared macro that nothing calls.
 
@@ -532,8 +533,8 @@ targets:
 
 ### unused-rule
 
-Stage `manifest`, default severity `warning`,
-diagnostic code `netsuke::lint::unused_rule`.
+Stage `manifest`, default severity `warning`, diagnostic code
+`netsuke::lint::unused_rule`.
 
 Declared rule that no target or action references.
 
@@ -571,8 +572,8 @@ the rule's name.
 
 ### unused-var
 
-Stage `document`, default severity `warning`,
-diagnostic code `netsuke::lint::unused_var`.
+Stage `document`, default severity `warning`, diagnostic code
+`netsuke::lint::unused_var`.
 
 Global `vars` entry that no template references.
 
@@ -612,15 +613,15 @@ A canonical alternative reads better or is easier to discover.
 
 ### action-without-description
 
-Stage `document`, default severity `advice`,
-diagnostic code `netsuke::lint::action_without_description`.
+Stage `document`, default severity `advice`, diagnostic code
+`netsuke::lint::action_without_description`.
 
 Action declares no `description`.
 
 Actions are a manifest's public entry points, and `netsuke help targets` is how
-a newcomer or an agent discovers them. An action without a `description` appears
-in that catalogue with no explanation, so the only way to learn what it does is
-to read its recipe.
+a newcomer or an agent discovers them. An action without a `description`
+appears in that catalogue with no explanation, so the only way to learn what it
+does is to read its recipe.
 
 Reported:
 
@@ -643,15 +644,15 @@ actions:
 
 ### command-chain-not-list
 
-Stage `document`, default severity `advice`,
-diagnostic code `netsuke::lint::command_chain_not_list`.
+Stage `document`, default severity `advice`, diagnostic code
+`netsuke::lint::command_chain_not_list`.
 
 Scalar `command` chains steps with `&&`.
 
 A `command` list runs its entries in declaration order and stops at the first
-non-zero exit, which is what the `&&` chain is emulating. The list form reads as
-one step per line and reports which entry failed by position, where the chained
-form reports only that the whole command failed.
+non-zero exit, which is what the `&&` chain is emulating. The list form reads
+as one step per line and reports which entry failed by position, where the
+chained form reports only that the whole command failed.
 
 Reported:
 
@@ -676,16 +677,16 @@ step.
 
 ### literal-recipe-path
 
-Stage `document`, default severity `warning`,
-diagnostic code `netsuke::lint::literal_recipe_path`.
+Stage `document`, default severity `warning`, diagnostic code
+`netsuke::lint::literal_recipe_path`.
 
 Recipe repeats a path the target already declares.
 
-Netsuke substitutes and shell-quotes the declared inputs and outputs through `{{
-ins }}` and `{{ outs }}`. A recipe that spells the same path out again states it
-twice: renaming the target, adding an output, or generating the target with
-`foreach` then changes one copy and not the other, and the literal copy is not
-shell-quoted.
+Netsuke substitutes and shell-quotes the declared inputs and outputs through
+`{{ ins }}` and `{{ outs }}`. A recipe that spells the same path out again
+states it twice: renaming the target, adding an output, or generating the
+target with `foreach` then changes one copy and not the other, and the literal
+copy is not shell-quoted.
 
 Reported:
 
@@ -705,13 +706,13 @@ targets:
     command: "tr 'a-z' 'A-Z' < {{ ins }} > {{ outs }}"
 ```
 
-**Remediation:** Replace the literal path with `{{ outs }}` for outputs or `{{
-ins }}` for sources.
+**Remediation:** Replace the literal path with `{{ outs }}` for outputs or
+`{{ ins }}` for sources.
 
 ### rule-without-description
 
-Stage `document`, default severity `off`,
-diagnostic code `netsuke::lint::rule_without_description`.
+Stage `document`, default severity `off`, diagnostic code
+`netsuke::lint::rule_without_description`.
 
 Rule declares no `description`.
 
@@ -741,15 +742,15 @@ example `Compiling an object file`.
 
 ### unreachable-target
 
-Stage `graph`, default severity `off`,
-diagnostic code `netsuke::lint::unreachable_target`.
+Stage `graph`, default severity `off`, diagnostic code
+`netsuke::lint::unreachable_target`.
 
 Target reachable from no default and no other target.
 
-A target that no default lists and nothing depends on is only built when someone
-names it on the command line. That is a legitimate workflow, so this rule is off
-by default; a project that expects every target to be reachable can enable it to
-catch the ones left behind by a removed dependency.
+A target that no default lists and nothing depends on is only built when
+someone names it on the command line. That is a legitimate workflow, so this
+rule is off by default; a project that expects every target to be reachable can
+enable it to catch the ones left behind by a removed dependency.
 
 Reported:
 
@@ -784,15 +785,15 @@ A workaround for behaviour that a released version has since changed.
 
 ### legacy-placeholder
 
-Stage `document`, default severity `warning`,
-diagnostic code `netsuke::lint::legacy_placeholder`.
+Stage `document`, default severity `warning`, diagnostic code
+`netsuke::lint::legacy_placeholder`.
 
 Recipe uses the undocumented `$in` or `$out` placeholder.
 
 Netsuke substitutes `$in` and `$out` while lowering a recipe, but the users'
-guide documents only `{{ ins }}` and `{{ outs }}`. A recipe that meant the shell
-variable of the same name is silently rewritten, and a reader cannot tell the
-two intentions apart.
+guide documents only `{{ ins }}` and `{{ outs }}`. A recipe that meant the
+shell variable of the same name is silently rewritten, and a reader cannot tell
+the two intentions apart.
 
 Reported:
 
@@ -817,8 +818,8 @@ rename any shell variable that collides.
 
 ### manual-ninja-escape
 
-Stage `document`, default severity `warning`,
-diagnostic code `netsuke::lint::manual_ninja_escape`.
+Stage `document`, default severity `warning`, diagnostic code
+`netsuke::lint::manual_ninja_escape`.
 
 Recipe doubles a dollar to escape it for Ninja.
 
@@ -852,8 +853,8 @@ The lint directives themselves are wrong or stale.
 
 ### suppression-without-reason
 
-Stage `directive`, default severity `warning`,
-diagnostic code `netsuke::lint::suppression_without_reason`.
+Stage `directive`, default severity `warning`, diagnostic code
+`netsuke::lint::suppression_without_reason`.
 
 Lint directive states no reason.
 
@@ -888,14 +889,14 @@ construct is correct here.
 
 ### unknown-suppression
 
-Stage `directive`, default severity `warning`,
-diagnostic code `netsuke::lint::unknown_suppression`.
+Stage `directive`, default severity `warning`, diagnostic code
+`netsuke::lint::unknown_suppression`.
 
 Lint directive names a rule that does not exist.
 
 A directive naming an unregistered rule silences nothing. It is most often a
-typo, or a rule that a Netsuke upgrade renamed or retired, and in both cases the
-finding the author meant to suppress is still being reported or is about to
+typo, or a rule that a Netsuke upgrade renamed or retired, and in both cases
+the finding the author meant to suppress is still being reported or is about to
 reappear.
 
 Reported:
@@ -920,19 +921,19 @@ targets:
       feh build &
 ```
 
-**Remediation:** Correct the rule name, or delete the directive. `netsuke check
---explain` lists every rule.
+**Remediation:** Correct the rule name, or delete the directive.
+`netsuke check --explain` lists every rule.
 
 ### unused-suppression
 
-Stage `directive`, default severity `advice`,
-diagnostic code `netsuke::lint::unused_suppression`.
+Stage `directive`, default severity `advice`, diagnostic code
+`netsuke::lint::unused_suppression`.
 
 Lint directive suppressed no finding.
 
-A directive that suppresses nothing is usually left over from a problem that has
-since been fixed. It then hides the next occurrence of the same problem without
-anyone noticing.
+A directive that suppresses nothing is usually left over from a problem that
+has since been fixed. It then hides the next occurrence of the same problem
+without anyone noticing.
 
 Reported:
 
