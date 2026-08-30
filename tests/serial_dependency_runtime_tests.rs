@@ -10,7 +10,7 @@
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use netsuke::ast::Recipe;
+use netsuke::ast::{Recipe, StringOrList};
 use netsuke::ir::{Action, BuildEdge, BuildGraph, DependencyOrder};
 use netsuke::ninja_gen::generate_bundle;
 use std::io::ErrorKind;
@@ -19,7 +19,8 @@ use tempfile::TempDir;
 
 const NINJA: &str = "ninja";
 
-fn action(command: &str) -> Action {
+/// Construct an action with the supplied command representation.
+fn action(command: impl Into<StringOrList>) -> Action {
     Action {
         recipe: Recipe::Command {
             command: command.into(),
@@ -31,7 +32,6 @@ fn action(command: &str) -> Action {
         restat: false,
     }
 }
-
 fn edge(
     action_id: &str,
     output: &str,
@@ -66,13 +66,12 @@ fn serial_order_graph() -> BuildGraph {
             "test",
             "test -e lint && test ! -e test && echo three >> order.log && touch test",
         ),
-        (
-            "all",
-            "test -e test && test ! -e all && echo all >> order.log && touch all",
-        ),
     ] {
         graph.actions.insert(name.into(), action(command));
     }
+    graph
+        .actions
+        .insert("all".into(), action(StringOrList::Empty));
     for (action_id, output, deps, dependency_order) in [
         ("fmt", "check-fmt", &[][..], DependencyOrder::Parallel),
         ("lint", "lint", &[][..], DependencyOrder::Parallel),
@@ -227,8 +226,12 @@ fn serial_deps_run_in_declaration_order() -> Result<()> {
         .read_to_string("order.log")
         .context("read order log")?;
     ensure!(
-        log.lines().collect::<Vec<_>>() == vec!["one", "two", "three", "all"],
+        log.lines().collect::<Vec<_>>() == vec!["one", "two", "three"],
         "deps ran out of order: {log:?}"
+    );
+    ensure!(
+        run.root.open("all").is_err(),
+        "dependency-only aggregate must not run a synthetic recipe"
     );
     Ok(())
 }
@@ -243,49 +246,19 @@ fn failure_of_early_dep_stops_later_stages() -> Result<()> {
         .insert("later".into(), action("touch later-marker"));
     graph
         .actions
-        .insert("all".into(), action("touch all-marker"));
+        .insert("all".into(), action(StringOrList::Empty));
 
     graph.targets.insert(
         Utf8PathBuf::from("first"),
-        BuildEdge {
-            action_id: "fail".into(),
-            inputs: Vec::new(),
-            implicit_deps: Vec::new(),
-            dependency_order: DependencyOrder::Parallel,
-            explicit_outputs: vec![Utf8PathBuf::from("first")],
-            implicit_outputs: Vec::new(),
-            order_only_deps: Vec::new(),
-            phony: false,
-            always: false,
-        },
+        edge("fail", "first", &[], DependencyOrder::Parallel),
     );
     graph.targets.insert(
         Utf8PathBuf::from("second"),
-        BuildEdge {
-            action_id: "later".into(),
-            inputs: Vec::new(),
-            implicit_deps: Vec::new(),
-            dependency_order: DependencyOrder::Parallel,
-            explicit_outputs: vec![Utf8PathBuf::from("second")],
-            implicit_outputs: Vec::new(),
-            order_only_deps: Vec::new(),
-            phony: false,
-            always: false,
-        },
+        edge("later", "second", &[], DependencyOrder::Parallel),
     );
     graph.targets.insert(
         Utf8PathBuf::from("all"),
-        BuildEdge {
-            action_id: "all".into(),
-            inputs: Vec::new(),
-            implicit_deps: vec!["first".into(), "second".into()],
-            dependency_order: DependencyOrder::Serial,
-            explicit_outputs: vec![Utf8PathBuf::from("all")],
-            implicit_outputs: Vec::new(),
-            order_only_deps: Vec::new(),
-            phony: false,
-            always: false,
-        },
+        edge("all", "all", &["first", "second"], DependencyOrder::Serial),
     );
 
     let bundle = generate_bundle(&graph)?;
@@ -298,10 +271,6 @@ fn failure_of_early_dep_stops_later_stages() -> Result<()> {
     ensure!(
         !dir.path().join("later-marker").exists(),
         "later dependency must not run after the first dep fails"
-    );
-    ensure!(
-        !dir.path().join("all-marker").exists(),
-        "aggregate must not run after the first dep fails"
     );
     Ok(())
 }

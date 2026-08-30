@@ -10,24 +10,30 @@
 use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8PathBuf;
 use netsuke::{
-    ast::Recipe,
+    ast::{Recipe, StringOrList},
     ir::{BuildGraph, IrGenError},
     manifest, ninja_gen,
 };
 use rstest::rstest;
 
 #[rstest]
-fn minimal_manifest_to_ir() -> Result<()> {
-    let manifest = manifest::from_path("tests/data/minimal.yml")?;
+#[case::minimal_manifest("tests/data/minimal.yml", 1, 1)]
+#[case::duplicate_rules("tests/data/duplicate_rules.yml", 2, 2)]
+fn manifest_fixture_generates_expected_ir(
+    #[case] manifest_path: &str,
+    #[case] expected_actions: usize,
+    #[case] expected_targets: usize,
+) -> Result<()> {
+    let manifest = manifest::from_path(manifest_path)?;
     let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;
     ensure!(
-        graph.actions.len() == 1,
-        "expected one action, got {}",
-        graph.actions.len()
+        graph.actions.len() == expected_actions,
+        "expected {expected_actions} actions, got {}",
+        graph.actions.len(),
     );
     ensure!(
-        graph.targets.len() == 1,
-        "expected one target, got {}",
+        graph.targets.len() == expected_targets,
+        "expected {expected_targets} targets, got {}",
         graph.targets.len()
     );
     Ok(())
@@ -60,23 +66,6 @@ fn command_list_entries_are_interpolated_in_order() -> Result<()> {
     ensure!(
         command.to_string_vec() == ["echo first src/main.c", "echo second out/app"],
         "each list entry should be interpolated in declaration order: {command:?}"
-    );
-    Ok(())
-}
-
-#[rstest]
-fn duplicate_rules_emit_distinct_actions() -> Result<()> {
-    let manifest = manifest::from_path("tests/data/duplicate_rules.yml")?;
-    let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;
-    ensure!(
-        graph.actions.len() == 2,
-        "expected two actions, got {}",
-        graph.actions.len()
-    );
-    ensure!(
-        graph.targets.len() == 2,
-        "expected two targets, got {}",
-        graph.targets.len()
     );
     Ok(())
 }
@@ -265,6 +254,45 @@ fn manifest_deps_do_not_contribute_to_recipe_inputs() -> Result<()> {
                 Utf8PathBuf::from("generated/stamp"),
             ],
         "deps should populate only implicit deps"
+    );
+    Ok(())
+}
+
+#[test]
+fn dependency_only_entries_lower_to_deduplicated_phony_actions() -> Result<()> {
+    let yaml = concat!(
+        "netsuke_version: '1.0.0'\n",
+        "actions:\n",
+        "  - name: all\n",
+        "    deps: [check-fmt, lint]\n",
+        "targets:\n",
+        "  - name: release\n",
+        "    deps: [all]\n",
+    );
+    let manifest = manifest::from_str(yaml)?;
+    let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;
+    ensure!(
+        graph.actions.len() == 1
+            && graph.actions.values().all(|action| {
+                matches!(
+                    action.recipe,
+                    Recipe::Command {
+                        command: StringOrList::Empty
+                    }
+                )
+            }),
+        "dependency-only entries should deduplicate into one non-executable action: {:?}",
+        graph.actions
+    );
+    let ninja = ninja_gen::generate(&graph).context("generate dependency-only Ninja")?;
+    ensure!(
+        ninja.contains("build all: phony | check-fmt lint")
+            && ninja.contains("build release: phony | all"),
+        "dependency-only entries should lower to phony Ninja nodes: {ninja}"
+    );
+    ensure!(
+        !ninja.contains("rule ") && !ninja.contains("command ="),
+        "dependency-only nodes must not emit a synthetic recipe: {ninja}"
     );
     Ok(())
 }

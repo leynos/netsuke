@@ -108,8 +108,8 @@ named-command help paths render clap help directly and do not load a manifest.
 Keep future help topics within this boundary rather than coupling read-only
 inspection to `runner::process`.
 
-Manifest rendering has two caller-selected modes. Full rendering evaluates
-all manifest fields, including recipe bodies, for build, generate, and manifest
+Manifest rendering has two caller-selected modes. Full rendering evaluates all
+manifest fields, including recipe bodies, for build, generate, and manifest
 output. Manifest-query rendering evaluates discovery metadata and the
 structural selectors needed to validate the graph, but leaves command and
 script recipe bodies untouched. This boundary is what permits a recipe to
@@ -119,8 +119,8 @@ otherwise evaluate that helper; it does not alter full-render behaviour.
 Helpers excluded from the query allowlist are registered as deliberate
 query-disabled stubs by the standard-library adapter. The stubs return a
 stable, classified MiniJinja operation error. Manifest expansion recognizes
-that classification only while evaluating a query `when` expression: the
-result is a conditional entry when the helper prevents evaluation, whereas a
+that classification only while evaluating a query `when` expression: the result
+is a conditional entry when the helper prevents evaluation, whereas a
 successfully evaluated false expression still excludes the entry. Unrelated
 template errors continue to propagate normally.
 
@@ -329,10 +329,28 @@ construction.
 Command recipes use the `StringOrList` AST type. A scalar command remains one
 shell-text value; a YAML sequence is an ordered list of entries. The same
 recipe path handles commands declared on reusable rules, direct targets, and
-actions. Manifest deserialization rejects an empty command list. Code that
-constructs the IR directly must also reject both `StringOrList::Empty` and an
-empty `StringOrList::List(Vec::new())` during Ninja generation rather than
-emitting an unusable rule.
+actions. Manifest deserialization rejects an explicitly empty command list. The
+internal `StringOrList::Empty` marker is valid for an action or target when its
+rendered `deps` list is non-empty, forming a dependency-only aggregate. Code
+that constructs the IR directly must reject an empty
+`StringOrList::List(Vec::new())` during Ninja generation rather than emitting
+an unusable rule.
+
+### Dependency-only actions and targets
+
+The manifest's internal dependency-only marker represents an action or target
+whose non-empty `deps` list is its complete operation. Manifest loading renders
+`deps` before validating recipes, then rejects dependency-only rules and
+actions or targets whose rendered dependencies are absent. Entries with
+executable work continue to require exactly one of `command`, `script`, or
+`rule`.
+
+Manifest-to-IR lowering keeps the dependency list as `BuildEdge::implicit_deps`
+and registers the dependency-only action without a command. The shared action
+rule emission in `src/ninja_gen/mod.rs` omits that action from the generated
+Ninja `rule` blocks; its edge selects Ninja's built-in `phony` rule instead.
+The direct generator and the serial-dependency bundle use this same path, so a
+dependency-only aggregate does not need a synthetic `command: ":"` recipe.
 
 The lowering stages have deliberately separate responsibilities:
 
@@ -351,23 +369,23 @@ The lowering stages have deliberately separate responsibilities:
   once. That boundary doubles residual dollar signs and rejects control
   characters after IR lowering and before file emission. Paths remain distinct
   from shell text and are rejected when they contain `$`, spaces, colons, or
-  control characters. For a list, it puts
-  each entry in a brace group and joins the groups with `&&`. Each group uses
-  `eval` with a shell-quoted entry payload. This keeps an inline comment or a
-  trailing control operator such as `&` inside the entry from consuming the
-  generated group terminator. Braces run in the current shell, not a subshell,
-  so directory changes, environment assignments, and shell variables can carry
-  from one entry to the next. The `&&` chain remains fail-fast. Each entry may
-  start at most one background job; the generated wrapper waits for that job
-  before it evaluates a later entry. Ninja generation rejects entries that
-  start more than one background job. It also rejects entries whose nested
-  `eval` payload makes the background-job count dynamic because the wrapper
-  cannot safely determine which jobs to wait for. A direct simple `exec`,
-  optionally prefixed by shell assignments, is evaluated in a retaining
-  subshell so its success or failure remains visible to the wrapper; a
-  successful `exec` ends the remaining chain. Structured or nested `exec` forms
-  are rejected during Ninja generation because the wrapper cannot supervise
-  them without changing their shell semantics.
+  control characters. For a list, it puts each entry in a brace group and joins
+  the groups with `&&`. Each group uses `eval` with a shell-quoted entry
+  payload. This keeps an inline comment or a trailing control operator such as
+  `&` inside the entry from consuming the generated group terminator. Braces
+  run in the current shell, not a subshell, so directory changes, environment
+  assignments, and shell variables can carry from one entry to the next. The
+  `&&` chain remains fail-fast. Each entry may start at most one background
+  job; the generated wrapper waits for that job before it evaluates a later
+  entry. Ninja generation rejects entries that start more than one background
+  job. It also rejects entries whose nested `eval` payload makes the
+  background-job count dynamic because the wrapper cannot safely determine
+  which jobs to wait for. A direct simple `exec`, optionally prefixed by shell
+  assignments, is evaluated in a retaining subshell so its success or failure
+  remains visible to the wrapper; a successful `exec` ends the remaining chain.
+  Structured or nested `exec` forms are rejected during Ninja generation
+  because the wrapper cannot supervise them without changing their shell
+  semantics.
 - `src/runner/process` forwards the command's output and recognizes the
   bounded `netsuke command-list failure: action HASH, entry M` marker. A failed
   list therefore retains the original exit status while adding the fixed-width
@@ -411,8 +429,8 @@ behavioural contract for these boundaries.
 `ShellText` is completed, backend-agnostic command or script text from the IR.
 It deliberately does not implement `Display`: writers must not serialize it by
 accident. `NinjaValue` is the escaped value accepted by a Ninja `command`
-binding. `escape_ninja_value` is its only constructor and is fallible so control
-characters fail before emission.
+binding. `escape_ninja_value` is its only constructor and is fallible so
+control characters fail before emission.
 
 The seam is owned by `src/ninja_gen_escape.rs`. Only the Ninja action writer
 may compose a completed command and convert its `ShellText` into a
@@ -623,6 +641,7 @@ workflow rather than copying the number, so the two cannot drift:
 NEXTEST_VERSION="$(sed -n "s/.*NEXTEST_VERSION: '\(.*\)'.*/\1/p" \
   .github/workflows/ci.yml)"
 cargo install cargo-nextest --locked --version "$NEXTEST_VERSION"
+
 # or, for a prebuilt binary:
 cargo binstall --no-confirm --locked \
   "cargo-nextest@$NEXTEST_VERSION"
@@ -702,15 +721,15 @@ inline `cli` facade: the four-file slice containing `src/cli/command.rs`,
 `src/cli/config.rs`, `src/cli/help.rs`, and `src/cli/validation.rs`. The
 `command.rs` module owns the Clap command schema and default-command behaviour,
 including `Cli::with_default_command()`, while runtime discovery remains
-deliberately outside the slice. The broader
-`netsuke::cli::discovery` module remains under the capability policy; no
-`build_script_build` exception is required. The behavioural step definitions,
-CLI integration tests, and shared workflow-reading helper that stage fixtures
-ambiently are scoped the same way. A crate-level entry is justified only when
-the ambient access lives in the crate root itself, where a path entry would be
-no narrower — that covers the enumerated integration-test crates. The
-`test_support` crate uses capability-backed fixture helpers and remains linted
-by Whitaker under its own narrow policy.
+deliberately outside the slice. The broader `netsuke::cli::discovery` module
+remains under the capability policy; no `build_script_build` exception is
+required. The behavioural step definitions, CLI integration tests, and shared
+workflow-reading helper that stage fixtures ambiently are scoped the same way.
+A crate-level entry is justified only when the ambient access lives in the
+crate root itself, where a path entry would be no narrower — that covers the
+enumerated integration-test crates. The `test_support` crate uses
+capability-backed fixture helpers and remains linted by Whitaker under its own
+narrow policy.
 
 The root Whitaker invocation selects only the `netsuke-build` package (the
 Cargo package name behind the `netsuke` targets; see ADR-007) and disables
@@ -1544,8 +1563,8 @@ Mutation evidence for these harnesses lives under
 `docs/verification/mutations/`. File names use the harness path with `::`
 replaced by `__`, for example
 `ir__cycle__verification__self_dependency_reports_cycle.patch`. Each patch
-seeds one realistic fault into the production code its harness drives, and
-each was validated by applying the patch and watching the harness fail under
+seeds one realistic fault into the production code its harness drives, and each
+was validated by applying the patch and watching the harness fail under
 `cargo kani --harness <name>`.
 
 `tests/kani_mutation_evidence_tests.rs` keeps that evidence in lockstep with
@@ -1555,11 +1574,10 @@ the harnesses as part of `make test`:
   (`git apply --check`), catching silent rot when production code near a
   patched hunk moves — skipped when the source tree is not a git checkout,
   because `cargo-mutants` tests each mutant in a copy without `.git` and a
-  mutant overlapping a patch hunk would otherwise be reported as killed
-  without any behavioural assertion detecting it;
+  mutant overlapping a patch hunk would otherwise be reported as killed without
+  any behavioural assertion detecting it;
 - every `#[kani::proof]` harness under `src/` must own a correspondingly
-  named patch, or appear in the test's exemption list with a stated reason;
-  and
+  named patch, or appear in the test's exemption list with a stated reason; and
 - every patch must correspond to a live harness, catching renames.
 
 When the gate reports a rotted patch, regenerate it against the moved
@@ -1656,10 +1674,9 @@ governs the non-doctest pass only, and deliberately stays small:
   slow documentation end-to-end suites, which shell out to real Ninja.
 - **Scoped subprocess timings.** The split-build locale harness and packaging
   smoke test emit their Cargo subprocess durations after each Cargo subprocess
-  returns.
-  They intentionally use private Cargo directories to preserve isolation and
-  publication-boundary coverage; their diagnostics distinguish that work from
-  future regressions without raising the slow-test threshold.
+  returns. They intentionally use private Cargo directories to preserve
+  isolation and publication-boundary coverage; their diagnostics distinguish
+  that work from future regressions without raising the slow-test threshold.
 
 ### How this relates to the isolation utilities
 
@@ -1998,13 +2015,14 @@ limited to the IR implementation; they must not be re-exported from the crate
 or used by non-IR modules.
 
 `first_byte_cmp` owns the bounded string-comparison semantics for Kani builds.
-Under `cfg(kani)`, it orders non-empty strings by their first UTF-8 byte, orders
-an empty string before a non-empty string, and treats two empty strings as
-equal. Its only direct consumers are `path_cmp`, which adapts cycle paths with
-`Utf8Path::as_str`, and `sort_utils::string_cmp`, which adapts manifest rule
-names. Future IR code may reuse it only when its symbolic inputs have that same
-single-byte contract; ordinary builds must keep their full lexical comparison,
-and a caller with different semantics must own a separate local comparator.
+Under `cfg(kani)`, it orders non-empty strings by their first UTF-8 byte,
+orders an empty string before a non-empty string, and treats two empty strings
+as equal. Its only direct consumers are `path_cmp`, which adapts cycle paths
+with `Utf8Path::as_str`, and `sort_utils::string_cmp`, which adapts manifest
+rule names. Future IR code may reuse it only when its symbolic inputs have that
+same single-byte contract; ordinary builds must keep their full lexical
+comparison, and a caller with different semantics must own a separate local
+comparator.
 
 This composition keeps the Kani approximation in one owner while leaving the
 cycle and manifest modules responsible for adapting their domain values. It is
@@ -2017,11 +2035,11 @@ Kani-friendly deterministic sorting and comparison helpers, owned by
 `#[path = "sort_utils.rs"] mod sort_utils;`). It provides `insertion_sort_by`,
 `sort_strings`, `sort_paths`, and `has_seen_output`, which the manifest-to-IR
 rule-resolution and duplicate-output detection paths consume. Its Kani
-`string_cmp` adapts rule names to the `cycle::support::first_byte_cmp` contract;
-it must not duplicate or redefine that byte-ordering semantics. Keep the local
-sorting algorithms dependency-free and deterministic so the Kani harnesses in
-`src/ir/from_manifest_verification.rs` can verify bounded symbolic input, and
-do not move them out to a shared utility crate.
+`string_cmp` adapts rule names to the `cycle::support::first_byte_cmp`
+contract; it must not duplicate or redefine that byte-ordering semantics. Keep
+the local sorting algorithms dependency-free and deterministic so the Kani
+harnesses in `src/ir/from_manifest_verification.rs` can verify bounded symbolic
+input, and do not move them out to a shared utility crate.
 
 ### `src/ir/cycle_detector.rs`
 
@@ -2224,14 +2242,15 @@ Two compile-time guards hold that boundary:
   because `src/manifest/mod.rs` deliberately re-exports it, making it genuinely
   reachable; every item here that is not re-exported stays guarded.
 - A pair of doctests attached to the public `glob_paths` documentation: a
-  `compile_fail,E0603` block importing `netsuke::manifest::glob::GlobEntryResult`
-  and a passing block importing `netsuke::manifest::glob_paths`. Together they
-  validate the downstream view — the alias has no public path, while the entry
-  point does. The passing block is the control: if the rustdoc harness wiring
-  breaks, it fails rather than letting the rejection pass vacuously. Both are
-  attached to `glob_paths` rather than to the private items they describe
-  because rustdoc renders and runs the examples of public items, which also
-  makes the boundary discoverable from the published API documentation.
+  `compile_fail,E0603` block importing
+  `netsuke::manifest::glob::GlobEntryResult` and a passing block importing
+  `netsuke::manifest::glob_paths`. Together they validate the downstream view —
+  the alias has no public path, while the entry point does. The passing block
+  is the control: if the rustdoc harness wiring breaks, it fails rather than
+  letting the rejection pass vacuously. Both are attached to `glob_paths`
+  rather than to the private items they describe because rustdoc renders and
+  runs the examples of public items, which also makes the boundary discoverable
+  from the published API documentation.
 
 When adding to this module, keep new items private, or `pub(super)` when a
 sibling submodule needs them; widen the boundary only by adding a deliberate
@@ -2239,10 +2258,10 @@ re-export in `src/manifest/mod.rs`. The comments in the source are supporting
 detail for these rules, not a substitute for them.
 
 The private `GlobExpansion::into_template_paths` method is the adapter between
-the filesystem query and Jinja values that may later be interpolated into
-shell commands. It accepts only non-empty paths made from ASCII letters,
-digits, `/`, `:`, comma, full stop, underscore, and hyphen. Any whitespace,
-control character, non-ASCII byte, or other punctuation returns a MiniJinja
+the filesystem query and Jinja values that may later be interpolated into shell
+commands. It accepts only non-empty paths made from ASCII letters, digits, `/`,
+`:`, comma, full stop, underscore, and hyphen. Any whitespace, control
+character, non-ASCII byte, or other punctuation returns a MiniJinja
 `InvalidOperation` error before `foreach` receives the value. This policy is
 Jinja-specific: `glob_paths` retains its filesystem-query contract and returns
 all matching UTF-8 file paths without applying shell-safety validation.
@@ -3007,9 +3026,9 @@ default. Only events emitted on the calling thread are captured; events emitted
 from threads spawned inside the closure are silently dropped.
 
 The root-crate module is `#[cfg(test)]`, so it is available to unit tests only;
-integration tests under `tests/` compile as separate crates and cannot reach
-it. `test_support::tracing_capture` is the public, reusable capture boundary
-for integration tests. It is limited to test code: callers choose the
+integration tests under `tests/` compile as separate crates and cannot reach it.
+`test_support::tracing_capture` is the public, reusable capture boundary for
+integration tests. It is limited to test code: callers choose the
 `LevelFilter`, capture events only inside the supplied closure, and must not
 install a global subscriber or use it from production modules. Reuse it for
 in-process observability assertions such as configuration merging. Coverage
@@ -3095,8 +3114,8 @@ then pass it to `cli::merge_with_cached_file_layers_with_observer(input)`. The
 function returns the merge result alongside bounded events; replay those events
 through `MergeObserver`, such as `TracingMergeObserver`. Another caller can
 provide its own `MergeObserver` implementation. Observers receive bounded
-`MergeEvent` values: layer application and failure states, file `path_hash`
-and layer counts, CLI override leaf keys, and validation `key`/`reason` fields.
+`MergeEvent` values: layer application and failure states, file `path_hash` and
+layer counts, CLI override leaf keys, and validation `key`/`reason` fields.
 Configuration values and raw paths are never included. Ordinary
 `merge_with_config*` and `merge_with_cached_file_layers` calls use no-op
 observation and do not emit merge tracing.
@@ -3124,10 +3143,9 @@ that avoids copying complete `MergeLayer` values before the cached merge.
 The standalone `merge_with_config_and_env` path performs discovery and
 delegates to the ordinary merge query, which discards its collected events. It
 does not replay retained discovery diagnostics or emit merge tracing.
-`merge_with_config` is
-the process-environment wrapper around that path. The application startup path
-replays discovery diagnostics and returned merge events through
-`TracingMergeObserver` explicitly.
+`merge_with_config` is the process-environment wrapper around that path. The
+application startup path replays discovery diagnostics and returned merge
+events through `TracingMergeObserver` explicitly.
 
 Deferred bounded discovery diagnostics are replay metadata only. Discovery
 errors remain owned by `DiscoveredLayers` and are handled by the diagnostic
@@ -3611,10 +3629,9 @@ resolves and caches discovered layers with
 `cli::resolve_json_and_layers_outcome_with_env`; the merge helper passes those
 cached layers to `cli::merge_with_cached_file_layers_with_observer`, then
 replays the returned merge events through `cli::TracingMergeObserver`. The
-boundary replays deferred discovery diagnostics before that merge; the
-ordinary query helpers do not emit tracing themselves.
-Phase-level metrics are composed in `src/observability.rs` around those two
-operations.
+boundary replays deferred discovery diagnostics before that merge; the ordinary
+query helpers do not emit tracing themselves. Phase-level metrics are composed
+in `src/observability.rs` around those two operations.
 
 Both aggregate and phase-level configuration-load timing use the same injected
 elapsed-time seam: each boundary receives `&impl monotony::MonotonicClock`.
@@ -4178,9 +4195,8 @@ or non-TTY standard output.
 `AccessibleReporter` and `VerboseTimingReporter` are each generic over a
 `Write + Send` output sink that defaults to `io::Stderr`; tests inject a
 `Vec<u8>` writer to capture status and timing lines without a global stderr
-sink. `VerboseTimingReporter` writes its timing summary to that injected
-sink while the wrapped reporter continues to own stage, task, and completion
-lines.
+sink. `VerboseTimingReporter` writes its timing summary to that injected sink
+while the wrapped reporter continues to own stage, task, and completion lines.
 
 External embedders construct the generic form with
 `VerboseTimingReporter::with_writer`; `VerboseTimingReporter::new` retains the

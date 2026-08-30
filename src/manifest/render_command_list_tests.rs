@@ -37,6 +37,29 @@ fn large_command_list_prepares_the_jinja_context_once() {
 }
 
 #[test]
+fn dependency_only_marker_skips_recipe_context_preparation() {
+    reset_recipe_context_preparations();
+    let mut command = StringOrList::Empty;
+    let env = Environment::new();
+    let vars = Vars::new();
+    let context = RecipeRenderContext {
+        env: &env,
+        vars: &vars,
+        subject: "target",
+        mode: RenderMode::Full,
+    };
+
+    render_command_recipe(&mut command, &context)
+        .expect("dependency-only marker should not need recipe rendering");
+
+    assert_eq!(
+        recipe_context_preparations(),
+        0,
+        "dependency-only markers must skip recipe-context preparation"
+    );
+}
+
+#[test]
 fn target_recipe_context_reserves_ins_and_outs_placeholders() -> Result<()> {
     let env = Environment::new();
     let mut target_vars = Vars::new();

@@ -44,6 +44,7 @@ mod expand;
 mod glob;
 mod hints;
 mod jinja_macros;
+mod load_stage;
 mod parse_with_config;
 mod query;
 mod render;
@@ -52,14 +53,13 @@ mod render;
 pub type ManifestValue = serde_json::Value;
 /// JSON object mapping string keys to manifest values.
 pub type ManifestMap = serde_json::Map<String, ManifestValue>;
-
 pub use diagnostics::{
     ManifestError, ManifestName, ManifestSource, map_data_error, map_yaml_error,
 };
 pub use env_reader::{EnvReadError, EnvReader, process_env_reader};
-pub use glob::glob_paths;
-
 pub(crate) use expand::expand_foreach;
+pub use glob::glob_paths;
+pub use load_stage::ManifestLoadStage;
 pub use parse_with_config::from_str_with_env_and_config;
 pub(crate) use query::from_path_for_manifest_query;
 pub use render::render_manifest;
@@ -67,19 +67,6 @@ pub use render::render_manifest;
 use self::{env_reader::env_var_with, jinja_macros::register_manifest_macros};
 #[cfg(test)]
 use workspace::open_manifest_workspace;
-
-/// Stages in the manifest-loading sub-pipeline.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum ManifestLoadStage {
-    /// Read raw manifest content from the filesystem.
-    ManifestIngestion,
-    /// Parse raw YAML into a `serde_json::Value` tree.
-    InitialYamlParsing,
-    /// Expand `foreach` and `when` template directives.
-    TemplateExpansion,
-    /// Deserialize and render string fields into typed manifest data.
-    FinalRendering,
-}
 
 /// Invoke the stage callback when present.
 fn notify_stage(
@@ -171,11 +158,19 @@ fn from_str_named(
             message: localization::message(keys::MANIFEST_PARSE),
         })?;
 
-    if is_manifest_query {
-        render::render_manifest_for_manifest_query(manifest, &jinja)
+    let rendered_manifest = if is_manifest_query {
+        render::render_manifest_for_manifest_query(manifest, &jinja)?
     } else {
-        render_manifest(manifest, &jinja)
-    }
+        render_manifest(manifest, &jinja)?
+    };
+    rendered_manifest
+        .validate_recipes()
+        .map_err(|detail| ManifestError::Parse {
+            source: map_data_error(serde_json::Error::custom(detail), name),
+            message: localization::message(keys::MANIFEST_PARSE),
+        })?;
+
+    Ok(rendered_manifest)
 }
 
 /// Translate schema-only recipe errors at the manifest adapter boundary.

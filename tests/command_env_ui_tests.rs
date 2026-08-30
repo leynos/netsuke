@@ -99,6 +99,15 @@ fn command_list_public_api_fixture_compiles() -> io::Result<()> {
     )
 }
 
+/// The public IR-generation error fixture compiles for an external embedder.
+#[test]
+fn ir_gen_error_public_api_fixture_compiles() -> io::Result<()> {
+    compile_public_api_fixture(
+        "tests/ui/ir_gen_error_public_api_pass.rs",
+        "the IR-generation error public API fixture should compile",
+    )
+}
+
 /// The cached configuration-discovery API compiles for an external embedder.
 #[test]
 fn config_cached_discovery_embedder_fixture_compiles() -> io::Result<()> {

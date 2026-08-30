@@ -286,11 +286,8 @@ fn generate_command_list_ninja_joins_a_fail_fast_chain() -> Result<()> {
 }
 
 #[rstest]
-#[case::empty(StringOrList::Empty)]
 #[case::empty_list(StringOrList::List(Vec::new()))]
-fn programmatic_empty_command_recipe_returns_a_typed_generation_error(
-    #[case] command: StringOrList,
-) {
+fn programmatic_empty_command_list_returns_a_typed_generation_error(#[case] command: StringOrList) {
     let action = command_action(command);
     let mut graph = BuildGraph::default();
     graph.actions.insert("empty".into(), action);
@@ -301,7 +298,6 @@ fn programmatic_empty_command_recipe_returns_a_typed_generation_error(
         "empty command recipe should produce the stable typed error, got {error:?}"
     );
 }
-
 #[test]
 fn nested_command_list_exec_returns_a_typed_generation_error() {
     let action = command_action(StringOrList::List(vec![

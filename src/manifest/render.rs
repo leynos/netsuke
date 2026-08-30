@@ -194,7 +194,7 @@ fn render_command_recipe(
     command: &mut StringOrList,
     context: &RecipeRenderContext<'_>,
 ) -> Result<()> {
-    if context.mode == RenderMode::ManifestQuery {
+    if context.mode == RenderMode::ManifestQuery || command.is_empty_marker() {
         return Ok(());
     }
     render_recipe_string_or_list(command, context.env, context.vars, || {
@@ -313,6 +313,7 @@ thread_local! {
 }
 
 #[cfg(test)]
+/// Count one recipe-context preparation for the recipe-context tests.
 fn record_recipe_context_preparation() {
     RECIPE_CONTEXT_PREPARATIONS.with(|count| count.set(count.get() + 1));
 }

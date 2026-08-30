@@ -59,8 +59,8 @@ use crate::hex;
 use crate::ir::{BuildEdge, BuildGraph};
 use crate::localization::{self, keys};
 use crate::ninja_gen::{
-    NamedAction, NinjaGenError, edge_requires_gates, graph_requires_dyndep, join, path_key,
-    reject_unsupported_path_characters, validate_action_metadata, validate_action_recipe,
+    NinjaGenError, edge_requires_gates, graph_requires_dyndep, join, path_key,
+    reject_unsupported_path_characters, write_action_rules,
 };
 use camino::Utf8PathBuf;
 use sha2::{Digest, Sha256};
@@ -118,13 +118,7 @@ fn generate_bundle_inner(graph: &BuildGraph) -> Result<GeneratedNinja, NinjaGenE
         writeln!(out, "ninja_required_version = 1.10\n")?;
     }
 
-    let mut actions: Vec<_> = graph.actions.iter().collect();
-    actions.sort_by_key(|(id, _)| *id);
-    for (zero_based_action_index, (id, action)) in actions.into_iter().enumerate() {
-        validate_action_recipe(action, zero_based_action_index + 1)?;
-        validate_action_metadata(action)?;
-        NamedAction { id, action }.write_into(&mut out)?;
-    }
+    write_action_rules(graph, &mut out)?;
 
     let mut stages = SerialStages::default();
     render_edges(graph, &mut out, &mut stages)?;
@@ -178,28 +172,47 @@ fn render_edge(
                     .with_arg("id", &edge.action_id),
             })?;
 
+    let rendered_action = RenderedAction {
+        name: if action.recipe.is_dependency_only() {
+            "phony"
+        } else {
+            &edge.action_id
+        },
+        restat: action.restat,
+    };
     if edge_requires_gates(edge) {
-        return render_serial_edge(edge, action.restat, out, stages);
+        return render_serial_edge(edge, rendered_action, out, stages);
     }
-    render_display_edge(edge, action.restat, &edge.implicit_deps, out)
+    render_display_edge(edge, rendered_action, &edge.implicit_deps, out)
 }
 
+/// Hold the selected Ninja rule metadata while lowering a graph edge.
+///
+/// Keep these fields together because direct and serial lowering must render
+/// the same rule selection without widening the graph representation.
+#[derive(Clone, Copy)]
+struct RenderedAction<'a> {
+    /// Name the Ninja rule selected for the edge.
+    name: &'a str,
+    /// Preserve whether Ninja should restat this edge after execution.
+    restat: bool,
+}
 /// Render one staged serial edge and replace its real dependencies with gates.
 fn render_serial_edge(
     edge: &BuildEdge,
-    action_restat: bool,
+    action: RenderedAction<'_>,
     out: &mut String,
     stages: &mut SerialStages,
 ) -> Result<(), NinjaGenError> {
     let mut gate_paths = Vec::new();
     render_serial_block(edge, out, stages, &mut gate_paths)?;
-    render_display_edge(edge, action_restat, &gate_paths, out)
+    render_display_edge(edge, action, &gate_paths, out)
 }
 
 /// Render an edge using its already selected Ninja action metadata.
 fn render_display_edge(
     edge: &BuildEdge,
-    action_restat: bool,
+    action: RenderedAction<'_>,
     implicit_deps: &[Utf8PathBuf],
     out: &mut String,
 ) -> Result<(), NinjaGenError> {
@@ -208,7 +221,8 @@ fn render_display_edge(
         "{}",
         crate::ninja_gen::DisplayEdge {
             edge,
-            action_restat,
+            action_name: action.name,
+            action_restat: action.restat,
             implicit_deps,
         }
     )?;

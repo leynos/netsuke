@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use camino::Utf8PathBuf;
 
-use crate::ast::{NetsukeManifest, Recipe, Rule};
+use crate::ast::{MISSING_RECIPE_ERROR, NetsukeManifest, Recipe, Rule};
 use crate::localization::{self, keys};
 
 use super::{
@@ -34,8 +34,14 @@ impl BuildGraph {
     /// # Errors
     ///
     /// Returns [`IrGenError`] when a referenced rule is missing, multiple rules
-    /// are specified for a single target, or no rule is provided.
+    /// are specified for a single target, no rule is provided, or a directly
+    /// deserialized manifest violates the recipe contract.
     pub fn from_manifest(manifest: &NetsukeManifest) -> Result<Self, IrGenError> {
+        manifest
+            .validate_recipes()
+            .map_err(|_| IrGenError::InvalidManifest {
+                message: MISSING_RECIPE_ERROR,
+            })?;
         let mut graph = Self::default();
         let mut rule_map = IrHashMap::<String, Arc<Rule>>::default();
 
