@@ -232,9 +232,9 @@ criterion in issue #552 and all repository gates pass.
 - [x] (2026-08-11) Documented the manifest syntax and user-visible execution
   contract in `docs/users-guide.md`, including the default, serial scope,
   failure handling, shared-work behaviour, independent-reachability boundary,
-  Ninja 1.10 floor, generated sidecars, and reserved paths. Updated the
-  design, developer, repository-layout, contents, and roadmap documents and
-  added ADR-011 for the durable backend decision.
+  Ninja 1.10 floor, generated sidecars, and reserved paths. Updated the design,
+  developer, repository-layout, contents, and roadmap documents and added
+  ADR-011 for the durable backend decision.
 - [x] (2026-08-12) Ran the full deterministic suite. Formatting, type checking,
   linting, Markdown linting, and Mermaid validation passed; the documentation
   example loader rejected the new YAML fence because it lacked a
@@ -278,9 +278,9 @@ criterion in issue #552 and all repository gates pass.
   the root Whitaker recipe did not pass the existing `dylint.toml` policy to
   Dylint; its documented build-script and ambient-path exclusions therefore
   appeared as false positives. The recipe now supplies `DYLINT_TOML` explicitly
-  for the root pass, matching the existing `test_support` pass. `make
-  check-fmt`, `make typecheck`, `make lint`, `make test`, `make markdownlint`,
-  and `make nixie` all passed afterwards.
+  for the root pass, matching the existing `test_support` pass.
+  `make check-fmt`, `make typecheck`, `make lint`, `make test`,
+  `make markdownlint`, and `make nixie` all passed afterwards.
 - [x] (2026-08-12) Replaced the deterministic temporary-sidecar suffix with a
   per-process, monotonic attempt name and retry `create_new` collisions. Keep
   every name below the final sidecar parent so the capability-scoped rename
@@ -289,8 +289,8 @@ criterion in issue #552 and all repository gates pass.
   existing matching final sidecar with another temporary file. The focused
   suite passed 7 tests. The first full lint run identified a five-argument
   helper and then a by-value context; grouping and borrowing the context
-  resolved both without changing the atomic protocol. `make check-fmt`, `make
-  typecheck`, `make lint`, `make test` (1,943 passed, 1 skipped, doctests
+  resolved both without changing the atomic protocol. `make check-fmt`,
+  `make typecheck`, `make lint`, `make test` (1,943 passed, 1 skipped, doctests
   passed), `make markdownlint`, and `make nixie` all passed. CodeRabbit found
   no concerns.
 - [x] Committed each green logical change and recorded final evidence here.
@@ -299,8 +299,8 @@ criterion in issue #552 and all repository gates pass.
   proves the shared output executes once and uses a marker handshake to prove
   that unrelated work progresses concurrently. Added the missing v0.1.0
   migration guidance and removed developer-specific workspace metadata from
-  this plan. All deterministic gates passed and CodeRabbit returned no
-  findings for this milestone.
+  this plan. All deterministic gates passed and CodeRabbit returned no findings
+  for this milestone.
 - [x] (2026-08-12) Separated effect-free `GeneratedNinja` production from the
   runner's explicit, capability-injected publication command. The command
   handlers now consume the bundle after publication, removing the generated
@@ -322,17 +322,16 @@ criterion in issue #552 and all repository gates pass.
   errors. Focused evidence: 21 dyndep tests, one render test, and 29 touched
   integration/runtime tests passed.
 - [x] (2026-08-12) Completed the review-fix validation. `make check-fmt`,
-  `make typecheck`, `make lint`, `make test`, `make markdownlint`, and `make
-  nixie` passed; the full suite reported 1,952 passed tests, one skipped test,
-  and passing doctests. CodeRabbit completed with zero findings.
+  `make typecheck`, `make lint`, `make test`, `make markdownlint`, and
+  `make nixie` passed; the full suite reported 1,952 passed tests, one skipped
+  test, and passing doctests. CodeRabbit completed with zero findings.
 - [x] (2026-08-12) Validated the second review remediation: control-character
   path rejection, dependency-order module split, concurrent runtime-order
   coverage, schema and migration links, and targeted locale corrections are
   implemented. All 52 focused tests passed. `make check-fmt`, `make typecheck`,
   `make lint`, `make test`, `make markdownlint`, and `make nixie` passed; the
   full suite reported 1,970 passed tests, one skipped test, and passing
-  doctests. The subsequent independent CodeRabbit review reported zero
-  findings.
+  doctests. The subsequent independent CodeRabbit review reported zero findings.
 - [x] (2026-08-12) Closed the remaining serial-dyndep review gaps without
   changing scheduling semantics. Public-CLI tests now prove runner-owned
   sidecar publication, declaration order, and failure short-circuiting at
@@ -364,16 +363,17 @@ criterion in issue #552 and all repository gates pass.
   telemetry, growth detection, and bounded collision retries with focused
   tests. Corrected the design flow and Ninja loading probe. The focused suites
   passed 13 materializer, 49 generator, and 4 CLI tests. `make check-fmt`,
-  `make typecheck`, `make lint`, `make test`, `make markdownlint`, and `make
-  nixie` passed; the full suite reported 2,003 passed tests, one skipped test,
-  and passing doctests. CodeRabbit reviewed the committed milestone and reported
-  zero actionable findings across 75 changed files.
+  `make typecheck`, `make lint`, `make test`, `make markdownlint`, and
+  `make nixie` passed; the full suite reported 2,003 passed tests, one skipped
+  test, and passing doctests. CodeRabbit reviewed the committed milestone and
+  reported zero actionable findings across 75 changed files.
 - [x] (2026-08-14) Rebased onto `origin/main`, preserving main's glob
   capability documentation alongside the serial-ordering contract. Renumbered
-  the serial dyndep record to ADR-011 because main now owns ADR-010. `make
-  check-fmt`, `make test`, `make typecheck`, `make lint`, `make markdownlint`,
-  and `make nixie` passed; the test suite reported 2,068 passed tests, one
-  skipped test, and passing doctests. Lease-protected publication remains.
+  the serial dyndep record to ADR-011 because main now owns ADR-010.
+  `make check-fmt`, `make test`, `make typecheck`, `make lint`,
+  `make markdownlint`, and `make nixie` passed; the test suite reported 2,068
+  passed tests, one skipped test, and passing doctests. Lease-protected
+  publication remains.
 - [x] (2026-08-14) Re-verified the serial-dyndep sequence diagram against the
   runner contract. The capability-scoped publication boundary is
   `materialize_dyndep_bundle(cli, bundle)`; it opens the effective directory
@@ -386,8 +386,8 @@ criterion in issue #552 and all repository gates pass.
   the current implementation. Corrected the reserved-namespace wording in the
   ADR and developer guide to cover outputs, inputs, implicit dependencies, and
   order-only dependencies. Corrected migration guidance so `generate` is
-  described as materializing sidecars while writing its manifest and `build`
-  and `clean` as materializing them before invoking Ninja. The
+  described as materializing sidecars while writing its manifest and `build` and
+  `clean` as materializing them before invoking Ninja. The
   `docs/netsuke-design.md` gate description remains unchanged because it
   already matches the current runner boundary and command-specific flow; that
   review suggestion was stale.
@@ -398,27 +398,26 @@ criterion in issue #552 and all repository gates pass.
   or output-consumption boundary. Publication occurs before cleanup, while
   `clean` cleans up only after successful `ninja -t clean`.
 - [x] (2026-08-15) Added focused materialization coverage for retention count
-  and byte budgets, current sidecars, stale temporary cleanup, localized cleanup
-  failures, and bounded telemetry. Added public CLI coverage for repeated
-  generate, successful clean cleanup, failed-clean preservation, and latest
-  generated-manifest Ninja loading. The focused materializer (14 tests),
+  and byte budgets, current sidecars, stale temporary cleanup, localized
+  cleanup failures, and bounded telemetry. Added public CLI coverage for
+  repeated generate, successful clean cleanup, failed-clean preservation, and
+  latest generated-manifest Ninja loading. The focused materializer (14 tests),
   retention (6 tests), and serial CLI (7 tests) suites pass.
 - [x] (2026-08-15) Validated the retention milestone: `make check-fmt`,
   `make typecheck`, `make lint`, `make test`, `make markdownlint`, and
-  `make nixie` passed. The focused dyndep materializer (14), retention (6),
-  and serial CLI (7) suites also passed. The lock implementation uses `fs4`
-  only on a file already opened through the effective-directory capability,
-  satisfying the capability-filesystem lint without an exemption.
+  `make nixie` passed. The focused dyndep materializer (14), retention (6), and
+  serial CLI (7) suites also passed. The lock implementation uses `fs4` only on
+  a file already opened through the effective-directory capability, satisfying
+  the capability-filesystem lint without an exemption.
 - [x] (2026-08-15) Re-verified the latest documentation review correction
   against the generated-bundle and Ninja-version implementation: staged serial
   ordering applies only to serial direct-dependency lists with at least two
   items, so only those bundles require Ninja 1.10 or newer; parallel and
   zero/one-item serial cases retain the existing requirement. The retention
-  warning was stale because bounded, lease-coordinated retention already
-  exists.
+  warning was stale because bounded, lease-coordinated retention already exists.
 - [x] (2026-08-15) Replaced retention's unbounded historical-sidecar
-  collection and global sort with a lease-protected multi-pass lexical scan.
-  It retains at most the policy budget, deletes non-fitting candidates during
+  collection and global sort with a lease-protected multi-pass lexical scan. It
+  retains at most the policy budget, deletes non-fitting candidates during
   selection, and performs a final bounded-set sweep. The focused 1,000-file
   regression proves that the current sidecar and the first fitting stale paths
   survive while all other stale paths are reclaimed.
@@ -435,8 +434,8 @@ criterion in issue #552 and all repository gates pass.
   1,000-sidecar regression now proves that a sufficient budget retains exactly
   the first two obsolete paths while preserving the current bundle sidecar.
 - [x] (2026-08-15) Re-verified the reviewed code, runtime, and locale findings
-  against the current implementation and fixed the valid issues. The
-  regression covers 1,000 non-fitting sidecars.
+  against the current implementation and fixed the valid issues. The regression
+  covers 1,000 non-fitting sidecars.
 - [x] (2026-08-16) Re-verified the documentation and locale requests against
   the live module tree and runner ownership boundaries. Updated the AST and
   Ninja module paths, clarified publication, atomic-write, and retention
@@ -469,8 +468,8 @@ criterion in issue #552 and all repository gates pass.
   one boundary split: `runner/dyndep_publication.rs` owns command-level
   publication and retention orchestration, `runner/process/dyndep_files.rs`
   owns atomic writes and verification, and `runner/process/dyndep_retention.rs`
-  owns the lease and cleanup. Generation remains an effect-free
-  `ninja_gen` query.
+  owns the lease and cleanup. Generation remains an effect-free `ninja_gen`
+  query.
 - (2026-08-11) The prior materializer commit accidentally left surplus blank
   lines at EOF in each changed Fluent catalogue. `git show --check` reports
   them even though the current worktree is clean. Remove only those trailing
@@ -564,8 +563,8 @@ criterion in issue #552 and all repository gates pass.
 - **Decision:** keep generation telemetry in the runner boundary's
   `src/runner/dyndep_generation_telemetry.rs` and publication telemetry in
   `src/runner/process/dyndep_telemetry.rs`; keep `src/ninja_gen` generation and
-  rendering telemetry-free. **Rationale:** the separate wrappers make query
-  and command policy explicit while restricting fields to bounded counts and
+  rendering telemetry-free. **Rationale:** the separate wrappers make query and
+  command policy explicit while restricting fields to bounded counts and
   outcome categories. **Date:** 2026-08-12.
 - **Decision:** reject an existing dyndep sidecar larger than 16 MiB before
   allocating verification storage. **Rationale:** generated sidecars are small
@@ -629,8 +628,8 @@ criterion in issue #552 and all repository gates pass.
 - **Decision:** renumber the serial dyndep record from ADR-010 to ADR-011 after
   rebasing. **Rationale:** main introduced the glob capability decision as
   ADR-010 after this branch diverged; preserving both decisions under distinct
-  numbers keeps the repository index and cross-references unambiguous. **Date:**
-  2026-08-14.
+  numbers keeps the repository index and cross-references unambiguous.
+  **Date:** 2026-08-14.
 - **Decision:** generate temporary sidecar candidates from a private,
   operation-scoped nonce and local retry sequence. This source is owned only by
   dyndep publication and is injectable solely for focused collision tests;
@@ -695,9 +694,9 @@ The syntax and graph-loading constraints used below follow the official
 particular, the main edge names its dyndep file as an input and each sidecar
 contains the version header plus a one-to-one update for that edge.
 
-`src/ast/mod.rs` defines `Target`, which is shared by ordinary targets and actions.
-Its `deps` vector is already ordered by YAML declaration. Add a serde-backed
-enum here rather than representing ordering as a string or Boolean.
+`src/ast/mod.rs` defines `Target`, which is shared by ordinary targets and
+actions. Its `deps` vector is already ordered by YAML declaration. Add a
+serde-backed enum here rather than representing ordering as a string or Boolean.
 
 `src/ir/from_manifest.rs::process_targets` currently transfers `Target::deps` to
 `BuildEdge::implicit_deps`. Keep the vector unchanged and copy the new enum to
@@ -835,8 +834,8 @@ showing the default and serial forms. Do not add this field to `Rule`.
 In `src/ir/graph.rs`, define a domain-only `DependencyOrder` with no Serde
 derives or attributes and add it to `BuildEdge`. In `src/ir/from_manifest.rs`,
 convert the parsed AST value explicitly while leaving `implicit_deps` in source
-order. Update every direct `BuildEdge` construction, fixture, and doctest to use
-the IR type explicitly or use a shared test constructor where one already
+order. Update every direct `BuildEdge` construction, fixture, and doctest to
+use the IR type explicitly or use a shared test constructor where one already
 exists. Do not introduce a new general-purpose builder solely to conceal
 updates.
 
@@ -1238,11 +1237,11 @@ checksum-pinned in `Cargo.lock`. The existing `cap_std::fs_utf8` facilities
 provide the capability-scoped open and filesystem operations, but neither they
 nor the capability policy permit direct use of `std::fs::File::lock` for this
 operation. The retention source therefore converts only the capability-opened
-file to a standard handle for `fs4::FileExt`; the lock crate does not open paths
-or widen the authority. Its published package metadata identifies the upstream
-repository at <https://github.com/al8n/fs4> and describes the cross-platform
-file-lock implementation; this is the maintenance basis available here, not a
-claim about an unverified release cadence.
+file to a standard handle for `fs4::FileExt`; the lock crate does not open
+paths or widen the authority. Its published package metadata identifies the
+upstream repository at <https://github.com/al8n/fs4> and describes the
+cross-platform file-lock implementation; this is the maintenance basis
+available here, not a claim about an unverified release cadence.
 
 ## Revision note
 
@@ -1266,8 +1265,7 @@ completion.
 2026-08-12: The first full documentation gate run exposed the repository's
 executable-fence contract. The serial-syntax sample is now a valid standalone
 manifest with an explicit marker and an entry in the documentation-example
-registry, so its syntax cannot drift without the normal test suite detecting
-it.
+registry, so its syntax cannot drift without the normal test suite detecting it.
 
 2026-08-12: The full suite passed after the executable-example correction, and
 the independent CodeRabbit review of `7153538` returned no actionable concerns.
@@ -1275,9 +1273,9 @@ the independent CodeRabbit review of `7153538` returned no actionable concerns.
 2026-08-14: Re-verified the remaining documentation and locale findings against
 the current implementation. Updated only the six requested documentation
 surfaces, including the `src/ninja_gen/mod.rs` path and AST-to-IR conversion
-description; no Rust or test files were changed.
-This completes the implementation plan; the remaining work is only to refresh
-the existing draft pull request with the completed documentation milestone.
+description; no Rust or test files were changed. This completes the
+implementation plan; the remaining work is only to refresh the existing draft
+pull request with the completed documentation milestone.
 
 2026-08-14: Reduced bounded sidecar verification complexity without changing
 its limit or concurrent-growth detection. Public-CLI tests now cover serial
@@ -1321,24 +1319,24 @@ the capability lint; the full deterministic suite passed afterwards.
 must never be reused by callers. A process identifier and monotonic sequence
 keep concurrent write attempts distinct; `create_new` remains the final
 authority and retries a stale collision. The helper may be used only to create
-or inspect sidecars relative to the final dyndep path, preserving same-directory
-atomic rename semantics.
+or inspect sidecars relative to the final dyndep path, preserving
+same-directory atomic rename semantics.
 
 2026-08-12: `RenameFailureContext` is a private, single-use grouping for the
 exact temporary path, final path, and expected content after one attempted
 rename. Only `rename_temp_file` constructs it and only `handle_rename_failure`
-consumes it; it must not become a runner-wide filesystem abstraction.
-The first lint pass rejected a by-value context parameter, so the failure
-handler borrows the private context instead; this does not alter the cleanup
-path or error ownership.
+consumes it; it must not become a runner-wide filesystem abstraction. The first
+lint pass rejected a by-value context parameter, so the failure handler borrows
+the private context instead; this does not alter the cleanup path or error
+ownership.
 
 2026-08-12: PR review follow-up reopens the plan for two missing observable
 contracts and a query-command boundary repair. The new real-Ninja regression
 proves single execution for shared serial work and concurrent progress for an
 unrelated branch. Bundle generation remains effect-free; runner command
 boundaries will open and inject the filesystem capability for sidecar
-publication. The remaining revision adds bounded outcome and duration
-telemetry and removes unnecessary ownership copies.
+publication. The remaining revision adds bounded outcome and duration telemetry
+and removes unnecessary ownership copies.
 
 2026-08-12: Completed the review remediation in two green commits. Real Ninja
 now proves execute-once shared work and unrelated-branch concurrency; the
@@ -1349,9 +1347,9 @@ final deterministic gate run passed all six checks (1,944 tests, one skipped,
 and passing doctests), and CodeRabbit reported zero findings before publication.
 
 2026-08-12: Verified the documentation review findings against the current
-implementation. The plan contains no machine-specific absolute path, so no
-path replacement was needed; the test-results sentence was corrected, and the
-ADR, design sketch, and user's guide now align with the `BuildEdge` policy and
+implementation. The plan contains no machine-specific absolute path, so no path
+replacement was needed; the test-results sentence was corrected, and the ADR,
+design sketch, and user's guide now align with the `BuildEdge` policy and
 staged serial-ordering contract.
 
 2026-08-12: A second review pass verified every reported schema, link,
@@ -1388,8 +1386,8 @@ telemetry is owned by `src/runner/process/dyndep_telemetry.rs`, and Ninja
 generation/rendering remains telemetry-free.
 
 2026-08-14: Rebased the completed feature onto `origin/main`. Conflict
-resolution retained main's glob capability and migration guidance alongside
-the serial dependency documentation. Because main now assigns ADR-010 to glob
+resolution retained main's glob capability and migration guidance alongside the
+serial dependency documentation. Because main now assigns ADR-010 to glob
 capability scoping, the serial dyndep decision and its references move to
 ADR-011. All code, test, documentation, and diagram gates passed after removing
 one duplicate blank line introduced by the additive documentation merge.
@@ -1414,8 +1412,8 @@ public serial-CLI focused tests.
 2026-08-15: Verified the remaining documentation and locale outcomes: the ADR
 date punctuation is template-compliant and remains unchanged; the four
 retention translations, users' guide sidecar location, and repository-layout
-telemetry attribution are corrected. The Polish rename request was invalid,
-and the Dutch rename request was already resolved; neither was changed.
+telemetry attribution are corrected. The Polish rename request was invalid, and
+the Dutch rename request was already resolved; neither was changed.
 
 2026-08-16: Rebased the branch cleanly onto `origin/main` and verified the
 latest review round. Bundle rendering now validates actions through the same
@@ -1441,8 +1439,7 @@ the live ADR, developer guide, design document, and this plan. Sidecar
 ownership names the publication boundary, atomic materializer, and retention
 module separately. Hungarian, Russian, and Vietnamese rename messages now say
 rename explicitly; the operation-required and generated-Ninja wording is
-neutral and precise in the requested catalogues. No supplied finding was
-stale.
+neutral and precise in the requested catalogues. No supplied finding was stale.
 
 2026-08-16: Replaced retention's enumeration-order-dependent replacement with
 bounded lexical reselection over the retained paths plus one candidate. This
@@ -1452,14 +1449,14 @@ evictions. Retention now records aggregate duration, and temporary-name
 collisions record fixed retry or exhausted outcomes without exposing paths.
 
 2026-08-17: Corrected the dependency record after the retention implementation.
-`fs4` is the sole external addition and resolves to 1.1.0 in `Cargo.lock`.
-The existing capability filesystem opens the lock file but supplies no
+`fs4` is the sole external addition and resolves to 1.1.0 in `Cargo.lock`. The
+existing capability filesystem opens the lock file but supplies no
 cross-process advisory-lock operation. Although the pinned toolchain exposes
 `std::fs::File::lock`, direct `std::fs` use would violate the
 capability-filesystem policy. `fs4` is therefore applied only to the
-capability-opened handle;
-the lockfile source/checksum and published package metadata provide the
-available maintenance basis without asserting an unverified release cadence.
+capability-opened handle; the lockfile source/checksum and published package
+metadata provide the available maintenance basis without asserting an
+unverified release cadence.
 
 2026-08-17: Rebased onto the current `origin/main` and re-verified the next
 review round as code-level hypotheses. All supplied findings remained valid:

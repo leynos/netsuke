@@ -144,6 +144,7 @@ fmt: ## Format Rust and Markdown sources
 
 check-fmt: ## Verify formatting
 	$(CARGO) fmt --all -- --check
+	@$(MD_FILES_FIND) | xargs -0 -r scripts/check-markdown-format.sh
 
 typecheck: ## Typecheck all targets and features
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) check --all-targets --all-features $(BUILD_JOBS)

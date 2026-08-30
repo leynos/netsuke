@@ -215,9 +215,9 @@ leaving user-scope lookup unchanged.
 The implementation now canonicalizes project-path comparisons through `dunce`,
 matching OrthoConfig's Windows short-name and long-name handling. When
 canonical comparison is unavailable, the project-scope fallback pass still
-de-duplicates layers by the available path identity. `ProjectScopeTrace` retains
-only bounded project-path metadata and the discovered, project, and appended
-layer counts. The de-duplication event is deferred until the production
+de-duplicates layers by the available path identity. `ProjectScopeTrace`
+retains only bounded project-path metadata and the discovered, project, and
+appended layer counts. The de-duplication event is deferred until the production
 `DiscoveryOutcome::emit_diagnostics` boundary, so collection does not emit a
 diagnostic before tracing is configured.
 
@@ -234,9 +234,9 @@ diagnostic before tracing is configured.
    - `config_path_env_var_bypasses_automatic_discovery`
    - `list_fields_append_across_discovered_config_env_and_cli`
 
-2. **Discovery diagnostics and layer tests** (`src/cli/discovery_layer_tests.rs`,
-   `src/cli/discovery_tracing_tests.rs`, and
-   `src/cli/discovery_replay_proptests.rs`):
+2. **Discovery diagnostics and layer tests**
+   (`src/cli/discovery_layer_tests.rs`, `src/cli/discovery_tracing_tests.rs`,
+   and `src/cli/discovery_replay_proptests.rs`):
    - Deferred replay covers the project-layer de-duplication event and its
      bounded layer counts without repeating discovery or environment access
    - Unix alias and normalization-fallback cases preserve one project layer;
@@ -263,8 +263,8 @@ policy. On Windows, a temporary directory may be spelled with a short path
 while OrthoConfig records a long canonical path. Discovery therefore
 canonicalizes both sides with `dunce` before comparing them, and the fallback
 pass de-duplicates the loaded project layers by their canonical path. This
-prevents one physical `.netsuke.toml` from entering the merge chain twice.
-The three bounded layer-count fields (discovered, project, and appended) are
+prevents one physical `.netsuke.toml` from entering the merge chain twice. The
+three bounded layer-count fields (discovered, project, and appended) are
 retained for deferred diagnostic replay and emitted only through
 `DiscoveryOutcome::emit_diagnostics`, not during collection.
 

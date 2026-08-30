@@ -61,12 +61,12 @@ result. This immediate feedback is crucial for a positive first impression.
 
 ### Discover manifest operations
 
-The CLI also provides a read-only manifest catalogue for discovery. Authors
-may add an optional `description` to a target or action; these values describe
-the operation in `netsuke help targets` and do not replace a referenced rule's
-description for Ninja progress output. The topic honours the selected
-manifest and the normal output preferences, including localization,
-accessibility, and `--json`.
+The CLI also provides a read-only manifest catalogue for discovery. Authors may
+add an optional `description` to a target or action; these values describe the
+operation in `netsuke help targets` and do not replace a referenced rule's
+description for Ninja progress output. The topic honours the selected manifest
+and the normal output preferences, including localization, accessibility, and
+`--json`.
 
 `netsuke help targets` uses manifest-query rendering to load, expand, and
 validate the selected manifest, then prints actions followed by targets. It
