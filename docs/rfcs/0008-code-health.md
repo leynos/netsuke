@@ -267,22 +267,29 @@ testing, extended fuzzing, full coverage trend reporting, and other
 resource-heavy analyses remain scheduled signals until their cost and stability
 justify promotion.
 
-Every exception must be represented in the registry with exactly one owner, one
-rationale, one issue or pull-request reference, a narrow rule and file scope, a
-creation date, and an expiry date. The validator rejects expired, duplicate,
-ownerless, broad, or unknown exceptions. It also rejects a policy rule that is
-bypassed inline when no corresponding registry entry exists. Expiring an
-exception is a deliberate review event; silently extending it is not an
-acceptable repair. An allowlist entry is an exception with the same metadata
-and expiry requirements, never a wildcard bypass for a whole workflow or
-directory.
+Every exception must be represented in the registry with exactly one
+rule-specific subject, one owner, one rationale, one issue or pull-request
+reference, a narrow rule and file scope, a creation date, and an expiry date.
+The validator rejects expired, duplicate, ownerless, broad, or unknown
+exceptions. It also rejects a policy rule that is bypassed inline when no
+corresponding registry entry exists. Expiring an exception is a deliberate
+review event; silently extending it is not an acceptable repair. An allowlist
+entry is an exception with the same metadata and expiry requirements, never a
+wildcard bypass for a whole workflow or directory.
 
 The registry uses a machine-checkable exception schema. Each entry has exactly
-these fields: `rule_id`, `scopes`, `owner`, `reference`, `rationale`,
+these fields: `rule_id`, `subject`, `scopes`, `owner`, `reference`, `rationale`,
 `created`, and `expires`:
 
 - `rule_id` matches `^[a-z][a-z0-9-]{2,63}$` and must name a known validator
   rule.
+- `subject` is a non-empty, rule-specific selector. For an external action or
+  reusable-workflow rule, it is a mapping with exactly `owner`, `repository`,
+  `reference`, and, where pinning is required, `sha` fields. These identify the
+  approved external owner and repository, exact action or workflow reference,
+  and full lower-case 40-character commit SHA. Each selector shape is defined
+  by its rule and must not be omitted; other rules must identify their concrete
+  governed subject using the rule's documented bounded pattern.
 - `scopes` is a non-empty list of repository-relative paths. Paths use `/`, do
   not start with `/`, contain `..`, or contain empty segments, and must include
   at least one literal character. The permitted glob grammar is literal
@@ -300,8 +307,16 @@ these fields: `rule_id`, `scopes`, `owner`, `reference`, `rationale`,
   repeated or omitted.
 
 The validator rejects unknown rule identifiers, empty or unbounded scopes,
-unsupported glob patterns, malformed owners or references, invalid dates, and
-duplicate entries before evaluating policy exceptions.
+unsupported glob patterns, missing or malformed rule-specific subjects,
+malformed owners or references, invalid dates, and duplicate entries before
+evaluating policy exceptions.
+
+The checked-in health-tier registry, exception registry, and external-source
+allowlist are policy inputs to the blocking validator. Protect them with
+CODEOWNERS and branch rules requiring protected review by the policy owners, or
+require an independent protected approval before a change can affect a blocking
+result. The validator must reject an unprotected registry change instead of
+evaluating that change as policy.
 
 ### Documentation consistency
 

@@ -351,7 +351,7 @@ Stop and escalate rather than improvising when any of these is reached.
   backtick contract while preventing a silent empty shell expansion after the
   backend escapes dollar signs. Date/Author: 2026-08-24, implementation agent.
 
-- Decision `D-METADATA`: **NEEDS APPROVAL before EP-M2.** Whether to escape
+- Superseded decision `D-METADATA` (2026-08-17): whether to escape
   `description`, `depfile`, `deps`, and `pool` in addition to command and
   script text. Analysis: the roadmap bullet and `docs/netsuke-design.md` §§2.6
   and 5.4 all scope the change to "command and script text". Descriptions are
@@ -375,12 +375,13 @@ Stop and escalate rather than improvising when any of these is reached.
   `NinjaValue` constructor still rejects control characters in these fields.
   Date/Author: 2026-08-17, planning agent.
 
-- Decision `D-METADATA`: revised during the 2026-08-28 review repair. Escape
-  descriptions, `depfile`, `deps`, and `pool` at their Ninja emission boundary,
-  while retaining rejection of newline, carriage-return, and NUL. These fields
-  are backend values at emission time, so literal dollars must not become Ninja
-  variable references. The completed action and metadata paths now share this
-  explicit contract. Date/Author: 2026-08-24, implementation agent.
+- Decision `D-METADATA`: revised during the 2026-08-28 review repair and now
+  authoritative. Escape descriptions, `depfile`, `deps`, and `pool` at their
+  Ninja emission boundary, while retaining rejection of newline,
+  carriage-return, and NUL. These fields are backend values at emission time,
+  so literal dollars must not become Ninja variable references. The completed
+  action and metadata paths now share this explicit contract. Date/Author:
+  2026-08-24, implementation agent.
 
 - Decision: no Kani harness and no Verus proof for this change.
   Rationale: the introduced function is a pure, total string map with no
@@ -680,7 +681,8 @@ the generated file, and the inner shell observes the real paths.
 or `default` line either contains no Ninja-special character, or generation
 fails with a typed error naming the offending path.
 
-- Method: `rstest` cases over paths containing `$`, a space, and a colon.
+- Method: `rstest` cases over paths containing `$`, a space, a colon, `|`, and
+  control characters.
 - Rationale: without this, EP-M2 makes the command and the dependency edge
   disagree for a path like `input$1`, so Ninja reports one dependency while the
   command reads another. `tests/command_escaping_tests.rs:55` already uses such
@@ -701,9 +703,11 @@ is verified.
 
 Kani and Verus are excluded, with reasons, in `Decision log`. There is no
 concurrency, protocol, or temporal property here, so no state-machine model
-checking. Descriptions and `depfile` are out of scope pending decision
-`D-METADATA`; if that decision changes, this section and the matrix must be
-revised before implementation continues.
+checking. The Ninja-boundary escaping of descriptions and `depfile` is in scope
+under the revised `D-METADATA` decision and must be covered by emission and
+integration tests, including rejection of newline, carriage-return, and NUL
+characters. This plan does not verify Ninja's own lexical implementation; those
+rules remain an external axiom exercised through the real binary.
 
 ## Plan of work
 
@@ -723,16 +727,16 @@ child-process environment control.
 
 Scalar `command:` rows:
 
-| Row | Recipe                                    | Expected Ninja text       | Expected expansion   | Shell effect                                                                                                 |
-| --- | ----------------------------------------- | ------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------ |
-| A1  | `echo $NETSUKE_TEST_SENTINEL > out`       | `$$NETSUKE_TEST_SENTINEL` | verbatim             | `out` is `sentinel-value`                                                                                    |
-| A2  | `echo ${NETSUKE_TEST_SENTINEL:-fb} > out` | `$${…:-fb}`               | verbatim             | set gives `sentinel-value`; unset gives `fb`. Today the file does not parse.                                 |
-| A3  | `echo $RUSTFLAGS-$PATH`                   | both doubled              | verbatim             | both survive                                                                                                 |
-| A4  | `echo $input > out`                       | `$$input`                 | verbatim             | empty; guards the word-boundary check at `src/ir/cmd_interpolate.rs:154` and proves escaping did not skip it |
-| A5  | `cat $in > $out`, plain paths             | no `$` at all             | `cat in > out`       | copies; proves escaping runs after lowering                                                                  |
-| A6  | `cat $in > $out`, source `a$b.c`          | quoted path, `$` doubled  | quoted path verbatim | composition of `shell_quote::Sh` with the escaper                                                            |
-| A7  | `echo $$`                                 | `$$$$`                    | `echo $$`            | prints a process identifier                                                                                  |
-| A8  | `echo hi`                                 | byte-identical to today   | `echo hi`            | control row; must pass before and after                                                                      |
+| Row | Recipe                                    | Expected Ninja text             | Expected expansion   | Shell effect                                                                                                 |
+| --- | ----------------------------------------- | ------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------ |
+| A1  | `echo $NETSUKE_TEST_SENTINEL > out`       | `$$NETSUKE_TEST_SENTINEL`       | verbatim             | `out` is `sentinel-value`                                                                                    |
+| A2  | `echo ${NETSUKE_TEST_SENTINEL:-fb} > out` | `$${NETSUKE_TEST_SENTINEL:-fb}` | verbatim             | set gives `sentinel-value`; unset gives `fb`. Today the file does not parse.                                 |
+| A3  | `echo $RUSTFLAGS-$PATH`                   | both doubled                    | verbatim             | both survive                                                                                                 |
+| A4  | `echo $input > out`                       | `$$input`                       | verbatim             | empty; guards the word-boundary check at `src/ir/cmd_interpolate.rs:154` and proves escaping did not skip it |
+| A5  | `cat $in > $out`, plain paths             | no `$` at all                   | `cat in > out`       | copies; proves escaping runs after lowering                                                                  |
+| A6  | `cat $in > $out`, source `a$b.c`          | quoted path, `$` doubled        | quoted path verbatim | composition of `shell_quote::Sh` with the escaper                                                            |
+| A7  | `echo $$`                                 | `$$$$`                          | `echo $$`            | prints a process identifier                                                                                  |
+| A8  | `echo hi`                                 | byte-identical to today         | `echo hi`            | control row; must pass before and after                                                                      |
 
 Script `script:` rows:
 
@@ -757,8 +761,8 @@ Command-list rows:
 Injection rows: a scalar command containing `\n`, and one containing `\r`, must
 produce a typed error rather than a generated file (obligation I5).
 
-Path rows: a build edge whose output path contains `$`, one containing a space,
-one containing a colon, and one ordinary path (obligation I7).
+Path rows: build edges whose output paths contain `$`, a space, a colon, `|`,
+or a control character, plus one ordinary path (obligation I7).
 
 Also in this stage: widen the vacuous generator at
 `src/ninja_gen_property_tests.rs:177` from `echo [a-z]{1,12}` to the
@@ -816,8 +820,8 @@ pass. Commit.
 
 Introduce a fallible path check in the emission path used by `join`
 (`src/ninja_gen.rs:166-168`), `DisplayEdge` (lines 305-330), and the `default`
-line (line 159). Reject `$`, space, colon, and control characters with a typed
-`NinjaGenError` naming the offending path. Because `Display` cannot fail
+line (line 159). Reject `$`, space, colon, `|`, and control characters with a
+typed `NinjaGenError` naming the offending path. Because `Display` cannot fail
 usefully, the validation must run in `generate_into` before formatting rather
 than inside a `Display` implementation.
 
@@ -850,8 +854,9 @@ abstraction's scope and re-use policy there.
 Add `docs/adr-014-backend-text-escaping-seam.md` following
 `docs/documentation-style-guide.md:421-498`, covering the layering decision,
 the fallible constructor, the rejection of Kani and Verus, and the scope
-boundary excluding descriptions and `depfile`. Reference it from
-`docs/netsuke-design.md` §2.6 and index it in `docs/contents.md`.
+boundary including description and `depfile` escaping at the Ninja emission
+boundary. Reference it from `docs/netsuke-design.md` §2.6 and index it in
+`docs/contents.md`.
 
 Add one `rstest-bdd` scenario to `tests/features/ninja.feature` phrased as a
 user-visible outcome — a recipe observing a shell variable — with steps in
