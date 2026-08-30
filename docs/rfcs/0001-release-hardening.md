@@ -110,6 +110,19 @@ profile. Both measurements use the same pinned toolchain, target, runner class,
 inputs, and build flags. The baseline and candidate are retained with the
 release evidence so a later comparison is reproducible.
 
+Property tests must cover every range-based release invariant. Proptest
+generators must produce arithmetic inputs at and around each valid boundary,
+measurement pairs from zero through twice the baseline, archive sets from zero
+through one beyond the permitted target count, and evidence timestamps at and
+around the freshness boundary. Each property must assert the corresponding
+acceptance or rejection decision, including deterministic rejection for invalid
+inputs, exact digest and commit binding, and the performance and size limits.
+Bound generated command inputs to 64 KiB and staged archive bytes to 64 MiB;
+bound each run to 256 cases and the documented evidence limits. Promote every
+discovered counterexample to a checked-in regression case, replay it in the
+blocking property suite, and use cargo-fuzz only as a supplement for longer
+hostile-input exploration.
+
 ### Secret scanning
 
 Use a SHA-pinned Gitleaks action or pinned executable. The working-tree scan is
@@ -120,11 +133,13 @@ false-positive pattern, path, reviewer, and expiry, and must not disable the
 whole repository scan.
 
 A scheduled job scans the full reachable Git history rather than a shallow
-checkout. Its result is a blocking security signal: release admission requires
-a successful history scan for the repository within the configured freshness
-window, and a new finding fails admission until it is removed or explicitly
-dispositioned. The schedule and freshness window must be recorded in the
-workflow contract so a missed schedule cannot be mistaken for a passing scan.
+checkout and records both the scanned ref and its resolved commit SHA. Its
+result is a blocking security signal: release admission requires a successful
+history scan for the repository within the configured freshness window whose
+resolved SHA is the exact release-tag commit. A new finding fails admission
+until it is removed or explicitly dispositioned. The schedule and freshness
+window must be recorded in the workflow contract so a missed or stale scan
+cannot be mistaken for a passing scan.
 
 All checkout and scanning actions, including any newly introduced action, must
 remain pinned to immutable commit SHAs. No release-hardening workflow may use
@@ -156,10 +171,13 @@ cannot turn a failed release job green by editing generated output.
 ### Release-admission evidence
 
 Add a read-only admission job before any job with permission to publish release
-assets. It consumes a machine-readable evidence manifest containing at least:
+assets. It verifies provenance rather than trusting declared fields and
+consumes a machine-readable evidence manifest containing at least:
 
 - the tag, commit SHA, repository, Rust toolchain, and versions of each policy
   tool;
+- the approved workflow run identifier, immutable producer job identifiers or
+  digests, and the exact release SHA checked out by every producer;
 - the result and log identity for formatting, lint, tests, rustdoc, Whitaker,
   Kani, and all existing all-target/all-feature gates;
 - release-profile performance and size measurements against their baseline;
@@ -168,11 +186,17 @@ assets. It consumes a machine-readable evidence manifest containing at least:
 - every staged archive name, target, byte size, and SHA-256 digest.
 
 Admission succeeds only when every required result is successful, the evidence
-manifest names the exact release commit, and every archive has exactly one
-matching `.sha256` sidecar. The publication job must depend on admission and
-must not run on a missing, stale, malformed, or mismatched manifest. A dry run
-may build and inspect artefacts, but it must not bypass admission for a real
-publication.
+manifest names the exact release commit, and the results and log identities are
+bound to the approved workflow run and that SHA. Every producer job must have
+checked out the release SHA; admission rejects a manifest with a mismatched or
+missing provenance binding. The declared archive set must preserve its required
+filenames and cardinality, and every archive must have exactly one matching
+`.sha256` sidecar. Before comparison, admission recomputes each archive's
+SHA-256 from its actual bytes and compares it with both the sidecar and the
+digest recorded in the evidence manifest; any mismatch rejects admission. The
+publication job must depend on admission and must not run on a missing, stale,
+malformed, or mismatched manifest. A dry run may build and inspect artefacts,
+but it must not bypass admission for a real publication.
 
 ### Failure modes and mitigations
 
@@ -337,6 +361,7 @@ fail-closed admission decision.
 - [`cargo-about`](https://github.com/EmbarkStudios/cargo-about).
 - [`cargo-audit`](https://github.com/RustSec/rustsec/tree/main/cargo-audit).
 - [`cargo-deny`](https://github.com/EmbarkStudios/cargo-deny).
+- [`cargo-unmaintained`](https://github.com/trailofbits/cargo-unmaintained).
 - [VTCode upstream repository](https://github.com/vinhnx/VTCode).
 - [VTCode release profile at commit `f188bcb0`][vtcode-release-profile].
 - [VTCode secret scan at commit `f188bcb0`][vtcode-secret-scan].

@@ -107,21 +107,32 @@ testable without GitHub credentials and should consume repository files only.
 The initial policy should enforce these invariants:
 
 1. Every external action and reusable workflow reference uses a full,
-   lower-case, 40-character commit SHA. Local references beginning with `./`
-   are permitted only when the referenced file exists in the repository.
+   lower-case, 40-character commit SHA and names an owner/repository on the
+   approved allowlist. A reference outside that allowlist requires an
+   explicitly reviewed registry exception. The blocking validator checks each
+   permitted SHA against a checked-in provenance registry that binds it to the
+   declared upstream repository. The registry update process resolves each SHA
+   through that repository and rejects SHAs found only in a fork or another
+   repository. Local references beginning with `./` are permitted only when the
+   referenced file exists in the repository.
 2. Workflow and job permissions are explicit. The default token permission is
    empty, and a job may add only the scopes it needs. Any broader scope is an
    exception with an owner, rationale, issue or pull-request reference, and
    expiry.
-3. `pull_request_target` jobs have an explicit policy exception and cannot
-   execute untrusted checkout content or interpolate untrusted pull-request
-   text into a shell command.
+3. `pull_request_target` and `workflow_run` jobs have an explicit policy
+   exception and cannot execute untrusted checkout content or interpolate
+   untrusted pull-request text into a shell command. A `workflow_run` job must
+   either avoid checking out untrusted content, validate artefact provenance
+   before consuming it, and keep untrusted pull-request data out of shell
+   commands, or be prohibited by the policy.
 4. Every `needs` job name, local workflow, local action, script path, Make
    target, nextest profile, and configuration path named by a workflow exists.
 5. Workflow triggers, concurrency, and cancellation settings follow the
-   repository policy. A job must not hide a failed health check behind
-   `continue-on-error` unless that job is classified as scheduled or has an
-   explicit, unexpired exception.
+   repository policy. A job must not hide a failed health check behind either
+   `jobs.<job_id>.continue-on-error` or
+   `jobs.<job_id>.steps[*].continue-on-error` unless the job is classified as
+   scheduled or has an explicit, unexpired exception. Fixtures must exercise
+   both YAML paths.
 6. Health jobs identify their tier in their name or metadata, and their
    failure or informational status is not contradictory to the tier registry.
 
@@ -143,9 +154,11 @@ The first contracts should include the following:
   the repository's documented phony targets.
 - A local reusable workflow or action resolves to a tracked file of the
   expected kind.
-- A `--profile NAME` argument resolves to a `[profile.NAME]` section in the
-  configured nextest file; a referenced tool-version file exists and is
-  non-empty.
+- A `--profile NAME` argument resolves against the effective nextest
+  configuration. Default and reserved built-in profiles use nextest's built-in
+  resolution; only repository-defined profiles require a literal
+  `[profile.NAME]` section in the configured file. A referenced tool-version
+  file still exists and is non-empty.
 - A path passed to a workflow cache, upload, coverage, mutation, Kani, or
   spelling step exists at checkout time or is created by an earlier step in the
   same job.
@@ -178,9 +191,26 @@ but the coverage contract is fixed:
 Each harness must be a pure library boundary: it must not invoke a user's
 shell, run Ninja, access the network, or write outside a test-controlled
 temporary directory. Invalid UTF-8 and malformed syntax are inputs to reject,
-not reasons for the harness to panic. Harnesses must bound input and output
-sizes, avoid unbounded recursion, and make the same input produce the same
-classification and output.
+not reasons for the harness to panic. The validator and harnesses publish and
+enforce the following concrete budget for every target; a job may not replace
+one value with a larger local default:
+
+| Resource                                  | Maximum    |
+| ----------------------------------------- | ---------: |
+| Input bytes per test case                 | 1 MiB      |
+| Output bytes per test case                | 4 MiB      |
+| Recursion depth                           | 64 frames  |
+| Test-controlled temporary storage per job | 64 MiB     |
+| Checked-in or downloaded corpus per job   | 256 MiB    |
+| Execution time per input                  | 1 second   |
+| Execution time per fuzz job               | 10 minutes |
+
+_Table 1: Per-target fuzz resource budgets._
+
+Harnesses must avoid unbounded recursion and make the same input produce the
+same classification and output. Smoke and scheduled jobs must report these
+limits in their registry metadata and reject inputs, outputs, or runs that
+exceed them.
 
 The first assertions should encode current behaviour, not invent a new language
 contract:
@@ -193,6 +223,29 @@ contract:
   it.
 - Ninja emission is deterministic for the same IR and either produces output
   accepted by the existing renderer contract or a typed error.
+
+### Property and bounded-verification plan
+
+Proptest is required for each range-based invariant before a fuzz target is
+promoted. Fuzzing remains a supplemental hostile-input search and does not
+replace these deterministic properties. Each property uses bounded generators,
+asserts the stated invariant, and retains a minimized regression case when it
+fails:
+
+| Invariant                            | Generator and property                                                                                                                                | Bound                                           |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------: |
+| Input, output, and recursion budgets | Generate byte vectors and nested templates; assert rejection or output within the budget table and recursion at most 64                               | 1 MiB input; 4 MiB output; 64 frames            |
+| Temporary storage and corpus limits  | Generate sequences of accepted corpus entries; assert cumulative size is rejected above the job limit and never writes outside the test directory     | 64 MiB temporary; 256 MiB corpus                |
+| Per-input and per-job execution      | Generate bounded batches of inputs; assert each case and the batch stay within their deadline, classifying timeout as a failure                       | 1 second per input; 10 minutes per job          |
+| Workflow references and job graph    | Generate finite jobs, `needs` edges, action SHAs, and local paths; assert every accepted reference resolves and every rejected graph reports its rule | 32 jobs; 64 edges; 40-character SHAs            |
+| Exception schema                     | Generate rule IDs, scopes, globs, owners, references, and ISO dates; assert unknown rules, empty or unbounded scopes, and unsupported globs reject    | 32 entries; 8 scopes each; 128-character fields |
+
+_Table 2: Property and bounded-verification coverage._
+
+The generators must include boundary values immediately below, at, and above
+each limit. A failing case is stored as a fixture, linked to the rule it
+exposes, and rerun by the ordinary deterministic test suite; deleting a
+regression input requires an explicit review record.
 
 Run short smoke corpora on pull requests only when they fit the deterministic
 blocking budget. Run longer fuzzing sessions on a schedule, archive new
@@ -224,12 +277,38 @@ acceptable repair. An allowlist entry is an exception with the same metadata
 and expiry requirements, never a wildcard bypass for a whole workflow or
 directory.
 
+The registry uses a machine-checkable exception schema. Each entry has exactly
+these fields: `rule_id`, `scopes`, `owner`, `reference`, `rationale`,
+`created`, and `expires`:
+
+- `rule_id` matches `^[a-z][a-z0-9-]{2,63}$` and must name a known validator
+  rule.
+- `scopes` is a non-empty list of repository-relative paths. Paths use `/`, do
+  not start with `/`, contain `..`, or contain empty segments, and must include
+  at least one literal character. The permitted glob grammar is literal
+  characters plus `*` and `?` within a segment, and `**` as a complete segment;
+  character classes, braces, extglobs, and other glob syntax are rejected. A
+  bare `*`, `**`, `**/*`, or equivalent all-repository pattern is unbounded and
+  rejected.
+- `owner` matches `@[A-Za-z0-9][A-Za-z0-9-]{0,38}` for a user or
+  `@[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9][A-Za-z0-9-]{0,38}` for a team.
+- `reference` matches
+  `https://github.com/leynos/netsuke/(issues|pull)/[1-9][0-9]*`.
+- `created` and `expires` match `YYYY-MM-DD` and are valid calendar dates;
+  `expires` is later than `created` and later than the validation date.
+- `rationale` is a non-empty string with a bounded length, and no field may be
+  repeated or omitted.
+
+The validator rejects unknown rule identifiers, empty or unbounded scopes,
+unsupported glob patterns, malformed owners or references, invalid dates, and
+duplicate entries before evaluating policy exceptions.
+
 ### Documentation consistency
 
 The documentation check should begin with finite, high-value contracts:
 
 - links in `docs/contents.md` and Markdown files resolve to existing files or
-  valid external URLs;
+  syntactically valid external URLs;
 - examples naming Make targets, workflow files, profiles, or tool-version
   files resolve to the current repository;
 - the documented per-PR and scheduled gate lists match the tier registry; and
@@ -239,6 +318,15 @@ The documentation check should begin with finite, high-value contracts:
 The check should report stale prose for correction rather than rewrite prose
 automatically. Markdown formatting, `en-GB-oxendict` spelling, and Mermaid
 validation remain their existing gates.
+
+External-link validation is separate from the deterministic repository-only
+validator. Blocking checks parse URL syntax and inspect only repository files;
+they require no network access and cannot fail because a remote service is
+temporarily unavailable. A scheduled, non-blocking reachability check may make
+network requests with an explicit per-URL timeout of 10 seconds and a total job
+timeout of 10 minutes. It classifies failures as DNS, connection, HTTP status,
+TLS, redirect, or timeout errors, and reports them without changing the
+blocking result.
 
 ### Inspiration and boundary
 
@@ -259,6 +347,9 @@ contracts differ.
   stable rule identifiers.
 - A clean checkout of Netsuke must have zero unresolved workflow, Make target,
   profile, configuration, job, and documentation references.
+- Nextest profile checks must resolve default and reserved built-in profiles
+  through nextest and require literal sections only for repository-defined
+  profiles.
 - Five fuzz targets must cover the manifest, Jinja, interpolation,
   path, and Ninja-emission boundaries, with malformed input cases included.
 - Every health signal must have exactly one tier, owner, schedule or PR event,
@@ -266,29 +357,44 @@ contracts differ.
 - Every exception must be narrow, owned, justified, referenced, and unexpired.
 - Fuzz crashes must become reproducible regression inputs before the corpus is
   considered healthy.
+- Every range-based invariant must have a bounded Proptest or Kani plan with
+  generators, properties, limits, and retained regressions; fuzzing is
+  supplemental.
 
 ### Technical requirements
 
 - Keep all workflow action and reusable-workflow references pinned to full
-  commit SHAs, with no untracked mutable-reference escape hatch.
+  commit SHAs and restricted to an owner/repository allowlist or an explicitly
+  reviewed registry exception. Verify that every permitted SHA resolves to a
+  commit in the declared repository, not merely in a fork, with no untracked
+  mutable-reference escape hatch.
 - Preserve `unsafe` forbiddance, warnings-denied Clippy and Whitaker, Proptest,
   Kani, changed-line coverage, scheduled mutation testing, and no blanket
   retries.
 - Keep fuzz harnesses deterministic, resource-bounded, offline, and free of
   shell or Ninja execution.
 - Keep per-PR checks deterministic and fast enough for normal review; put
-  unbounded or resource-heavy work in scheduled jobs with explicit budgets.
+  unbounded or resource-heavy work in scheduled jobs with the exact input,
+  output, recursion, temporary-storage, corpus, per-input, and per-job limits
+  in the budget table above (1 MiB, 4 MiB, 64 frames, 64 MiB, 256 MiB, 1
+  second, and 10 minutes respectively).
+- Keep the blocking documentation validator repository-only and network-free;
+  validate external URL syntax there, and reserve reachability for a
+  non-blocking scheduled check with explicit timeouts and classified failures.
 - Test every validator rule with valid and invalid fixtures, including YAML
-  quoting, multiline commands, local references, and documented exceptions.
+  quoting, multiline commands, local references, both job- and step-level
+  `continue-on-error`, privileged `workflow_run` cases, fork-only SHAs, and
+  documented exceptions.
 - Use the repository's existing Markdown formatting and spelling conventions,
   including 80-column prose wrapping and en-GB-oxendict spelling.
 
 ### Acceptance criteria
 
 - A clean checkout passes the validator, and fixture tests demonstrate a
-  failure for every policy class: mutable action reference, permission
-  escalation, unsafe `pull_request_target` use, missing reference, broken tier,
-  and invalid exception.
+  failure for every policy class: mutable action reference, disallowed source
+  repository or fork-only SHA, permission escalation, unsafe
+  `pull_request_target` or `workflow_run` use, both `continue-on-error` YAML
+  scopes, missing reference, broken tier, and invalid exception.
 - Every tracked workflow has zero unresolved local references, Make targets,
   profiles, configuration paths, job dependencies, or documentation links.
 - No external workflow reference is mutable, and every exception has all
@@ -296,7 +402,10 @@ contracts differ.
   date.
 - Each of the five fuzz boundaries has a checked-in smoke corpus containing
   valid, malformed, and boundary inputs, and each target completes its smoke
-  run without a panic, timeout, or uncontrolled filesystem access.
+  run without a panic, timeout, or uncontrolled filesystem access. The smoke
+  and scheduled jobs enforce the budget table exactly: 1 MiB input, 4 MiB
+  output, 64 recursion frames, 64 MiB temporary storage, 256 MiB corpus, 1
+  second per input, and 10 minutes per job.
 - Twenty consecutive scheduled fuzz runs publish the target name, corpus
   revision, execution budget, and crash result; any new crash is reproduced by
   a deterministic regression test before the run is considered healthy.
@@ -334,7 +443,9 @@ same phase.
 Add the fuzz workspace, bounded smoke corpus, and the five boundary targets.
 Run smoke cases where practical and longer sessions on a scheduled workflow.
 Publish minimized crashers as regression fixtures, retain failure artefacts,
-and document the schedule and resource budget in the tier registry.
+and document the schedule and the exact budget-table values (1 MiB input, 4 MiB
+output, 64 recursion frames, 64 MiB temporary storage, 256 MiB corpus, 1 second
+per input, and 10 minutes per job) in the tier registry.
 
 ### Phase 4: Ratchet and review
 

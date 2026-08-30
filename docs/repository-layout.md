@@ -134,7 +134,7 @@ Place new production Rust modules under the `src/` subtree that owns the
 feature boundary. Use `test_support/` for reusable integration-test helpers and
 keep one-off fixtures close to the tests that consume them.
 
-Place proposed changes requiring technical review under `docs/rfcs/`, using the
+Place all proposed changes requiring technical review under `docs/rfcs/`, using
 numbering and status conventions in the documentation style guide. Link each
 RFC from `docs/contents.md` when it is first committed.
 
