@@ -66,6 +66,8 @@ cli.validation.emoji.invalid = Invalid emoji policy '{ $value }'. Valid options:
 cli.validation.progress.invalid = Invalid progress policy '{ $value }'. Valid options: auto, always, never.
 cli.validation.accessibility.invalid = Invalid accessibility policy '{ $value }'. Valid options: auto, on, off.
 cli.validation.config.expected_object = Expected parsed CLI values to serialize to an object, got { $value }.
+cli.file.non_utf8 = Manifest path '{ $path }' is not valid UTF-8.
+cli.directory.non_utf8 = Working directory path '{ $path }' is not valid UTF-8.
 
 # Clap error messages.
 clap-error-missing-argument = Missing required argument: { $argument }
@@ -82,8 +84,6 @@ clap-error-value-validation = Validation failed for { $argument }: { $value }
 runner.manifest.not_found = Manifest '{ $manifest_name }' not found in { $directory }.
 runner.manifest.not_found.help = Ensure the manifest exists or pass `--file` with the correct path.
 runner.manifest.path_missing_name = Manifest path '{ $path }' has no file name.
-runner.manifest.path_utf8 = Manifest path '{ $path }' is not valid UTF-8.
-runner.manifest.directory_utf8 = Manifest directory path '{ $path }' is not valid UTF-8.
 runner.manifest.directory_label = directory `{ $directory }`
 runner.manifest.current_directory_label = the current directory
 runner.manifest.default_not_declared = manifest default '{ $default }' does not name a declared action or target.
@@ -104,7 +104,6 @@ runner.io.write_ninja_file = Failed to write Ninja file at { $path }.
 runner.io.flush_ninja_file = Failed to flush Ninja file at { $path }.
 runner.io.sync_ninja_file = Failed to sync Ninja file at { $path }.
 runner.io.open_ambient_dir = Failed to open ambient directory.
-runner.io.non_utf8_working_directory = The working directory path is not valid UTF-8.
 runner.io.no_existing_ancestor = No existing ancestor directory for { $path }.
 runner.io.derive_relative_path = Failed to derive relative Ninja path.
 runner.io.non_utf8_path = Non-UTF-8 path is not supported (path: { $path }).

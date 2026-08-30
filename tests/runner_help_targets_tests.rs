@@ -82,7 +82,7 @@ fn assert_help_targets_rejects_manifest(
         .write("Netsukefile", manifest)
         .with_context(|| format!("write {fixture_name} manifest"))?;
     let cli = Cli {
-        file: manifest_path.into_std_path_buf(),
+        file: manifest_path,
         command: Some(Commands::Help(HelpArgs {
             topic: Some(HelpTopic::Targets),
         })),
@@ -151,7 +151,7 @@ fn help_targets_with_invalid_manifest_reports_error() -> Result<()> {
     data.copy("invalid_version.yml", &workspace, "Netsukefile")
         .with_context(|| format!("copy invalid manifest to {}", manifest_path.as_str()))?;
     let cli = Cli {
-        file: manifest_path.into_std_path_buf(),
+        file: manifest_path,
         command: Some(Commands::Help(HelpArgs {
             topic: Some(HelpTopic::Targets),
         })),

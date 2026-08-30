@@ -1,7 +1,7 @@
 //! Behavioural tests for the Netsuke runner and CLI integration.
 
 use anyhow::{Context, Result, bail, ensure};
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use netsuke::cli::{Cli, Commands};
 use netsuke::localization::{self, keys};
 use netsuke::output_prefs;
@@ -20,18 +20,24 @@ fn utf8_path(path: &Path) -> Result<&Utf8Path> {
     Utf8Path::from_path(path).context("test path is not valid UTF-8")
 }
 
+/// Convert a test filesystem path into the UTF-8 CLI boundary type.
+fn utf8_path_buf(path: &Path) -> Result<Utf8PathBuf> {
+    Utf8PathBuf::from_path_buf(path.to_path_buf())
+        .map_err(|non_utf8| anyhow::anyhow!("test path is not valid UTF-8: {non_utf8:?}"))
+}
+
 /// Build a `Cli` that runs `generate --output <output>` for `manifest` within
 /// `directory`. Shared by the generate-output tests, which differ only in their
 /// workspace setup and post-run assertions.
-fn generate_cli(manifest: &Path, directory: &Path, output: &Path) -> Cli {
-    Cli {
-        file: manifest.to_path_buf(),
-        directory: Some(directory.to_path_buf()),
+fn generate_cli(manifest: &Path, directory: &Path, output: &Path) -> Result<Cli> {
+    Ok(Cli {
+        file: utf8_path_buf(manifest)?,
+        directory: Some(utf8_path_buf(directory)?),
         command: Some(Commands::Generate {
             output: Some(output.to_path_buf()),
         }),
         ..Cli::default()
-    }
+    })
 }
 
 /// Fixture: provide a fake `ninja` binary with a configurable exit code.
@@ -62,8 +68,8 @@ fn setup_ninja_env_test() -> Result<(tempfile::TempDir, PathBuf, tempfile::TempD
     let (ninja_dir, ninja_path) = checking_ninja()?;
     let (temp, manifest_path) = create_test_manifest()?;
     let cli = Cli {
-        file: manifest_path.clone(),
-        directory: Some(temp.path().to_path_buf()),
+        file: utf8_path_buf(&manifest_path)?,
+        directory: Some(utf8_path_buf(temp.path())?),
         ..Cli::default()
     };
     Ok((ninja_dir, ninja_path, temp, cli))
@@ -76,7 +82,7 @@ fn run_exits_with_manifest_error_on_invalid_version() -> Result<()> {
     std::fs::copy("tests/data/invalid_version.yml", &manifest_path)
         .with_context(|| format!("copy invalid manifest to {}", manifest_path.display()))?;
     let cli = Cli {
-        file: manifest_path.clone(),
+        file: utf8_path_buf(&manifest_path)?,
         ..Cli::default()
     };
 
@@ -107,8 +113,8 @@ fn assert_ninja_failure_propagates(command: Option<Commands>) -> Result<()> {
     let (_ninja_dir, ninja_path) = ninja_with_exit_code(7)?;
     let (temp, manifest_path) = create_test_manifest()?;
     let cli = Cli {
-        file: manifest_path.clone(),
-        directory: Some(temp.path().to_path_buf()),
+        file: utf8_path_buf(&manifest_path)?,
+        directory: Some(utf8_path_buf(temp.path())?),
         command,
         ..Cli::default()
     };
@@ -189,7 +195,7 @@ fn run_executes_ninja_without_persisting_file() -> Result<()> {
 fn run_generate_with_output_keeps_file() -> Result<()> {
     let (temp, manifest_path) = create_test_manifest()?;
     let output_path = temp.path().join("generated.ninja");
-    let cli = generate_cli(&manifest_path, temp.path(), &output_path);
+    let cli = generate_cli(&manifest_path, temp.path(), &output_path)?;
 
     run(&cli, output_prefs::resolve(None)).context("expected generate to succeed")?;
 
@@ -224,7 +230,7 @@ fn run_generate_with_output_creates_parent_dirs() -> Result<()> {
         !nested_dir.exists(),
         "nested directory should not exist prior to generate"
     );
-    let cli = generate_cli(&manifest_path, temp.path(), &output_path);
+    let cli = generate_cli(&manifest_path, temp.path(), &output_path)?;
 
     run(&cli, output_prefs::resolve(None))
         .context("expected generate to succeed with nested output path")?;
@@ -237,7 +243,7 @@ fn run_generate_with_output_creates_parent_dirs() -> Result<()> {
 fn run_generate_subcommand_writes_file() -> Result<()> {
     let (temp, manifest_path) = create_test_manifest()?;
     let output_path = temp.path().join("standalone.ninja");
-    let cli = generate_cli(&manifest_path, temp.path(), &output_path);
+    let cli = generate_cli(&manifest_path, temp.path(), &output_path)?;
 
     run(&cli, output_prefs::resolve(None)).context("expected generate subcommand to succeed")?;
     ensure!(
@@ -256,8 +262,8 @@ fn run_generate_subcommand_accepts_relative_manifest_path() -> Result<()> {
     let (temp, _manifest_path) = create_test_manifest()?;
     let output_path = temp.path().join("relative.ninja");
     let cli = Cli {
-        file: PathBuf::from("Netsukefile"),
-        directory: Some(temp.path().to_path_buf()),
+        file: Utf8PathBuf::from("Netsukefile"),
+        directory: Some(utf8_path_buf(temp.path())?),
         command: Some(Commands::Generate {
             output: Some(output_path.clone()),
         }),
@@ -278,8 +284,8 @@ fn run_respects_env_override_for_ninja() -> Result<()> {
     let (_temp_dir_env, ninja_env_path) = fake_ninja(0u8)?;
     let (temp, manifest_path) = create_test_manifest()?;
     let cli = Cli {
-        file: manifest_path.clone(),
-        directory: Some(temp.path().to_path_buf()),
+        file: utf8_path_buf(&manifest_path)?,
+        directory: Some(utf8_path_buf(temp.path())?),
         ..Cli::default()
     };
 

@@ -6,6 +6,7 @@ use super::paths::{FailingPathNormalizer, FsPathNormalizer, PathNormalizer, norm
 use super::*;
 use crate::cli::test_support::TestEnv;
 use anyhow::{Context, Result, ensure};
+use camino::Utf8PathBuf;
 use googletest::prelude::*;
 use pretty_assertions::assert_eq;
 use rstest::rstest;
@@ -16,6 +17,12 @@ use super::layers::collect_file_layers_with_normalizer;
 use std::cell::Cell;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+
+/// Convert a temporary test directory into the CLI's UTF-8 path type.
+fn utf8_directory(path: &Path) -> Result<Utf8PathBuf> {
+    Utf8PathBuf::from_path_buf(path.to_path_buf())
+        .map_err(|non_utf8| anyhow::anyhow!("test directory is not valid UTF-8: {non_utf8:?}"))
+}
 
 #[derive(Debug, Clone, Copy)]
 pub(super) enum LayerScenario {
@@ -82,7 +89,7 @@ pub(super) fn scenario_cli(scenario: LayerScenario, temp: &TempDir) -> Result<Cl
             })
         }
         LayerScenario::Discovery => Ok(Cli {
-            directory: Some(temp.path().to_path_buf()),
+            directory: Some(utf8_directory(temp.path())?),
             ..Cli::default()
         }),
     }
@@ -150,7 +157,7 @@ fn discovered_project_config_retains_load_outcome(
     }
 
     let cli = Cli {
-        directory: Some(temp.path().to_path_buf()),
+        directory: Some(utf8_directory(temp.path())?),
         ..Cli::default()
     };
     let env = TestEnv::default();
@@ -189,7 +196,11 @@ fn existing_project_scope_layer_is_not_appended_twice() -> Result<()> {
     // Equivalent to `project_dir`, but not in canonical form.
     let non_canonical = project_dir.join(".");
     let cli = Cli {
-        directory: Some(non_canonical),
+        directory: Some(
+            Utf8PathBuf::from_path_buf(non_canonical).map_err(|non_utf8| {
+                anyhow::anyhow!("test directory is not valid UTF-8: {non_utf8:?}")
+            })?,
+        ),
         ..Cli::default()
     };
     let discovered = discover_file_layers(&cli, &TestEnv::default());
@@ -295,7 +306,9 @@ fn normalization_failure_does_not_fail_discovery() -> Result<()> {
     // the failing normalizer must take the fallback de-duplication branch.
     let alias = project_dir.join(".");
     let cli = Cli {
-        directory: Some(alias),
+        directory: Some(Utf8PathBuf::from_path_buf(alias).map_err(|non_utf8| {
+            anyhow::anyhow!("test directory is not valid UTF-8: {non_utf8:?}")
+        })?),
         ..Cli::default()
     };
     let env = CountingEnv::default();
@@ -332,37 +345,5 @@ fn normalization_failure_does_not_fail_discovery() -> Result<()> {
             && deduplication.contains("appended_layer_count=0"),
         "fallback de-duplication outcome should record its counts: {deduplication}"
     );
-    Ok(())
-}
-
-/// A non-UTF-8 project directory still matches the discovered project layer.
-#[cfg(unix)]
-#[test]
-fn non_utf8_directory_does_not_duplicate_project_layer() -> Result<()> {
-    use std::os::unix::ffi::OsStringExt;
-
-    let temp = tempdir().context("create temp dir")?;
-    let project_dir = temp
-        .path()
-        .join(OsString::from_vec(b"project-\xff".to_vec()));
-    test_support::fs::create_dir(&project_dir).context("create project dir")?;
-    // OrthoConfig records paths lossily, so provide the equivalent alias it
-    // uses for filesystem access while retaining a non-UTF-8 `--directory`.
-    let lossy_project_dir = temp.path().join("project-\u{fffd}");
-    test_support::fs::symlink(&project_dir, &lossy_project_dir)
-        .context("create lossy project alias")?;
-    test_support::fs::write(
-        project_dir.join(".netsuke.toml"),
-        "default_targets = [\"alpha\"]\n",
-    )
-    .context("write project config")?;
-
-    let cli = Cli {
-        directory: Some(project_dir),
-        ..Cli::default()
-    };
-    let discovered = discover_file_layers(&cli, &TestEnv::default());
-    let layers = discovered.layers();
-    ensure!(layers.len() == 1, "expected one project layer: {layers:?}");
     Ok(())
 }

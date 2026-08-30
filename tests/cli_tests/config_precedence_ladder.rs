@@ -151,9 +151,9 @@ impl LadderExpectation {
 fn assert_ladder(merged: &Cli, expected: LadderExpectation) -> Result<()> {
     ensure!(
         merged.file.as_path() == Path::new(expected.file),
-        "manifest path should be {:?}, got {}",
+        "manifest path should be {:?}, got {:?}",
         expected.file,
-        merged.file.display()
+        merged.file
     );
     ensure!(
         merged.emoji == expected.emoji,

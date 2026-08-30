@@ -64,7 +64,7 @@ fn help_targets_fixture_with_manifest(manifest: &str) -> Result<(TempDir, Cli)> 
     workspace
         .write("Netsukefile", manifest)
         .context("write help telemetry manifest")?;
-    let manifest_path = root.join("Netsukefile").into_std_path_buf();
+    let manifest_path = root.join("Netsukefile");
     Ok((
         temp,
         Cli {

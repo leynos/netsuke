@@ -7,12 +7,15 @@
 //!
 //! **Pipeline position:** argument-validation layer, below [`super::parser`].
 //!
-//! - Receives raw `&str` slices from Clap's argument machinery.
+//! - Receives raw `&str` and [`OsStr`] values from Clap's argument machinery.
 //! - Emits localized error strings via [`super::parser::validation_message`].
 //! - Shared dispatch logic lives in [`parse_value_enum`] (called by the three
 //!   enum-valued parsers via [`ParseEnumSpec`]).
 
+use camino::Utf8PathBuf;
 use ortho_config::{LanguageIdentifier, LocalizationArgs, Localizer};
+use std::ffi::OsStr;
+use std::path::PathBuf;
 use std::str::FromStr;
 
 use super::{AccessibilityPolicy, ColourPolicy, EmojiPolicy, ProgressPolicy};
@@ -47,6 +50,24 @@ pub(super) fn parse_jobs(localizer: &dyn Localizer, s: &str) -> Result<usize, St
             &format!("jobs must be between 1 and {}", super::validation::MAX_JOBS),
         ))
     }
+}
+
+/// Parse a path argument, rejecting non-UTF-8 input with a localized error.
+///
+/// `--file` and `--directory` feed the UTF-8 Ninja invocation chain, so this
+/// preserves the original `OsStr` long enough to report the rejection at the
+/// CLI boundary rather than after partial runner setup.
+pub(super) fn parse_utf8_path(
+    localizer: &dyn Localizer,
+    value: &OsStr,
+    key: &'static str,
+    fallback: &str,
+) -> Result<Utf8PathBuf, String> {
+    Utf8PathBuf::from_path_buf(PathBuf::from(value)).map_err(|path| {
+        let mut args = LocalizationArgs::default();
+        args.insert("path", path.display().to_string().into());
+        super::parser::validation_message(localizer, key, Some(&args), fallback)
+    })
 }
 
 /// Parse and normalize a URI scheme provided via CLI flags.

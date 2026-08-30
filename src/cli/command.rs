@@ -14,6 +14,7 @@
 //! behaviour that the man page does not need belongs in a sibling module
 //! instead.
 
+use camino::Utf8PathBuf;
 use clap::{Args, Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -42,13 +43,13 @@ pub struct Cli {
         value_name = "FILE",
         default_value_os_t = CliConfig::default_manifest_path()
     )]
-    pub file: PathBuf,
+    pub file: Utf8PathBuf,
 
     /// Run as if started in this directory.
     ///
     /// This affects manifest lookup, output paths, and config discovery.
     #[arg(short = 'C', long, value_name = "DIR")]
-    pub directory: Option<PathBuf>,
+    pub directory: Option<Utf8PathBuf>,
 
     /// Path to a configuration file, bypassing automatic discovery.
     #[arg(long, value_name = "FILE")]

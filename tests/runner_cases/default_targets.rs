@@ -6,7 +6,7 @@
 #![cfg(unix)]
 
 use anyhow::{Context, Result, ensure};
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use netsuke::cli::{BuildArgs, Cli, Commands};
 use netsuke::output_prefs;
 use netsuke::runner::run_with_ninja_program;
@@ -71,8 +71,14 @@ fn run_build_uses_cli_default_targets_when_no_targets_are_requested(
     let fixture = fake_ninja_fixture?;
     let (temp, manifest_path) = create_test_manifest()?;
     let cli = Cli {
-        file: manifest_path,
-        directory: Some(temp.path().to_path_buf()),
+        file: Utf8PathBuf::from_path_buf(manifest_path).map_err(|non_utf8| {
+            anyhow::anyhow!("manifest path is not valid UTF-8: {non_utf8:?}")
+        })?,
+        directory: Some(
+            Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).map_err(|non_utf8| {
+                anyhow::anyhow!("temporary directory is not valid UTF-8: {non_utf8:?}")
+            })?,
+        ),
         default_targets: vec![String::from("hello")],
         command: Some(Commands::Build(BuildArgs {
             targets: Vec::new(),

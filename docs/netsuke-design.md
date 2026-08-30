@@ -2359,9 +2359,10 @@ child process's execution environment.
 
 Every invocation is described by a borrowed request bundle rather than a long
 parameter list: `NinjaBuildRequest` for a build and `NinjaToolRequest` for
-`ninja -t <tool>`. Each names the resolved program, `NinjaProcessOptions` (an
-optional UTF-8 working directory and job count), the generated build file, the
-targets or tool, a `&CommandEnv` describing the child's environment, and the
+`ninja -t <tool>`. Each names the UTF-8 resolved program,
+`NinjaProcessOptions` (an optional UTF-8 working directory and job count), the
+UTF-8 generated build file, the targets or tool, a `&CommandEnv` describing
+the child's environment, and the
 `stderr_mode: StderrMode` policy field. `run_ninja_with` and
 `run_ninja_tool_with` consume these; the convenience wrappers `run_ninja` and
 `run_ninja_tool` live in `runner::ninja_process_adapter`, translate `Cli` state
@@ -2369,9 +2370,10 @@ at the runner boundary, call them with `CommandEnv::inherit()`, and derive the
 `stderr_mode` policy from the CLI via
 `StderrMode::from_json_enabled(cli.json)`, which is production behaviour.
 Process requests never import `Cli`; callers without parser state construct
-`NinjaProcessOptions` directly. The adapter converts `Cli::directory` to the
-UTF-8 path at this boundary and returns `io::ErrorKind::InvalidData` if the CLI
-path is not valid UTF-8.
+`NinjaProcessOptions` directly. The CLI parser rejects a non-UTF-8 `--file` or
+`--directory` value with a localized diagnostic before configuration merging or
+runner setup. The adapter therefore preserves the UTF-8 path values unchanged;
+only the `std::process::Command` calls narrow them to `std::path::Path`.
 
 The private `run_ninja_internal` helper takes a `NinjaInternalRequest`, a
 clock, and a `configure` closure. The request groups the resolved program,

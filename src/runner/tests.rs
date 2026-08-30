@@ -1,5 +1,4 @@
 //! Unit tests for runner path resolution, predicate helpers, and core helpers.
-
 use super::*;
 use crate::cli::{HelpArgs, HelpTopic};
 use crate::ir::{BuildEdge, BuildGraph, DependencyOrder};
@@ -11,7 +10,6 @@ use camino::Utf8PathBuf;
 use rstest::rstest;
 use std::cell::Cell;
 use std::path::Path;
-use std::path::PathBuf;
 use std::sync::{Mutex, PoisonError};
 use test_support::{localizer_test_lock, set_en_localizer};
 
@@ -68,7 +66,7 @@ fn resolve_output_path_respects_directory(
     #[case] expected: &str,
 ) {
     let cli = Cli {
-        directory: directory.map(PathBuf::from),
+        directory: directory.map(Utf8PathBuf::from),
         ..Cli::default()
     };
     let resolved = resolve_output_path(&cli, Path::new(input));
@@ -199,8 +197,11 @@ fn ninja_text_propagates_typed_generation_errors() {
 fn runner_reports_the_complete_generation_stage_sequence() -> Result<()> {
     let (temp, manifest_path) = write_manifest(MINIMAL_MANIFEST)?;
     let cli = Cli {
-        file: manifest_path.into_std_path_buf(),
-        directory: Some(temp.path().to_path_buf()),
+        file: manifest_path,
+        directory: Some(
+            Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+                .map_err(|path| anyhow::anyhow!("non-UTF-8 temp path: {}", path.display()))?,
+        ),
         command: Some(Commands::Generate { output: None }),
         ..Cli::default()
     };
@@ -226,7 +227,7 @@ fn help_targets_bypasses_ninja_program_resolution() -> Result<()> {
     let _lock = localizer_test_lock().map_err(|error| anyhow::anyhow!("{error}"))?;
     let _guard = set_en_localizer();
     let cli = Cli {
-        file: PathBuf::from("missing-help-targets-manifest.yml"),
+        file: Utf8PathBuf::from("missing-help-targets-manifest.yml"),
         command: Some(Commands::Help(HelpArgs {
             topic: Some(HelpTopic::Targets),
         })),

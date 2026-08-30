@@ -212,6 +212,9 @@ If Netsuke cannot find `Netsukefile`, it reports the missing file and suggests
 `--file`. A different path can be selected with
 `netsuke --file path/to/manifest.yml build`.
 
+Manifest and `--directory` paths must be valid UTF-8. Netsuke rejects an
+invalid path while parsing the command line and identifies the affected option.
+
 The [quick-start guide](quickstart.md) provides a longer walkthrough.
 
 ## Understand the build model

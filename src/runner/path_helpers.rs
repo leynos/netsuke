@@ -18,7 +18,7 @@ use super::RunnerError;
 /// Determine the manifest path respecting the CLI's directory option.
 ///
 /// # Errors
-/// Returns an error when the CLI `file` or `directory` paths are not valid UTF-8.
+/// Returns an error when the resulting manifest path has no file name.
 ///
 /// # Examples
 /// ```ignore
@@ -29,25 +29,10 @@ use super::RunnerError;
 /// assert!(path.as_str().ends_with("Netsukefile"));
 /// ```
 pub(super) fn resolve_manifest_path(cli: &Cli) -> Result<Utf8PathBuf> {
-    let file = Utf8PathBuf::from_path_buf(cli.file.clone()).map_err(|path| {
-        anyhow!(
-            "{}",
-            localization::message(keys::RUNNER_MANIFEST_PATH_UTF8)
-                .with_arg("path", path.display().to_string())
-        )
-    })?;
-    let resolved = if let Some(dir) = &cli.directory {
-        let base = Utf8PathBuf::from_path_buf(dir.clone()).map_err(|path| {
-            anyhow!(
-                "{}",
-                localization::message(keys::RUNNER_MANIFEST_DIR_UTF8)
-                    .with_arg("path", path.display().to_string())
-            )
-        })?;
-        base.join(&file)
-    } else {
-        file
-    };
+    let resolved = cli
+        .directory
+        .as_ref()
+        .map_or_else(|| cli.file.clone(), |dir| dir.join(&cli.file));
     if resolved.file_name().is_none() {
         return Err(anyhow!(
             "{}",
@@ -67,9 +52,10 @@ pub(super) fn resolve_manifest_path(cli: &Cli) -> Result<Utf8PathBuf> {
 #[must_use]
 pub(super) fn resolve_output_path<'a>(cli: &Cli, path: &'a Path) -> Cow<'a, Path> {
     if path.is_relative() {
-        cli.directory
-            .as_ref()
-            .map_or_else(|| Cow::Borrowed(path), |dir| Cow::Owned(dir.join(path)))
+        cli.directory.as_ref().map_or_else(
+            || Cow::Borrowed(path),
+            |dir| Cow::Owned(dir.as_std_path().join(path)),
+        )
     } else {
         Cow::Borrowed(path)
     }
