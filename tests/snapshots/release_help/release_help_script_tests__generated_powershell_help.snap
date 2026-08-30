@@ -1,6 +1,5 @@
 ---
 source: tests/release_help_script_tests.rs
-assertion_line: 316
 expression: "format!(\"{ps_module}\\n---\\n{ps_manifest}\\n---\\n{maml}\\n---\\n{about_help}\")"
 ---
 function Invoke-CustomNetsuke { param() }
@@ -17,6 +16,9 @@ function Invoke-CustomNetsuke { param() }
     <command:details>
       <command:name>CustomNetsuke</command:name>
     </command:details>
+    <command:description>
+      <maml:para xmlns:maml="http://schemas.microsoft.com/maml/2004/10">--config build clean graph generate help</maml:para>
+    </command:description>
   </command:command>
 </helpItems>
 

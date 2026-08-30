@@ -237,4 +237,24 @@ mod tests {
         );
         Ok(())
     }
+
+    #[test]
+    fn release_help_metadata_localizes_the_config_description() -> Result<()> {
+        let metadata = ReleaseHelpCli::get_doc_metadata();
+        let config = metadata
+            .fields
+            .iter()
+            .find(|field| field.name == "config")
+            .context("release help metadata should include the config selector")?;
+        let localizer = crate::cli_localization::build_localizer(Some("en-US"));
+        let description = localizer
+            .lookup(&config.help_id, None)
+            .context("release help metadata should resolve its config description")?;
+
+        ensure!(
+            description == "Path to a configuration file, bypassing automatic discovery.",
+            "release help config description should be localized: {description}"
+        );
+        Ok(())
+    }
 }

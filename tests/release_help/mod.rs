@@ -5,6 +5,8 @@ mod script_functions;
 
 use anyhow::{Context, Result};
 use insta::Settings;
+use netsuke::cli::ReleaseHelpCli;
+use ortho_config::docs::OrthoConfigDocs;
 use rstest::fixture;
 use std::{
     ffi::OsString,
@@ -26,6 +28,7 @@ pub struct ScriptFixture {
     fake_bin_dir: PathBuf,
     pub log_path: PathBuf,
     pub out_dir: PathBuf,
+    metadata_path: PathBuf,
 }
 
 #[fixture]
@@ -34,6 +37,7 @@ pub fn script_fixture() -> Result<ScriptFixture> {
     let fake_bin_dir = temp_dir.path().join("bin");
     let out_dir = temp_dir.path().join("out");
     let log_path = temp_dir.path().join("cargo-orthohelp-args.log");
+    let metadata_path = temp_dir.path().join("release-help-metadata.json");
     fs::create_dir_all(&fake_bin_dir).context("create fake cargo-orthohelp bin directory")?;
     write_fake_cargo_orthohelp(&fake_bin_dir.join("cargo-orthohelp"))?;
     Ok(ScriptFixture {
@@ -41,6 +45,7 @@ pub fn script_fixture() -> Result<ScriptFixture> {
         fake_bin_dir,
         log_path,
         out_dir,
+        metadata_path,
     })
 }
 
@@ -55,8 +60,7 @@ pub fn write_fake_cargo_orthohelp(path: &Path) -> Result<()> {
         .with_context(|| format!("mark fake cargo-orthohelp executable {}", path.display()))
 }
 
-pub const fn fake_cargo_orthohelp_script() -> &'static str {
-    r#"#!/usr/bin/env bash
+const FAKE_CARGO_ORTHOHELP_PROLOGUE: &str = r#"#!/usr/bin/env bash
 set -euo pipefail
 
 printf '%s\n' "$*" >>"${ORTHOHELP_FAKE_LOG}"
@@ -93,7 +97,32 @@ if [[ "${ORTHOHELP_FAKE_SKIP_OUTPUT:-}" == "$format" ]]; then
   exit 0
 fi
 
-case "$format" in
+"#;
+
+const FAKE_CARGO_ORTHOHELP_METADATA: &str = r#"mapfile -t public_cli_surface < <(
+  python3 - "${ORTHOHELP_FAKE_METADATA:?release-help metadata is required}" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as metadata_file:
+    metadata = json.load(metadata_file)
+
+config = next(field for field in metadata["fields"] if field["name"] == "config")
+config_long = config["cli"]["long"]
+if not config_long:
+    raise ValueError("release-help config metadata must have a long flag")
+
+print(f"--{config_long}")
+print(" ".join(command["app_name"] for command in metadata["subcommands"]))
+PY
+)
+config_flag="${public_cli_surface[0]}"
+subcommands="${public_cli_surface[1]}"
+
+"#;
+
+const FAKE_CARGO_ORTHOHELP_OUTPUT: &str = r#"case "$format" in
+
   man)
     mkdir -p "$out_dir/man/man1"
     cat >"$out_dir/man/man1/netsuke.1" <<'MAN'
@@ -103,6 +132,12 @@ netsuke \- dependency-aware build orchestration
 .SH SYNOPSIS
 .B netsuke
 [OPTIONS]
+MAN
+    cat >>"$out_dir/man/man1/netsuke.1" <<MAN
+.SH OPTIONS
+.B $config_flag
+.SH COMMANDS
+$subcommands
 MAN
     ;;
   ps)
@@ -116,13 +151,24 @@ MAN
     <command:details>
       <command:name>$module_name</command:name>
     </command:details>
+    <command:description>
+      <maml:para xmlns:maml="http://schemas.microsoft.com/maml/2004/10">$config_flag $subcommands</maml:para>
+    </command:description>
   </command:command>
 </helpItems>
 MAML
     printf 'TOPIC\n    about_%s\n' "$module_name" >"$help_dir/about_$module_name.help.txt"
     ;;
 esac
-"#
+"#;
+
+pub fn fake_cargo_orthohelp_script() -> String {
+    [
+        FAKE_CARGO_ORTHOHELP_PROLOGUE,
+        FAKE_CARGO_ORTHOHELP_METADATA,
+        FAKE_CARGO_ORTHOHELP_OUTPUT,
+    ]
+    .concat()
 }
 
 #[expect(
@@ -179,6 +225,17 @@ impl<'a> ReleaseHelpRun<'a> {
 
 pub fn run_release_help(fixture: &ScriptFixture, run: ReleaseHelpRun<'_>) -> Result<Output> {
     let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    fs::write(
+        &fixture.metadata_path,
+        serde_json::to_vec(&ReleaseHelpCli::get_doc_metadata())
+            .context("serialise release-help metadata for fake cargo-orthohelp")?,
+    )
+    .with_context(|| {
+        format!(
+            "write release-help metadata fixture {}",
+            fixture.metadata_path.display()
+        )
+    })?;
     let mut command = Command::new("bash");
     command
         .arg(script_path())
@@ -189,6 +246,7 @@ pub fn run_release_help(fixture: &ScriptFixture, run: ReleaseHelpRun<'_>) -> Res
         .current_dir(repo_root)
         .env("PATH", path_with_fake_cargo_orthohelp(fixture)?)
         .env("ORTHOHELP_FAKE_LOG", &fixture.log_path)
+        .env("ORTHOHELP_FAKE_METADATA", &fixture.metadata_path)
         .env_remove("GITHUB_RUN_ID")
         .env_remove("GITHUB_RUN_ATTEMPT")
         .env_remove("RELEASE_HELP_BUILD_ID")

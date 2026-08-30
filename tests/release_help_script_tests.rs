@@ -18,6 +18,8 @@ use release_help::{
 use rstest::rstest;
 use std::{fs, process::Command};
 
+const DOCUMENTED_SUBCOMMANDS: [&str; 5] = ["build", "clean", "graph", "generate", "help"];
+
 #[rstest]
 fn generates_manual_page_for_non_windows_target(
     script_fixture: Result<ScriptFixture>,
@@ -161,6 +163,7 @@ fn assert_man_page_structure(man_page: &str) -> Result<()> {
         man_page.contains(".SH SYNOPSIS") && man_page.contains(".B netsuke"),
         "man page should include SYNOPSIS for the binary: {man_page}"
     );
+    assert_public_cli_surface(man_page, "man page")?;
     Ok(())
 }
 
@@ -186,6 +189,21 @@ fn assert_powershell_help_structure(
         about_help.contains("about_CustomNetsuke"),
         "about help should name the requested module: {about_help}"
     );
+    assert_public_cli_surface(maml, "MAML help")?;
+    Ok(())
+}
+
+fn assert_public_cli_surface(document: &str, format_name: &str) -> Result<()> {
+    ensure!(
+        document.contains("--config"),
+        "{format_name} should include the parser-only config selector: {document}"
+    );
+    for subcommand in DOCUMENTED_SUBCOMMANDS {
+        ensure!(
+            document.contains(subcommand),
+            "{format_name} should include the {subcommand} subcommand: {document}"
+        );
+    }
     Ok(())
 }
 

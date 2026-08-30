@@ -11,6 +11,7 @@ precedence:
 discovery: ~
 fields:
   - name: file
+    help_id: netsuke.fields.file.help
     cli:
       long: file
       short: f
@@ -20,6 +21,7 @@ fields:
     file: file
     merge_strategy: replace
   - name: jobs
+    help_id: netsuke.fields.jobs.help
     cli:
       long: jobs
       short: j
@@ -29,6 +31,7 @@ fields:
     file: jobs
     merge_strategy: replace
   - name: verbose
+    help_id: netsuke.fields.verbose.help
     cli:
       long: verbose
       short: v
@@ -38,6 +41,7 @@ fields:
     file: verbose
     merge_strategy: replace
   - name: locale
+    help_id: netsuke.fields.locale.help
     cli:
       long: locale
       short: l
@@ -47,6 +51,7 @@ fields:
     file: locale
     merge_strategy: replace
   - name: fetch_allow_scheme
+    help_id: netsuke.fields.fetch_allow_scheme.help
     cli:
       long: fetch-allow-scheme
       short: F
@@ -56,6 +61,7 @@ fields:
     file: fetch_allow_scheme
     merge_strategy: append
   - name: fetch_allow_host
+    help_id: netsuke.fields.fetch_allow_host.help
     cli:
       long: fetch-allow-host
       short: e
@@ -65,6 +71,7 @@ fields:
     file: fetch_allow_host
     merge_strategy: append
   - name: fetch_block_host
+    help_id: netsuke.fields.fetch_block_host.help
     cli:
       long: fetch-block-host
       short: E
@@ -74,6 +81,7 @@ fields:
     file: fetch_block_host
     merge_strategy: append
   - name: fetch_default_deny
+    help_id: netsuke.fields.fetch_default_deny.help
     cli:
       long: fetch-default-deny
       short: t
@@ -83,6 +91,7 @@ fields:
     file: fetch_default_deny
     merge_strategy: replace
   - name: json
+    help_id: netsuke.fields.json.help
     cli:
       long: json
       short: J
@@ -92,31 +101,37 @@ fields:
     file: json
     merge_strategy: replace
   - name: no_input
+    help_id: netsuke.fields.no_input.help
     cli: ~
     environment: NETSUKE_NO_INPUT
     file: no_input
     merge_strategy: replace
   - name: color
+    help_id: netsuke.fields.color.help
     cli: ~
     environment: NETSUKE_COLOR
     file: color
     merge_strategy: replace
   - name: emoji
+    help_id: netsuke.fields.emoji.help
     cli: ~
     environment: NETSUKE_EMOJI
     file: emoji
     merge_strategy: replace
   - name: progress
+    help_id: netsuke.fields.progress.help
     cli: ~
     environment: NETSUKE_PROGRESS
     file: progress
     merge_strategy: replace
   - name: accessibility
+    help_id: netsuke.fields.accessibility.help
     cli: ~
     environment: NETSUKE_ACCESSIBILITY
     file: accessibility
     merge_strategy: replace
   - name: default_targets
+    help_id: netsuke.fields.default_targets.help
     cli:
       long: default-targets
       short: d
@@ -126,8 +141,29 @@ fields:
     file: default_targets
     merge_strategy: append
   - name: cmds
+    help_id: netsuke.fields.cmds.help
     cli: ~
     environment: NETSUKE_CMDS
     file: cmds
     merge_strategy: replace
-subcommand_count: 0
+  - name: config
+    help_id: cli.flag.config.help
+    cli:
+      long: config
+      short: ~
+      multiple: false
+      possible_values: []
+    environment: ~
+    file: ~
+    merge_strategy: replace
+subcommands:
+  - name: build
+    about_id: cli.subcommand.build.about
+  - name: clean
+    about_id: cli.subcommand.clean.about
+  - name: graph
+    about_id: cli.subcommand.graph.about
+  - name: generate
+    about_id: cli.subcommand.generate.about
+  - name: help
+    about_id: cli.subcommand.help.long_about
