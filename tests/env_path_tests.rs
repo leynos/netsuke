@@ -20,6 +20,20 @@ use std::{
 };
 use test_support::env::prepend_path_value;
 
+use camino::Utf8PathBuf;
+
+//! Tests for composing isolated child-process `PATH` values.
+//!
+//! Composition is pure (`test_support::env::prepend_path_value`) and the
+//! runner applies the result as data via `CommandEnv`, so nothing here
+//! mutates the parent process: no test carries `#[serial]` and none needs
+//! process-global environment or working-directory coordination.
+//!
+//! These are the named cases; the invariants they instantiate live in
+//! `env_path_property_tests.rs`, which Cargo builds as its own target.
+#[cfg(unix)]
+};
+
 #[rstest]
 fn prepend_dir_to_path_preserves_existing_entries() -> Result<()> {
     let original = std::env::join_paths(["one", "two"])?;
@@ -186,11 +200,16 @@ fn observed_value(dir: &tempfile::TempDir) -> Result<std::ffi::OsString> {
 fn composed_path_reaches_the_spawned_process(
     probe_fixture: Result<(tempfile::TempDir, PathBuf, PathBuf)>,
 ) -> Result<()> {
+    use camino::Utf8PathBuf;
     use netsuke::runner::{
         BuildTargets, NinjaBuildRequest, NinjaProcessOptions, StderrMode, run_ninja_with,
     };
     use std::path::Path;
     let (dir, probe, build_file) = probe_fixture?;
+    let utf8_probe = Utf8PathBuf::from_path_buf(probe)
+        .map_err(|path| anyhow::anyhow!("probe path is not UTF-8: {}", path.display()))?;
+    let utf8_build_file = Utf8PathBuf::from_path_buf(build_file)
+        .map_err(|path| anyhow::anyhow!("build file path is not UTF-8: {}", path.display()))?;
     let parent_before = std::env::var_os("PATH");
     let composed = prepend_path_value(parent_before.as_deref(), Path::new("/injected/marker"))
         .context("compose PATH")?;
@@ -198,9 +217,9 @@ fn composed_path_reaches_the_spawned_process(
     let targets = BuildTargets::default();
 
     run_ninja_with(&NinjaBuildRequest {
-        program: probe.as_path(),
+        program: &utf8_probe,
         options: &options,
-        build_file: build_file.as_path(),
+        build_file: &utf8_build_file,
         targets: &targets,
         env: &CommandEnv::inherit().with_path(&composed),
         stderr_mode: StderrMode::Forward,
@@ -250,14 +269,18 @@ fn unoverridden_parent_variables_are_inherited(
     let inherited = observed_value(&baseline_dir)?;
 
     let (dir, probe, build_file) = probe_fixture?;
+    let utf8_probe = Utf8PathBuf::from_path_buf(probe)
+        .map_err(|path| anyhow::anyhow!("probe path is not UTF-8: {}", path.display()))?;
+    let utf8_build_file = Utf8PathBuf::from_path_buf(build_file)
+        .map_err(|path| anyhow::anyhow!("build file path is not UTF-8: {}", path.display()))?;
     let options = NinjaProcessOptions::default();
     let targets = BuildTargets::default();
 
     // The override touches only an unrelated marker; PATH is not configured.
     run_ninja_with(&NinjaBuildRequest {
-        program: probe.as_path(),
+        program: &utf8_probe,
         options: &options,
-        build_file: build_file.as_path(),
+        build_file: &utf8_build_file,
         targets: &targets,
         env: &CommandEnv::inherit().with_var("NETSUKE_PROBE_MARKER", "sentinel"),
         stderr_mode: StderrMode::Forward,
@@ -290,12 +313,16 @@ fn general_overrides_reach_the_spawned_tool_process(
     use netsuke::runner::{NinjaProcessOptions, NinjaToolRequest, StderrMode, run_ninja_tool_with};
 
     let (dir, probe, build_file) = probe_fixture?;
+    let utf8_probe = Utf8PathBuf::from_path_buf(probe)
+        .map_err(|path| anyhow::anyhow!("probe path is not UTF-8: {}", path.display()))?;
+    let utf8_build_file = Utf8PathBuf::from_path_buf(build_file)
+        .map_err(|path| anyhow::anyhow!("build file path is not UTF-8: {}", path.display()))?;
     let options = NinjaProcessOptions::default();
 
     run_ninja_tool_with(&NinjaToolRequest {
-        program: probe.as_path(),
+        program: &utf8_probe,
         options: &options,
-        build_file: build_file.as_path(),
+        build_file: &utf8_build_file,
         tool: "clean",
         env: &CommandEnv::inherit().with_var("NETSUKE_PROBE_MARKER", "sentinel"),
         stderr_mode: StderrMode::Forward,

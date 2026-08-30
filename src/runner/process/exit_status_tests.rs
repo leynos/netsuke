@@ -102,6 +102,11 @@ fn fake_ninja_program() -> anyhow::Result<(tempfile::TempDir, std::path::PathBuf
 fn build_and_tool_execution_preserve_operation_labels() -> anyhow::Result<()> {
     let (_program_dir, program) = fake_ninja_program()?;
     let build_file = tempfile::NamedTempFile::new()?;
+    let utf8_program = camino::Utf8PathBuf::from_path_buf(program)
+        .map_err(|path| anyhow::anyhow!("fake Ninja path is not UTF-8: {}", path.display()))?;
+    let utf8_build_file =
+        camino::Utf8PathBuf::from_path_buf(build_file.into_temp_path().to_path_buf())
+            .map_err(|path| anyhow::anyhow!("build file path is not UTF-8: {}", path.display()))?;
     let options = NinjaProcessOptions::default();
     let env = CommandEnv::inherit();
     let target_names = vec![String::from("default")];
@@ -110,9 +115,9 @@ fn build_and_tool_execution_preserve_operation_labels() -> anyhow::Result<()> {
     let (build_result, build_events) = with_test_subscriber(LevelFilter::INFO, |captured| {
         let result = run_ninja_build_internal(
             NinjaBuildRequest {
-                program: &program,
+                program: &utf8_program,
                 options: &options,
-                build_file: build_file.path(),
+                build_file: &utf8_build_file,
                 targets: &targets,
                 env: &env,
                 stderr_mode: StderrMode::Forward,
@@ -133,9 +138,9 @@ fn build_and_tool_execution_preserve_operation_labels() -> anyhow::Result<()> {
     let (tool_result, tool_events) = with_test_subscriber(LevelFilter::INFO, |captured| {
         let result = run_ninja_tool_internal(
             NinjaToolRequest {
-                program: &program,
+                program: &utf8_program,
                 options: &options,
-                build_file: build_file.path(),
+                build_file: &utf8_build_file,
                 tool: "clean",
                 env: &env,
                 stderr_mode: StderrMode::Forward,

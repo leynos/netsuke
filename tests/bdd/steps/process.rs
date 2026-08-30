@@ -261,12 +261,12 @@ fn build_dir_exists(world: &TestWorld) -> Result<()> {
 fn run(world: &TestWorld) -> Result<()> {
     prepare_cli_with_directory(world)?;
     let ninja_path = world.ninja_content.get();
-    let program_path: PathBuf;
+    let program_path: Utf8PathBuf;
     let program = if let Some(ref ninja) = ninja_path {
-        program_path = PathBuf::from(ninja.as_str());
+        program_path = Utf8PathBuf::from(ninja.as_str());
         program_path.as_path()
     } else {
-        Path::new(NINJA_PROGRAM)
+        Utf8Path::new(NINJA_PROGRAM)
     };
     let targets = BuildTargets::default();
     let result = world
@@ -292,7 +292,7 @@ fn run(world: &TestWorld) -> Result<()> {
                     working_dir,
                     jobs: cli.jobs.map(runner::NinjaJobCount::try_new).transpose()?,
                 },
-                build_file: Path::new("build.ninja"),
+                build_file: Utf8Path::new("build.ninja"),
                 targets: &targets,
                 env: &world.command_env.borrow(),
                 stderr_mode: runner::StderrMode::from_json_enabled(cli.json),
@@ -307,8 +307,8 @@ fn run(world: &TestWorld) -> Result<()> {
 #[cfg(unix)]
 fn run_subcommand(world: &TestWorld) -> Result<()> {
     let program = world.ninja_content.get().map_or_else(
-        || PathBuf::from(NINJA_PROGRAM),
-        |path| PathBuf::from(path.as_str()),
+        || Utf8PathBuf::from(NINJA_PROGRAM),
+        |path| Utf8PathBuf::from(path.as_str()),
     );
     let result = world
         .cli

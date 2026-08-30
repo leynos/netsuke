@@ -4,11 +4,10 @@
 //! count, build file, streaming pipes, and the injected environment — sits
 //! together, and so neither module exceeds the repository's file-length limit.
 
-use std::io::{self, ErrorKind};
-use std::path::Path;
+use std::io;
 use std::process::{Command, Stdio};
 
-use camino::Utf8PathBuf;
+use camino::Utf8Path;
 
 use super::{
     CommandEnv, NinjaBuildRequest, NinjaProcessOptions, NinjaToolRequest, canonicalize_utf8_path,
@@ -21,35 +20,24 @@ use super::{
 ///
 /// # Errors
 ///
-/// Returns an I/O error only when working-directory canonicalization fails or
-/// the build-file path remains non-UTF-8 after the fallback. Build and tool
-/// helpers tolerate build-file canonicalization failure when the original path
-/// is valid UTF-8.
+/// Returns an I/O error only when working-directory canonicalization fails.
+/// Build and tool helpers tolerate build-file canonicalization failure by
+/// passing the original UTF-8 path to Ninja.
 fn configure_ninja_base(
     cmd: &mut Command,
     options: &NinjaProcessOptions,
-    build_file: &Path,
+    build_file: &Utf8Path,
     env: &CommandEnv,
 ) -> io::Result<()> {
     env.apply(cmd);
     if let Some(dir) = &options.working_dir {
-        let canonical = canonicalize_utf8_path(dir.as_std_path())?;
+        let canonical = canonicalize_utf8_path(dir)?;
         cmd.current_dir(canonical.as_std_path());
     }
     if let Some(jobs) = options.jobs {
         cmd.arg("-j").arg(jobs.to_string());
     }
-    let build_file_path = canonicalize_utf8_path(build_file).or_else(|_| {
-        Utf8PathBuf::from_path_buf(build_file.to_path_buf()).map_err(|_| {
-            io::Error::new(
-                ErrorKind::InvalidData,
-                format!(
-                    "build file path {} is not valid UTF-8",
-                    build_file.display()
-                ),
-            )
-        })
-    })?;
+    let build_file_path = canonicalize_utf8_path(build_file).unwrap_or_else(|_| build_file.into());
     cmd.arg("-f").arg(build_file_path.as_std_path());
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
@@ -60,10 +48,8 @@ fn configure_ninja_base(
 ///
 /// # Errors
 ///
-/// Build-file canonicalization failure is tolerated when the original path is
-/// valid UTF-8. Returns an error when working-directory canonicalization fails
-/// or when the build-file path cannot be represented as UTF-8 after that
-/// fallback.
+/// Build-file canonicalization failure is tolerated by passing the original
+/// UTF-8 path. Returns an error when working-directory canonicalization fails.
 pub(super) fn configure_ninja_build_command(
     cmd: &mut Command,
     request: &NinjaBuildRequest<'_>,
@@ -78,10 +64,8 @@ pub(super) fn configure_ninja_build_command(
 ///
 /// # Errors
 ///
-/// Build-file canonicalization failure is tolerated when the original path is
-/// valid UTF-8. Returns an error when working-directory canonicalization fails
-/// or when the build-file path cannot be represented as UTF-8 after that
-/// fallback.
+/// Build-file canonicalization failure is tolerated by passing the original
+/// UTF-8 path. Returns an error when working-directory canonicalization fails.
 pub(super) fn configure_ninja_tool_command(
     cmd: &mut Command,
     request: &NinjaToolRequest<'_>,
@@ -98,6 +82,7 @@ mod tests {
     use super::*;
     use crate::runner::{NinjaJobCount, StderrMode};
     use anyhow::{Result, ensure};
+    use camino::{Utf8Path, Utf8PathBuf};
     use rstest::{fixture, rstest};
     use std::ffi::{OsStr, OsString};
     use tempfile::NamedTempFile;
@@ -124,7 +109,7 @@ mod tests {
         cmd.get_args().map(OsStr::to_os_string).collect()
     }
 
-    fn expected_base_arguments(build_file: &Path) -> Result<Vec<OsString>> {
+    fn expected_base_arguments(build_file: &Utf8Path) -> Result<Vec<OsString>> {
         Ok(vec![
             OsString::from("-j"),
             OsString::from("4"),
@@ -142,13 +127,16 @@ mod tests {
         env: CommandEnv,
     ) -> Result<()> {
         let build_file = temp_file?;
+        let temp_build_file = build_file.into_temp_path();
+        let utf8_build_file = Utf8PathBuf::from_path_buf(temp_build_file.to_path_buf())
+            .map_err(|path| anyhow::anyhow!("tempfile path is not UTF-8: {}", path.display()))?;
         let resolved_options = options?;
         let target_names = vec![String::from("default")];
         let targets = super::super::BuildTargets::new(&target_names);
         let request = NinjaBuildRequest {
-            program: Path::new("ninja"),
+            program: Utf8Path::new("ninja"),
             options: &resolved_options,
-            build_file: build_file.path(),
+            build_file: &utf8_build_file,
             targets: &targets,
             env: &env,
             stderr_mode: StderrMode::Forward,
@@ -157,7 +145,7 @@ mod tests {
 
         configure_ninja_build_command(&mut cmd, &request)?;
 
-        let mut expected = expected_base_arguments(build_file.path())?;
+        let mut expected = expected_base_arguments(&utf8_build_file)?;
         expected.push(OsString::from("default"));
         let actual = command_arguments(&cmd);
         ensure!(
@@ -174,11 +162,14 @@ mod tests {
         env: CommandEnv,
     ) -> Result<()> {
         let build_file = temp_file?;
+        let temp_build_file = build_file.into_temp_path();
+        let utf8_build_file = Utf8PathBuf::from_path_buf(temp_build_file.to_path_buf())
+            .map_err(|path| anyhow::anyhow!("tempfile path is not UTF-8: {}", path.display()))?;
         let resolved_options = options?;
         let request = NinjaToolRequest {
-            program: Path::new("ninja"),
+            program: Utf8Path::new("ninja"),
             options: &resolved_options,
-            build_file: build_file.path(),
+            build_file: &utf8_build_file,
             tool: "clean",
             env: &env,
             stderr_mode: StderrMode::Forward,
@@ -187,7 +178,7 @@ mod tests {
 
         configure_ninja_tool_command(&mut cmd, &request)?;
 
-        let mut expected = expected_base_arguments(build_file.path())?;
+        let mut expected = expected_base_arguments(&utf8_build_file)?;
         expected.extend([OsString::from("-t"), OsString::from("clean")]);
         let actual = command_arguments(&cmd);
         ensure!(

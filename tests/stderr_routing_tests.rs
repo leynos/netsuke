@@ -10,6 +10,7 @@
 #![cfg(unix)]
 
 use anyhow::{Context, Result, bail, ensure};
+use camino::{Utf8Path, Utf8PathBuf};
 use mockable::{DefaultEnv, Env};
 use netsuke::runner::{
     BuildTargets, CommandEnv, NinjaBuildRequest, NinjaProcessOptions, NinjaToolRequest, StderrMode,
@@ -131,11 +132,12 @@ fn routing_worker() -> Result<()> {
     let process_env = DefaultEnv;
     let job = process_env.raw(JOB_ENV).context("read routing job")?;
     let tool = process_env.os_string(TOOL_ENV).is_some();
-    let ninja = PathBuf::from(
+    let ninja = Utf8PathBuf::from_path_buf(PathBuf::from(
         process_env
             .os_string(NINJA_ENV)
             .context("read fake ninja path")?,
-    );
+    ))
+    .map_err(|path| anyhow::anyhow!("fake Ninja path is not UTF-8: {}", path.display()))?;
     let stderr_mode = match job.as_str() {
         "forward" => StderrMode::Forward,
         "suppress" => StderrMode::Suppress,
@@ -148,7 +150,7 @@ fn routing_worker() -> Result<()> {
         run_ninja_tool_with(&NinjaToolRequest {
             program: &ninja,
             options: &options,
-            build_file: Path::new("build.ninja"),
+            build_file: Utf8Path::new("build.ninja"),
             tool: "clean",
             env: &env,
             stderr_mode,
@@ -157,7 +159,7 @@ fn routing_worker() -> Result<()> {
         run_ninja_with(&NinjaBuildRequest {
             program: &ninja,
             options: &options,
-            build_file: Path::new("build.ninja"),
+            build_file: Utf8Path::new("build.ninja"),
             targets: &targets,
             env: &env,
             stderr_mode,

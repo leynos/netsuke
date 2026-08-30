@@ -1,6 +1,7 @@
 //! Behavioural tests for the Netsuke runner and CLI integration.
 
 use anyhow::{Context, Result, bail, ensure};
+use camino::Utf8Path;
 use netsuke::cli::{Cli, Commands};
 use netsuke::localization::{self, keys};
 use netsuke::output_prefs;
@@ -14,6 +15,10 @@ mod default_targets;
 mod fixtures;
 
 use fixtures::create_test_manifest;
+
+fn utf8_path(path: &Path) -> Result<&Utf8Path> {
+    Utf8Path::from_path(path).context("test path is not valid UTF-8")
+}
 
 /// Build a `Cli` that runs `generate --output <output>` for `manifest` within
 /// `directory`. Shared by the generate-output tests, which differ only in their
@@ -108,7 +113,9 @@ fn assert_ninja_failure_propagates(command: Option<Commands>) -> Result<()> {
         ..Cli::default()
     };
 
-    let Err(err) = run_with_ninja_program(&cli, output_prefs::resolve(None), &ninja_path) else {
+    let Err(err) =
+        run_with_ninja_program(&cli, output_prefs::resolve(None), utf8_path(&ninja_path)?)
+    else {
         bail!("expected run to fail when ninja exits non-zero");
     };
     let messages: Vec<String> = err
@@ -154,9 +161,9 @@ fn run_ninja_not_found() -> Result<()> {
     assert_runner_not_found(|cli| {
         let targets = BuildTargets::default();
         run_ninja(
-            Path::new("does-not-exist"),
+            Utf8Path::new("does-not-exist"),
             cli,
-            Path::new("build.ninja"),
+            Utf8Path::new("build.ninja"),
             &targets,
         )
     })
@@ -166,7 +173,7 @@ fn run_ninja_not_found() -> Result<()> {
 fn run_executes_ninja_without_persisting_file() -> Result<()> {
     let (_ninja_dir, ninja_path, temp, cli) = setup_ninja_env_test()?;
 
-    run_with_ninja_program(&cli, output_prefs::resolve(None), &ninja_path)
+    run_with_ninja_program(&cli, output_prefs::resolve(None), utf8_path(&ninja_path)?)
         .context("expected build to succeed")?;
 
     // Ensure no ninja file remains in project directory
@@ -276,8 +283,12 @@ fn run_respects_env_override_for_ninja() -> Result<()> {
         ..Cli::default()
     };
 
-    run_with_ninja_program(&cli, output_prefs::resolve(None), &ninja_env_path)
-        .context("expected injected Ninja programme to be used")?;
+    run_with_ninja_program(
+        &cli,
+        output_prefs::resolve(None),
+        utf8_path(&ninja_env_path)?,
+    )
+    .context("expected injected Ninja programme to be used")?;
     Ok(())
 }
 
@@ -285,7 +296,7 @@ fn run_respects_env_override_for_ninja() -> Result<()> {
 fn run_succeeds_with_checking_ninja_env() -> Result<()> {
     let (_ninja_dir, ninja_path, _temp, cli) = setup_ninja_env_test()?;
 
-    run_with_ninja_program(&cli, output_prefs::resolve(None), &ninja_path)
+    run_with_ninja_program(&cli, output_prefs::resolve(None), utf8_path(&ninja_path)?)
         .context("expected run to succeed using NINJA_ENV check binary")?;
     ensure!(ninja_path.exists(), "fake ninja should remain present");
     Ok(())
@@ -300,9 +311,9 @@ fn run_fails_with_failing_ninja_env() -> Result<()> {
 fn run_ninja_tool_not_found() -> Result<()> {
     assert_runner_not_found(|cli| {
         run_ninja_tool(
-            Path::new("does-not-exist"),
+            Utf8Path::new("does-not-exist"),
             cli,
-            Path::new("build.ninja"),
+            Utf8Path::new("build.ninja"),
             "clean",
         )
     })

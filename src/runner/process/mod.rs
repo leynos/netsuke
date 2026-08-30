@@ -3,8 +3,9 @@
 
 use super::BuildTargets;
 use monotony::{MonotonicClock, StdMonotonicClock};
-use std::{io, path::Path, process::Command};
+use std::{io, process::Command};
 
+use camino::Utf8Path;
 mod child_exit;
 mod command_list_telemetry;
 mod command_logging;
@@ -34,8 +35,6 @@ pub use dyndep_retention::MAX_RETAINED_DYNDEP_FILES;
 pub(crate) use dyndep_retention::{DyndepPublicationLease, prune_dyndep_cache};
 pub use file_io::*;
 pub use ninja_program::resolve_ninja_program;
-#[cfg(doctest)]
-pub use ninja_program::resolve_ninja_program_utf8;
 use output_forwarding::{StatusObserver, spawn_and_stream_output};
 
 mod command_env;
@@ -77,8 +76,7 @@ pub mod doc {
         CommandArg, is_sensitive_arg, redact_argument, redact_sensitive_args,
     };
     pub use super::{
-        create_temp_ninja_file, resolve_ninja_program, resolve_ninja_program_utf8,
-        write_ninja_file, write_text_file_utf8,
+        create_temp_ninja_file, resolve_ninja_program, write_ninja_file, write_text_file_utf8,
     };
 }
 
@@ -133,7 +131,7 @@ fn run_command_and_stream_with_context<Clock: MonotonicClock>(
 ///     BuildTargets, CommandEnv, NinjaBuildRequest, NinjaProcessOptions, StderrMode,
 ///     run_ninja_with,
 /// };
-/// use std::path::Path;
+/// use camino::Utf8Path;
 ///
 /// let options = NinjaProcessOptions::default();
 /// let targets = BuildTargets::default();
@@ -144,9 +142,9 @@ fn run_command_and_stream_with_context<Clock: MonotonicClock>(
 ///     .expect("separator-free entries always join");
 /// let env = CommandEnv::inherit().with_path(&path);
 /// run_ninja_with(&NinjaBuildRequest {
-///     program: Path::new("ninja"),
+///     program: Utf8Path::new("ninja"),
 ///     options: &options,
-///     build_file: Path::new("build.ninja"),
+///     build_file: Utf8Path::new("build.ninja"),
 ///     targets: &targets,
 ///     env: &env,
 ///     stderr_mode: StderrMode::Forward,
@@ -183,13 +181,13 @@ fn run_ninja_with_clock(
 /// use netsuke::runner::{
 ///     CommandEnv, NinjaProcessOptions, NinjaToolRequest, StderrMode, run_ninja_tool_with,
 /// };
-/// use std::path::Path;
+/// use camino::Utf8Path;
 ///
 /// let options = NinjaProcessOptions::default();
 /// run_ninja_tool_with(&NinjaToolRequest {
-///     program: Path::new("ninja"),
+///     program: Utf8Path::new("ninja"),
 ///     options: &options,
-///     build_file: Path::new("build.ninja"),
+///     build_file: Utf8Path::new("build.ninja"),
 ///     tool: "clean",
 ///     env: &CommandEnv::inherit(),
 ///     stderr_mode: StderrMode::Forward,
@@ -208,7 +206,7 @@ pub fn run_ninja_tool_with(request: &NinjaToolRequest<'_>) -> io::Result<()> {
 /// Caller-supplied parameters shared across Ninja invocation variants.
 struct NinjaInternalRequest<'request, 'observer> {
     /// Ninja executable to invoke.
-    program: &'request Path,
+    program: &'request Utf8Path,
     /// Child stderr policy controlling forwarding and attribution.
     stderr_mode: StderrMode,
     /// Optional callback receiving parsed task-progress updates.
@@ -235,7 +233,7 @@ where
     F: FnOnce(&mut Command) -> io::Result<()>,
     Clock: MonotonicClock,
 {
-    let mut cmd = Command::new(request.program);
+    let mut cmd = Command::new(request.program.as_std_path());
     configure(&mut cmd)?;
     let execution = CommandExecutionContext {
         operation: request.operation,

@@ -6,6 +6,7 @@
 #![cfg(unix)]
 
 use anyhow::{Context, Result, ensure};
+use camino::Utf8Path;
 use netsuke::cli::{BuildArgs, Cli, Commands};
 use netsuke::output_prefs;
 use netsuke::runner::run_with_ninja_program;
@@ -79,8 +80,12 @@ fn run_build_uses_cli_default_targets_when_no_targets_are_requested(
         ..Cli::default()
     };
 
-    run_with_ninja_program(&cli, output_prefs::resolve(None), &fixture.ninja_path)
-        .context("run build with cli default targets")?;
+    run_with_ninja_program(
+        &cli,
+        output_prefs::resolve(None),
+        Utf8Path::from_path(&fixture.ninja_path).context("fake ninja path is not valid UTF-8")?,
+    )
+    .context("run build with cli default targets")?;
 
     let logged_args = fs::read_to_string(&fixture.args_log)
         .with_context(|| format!("read fake ninja args log {}", fixture.args_log.display()))?;

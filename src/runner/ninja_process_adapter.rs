@@ -7,11 +7,8 @@
 
 use super::{BuildTargets, CommandEnv, StderrMode, process};
 use crate::cli::Cli;
-use camino::Utf8PathBuf;
-use std::{
-    io::{self, ErrorKind},
-    path::Path,
-};
+use camino::{Utf8Path, Utf8PathBuf};
+use std::{io, io::ErrorKind};
 
 /// Translate CLI state into the narrow options consumed by the process layer.
 ///
@@ -48,9 +45,9 @@ pub(super) fn ninja_process_options(cli: &Cli) -> io::Result<process::NinjaProce
 ///
 /// Returns an [`std::io::Error`] if Ninja cannot execute successfully.
 pub fn run_ninja(
-    program: &Path,
+    program: &Utf8Path,
     cli: &Cli,
-    build_file: &Path,
+    build_file: &Utf8Path,
     targets: &BuildTargets<'_>,
 ) -> std::io::Result<()> {
     let options = ninja_process_options(cli)?;
@@ -73,9 +70,9 @@ pub fn run_ninja(
 ///
 /// Returns an [`std::io::Error`] if Ninja cannot execute successfully.
 pub fn run_ninja_tool(
-    program: &Path,
+    program: &Utf8Path,
     cli: &Cli,
-    build_file: &Path,
+    build_file: &Utf8Path,
     tool: &str,
 ) -> std::io::Result<()> {
     let options = ninja_process_options(cli)?;

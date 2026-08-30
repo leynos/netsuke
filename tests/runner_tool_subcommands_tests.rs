@@ -10,6 +10,7 @@
 #![cfg(unix)]
 
 use anyhow::{Context, Result, bail, ensure};
+use camino::Utf8Path;
 use netsuke::cli::{Cli, Commands};
 use netsuke::localization::{self, keys};
 use netsuke::output_prefs;
@@ -54,7 +55,11 @@ fn assert_ninja_failure_propagates(command: Commands) -> Result<()> {
         ..Cli::default()
     };
 
-    let Err(err) = run_with_ninja_program(&cli, output_prefs::resolve(None), &ninja_path) else {
+    let Err(err) = run_with_ninja_program(
+        &cli,
+        output_prefs::resolve(None),
+        Utf8Path::from_path(&ninja_path).context("fake ninja path is not valid UTF-8")?,
+    ) else {
         bail!("expected run to fail when ninja exits non-zero");
     };
     let messages: Vec<String> = err
@@ -94,8 +99,12 @@ fn assert_subcommand_succeeds_without_persisting_file(
         ..Cli::default()
     };
 
-    run_with_ninja_program(&cli, output_prefs::resolve(None), &ninja_path)
-        .with_context(|| format!("expected {name} subcommand to succeed"))?;
+    run_with_ninja_program(
+        &cli,
+        output_prefs::resolve(None),
+        Utf8Path::from_path(&ninja_path).context("fake ninja path is not valid UTF-8")?,
+    )
+    .with_context(|| format!("expected {name} subcommand to succeed"))?;
 
     ensure!(
         !temp.path().join("build.ninja").exists(),

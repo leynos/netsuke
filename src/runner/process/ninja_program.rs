@@ -65,25 +65,10 @@ pub(super) fn resolve_ninja_program_utf8_with(env: &impl Env) -> Utf8PathBuf {
     )
 }
 
-/// Resolve Ninja as a general platform path with an injectable environment.
-///
-/// Compiled for tests only: production reaches the platform-path form through
-/// [`resolve_ninja_program`], which shares the UTF-8 resolution below.
-#[cfg(test)]
-pub(super) fn resolve_ninja_program_with(env: &impl Env) -> PathBuf {
-    resolve_ninja_program_utf8_with(env).into()
-}
-
 /// Resolve the configured Ninja executable as a UTF-8 path.
 #[must_use]
-pub fn resolve_ninja_program_utf8() -> Utf8PathBuf {
+pub fn resolve_ninja_program() -> Utf8PathBuf {
     resolve_ninja_program_utf8_with(&mockable::DefaultEnv)
-}
-
-/// Resolve the configured Ninja executable as a general platform path.
-#[must_use]
-pub fn resolve_ninja_program() -> PathBuf {
-    resolve_ninja_program_utf8().into()
 }
 #[cfg(test)]
 mod tests {
@@ -234,13 +219,13 @@ mod tests {
         OsString::from_vec(vec![0xff, b'n', b'i', b'n', b'j', b'a'])
     }
 
-    /// Verify platform-path resolution shares the UTF-8 resolver's result.
+    /// Verify the UTF-8 resolver returns the configured override unchanged.
     #[rstest]
-    fn resolve_ninja_program_with_converts_the_resolved_path(
+    fn resolve_ninja_program_utf8_with_returns_the_resolved_path(
         #[with(Some(OsString::from("/opt/ninja")))] ninja_env: MockEnv,
     ) {
-        let resolved = resolve_ninja_program_with(&ninja_env);
-        assert_eq!(resolved, PathBuf::from("/opt/ninja"));
+        let resolved = resolve_ninja_program_utf8_with(&ninja_env);
+        assert_eq!(resolved, Utf8PathBuf::from("/opt/ninja"));
     }
 
     // `proptest!` owns the generated function signature, so rstest cannot
