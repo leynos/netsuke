@@ -9,6 +9,9 @@ use crate::recipe_shell::RecipeShell;
 /// Leave space for Windows' terminating command-line NUL character.
 const MAX_POWER_SHELL_COMMAND_LINE: usize = 32_766;
 
+/// Bound the in-memory PowerShell recipe text before UTF-16LE and Base64 encoding.
+const MAX_POWER_SHELL_RECIPE_BYTES: usize = 1024 * 1024;
+
 /// Prefix shared by every encoded Windows PowerShell recipe invocation.
 const POWER_SHELL_COMMAND_PREFIX: &str =
     "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ";
@@ -70,6 +73,7 @@ impl RecipeShell {
         match self {
             Self::Posix => escape_ninja_value(script).map(RenderedRecipeCommand::Direct),
             Self::PowerShell => {
+                Self::validate_power_shell_recipe_size(script)?;
                 let power_shell_script = Self::power_shell_script(script);
                 Self::power_shell_command(&power_shell_script)
             }
@@ -97,6 +101,18 @@ impl RecipeShell {
             "$ErrorActionPreference = 'Stop'\n$LASTEXITCODE = 0\n{}\nif ($LASTEXITCODE -ne 0) {{ exit $LASTEXITCODE }}",
             script.as_str()
         ))
+    }
+
+    /// Reject recipe text that would exceed the bounded in-memory encoder budget.
+    fn validate_power_shell_recipe_size(script: &ShellText) -> Result<(), NinjaGenError> {
+        let actual_bytes = script.as_str().len();
+        if actual_bytes > MAX_POWER_SHELL_RECIPE_BYTES {
+            return Err(NinjaGenError::PowerShellRecipeTooLarge {
+                actual_bytes,
+                maximum_bytes: MAX_POWER_SHELL_RECIPE_BYTES,
+            });
+        }
+        Ok(())
     }
 
     /// Encode one PowerShell script without exposing its text to Ninja parsing.
@@ -187,8 +203,8 @@ mod tests {
     //! Verifies interpreter-specific Ninja command rendering.
 
     use super::{
-        POWER_SHELL_COMMAND_PREFIX, POWER_SHELL_RESPONSE_FILE_COMMAND, RecipeShell,
-        RenderedRecipeCommand, windows_argument,
+        MAX_POWER_SHELL_RECIPE_BYTES, POWER_SHELL_COMMAND_PREFIX,
+        POWER_SHELL_RESPONSE_FILE_COMMAND, RecipeShell, RenderedRecipeCommand, windows_argument,
     };
     use crate::ninja_gen::ninja_gen_escape::ShellText;
     use base64::{Engine as _, engine::general_purpose::STANDARD};
@@ -284,6 +300,20 @@ mod tests {
         assert!(matches!(
             result,
             Err(super::NinjaGenError::UnsafeNinjaValue)
+        ));
+    }
+
+    /// Reject recipe text that would exceed the bounded PowerShell encoder allocation.
+    #[test]
+    fn power_shell_commands_reject_recipes_larger_than_the_encoding_limit() {
+        let recipe = "x".repeat(MAX_POWER_SHELL_RECIPE_BYTES + 1);
+        let result = RecipeShell::PowerShell.command_value(&ShellText::new(recipe));
+        assert!(matches!(
+            result,
+            Err(super::NinjaGenError::PowerShellRecipeTooLarge {
+                actual_bytes,
+                maximum_bytes: MAX_POWER_SHELL_RECIPE_BYTES,
+            }) if actual_bytes == MAX_POWER_SHELL_RECIPE_BYTES + 1
         ));
     }
 

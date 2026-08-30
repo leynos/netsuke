@@ -381,12 +381,13 @@ The lowering stages have deliberately separate responsibilities:
   validation rules apply to this POSIX route.
 - On Windows, `RecipeShell::PowerShell` renders scalar commands and scripts as
   encoded `powershell.exe` invocations while they fit the Windows command-line
-  limit. Larger recipes use Ninja's per-edge `rspfile` and `rspfile_content`
-  bindings. Ninja derives a unique `$out`-based `.ps1` response-file name,
-  creates it in the edge's working directory with an ASCII PowerShell bootstrap
-  containing the Base64 UTF-16LE payload, and invokes it with
-  `powershell.exe -File "$rspfile"`. The bootstrap removes its own
-  `$PSCommandPath` in a `finally` block after the recipe succeeds or fails;
+  limit. Recipes up to 1 MiB use Ninja's per-edge `rspfile` and
+  `rspfile_content` bindings; larger recipes are rejected before Netsuke
+  allocates UTF-16LE and Base64 payloads. Ninja derives a unique `$out`-based
+  `.ps1` response-file name, creates it in the edge's working directory with an
+  ASCII PowerShell bootstrap containing the Base64 UTF-16LE payload, and
+  invokes it with `powershell.exe -File "$rspfile"`. The bootstrap removes its
+  own `$PSCommandPath` in a `finally` block after the recipe succeeds or fails;
   query-only generation emits the bindings without creating files. An ordered
   list becomes one PowerShell script that checks `$LASTEXITCODE` immediately
   after each generated list entry, preserving PowerShell state while stopping
@@ -618,6 +619,38 @@ cargo nextest run --test polonius_toolchain_contract
 Keep this section and the [Polonius migration notes](polonius.md) in step: both
 describe the same no-directive, pinned-toolchain contract, and the notes record
 the remaining harness consequences of that policy.
+
+### Windows native recipe smoke workflow
+
+The pull-request `windows-native-recipe-smoke` job in
+[`ci.yml`](../.github/workflows/ci.yml) is the native Windows execution gate.
+It waits for the successful `build-test-windows` job, then runs on
+`windows-latest` with `pwsh` as the shell for every `run` step. It checks out
+the pull request source, installs the pinned nightly from `rust-toolchain.toml`
+through the shared Rust setup action, installs Ninja, and builds the `netsuke`
+binary from that checkout. The job then invokes:
+
+```powershell
+./scripts/windows-recipe-smoke.ps1 `
+  -Netsuke ./target/debug/netsuke.exe `
+  -Manifest ./tests/data/windows-recipe-smoke.yml
+```
+
+The fixture exercises the Windows PowerShell legacy-recipe contract, including
+target discovery, scalar and script recipes, ordered-list state and failure,
+path quoting, and the large-recipe response-file transport. The job
+deliberately does not set `SHELL=bash` or use Git Bash for its invocation, so
+the launch boundary remains an ordinary PowerShell session.
+`build-test-windows` continues to use Git Bash only for the repository's POSIX
+Makefile quality gates.
+
+The release workflow has a second `windows-native-recipe-smoke` job for the
+tagged source. It uses the same `pwsh` defaults, pinned Rust toolchain, Ninja
+installation, binary build, smoke script, and
+`tests/data/windows-recipe-smoke.yml` fixture. The smoke job builds the tagged
+source itself; the release publication job separately requires both this smoke
+job and the platform package jobs in its `needs` list. Consequently, release
+publication cannot proceed unless the native Windows smoke test passes.
 
 ## Quality gates
 

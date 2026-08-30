@@ -147,14 +147,16 @@ and target has a fresh shell process. In PowerShell, `{{ ins }}` and
 spaces are escaped for Ninja, so whitespace-containing outputs remain valid;
 quote any other path or argument with the selected shell's syntax. Encoded
 PowerShell commands are retained while they fit the Windows command-line limit.
-Larger recipes use Ninja's `rspfile` and `rspfile_content` bindings, with a
-unique `$out`-derived `.ps1` name per edge, created in that edge's working
-directory, containing an ASCII PowerShell bootstrap and the Base64 UTF-16LE
-recipe payload. The command invokes it with `powershell.exe -File "$rspfile"`.
-The bootstrap removes its own `$PSCommandPath` in a `finally` block after the
-recipe succeeds or fails. Queries do not create response files. On POSIX and
-Bash routes, `$$` means the process identifier; in PowerShell, `$$` is the
-automatic variable containing the last token received by the session.
+Larger recipes up to 1 MiB use Ninja's `rspfile` and `rspfile_content`
+bindings, with a unique `$out`-derived `.ps1` name per edge, created in that
+edge's working directory, containing an ASCII PowerShell bootstrap and the
+Base64 UTF-16LE recipe payload. Recipes above that limit are rejected before
+Netsuke allocates their encoded payload. The command invokes it with
+`powershell.exe -File "$rspfile"`. The bootstrap removes its own
+`$PSCommandPath` in a `finally` block after the recipe succeeds or fails.
+Queries do not create response files. On POSIX and Bash routes, `$$` means the
+process identifier; in PowerShell, `$$` is the automatic variable containing
+the last token received by the session.
 
 For reproducible Windows CI, use a `pwsh` step and let Netsuke select
 PowerShell; do not use a workflow-level `shell: bash` setting as evidence of
