@@ -181,6 +181,70 @@ def _step_position(steps: list[dict[str, object]], name: str) -> int:
     return steps.index(_step(steps, name))
 
 
+def _assert_yamllint_ci_contract(steps: list[dict[str, object]]) -> None:
+    """Assert that Linux CI provisions the pinned yamllint installation."""
+    setup_uv = _step(steps, "Setup uv")
+    cache_yamllint = _step(steps, "Cache yamllint")
+    install_yamllint = _step(steps, "Install yamllint")
+
+    assert setup_uv.get("uses") == (
+        "astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990"
+    ), "the Linux CI job must provision uv before installing yamllint"
+    assert cache_yamllint.get("uses") == (
+        "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9"
+    ), "the Linux CI job must cache the pinned yamllint installation"
+    assert install_yamllint.get("run") == (
+        'uv tool install "yamllint==${YAMLLINT_VERSION}"\n'
+        'echo "${UV_TOOL_BIN_DIR}" >> "$GITHUB_PATH"\n'
+    ), "the Linux CI job must install and expose the pinned yamllint binary"
+
+
+def _assert_actionlint_ci_contract(steps: list[dict[str, object]]) -> None:
+    """Assert that Linux CI provisions actionlint and invokes trusted Make."""
+    cache_actionlint = _step(steps, "Cache actionlint")
+    download_actionlint = _step(steps, "Download actionlint")
+    lint = _step(steps, "Lint")
+    download_script = download_actionlint.get("run")
+
+    assert cache_actionlint.get("id") == "cache_actionlint", (
+        "the actionlint cache step must expose its cache-hit result"
+    )
+    assert cache_actionlint.get("with") == {
+        "path": "actionlint",
+        "key": "actionlint-${{ runner.os }}-${{ runner.arch }}-1.7.12",
+    }, "the actionlint cache must own the pinned binary at the repository path"
+    assert download_actionlint.get("if") == (
+        "steps.cache_actionlint.outputs.cache-hit != 'true'"
+    ), "the actionlint download must run only after a cache miss"
+    assert isinstance(download_script, str), (
+        "the actionlint cache-miss step must define its verified installer script"
+    )
+    for expected, message in ACTIONLINT_SCRIPT_CONTRACTS:
+        assert expected in download_script, message
+    assert download_script.index(ACTIONLINT_CHECKSUM_COMMAND) < download_script.index(
+        ACTIONLINT_INSTALL_COMMAND
+    ), "the actionlint archive checksum must be verified before running the installer"
+    assert lint.get("run") == (
+        '/usr/bin/make ACTIONLINT="$GITHUB_WORKSPACE/actionlint" lint'
+    ), "the Linux CI job must use trusted `/usr/bin/make` with the cached actionlint"
+
+
+def _assert_workflow_linter_provisioning_order(
+    steps: list[dict[str, object]],
+) -> None:
+    """Assert that Linux CI provisions both workflow linters before linting."""
+    assert all(
+        _step_position(steps, earlier) < _step_position(steps, later)
+        for earlier, later in [
+            ("Setup uv", "Cache yamllint"),
+            ("Cache yamllint", "Install yamllint"),
+            ("Install yamllint", "Cache actionlint"),
+            ("Cache actionlint", "Download actionlint"),
+            ("Download actionlint", "Lint"),
+        ]
+    ), "the Linux CI job must provision both linters before the trusted lint step"
+
+
 def _mocked_command(cmd_mox: CmdMox, name: str) -> str:
     """Return the active CmdMox shim for a Makefile command variable."""
     shim_dir = cmd_mox.environment.shim_dir
@@ -256,55 +320,9 @@ def test_yamllint_policy_supports_github_actions_workflows() -> None:
 def test_ci_installs_and_invokes_pinned_workflow_linters() -> None:
     """Linux CI provisions the pinned tools before the trusted lint invocation."""
     steps = _build_test_steps()
-    setup_uv = _step(steps, "Setup uv")
-    cache_yamllint = _step(steps, "Cache yamllint")
-    install_yamllint = _step(steps, "Install yamllint")
-    cache_actionlint = _step(steps, "Cache actionlint")
-    download_actionlint = _step(steps, "Download actionlint")
-    lint = _step(steps, "Lint")
-    download_script = download_actionlint.get("run")
-
-    assert setup_uv.get("uses") == (
-        "astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990"
-    ), "the Linux CI job must provision uv before installing yamllint"
-    assert cache_yamllint.get("uses") == (
-        "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9"
-    ), "the Linux CI job must cache the pinned yamllint installation"
-    assert install_yamllint.get("run") == (
-        'uv tool install "yamllint==${YAMLLINT_VERSION}"\n'
-        'echo "${UV_TOOL_BIN_DIR}" >> "$GITHUB_PATH"\n'
-    ), "the Linux CI job must install and expose the pinned yamllint binary"
-    assert cache_actionlint.get("id") == "cache_actionlint", (
-        "the actionlint cache step must expose its cache-hit result"
-    )
-    assert cache_actionlint.get("with") == {
-        "path": "actionlint",
-        "key": "actionlint-${{ runner.os }}-${{ runner.arch }}-1.7.12",
-    }, "the actionlint cache must own the pinned binary at the repository path"
-    assert download_actionlint.get("if") == (
-        "steps.cache_actionlint.outputs.cache-hit != 'true'"
-    ), "the actionlint download must run only after a cache miss"
-    assert isinstance(download_script, str), (
-        "the actionlint cache-miss step must define its verified installer script"
-    )
-    for expected, message in ACTIONLINT_SCRIPT_CONTRACTS:
-        assert expected in download_script, message
-    assert download_script.index(ACTIONLINT_CHECKSUM_COMMAND) < download_script.index(
-        ACTIONLINT_INSTALL_COMMAND
-    ), "the actionlint archive checksum must be verified before running the installer"
-    assert lint.get("run") == (
-        '/usr/bin/make ACTIONLINT="$GITHUB_WORKSPACE/actionlint" lint'
-    ), "the Linux CI job must use trusted `/usr/bin/make` with the cached actionlint"
-    assert all(
-        _step_position(steps, earlier) < _step_position(steps, later)
-        for earlier, later in [
-            ("Setup uv", "Cache yamllint"),
-            ("Cache yamllint", "Install yamllint"),
-            ("Install yamllint", "Cache actionlint"),
-            ("Cache actionlint", "Download actionlint"),
-            ("Download actionlint", "Lint"),
-        ]
-    ), "the Linux CI job must provision both linters before the trusted lint step"
+    _assert_yamllint_ci_contract(steps)
+    _assert_actionlint_ci_contract(steps)
+    _assert_workflow_linter_provisioning_order(steps)
 
 
 def test_every_workflow_starts_a_yaml_document() -> None:
