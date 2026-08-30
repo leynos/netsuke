@@ -1,13 +1,13 @@
 # Netsuke user's guide
 
 This guide documents the current development source for the planned
-v0.1.0-beta3 release. The latest published release is Netsuke v0.1.0-beta2;
-the package and registry-install instructions below are specific to that
-release, while source-install instructions describe the current checkout. The
-source still reports version `0.1.0-beta2` until the beta3 version bump, but it
-is ahead of the beta2 tag. The guide covers the first build, the manifest
-format, templating, command-line usage, configuration, diagnostics,
-accessibility, and the current safety boundary.
+v0.1.0-beta3 release. The latest published release is Netsuke v0.1.0-beta2; the
+package and registry-install instructions below are specific to that release,
+while source-install instructions describe the current checkout. The source
+still reports version `0.1.0-beta2` until the beta3 version bump, but it is
+ahead of the beta2 tag. The guide covers the first build, the manifest format,
+templating, command-line usage, configuration, diagnostics, accessibility, and
+the current safety boundary.
 
 The published beta2 release is an early-adopter release. The compiler pipeline
 is useful, but command names, flags, diagnostic schemas, and some manifest

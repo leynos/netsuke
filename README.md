@@ -131,9 +131,9 @@ ______________________________________________________________________
 
 ## What works today
 
-The current development source in this checkout is the planned
-v0.1.0-beta3 and is ahead of the published v0.1.0-beta2 tag. Its core
-build-system compiler provides:
+The current development source in this checkout is the planned v0.1.0-beta3 and
+is ahead of the published v0.1.0-beta2 tag. Its core build-system compiler
+provides:
 
 - YAML 1.2 manifest parsing with duplicate-key and schema validation;
 - Jinja variables, macros, `foreach`, `when`, globbing, environment helpers,
