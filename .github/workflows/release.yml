@@ -22,6 +22,14 @@ name: Release Binary
         required: false
         type: boolean
         default: false
+      run-release-admission:
+        description: >-
+          Whether to run trusted downstream release-admission canaries. Tag
+          releases always run admission; reusable callers may disable it when
+          they do not receive a token.
+        required: false
+        type: boolean
+        default: true
       wix-extension-version:
         description: >-
           Version of the WixToolset.UI.wixext extension to install alongside
@@ -113,13 +121,45 @@ jobs:
           fields: bin-name
           export-to-env: 'false'
 
+  release-admission-canaries:
+    if: >-
+      github.event_name != 'workflow_call' || inputs.run-release-admission
+    needs: metadata
+    runs-on: ubuntu-latest
+    env:
+      NETSUKE_ADMISSION_PYTHON_VERSION: '3.13'
+      NETSUKE_ADMISSION_PYYAML_VERSION: '6.0.2'
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        # v8.3.2
+        with:
+          enable-cache: false
+      - name: Set up admission Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        # v6.2.0
+        with:
+          python-version: ${{ env.NETSUKE_ADMISSION_PYTHON_VERSION }}
+      - name: Require successful pinned downstream canaries
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          uv run --no-project --python "${NETSUKE_ADMISSION_PYTHON_VERSION}"
+          --with "pyyaml==${NETSUKE_ADMISSION_PYYAML_VERSION}"
+          bash .github/scripts/require-release-admission-canaries.sh
+
   build-linux:
     needs: metadata
     permissions:
       actions: read
       contents: read
-      id-token: write
-      packages: write
     strategy:
       matrix:
         include:
@@ -148,8 +188,6 @@ jobs:
     permissions:
       actions: read
       contents: read
-      id-token: write
-      packages: write
     strategy:
       matrix:
         include:
@@ -179,8 +217,6 @@ jobs:
     permissions:
       actions: read
       contents: read
-      id-token: write
-      packages: write
     strategy:
       matrix:
         include:
@@ -239,11 +275,14 @@ jobs:
           -Manifest ./tests/data/windows-recipe-smoke.yml
 
   release:
-    if: needs.metadata.outputs.should_publish == 'true'
+    if: >-
+      needs.metadata.outputs.should_publish == 'true' &&
+      needs.release-admission-canaries.result == 'success'
     permissions:
       contents: write
     needs:
       - metadata
+      - release-admission-canaries
       - build-linux
       - build-windows
       - build-macos
