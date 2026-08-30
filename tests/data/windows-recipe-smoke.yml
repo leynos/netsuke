@@ -33,9 +33,27 @@ actions:
     deps:
       - dependency-first
       - dependency-second
+  - name: large-scalar
+    description: Execute a scalar recipe beyond the Windows command-line limit
+    command: "$largeRecipePadding = '{{ 'x' * 12500 }}'; Set-Content -NoNewline -LiteralPath 'large scalar.txt' -Value scalar"
+  - name: large-script
+    description: Execute a script recipe beyond the Windows command-line limit
+    script: |
+      $largeRecipePadding = '{{ 'x' * 12500 }}'
+      Set-Content -NoNewline -LiteralPath 'large script.txt' -Value script
+  - name: large-list
+    description: Preserve state through an oversized ordered command list
+    command:
+      - "$largeRecipePadding = '{{ 'x' * 12500 }}'; $env:NETSUKE_LARGE_LIST = 'first'"
+      - "if ($env:NETSUKE_LARGE_LIST -ne 'first') { exit 75 }; Set-Content -NoNewline -LiteralPath 'large list.txt' -Value $env:NETSUKE_LARGE_LIST"
+  - name: large-list-fails
+    description: Stop an oversized ordered command list at its first failure
+    command:
+      - "$largeRecipePadding = '{{ 'x' * 12500 }}'; cmd.exe /d /c exit 28"
+      - "Set-Content -NoNewline -LiteralPath 'large list must not exist.txt' -Value second-entry-ran"
 
 targets:
-  - name: automatic-path.txt
+  - name: automatic path.txt
     description: Discover this target without executing its recipe
     command: "Set-Content -NoNewline -LiteralPath {{ outs }} -Value automatic-path-quoting"
   - name: discovery-must-not-execute.txt

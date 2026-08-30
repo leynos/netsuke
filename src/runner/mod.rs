@@ -166,7 +166,6 @@ fn on_task_progress_callback(reporter: &dyn StatusReporter) -> impl FnMut(u32, u
 ///
 /// Returns an error if manifest generation or Ninja execution fails.
 fn handle_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> Result<()> {
-    recipe_shell::validate_recipe_shell(context.recipe_shell)?;
     let bundle = generate_ninja_with_shell(
         cli,
         context.reporter,
@@ -243,7 +242,6 @@ fn handle_ninja_tool(
         subcommand = tool.name,
         "Preparing Ninja tool invocation"
     );
-    recipe_shell::validate_recipe_shell(context.recipe_shell)?;
     let bundle =
         generate_ninja_with_shell(cli, context.reporter, Some(tool.key), context.recipe_shell)?;
     let publication = materialize_dyndep_bundle(cli, &bundle)?;
@@ -306,6 +304,7 @@ pub(super) fn generate_ninja_with_shell(
     tool_key: Option<LocalizationKey>,
     recipe_shell: ninja_gen::RecipeShell,
 ) -> Result<ninja_gen::GeneratedNinja> {
+    recipe_shell::validate_recipe_shell(recipe_shell)?;
     let manifest_path = resolve_manifest_path(cli)?;
     ensure_manifest_exists_or_error(cli, reporter, &manifest_path)?;
 

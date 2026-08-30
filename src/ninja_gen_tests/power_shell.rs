@@ -5,6 +5,108 @@ use super::*;
 use anyhow::{Context, Result, bail, ensure};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 
+/// Render one oversized PowerShell recipe and assert Ninja owns its response-file lifecycle.
+fn assert_large_recipe_uses_ninja_response_file(
+    recipe: Recipe,
+    expected_script: &str,
+) -> Result<()> {
+    let action = Action {
+        recipe,
+        description: None,
+        depfile: None,
+        deps_format: None,
+        pool: None,
+        restat: false,
+    };
+    let mut rendered = String::new();
+    NamedAction {
+        id: "large_power_shell",
+        action: &action,
+        shell: RecipeShell::PowerShell,
+    }
+    .write_into(&mut rendered)?;
+    ensure!(rendered.contains("-Command"));
+    ensure!(!rendered.contains("-EncodedCommand"));
+    ensure!(rendered.contains("rspfile = $out.netsuke-large_power_shell.rsp"));
+    ensure!(rendered.contains("rspfile_content = "));
+    ensure!(!rendered.contains(expected_script));
+    let encoded = rendered
+        .lines()
+        .find_map(|line| line.strip_prefix("  rspfile_content = "))
+        .context("oversized PowerShell command should provide Ninja response-file content")?;
+    let script = decode_power_shell_script(encoded)?;
+    ensure!(script.starts_with("$ErrorActionPreference = 'Stop'\n"));
+    ensure!(script.contains(expected_script));
+    ensure!(
+        rendered.contains("Netsuke could not read the PowerShell response file"),
+        "the response-file transport must report setup failures clearly"
+    );
+    ensure!(
+        rendered.contains("Netsuke could not decode the PowerShell response file"),
+        "the response-file transport must report decoding failures clearly"
+    );
+    Ok(())
+}
+
+/// Verify that oversized scalar, script, and list recipes use Ninja response files.
+#[test]
+fn large_power_shell_recipes_use_ninja_response_files() -> Result<()> {
+    let padding = "x".repeat(12_500);
+    assert_large_recipe_uses_ninja_response_file(
+        Recipe::Command {
+            command: StringOrList::String(format!("# {padding}\nWrite-Output large-scalar")),
+        },
+        "Write-Output large-scalar",
+    )?;
+    assert_large_recipe_uses_ninja_response_file(
+        Recipe::Script {
+            script: format!("# {padding}\nWrite-Output large-script"),
+        },
+        "Write-Output large-script",
+    )?;
+    assert_large_recipe_uses_ninja_response_file(
+        Recipe::Command {
+            command: StringOrList::List(vec![
+                format!("# {padding}\n$env:NETSUKE_LARGE = 'shared'"),
+                "if ($env:NETSUKE_LARGE -ne 'shared') { exit 1 }; Write-Output large-list".into(),
+            ]),
+        },
+        "Write-Output large-list",
+    )
+}
+
+/// Verify that distinct rules receive distinct Ninja-owned response-file names.
+#[test]
+fn large_power_shell_rules_use_distinct_response_files() -> Result<()> {
+    let action = Action {
+        recipe: Recipe::Command {
+            command: StringOrList::String("x".repeat(12_500)),
+        },
+        description: None,
+        depfile: None,
+        deps_format: None,
+        pool: None,
+        restat: false,
+    };
+    let mut first = String::new();
+    NamedAction {
+        id: "first_large_power_shell",
+        action: &action,
+        shell: RecipeShell::PowerShell,
+    }
+    .write_into(&mut first)?;
+    let mut second = String::new();
+    NamedAction {
+        id: "second_large_power_shell",
+        action: &action,
+        shell: RecipeShell::PowerShell,
+    }
+    .write_into(&mut second)?;
+    ensure!(first.contains("rspfile = $out.netsuke-first_large_power_shell.rsp"));
+    ensure!(second.contains("rspfile = $out.netsuke-second_large_power_shell.rsp"));
+    Ok(())
+}
+
 /// Verify that PowerShell command lists preserve state and native failure checks.
 #[test]
 fn power_shell_command_lists_preserve_state_and_stop_on_native_failure() -> Result<()> {

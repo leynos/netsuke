@@ -12,6 +12,19 @@ const MAX_POWER_SHELL_COMMAND_LINE: usize = 32_766;
 const POWER_SHELL_COMMAND_PREFIX: &str =
     "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ";
 
+/// Fixed command that decodes an oversized recipe from Ninja's response file.
+///
+/// Ninja expands `$rspfile`; the doubled dollar signs preserve PowerShell
+/// variables until the spawned interpreter receives them.
+const POWER_SHELL_RESPONSE_FILE_COMMAND: &str = concat!(
+    "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ",
+    "\"$$netsukePayload = try { [IO.File]::ReadAllText($$args[0]) } catch { ",
+    "throw \\\"Netsuke could not read the PowerShell response file: $$($$_.Exception.Message)\\\" }; ",
+    "$$netsukeScript = try { [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($$netsukePayload)) } ",
+    "catch { throw \\\"Netsuke could not decode the PowerShell response file: $$($$_.Exception.Message)\\\" }; ",
+    "& ([ScriptBlock]::Create($$netsukeScript))\" \"$rspfile\""
+);
+
 /// Selects the interpreter that receives completed legacy recipe text.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RecipeShell {
@@ -21,6 +34,36 @@ pub enum RecipeShell {
     PowerShell,
     /// Uses an explicitly selected Bash compatibility runtime on Windows.
     Bash,
+}
+
+/// Represent one Ninja command binding and its optional response-file payload.
+pub(super) enum RenderedRecipeCommand {
+    /// Run the command directly from the Ninja command binding.
+    Direct(NinjaValue),
+    /// Let Ninja materialize and remove a response file for one build edge.
+    ResponseFile {
+        /// Fixed command that decodes the response-file payload.
+        command: NinjaValue,
+        /// Base64 UTF-16LE recipe text that Ninja writes immediately before execution.
+        content: NinjaValue,
+    },
+}
+
+impl RenderedRecipeCommand {
+    /// Borrow the command text written into the Ninja rule.
+    pub(super) const fn command(&self) -> &NinjaValue {
+        match self {
+            Self::Direct(command) | Self::ResponseFile { command, .. } => command,
+        }
+    }
+
+    /// Borrow the optional response-file content written by Ninja at execution time.
+    pub(super) const fn response_file_content(&self) -> Option<&NinjaValue> {
+        match self {
+            Self::Direct(_) => None,
+            Self::ResponseFile { content, .. } => Some(content),
+        }
+    }
 }
 
 impl RecipeShell {
@@ -34,14 +77,17 @@ impl RecipeShell {
     }
 
     /// Render completed recipe text as a safe Ninja command binding value.
-    pub(super) fn command_value(self, script: &ShellText) -> Result<NinjaValue, NinjaGenError> {
+    pub(super) fn command_value(
+        self,
+        script: &ShellText,
+    ) -> Result<RenderedRecipeCommand, NinjaGenError> {
         match self {
-            Self::Posix => escape_ninja_value(script),
+            Self::Posix => escape_ninja_value(script).map(RenderedRecipeCommand::Direct),
             Self::PowerShell => {
                 let power_shell_script = Self::power_shell_script(script);
                 Self::power_shell_command(&power_shell_script)
             }
-            Self::Bash => Self::bash_command(script),
+            Self::Bash => Self::bash_command(script).map(RenderedRecipeCommand::Direct),
         }
     }
 
@@ -68,7 +114,7 @@ impl RecipeShell {
     }
 
     /// Encode one PowerShell script without exposing its text to Ninja parsing.
-    fn power_shell_command(script: &ShellText) -> Result<NinjaValue, NinjaGenError> {
+    fn power_shell_command(script: &ShellText) -> Result<RenderedRecipeCommand, NinjaGenError> {
         if script.as_str().contains('\0') {
             return Err(NinjaGenError::UnsafeNinjaValue);
         }
@@ -87,13 +133,13 @@ impl RecipeShell {
         let command = STANDARD.encode(utf16le);
         let length = POWER_SHELL_COMMAND_PREFIX.len() + command.len();
         if length > MAX_POWER_SHELL_COMMAND_LINE {
-            return Err(NinjaGenError::PowerShellCommandLineTooLong {
-                length,
-                maximum: MAX_POWER_SHELL_COMMAND_LINE,
+            return Ok(RenderedRecipeCommand::ResponseFile {
+                command: NinjaValue::from_encoded(POWER_SHELL_RESPONSE_FILE_COMMAND.into()),
+                content: NinjaValue::from_encoded(command),
             });
         }
-        Ok(NinjaValue::from_encoded(format!(
-            "{POWER_SHELL_COMMAND_PREFIX}{command}"
+        Ok(RenderedRecipeCommand::Direct(NinjaValue::from_encoded(
+            format!("{POWER_SHELL_COMMAND_PREFIX}{command}"),
         )))
     }
 
@@ -131,7 +177,7 @@ fn windows_argument(argument: &str) -> String {
 mod tests {
     //! Verifies interpreter-specific Ninja command rendering.
 
-    use super::{POWER_SHELL_COMMAND_PREFIX, RecipeShell, windows_argument};
+    use super::{POWER_SHELL_COMMAND_PREFIX, RecipeShell, RenderedRecipeCommand, windows_argument};
     use crate::ninja_gen::ninja_gen_escape::ShellText;
     use base64::{Engine as _, engine::general_purpose::STANDARD};
     use proptest::prelude::*;
@@ -142,6 +188,7 @@ mod tests {
         let rendered = RecipeShell::PowerShell
             .command_value(&ShellText::new("$env:NETSUKE_SMOKE".into()))
             .expect("PowerShell encoding should succeed")
+            .command()
             .to_string();
         assert!(rendered.starts_with("powershell.exe "));
         assert!(!rendered.contains("NETSUKE_SMOKE"));
@@ -162,6 +209,7 @@ mod tests {
         let rendered = RecipeShell::Bash
             .command_value(&ShellText::new("echo \"hello world\"\\".into()))
             .expect("Bash command rendering should succeed")
+            .command()
             .to_string();
         assert_eq!(rendered, "bash.exe -e -c \"echo \\\"hello world\\\"\\\\\"");
     }
@@ -193,13 +241,27 @@ mod tests {
         assert!(!script.contains("$netsuke_exit_code = $LASTEXITCODE"));
     }
 
-    /// Verify that oversized encoded commands fail before Windows rejects the process.
+    /// Verify that oversized recipes use a response file instead of a command-line payload.
     #[test]
-    fn power_shell_commands_fail_before_exceeding_the_windows_command_line_limit() {
-        let result = RecipeShell::PowerShell.command_value(&ShellText::new("x".repeat(12_500)));
+    fn power_shell_commands_exceeding_the_windows_limit_use_a_response_file() {
+        let recipe = "x".repeat(12_500);
+        let result = RecipeShell::PowerShell
+            .command_value(&ShellText::new(recipe.clone()))
+            .expect("oversized recipes should use a response file");
+        assert!(matches!(
+            &result,
+            RenderedRecipeCommand::ResponseFile { .. }
+        ));
+        assert!(!result.command().to_string().contains(&recipe));
+    }
+
+    /// Reject NUL-bearing PowerShell text before either transport can serialize it.
+    #[test]
+    fn power_shell_commands_reject_unsafe_ninja_control_characters() {
+        let result = RecipeShell::PowerShell.command_value(&ShellText::new("safe\0unsafe".into()));
         assert!(matches!(
             result,
-            Err(super::NinjaGenError::PowerShellCommandLineTooLong { .. })
+            Err(super::NinjaGenError::UnsafeNinjaValue)
         ));
     }
 
@@ -214,6 +276,7 @@ mod tests {
             let rendered = RecipeShell::PowerShell
                 .command_value(&ShellText::new(recipe.clone()))
                 .expect("bounded PowerShell recipe should encode")
+                .command()
                 .to_string();
             let payload = rendered
                 .strip_prefix(POWER_SHELL_COMMAND_PREFIX)

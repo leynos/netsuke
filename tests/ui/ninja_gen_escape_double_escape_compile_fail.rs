@@ -10,7 +10,7 @@ mod ninja_gen_escape;
 
 fn main() {
     let shell_text = ninja_gen_escape::ShellText::new("$value".into());
-    let escaped = ninja_gen_escape::escape_ninja_value(shell_text)
+    let escaped = ninja_gen_escape::escape_ninja_value(&shell_text)
         .expect("first conversion should be valid");
     let _ = ninja_gen_escape::escape_ninja_value(escaped);
 }

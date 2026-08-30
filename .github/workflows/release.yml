@@ -207,6 +207,8 @@ jobs:
   windows-native-recipe-smoke:
     needs: metadata
     runs-on: windows-latest
+    permissions:
+      contents: read
     defaults:
       run:
         shell: pwsh

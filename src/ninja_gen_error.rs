@@ -68,16 +68,6 @@ pub enum NinjaGenError {
     /// Completed recipe text cannot be represented safely in one Ninja binding.
     #[error("recipe text contains an unsafe Ninja control character")]
     UnsafeNinjaValue,
-    /// An encoded PowerShell invocation would exceed Windows' command-line limit.
-    #[error(
-        "PowerShell recipe command is {length} characters, exceeding the Windows limit of {maximum}; split the legacy recipe into smaller actions"
-    )]
-    PowerShellCommandLineTooLong {
-        /// Rendered command-line length in UTF-16 code units.
-        length: usize,
-        /// Maximum supported command-line length in UTF-16 code units.
-        maximum: usize,
-    },
     /// A graph with serial dependencies cannot be represented by a single
     /// build-file string; callers must use [`crate::ninja_gen::generate_bundle`].
     #[error("{message}")]

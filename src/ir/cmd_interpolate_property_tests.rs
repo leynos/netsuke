@@ -69,6 +69,28 @@ proptest! {
         }
     }
 
+    /// Quote apostrophe-bearing PowerShell paths as single literals.
+    #[test]
+    fn power_shell_bindings_double_apostrophes_in_paths(
+        prefix in "[a-zA-Z0-9]{0,12}",
+        suffix in "[a-zA-Z0-9]{0,12}",
+    ) {
+        let input = camino::Utf8PathBuf::from(format!("{prefix}'input"));
+        let output = camino::Utf8PathBuf::from(format!("{suffix}'output"));
+        let command = interpolate_command_with_shell(
+            "Write-Output $in $out",
+            std::slice::from_ref(&input),
+            std::slice::from_ref(&output),
+            RecipeShell::PowerShell,
+        )
+        .expect("PowerShell command should interpolate");
+
+        let expected_input = format!("'{}'", input.as_str().replace('\'', "''"));
+        let expected_output = format!("'{}'", output.as_str().replace('\'', "''"));
+        prop_assert!(command.contains(&expected_input));
+        prop_assert!(command.contains(&expected_output));
+    }
+
     /// Reject every supported placeholder token when backticks protect it.
     #[test]
     fn tokens_inside_backticks_are_rejected(token in prop::sample::select(vec!["$in", "$out", INS_TOKEN, OUTS_TOKEN]), inputs in paths_strategy("in", 1..10), outputs in paths_strategy("out", 1..10)) {

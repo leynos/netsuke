@@ -380,15 +380,21 @@ The lowering stages have deliberately separate responsibilities:
   the chain remains fail-fast. The existing background-job and `exec`
   validation rules apply to this POSIX route.
 - On Windows, `RecipeShell::PowerShell` renders scalar commands and scripts as
-  encoded `powershell.exe` invocations. An ordered list becomes one PowerShell
-  script that checks `$LASTEXITCODE` immediately after each generated list
-  entry, preserving PowerShell state while stopping before a later entry can
-  overwrite a non-zero status. Multiple native commands inside one entry are
-  not individually instrumented. Terminating PowerShell errors also stop the
-  list. The POSIX command-list analyser is deliberately not applied to this
-  route. The runner resolves `NETSUKE_WINDOWS_SHELL` and preflights `bash.exe`
-  only when the optional compatibility route is selected; `help targets` stays
-  outside this execution boundary.
+  encoded `powershell.exe` invocations while they fit the Windows command-line
+  limit. Larger recipes use Ninja's per-edge `rspfile` and `rspfile_content`
+  bindings. Ninja derives a unique response-file name from `$out`, creates it
+  in the edge's working directory with the Base64 UTF-16LE payload, and cleans
+  it after execution; query-only generation emits the bindings without creating
+  files.
+  An ordered list becomes one PowerShell script that checks `$LASTEXITCODE`
+  immediately after each generated list entry, preserving PowerShell state
+  while stopping before a later entry can overwrite a non-zero status. Multiple
+  native commands inside one entry are not individually instrumented.
+  Terminating PowerShell errors also stop the list. The POSIX command-list
+  analyser is deliberately not applied to this route. The runner resolves
+  `NETSUKE_WINDOWS_SHELL` and preflights `bash.exe` only when the optional
+  compatibility route is selected; `help targets` stays outside this execution
+  boundary.
 - The brace-group, `eval`, background-job, and `exec` validation rules described
   above apply only to Unix and the explicit Windows Bash compatibility route.
   PowerShell uses its per-entry `$LASTEXITCODE` and terminating-error checks
@@ -548,7 +554,9 @@ affected workflow passes it through the relevant shared action's
 job-level override would win over the action's exported value and silently drop
 whatever the action set.
 
-Five CI jobs across four workflows carry the contract:
+Five CI jobs across four workflows carry the contract.
+
+Table: CI jobs and their shared Rust setup.
 
 | Workflow                                                              | Job                  | Shared action        | `with.rustflags`            |
 | --------------------------------------------------------------------- | -------------------- | -------------------- | --------------------------- |
@@ -4238,6 +4246,53 @@ selected Ninja program through `dispatch::execute`. Handlers consume the
 context rather than resolving output or process configuration again; tests
 should inject the program through `run_with_ninja_program` when they need a
 deterministic child executable.
+
+### Module: `runner::generation`
+
+`src/runner/generation.rs` owns the runner's reusable, in-memory generation
+pipeline. It separates manifest loading, IR construction, and Ninja bundle
+synthesis from command reporting and process execution. The read-only pipeline
+is `load_manifest` (optionally observing manifest stages), then
+`build_graph_for_shell`, then `ninja_text_for_shell`. Its final value is
+`GeneratedNinja`, including any dyndep sidecars, rather than a materialized file
+or a running Ninja process. `generate_ninja_with_shell` is the orchestration
+boundary: it selects the legacy `RecipeShell`, performs the shell preflight,
+and carries the same selection through graph lowering and Ninja synthesis.
+
+`load_manifest` uses the manifest-query registration: it permits only its
+read-only helpers and rejects template access to the environment, filesystem,
+network, clock, and shell. `load_manifest_for_build` is a separate, explicitly
+effectful loader for build, clean, generate, and graph commands. It receives a
+network policy and enables the full build stdlib; it is not a dry-run or
+background-query primitive.
+
+#### Generation reuse boundary
+
+- **Ownership:** `runner::generation` is a private runner submodule. It owns
+  the three read-only generation steps, the explicitly effectful build loader,
+  their input/output hand-offs, and the manifest and IR error contexts. It does
+  not own `StatusReporter` updates, command dispatch, dyndep publication, or
+  Ninja execution.
+- **Permitted call-sites:** `runner::generate_ninja_with_shell` composes the
+  complete shell-aware build pipeline through `load_manifest_for_build` for
+  build, clean, and generate commands. `runner::graph::handle_graph` may stop
+  after the backend-neutral `build_graph` to render the graph, and
+  `runner::help_query` uses `load_manifest` for its read-only target catalogue.
+  Runner unit tests may compose the read-only steps directly. New dry-run or
+  background-generation work may use `load_manifest`,
+  `build_graph_for_shell`, and `ninja_text_for_shell` only within the runner
+  boundary; a public or cross-subsystem consumer requires an explicit
+  application boundary rather than widening these internal helpers.
+- **Composition rules:** command adapters report stages before or after the
+  relevant step and wrap `ninja_text_for_shell` with runner-owned,
+  shell-aware generation telemetry. Only `load_manifest_with_stage_reporting`
+  translates `StageObserver` events into status updates and selects the
+  effectful build loader. Consumers must not call manifest parsing, IR
+  generation, or `ninja_gen::generate_bundle_for_shell` directly in parallel
+  with this pipeline. Before an adapter writes or executes a returned bundle,
+  it must use the existing capability-injected
+  dyndep-publication path to materialize its sidecars; the read-only steps
+  never write files, start processes, or invoke effectful template helpers.
 
 ### Module: `runner::reporter`
 

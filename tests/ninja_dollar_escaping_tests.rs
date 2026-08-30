@@ -391,7 +391,6 @@ fn command_control_characters_are_rejected(#[case] command: &str) {
 /// Verify that Ninja-unsafe path characters are rejected during generation.
 #[rstest]
 #[case::dollar("input$file")]
-#[case::space("input file")]
 #[case::colon("input:file")]
 #[case::pipe("input|file")]
 #[case::tab("input\tfile")]

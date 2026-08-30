@@ -1,6 +1,6 @@
 //! Resolves and validates the Windows legacy-recipe interpreter selection.
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use mockable::Env;
 use std::{
     ffi::OsString,
@@ -105,11 +105,17 @@ fn validate_bash_runtime_with(
 
 /// Validate one completed Bash availability probe result.
 fn validate_bash_probe_result(probe_result: std::io::Result<BashProbeStatus>) -> Result<()> {
-    let probe_status = probe_result.context(
-        "Windows legacy recipes selected `bash`, but `bash.exe` was not found on PATH; \
+    let probe_status = probe_result.map_err(|error| {
+        let message = if error.kind() == std::io::ErrorKind::NotFound {
+            "Windows legacy recipes selected `bash`, but `bash.exe` was not found on PATH; \
              install Git for Windows or MSYS2, add its Bash directory to PATH, or unset \
-             NETSUKE_WINDOWS_SHELL to use PowerShell",
-    )?;
+             NETSUKE_WINDOWS_SHELL to use PowerShell"
+        } else {
+            "Windows legacy recipes selected `bash`, but Netsuke could not start `bash.exe`; \
+             repair the Bash runtime or unset NETSUKE_WINDOWS_SHELL to use PowerShell"
+        };
+        anyhow::Error::new(error).context(message)
+    })?;
     if let BashProbeStatus::Failed(status) = probe_status {
         bail!(
             "Windows legacy recipes selected `bash`, but `bash.exe --version` exited with {status}; \
@@ -178,6 +184,18 @@ mod tests {
         assert_eq!(shell, RecipeShell::Bash);
     }
 
+    /// Verify that PowerShell override spellings select the native Windows route.
+    #[rstest::rstest]
+    #[case::explicit("powershell")]
+    #[case::empty("")]
+    #[case::whitespace("  \t  ")]
+    #[case::case_and_whitespace("  PoWeRsHeLl\t")]
+    fn accepts_power_shell_override_variants(#[case] value: &str) {
+        let shell = resolve_windows_recipe_shell(Some(OsString::from(value)))
+            .expect("PowerShell override should resolve");
+        assert_eq!(shell, RecipeShell::PowerShell);
+    }
+
     #[test]
     fn rejects_an_unknown_windows_recipe_shell() {
         let error = resolve_windows_recipe_shell(Some(OsString::from("cmd")))
@@ -204,17 +222,18 @@ mod tests {
         assert_bash_runtime_launch_error(std::io::ErrorKind::PermissionDenied);
     }
 
-    /// Assert that a Bash process-launch error produces the installation guidance.
+    /// Assert that a Bash process-launch error produces the matching diagnostic.
     fn assert_bash_runtime_launch_error(error_kind: std::io::ErrorKind) {
         let error = validate_bash_runtime_with(|| {
             Err(std::io::Error::new(error_kind, "cannot launch bash"))
         })
         .expect_err("launch failure should be actionable");
-        assert!(
-            error
-                .to_string()
-                .contains("bash.exe` was not found on PATH")
-        );
+        let expected = if error_kind == std::io::ErrorKind::NotFound {
+            "bash.exe` was not found on PATH"
+        } else {
+            "could not start `bash.exe`"
+        };
+        assert!(error.to_string().contains(expected));
     }
 
     /// Verify that a failing injected Bash probe preserves its exit diagnostic.

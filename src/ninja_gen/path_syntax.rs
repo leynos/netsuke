@@ -17,7 +17,7 @@ pub(crate) fn validated_ninja_path(path: &str) -> Result<String, NinjaGenError> 
 
 /// Clone a path after whole-graph syntax validation has succeeded.
 pub(super) fn clone_validated_ninja_path(path: &str) -> String {
-    path.to_owned()
+    path.replace(' ', "$ ")
 }
 
 /// Reject graph paths that Ninja cannot represent.
@@ -51,7 +51,7 @@ fn validate_path(path: &str) -> Result<(), NinjaGenError> {
 /// Return the first unsupported character in `path`, if any.
 fn unsupported_character(path: &str) -> Option<char> {
     path.chars()
-        .find(|character| matches!(character, '$' | ' ' | ':' | '|') || character.is_control())
+        .find(|character| matches!(character, '$' | ':' | '|') || character.is_control())
 }
 
 /// Build the error naming `path` and the single unsupported `character`.

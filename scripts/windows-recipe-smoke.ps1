@@ -102,8 +102,31 @@ try {
     Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'dependency order.txt') -Expected 'first;second;aggregate' `
         -Message 'The aggregate action did not observe serial dependency order'
 
-    Invoke-Netsuke -Arguments @('build', 'automatic-path.txt')
-    Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'automatic-path.txt') `
+    Invoke-Netsuke -Arguments @('build', 'large-scalar')
+    Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'large scalar.txt') -Expected 'scalar' `
+        -Message 'A large scalar recipe did not use the alternate PowerShell transport'
+
+    Invoke-Netsuke -Arguments @('build', 'large-script')
+    Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'large script.txt') -Expected 'script' `
+        -Message 'A large script recipe did not use the alternate PowerShell transport'
+
+    Invoke-Netsuke -Arguments @('build', 'large-list')
+    Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'large list.txt') -Expected 'first' `
+        -Message 'A large ordered recipe did not preserve PowerShell state'
+
+    $largeListFailure = & $Netsuke build large-list-fails 2>&1
+    if ($LASTEXITCODE -ne 1) {
+        throw "A large recipe exit code of 28 should become Netsuke's documented failure exit code 1, got ${LASTEXITCODE}: $largeListFailure"
+    }
+    if (Test-Path -LiteralPath 'large list must not exist.txt') {
+        throw "The large ordered recipe continued after its first failed entry: $largeListFailure"
+    }
+    if (Get-ChildItem -LiteralPath . -Filter '*.netsuke-*.rsp' -ErrorAction SilentlyContinue) {
+        throw 'Ninja did not clean the PowerShell response files after executing the recipes.'
+    }
+
+    Invoke-Netsuke -Arguments @('build', 'automatic path.txt')
+    Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'automatic path.txt') `
         -Expected 'automatic-path-quoting' -Message 'The discovered target did not build'
 
     $savedPath = $env:PATH

@@ -281,7 +281,6 @@ fn unsupported_control_characters_are_rejected_in_every_path_field(
 }
 
 #[rstest]
-#[case::space("path with space", ' ')]
 #[case::dollar("path$money", '$')]
 #[case::colon("path:colon", ':')]
 fn ninja_metacharacters_are_rejected_in_every_path_field(
@@ -328,6 +327,26 @@ fn ninja_metacharacters_are_rejected_in_every_path_field(
     Ok(())
 }
 
+/// Render whitespace in every graph path field with Ninja's literal-space escape.
+#[rstest]
+fn whitespace_paths_are_escaped_in_every_path_field(
+    #[values(
+        GraphPathField::Edge(EdgePathField::ExplicitOutput),
+        GraphPathField::Edge(EdgePathField::ImplicitOutput),
+        GraphPathField::Edge(EdgePathField::Input),
+        GraphPathField::Edge(EdgePathField::ImplicitDependency),
+        GraphPathField::Edge(EdgePathField::OrderOnlyDependency),
+        GraphPathField::DefaultTarget
+    )]
+    field: GraphPathField,
+) -> Result<()> {
+    let graph = graph_with_path(field, "path with space")?;
+    let generated = crate::ninja_gen::generate(&graph)?;
+    let bundle = generate_bundle(&graph)?;
+    ensure!(generated.contains("path$ with$ space"));
+    ensure!(bundle.build_file().contains("path$ with$ space"));
+    Ok(())
+}
 #[rstest]
 #[case::explicit_output(EdgePathField::ExplicitOutput)]
 #[case::implicit_output(EdgePathField::ImplicitOutput)]

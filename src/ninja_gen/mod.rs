@@ -369,7 +369,6 @@ impl NamedAction<'_> {
         // debug parser guard.
         ShellText::new(cmd)
     }
-
     /// Write list entries as isolated current-shell groups joined by `&&`.
     fn command_list_shell_text(&self, items: &[String]) -> ShellText {
         if let Some(script) = self.shell.command_list_script(items) {
@@ -396,7 +395,11 @@ impl NamedAction<'_> {
     fn write_into<W: Write>(&self, output: &mut W) -> Result<(), NinjaGenError> {
         let command = self.shell.command_value(&self.shell_text()?)?;
         writeln!(output, "rule {}", self.id)?;
-        writeln!(output, "  command = {command}")?;
+        writeln!(output, "  command = {}", command.command())?;
+        if let Some(content) = command.response_file_content() {
+            writeln!(output, "  rspfile = $out.netsuke-{}.rsp", self.id)?;
+            writeln!(output, "  rspfile_content = {content}")?;
+        }
         self.write_metadata(output)
     }
 }

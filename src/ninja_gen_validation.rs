@@ -92,3 +92,54 @@ pub(super) fn validate_action_metadata(action: &crate::ir::Action) -> Result<(),
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    //! Verifies shell-specific recipe validation boundaries.
+
+    use super::{NinjaGenError, RecipeShell, validate_action_recipe};
+    use crate::ast::{Recipe, StringOrList};
+    use crate::ir::Action;
+
+    /// Construct one action with a supplied command recipe for validation tests.
+    fn command_action(command: StringOrList) -> Action {
+        Action {
+            recipe: Recipe::Command { command },
+            description: None,
+            depfile: None,
+            deps_format: None,
+            pool: None,
+            restat: false,
+        }
+    }
+
+    /// Accept multi-line scalar text because PowerShell receives it through its transport.
+    #[test]
+    fn power_shell_accepts_a_multi_line_scalar_command() {
+        let action = command_action(StringOrList::String(
+            "Write-Output first\nWrite-Output second".into(),
+        ));
+        assert!(validate_action_recipe(&action, 1, RecipeShell::PowerShell).is_ok());
+    }
+
+    /// Bypass POSIX-only command-list restrictions for PowerShell command lists.
+    #[test]
+    fn power_shell_bypasses_posix_command_list_validation() {
+        let action = command_action(StringOrList::List(vec!["echo one & echo two &".into()]));
+        assert!(validate_action_recipe(&action, 1, RecipeShell::PowerShell).is_ok());
+        assert!(matches!(
+            validate_action_recipe(&action, 1, RecipeShell::Posix),
+            Err(NinjaGenError::MultipleBackgroundJobs { .. })
+        ));
+    }
+
+    /// Reject empty commands before applying the PowerShell validation bypass.
+    #[test]
+    fn power_shell_rejects_an_empty_command_recipe() {
+        let action = command_action(StringOrList::Empty);
+        assert!(matches!(
+            validate_action_recipe(&action, 1, RecipeShell::PowerShell),
+            Err(NinjaGenError::EmptyCommandRecipe { .. })
+        ));
+    }
+}
