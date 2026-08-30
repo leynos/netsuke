@@ -281,11 +281,11 @@ jobs:
           $whitaker = Join-Path $HOME '.local\bin\whitaker.ps1'
           $env:RUSTFLAGS = "$env:RUSTFLAGS -D warnings"
           $env:DYLINT_TOML = Get-Content dylint.toml -Raw
-          & $whitaker --all --no-deps --package netsuke-build -- --all-targets --all-features
+          & $whitaker --all --no-deps --package netsuke-build '--' --all-targets --all-features
           Push-Location test_support
           try {
             $env:DYLINT_TOML = Get-Content dylint.toml -Raw
-            & $whitaker --all --no-deps --package test_support -- --all-targets --all-features
+            & $whitaker --all --no-deps --package test_support '--' --all-targets --all-features
           } finally {
             Pop-Location
           }

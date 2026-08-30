@@ -152,20 +152,27 @@ def test_windows_job_runs_whitaker_through_powershell_wrapper(
         "Join-Path $HOME '.local\\bin\\whitaker.ps1'",
         '$env:RUSTFLAGS = "$env:RUSTFLAGS -D warnings"',
         "$env:DYLINT_TOML = Get-Content dylint.toml -Raw",
-        "& $whitaker --all --no-deps --package netsuke-build",
+        (
+            "& $whitaker --all --no-deps --package netsuke-build '--' "
+            "--all-targets --all-features"
+        ),
         "Push-Location test_support",
     )
     missing = [fragment for fragment in workspace_fragments if fragment not in run]
     assert not missing, (
         f"{step_name} must resolve the PowerShell wrapper, append -D warnings, "
-        f"load the workspace Dylint configuration, lint netsuke-build, and enter "
+        f"load the workspace Dylint configuration, pass the quoted separator to "
+        f"lint netsuke-build, and enter "
         f"test_support; missing {missing!r}"
     )
 
     _, _, run_after_push = run.partition("Push-Location test_support")
     test_support_fragments = (
         "$env:DYLINT_TOML = Get-Content dylint.toml -Raw",
-        "& $whitaker --all --no-deps --package test_support",
+        (
+            "& $whitaker --all --no-deps --package test_support '--' "
+            "--all-targets --all-features"
+        ),
         "finally {",
         "Pop-Location",
     )
@@ -173,7 +180,8 @@ def test_windows_job_runs_whitaker_through_powershell_wrapper(
     missing = [fragment for fragment in fragments if fragment not in run_after_push]
     assert not missing, (
         f"{step_name} must load test_support's Dylint configuration after entering it, "
-        f"lint test_support, and restore the location in finally; missing "
+        f"pass the quoted separator to lint test_support, and restore the location "
+        f"in finally; missing "
         f"{missing!r}"
     )
 
