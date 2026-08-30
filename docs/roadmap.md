@@ -1400,8 +1400,13 @@ Objective: deliver the `netsuke test` command and YAML test dialect specified in
   - [ ] Admit the enclosing project's Netsukefile read-only, without
     granting write access to the project root.
   - [ ] Keep valid relative fixture paths working.
-  - [ ] Test each path source against an absolute path and a traversal
-    path, plus the project-Netsukefile exception.
+  - [ ] Test every path source — the action `manifest` argument,
+    `given.subject`, and case-level `subject` — against an absolute path
+    and a traversal path such as `../../outside/Netsukefile`.
+  - [ ] Test a symlink escape, gated on the platform supporting symbolic
+    links.
+  - [ ] Test that a valid relative fixture manifest still resolves, and
+    that the enclosing-project Netsukefile is admitted read-only.
 
 - [ ] 7.5.4. Implement result views. Requires: 7.5.1.
   - [ ] Expose manifest, graph, and Ninja views with the documented helper
