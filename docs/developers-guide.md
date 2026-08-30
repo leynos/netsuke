@@ -901,6 +901,34 @@ every command in this completion checklist:
 - `make lint`
 - `make test`
 
+## Markdown formatting and table alignment
+
+`make fmt` runs `mdformat-all`, which runs `mdtablefix` (with `--wrap
+--renumber --breaks --ellipsis --fences --in-place`) and then
+`markdownlint-cli2 --fix`. `mdtablefix` owns table padding and paragraph
+wrapping; `make markdownlint` then verifies the result.
+
+markdownlint's `MD060` (table-column-style) checks that table pipes align
+using a display-width model that treats CJK characters and emoji as
+double-width. That model disagrees with `mdtablefix`'s padding for
+right-to-left scripts, Indic scripts, and combining marks, so for tables
+containing those scripts the formatter and the rule cannot both be satisfied.
+
+Because of this, `MD060` is suppressed in `docs/localization-glossary.md`
+only, via a `<!-- markdownlint-disable-file MD060 -->` directive at the top of
+that file with an explanatory comment. The rule remains enabled for every
+other Markdown file, and the repository-level `.markdownlint-cli2.jsonc` does
+not disable it.
+
+Contributors should prefer a file-scoped `markdownlint-disable-file`
+directive (or a narrower `markdownlint-disable-next-line`) over disabling a
+rule repository-wide, and should record the reason in a comment beside the
+directive.
+
+Note that `mdformat-all` rewraps every Markdown file it finds, not only the
+files a change touches. Revert the unrelated reflow before committing so a
+change stays reviewable.
+
 ## Spelling enforcement
 
 `make markdownlint` enforces en-GB-oxendict (Oxford) spelling over the
