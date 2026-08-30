@@ -1,9 +1,5 @@
 //! Tests for the rules that police the lint directives themselves.
 
-use crate::lint::test_support::{
-    assert_fires, assert_fires_by_default, assert_silent, assert_silent_by_default, messages_for,
-};
-
 /// A manifest whose only finding is silenced by `directive`.
 fn manifest(directive: &str) -> String {
     format!(
@@ -21,8 +17,8 @@ fn manifest(directive: &str) -> String {
 #[test]
 fn unknown_suppression_reports_a_misspelled_rule() {
     let yaml = manifest("# netsuke-lint: allow backgroundjob -- typo");
-    assert_fires(&yaml, "unknown-suppression", 1);
-    let messages = messages_for(&yaml, "unknown-suppression");
+    crate::assert_lint_fires!(&yaml, "unknown-suppression", 1);
+    let messages = crate::lint_messages!(&yaml, "unknown-suppression");
     assert!(
         messages
             .iter()
@@ -34,12 +30,12 @@ fn unknown_suppression_reports_a_misspelled_rule() {
 #[test]
 fn unknown_suppression_reports_a_directive_naming_nothing() {
     let yaml = manifest("# netsuke-lint: allow -- nothing named");
-    assert_fires(&yaml, "unknown-suppression", 1);
+    crate::assert_lint_fires!(&yaml, "unknown-suppression", 1);
 }
 
 #[test]
 fn unknown_suppression_accepts_a_registered_rule() {
-    assert_silent(
+    crate::assert_lint_silent!(
         &manifest("# netsuke-lint: allow background-job -- deliberate"),
         "unknown-suppression",
     );
@@ -55,12 +51,12 @@ fn unknown_suppression_is_suppressed_by_a_directive() {
         "  - name: out\n",
         "    command: \"touch {{ outs }}\"\n",
     );
-    assert_silent(yaml, "unknown-suppression");
+    crate::assert_lint_silent!(yaml, "unknown-suppression");
 }
 
 #[test]
 fn suppression_without_reason_reports_a_bare_directive() {
-    assert_fires(
+    crate::assert_lint_fires!(
         &manifest("# netsuke-lint: allow background-job"),
         "suppression-without-reason",
         1,
@@ -69,7 +65,7 @@ fn suppression_without_reason_reports_a_bare_directive() {
 
 #[test]
 fn suppression_without_reason_accepts_a_stated_reason() {
-    assert_silent(
+    crate::assert_lint_silent!(
         &manifest("# netsuke-lint: allow background-job -- deliberate"),
         "suppression-without-reason",
     );
@@ -79,7 +75,7 @@ fn suppression_without_reason_accepts_a_stated_reason() {
 /// must not be mistaken for one.
 #[test]
 fn suppression_without_reason_rejects_an_empty_reason() {
-    assert_fires(
+    crate::assert_lint_fires!(
         &manifest("# netsuke-lint: allow background-job --"),
         "suppression-without-reason",
         1,
@@ -96,7 +92,7 @@ fn suppression_without_reason_is_suppressed_by_a_directive() {
         "  - name: out\n",
         "    command: \"feh preview &\"\n",
     );
-    assert_silent(yaml, "suppression-without-reason");
+    crate::assert_lint_silent!(yaml, "suppression-without-reason");
 }
 
 /// Usage is measured against the rules that actually ran, so these cases use
@@ -110,12 +106,12 @@ fn unused_suppression_reports_a_directive_that_silenced_nothing() {
         "  - name: out\n",
         "    command: \"touch {{ outs }}\"\n",
     );
-    assert_fires_by_default(yaml, "unused-suppression");
+    crate::assert_lint_fires_by_default!(yaml, "unused-suppression");
 }
 
 #[test]
 fn unused_suppression_accepts_a_directive_that_did_its_job() {
-    assert_silent_by_default(
+    crate::assert_lint_silent_by_default!(
         &manifest("# netsuke-lint: allow background-job -- deliberate"),
         "unused-suppression",
     );
@@ -126,7 +122,7 @@ fn unused_suppression_accepts_a_directive_that_did_its_job() {
 /// twice.
 #[test]
 fn unused_suppression_defers_to_unknown_suppression() {
-    assert_silent_by_default(
+    crate::assert_lint_silent_by_default!(
         &manifest("# netsuke-lint: allow no-such-rule -- typo"),
         "unused-suppression",
     );
@@ -142,5 +138,5 @@ fn unused_suppression_is_suppressed_by_a_directive() {
         "  - name: out\n",
         "    command: \"touch {{ outs }}\"\n",
     );
-    assert_silent_by_default(yaml, "unused-suppression");
+    crate::assert_lint_silent_by_default!(yaml, "unused-suppression");
 }

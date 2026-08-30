@@ -2,8 +2,6 @@
 
 use rstest::rstest;
 
-use crate::lint::test_support::{assert_fires, assert_silent};
-
 #[test]
 fn builtin_clean_action_reports_a_hand_written_clean() {
     let yaml = concat!(
@@ -13,7 +11,7 @@ fn builtin_clean_action_reports_a_hand_written_clean() {
         "    command: \"rm -f *.o app\"\n",
         "targets: []\n",
     );
-    assert_fires(yaml, "builtin-clean-action", 1);
+    crate::assert_lint_fires!(yaml, "builtin-clean-action", 1);
 }
 
 /// Only an action named `clean` duplicates the built-in; a rule or a target of
@@ -36,7 +34,7 @@ fn builtin_clean_action_reports_a_hand_written_clean() {
     "    rule: clean\n",
 ))]
 fn builtin_clean_action_leaves_other_declarations_alone(#[case] yaml: &str) {
-    assert_silent(yaml, "builtin-clean-action");
+    crate::assert_lint_silent!(yaml, "builtin-clean-action");
 }
 
 #[test]
@@ -49,7 +47,7 @@ fn builtin_clean_action_is_suppressed_by_a_directive() {
         "    command: \"rm -rf build vendor/.cache\"\n",
         "targets: []\n",
     );
-    assert_silent(yaml, "builtin-clean-action");
+    crate::assert_lint_silent!(yaml, "builtin-clean-action");
 }
 
 #[rstest]
@@ -70,7 +68,7 @@ fn serial_order_without_deps_reports_an_inert_declaration(#[case] deps: &str) {
         ),
         deps
     );
-    assert_fires(&yaml, "serial-order-without-deps", 1);
+    crate::assert_lint_fires!(&yaml, "serial-order-without-deps", 1);
 }
 
 #[test]
@@ -90,7 +88,7 @@ fn serial_order_without_deps_accepts_an_ordered_list() {
         "    command: \"aggregate\"\n",
         "targets: []\n",
     );
-    assert_silent(yaml, "serial-order-without-deps");
+    crate::assert_lint_silent!(yaml, "serial-order-without-deps");
 }
 
 #[test]
@@ -104,7 +102,7 @@ fn serial_order_without_deps_is_suppressed_by_a_directive() {
         "    command: \"aggregate\"\n",
         "targets: []\n",
     );
-    assert_silent(yaml, "serial-order-without-deps");
+    crate::assert_lint_silent!(yaml, "serial-order-without-deps");
 }
 
 #[rstest]
@@ -125,7 +123,7 @@ fn serial_order_without_deps_is_suppressed_by_a_directive() {
     "    command: \"check\"\n",
 ))]
 fn redundant_always_reports_always_on_a_phony_target(#[case] yaml: &str) {
-    assert_fires(yaml, "redundant-always", 1);
+    crate::assert_lint_fires!(yaml, "redundant-always", 1);
 }
 
 /// `always` on a file target is the feature working as documented.
@@ -138,7 +136,7 @@ fn redundant_always_accepts_always_on_a_file_target() {
         "    always: true\n",
         "    command: \"date > {{ outs }}\"\n",
     );
-    assert_silent(yaml, "redundant-always");
+    crate::assert_lint_silent!(yaml, "redundant-always");
 }
 
 #[test]
@@ -152,5 +150,5 @@ fn redundant_always_is_suppressed_by_a_directive() {
         "    command: \"lint\"\n",
         "targets: []\n",
     );
-    assert_silent(yaml, "redundant-always");
+    crate::assert_lint_silent!(yaml, "redundant-always");
 }

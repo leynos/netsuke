@@ -6,24 +6,27 @@ use super::{Scope, collect};
 use crate::lint::document::Document;
 
 /// Parse `text` and collect its directives.
-fn directives(text: &str) -> Vec<super::Directive> {
-    let doc = Document::parse(text.to_owned()).expect("fixture should index");
-    collect(&doc)
+macro_rules! directives {
+    ($text:expr) => {
+        collect(&Document::parse($text.to_owned()).expect("fixture should index"))
+    };
 }
 
-/// Collect `text`'s directives and take the first one.
-fn first(text: &str) -> super::Directive {
-    directives(text)
-        .into_iter()
-        .next()
-        .expect("the fixture should carry a directive")
+/// Collect a fixture's directives and take the first one.
+macro_rules! first {
+    ($text:expr) => {
+        directives!($text)
+            .into_iter()
+            .next()
+            .expect("the fixture should carry a directive")
+    };
 }
 
 #[test]
 fn a_directive_records_its_rules_and_reason() {
     const TEXT: &str = "a: 1  # netsuke-lint: allow one, two -- because\n";
-    assert_eq!(directives(TEXT).len(), 1);
-    let directive = first(TEXT);
+    assert_eq!(directives!(TEXT).len(), 1);
+    let directive = first!(TEXT);
     assert_eq!(directive.rules, vec!["one".to_owned(), "two".to_owned()]);
     assert_eq!(directive.reason.as_deref(), Some("because"));
 }
@@ -34,7 +37,7 @@ fn a_directive_records_its_rules_and_reason() {
 #[case("a: 1  # netsuke-lint: allow one --   \n", None)]
 #[case("a: 1  # netsuke-lint: allow one -- why\n", Some("why"))]
 fn a_reason_is_recorded_only_when_stated(#[case] text: &str, #[case] expected: Option<&str>) {
-    assert_eq!(first(text).reason.as_deref(), expected);
+    assert_eq!(first!(text).reason.as_deref(), expected);
 }
 
 /// A `#` inside a scalar is content, not a comment. Without this the shell
@@ -45,7 +48,7 @@ fn a_reason_is_recorded_only_when_stated(#[case] text: &str, #[case] expected: O
 #[case("a: 'x#netsuke-lint: allow one -- joined'\n")]
 fn a_hash_inside_a_scalar_is_not_a_directive(#[case] text: &str) {
     assert_eq!(
-        directives(text).len(),
+        directives!(text).len(),
         0,
         "a scalar's contents should not be scanned for directives"
     );
@@ -53,7 +56,7 @@ fn a_hash_inside_a_scalar_is_not_a_directive(#[case] text: &str) {
 
 #[test]
 fn an_ordinary_comment_is_not_a_directive() {
-    assert_eq!(directives("# just a note\na: 1\n").len(), 0);
+    assert_eq!(directives!("# just a note\na: 1\n").len(), 0);
 }
 
 /// A directive above a list item governs the whole item, including every line
@@ -68,7 +71,7 @@ fn a_leading_directive_scopes_to_the_block_beneath_it() {
         "  - name: second\n",
     );
     let doc = Document::parse(text.to_owned()).expect("fixture should index");
-    let directive = first(text);
+    let directive = first!(text);
     let Scope::Node(span) = directive.scope else {
         panic!(
             "the directive should scope to a block, got {:?}",
@@ -97,7 +100,7 @@ fn consecutive_directives_share_one_block() {
         "  - name: first\n",
         "    command: \"a\"\n",
     );
-    let scopes: Vec<Scope> = directives(text)
+    let scopes: Vec<Scope> = directives!(text)
         .iter()
         .map(|directive| directive.scope)
         .collect();
@@ -118,7 +121,7 @@ fn a_trailing_directive_scopes_to_its_own_line() {
         "  - name: second\n",
     );
     let doc = Document::parse(text.to_owned()).expect("fixture should index");
-    let directive = first(text);
+    let directive = first!(text);
     let Scope::Node(span) = directive.scope else {
         panic!("the directive should scope to a block");
     };
@@ -129,7 +132,7 @@ fn a_trailing_directive_scopes_to_its_own_line() {
 
 #[test]
 fn a_file_directive_covers_everything() {
-    let directive = first("# netsuke-lint-file: allow one -- everywhere\na: 1\n");
+    let directive = first!("# netsuke-lint-file: allow one -- everywhere\na: 1\n");
     assert_eq!(directive.scope, Scope::File);
     assert!(
         directive.covers(None),
@@ -139,7 +142,7 @@ fn a_file_directive_covers_everything() {
 
 #[test]
 fn a_directive_names_only_the_rules_it_lists() {
-    let directive = first("a: 1  # netsuke-lint: allow one -- because\n");
+    let directive = first!("a: 1  # netsuke-lint: allow one -- because\n");
     assert!(directive.names("one"));
     assert!(!directive.names("two"));
 }

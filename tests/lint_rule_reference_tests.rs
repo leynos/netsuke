@@ -16,7 +16,7 @@ const REFERENCE_PATH: &str = "docs/netsuke-linter-rules.md";
 
 /// Read the rule reference.
 fn reference() -> Result<String> {
-    std::fs::read_to_string(REFERENCE_PATH).context("read the lint rule reference")
+    test_support::fs::read_to_string(REFERENCE_PATH).context("read the lint rule reference")
 }
 
 /// Collapse every whitespace run so wrapped prose compares as written.

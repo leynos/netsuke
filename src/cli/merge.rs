@@ -30,8 +30,8 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 
 use super::MergeEvent;
-use super::command::{BuildArgs, CheckArgs, Cli, Commands};
-use super::config::{BuildConfig, CliConfig};
+use super::command::Cli;
+use super::config::CliConfig;
 use super::discovery::{
     DiscoveredLayers, EnvProvider, StdEnvProvider, discover_file_layers,
     push_discovered_file_layers,
@@ -41,6 +41,7 @@ use super::merge_input::{CachedMergeInput, MergeComposition};
 use super::merge_observability::{
     collect_override_leaf_paths, is_empty_configuration_value, validation_rejection_reason,
 };
+use super::merge_subcommands as subcommands;
 use super::validation::validation_error;
 
 /// Merge discovered configuration layers over parsed CLI input.
@@ -260,90 +261,12 @@ fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Va
     maybe_insert_explicit(matches, "progress", &cli.progress, &mut root)?;
     maybe_insert_explicit(matches, "accessibility", &cli.accessibility, &mut root)?;
 
-    let mut cmds_build: Map<String, Value> = Map::new();
-
-    if matches.value_source("default_targets") == Some(ValueSource::CommandLine) {
-        cmds_build.insert(
-            "targets".to_owned(),
-            serialize_value("default_targets", &cli.default_targets)?,
-        );
-    }
-
-    if let Some(Commands::Build(args)) = cli.command.as_ref()
-        && let Some(build_matches) = matches.subcommand_matches("build")
-    {
-        for (k, v) in build_cli_overrides(args, build_matches)? {
-            cmds_build.insert(k, v);
-        }
-    }
-
-    let cmds_check = check_overrides(cli, matches)?;
-    let mut cmds: Map<String, Value> = Map::new();
-    if !cmds_build.is_empty() {
-        cmds.insert("build".to_owned(), Value::Object(cmds_build));
-    }
-    if !cmds_check.is_empty() {
-        cmds.insert("check".to_owned(), Value::Object(cmds_check));
-    }
+    let cmds = subcommands::overrides(cli, matches)?;
     if !cmds.is_empty() {
         root.insert("cmds".to_owned(), Value::Object(cmds));
     }
 
     Ok(Value::Object(root))
-}
-
-/// Collect the `check` subcommand's explicitly supplied arguments.
-///
-/// # Errors
-///
-/// Returns a validation error when a supplied value cannot be serialized.
-fn check_overrides(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Map<String, Value>> {
-    let mut check = Map::new();
-    let Some(Commands::Check(args)) = cli.command.as_ref() else {
-        return Ok(check);
-    };
-    let Some(check_matches) = matches.subcommand_matches("check") else {
-        return Ok(check);
-    };
-    maybe_insert_explicit(check_matches, "rule", &args.rule, &mut check)?;
-    maybe_insert_explicit(check_matches, "fail_on", &args.fail_on, &mut check)?;
-    maybe_insert_explicit(check_matches, "limit", &args.limit, &mut check)?;
-    Ok(check)
-}
-
-/// Resolve the effective `check` arguments from the CLI and configuration.
-///
-/// Command-line values already won the merge, so the configuration only fills
-/// in the fields the caller left at their defaults.
-fn resolve_check_args(args: &CheckArgs, config: &super::CheckConfig) -> CheckArgs {
-    CheckArgs {
-        rule: if args.rule.is_empty() {
-            config.rule.clone()
-        } else {
-            args.rule.clone()
-        },
-        fail_on: config
-            .fail_on
-            .clone()
-            .filter(|_| args.fail_on == super::DEFAULT_FAIL_ON)
-            .unwrap_or_else(|| args.fail_on.clone()),
-        limit: config
-            .limit
-            .filter(|_| args.limit == super::DEFAULT_FINDING_LIMIT)
-            .unwrap_or(args.limit),
-        explain: args.explain.clone(),
-    }
-}
-
-/// Collect the `build` subcommand's overrides from explicitly supplied arguments.
-///
-/// # Errors
-///
-/// Returns a validation error when a supplied value cannot be serialized.
-fn build_cli_overrides(args: &BuildArgs, matches: &ArgMatches) -> OrthoResult<Map<String, Value>> {
-    let mut build = Map::new();
-    maybe_insert_explicit(matches, "targets", &args.targets, &mut build)?;
-    Ok(build)
 }
 
 /// Insert `field` into `target` when `matches` reports it was supplied on the
@@ -352,7 +275,7 @@ fn build_cli_overrides(args: &BuildArgs, matches: &ArgMatches) -> OrthoResult<Ma
 /// # Errors
 ///
 /// Returns a validation error when `value` cannot be serialized.
-fn maybe_insert_explicit<T>(
+pub(super) fn maybe_insert_explicit<T>(
     matches: &ArgMatches,
     field: &str,
     value: &T,
@@ -372,7 +295,7 @@ where
 /// # Errors
 ///
 /// Returns a validation error when serialization fails.
-fn serialize_value<T>(field: &str, value: &T) -> OrthoResult<Value>
+pub(super) fn serialize_value<T>(field: &str, value: &T) -> OrthoResult<Value>
 where
     T: Serialize,
 {
@@ -382,7 +305,7 @@ where
 /// Apply the merged configuration over the parsed CLI input, producing the
 /// resolved runtime `Cli`.
 fn apply_config(parsed: &Cli, config: CliConfig) -> Cli {
-    let build_defaults = resolved_build_config(&config);
+    let build_defaults = subcommands::resolved_build_config(&config);
     Cli {
         file: config.file,
         directory: parsed.directory.clone(),
@@ -403,46 +326,10 @@ fn apply_config(parsed: &Cli, config: CliConfig) -> Cli {
         progress: config.progress,
         accessibility: config.accessibility,
         default_targets: build_defaults.targets.clone(),
-        command: Some(resolve_command(
+        command: Some(subcommands::resolve_command(
             parsed.command.as_ref(),
             &build_defaults,
             &config.cmds.check,
         )),
-    }
-}
-
-/// Resolve the effective build defaults, combining root-level default targets
-/// with subcommand-level targets.
-fn resolved_build_config(config: &CliConfig) -> BuildConfig {
-    let mut build = config.cmds.build.clone();
-    if build.targets.is_empty() {
-        build.targets.clone_from(&config.default_targets);
-    } else if !config.default_targets.is_empty() {
-        let mut targets = config.default_targets.clone();
-        targets.extend(build.targets);
-        build.targets = targets;
-    }
-    build
-}
-
-/// Resolve the final command, substituting default targets when none were given.
-fn resolve_command(
-    parsed: Option<&Commands>,
-    build_defaults: &BuildConfig,
-    check_defaults: &super::CheckConfig,
-) -> Commands {
-    match parsed {
-        Some(Commands::Build(args)) => Commands::Build(BuildArgs {
-            targets: if args.targets.is_empty() {
-                build_defaults.targets.clone()
-            } else {
-                args.targets.clone()
-            },
-        }),
-        Some(Commands::Check(args)) => Commands::Check(resolve_check_args(args, check_defaults)),
-        Some(other) => other.clone(),
-        None => Commands::Build(BuildArgs {
-            targets: build_defaults.targets.clone(),
-        }),
     }
 }

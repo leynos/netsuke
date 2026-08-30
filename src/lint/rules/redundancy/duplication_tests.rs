@@ -2,8 +2,6 @@
 
 use rstest::rstest;
 
-use crate::lint::test_support::{assert_fires, assert_silent, messages_for};
-
 #[test]
 fn duplicate_rule_recipe_reports_the_second_of_two_identical_rules() {
     let yaml = concat!(
@@ -19,8 +17,8 @@ fn duplicate_rule_recipe_reports_the_second_of_two_identical_rules() {
         "  - name: b.o\n",
         "    rule: compile_test\n",
     );
-    assert_fires(yaml, "duplicate-rule-recipe", 1);
-    let messages = messages_for(yaml, "duplicate-rule-recipe");
+    crate::assert_lint_fires!(yaml, "duplicate-rule-recipe", 1);
+    let messages = crate::lint_messages!(yaml, "duplicate-rule-recipe");
     assert!(
         messages.iter().any(|message| message.contains("`compile`")),
         "the finding should name the rule it duplicates, got {messages:?}"
@@ -57,7 +55,7 @@ fn duplicate_rule_recipe_reports_the_second_of_two_identical_rules() {
     "    rule: as_script\n",
 ))]
 fn duplicate_rule_recipe_leaves_distinct_rules_alone(#[case] yaml: &str) {
-    assert_silent(yaml, "duplicate-rule-recipe");
+    crate::assert_lint_silent!(yaml, "duplicate-rule-recipe");
 }
 
 #[test]
@@ -76,7 +74,7 @@ fn duplicate_rule_recipe_is_suppressed_by_a_directive() {
         "  - name: b.o\n",
         "    rule: compile_test\n",
     );
-    assert_silent(yaml, "duplicate-rule-recipe");
+    crate::assert_lint_silent!(yaml, "duplicate-rule-recipe");
 }
 
 #[rstest]
@@ -96,7 +94,7 @@ fn redundant_dependency_reports_a_path_declared_twice(#[case] extra: &str) {
         ),
         extra
     );
-    assert_fires(&yaml, "redundant-dependency", 1);
+    crate::assert_lint_fires!(&yaml, "redundant-dependency", 1);
 }
 
 #[test]
@@ -113,7 +111,7 @@ fn redundant_dependency_accepts_distinct_dependency_keys() {
         "    order_only_deps: build\n",
         "    command: \"cp {{ ins }} {{ outs }}\"\n",
     );
-    assert_silent(yaml, "redundant-dependency");
+    crate::assert_lint_silent!(yaml, "redundant-dependency");
 }
 
 #[test]
@@ -129,5 +127,5 @@ fn redundant_dependency_is_suppressed_by_a_directive() {
         "    deps: in.txt\n",
         "    command: \"cp {{ ins }} {{ outs }}\"\n",
     );
-    assert_silent(yaml, "redundant-dependency");
+    crate::assert_lint_silent!(yaml, "redundant-dependency");
 }

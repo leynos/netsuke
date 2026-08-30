@@ -2,8 +2,6 @@
 
 use rstest::rstest;
 
-use crate::lint::test_support::{assert_fires, assert_silent, messages_for, spans_for};
-
 #[test]
 fn literal_recipe_path_reports_a_repeated_output() {
     let yaml = concat!(
@@ -13,9 +11,9 @@ fn literal_recipe_path_reports_a_repeated_output() {
         "    sources: in.txt\n",
         "    command: \"cp in.txt out.txt\"\n",
     );
-    assert_fires(yaml, "literal-recipe-path", 2);
+    crate::assert_lint_fires!(yaml, "literal-recipe-path", 2);
     assert_eq!(
-        spans_for(yaml, "literal-recipe-path"),
+        crate::lint_spans!(yaml, "literal-recipe-path"),
         vec!["in.txt", "out.txt"]
     );
 }
@@ -61,7 +59,7 @@ fn literal_recipe_path_reports_a_repeated_output() {
     "    command: \"run check\"\n",
 ))]
 fn literal_recipe_path_leaves_correct_manifests_alone(#[case] yaml: &str) {
-    assert_silent(yaml, "literal-recipe-path");
+    crate::assert_lint_silent!(yaml, "literal-recipe-path");
 }
 
 #[test]
@@ -73,7 +71,7 @@ fn literal_recipe_path_is_suppressed_by_a_directive() {
         "  - name: out.txt\n",
         "    command: \"generate --into out.txt\"\n",
     );
-    assert_silent(yaml, "literal-recipe-path");
+    crate::assert_lint_silent!(yaml, "literal-recipe-path");
 }
 
 #[test]
@@ -84,8 +82,8 @@ fn command_chain_not_list_reports_a_scalar_chain() {
         "  - name: out\n",
         "    command: \"build && test && package\"\n",
     );
-    assert_fires(yaml, "command-chain-not-list", 1);
-    let messages = messages_for(yaml, "command-chain-not-list");
+    crate::assert_lint_fires!(yaml, "command-chain-not-list", 1);
+    let messages = crate::lint_messages!(yaml, "command-chain-not-list");
     assert!(
         messages.iter().any(|message| message.contains("3 steps")),
         "the finding should count the steps, got {messages:?}"
@@ -109,7 +107,7 @@ fn command_chain_not_list_reports_a_scalar_chain() {
     "    command: \"echo 'a && b'\"\n",
 ))]
 fn command_chain_not_list_leaves_lists_and_quoted_text_alone(#[case] yaml: &str) {
-    assert_silent(yaml, "command-chain-not-list");
+    crate::assert_lint_silent!(yaml, "command-chain-not-list");
 }
 
 #[test]
@@ -120,5 +118,5 @@ fn command_chain_not_list_is_suppressed_by_a_directive() {
         "  - name: out\n",
         "    command: \"build && test\"  # netsuke-lint: allow command-chain-not-list -- one logical step\n",
     );
-    assert_silent(yaml, "command-chain-not-list");
+    crate::assert_lint_silent!(yaml, "command-chain-not-list");
 }

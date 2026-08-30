@@ -2,8 +2,6 @@
 
 use rstest::rstest;
 
-use crate::lint::test_support::{assert_fires, assert_silent};
-
 #[rstest]
 #[case("    deps: schema\n")]
 #[case("    sources: schema\n")]
@@ -21,7 +19,7 @@ fn phony_dep_of_file_target_reports_an_always_dirty_dependency(#[case] dependenc
         ),
         dependency
     );
-    assert_fires(&yaml, "phony-dep-of-file-target", 1);
+    crate::assert_lint_fires!(&yaml, "phony-dep-of-file-target", 1);
 }
 
 /// An order-only edge sequences without tracking, and a phony target may
@@ -49,7 +47,7 @@ fn phony_dep_of_file_target_reports_an_always_dirty_dependency(#[case] dependenc
     "    command: \":\"\n",
 ))]
 fn phony_dep_of_file_target_accepts_correct_shapes(#[case] yaml: &str) {
-    assert_silent(yaml, "phony-dep-of-file-target");
+    crate::assert_lint_silent!(yaml, "phony-dep-of-file-target");
 }
 
 #[test]
@@ -65,7 +63,7 @@ fn phony_dep_of_file_target_is_suppressed_by_a_directive() {
         "    deps: schema\n",
         "    command: \"render > {{ outs }}\"\n",
     );
-    assert_silent(yaml, "phony-dep-of-file-target");
+    crate::assert_lint_silent!(yaml, "phony-dep-of-file-target");
 }
 
 #[test]
@@ -79,7 +77,7 @@ fn directory_dep_not_order_only_reports_a_content_dependency() {
         "    deps: build\n",
         "    command: \"report > {{ outs }}\"\n",
     );
-    assert_fires(yaml, "directory-dep-not-order-only", 1);
+    crate::assert_lint_fires!(yaml, "directory-dep-not-order-only", 1);
 }
 
 /// An order-only edge is the fix, and a recipe that writes a real output is
@@ -104,7 +102,7 @@ fn directory_dep_not_order_only_reports_a_content_dependency() {
     "    command: \"cp staged.txt {{ outs }}\"\n",
 ))]
 fn directory_dep_not_order_only_accepts_correct_shapes(#[case] yaml: &str) {
-    assert_silent(yaml, "directory-dep-not-order-only");
+    crate::assert_lint_silent!(yaml, "directory-dep-not-order-only");
 }
 
 /// The rule resolves a `rule:` selector, so a directory target that shares a
@@ -123,7 +121,7 @@ fn directory_dep_not_order_only_resolves_a_shared_rule() {
         "    deps: build\n",
         "    command: \"report > {{ outs }}\"\n",
     );
-    assert_fires(yaml, "directory-dep-not-order-only", 1);
+    crate::assert_lint_fires!(yaml, "directory-dep-not-order-only", 1);
 }
 
 #[test]
@@ -138,5 +136,5 @@ fn directory_dep_not_order_only_is_suppressed_by_a_directive() {
         "    deps: build\n",
         "    command: \"report > {{ outs }}\"\n",
     );
-    assert_silent(yaml, "directory-dep-not-order-only");
+    crate::assert_lint_silent!(yaml, "directory-dep-not-order-only");
 }
