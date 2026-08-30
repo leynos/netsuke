@@ -647,6 +647,25 @@ cargo binstall --no-confirm --locked \
   "cargo-nextest@$NEXTEST_VERSION"
 ```
 
+`make check-fmt` verifies Markdown formatting as well as Rust formatting, and
+needs `mdtablefix` on `PATH`. CI pins the version in `MDTABLEFIX_VERSION` in
+`.github/workflows/ci.yml`. Install that same version locally so local runs
+match CI; read the pin from the workflow rather than copying the number, so the
+two cannot drift:
+
+```bash
+MDTABLEFIX_VERSION="$(sed -n "s/.*MDTABLEFIX_VERSION: '\(.*\)'.*/\1/p" \
+  .github/workflows/ci.yml)"
+cargo install --locked mdtablefix --version "$MDTABLEFIX_VERSION"
+# or, for a prebuilt binary:
+cargo binstall --no-confirm --locked \
+  "mdtablefix@$MDTABLEFIX_VERSION"
+```
+
+Version drift matters here beyond reproducibility: a different `mdtablefix`
+version may reflow prose differently, which would make `make check-fmt` fail on
+an otherwise clean tree.
+
 CI pins the Whitaker installer version in `WHITAKER_INSTALLER_VERSION` in
 `.github/workflows/ci.yml`. Install that same version locally so local linting
 matches CI; read the pin from the workflow rather than copying the number, so

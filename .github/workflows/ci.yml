@@ -11,6 +11,12 @@ env:
   # this value. Declared once at workflow scope so the documented
   # AGENTS.md `sed` extraction yields exactly one version.
   NEXTEST_VERSION: '0.9.133'
+  # `make check-fmt` verifies Markdown formatting through
+  # scripts/check-markdown-format.sh, which shells out to mdtablefix. Pinned
+  # once at workflow scope so both the Linux and Windows jobs format against
+  # the same version; a different version reflows differently and would fail
+  # the check on an otherwise clean tree.
+  MDTABLEFIX_VERSION: '0.5.0'
 
 jobs:
   build-test:
@@ -68,6 +74,29 @@ jobs:
           cargo --version
       - name: Show Ninja version
         run: ninja --version
+      - name: Cache mdtablefix
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            ~/.cargo/bin/mdtablefix
+            ~/.cargo/bin/mdtablefix.exe
+            ~/.cache/cargo-binstall
+          key: mdtablefix-${{ runner.os }}-${{ runner.arch }}-${{ env.MDTABLEFIX_VERSION }}
+      - name: Install mdtablefix
+        # Required by `make check-fmt`. Same binstall-with-cargo-install
+        # fallback as the Whitaker step below; the release carries no
+        # prebuilt asset for every target, so binstall may build from
+        # source, which the cache above then keeps across runs.
+        run: |
+          if ! command -v mdtablefix >/dev/null 2>&1; then
+            if cargo binstall --version >/dev/null 2>&1; then
+              cargo binstall --no-confirm --locked "mdtablefix@${MDTABLEFIX_VERSION}"
+            else
+              echo "cargo-binstall unavailable; building mdtablefix from crates.io"
+              cargo install --locked mdtablefix --version "${MDTABLEFIX_VERSION}"
+            fi
+          fi
+          mdtablefix --version
       - name: Format
         run: make check-fmt
       - name: Cache Whitaker installer
@@ -184,6 +213,29 @@ jobs:
           cargo --version
       - name: Show Ninja version
         run: ninja --version
+      - name: Cache mdtablefix
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            ~/.cargo/bin/mdtablefix
+            ~/.cargo/bin/mdtablefix.exe
+            ~/.cache/cargo-binstall
+          key: mdtablefix-${{ runner.os }}-${{ runner.arch }}-${{ env.MDTABLEFIX_VERSION }}
+      - name: Install mdtablefix
+        # Required by `make check-fmt`. Same binstall-with-cargo-install
+        # fallback as the Whitaker step below; the release carries no
+        # prebuilt asset for every target, so binstall may build from
+        # source, which the cache above then keeps across runs.
+        run: |
+          if ! command -v mdtablefix >/dev/null 2>&1; then
+            if cargo binstall --version >/dev/null 2>&1; then
+              cargo binstall --no-confirm --locked "mdtablefix@${MDTABLEFIX_VERSION}"
+            else
+              echo "cargo-binstall unavailable; building mdtablefix from crates.io"
+              cargo install --locked mdtablefix --version "${MDTABLEFIX_VERSION}"
+            fi
+          fi
+          mdtablefix --version
       - name: Format
         run: make SHELL=bash check-fmt
       - name: Lint (Clippy)
