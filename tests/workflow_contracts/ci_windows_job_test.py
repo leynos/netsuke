@@ -24,12 +24,11 @@ from workflow_loading import (
 
 WINDOWS_JOB = "build-test-windows"
 
-#: The platform-sensitive gates the Windows job must run through the Makefile
-#: with ``SHELL=bash``, so the POSIX recipes execute under Git Bash.
-EXPECTED_WINDOWS_RUNS = (
+#: The Git Bash Makefile gates the Windows job must run through the Makefile,
+#: so the POSIX recipes execute under Git Bash.
+EXPECTED_WINDOWS_BASH_MAKEFILE_GATES = (
     "make SHELL=bash check-fmt",
     "make SHELL=bash lint-clippy",
-    "make SHELL=bash lint-whitaker",
     "make SHELL=bash test",
 )
 
@@ -124,16 +123,58 @@ def test_windows_setup_rust_keeps_warnings(
 def test_windows_job_runs_check_fmt_lint_and_test(
     windows_steps: list[dict[str, object]],
 ) -> None:
-    """The Windows job runs check-fmt, lint, and test as merge gates.
-
-    Every quality gate must run through the Makefile with `SHELL=bash` so the
-    POSIX-shell recipes execute under Git Bash on the Windows runner.
-    """
+    """Assert that listed Makefile gates run exactly once under Git Bash."""
     runs = [normalise_run(run) for run in step_runs(windows_steps)]
-    counts = {command: runs.count(command) for command in EXPECTED_WINDOWS_RUNS}
+    bash_makefile_gates = EXPECTED_WINDOWS_BASH_MAKEFILE_GATES
+    counts = {command: runs.count(command) for command in bash_makefile_gates}
     assert set(counts.values()) == {1}, (
-        f"{WINDOWS_JOB} must run each of {list(EXPECTED_WINDOWS_RUNS)!r} exactly "
-        f"once, got occurrence counts {counts!r} from run steps: {runs!r}"
+        f"{WINDOWS_JOB} must run each Git Bash Makefile gate "
+        f"{list(EXPECTED_WINDOWS_BASH_MAKEFILE_GATES)!r} exactly once, got "
+        f"occurrence counts {counts!r} from run steps: {runs!r}"
+    )
+
+def test_windows_job_runs_whitaker_through_powershell_wrapper(
+    windows_steps: list[dict[str, object]],
+) -> None:
+    """Assert that Windows runs both Whitaker packages through PowerShell."""
+    step_name = "Lint (Whitaker)"
+    step = named_step(windows_steps, step_name)
+    assert step.get("shell") == "pwsh", (
+        f"{step_name} must declare the PowerShell Core shell, got {step.get('shell')!r}"
+    )
+    match step.get("run"):
+        case str() as run:
+            pass
+        case _:
+            pytest.fail(f"{step_name} must declare a PowerShell run block")
+
+    workspace_fragments = (
+        "Join-Path $HOME '.local\\bin\\whitaker.ps1'",
+        '$env:RUSTFLAGS = "$env:RUSTFLAGS -D warnings"',
+        "$env:DYLINT_TOML = Get-Content dylint.toml -Raw",
+        "& $whitaker --all --no-deps --package netsuke-build",
+        "Push-Location test_support",
+    )
+    missing = [fragment for fragment in workspace_fragments if fragment not in run]
+    assert not missing, (
+        f"{step_name} must resolve the PowerShell wrapper, append -D warnings, "
+        f"load the workspace Dylint configuration, lint netsuke-build, and enter "
+        f"test_support; missing {missing!r}"
+    )
+
+    _, _, run_after_push = run.partition("Push-Location test_support")
+    test_support_fragments = (
+        "$env:DYLINT_TOML = Get-Content dylint.toml -Raw",
+        "& $whitaker --all --no-deps --package test_support",
+        "finally {",
+        "Pop-Location",
+    )
+    fragments = test_support_fragments
+    missing = [fragment for fragment in fragments if fragment not in run_after_push]
+    assert not missing, (
+        f"{step_name} must load test_support's Dylint configuration after entering it, "
+        f"lint test_support, and restore the location in finally; missing "
+        f"{missing!r}"
     )
 
 
