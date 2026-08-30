@@ -1,7 +1,7 @@
 # 1. overview of `uv` and `pyproject.toml`
 
 Astral's `uv` is a Rust-based project and package manager that uses
-`pyproject.toml` as its central configuration file. When you run commands like
+`pyproject.toml` as its central configuration file. When commands such as
 `uv init`, `uv sync` or `uv run`, `uv` will:
 
 1. Look for a `pyproject.toml` in the project root and keep a lockfile
@@ -10,8 +10,8 @@ Astral's `uv` is a Rust-based project and package manager that uses
 3. Read dependency specifications (and any build-system directives) to install
    or update packages accordingly. (Astral Docs[^1], RidgeRun.ai[^2])
 
-In other words, your `pyproject.toml` drives everything—from metadata to
-dependencies to build instructions—without needing `requirements.txt` or a
+In other words, the project's `pyproject.toml` drives everything—from metadata
+to dependencies to build instructions—without needing `requirements.txt` or a
 separate `setup.py` file. (Level Up Coding[^3], Python Packaging[^4])
 
 ______________________________________________________________________
@@ -26,15 +26,15 @@ declared statically or listed in `dynamic` when supplied by the build backend:
 - `name`
 - `version`, or `dynamic = ["version"]`
 
-However, you almost always want to include at least the following additional
-fields for clarity and compatibility:
+However, projects generally benefit from including at least the following
+additional fields for clarity and compatibility:
 
 ```toml
 [project]
 name = "my_project"            # Project name (PEP 621 requirement)
 version = "0.1.0"              # PEP 440-compatible version
 description = "A brief overview"       # Short summary
-readme = "README.md"           # Path to your README file (automatically included)
+readme = "README.md"           # Path to the project README (automatically included)
 requires-python = ">=3.10"     # Restrict Python versions, if needed
 license = "MIT"                # SPDX licence expression
 license-files = ["LICENSE"]
@@ -57,9 +57,9 @@ dependencies = [
   the build backend. (Python Packaging[^4], Reddit[^5])
 - **`description` and `readme`:** Although not mandatory, they help with
   indexing and packaging tools; `readme = "README.md"` tells `uv` (and PyPI) to
-  include your README as the long description. (Astral Docs[^1], Python
+  include the project README as the long description. (Astral Docs[^1], Python
   Packaging[^4])
-- **`requires-python`:** Constrains which Python interpreters your package
+- **`requires-python`:** Constrains which Python interpreters the package
   supports (e.g. `>=3.10`). (Python Packaging[^4], Reddit[^5])
 - **`license` and `license-files`:** Specify an SPDX licence expression such as
   `license = "MIT"` and identify distributed licence files with
@@ -113,7 +113,7 @@ tooling. Add them with `uv add --optional <extra> <package>`:
 
 ```toml
 [project.optional-dependencies]
-# Opt-in feature: end users request it with cuprum[feature].
+# Opt-in feature: end users request it with my_project[feature].
 feature = [
   "some-runtime-lib>=1.2,<2",
 ]
@@ -155,7 +155,7 @@ default-groups = ["dev", "docs"]  # or "all"
 
 Groups may nest via `{ include-group = "..." }`, and by default `uv` resolves
 every group together into a single `uv.lock`, so groups must be mutually
-compatible unless you declare incompatible sets explicitly under
+compatible unless incompatible sets are declared explicitly under
 `[tool.uv].conflicts`. (Astral Docs[^6])
 
 > **Rule of thumb:** if an end user needs it to *run* the code, it belongs
@@ -168,9 +168,8 @@ ______________________________________________________________________
 
 ## 4. Entry points and scripts
 
-If you want to expose command-line interfaces (CLIs) or GUIs through your
-package, PEP 621 provides the `[project.scripts]` and `[project.gui-scripts]`
-tables:
+To expose command-line interfaces (CLIs) or GUIs through a package, PEP 621
+provides the `[project.scripts]` and `[project.gui-scripts]` tables:
 
 ```toml
 [project.scripts]
@@ -180,12 +179,12 @@ mycli = "my_project.cli:main"
 mygui = "my_project.gui:start"
 ```
 
-- **`[project.scripts]`:** Defines console scripts. When you run `uv run mycli`,
+- **`[project.scripts]`:** Defines console scripts. When `uv run mycli` is run,
   `uv` will invoke the `main` function in `my_project/cli.py`. (Astral Docs[^7])
 - **`[project.gui-scripts]`:** On Windows, `uv` will wrap these in a GUI
   executable; on Unix-like systems, they behave like normal console scripts.
   (Astral Docs[^7])
-- **Plugin Entry Points:** If your project supports plugins, use
+- **Plugin Entry Points:** If the project supports plugins, use
   `[project.entry-points.'group.name']` to register them. (Astral Docs[^7])
 
 ______________________________________________________________________
@@ -193,7 +192,7 @@ ______________________________________________________________________
 ## 5. Declaring a build system
 
 PEP 517/518 strongly recommends a `[build-system]` table to tell tools how to
-build and install your project, but it is not universally required. When the
+build and install the project, but it is not universally required. When the
 table is omitted, legacy setuptools behaviour applies: tools may use
 `setuptools.build_meta:__legacy__` for dependency installation, while `uv` does
 not install the current project unless `tool.uv.package = true`. A common
@@ -211,30 +210,31 @@ build-backend = "setuptools.build_meta"
 - **`requires`:** A list of packages needed at build time.
   `setuptools>=64.0` supplies PEP 660 support for compatible editable installs
   in `uv`; `wheel` is not required. (Python Packaging[^4], Astral Docs[^7])
-- **`build-backend`:** The entry point for your build backend.
+  - **`build-backend`:** The entry point for the project's build backend.
   `setuptools.build_meta` is the PEP 517-compliant backend for setuptools.
   (Python Packaging[^4], Astral Docs[^7])
-- **Note:** If you omit `[build-system]`, `uv` can still install dependencies
-  using the legacy setuptools backend, but it will not install the current
-  project unless `tool.uv.package = true` (see next section). (Astral Docs[^7])
+- **Note:** When `[build-system]` is omitted, `uv` can still install
+  dependencies using the legacy setuptools backend, but it will not install the
+  current project unless `tool.uv.package = true` (see next section). (Astral
+  Docs[^7])
 
 ______________________________________________________________________
 
 ## 6. `uv`-specific configuration (`[tool.uv]`)
 
-Astral `uv` allows you to inject its own settings in `[tool.uv]`. The most
-common option is:
+Astral `uv` allows projects to define their own settings in `[tool.uv]`. The
+most common option is:
 
 ```toml
 [tool.uv]
 package = true
 ```
 
-- **`tool.uv.package = true`:** Forces `uv` to build and install your project
-  into its virtual environment every time you run `uv sync` or `uv run`. When
+- **`tool.uv.package = true`:** Forces `uv` to build and install the project
+  into its virtual environment every time `uv sync` or `uv run` is run. When
   `[build-system]` is omitted, `uv` installs dependencies but does not install
   the current project unless `tool.uv.package = true`. (Astral Docs[^7])
-- You may also set other `uv`-specific keys (e.g., custom indexes, resolver
+- Additional `uv`-specific keys (e.g., custom indexes, resolver
   policies) under `[tool.uv]`, but `package` is the most common. (Python
   Packaging[^4], Astral Docs[^7])
 
@@ -243,7 +243,7 @@ ______________________________________________________________________
 ## 7. Putting it all together: example `pyproject.toml`
 
 Below is a complete example that demonstrates all sections. Adjust values as
-needed for your own project.
+needed for the project itself.
 
 ```toml
 [project]
@@ -300,8 +300,8 @@ package = true
 
 1. **Metadata under `[project]`:**
 
-   - `name`, `version` (mandatory per PEP 621) (Python Packaging[^4],
-     Reddit[^5])
+   - `name` (mandatory), and `version` unless supplied through `dynamic` (Python
+     Packaging[^4], Reddit[^5])
    - `description`, `readme`, `requires-python`: provide clarity about the
      project and help tools like PyPI. (Python Packaging[^4], Reddit[^5])
    - `license`, `authors`, `keywords`, `classifiers`: standardized metadata,
@@ -329,14 +329,14 @@ package = true
      compatible project layouts. ✱ Newer versions of setuptools support PEP 660
      editable installs without a `setup.py` stub. (Python Packaging[^4], Astral
      Docs[^7])
-   - `build-backend = "setuptools.build_meta"` tells `uv` how to compile your
+   - `build-backend = "setuptools.build_meta"` tells `uv` how to compile the
      package. (Python Packaging[^4], Astral Docs[^7])
 
 5. **`[tool.uv]`:**
 
-   - `package = true` ensures that `uv sync` will build and install your own
-     project (in editable mode) every time dependencies change. Otherwise, `uv`
-     treats your project as a collection of scripts only (no package). (Astral Docs[^7])
+   - `package = true` ensures that `uv sync` will build and install the project
+     (in editable mode) every time dependencies change. Otherwise, `uv` treats
+     the project as a collection of scripts only (no package). (Astral Docs[^7])
 
 ______________________________________________________________________
 
@@ -362,9 +362,9 @@ ______________________________________________________________________
 5. **Use Exact or Bounded Ranges for Dependencies:** Rather than `requests`, use
    `requests>=2.25, <3.0` to avoid unexpected major bumps. (DevsJC[^8])
 
-6. **Consider dynamic fields sparingly:** You can declare fields like
+6. **Consider dynamic fields sparingly:** Declare fields such as
    `dynamic = ["version"]` if the version is computed at build time (e.g. via
-   `setuptools_scm`). If you do so, ensure your build backend supports dynamic
+   `setuptools_scm`). When doing so, ensure the build backend supports dynamic
    metadata. (Python Packaging[^4])
 
 ______________________________________________________________________
@@ -382,10 +382,10 @@ A "modern" `pyproject.toml` for an Astral `uv` project should:
 - Declare a PEP 517 `[build-system]` (e.g. `setuptools>=64.0` with
   `setuptools.build_meta`) to support compatible PEP 660 editable installs, or
   omit it and rely on `tool.uv.package = true`.
-- Include a `[tool.uv]` section, at minimum `package = true` if you want `uv` to
-  build and install your own package.
+- Include a `[tool.uv]` section, at minimum `package = true` to have `uv` build
+  and install the project package.
 
-Following these conventions ensures that your project is fully PEP-compliant,
+Following these conventions ensures that the project is fully PEP-compliant,
 easy to maintain, and integrates seamlessly with Astral `uv`.
 
 [^1]: [Working on projects | uv - Astral Docs](https://docs.astral.sh/uv/guides/projects/)

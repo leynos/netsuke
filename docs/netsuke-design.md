@@ -1156,9 +1156,11 @@ providing a secure bridge to the underlying system.
   directory or workspace root to `glob_paths(pattern, base)` and internal
   `expand_glob(pattern, base)`: relative patterns, including parent-relative
   ones, resolve from that root and retain their pattern-relative spelling after
-  base stripping, while absolute patterns remain absolute. This expansion does
-  not read or mutate process-global working-directory state. Invalid patterns
-  surface as `SyntaxError`; filesystem iteration errors surface as
+  base stripping, while absolute patterns remain absolute. With an injected
+  manifest root, this expansion does not read or mutate process-global
+  working-directory state. `from_str_with_env` passes `manifest_root: None`, so
+  unbased relative patterns resolve from the process working directory. Invalid
+  patterns surface as `SyntaxError`; filesystem iteration errors surface as
   `InvalidOperation`, matching minijinja error semantics. On Unix, backslash
   escapes for glob metacharacters (`[`, `]`, `{`, `}`, `*`, `?`) are preserved
   during separator normalization. A backslash before `*` or `?` is kept only

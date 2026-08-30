@@ -101,6 +101,26 @@ fn benchmark_glob_expansion_target_is_phony_and_runs_the_expected_bench() -> Res
     Ok(())
 }
 
+#[test]
+fn check_fmt_portably_skips_markdown_validation_without_files() -> Result<()> {
+    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
+    let recipe =
+        target_recipe(&makefile, "check-fmt").context("Makefile should declare check-fmt")?;
+    ensure!(
+        !recipe.contains("xargs -0 -r"),
+        "check-fmt must not rely on GNU-only xargs -r, found {recipe:?}"
+    );
+    ensure!(
+        recipe.contains("if [ \"$$#\" -gt 0 ]"),
+        "check-fmt must guard against an empty Markdown input, found {recipe:?}"
+    );
+    ensure!(
+        recipe.contains("scripts/check-markdown-format.sh \"$$@\""),
+        "check-fmt must validate every discovered Markdown path, found {recipe:?}"
+    );
+    Ok(())
+}
+
 #[path = "makefile_test_target/rustflags.rs"]
 mod rustflags;
 

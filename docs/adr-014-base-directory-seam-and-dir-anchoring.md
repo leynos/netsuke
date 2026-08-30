@@ -19,9 +19,9 @@ execution cannot isolate a mutable process CWD, and a library's correct result
 should not depend on where the invoking process happens to sit.
 
 Separately, the CLI contract for `-C/--directory` needed a precise statement:
-the flag anchors automatic project discovery and manifest lookup. Relative
-explicit configuration selectors remain rooted in the process working
-directory, independently of `-C/--directory`.
+the flag anchors automatic project discovery and manifest lookup, but an
+explicit `--config` (or `NETSUKE_CONFIG`) selector is resolved against the
+shell's original working directory and is deliberately independent of `-C`.
 
 ## Decision
 
@@ -30,23 +30,23 @@ directory, independently of `-C/--directory`.
   value onward as an explicit base directory; manifest workspace resolution and
   glob expansion accept that base as a parameter and never read the process CWD
   themselves. `expand_glob`/`glob_paths` thread the base through to
-  `strip_base`, which removes it from relative matches to restore
-  pattern-relative spellings, including `..` segments. Absolute patterns do not
-  use or strip the base.
+  `strip_base`, which removes it from matches to restore pattern-relative
+  spellings.
 - **An ambient fallback exists only where no manifest root is available**, and
   that read is confined to the composition boundary, not to resolution
   internals.
-- **Explicit selectors remain independent of `-C`.** A relative
-  `--config <PATH>` or `NETSUKE_CONFIG` resolves from the process working
-  directory, even when `-C/--directory` is supplied; absolute selectors remain
-  unchanged. `-C` continues to anchor automatic project discovery. See ADR-004
-  for the selection machinery and `src/cli/discovery.rs` for the implementation.
+- **Explicit selectors are independent of `-C`.** A relative `--config <PATH>`
+  or `NETSUKE_CONFIG` resolves against the shell's original working directory.
+  `-C` scopes automatic project discovery and manifest lookup; it never
+  re-anchors an explicit selector. See ADR-004 for the selection machinery and
+  `src/cli/discovery.rs` for the implementation.
 - **In-process environment mutation is banned and gated.** `clippy.toml` and
   `test_support/clippy.toml` disallow `std::env::set_var`, `remove_var`, and
-  `set_current_dir`; `lint-clippy` applies those prohibitions across every
-  workspace target kind. `Command::env`/`Command::env_clear`/
-  `Command::current_dir` — the child-process configuration builders — remain
-  the sanctioned route and are deliberately not matched.
+  `set_current_dir`; `scripts/check-env-mutation.sh` greps `src/`, `tests/`, and
+  `test_support/` for the same spellings and is wired into `make lint`.
+  `Command::env`/`Command::env_clear`/`Command::current_dir` — the
+  child-process configuration builders — remain the sanctioned route and are
+  deliberately not matched.
 
 ## Consequences
 
@@ -54,12 +54,12 @@ directory, independently of `-C/--directory`.
   base, not on where the test or process was launched.
 - Tests no longer need `EnvLock`/`CwdGuard`; `test_support/src/env_lock.rs` and
   `cwd_guard.rs` were deleted, and suites pass explicit base directories.
-- A contributor who reintroduces in-process mutation fails `cargo clippy`
-  (disallowed-methods) with a reason string telling them what to do instead.
+- A contributor who reintroduces in-process mutation immediately fails
+  `make lint` (grep gate) and `cargo clippy` (disallowed-methods) with a reason
+  string telling them what to do instead.
 - Explicit `--config` behaviour is documented identically in the user guide,
-  the design document, and this ADR: relative selectors resolve from the
-  process working directory independently of `-C`, while absolute selectors
-  retain their spelling.
+  the design document, and this ADR, fixing a stale passage that claimed
+  `-C`-anchoring.
 
 ## Alternatives considered
 
@@ -75,6 +75,27 @@ directory, independently of `-C/--directory`.
   [`src/manifest/workspace.rs`](../src/manifest/workspace.rs)
   (`resolve_absolute_workspace_root`).
 - Composition boundary: `src/runner/mod.rs` and `src/runner/help_query.rs`.
-- Explicit-selector anchoring:
+- Explicit-selector independence:
   [`src/cli/discovery.rs`](../src/cli/discovery.rs); ADR-004.
-- Gate: `lint-clippy`, `clippy.toml`, `test_support/clippy.toml`.
+- Gate: [`scripts/check-env-mutation.sh`](../scripts/check-env-mutation.sh),
+  `clippy.toml`, `test_support/clippy.toml`.
+
+## Addendum — 2026-08-30
+
+The accepted decision above remains the historical rationale for the seam. Its
+current implementation has these clarified contracts:
+
+- Manifest parsing supplies the manifest directory or workspace root to
+  `glob_paths(pattern, base)` and `expand_glob(pattern, base)`. Relative
+  patterns, including parent-relative patterns, resolve from that injected root
+  and retain their pattern-relative result spelling; absolute patterns remain
+  absolute.
+- Explicit `--config` and `NETSUKE_CONFIG` selectors remain independent of
+  `-C/--directory`: relative selectors resolve from the process working
+  directory and absolute selectors remain unchanged. `-C` anchors automatic
+  project discovery and manifest lookup.
+- The environment-mutation enforcement is Clippy-only. `clippy.toml` and
+  `test_support/clippy.toml` reject the forbidden process-global mutation
+  methods across workspace targets; child-process configuration through
+  `Command::env`, `Command::env_clear`, and `Command::current_dir` remains
+  allowed.
