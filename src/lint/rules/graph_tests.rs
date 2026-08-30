@@ -43,6 +43,40 @@ fn undeclared_target_input_accepts_declared_and_reachable_paths(#[case] yaml: &s
     crate::assert_lint_silent!(yaml, "undeclared-target-input");
 }
 
+/// A phony target names no file, so a recipe cannot consume it as an input.
+///
+/// Without this the rule matched every graph output, and an action called
+/// `install` or `test` made any recipe running `install -m` or `test -f` look
+/// like it had consumed one.
+#[test]
+fn undeclared_target_input_ignores_phony_outputs() {
+    let yaml = concat!(
+        "netsuke_version: \"1.0.0\"\n",
+        "actions:\n",
+        "  - name: install\n",
+        "    description: Install the built artefact\n",
+        "    command: \"cp app /usr/bin\"\n",
+        "targets:\n",
+        "  - name: staged\n",
+        "    command: \"install -m 0755 app {{ outs }}\"\n",
+    );
+    crate::assert_lint_silent!(yaml, "undeclared-target-input");
+}
+
+/// A name too short to be a distinctive path is not searched for either.
+#[test]
+fn undeclared_target_input_ignores_very_short_output_names() {
+    let yaml = concat!(
+        "netsuke_version: \"1.0.0\"\n",
+        "targets:\n",
+        "  - name: ab\n",
+        "    command: \"touch {{ outs }}\"\n",
+        "  - name: report.txt\n",
+        "    command: \"summarize --mode ab > {{ outs }}\"\n",
+    );
+    crate::assert_lint_silent!(yaml, "undeclared-target-input");
+}
+
 #[test]
 fn undeclared_target_input_is_suppressed_by_a_directive() {
     let yaml = concat!(
