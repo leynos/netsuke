@@ -4399,14 +4399,34 @@ tests.
 #### expand_foreach
 
 `src/manifest/expand.rs` exposes
-`expand_foreach(doc: &mut ManifestValue, env: &Environment) -> Result<FilteringStats>`.
+`expand_foreach(doc: &mut ManifestValue, env: &Environment) ->
+Result<ExpansionReport>`.
 
 **Purpose:** expands `foreach`/`when` directives in both `targets` and
 `actions` top-level arrays before the manifest is deserialized into the AST.
 This is the manifest-time boundary for conditional planning. Downstream layers
 receive only selected entries and must not reinterpret manifest condition keys.
-The returned `FilteringStats` records how many target and action entries were
-filtered during expansion.
+The returned `ExpansionReport` contains exact `FilteringStats` counts for
+target and action entries excluded during expansion, plus bounded metadata for
+the excluded entries. Expansion is a pure transformation: it emits no
+tracing.
+
+`ExpansionReport.filtered_entries` retains at most 64 `FilteredEntry` records,
+in expansion order. The `ExpansionReport.omitted_filtered_entries` count tracks
+excluded entries that were not retained, while `stats.filtered_targets` and
+`stats.filtered_actions` continue to count every excluded entry independently
+of this cap. Each retained `FilteredEntry` contains:
+
+- `section`: either `targets` or `actions`.
+- `entry_name_hash`: the first four bytes of the SHA-256 digest of the entry
+  name, rendered as eight lowercase hexadecimal characters.
+- `iteration_index`: the zero-based `foreach` index, or `None` for a static
+  entry.
+- `when_expression_len`: the byte length of the filtering `when` expression.
+
+The report contains no raw entry names, item values, or expression text. This
+keeps caller-owned diagnostics bounded and prevents manifest content from
+reaching telemetry.
 
 **Inputs:**
 
@@ -4430,6 +4450,11 @@ filtered during expansion.
 - Filtered entries are absent before IR generation, Ninja generation, and
   process execution. Build-time branching belongs inside the recipe command or
   script until a separately designed runtime-condition feature exists.
+- `src/manifest/loading.rs::trace_expansion_report` owns optional tracing for
+  the report. The loading orchestrator calls it after expansion to emit one
+  bounded debug event for each retained `FilteredEntry` and an aggregate
+  summary, including the exact counts and omitted-entry count. Other callers
+  may consume the report without installing a tracing subscriber.
 
 ### Executable availability predicate
 

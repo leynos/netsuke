@@ -154,6 +154,47 @@ proptest! {
         }
     }
 
+    /// Filtering reports count every removed entry and preserve foreach metadata.
+    #[test]
+    fn filtering_report_matches_removed_entries(items in keep_skip_items(10)) {
+        let env = Environment::new();
+        let expected_indexes: Vec<usize> = items
+            .iter()
+            .enumerate()
+            .filter_map(|(index, item)| (item == "skip").then_some(index))
+            .collect();
+        for section in ["targets", "actions"] {
+            let mut doc = foreach_doc(section, &items, Some("item != 'skip'"));
+            let report = expand_foreach(&mut doc, &env)
+                .map_err(|e| TestCaseError::fail(format!("expansion failed: {e}")))?;
+            let expected_count = expected_indexes.len();
+            let expected_stats = FilteringStats {
+                filtered_targets: if section == "targets" { expected_count } else { 0 },
+                filtered_actions: if section == "actions" { expected_count } else { 0 },
+            };
+            prop_assert_eq!(report.stats, expected_stats);
+            prop_assert_eq!(
+                report.filtered_entries.len() + report.omitted_filtered_entries,
+                expected_count
+            );
+            prop_assert_eq!(report.omitted_filtered_entries, 0);
+            let indexes: Vec<_> = report
+                .filtered_entries
+                .iter()
+                .map(|entry| entry.iteration_index)
+                .collect();
+            prop_assert_eq!(
+                indexes,
+                expected_indexes.iter().copied().map(Some).collect::<Vec<_>>()
+            );
+            for entry in &report.filtered_entries {
+                prop_assert_eq!(&entry.section, section);
+                prop_assert_eq!(&entry.entry_name_hash, "829f8d84");
+                prop_assert_eq!(entry.when_expression_len, 14);
+            }
+        }
+    }
+
     /// Any `when` value composed solely of whitespace characters is rejected,
     /// regardless of whitespace kind or length.
     #[test]

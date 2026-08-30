@@ -23,6 +23,7 @@ pub(super) fn trace_expansion_report(report: &ExpansionReport) {
         filtered_targets = report.stats.filtered_targets,
         filtered_actions = report.stats.filtered_actions,
         filtered_entry_count = report.stats.filtered_targets + report.stats.filtered_actions,
+        omitted_filtered_entries = report.omitted_filtered_entries,
         "expanded manifest foreach and when directives"
     );
 }

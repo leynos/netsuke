@@ -500,6 +500,17 @@ assertion that no impure stdlib helper ran during selection, rather than a
 shell-specific invocation count. No new port or adapter is introduced for this
 test contract.
 
+The expansion pass returns an `ExpansionReport` to its caller. Its aggregate
+target and action filtering counts include every excluded entry, while its
+`FilteredEntry` metadata is retained in expansion order up to a fixed limit of
+64 records. `omitted_filtered_entries` records excluded entries beyond that
+limit. Each retained record contains only the section, an eight-character
+bounded hash of the entry name, an optional iteration index, and the length of
+the `when` expression; raw names, item values, and expressions are not
+returned. Expansion itself emits no tracing. The loading orchestrator owns the
+`trace_expansion_report` adapter that turns the bounded report into debug
+events and an aggregate summary.
+
 ```yaml
 - foreach: glob('assets/svg/*.svg')
   when: item | basename != 'logo.svg'

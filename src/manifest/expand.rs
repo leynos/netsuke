@@ -8,6 +8,9 @@ use minijinja::{Environment, context, value::Value};
 use serde_json::{Number as JsonNumber, map::Entry};
 use sha2::{Digest, Sha256};
 
+/// Limit the number of filtered-entry records retained for telemetry.
+const FILTERED_ENTRY_RETENTION_LIMIT: usize = 64;
+
 /// Counts of manifest entries excluded during template expansion.
 ///
 /// `filtered_targets` records how many target entries were skipped because a
@@ -48,8 +51,31 @@ pub(crate) struct FilteredEntry {
 pub(crate) struct ExpansionReport {
     /// Counts of filtered entries per section.
     pub stats: FilteringStats,
-    /// One event per entry removed by a `when` expression.
+    /// Bounded per-entry records for entries removed by a `when` expression.
     pub filtered_entries: Vec<FilteredEntry>,
+    /// Number of filtered entries not retained in `filtered_entries`.
+    pub omitted_filtered_entries: usize,
+}
+
+impl ExpansionReport {
+    /// Record a filtered entry while preserving exact aggregate counts.
+    fn record_filtered_entry(&mut self, is_target: bool, filtered_entry: Option<FilteredEntry>) {
+        if is_target {
+            self.stats.filtered_targets += 1;
+        } else {
+            self.stats.filtered_actions += 1;
+        }
+        if let Some(retained_entry) = filtered_entry {
+            self.filtered_entries.push(retained_entry);
+        } else {
+            self.omitted_filtered_entries += 1;
+        }
+    }
+
+    /// Report whether another filtered-entry record can be retained.
+    const fn has_filtered_entry_capacity(&self) -> bool {
+        self.filtered_entries.len() < FILTERED_ENTRY_RETENTION_LIMIT
+    }
 }
 /// Context shared by expansion operations.
 ///
@@ -79,8 +105,8 @@ enum WhenEvaluation {
 enum WhenResolution {
     /// The entry remains in the expanded manifest.
     Include,
-    /// The entry is removed and supplies bounded metadata for caller-owned telemetry.
-    Exclude(FilteredEntry),
+    /// The entry is removed and supplies metadata only while report capacity remains.
+    Exclude(Option<FilteredEntry>),
     /// The entry remains conditional because a query-disabled helper prevented evaluation.
     Conditional,
 }
@@ -95,51 +121,43 @@ pub(crate) fn expand_foreach(
     doc: &mut ManifestValue,
     env: &Environment,
 ) -> Result<ExpansionReport> {
-    let filtered_targets = expand_section(doc, "targets", env)?;
-    let filtered_actions = expand_section(doc, "actions", env)?;
-    let stats = FilteringStats {
-        filtered_targets: filtered_targets.len(),
-        filtered_actions: filtered_actions.len(),
-    };
-    let mut filtered_entries = filtered_targets;
-    filtered_entries.extend(filtered_actions);
-    Ok(ExpansionReport {
-        stats,
-        filtered_entries,
-    })
+    let mut report = ExpansionReport::default();
+    expand_section(doc, "targets", env, &mut report)?;
+    expand_section(doc, "actions", env, &mut report)?;
+    Ok(report)
 }
 
-/// Expand one manifest section, returning metadata for each filtered entry.
+/// Expand one manifest section and record any filtered entries in `report`.
 fn expand_section(
     doc: &mut ManifestValue,
     key: &str,
     env: &Environment,
-) -> Result<Vec<FilteredEntry>> {
+    report: &mut ExpansionReport,
+) -> Result<()> {
     let Some(entries) = doc.get_mut(key).and_then(|v| v.as_array_mut()) else {
-        return Ok(Vec::new());
+        return Ok(());
     };
 
     let mut expanded = Vec::new();
-    let mut filtered = Vec::new();
     let context = ExpansionContext { env, section: key };
     for entry in std::mem::take(entries) {
         match entry {
             ManifestValue::Object(map) => {
-                expanded.extend(expand_target(map, &context, &mut filtered)?);
+                expanded.extend(expand_target(map, &context, report)?);
             }
             other => expanded.push(other),
         }
     }
 
     *entries = expanded;
-    Ok(filtered)
+    Ok(())
 }
 
 /// Expand a single target into its concrete entries, honouring `foreach`.
 fn expand_target(
     mut map: ManifestMap,
     context: &ExpansionContext<'_>,
-    filtered: &mut Vec<FilteredEntry>,
+    report: &mut ExpansionReport,
 ) -> Result<Vec<ManifestValue>> {
     if let Some(expr_val) = map.get("foreach") {
         let values = parse_foreach_values(expr_val, context.env)?;
@@ -147,10 +165,15 @@ fn expand_target(
         for (index, item) in values.into_iter().enumerate() {
             let mut clone = map.clone();
             clone.remove("foreach");
-            match when_allows(&mut clone, context, Some((&item, index)))? {
+            match when_allows(
+                &mut clone,
+                context,
+                Some((&item, index)),
+                report.has_filtered_entry_capacity(),
+            )? {
                 WhenResolution::Include => {}
                 WhenResolution::Exclude(event) => {
-                    filtered.push(event);
+                    report.record_filtered_entry(context.section == "targets", event);
                     continue;
                 }
                 WhenResolution::Conditional => {
@@ -164,10 +187,15 @@ fn expand_target(
     } else {
         // For targets without foreach, still evaluate and remove the `when` clause.
         // Use empty context since there's no iteration variable.
-        match when_allows(&mut map, context, None)? {
+        match when_allows(
+            &mut map,
+            context,
+            None,
+            report.has_filtered_entry_capacity(),
+        )? {
             WhenResolution::Include => {}
             WhenResolution::Exclude(event) => {
-                filtered.push(event);
+                report.record_filtered_entry(context.section == "targets", event);
                 return Ok(vec![]);
             }
             WhenResolution::Conditional => {
@@ -261,11 +289,13 @@ const fn when_evaluation(is_true: bool) -> WhenEvaluation {
 /// Evaluate a `when` clause and return the entry's expansion outcome.
 ///
 /// Accepts an optional iteration context (`item`, `index`) for foreach targets;
-/// static targets pass `None`.
+/// static targets pass `None`. Callers disable metadata retention after the
+/// report cap to avoid unnecessary hashing and allocation.
 fn when_allows(
     map: &mut ManifestMap,
     context: &ExpansionContext<'_>,
     iteration: Option<(&Value, usize)>,
+    retain_filtered_entry: bool,
 ) -> Result<WhenResolution> {
     let Some(when_val) = map.remove("when") else {
         return Ok(WhenResolution::Include);
@@ -275,12 +305,14 @@ fn when_allows(
     match eval_when(context.env, expr, &ctx)? {
         WhenEvaluation::Include => Ok(WhenResolution::Include),
         WhenEvaluation::Conditional => Ok(WhenResolution::Conditional),
-        WhenEvaluation::Exclude => Ok(WhenResolution::Exclude(FilteredEntry {
-            section: context.section.to_owned(),
-            entry_name_hash: entry_name_hash(entry_name(map)),
-            iteration_index: iteration.map(|(_, index)| index),
-            when_expression_len: expr.len(),
-        })),
+        WhenEvaluation::Exclude => Ok(WhenResolution::Exclude(retain_filtered_entry.then(|| {
+            FilteredEntry {
+                section: context.section.to_owned(),
+                entry_name_hash: entry_name_hash(entry_name(map)),
+                iteration_index: iteration.map(|(_, index)| index),
+                when_expression_len: expr.len(),
+            }
+        }))),
     }
 }
 /// Build the Jinja context for a `when` condition, adding `item` and `index`.

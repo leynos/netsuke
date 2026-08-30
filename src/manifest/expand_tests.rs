@@ -106,11 +106,17 @@ fn expand_foreach_returns_filtering_stats() -> Result<()> {
     when: 'false'
   - name: kept-target
     command: echo kept
+  - name: skipped-foreach-target
+    command: echo {{ item }}
+    foreach:
+      - skip
+      - keep
+    when: item != 'skip'
 actions:
   - name: skipped-action
     command: echo skipped
     when: 'false'
-  - name: each-action
+  - name: skipped-foreach-action
     command: echo {{ item }}
     foreach:
       - skip
@@ -123,25 +129,84 @@ actions:
     anyhow::ensure!(
         report.stats
             == FilteringStats {
-                filtered_targets: 1,
+                filtered_targets: 2,
                 filtered_actions: 2,
             },
         "unexpected filtering stats: {report:?}"
     );
     anyhow::ensure!(
-        report.filtered_entries.len() == 3,
-        "expected one filtering event per removed entry: {report:?}"
+        report.filtered_entries
+            == vec![
+                FilteredEntry {
+                    section: "targets".into(),
+                    entry_name_hash: "63563386".into(),
+                    iteration_index: None,
+                    when_expression_len: 5,
+                },
+                FilteredEntry {
+                    section: "targets".into(),
+                    entry_name_hash: "d743b39a".into(),
+                    iteration_index: Some(0),
+                    when_expression_len: 14,
+                },
+                FilteredEntry {
+                    section: "actions".into(),
+                    entry_name_hash: "b61bdf58".into(),
+                    iteration_index: None,
+                    when_expression_len: 5,
+                },
+                FilteredEntry {
+                    section: "actions".into(),
+                    entry_name_hash: "a4642f66".into(),
+                    iteration_index: Some(0),
+                    when_expression_len: 14,
+                },
+            ],
+        "unexpected retained filtering entries: {report:?}"
     );
     anyhow::ensure!(
-        report
-            .filtered_entries
-            .iter()
-            .filter(|entry| entry.section == "targets")
-            .count()
-            == 1,
-        "expected one filtered target event: {report:?}"
+        report.omitted_filtered_entries == 0,
+        "small expansion should retain every filtering entry: {report:?}"
     );
-    anyhow::ensure!(targets(&doc)?.len() == 1, "expected one kept target");
+    anyhow::ensure!(targets(&doc)?.len() == 2, "expected two kept targets");
     anyhow::ensure!(actions(&doc)?.len() == 1, "expected one kept action");
+    Ok(())
+}
+
+#[test]
+fn expand_foreach_bounds_retained_filtered_entries() -> Result<()> {
+    let env = Environment::new();
+    let filtered_count = FILTERED_ENTRY_RETENTION_LIMIT + 1;
+    let foreach_values = (0..filtered_count)
+        .map(|index| format!("      - {index}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let yaml = format!(
+        "targets:\n  - name: skipped-foreach-target\n    command: echo {{{{ item }}}}\n    foreach:\n{foreach_values}\n    when: 'false'"
+    );
+    let mut doc: ManifestValue = serde_saphyr::from_str(&yaml)?;
+
+    let report = expand_foreach(&mut doc, &env)?;
+
+    anyhow::ensure!(
+        report.stats
+            == FilteringStats {
+                filtered_targets: filtered_count,
+                filtered_actions: 0,
+            },
+        "aggregate counts must include entries beyond the retention limit: {report:?}"
+    );
+    anyhow::ensure!(
+        report.filtered_entries.len() == FILTERED_ENTRY_RETENTION_LIMIT,
+        "retained filtering entries must be bounded: {report:?}"
+    );
+    anyhow::ensure!(
+        report.omitted_filtered_entries == 1,
+        "report must record entries omitted by the retention limit: {report:?}"
+    );
+    anyhow::ensure!(
+        targets(&doc)?.is_empty(),
+        "fully filtered foreach expansion should retain no manifest entries"
+    );
     Ok(())
 }
