@@ -1,4 +1,4 @@
-# Python 3.13 code style guidelines (with Ruff, Pyright, and pytest)
+# Python 3.14 code style guidelines (with Ruff, Pyright, and pytest)
 
 ## Naming Conventions
 
