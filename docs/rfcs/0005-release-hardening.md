@@ -1,8 +1,8 @@
-# RFC 0001: Harden release integrity and admission
+# RFC 0005: Harden release integrity and admission
 
 ## Preamble
 
-- **RFC number:** 0001
+- **RFC number:** 0005
 - **Status:** Proposed
 - **Created:** 2026-08-11
 

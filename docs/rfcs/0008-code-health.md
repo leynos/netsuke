@@ -1,8 +1,8 @@
-# RFC 0002: Repository-wide code-health contracts and fuzzing
+# RFC 0008: Repository-wide code-health contracts and fuzzing
 
 ## Preamble
 
-- **RFC number:** 0002
+- **RFC number:** 0008
 - **Status:** Proposed
 - **Created:** 2026-08-11
 
@@ -88,7 +88,7 @@ itself remains a small, repository-level tool.
   - Replacing unit, integration, behavioural, snapshot, Proptest, Kani,
     coverage, mutation, or Whitaker checks with fuzzing.
   - Introducing a new release-security policy; release admission belongs to
-    [RFC 0001](0001-release-hardening.md).
+    [RFC 0005](0005-release-hardening.md).
   - Requiring full mutation testing, full coverage, or every fuzz target on
     every pull request.
   - Copying VTCode's workflow scripts, action choices, or policy exceptions.

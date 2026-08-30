@@ -37,9 +37,20 @@ operator, user, and contributor references are easier to find.
 - [rfcs/0001-structured-command-blocks.md](rfcs/0001-structured-command-blocks.md):
   Proposed structured command blocks, shell-free argv templates, typed Jinja
   interpolation, stream routing, and pipeline semantics.
+- [RFC 0005: Harden release integrity and
+  admission](rfcs/0005-release-hardening.md): Proposed release-profile
+  invariants, secret and dependency policy, and exact-commit release admission.
+- [rfcs/0006-ansible-inspired-template-standard-library.md](rfcs/0006-ansible-inspired-template-standard-library.md):
+  Survey of the ansible-core Jinja standard library, with an explicit
+  disposition for every candidate helper and Netsuke-native contracts for the
+  accepted set.
 - [rfcs/0007-netsukefile-testing-framework.md](rfcs/0007-netsukefile-testing-framework.md):
   Proposed Netsukefile testing framework: the `netsuke test` command, the YAML
   test dialect, and its mocking model.
+- [RFC 0008: Repository-wide code-health contracts and
+  fuzzing](rfcs/0008-code-health.md): Proposed workflow-policy validation, gate
+  self-consistency, health-signal ownership, and scheduled coverage-guided
+  fuzzing.
 
 ## Decision records
 
@@ -100,23 +111,25 @@ operator, user, and contributor references are easier to find.
 
 ## Requests for comments
 
-- [RFC 0001: Harden release integrity and
-  admission](rfcs/0001-release-hardening.md):
-  Proposed release-profile invariants, secret and dependency policy, and
-  exact-commit release admission.
-- [RFC 0002: Repository-wide code-health contracts and
-  fuzzing](rfcs/0002-code-health.md):
-  Proposed workflow-policy validation, gate self-consistency, health-signal
-  ownership, and scheduled coverage-guided fuzzing.
+- [rfcs/0001-structured-command-blocks.md](rfcs/0001-structured-command-blocks.md):
+  Proposed structured command blocks, shell-free argv templates, typed Jinja
+  interpolation, stream routing, and pipeline semantics.
+- [RFC 0005: Harden release integrity and
+  admission](rfcs/0005-release-hardening.md): Proposed release-profile
+  invariants, secret and dependency policy, and exact-commit release admission.
+- [rfcs/0006-ansible-inspired-template-standard-library.md](rfcs/0006-ansible-inspired-template-standard-library.md):
+  Survey of the ansible-core Jinja standard library, with an explicit
+  disposition for every candidate helper and Netsuke-native contracts for the
+  accepted set.
+- [RFC 0008: Repository-wide code-health contracts and
+  fuzzing](rfcs/0008-code-health.md): Proposed workflow-policy validation, gate
+  self-consistency, health-signal ownership, and scheduled coverage-guided
+  fuzzing.
 
 ## Proposals
 
 - [rfcs/](rfcs/): Requests for Comments proposing changes that need technical
   review before they become binding.
-  - [rfcs/0006-ansible-inspired-template-standard-library.md](rfcs/0006-ansible-inspired-template-standard-library.md):
-    Survey of the ansible-core Jinja standard library, with an explicit
-    disposition for every candidate helper and Netsuke-native contracts for
-    the accepted set.
 
 ## User and operator guides
 
