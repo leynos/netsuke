@@ -106,7 +106,7 @@ function Test-ExpectedRecipeFailure {
         [string]$Netsuke,
 
         [Parameter(Mandatory)]
-        [hashtable]$Failure
+        [pscustomobject]$Failure
     )
 
     $failure = & $Netsuke build $Failure.Target 2>&1
@@ -154,7 +154,7 @@ function Test-OrderedCommandList {
     Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'ordered state.txt') -Expected 'first;second' `
         -Message 'The ordered command list did not preserve state and order'
 
-    $expectedFailure = @{
+    $expectedFailure = [pscustomobject]@{
         Target = 'first-list-entry-fails'
         NotCreatedPath = 'must not exist.txt'
         ExitCodeMessage = "A recipe exit code of 27 should become Netsuke's documented failure exit code 1"
@@ -198,7 +198,7 @@ function Test-LargeRecipeTransport {
     Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'large list.txt') -Expected 'first' `
         -Message 'A large ordered recipe did not preserve PowerShell state'
 
-    $expectedFailure = @{
+    $expectedFailure = [pscustomobject]@{
         Target = 'large-list-fails'
         NotCreatedPath = 'large list must not exist.txt'
         ExitCodeMessage = "A large recipe exit code of 28 should become Netsuke's documented failure exit code 1"
