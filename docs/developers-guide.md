@@ -383,26 +383,26 @@ The lowering stages have deliberately separate responsibilities:
   encoded `powershell.exe` invocations while they fit the Windows command-line
   limit. Larger recipes use Ninja's per-edge `rspfile` and `rspfile_content`
   bindings. Ninja derives a unique `$out`-based `.ps1` response-file name,
-  creates it in the edge's working directory with an ASCII PowerShell
-  bootstrap containing the Base64 UTF-16LE payload, and invokes it with
+  creates it in the edge's working directory with an ASCII PowerShell bootstrap
+  containing the Base64 UTF-16LE payload, and invokes it with
   `powershell.exe -File "$rspfile"`. The bootstrap removes its own
   `$PSCommandPath` in a `finally` block after the recipe succeeds or fails;
-  query-only generation emits the bindings without creating files.
-  An ordered list becomes one PowerShell script that checks `$LASTEXITCODE`
-  immediately after each generated list entry, preserving PowerShell state
-  while stopping before a later entry can overwrite a non-zero status. Multiple
-  native commands inside one entry are not individually instrumented.
-  Terminating PowerShell errors also stop the list. The POSIX command-list
-  analyser is deliberately not applied to this route. The runner resolves
+  query-only generation emits the bindings without creating files. An ordered
+  list becomes one PowerShell script that checks `$LASTEXITCODE` immediately
+  after each generated list entry, preserving PowerShell state while stopping
+  before a later entry can overwrite a non-zero status. Multiple native
+  commands inside one entry are not individually instrumented. Terminating
+  PowerShell errors also stop the list. The POSIX command-list analyser is
+  deliberately not applied to this route. The runner resolves
   `NETSUKE_WINDOWS_SHELL` and preflights `bash.exe` only when the optional
   compatibility route is selected; `help targets` stays outside this execution
   boundary.
 - The brace-group, `eval`, background-job, and `exec` validation rules described
   above apply only to Unix and the explicit Windows Bash compatibility route.
   PowerShell uses its per-entry `$LASTEXITCODE` and terminating-error checks
-  instead. In shell-dollar documentation, `$$` therefore means a
-  process identifier only for POSIX/Bash; PowerShell's `$$` automatic variable
-  contains the last token received by the session.
+  instead. In shell-dollar documentation, `$$` therefore means a process
+  identifier only for POSIX/Bash; PowerShell's `$$` automatic variable contains
+  the last token received by the session.
 - `src/runner/process` forwards the command's output and recognizes the
   bounded `netsuke command-list failure: action HASH, entry M` marker. A failed
   list therefore retains the original exit status while adding the fixed-width
@@ -4256,10 +4256,11 @@ pipeline. It separates manifest loading, IR construction, and Ninja bundle
 synthesis from command reporting and process execution. The read-only pipeline
 is `load_manifest` (optionally observing manifest stages), then
 `build_graph_for_shell`, then `ninja_text_for_shell`. Its final value is
-`GeneratedNinja`, including any dyndep sidecars, rather than a materialized file
-or a running Ninja process. `generate_ninja_with_shell` is the orchestration
-boundary: it selects the legacy `RecipeShell`, performs the shell preflight,
-and carries the same selection through graph lowering and Ninja synthesis.
+`GeneratedNinja`, including any dyndep sidecars, rather than a materialized
+file or a running Ninja process. `generate_ninja_with_shell` is the
+orchestration boundary: it selects the legacy `RecipeShell`, performs the shell
+preflight, and carries the same selection through graph lowering and Ninja
+synthesis.
 
 `load_manifest` uses the manifest-query registration: it permits only its
 read-only helpers and rejects template access to the environment, filesystem,
@@ -4281,20 +4282,20 @@ background-query primitive.
   after the backend-neutral `build_graph` to render the graph, and
   `runner::help_query` uses `load_manifest` for its read-only target catalogue.
   Runner unit tests may compose the read-only steps directly. New dry-run or
-  background-generation work may use `load_manifest`,
-  `build_graph_for_shell`, and `ninja_text_for_shell` only within the runner
-  boundary; a public or cross-subsystem consumer requires an explicit
-  application boundary rather than widening these internal helpers.
+  background-generation work may use `load_manifest`, `build_graph_for_shell`,
+  and `ninja_text_for_shell` only within the runner boundary; a public or
+  cross-subsystem consumer requires an explicit application boundary rather
+  than widening these internal helpers.
 - **Composition rules:** command adapters report stages before or after the
-  relevant step and wrap `ninja_text_for_shell` with runner-owned,
-  shell-aware generation telemetry. Only `load_manifest_with_stage_reporting`
-  translates `StageObserver` events into status updates and selects the
-  effectful build loader. Consumers must not call manifest parsing, IR
-  generation, or `ninja_gen::generate_bundle_for_shell` directly in parallel
-  with this pipeline. Before an adapter writes or executes a returned bundle,
-  it must use the existing capability-injected
-  dyndep-publication path to materialize its sidecars; the read-only steps
-  never write files, start processes, or invoke effectful template helpers.
+  relevant step and wrap `ninja_text_for_shell` with runner-owned, shell-aware
+  generation telemetry. Only `load_manifest_with_stage_reporting` translates
+  `StageObserver` events into status updates and selects the effectful build
+  loader. Consumers must not call manifest parsing, IR generation, or
+  `ninja_gen::generate_bundle_for_shell` directly in parallel with this
+  pipeline. Before an adapter writes or executes a returned bundle, it must use
+  the existing capability-injected dyndep-publication path to materialize its
+  sidecars; the read-only steps never write files, start processes, or invoke
+  effectful template helpers.
 
 ### Module: `runner::reporter`
 

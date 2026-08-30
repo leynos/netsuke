@@ -39,6 +39,7 @@ pub use explicit_shell::generate_with_shell;
 use ninja_gen_command_list::{ActionId, CommandListEntry, command_list_entry};
 pub use ninja_gen_error::NinjaGenError;
 use ninja_gen_escape::{ShellText, escape_metadata_value};
+use ninja_gen_recipe_shell::escape_posix_script;
 use ninja_gen_validation::{validate_action_metadata, validate_action_recipe};
 /// Write `key = value` to a Ninja file when `opt` holds a value.
 ///
@@ -243,21 +244,6 @@ pub(crate) fn path_key(paths: &[Utf8PathBuf]) -> String {
     parts.sort_unstable();
     parts.join(&char::from(0).to_string())
 }
-
-/// Escape a script for the wrapper's single-quoted `printf %b` argument.
-///
-/// Preserve the script through the double-quoted `sh -c` wrapper so its inner
-/// shell receives literal text, including line breaks and apostrophes, before
-/// it evaluates intentional shell variables.
-fn escape_script(script: &str) -> String {
-    script
-        .replace('\\', "\\\\")
-        .replace('$', "\\$")
-        .replace('"', "\\\"")
-        .replace('`', "\\`")
-        .replace('\'', r"'\''")
-        .replace('\n', "\\n")
-}
 /// Whether the graph contains an edge whose serial list needs dyndep gates.
 pub(crate) fn graph_requires_dyndep(graph: &BuildGraph) -> bool {
     graph.targets.values().any(edge_requires_gates)
@@ -362,7 +348,7 @@ impl NamedAction<'_> {
         // Ninja commands must be single-line. Encode newlines and reconstruct the
         // original script with `printf %b` piped into a fresh shell to preserve
         // expected expansions.
-        let escaped = escape_script(script);
+        let escaped = escape_posix_script(script);
         let cmd = format!("/bin/sh -e -c \"printf %b '{escaped}' | /bin/sh -e\"");
         // Scripts are allowed to contain shell constructs such as heredocs and
         // comments that `shlex` cannot model, so only command recipes use the

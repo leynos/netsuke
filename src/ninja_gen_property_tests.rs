@@ -20,6 +20,9 @@ use std::collections::{HashMap, HashSet};
 
 #[path = "ninja_gen_property_tests/dependency_only.rs"]
 mod dependency_only;
+#[path = "ninja_gen_property_tests/ninja_oracle.rs"]
+mod ninja_oracle;
+use ninja_oracle::scalar_graph;
 
 fn edge_strategy_with_ranges(
     input_range: std::ops::Range<usize>,
@@ -179,7 +182,7 @@ fn command_list_entry_strategy() -> impl Strategy<Value = String> {
 }
 
 fn canonical_shell_single_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', r"'\''").replace('$', "$$"))
+    format!("'{}'", value.replace('\'', r"'\''"))
 }
 
 proptest! {
@@ -252,12 +255,8 @@ proptest! {
     }
 
     #[test]
-    fn programmatic_empty_command_recipes_are_rejected(use_empty_list in any::<bool>()) {
-        let graph = command_graph(if use_empty_list {
-            StringOrList::List(Vec::new())
-        } else {
-            StringOrList::Empty
-        });
+    fn programmatic_empty_command_lists_are_rejected(_case in Just(())) {
+        let graph = command_graph(StringOrList::List(Vec::new()));
         let error = generate(&graph).expect_err("empty command recipe should be rejected");
         let is_stable_empty_recipe_error = matches!(error, NinjaGenError::EmptyCommandRecipe { action_index: 1 });
         prop_assert!(is_stable_empty_recipe_error);

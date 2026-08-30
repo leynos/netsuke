@@ -50,7 +50,7 @@ impact
 | Cached CLI configuration API | Breaking for callers of the unstable Rust API: use the opt-in cached discovery flow with `ConfigEnvProvider`; `ConfigStdEnvProvider` supplies process-backed access.                                                                                                                                                                                  | [Users' guide](users-guide.md)                                                                   |
 | Timing output                | Existing `VerboseTimingReporter::new` keeps its stderr sink; Rust callers can opt into an owned `Write + Send` sink with `with_writer`.                                                                                                                                                                                                               | [Users' guide](users-guide.md#capture-verbose-timing-output)                                     |
 | Glob expansion               | Parent-relative patterns such as `glob('../shared/*.h')` now expand. The Jinja helper rejects matched paths that are not portable unquoted shell words. Metadata checks use a capability rooted at the pattern's longest literal directory prefix; missing or non-directory prefixes return no matches, and unresolvable symlink matches are skipped. | [Users' guide](users-guide.md) and [ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md) |
-| Command recipes              | On Windows, legacy scalar commands, lists, and scripts use Windows PowerShell by default; YAML command lists remain opt-in, ordered, and fail-fast.                                                                                                                                                                                                    | [Windows legacy recipe contract](users-guide.md#windows-legacy-recipe-contract)                 |
+| Command recipes              | On Windows, legacy scalar commands, lists, and scripts use Windows PowerShell by default; YAML command lists remain opt-in, ordered, and fail-fast.                                                                                                                                                                                                   | [Windows legacy recipe contract](users-guide.md#windows-legacy-recipe-contract)                  |
 | Ninja text escaping          | Write shell dollars normally; spaces in build and default-target paths are escaped for Ninja. Paths containing `$`, colons, `\|`, or control characters remain rejected, as are newline, carriage-return, and NUL metadata values.                                                                                                                    | [Users' guide](users-guide.md#review-the-safety-boundary)                                        |
 | Manifest discovery           | Optional target/action `description` values are shown by the new `netsuke help targets` command. Manifests without them and existing build output are unchanged.                                                                                                                                                                                      | [Users' guide](users-guide.md)                                                                   |
 | Serial dependencies          | New opt-in `dependency_order: serial` runs an action or target's direct `deps` list in declaration order.                                                                                                                                                                                                                                             | [Serial dependency ordering](users-guide.md#run-direct-dependencies-serially)                    |
@@ -117,8 +117,8 @@ v0.1.x makes Windows legacy-recipe execution explicit. Netsuke starts
 `powershell.exe` for every scalar command, ordered list, and script, regardless
 of whether the CLI was launched by `pwsh`, `cmd.exe`, an IDE, or Git Bash. The
 default is Windows PowerShell, not PowerShell Core. Existing Windows manifests
-that contain POSIX-only syntax must either move to PowerShell syntax or opt into
-the Bash compatibility route:
+that contain POSIX-only syntax must either move to PowerShell syntax or opt
+into the Bash compatibility route:
 
 ```powershell
 choco install git --yes --no-progress
@@ -142,20 +142,19 @@ entry, so a non-zero status or terminating error stops the list before a later
 entry can overwrite it. Multiple native commands inside one entry are not
 individually instrumented. Variables, environment assignments, and
 current-directory changes persist between entries. Each scalar, script, action,
-and target has a fresh shell process. In PowerShell, `{{ ins }}` and `{{ outs }}`
-remain path-quoted. Build and default-target paths containing spaces are escaped
-for Ninja, so whitespace-containing outputs remain valid; quote any other path
-or argument with the selected shell's syntax. Encoded PowerShell commands are
-retained while they fit the Windows command-line limit. Larger recipes use
-Ninja's `rspfile` and `rspfile_content` bindings, with a unique `$out`-derived
-`.ps1` name per edge, created in that edge's working directory, containing an
-ASCII PowerShell bootstrap and the Base64 UTF-16LE recipe payload. The command
-invokes it with `powershell.exe -File "$rspfile"`. The bootstrap removes its own
-`$PSCommandPath` in a `finally` block after the recipe succeeds or fails. Query-
-only generation does not create response files. On POSIX and Bash routes, `$$`
-means the process identifier; in
-PowerShell, `$$` is the automatic variable containing the last token received
-by the session.
+and target has a fresh shell process. In PowerShell, `{{ ins }}` and
+`{{ outs }}` remain path-quoted. Build and default-target paths containing
+spaces are escaped for Ninja, so whitespace-containing outputs remain valid;
+quote any other path or argument with the selected shell's syntax. Encoded
+PowerShell commands are retained while they fit the Windows command-line limit.
+Larger recipes use Ninja's `rspfile` and `rspfile_content` bindings, with a
+unique `$out`-derived `.ps1` name per edge, created in that edge's working
+directory, containing an ASCII PowerShell bootstrap and the Base64 UTF-16LE
+recipe payload. The command invokes it with `powershell.exe -File "$rspfile"`.
+The bootstrap removes its own `$PSCommandPath` in a `finally` block after the
+recipe succeeds or fails. Queries do not create response files. On POSIX and
+Bash routes, `$$` means the process identifier; in PowerShell, `$$` is the
+automatic variable containing the last token received by the session.
 
 For reproducible Windows CI, use a `pwsh` step and let Netsuke select
 PowerShell; do not use a workflow-level `shell: bash` setting as evidence of
@@ -164,8 +163,8 @@ prepend `C:\Program Files\Git\bin` to that step's `PATH`, and set
 `NETSUKE_WINDOWS_SHELL=bash` explicitly.
 
 This is deliberately a v0.1.x shell-string compatibility boundary. The
-structured command blocks and argv templates in [RFC: structured command
-blocks and argv templates #573](https://github.com/leynos/netsuke/pull/573)
+structured command blocks and argv templates in
+[RFC: structured command blocks and argv templates #573](https://github.com/leynos/netsuke/pull/573)
 are planned for v0.2.0 to remove shell-dependent quoting, paths, variable
 expansion, and exit-status ambiguity. They are not backported through an
 implicit change to legacy recipes.

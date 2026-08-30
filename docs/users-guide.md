@@ -324,13 +324,13 @@ output paths. An empty command list is rejected when the manifest is parsed.
 
 ### Windows legacy recipe contract
 
-On Windows, v0.1.x interprets every legacy `command` string, `command` list,
-and `script` with **Windows PowerShell** (`powershell.exe`), not with the shell
+On Windows, v0.1.x interprets every legacy `command` string, `command` list, and
+`script` with **Windows PowerShell** (`powershell.exe`), not with the shell
 that launched `netsuke`. Netsuke invokes it explicitly with an encoded,
 non-interactive, no-profile command before Ninja executes a recipe. A build
 started from PowerShell, `cmd.exe`, an IDE, or Git Bash therefore uses the same
-recipe interpreter. This is a Windows PowerShell contract, not a PowerShell
-Core (`pwsh`) contract.
+recipe interpreter. This is a Windows PowerShell contract, not a PowerShell Core
+(`pwsh`) contract.
 
 Scalar commands and scripts each receive a fresh PowerShell process. A command
 list receives one shared process: entries run in declaration order, and each
@@ -342,9 +342,9 @@ observed. PowerShell terminating errors also fail the recipe. Later entries see
 PowerShell variables, `$env:` assignments, and locations left by earlier
 entries, but state does not cross action or target boundaries.
 
-Use PowerShell syntax in the default route. `$name` is a PowerShell variable
-and `$env:NAME` reads an environment variable; `${VAR:-default}` is POSIX
-syntax and is not valid PowerShell. Recipe text is protected from Ninja dollar
+Use PowerShell syntax in the default route. `$name` is a PowerShell variable and
+`$env:NAME` reads an environment variable; `${VAR:-default}` is POSIX syntax
+and is not valid PowerShell. Recipe text is protected from Ninja dollar
 expansion, so write ordinary PowerShell dollars rather than `$$`. The rendered
 `{{ ins }}` and `{{ outs }}` paths use single-quoted PowerShell arguments.
 Build and default-target paths containing spaces are escaped for Ninja before
@@ -353,16 +353,17 @@ Quote every other path and argument with PowerShell syntax; arbitrary rendered
 Jinja text is not shell-quoted.
 
 Recipes that fit within Windows' 32,766-character command-line safety limit use
-the encoded `powershell.exe` invocation described above. Larger scalar commands,
-scripts, and command lists use Ninja's `rspfile` and `rspfile_content` bindings,
-so recipe text is not truncated or rejected solely because of its encoded size.
-Each Ninja edge derives a unique response-file name from `$out`; Ninja creates a
-unique `.ps1` file in the edge's working directory containing an ASCII PowerShell
-bootstrap and the Base64 UTF-16LE recipe payload. The command invokes it with
-`powershell.exe -File "$rspfile"`. The bootstrap removes its own
-`$PSCommandPath` in a `finally` block, including when the recipe succeeds or
-fails. Query-only generation emits these bindings but does not create files.
-Response-file setup failures are reported by Ninja as execution errors.
+the encoded `powershell.exe` invocation described above. Larger scalar
+commands, scripts, and command lists use Ninja's `rspfile` and
+`rspfile_content` bindings, so recipe text is not truncated or rejected solely
+because of its encoded size. Each Ninja edge derives a unique response-file
+name from `$out`; Ninja creates a unique `.ps1` file in the edge's working
+directory containing an ASCII PowerShell bootstrap and the Base64 UTF-16LE
+recipe payload. The command invokes it with `powershell.exe -File "$rspfile"`.
+The bootstrap removes its own `$PSCommandPath` in a `finally` block, including
+when the recipe succeeds or fails. Query-only generation emits these bindings
+but does not create files. Response-file setup failures are reported by Ninja
+as execution errors.
 
 Ninja turns a failed recipe into its own non-zero result, and `netsuke` returns
 failure after forwarding Ninja's output. The CLI contract distinguishes success
@@ -392,15 +393,14 @@ For the Unix default and the explicit Bash route, each list entry is evaluated
 inside its own brace group and the groups are joined with `&&`. The entry is
 passed to `eval` as a shell-quoted payload, so an inline `#` comment or a
 trailing control operator such as `&` cannot consume the generated group's
-closing boundary. Brace groups run in the current shell rather than a
-subshell: a changed working directory, environment assignment, or shell
-variable can therefore be used by later entries. A failed entry stops the
-chain, and the diagnostic identifies the generated action and one-based
-list-entry positions, for example `netsuke command-list failure: action HASH,
-entry 2`. These brace-group, `eval`, background-job, and `exec` restrictions
-apply only to the Unix renderer and the explicit Windows Bash compatibility
-route; the Windows PowerShell route uses the native-command and terminating-
-error checks described above instead.
+closing boundary. Brace groups run in the current shell rather than a subshell:
+a changed working directory, environment assignment, or shell variable can
+therefore be used by later entries. A failed entry stops the chain, and the
+diagnostic identifies the generated action and one-based list-entry positions,
+for example `netsuke command-list failure: action HASH, entry 2`. These
+brace-group, `eval`, background-job, and `exec` restrictions apply only to the
+Unix renderer and the explicit Windows Bash compatibility route; the Windows
+PowerShell route uses its native-command and error checks instead.
 
 <!-- tested-example: guide-command-list -->
 
@@ -1585,19 +1585,18 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   a later entry, and rejects an entry that starts more than one background job
   during Ninja generation. It also rejects an entry whose nested `eval` payload
   makes the background-job count dynamic because the wrapper cannot safely
-  determine which jobs to wait for. A direct simple `exec`, optionally
-  prefixed by shell assignments, is supervised so its success or failure
-  retains the list's status semantics: a successful `exec` ends the remaining
-  chain, while structured or nested `exec` forms are rejected during Ninja
-  generation. Failure diagnostics include the action fingerprint and one-based
-  entry position when Netsuke can attribute the failed list entry.
+  determine which jobs to wait for. A direct simple `exec`, optionally prefixed
+  by shell assignments, is supervised so its success or failure retains the
+  list's status semantics: a successful `exec` ends the remaining chain, while
+  structured or nested `exec` forms are rejected during Ninja generation.
+  Failure diagnostics include the action fingerprint and one-based entry
+  position when Netsuke can attribute the failed list entry.
 - On Windows in the default PowerShell route, each command list shares one
   PowerShell process. Netsuke checks `$LASTEXITCODE` immediately after every
   generated list entry and stops before a later entry can overwrite a failure.
   Multiple native commands inside one entry are not individually instrumented;
-  terminating PowerShell errors also stop the list. The POSIX
-  brace-group, `eval`, background-job, and `exec` restrictions do not apply to
-  this route.
+  terminating PowerShell errors also stop the list. The POSIX brace-group,
+  `eval`, background-job, and `exec` restrictions do not apply to this route.
 - Write shell dollar expressions normally. `$PATH`, `$RUSTFLAGS`, and
   `${CARGO:-cargo}` reach POSIX routes unchanged; PowerShell routes use `$name`
   or `$env:NAME`. Netsuke performs the required Ninja escaping after it lowers

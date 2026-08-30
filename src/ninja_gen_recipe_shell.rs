@@ -171,6 +171,17 @@ fn windows_argument(argument: &str) -> String {
     quoted
 }
 
+/// Escape a POSIX script for the wrapper's single-quoted `printf %b` argument.
+pub(super) fn escape_posix_script(script: &str) -> String {
+    script
+        .replace('\\', "\\\\")
+        .replace('$', "\\$")
+        .replace('"', "\\\"")
+        .replace('`', "\\`")
+        .replace('\'', r"'\''")
+        .replace('\n', "\\n")
+}
+
 #[cfg(test)]
 mod tests {
     //! Verifies interpreter-specific Ninja command rendering.
