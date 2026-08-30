@@ -255,8 +255,10 @@ pub(super) enum QuoteContext {
 /// assert!(matches!(res, Some((Placeholder::Inputs, _))));
 /// ```
 pub(super) fn find_substitution(chars: &[char], pos: usize) -> Option<(Placeholder, usize)> {
-    try_match_token(chars, pos, INS_TOKEN, Placeholder::Inputs)
-        .or_else(|| try_match_token(chars, pos, OUTS_TOKEN, Placeholder::Outputs))
+    (chars.get(pos) == Some(&'_')).then_some(()).and_then(|()| {
+        try_match_token(chars, pos, INS_TOKEN, Placeholder::Inputs)
+            .or_else(|| try_match_token(chars, pos, OUTS_TOKEN, Placeholder::Outputs))
+    })
 }
 
 /// Return the replacement and matched length when `token` starts at `pos`.
@@ -311,6 +313,10 @@ mod posix_lexical_tests;
 #[cfg(test)]
 #[path = "../cmd_interpolate_property_tests.rs"]
 mod property_tests;
+
+#[cfg(kani)]
+mod verification;
+
 #[cfg(test)]
 #[path = "../cmd_interpolate_tests.rs"]
 mod tests;

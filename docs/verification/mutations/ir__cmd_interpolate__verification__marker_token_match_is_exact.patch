@@ -1,0 +1,11 @@
+diff --git a/src/ir/cmd_interpolate.rs b/src/ir/cmd_interpolate.rs
+--- a/src/ir/cmd_interpolate.rs
++++ b/src/ir/cmd_interpolate.rs
+@@ -230,6 +230,6 @@ fn try_match_token<'a>(
+     let mut matched_len = 0;
+     for (i, token_ch) in token.chars().enumerate() {
+-        if chars.get(pos + i) != Some(&token_ch) {
++        if chars.get(pos) != Some(&token_ch) {
+             return None;
+         }
+         matched_len += 1;

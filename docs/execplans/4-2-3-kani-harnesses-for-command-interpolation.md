@@ -7,7 +7,7 @@ This ExecPlan (execution plan) is a living document. The sections
 
 Status: IN PROGRESS
 
-Revision 2.4. See `Revision note` at the foot of this document.
+Revision 2.5. See `Revision note` at the foot of this document.
 
 ## Purpose / big picture
 
@@ -1294,9 +1294,10 @@ OOM-killed.
 | `substitute_chars` scanner | 6 | 5m cap | unavailable | timed out |
 | `interpolate_command_with_bindings` guard | 6 | not run | n/a | dominated by scanner |
 
-`cargo kani --help` confirmed that 0.67.0 accepts `--jobs 4`; it does not
-require `--output-format=terse`. The first possible optimization is therefore
-parallel harness scheduling without a Makefile change.
+`cargo kani --help` confirmed that 0.67.0 advertises `--jobs 4`; the M2 probe
+then established that it requires `--output-format terse`. The available
+optimization is therefore parallel harness scheduling without a Makefile
+change, using that flag pair only for the capped validation run.
 
 The sigil proof's successful N=16 run is enough to support the planned
 window-completeness argument. The real scanner does not fit the cap even at
@@ -1354,7 +1355,12 @@ retained targeted nextest run passed all 20 command-interpolation tests:
 - [x] (2026-08-30) EP-M1 production seam; behaviour unchanged. Added the
   `substitute_chars` technical seam, Kani-only raw bindings, characterization
   cases, and an adversarial Proptest; removed the temporary differential oracle.
-- [ ] EP-M2 sigil and marker harnesses; mutation-patch contract test.
+- [x] (2026-08-30) EP-M2 sigil and marker harnesses; mutation-patch contract
+  test. The final individual proofs took 66.686s and 22.644s respectively;
+  all five sigil covers and four marker covers were satisfied. The full suite
+  completed 15 harnesses with zero failures under the cap using four workers
+  and terse output. The contract test now enforces 14 patches for 15 proofs,
+  with the documented cycle-kernel exemption, and refreshed six stale patches.
 - [ ] EP-M3 scanner specification and backtick-rejection harnesses.
 - [ ] EP-M4 guard-placement harness.
 - [ ] EP-M5 Proptest hand-off.
@@ -1403,6 +1409,12 @@ retained targeted nextest run passed all 20 command-interpolation tests:
   iteration 28 at `src/ir/cmd_interpolate.rs:229`. Impact: every retained Kani
   harness must use an unwind at least 32; the default unwind of 6 is unsound for
   this path.
+
+- Observation: Kani 0.67.0 accepts `--jobs 4` only with
+  `--output-format terse`; the former alone fails before verification begins.
+  Evidence: the M2 capped full-suite probe reported `Conflicting options`.
+  Impact: use both flags for a parallel full-suite run; leave the repository's
+  default `KANI_FLAGS` empty.
 
 ## Decision log
 
@@ -1557,6 +1569,15 @@ and are now marked **accepted**. No decision in this log is outstanding.
   cap or changing production behaviour.
   **Date/Author:** 2026-08-30, implementation agent.
 
+- **Decision:** Guard the marker fallback in `find_substitution` by its `_`
+  prefix before asking `try_match_token` to count either 27-character marker.
+  **Rationale:** neither marker can match at any other character, so this
+  preserves every output while avoiding an unrelated long-token loop in the
+  sigil proof's rejected cases. The dedicated marker proof still drives the
+  full matcher directly. Existing characterization and property tests remain
+  the behavioural regression contract.
+  **Date/Author:** 2026-08-30, implementation agent.
+
 ## Outcomes & retrospective
 
 To be completed at EP-M6. Before setting this plan to `COMPLETE`, reconcile:
@@ -1668,3 +1689,13 @@ at N=8, N=12, and N=16, while the real scanner timed out at both M=8 and M=6.
 The plan therefore remains in progress with the pre-accepted small-proof plus
 Proptest hand-off; its exact measurements and the no-guard rationale are in
 `Artefacts and notes` and the `Decision log`.
+
+**Revision 2.5 (2026-08-30).** EP-M2 added the two allocation-free
+`cmd_interpolate` proofs, their mutation patches, and the mutation-evidence
+contract test. Both harnesses passed individually with every cover reachable;
+their mutations failed the named assertions and the restored proofs passed.
+The complete suite first exceeded the five-minute sequential wrapper, but
+completed all 15 harnesses under the same cap with Kani's supported
+`--jobs 4 --output-format terse` pair. Six earlier mutation patches had rotted
+after support-module extraction and were refreshed so the new contract test
+validates the whole checked-in inventory.
