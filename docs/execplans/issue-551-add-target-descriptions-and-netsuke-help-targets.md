@@ -19,14 +19,15 @@ then prints the available targets and actions with their descriptions.
 The discovery query uses a restricted, side-effect-free Jinja surface. It
 allowlists only the lexical path filters `basename`, `dirname`, `with_suffix`,
 and `relative_to`, the collection filters `uniq`, `flatten`, and `group_by`,
-and the clock-independent `timedelta` function. It rejects `env()` and `glob()`,
-file tests, filesystem metadata filters such as `size` and `linecount`, `hash`,
-`digest`, `contents`, `realpath`, and `expanduser`, executable discovery through
-`which` and `command_available`, network and command helpers (`fetch`, `shell`,
-and `grep`), and the clock-dependent `now()` function. This keeps manifest
-inspection from disclosing host state, reading file contents, fetching data,
-executing commands, or writing caches. Normal build manifest rendering retains
-the full standard library; the restriction applies only to query rendering.
+and the clock-independent `timedelta` function. It rejects `env()` and
+`glob()`, file tests, filesystem metadata filters such as `size` and
+`linecount`, `hash`, `digest`, `contents`, `realpath`, and `expanduser`,
+executable discovery through `which` and `command_available`, network and
+command helpers (`fetch`, `shell`, and `grep`), and the clock-dependent `now()`
+function. This keeps manifest inspection from disclosing host state, reading
+file contents, fetching data, executing commands, or writing caches. Normal
+build manifest rendering retains the full standard library; the restriction
+applies only to query rendering.
 
 A user can verify the change by writing a manifest with an action and a target
 that carry `description`, then running `netsuke help targets` and observing the
@@ -159,14 +160,15 @@ default marker such as `[★ default]` on manifest defaults.
 - Observation [type:docstyle]: The
   `cli_localization::tracing_tests::a_resolved_locale_reports_requested_and_effective_tags`
   test is a PRE-EXISTING flake on the base commit (reproduced with `git stash`
-  on 487f77e, ~2/3 failure rate). Root cause: `tracing` caches callsite interest
-  from the first subscriber to register it; the `Dispatch::none()` default in
-  the test binary returns `Interest::never()`, poisoning the callsite for the
-  process when a no-op thread touches it first. A global TRACE-hinted
-  subscriber was tried but did not fully fix it and added risk, so the change
-  was reverted. Impact: gates may intermittently fail on this test; re-run the
-  suite when it hits (it passes in isolation and with `--test-threads=1`).
-  Fixing the infrastructure properly is a separate concern from issue #551.
+  on 487f77e, ~2/3 failure rate). Root cause: `tracing` caches callsite
+  interest from the first subscriber to register it; the `Dispatch::none()`
+  default in the test binary returns `Interest::never()`, poisoning the
+  callsite for the process when a no-op thread touches it first. A global
+  TRACE-hinted subscriber was tried but did not fully fix it and added risk, so
+  the change was reverted. Impact: gates may intermittently fail on this test;
+  re-run the suite when it hits (it passes in isolation and with
+  `--test-threads=1`). Fixing the infrastructure properly is a separate concern
+  from issue #551.
 - Observation: the target-help query path uses a dedicated localized
   synopsis for the nested `targets` help topic rather than the catalogue's
   section heading. Evidence: `5ca08e30`. Impact: keep the
@@ -197,9 +199,9 @@ Windows PowerShell help, with `man_page_contract_tests.rs`,
 artefacts and the completion sidecars.
 
 The follow-up additionally isolates discovery rendering from impure template
-helpers, keeps terminal text safe, preserves rule descriptions as the source
-of Ninja progress text, and supplies the nested help synopsis in all 35
-shipped locales. These outcomes are recorded by reachable commits `2891032c`,
+helpers, keeps terminal text safe, preserves rule descriptions as the source of
+Ninja progress text, and supplies the nested help synopsis in all 35 shipped
+locales. These outcomes are recorded by reachable commits `2891032c`,
 `ba6df590`, `eb76034b`, `90a7d4c3`, and `5ca08e30`. Later reachable commits
 `c53a2a92`, `1e4b4d07`, `5a436620`, `0125986e`, `5ad71492`, and `74099972`
 separate and instrument the pure query boundary, harden its dependencies and
@@ -235,8 +237,7 @@ generates Ninja build files. Key files and modules for this task:
 - `src/runner/graph.rs` — pattern for an in-process handler using
   `load_manifest_with_stage_reporting` and `BuildGraph::from_manifest`.
 - `src/status.rs` / `src/status_pipeline.rs` — `PipelineStage`,
-  `StatusReporter`,
-  `report_pipeline_stage`.
+  `StatusReporter`, `report_pipeline_stage`.
 - `src/localization/keys.rs` — Fluent key registry (`define_keys!`). The
   build-time audit requires every key in every locale.
 - `src/result_json.rs` / `src/json_envelope.rs` — versioned JSON document

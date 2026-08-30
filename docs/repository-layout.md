@@ -71,11 +71,11 @@ output and some leaf files so the long-lived structure remains visible.
   for scoped tasks.
 - `docs/rfcs/`: Requests for Comments proposing changes that need technical
   review before they become binding, named `NNNN-short-topic.md` and numbered
-  in allocation order. Numbers are never reused, and are never renumbered
-  after publication. Gaps are therefore expected rather than erroneous: a
-  number may be reserved, drafted on another branch, or deliberately skipped,
-  so an unused number is not free for reallocation. Check every remote branch
-  for `docs/rfcs/` files before allocating one.
+  in allocation order. Numbers are never reused, and are never renumbered after
+  publication. Gaps are therefore expected rather than erroneous: a number may
+  be reserved, drafted on another branch, or deliberately skipped, so an unused
+  number is not free for reallocation. Check every remote branch for
+  `docs/rfcs/` files before allocating one.
 - `examples/`: Example Netsuke manifests and minimal runnable sample projects.
 - `installer/`: Installer packaging assets and platform-specific packaging
   definitions.
@@ -96,9 +96,9 @@ output and some leaf files so the long-lived structure remains visible.
   manifest-specific tests.
 - `src/ninja_gen/`: Ninja rendering and staged-dyndep bundle generation.
 - `src/runner/`: Process execution, path handling, runner errors, command
-  orchestration, capability-injected dyndep publication, and bounded
-  generation and publication telemetry, including
-  `dyndep_generation_telemetry.rs` and `process/dyndep_telemetry.rs`.
+  orchestration, capability-injected dyndep publication, and bounded generation
+  and publication telemetry, including `dyndep_generation_telemetry.rs` and
+  `process/dyndep_telemetry.rs`.
 - `src/snapshots/`: Checked-in `insta` snapshots for source-level snapshot
   tests.
 - `src/stdlib/`: Netsuke standard library modules exposed to manifest
@@ -154,7 +154,6 @@ dependencies and `.netsuke/serial` is a reserved generated-gate namespace;
 manifest outputs must not claim either path. Sidecar-capable commands retain
 the current bundle, at most 32 obsolete `.dd` files, and 1 MiB of obsolete
 `.dd` bytes. They remove stale `.tmp` files while holding the exclusive
-directory lease; `clean` prunes only after successful `ninja -t clean`.
-An older arbitrary `generate --output` manifest may therefore need
-regeneration after a later command. See
-[ADR-012](adr-012-bound-dyndep-sidecar-retention.md).
+directory lease; `clean` prunes only after successful `ninja -t clean`. An
+older arbitrary `generate --output` manifest may therefore need regeneration
+after a later command. See [ADR-012](adr-012-bound-dyndep-sidecar-retention.md).

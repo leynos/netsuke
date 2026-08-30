@@ -19,12 +19,12 @@ below it as reserved, per the "gaps are acceptable when numbers are reserved,
 drafted on another branch, or intentionally skipped" rule in
 [the documentation style guide](../documentation-style-guide.md).
 
-| Numbers | Reserved for | Current state |
-| --- | --- | --- |
-| 0001 | Structured command blocks, plus the two amendments | Drafted in [#573](https://github.com/leynos/netsuke/pull/573) and superseded by [#600](https://github.com/leynos/netsuke/pull/600) |
-| 0002 to 0004 | Manifest composition: repository-relative includes, versioned local bundles, digest-pinned external bundles | Drafted in [#600](https://github.com/leynos/netsuke/pull/600) |
-| 0005 | Held free for the first renumbering out of the current 0001 to 0002 collision | [#556](https://github.com/leynos/netsuke/pull/556) and [#566](https://github.com/leynos/netsuke/pull/566) both draft at numbers already claimed by [#600](https://github.com/leynos/netsuke/pull/600) |
-| 0006 | This RFC | Proposed |
+| Numbers      | Reserved for                                                                                                | Current state                                                                                                                                                                                         |
+| ------------ | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0001         | Structured command blocks, plus the two amendments                                                          | Drafted in [#573](https://github.com/leynos/netsuke/pull/573) and superseded by [#600](https://github.com/leynos/netsuke/pull/600)                                                                    |
+| 0002 to 0004 | Manifest composition: repository-relative includes, versioned local bundles, digest-pinned external bundles | Drafted in [#600](https://github.com/leynos/netsuke/pull/600)                                                                                                                                         |
+| 0005         | Held free for the first renumbering out of the current 0001 to 0002 collision                               | [#556](https://github.com/leynos/netsuke/pull/556) and [#566](https://github.com/leynos/netsuke/pull/566) both draft at numbers already claimed by [#600](https://github.com/leynos/netsuke/pull/600) |
+| 0006         | This RFC                                                                                                    | Proposed                                                                                                                                                                                              |
 
 _Table 1: RFC sequence reservations across in-flight branches._
 
@@ -33,27 +33,27 @@ _Table 1: RFC sequence reservations across in-flight branches._
 Ansible has spent fifteen years accumulating a Jinja standard library for
 people who write declarative configuration in YAML. Netsuke writes declarative
 build manifests in YAML. The overlap in ergonomic need is large, and the
-overlap in judgement is small: much of Ansible's surface encodes Python
-quirks, unstable set ordering, permissive coercion, deprecated compatibility
-behaviour, and orchestration concepts that have no meaning in a build graph.
+overlap in judgement is small: much of Ansible's surface encodes Python quirks,
+unstable set ordering, permissive coercion, deprecated compatibility behaviour,
+and orchestration concepts that have no meaning in a build graph.
 
 This RFC surveys every function, filter, and test exposed by ansible-core
 2.21.3, records an explicit accept, defer, or reject disposition for each
 candidate, and specifies Netsuke-native contracts for the accepted set. It
-proposes fifty-seven new helpers — forty-one filters and sixteen tests —
-across ten capability groups, three behaviour-preserving options on existing
-helpers, a normative cross-cutting contract that every accepted helper must
-satisfy, deliberate resolutions for every naming collision with MiniJinja and
-the existing Netsuke surface, and a delivery sequence of ten focused slices.
+proposes fifty-seven new helpers — forty-one filters and sixteen tests — across
+ten capability groups, three behaviour-preserving options on existing helpers,
+a normative cross-cutting contract that every accepted helper must satisfy,
+deliberate resolutions for every naming collision with MiniJinja and the
+existing Netsuke surface, and a delivery sequence of ten focused slices.
 
-This RFC specifies behaviour only. It contains no implementation, and it is
-not itself a request to merge one large standard-library change. Accepted
-groups become focused child issues after v0.1.0 final.
+This RFC specifies behaviour only. It contains no implementation, and it is not
+itself a request to merge one large standard-library change. Accepted groups
+become focused child issues after v0.1.0 final.
 
 ## 2. Problem
 
-Netsuke manifests currently reach outside the template language for
-operations that a build description should be able to express directly.
+Netsuke manifests currently reach outside the template language for operations
+that a build description should be able to express directly.
 
 - **Structured data cannot be read.** A manifest that needs a field from
   `Cargo.toml` metadata, a compiler's JSON output, a package manifest, or a
@@ -67,9 +67,8 @@ operations that a build description should be able to express directly.
   feature sets, and optimization levels have to be pre-expanded by hand or
   written as nested `foreach` blocks.
 - **String matching is absent.** Extracting a version from `--version` output,
-  filtering a `glob()` result by pattern, or normalizing a toolchain
-  identifier all require either a subprocess or contorted `split`/`join`
-  chains.
+  filtering a `glob()` result by pattern, or normalizing a toolchain identifier
+  all require either a subprocess or contorted `split`/`join` chains.
 - **Version comparison is string comparison.** `"1.10.0" > "1.9.0"` is false
   under lexicographic ordering, and manifests that select compiler flags by
   toolchain version have no correct way to express the test.
@@ -91,8 +90,8 @@ cases, not to reproduce Ansible.
 ### 3.1. MiniJinja built-ins already available
 
 `Cargo.toml` requests `minijinja = "2.12.0"`; `Cargo.lock` currently resolves
-`2.21.0`. The built-in surface below is present in both, and this RFC treats
-it as the baseline that must not be duplicated.
+`2.21.0`. The built-in surface below is present in both, and this RFC treats it
+as the baseline that must not be duplicated.
 
 - **Filters:** `abs`, `attr`, `batch`, `bool`, `capitalize`, `chain`, `count`,
   `d`, `default`, `dictsort`, `e`, `escape`, `first`, `float`, `format`,
@@ -105,14 +104,14 @@ it as the baseline that must not be duplicated.
   `even`, `false`, `filter`, `float`, `in`, `integer`, `int`, `iterable`,
   `lower`, `mapping`, `none`, `number`, `odd`, `safe`, `sameas`, `sequence`,
   `startingwith`, `string`, `test`, `true`, `undefined`, `upper`, and the
-  comparison family `eq`/`equalto`/`==`, `ne`/`!=`, `lt`/`lessthan`/`<`,
-  `le`/`<=`, `gt`/`greaterthan`/`>`, `ge`/`>=`.
+  comparison family `eq`/`equalto`/`==`, `ne`/`!=`, `lt`/`lessthan`/`<`, `le`/
+  `<=`, `gt`/`greaterthan`/`>`, `ge`/`>=`.
 - **Globals:** `debug`, `dict`, `namespace`, `range`.
 
 ### 3.2. Netsuke extensions already available
 
-`src/stdlib/register.rs` is the composition root. It registers the following
-on top of MiniJinja, with `env` and `glob` registered a layer up in
+`src/stdlib/register.rs` is the composition root. It registers the following on
+top of MiniJinja, with `env` and `glob` registered a layer up in
 `src/manifest/mod.rs`.
 
 - **Functions:** `env`, `glob`, `fetch`, `now`, `timedelta`, `which`,
@@ -140,9 +139,9 @@ Three existing mechanisms matter to this proposal.
    `netsuke help targets` is its only command consumer today, but
    [the developers' guide](../developers-guide.md) already admits future
    dry-run and background-generation callers into the same pipeline. This RFC
-   therefore treats the restriction as a property of the read-only
-   registration rather than of one command, and "available in manifest
-   queries" below should be read that way throughout.
+   therefore treats the restriction as a property of the read-only registration
+   rather than of one command, and "available in manifest queries" below should
+   be read that way throughout.
 3. **Documented examples are executed.** Every fenced example in
    `docs/stdlib-yaml-and-jinja-guide.md` carries a `tested-example` marker and
    is loaded, generated, and in most cases executed by
@@ -155,16 +154,16 @@ Three existing gaps constrain this design and are called out so the follow-up
 work does not silently inherit them.
 
 - **Excluded helpers do not all fail explicitly.** `register_manifest_query`
-  stubs six helpers: `env`, `glob`, `fetch`, `shell`, `grep`, and `contents`.
-  A further sixteen names registered in the full environment are absent from
-  the manifest-query environment altogether, so a manifest query reports
-  "unknown filter" or "unknown test" rather than explaining the restriction.
-  They are the filters `realpath`, `expanduser`, `size`, `linecount`, `hash`,
-  and `digest`; `which`, which is registered as both a filter and a function;
-  the functions `command_available` and `now`; and the file tests `dir`,
-  `file`, `symlink`, `pipe`, `block_device`, `char_device`, and `device`.
-  Section 6.2 makes explicit failure normative, and section 14.1 schedules the
-  repair across that whole set rather than the path filters alone.
+  stubs six helpers: `env`, `glob`, `fetch`, `shell`, `grep`, and `contents`. A
+  further sixteen names registered in the full environment are absent from the
+  manifest-query environment altogether, so a manifest query reports "unknown
+  filter" or "unknown test" rather than explaining the restriction. They are
+  the filters `realpath`, `expanduser`, `size`, `linecount`, `hash`, and
+  `digest`; `which`, which is registered as both a filter and a function; the
+  functions `command_available` and `now`; and the file tests `dir`, `file`,
+  `symlink`, `pipe`, `block_device`, `char_device`, and `device`. Section 6.2
+  makes explicit failure normative, and section 14.1 schedules the repair
+  across that whole set rather than the path filters alone.
 - **`manifest_query_operation_error` is not localized.** It builds its message
   with `format!` rather than a Fluent key, unlike the rest of the stdlib.
 - **`now` has no injected clock seam.** It calls `OffsetDateTime::now_utc()`
@@ -205,9 +204,9 @@ rules are normative for every child issue arising from this RFC.
    mechanically ported. Implementations are written in Rust from the contracts
    in this document and are validated against Netsuke-owned tests.
 3. Where a contract in this RFC diverges from Ansible, the divergence is
-   deliberate and is recorded in section 12. Divergence is the default
-   whenever Ansible's behaviour depends on a Python quirk, unstable set
-   ordering, permissive coercion, or deprecated compatibility handling.
+   deliberate and is recorded in section 12. Divergence is the default whenever
+   Ansible's behaviour depends on a Python quirk, unstable set ordering,
+   permissive coercion, or deprecated compatibility handling.
 4. The only Ansible material reproduced in this document is the set of Jinja
    signatures in section 7, which record what was surveyed.
 
@@ -230,14 +229,14 @@ below for every helper it adds is not complete.
 Every helper carries exactly one purity label, recorded in its documentation
 entry and asserted by a test.
 
-| Class | Meaning | Available in manifest queries |
-| --- | --- | --- |
-| Pure | Result depends only on the supplied value and arguments | Yes |
-| Clock-observing | Reads the wall clock | No |
-| Environment-observing | Reads process environment variables | No |
-| Filesystem-observing | Reads filesystem metadata or contents | No |
-| Network-observing | Performs a network request | No |
-| Subprocess-observing | Spawns a child process | No |
+| Class                 | Meaning                                                 | Available in manifest queries |
+| --------------------- | ------------------------------------------------------- | ----------------------------- |
+| Pure                  | Result depends only on the supplied value and arguments | Yes                           |
+| Clock-observing       | Reads the wall clock                                    | No                            |
+| Environment-observing | Reads process environment variables                     | No                            |
+| Filesystem-observing  | Reads filesystem metadata or contents                   | No                            |
+| Network-observing     | Performs a network request                              | No                            |
+| Subprocess-observing  | Spawns a child process                                  | No                            |
 
 _Table 2: Purity classes and their manifest-query availability._
 
@@ -261,17 +260,17 @@ admitted to every such caller at once.
 3. The stub diagnostic is localized through a Fluent key, replacing the
    current `format!`-built message.
 4. A test asserts each helper's disposition by exercising its registration,
-   rather than by differencing the two name sets. Clause 2 keeps every
-   non-pure helper registered in the manifest-query environment as a stub, so
-   a compliant implementation has the same names in both modes and the
-   difference is always empty. For every helper in the inventory from section
-   14.1 the test instead checks that the name resolves in both environments,
-   that a pure helper evaluates normally under the manifest-query
-   registration, and that a non-pure helper raises the restriction diagnostic
-   there. A helper missing from the inventory, or one whose manifest-query
-   registration neither evaluates nor raises the restriction diagnostic, fails
-   the test. This makes it impossible to add a non-pure helper without
-   deciding its query disposition.
+   rather than by differencing the two name sets. Clause 2 keeps every non-pure
+   helper registered in the manifest-query environment as a stub, so a
+   compliant implementation has the same names in both modes and the difference
+   is always empty. For every helper in the inventory from section 14.1 the
+   test instead checks that the name resolves in both environments, that a pure
+   helper evaluates normally under the manifest-query registration, and that a
+   non-pure helper raises the restriction diagnostic there. A helper missing
+   from the inventory, or one whose manifest-query registration neither
+   evaluates nor raises the restriction diagnostic, fails the test. This makes
+   it impossible to add a non-pure helper without deciding its query
+   disposition.
 
 ### 6.3. Determinism
 
@@ -279,9 +278,9 @@ A `Netsukefile` compiled twice from the same inputs must produce the same
 generated Ninja byte for byte.
 
 - **Ordering.** Every helper that returns a sequence or mapping defines its
-  output order in terms of input order. No helper may expose an iteration
-  order derived from a hash table. This explicitly rejects Ansible's
-  set-backed collection filters.
+  output order in terms of input order. No helper may expose an iteration order
+  derived from a hash table. This explicitly rejects Ansible's set-backed
+  collection filters.
 - **Serialization.** `to_yaml` and `to_nice_json` define key order, indent,
   scalar quoting, line endings, and trailing-newline behaviour exactly.
 - **Line endings.** All generated text uses LF, on every platform.
@@ -299,10 +298,10 @@ generated Ninja byte for byte.
   already threaded by `StdlibConfig`. No leaf helper performs an ambient
   filesystem read.
 - Environment access goes through an injected reader supplied at the
-  composition root, following the narrow-closure seam that `expanduser`
-  already uses and that [ADR-008](../adr-008-environment-seam-taxonomy.md)
-  prescribes for a small number of call sites. `expandvars` is the only new
-  helper that needs one.
+  composition root, following the narrow-closure seam that `expanduser` already
+  uses and that [ADR-008](../adr-008-environment-seam-taxonomy.md) prescribes
+  for a small number of call sites. `expandvars` is the only new helper that
+  needs one.
 - A path outside the capability boundary is an error, never a `false` result.
   A filesystem predicate that silently reported `false` for an out-of-scope
   path would be a trapdoor: it would make a capability violation
@@ -320,8 +319,8 @@ generated Ninja byte for byte.
   `windows` by compilation target. A helper whose purpose is to parse another
   platform's paths must never fall back to host-native parsing.
 - A helper that cannot honour its contract on the running platform fails with
-  a typed diagnostic naming the platform and the capability. It does not
-  return a plausible-looking wrong answer.
+  a typed diagnostic naming the platform and the capability. It does not return
+  a plausible-looking wrong answer.
 
 ### 6.6. Type and error contract
 
@@ -368,16 +367,16 @@ values through a hash set.
 Every parser, combinatorial helper, regular-expression operation, and
 materialized output rejects unreasonable expansion **before** allocating.
 
-| Bound | Default | Applies to |
-| --- | --- | --- |
-| Input length | 8 MiB | `from_json`, `from_yaml`, `from_yaml_all`, `b64decode` |
-| Nesting depth | 128 | `from_json`, `from_yaml`, `from_yaml_all`, `combine(recursive=true)` |
-| Alias expansion nodes | 100000 | `from_yaml`, `from_yaml_all` |
-| Output tuples | 100000 | `product`, `combinations` |
-| Output tuples | 10000 | `permutations` |
-| Match count | 100000 | `regex_findall` |
-| Compiled pattern size | 1 MiB | every regular-expression helper |
-| Compiled pattern cache | 64 entries, least-recently-used | every regular-expression helper |
+| Bound                  | Default                         | Applies to                                                           |
+| ---------------------- | ------------------------------- | -------------------------------------------------------------------- |
+| Input length           | 8 MiB                           | `from_json`, `from_yaml`, `from_yaml_all`, `b64decode`               |
+| Nesting depth          | 128                             | `from_json`, `from_yaml`, `from_yaml_all`, `combine(recursive=true)` |
+| Alias expansion nodes  | 100000                          | `from_yaml`, `from_yaml_all`                                         |
+| Output tuples          | 100000                          | `product`, `combinations`                                            |
+| Output tuples          | 10000                           | `permutations`                                                       |
+| Match count            | 100000                          | `regex_findall`                                                      |
+| Compiled pattern size  | 1 MiB                           | every regular-expression helper                                      |
+| Compiled pattern cache | 64 entries, least-recently-used | every regular-expression helper                                      |
 
 _Table 3: Default resource bounds by helper family._
 
@@ -393,17 +392,16 @@ consumer needs it.
   `ErrorKind::InvalidOperation`, as the existing stdlib does.
 - Each new capability group defines a private domain error enum and exactly
   one `impl From<DomainError> for minijinja::Error`, following the
-  `ResolveError` pattern that
-  [the developers' guide](../developers-guide.md) already names as the
-  template for future stdlib helpers. Ad hoc `Error::new` calls scattered
-  through leaf functions are not acceptable at this scale.
+  `ResolveError` pattern that [the developers' guide](../developers-guide.md)
+  already names as the template for future stdlib helpers. Ad hoc `Error::new`
+  calls scattered through leaf functions are not acceptable at this scale.
 - Every user-facing message is a Fluent key under `stdlib.<module>.<condition>`
   with a matching `keys::STDLIB_<MODULE>_<CONDITION>` constant.
 - Every error carries a machine-readable code of the form
-  `netsuke::jinja::<module>::<reason>`, matching the shape `which` already
-  uses for `netsuke::jinja::which::not_found`. Today that convention exists
-  only in `which`; this RFC promotes it to policy for new helpers. Extending
-  it retroactively to the existing stdlib is out of scope here.
+  `netsuke::jinja::<module>::<reason>`, matching the shape `which` already uses
+  for `netsuke::jinja::which::not_found`. Today that convention exists only in
+  `which`; this RFC promotes it to policy for new helpers. Extending it
+  retroactively to the existing stdlib is out of scope here.
 
 ### 6.10. Naming and alias policy
 
@@ -414,8 +412,8 @@ Netsuke registers exactly **one** name per capability.
   `failure`, `success`, `successful`, `change`, `skip`, and `version_compare`
   are all rejected.
 - Where two names would differ only in a default argument value, one name with
-  an explicit argument wins. This is why `to_nice_yaml` is rejected in favour
-  of `to_yaml(indent=...)` and the `win_*` family is rejected in favour of
+  an explicit argument wins. This is why `to_nice_yaml` is rejected in favour of
+  `to_yaml(indent=...)` and the `win_*` family is rejected in favour of
   `dialect='windows'`.
 - Filters, functions, and tests occupy separate namespaces in Jinja. Where a
   name is reused across namespaces, section 11 records the resolution
@@ -455,150 +453,150 @@ and rejected names in section 10.
 
 ### 7.1. Core filters
 
-| Ansible name | Surveyed signature | Disposition | Netsuke resolution |
-| --- | --- | --- | --- |
-| `b64decode` | `b64decode(string, encoding='utf-8', urlsafe=False)` | Accept | §8.9 |
-| `b64encode` | `b64encode(string, encoding='utf-8', urlsafe=False)` | Accept | §8.9 |
-| `to_uuid` | `to_uuid(string, namespace=UUID_NAMESPACE_ANSIBLE)` | Accept | §8.9, with a Netsuke namespace |
-| `to_json` | `to_json(a, profile=None, **kwargs)` | Reject | MiniJinja `tojson` |
-| `to_nice_json` | `to_nice_json(a, indent=4, sort_keys=True, **kwargs)` | Accept | §8.1, `indent=2`, `sort_keys=false` |
-| `from_json` | `from_json(a, profile=None, **kwargs)` | Accept | §8.1 |
-| `to_yaml` | `to_yaml(a, *_args, default_flow_style=None, vault_behavior=None, **kwargs)` | Accept | §8.1 |
-| `to_nice_yaml` | `to_nice_yaml(a, indent=4, *_args, default_flow_style=False, **kwargs)` | Reject | Redundant with `to_yaml(indent=...)`; §10.2 |
-| `from_yaml` | `from_yaml(data)` | Accept | §8.1 |
-| `from_yaml_all` | `from_yaml_all(data)` | Accept | §8.1, materialized |
-| `basename` | `os.path.basename` | Reject | Exists; gains `dialect` in §8.6 |
-| `dirname` | `os.path.dirname` | Reject | Exists; gains `dialect` in §8.6 |
-| `expanduser` | `os.path.expanduser` | Reject | Exists |
-| `expandvars` | `os.path.expandvars` | Accept | §8.6, environment-observing |
-| `path_join` | `path_join(paths)` | Accept | §8.6 |
-| `realpath` | `os.path.realpath` | Reject | Exists |
-| `relpath` | `os.path.relpath` | Accept | §8.6, alongside `relative_to` |
-| `splitext` | `os.path.splitext` | Accept | §8.6 |
-| `win_basename` | `ntpath.basename` | Reject | `basename(dialect='windows')`; §10.2 |
-| `win_dirname` | `ntpath.dirname` | Reject | `dirname(dialect='windows')`; §10.2 |
-| `win_splitdrive` | `ntpath.splitdrive` | Reject | `splitdrive(dialect='windows')`; §8.6 |
-| `commonpath` | `commonpath(paths)` | Accept | §8.6 |
-| `normpath` | `os.path.normpath` | Accept | §8.6 |
-| `fileglob` | `fileglob(pathname)` | Reject | `glob(files_only=true)`; §8.7 |
-| `bool` | `to_bool(value)` | Reject | MiniJinja `bool`; coercion policy in §8.8 |
-| `to_datetime` | `to_datetime(string, format="%Y-%m-%d %H:%M:%S")` | Accept | §8.10 |
-| `strftime` | `strftime(string_format, second=None, utc=False)` | Accept | §8.10, reshaped |
-| `quote` | `quote(a)` | Reject | `shell_quote`; §10.2 |
-| `md5` | `md5s` | Reject | Weak digest; §10.4 |
-| `sha1` | `checksum_s` | Reject | Weak digest; §10.4 |
-| `checksum` | `checksum_s` | Reject | Ambiguous alias; §11.1 |
-| `password_hash` | `get_encrypted_password(password, hashtype='sha512', salt=None, ...)` | Reject | Secrecy concern unrelated to build graphs |
-| `hash` | `get_hash(data, hashtype='sha1')` | Accept as `text_hash` | §8.9; existing `hash` unchanged; §11.1 |
-| `regex_replace` | `regex_replace(value='', pattern='', replacement='', ignorecase=False, multiline=False, count=0, mandatory_count=0)` | Accept | §8.4 |
-| `regex_escape` | `regex_escape(string, re_type='python')` | Accept | §8.4, single dialect |
-| `regex_search` | `regex_search(value, regex, *args, **kwargs)` | Accept | §8.4, reshaped |
-| `regex_findall` | `regex_findall(value, regex, multiline=False, ignorecase=False)` | Accept | §8.4, reshaped |
-| `ternary` | `ternary(value, true_val, false_val, none_val=None)` | Reject | Jinja conditional expressions |
-| `random` | `rand(environment, end, start=None, step=None, seed=None)` | Defer | §9.1, seeded only |
-| `shuffle` | `randomize_list(mylist, seed=None)` | Defer | §9.1, seeded only |
-| `mandatory` | `mandatory(a, msg=None)` | Reject | Strict undefined already errors |
-| `comment` | `comment(text, style='plain', **kw)` | Accept | §8.9 |
-| `type_debug` | `type_debug(obj)` | Defer | §9.3 |
-| `combine` | `combine(*terms, **kwargs)` | Accept | §8.2 |
-| `extract` | `extract(environment, item, container, morekeys=None)` | Accept | §8.2, explicit missing policy |
-| `flatten` | `flatten(mylist, levels=None, skip_nulls=True)` | Reject | Exists |
-| `dict2items` | `dict_to_list_of_dict_key_value_elements(mydict, key_name='key', value_name='value')` | Accept | §8.2 |
-| `items2dict` | `list_of_dict_key_value_elements_to_dict(mylist, key_name='key', value_name='value')` | Accept | §8.2, plus `duplicates` |
-| `subelements` | `subelements(obj, subelements, skip_missing=False)` | Accept | §8.2 |
-| `split` | `str.split` | Reject | MiniJinja `split` |
-| `groupby` | `_cleansed_groupby(*args, **kwargs)` | Reject | MiniJinja `groupby`; §11.2 |
-| `d` / `default` | `ansible_default(value, default_value='', boolean=False)` | Reject | MiniJinja `d` / `default` |
-| `map` | `wrapped_map(*args, **kwargs)` | Reject | MiniJinja `map` |
-| `select` | `wrapped_select(*args, **kwargs)` | Reject | MiniJinja `select` |
-| `selectattr` | `wrapped_selectattr(*args, **kwargs)` | Reject | MiniJinja `selectattr` |
-| `reject` | `wrapped_reject(*args, **kwargs)` | Reject | MiniJinja `reject` |
-| `rejectattr` | `wrapped_rejectattr(*args, **kwargs)` | Reject | MiniJinja `rejectattr` |
+| Ansible name     | Surveyed signature                                                                                                   | Disposition           | Netsuke resolution                          |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------- | --------------------- | ------------------------------------------- |
+| `b64decode`      | `b64decode(string, encoding='utf-8', urlsafe=False)`                                                                 | Accept                | §8.9                                        |
+| `b64encode`      | `b64encode(string, encoding='utf-8', urlsafe=False)`                                                                 | Accept                | §8.9                                        |
+| `to_uuid`        | `to_uuid(string, namespace=UUID_NAMESPACE_ANSIBLE)`                                                                  | Accept                | §8.9, with a Netsuke namespace              |
+| `to_json`        | `to_json(a, profile=None, **kwargs)`                                                                                 | Reject                | MiniJinja `tojson`                          |
+| `to_nice_json`   | `to_nice_json(a, indent=4, sort_keys=True, **kwargs)`                                                                | Accept                | §8.1, `indent=2`, `sort_keys=false`         |
+| `from_json`      | `from_json(a, profile=None, **kwargs)`                                                                               | Accept                | §8.1                                        |
+| `to_yaml`        | `to_yaml(a, *_args, default_flow_style=None, vault_behavior=None, **kwargs)`                                         | Accept                | §8.1                                        |
+| `to_nice_yaml`   | `to_nice_yaml(a, indent=4, *_args, default_flow_style=False, **kwargs)`                                              | Reject                | Redundant with `to_yaml(indent=...)`; §10.2 |
+| `from_yaml`      | `from_yaml(data)`                                                                                                    | Accept                | §8.1                                        |
+| `from_yaml_all`  | `from_yaml_all(data)`                                                                                                | Accept                | §8.1, materialized                          |
+| `basename`       | `os.path.basename`                                                                                                   | Reject                | Exists; gains `dialect` in §8.6             |
+| `dirname`        | `os.path.dirname`                                                                                                    | Reject                | Exists; gains `dialect` in §8.6             |
+| `expanduser`     | `os.path.expanduser`                                                                                                 | Reject                | Exists                                      |
+| `expandvars`     | `os.path.expandvars`                                                                                                 | Accept                | §8.6, environment-observing                 |
+| `path_join`      | `path_join(paths)`                                                                                                   | Accept                | §8.6                                        |
+| `realpath`       | `os.path.realpath`                                                                                                   | Reject                | Exists                                      |
+| `relpath`        | `os.path.relpath`                                                                                                    | Accept                | §8.6, alongside `relative_to`               |
+| `splitext`       | `os.path.splitext`                                                                                                   | Accept                | §8.6                                        |
+| `win_basename`   | `ntpath.basename`                                                                                                    | Reject                | `basename(dialect='windows')`; §10.2        |
+| `win_dirname`    | `ntpath.dirname`                                                                                                     | Reject                | `dirname(dialect='windows')`; §10.2         |
+| `win_splitdrive` | `ntpath.splitdrive`                                                                                                  | Reject                | `splitdrive(dialect='windows')`; §8.6       |
+| `commonpath`     | `commonpath(paths)`                                                                                                  | Accept                | §8.6                                        |
+| `normpath`       | `os.path.normpath`                                                                                                   | Accept                | §8.6                                        |
+| `fileglob`       | `fileglob(pathname)`                                                                                                 | Reject                | `glob(files_only=true)`; §8.7               |
+| `bool`           | `to_bool(value)`                                                                                                     | Reject                | MiniJinja `bool`; coercion policy in §8.8   |
+| `to_datetime`    | `to_datetime(string, format="%Y-%m-%d %H:%M:%S")`                                                                    | Accept                | §8.10                                       |
+| `strftime`       | `strftime(string_format, second=None, utc=False)`                                                                    | Accept                | §8.10, reshaped                             |
+| `quote`          | `quote(a)`                                                                                                           | Reject                | `shell_quote`; §10.2                        |
+| `md5`            | `md5s`                                                                                                               | Reject                | Weak digest; §10.4                          |
+| `sha1`           | `checksum_s`                                                                                                         | Reject                | Weak digest; §10.4                          |
+| `checksum`       | `checksum_s`                                                                                                         | Reject                | Ambiguous alias; §11.1                      |
+| `password_hash`  | `get_encrypted_password(password, hashtype='sha512', salt=None, ...)`                                                | Reject                | Secrecy concern unrelated to build graphs   |
+| `hash`           | `get_hash(data, hashtype='sha1')`                                                                                    | Accept as `text_hash` | §8.9; existing `hash` unchanged; §11.1      |
+| `regex_replace`  | `regex_replace(value='', pattern='', replacement='', ignorecase=False, multiline=False, count=0, mandatory_count=0)` | Accept                | §8.4                                        |
+| `regex_escape`   | `regex_escape(string, re_type='python')`                                                                             | Accept                | §8.4, single dialect                        |
+| `regex_search`   | `regex_search(value, regex, *args, **kwargs)`                                                                        | Accept                | §8.4, reshaped                              |
+| `regex_findall`  | `regex_findall(value, regex, multiline=False, ignorecase=False)`                                                     | Accept                | §8.4, reshaped                              |
+| `ternary`        | `ternary(value, true_val, false_val, none_val=None)`                                                                 | Reject                | Jinja conditional expressions               |
+| `random`         | `rand(environment, end, start=None, step=None, seed=None)`                                                           | Defer                 | §9.1, seeded only                           |
+| `shuffle`        | `randomize_list(mylist, seed=None)`                                                                                  | Defer                 | §9.1, seeded only                           |
+| `mandatory`      | `mandatory(a, msg=None)`                                                                                             | Reject                | Strict undefined already errors             |
+| `comment`        | `comment(text, style='plain', **kw)`                                                                                 | Accept                | §8.9                                        |
+| `type_debug`     | `type_debug(obj)`                                                                                                    | Defer                 | §9.3                                        |
+| `combine`        | `combine(*terms, **kwargs)`                                                                                          | Accept                | §8.2                                        |
+| `extract`        | `extract(environment, item, container, morekeys=None)`                                                               | Accept                | §8.2, explicit missing policy               |
+| `flatten`        | `flatten(mylist, levels=None, skip_nulls=True)`                                                                      | Reject                | Exists                                      |
+| `dict2items`     | `dict_to_list_of_dict_key_value_elements(mydict, key_name='key', value_name='value')`                                | Accept                | §8.2                                        |
+| `items2dict`     | `list_of_dict_key_value_elements_to_dict(mylist, key_name='key', value_name='value')`                                | Accept                | §8.2, plus `duplicates`                     |
+| `subelements`    | `subelements(obj, subelements, skip_missing=False)`                                                                  | Accept                | §8.2                                        |
+| `split`          | `str.split`                                                                                                          | Reject                | MiniJinja `split`                           |
+| `groupby`        | `_cleansed_groupby(*args, **kwargs)`                                                                                 | Reject                | MiniJinja `groupby`; §11.2                  |
+| `d` / `default`  | `ansible_default(value, default_value='', boolean=False)`                                                            | Reject                | MiniJinja `d` / `default`                   |
+| `map`            | `wrapped_map(*args, **kwargs)`                                                                                       | Reject                | MiniJinja `map`                             |
+| `select`         | `wrapped_select(*args, **kwargs)`                                                                                    | Reject                | MiniJinja `select`                          |
+| `selectattr`     | `wrapped_selectattr(*args, **kwargs)`                                                                                | Reject                | MiniJinja `selectattr`                      |
+| `reject`         | `wrapped_reject(*args, **kwargs)`                                                                                    | Reject                | MiniJinja `reject`                          |
+| `rejectattr`     | `wrapped_rejectattr(*args, **kwargs)`                                                                                | Reject                | MiniJinja `rejectattr`                      |
 
 _Table 4: Disposition of ansible-core `filter/core.py` names._
 
 ### 7.2. Collection and mathematical filters
 
-| Ansible name | Surveyed signature | Disposition | Netsuke resolution |
-| --- | --- | --- | --- |
-| `union` | `union(environment, a, b)` | Accept | §8.3, ordered |
-| `intersect` | `intersect(environment, a, b)` | Accept | §8.3, ordered |
-| `difference` | `difference(environment, a, b)` | Accept | §8.3, ordered |
-| `symmetric_difference` | `symmetric_difference(environment, a, b)` | Accept | §8.3, ordered |
-| `product` | `itertools.product` | Accept | §8.3, bounded |
-| `permutations` | `itertools.permutations` | Accept | §8.3, bounded |
-| `combinations` | `itertools.combinations` | Accept | §8.3, bounded |
-| `zip_longest` | `itertools.zip_longest` | Accept | §8.3, required `fill_value` |
-| `zip` | `zip` | Reject | MiniJinja `zip` |
-| `unique` | `unique(environment, a, case_sensitive=None, attribute=None)` | Reject | MiniJinja `unique`, Netsuke `uniq`; §11.3 |
-| `human_readable` | `human_readable(size, isbits=False, unit=None)` | Accept | §8.9 |
-| `human_to_bytes` | `human_to_bytes(size, default_unit=None, isbits=False)` | Accept | §8.9 |
-| `rekey_on_member` | `rekey_on_member(data, key, duplicates='error')` | Accept | §8.2, sequences only |
-| `log` | `logarithm(x, base=math.e)` | Defer | §9.2 |
-| `pow` | `power(x, y)` | Defer | §9.2 |
-| `root` | `inversepower(x, base=2)` | Defer | §9.2 |
+| Ansible name           | Surveyed signature                                            | Disposition | Netsuke resolution                        |
+| ---------------------- | ------------------------------------------------------------- | ----------- | ----------------------------------------- |
+| `union`                | `union(environment, a, b)`                                    | Accept      | §8.3, ordered                             |
+| `intersect`            | `intersect(environment, a, b)`                                | Accept      | §8.3, ordered                             |
+| `difference`           | `difference(environment, a, b)`                               | Accept      | §8.3, ordered                             |
+| `symmetric_difference` | `symmetric_difference(environment, a, b)`                     | Accept      | §8.3, ordered                             |
+| `product`              | `itertools.product`                                           | Accept      | §8.3, bounded                             |
+| `permutations`         | `itertools.permutations`                                      | Accept      | §8.3, bounded                             |
+| `combinations`         | `itertools.combinations`                                      | Accept      | §8.3, bounded                             |
+| `zip_longest`          | `itertools.zip_longest`                                       | Accept      | §8.3, required `fill_value`               |
+| `zip`                  | `zip`                                                         | Reject      | MiniJinja `zip`                           |
+| `unique`               | `unique(environment, a, case_sensitive=None, attribute=None)` | Reject      | MiniJinja `unique`, Netsuke `uniq`; §11.3 |
+| `human_readable`       | `human_readable(size, isbits=False, unit=None)`               | Accept      | §8.9                                      |
+| `human_to_bytes`       | `human_to_bytes(size, default_unit=None, isbits=False)`       | Accept      | §8.9                                      |
+| `rekey_on_member`      | `rekey_on_member(data, key, duplicates='error')`              | Accept      | §8.2, sequences only                      |
+| `log`                  | `logarithm(x, base=math.e)`                                   | Defer       | §9.2                                      |
+| `pow`                  | `power(x, y)`                                                 | Defer       | §9.2                                      |
+| `root`                 | `inversepower(x, base=2)`                                     | Defer       | §9.2                                      |
 
 _Table 5: Disposition of ansible-core `filter/mathstuff.py` names._
 
 ### 7.3. URL filters
 
-| Ansible name | Surveyed signature | Disposition | Netsuke resolution |
-| --- | --- | --- | --- |
-| `urldecode` | `unquote_plus(string, encoding='utf-8', errors='replace')` | Accept | §8.9, `plus` defaults to false |
+| Ansible name | Surveyed signature                                         | Disposition | Netsuke resolution             |
+| ------------ | ---------------------------------------------------------- | ----------- | ------------------------------ |
+| `urldecode`  | `unquote_plus(string, encoding='utf-8', errors='replace')` | Accept      | §8.9, `plus` defaults to false |
 
 _Table 6: Disposition of ansible-core `filter/urls.py` names._
 
 ### 7.4. Core tests
 
-| Ansible name | Surveyed signature | Disposition | Netsuke resolution |
-| --- | --- | --- | --- |
-| `match` | `match(value, pattern='', ignorecase=False, multiline=False)` | Accept | §8.4 |
-| `search` | `search(value, pattern='', ignorecase=False, multiline=False)` | Accept | §8.4 |
-| `regex` | `regex(value='', pattern='', ignorecase=False, multiline=False, match_type='search')` | Accept | §8.4 |
-| `version` | `version_compare(value, version, operator='eq', strict=None, version_type=None)` | Accept | §8.5, operator required |
-| `version_compare` | same callable as `version` | Reject | Alias; §6.10 |
-| `any` | `any` | Accept | §8.8 |
-| `all` | `all` | Accept | §8.8 |
-| `truthy` | `truthy(value, convert_bool=False)` | Accept | §8.8, closed vocabulary |
-| `falsy` | `falsy(value, convert_bool=False)` | Accept | §8.8, closed vocabulary |
-| `defined` / `undefined` | Ansible wrappers | Reject | MiniJinja `defined` / `undefined` |
-| `failed` / `failure` | `failed(result)` | Reject | Task results have no meaning in a build graph |
-| `succeeded` / `success` / `successful` | `success(result)` | Reject | As above |
-| `reachable` / `unreachable` | `reachable(result)` / `unreachable(result)` | Reject | As above |
-| `timedout` | `timedout(result)` | Reject | As above |
-| `changed` / `change` | `changed(result)` | Reject | As above |
-| `skipped` / `skip` | `skipped(result)` | Reject | As above |
-| `started` / `finished` | `started(result)` / `finished(result)` | Reject | As above |
-| `vault_encrypted` | `vault_encrypted(value)` | Reject | Netsuke has no vault |
-| `vaulted_file` | `vaulted_file(value)` | Reject | Netsuke has no vault |
+| Ansible name                           | Surveyed signature                                                                    | Disposition | Netsuke resolution                            |
+| -------------------------------------- | ------------------------------------------------------------------------------------- | ----------- | --------------------------------------------- |
+| `match`                                | `match(value, pattern='', ignorecase=False, multiline=False)`                         | Accept      | §8.4                                          |
+| `search`                               | `search(value, pattern='', ignorecase=False, multiline=False)`                        | Accept      | §8.4                                          |
+| `regex`                                | `regex(value='', pattern='', ignorecase=False, multiline=False, match_type='search')` | Accept      | §8.4                                          |
+| `version`                              | `version_compare(value, version, operator='eq', strict=None, version_type=None)`      | Accept      | §8.5, operator required                       |
+| `version_compare`                      | same callable as `version`                                                            | Reject      | Alias; §6.10                                  |
+| `any`                                  | `any`                                                                                 | Accept      | §8.8                                          |
+| `all`                                  | `all`                                                                                 | Accept      | §8.8                                          |
+| `truthy`                               | `truthy(value, convert_bool=False)`                                                   | Accept      | §8.8, closed vocabulary                       |
+| `falsy`                                | `falsy(value, convert_bool=False)`                                                    | Accept      | §8.8, closed vocabulary                       |
+| `defined` / `undefined`                | Ansible wrappers                                                                      | Reject      | MiniJinja `defined` / `undefined`             |
+| `failed` / `failure`                   | `failed(result)`                                                                      | Reject      | Task results have no meaning in a build graph |
+| `succeeded` / `success` / `successful` | `success(result)`                                                                     | Reject      | As above                                      |
+| `reachable` / `unreachable`            | `reachable(result)` / `unreachable(result)`                                           | Reject      | As above                                      |
+| `timedout`                             | `timedout(result)`                                                                    | Reject      | As above                                      |
+| `changed` / `change`                   | `changed(result)`                                                                     | Reject      | As above                                      |
+| `skipped` / `skip`                     | `skipped(result)`                                                                     | Reject      | As above                                      |
+| `started` / `finished`                 | `started(result)` / `finished(result)`                                                | Reject      | As above                                      |
+| `vault_encrypted`                      | `vault_encrypted(value)`                                                              | Reject      | Netsuke has no vault                          |
+| `vaulted_file`                         | `vaulted_file(value)`                                                                 | Reject      | Netsuke has no vault                          |
 
 _Table 7: Disposition of ansible-core `test/core.py` names._
 
 ### 7.5. Filesystem tests
 
-| Ansible name | Surveyed callable | Disposition | Netsuke resolution |
-| --- | --- | --- | --- |
-| `exists` | `os.path.exists` | Accept | §8.7 |
-| `link_exists` | `os.path.lexists` | Accept | §8.7 |
-| `abs` | `os.path.isabs` | Accept | §8.7, pure and lexical; §11.4 |
-| `same_file` | `os.path.samefile` | Accept | §8.7 |
-| `mount` | `os.path.ismount` | Accept | §8.7, platform-qualified, sequenced last |
-| `directory` / `is_dir` | `os.path.isdir` | Reject | Netsuke `dir` |
-| `file` / `is_file` | `os.path.isfile` | Reject | Netsuke `file` |
-| `link` / `is_link` | `os.path.islink` | Reject | Netsuke `symlink` |
-| `is_abs` / `is_same_file` / `is_mount` | aliases | Reject | Alias thicket; §6.10 |
+| Ansible name                           | Surveyed callable  | Disposition | Netsuke resolution                       |
+| -------------------------------------- | ------------------ | ----------- | ---------------------------------------- |
+| `exists`                               | `os.path.exists`   | Accept      | §8.7                                     |
+| `link_exists`                          | `os.path.lexists`  | Accept      | §8.7                                     |
+| `abs`                                  | `os.path.isabs`    | Accept      | §8.7, pure and lexical; §11.4            |
+| `same_file`                            | `os.path.samefile` | Accept      | §8.7                                     |
+| `mount`                                | `os.path.ismount`  | Accept      | §8.7, platform-qualified, sequenced last |
+| `directory` / `is_dir`                 | `os.path.isdir`    | Reject      | Netsuke `dir`                            |
+| `file` / `is_file`                     | `os.path.isfile`   | Reject      | Netsuke `file`                           |
+| `link` / `is_link`                     | `os.path.islink`   | Reject      | Netsuke `symlink`                        |
+| `is_abs` / `is_same_file` / `is_mount` | aliases            | Reject      | Alias thicket; §6.10                     |
 
 _Table 8: Disposition of ansible-core `test/files.py` names._
 
 ### 7.6. Collection tests
 
-| Ansible name | Surveyed signature | Disposition | Netsuke resolution |
-| --- | --- | --- | --- |
-| `subset` | `issubset(a, b)` | Accept | §8.8, set semantics |
-| `superset` | `issuperset(a, b)` | Accept | §8.8, set semantics |
-| `contains` | `contains(seq, value)` | Accept | §8.8 |
-| `issubset` / `issuperset` | aliases | Reject | Alias; §6.10 |
-| `nan` / `isnan` | `isnotanumber(x)` | Reject | §10.3 |
+| Ansible name              | Surveyed signature     | Disposition | Netsuke resolution  |
+| ------------------------- | ---------------------- | ----------- | ------------------- |
+| `subset`                  | `issubset(a, b)`       | Accept      | §8.8, set semantics |
+| `superset`                | `issuperset(a, b)`     | Accept      | §8.8, set semantics |
+| `contains`                | `contains(seq, value)` | Accept      | §8.8                |
+| `issubset` / `issuperset` | aliases                | Reject      | Alias; §6.10        |
+| `nan` / `isnan`           | `isnotanumber(x)`      | Reject      | §10.3               |
 
 _Table 9: Disposition of ansible-core `test/mathstuff.py` names._
 
@@ -607,12 +605,12 @@ _Table 9: Disposition of ansible-core `test/mathstuff.py` names._
 Ansible's notable global functions are `lookup`, `query`, `q`, `now`, and
 `undef`.
 
-| Ansible name | Disposition | Netsuke resolution |
-| --- | --- | --- |
-| `now` | Reject as a new name | Netsuke `now(offset=...)` already exists and is stronger; formatting is added in §8.10 |
-| `undef` | Reject | Conflicts with strict-undefined semantics and has no value without Ansible's variable-precedence machinery |
-| `lookup` | Reject | §10.5 |
-| `query` / `q` | Reject | §10.5 |
+| Ansible name  | Disposition          | Netsuke resolution                                                                                         |
+| ------------- | -------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `now`         | Reject as a new name | Netsuke `now(offset=...)` already exists and is stronger; formatting is added in §8.10                     |
+| `undef`       | Reject               | Conflicts with strict-undefined semantics and has no value without Ansible's variable-precedence machinery |
+| `lookup`      | Reject               | §10.5                                                                                                      |
+| `query` / `q` | Reject               | §10.5                                                                                                      |
 
 _Table 10: Disposition of ansible-core global functions._
 
@@ -621,22 +619,22 @@ _Table 10: Disposition of ansible-core global functions._
 Rows above cover alias groups as single entries, so the row counts and the
 count of new Netsuke names differ. Both are given.
 
-| Measure | Count |
-| --- | --- |
-| Surveyed entries accepted | 55 |
-| Surveyed entries deferred | 6 |
-| Surveyed entries rejected because MiniJinja or Netsuke already provides the capability | 22 |
-| Surveyed entries rejected as a redundant alias or spelling | 10 |
-| Surveyed entries rejected on principle | 18 |
-| New Netsuke filters introduced | 41 |
-| New Netsuke tests introduced | 16 |
-| Existing Netsuke helpers gaining a behaviour-preserving option | 3 |
+| Measure                                                                                | Count |
+| -------------------------------------------------------------------------------------- | ----- |
+| Surveyed entries accepted                                                              | 55    |
+| Surveyed entries deferred                                                              | 6     |
+| Surveyed entries rejected because MiniJinja or Netsuke already provides the capability | 22    |
+| Surveyed entries rejected as a redundant alias or spelling                             | 10    |
+| Surveyed entries rejected on principle                                                 | 18    |
+| New Netsuke filters introduced                                                         | 41    |
+| New Netsuke tests introduced                                                           | 16    |
+| Existing Netsuke helpers gaining a behaviour-preserving option                         | 3     |
 
 _Table 11: Candidate matrix totals._
 
-Three accepted capabilities are registered under a Netsuke name rather than
-the surveyed one: Ansible's `hash` becomes `text_hash` (§11.1), its `quote`
-becomes `shell_quote` (§10.2), and its `win_splitdrive` becomes
+Three accepted capabilities are registered under a Netsuke name rather than the
+surveyed one: Ansible's `hash` becomes `text_hash` (§11.1), its `quote` becomes
+`shell_quote` (§10.2), and its `win_splitdrive` becomes
 `splitdrive(dialect='windows')` (§8.6).
 
 ## 8. Accepted capabilities
@@ -744,8 +742,8 @@ Pretty-prints JSON. MiniJinja's `tojson` remains the compact serializer; no
 ### 8.2. Mapping and sequence transforms
 
 All six helpers in this group are pure. They are the highest-value group for
-Netsuke because layering defaults, platform overrides, and per-target
-overrides is what `vars`, `foreach`, and conditional actions exist to do.
+Netsuke because layering defaults, platform overrides, and per-target overrides
+is what `vars`, `foreach`, and conditional actions exist to do.
 
 #### `mapping | combine(*others, recursive=false, list_merge='replace')`
 
@@ -833,8 +831,8 @@ Resolves a key, or a nested key path, against a container. The subject is the
   an out-of-range index is an error naming the failing step of the path. With
   `default`, that value is returned instead. The filter never yields undefined.
 - Traversing into a non-container intermediate value is always an error, even
-  when `default` is supplied, because it indicates a shape mismatch rather
-  than an absent entry.
+  when `default` is supplied, because it indicates a shape mismatch rather than
+  an absent entry.
 
 #### `sequence | subelements(path, skip_missing=false)`
 
@@ -897,9 +895,8 @@ absent from `a`, in `b`'s order. Each half is deduplicated.
 For all four, both operands must be sequences; any other kind is an error.
 Property tests cover idempotence, commutativity where it holds (`union` and
 `intersect` commute as sets but not as sequences, so the property is stated
-over the canonical key set), and the identity that
-`a | union(b) | length` equals
-`a | uniq | length + (b | difference(a) | uniq | length)`.
+over the canonical key set), and the identity that `a | union(b) | length`
+equals `a | uniq | length + (b | difference(a) | uniq | length)`.
 
 #### `a | product(*others, repeat=1)`
 
@@ -964,19 +961,18 @@ dialect.
   linear-time matching in the length of the input.
 - **Supported:** character classes including Unicode properties, anchors,
   greedy and lazy quantifiers, bounded repetition, alternation, capturing and
-  non-capturing groups, named groups `(?P<name>...)`, and inline flags
-  `(?i)`, `(?m)`, `(?s)`, `(?x)`, and `(?U)`.
+  non-capturing groups, named groups `(?P<name>...)`, and inline flags `(?i)`,
+  `(?m)`, `(?s)`, `(?x)`, and `(?U)`.
 - **Not supported:** look-ahead `(?=...)` and `(?!...)`, look-behind
   `(?<=...)` and `(?<!...)`, back-references inside a pattern, recursion,
   atomic groups, possessive quantifiers, and `\G`. These are consequences of
-  the linear-time guarantee, not omissions. An unsupported construct produces
-  a typed diagnostic naming the construct and the offset, not a generic parse
+  the linear-time guarantee, not omissions. An unsupported construct produces a
+  typed diagnostic naming the construct and the offset, not a generic parse
   failure.
 - **Invalid patterns** always produce a typed, localized diagnostic carrying
   the pattern, the offset, and the parser's explanation.
 - **Bounds.** Compiled-pattern size and the compiled-pattern cache follow
-  table 3. Patterns are compiled once per distinct pattern and flag
-  combination.
+  table 3. Patterns are compiled once per distinct pattern and flag combination.
 - The `ignorecase` and `multiline` keyword arguments are conveniences for the
   inline `(?i)` and `(?m)` flags. No further flag keywords are added, because
   inline flags already cover the rest.
@@ -1040,8 +1036,8 @@ True when the pattern matches anywhere in the subject.
 #### `value is regex(pattern, match_type='search', ignorecase=false, multiline=false)`
 
 Explicit selection between `search`, `match`, and `fullmatch`. `fullmatch`
-requires the pattern to match the entire subject. An unknown `match_type` is
-an error enumerating the three.
+requires the pattern to match the entire subject. An unknown `match_type` is an
+error enumerating the three.
 
 ### 8.5. Version predicates
 
@@ -1054,17 +1050,17 @@ A Jinja test, not a transformation filter, so it reads as a predicate:
 ```
 
 - `operator` is **required**. Ansible defaults it to `eq`; a silent equality
-  comparison is a poor default for a predicate whose whole purpose is
-  ordering. Accepted values are `==`, `!=`, `<`, `<=`, `>`, `>=`, and the
-  mnemonics `eq`, `ne`, `lt`, `le`, `gt`, `ge`. An unknown value is an error
-  enumerating all twelve.
+  comparison is a poor default for a predicate whose whole purpose is ordering.
+  Accepted values are `==`, `!=`, `<`, `<=`, `>`, `>=`, and the mnemonics `eq`,
+  `ne`, `lt`, `le`, `gt`, `ge`. An unknown value is an error enumerating all
+  twelve.
 - `scheme` currently accepts only `semver`. The argument exists so that a
   future scheme is an additive change rather than a breaking one. An unknown
   value is an error enumerating the accepted schemes.
 - Both operands are parsed strictly by the existing `semver` dependency. A
-  parse failure is an error naming which operand failed and the offending
-  text. There is no lenient mode: `1.82` is not a Semantic Version and is
-  rejected rather than silently treated as `1.82.0`.
+  parse failure is an error naming which operand failed and the offending text.
+  There is no lenient mode: `1.82` is not a Semantic Version and is rejected
+  rather than silently treated as `1.82.0`.
 - Ordering follows Semantic Versioning §11. Pre-release identifiers order
   below the corresponding release, and **build metadata is ignored** for
   comparison. Both facts are documented at the helper.
@@ -1075,15 +1071,15 @@ A Jinja test, not a transformation filter, so it reads as a predicate:
   become new `scheme` values only when a real consumer requires one; calling
   any of them `semver` would be a lie.
 - Version strings carrying a `v` prefix or a vendor suffix must be normalized
-  by the manifest, for which `regex_search` is the sanctioned tool. See
-  section 16 for the open question on whether to relax this.
+  by the manifest, for which `regex_search` is the sanctioned tool. See section
+  16 for the open question on whether to relax this.
 
 ### 8.6. Lexical path composition
 
 Netsuke's existing path filters parse with host-native rules, which is correct
-for local paths and wrong for cross-compilation, where a Unix host must
-compose and inspect Windows path text. Rather than adopting Ansible's `win_*`
-family, this RFC introduces one uniform mechanism.
+for local paths and wrong for cross-compilation, where a Unix host must compose
+and inspect Windows path text. Rather than adopting Ansible's `win_*` family,
+this RFC introduces one uniform mechanism.
 
 #### The `dialect` argument
 
@@ -1101,9 +1097,9 @@ host-native behaviour when it is omitted, so no shipped manifest changes
 meaning.
 
 Every helper in this group is **pure and lexical**. None touches the
-filesystem, none resolves symbolic links, and none grants authority.
-Normalizing `../../etc/passwd` produces text, not access; containment remains
-the capability layer's responsibility, per section 6.4.
+filesystem, none resolves symbolic links, and none grants authority. Normalizing
+`../../etc/passwd` produces text, not access; containment remains the
+capability layer's responsibility, per section 6.4.
 
 #### `parts | path_join(dialect='host')`
 
@@ -1195,8 +1191,8 @@ The one **environment-observing** helper in this RFC.
   an unterminated `${` is an error, not a passthrough.
 - `missing` is `error` (default), `empty`, or `preserve`. Strict by default,
   because an unset variable silently collapsing to nothing is how build
-  commands acquire an empty argument. An unknown value is an error
-  enumerating the three.
+  commands acquire an empty argument. An unknown value is an error enumerating
+  the three.
 - A non-UTF-8 environment value is an error, matching the existing `env`
   function.
 - It reads the environment through the injected reader described in section
@@ -1256,11 +1252,11 @@ True when the path is a mount point.
 - On any other platform the test errors with a diagnostic naming the platform
   and the capability, per section 6.5.
 - This is the most platform-divergent helper in the RFC and is therefore
-  sequenced last within its slice. If the Windows semantics cannot be
-  specified crisply during implementation, the acceptable fallback is a
-  Unix-only implementation with an explicit unsupported-platform error on
-  Windows, recorded in the guide. Silently returning `false` on Windows is not
-  an acceptable fallback.
+  sequenced last within its slice. If the Windows semantics cannot be specified
+  crisply during implementation, the acceptable fallback is a Unix-only
+  implementation with an explicit unsupported-platform error on Windows,
+  recorded in the guide. Silently returning `false` on Windows is not an
+  acceptable fallback.
 
 #### `glob(pattern, files_only=false)`
 
@@ -1317,8 +1313,7 @@ the attribute value as the test subject:
 - For a mapping, membership is over **keys**, matching Jinja's `in` operator
   on mappings.
 - For a string, true when `value` is a string and occurs as a substring. A
-  non-string `value` against a string container is an error rather than
-  `false`.
+  non-string `value` against a string container is an error rather than `false`.
 - Any other container kind is an error.
 - MiniJinja's `in` test is the same relation with the operands the other way
   round; the guide says so explicitly so authors can pick the readable one.
@@ -1328,9 +1323,9 @@ the attribute value as the test subject:
 - With `convert_bool=false`, which is the default, these are exactly ordinary
   MiniJinja truthiness and its negation. Nothing is coerced.
 - With `convert_bool=true`, a **string** subject is matched, after trimming
-  and ASCII case-folding, against a closed vocabulary: `true`, `yes`, `on`,
-  and `1` are true; `false`, `no`, `off`, and `0` are false. Any other string
-  is an error enumerating the eight accepted spellings.
+  and ASCII case-folding, against a closed vocabulary: `true`, `yes`, `on`, and
+  `1` are true; `false`, `no`, `off`, and `0` are false. Any other string is an
+  error enumerating the eight accepted spellings.
 - Non-string subjects fall back to ordinary truthiness even when
   `convert_bool=true`.
 - Undefined is an error.
@@ -1390,25 +1385,24 @@ Deterministic UUID version 5 generation, over the UTF-8 bytes of the subject.
   an error.
 - Output is the lowercase canonical hyphenated form.
 - UUID version 5 is defined over SHA-1. That use is a namespacing primitive,
-  not a security digest, so it does not fall under the `legacy-digests`
-  feature policy that gates the `md5` and `sha1` algorithms of the existing
-  `hash` filter. The distinction is recorded at the helper so a future reader
-  does not "fix" it.
+  not a security digest, so it does not fall under the `legacy-digests` feature
+  policy that gates the `md5` and `sha1` algorithms of the existing `hash`
+  filter. The distinction is recorded at the helper so a future reader does not
+  "fix" it.
 
 #### `text | shell_quote(dialect='sh')`
 
-Quotes one value for a named shell dialect, reusing Netsuke's existing
-quoting machinery rather than adding a second implementation.
+Quotes one value for a named shell dialect, reusing Netsuke's existing quoting
+machinery rather than adding a second implementation.
 
 - The subject must be a string. An embedded NUL is an error.
 - `dialect` currently accepts only `sh`, matching the single `shell-quote`
   feature Netsuke enables. An unknown value is an error enumerating the
   accepted dialects.
 - **This is the same capability as the `shell_escape` helper documented but
-  unimplemented today**, which roadmap task 3.14.8 exists to resolve. That
-  task remains the owner and ships first; this RFC contributes only the
-  canonical name and the `dialect` argument. Section 13 records the
-  sequencing.
+  unimplemented today**, which roadmap task 3.14.8 exists to resolve. That task
+  remains the owner and ships first; this RFC contributes only the canonical
+  name and the `dialect` argument. Section 13 records the sequencing.
 - Ansible's `quote` alias is rejected; see section 10.2.
 - Structured recipes, tracked in
   [#593](https://github.com/leynos/netsuke/issues/593), remain the preferred
@@ -1425,8 +1419,8 @@ Decorates text as comments for common generated-file syntaxes.
 - Block styles wrap the whole text between markers on their own lines:
   `c_block` (`/*` and `*/`) and `xml` (`<!--` and `-->`).
 - A block style whose input already contains the closing marker is an
-  **error**. Emitting it would silently terminate the comment early and let
-  the remaining text escape into the generated file as live syntax.
+  **error**. Emitting it would silently terminate the comment early and let the
+  remaining text escape into the generated file as live syntax.
 - `prefix` overrides `style` with an explicit line prefix.
 - An unknown `style` is an error enumerating the five presets.
 - Output uses LF line endings and adds no trailing newline.
@@ -1477,23 +1471,23 @@ Parses a human-readable size strictly.
 - An unknown unit is an error enumerating the valid units.
 - Round trip: for every value representable exactly,
   `n | human_readable(precision=0) | human_to_bytes` equals `n` when `n` is a
-  whole multiple of the selected unit. The guide states the rounding caveat
-  for values that are not.
+  whole multiple of the selected unit. The guide states the rounding caveat for
+  values that are not.
 
 #### `text | text_hash(algorithm='sha256')`
 
 Hashes the UTF-8 bytes of a string.
 
 - This is a **new, distinct name**. Netsuke's existing `hash` filter treats
-  its subject as a _file path_ and hashes that file's contents. Overloading
-  one name with type-dependent or existence-dependent behaviour would be a
+  its subject as a _file path_ and hashes that file's contents. Overloading one
+  name with type-dependent or existence-dependent behaviour would be a
   trapdoor: a manifest bug that turned a path into arbitrary text would change
   from an error into a plausible wrong answer. Section 11.1 records the
   resolution.
 - `algorithm` accepts `sha256` (default) and `sha512`. `sha1` and `md5` are
   accepted only when the existing `legacy-digests` Cargo feature is enabled,
-  and produce the same feature-gated diagnostic that `hash` already emits.
-  This reuses the existing policy rather than inventing a second one.
+  and produce the same feature-gated diagnostic that `hash` already emits. This
+  reuses the existing policy rather than inventing a second one.
 - Output is lowercase hexadecimal.
 - Ansible's `checksum`, `md5`, and `sha1` filters are rejected; see sections
   10.4 and 11.1.
@@ -1512,24 +1506,24 @@ chosen because manifest authors already know them and because the underlying
 `time` dependency's own descriptor syntax is not a public-facing contract
 Netsuke should adopt.
 
-| Specifier | Meaning |
-| --- | --- |
-| `%Y` | Year, four or more digits, with a sign beyond the four-digit range |
-| `%y` | Year modulo 100, zero-padded to two digits |
-| `%m` | Month, 01 to 12 |
-| `%d` | Day of month, 01 to 31 |
-| `%H` | Hour, 00 to 23 |
-| `%I` | Hour, 01 to 12 |
-| `%M` | Minute, 00 to 59 |
-| `%S` | Second, 00 to 60 |
-| `%f` | Fractional second, six digits |
-| `%j` | Day of year, 001 to 366 |
-| `%z` | UTC offset as `+HHMM` |
-| `%s` | Unix epoch seconds |
-| `%a`, `%A` | Abbreviated and full weekday name, invariant C locale |
-| `%b`, `%B` | Abbreviated and full month name, invariant C locale |
-| `%p` | `AM` or `PM`, invariant C locale |
-| `%%` | A literal `%` |
+| Specifier  | Meaning                                                            |
+| ---------- | ------------------------------------------------------------------ |
+| `%Y`       | Year, four or more digits, with a sign beyond the four-digit range |
+| `%y`       | Year modulo 100, zero-padded to two digits                         |
+| `%m`       | Month, 01 to 12                                                    |
+| `%d`       | Day of month, 01 to 31                                             |
+| `%H`       | Hour, 00 to 23                                                     |
+| `%I`       | Hour, 01 to 12                                                     |
+| `%M`       | Minute, 00 to 59                                                   |
+| `%S`       | Second, 00 to 60                                                   |
+| `%f`       | Fractional second, six digits                                      |
+| `%j`       | Day of year, 001 to 366                                            |
+| `%z`       | UTC offset as `+HHMM`                                              |
+| `%s`       | Unix epoch seconds                                                 |
+| `%a`, `%A` | Abbreviated and full weekday name, invariant C locale              |
+| `%b`, `%B` | Abbreviated and full month name, invariant C locale                |
+| `%p`       | `AM` or `PM`, invariant C locale                                   |
+| `%%`       | A literal `%`                                                      |
 
 _Table 12: Accepted conversion specifiers for `to_datetime` and `strftime`._
 
@@ -1556,8 +1550,8 @@ _Table 12: Accepted conversion specifiers for `to_datetime` and `strftime`._
   the specifier that failed.
 - `timezone` supplies the zone for an input whose format carries no offset. It
   accepts `UTC` and fixed offsets in `+HH:MM` form. IANA zone names are
-  rejected, because supporting them means shipping or depending on a
-  time-zone database, which is a separate decision with its own reproducibility
+  rejected, because supporting them means shipping or depending on a time-zone
+  database, which is a separate decision with its own reproducibility
   consequences.
 - When the format does carry an offset through `%z`, that offset wins and
   `timezone` is ignored; supplying both is not an error.
@@ -1627,14 +1621,14 @@ is unscheduled.
 
 ### 10.1. Ansible orchestration concepts
 
-The task-result tests `failed`, `succeeded`, `changed`, `skipped`,
-`reachable`, `unreachable`, `timedout`, `started`, and `finished` describe the
-outcome of an Ansible task. Netsuke's manifest-time templates run before any
-build action exists, so these have no referent. The vault tests
-`vault_encrypted` and `vaulted_file` describe an encryption facility Netsuke
-does not have. `password_hash` brings salt, algorithm, dependency, and secrecy
-concerns entirely unrelated to build-graph construction. `undef` conflicts
-with strict-undefined semantics and is worthless without Ansible's
+The task-result tests `failed`, `succeeded`, `changed`, `skipped`, `reachable`,
+`unreachable`, `timedout`, `started`, and `finished` describe the outcome of an
+Ansible task. Netsuke's manifest-time templates run before any build action
+exists, so these have no referent. The vault tests `vault_encrypted` and
+`vaulted_file` describe an encryption facility Netsuke does not have.
+`password_hash` brings salt, algorithm, dependency, and secrecy concerns
+entirely unrelated to build-graph construction. `undef` conflicts with
+strict-undefined semantics and is worthless without Ansible's
 variable-precedence machinery.
 
 ### 10.2. Redundant names
@@ -1670,11 +1664,11 @@ flow through manifests, which is not a shape Netsuke wants to encourage.
 
 ### 10.4. Weak digest names
 
-`md5` and `sha1` as standalone filter names are rejected. Netsuke already
-gates weak digests behind the `legacy-digests` Cargo feature and exposes them
-through the `algorithm` argument of `hash`, `digest`, and now `text_hash`.
-Adding two more top-level names would make the weak algorithms _more_
-discoverable than the strong ones.
+`md5` and `sha1` as standalone filter names are rejected. Netsuke already gates
+weak digests behind the `legacy-digests` Cargo feature and exposes them through
+the `algorithm` argument of `hash`, `digest`, and now `text_hash`. Adding two
+more top-level names would make the weak algorithms _more_ discoverable than
+the strong ones.
 
 ### 10.5. Generic lookup dispatch
 
@@ -1718,16 +1712,16 @@ MiniJinja's `groupby` groups a sequence by an attribute and returns
 `(grouper, list)` pairs. Netsuke's `group_by` is a separate existing filter.
 Both remain, both keep their current behaviour, and Ansible's `groupby` is not
 adopted. The obligation this RFC creates is documentary: the inventory in
-section 14.1 must state the difference at both entries, so authors stop
-picking one by guesswork.
+section 14.1 must state the difference at both entries, so authors stop picking
+one by guesswork.
 
 ### 11.3. `unique` and `uniq`
 
 MiniJinja's `unique` and Netsuke's `uniq` both exist today. Ansible's `unique`
-is not adopted. As with `groupby`, the resolution is documentary: the
-inventory records which is which, and section 8.3 defines its deduplication in
-terms of section 6.7 canonical equality so a reader can tell whether either
-existing filter already does what they want.
+is not adopted. As with `groupby`, the resolution is documentary: the inventory
+records which is which, and section 8.3 defines its deduplication in terms of
+section 6.7 canonical equality so a reader can tell whether either existing
+filter already does what they want.
 
 ### 11.4. `abs` as both a filter and a test
 
@@ -1741,9 +1735,9 @@ The collision is nonetheless real for a human reader, so:
 - the inventory lists both, adjacent, with their namespaces marked; and
 - the guide's path section states the distinction where `abs` is introduced.
 
-The alternative names considered were `absolute` and `abs_path`. `abs` was
-kept because the discoverability benefit of the Ansible spelling is real and
-the grammatical ambiguity is not. Section 16 records this as an open question.
+The alternative names considered were `absolute` and `abs_path`. `abs` was kept
+because the discoverability benefit of the Ansible spelling is real and the
+grammatical ambiguity is not. Section 16 records this as an open question.
 
 ### 11.5. `quote`
 
@@ -1761,50 +1755,48 @@ adopted, no second `now` is registered, and formatting arrives as the separate
 MiniJinja's `items` filter converts a mapping to a sequence of two-element
 `[key, value]` sequences. `dict2items` produces a sequence of two-**key
 mappings** with configurable field names, which is what `selectattr`,
-`groupby`, and `foreach` bindings actually want. Both are useful; the
-inventory records the difference.
+`groupby`, and `foreach` bindings actually want. Both are useful; the inventory
+records the difference.
 
 ### 11.8. `in` and `contains`
 
 MiniJinja's `in` test asks whether the subject is contained by the argument.
 `contains` asks whether the subject contains the argument. They are the same
-relation with the operands reversed, and `contains` exists because
-`selectattr` passes the attribute value as the subject. Both are documented at
-each other.
+relation with the operands reversed, and `contains` exists because `selectattr`
+passes the attribute value as the subject. Both are documented at each other.
 
 ### 11.9. `urlencode` and `urldecode`
 
-MiniJinja's `urlencode` percent-encodes a space as `%20`. `urldecode`
-therefore defaults `plus=false`, so that the pair round-trips. See section
-8.9.
+MiniJinja's `urlencode` percent-encodes a space as `%20`. `urldecode` therefore
+defaults `plus=false`, so that the pair round-trips. See section 8.9.
 
 ## 12. Deliberate divergences from Ansible
 
 Each divergence below is a place where Ansible's observable behaviour was
-surveyed and deliberately not reproduced. They are collected here so a
-reviewer can assess the judgement in one pass, and so an implementer does not
-"restore compatibility" by accident.
+surveyed and deliberately not reproduced. They are collected here so a reviewer
+can assess the judgement in one pass, and so an implementer does not "restore
+compatibility" by accident.
 
-| Ansible behaviour | Netsuke behaviour | Reason |
-| --- | --- | --- |
-| Set-backed collection filters return unstable order | Every collection helper defines its output order in terms of input order | A `Netsukefile` compiled twice must emit identical Ninja |
-| `from_json` and `from_yaml` accept duplicate keys, last wins | Duplicate keys are rejected with the key and offset | Silent data loss during configuration layering |
-| `regex_findall` returns whole matches, one group, or tuples depending on the pattern | Return shape depends only on the arguments | Pattern-dependent return kinds break `map` and `select` chains |
-| Replacement back-references are `\1` | Replacement back-references are `$1`; `\1` is rejected with a hint | The Rust dialect's own syntax, plus a migration guard against silent literal output |
-| `version` defaults `operator` to `eq` | `operator` is required | A silent equality default defeats the point of an ordering predicate |
-| `version_type` permits loose and ecosystem-specific parsing under a `semver` banner | `scheme` accepts only `semver`, strictly | Calling a permissive parser `semver` is a lie |
-| `truthy` falls back to truthy for unrecognized strings | Unrecognized strings error, enumerating eight accepted spellings | Guessing at `maybe` is worse than failing |
-| `human_to_bytes` distinguishes bits from bytes by the case of a trailing `b` | Case-insensitive throughout; `bits` selects bits | Case-sensitive unit parsing is a footgun |
-| `path_join` resets at an absolute component | An absolute component after the first is an error | `['/safe/root', '/etc/passwd']` yielding `/etc/passwd` is a trapdoor |
-| `subelements` `skip_missing` also tolerates non-sequence values | `skip_missing` covers absence only; a type mismatch always errors | Absence and shape mismatch are different bugs |
-| `rekey_on_member` accepts a mapping and discards its keys | Sequences only | Silent key loss |
-| `combine` offers `append_rp` and `prepend_rp` list policies | Four policies: `replace`, `keep`, `append`, `prepend` | Element removal hidden inside a merge; `difference` composes more legibly |
-| `zip_longest` defaults its fill value to `None` | `fill_value` is required | Prevents a silent `none` entering a build graph |
-| `strftime` output is locale-sensitive | The invariant C locale is pinned and locale-varying specifiers are rejected | Identical manifests must not acquire machine-dependent text |
-| `to_uuid` defaults to Ansible's namespace | Defaults to a documented Netsuke namespace | Netsuke should not inherit another project's identity space |
-| `comment` block styles do not check for the closing marker | A block style errors when the input contains the closing marker | Otherwise the remainder escapes into the generated file as live syntax |
-| Weak digests are ordinary filter names | Weak digests stay behind the `legacy-digests` feature and the `algorithm` argument | Do not make weak algorithms more discoverable than strong ones |
-| `hash` hashes the supplied string | Netsuke's `hash` continues to hash the file at the supplied path; text hashing is `text_hash` | Type-dependent overloading would be a trapdoor |
+| Ansible behaviour                                                                    | Netsuke behaviour                                                                             | Reason                                                                              |
+| ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Set-backed collection filters return unstable order                                  | Every collection helper defines its output order in terms of input order                      | A `Netsukefile` compiled twice must emit identical Ninja                            |
+| `from_json` and `from_yaml` accept duplicate keys, last wins                         | Duplicate keys are rejected with the key and offset                                           | Silent data loss during configuration layering                                      |
+| `regex_findall` returns whole matches, one group, or tuples depending on the pattern | Return shape depends only on the arguments                                                    | Pattern-dependent return kinds break `map` and `select` chains                      |
+| Replacement back-references are `\1`                                                 | Replacement back-references are `$1`; `\1` is rejected with a hint                            | The Rust dialect's own syntax, plus a migration guard against silent literal output |
+| `version` defaults `operator` to `eq`                                                | `operator` is required                                                                        | A silent equality default defeats the point of an ordering predicate                |
+| `version_type` permits loose and ecosystem-specific parsing under a `semver` banner  | `scheme` accepts only `semver`, strictly                                                      | Calling a permissive parser `semver` is a lie                                       |
+| `truthy` falls back to truthy for unrecognized strings                               | Unrecognized strings error, enumerating eight accepted spellings                              | Guessing at `maybe` is worse than failing                                           |
+| `human_to_bytes` distinguishes bits from bytes by the case of a trailing `b`         | Case-insensitive throughout; `bits` selects bits                                              | Case-sensitive unit parsing is a footgun                                            |
+| `path_join` resets at an absolute component                                          | An absolute component after the first is an error                                             | `['/safe/root', '/etc/passwd']` yielding `/etc/passwd` is a trapdoor                |
+| `subelements` `skip_missing` also tolerates non-sequence values                      | `skip_missing` covers absence only; a type mismatch always errors                             | Absence and shape mismatch are different bugs                                       |
+| `rekey_on_member` accepts a mapping and discards its keys                            | Sequences only                                                                                | Silent key loss                                                                     |
+| `combine` offers `append_rp` and `prepend_rp` list policies                          | Four policies: `replace`, `keep`, `append`, `prepend`                                         | Element removal hidden inside a merge; `difference` composes more legibly           |
+| `zip_longest` defaults its fill value to `None`                                      | `fill_value` is required                                                                      | Prevents a silent `none` entering a build graph                                     |
+| `strftime` output is locale-sensitive                                                | The invariant C locale is pinned and locale-varying specifiers are rejected                   | Identical manifests must not acquire machine-dependent text                         |
+| `to_uuid` defaults to Ansible's namespace                                            | Defaults to a documented Netsuke namespace                                                    | Netsuke should not inherit another project's identity space                         |
+| `comment` block styles do not check for the closing marker                           | A block style errors when the input contains the closing marker                               | Otherwise the remainder escapes into the generated file as live syntax              |
+| Weak digests are ordinary filter names                                               | Weak digests stay behind the `legacy-digests` feature and the `algorithm` argument            | Do not make weak algorithms more discoverable than strong ones                      |
+| `hash` hashes the supplied string                                                    | Netsuke's `hash` continues to hash the file at the supplied path; text hashing is `text_hash` | Type-dependent overloading would be a trapdoor                                      |
 
 _Table 13: Deliberate divergences from surveyed Ansible behaviour._
 
@@ -1837,27 +1829,27 @@ does not have and what to write instead.
 
 ### 13.3. Relationship to in-flight work
 
-| Work item | Relationship |
-| --- | --- |
-| Roadmap 3.14.8, `shell_escape` | Owns the shell-quoting capability and ships first. This RFC contributes the canonical name `shell_quote` and the `dialect` argument; the roadmap task should adopt them so the two do not diverge |
-| Roadmap 3.15.5, enumerable errors | Section 6.6 requires every string-valued option to enumerate its valid values on failure; these helpers are a large new source of such options |
-| [#594](https://github.com/leynos/netsuke/issues/594) | Gates all of this work; nothing here may widen the hardening release |
-| [#593](https://github.com/leynos/netsuke/issues/593) | Structured recipes remain the preferred shell-free answer; `shell_quote` serves the manifests that still need a shell |
-| [#590](https://github.com/leynos/netsuke/issues/590) | Owns any future dynamic provider registry; section 10.5 defers all dispatcher questions there |
-| [ADR-008](../adr-008-environment-seam-taxonomy.md) | Governs the `expandvars` environment seam |
-| [ADR-010](../adr-010-scope-glob-capability-to-literal-prefix.md) | Governs `glob(files_only=true)`, whose capability scoping is unchanged |
-| [ADR-001](../adr-001-replace-serde-yml-with-serde-saphyr.md) | Governs the YAML stack that `from_yaml` and `from_yaml_all` use |
+| Work item                                                        | Relationship                                                                                                                                                                                      |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Roadmap 3.14.8, `shell_escape`                                   | Owns the shell-quoting capability and ships first. This RFC contributes the canonical name `shell_quote` and the `dialect` argument; the roadmap task should adopt them so the two do not diverge |
+| Roadmap 3.15.5, enumerable errors                                | Section 6.6 requires every string-valued option to enumerate its valid values on failure; these helpers are a large new source of such options                                                    |
+| [#594](https://github.com/leynos/netsuke/issues/594)             | Gates all of this work; nothing here may widen the hardening release                                                                                                                              |
+| [#593](https://github.com/leynos/netsuke/issues/593)             | Structured recipes remain the preferred shell-free answer; `shell_quote` serves the manifests that still need a shell                                                                             |
+| [#590](https://github.com/leynos/netsuke/issues/590)             | Owns any future dynamic provider registry; section 10.5 defers all dispatcher questions there                                                                                                     |
+| [ADR-008](../adr-008-environment-seam-taxonomy.md)               | Governs the `expandvars` environment seam                                                                                                                                                         |
+| [ADR-010](../adr-010-scope-glob-capability-to-literal-prefix.md) | Governs `glob(files_only=true)`, whose capability scoping is unchanged                                                                                                                            |
+| [ADR-001](../adr-001-replace-serde-yml-with-serde-saphyr.md)     | Governs the YAML stack that `from_yaml` and `from_yaml_all` use                                                                                                                                   |
 
 _Table 14: Relationship to in-flight Netsuke work._
 
 ### 13.4. New dependencies
 
-| Crate | Needed by | Notes |
-| --- | --- | --- |
-| `regex` | §8.4 | The dialect in section 8.4 is defined as this crate's syntax; its linear-time guarantee is what makes untrusted patterns safe |
-| `base64` | §8.9 | Both alphabets and configurable padding |
-| `uuid`, feature `v5` | §8.9 | Avoids making the optional `sha1` dependency mandatory, which would disturb the `legacy-digests` policy |
-| `percent-encoding` | §8.9 | May instead be satisfied by the existing `url` dependency, which already vendors percent decoding; the implementation slice picks one and does not add both |
+| Crate                | Needed by | Notes                                                                                                                                                       |
+| -------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `regex`              | §8.4      | The dialect in section 8.4 is defined as this crate's syntax; its linear-time guarantee is what makes untrusted patterns safe                               |
+| `base64`             | §8.9      | Both alphabets and configurable padding                                                                                                                     |
+| `uuid`, feature `v5` | §8.9      | Avoids making the optional `sha1` dependency mandatory, which would disturb the `legacy-digests` policy                                                     |
+| `percent-encoding`   | §8.9      | May instead be satisfied by the existing `url` dependency, which already vendors percent decoding; the implementation slice picks one and does not add both |
 
 _Table 15: New dependencies by capability group._
 
@@ -1866,9 +1858,9 @@ Existing dependencies carry the rest: `serde_json` with `preserve_order`,
 `serde_json_canonicalizer`, `camino`, and `cap-std`.
 
 Each new dependency must pass the repository's supply-chain gates before its
-slice merges, and each must be licence-compatible with ISC. All four
-candidates are dual MIT or Apache-2.0 at the time of writing; the implementing
-slice re-verifies rather than assuming.
+slice merges, and each must be licence-compatible with ISC. All four candidates
+are dual MIT or Apache-2.0 at the time of writing; the implementing slice
+re-verifies rather than assuming.
 
 ## 14. Delivery slices and sequencing
 
@@ -1878,9 +1870,9 @@ independently, and each carries the full cross-cutting contract from section 6
 rather than saying only "match Ansible".
 
 For screen readers: the following flowchart shows slice 0 as the sole
-prerequisite for slices 1, 2, 3 and 8; slice 5 as the prerequisite for slice
-6; and roadmap task 3.14.8 as an external prerequisite for slice 7. Slices 4,
-5 and 9 have no prerequisites within this RFC.
+prerequisite for slices 1, 2, 3 and 8; slice 5 as the prerequisite for slice 6;
+and roadmap task 3.14.8 as an external prerequisite for slice 7. Slices 4, 5
+and 9 have no prerequisites within this RFC.
 
 ```mermaid
 flowchart TD
@@ -1919,8 +1911,8 @@ each invent their own version of the same shared machinery.
 - The manifest-query disposition test from section 6.2. It exercises every
   inventory entry against both the full registration and the manifest-query
   registration, verifying that each pure helper evaluates normally under the
-  manifest-query registration, and that each non-pure helper resolves there
-  but raises the localized manifest-query restriction diagnostic. It does not
+  manifest-query registration, and that each non-pure helper resolves there but
+  raises the localized manifest-query restriction diagnostic. It does not
   compare the two environments' name sets, which are identical by construction
   once clause 2 of section 6.2 is satisfied.
 - The repair of the two existing gaps recorded in section 3.3. This slice
@@ -1945,10 +1937,10 @@ each invent their own version of the same shared machinery.
 
 ### 14.2. Slice 1: structured data interchange
 
-`from_json`, `from_yaml`, `from_yaml_all`, `to_yaml`, `to_nice_json`.
-Requires slice 0 for the bounded-parser helper. This slice unlocks direct
-consumption of compiler metadata, package manifests, and bounded output from
-`contents` and `fetch`.
+`from_json`, `from_yaml`, `from_yaml_all`, `to_yaml`, `to_nice_json`. Requires
+slice 0 for the bounded-parser helper. This slice unlocks direct consumption of
+compiler metadata, package manifests, and bounded output from `contents` and
+`fetch`.
 
 ### 14.3. Slice 2: mapping transforms
 
@@ -1965,16 +1957,16 @@ equality and the cardinality bound.
 
 ### 14.5. Slice 4: pattern and version predicates
 
-`regex_replace`, `regex_search`, `regex_findall`, `regex_escape`, and the
-tests `match`, `search`, `regex`, and `version`. Adds the `regex` dependency
-and the bounded compiled-pattern cache. The version predicate has no
-dependency on the regular-expression work and may be split out if the slice
-grows too large for one review.
+`regex_replace`, `regex_search`, `regex_findall`, `regex_escape`, and the tests
+`match`, `search`, `regex`, and `version`. Adds the `regex` dependency and the
+bounded compiled-pattern cache. The version predicate has no dependency on the
+regular-expression work and may be split out if the slice grows too large for
+one review.
 
 ### 14.6. Slice 5: lexical paths and filesystem predicates
 
-`path_join`, `normpath`, `splitext`, `commonpath`, `relpath`, `splitdrive`,
-the `dialect` argument on `basename` and `dirname`, the tests `exists`,
+`path_join`, `normpath`, `splitext`, `commonpath`, `relpath`, `splitdrive`, the
+`dialect` argument on `basename` and `dirname`, the tests `exists`,
 `link_exists`, `abs`, `same_file`, and `mount`, and `glob(files_only=...)`.
 
 Order within the slice: the `dialect` mechanism first, then the pure lexical
@@ -2048,10 +2040,10 @@ exactly" is an instruction that invites reading the implementation.
 Zero new surface, zero new dependencies, and zero new contracts to maintain.
 
 Rejected. It is the status quo, and the status quo converts pure manifest-time
-planning into subprocess execution for operations as ordinary as reading a
-JSON field. Every such conversion adds a host dependency, an escaping surface,
-and a capability escalation, and it makes `netsuke help targets` unable to
-answer questions it should be able to answer purely.
+planning into subprocess execution for operations as ordinary as reading a JSON
+field. Every such conversion adds a host dependency, an escaping surface, and a
+capability escalation, and it makes `netsuke help targets` unable to answer
+questions it should be able to answer purely.
 
 ### 15.3. One generic `lookup(...)` dispatcher
 
@@ -2067,8 +2059,8 @@ a runtime string, which breaks sections 6.1 and 6.2 at the root.
 One review, one consistent design pass, no risk of the slices diverging in
 convention.
 
-Rejected. Fifty-seven helpers across four new dependencies is not reviewable
-as one change, is not revertible in parts, and would in practice land its
+Rejected. Fifty-seven helpers across four new dependencies is not reviewable as
+one change, is not revertible in parts, and would in practice land its
 conventions in whatever order the first few helpers happened to be written.
 Slice 0 exists precisely to fix the conventions before the volume arrives.
 
@@ -2078,17 +2070,17 @@ Three more names, no new mechanism, and exact Ansible parity for the Windows
 path helpers.
 
 Rejected in section 10.2. The `win_*` family covers three operations out of
-eight and cannot express the `posix` direction at all, which is the direction
-a Windows host needs when generating paths for a Unix target.
+eight and cannot express the `posix` direction at all, which is the direction a
+Windows host needs when generating paths for a Unix target.
 
 ## 16. Open questions
 
 1. **Is rejecting `to_nice_yaml` correct?** Section 10.2 rejects it as
-   redundant with `to_yaml(indent=4)`. The counter-argument is
-   discoverability: an Ansible-literate author will reach for the name, and
-   MiniJinja's "unknown filter" error will not help them. An intermediate
-   option is to register `to_nice_yaml` solely to raise a typed diagnostic
-   naming `to_yaml(indent=4)`. A reviewer should settle this before slice 1.
+   redundant with `to_yaml(indent=4)`. The counter-argument is discoverability:
+   an Ansible-literate author will reach for the name, and MiniJinja's "unknown
+   filter" error will not help them. An intermediate option is to register
+   `to_nice_yaml` solely to raise a typed diagnostic naming
+   `to_yaml(indent=4)`. A reviewer should settle this before slice 1.
 2. **Is `abs` the right test name?** Section 11.4 keeps it despite the
    cross-namespace reuse with MiniJinja's `abs` filter. `absolute` and
    `abs_path` were the alternatives. Settle before slice 5.
@@ -2126,15 +2118,15 @@ expressed as shell pipelines that Netsuke can neither audit nor reproduce.
 
 The case for adopting _this_ specification rather than Ansible's surface is
 section 12. Eighteen surveyed behaviours are deliberately not reproduced, and
-each of them is a place where Ansible's answer would have cost Netsuke either
-a reproducible graph, a strict type contract, or an honest name. The
+each of them is a place where Ansible's answer would have cost Netsuke either a
+reproducible graph, a strict type contract, or an honest name. The
 discoverability benefit of shared spellings is real, and it is retained
 wherever it is free; it is dropped wherever it would have to be paid for in
 correctness.
 
 Slice 0 should be scheduled first regardless of which capability slices are
 prioritized. Its conventions — canonical equality, checked bounds, typed
-localized diagnostics, manifest-query enumeration, and the maintained
-inventory — are what keep the following slices from each inventing their own,
-and they are considerably cheaper to establish before fifty-seven helpers
-exist than after.
+localized diagnostics, manifest-query enumeration, and the maintained inventory
+— are what keep the following slices from each inventing their own, and they
+are considerably cheaper to establish before fifty-seven helpers exist than
+after.

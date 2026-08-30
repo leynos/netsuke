@@ -30,14 +30,14 @@ A list-valued interpolation may splice multiple arguments only when it occupies
 an entire unquoted argv word. That typed splice is explicit in the template
 structure and does not parse the resulting values.
 
-When `shell: true` is present, `invoke` is deliberately treated as shell source.
-This keeps shell power available while making the trust boundary visible. Shell
-mode does not inherit the direct mode injection guarantee.
+When `shell: true` is present, `invoke` is deliberately treated as shell
+source. This keeps shell power available while making the trust boundary
+visible. Shell mode does not inherit the direct mode injection guarantee.
 
 ## 2. Problem
 
-Netsuke currently represents a command as either one shell string or a non-empty
-list of shell strings. The list form improves readability and failure
+Netsuke currently represents a command as either one shell string or a
+non-empty list of shell strings. The list form improves readability and failure
 reporting, but environment setup, redirection, pipelines, and command
 composition still leak through shell text. The result is difficult to inspect,
 less portable than the manifest schema, and easy to make unsafe when rendered
@@ -95,17 +95,18 @@ fail-fast shell groups joined by `&&`; its entries run in one shell process, so
 shell variables, environment changes, and working-directory changes carry
 between entries.
 
-The current renderer delays `{{ ins }}` and `{{ outs }}` through opaque internal
-markers, then lowers them to space-separated, shell-quoted paths. Standalone
-`$in` and `$out` receive similar late substitution. This is already a limited
-instance of the parse-or-classify-before-substitution principle proposed here.
+The current renderer delays `{{ ins }}` and `{{ outs }}` through opaque
+internal markers, then lowers them to space-separated, shell-quoted paths.
+Standalone `$in` and `$out` receive similar late substitution. This is already
+a limited instance of the parse-or-classify-before-substitution principle
+proposed here.
 
 Netsuke compiles its intermediate representation (IR) to Ninja. Ninja remains
 responsible for dependency scheduling and invokes the generated command text.
 Direct process invocation, cross-platform stream wiring, and byte-preserving
 teeing cannot be expressed portably by merely adding more shell quoting to that
-text. Structured commands therefore require a small Netsuke-owned action
-runner behind the generated Ninja edge.
+text. Structured commands therefore require a small Netsuke-owned action runner
+behind the generated Ninja edge.
 
 The design document also contains a forward-looking `exec: { program, args }`
 sketch. If accepted, this RFC supersedes that sketch with the more ergonomic
@@ -216,8 +217,8 @@ script-item   := { script: string }
 ```
 
 A mapping used directly as the value of `command` must be a structured command
-block. The `{ rule: ... }` and `{ script: ... }` mappings are valid only as list
-items because recipe-level `rule:` and `script:` forms already cover the
+block. The `{ rule: ... }` and `{ script: ... }` mappings are valid only as
+list items because recipe-level `rule:` and `script:` forms already cover the
 single-item cases.
 
 ### 6.2 Structured command block fields
@@ -241,24 +242,24 @@ capture_stdout: 65536
 temp_dir: true
 ```
 
-| Field | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `invoke` | string | required | Direct argv template, or shell source when `shell: true`. |
-| `shell` | Boolean | `false` | Select shell execution instead of direct invocation. |
-| `env` | mapping of string to string | empty | Exact child-environment overlay. |
-| `stdin` | string path | inherited | Read the child's standard input from a file. |
-| `stdout` | string path | inherited | Write standard output to a truncated file. |
-| `stderr` | string path | inherited | Write standard error to a truncated file. |
-| `tee` | string path | absent | Copy standard output to inherited stdout and a truncated file. |
-| `pipe` | Boolean or `stdout`/`stderr` | `false` | Connect the selected stream to the next structured block's stdin. `true` is an alias for `stdout`. |
-| `cwd` | string path | effective directory | Run this block relative to the effective `-C` directory. |
-| `capture_stdout` | non-negative integer | absent | Retain at most this many stdout bytes for the action result. |
-| `temp_dir` | Boolean | `false` | Bind a private, per-stage runtime temporary directory. |
+| Field            | Type                         | Default             | Meaning                                                                                            |
+| ---------------- | ---------------------------- | ------------------- | -------------------------------------------------------------------------------------------------- |
+| `invoke`         | string                       | required            | Direct argv template, or shell source when `shell: true`.                                          |
+| `shell`          | Boolean                      | `false`             | Select shell execution instead of direct invocation.                                               |
+| `env`            | mapping of string to string  | empty               | Exact child-environment overlay.                                                                   |
+| `stdin`          | string path                  | inherited           | Read the child's standard input from a file.                                                       |
+| `stdout`         | string path                  | inherited           | Write standard output to a truncated file.                                                         |
+| `stderr`         | string path                  | inherited           | Write standard error to a truncated file.                                                          |
+| `tee`            | string path                  | absent              | Copy standard output to inherited stdout and a truncated file.                                     |
+| `pipe`           | Boolean or `stdout`/`stderr` | `false`             | Connect the selected stream to the next structured block's stdin. `true` is an alias for `stdout`. |
+| `cwd`            | string path                  | effective directory | Run this block relative to the effective `-C` directory.                                           |
+| `capture_stdout` | non-negative integer         | absent              | Retain at most this many stdout bytes for the action result.                                       |
+| `temp_dir`       | Boolean                      | `false`             | Bind a private, per-stage runtime temporary directory.                                             |
 
 Table 1: Structured command block fields.
 
-Unknown keys are invalid. `invoke` must be present exactly once. The mapping may
-not contain `rule` or `script`.
+Unknown keys are invalid. `invoke` must be present exactly once. The mapping
+may not contain `rule` or `script`.
 
 ### 6.3 Reference and script items
 
@@ -322,8 +323,8 @@ removed from the resulting argument. No shell expansion stage follows.
 ### 7.2 Conceptual grammar
 
 The grammar below is descriptive. MiniJinja owns the grammar inside an
-`expression` token, and its tokenizer must identify those tokens before the argv
-lexer interprets surrounding quotes or whitespace.
+`expression` token, and its tokenizer must identify those tokens before the
+argv lexer interprets surrounding quotes or whitespace.
 
 ```text
 invocation       := whitespace* word (whitespace+ word)* whitespace*
@@ -357,15 +358,15 @@ Otherwise, `unquoted-char` excludes the four `whitespace` code points, U+0022
 (`"`), U+0027 (`'`), and the direct-mode metacharacters U+007C (`|`), U+0026
 (`&`), U+003B (`;`), U+003C (`<`), and U+003E (`>`). `single-char` excludes
 only U+0027, and `double-char` excludes only U+0022; the `expression` check
-therefore also applies within both literal productions.
-The escape alternatives are checked before `double-char`, so only the two-code-
-point sequence `\"` yields one literal `"` and only `\\` yields one literal
-`\`. Every other backslash is literal, including a terminal backslash in an
-unquoted or single-literal run; there is no general backslash escape and no
-dangling-escape error. In double-quoted text, a backslash immediately before a
-quote is therefore `escaped-quote`; a literal backslash before the closing
-quote must use `\\`. A quote closes its corresponding quoted production unless
-it was consumed by `escaped-quote`.
+therefore also applies within both literal productions. The escape alternatives
+are checked before `double-char`, so only the two-code- point sequence `\"`
+yields one literal `"` and only `\\` yields one literal `\`. Every other
+backslash is literal, including a terminal backslash in an unquoted or
+single-literal run; there is no general backslash escape and no dangling-escape
+error. In double-quoted text, a backslash immediately before a quote is
+therefore `escaped-quote`; a literal backslash before the closing quote must use
+`\\`. A quote closes its corresponding quoted production unless it was
+consumed by `escaped-quote`.
 
 ### 7.3 Quoting and escaping
 
@@ -533,8 +534,9 @@ normally occupy whole unquoted words:
 invoke: clang {{ ins }} -o {{ outs }}
 ```
 
-Every input and output path becomes one argv element, including paths containing
-whitespace or metacharacters. An empty input list contributes no arguments.
+Every input and output path becomes one argv element, including paths
+containing whitespace or metacharacters. An empty input list contributes no
+arguments.
 
 A command requiring one output may select it explicitly:
 
@@ -542,19 +544,19 @@ A command requiring one output may select it explicitly:
 invoke: clang {{ ins }} -o {{ outs[0] }}
 ```
 
-In shell mode and legacy commands, existing shell-quoted, space-joined
-`ins`/`outs` behaviour remains unchanged.
+In shell mode and legacy commands, existing shell-quoted, space-joined `ins`/
+`outs` behaviour remains unchanged.
 
 ### 8.5 Examples
 
-| Template | Expression value | Result |
-| --- | --- | --- |
-| `tool {{ value }}` | `"a b; c"` | `["tool", "a b; c"]` |
-| `tool --name={{ value }}` | `"a b"` | `["tool", "--name=a b"]` |
-| `tool {{ flags }}` | `["-x", "a b"]` | `["tool", "-x", "a b"]` |
-| `tool "{{ flags }}"` | `["-x", "a b"]` | validation error |
-| `{{ prefix }} status` | `["cargo", "+nightly"]` | `["cargo", "+nightly", "status"]` |
-| `tool {{ empty }}` | `[]` | `["tool"]` |
+| Template                  | Expression value        | Result                            |
+| ------------------------- | ----------------------- | --------------------------------- |
+| `tool {{ value }}`        | `"a b; c"`              | `["tool", "a b; c"]`              |
+| `tool --name={{ value }}` | `"a b"`                 | `["tool", "--name=a b"]`          |
+| `tool {{ flags }}`        | `["-x", "a b"]`         | `["tool", "-x", "a b"]`           |
+| `tool "{{ flags }}"`      | `["-x", "a b"]`         | validation error                  |
+| `{{ prefix }} status`     | `["cargo", "+nightly"]` | `["cargo", "+nightly", "status"]` |
+| `tool {{ empty }}`        | `[]`                    | `["tool"]`                        |
 
 Table 2: Direct-mode interpolation examples.
 
@@ -578,17 +580,17 @@ unless it is absolute.
 The effective working directory starts with the directory selected by the
 command-line `-C` option. A block without `cwd` runs there. When `cwd` is
 present, Netsuke renders it as a path and resolves it relative to that
-effective directory; an absolute path remains absolute. Each block resolves
-its own `cwd`, so a pipeline stage does not inherit the preceding stage's
-working directory. The resolved directory must exist and be a directory before
-the stage starts. This block or stage directory is the base for all relative
-stream paths and is the child's working directory.
+effective directory; an absolute path remains absolute. Each block resolves its
+own `cwd`, so a pipeline stage does not inherit the preceding stage's working
+directory. The resolved directory must exist and be a directory before the
+stage starts. This block or stage directory is the base for all relative stream
+paths and is the child's working directory.
 
 On Windows, direct mode must reject a resolved `cmd.exe`, `.bat`, or `.cmd`
 target. Rust preserves Windows batch-file launching through `cmd.exe`, whose
 non-standard argument parser can reinterpret otherwise distinct arguments as
-shell source. The diagnostic must recommend an explicit `shell: true` block.
-A future RFC may define a narrower trusted opt-in.
+shell source. The diagnostic must recommend an explicit `shell: true` block. A
+future RFC may define a narrower trusted opt-in.
 
 This restriction does not make arbitrary programs safe interpreters. A program
 may interpret one argument as SQL, a regular expression, a `find` predicate, a
@@ -600,8 +602,8 @@ it cannot validate every callee's application grammar.
 ### 10.1 Selection and source handling
 
 With `shell: true`, Netsuke does not apply the argv-template grammar. It renders
-`invoke` as one shell-source string using the existing command-template context
-and launches the platform shell through the structured action runner.
+`invoke` as one shell-source string using the existing command-template
+context and launches the platform shell through the structured action runner.
 
 The initial platform defaults are:
 
@@ -609,8 +611,8 @@ The initial platform defaults are:
 - `powershell.exe -NoLogo -NoProfile -NonInteractive -Command` on Windows.
 
 An explicit shell selector is outside this RFC. A future extension may replace
-the Boolean with, or supplement it by, a selector for `sh`, `bash`, `pwsh`, or a
-configured interpreter.
+the Boolean with, or supplement it by, a selector for `sh`, `bash`, `pwsh`, or
+a configured interpreter.
 
 ### 10.2 Interpolation boundary
 
@@ -643,8 +645,8 @@ env:
 ```
 
 The child inherits Netsuke's execution environment. Every block entry then sets
-or replaces exactly one variable for that child process. The overlay is local to
-the structured block and does not persist to later blocks.
+or replaces exactly one variable for that child process. The overlay is local
+to the structured block and does not persist to later blocks.
 
 Future enclosing rule, target, or action environment mappings should layer
 before the command-block mapping. The reserved precedence is:
@@ -659,8 +661,8 @@ Only level 4 is standardized by this RFC.
 ### 11.2 Rendering and validation
 
 Environment keys and values are rendered at manifest compilation time. A key
-must be non-empty and contain neither `=` nor NUL. A value must not contain NUL.
-Sequence and mapping values are invalid in this initial form.
+must be non-empty and contain neither `=` nor NUL. A value must not contain
+NUL. Sequence and mapping values are invalid in this initial form.
 
 Duplicate keys produced after rendering are invalid. On Windows, duplicate
 comparison is case-insensitive while preserving the spelling of the surviving
@@ -677,8 +679,8 @@ before spawning it, binds the stage's `TMPDIR`, `TMP`, and `TEMP` variables to
 that directory, and removes the directory after the stage and its associated
 relays have finished. The directory is created outside the project tree with
 owner-only permissions, or the closest platform equivalent. A stage receives
-its own directory; sequential stages do not share one, and the directory is
-not an action-plan sidecar.
+its own directory; sequential stages do not share one, and the directory is not
+an action-plan sidecar.
 
 The temporary-directory bindings are applied after the `env` overlay and take
 precedence over entries with the same names. With `temp_dir: false`, `env` may
@@ -697,25 +699,24 @@ small, deterministic first surface and covers the motivating use case.
 
 ### 12.1 Path resolution
 
-Every stream path is rendered at manifest compilation time and resolved relative
-to the block's resolved `cwd`. An absent `cwd` resolves to the effective
-working directory after command-line `-C` processing. Netsuke opens the path
-when the action executes, not while the manifest is compiled.
+Every stream path is rendered at manifest compilation time and resolved
+relative to the block's resolved `cwd`. An absent `cwd` resolves to the
+effective working directory after command-line `-C` processing. Netsuke opens
+the path when the action executes, not while the manifest is compiled.
 
-Validation occurs independently when each execution unit starts. For a
-maximal structured pipeline, the unit's destination set is the union of
-`stdin`, `stdout`, `stderr`, and `tee` from all its stages, resolved using each
-stage's own `cwd`; all those destinations are checked together. A different
-sequential execution unit starts a new validation set and does not compare its
+Validation occurs independently when each execution unit starts. For a maximal
+structured pipeline, the unit's destination set is the union of `stdin`,
+`stdout`, `stderr`, and `tee` from all its stages, resolved using each stage's
+own `cwd`; all those destinations are checked together. A different sequential
+execution unit starts a new validation set and does not compare its
 destinations with a previous unit. Sequential output reuse is therefore
 permitted: after one unit succeeds, a later unit may resolve and open that
 unit's output as its `stdin`.
 
 At unit start, the runner records the current identity (including an explicit
 absent state) of every configured destination in that unit's set. It then opens
-a provisional handle for each destination without truncation. Input handles
-are read-only; output handles may create a missing file but must not truncate
-it.
+a provisional handle for each destination without truncation. Input handles are
+read-only; output handles may create a missing file but must not truncate it.
 The handles use non-following flags, or the closest platform-equivalent safe
 handle semantics, where available.
 
@@ -791,9 +792,9 @@ an independent stdout behaviour, including `tee` or `capture_stdout`.
 
 No two configured stream destinations in one execution unit may identify the
 same file. Opening the same file through independent handles would give
-ambiguous ordering and file-offset semantics. This pairwise check occurs
-before any output handle is truncated; destinations in separate sequential
-units are not part of this check.
+ambiguous ordering and file-offset semantics. This pairwise check occurs before
+any output handle is truncated; destinations in separate sequential units are
+not part of this check.
 
 ### 12.5 File modes and byte handling
 
@@ -833,9 +834,9 @@ stage or out of its last stage in this RFC.
 ### 13.2 Execution
 
 Netsuke creates operating-system pipes and starts the stages as one execution
-unit. It starts every stage and every required drain or tee relay before waiting
-for any stage. Each child inherits only its assigned standard handles: the
-selected input pipe, the selected output or relay pipe, and its configured
+unit. It starts every stage and every required drain or tee relay before
+waiting for any stage. Each child inherits only its assigned standard handles:
+the selected input pipe, the selected output or relay pipe, and its configured
 standard handles. It never inherits an unrelated pipe end. After spawning each
 stage, the runner closes its duplicate and otherwise unused pipe ends
 immediately, retaining only ends needed by a later spawn or by a relay. Once
@@ -876,11 +877,11 @@ pipeline's failure stops the enclosing sequence.
 Execution units run in declaration order. Netsuke starts the next unit only
 when the previous unit succeeds. A failure stops the sequence.
 
-Stream validation is repeated at the start of each unit, rather than across
-the whole command list. Consequently, sequential output reuse is permitted:
-the next unit may open a successful earlier unit's output as `stdin`. Stages
-within one maximal pipeline remain one validation set and may not alias one
-another's stream destinations.
+Stream validation is repeated at the start of each unit, rather than across the
+whole command list. Consequently, sequential output reuse is permitted: the
+next unit may open a successful earlier unit's output as `stdin`. Stages within
+one maximal pipeline remain one validation set and may not alias one another's
+stream destinations.
 
 ### 14.2 Legacy string groups
 
@@ -910,11 +911,12 @@ state that crosses execution-model boundaries.
 
 A rule item executes the referenced rule as a nested fail-fast sequence. Its
 success permits the enclosing sequence to continue; its failure stops the
-enclosing sequence. Rule expansion must retain enough provenance for diagnostics
-to identify both the outer list item and the referenced rule's inner item.
+enclosing sequence. Rule expansion must retain enough provenance for
+diagnostics to identify both the outer list item and the referenced rule's
+inner item.
 
-A script item executes as one unit using existing script semantics. Neither form
-shares shell process state with neighbouring units.
+A script item executes as one unit using existing script semantics. Neither
+form shares shell process state with neighbouring units.
 
 ## 15. Validation rules
 
@@ -954,14 +956,13 @@ the required information is available at compile time.
 - A pipeline recipient may not specify `stdin`.
 - Pipelines may not cross rule, script, or legacy-string boundaries.
 - All configured destinations among `stdin`, `stdout`, `stderr`, and `tee` in
-  one execution unit must be provisionally opened without truncation using
-  safe non-following handles, or the closest platform equivalent. Each handle
-  must match a fresh path identity, and every pair of handles must have a
-  distinct file identity. Validation must detect relative path aliases,
-  symlinks, hard links, path replacement, disappearance, and unexpected
-  creation before any output handle is truncated. Provisional handles are
-  closed on rejection. Destinations in separate sequential units are checked
-  independently.
+  one execution unit must be provisionally opened without truncation using safe
+  non-following handles, or the closest platform equivalent. Each handle must
+  match a fresh path identity, and every pair of handles must have a distinct
+  file identity. Validation must detect relative path aliases, symlinks, hard
+  links, path replacement, disappearance, and unexpected creation before any
+  output handle is truncated. Provisional handles are closed on rejection.
+  Destinations in separate sequential units are checked independently.
 - `capture_stdout` must be a non-negative byte limit. It is mutually exclusive
   with `stdout`, `tee`, and a stdout pipe; a limit violation fails the unit.
 - `cwd` must resolve to an existing directory before its execution unit starts.
@@ -1000,9 +1001,9 @@ Diagnostics should identify:
 
 Diagnostics must not print complete environment mappings by default. Rendered
 argv may also contain credentials, tokens, or private paths, so ordinary errors
-should use bounded command summaries and existing redaction conventions. Verbose
-or debug modes may expose more detail only under the project's established
-telemetry and diagnostic policies.
+should use bounded command summaries and existing redaction conventions.
+Verbose or debug modes may expose more detail only under the project's
+established telemetry and diagnostic policies.
 
 Structured execution should emit stable categorical telemetry such as direct
 versus shell mode, pipeline stage count, redirection kinds, and success or
@@ -1124,8 +1125,8 @@ A conceptual generated edge is:
 <current-netsuke-executable> __run-action --plan <private-plan> --id <action-id>
 ```
 
-The exact hidden subcommand and serialization format are implementation details.
-The following requirements are normative:
+The exact hidden subcommand and serialization format are implementation
+details. The following requirements are normative:
 
 - action plans are versioned and validated before execution;
 - the generated command contains no rendered user arguments or environment

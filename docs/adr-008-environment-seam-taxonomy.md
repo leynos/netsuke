@@ -87,8 +87,8 @@ calls back into neither, so there is no environment-to-lookup cycle.
 The which-resolver `CacheKey` incorporates every input the snapshot captured,
 though not uniformly: `cwd` is stored directly as its own field, while
 `stdlib::which::cache::env_fingerprint` hashes `raw_path`, `raw_pathext`, and
-the `WorkspaceSwitch` state, which derives `Hash` precisely so it can be
-hashed directly. Either way, two resolutions that differ only in one captured
+the `WorkspaceSwitch` state, which derives `Hash` precisely so it can be hashed
+directly. Either way, two resolutions that differ only in one captured
 environment input cannot share a cache entry.
 
 ### Explicit child-environment composition
@@ -223,6 +223,5 @@ test-harness process. The suite now uses two routes:
 The BDD suite no longer uses `EnvLock` or `CwdGuard` to coordinate
 process-global environment or working-directory changes. Route B avoids CWD
 changes by passing absolute paths or preserving `-C/--directory` for automatic
-project discovery.
-Explicit relative `--config` and `NETSUKE_CONFIG` selectors remain anchored to
-the child process CWD; they are not rebased beneath `-C`.
+project discovery. Explicit relative `--config` and `NETSUKE_CONFIG` selectors
+remain anchored to the child process CWD; they are not rebased beneath `-C`.

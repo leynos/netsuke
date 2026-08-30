@@ -89,11 +89,13 @@ Netsuke uses a private typed conversion at the Ninja writer boundary:
 ## Implementation references
 
 - Backend conversion: [`src/ninja_gen_escape.rs`](../src/ninja_gen_escape.rs)
-- Action and path emission: [`src/ninja_gen/mod.rs`](../src/ninja_gen/mod.rs) and
-  [`src/ninja_gen_validation.rs`](../src/ninja_gen_validation.rs)
-- Placeholder lowering: [`src/ir/cmd_interpolate.rs`](../src/ir/cmd_interpolate.rs)
-  and [`src/ir/from_manifest_support.rs`](../src/ir/from_manifest_support.rs)
-- Differential coverage: [`tests/ninja_dollar_escaping_tests.rs`](../tests/ninja_dollar_escaping_tests.rs)
+- Action and path emission: [`src/ninja_gen/mod.rs`](../src/ninja_gen/mod.rs)
+  and [`src/ninja_gen_validation.rs`](../src/ninja_gen_validation.rs)
+- Placeholder lowering:
+  [`src/ir/cmd_interpolate.rs`](../src/ir/cmd_interpolate.rs) and
+  [`src/ir/from_manifest_support.rs`](../src/ir/from_manifest_support.rs)
+- Differential coverage:
+  [`tests/ninja_dollar_escaping_tests.rs`](../tests/ninja_dollar_escaping_tests.rs)
 
 ## Revision history
 
@@ -101,5 +103,5 @@ Netsuke uses a private typed conversion at the Ninja writer boundary:
 initial scope discussion considered only command and script bindings, but the
 Ninja writer also emits `description`, `depfile`, `deps`, and `pool` as binding
 values. The accepted decision therefore escapes literal dollars and rejects
-newline, carriage-return, and NUL in each of those fields at the Ninja
-emission boundary, while keeping their IR representation backend-neutral.
+newline, carriage-return, and NUL in each of those fields at the Ninja emission
+boundary, while keeping their IR representation backend-neutral.

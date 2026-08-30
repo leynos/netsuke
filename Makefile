@@ -197,6 +197,7 @@ fmt: ## Format Rust, Python, and Markdown sources
 check-fmt: ## Verify formatting
 	$(CARGO) fmt --all -- --check
 	$(RUFF) format --check $(PYTHON_SOURCES)
+	@$(MD_FILES_FIND) | xargs -0 -r scripts/check-markdown-format.sh
 
 typecheck: typecheck-python ## Typecheck all targets and features
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) check --all-targets --all-features $(BUILD_JOBS)

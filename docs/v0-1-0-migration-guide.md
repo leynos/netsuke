@@ -1,9 +1,9 @@
 # Migrating to v0.1.0
 
-This guide signposts the v0.1.0 beta additions: the injectable child
-environment (`CommandEnv`), the named Ninja request types, narrow process
-options (`NinjaProcessOptions`), target/action discovery through `description`
-and `netsuke help targets`, and cached configuration discovery. Most existing
+This guide signposts the v0.1.0 beta additions: the injectable child environment
+(`CommandEnv`), the named Ninja request types, narrow process options
+(`NinjaProcessOptions`), target/action discovery through `description` and
+`netsuke help targets`, and cached configuration discovery. Most existing
 manifests remain compatible, and callers of the unchanged convenience wrappers
 compile unchanged. Manifests using Jinja `glob()` must use shell-inert matched
 paths. The cached configuration discovery API is a breaking change for callers
@@ -39,29 +39,29 @@ tracking those changes.
 ## At-a-glance changes
 
 <!-- markdownlint-disable-next-line MD013 -->
-Table: documented v0.1.0 additions, including `netsuke help targets`, and their impact
+Table: documented v0.1.0 additions, including `netsuke help targets`, and their
+impact
 
-| Area | Impact | Where to read more |
-| --- | --- | --- |
-| Convenience wrappers | Unchanged. `run_ninja` and `run_ninja_tool` behave exactly as before, inheriting the process environment. | [Users' guide](users-guide.md) |
-| Child environment | New opt-in `netsuke::runner::CommandEnv` carries additive variable overrides and an injected `PATH` for Ninja child processes. | [Users' guide](users-guide.md) |
-| Request types | New `netsuke::runner::NinjaBuildRequest` and `netsuke::runner::NinjaToolRequest` name the program, `NinjaProcessOptions`, build file, targets or tool, a child environment, and a required `stderr_mode: StderrMode` policy for the `*_with` run functions. | [Users' guide](users-guide.md) |
-| Cached CLI configuration API | Breaking for callers of the unstable Rust API: use the opt-in cached discovery flow with `ConfigEnvProvider`; `ConfigStdEnvProvider` supplies process-backed access. | [Users' guide](users-guide.md) |
-| Timing output | Existing `VerboseTimingReporter::new` keeps its stderr sink; Rust callers can opt into an owned `Write + Send` sink with `with_writer`. | [Users' guide](users-guide.md#capture-verbose-timing-output) |
-| Glob expansion | Parent-relative patterns such as `glob('../shared/*.h')` now expand. The Jinja helper rejects matched paths that are not portable unquoted shell words. Metadata checks use a capability rooted at the pattern's longest literal directory prefix; missing or non-directory prefixes return no matches, and unresolvable symlink matches are skipped. | [Users' guide](users-guide.md) and [ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md) |
-| Command recipes | Existing scalar `command` recipes are unchanged. New YAML command lists are opt-in and run in declaration order with fail-fast semantics. | [Rules and recipes](users-guide.md#rules-and-recipes) |
-| Ninja text escaping | Write shell dollars normally; paths containing `$`, spaces, colons, `\|`, or control characters are rejected, as are newline, carriage-return, and NUL metadata values. | [Users' guide](users-guide.md#review-the-safety-boundary) |
-| Manifest discovery | Optional target/action `description` values are shown by the new `netsuke help targets` command. Manifests without them and existing build output are unchanged. | [Users' guide](users-guide.md) |
-| Serial dependencies | New opt-in `dependency_order: serial` runs an action or target's direct `deps` list in declaration order. | [Serial dependency ordering](users-guide.md#run-direct-dependencies-serially) |
+| Area                         | Impact                                                                                                                                                                                                                                                                                                                                                | Where to read more                                                                               |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Convenience wrappers         | Unchanged. `run_ninja` and `run_ninja_tool` behave exactly as before, inheriting the process environment.                                                                                                                                                                                                                                             | [Users' guide](users-guide.md)                                                                   |
+| Child environment            | New opt-in `netsuke::runner::CommandEnv` carries additive variable overrides and an injected `PATH` for Ninja child processes.                                                                                                                                                                                                                        | [Users' guide](users-guide.md)                                                                   |
+| Request types                | New `netsuke::runner::NinjaBuildRequest` and `netsuke::runner::NinjaToolRequest` name the program, `NinjaProcessOptions`, build file, targets or tool, a child environment, and a required `stderr_mode: StderrMode` policy for the `*_with` run functions.                                                                                           | [Users' guide](users-guide.md)                                                                   |
+| Cached CLI configuration API | Breaking for callers of the unstable Rust API: use the opt-in cached discovery flow with `ConfigEnvProvider`; `ConfigStdEnvProvider` supplies process-backed access.                                                                                                                                                                                  | [Users' guide](users-guide.md)                                                                   |
+| Timing output                | Existing `VerboseTimingReporter::new` keeps its stderr sink; Rust callers can opt into an owned `Write + Send` sink with `with_writer`.                                                                                                                                                                                                               | [Users' guide](users-guide.md#capture-verbose-timing-output)                                     |
+| Glob expansion               | Parent-relative patterns such as `glob('../shared/*.h')` now expand. The Jinja helper rejects matched paths that are not portable unquoted shell words. Metadata checks use a capability rooted at the pattern's longest literal directory prefix; missing or non-directory prefixes return no matches, and unresolvable symlink matches are skipped. | [Users' guide](users-guide.md) and [ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md) |
+| Command recipes              | Existing scalar `command` recipes are unchanged. New YAML command lists are opt-in and run in declaration order with fail-fast semantics.                                                                                                                                                                                                             | [Rules and recipes](users-guide.md#rules-and-recipes)                                            |
+| Ninja text escaping          | Write shell dollars normally; paths containing `$`, spaces, colons, `\|`, or control characters are rejected, as are newline, carriage-return, and NUL metadata values.                                                                                                                                                                               | [Users' guide](users-guide.md#review-the-safety-boundary)                                        |
+| Manifest discovery           | Optional target/action `description` values are shown by the new `netsuke help targets` command. Manifests without them and existing build output are unchanged.                                                                                                                                                                                      | [Users' guide](users-guide.md)                                                                   |
+| Serial dependencies          | New opt-in `dependency_order: serial` runs an action or target's direct `deps` list in declaration order.                                                                                                                                                                                                                                             | [Serial dependency ordering](users-guide.md#run-direct-dependencies-serially)                    |
 
 ## Nothing to change for existing callers
 
-The convenience wrappers keep their signatures and their behaviour: the
-child inherits the calling process's environment, and Ninja is resolved
-exactly as before. No caller using these wrappers needs to change to adopt this
-release. A caller that constructs `NinjaBuildRequest`/`NinjaToolRequest`
-directly must pass `options: &options` and supply the required
-`stderr_mode: StderrMode` field.
+The convenience wrappers keep their signatures and their behaviour: the child
+inherits the calling process's environment, and Ninja is resolved exactly as
+before. No caller using these wrappers needs to change to adopt this release. A
+caller that constructs `NinjaBuildRequest`/`NinjaToolRequest` directly must pass
+`options: &options` and supply the required `stderr_mode: StderrMode` field.
 
 Existing callers that construct `VerboseTimingReporter::new` continue to
 receive timing summaries on stderr. Callers that need to capture or redirect
@@ -78,11 +78,11 @@ comma, full stop, underscore, and hyphen remain accepted. This prevents a
 checkout filename from becoming executable shell syntax when a `foreach` item
 is interpolated into a `command` or `script`.
 
-Rename affected files to use the accepted character set, or change the
-manifest so filesystem-derived paths do not cross the Jinja command-template
-boundary. The Rust `manifest::glob_paths` query retains its previous contract
-and continues to return any matching UTF-8 file path because its callers own
-their downstream escaping boundary.
+Rename affected files to use the accepted character set, or change the manifest
+so filesystem-derived paths do not cross the Jinja command-template boundary.
+The Rust `manifest::glob_paths` query retains its previous contract and
+continues to return any matching UTF-8 file path because its callers own their
+downstream escaping boundary.
 
 ## Policy enum parsing
 
@@ -104,25 +104,25 @@ the syntax, shell semantics, and examples.
 
 ## Opting into an explicit child environment
 
-Construct a `CommandEnv`, name the variables to add, and pass it through
-the request forms:
+Construct a `CommandEnv`, name the variables to add, and pass it through the
+request forms:
 
 - `run_ninja_with` runs a build described by a `NinjaBuildRequest`;
 - `run_ninja_tool_with` runs `ninja -t <tool>` described by a
   `NinjaToolRequest`.
 
-Overrides are additive: variables not named are inherited. The injected
-`PATH` governs what commands the Ninja child can see. Relative program
-names remain valid and resolve through that child `PATH`; supply an
-absolute or otherwise resolved `program` only when executable selection
-must stay isolated from the injected `PATH`.
+Overrides are additive: variables not named are inherited. The injected `PATH`
+governs what commands the Ninja child can see. Relative program names remain
+valid and resolve through that child `PATH`; supply an absolute or otherwise
+resolved `program` only when executable selection must stay isolated from the
+injected `PATH`.
 
 Both request types borrow their fields, so one `CommandEnv` and one
-`NinjaProcessOptions` can serve several invocations. Direct request callers
-now pass `options: &options` in place of `cli: &cli`; the adapter converts a
-CLI working directory to UTF-8 and returns `io::ErrorKind::InvalidData` when
-it cannot. Worked examples live in the users' guide's
-"Drive Ninja with an explicit environment" section.
+`NinjaProcessOptions` can serve several invocations. Direct request callers now
+pass `options: &options` in place of `cli: &cli`; the adapter converts a CLI
+working directory to UTF-8 and returns `io::ErrorKind::InvalidData` when it
+cannot. Worked examples live in the users' guide's "Drive Ninja with an
+explicit environment" section.
 
 ## Cached CLI configuration API
 
@@ -150,10 +150,10 @@ and loading pass. `merge_with_config` and `merge_with_config_and_env` remain
 standalone alternatives: each discovers and merges configuration in one call,
 so neither reuses an earlier discovery.
 
-v0.1.0 also instruments configuration loading itself. The internal
-phase-level series are `config_load_total`, labelled `phase=diag_mode|merge`
-and `outcome=success|failure`, and `config_load_duration_seconds`, labelled
-only `phase=diag_mode|merge`. The operator-facing startup-attempt series are
+v0.1.0 also instruments configuration loading itself. The internal phase-level
+series are `config_load_total`, labelled `phase=diag_mode|merge` and
+`outcome=success|failure`, and `config_load_duration_seconds`, labelled only
+`phase=diag_mode|merge`. The operator-facing startup-attempt series are
 `netsuke_config_load_total`, labelled only `outcome=success|failure`, and
 `netsuke_config_load_duration_seconds`, with no labels. Configuration-load
 failures add bounded `operation` and `error_category` fields. Cached discovery
@@ -229,10 +229,10 @@ conditional catalogue entry as a confirmed selected entry. Full rendering for
 `build`, `generate`, and normal manifest output retains the full standard
 library and its existing semantics; these restrictions apply only to
 manifest-query rendering. See the detailed [help targets documentation]
-(users-guide.md#generate-and-inspect-artefacts).
-Add `--json` to receive the versioned JSON result document; its
-`result.command` is `help-targets`. The command and the new descriptions are
-beta-series additions and remain subject to the stability caveat above.
+(users-guide.md#generate-and-inspect-artefacts). Add `--json` to receive the
+versioned JSON result document; its `result.command` is `help-targets`. The
+command and the new descriptions are beta-series additions and remain subject
+to the stability caveat above.
 
 ## Diagnostics
 

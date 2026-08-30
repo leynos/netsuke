@@ -993,31 +993,53 @@ every command in this completion checklist:
 
 ## Markdown formatting and table alignment
 
-`make fmt` runs `mdformat-all`, which runs `mdtablefix` (with `--wrap
---renumber --breaks --ellipsis --fences --in-place`) and then
+`make fmt` runs `mdformat-all`, which runs `mdtablefix` (with
+`--wrap --renumber --breaks --ellipsis --fences --in-place`) and then
 `markdownlint-cli2 --fix`. `mdtablefix` owns table padding and paragraph
 wrapping; `make markdownlint` then verifies the result.
 
-markdownlint's `MD060` (table-column-style) checks that table pipes align
-using a display-width model that treats CJK characters and emoji as
-double-width. That model disagrees with `mdtablefix`'s padding for
-right-to-left scripts, Indic scripts, and combining marks, so for tables
-containing those scripts the formatter and the rule cannot both be satisfied.
+markdownlint's `MD060` (table-column-style) checks that table pipes align using
+a display-width model that treats CJK characters and emoji as double-width.
+That model disagrees with `mdtablefix`'s padding for right-to-left scripts,
+Indic scripts, and combining marks, so for tables containing those scripts the
+formatter and the rule cannot both be satisfied.
 
-Because of this, `MD060` is suppressed in `docs/localization-glossary.md`
-only, via a `<!-- markdownlint-disable-file MD060 -->` directive at the top of
-that file with an explanatory comment. The rule remains enabled for every
-other Markdown file, and the repository-level `.markdownlint-cli2.jsonc` does
-not disable it.
+Because of this, `MD060` is suppressed in `docs/localization-glossary.md` only,
+via a `<!-- markdownlint-disable-file MD060 -->` directive at the top of that
+file with an explanatory comment. The rule remains enabled for every other
+Markdown file, and the repository-level `.markdownlint-cli2.jsonc` does not
+disable it.
 
-Contributors should prefer a file-scoped `markdownlint-disable-file`
-directive (or a narrower `markdownlint-disable-next-line`) over disabling a
-rule repository-wide, and should record the reason in a comment beside the
-directive.
+Contributors should prefer a file-scoped `markdownlint-disable-file` directive
+(or a narrower `markdownlint-disable-next-line`) over disabling a rule
+repository-wide, and should record the reason in a comment beside the directive.
 
-Note that `mdformat-all` rewraps every Markdown file it finds, not only the
-files a change touches. Revert the unrelated reflow before committing so a
-change stays reviewable.
+`make check-fmt` verifies Markdown formatting as well as Rust formatting. It
+runs `scripts/check-markdown-format.sh`, which compares each file against
+`mdtablefix`'s output for that file and reports any that differ. `mdtablefix`
+has no check-only mode, and the script never modifies tracked files.
+
+The script deliberately does not replay the `markdownlint-cli2 --fix` pass that
+`make fmt` performs after `mdtablefix`. `make markdownlint` already rejects any
+lint violation, so on a passing tree that pass has nothing to change.
+
+Checking against `mdtablefix` alone has a second benefit: it surfaces documents
+where `mdtablefix` and markdownlint would fight. A heading nested inside an
+ordered list is the common case: `mdtablefix` treats the heading as ending the
+list and restarts the numbering at 1, while `MD029: ordered` renumbers it to
+continue. Because `--fix` runs last, `make fmt` leaves such a file passing lint
+but permanently unstable, so the check flags it. The remedy is to restructure
+the document, for example by replacing the nested heading with a bold lead-in,
+rather than to relax the check.
+
+Contributors who change the `mdtablefix` flags in `mdformat-all` must change
+them in `scripts/check-markdown-format.sh` to match.
+
+The repository's Markdown is now held in canonical form, and `make check-fmt`
+enforces it, so `make fmt` should no longer produce unrelated reflow. If it
+does, that indicates a formatter version change or a file that has drifted, and
+the resulting diff belongs in its own commit rather than being reverted
+piecemeal.
 
 ## Spelling enforcement
 

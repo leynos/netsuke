@@ -68,7 +68,7 @@ before execution, a critical requirement for compatibility with Ninja.
    templating using `{% %}` blocks is forbidden; all control flow must appear
    in YAML values.
 
-   #### Manifest rendering modes and discovery
+   **Manifest rendering modes and discovery**
 
    Netsuke has two rendering policies. Full rendering evaluates every manifest
    field for `build`, `generate`, and normal manifest rendering, retaining the

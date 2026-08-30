@@ -278,8 +278,8 @@ function, serializing locale state across the test suite.
 
 ## Redacting generator versions in JSON snapshots
 
-JSON diagnostics and help-target catalogues embed Netsuke's crate version.
-Left unredacted, that field changes on every version bump and would churn their
+JSON diagnostics and help-target catalogues embed Netsuke's crate version. Left
+unredacted, that field changes on every version bump and would churn their
 snapshots without a behavioural change.
 
 The shared, private `add_generator_version_filter` helper in
@@ -302,9 +302,8 @@ field named `version` remains visible in snapshot diffs. The generator name and
 asserted structurally.
 
 The fixed diagnostic example exercises every structural filter path because the
-regular expression has no data-dependent branches. The
-`snapshot_test_support` property test separately varies valid `SemVer`
-generator versions.
+regular expression has no data-dependent branches. The `snapshot_test_support`
+property test separately varies valid `SemVer` generator versions.
 
 ## Running and Updating Snapshot Tests
 

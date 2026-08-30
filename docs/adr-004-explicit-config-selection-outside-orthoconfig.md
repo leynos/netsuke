@@ -20,8 +20,8 @@ known configuration file to control a run. The public selector order is
 
 The merge pipeline is a cached one-pass model. A single discovery pass through
 the injected environment provider produces a `DiscoveryOutcome` whose
-side-effect-free diagnostics are replayed once after tracing is configured;
-the full OrthoConfig-backed merge then reuses the already-discovered
+side-effect-free diagnostics are replayed once after tracing is configured; the
+full OrthoConfig-backed merge then reuses the already-discovered
 `DiscoveredLayers` for the final `Cli` value, with no second environment or
 filesystem pass. Automatic discovery also has Netsuke-specific precedence
 requirements: project configuration must outrank user configuration, and a
@@ -54,10 +54,9 @@ This would let OrthoConfig own the config-path selector and merge discovered
 files as part of its normal derived merge behaviour.
 
 It was rejected because Netsuke needs the public spelling `--config`, the
-`NETSUKE_CONFIG` environment selector, and its cached one-pass diagnostic
-path. OrthoConfig's generic discovery machinery cannot express those
-Netsuke-specific semantics without broadening its API around one consumer's
-policy.
+`NETSUKE_CONFIG` environment selector, and its cached one-pass diagnostic path.
+OrthoConfig's generic discovery machinery cannot express those Netsuke-specific
+semantics without broadening its API around one consumer's policy.
 
 ### Option B: add Netsuke-specific explicit selection to OrthoConfig
 

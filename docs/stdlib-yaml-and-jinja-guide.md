@@ -123,8 +123,8 @@ split the same input identically.
   `{{ 'input-link' | realpath }}`.
 - `path | expanduser` is host-observing because it reads the home-directory
   environment. It expands `~` and `~/...`; named-user forms such as `~alice`
-  are unsupported. The filter tries a platform-specific ladder of variables
-  and uses the first one that resolves, treating an empty value as set (not
+  are unsupported. The filter tries a platform-specific ladder of variables and
+  uses the first one that resolves, treating an empty value as set (not
   skipped) except in the `HOMEDRIVE`/`HOMEPATH` case noted below:
   - POSIX hosts: `HOME`, then `USERPROFILE`.
   - Windows hosts: `HOME`, then `USERPROFILE`, then `HOMEDRIVE` joined with

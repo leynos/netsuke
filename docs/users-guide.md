@@ -562,8 +562,8 @@ brace remains unclosed, the diagnostic points to the outermost unmatched
 opening brace; an unmatched closing brace is reported at that closing brace.
 
 The Jinja helper rejects a matched path unless it can be inserted as one
-portable unquoted shell word. ASCII letters, digits, `/`, `:`, comma, full stop,
-underscore, and hyphen are accepted; whitespace, control characters, and
+portable unquoted shell word. ASCII letters, digits, `/`, `:`, comma, full
+stop, underscore, and hyphen are accepted; whitespace, control characters, and
 shell punctuation are rejected. This prevents an untrusted checkout filename
 from becoming shell syntax when `item` is interpolated into a `command` or
 `script`. The Rust `manifest::glob_paths` query performs no shell-safety
@@ -796,11 +796,11 @@ reporter. `VerboseTimingReporter::new` remains the default API and writes to
 `io::Stderr`. On the first completion, the wrapped reporter receives its
 completion event before the timing summary is written synchronously to the
 sink. A blocking sink therefore blocks only that completion call; later stage,
-progress, and completion events remain suppressed. Re-entrant calls observe
-the completed state, and summary lines retain their rendered order. Write
-errors are ignored, matching the existing accessible reporter contract;
-applications can observe them through the bounded timing sink telemetry emitted
-by their configured metrics and tracing backends.
+progress, and completion events remain suppressed. Re-entrant calls observe the
+completed state, and summary lines retain their rendered order. Write errors
+are ignored, matching the existing accessible reporter contract; applications
+can observe them through the bounded timing sink telemetry emitted by their
+configured metrics and tracing backends.
 
 ## Use the template standard library
 
@@ -1075,10 +1075,10 @@ events report whether `--config`, `NETSUKE_CONFIG`, or automatic discovery won,
 whether a path was present, and which environment lookups were attempted.
 Events then identify whether Netsuke uses an explicit file or discovered layers.
 
-During the merge, verbose tracing also reports the defaults, file,
-environment, and CLI layers as they are applied. File-layer events include a
-bounded `path_hash` so operators can correlate a layer with discovery events
-without recording the raw path. CLI events record only the leaf keys in
+During the merge, verbose tracing also reports the defaults, file, environment,
+and CLI layers as they are applied. File-layer events include a bounded
+`path_hash` so operators can correlate a layer with discovery events without
+recording the raw path. CLI events record only the leaf keys in
 `override_keys`; they do not record override values such as paths or host
 lists. If validation rejects the merged configuration, the event includes the
 rejected setting in `key` and a bounded explanation in `reason`. These events
@@ -1145,8 +1145,8 @@ then pass it to `cli::merge_with_cached_file_layers_with_observer(input)`. The
 function returns the merge result alongside bounded events; replay those events
 through `MergeObserver`, such as `TracingMergeObserver`. Another caller can
 provide its own `MergeObserver` implementation. Observers receive bounded
-`MergeEvent` values: layer application and failure states, file `path_hash`
-and layer counts, CLI override leaf keys, and validation `key`/`reason` fields.
+`MergeEvent` values: layer application and failure states, file `path_hash` and
+layer counts, CLI override leaf keys, and validation `key`/`reason` fields.
 Configuration values and raw paths are never included. Ordinary
 `merge_with_config*` and `merge_with_cached_file_layers` calls discard their
 collected events and do not emit merge tracing.
@@ -1213,14 +1213,14 @@ absolute path. Empty and non-UTF-8 values fall back to the default.
 Pass `--verbose` to see Ninja subprocess diagnostics on stderr. The
 `Executing Ninja subprocess` informational event contains stable fields:
 `operation`, `ninja_program`, `arg_count`, `env_override_count`,
-`path_overridden`, and `suppress_stderr`. A debug-level companion event contains
-the redacted command as `Executing command: ...`, including the arguments used
-for the invocation.
+`path_overridden`, and `suppress_stderr`. A debug-level companion event
+contains the redacted command as `Executing command: ...`, including the
+arguments used for the invocation.
 
 Ninja executable resolution also emits a debug event with `ninja_program` and
-`source`. The source is `NETSUKE_NINJA` for a valid override and `fallback` when
-the variable is unset, empty, or non-UTF-8. JSON mode suppresses these tracing
-events so stderr remains parseable.
+`source`. The source is `NETSUKE_NINJA` for a valid override and `fallback`
+when the variable is unset, empty, or non-UTF-8. JSON mode suppresses these
+tracing events so stderr remains parseable.
 
 `NETSUKE_WHICH_WORKSPACE` switches off the `which()` workspace-tree fallback
 search that runs when a command is not found on `PATH`. Set it to `0`, `false`,
@@ -1478,18 +1478,18 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   `{{ outs }}`. A `$in` or `$out` token inside backticks is rejected because
   Netsuke cannot safely lower it there. This applies to command and script
   recipes. Command text containing newline, carriage-return, or NUL characters
-  is rejected during Ninja generation. Script text containing carriage-return or
-  NUL characters is rejected; ordinary script newlines are preserved by the
-  generated shell wrapper. Literal `$` characters in action
-  metadata—`description`, `depfile`, `deps`, and `pool`—are doubled for Ninja
-  so they remain literal values rather than becoming Ninja variable references.
+  is rejected during Ninja generation. Script text containing carriage-return
+  or NUL characters is rejected; ordinary script newlines are preserved by the
+  generated shell wrapper. Literal `$` characters in action metadata—
+  `description`, `depfile`, `deps`, and `pool`—are doubled for Ninja so they
+  remain literal values rather than becoming Ninja variable references.
 - Build and default-target paths reject `$`, spaces, colons, `|`, and control
   characters because Ninja cannot represent them without ambiguity. Generation
   also rejects newline, carriage-return, and NUL characters in emitted metadata
   such as descriptions, `depfile`, `deps`, and `pool`.
 - **Migration:** replace the historical manifest spelling `$$PATH` with
-  `$PATH`. Keeping the extra dollar now asks the shell to interpret `$$` as
-  its process identifier and can change the command's result. Existing script
+  `$PATH`. Keeping the extra dollar now asks the shell to interpret `$$` as its
+  process identifier and can change the command's result. Existing script
   actions that use `$in` or `$out` outside backtick-delimited regions will
   receive the same paths after this release, but their generated action
   identifiers change once because lowering now happens before Ninja emission;
