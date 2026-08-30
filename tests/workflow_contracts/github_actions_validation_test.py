@@ -30,18 +30,21 @@ WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 YAMLLINT_POLICY_PATH = REPO_ROOT / ".yamllint.yml"
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
 
-ACTIONLINT_VERSION = "1.7.12"
-ACTIONLINT_SHA256 = "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
-ACTIONLINT_INSTALLER_COMMIT = "914e7df21a07ef503a81201c76d2b11c789d3fca"
-ACTIONLINT_ARCHIVE = f"actionlint_{ACTIONLINT_VERSION}_linux_x86_64.tar.gz"
-ACTIONLINT_RAW_BASE = "https://raw.githubusercontent.com/rhysd/actionlint"
-ACTIONLINT_SCRIPT = "scripts/download-actionlint.bash"
-ACTIONLINT_RELEASE_ROOT = "https://github.com/rhysd/actionlint/releases/download"
-
 
 def _shell_variable(name: str) -> str:
     """Return a shell variable expansion for script contract expectations."""
     return f"${{{name}}}"
+
+
+ACTIONLINT_VERSION = "1.7.12"
+ACTIONLINT_SHA256 = "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
+ACTIONLINT_INSTALLER_COMMIT = "914e7df21a07ef503a81201c76d2b11c789d3fca"
+ACTIONLINT_ARCHIVE = (
+    f"actionlint_{_shell_variable('ACTIONLINT_VERSION')}_linux_x86_64.tar.gz"
+)
+ACTIONLINT_RAW_BASE = "https://raw.githubusercontent.com/rhysd/actionlint"
+ACTIONLINT_SCRIPT = "scripts/download-actionlint.bash"
+ACTIONLINT_RELEASE_ROOT = "https://github.com/rhysd/actionlint/releases/download"
 
 
 ACTIONLINT_INSTALL_COMMAND = (
@@ -192,7 +195,7 @@ def _run_github_actions_lint(cmd_mox: CmdMox) -> subprocess.CompletedProcess[str
     # ruff: ignore[subprocess-without-shell-equals-true] - shell is False.
     return subprocess.run(
         [
-            "/usr/bin/make",
+            "make",  # noqa: S607 - CmdMox controls the test command path.
             f"YAMLLINT={_mocked_command(cmd_mox, 'yamllint')}",
             f"ACTIONLINT={_mocked_command(cmd_mox, 'actionlint')}",
             "github-actions-lint",
@@ -214,9 +217,9 @@ def test_makefile_runs_both_github_actions_linters() -> None:
     makefile = _read(MAKEFILE_PATH)
     recipe = _makefile_recipe("github-actions-lint")
 
-    assert "lint: lint-clippy lint-whitaker github-actions-lint" in makefile, (
-        "the `lint` target must delegate workflow validation to `github-actions-lint`"
-    )
+    assert (
+        "lint: lint-clippy lint-whitaker lint-python github-actions-lint" in makefile
+    ), "the `lint` target must delegate workflow validation to `github-actions-lint`"
     assert "github-actions-lint: ## Validate GitHub Actions workflows" in makefile, (
         "the Makefile must document the `github-actions-lint` target"
     )
