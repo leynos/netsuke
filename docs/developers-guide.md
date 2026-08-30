@@ -666,6 +666,11 @@ cargo binstall --no-confirm --locked \
 Install the separately versioned Whitaker installer with:
 
 ```bash
+WHITAKER_INSTALLER_VERSION="$(sed -n "s/.*WHITAKER_INSTALLER_VERSION: '\\(.*\\)'.*/\\1/p" \
+  .github/workflows/ci.yml)"
+# Build from crates.io:
+cargo install --locked whitaker-installer --version "$WHITAKER_INSTALLER_VERSION"
+# or, for a prebuilt binary:
 cargo binstall --no-confirm --locked \
   "whitaker-installer@$WHITAKER_INSTALLER_VERSION"
 ```

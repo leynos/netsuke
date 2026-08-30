@@ -24,7 +24,7 @@ mod makefile;
 
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
-use makefile::{read_repo_file, target_prerequisites, target_recipe};
+use makefile::{phony_targets, read_repo_file, target_prerequisites, target_recipe};
 use toml::Value;
 
 #[test]
@@ -78,6 +78,24 @@ fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()>
     ensure!(
         doctest_recipe.contains("--workspace"),
         "doctest should cover the workspace, found {doctest_recipe:?}"
+    );
+    Ok(())
+}
+
+/// Keep the glob-expansion benchmark available through the Makefile.
+#[test]
+fn benchmark_glob_expansion_target_is_phony_and_runs_the_expected_bench() -> Result<()> {
+    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
+    let phony = phony_targets(&makefile);
+    ensure!(
+        phony.contains(&"bench-glob-expansion"),
+        ".PHONY must include bench-glob-expansion, found {phony:?}"
+    );
+    let recipe = target_recipe(&makefile, "bench-glob-expansion")
+        .context("Makefile should declare a bench-glob-expansion recipe")?;
+    ensure!(
+        recipe.contains("$(CARGO) bench --bench glob_expansion"),
+        "bench-glob-expansion must invoke the glob_expansion bench, found {recipe:?}"
     );
     Ok(())
 }

@@ -44,7 +44,6 @@ updates:
       - "/"
       - "/test_support"
       - "/tests/ui/cli_configuration_pass"
-      - "/tests/ui/clippy_env_policy_pass"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
