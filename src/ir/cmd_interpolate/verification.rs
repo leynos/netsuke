@@ -58,7 +58,10 @@ fn marker_token_match_is_exact() {
         pos == 0 && actual == Some(("R", 3)),
         "marker matches at start"
     );
-    kani::cover!(marker_near_miss(&chars, pos), "marker near miss is rejected");
+    kani::cover!(
+        marker_near_miss(&chars, pos),
+        "marker near miss is rejected"
+    );
     kani::cover!(
         pos + MARKER_TOKEN.len() > chars.len(),
         "marker truncation is rejected"

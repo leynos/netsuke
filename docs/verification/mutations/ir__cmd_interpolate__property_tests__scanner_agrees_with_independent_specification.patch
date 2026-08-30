@@ -1,0 +1,9 @@
+diff --git a/src/ir/cmd_interpolate.rs b/src/ir/cmd_interpolate.rs
+--- a/src/ir/cmd_interpolate.rs
++++ b/src/ir/cmd_interpolate.rs
+@@ -260,4 +260,4 @@ fn substitute_chars(chars: &[char], ins: &str, outs: &str) -> String {
+-        if in_backticks {
++        if false && in_backticks {
+             out.push(ch);
+             i += 1;
+             continue;

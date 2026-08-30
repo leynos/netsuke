@@ -1,0 +1,9 @@
+diff --git a/src/ir/cmd_interpolate.rs b/src/ir/cmd_interpolate.rs
+--- a/src/ir/cmd_interpolate.rs
++++ b/src/ir/cmd_interpolate.rs
+@@ -111,4 +111,4 @@ pub(crate) fn interpolate_command_with_bindings(
+ ) -> Result<String, IrGenError> {
+     let interpolated = substitute(template, &bindings.ins, &bindings.outs);
+-    if has_unmatched_backticks(&interpolated) || shlex::split(&interpolated).is_none() {
++    if has_unmatched_backticks(template) || shlex::split(&interpolated).is_none() {
+         let snippet = interpolated.chars().take(160).collect();

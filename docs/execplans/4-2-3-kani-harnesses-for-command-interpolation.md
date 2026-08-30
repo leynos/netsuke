@@ -7,7 +7,7 @@ This ExecPlan (execution plan) is a living document. The sections
 
 Status: IN PROGRESS
 
-Revision 2.5. See `Revision note` at the foot of this document.
+Revision 2.6. See `Revision note` at the foot of this document.
 
 ## Purpose / big picture
 
@@ -1361,9 +1361,17 @@ retained targeted nextest run passed all 20 command-interpolation tests:
   completed 15 harnesses with zero failures under the cap using four workers
   and terse output. The contract test now enforces 14 patches for 15 proofs,
   with the documented cycle-kernel exemption, and refreshed six stale patches.
-- [ ] EP-M3 scanner specification and backtick-rejection harnesses.
-- [ ] EP-M4 guard-placement harness.
-- [ ] EP-M5 Proptest hand-off.
+- [x] (2026-08-30) EP-M3 scanner and backtick obligation hand-off. The M0
+  five-minute cap precluded scanner proofs at M=6 and M=8, so no Kani harness
+  was added; M5 supplies the agreed residual-range checks instead.
+- [x] (2026-08-30) EP-M4 guard-placement hand-off. The guard necessarily calls
+  the scanner, so its Kani probe is dominated by the M0 scanner shortfall; M5
+  exercises the substituted command and real `shlex` guard over the full range.
+- [x] (2026-08-30) EP-M5 Proptest hand-off. Independent scanner and guard
+  oracles cover templates up to 256 characters assembled from zero to eight
+  placeholders. Dedicated properties force eight-placeholder cases and verify
+  odd-backtick rejection and substituted-command guard placement. The three
+  added mutation patches each produced a counterexample before restoration.
 - [ ] EP-M6 documentation, ADR extension, roadmap marked done, gates green,
   CodeRabbit clear.
 
@@ -1699,3 +1707,11 @@ completed all 15 harnesses under the same cap with Kani's supported
 `--jobs 4 --output-format terse` pair. Six earlier mutation patches had rotted
 after support-module extraction and were refreshed so the new contract test
 validates the whole checked-in inventory.
+
+**Revision 2.6 (2026-08-30).** The pre-accepted EP-M0 hand-off was completed:
+the scanner, odd-backtick, and guard-placement obligations are now Proptest
+properties over templates no longer than 256 characters containing at most
+eight generated placeholders. Their independent scanner and substituted-command
+guard oracles rejected all three corresponding mutation patches. EP-M3 and
+EP-M4 therefore have no Kani artefacts by design; the bounded proofs remain
+limited to the feasible sigil and marker kernels.
