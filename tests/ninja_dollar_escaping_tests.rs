@@ -177,6 +177,24 @@ fn ninja_output(
         .context("read shell output from generated target")
 }
 
+/// Assert one POSIX script recipe yields its expected output.
+#[cfg(unix)]
+fn assert_script_output(
+    manifest_source: &str,
+    input: (&str, &str),
+    expected: &str,
+    failure_message: &str,
+) -> Result<()> {
+    let manifest = manifest::from_str(manifest_source)?;
+    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
+        &manifest,
+        RecipeShell::Posix,
+    )?)?;
+    let actual = ninja_output(&ninja, None, Some(input))?;
+
+    ensure!(actual == expected, "{failure_message}: {actual:?}");
+    Ok(())
+}
 /// Verify that remaining shell dollars are doubled for Ninja.
 #[rstest]
 #[case::shell_variable("echo $NETSUKE_TEST_SENTINEL", "echo $$NETSUKE_TEST_SENTINEL")]
@@ -343,40 +361,24 @@ fn script_default_reaches_the_child_shell(
 #[cfg(unix)]
 #[rstest]
 fn script_placeholders_execute_against_real_paths() -> Result<()> {
-    let manifest = manifest::from_str(
-        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: in\n    script: \"printf '%s' {{ ins }} > {{ outs }}\"\n",
-    )?;
-    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
-        &manifest,
-        RecipeShell::Posix,
-    )?)?;
-
-    let actual = ninja_output(&ninja, None, Some(("in", "script input")))?;
-    ensure!(
-        actual == "in",
-        "expected script to write the lowered input path \"in\", got {actual:?}"
-    );
-    Ok(())
+    assert_script_output(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: in\n    script: \"printf '%s' $in > $out\"\n",
+        ("in", "script input"),
+        "in",
+        "expected script to write the lowered input path \"in\", got",
+    )
 }
 
 /// Verify double-quoted script placeholders keep shell punctuation inert.
 #[cfg(unix)]
 #[rstest]
 fn script_double_quoted_placeholders_quote_shell_punctuation() -> Result<()> {
-    let manifest = manifest::from_str(
+    assert_script_output(
         "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: 'foo;id'\n    script: \"printf '%s' \\\"$in\\\" > $out\"\n",
-    )?;
-    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
-        &manifest,
-        RecipeShell::Posix,
-    )?)?;
-
-    let actual = ninja_output(&ninja, None, Some(("foo;id", "script input")))?;
-    ensure!(
-        actual == "foo;id",
-        "double-quoted script interpolation must not execute shell punctuation: {actual:?}"
-    );
-    Ok(())
+        ("foo;id", "script input"),
+        "foo;id",
+        "double-quoted script interpolation must not execute shell punctuation",
+    )
 }
 
 /// Verify single-quoted script placeholders reject shell-punctuation paths.
