@@ -27,6 +27,7 @@ impl OrthoConfigDocs for ReleaseHelpCli {
     fn get_doc_metadata() -> DocMetadata {
         let mut metadata = CliConfig::get_doc_metadata();
         keys::CLI_ABOUT.clone_into(&mut metadata.about_id);
+        localized_config_help(&mut metadata.fields);
         match documented_clap_config_field(&Cli::command()) {
             Ok(config) => metadata.fields.push(config),
             Err(error) => {
@@ -39,6 +40,48 @@ impl OrthoConfigDocs for ReleaseHelpCli {
         metadata.subcommands = documented_clap_subcommands(&metadata);
         metadata
     }
+}
+
+/// Project existing CLI Fluent keys onto release-help configuration fields.
+///
+/// `CliConfig` remains the source of the fields and their configuration
+/// sources. The structural `cmds` container is not a public configuration
+/// setting, so release help omits it rather than inventing a separate model.
+fn localized_config_help(fields: &mut Vec<FieldMetadata>) {
+    fields.retain_mut(|field| {
+        let Some(help_key) = localized_config_help_key(&field.name) else {
+            tracing::error!(
+                field = %field.name,
+                "release help omits a configuration field without a declared Fluent help key"
+            );
+            return false;
+        };
+        help_key.clone_into(&mut field.help_id);
+        field.long_help_id = None;
+        true
+    });
+}
+
+/// Return the existing Fluent key that documents a published configuration field.
+fn localized_config_help_key(name: &str) -> Option<&'static str> {
+    Some(match name {
+        "file" => keys::CLI_FLAG_FILE_HELP,
+        "jobs" => keys::CLI_FLAG_JOBS_HELP,
+        "verbose" => keys::CLI_FLAG_VERBOSE_HELP,
+        "locale" => keys::CLI_FLAG_LOCALE_HELP,
+        "fetch_allow_scheme" => keys::CLI_FLAG_FETCH_ALLOW_SCHEME_HELP,
+        "fetch_allow_host" => keys::CLI_FLAG_FETCH_ALLOW_HOST_HELP,
+        "fetch_block_host" => keys::CLI_FLAG_FETCH_BLOCK_HOST_HELP,
+        "fetch_default_deny" => keys::CLI_FLAG_FETCH_DEFAULT_DENY_HELP,
+        "json" => keys::CLI_FLAG_JSON_HELP,
+        "no_input" => keys::CLI_FLAG_NO_INPUT_HELP,
+        "color" => keys::CLI_FLAG_COLOR_HELP,
+        "emoji" => keys::CLI_FLAG_EMOJI_HELP,
+        "progress" => keys::CLI_FLAG_PROGRESS_HELP,
+        "accessibility" => keys::CLI_FLAG_ACCESSIBILITY_HELP,
+        "default_targets" => keys::CLI_FLAG_DEFAULT_TARGETS_HELP,
+        _ => return None,
+    })
 }
 
 /// Build release-help metadata for Netsuke's parser-only `--config` selector.
@@ -255,6 +298,33 @@ mod tests {
             description == "Path to a configuration file, bypassing automatic discovery.",
             "release help config description should be localized: {description}"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn release_help_metadata_localizes_every_published_field() -> Result<()> {
+        let metadata = ReleaseHelpCli::get_doc_metadata();
+        let localizer = crate::cli_localization::build_localizer(Some("en-US"));
+
+        for field in metadata.fields {
+            ensure!(
+                field.name != "cmds",
+                "release help must not expose the structural cmds container"
+            );
+            ensure!(
+                field.long_help_id.is_none(),
+                "release help should use one resolved help key for {}",
+                field.name
+            );
+            let description = localizer
+                .lookup(&field.help_id, None)
+                .with_context(|| format!("release help should localize {}", field.name))?;
+            ensure!(
+                !description.starts_with("[missing:"),
+                "release help should not emit a missing message for {}: {description}",
+                field.name
+            );
+        }
         Ok(())
     }
 }

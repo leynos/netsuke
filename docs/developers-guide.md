@@ -1143,11 +1143,13 @@ Release builds generate their manual and PowerShell help explicitly with
 permitted composition site for release help. `CliConfig` supplies only layered
 configuration fields; `Cli::command()` supplies parser-only flags such as
 `--config` and documented subcommands, including `help targets`. The adapter
-adds parser-only help metadata without adding an environment or file source.
-Keep selector precedence and fail-closed loading in `src/cli/discovery.rs`, as
-required by [ADR 004]. During ordinary Cargo builds, `build.rs` generates the
-local manual page and shell completions, and audits the localization keys.
-Release automation installs the pinned tool with:
+projects existing CLI Fluent keys onto published configuration fields and adds
+parser-only help metadata without adding an environment or file source. It
+omits the structural `cmds` container. Keep selector precedence and fail-closed
+loading in `src/cli/discovery.rs`, as required by [ADR 004]. During ordinary
+Cargo builds, `build.rs` generates the local manual page and shell completions,
+and audits the localization keys. Release automation installs the pinned tool
+with:
 
 ```bash
 cargo install cargo-orthohelp --version 0.9.0 --locked

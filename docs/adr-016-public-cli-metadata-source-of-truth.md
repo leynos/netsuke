@@ -26,8 +26,9 @@ established ownership boundary.
 `ReleaseHelpCli` is the sole composition site for Netsuke's release-help
 metadata. It starts with `CliConfig::get_doc_metadata()`, then reads
 `Cli::command()` to add parser-only `--config` metadata and documented
-subcommands. The synthetic selector uses the Fluent `cli.flag.config.help` key
-and has no environment or file source.
+subcommands. It projects existing CLI Fluent keys onto published configuration
+fields and omits the structural `cmds` container. The synthetic selector uses
+the Fluent `cli.flag.config.help` key and has no environment or file source.
 
 `ReleaseHelpCli` supplies metadata only. It does not resolve a selector, load a
 file, establish precedence, or decide failure behaviour. `discovery.rs` retains
@@ -39,7 +40,8 @@ the public `--config` and `NETSUKE_CONFIG` policy defined by ADR 004.
   `ortho_config` `root_type`, so the generator sees the complete public CLI.
 - **Ownership remains local.** `CliConfig` remains the source of truth for
   layered fields, while Clap remains the source of truth for parser-only
-  selectors and subcommands.
+  selectors and subcommands. `ReleaseHelpCli` only joins the existing Fluent
+  keys to the published field metadata.
 - **Localization remains explicit.** Parser-only fields carry declared Fluent
   keys, rather than relying on inferred message-name conventions.
 - **Policy stays separate from description.** Describing `--config` in help
@@ -55,6 +57,8 @@ cover the composition with unit, snapshot, and artefact tests.
 `CliConfig` must not gain parser-only fields, and a second parser metadata
 model must not be introduced. Changes to selector policy still update ADR 004,
 `discovery.rs`, and the configuration documentation rather than this adapter.
+The structural `cmds` container is absent from release help because it is not a
+standalone public configuration setting.
 
 ## Alternatives considered
 
