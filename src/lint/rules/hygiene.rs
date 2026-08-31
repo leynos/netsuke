@@ -6,7 +6,7 @@
 //! has gone. Unused-rule analysis binds to the manifest stage instead, because
 //! a `foreach` target's rule reference only exists once the loop is unrolled.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::{Recipe, StringOrList};
 use crate::lint::document::{Document, Node, NodeKind, Span};
@@ -94,9 +94,8 @@ impl DocumentRule for UnusedMacro {
             return;
         };
         let declarations = macros.items().filter_map(|item| {
-            let signature = item.get("signature");
-            let name = signature.and_then(Node::as_str).map(macro_name)?;
-            Some((name, signature.map_or(item.span, |node| node.span)))
+            let signature = item.get("signature")?;
+            Some((macro_name(signature.as_str()?), signature.span))
         });
         report_unreferenced_declarations(declarations, &referenced, sink, |name| {
             format!("macro `{name}` is never called")
@@ -235,16 +234,39 @@ impl ManifestRule for UnusedRule {
     }
 }
 
-/// Collect every rule name a target, action, or other rule references.
+/// Collect every rule name reachable from a target or an action.
+///
+/// Reachability is seeded from targets and actions alone, then followed
+/// through rule delegation. Treating every rule's own references as roots
+/// would let a dead rule keep its delegate alive: if nothing selects
+/// `wrapper` and `wrapper` delegates to `compile`, neither contributes a
+/// build edge, so reporting only `wrapper` would leave the real orphan
+/// hidden. The insertion guard also terminates a delegation cycle, which the
+/// manifest parser accepts and graph lowering does not resolve away.
 fn referenced_rules<'a>(ctx: &'a ManifestContext<'a>) -> BTreeSet<&'a str> {
-    let recipes = ctx
+    let rules: BTreeMap<&str, &Recipe> = ctx
+        .manifest
+        .rules
+        .iter()
+        .map(|rule| (rule.name.as_str(), &rule.recipe))
+        .collect();
+    let mut reachable = BTreeSet::new();
+    let mut queue: Vec<&str> = ctx
         .manifest
         .targets
         .iter()
         .chain(&ctx.manifest.actions)
-        .map(|target| &target.recipe)
-        .chain(ctx.manifest.rules.iter().map(|rule| &rule.recipe));
-    recipes.flat_map(rule_references).collect()
+        .flat_map(|target| rule_references(&target.recipe))
+        .collect();
+    while let Some(name) = queue.pop() {
+        if !reachable.insert(name) {
+            continue;
+        }
+        if let Some(recipe) = rules.get(name) {
+            queue.extend(rule_references(recipe));
+        }
+    }
+    reachable
 }
 
 /// Report the rule names one recipe references.

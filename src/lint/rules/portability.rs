@@ -19,12 +19,26 @@ pub fn rules() -> Vec<Registered> {
     vec![Registered::Document(&Bashism)]
 }
 
+/// Where a construct must appear before it counts as shell syntax.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Position {
+    /// Anywhere in the shell-active text.
+    Anywhere,
+    /// Bounded by non-word bytes, so it does not match inside a longer word.
+    Word,
+    /// Only as the leading word of a command.
+    ///
+    /// `function`, `source`, and `local` are ordinary arguments elsewhere:
+    /// `grep function main.c` names a search pattern, not a shell keyword.
+    Command,
+}
+
 /// One non-portable construct and the portable alternative.
 struct Construct {
     /// The literal text that identifies the construct.
     token: &'static str,
-    /// Whether the token must be delimited by non-word bytes.
-    needs_word_boundary: bool,
+    /// Where the token must appear to count.
+    position: Position,
     /// What to write instead.
     advice: &'static str,
 }
@@ -37,47 +51,47 @@ struct Construct {
 static CONSTRUCTS: &[Construct] = &[
     Construct {
         token: "[[",
-        needs_word_boundary: false,
+        position: Position::Anywhere,
         advice: "use `[` with POSIX operators",
     },
     Construct {
         token: "function",
-        needs_word_boundary: true,
+        position: Position::Command,
         advice: "declare the function as `name() { … }`",
     },
     Construct {
         token: "source",
-        needs_word_boundary: true,
+        position: Position::Command,
         advice: "use `.` to source a file",
     },
     Construct {
         token: "local",
-        needs_word_boundary: true,
+        position: Position::Command,
         advice: "assign without `local`, or keep the assignment in a subshell",
     },
     Construct {
         token: "<<<",
-        needs_word_boundary: false,
+        position: Position::Anywhere,
         advice: "pipe the value in with `printf %s … |`",
     },
     Construct {
         token: "&>",
-        needs_word_boundary: false,
+        position: Position::Anywhere,
         advice: "redirect with `> file 2>&1`",
     },
     Construct {
         token: "|&",
-        needs_word_boundary: false,
+        position: Position::Anywhere,
         advice: "redirect with `2>&1 |`",
     },
     Construct {
         token: "pipefail",
-        needs_word_boundary: true,
+        position: Position::Word,
         advice: "check each stage's status, or accept the pipeline's last status",
     },
     Construct {
         token: "echo -e",
-        needs_word_boundary: false,
+        position: Position::Anywhere,
         advice: "use `printf` for escape sequences",
     },
 ];
@@ -117,10 +131,10 @@ impl DocumentRule for Bashism {
 
 /// Report every occurrence of one non-portable construct in a fragment.
 fn report_construct(part: &RecipePart<'_>, construct: &Construct, sink: &mut FindingSink<'_>) {
-    let matches = if construct.needs_word_boundary {
-        shellscan::find_words(part.source, construct.token)
-    } else {
-        shellscan::find_all(part.source, construct.token)
+    let matches = match construct.position {
+        Position::Anywhere => shellscan::find_all(part.source, construct.token),
+        Position::Word => shellscan::find_words(part.source, construct.token),
+        Position::Command => command_positions(part.source, construct.token),
     };
     for found in matches {
         sink.at(
@@ -134,6 +148,18 @@ fn report_construct(part: &RecipePart<'_>, construct: &Construct, sink: &mut Fin
             ),
         );
     }
+}
+
+/// Find every occurrence of `token` that leads a command.
+fn command_positions(text: &str, token: &str) -> Vec<shellscan::Match> {
+    shellscan::segments(text)
+        .into_iter()
+        .filter_map(|(offset, segment)| Some((offset, shellscan::leading_word(segment)?)))
+        .filter(|(_, (_, word))| *word == token)
+        .map(|(offset, (lead, word))| {
+            shellscan::Match::new(offset.saturating_add(lead), word.len())
+        })
+        .collect()
 }
 
 #[cfg(test)]
