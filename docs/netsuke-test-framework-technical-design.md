@@ -117,7 +117,7 @@ which alone holds scheduling state and writes the report._
 
 ### 4.1. The pipeline today
 
-The loader driver `from_str_named` (`src/manifest/mod.rs:119`) runs six stages:
+The loader driver `from_str_named` (`src/manifest/mod.rs:109`) runs six stages:
 read, `serde_saphyr` parse into a JSON value tree, MiniJinja environment
 construction (strict undefined; `env()` and `glob()` registered from an injected
 `EnvReader` and the glob expander; stdlib registered according to the selected
@@ -125,7 +125,7 @@ construction (strict undefined; `env()` and `glob()` registered from an injected
 plus `expand_foreach` (which also evaluates `when`), `serde_json::from_value`
 deserialization into `NetsukeManifest`, and `render_manifest` string rendering.
 The fullest-parameterized entry point is `from_path_with_policy_and_env`
-(`src/manifest/mod.rs:380`), which already accepts a `NetworkPolicy`, an
+(`src/manifest/mod.rs:385`), which already accepts a `NetworkPolicy`, an
 `EnvReader`, and a coarse `ManifestLoadStage` callback.
 
 Two ordering facts drive the design. First, `foreach` and `when` evaluate
@@ -140,10 +140,10 @@ expansion.
 
 `netsuke help targets` established the pattern this framework extends. The
 loader already selects its standard-library boundary through an enum
-(`StdlibRegistration`, `src/manifest/mod.rs:113`) with two variants:
+(`StdlibRegistration`, `src/manifest/mod.rs:99`) with two variants:
 `Full(Box<StdlibConfig>)` for builds, and `ManifestQuery` for side-effect-free
 discovery. `src/manifest/query.rs` owns that boundary, and
-`register_manifest_query` (`src/stdlib/register.rs:114`) implements it by
+`register_manifest_query` (`src/stdlib/register.rs:135`) implements it by
 registering the pure helpers and replacing `env`, `glob`, `fetch`, `shell`,
 `grep`, and `contents` with stubs that raise a located diagnostic naming the
 unavailable operation.
@@ -163,7 +163,7 @@ Three consequences follow, each replacing machinery this design would otherwise
 have invented:
 
 - The disabled-helper diagnostic already exists.
-  `manifest_query_operation_error` (`src/stdlib/register.rs:185`) is the
+  `manifest_query_operation_error` (`src/stdlib/register.rs:262`) is the
   template for the "unavailable under test" messages in §5.5; the test mode
   reuses the mechanism with its own message keys rather than intercepting
   MiniJinja's unknown-function error.
@@ -230,7 +230,7 @@ shipped binary.
 
 ### 4.4. Result views
 
-`NetsukeManifest` already derives `Serialize` (`src/ast/mod.rs:101`), and
+`NetsukeManifest` already derives `Serialize` (`src/ast/mod.rs:102`), and
 `GraphView` (`src/graph_view/`) is an existing deterministic projection of
 `BuildGraph` with sorted nodes and edges. The assertion layer builds on both:
 
@@ -240,7 +240,7 @@ shipped binary.
   methods the UX design promises (`has_target`, `has_rule`, `target(name)`
   field access), exposed as a MiniJinja object.
 - `result.ninja` — the string from `ninja_gen::generate`
-  (`src/ninja_gen/mod.rs:87`), which is already deterministic for snapshot
+  (`src/ninja_gen/mod.rs:106`), which is already deterministic for snapshot
   tests.
 
 The IR types themselves are not exposed: the views are a stable assertion
@@ -262,7 +262,7 @@ reader never consults it (C2, C4).
 ### 5.2. Clock (new seam)
 
 `now()` currently calls `OffsetDateTime::now_utc()` directly
-(`src/stdlib/time/mod.rs:49`) — a gap relative to ADR-008. The stdlib time
+(`src/stdlib/time/mod.rs:62`) — a gap relative to ADR-008. The stdlib time
 module gains a clock provider in the `EnvReader` shape (an `Arc` closure,
 because MiniJinja registration requires `Send + Sync`):
 
@@ -582,8 +582,20 @@ compositions of public library functions:
 - `load_manifest` → `manifest::from_str_named`-equivalent entry with
   `ManifestLoadOptions` (§4.3);
 - `build_graph` → `BuildGraph::from_manifest`
-  (`src/ir/from_manifest.rs:38`) over the loaded manifest;
+  (`src/ir/from_manifest.rs:49`) over the loaded manifest;
 - `generate_ninja` → `ninja_gen::generate` over the built graph.
+
+`BuildGraph::from_manifest` lowers path placeholders for
+`RecipeShell::host_default()`, so quoting in the resulting command text differs
+between a POSIX host and a Windows one. The test runner keeps that default
+rather than pinning a shell: invariant I4 requires a case to lower exactly as
+`netsuke build` would on the same machine, and pinning would break that on
+Windows. The consequence belongs in the dialect's contract rather than in a
+footnote — an assertion over raw `result.ninja` text containing quoted paths is
+host-sensitive, whereas the graph view's structural helpers are not. Authors
+testing recipe text across platforms should assert through the view, and a
+future dialect addition may expose `from_manifest_for_shell` so a case can pin
+a shell deliberately.
 
 Within a step, the actions share one pipeline pass: `build_graph` and
 `generate_ninja` extend the step's memoized artefacts rather than re-running
