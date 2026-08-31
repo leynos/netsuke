@@ -154,7 +154,7 @@ def test_makefile_clippy_flags_stay_workspace_wide() -> None:
 
 
 def test_makefile_check_fmt_runs_markdown_format_checker() -> None:
-    """Protect Markdown formatting from being silently removed from make check-fmt."""
+    """Protect NUL-safe Markdown batching and its portable empty-input guard."""
     makefile_lines = MAKEFILE_PATH.read_text(encoding="utf-8").splitlines()
     target_index = next(
         (
@@ -174,14 +174,16 @@ def test_makefile_check_fmt_runs_markdown_format_checker() -> None:
         if line.startswith("\t"):
             recipe_lines.append(line)
     recipe = "\n".join(recipe_lines)
-    expected_pipeline = (
-        "@$(MD_FILES_FIND) | xargs -0 -r scripts/check-markdown-format.sh"
-    )
 
     required_fragments = {
         "$(MD_FILES_FIND)": "discover Markdown files with $(MD_FILES_FIND)",
         "scripts/check-markdown-format.sh": "invoke the Markdown format checker",
-        "xargs -0 -r": "batch Markdown paths with NUL delimiters and skip empty input",
+        "xargs -0": "batch Markdown paths with NUL delimiters",
+        "sh -c": "run the portable empty-input guard",
+        'if [ "$$#" -gt 0 ]': "skip the Markdown checker for empty input",
+        'scripts/check-markdown-format.sh "$$@"': (
+            "validate every discovered Markdown path"
+        ),
     }
     missing_fragments = [
         description
@@ -189,8 +191,24 @@ def test_makefile_check_fmt_runs_markdown_format_checker() -> None:
         if fragment not in recipe
     ]
     assert not missing_fragments, "check-fmt must " + "; ".join(missing_fragments)
-    assert recipe.count(expected_pipeline) == 1, (
-        "check-fmt must contain exactly one Markdown format checker pipeline"
+
+    xargs_arguments = [
+        argument
+        for line in recipe_lines
+        if "xargs" in line
+        for argument in line.split()
+    ]
+    assert not any(
+        argument in {"-r", "--no-run-if-empty"}
+        or (
+            argument.startswith("-")
+            and not argument.startswith("--")
+            and "r" in argument[1:]
+        )
+        for argument in xargs_arguments
+    ), (
+        "check-fmt must use the shell positional-parameter guard instead of "
+        f"GNU-only xargs -r, found xargs arguments: {xargs_arguments!r}"
     )
 
 
