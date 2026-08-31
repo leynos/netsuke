@@ -145,6 +145,44 @@ fn unused_rule_accepts_a_rule_a_generated_target_uses() {
     crate::assert_lint_silent!(yaml, "unused-rule");
 }
 
+/// A dead rule must not keep its delegate alive.
+///
+/// Neither rule contributes a build edge, so both are unused; crediting the
+/// reference that `wrapper` makes would report only `wrapper` and hide the
+/// real orphan.
+#[test]
+fn unused_rule_reports_a_rule_only_another_dead_rule_references() {
+    let yaml = concat!(
+        "netsuke_version: \"1.0.0\"\n",
+        "rules:\n",
+        "  - name: wrapper\n",
+        "    rule: compile\n",
+        "  - name: compile\n",
+        "    command: \"cc -c {{ ins }} -o {{ outs }}\"\n",
+        "targets:\n",
+        "  - name: out\n",
+        "    command: \"touch {{ outs }}\"\n",
+    );
+    crate::assert_lint_fires!(yaml, "unused-rule", 2);
+}
+
+/// A rule delegation cycle must terminate rather than hang.
+#[test]
+fn unused_rule_terminates_on_a_delegation_cycle() {
+    let yaml = concat!(
+        "netsuke_version: \"1.0.0\"\n",
+        "rules:\n",
+        "  - name: first\n",
+        "    rule: second\n",
+        "  - name: second\n",
+        "    rule: first\n",
+        "targets:\n",
+        "  - name: out\n",
+        "    rule: first\n",
+    );
+    crate::assert_lint_silent!(yaml, "unused-rule");
+}
+
 #[test]
 fn unused_rule_is_suppressed_by_a_directive() {
     let yaml = concat!(

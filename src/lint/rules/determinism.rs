@@ -85,9 +85,7 @@ fn detached_offsets(part: &RecipePart<'_>) -> Vec<usize> {
 fn detaches(bytes: &[u8], index: usize) -> bool {
     let previous = index.checked_sub(1).and_then(|prior| bytes.get(prior));
     let next = bytes.get(index.saturating_add(1));
-    !matches!(previous, Some(b'&' | b'>' | b'<'))
-        && !matches!(next, Some(b'&' | b'>' | b'1' | b'2'))
-        && next.is_none_or(u8::is_ascii_whitespace)
+    !matches!(previous, Some(b'&' | b'>' | b'<')) && next.is_none_or(u8::is_ascii_whitespace)
 }
 
 /// Build tools whose re-entry defeats the single static graph.
@@ -145,9 +143,8 @@ fn report_invocations(part: &RecipePart<'_>, sink: &mut FindingSink<'_>) {
 /// Report the build tool a leading word invokes, ignoring any path prefix.
 fn invoked_tool(word: &str) -> Option<&'static str> {
     let command = word.rsplit('/').next().unwrap_or(word);
-    BUILD_TOOLS
-        .into_iter()
-        .find(|tool| command == *tool || command == format!("{tool}.exe"))
+    let stem = command.strip_suffix(".exe").unwrap_or(command);
+    BUILD_TOOLS.into_iter().find(|tool| stem == *tool)
 }
 
 #[cfg(test)]
