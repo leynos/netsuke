@@ -6,9 +6,11 @@
 
 #[cfg(unix)]
 use super::super::MAX_UNREACHABLE_SYMLINK_SAMPLES;
-use super::super::{GlobBaseCache, PreparedGlob, expand_manifest_template_glob, glob_paths};
+use super::super::{
+    GlobBaseCache, GlobExpansion, PreparedGlob, expand_manifest_template_glob, glob_paths,
+};
 use super::diagnostics_support::{
-    BASE_CACHE, EXPANSIONS, SKIPPED, TEMPLATE_EXPANSION_DURATION, TEMPLATE_EXPANSIONS,
+    BASE_CACHE, EXPANSIONS, SKIPPED, Snapshot, TEMPLATE_EXPANSION_DURATION, TEMPLATE_EXPANSIONS,
     counter_value, counter_value_with_labels, has_histogram, recorded,
 };
 use anyhow::{Context, Result, ensure};
@@ -22,6 +24,21 @@ fn expand_and_record(pattern: &str) -> Result<Vec<String>> {
     let base = GlobBaseCache::new(None);
     let expansion = expand_manifest_template_glob(pattern, &base)?;
     Ok(expansion.into_paths())
+}
+
+/// Expand and record a manifest-template glob anchored at `temporary_directory`.
+fn expand_and_record_with_injected_base(
+    temporary_directory: &tempfile::TempDir,
+    pattern: &str,
+) -> (Result<Vec<String>>, Vec<String>, Snapshot) {
+    recorded(|| -> Result<Vec<String>> {
+        let base = Utf8Path::from_path(temporary_directory.path())
+            .context("temporary directory should have a UTF-8 path")?
+            .to_path_buf();
+        let cache = GlobBaseCache::new(Some(base));
+        let expansion = expand_manifest_template_glob(pattern, &cache)?;
+        Ok(GlobExpansion::into_paths(expansion))
+    })
 }
 
 #[rstest]
@@ -73,15 +90,8 @@ fn a_completed_expansion_counts_its_matches() -> Result<()> {
     let temp = tempdir()?;
     test_fs::write(temp.path().join("a.txt"), "a")?;
     test_fs::write(temp.path().join("b.txt"), "b")?;
-    let base = Utf8Path::from_path(temp.path())
-        .context("temporary directory should have a UTF-8 path")?
-        .to_path_buf();
-    let cache = GlobBaseCache::new(Some(base));
 
-    let (results, events, snapshot) = recorded(|| -> Result<Vec<String>> {
-        let expansion = expand_manifest_template_glob("*.txt", &cache)?;
-        Ok(expansion.into_paths())
-    });
+    let (results, events, snapshot) = expand_and_record_with_injected_base(&temp, "*.txt");
     ensure!(results?.len() == 2, "both files should match");
 
     ensure!(
@@ -127,15 +137,9 @@ fn a_completed_expansion_counts_its_matches() -> Result<()> {
 #[rstest]
 fn an_unopenable_prefix_counts_and_names_the_prefix() -> Result<()> {
     let temp = tempdir()?;
-    let base = Utf8Path::from_path(temp.path())
-        .context("temporary directory should have a UTF-8 path")?
-        .to_path_buf();
-    let cache = GlobBaseCache::new(Some(base));
 
-    let (results, events, snapshot) = recorded(|| -> Result<Vec<String>> {
-        let expansion = expand_manifest_template_glob("no-such-dir/*.txt", &cache)?;
-        Ok(expansion.into_paths())
-    });
+    let (results, events, snapshot) =
+        expand_and_record_with_injected_base(&temp, "no-such-dir/*.txt");
     ensure!(results?.is_empty(), "a missing prefix should match nothing");
 
     ensure!(
