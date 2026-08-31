@@ -2574,14 +2574,15 @@ optional `NO_COLOR` lookup behaviour.
 
 `src/cli/parser_tests.rs` exclusively owns the private
 `render_localized_long_help` helper. It builds, localizes, renders, and
-normalizes help as a pure CQRS query with no filesystem I/O. The localized
-config and topic substring tests are its permitted callers.
+normalizes help as a pure CQRS query with no filesystem I/O. Its only permitted
+callers are `localized_help_includes_config_flag`, `localized_help_snapshot`,
+and `localized_help_topics_include_localized_descriptions`.
 
-`localized_help_snapshot` is the sole command/acceptance layer. It binds
-`snapshot_settings("cli")` and invokes `assert_snapshot!`, which may read or
-write under `src/snapshots/cli`. Production code and unrelated test modules
-must not use the helper. Broader reuse requires moving it into shared test
-support, justified by new call sites.
+`localized_help_snapshot` is the sole command/acceptance layer. Only this test
+may bind `snapshot_settings("cli")` and invoke `assert_snapshot!`, which may
+read or write under `src/snapshots/cli`. Production code and unrelated test
+modules must not use the helper. Broader reuse requires moving it into shared
+test support, justified by new call sites.
 
 ### JSON snapshot version redaction
 
