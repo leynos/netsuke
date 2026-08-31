@@ -99,9 +99,7 @@ pub(super) fn record_base_cache_hit() {
 
 /// Record a successful first canonicalization of the manifest base.
 pub(super) fn record_base_cache_miss(duration: Duration) {
-    describe_metrics();
-    counter!(BASE_CACHE_TOTAL, "outcome" => "miss").increment(1);
-    record_base_canonicalization_duration(duration);
+    record_base_cache_canonicalization("miss", duration);
     tracing::debug!(
         operation = "glob_base_cache",
         outcome = "miss",
@@ -111,15 +109,20 @@ pub(super) fn record_base_cache_miss(duration: Duration) {
 
 /// Record a failed canonicalization of the manifest base.
 pub(super) fn record_base_cache_error(duration: Duration) {
-    describe_metrics();
-    counter!(BASE_CACHE_TOTAL, "outcome" => "error").increment(1);
-    record_base_canonicalization_duration(duration);
+    record_base_cache_canonicalization("error", duration);
     tracing::debug!(
         operation = "glob_base_cache",
         outcome = "error",
         error_category = "base_resolution",
         "manifest glob base preparation failed"
     );
+}
+
+/// Record the metric-only observations for one base canonicalization.
+fn record_base_cache_canonicalization(outcome: &'static str, duration: Duration) {
+    describe_metrics();
+    counter!(BASE_CACHE_TOTAL, "outcome" => outcome).increment(1);
+    record_base_canonicalization_duration(duration);
 }
 
 /// Record the elapsed duration of one injected-base canonicalization.
