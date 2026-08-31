@@ -40,6 +40,7 @@ pub(super) fn recognised_configuration_field_names() -> Vec<String> {
         .collect()
 }
 
+/// Verify that parser-only metadata preserves the corresponding Clap details.
 #[rstest]
 #[case::directory(
     "directory",
@@ -104,6 +105,7 @@ fn parser_only_metadata_preserves_clap_details(
     Ok(())
 }
 
+/// Verify that missing parser arguments are rejected during extraction.
 #[rstest]
 #[case::directory("directory")]
 #[case::config("config")]
@@ -123,6 +125,7 @@ fn parser_only_metadata_requires_the_parser_argument(#[case] argument_id: &str) 
     Ok(())
 }
 
+/// Verify that release help includes every parser-only selector.
 #[test]
 fn release_help_metadata_composes_every_parser_only_selector() -> Result<()> {
     let metadata = ReleaseHelpCli::try_get_doc_metadata()?;
@@ -140,6 +143,7 @@ fn release_help_metadata_composes_every_parser_only_selector() -> Result<()> {
     Ok(())
 }
 
+/// Verify that known fields resolve and the structural field is omitted.
 #[rstest]
 #[case::known("file", Some(keys::CLI_FLAG_FILE_HELP))]
 #[case::structural("cmds", None)]
@@ -178,6 +182,7 @@ fn config_metadata_localization_handles_known_and_structural_fields(
     Ok(())
 }
 
+/// Verify that unknown configuration fields fail localization.
 #[test]
 fn config_metadata_localization_rejects_unknown_fields() -> Result<()> {
     let mut field = CliConfig::get_doc_metadata()

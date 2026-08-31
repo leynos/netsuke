@@ -38,6 +38,7 @@ impl ReleaseHelpCli {
 }
 
 impl OrthoConfigDocs for ReleaseHelpCli {
+    /// Return the composed metadata consumed by release-help generators.
     fn get_doc_metadata() -> DocMetadata {
         match Self::try_get_doc_metadata() {
             Ok(metadata) => metadata,
@@ -236,6 +237,7 @@ mod tests {
             .context("release help metadata should resolve its description")
     }
 
+    /// Verify that the help subcommand documents the available help targets.
     #[test]
     fn metadata_documents_help_targets_through_the_help_subcommand() {
         let metadata = ReleaseHelpCli::get_doc_metadata();
@@ -256,6 +258,7 @@ mod tests {
         );
     }
 
+    /// Verify that Cargo selects the release-help Clap metadata adapter.
     #[test]
     fn cargo_metadata_selects_the_clap_documentation_adapter() {
         assert!(
@@ -265,6 +268,7 @@ mod tests {
         );
     }
 
+    /// Verify that the help-targets description resolves through localization.
     #[test]
     fn release_help_metadata_localizes_the_help_targets_description() -> Result<()> {
         let description = localized_release_help_description(
@@ -340,6 +344,7 @@ mod tests {
     }
 
     proptest! {
+        /// Verify that configuration metadata is projected or rejected consistently.
         #[test]
         fn localized_config_help_preserves_the_configuration_metadata_contract(
             field_names in prop::collection::vec(

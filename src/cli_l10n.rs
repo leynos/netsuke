@@ -365,6 +365,7 @@ mod tests {
     use super::*;
     use rstest::rstest;
 
+    /// Verify that help topic names map only to supported about keys.
     #[rstest]
     #[case("targets", Some(keys::CLI_HELP_TARGETS_ABOUT))]
     #[case("build", Some(keys::CLI_SUBCOMMAND_BUILD_ABOUT))]
