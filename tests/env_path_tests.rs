@@ -9,7 +9,6 @@
 //! `env_path_property_tests.rs`, which Cargo builds as its own target.
 
 use anyhow::{Context, Result, ensure};
-use camino::Utf8PathBuf;
 use netsuke::runner::CommandEnv;
 use proptest::prelude::*;
 #[cfg(unix)]
@@ -20,6 +19,19 @@ use std::{
     path::PathBuf,
 };
 use test_support::env::prepend_path_value;
+
+
+//! Tests for composing isolated child-process `PATH` values.
+//!
+//! Composition is pure (`test_support::env::prepend_path_value`) and the
+//! runner applies the result as data via `CommandEnv`, so nothing here
+//! mutates the parent process: no test carries `#[serial]` and none needs
+//! process-global environment or working-directory coordination.
+//!
+//! These are the named cases; the invariants they instantiate live in
+//! `env_path_property_tests.rs`, which Cargo builds as its own target.
+#[cfg(unix)]
+};
 
 #[rstest]
 fn prepend_dir_to_path_preserves_existing_entries() -> Result<()> {
@@ -239,6 +251,7 @@ fn unoverridden_parent_variables_are_inherited(
     #[from(probe_fixture)] baseline: Result<(tempfile::TempDir, PathBuf, PathBuf)>,
     probe_fixture: Result<(tempfile::TempDir, PathBuf, PathBuf)>,
 ) -> Result<()> {
+    use camino::Utf8PathBuf;
     use netsuke::runner::{
         BuildTargets, NinjaBuildRequest, NinjaProcessOptions, StderrMode, run_ninja_with,
     };
@@ -297,6 +310,7 @@ fn general_overrides_reach_the_spawned_tool_process(
         PathBuf,
     )>,
 ) -> Result<()> {
+    use camino::Utf8PathBuf;
     use netsuke::runner::{NinjaProcessOptions, NinjaToolRequest, StderrMode, run_ninja_tool_with};
 
     let (dir, probe, build_file) = probe_fixture?;

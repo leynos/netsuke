@@ -16,6 +16,7 @@ use metrics_util::{
 use monotony::StdMonotonicClock;
 #[cfg(unix)]
 use monotony::test_util::FixedMonotonicClock;
+#[cfg(unix)]
 use std::path::Path;
 #[cfg(unix)]
 use std::process::Stdio;
