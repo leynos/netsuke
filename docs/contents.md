@@ -252,7 +252,7 @@ operator, user, and contributor references are easier to find.
 - [ADR-041](adr-041-canonical-recipe-shell-quoting-surface.md): `shell_quote`
   and `shell_join` as the canonical recipe quoting surface, with two dialects
   and a host-dependent default.
-- [ADR-015](adr-015-manifest-linting-under-netsuke-check.md):
+- [ADR-016](adr-016-manifest-linting-under-netsuke-check.md):
   Manifest-linting decision record, placing the linter under `netsuke check`,
   treating findings as command results rather than failures, and fixing the
   rule-identifier and rule-text ownership rules.
