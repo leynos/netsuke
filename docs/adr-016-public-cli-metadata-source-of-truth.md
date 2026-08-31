@@ -16,10 +16,12 @@ not a configuration field: the `-C/--directory` and `--config` selectors and
 command tree. A release-help generator that consumes only `CliConfig` therefore
 omits public, localized CLI documentation.
 
-The missing selector must not become a layered configuration source. ADR 004
-assigns selector precedence, explicit-file loading, and fail-closed behaviour to
-`src/cli/discovery.rs`; putting that policy into OrthoConfig would reverse the
-established ownership boundary.
+The parser-only selectors must not become layered configuration sources. ADR
+004 assigns `--config` precedence, explicit-file loading, and fail-closed
+behaviour to `src/cli/discovery.rs`, while ADR 014 assigns `-C/--directory`
+project-discovery rooting and manifest lookup to the same discovery boundary.
+Putting either policy into OrthoConfig would reverse the established ownership
+boundary.
 
 ## Decision
 
@@ -33,7 +35,8 @@ source.
 
 `ReleaseHelpCli` supplies metadata only. It does not resolve a selector, load a
 file, establish precedence, or decide failure behaviour. `discovery.rs` retains
-the public `--config` and `NETSUKE_CONFIG` policy defined by ADR 004.
+the public `--config` and `NETSUKE_CONFIG` policy defined by ADR 004, and the
+`-C/--directory` project-discovery policy defined by ADR 014.
 
 ## Rationale
 
@@ -47,7 +50,7 @@ the public `--config` and `NETSUKE_CONFIG` policy defined by ADR 004.
   keys, rather than relying on inferred message-name conventions.
 - **Policy stays separate from description.** Describing the parser-only
   selectors in help does not transfer config-selector precedence, project-root
-  discovery, or fail-closed loading semantics.
+  discovery, or fail-closed loading semantics to the metadata adapter.
 
 ## Consequences
 
@@ -58,10 +61,12 @@ through `define_keys!`, and cover the composition with unit, snapshot, and
 artefact tests.
 
 `CliConfig` must not gain parser-only fields, and a second parser metadata
-model must not be introduced. Changes to selector policy still update ADR 004,
-`discovery.rs`, and the configuration documentation rather than this adapter.
-The structural `cmds` container is absent from release help because it is not a
-standalone public configuration setting.
+model must not be introduced. Changes to `--config` policy still update ADR
+004, while changes to `-C/--directory` rooting still update ADR 014; both
+policies are implemented in `discovery.rs` and documented with the
+configuration behaviour rather than in this adapter. The structural `cmds`
+container is absent from release help because it is not a standalone public
+configuration setting.
 
 ## Alternatives considered
 
@@ -88,3 +93,5 @@ standalone public configuration setting.
 - Design narrative: [Netsuke design §8.5](netsuke-design.md#85-manual-pages)
 - Selector-policy boundary:
   [ADR 004](adr-004-explicit-config-selection-outside-orthoconfig.md)
+- Base-directory policy:
+  [ADR 014](adr-014-base-directory-seam-and-dir-anchoring.md)

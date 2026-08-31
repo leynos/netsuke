@@ -86,9 +86,9 @@ operator, user, and contributor references are easier to find.
   manifest and glob resolution, explicit-selector independence from `-C`, and
   the in-process environment-mutation gate.
 - [ADR-016: public CLI metadata source of truth](
-  adr-016-public-cli-metadata-source-of-truth.md):
-  Release-help metadata composition boundary for configuration fields,
-  parser-only selectors, and subcommands.
+  adr-016-public-cli-metadata-source-of-truth.md): Release-help metadata
+  composition boundary for configuration fields, parser-only selectors, and
+  subcommands.
 
 ## Proposals
 

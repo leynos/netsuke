@@ -1146,8 +1146,10 @@ configuration fields; `Cli::command()` supplies parser-only flags such as
 `help targets`. The adapter projects existing CLI Fluent keys onto published
 configuration fields and adds parser-only help metadata without adding an
 environment or file source. It omits the structural `cmds` container. Keep
-selector precedence and fail-closed loading in `src/cli/discovery.rs`, as
-required by [ADR 004]. During ordinary Cargo builds, `build.rs` generates the
+`--config` selector precedence and fail-closed loading in
+`src/cli/discovery.rs`, as required by [ADR 004]. Keep `-C/--directory`
+project-discovery rooting and manifest lookup in that discovery boundary, as
+required by [ADR 014]. During ordinary Cargo builds, `build.rs` generates the
 local manual page and shell completions, and audits the localization keys.
 Release automation installs the pinned tool with:
 
@@ -1194,6 +1196,7 @@ metadata model. Declare its Fluent key with `define_keys!` in
 artefact coverage for the composed surface.
 
 [ADR 004]: adr-004-explicit-config-selection-outside-orthoconfig.md
+[ADR 014]: adr-014-base-directory-seam-and-dir-anchoring.md
 
 Use `googletest` matchers for structural or diagnostic assertions and
 `pretty_assertions` for ordered collection equality where its diff is useful.
