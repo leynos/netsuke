@@ -22,9 +22,9 @@ selected local bundle catalogue.
 
 The central rule is:
 
-> A bundle instance is identified by source identity, declared version,
-> namespace, and rendered parameters; none of those inputs may be inferred from
-> mutable ambient state.
+> A bundle instance is identified by requested source and bundle identity,
+> declared version, namespace, and rendered parameters; none of those inputs
+> may be inferred from mutable ambient state.
 
 The design supports two local selection forms:
 
@@ -101,6 +101,8 @@ rust-quality/
 ├── fragments/
 │   ├── lint.yaml
 │   └── test.yaml
+├── tools/
+│   └── run-quality-check
 └── README.md
 ```
 
@@ -115,6 +117,8 @@ bundle:
   name: df12.rust-quality
   version: 1.4.2
   manifest: Netsukefile.bundle.yaml
+  runtime_resources:
+    - tools/run-quality-check
   requires:
     netsuke: ">=0.2.0, <0.3.0"
     manifest: ">=1.1.0, <2.0.0"
@@ -143,15 +147,30 @@ exports:
 
 Unknown descriptor keys are errors. The descriptor is parsed without Jinja.
 
+`runtime_resources` is required, including when its value is an explicit empty
+list. It names every regular file that the bundle makes available to a spawned
+process or reads as runtime data but that is not reachable from the descriptor
+or entry-manifest include graph. Each resource path is a literal,
+bundle-relative, normalized path to one regular file. It may not contain Jinja,
+glob syntax, parent traversal, or a symlink escape. A bundle must declare every
+executable script, helper binary, configuration file, and data file it uses at
+runtime. The resolver opens each declared resource through the selected bundle
+directory capability and includes its path, mode, and bytes in the canonical
+content digest. The manifest compiler must reject a bundle-relative runtime
+file reference that is neither graph-reachable nor declared in
+`runtime_resources`.
+
 ## 5. Import syntax
 
 ### 5.1 Direct bundle path
 
-A direct import names one bundle directory and asserts an exact version:
+A direct import names the expected bundle identity, one bundle directory, and
+asserts an exact version:
 
 ```yaml
 bundles:
-  - source:
+  - name: df12.rust-quality
+    source:
       path: build/bundles/rust-quality
     version: "=1.4.2"
     as: rust
@@ -162,8 +181,8 @@ bundles:
         - tracing
 ```
 
-The selected bundle's descriptor version must satisfy the requirement. A direct
-path does not search sibling directories.
+The selected descriptor name and version must satisfy the import's `name` and
+version requirements. A direct path does not search sibling directories.
 
 ### 5.2 Local catalogue resolution
 
@@ -172,7 +191,8 @@ bundle directories:
 
 ```yaml
 bundles:
-  - source:
+  - name: df12.rust-quality
+    source:
       catalogue: build/bundle-catalogue/rust-quality
     version: "^1.4"
     as: rust
@@ -192,10 +212,12 @@ build/bundle-catalogue/rust-quality/
     └── NetsukeBundle.yaml
 ```
 
-Netsuke examines immediate children in sorted byte order, parses each descriptor,
-and groups candidates by the descriptor's declared bundle name. Directory names
-are hints only. They need not equal the version, although a mismatch should
-produce a diagnostic or policy warning because it is likely confusing.
+Netsuke examines immediate children in sorted byte order and parses each
+descriptor. The import's required `name` selects the matching declared bundle
+identity; candidates declaring another name do not participate in version
+selection. Directory names are hints only. They need not equal the version,
+although a mismatch should produce a diagnostic or policy warning because it is
+likely confusing.
 
 Selection chooses the highest stable semantic version satisfying the
 requirement. Pre-release versions participate only when the requirement itself
@@ -206,14 +228,15 @@ canonical content digests are an ambiguity error.
 
 ### 5.3 Import fields
 
-| Field | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `source.path` | local directory | one source required | Direct bundle directory. |
-| `source.catalogue` | local directory | one source required | Directory of candidate bundles. |
-| `version` | semantic version requirement | required | Accepted bundle version range. |
-| `as` | identifier | required | Namespace for this bundle instance. |
-| `with` | parameter mapping | empty | Explicit parameter values. |
-| `lock` | `required` or `update` | `required` in CI | Lock disposition. |
+| Field              | Type                         | Default             | Meaning                             |
+| ------------------ | ---------------------------- | ------------------- | ----------------------------------- |
+| `name`             | bundle identifier            | required            | Expected declared bundle identity.  |
+| `source.path`      | local directory              | one source required | Direct bundle directory.            |
+| `source.catalogue` | local directory              | one source required | Directory of candidate bundles.     |
+| `version`          | semantic version requirement | required            | Accepted bundle version range.      |
+| `as`               | identifier                   | required            | Namespace for this bundle instance. |
+| `with`             | parameter mapping            | empty               | Explicit parameter values.          |
+| `lock`             | `required` or `update`       | `required` in CI    | Lock disposition.                   |
 
 Table 1: Local bundle import fields.
 
@@ -237,8 +260,8 @@ required. Unknown supplied parameters are errors. Values are validated before
 the entry manifest's Jinja expressions evaluate.
 
 Parameter expressions in the importing manifest may use the ordinary pure
-manifest context, but they must render to the declared type. They may not invoke
-network, subprocess, clock, or unrestricted filesystem helpers.
+manifest context, but they must render to the declared type. They may not
+invoke network, subprocess, clock, or unrestricted filesystem helpers.
 
 Inside a bundle, parameters appear under a dedicated immutable object:
 
@@ -306,6 +329,7 @@ diagnostics.
 A bundle import fails when:
 
 - no candidate satisfies the requested version;
+- no candidate has the requested declared bundle name;
 - the selected bundle rejects the running Netsuke version;
 - the selected bundle rejects the active manifest-format version;
 - candidate identity or version is ambiguous;
@@ -318,8 +342,8 @@ version range make resolution fail with provenance.
 
 ## 10. Tagged Git relationship
 
-This RFC remains local-only, but it reserves provenance fields needed for tagged
-Git resolution under RFC 0004:
+This RFC remains local-only, but it reserves provenance fields needed for
+tagged Git resolution under RFC 0004:
 
 - requested source kind;
 - requested version requirement;
@@ -346,6 +370,7 @@ Netsuke computes a digest over a canonical bundle tree containing:
 
 - every regular file reachable from the descriptor and entry-manifest include
   graph;
+- every regular file named by `runtime_resources`;
 - normalized workspace-relative paths within the bundle;
 - file type and executable bit where semantically relevant; and
 - exact file bytes.
@@ -354,8 +379,8 @@ The canonicalization excludes:
 
 - `.git` data;
 - filesystem timestamps, owners, and inode numbers;
-- files not reachable from the bundle composition unless the descriptor lists
-  them as runtime resources; and
+- files neither reachable from the bundle composition nor named by
+  `runtime_resources`; and
 - generated Netsuke state.
 
 The initial algorithm is SHA-256 with an algorithm-qualified representation:
@@ -392,8 +417,8 @@ The lock file never contains absolute host paths. Paths are relative to the
 workspace root or an explicitly named local catalogue root.
 
 Changing bundle files without changing the declared version is visible as a
-content-digest mismatch. Local development may offer a deliberate unlocked mode,
-but it must be explicit in human and JSON output and should not be the CI
+content-digest mismatch. Local development may offer a deliberate unlocked
+mode, but it must be explicit in human and JSON output and should not be the CI
 default.
 
 ## 13. Provenance and diagnostics
@@ -446,8 +471,8 @@ netsuke bundle update rust
 netsuke bundle verify
 ```
 
-Equivalent placement beneath existing commands is acceptable if it avoids a
-new top-level noun.
+Equivalent placement beneath existing commands is acceptable if it avoids a new
+top-level noun.
 
 Human and JSON output should show:
 
@@ -518,19 +543,23 @@ The implementation must include:
 - catalogue highest-compatible selection;
 - stable versus pre-release selection;
 - malformed candidate and duplicate identity/version failures;
+- catalogue candidates with distinct declared names, proving selection uses the
+  import's required name before comparing compatible versions;
 - typed parameter defaults, missing values, type failures, and unknown keys;
 - private declaration isolation and explicit export tests;
 - multiple instances under distinct namespaces;
 - nested bundle cycles;
 - symlink and lexical boundary escapes;
 - content-digest stability across timestamp changes;
-- digest changes for reachable byte, mode, and path changes;
+- digest changes for reachable and declared runtime-resource byte, mode, and
+  path changes;
+- missing, escaping, non-regular, and undeclared runtime-resource failures;
 - lock verification and atomic update tests;
 - JSON provenance snapshots with redaction; and
 - property tests over bounded version catalogues and parameter maps.
 
-Cross-platform tests must cover path spelling and Windows case behaviour without
-making version selection depend on host directory enumeration.
+Cross-platform tests must cover path spelling and Windows case behaviour
+without making version selection depend on host directory enumeration.
 
 ## 19. Alternatives considered
 
@@ -561,8 +590,6 @@ explicit tagged Git resolution.
 - Should local catalogue roots be declared globally or only per import?
 - Should bundle parameters support enums and constrained strings in the initial
   implementation?
-- Should runtime resource files be declared in the descriptor or inferred from
-  explicit manifest fields?
 - Should local lock updates require an explicit `--update` flag or a dedicated
   command?
 - What stable vocabulary should describe an unlocked development import?

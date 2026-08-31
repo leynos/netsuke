@@ -37,10 +37,10 @@ operator, user, and contributor references are easier to find.
 - [rfcs/0001-structured-command-blocks.md](rfcs/0001-structured-command-blocks.md):
   Proposed structured command blocks, shell-free argv templates, typed Jinja
   interpolation, stream routing, and pipeline semantics.
-- [rfcs/0001-amendment-command-working-directories.md](rfcs/0001-amendment-command-working-directories.md):
+- [rfcs/0009-structured-command-working-directories.md](rfcs/0009-structured-command-working-directories.md):
   Normative amendment adding capability-scoped per-command working directories
   to RFC 0001.
-- [rfcs/0001-amendment-runtime-bindings-and-secure-tempdirs.md](rfcs/0001-amendment-runtime-bindings-and-secure-tempdirs.md):
+- [rfcs/0010-runtime-bindings-and-secure-tempdirs.md](rfcs/0010-runtime-bindings-and-secure-tempdirs.md):
   Normative amendment adding bounded stdout environment capture, standard-error
   pipelines, environment-selected working directories, and secure temporary
   execution directories to RFC 0001.

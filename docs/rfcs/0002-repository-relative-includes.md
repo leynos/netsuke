@@ -128,10 +128,10 @@ includes:
 
 The initial mapping accepts exactly these keys:
 
-| Field | Type | Default | Meaning |
-| --- | --- | --- | --- |
+| Field  | Type             | Default  | Meaning                                       |
+| ------ | ---------------- | -------- | --------------------------------------------- |
 | `path` | non-empty string | required | Fragment path relative to the including file. |
-| `as` | identifier | absent | Namespace the included declarations. |
+| `as`   | identifier       | absent   | Namespace the included declarations.          |
 
 Table 1: Local include fields.
 
@@ -148,9 +148,9 @@ includes:
     as: rust_quality
 ```
 
-The namespace applies to named rules, targets, and actions. For example,
-`lint` becomes `rust_quality::lint`. References inside the fragment are
-rewritten within that namespace before cross-fragment resolution.
+The namespace applies to named rules, targets, and actions. For example, `lint`
+becomes `rust_quality::lint`. References inside the fragment are rewritten
+within that namespace before cross-fragment resolution.
 
 Fragment variables appear beneath one mapping value named by the namespace:
 
@@ -254,8 +254,8 @@ Settings that control the complete compilation, including manifest-format
 selection and workspace-wide defaults, may appear only in the root manifest
 unless their schema explicitly declares fragment scope.
 
-A fragment containing a root-only setting is rejected at that fragment's
-source span. It is not ignored and does not compete by composition order.
+A fragment containing a root-only setting is rejected at that fragment's source
+span. It is not ignored and does not compete by composition order.
 
 ### 7.4 Sequence sections
 

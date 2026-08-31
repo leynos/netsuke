@@ -48,8 +48,8 @@ The local semantic model must exist first so remote acquisition supplies bytes
 to an already-defined bundle verifier rather than defining bundle meaning by
 accident.
 
-Acceptance of this RFC may occur during v0.2.0 design work. External acquisition
-itself may ship later than local includes and local bundles.
+Acceptance of this RFC may occur during v0.2.0 design work. External
+acquisition itself may ship later than local includes and local bundles.
 
 ## 3. Problem
 
@@ -150,16 +150,16 @@ Exactly one of `tag` or `commit` is required.
 
 ### 5.1 Git source fields
 
-| Field | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `url` | canonical Git URL | required | Repository transport identity. |
-| `tag` | exact tag name | one revision required | Human-friendly exact tag to resolve. |
-| `commit` | full object ID | one revision required | Exact commit to use directly. |
-| `subdir` | relative directory | repository root | Bundle directory within the selected tree. |
-| `digest` | algorithm-qualified digest | required | RFC 0003 canonical bundle content digest. |
-| `tag_object` | full object ID | absent | Optional reviewed assertion for an annotated tag object. |
-| `peeled_commit` | full object ID | absent | Optional reviewed assertion for the resolved commit. |
-| `allow_shallow` | Boolean | `true` | Permit a bounded exact-ref fetch when supported. |
+| Field           | Type                       | Default               | Meaning                                                  |
+| --------------- | -------------------------- | --------------------- | -------------------------------------------------------- |
+| `url`           | canonical Git URL          | required              | Repository transport identity.                           |
+| `tag`           | exact tag name             | one revision required | Human-friendly exact tag to resolve.                     |
+| `commit`        | full object ID             | one revision required | Exact commit to use directly.                            |
+| `subdir`        | relative directory         | repository root       | Bundle directory within the selected tree.               |
+| `digest`        | algorithm-qualified digest | required              | RFC 0003 canonical bundle content digest.                |
+| `tag_object`    | full object ID             | absent                | Optional reviewed assertion for an annotated tag object. |
+| `peeled_commit` | full object ID             | absent                | Optional reviewed assertion for the resolved commit.     |
+| `allow_shallow` | Boolean                    | `true`                | Permit a bounded exact-ref fetch when supported.         |
 
 Table 1: External Git source fields.
 
@@ -167,8 +167,8 @@ Table 1: External Git source fields.
 than hand-authored. Supplying them in the manifest is an additional assertion,
 not a replacement for the digest.
 
-Unknown keys are errors. Jinja is forbidden in `url`, `tag`, `commit`, `subdir`,
-and `digest`.
+Unknown keys are errors. Jinja is forbidden in `url`, `tag`, `commit`,
+`subdir`, and `digest`.
 
 ## 6. Exact tag resolution
 
@@ -192,8 +192,8 @@ refs, or other namespaces.
 A value already beginning with `refs/tags/` is accepted after validation. Other
 `refs/` namespaces are rejected in the `tag` field.
 
-Tag names must satisfy Git's ref-format rules, contain no NUL, and be bounded in
-length. Revision expressions such as `^{}`, `~1`, `^1`, `:path`, or reflog
+Tag names must satisfy Git's ref-format rules, contain no NUL, and be bounded
+in length. Revision expressions such as `^{}`, `~1`, `^1`, `:path`, or reflog
 selectors are not tag names and are rejected.
 
 ### 6.2 Fetch contract
@@ -557,8 +557,8 @@ and bounded provenance serialization.
 
 ### 20.1 Branch references
 
-Branches are mutable and make ordinary builds perform change detection. Rejected
-for the initial reproducible source model.
+Branches are mutable and make ordinary builds perform change detection.
+Rejected for the initial reproducible source model.
 
 ### 20.2 Tag without digest
 
@@ -605,8 +605,8 @@ verification representation.
 
 ## 22. Recommendation
 
-Adopt external Git bundles only as digest-pinned, lock-recorded acquisitions over
-RFC 0003 bundle semantics.
+Adopt external Git bundles only as digest-pinned, lock-recorded acquisitions
+over RFC 0003 bundle semantics.
 
 Support exact human-friendly tags, including annotated and lightweight tags,
 but resolve them to immutable object identities and treat retagging as a

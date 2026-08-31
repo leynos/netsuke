@@ -1,7 +1,8 @@
-# RFC 0001 amendment: Structured-command working directories
+# RFC 0009: Structured-command working directories
 
 ## Preamble
 
+- **RFC number:** 0009
 - **Amends:** RFC 0001, Structured command blocks and argv templates
 - **Status:** Proposed
 - **Created:** 2026-08-26
@@ -14,8 +15,8 @@ blocks.
 
 The field selects the child process working directory without embedding `cd`,
 `pushd`, platform shell syntax, or directory state in a legacy command group.
-It applies equally to direct and explicit-shell structured commands and may vary
-between stages of one structured pipeline.
+It applies equally to direct and explicit-shell structured commands and may
+vary between stages of one structured pipeline.
 
 Upon acceptance, RFC 0001 must be read as if:
 
@@ -106,8 +107,8 @@ pipe: false
 
 The field table gains:
 
-| Field | Type | Default | Meaning |
-| --- | --- | --- | --- |
+| Field | Type        | Default                             | Meaning                          |
+| ----- | ----------- | ----------------------------------- | -------------------------------- |
 | `cwd` | string path | Netsuke effective working directory | Child process working directory. |
 
 Unknown-key rejection remains unchanged.
@@ -122,8 +123,8 @@ produce one non-empty string containing no NUL.
 
 Sequence, mapping, null, undefined, and callable values are errors.
 
-A relative `cwd` is resolved against Netsuke's effective working directory after
-CLI `-C` processing. It is not resolved relative to:
+A relative `cwd` is resolved against Netsuke's effective working directory
+after CLI `-C` processing. It is not resolved relative to:
 
 - the source file containing the command;
 - a bundle directory;
@@ -162,8 +163,8 @@ Netsuke does not create the directory automatically.
 ## 7. Direct-mode semantics
 
 For a direct structured command, the action runner configures the process using
-the platform process API equivalent of `std::process::Command::current_dir`.
-It does not prefix argv with a shell command.
+the platform process API equivalent of `std::process::Command::current_dir`. It
+does not prefix argv with a shell command.
 
 Executable resolution follows RFC 0001 section 9 with this clarification:
 
@@ -184,8 +185,8 @@ command:
   cwd: rust_extension
 ```
 
-This launches `cargo` with `rust_extension` as its process working directory and
-passes the remaining arguments unchanged.
+This launches `cargo` with `rust_extension` as its process working directory
+and passes the remaining arguments unchanged.
 
 ## 8. Shell-mode semantics
 
@@ -296,9 +297,10 @@ that is outside this amendment.
 Commands originating from included fragments or bundles still resolve `cwd`
 against the importing build's effective workspace root.
 
-A bundle must not gain ambient access to its own source directory merely because
-its manifest file lives there. A reusable bundle that needs a subproject path
-should accept it as a typed parameter and use that value in `cwd`.
+A bundle must not gain ambient access to its own source directory merely
+because its manifest file lives there. A reusable bundle that needs a
+subproject path should accept it as a typed parameter and use that value in
+`cwd`.
 
 The provenance record retains both:
 
@@ -458,8 +460,8 @@ RFC 0001's test strategy gains:
 - Windows drive, separator, and case behaviour; and
 - action-plan schema compatibility and provenance snapshots.
 
-Property tests should generate bounded relative paths and assert that normalized
-accepted paths remain descendants of the effective workspace root.
+Property tests should generate bounded relative paths and assert that
+normalized accepted paths remain descendants of the effective workspace root.
 
 ## 20. Alternatives considered
 

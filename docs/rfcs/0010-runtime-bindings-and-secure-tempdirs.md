@@ -1,9 +1,10 @@
-# RFC 0001 amendment: Runtime bindings and secure execution contexts
+# RFC 0010: Runtime bindings and secure execution contexts
 
 ## Preamble
 
+- **RFC number:** 0010
 - **Amends:** RFC 0001, Structured command blocks and argv templates
-- **Also refines:** The RFC 0001 working-directory amendment
+- **Also refines:** RFC 0009, Structured-command working directories
 - **Status:** Proposed
 - **Created:** 2026-08-26
 - **Target:** Structured command execution context and action-runner IR
@@ -61,17 +62,18 @@ The central safety rules are:
 
 > Runtime bindings are scoped data owned by the action runner, not mutations of
 > the parent process environment.
-
+>
 > Text captured from a child cannot grant filesystem authority merely by
 > containing an absolute path.
-
+>
 > A runner-created temporary directory carries an explicit directory
 > capability and is cleaned on every completion path.
 
 Upon acceptance, RFC 0001 must be read as if its stream, pipeline, environment,
 validation, action-runner, security, and test sections included the semantics
 below. The working-directory amendment must be read as if `cwd` accepted the
-additional environment and temporary-directory forms in section 6.
+additional environment and temporary-directory forms in section 6. RFC 0009
+therefore remains the literal-path foundation for these additional forms.
 
 The implementation PR should fold this amendment into RFC 0001 and its
 working-directory text before the RFC moves from Proposed to Accepted.
@@ -197,10 +199,10 @@ cross:
 - a newly invoked Netsuke process; or
 - manifest evaluation.
 
-Script items and newly spawned legacy shell groups within the same action-runner
-sequence receive the current binding context as part of their child
-environment. An all-string legacy command list remains one legacy shell group
-and cannot produce a structured runtime binding.
+Script items and newly spawned legacy shell groups within the same
+action-runner sequence receive the current binding context as part of their
+child environment. An all-string legacy command list remains one legacy shell
+group and cannot produce a structured runtime binding.
 
 ### 5.2 Effective child environment
 
@@ -211,8 +213,9 @@ order:
 2. sequence-local runtime bindings; and
 3. the structured command's explicit `env` overlay.
 
-Later layers win for the child process only. An explicit command `env` entry may
-shadow a runtime binding for that command without changing the stored binding.
+Later layers win for the child process only. An explicit command `env` entry
+may shadow a runtime binding for that command without changing the stored
+binding.
 
 The parent Netsuke process environment is never modified.
 
@@ -251,8 +254,8 @@ completed successfully according to RFC 0001's pipeline policy.
 
 ### 6.1 Standard output to an environment binding
 
-RFC 0001's `stdout` field becomes a union. Its existing path-string form remains
-unchanged. The new mapping form captures standard output:
+RFC 0001's `stdout` field becomes a union. Its existing path-string form
+remains unchanged. The new mapping form captures standard output:
 
 ```yaml
 stdout:
@@ -261,11 +264,11 @@ stdout:
   max_bytes: 65536
 ```
 
-| Field | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `env` | portable environment name | required | Runtime binding to create. |
-| `chomp` | Boolean | `true` | Remove one trailing line ending. |
-| `max_bytes` | positive integer | `65536` | Maximum captured byte count. |
+| Field       | Type                      | Default  | Meaning                          |
+| ----------- | ------------------------- | -------- | -------------------------------- |
+| `env`       | portable environment name | required | Runtime binding to create.       |
+| `chomp`     | Boolean                   | `true`   | Remove one trailing line ending. |
+| `max_bytes` | positive integer          | `65536`  | Maximum captured byte count.     |
 
 Table 1: Standard-output environment capture fields.
 
@@ -359,8 +362,8 @@ cwd:
 
 This creates a private temporary directory for one execution unit, sets the
 child process working directory to it, and removes it after that unit finishes.
-The empty mapping is required so a literal repository directory named
-`tempdir` remains unambiguous.
+The empty mapping is required so a literal repository directory named `tempdir`
+remains unambiguous.
 
 A named form publishes a directory binding:
 
@@ -381,9 +384,9 @@ When `env` is present:
 
 The `tempdir` mapping accepts exactly one optional field:
 
-| Field | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `env` | portable environment name | absent | Publish a sequence-local directory binding. |
+| Field | Type                      | Default | Meaning                                     |
+| ----- | ------------------------- | ------- | ------------------------------------------- |
+| `env` | portable environment name | absent  | Publish a sequence-local directory binding. |
 
 Table 2: Secure temporary-directory fields.
 
@@ -396,8 +399,7 @@ on every completion path by default.
 ### 7.1 Byte collection
 
 The action runner drains the child's standard output continuously to avoid pipe
-back-pressure. It counts raw bytes before UTF-8 decoding or line-ending
-removal.
+back-pressure. It counts raw bytes before UTF-8 decoding or line-ending removal.
 
 If the byte count would exceed `max_bytes`, the runner:
 
@@ -415,8 +417,8 @@ After successful process completion, Netsuke decodes the captured bytes as
 strict UTF-8. Invalid UTF-8 and embedded NUL produce typed errors and prevent
 binding commit.
 
-The initial surface has no locale-dependent decoding and no lossy conversion.
-A command that needs binary capture must write a declared file artefact instead.
+The initial surface has no locale-dependent decoding and no lossy conversion. A
+command that needs binary capture must write a declared file artefact instead.
 
 After optional `chomp`, the resulting string may be empty and may contain
 embedded newlines. It is inserted into later child environments exactly as a
@@ -485,8 +487,8 @@ RFC 0001's pipeline exit policy remains unchanged. Selecting standard error as
 the data stream does not turn a non-zero producer status into success.
 
 When a stage cannot spawn or the pipeline is cancelled, Netsuke closes every
-pipe endpoint, terminates started children, drains or abandons streams according
-to the bounded cleanup policy, and reaps all processes.
+pipe endpoint, terminates started children, drains or abandons streams
+according to the bounded cleanup policy, and reaps all processes.
 
 Diagnostics identify the selected stream and the source and destination stages.
 
@@ -541,8 +543,7 @@ capability is not inherited through the shadow.
 
 ### 9.4 Executable and argument behaviour
 
-After resolving the directory, direct and shell execution follow the existing
-working-directory amendment:
+After resolving the directory, direct and shell execution follow RFC 0009:
 
 - bare executable names use the effective child `PATH`;
 - relative executable paths containing a separator resolve from `cwd`;
@@ -570,8 +571,8 @@ cryptographic name and no pre-existing path reuse.
 
 On Unix-like platforms, the directory is owner-only, equivalent to mode `0700`,
 before the path becomes visible to a child. On Windows, the directory receives
-an access-control list restricted to the current security principal and required
-system access.
+an access-control list restricted to the current security principal and
+required system access.
 
 The implementation must not create a world-readable directory and tighten it
 afterwards.
@@ -598,8 +599,8 @@ If preparation of any directory fails, no pipeline stage starts.
 
 ### 10.4 Child environment
 
-When the tempdir form contains `env`, the current and later children receive the
-absolute child-visible path under that environment name.
+When the tempdir form contains `env`, the current and later children receive
+the absolute child-visible path under that environment name.
 
 Netsuke does not implicitly rewrite `TMPDIR`, `TMP`, `TEMP`, `HOME`, or any
 other conventional variable. A manifest requiring those values must set them
@@ -611,8 +612,8 @@ temporary directory.
 
 ### 10.5 Cleanup
 
-Cleanup runs after success, failure, cancellation, timeout, signal, spawn error,
-and pipeline setup failure.
+Cleanup runs after success, failure, cancellation, timeout, signal, spawn
+error, and pipeline setup failure.
 
 The runner:
 
@@ -810,8 +811,9 @@ Every failure identifies:
 - failure category; and
 - include or bundle provenance.
 
-Human output may display a workspace-relative path when useful. Runtime-generated
-secure temporary paths and captured values are redacted by default.
+Human output may display a workspace-relative path when useful.
+Runtime-generated secure temporary paths and captured values are redacted by
+default.
 
 Bounded telemetry may record:
 
@@ -851,7 +853,7 @@ Existing RFC 0001 forms remain valid:
 - `stdout: path` retains file-redirection semantics;
 - `pipe: false` and `pipe: true` retain their meanings, with `true` normalized
   to `stdout`;
-- literal string `cwd` retains the working-directory amendment's semantics; and
+- literal string `cwd` retains RFC 0009's semantics; and
 - legacy command strings and command-string lists remain unchanged.
 
 Mechanical migrations include:
@@ -1004,9 +1006,10 @@ typed directory authority, parent-environment isolation, or mandatory cleanup.
 
 ## 20. Recommendation
 
-Amend RFC 0001 with action-local runtime bindings, bounded stdout-to-environment
-capture, explicit standard-error pipelines, environment-selected working
-directories, and runner-owned secure temporary directories.
+Amend RFC 0001 with action-local runtime bindings, bounded
+stdout-to-environment capture, explicit standard-error pipelines,
+environment-selected working directories, and runner-owned secure temporary
+directories.
 
 Together, these features replace several high-value shell idioms without
 weakening the structured-command trust boundary. They also create a coherent
