@@ -82,11 +82,11 @@ fn report_repeats(
 /// file-producing targets are compared.
 fn declares_files(item: &Item<'_>) -> bool {
     item.section == Section::Targets
-        && item
+        && !item
             .node
             .get("phony")
-            .and_then(Node::as_str)
-            .is_none_or(|value| value != "true")
+            .and_then(Node::as_bool)
+            .unwrap_or_default()
 }
 
 /// Collect the literal paths an item declares, paired with their placeholder.

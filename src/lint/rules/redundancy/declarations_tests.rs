@@ -126,6 +126,25 @@ fn redundant_always_reports_always_on_a_phony_target(#[case] yaml: &str) {
     crate::assert_lint_fires!(yaml, "redundant-always", 1);
 }
 
+/// The parser accepts YAML 1.1 Boolean spellings for `always` and `phony`.
+#[rstest]
+#[case("yes", "yes")]
+#[case("on", "True")]
+fn redundant_always_recognizes_every_boolean_spelling(#[case] always: &str, #[case] phony: &str) {
+    let yaml = format!(
+        concat!(
+            "netsuke_version: \"1.0.0\"\n",
+            "targets:\n",
+            "  - name: check\n",
+            "    phony: {}\n",
+            "    always: {}\n",
+            "    command: \"check\"\n",
+        ),
+        phony, always
+    );
+    crate::assert_lint_fires!(&yaml, "redundant-always", 1);
+}
+
 /// `always` on a file target is the feature working as documented.
 #[test]
 fn redundant_always_accepts_always_on_a_file_target() {
