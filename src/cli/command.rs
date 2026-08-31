@@ -220,7 +220,7 @@ pub struct GraphArgs {
 /// live in `crate::lint`, and the runner parses these values once it has the
 /// registry to validate them against. `explain` is a per-invocation mode and
 /// is excluded from `OrthoConfig` layering.
-#[derive(Debug, Args, PartialEq, Eq, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Args, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct CheckArgs {
     /// Set a rule's or category's severity, as `NAME=SEVERITY`.
     #[arg(long = "rule", value_name = "NAME=SEVERITY")]
@@ -258,6 +258,24 @@ impl CheckArgs {
     /// Supply the default finding limit to `serde`.
     const fn default_limit() -> usize {
         DEFAULT_FINDING_LIMIT
+    }
+}
+
+impl Default for CheckArgs {
+    /// Construct the same defaults Clap and `serde` apply.
+    ///
+    /// Deriving this would yield an empty `fail_on` and a zero `limit`, which
+    /// are not the documented defaults: the merge layer decides whether a
+    /// configuration value applies by comparing `fail_on` against
+    /// [`DEFAULT_FAIL_ON`], so a derived default would silently change which
+    /// threshold wins.
+    fn default() -> Self {
+        Self {
+            rule: Vec::new(),
+            fail_on: Self::default_fail_on(),
+            limit: Self::default_limit(),
+            explain: None,
+        }
     }
 }
 

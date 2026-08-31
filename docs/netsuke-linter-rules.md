@@ -314,7 +314,9 @@ Fixed:
 targets:
   - name: vendor/libfoo.a
     sources: vendor/foo.c
-    command: "cc -c {{ ins }} && ar rcs {{ outs }} foo.o"
+    command:
+      - "cc -c {{ ins }}"
+      - "ar rcs {{ outs }} foo.o"
 ```
 
 **Remediation:** Declare the inner build's work as targets in this manifest so
