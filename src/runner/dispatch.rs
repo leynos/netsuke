@@ -2,8 +2,7 @@
 
 use super::{
     ExecutionContext, NinjaContent, NinjaToolSpec, check, generate_ninja_with_shell, graph,
-    handle_build,
-    handle_ninja_tool, help, materialize_dyndep_bundle, process, prune_dyndep_bundle,
+    handle_build, handle_ninja_tool, help, materialize_dyndep_bundle, process, prune_dyndep_bundle,
     resolve_output_path,
 };
 use crate::cli::{BuildArgs, CheckArgs, Cli, Commands, HelpArgs, HelpTopic};
