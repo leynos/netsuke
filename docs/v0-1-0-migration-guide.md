@@ -27,7 +27,6 @@ rustup toolchain install nightly-2026-08-23
 cargo +nightly-2026-08-23 install netsuke-build
 ```
 
-
 ## Netsuke is a build tool, not a library
 
 Netsuke is intended to be used as a command-line build tool. The only surfaces

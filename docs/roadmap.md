@@ -710,13 +710,13 @@ Kind: capability. Value is measured by the manifest operations that no longer
 require a subprocess, not by name parity with Ansible.
 
 Scope: the accepted set in
-[RFC 0006](rfcs/0006-ansible-inspired-template-standard-library.md). Every
-task in this phase targets a release after v0.1.0 final and must not widen the
-hardening release defined by issue `#594`. Candidates that RFC 0006 §10
-rejects must not be reintroduced by a later task, and candidates it defers are
-gated behind step 6.10. The bounded Git change-detection capability in step
-6.11 is outside RFC 0006's Ansible-derived candidate set, but follows the same
-shared contract and capability boundary.
+[RFC 0006](rfcs/0006-ansible-inspired-template-standard-library.md). Every task
+in this phase targets a release after v0.1.0 final and must not widen the
+hardening release defined by issue `#594`. Candidates that RFC 0006 §10 rejects
+must not be reintroduced by a later task, and candidates it defers are gated
+behind step 6.10. The bounded Git change-detection capability in step 6.11 is
+outside RFC 0006's Ansible-derived candidate set, but follows the same shared
+contract and capability boundary.
 
 ### 6.1. Settle the standard-library contract before the volume arrives
 
@@ -724,8 +724,7 @@ This step answers whether one shared contract, covering canonical equality,
 checked bounds, typed localized diagnostics, and an enumerated manifest-query
 boundary, can carry every later helper, or whether each capability group needs
 its own. Its outcome decides whether steps 6.2 to 6.9 can be reviewed as
-ordinary additions or need individual design passes. See RFC 0006 §§6 and
-14.1.
+ordinary additions or need individual design passes. See RFC 0006 §§6 and 14.1.
 
 - [ ] 6.1.1. Split the RFC 0006 accepted set into focused child issues.
   - See RFC 0006 §14.
@@ -839,11 +838,10 @@ See RFC 0006 §8.1 and
 
 ### 6.3. Make configuration layering expressible
 
-This step answers whether the mapping transforms remove the merge and
-re-index loops that `vars`, `foreach`, and per-entry overrides currently force
-manifest authors to write by hand. Its outcome informs how much of the
-platform and toolchain configuration problem the template layer can own. See
-RFC 0006 §8.2.
+This step answers whether the mapping transforms remove the merge and re-index
+loops that `vars`, `foreach`, and per-entry overrides currently force manifest
+authors to write by hand. Its outcome informs how much of the platform and
+toolchain configuration problem the template layer can own. See RFC 0006 §8.2.
 
 - [ ] 6.3.1. Add `combine` with explicit recursion and list policies. Requires
   6.1.2 and 6.1.4.
@@ -989,8 +987,8 @@ manifest time. See RFC 0006 §§8.4 and 8.5.
 This step answers whether one uniform `dialect` mechanism can serve
 cross-compilation better than a family of Windows-specific filter names, and
 whether lexical normalization can be offered without weakening the capability
-boundary. Its outcome informs how Netsuke describes any future
-cross-platform surface. See RFC 0006 §8.6.
+boundary. Its outcome informs how Netsuke describes any future cross-platform
+surface. See RFC 0006 §8.6.
 
 - [ ] 6.6.1. Add the `dialect` argument and its `host`, `posix`, and `windows`
   path parsers. Requires 6.1.4.
@@ -1068,8 +1066,8 @@ capability contract in RFC 0006 §6.4. See RFC 0006 §§8.6 and 8.7.
 
 This step answers whether Netsuke can produce comment banners, encoded
 payloads, quoted shell words, human-readable sizes, and content-derived
-identifiers without either a subprocess or a second quoting implementation.
-See RFC 0006 §8.9.
+identifiers without either a subprocess or a second quoting implementation. See
+RFC 0006 §8.9.
 
 - [ ] 6.8.1. Add `b64encode`, `b64decode`, and `urldecode`. Requires 6.1.3 and
   6.1.4.
@@ -1117,8 +1115,8 @@ See RFC 0006 §8.9.
 
 ### 6.9. Convert explicit timestamps without reading the clock
 
-This step answers whether timestamp parsing and formatting can be added as
-pure helpers over the existing `now()` value, leaving clock access as the only
+This step answers whether timestamp parsing and formatting can be added as pure
+helpers over the existing `now()` value, leaving clock access as the only
 host-observing time operation. See RFC 0006 §8.10.
 
 - [ ] 6.9.1. Add the shared conversion-specifier set and `strftime`. Requires
@@ -1141,9 +1139,9 @@ host-observing time operation. See RFC 0006 §8.10.
 ### 6.10. Decide the deferred candidates on evidence rather than parity
 
 This step answers whether the capabilities RFC 0006 deliberately withheld are
-actually wanted once the accepted set is in use. Its outcome either closes
-them permanently or produces a specification with a named consumer, so neither
-is adopted for name parity alone. See RFC 0006 §9.
+actually wanted once the accepted set is in use. Its outcome either closes them
+permanently or produces a specification with a named consumer, so neither is
+adopted for name parity alone. See RFC 0006 §9.
 
 - [ ] 6.10.1. Evaluate seeded `shuffle` and `random`. Requires steps 6.1 to
   6.9.

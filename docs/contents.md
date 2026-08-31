@@ -109,23 +109,6 @@ operator, user, and contributor references are easier to find.
   composition boundary for configuration fields, parser-only selectors, and
   subcommands.
 
-## Requests for comments
-
-- [rfcs/0001-structured-command-blocks.md](rfcs/0001-structured-command-blocks.md):
-  Proposed structured command blocks, shell-free argv templates, typed Jinja
-  interpolation, stream routing, and pipeline semantics.
-- [RFC 0005: Harden release integrity and
-  admission](rfcs/0005-release-hardening.md): Proposed release-profile
-  invariants, secret and dependency policy, and exact-commit release admission.
-- [rfcs/0006-ansible-inspired-template-standard-library.md](rfcs/0006-ansible-inspired-template-standard-library.md):
-  Survey of the ansible-core Jinja standard library, with an explicit
-  disposition for every candidate helper and Netsuke-native contracts for the
-  accepted set.
-- [RFC 0008: Repository-wide code-health contracts and
-  fuzzing](rfcs/0008-code-health.md): Proposed workflow-policy validation, gate
-  self-consistency, health-signal ownership, and scheduled coverage-guided
-  fuzzing.
-
 ## Proposals
 
 - [rfcs/](rfcs/): Requests for Comments proposing changes that need technical

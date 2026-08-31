@@ -97,7 +97,6 @@ cd netsuke
 cargo install --path .
 ```
 
-
 ### Complete Windows setup
 
 The MSI does not add its installation directory to `PATH`. Add it to the
