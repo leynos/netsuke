@@ -1,4 +1,4 @@
-//! Human and JSON rendering of lint findings.
+//! Bounding, counting, and diagnostic projection for lint findings.
 //!
 //! Both branches carry the same per-finding object, because a consumer should
 //! parse one finding representation whatever the failure threshold decided.
@@ -36,6 +36,10 @@ pub struct Report {
     source: Arc<NamedSource<String>>,
     /// Findings within the reporting limit, in output order.
     reported: Vec<Finding>,
+    /// Findings at each severity across the whole run, before bounding.
+    counts: SeverityCounts,
+    /// Findings reaching the threshold across the whole run, before bounding.
+    failing: usize,
     /// Findings the limit excluded.
     truncated: usize,
     /// Findings a directive silenced.
@@ -44,14 +48,58 @@ pub struct Report {
     threshold: FailOn,
 }
 
+/// Findings at each severity across one run.
+#[derive(Debug, Clone, Copy, Default)]
+struct SeverityCounts {
+    /// Findings reported at error severity.
+    error: usize,
+    /// Findings reported at warning severity.
+    warning: usize,
+    /// Findings reported at advice severity.
+    advice: usize,
+}
+
+impl SeverityCounts {
+    /// Tally `findings` by severity.
+    fn tally(findings: &[Finding]) -> Self {
+        let mut counts = Self::default();
+        for finding in findings {
+            match finding.severity {
+                Severity::Error => counts.error = counts.error.saturating_add(1),
+                Severity::Warning => counts.warning = counts.warning.saturating_add(1),
+                Severity::Advice => counts.advice = counts.advice.saturating_add(1),
+            }
+        }
+        counts
+    }
+
+    /// Report the tally for one severity.
+    const fn at(self, severity: Severity) -> usize {
+        match severity {
+            Severity::Error => self.error,
+            Severity::Warning => self.warning,
+            Severity::Advice => self.advice,
+        }
+    }
+}
+
 impl Report {
-    /// Build a report from an outcome, bounding it to `limit` findings.
+    /// Build a report from an outcome, bounding its output to `limit`
+    /// findings.
     ///
-    /// A `limit` of zero reports every finding. Truncation drops the least
-    /// severe findings last, so raising the limit only ever adds entries to
-    /// the end of the list.
+    /// A `limit` of zero reports every finding. The verdict and the severity
+    /// tallies come from the whole outcome before bounding: findings are
+    /// ordered by source position rather than severity, so truncating first
+    /// would let an early advisory hide a later error and report success for a
+    /// run that found one.
     #[must_use]
     pub fn new(manifest: NamedManifest<'_>, outcome: Outcome, bounds: Bounds) -> Self {
+        let counts = SeverityCounts::tally(&outcome.findings);
+        let failing = outcome
+            .findings
+            .iter()
+            .filter(|finding| bounds.threshold.is_reached_by(finding.severity))
+            .count();
         let total = outcome.findings.len();
         let mut reported = outcome.findings;
         if bounds.limit > 0 && total > bounds.limit {
@@ -63,6 +111,8 @@ impl Report {
                 NamedSource::new(manifest.name, manifest.source).with_language("yaml"),
             ),
             reported,
+            counts,
+            failing,
             truncated,
             suppressed: outcome.suppressed,
             threshold: bounds.threshold,
@@ -87,27 +137,24 @@ impl Report {
         self.suppressed
     }
 
-    /// Count the reported findings at `severity`.
+    /// Count the findings at `severity` across the whole run.
+    ///
+    /// This counts before `--limit` applies, so a summary describes what the
+    /// run found rather than what fitted in the output.
     #[must_use]
-    pub fn count_at(&self, severity: Severity) -> usize {
-        self.reported
-            .iter()
-            .filter(|finding| finding.severity == severity)
-            .count()
+    pub const fn count_at(&self, severity: Severity) -> usize {
+        self.counts.at(severity)
     }
 
-    /// Count the reported findings that reach the failure threshold.
+    /// Count the findings reaching the failure threshold across the whole run.
     #[must_use]
-    pub fn failing_count(&self) -> usize {
-        self.reported
-            .iter()
-            .filter(|finding| self.threshold.is_reached_by(finding.severity))
-            .count()
+    pub const fn failing_count(&self) -> usize {
+        self.failing
     }
 
     /// Report whether the command fails because of these findings.
     #[must_use]
-    pub fn is_failure(&self) -> bool {
+    pub const fn is_failure(&self) -> bool {
         self.failing_count() > 0
     }
 
