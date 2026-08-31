@@ -105,6 +105,32 @@ fn a_limit_does_not_hide_a_failing_finding() {
     );
 }
 
+/// The severity tallies and the bounded output must stay reconcilable.
+///
+/// A consumer reads both from one summary, so `error + warning + advice` has
+/// to equal `reported + omitted` however the limit falls.
+#[rstest]
+#[case(0)]
+#[case(1)]
+#[case(2)]
+#[case(5)]
+fn severity_tallies_reconcile_with_the_bounded_output(#[case] limit: usize) {
+    let built = report!(
+        &[Severity::Error, Severity::Warning, Severity::Advice],
+        limit,
+        FailOn::Error
+    );
+    let tallied: usize = Severity::ALL
+        .into_iter()
+        .map(|severity| built.count_at(severity))
+        .sum();
+    assert_eq!(
+        tallied,
+        built.findings().len() + built.truncated(),
+        "tallies should account for every finding, shown or omitted"
+    );
+}
+
 #[rstest]
 #[case(FailOn::Error, 1, true)]
 #[case(FailOn::Warning, 2, true)]
