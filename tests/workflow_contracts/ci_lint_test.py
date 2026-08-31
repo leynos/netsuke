@@ -25,17 +25,22 @@ Run via ``make test-workflow-contracts``.
 """
 
 import re
+import typing as typ
 
 import pytest
 from workflow_loading import (
     CI_WORKFLOW_PATH,
     MAKEFILE_PATH,
+    _WorkflowLoader,
     job_steps,
     load_workflow,
     named_step,
     require_mapping,
     step_runs,
 )
+
+if typ.TYPE_CHECKING:
+    from pathlib import Path
 
 TEST_SHELL_STEP = "Install test shell dependencies"
 
@@ -64,6 +69,81 @@ def _tool_input(step: dict[str, object]) -> object:
             return tool
         case _:
             return ""
+
+
+def test_workflow_loader_keeps_github_actions_trigger_words_as_strings() -> None:
+    """Keep GitHub Actions trigger words distinct from YAML boolean literals."""
+    loader = _WorkflowLoader("on: on\nyes: yes\noff: off\nno: no\n")
+    try:
+        document = loader.get_single_data()
+    finally:
+        loader.dispose()
+
+    for word in ("on", "yes", "off", "no"):
+        assert document[word] == word, (
+            f"the GitHub Actions {word!r} trigger word must stay a string "
+            "rather than becoming a YAML 1.1 boolean"
+        )
+        assert isinstance(document[word], str), (
+            f"the GitHub Actions {word!r} trigger word must remain a string "
+            "for workflow parsing"
+        )
+    assert "on" in document, "the GitHub Actions on: trigger key must remain a string"
+    assert True not in document, (
+        "the GitHub Actions on: trigger key must not become True"
+    )
+
+
+@pytest.mark.parametrize(
+    ("literal", "expected"),
+    [
+        pytest.param("true", True, id="lowercase-true"),
+        pytest.param("True", True, id="titlecase-true"),
+        pytest.param("TRUE", True, id="uppercase-true"),
+        pytest.param("false", False, id="lowercase-false"),
+        pytest.param("False", False, id="titlecase-false"),
+        pytest.param("FALSE", False, id="uppercase-false"),
+    ],
+)
+def test_workflow_loader_boolean_literals(literal: str, *, expected: bool) -> None:
+    """Resolve YAML 1.2 boolean literals in every permitted case variant."""
+    loader = _WorkflowLoader(f"value: {literal}\n")
+    try:
+        document = loader.get_single_data()
+    finally:
+        loader.dispose()
+
+    assert document == {"value": expected}, (
+        f"the YAML 1.2 literal {literal!r} must resolve to {expected!r}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("document", "expected_fragment"),
+    [
+        pytest.param("", "got NoneType", id="empty-document"),
+        pytest.param("build-test\n", "got str", id="scalar-document"),
+        pytest.param("- build-test\n", "got list", id="list-document"),
+        pytest.param(
+            "true: build-test\n",
+            "string-keyed",
+            id="non-string-mapping-key",
+        ),
+    ],
+)
+def test_load_workflow_rejects_invalid_document_roots(
+    tmp_path: Path,
+    document: str,
+    expected_fragment: str,
+) -> None:
+    """Reject malformed documents before workflow-specific contracts run."""
+    workflow_path = tmp_path / "workflow.yml"
+    workflow_path.write_text(document, encoding="utf-8")
+
+    # ``pytest.fail`` raises this private exception so tests can assert the
+    # loader's user-facing validation message without treating it as an error.
+    with pytest.raises(pytest.fail.Exception, match=re.escape(expected_fragment)):
+        load_workflow(workflow_path)
 
 
 @pytest.fixture
