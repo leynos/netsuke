@@ -321,7 +321,6 @@ same Jinja context, including `{{ ins }}` and `{{ outs }}`; those two
 placeholders are resolved later to the concrete target's shell-quoted input and
 output paths. An empty command list is rejected when the manifest is parsed.
 
-
 ### Windows legacy recipe contract
 
 On Windows, v0.1.x interprets every legacy `command` string, `command` list, and

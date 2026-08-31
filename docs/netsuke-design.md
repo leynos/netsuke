@@ -2128,7 +2128,6 @@ This transformation involves several steps:
    traversal are logged, collected, and returned alongside any cycle to aid
    diagnostics.
 
-
 #### Legacy recipe shell selection
 
 `RecipeShell` is the backend boundary for completed legacy recipe text. The

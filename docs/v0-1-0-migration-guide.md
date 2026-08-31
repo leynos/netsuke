@@ -110,7 +110,6 @@ non-empty YAML list. The entries run in one shell process and stop at the first
 non-zero exit. See [Rules and recipes](users-guide.md#rules-and-recipes) for
 the syntax, shell semantics, and examples.
 
-
 ## Windows legacy recipe interpreter
 
 v0.1.x makes Windows legacy-recipe execution explicit. Netsuke starts
