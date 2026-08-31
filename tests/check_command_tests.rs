@@ -305,6 +305,70 @@ fn human_output_shows_the_offending_source(warning_workspace: Result<Workspace>)
     Ok(())
 }
 
+/// Write `config` beside the workspace manifest and return its path argument.
+fn write_config(workspace: &Workspace, config: &str) -> Result<String> {
+    let path = workspace.directory.path().join("netsuke.toml");
+    test_fs::write(&path, config).context("write the check configuration")?;
+    path.to_str()
+        .map(str::to_owned)
+        .context("temporary config path should be UTF-8")
+}
+
+/// A `[cmds.check]` table supplies the policy when the caller gives none.
+#[rstest]
+fn configuration_supplies_the_check_policy(warning_workspace: Result<Workspace>) -> Result<()> {
+    let workspace = warning_workspace?;
+    let config = write_config(&workspace, "[cmds.check]\nfail_on = \"warning\"\n")?;
+    let run = workspace.run(&["--config", &config, "--json", "check"])?;
+    ensure!(
+        !run.success,
+        "the configured threshold should fail the run: {}",
+        run.stdout
+    );
+    Ok(())
+}
+
+/// An explicit flag outranks the configuration file.
+///
+/// The check is written against a value that equals the built-in default,
+/// because that is where a merge keyed on "differs from the default" rather
+/// than on "supplied on the command line" would silently keep the
+/// configuration's value.
+#[rstest]
+fn an_explicit_flag_outranks_the_configuration(warning_workspace: Result<Workspace>) -> Result<()> {
+    let workspace = warning_workspace?;
+    let config = write_config(&workspace, "[cmds.check]\nfail_on = \"warning\"\n")?;
+    let run = workspace.run(&["--config", &config, "--json", "check", "--fail-on", "error"])?;
+    ensure!(
+        run.success,
+        "the explicit threshold should win over the configured one: {}",
+        run.stderr
+    );
+    Ok(())
+}
+
+/// Configured rule selectors and limits reach the run.
+#[rstest]
+fn configuration_supplies_selectors_and_limits(warning_workspace: Result<Workspace>) -> Result<()> {
+    let workspace = warning_workspace?;
+    let config = write_config(
+        &workspace,
+        "[cmds.check]\nrule = [\"migration=off\"]\nlimit = 1\n",
+    )?;
+    let run = workspace.run(&["--config", &config, "--json", "check"])?;
+    ensure!(run.success, "configured selectors: {}", run.stderr);
+    let findings = document(&run)?
+        .pointer("/result/findings")
+        .and_then(Value::as_array)
+        .cloned()
+        .context("the result should carry a findings array")?;
+    ensure!(
+        findings.is_empty(),
+        "the configured selector should disable the rule, got {findings:?}"
+    );
+    Ok(())
+}
+
 /// A missing manifest is an ordinary command failure, not a lint finding.
 #[test]
 fn a_missing_manifest_fails_before_any_rule_runs() -> Result<()> {
