@@ -282,7 +282,7 @@ operator, user, and contributor references are easier to find.
   0010, RFC 0011, and ADR-019: the `cwd` stream-path base, absolute-`cwd`
   rejection, the two capture forms, the two temporary-directory spellings, and
   the reserved `1.1.0` manifest minor version.
-- [ADR-015](adr-015-manifest-linting-under-netsuke-check.md):
+- [ADR-016](adr-016-manifest-linting-under-netsuke-check.md):
   Manifest-linting decision record, placing the linter under `netsuke check`,
   treating findings as command results rather than failures, and fixing the
   rule-identifier and rule-text ownership rules.
