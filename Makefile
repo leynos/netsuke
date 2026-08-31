@@ -21,6 +21,9 @@ CARGO ?= $(shell command -v cargo 2>/dev/null || printf '%s' "$$HOME/.cargo/bin/
 # CARGO is resolved above before it is exported: `export` alone would define
 # the variable empty and shadow the `?=` fallback for every recipe.
 export CARGO
+# Pass `--locked` through only when a caller asks for lockfile verification.
+# Keeping the default empty preserves the interactive inner-loop behaviour.
+CARGO_LOCKED ?=
 # Extra build-parallelism flags for plain Cargo invocations, e.g. `-j 4`.
 BUILD_JOBS ?=
 # The same concept for cargo-nextest, which spells build parallelism
@@ -299,10 +302,10 @@ DEV_FAST_TARGETS = install-dev-fast dev-fast-check dev-build dev-test bench-buil
 $(DEV_FAST_TARGETS): export PATH := $(DEV_FAST_PREFIX)/bin:$(PATH)
 
 dev-build: dev-fast-check ## Build the debug binary with Cranelift and mold
-	RUSTUP_TOOLCHAIN=$(DEV_FAST_TOOLCHAIN) $(CARGO) --config "$$DEV_FAST_CONFIG" build $(BUILD_JOBS) --bin $(APP)
+	RUSTUP_TOOLCHAIN=$(DEV_FAST_TOOLCHAIN) $(CARGO) $(CARGO_LOCKED) --config "$$DEV_FAST_CONFIG" build $(BUILD_JOBS) --bin $(APP)
 
 dev-test: dev-fast-check ## Run the nextest pass with Cranelift and mold
-	RUSTUP_TOOLCHAIN=$(DEV_FAST_TOOLCHAIN) $(CARGO) --config "$$DEV_FAST_CONFIG" nextest run --workspace --all-targets --all-features $(NEXTEST_BUILD_JOBS)
+	RUSTUP_TOOLCHAIN=$(DEV_FAST_TOOLCHAIN) $(CARGO) $(CARGO_LOCKED) --config "$$DEV_FAST_CONFIG" nextest run --workspace --all-targets --all-features $(NEXTEST_BUILD_JOBS)
 
 bench-build: dev-fast-check ## Time clean and incremental debug builds for both paths
 	@CARGO="$(CARGO)" scripts/bench-build.sh

@@ -88,6 +88,79 @@ fn build_targets_select_the_pinned_toolchain_and_fragment(
     Ok(())
 }
 
+#[rstest]
+#[case("dev-build")]
+#[case("dev-test")]
+fn build_targets_forward_config_and_lockfile_overrides(#[case] target: &str) -> Result<()> {
+    let scenario = BuildScenario::prepare()?;
+    let config = "tools/dev-fast/config.local.toml";
+    let invocation = MakeInvocation::new(target)
+        .variable("CARGO", scenario.cargo().executable())
+        .variable("CARGO_LOCKED", "--locked")
+        .variable("DEV_FAST_CONFIG", config);
+    let output = scenario.sandbox().run_make(&invocation)?;
+
+    ensure!(
+        output.status.success(),
+        "make {target} should succeed, got `{}`",
+        combined(&output)
+    );
+    let recorded = scenario.cargo().sole_invocation()?;
+    ensure!(
+        recorded.contains_sequence(&["--locked"]),
+        "{target} should forward CARGO_LOCKED, got `{:?}`",
+        recorded.arguments()
+    );
+    ensure!(
+        recorded.contains_sequence(&["--config", config]),
+        "{target} should forward DEV_FAST_CONFIG, got `{:?}`",
+        recorded.arguments()
+    );
+    Ok(())
+}
+
+#[rstest]
+#[case("dev-build")]
+#[case("dev-test")]
+fn build_targets_do_not_evaluate_a_config_override(#[case] target: &str) -> Result<()> {
+    let scenario = BuildScenario::prepare()?;
+    let marker = scenario.sandbox().home().join("config-evaluation-marker");
+    let config = format!("`touch {marker}`");
+    let invocation = MakeInvocation::new(target)
+        .variable("CARGO", scenario.cargo().executable())
+        .variable("DEV_FAST_CONFIG", config);
+    let output = scenario.sandbox().run_make(&invocation)?;
+
+    ensure!(
+        output.status.success(),
+        "make {target} should treat the override as data, got `{}`",
+        combined(&output)
+    );
+    ensure!(
+        !marker.as_std_path().exists(),
+        "make {target} must not evaluate DEV_FAST_CONFIG as shell syntax"
+    );
+    Ok(())
+}
+
+#[rstest]
+#[case("dev-build")]
+#[case("dev-test")]
+fn build_targets_propagate_cargo_failure(#[case] target: &str) -> Result<()> {
+    let scenario = BuildScenario::prepare()?;
+    let cargo = scenario
+        .sandbox()
+        .write_fake(&scenario.sandbox().bin(), "failing-cargo", "exit 17")?;
+    let invocation = MakeInvocation::new(target).variable("CARGO", cargo);
+    let output = scenario.sandbox().run_make(&invocation)?;
+
+    ensure!(
+        !output.status.success(),
+        "make {target} must fail when Cargo exits unsuccessfully"
+    );
+    Ok(())
+}
+
 /// The capability check gates the build targets, so a failing check must stop
 /// them before Cargo runs. Asserting on the recorded invocations proves that
 /// directly, where relying on Cargo's absence from the sandbox would pass even
