@@ -53,6 +53,11 @@ impl OrthoConfigDocs for ReleaseHelpCli {
 /// `CliConfig` remains the source of the fields and their configuration
 /// sources. The structural `cmds` container is not a public configuration
 /// setting, so release help omits it rather than inventing a separate model.
+///
+/// # Errors
+///
+/// Returns an error when a published configuration field has no declared
+/// top-level Fluent help key.
 fn localized_config_help(fields: Vec<FieldMetadata>) -> Result<Vec<FieldMetadata>> {
     fields
         .into_iter()
@@ -210,10 +215,16 @@ mod metadata_tests;
 mod tests {
     //! Tests for release-help metadata assembled from the Clap command tree.
 
+    use super::metadata_tests::{inert_field_metadata, recognised_configuration_field_names};
     use super::*;
     use anyhow::{Context, Result, ensure};
+    use proptest::prelude::*;
 
     /// Resolve a release-help metadata description through the English localizer.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the requested metadata or its Fluent message is absent.
     fn localized_release_help_description(
         find_help_id: impl FnOnce(&DocMetadata) -> Option<String>,
         missing_message: &'static str,
@@ -295,6 +306,12 @@ mod tests {
         Ok(())
     }
 
+    /// Verify that every published field has a resolvable localized description.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when release-help metadata omits a field property or its
+    /// Fluent description cannot be resolved.
     #[test]
     fn release_help_metadata_localizes_every_published_field() -> Result<()> {
         let metadata = ReleaseHelpCli::get_doc_metadata();
@@ -320,5 +337,53 @@ mod tests {
             );
         }
         Ok(())
+    }
+
+    proptest! {
+        #[test]
+        fn localized_config_help_preserves_the_configuration_metadata_contract(
+            field_names in prop::collection::vec(
+                prop_oneof![
+                    3 => prop::sample::select(recognised_configuration_field_names()),
+                    1 => Just("cmds".to_owned()),
+                    1 => "unknown[a-z]{0,12}".prop_map(|suffix| format!("unknown{suffix}")),
+                ],
+                0..64,
+            ),
+        ) {
+            let contains_unrecognised_field = field_names.iter().any(|name| {
+                name != "cmds" && top_level_flag_help_key(name).is_none()
+            });
+            let expected_recognised_names = field_names
+                .iter()
+                .filter(|name| top_level_flag_help_key(name).is_some())
+                .cloned()
+                .collect::<Vec<_>>();
+            let projection = localized_config_help(
+                field_names
+                    .iter()
+                    .cloned()
+                    .map(inert_field_metadata)
+                    .collect(),
+            );
+
+            if contains_unrecognised_field {
+                prop_assert!(projection.is_err());
+            } else {
+                let projected_fields = projection
+                    .map_err(|error| TestCaseError::fail(error.to_string()))?;
+
+                prop_assert_eq!(
+                    projected_fields.iter().map(|field| field.name.clone()).collect::<Vec<_>>(),
+                    expected_recognised_names,
+                );
+                let has_valid_localized_fields = projected_fields.iter().all(|field| {
+                    field.name != "cmds"
+                        && field.long_help_id.is_none()
+                        && top_level_flag_help_key(&field.name) == Some(field.help_id.as_str())
+                });
+                prop_assert!(has_valid_localized_fields);
+            }
+        }
     }
 }

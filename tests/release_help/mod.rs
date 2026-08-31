@@ -19,6 +19,7 @@ use tempfile::TempDir;
 
 const SCRIPT_PATH: &str = "scripts/generate-release-help.sh";
 
+/// Return the repository path of the release-help generation script.
 pub fn script_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(SCRIPT_PATH)
 }
@@ -31,6 +32,12 @@ pub struct ScriptFixture {
     metadata_path: PathBuf,
 }
 
+/// Prepare an isolated fixture for release-help generation tests.
+///
+/// # Errors
+///
+/// Returns an error when the temporary directories or fake executable cannot
+/// be created.
 #[fixture]
 pub fn script_fixture() -> Result<ScriptFixture> {
     let temp_dir = tempfile::tempdir().context("create release help test tempdir")?;
@@ -49,6 +56,12 @@ pub fn script_fixture() -> Result<ScriptFixture> {
     })
 }
 
+/// Write an executable fake `cargo-orthohelp` script to `path`.
+///
+/// # Errors
+///
+/// Returns an error when the script cannot be written, inspected, or marked
+/// executable.
 pub fn write_fake_cargo_orthohelp(path: &Path) -> Result<()> {
     fs::write(path, fake_cargo_orthohelp_script())
         .with_context(|| format!("write fake cargo-orthohelp script {}", path.display()))?;
@@ -184,6 +197,12 @@ pub fn fake_cargo_orthohelp_script() -> String {
     .concat()
 }
 
+/// Prepend the fixture's fake `cargo-orthohelp` directory to `PATH`.
+///
+/// # Errors
+///
+/// Returns an error when the resulting platform-specific `PATH` cannot be
+/// constructed.
 #[expect(
     clippy::disallowed_methods,
     reason = "locating build artefacts Cargo reports through the environment; there is no seam to inject and no process state to isolate"
@@ -205,6 +224,7 @@ pub struct ReleaseHelpRun<'a> {
 }
 
 impl<'a> ReleaseHelpRun<'a> {
+    /// Create release-help run settings for a target triple.
     pub const fn for_target(target: &'a str) -> Self {
         Self {
             target,
@@ -215,27 +235,37 @@ impl<'a> ReleaseHelpRun<'a> {
         }
     }
 
+    /// Set the PowerShell module name for the run.
     pub const fn module_name(mut self, value: &'a str) -> Self {
         self.module_name = value;
         self
     }
 
+    /// Set the source date epoch used by the run.
     pub const fn source_date_epoch(mut self, value: &'a str) -> Self {
         self.source_date_epoch = Some(value);
         self
     }
 
+    /// Configure the run to make the fake generator fail.
     pub const fn fail_cargo(mut self) -> Self {
         self.fail_cargo = true;
         self
     }
 
+    /// Configure the run to omit one generated output format.
     pub const fn skip_output(mut self, format: &'a str) -> Self {
         self.skip_output = Some(format);
         self
     }
 }
 
+/// Run the release-help script with the supplied fixture and settings.
+///
+/// # Errors
+///
+/// Returns an error when metadata cannot be serialised or written, the test
+/// command environment cannot be prepared, or the script cannot be started.
 pub fn run_release_help(fixture: &ScriptFixture, run: ReleaseHelpRun<'_>) -> Result<Output> {
     let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     fs::write(
@@ -281,6 +311,7 @@ pub fn run_release_help(fixture: &ScriptFixture, run: ReleaseHelpRun<'_>) -> Res
     command.output().context("run release help script")
 }
 
+/// Configure snapshot storage for release-help artefacts.
 pub fn snapshot_settings() -> Settings {
     let mut settings = Settings::clone_current();
     settings.set_snapshot_path(concat!(
@@ -290,6 +321,11 @@ pub fn snapshot_settings() -> Settings {
     settings
 }
 
+/// Read the arguments recorded by the fake generator.
+///
+/// # Errors
+///
+/// Returns an error when the fake generator log cannot be read.
 pub fn logged_args(fixture: &ScriptFixture) -> Result<String> {
     fs::read_to_string(&fixture.log_path).with_context(|| {
         format!(

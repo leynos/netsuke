@@ -11,6 +11,35 @@ struct ParserOnlyFieldExpectation {
     help_id: &'static str,
 }
 
+/// Build inert metadata for testing the configuration-help projection.
+pub(super) fn inert_field_metadata(name: String) -> FieldMetadata {
+    FieldMetadata {
+        name,
+        help_id: "inert-help".to_owned(),
+        long_help_id: Some("inert-long-help".to_owned()),
+        value: None,
+        default: None,
+        required: false,
+        deprecated: None,
+        cli: None,
+        env: None,
+        file: None,
+        examples: Vec::new(),
+        links: Vec::new(),
+        notes: Vec::new(),
+    }
+}
+
+/// Return generated names for configuration fields with declared Fluent keys.
+pub(super) fn recognised_configuration_field_names() -> Vec<String> {
+    CliConfig::get_doc_metadata()
+        .fields
+        .into_iter()
+        .filter(|field| field.name != "cmds")
+        .map(|field| field.name)
+        .collect()
+}
+
 #[rstest]
 #[case::directory(
     "directory",

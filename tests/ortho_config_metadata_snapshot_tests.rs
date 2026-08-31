@@ -58,6 +58,7 @@ struct SubcommandSnapshot {
     about_id: String,
 }
 
+/// Select the snapshot merge strategy for a configuration field.
 fn merge_strategy(field_name: &str) -> &'static str {
     if APPEND_MERGE_FIELDS.contains(&field_name) {
         "append"
@@ -66,6 +67,7 @@ fn merge_strategy(field_name: &str) -> &'static str {
     }
 }
 
+/// Project release-help metadata into the stable snapshot representation.
 fn metadata_snapshot() -> MetadataSnapshot {
     let metadata = ReleaseHelpCli::get_doc_metadata();
     let precedence = metadata
@@ -133,6 +135,7 @@ fn metadata_snapshot() -> MetadataSnapshot {
     }
 }
 
+/// Keep the release-help metadata contract snapshot stable.
 #[test]
 fn release_help_documentation_metadata_is_stable() {
     assert_yaml_snapshot!(metadata_snapshot());
