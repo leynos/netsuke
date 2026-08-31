@@ -1315,6 +1315,17 @@ boundary for the blocking validator and later scheduled jobs.
     report](rfcs/0008-code-health.md#phase-1-inventory-and-report).
   - Success: every reported finding has an owner and disposition, and the clean
     checkout has no unexplained inventory or tier mismatch.
+- [ ] 7.1.4. Validate protected policy-input changes.
+  - Requires 7.1.1 and 7.1.2.
+  - Treat tier, exception, and external-source registry edits as policy
+    changes; require CODEOWNERS and branch protection, or independent
+    protected approval, before their contents affect blocking results.
+  - Test acceptable protected changes and reject direct, unprotected
+    modifications before exception evaluation.
+  - See [RFC 0008 §Health tiers and exception/allowlist
+    registry](rfcs/0008-code-health.md#health-tiers-and-exceptionallowlist-registry).
+  - Success: a registry change cannot relax a blocking rule without the
+    required protected approval, and validation identifies the protected input.
 
 ### 7.2. Make deterministic policy violations block pull requests
 
@@ -1325,30 +1336,38 @@ schedule.
 
 - [ ] 7.2.1. Enforce repository-wide workflow security rules.
   - Requires 7.1.2 and 7.1.3.
-  - Reject mutable external references, implicit or excessive permissions,
-    unsafe `pull_request_target` or privileged `workflow_run` execution,
-    contradictory concurrency policy, and `continue-on-error` health jobs
-    without a registered exception. For `workflow_run`, reject untrusted
-    checkout content, unverified artefacts, and untrusted pull-request data
-    reaching shell commands unless the required controls are enforced.
+  - Reject mutable external references, sources outside the approved
+    owner/repository allowlist, fork-only SHAs, implicit or excessive
+    permissions, unsafe `pull_request_target` or privileged `workflow_run`
+    execution, contradictory concurrency policy, and health checks masked by
+    job- or step-level `continue-on-error` without a valid exception. For
+    `workflow_run`, reject untrusted checkout content, unverified artefacts,
+    and untrusted pull-request data reaching shell commands unless the required
+    controls are enforced.
   - Preserve full lower-case commit-SHA pins and test each rule with valid and
-    invalid YAML fixtures, including quoted and multiline values, both
-    privileged triggers, untrusted checkout and artefact-provenance cases, and
+    invalid YAML fixtures, including quoted and multiline values, allowlist and
+    fork-provenance cases, both `continue-on-error` scopes, both privileged
+    triggers, untrusted checkout and artefact-provenance cases, and
     pull-request data flowing to shell commands.
   - See [RFC 0008 §Repository-wide workflow-policy
     validator](rfcs/0008-code-health.md#repository-wide-workflow-policy-validator).
   - Success: every security-policy class has a stable failing fixture and an
-    actionable rule identifier, including `pull_request_target` and privileged
-    `workflow_run` coverage for untrusted checkout content, verified artefact
-    provenance, and pull-request data reaching shell commands, while all
-    tracked workflows pass.
+    actionable rule identifier, including allowed-source and declared-repository
+    SHA provenance, both `continue-on-error` scopes, `pull_request_target`, and
+    privileged `workflow_run` coverage for untrusted checkout content, verified
+    artefact provenance, and pull-request data reaching shell commands, while
+    all tracked workflows pass.
 - [ ] 7.2.2. Enforce gate, reference, and documentation consistency.
   - Requires 7.1.2 and 7.1.3.
-  - Resolve local workflows and actions, Make targets, nextest profiles,
-    scripts, configuration and artefact paths, job dependencies, and health
-    producers against their owning contracts.
+  - Resolve local workflows and actions, Make targets, effective nextest
+    profiles, scripts, configuration and artefact paths, job dependencies, and
+    health producers against their owning contracts. Accept nextest's default
+    and reserved built-in profiles through its own resolution, require literal
+    profile sections only for repository-defined profiles, and reject missing
+    or empty referenced tool-version files.
   - Check documentation links and current claims about gates and tools without
-    rewriting prose automatically.
+    rewriting prose automatically. Keep the blocking validator repository-only
+    and network-free: it validates external URL syntax, not reachability.
   - Make focused workflow-contract tests consume the shared inventory where it
     removes duplicate parsing, while preserving their domain-specific
     assertions.
@@ -1357,12 +1376,15 @@ schedule.
     and [§Documentation
     consistency](rfcs/0008-code-health.md#documentation-consistency).
   - Success: every tracked workflow and indexed documentation reference
-    resolves, or is explicitly marked as historical under the documented rule.
+    resolves, or is explicitly marked as historical under the documented rule;
+    the blocking validator requires no network access.
 - [ ] 7.2.3. Enforce tier and exception hygiene through the canonical gate.
-  - Requires 7.1.1, 7.2.1, and 7.2.2.
+  - Requires 7.1.1, 7.1.4, 7.2.1, and 7.2.2.
   - Reject missing producers, contradictory blocking status, expired or
-    duplicate entries, unknown rules, broad scopes, and inline bypasses without
-    a registry entry.
+    duplicate entries, unknown rules, missing or malformed rule-specific
+    subjects, empty or unbounded scopes, unsupported globs, invalid owners,
+    references, or calendar dates, and inline bypasses without a registry
+    entry.
   - Add the validator to a canonical Make target and the per-pull-request CI
     path without weakening existing gates or adding blanket retries.
   - See [RFC 0008 §Health tiers and exception/allowlist
@@ -1370,17 +1392,30 @@ schedule.
     and [§Phase 2: Block deterministic
     contracts](rfcs/0008-code-health.md#phase-2-block-deterministic-contracts).
   - Success: twenty measured runs on the standard CI runner complete in under
-    two minutes each and produce the same classifications for the same tree.
+    two minutes each and produce the same classifications for the same tree;
+    every accepted exception has one valid subject, owner, reference, rationale,
+    creation date, and later expiry date.
 - [ ] 7.2.4. Add an end-to-end workflow-policy regression corpus.
   - Requires 7.2.3.
-  - Cover mutable references, permission escalation, unsafe
-    `pull_request_target`, missing local references, broken tiers, invalid
+  - Cover mutable and unallowlisted references, fork-only SHAs, permission
+    escalation, unsafe `pull_request_target` and `workflow_run`, both
+    `continue-on-error` scopes, missing local references, broken tiers, invalid
     exceptions, shell quoting, comments, and multiline commands in combination.
   - Exercise every tracked workflow through the same command that CI invokes.
   - See [RFC 0008 §Acceptance
     criteria](rfcs/0008-code-health.md#acceptance-criteria).
   - Success: each policy class fails independently and in representative
     combinations, while the repository corpus passes without allowlist drift.
+- [ ] 7.2.5. Report external-link reachability outside blocking validation.
+  - Requires 7.2.2.
+  - Add a scheduled, non-blocking external-link check with a 10-second
+    per-URL timeout and a 10-minute job limit. Classify DNS, connection, TLS,
+    redirect, HTTP-status, and timeout failures without changing PR results.
+  - See [RFC 0008 §Documentation
+    consistency](rfcs/0008-code-health.md#documentation-consistency).
+  - Success: a temporarily unavailable external URL is reported with its
+    classified failure while the repository-only blocking validator still
+    completes deterministically.
 
 ### 7.3. Add bounded coverage-guided fuzzing at compiler boundaries
 
@@ -1390,8 +1425,10 @@ which short corpora are suitable for pull requests and which campaigns must
 remain scheduled.
 
 - [ ] 7.3.1. Establish the fuzz workspace and bounded harness contract.
-  - Pin the supported `cargo-fuzz` and toolchain inputs, decide corpus storage
-    and size limits, and record per-target smoke and scheduled budgets.
+  - Pin the supported `cargo-fuzz` and toolchain inputs, decide corpus storage,
+    and record the fixed per-target budget: 1 MiB input, 4 MiB output, 64
+    recursion frames, 64 MiB temporary storage, 256 MiB corpus, a one-second
+    watchdog per input, and a 10-minute watchdog per job.
   - Forbid shell or Ninja execution, network access, unbounded recursion and
     output, and writes outside a capability-scoped temporary directory.
   - Document the harness ownership and composition rules before extracting any
@@ -1400,7 +1437,9 @@ remain scheduled.
     targets](rfcs/0008-code-health.md#scheduled-cargo-fuzz-targets)
     and [§Open questions](rfcs/0008-code-health.md#open-questions).
   - Success: a fixed input always yields the same bounded value or typed error,
-    and a harness defect cannot invoke user commands or escape its test root.
+    the registry publishes every fixed budget, watchdog expiry is an explicit
+    timeout result, and a harness defect cannot invoke user commands or escape
+    its test root.
 - [ ] 7.3.2. Implement the `manifest_yaml` fuzz boundary.
   - Requires 7.3.1.
   - Exercise arbitrary bytes, invalid UTF-8, malformed YAML, nesting pressure,
@@ -1450,23 +1489,34 @@ remain scheduled.
     renderer contract, or a typed error, without running Ninja.
 - [ ] 7.3.7. Integrate fuzz smoke checks, scheduled campaigns, and crash
   promotion.
-  - Requires 7.2.3, 7.3.2, 7.3.3, 7.3.4, 7.3.5, 7.3.6, and the bounded
-    Proptest suites for the range invariants, size and performance limits,
-    limit-edge cases, the 256-case bound, and retained regressions.
+  - Requires 7.2.3, 7.3.2, 7.3.3, 7.3.4, 7.3.5, 7.3.6, and bounded Proptest
+    suites for input, output, recursion, temporary-storage, corpus, fuel, and
+    operation limits; workflow references and job graphs; exception subjects,
+    scopes, globs, owners, references, and dates; limit-edge cases; the
+    256-case bound; and retained regressions. Bound those suites to 10,000 fuel
+    units per input, 1,000,000 per job, 32 jobs, 64 graph edges, 40-character
+    SHAs, 32 exception entries, eight scopes per entry, and 128-character
+    fields.
   - Run only measured, deterministic smoke corpora on pull requests; run longer
     budgeted campaigns on a scheduled workflow.
-  - Promote a fuzz target only after its bounded properties cover those
-    invariants and retained regression inputs.
+  - Promote a fuzz target only after deterministic fuel and operation
+    properties cover those invariants and retained regression inputs; use
+    watchdog elapsed time only to report an explicit harness timeout.
   - Publish target, corpus revision, execution budget, and crash result, retain
     failure artefacts, and minimize each crasher.
   - Require a deterministic regression test before deleting or quarantining a
     crasher, and do not use blanket retries.
+  - Open or update an owned investigation for each scheduled failure. Treat a
+    timeout, out-of-memory result, or uncontrolled filesystem access as a
+    harness defect that blocks promotion; correct validator false positives
+    with a fixture and rule change rather than a broad allowlist.
   - See [RFC 0008 §Phase 3: Add scheduled
     fuzzing](rfcs/0008-code-health.md#phase-3-add-scheduled-fuzzing).
   - Success: every target has a passing smoke corpus and bounded properties
-    cover the range invariants, size and performance limits, limit edges, the
-    256-case bound, and retained regressions before promotion; any scheduled
-    failure remains visible until its minimized regression test passes.
+    cover the range invariants, resource and operation limits, validator graph
+    and exception-schema boundaries, limit edges, the 256-case bound, and
+    retained regressions before promotion; any scheduled failure remains
+    visible until its minimized regression test passes.
 
 ### 7.4. Ratchet health signals from measured evidence
 
@@ -1534,15 +1584,17 @@ must share.
 - [ ] 8.1.2. Define and validate the release-evidence manifest schema.
   - Requires 8.1.1.
   - Bind the tag, exact commit, repository, pinned Rust toolchain, policy-tool
-    versions and data state, gate result and log identities, profile
-    measurements, scan freshness, policy results, and every archive's target,
-    byte size, and SHA-256 digest.
+    versions and data state, approved workflow run, immutable producer job or
+    artefact identities, every producer's checked-out release SHA, gate result
+    and log identities, profile measurements, scan freshness, policy results,
+    and every archive's target, byte size, and SHA-256 digest.
   - Reject unknown, missing, stale, malformed, duplicated, or contradictory
     evidence and require exactly one sidecar per archive.
   - See [RFC 0005 §Release-admission
     evidence](rfcs/0005-release-hardening.md#release-admission-evidence).
-  - Success: schema fixtures prove every required field and exact-commit
-    relation, including negative cases, without granting publish permissions.
+  - Success: schema fixtures prove every required field, exact-commit relation,
+    producer provenance binding, and malformed or mismatched identity case
+    without granting publish permissions.
 - [ ] 8.1.3. Capture reproducible release-profile baselines.
   - Requires 8.1.1.
   - Measure the current profile on the pinned toolchain, supported targets,
@@ -1575,20 +1627,33 @@ the accepted size and performance budgets.
   - Requires 8.2.1 and bounded Proptest suites for release arithmetic, digest
     and commit binding, freshness, archive cardinality, size and performance
     limits, limit-edge cases, the 256-case bound, and retained regressions.
-  - Exercise every supported command path that can reach a production
-    `debug_assert`, selected arithmetic boundaries, valid inputs, and
-    intentionally rejected inputs in release mode.
+  - Generate arithmetic values immediately below, at, and above each boundary;
+    measurement pairs from zero through twice the baseline; archive sets from
+    zero through one above the permitted cardinality; and timestamps around the
+    freshness boundary. Bound command inputs to 64 KiB, staged archive bytes to
+    64 MiB, and every property run to 256 cases; retain each counterexample as
+    a checked-in regression that the blocking suite replays.
+  - Exercise every supported command path that can reach the seven production
+    `debug_assert*` sites in `src/ir/cycle_support.rs`,
+    `src/ir/cycle_detector.rs`, `src/ir/cmd_interpolate/mod.rs`,
+    `src/stdlib/time/format.rs`, `src/stdlib/command/quote.rs`,
+    `src/ninja_gen/mod.rs`, and `src/cli/discovery_layers.rs`, plus selected
+    arithmetic boundaries, valid inputs, and intentionally rejected inputs.
+  - Cover `NamedAction::write_into` for `Recipe::Rule`: assert the
+    debug-assertion panic in its applicable profile and
+    `NinjaGenError::UnsafeNinjaValue` without debug assertions.
   - Run the bounded property cases before release admission, including the
     256-case bound and regression inputs retained from prior failures.
   - Require supported failures to remain typed, documented errors rather than
     assertion failures or arithmetic panics.
   - See [RFC 0005 §Measurable acceptance
     criteria](rfcs/0005-release-hardening.md#measurable-acceptance-criteria).
-  - Success: all production assertion sites and selected overflow boundaries
-    are covered across supported targets without weakening an invariant, and
-    bounded properties cover release arithmetic, digest and commit binding,
-    freshness, archive cardinality, size and performance limits, limit edges,
-    the 256-case bound, and retained regressions before admission.
+  - Success: every named assertion site, the `Recipe::Rule` profile-dependent
+    rejection, and selected overflow boundaries are covered across supported
+    targets without weakening an invariant. Bounded properties cover release
+    arithmetic, digest and commit binding, freshness, archive cardinality, size
+    and performance limits, limit edges, the 256-case bound, and retained
+    regressions before admission.
 - [ ] 8.2.3. Enforce release-profile size and performance budgets.
   - Requires 8.1.2, 8.1.3, and 8.2.2.
   - Run five candidate measurements with the same inputs as the baseline and
@@ -1614,6 +1679,9 @@ temporary waivers into permanent trust.
   - Run a blocking CI scan over checkout-tracked files and untracked files
     generated by the runner on pull requests, pushes, and release candidates,
     using a SHA-pinned action or verified pinned executable.
+  - Keep every checkout and scanning action, and every newly introduced
+    release-hardening download, pinned to an immutable commit SHA or verified
+    pinned executable; reject an unpinned action tag or download URL.
   - Redact findings and require false-positive suppressions to identify the
     pattern, path, reviewer, rationale, and expiry without disabling the
     repository scan.
@@ -1673,27 +1741,35 @@ runs prove the failure boundary before any job receives release permissions.
   - Collect formatting, lint, tests, rustdoc, Whitaker, Kani, profile
     measurements, secret scans, dependency and licence policy, notices, and
     archive checksum results under the schema from 8.1.2.
-  - Bind every producer to the tag commit and record tool versions, policy
-    inputs, and immutable log or artefact identities.
+  - Bind every producer to the tag commit, approved workflow run, and exact
+    checked-out release SHA; record tool versions, policy inputs, and immutable
+    producer, log, and artefact identities or digests.
   - See [RFC 0005 §Release-admission
     evidence](rfcs/0005-release-hardening.md#release-admission-evidence).
-  - Success: a candidate has exactly one successful, reproducible result for
-    every required gate, target, archive, and checksum sidecar.
+  - Success: a candidate has exactly one successful, reproducible,
+    provenance-bound result for every required gate, target, archive, and
+    checksum sidecar.
 - [ ] 8.4.2. Add the read-only release-admission job.
   - Requires 7.2.3, 8.1.2, and 8.4.1.
   - Give admission no publication permission, require it to validate the exact
-    tag-to-commit binding and all evidence, and make the publication job depend
-    on its success.
+    tag-to-commit binding, approved workflow run, producer checkout SHA, and
+    all evidence, and make the publication job depend on its success.
+  - Recompute every staged archive SHA-256 from its bytes, then compare it with
+    its matching `.sha256` sidecar and evidence-manifest digest; reject any
+    filename, cardinality, sidecar, commit, result, provenance, or digest
+    mismatch.
   - Preserve existing archive names, target coverage, checksum sidecars,
     `cargo-binstall` resolution, action SHA pins, and release staging policy.
   - See [RFC 0005 §Phase 4: Turn on
     admission](rfcs/0005-release-hardening.md#phase-4-turn-on-admission).
   - Success: no job with publication permission can run before successful
-    exact-commit admission.
+    exact-commit admission, and no archive is admitted without three-way
+    byte-derived digest agreement.
 - [ ] 8.4.3. Add end-to-end release-admission dry-run coverage.
   - Requires 8.4.2.
   - Exercise clean evidence and missing, stale, malformed, failed,
-    contradictory, wrong-commit, duplicate-sidecar, missing-sidecar, and
+    contradictory, wrong-commit, wrong-workflow, wrong-producer-SHA,
+    provenance-identity, duplicate-sidecar, missing-sidecar, and
     checksum-mismatch combinations without publishing assets.
   - Prove tool outages and expired waivers remain unknown or failed, and prove
     a dry run cannot bypass admission for a real publication event.
