@@ -81,6 +81,10 @@ struct Scan {
     quote: Quote,
     /// Whether the pass is inside a Jinja delimiter pair.
     in_jinja: bool,
+    /// Whether the pass is inside a shell comment.
+    in_comment: bool,
+    /// Whether the previous character was whitespace or the text began.
+    after_space: bool,
 }
 
 impl Scan {
@@ -90,11 +94,18 @@ impl Scan {
             active: vec![false; len],
             quote: Quote::None,
             in_jinja: false,
+            in_comment: false,
+            after_space: true,
         }
     }
 
     /// Consume one character, reporting whether the next one is also consumed.
     fn step(&mut self, index: usize, character: char, follower: Option<char>) -> bool {
+        if self.in_comment {
+            self.in_comment = character != '\n';
+            self.after_space = true;
+            return false;
+        }
         if self.in_jinja {
             self.in_jinja = !closes_jinja(character, follower);
             return !self.in_jinja;
@@ -104,11 +115,27 @@ impl Scan {
             return true;
         }
         if self.is_escape(character) {
+            self.after_space = false;
             return true;
+        }
+        if self.opens_comment(character) {
+            self.in_comment = true;
+            return false;
         }
         self.update_quote(character);
         self.mark(index);
+        self.after_space = character.is_whitespace();
         false
+    }
+
+    /// Report whether `character` opens a shell comment.
+    ///
+    /// A `#` only starts a comment at the beginning of a word, so `a#b` stays
+    /// ordinary text. Everything from there to the newline is prose the shell
+    /// never runs, and reporting a construct found in it would fail a build
+    /// over a comment.
+    const fn opens_comment(&self, character: char) -> bool {
+        character == '#' && matches!(self.quote, Quote::None) && self.after_space
     }
 
     /// Report whether `character` escapes the next one in the current state.
@@ -236,13 +263,24 @@ const fn separator_width(character: char, follower: Option<char>, is_active: boo
 /// prefixes is the word a caller is looking for.
 #[must_use]
 pub fn leading_word(segment: &str) -> Option<(usize, &str)> {
-    let trimmed = segment.trim_start();
-    let indent = segment.len().saturating_sub(trimmed.len());
-    let word = trimmed
-        .split_whitespace()
-        .find(|word| !word.contains('='))?;
-    let offset = trimmed.find(word)?;
-    Some((indent.saturating_add(offset), word))
+    // The offset is tracked while scanning rather than recovered with `find`,
+    // because the command can repeat text from an assignment that precedes it:
+    // in `CC=gcc gcc -c a.c`, searching for `gcc` would report the one inside
+    // `CC=gcc` and point the diagnostic at the wrong word.
+    let mut cursor = 0usize;
+    for word in segment.split_inclusive(char::is_whitespace) {
+        let trimmed = word.trim();
+        if trimmed.is_empty() {
+            cursor = cursor.saturating_add(word.len());
+            continue;
+        }
+        if !trimmed.contains('=') {
+            let lead = word.len().saturating_sub(word.trim_start().len());
+            return Some((cursor.saturating_add(lead), trimmed));
+        }
+        cursor = cursor.saturating_add(word.len());
+    }
+    None
 }
 
 #[cfg(test)]

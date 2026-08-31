@@ -3352,7 +3352,7 @@ prose is localized.
     `.remediation` so the key follows the rule rather than its category.
   - Keep the registry's English text as the fallback, so a catalogue gap
     degrades to the source locale rather than to an empty diagnostic.
-  - Success: `netsuke check --locale <tag>` reports a finding's message and
+  - Success: `netsuke --locale <tag> check` reports a finding's message and
     remediation in that locale, while its `rule`, `category`, `severity`, and
     `code` fields are byte-identical across locales.
 - [ ] 31.2.2. Localize the framing text `--explain` prints. Requires 31.2.1.
@@ -3374,7 +3374,6 @@ prose is localized.
     `dependency_order` verbatim.
   - Success: the build-script localization audit passes with no catalogue
     carrying an untranslated copy of a rule message.
-
 
 ### 31.3. Close the gaps the prototype left open
 

@@ -5,7 +5,7 @@
 //! the target rebuilds on every invocation and everything downstream of it
 //! rebuilds too.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::{NetsukeManifest, Recipe, StringOrList, Target};
 use crate::lint::document::Node;
@@ -180,6 +180,23 @@ fn directory_targets(manifest: &NetsukeManifest) -> Vec<&str> {
 /// Every command must be a `mkdir`, so a recipe that creates a directory and
 /// then writes a real output is not mistaken for a directory target.
 fn creates_directory(recipe: &Recipe, rules: &BTreeMap<&str, &Recipe>) -> bool {
+    let mut active = BTreeSet::new();
+    resolves_to_directory(recipe, rules, &mut active)
+}
+
+/// Resolve a recipe, refusing to re-enter a rule already being resolved.
+///
+/// A rule may delegate to another rule, and the manifest parser and graph
+/// lowering both accept a delegation cycle: lowering resolves one hop and
+/// leaves the rest unresolved, so `a -> b -> a` reaches this analysis intact.
+/// Without the guard the recursion never terminates and `netsuke check`
+/// aborts on a stack overflow. A cycle produces no command text at all, so
+/// treating a re-entered rule as "not a directory" is also the right answer.
+fn resolves_to_directory<'rules>(
+    recipe: &'rules Recipe,
+    rules: &BTreeMap<&'rules str, &'rules Recipe>,
+    active: &mut BTreeSet<&'rules str>,
+) -> bool {
     match recipe {
         Recipe::Command { command } => {
             let commands = command.to_string_vec();
@@ -189,8 +206,14 @@ fn creates_directory(recipe: &Recipe, rules: &BTreeMap<&str, &Recipe>) -> bool {
         Recipe::Rule { rule } => rule
             .to_string_vec()
             .iter()
-            .filter_map(|name| rules.get(name.as_str()))
-            .any(|referenced| creates_directory(referenced, rules)),
+            .filter_map(|name| rules.get_key_value(name.as_str()))
+            .any(|(name, referenced)| {
+                active.insert(*name) && {
+                    let found = resolves_to_directory(referenced, rules, active);
+                    active.remove(*name);
+                    found
+                }
+            }),
     }
 }
 
