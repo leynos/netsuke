@@ -213,8 +213,9 @@ fn graph_target_implicit_deps(world: &TestWorld, target: &str, paths: &str) -> R
 
 /// Compile a manifest file to IR, storing result or error in state.
 fn compile_manifest_impl(world: &TestWorld, path: &str) {
-    // The manifest path is absolute, while the process CWD stays at the
-    // project root, so relative glob patterns continue to resolve correctly.
+    // The manifest path is absolute; manifest parsing injects the manifest
+    // directory as the glob base, so relative glob patterns resolve against
+    // that directory regardless of the process working directory.
     let resolved = if std::path::Path::new(path).is_relative() && path.starts_with("tests/") {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         std::path::Path::new(manifest_dir)

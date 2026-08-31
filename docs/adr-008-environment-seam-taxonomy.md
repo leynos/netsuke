@@ -198,6 +198,15 @@ resolution entirely rather than setting the variable for a child to read.
 
 ## Addendum
 
+### 2026-08-30: Manifest glob base seam
+
+Manifest parsing owns a separate base-directory seam: it passes the manifest
+directory or workspace root to `glob_paths(pattern, base)` and internal
+`expand_glob(pattern, base)`. Relative glob patterns, including parent-relative
+ones, resolve from that injected root and retain their pattern-relative result
+spelling; absolute patterns remain absolute. This path neither reads nor
+mutates process-global working-directory state during expansion.
+
 ### 2026-08-26: EnvLock retirement
 
 `EnvLock` is retired rather than hardened. Production signatures must inject

@@ -6,9 +6,10 @@
 //! paths in the order the `glob` crate yields them, with directories filtered
 //! out.
 //!
-//! The work is split across four private submodules:
+//! The work is split across seven private submodules:
 //!
 //! - `validate` rejects unbalanced braces before any filesystem access.
+//! - `base` canonicalizes an injected base into a glob-compatible path.
 //! - `normalize` maps separators onto the platform's and, on Unix, rewrites
 //!   backslash escapes into the bracket classes the `glob` crate understands.
 //!   [`GlobPattern`] pairs the caller's text with that normalized form.
@@ -17,9 +18,14 @@
 //!   runs the metadata check that filters each match.
 //! - `diagnostics` records the bounded data the pure expansion query returns
 //!   at the manifest orchestration boundary.
-//! - The manifest adapter exposes only paths that are portable unquoted shell
-//!   words. The public [`glob_paths`] query remains a filesystem API and does
-//!   not impose that template-specific command-safety policy.
+//! - `errors` centralizes context-rich failures from validation and filesystem
+//!   access.
+//! - `escape` preserves platform roots while quoting injected base components
+//!   for glob compilation.
+//!
+//! The manifest adapter exposes only paths that are portable unquoted shell
+//! words. The public [`glob_paths`] query remains a filesystem API and does
+//! not impose that template-specific command-safety policy.
 //!
 //! Matching itself belongs to the `glob` crate, which traverses the filesystem
 //! ambiently; only the metadata check is capability-scoped. `walk`'s module
@@ -30,11 +36,16 @@ use minijinja::Error;
 
 mod diagnostics;
 mod errors;
+mod escape;
 mod normalize;
 mod validate;
 mod walk;
 
-use errors::{GlobErrorContext, GlobErrorType, create_glob_error};
+pub(super) use base::GlobBaseCache;
+use base::PreparedGlob;
+use camino::{Utf8Path, Utf8PathBuf};
+pub(super) use diagnostics::expand_manifest_template_glob;
+use errors::{GlobErrorContext, GlobErrorType, GlobExpansionFailure, create_glob_error};
 use normalize::normalize_separators;
 use validate::validate_brace_matching;
 use walk::{open_root_dir, process_glob_entry};
@@ -157,8 +168,8 @@ impl GlobSkippedEntries {
 /// Entry selected by the capability-scoped metadata query.
 #[derive(Debug)]
 pub(super) enum GlobEntry {
-    /// A matched regular file path with separators normalized to `/`.
-    Path(String),
+    /// A matched regular file path retained until final result formatting.
+    Path(Utf8PathBuf),
     /// A symlink the capability cannot resolve, given relative to the prefix.
     UnreachableSymlink(camino::Utf8PathBuf),
     /// The match does not name a regular file.
@@ -241,7 +252,7 @@ fn is_shell_inert_path(path: &str) -> bool {
 ///
 /// ```
 /// use netsuke::manifest::glob_paths;
-/// let _: fn(&str) -> _ = glob_paths;
+/// let _: fn(&str, Option<&camino::Utf8Path>) -> _ = glob_paths;
 /// ```
 ///
 /// The module's internals are not. `GlobEntryResult` is a private alias inside
@@ -254,12 +265,45 @@ fn is_shell_inert_path(path: &str) -> bool {
 /// The passing example above is the control for this rejection: it fails
 /// instead if the rustdoc harness wiring breaks, so the `compile_fail` block
 /// cannot pass vacuously.
-pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
-    expand_glob(pattern).map(GlobExpansion::into_paths)
+pub fn glob_paths(
+    pattern: &str,
+    base: Option<&Utf8Path>,
+) -> std::result::Result<Vec<String>, Error> {
+    expand_glob(pattern, base).map(GlobExpansion::into_paths)
 }
 
 /// Expand a pattern and return its bounded diagnostic data without recording it.
-pub(super) fn expand_glob(pattern: &str) -> std::result::Result<GlobExpansion, Error> {
+///
+/// `base` anchors relative patterns: when supplied and the pattern is not
+/// absolute, the pattern is joined onto `base` before matching and the base is
+/// stripped from the returned paths, so results keep their pattern-relative
+/// spelling. `None` falls back to the process current directory, the
+/// composition-root behaviour retained for string parsing.
+pub(super) fn expand_glob(
+    pattern: &str,
+    base: Option<&Utf8Path>,
+) -> std::result::Result<GlobExpansion, Error> {
+    let prepared = PreparedGlob::new(pattern, base)?;
+    expand_prepared_glob(&prepared).map_err(GlobExpansionFailure::into_error)
+}
+
+/// Expand a pattern using a manifest-owned injected-base cache.
+///
+/// The cache retains a successful canonicalization across `glob()` calls in
+/// one manifest parse. It is consulted only after the normalized pattern has
+/// been found relative, so absolute patterns still avoid base resolution.
+fn expand_glob_with_base_cache(
+    pattern: &str,
+    base: &GlobBaseCache,
+) -> std::result::Result<GlobExpansion, GlobExpansionFailure> {
+    let prepared = PreparedGlob::new_with_base_cache_for_template(pattern, base)?;
+    expand_prepared_glob(&prepared)
+}
+
+/// Expand one already-prepared glob search and collect its diagnostic data.
+fn expand_prepared_glob(
+    prepared: &PreparedGlob,
+) -> std::result::Result<GlobExpansion, GlobExpansionFailure> {
     use glob::{MatchOptions, glob_with};
 
     let opts = MatchOptions {
@@ -268,29 +312,32 @@ pub(super) fn expand_glob(pattern: &str) -> std::result::Result<GlobExpansion, E
         require_literal_leading_dot: false,
     };
 
-    let pattern_state = GlobPattern::new(pattern)?;
-    let entries = glob_with(pattern_state.normalized(), opts).map_err(|e| {
-        create_glob_error(
+    let entries = glob_with(prepared.search(), opts).map_err(|e| {
+        GlobExpansionFailure::InvalidPattern(create_glob_error(
             &GlobErrorContext {
-                pattern: pattern_state.raw().to_owned(),
+                pattern: prepared.pattern.raw().to_owned(),
                 error_char: char::from(0),
                 position: 0,
                 error_type: GlobErrorType::InvalidPattern,
             },
             Some(e.to_string()),
-        )
+        ))
     })?;
 
-    let Some(root) = open_root_dir(&pattern_state).map_err(|e| {
-        create_glob_error(
+    // `search` already embeds the injected base (`base.join(normalized)`), so
+    // the capability root must be opened from the literal prefix as written
+    // rather than passing `base` again: doing the latter would reopen the base
+    // directory and then traverse its own name, doubling the path component.
+    let Some(root) = open_root_dir(prepared.search(), None).map_err(|e| {
+        GlobExpansionFailure::CapabilityRootIo(create_glob_error(
             &GlobErrorContext {
-                pattern: pattern_state.raw().to_owned(),
+                pattern: prepared.pattern.raw().to_owned(),
                 error_char: char::from(0),
                 position: 0,
                 error_type: GlobErrorType::IoError,
             },
             Some(e.to_string()),
-        )
+        ))
     })?
     else {
         // The pattern's literal directory prefix does not exist, so the
@@ -305,8 +352,10 @@ pub(super) fn expand_glob(pattern: &str) -> std::result::Result<GlobExpansion, E
     let mut paths = Vec::new();
     let mut skipped = GlobSkippedEntries::default();
     for entry in entries {
-        match process_glob_entry(entry, &pattern_state, &root)? {
-            GlobEntry::Path(path) => paths.push(path),
+        match process_glob_entry(entry, &prepared.pattern, &root)
+            .map_err(GlobExpansionFailure::GlobEntryProcessing)?
+        {
+            GlobEntry::Path(path) => paths.push(strip_base(prepared.strip.as_deref(), &path)),
             GlobEntry::UnreachableSymlink(relative) => {
                 skipped.record_unreachable_symlink(relative);
             }
@@ -320,14 +369,22 @@ pub(super) fn expand_glob(pattern: &str) -> std::result::Result<GlobExpansion, E
     })
 }
 
-/// Record the bounded observations from a completed expansion.
+/// Remove an injected base directory from a matched path, restoring the
+/// pattern-relative spelling the caller supplied.
 ///
-/// `glob_paths` deliberately does not call this function: it is a pure query.
-/// The manifest-template adapter records observations after it calls
-/// [`expand_glob`].
-pub(super) fn record_expansion(expansion: &GlobExpansion) {
-    diagnostics::record(expansion);
+/// Only relative patterns with an injected base are affected: `strip` is
+/// `Some` exactly when the matcher ran against `base.join(pattern)`, so every
+/// match starts with `base` and the lexical strip cannot fail in a way that
+/// would drop real matches. The fallback returns the path unchanged.
+fn strip_base(base: Option<&Utf8Path>, path: &Utf8Path) -> String {
+    let relative = base
+        .and_then(|dir| path.strip_prefix(dir).ok())
+        .unwrap_or(path);
+    // Format once, after any lexical base stripping, so a matched path does
+    // not first allocate a normalized String only to allocate again to rebase.
+    relative.as_str().replace('\\', "/")
 }
-
 #[cfg(test)]
 mod tests;
+
+mod base;

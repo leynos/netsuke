@@ -67,6 +67,7 @@ pub fn from_str_with_env_and_config(
             name: &ManifestName::new("Netsukefile"),
             stdlib_registration: Some(StdlibRegistration::Full(Box::new(stdlib_config))),
             env_reader,
+            manifest_root: None,
         },
         &mut None,
     )

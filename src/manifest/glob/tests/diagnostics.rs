@@ -1,83 +1,126 @@
 //! Tests for the counters and tracing events glob expansion records.
 //!
-//! Each case records data returned by the pure expansion query through a
-//! subscriber scoped to the call. The recorder and subscriber are both
+//! Each case exercises the manifest-template adapter or the pure query through
+//! a subscriber scoped to the call. The recorder and subscriber are both
 //! thread-local, so no test-wide lock is needed.
 
 #[cfg(unix)]
 use super::super::MAX_UNREACHABLE_SYMLINK_SAMPLES;
-use super::super::{expand_glob, glob_paths, record_expansion};
-use anyhow::{Context, Result, ensure};
-use metrics::SharedString;
-use metrics_util::{
-    CompositeKey, MetricKind,
-    debugging::{DebugValue, DebuggingRecorder},
+use super::super::{
+    GlobBaseCache, GlobExpansion, PreparedGlob, expand_manifest_template_glob, glob_paths,
 };
+use super::diagnostics_support::{
+    BASE_CACHE, EXPANSIONS, SKIPPED, Snapshot, TEMPLATE_EXPANSION_DURATION, TEMPLATE_EXPANSIONS,
+    counter_value, counter_value_with_labels, has_histogram, recorded,
+};
+use anyhow::{Context, Result, ensure};
+use camino::Utf8Path;
 use rstest::rstest;
 use tempfile::tempdir;
 use test_support::fs as test_fs;
-use tracing::level_filters::LevelFilter;
 
-type Snapshot = Vec<(
-    CompositeKey,
-    Option<metrics::Unit>,
-    Option<SharedString>,
-    DebugValue,
-)>;
-
-/// Run `expand` with a local metrics recorder and a capturing subscriber.
-fn recorded<T>(expand: impl FnOnce() -> T) -> (T, Vec<String>, Snapshot) {
-    let recorder = DebuggingRecorder::new();
-    let snapshotter = recorder.snapshotter();
-    let (value, events) = metrics::with_local_recorder(&recorder, || {
-        crate::test_tracing_capture::with_test_subscriber(LevelFilter::DEBUG, |captured| {
-            let value = expand();
-            (value, captured.snapshot())
-        })
-    });
-    (value, events, snapshotter.snapshot().into_vec())
-}
+#[path = "template_modes.rs"]
+mod template_modes;
 
 /// Expand and record at the manifest adapter's telemetry boundary.
 fn expand_and_record(pattern: &str) -> Result<Vec<String>> {
-    let expansion = expand_glob(pattern)?;
-    record_expansion(&expansion);
+    let base = GlobBaseCache::new(None);
+    let expansion = expand_manifest_template_glob(pattern, &base)?;
     Ok(expansion.into_paths())
 }
 
-/// Value of the counter `name` carrying the label `label = value`.
-fn counter_value(snapshot: &Snapshot, name: &str, label: (&str, &str)) -> Option<u64> {
-    snapshot.iter().find_map(|(key, _, _, debug_value)| {
-        if key.kind() != MetricKind::Counter || key.key().name() != name {
-            return None;
-        }
-        let carries_label = key
-            .key()
-            .labels()
-            .any(|found| found.key() == label.0 && found.value() == label.1);
-        match debug_value {
-            DebugValue::Counter(count) if carries_label => Some(*count),
-            _ => None,
-        }
+/// Expand and record a manifest-template glob anchored at `temporary_directory`.
+fn expand_and_record_with_injected_base(
+    temporary_directory: &tempfile::TempDir,
+    pattern: &str,
+) -> (Result<Vec<String>>, Vec<String>, Snapshot) {
+    recorded(|| -> Result<Vec<String>> {
+        let base = Utf8Path::from_path(temporary_directory.path())
+            .context("temporary directory should have a UTF-8 path")?
+            .to_path_buf();
+        let cache = GlobBaseCache::new(Some(base));
+        let expansion = expand_manifest_template_glob(pattern, &cache)?;
+        Ok(GlobExpansion::into_paths(expansion))
     })
 }
 
-const EXPANSIONS: &str = "netsuke_manifest_glob_expansions_total";
-const SKIPPED: &str = "netsuke_manifest_glob_entries_skipped_total";
+#[rstest]
+fn base_cache_records_bypass_hit_miss_and_error_outcomes() -> Result<()> {
+    let temporary_directory = tempdir()?;
+    let base = Utf8Path::from_path(temporary_directory.path())
+        .context("temporary directory should have a UTF-8 path")?
+        .to_path_buf();
+    let unconfigured = GlobBaseCache::new(None);
+    let configured = GlobBaseCache::new(Some(base.clone()));
+    let missing = GlobBaseCache::new(Some(base.join("missing")));
+
+    let (result, events, snapshot) = recorded(|| -> Result<()> {
+        PreparedGlob::new_with_base_cache("*.txt", &unconfigured)?;
+        PreparedGlob::new_with_base_cache("*.txt", &configured)?;
+        PreparedGlob::new_with_base_cache("*.txt", &configured)?;
+        ensure!(
+            PreparedGlob::new_with_base_cache("*.txt", &missing).is_err(),
+            "a missing injected base must fail preparation"
+        );
+        Ok(())
+    });
+    result?;
+
+    for outcome in ["bypass", "miss", "hit", "error"] {
+        ensure!(
+            counter_value(&snapshot, BASE_CACHE, ("outcome", outcome)) == Some(1),
+            "expected one base-cache {outcome} outcome: {snapshot:?}"
+        );
+    }
+    ensure!(
+        events
+            .iter()
+            .any(|event| event.contains("operation=\"glob_base_cache\"")
+                && event.contains("outcome=\"miss\"")),
+        "expected the cache miss trace event: {events:?}"
+    );
+    ensure!(
+        !events
+            .iter()
+            .any(|event| event.contains(&temporary_directory.path().display().to_string())),
+        "base-cache trace events must not disclose the base path: {events:?}"
+    );
+    Ok(())
+}
 
 #[rstest]
 fn a_completed_expansion_counts_its_matches() -> Result<()> {
     let temp = tempdir()?;
     test_fs::write(temp.path().join("a.txt"), "a")?;
     test_fs::write(temp.path().join("b.txt"), "b")?;
-    let pattern = format!("{}/*.txt", temp.path().display());
 
-    let (results, events, snapshot) = recorded(|| expand_and_record(&pattern));
+    let (results, events, snapshot) = expand_and_record_with_injected_base(&temp, "*.txt");
     ensure!(results?.len() == 2, "both files should match");
 
     ensure!(
         counter_value(&snapshot, EXPANSIONS, ("outcome", "matched")) == Some(1),
         "a completed expansion should count once as matched: {snapshot:?}"
+    );
+    ensure!(
+        counter_value_with_labels(
+            &snapshot,
+            TEMPLATE_EXPANSIONS,
+            &[("base_mode", "relative_with_base"), ("outcome", "matched")]
+        ) == Some(1),
+        "the template boundary should record one based matched result: {snapshot:?}"
+    );
+    ensure!(
+        has_histogram(&snapshot, TEMPLATE_EXPANSION_DURATION),
+        "the template boundary should record its duration: {snapshot:?}"
+    );
+    ensure!(
+        events.iter().any(|event| {
+            event.contains("operation=\"manifest_template_glob_expansion\"")
+                && event.contains("base_mode=\"relative_with_base\"")
+                && event.contains("outcome=\"matched\"")
+                && event.contains("manifest template glob expansion completed")
+        }),
+        "the template boundary should emit a bounded matched trace: {events:?}"
     );
     let expansion_event = events
         .iter()
@@ -97,9 +140,9 @@ fn a_completed_expansion_counts_its_matches() -> Result<()> {
 #[rstest]
 fn an_unopenable_prefix_counts_and_names_the_prefix() -> Result<()> {
     let temp = tempdir()?;
-    let pattern = format!("{}/no-such-dir/*.txt", temp.path().display());
 
-    let (results, events, snapshot) = recorded(|| expand_and_record(&pattern));
+    let (results, events, snapshot) =
+        expand_and_record_with_injected_base(&temp, "no-such-dir/*.txt");
     ensure!(results?.is_empty(), "a missing prefix should match nothing");
 
     ensure!(
@@ -109,6 +152,30 @@ fn an_unopenable_prefix_counts_and_names_the_prefix() -> Result<()> {
     ensure!(
         counter_value(&snapshot, EXPANSIONS, ("outcome", "matched")).is_none(),
         "an expansion that never ran must not count as matched: {snapshot:?}"
+    );
+    ensure!(
+        counter_value_with_labels(
+            &snapshot,
+            TEMPLATE_EXPANSIONS,
+            &[
+                ("base_mode", "relative_with_base"),
+                ("outcome", "unopenable_prefix"),
+            ]
+        ) == Some(1),
+        "the template boundary should record one based unopenable result: {snapshot:?}"
+    );
+    ensure!(
+        has_histogram(&snapshot, TEMPLATE_EXPANSION_DURATION),
+        "the template boundary should record its duration: {snapshot:?}"
+    );
+    ensure!(
+        events.iter().any(|event| {
+            event.contains("operation=\"manifest_template_glob_expansion\"")
+                && event.contains("base_mode=\"relative_with_base\"")
+                && event.contains("outcome=\"unopenable_prefix\"")
+                && event.contains("manifest template glob expansion completed")
+        }),
+        "the template boundary should emit a bounded unopenable trace: {events:?}"
     );
     let prefix_event = events
         .iter()
@@ -122,6 +189,44 @@ fn an_unopenable_prefix_counts_and_names_the_prefix() -> Result<()> {
     ensure!(
         !prefix_event.contains(&temp.path().display().to_string()),
         "the event must not disclose the absolute path: {prefix_event}"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn a_failed_template_expansion_records_a_bounded_error_outcome() -> Result<()> {
+    let cache = GlobBaseCache::new(None);
+
+    let (result, events, snapshot) = recorded(|| expand_manifest_template_glob("[", &cache));
+    ensure!(result.is_err(), "an invalid pattern must fail expansion");
+    ensure!(
+        counter_value_with_labels(
+            &snapshot,
+            TEMPLATE_EXPANSIONS,
+            &[
+                ("base_mode", "relative_without_base"),
+                ("outcome", "invalid_pattern"),
+            ]
+        ) == Some(1),
+        "the template boundary should record one unbased error result: {snapshot:?}"
+    );
+    ensure!(
+        has_histogram(&snapshot, TEMPLATE_EXPANSION_DURATION),
+        "the failed template expansion should record its duration: {snapshot:?}"
+    );
+    ensure!(
+        events.iter().any(|event| {
+            event.contains("operation=\"manifest_template_glob_expansion\"")
+                && event.contains("base_mode=\"relative_without_base\"")
+                && event.contains("outcome=\"invalid_pattern\"")
+                && event.contains("error_category=\"expansion_failure\"")
+                && event.contains("manifest template glob expansion failed")
+        }),
+        "the failed template expansion should emit only its bounded trace: {events:?}"
+    );
+    ensure!(
+        !events.iter().any(|event| event.contains('[')),
+        "the failed template trace must not disclose the pattern: {events:?}"
     );
     Ok(())
 }
@@ -259,7 +364,7 @@ fn glob_paths_is_a_pure_query() -> Result<()> {
     test_fs::write(temp.path().join("a.txt"), "a")?;
     let pattern = format!("{}/*.txt", temp.path().display());
 
-    let (results, events, snapshot) = recorded(|| glob_paths(&pattern));
+    let (results, events, snapshot) = recorded(|| glob_paths(&pattern, None));
     ensure!(results?.len() == 1, "the file should match");
     ensure!(
         events.is_empty(),

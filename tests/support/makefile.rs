@@ -123,6 +123,21 @@ pub fn target_prerequisites(contents: &str, target: &str) -> Option<Vec<String>>
     })
 }
 
+/// Returns every target declared by a single-line `.PHONY` directive.
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(phony_targets(".PHONY: test lint\n"), ["test", "lint"]);
+/// ```
+pub fn phony_targets(contents: &str) -> Vec<&str> {
+    contents
+        .lines()
+        .filter_map(|line| line.strip_prefix(".PHONY:"))
+        .flat_map(str::split_whitespace)
+        .collect()
+}
+
 /// Returns the tab-indented recipe lines for `target`, joined by newlines.
 ///
 /// A target with no recipe yields an empty string; an absent target yields
@@ -157,7 +172,9 @@ mod tests {
     //! These also keep every helper used from each including crate, so a
     //! consumer needing only part of the surface does not trip `dead_code`.
 
-    use super::{parse_rule, read_repo_file, repo_root, target_prerequisites, target_recipe};
+    use super::{
+        parse_rule, phony_targets, read_repo_file, repo_root, target_prerequisites, target_recipe,
+    };
     use camino::Utf8Path;
 
     const SAMPLE: &str = concat!(
@@ -205,6 +222,11 @@ mod tests {
         );
         assert_eq!(target_prerequisites(SAMPLE, "gamma"), Some(vec![]));
         assert_eq!(target_prerequisites(SAMPLE, "missing"), None);
+    }
+
+    #[test]
+    fn phony_targets_reads_each_declared_target() {
+        assert_eq!(phony_targets(SAMPLE), ["alpha", "beta"]);
     }
 
     #[test]

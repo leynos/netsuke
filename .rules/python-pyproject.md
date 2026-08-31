@@ -1,0 +1,401 @@
+# 1. overview of `uv` and `pyproject.toml`
+
+Astral's `uv` is a Rust-based project and package manager that uses
+`pyproject.toml` as its central configuration file. After a project is
+initialized, commands such as `uv init`, `uv sync` or `uv run` cause `uv` to:
+
+1. Look for a `pyproject.toml` in the project root and keep a lockfile
+   (`uv.lock`) in sync with it.
+2. Create a virtual environment (`.venv`) if one does not already exist.
+3. Read dependency specifications (and any build-system directives) to install
+   or update packages accordingly. (Astral Docs[^1], RidgeRun.ai[^2])
+
+In other words, the project's `pyproject.toml` drives everything—from metadata
+to dependencies to build instructions—without needing `requirements.txt` or a
+separate `setup.py` file. (Level Up Coding[^3], Python Packaging[^4])
+
+______________________________________________________________________
+
+## 2. The `[project]` table (PEP 621)
+
+The `[project]` table is defined by PEP 621 and is now the canonical place to
+declare metadata (name, version, authors, etc.) and runtime dependencies. At
+minimum, PEP 621 requires a statically declared `name`. The `version` may be
+declared statically or listed in `dynamic` when supplied by the build backend:
+
+- `name`
+- `version`, or `dynamic = ["version"]`
+
+However, projects generally benefit from including at least the following
+additional fields for clarity and compatibility:
+
+```toml
+[project]
+name = "my_project"            # Project name (PEP 621 requirement)
+version = "0.1.0"              # PEP 440-compatible version
+description = "A brief overview"       # Short summary
+readme = "README.md"           # Path to the project README (automatically included)
+requires-python = ">=3.10"     # Restrict Python versions, if needed
+license = "MIT"                # SPDX licence expression
+license-files = ["LICENSE"]
+authors = [
+  { name = "Alice Example", email = "alice@example.org" }
+]
+keywords = ["uv", "astral", "example"]   # (Optional) for metadata registries
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent"
+]
+dependencies = [
+  "requests>=2.25",            # Runtime dependency
+  "numpy>=1.23"
+]
+```
+
+- **`name`:** A statically declared project name is mandatory per PEP 621.
+  `version` is also required unless it is listed in `dynamic` and supplied by
+  the build backend. (Python Packaging[^4], Reddit[^5])
+- **`description` and `readme`:** Although not mandatory, they help with
+  indexing and packaging tools; `readme = "README.md"` tells `uv` (and PyPI) to
+  include the project README as the long description. (Astral Docs[^1], Python
+  Packaging[^4])
+- **`requires-python`:** Constrains which Python interpreters the package
+  supports (e.g. `>=3.10`). (Python Packaging[^4], Reddit[^5])
+- **`license` and `license-files`:** Specify an SPDX licence expression such as
+  `license = "MIT"` and identify distributed licence files with
+  `license-files = ["LICENSE"]`. (Python Packaging[^4], Reddit[^5])
+- **`authors`:** A list of tables with `name` and `email`. Many registries
+  (e.g., PyPI) pull this for display. (Python Packaging[^4], Reddit[^5])
+- **`keywords` and `classifiers`:** These help search engines and package
+  indexes. Classifiers must follow the exact trove list defined by PyPA.
+  (Python Packaging[^4], Reddit[^5])
+- **`dependencies`:** A list of PEP 508 constraints (e.g.,
+  `"requests>=2.25"`) that `uv` resolves to selected versions recorded in
+  `uv.lock`. `uv sync` installs the versions resolved in that lockfile rather
+  than the literal requirement strings. (Astral Docs[^1], RidgeRun.ai[^2])
+
+______________________________________________________________________
+
+## 3. Runtime vs. development dependencies
+
+`uv` (via PEP 621 and PEP 735) exposes three dependency fields. Choosing the
+right one decides whether a dependency ships to every end user or only ever
+exists on a contributor's machine.
+
+Table 1. Dependency field selection.
+
+| Field                           | Installed for                     | Use it for                                      |
+| ------------------------------- | --------------------------------- | ----------------------------------------------- |
+| `project.dependencies`          | Everyone who installs the package | Libraries the shipped code imports at runtime   |
+| `project.optional-dependencies` | End users who opt into an *extra* | Optional runtime *features* (`package[extra]`)  |
+| `dependency-groups`             | Local development only            | Test, lint, type-check, docs, and other tooling |
+
+### required runtime dependencies — `project.dependencies`
+
+Packages the shipped code imports unconditionally. They are published in the
+wheel metadata and installed for every consumer. Use PEP 508 specifiers with
+bounded ranges, and add them with `uv add <name>`:
+
+```toml
+[project]
+dependencies = [
+  "httpx>=0.27,<1",
+]
+```
+
+### optional runtime features — `project.optional-dependencies`
+
+Published "extras" that an *end user* opts into to enable an optional feature
+of the package, requested with `package[extra]` syntax (for example,
+`pandas[excel]`). Reach for this only when the extra dependency powers
+user-facing functionality that not everyone needs — never for development
+tooling. Add them with `uv add --optional <extra> <package>`:
+
+```toml
+[project.optional-dependencies]
+# Opt-in feature: end users request it with my_project[feature].
+feature = [
+  "some-runtime-lib>=1.2,<2",
+]
+```
+
+### development-time dependencies — `dependency-groups`
+
+Tooling only contributors need: test frameworks, linters, type checkers,
+documentation builders, and property or mutation testers. These are
+**local-only** — PEP 735 dependency groups are *not* included in published
+package metadata (they are not part of the wheel), so they must live here
+rather than in `project.optional-dependencies`. Add them with
+`uv add --dev <package>` (the `dev` group) or `uv add --group <name> <package>`:
+
+```toml
+[dependency-groups]
+dev = [
+  "pytest<9.1",
+  "ruff",
+  "ty",
+]
+```
+
+**`uv` installs the `dev` group automatically by default.** `uv run` and
+`uv sync` include the `dev` group with no extra flags, so a bare `uv sync`
+gives a contributor the full toolchain. Adjust this with:
+
+- `--no-dev` to exclude only the `dev` group.
+- `--no-default-groups` to disable configured default groups while still
+  permitting explicit selection of other groups.
+- `--group <name>` or `--only-group <name>` to include or isolate a
+  non-default group.
+- `[tool.uv].default-groups` to change which groups sync by default:
+
+```toml
+[tool.uv]
+default-groups = ["dev", "docs"]  # or "all"
+```
+
+Groups may nest via `{ include-group = "..." }`, and by default `uv` resolves
+every group together into a single `uv.lock`, so groups must be mutually
+compatible unless incompatible sets are declared explicitly under
+`[tool.uv].conflicts`. (Astral Docs[^6])
+
+> **Rule of thumb:** if an end user needs it to *run* the code, it belongs
+> in `project.dependencies` (always) or `project.optional-dependencies`
+> (an opt-in feature). If only a contributor needs it to *develop, test,
+> lint, type-check, or document* the code, it belongs in
+> `dependency-groups`.
+
+______________________________________________________________________
+
+## 4. Entry points and scripts
+
+To expose command-line interfaces (CLIs) or GUIs through a package, PEP 621
+provides the `[project.scripts]` and `[project.gui-scripts]` tables:
+
+```toml
+[project.scripts]
+mycli = "my_project.cli:main"
+
+[project.gui-scripts]
+mygui = "my_project.gui:start"
+```
+
+- **`[project.scripts]`:** Defines console scripts. When `uv run mycli` is run,
+  `uv` will invoke the `main` function in `my_project/cli.py`. (Astral Docs[^7])
+- **`[project.gui-scripts]`:** On Windows, `uv` will wrap these in a GUI
+  executable; on Unix-like systems, they behave like normal console scripts.
+  (Astral Docs[^7])
+- **Plugin Entry Points:** If the project supports plugins, use
+  `[project.entry-points.'group.name']` to register them. (Astral Docs[^7])
+
+______________________________________________________________________
+
+## 5. Declaring a build system
+
+PEP 517/518 strongly recommends a `[build-system]` table to tell tools how to
+build and install the project, but it is not universally required. When the
+table is present, `uv` uses the declared backend and packages the current
+project by default. When the table is omitted, `uv` does not install the
+current project unless `tool.uv.package = true`; with that setting, `uv` uses
+the legacy setuptools backend to package the project. Dependency resolution and
+installation remain `uv` responsibilities and do not come from that legacy
+backend. A common setuptools configuration specifies `setuptools>=64.0`, which
+supports compatible PEP 660 editable installs without a `setup.py` stub, or
+uses a lighter alternative such as `flit_core`. Below is the typical setup
+using setuptools:
+
+```toml
+[build-system]
+requires = ["setuptools>=64.0"]
+build-backend = "setuptools.build_meta"
+```
+
+- **`requires`:** A list of packages needed at build time.
+  `setuptools>=64.0` supplies PEP 660 support for compatible editable installs
+  in `uv`; `wheel` is not required. (Python Packaging[^4], Astral Docs[^7])
+  - **`build-backend`:** The entry point for the project's build backend.
+  `setuptools.build_meta` is the PEP 517-compliant backend for setuptools.
+  (Python Packaging[^4], Astral Docs[^7])
+- **Note:** When `[build-system]` is omitted, `uv` uses the legacy setuptools
+  backend to package the current project only when `tool.uv.package = true`
+  (see next section). Without that setting, the current project is not
+  installed; `uv` continues to resolve and install dependencies independently.
+  (Astral Docs[^7])
+
+______________________________________________________________________
+
+## 6. `uv`-specific configuration (`[tool.uv]`)
+
+Astral `uv` allows projects to define their own settings in `[tool.uv]`. The
+most common option is:
+
+```toml
+[tool.uv]
+package = true
+```
+
+- **`tool.uv.package = true`:** Forces `uv` to build and install the project
+  into its virtual environment every time `uv sync` or `uv run` is run. When
+  `[build-system]` is omitted, this setting selects the legacy setuptools
+  backend for packaging the current project. (Astral Docs[^7])
+- **Additional `uv`-specific keys:** Declare options such as custom indexes and
+  resolver policies under `[tool.uv]`; `package` is the most common key.
+  (Python Packaging[^4], Astral Docs[^7])
+
+______________________________________________________________________
+
+## 7. Putting it all together: example `pyproject.toml`
+
+Below is a complete example that demonstrates all sections. Adjust values as
+needed for the project itself.
+
+```toml
+[project]
+name = "my_project"
+version = "0.1.0"              # PEP 440-compatible version
+description = "An illustrative example for Astral uv"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+  { name = "Alice Example", email = "alice@example.org" }
+]
+keywords = ["astral", "uv", "pyproject", "example"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent"
+]
+dependencies = [
+  "requests>=2.25",
+  "numpy>=1.23"
+]
+
+# Opt-in runtime feature; end users install it with my_project[fast].
+[project.optional-dependencies]
+fast = [
+  "orjson>=3.9"
+]
+
+# Development-only tooling (PEP 735); never shipped to end users.
+[dependency-groups]
+dev = [
+  "pytest>=7.0",
+  "ruff",
+  "mypy>=1.0"
+]
+docs = [
+  "sphinx>=5.0",
+  "sphinx-rtd-theme"
+]
+
+[project.scripts]
+mycli = "my_project.cli:main"
+
+[build-system]
+requires = ["setuptools>=64.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.uv]
+package = true
+```
+
+**Explanation of key points:**
+
+1. **Metadata under `[project]`:**
+
+   - `name` (mandatory), and `version` unless supplied through `dynamic` (Python
+     Packaging[^4], Reddit[^5])
+   - `description`, `readme`, `requires-python`: provide clarity about the
+     project and help tools like PyPI. (Python Packaging[^4], Reddit[^5])
+   - `license`, `authors`, `keywords`, `classifiers`: standardized metadata,
+     which improves discoverability. (Python Packaging[^4], Reddit[^5])
+   - `dependencies`: runtime requirements, expressed in PEP 508 syntax.
+     (Astral Docs[^1], RidgeRun.ai[^2])
+
+2. **Optional features vs. development tooling:**
+
+   - `[project.optional-dependencies]` declares an opt-in runtime *extra*
+     (`fast`), installed by end users via `my_project[fast]`. (Python
+     Packaging[^4])
+   - `[dependency-groups]` (PEP 735) holds development-only tooling (`dev`,
+     `docs`) that is never published; `uv sync` installs the `dev` group by
+     default. (Astral Docs[^6])
+
+3. **Entry Points (`[project.scripts]`):**
+
+   - Defines a console command `mycli` that maps to `my_project/cli.py:main`.
+     Invoking `uv run mycli` will run the `main()` function. (Astral Docs[^7])
+
+4. **Build System:**
+
+   - `setuptools>=64.0` provides PEP 660 editable-install support for
+     compatible project layouts. ✱ Newer versions of setuptools support PEP 660
+     editable installs without a `setup.py` stub. (Python Packaging[^4], Astral
+     Docs[^7])
+   - `build-backend = "setuptools.build_meta"` tells `uv` how to compile the
+     package. (Python Packaging[^4], Astral Docs[^7])
+
+5. **`[tool.uv]`:**
+
+   - `package = true` ensures that `uv sync` will build and install the project
+     (in editable mode) every time dependencies change. Otherwise, `uv` treats
+     the project as a collection of scripts only (no package). (Astral Docs[^7])
+
+______________________________________________________________________
+
+## 8. Additional tips & best practices
+
+1. **Keep `pyproject.toml` Human-Readable:** Edit it by hand when possible.
+   Modern editors (VS Code, PyCharm) offer TOML syntax highlighting and PEP 621
+   autocompletion. (Python Packaging[^4])
+
+2. **Lockfile Discipline:** After modifying `dependencies` or any `[project]`
+   fields, always run `uv sync` (or `uv lock`) to update `uv.lock`. This
+   guarantees reproducible environments. (Astral Docs[^1])
+
+3. **Versioning:** Use PEP 440-compatible version values for `version`. If the
+   version is generated by the build backend, list it in `dynamic` instead.
+   (Python Packaging[^4])
+
+4. **Keep build constraints minimal:** If the project does not need editable
+   installs, `[build-system]` may be omitted; `uv` will not install the current
+   project unless `tool.uv.package = true`, which enables the legacy setuptools
+   backend for packaging. (Astral Docs[^7])
+
+5. **Use Exact or Bounded Ranges for Dependencies:** Rather than `requests`, use
+   `requests>=2.25, <3.0` to avoid unexpected major bumps. (DevsJC[^8])
+
+6. **Consider dynamic fields sparingly:** Declare fields such as
+   `dynamic = ["version"]` if the version is computed at build time (e.g. via
+   `setuptools_scm`). When doing so, ensure the build backend supports dynamic
+   metadata. (Python Packaging[^4])
+
+______________________________________________________________________
+
+## 9. Summary
+
+A "modern" `pyproject.toml` for an Astral `uv` project should:
+
+- Use the PEP 621 `[project]` table for metadata and runtime `dependencies`.
+- Declare opt-in runtime *features* as extras under
+  `[project.optional-dependencies]`, and development-only tooling under
+  `[dependency-groups]` (the `dev` group installs by default).
+- Define any CLI or GUI entry points under `[project.scripts]` or
+  `[project.gui-scripts]`.
+- Declare a PEP 517 `[build-system]` (e.g. `setuptools>=64.0` with
+  `setuptools.build_meta`) to support compatible PEP 660 editable installs, or
+  omit it and rely on `tool.uv.package = true`.
+- Include a `[tool.uv]` section, at minimum `package = true` to have `uv` build
+  and install the project package.
+
+Following these conventions ensures that the project is fully PEP-compliant,
+easy to maintain, and integrates seamlessly with Astral `uv`.
+
+[^1]: [Working on projects | uv - Astral Docs](https://docs.astral.sh/uv/guides/projects/)
+[^2]: [UV Tutorial: A Fast Python Package and Project Manager](https://www.ridgerun.ai/post/uv-tutorial-a-fast-python-package-and-project-manager)
+[^3]: [Modern Python Development with pyproject.toml and UV](https://levelup.gitconnected.com/modern-python-development-with-pyproject-toml-and-uv-405dfb8b6ec8)
+[^4]: [Writing your pyproject.toml – Python Packaging User Guide](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/)
+[^5]: [Anyone used UV package manager in production? (Reddit)](https://www.reddit.com/r/Python/comments/1ixryec/anyone_used_uv_package_manager_in_production/)
+[^6]: [Managing dependencies | uv - Astral Docs](https://docs.astral.sh/uv/concepts/projects/dependencies/)
+[^7]: [Configuring projects | uv - Astral Docs](https://docs.astral.sh/uv/concepts/projects/config/)
+[^8]: [The Complete Guide to pyproject.toml – devsjc blogs](https://devsjc.github.io/blog/20240627-the-complete-guide-to-pyproject-toml/)

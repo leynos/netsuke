@@ -13,14 +13,10 @@
 //! [`ManifestSource`] so callers pass domain-specific types instead of raw
 //! strings.
 //!
-//! The optional `vars` section must deserialize into a JSON object; a list or
-//! scalar is rejected with the localized `manifest.vars.not_object` diagnostic.
-//! YAML mappings with non-string or composite keys cannot be represented as
-//! JSON at all, so they fail earlier, during the initial `serde_saphyr` parse,
-//! with the YAML parse diagnostic. Keys colliding with the built-in `env` and
-//! `glob` helpers are rejected with the localized `manifest.vars.reserved_name`
-//! diagnostic, since `MiniJinja` keeps functions and global variables in a
-//! single namespace.
+//! The optional `vars` section must be a JSON object; lists and scalars fail
+//! with `manifest.vars.not_object`; non-string or composite keys fail during
+//! the initial `serde_saphyr` parse. Reserved `env`/`glob` names fail with
+//! `manifest.vars.reserved_name` because `MiniJinja` shares a global namespace.
 
 use crate::{
     ast::{EMPTY_COMMAND_LIST_ERROR, NetsukeManifest},
@@ -94,6 +90,9 @@ struct ManifestParse<'a> {
     stdlib_registration: Option<StdlibRegistration>,
     /// Environment reader backing the `env()` helper.
     env_reader: &'a EnvReader,
+    /// Manifest workspace root, anchoring relative `glob()` patterns; `None`
+    /// falls back to the process current directory at the composition root.
+    manifest_root: Option<camino::Utf8PathBuf>,
 }
 
 /// Selects the stdlib surface available while rendering a manifest.
@@ -103,7 +102,10 @@ enum StdlibRegistration {
     /// The read-only stdlib used to inspect manifest discovery metadata.
     ManifestQuery,
 }
-/// Parse a manifest string, running the full YAML, Jinja and expansion pipeline.
+/// Parse, render, and validate a manifest with injected glob-base data.
+///
+/// Render Jinja values, anchor relative `glob()` patterns at `manifest_root`,
+/// and validate recipes after expansion so rendered rules are checked.
 fn from_str_named(
     yaml: &str,
     parse: ManifestParse<'_>,
@@ -113,6 +115,7 @@ fn from_str_named(
         name,
         stdlib_registration,
         env_reader,
+        manifest_root,
     } = parse;
     let is_manifest_query = matches!(stdlib_registration, Some(StdlibRegistration::ManifestQuery));
     notify_stage(on_stage, ManifestLoadStage::InitialYamlParsing);
@@ -129,9 +132,9 @@ fn from_str_named(
     jinja.add_function("env", move |var_name: String| {
         env_var_with(&var_name, |key| reader(key))
     });
-    jinja.add_function("glob", |pattern: String| {
-        let expansion = glob::expand_glob(&pattern)?;
-        glob::record_expansion(&expansion);
+    let glob_base = glob::GlobBaseCache::new(manifest_root);
+    jinja.add_function("glob", move |pattern: String| {
+        let expansion = glob::expand_manifest_template_glob(&pattern, &glob_base)?;
         expansion.into_template_paths(&pattern)
     });
     let _stdlib_state = match stdlib_registration {
@@ -299,6 +302,7 @@ pub fn from_str_with_env(yaml: &str, env_reader: &EnvReader) -> Result<NetsukeMa
             name: &ManifestName::new("Netsukefile"),
             stdlib_registration: None,
             env_reader,
+            manifest_root: None,
         },
         &mut None,
     )

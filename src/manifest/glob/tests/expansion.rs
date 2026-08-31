@@ -23,7 +23,7 @@ fn glob_paths_filters_directories() -> Result<()> {
     test_fs::write(&file, "data")?;
 
     let pattern = format!("{}/dir/*", temp.path().display());
-    let results = glob_paths(&pattern)?;
+    let results = glob_paths(&pattern, None)?;
     ensure!(
         results.iter().any(|p| p.ends_with("file.txt")),
         "expected file match"
@@ -37,13 +37,13 @@ fn glob_paths_filters_directories() -> Result<()> {
 
 #[test]
 fn glob_paths_rejects_unmatched_brace() {
-    let err = glob_paths("foo{bar").expect_err("brace mismatch should error");
+    let err = glob_paths("foo{bar", None).expect_err("brace mismatch should error");
     assert_eq!(err.kind(), ErrorKind::SyntaxError);
 }
 
 #[rstest]
 fn glob_paths_rejects_an_invalid_pattern_before_a_missing_prefix() {
-    let err = glob_paths("missing/[").expect_err("an invalid pattern should error");
+    let err = glob_paths("missing/[", None).expect_err("an invalid pattern should error");
     assert_eq!(err.kind(), ErrorKind::SyntaxError);
 }
 
@@ -88,7 +88,7 @@ fn glob_paths_accepts_escaped_braces_and_matches_files() -> Result<()> {
         "unexpected normalized pattern: {}",
         normalized.normalized()
     );
-    let results = glob_paths(&pattern)?;
+    let results = glob_paths(&pattern, None)?;
     ensure!(
         results.iter().any(|p| p.ends_with("{file}.txt")),
         "escaped brace pattern should match literal braces"

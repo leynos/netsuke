@@ -67,17 +67,19 @@ fn from_path_with_registration(
     let stdlib_registration = match mode {
         ManifestLoadMode::Full(policy) => StdlibRegistration::Full(Box::new(
             StdlibConfig::new(workspace.dir)?
-                .with_workspace_root_path(workspace.root)?
+                .with_workspace_root_path(&workspace.root)?
                 .with_network_policy(policy),
         )),
         ManifestLoadMode::ManifestQuery => StdlibRegistration::ManifestQuery,
     };
+    let manifest_root = Some(workspace.root);
     from_str_named(
         &data,
         ManifestParse {
             name: &name,
             stdlib_registration: Some(stdlib_registration),
             env_reader,
+            manifest_root,
         },
         &mut on_stage,
     )

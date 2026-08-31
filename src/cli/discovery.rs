@@ -3,11 +3,10 @@
 //! This module locates `OrthoConfig` file layers by scanning for config files
 //! through [`ConfigDiscovery`], handling explicit paths from CLI flags and
 //! environment variables, and loading TOML chains into [`MergeLayer`] values.
-
 use ortho_config::{MapEnv, MergeLayer, OrthoResult, SharedEnvSource, load_config_file_as_chain};
 use std::borrow::Cow;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use super::command::Cli;
@@ -24,6 +23,9 @@ mod json;
 mod layers;
 #[path = "discovery_paths.rs"]
 mod paths;
+
+#[path = "discovery_selector.rs"]
+mod selector;
 #[path = "discovery_trace.rs"]
 mod trace;
 
@@ -32,6 +34,12 @@ mod telemetry;
 use diagnostics::{BoundedConfigPath, ConfigLoadFailureKind, ConfigLoadWarning};
 use layers::collect_file_layers_with_normalizer_and_trace;
 use paths::{FsPathNormalizer, PathNormalizer};
+#[cfg(test)]
+use selector::{
+    ConfigPathResolution, env_config_path, explicit_config_path_with_env, resolve_config_selector,
+};
+#[cfg(test)]
+use std::path::PathBuf;
 /// Record the discovery series for an already-timed phase at the boundary.
 pub use telemetry::record_discovery_outcome;
 use trace::{DiscoveryDiagnostics, DiscoveryTrace, FileLayerTrace};
@@ -179,7 +187,7 @@ fn collect_file_layers_with_env(
     Option<ConfigLoadWarning>,
     OrthoResult<Vec<MergeLayer<'static>>>,
 ) {
-    let resolution = resolve_config_selector(cli.config.clone(), env);
+    let resolution = selector::resolve_config_selector(cli.config.clone(), env);
     let (file_layers, load_warning, outcome) = resolution.path.as_deref().map_or_else(
         || {
             let (project_scope, outcome) = collect_file_layers_with_normalizer_and_trace(
@@ -190,6 +198,10 @@ fn collect_file_layers_with_env(
             (FileLayerTrace::Automatic { project_scope }, None, outcome)
         },
         |path| {
+            // Explicit selectors are independent of `-C/--directory`.
+            // Relative paths retain their selector spelling and resolve
+            // against the process working directory at load time; absolute
+            // paths remain unchanged.
             let (load_warning, outcome) = load_layers_from_path_with_warning(path);
             (
                 FileLayerTrace::Explicit {
@@ -221,68 +233,6 @@ pub(crate) fn discovery_env_source(env: &impl EnvProvider) -> SharedEnvSource {
     }
     Arc::new(source)
 }
-
-/// Select an explicit config path, giving `--config` precedence over `env`.
-///
-/// A thin wrapper over [`resolve_config_selector`] for callers that need only
-/// the winning path. Like that query it performs no tracing; discovery returns
-/// bounded diagnostics for composition boundaries to emit later.
-///
-/// Production code takes the richer [`ConfigPathResolution`] so it can trace the
-/// environment lookups, leaving this as a convenience for precedence tests.
-#[cfg(test)]
-pub(crate) fn explicit_config_path_with_env(cli: &Cli, env: &impl EnvProvider) -> Option<PathBuf> {
-    resolve_config_selector(cli.config.clone(), env).path
-}
-
-/// Describes the result of the pure explicit-path selection query.
-///
-/// Records the winning selector, its optional path, and every environment
-/// lookup evaluated to reach the decision, so a caller can emit diagnostics
-/// afterwards without giving the query tracing side effects.
-#[derive(Debug, PartialEq, Eq)]
-struct ConfigPathResolution {
-    /// Configuration selector that resolved the path.
-    selector: &'static str,
-    /// Bounded resolved configuration path, or `None` when unset.
-    path: Option<PathBuf>,
-    /// Environment variables consulted during resolution, with their results.
-    environment_lookups: Vec<(&'static str, Option<PathBuf>)>,
-}
-
-/// Select a config path from the CLI flag, then `NETSUKE_CONFIG` via `env`.
-///
-/// `cli_config` wins when present, in which case no environment lookup is
-/// recorded because none is performed. This query emits no tracing.
-fn resolve_config_selector(
-    cli_config: Option<PathBuf>,
-    env: &impl EnvProvider,
-) -> ConfigPathResolution {
-    if let Some(path) = cli_config {
-        return ConfigPathResolution {
-            selector: "cli_flag",
-            path: Some(path),
-            environment_lookups: Vec::new(),
-        };
-    }
-
-    let primary_path = env_config_path(env, CONFIG_ENV_VAR);
-    ConfigPathResolution {
-        selector: primary_path.as_ref().map_or("none", |_| CONFIG_ENV_VAR),
-        environment_lookups: vec![(CONFIG_ENV_VAR, primary_path.clone())],
-        path: primary_path,
-    }
-}
-/// Read a non-empty config path from `var_name` through `env`.
-///
-/// Returns `None` when the variable is unset or empty, so discovery still runs.
-/// This query emits no tracing.
-fn env_config_path(env: &impl EnvProvider, var_name: &str) -> Option<PathBuf> {
-    env.get(var_name)
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-}
-
 /// Load the configuration chain rooted at an explicit file path.
 ///
 /// Unlike discovery, a missing explicit file is an error because the caller
@@ -361,12 +311,11 @@ mod helper_proptests;
 #[path = "discovery_layer_replay_tests.rs"]
 mod layer_replay_tests;
 #[cfg(test)]
+#[path = "discovery_layer_selector_tests.rs"]
+mod layer_selector_tests;
+#[cfg(test)]
 #[path = "discovery_layer_tests.rs"]
 mod layer_tests;
-#[cfg(test)]
-#[path = "discovery_path_selection_tests.rs"]
-mod path_selection_tests;
-
 #[cfg(test)]
 #[path = "discovery_replay_proptests.rs"]
 mod replay_proptests;

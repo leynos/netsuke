@@ -1,8 +1,12 @@
-//! End-to-end configuration discovery failure coverage.
+//! End-to-end configuration-discovery coverage through the real binary.
 //!
-//! These tests run the real binary in a child process with a closed
-//! environment, proving that missing configuration still permits the normal
-//! workflow while a malformed discovered file fails before manifest handling.
+//! These tests run `netsuke` in a child process with a closed environment and
+//! an explicit invocation directory, proving the explicit-selector contract of
+//! ADR-014: a relative `--config <PATH>` resolves against the process working
+//! directory even when `-C/--directory` is supplied; an absolute selector is
+//! unchanged. The
+//! parent process environment and working directory are never mutated; all
+//! child-process configuration flows through the `Command` builders.
 
 use anyhow::{Context, Result, ensure};
 use assert_cmd::cargo::cargo_bin_cmd;
@@ -76,31 +80,40 @@ fn malformed_discovered_config_fails_the_binary_workflow() -> Result<()> {
     Ok(())
 }
 
-/// Assert that an explicit selector does not rebase beneath `-C`.
-fn assert_explicit_relative_config_ignores_directory_anchor(
+/// Prove explicit-selector independence from `-C` through the binary.
+///
+/// The child runs from `invocation` with `-C project` and an explicit
+/// selector. The invocation-directory copy enables early JSON output while
+/// the `-C`-anchored copy does not, so the response shape names which file
+/// loaded. A relative selector must load the invocation-directory copy;
+/// an absolute selector must also remain unchanged.
+fn assert_explicit_config_selection(
     selector: ExplicitSelector,
     selector_path_kind: SelectorPathKind,
     project_name: &str,
     config_name: &str,
 ) -> Result<()> {
-    let outer = tempdir().context("create invoking directory")?;
-    let project = outer.path().join(project_name);
+    let invocation = tempdir().context("create invoking directory")?;
+    let project = invocation.path().join(project_name);
     test_fs::create_dir(&project).context("create directory-anchored project")?;
     test_fs::copy("tests/data/minimal.yml", project.join("Netsukefile"))
         .context("write project manifest")?;
-    test_fs::write(outer.path().join(config_name), "json = true\n")
-        .context("write invoking-directory config")?;
-    test_fs::write(project.join(config_name), "json = false\n")
+    // The invocation-directory copy wins for every explicit selector. The
+    // `-C`-anchored copy is a decoy, while the invocation copy enables early
+    // JSON output so the response shape names which file loaded.
+    test_fs::write(invocation.path().join(config_name), "json = true\n")
+        .context("write invocation-directory config")?;
+    test_fs::write(project.join(config_name), "color = \"never\"\n")
         .context("write directory-anchored config")?;
 
-    let outer_path = utf8_workspace_path(&outer)?;
+    let invocation_path = utf8_workspace_path(&invocation)?;
     let selector_path = match selector_path_kind {
-        // Relative explicit selectors stay anchored to the child CWD.
+        // A relative explicit selector remains relative to the child CWD.
         SelectorPathKind::Relative => Utf8PathBuf::from(config_name),
-        // Absolute explicit selectors remain unchanged.
-        SelectorPathKind::Absolute => outer_path.join(config_name),
+        // An absolute explicit selector remains unchanged.
+        SelectorPathKind::Absolute => invocation_path.join(config_name),
     };
-    let mut command = isolated_netsuke_command(&outer_path);
+    let mut command = isolated_netsuke_command(&invocation_path);
     command.args(["-C", project_name]);
     match selector {
         ExplicitSelector::Cli => {
@@ -119,8 +132,12 @@ fn assert_explicit_relative_config_ignores_directory_anchor(
         output.status.success(),
         "generate should succeed: {output:?}"
     );
-    let document: Value = serde_json::from_slice(&output.stdout)
-        .context("explicit selected config should enable JSON output")?;
+    let ninja = String::from_utf8_lossy(&output.stdout).into_owned();
+    // The invocation-directory copy set `json = true`, so stdout is the JSON
+    // envelope around the generated artefact. This proves `-C` did not rebase
+    // the explicit relative selector onto its decoy.
+    let document: Value = serde_json::from_str(&ninja)
+        .with_context(|| format!("explicit selector should load the JSON config: {ninja}"))?;
     ensure!(
         document
             .pointer("/result/content")
@@ -131,10 +148,10 @@ fn assert_explicit_relative_config_ignores_directory_anchor(
     Ok(())
 }
 
-/// An explicit relative CLI selector stays anchored to the child process CWD.
+/// A relative CLI selector ignores `-C/--directory`.
 #[test]
 fn cli_explicit_relative_config_ignores_directory_anchor() -> Result<()> {
-    assert_explicit_relative_config_ignores_directory_anchor(
+    assert_explicit_config_selection(
         ExplicitSelector::Cli,
         SelectorPathKind::Relative,
         "project",
@@ -142,10 +159,10 @@ fn cli_explicit_relative_config_ignores_directory_anchor() -> Result<()> {
     )
 }
 
-/// A relative environment selector stays anchored to the child process CWD.
+/// A relative environment selector ignores `-C/--directory`.
 #[test]
 fn environment_explicit_relative_config_ignores_directory_anchor() -> Result<()> {
-    assert_explicit_relative_config_ignores_directory_anchor(
+    assert_explicit_config_selection(
         ExplicitSelector::Environment,
         SelectorPathKind::Relative,
         "project",
@@ -156,7 +173,7 @@ fn environment_explicit_relative_config_ignores_directory_anchor() -> Result<()>
 /// An absolute CLI selector remains unchanged when `-C` is present.
 #[test]
 fn cli_explicit_absolute_config_ignores_directory_anchor() -> Result<()> {
-    assert_explicit_relative_config_ignores_directory_anchor(
+    assert_explicit_config_selection(
         ExplicitSelector::Cli,
         SelectorPathKind::Absolute,
         "project",
@@ -167,7 +184,7 @@ fn cli_explicit_absolute_config_ignores_directory_anchor() -> Result<()> {
 /// An absolute environment selector remains unchanged when `-C` is present.
 #[test]
 fn environment_explicit_absolute_config_ignores_directory_anchor() -> Result<()> {
-    assert_explicit_relative_config_ignores_directory_anchor(
+    assert_explicit_config_selection(
         ExplicitSelector::Environment,
         SelectorPathKind::Absolute,
         "project",
@@ -175,12 +192,53 @@ fn environment_explicit_absolute_config_ignores_directory_anchor() -> Result<()>
     )
 }
 
+/// Without `-C`, a relative explicit selector resolves against the process
+/// working directory.
+#[test]
+fn cli_explicit_relative_config_without_directory_uses_working_directory() -> Result<()> {
+    let invocation = tempdir().context("create invoking directory")?;
+    test_fs::copy(
+        "tests/data/minimal.yml",
+        invocation.path().join("Netsukefile"),
+    )
+    .context("write invocation manifest")?;
+    test_fs::write(invocation.path().join("relative.toml"), "json = true\n")
+        .context("write invocation-directory config")?;
+
+    let invocation_path = utf8_workspace_path(&invocation)?;
+    let output = isolated_netsuke_command(&invocation_path)
+        .arg("--config")
+        .arg("relative.toml")
+        .arg("generate")
+        .output()
+        .context("run generate with an unanchored relative config")?;
+
+    ensure!(
+        output.status.success(),
+        "generate should succeed: {output:?}"
+    );
+    let document: Value = serde_json::from_slice(&output.stdout).with_context(|| {
+        format!(
+            "the relative selector should load the JSON invocation-directory config: {}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+    })?;
+    ensure!(
+        document
+            .pointer("/result/content")
+            .and_then(Value::as_str)
+            .is_some(),
+        "JSON output should contain the generated Ninja artefact: {document}",
+    );
+    Ok(())
+}
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(32))]
 
-    /// Generated selector paths preserve explicit-selection anchoring.
+    /// Generated selector paths preserve the ADR-014 independence contract.
     #[test]
-    fn explicit_config_never_rebases_under_directory(
+    fn explicit_config_selection_ignores_directory_anchor(
         selector in prop_oneof![
             Just(ExplicitSelector::Cli),
             Just(ExplicitSelector::Environment),
@@ -193,7 +251,7 @@ proptest! {
         config_stem in "[a-z]{1,12}",
     ) {
         let config_name = format!("{config_stem}.toml");
-        let result = assert_explicit_relative_config_ignores_directory_anchor(
+        let result = assert_explicit_config_selection(
             selector,
             selector_path_kind,
             &project_name,

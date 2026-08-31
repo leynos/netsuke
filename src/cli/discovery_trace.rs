@@ -6,12 +6,12 @@
 
 use tracing::debug;
 
-use super::ConfigPathResolution;
 use super::diagnostics::{
     BoundedConfigPath, ConfigLoadWarning, debug_config_path_from_fields,
     trace_config_path_variable_from_fields,
 };
 use super::layers::ProjectScopeTrace;
+use super::selector::ConfigPathResolution;
 
 /// Bounded selector and layer-branch diagnostics retained after discovery.
 #[derive(Clone, Debug)]

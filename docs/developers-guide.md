@@ -655,51 +655,27 @@ workflow-specific projections and assertions, so parsing and structural
 validation remain consistent across the workflows under test.
 
 `make test` runs the non-doctest suite through
-[cargo-nextest](https://nexte.st/) and then runs the doctests separately. CI
-pins the runner version in `NEXTEST_VERSION` in `.github/workflows/ci.yml`.
-Install that same version locally so local runs match CI; read the pin from the
-workflow rather than copying the number, so the two cannot drift:
+[cargo-nextest](https://nexte.st/) and the doctests separately. CI pins the
+runner version in `NEXTEST_VERSION` in `.github/workflows/ci.yml`. Install that
+same version locally so local runs match CI; read the pin from the workflow
+rather than copying the number, so the two cannot drift:
 
 ```bash
 NEXTEST_VERSION="$(sed -n "s/.*NEXTEST_VERSION: '\(.*\)'.*/\1/p" \
   .github/workflows/ci.yml)"
 cargo install cargo-nextest --locked --version "$NEXTEST_VERSION"
-
 # or, for a prebuilt binary:
 cargo binstall --no-confirm --locked \
   "cargo-nextest@$NEXTEST_VERSION"
 ```
 
-`make check-fmt` verifies Markdown formatting as well as Rust formatting, and
-needs `mdtablefix` on `PATH`. CI pins the version in `MDTABLEFIX_VERSION` in
-`.github/workflows/ci.yml`. Install that same version locally so local runs
-match CI; read the pin from the workflow rather than copying the number, so the
-two cannot drift:
+Install the separately versioned Whitaker installer with:
 
 ```bash
-MDTABLEFIX_VERSION="$(sed -n "s/.*MDTABLEFIX_VERSION: '\(.*\)'.*/\1/p" \
+WHITAKER_INSTALLER_VERSION="$(sed -n "s/.*WHITAKER_INSTALLER_VERSION: '\\(.*\\)'.*/\\1/p" \
   .github/workflows/ci.yml)"
-cargo install --locked mdtablefix --version "$MDTABLEFIX_VERSION"
-# or, for a prebuilt binary:
-cargo binstall --no-confirm --locked \
-  "mdtablefix@$MDTABLEFIX_VERSION"
-```
-
-Version drift matters here beyond reproducibility: a different `mdtablefix`
-version may reflow prose differently, which would make `make check-fmt` fail on
-an otherwise clean tree.
-
-CI pins the Whitaker installer version in `WHITAKER_INSTALLER_VERSION` in
-`.github/workflows/ci.yml`. Install that same version locally so local linting
-matches CI; read the pin from the workflow rather than copying the number, so
-the two cannot drift:
-
-```bash
-WHITAKER_INSTALLER_VERSION="$(sed -n \
-  "s/.*WHITAKER_INSTALLER_VERSION: '\\(.*\\)'.*/\\1/p" \
-  .github/workflows/ci.yml)"
-cargo install --locked whitaker-installer \
-  --version "$WHITAKER_INSTALLER_VERSION"
+# Build from crates.io:
+cargo install --locked whitaker-installer --version "$WHITAKER_INSTALLER_VERSION"
 # or, for a prebuilt binary:
 cargo binstall --no-confirm --locked \
   "whitaker-installer@$WHITAKER_INSTALLER_VERSION"
@@ -731,8 +707,8 @@ so the staged libraries must be recent enough to include it. Libraries staged
 from an older checkout ignore `excluded_paths` silently — the exemptions stop
 applying with no error, and the lint reports the modules they covered. Re-run
 `whitaker-installer` to restage from HEAD. If that checkout has been left on a
-detached HEAD, the install fails at its `git pull`; put it back on the default
-branch and re-run.
+detached HEAD, the installation fails during its `git pull`; put it back on the
+default branch and re-run.
 
 [whitaker-pr-315]: https://github.com/leynos/whitaker/pull/315
 
@@ -816,7 +792,7 @@ backend. For a faster inner loop between gate runs, see
 For documentation changes, also run `make fmt`, `make markdownlint`, and
 `make nixie`.
 
-### Workflow pins and Dependabot
+## Workflow pins and Dependabot
 
 Dependabot owns the upgrade of GitHub Actions and reusable workflows, including
 calls into `leynos/shared-actions`. Contract tests that assert a caller's exact
@@ -859,7 +835,7 @@ shared-action revision: the caller would keep working across any upstream bump,
 so pinning the SHA in a test buys nothing and costs a manual edit per bump.
 `tests/workflow_contracts/mutation_testing_test.py` is the canonical example.
 
-#### Exception: the Polonius shared-action contract
+### Exception: the Polonius shared-action contract
 
 The four workflows described under
 [Polonius CI shared-action contract](#polonius-ci-shared-action-contract) do
@@ -1021,6 +997,14 @@ every command in this completion checklist:
 `markdownlint-cli2 --fix`. `mdtablefix` owns table padding and paragraph
 wrapping; `make markdownlint` then verifies the result.
 
+`make check-fmt` runs the Rust and Python formatter checks, then passes tracked
+Markdown files to `scripts/check-markdown-format.sh`. The wrapper skips the
+Markdown check when the file list is empty, so the command remains portable
+across hosts. The checker requires `mdtablefix` version `0.5.0`, the version
+pinned by `MDTABLEFIX_VERSION` in the CI workflow; verify an installation with
+`mdtablefix --version`. Run `make test-markdown-format` to exercise the
+checker, including its empty-input behaviour, before changing the wrapper.
+
 markdownlint's `MD060` (table-column-style) checks that table pipes align using
 a display-width model that treats CJK characters and emoji as double-width.
 That model disagrees with `mdtablefix`'s padding for right-to-left scripts,
@@ -1037,37 +1021,9 @@ Contributors should prefer a file-scoped `markdownlint-disable-file` directive
 (or a narrower `markdownlint-disable-next-line`) over disabling a rule
 repository-wide, and should record the reason in a comment beside the directive.
 
-`make check-fmt` verifies Markdown formatting as well as Rust formatting. It
-runs `scripts/check-markdown-format.sh`, which compares each file against
-`mdtablefix`'s output for that file and reports any that differ. `mdtablefix`
-has no check-only mode, and the script never modifies tracked files.
-
-`mdtablefix` emits LF line endings, but Git can check files out with CRLF on
-Windows. The script therefore accepts either the formatter's exact LF output or
-its exact CRLF rendering; it does not accept mixed line endings or other text
-differences.
-
-The script deliberately does not replay the `markdownlint-cli2 --fix` pass that
-`make fmt` performs after `mdtablefix`. `make markdownlint` already rejects any
-lint violation, so on a passing tree that pass has nothing to change.
-
-Checking against `mdtablefix` alone has a second benefit: it surfaces documents
-where `mdtablefix` and markdownlint would fight. A heading nested inside an
-ordered list is the common case: `mdtablefix` treats the heading as ending the
-list and restarts the numbering at 1, while `MD029: ordered` renumbers it to
-continue. Because `--fix` runs last, `make fmt` leaves such a file passing lint
-but permanently unstable, so the check flags it. The remedy is to restructure
-the document, for example by replacing the nested heading with a bold lead-in,
-rather than to relax the check.
-
-Contributors who change the `mdtablefix` flags in `mdformat-all` must change
-them in `scripts/check-markdown-format.sh` to match.
-
-The repository's Markdown is now held in canonical form, and `make check-fmt`
-enforces it, so `make fmt` should no longer produce unrelated reflow. If it
-does, that indicates a formatter version change or a file that has drifted, and
-the resulting diff belongs in its own commit rather than being reverted
-piecemeal.
+Note that `mdformat-all` rewraps every Markdown file it finds, not only the
+files a change touches. Revert the unrelated reflow before committing so a
+change stays reviewable.
 
 ## Spelling enforcement
 
@@ -1578,6 +1534,14 @@ on the repository's then-pinned `nightly-2026-06-25` supplying Cranelift
 between the two rows is the durable signal, not the seconds; the run below is
 representative of three consecutive runs that agreed to within 0.4 s.
 
+`make bench-glob-expansion` measures `glob_paths("**/*.txt", Some(base))`
+against its equivalent absolute, unbased pattern. Its deterministic fixture is
+created before timing starts and each result is passed to `test::black_box`, so
+the benchmark measures expansion rather than fixture construction or an
+optimized-away query. Use it when changing glob-base preparation, path
+rebasing, or separator formatting; compare the two cases on the same machine,
+not their absolute timings across hosts.
+
 | Variant                         | Clean build (s) | Incremental build (s) |
 | ------------------------------- | --------------- | --------------------- |
 | Default (LLVM, platform linker) | 11.6            | 0.8                   |
@@ -1754,7 +1718,7 @@ Cargo home plus Kani support-file home.
 
 ## Test execution
 
-`make test` is the canonical entry point and composes two passes:
+`make test` is the canonical entry point and composes two stages:
 
 - `make test-nextest` —
   `cargo nextest run --workspace --all-targets --all-features`, with
@@ -1768,7 +1732,7 @@ Cargo home plus Kani support-file home.
   doctests, so they need their own pass; the separate target is what makes a
   broken documentation example fail the gate.
 
-If either pass fails, `make test` fails. Run the individual targets when
+If any stage fails, `make test` fails. Run the individual targets when
 iterating, but treat `make test` as the gate.
 
 ### Required real-Ninja coverage
@@ -1811,10 +1775,10 @@ governs the non-doctest pass only, and deliberately stays small:
 nextest runs each test in its own process, but the codebase does not rely on
 that isolation for environment safety. Tests pass environment values through
 explicit configuration seams or configure a child with `env_clear()` followed by
-`Command::env`. The BDD suite carries no environment or CWD lock: its steps
-run inside the generated test-harness process, not inside an `assert_cmd` child.
-`EnvLock` and `CwdGuard` remain only for direct tests that deliberately
-exercise process working-directory behaviour outside that suite.
+`Command::env`. Working-directory behaviour is exercised by injecting a base
+directory through the manifest and discovery seams rather than changing the
+process working directory, because the in-process coverage runner shares that
+state.
 
 ### Runners not covered by this configuration
 
@@ -2248,19 +2212,15 @@ cargo-nextest alongside every other test (see
 point (`world: TestWorld`) to each generated scenario test.
 
 nextest runs each generated scenario in its own process. That reinforces the
-per-scenario isolation policy below rather than conflicting with it. The
-scenario's steps still execute in that generated test-harness process, so an
-in-process BDD step does not qualify for subprocess isolation.
+per-scenario isolation policy below rather than conflicting with it: scenario
+state cannot leak across process boundaries, so the policy's requirement to
+recreate state per test is enforced by the runner as well as by convention.
 
 ### State and isolation policy
 
 - Scenario isolation is the default: scenario state must be recreated per test.
 - Shared process-wide state is avoided unless infrastructure cost requires
   controlled reuse.
-- Route A drives an end-to-end `netsuke` child with `assert_cmd` and configures
-  only that child with `Command::env`.
-- Route B calls a library entry point with its injected environment and keeps
-  assertions on in-process values such as `Cli`, `Manifest`, or `BuildGraph`.
 - Use `Slot<T>` for optional or replaceable scenario values.
 - Use typed wrappers in `tests/bdd/types.rs` for step parameters to avoid
   ambiguous string-heavy signatures.
@@ -2425,6 +2385,36 @@ character, non-ASCII byte, or other punctuation returns a MiniJinja
 Jinja-specific: `glob_paths` retains its filesystem-query contract and returns
 all matching UTF-8 file paths without applying shell-safety validation.
 
+### Base-directory seam
+
+`glob_paths(pattern, base)` and the internal `expand_glob(pattern, base)` take
+an optional injected `Utf8Path` base. The manifest parse boundary owns the
+workspace-root decision and passes that root to the query closure; a
+manifest-rooted parse therefore neither reads nor mutates process-global
+working-directory state during glob expansion.
+
+- A relative pattern, including a parent-relative pattern, resolves from the
+  manifest directory or workspace root. The resolved base is stripped only
+  after matching, so results retain the spelling relative to the original
+  pattern (`../shared/file.txt` remains parent-relative).
+- An absolute pattern does not use or strip the injected base.
+- `PreparedGlob` canonicalizes a valid relative base to preserve symlinked
+  workspace behaviour, escapes that base as a literal for glob compilation, and
+  retains the unescaped path for result rebasing. `open_root_dir` receives
+  `None` for this prepared search because the base is already embedded.
+
+The focused base and property tests cover no-double-base, symlinked base,
+base-path metacharacters, canonicalization failure, nested and parent-relative
+results, absolute patterns, and forward-slash output. Run
+`make bench-glob-expansion` alongside the relevant tests when changing this hot
+path.
+
+The adjacent configuration-discovery seam keeps its ownership boundary clear:
+`-C/--directory` anchors manifest lookup and automatic project discovery.
+Explicit `--config` and `NETSUKE_CONFIG` selectors remain independent. Their
+relative paths resolve from the process working directory and their absolute
+paths are unchanged.
+
 ### Capability scope
 
 The metadata check that filters directories out of a glob's results goes
@@ -2484,10 +2474,11 @@ directory, and matches dropped because a symbolic link cannot be resolved
 through the capability, including an unreadable link within the prefix. It
 aggregates every skipped entry while retaining at most the first four
 unreachable-symlink paths as a trace sample. The `src/manifest/mod.rs` adapter
-records those observations after the query at the Jinja `glob` helper's
-orchestration boundary, via `glob::record_expansion`. Keeping recording there
-leaves the expansion query free of metrics and tracing side effects while
-keeping a degraded expansion visible without having to reproduce it.
+records those observations and the whole expansion duration at the Jinja `glob`
+helper's orchestration boundary, via `glob::expand_manifest_template_glob`.
+Keeping recording there leaves the expansion query free of metrics and tracing
+side effects while keeping a degraded or failed template expansion visible
+without having to reproduce it.
 
 - **Metrics** — `netsuke_manifest_glob_expansions_total`, labelled
   `outcome` (`matched`, `unopenable_prefix`), and
@@ -2498,15 +2489,28 @@ keeping a degraded expansion visible without having to reproduce it.
   rule in `AGENTS.md`. The Jinja adapter additionally records
   `netsuke_manifest_glob_rejections_total` with `outcome=unsafe_path` and
   `error_category=shell_quoting_required` when its shell-safety boundary
-  rejects a match.
+  rejects a match. It also records
+  `netsuke_manifest_template_glob_expansions_total`, labelled with the closed
+  `base_mode` (`absolute_pattern`, `relative_without_base`,
+  `relative_with_base`) and `outcome` (`matched`, `unopenable_prefix`,
+  `invalid_pattern`, `base_canonicalization_failure`, `utf8_conversion_failure`,
+  `capability_root_io_failure`, `glob_entry_processing_failure`) sets, plus
+  the unlabelled `netsuke_manifest_template_glob_expansion_duration_seconds`
+  histogram. The base mode classifies the pattern and manifest-root context;
+  absolute patterns bypass the configured root without resolving it. Direct
+  `glob_paths` queries remain pure and emit no metrics or tracing.
+  Template-boundary tracing uses the same bounded mode and outcome fields, with
+  caller-controlled paths and error text redacted.
 - **Tracing** — every caller-controlled path field is replaced with the stable
   `<redacted>` marker: patterns, prefixes, and sampled relative matches. A
   skipped unreachable-symlink event is emitted only for the retained sample,
   with no more than four such events per expansion. Metrics retain only bounded
   aggregate status and reason data; errors may retain the caller's original
-  original pattern so invalid input can be explained precisely. Adapter
-  rejection events use the same `<redacted>` path marker and carry only the
-  bounded outcome and error category.
+  pattern so invalid input can be explained precisely. Adapter rejection events
+  use the same `<redacted>` path marker and carry only the bounded outcome and
+  error category. Template-expansion success, unopenable prefix, and error
+  events carry only the same bounded mode and outcome fields; failures use the
+  closed outcome set documented above.
 
 ## Test isolation utilities
 
@@ -2514,12 +2518,10 @@ Environment variable mutations and working-directory changes are process-global
 side effects that can cause data races when tests run in parallel. Tests inject
 environment readers where the API supports them, and configure child processes
 with `env_clear()` followed by `Command::env` where ambient discovery is part
-of the contract. BDD steps must not change either process-global value: use an
-injected environment and absolute paths for in-process library assertions, or
-an isolated `assert_cmd` child for end-to-end behaviour. `CwdGuard` is the RAII
-utility for the few direct CWD tests that deliberately exercise it. For
-locale-sensitive snapshot tests, use the `EnLocalizer` scoped pattern
-documented in the
+of the contract. Working-directory behaviour is exercised by injecting a base
+directory (the manifest glob base, or `project_scope_file`'s directory) rather
+than changing the process working directory. For locale-sensitive snapshot
+tests, use the `EnLocalizer` scoped pattern documented in the
 [snapshot testing guide](snapshot-testing-in-netsuke-using-insta.md#locale-pinned-snapshot-tests).
 
 `src/snapshot_test_support.rs` owns output-oriented unit-test fixtures;
@@ -2753,14 +2755,18 @@ section for the fixture's intended usage.
 
 ### Enforcing the environment mandate
 
-`clippy.toml` disallows the six process-environment entry points, so
+`clippy.toml` disallows the seven process-environment entry points, so
 `make lint` rejects a new one:
 
 ```toml
 disallowed-methods = [
   { path = "std::env::var", reason = "inject an environment reader" },
+  { path = "std::env::var_os", reason = "inject an environment reader" },
+  { path = "std::env::vars", reason = "inject an environment reader" },
+  { path = "std::env::vars_os", reason = "inject an environment reader" },
   { path = "std::env::set_var", reason = "use a stub environment in tests" },
-  # ... var_os, vars, vars_os, remove_var
+  { path = "std::env::remove_var", reason = "use a stub environment in tests" },
+  { path = "std::env::set_current_dir", reason = "inject a base-directory seam" },
 ]
 ```
 
@@ -3019,88 +3025,34 @@ process.
 - The reader answers by name only. It must not enumerate, and it must not
   mutate.
 
-#### Manifest workspace base seam
+### Retired process-environment mutation utilities
 
-`resolve_absolute_workspace_root` and `open_manifest_workspace` in
-`src/manifest/workspace.rs` anchor the workspace directory containing a
-manifest. Both are `pub(super)` and are not exported from
-`src/manifest/mod.rs`: the seam is a working-directory injection point, not a
-general path-configuration API.
+The `EnvLock`, `CwdGuard`, and `EnvVarGuard` utilities that once serialized
+process working-directory and environment mutation were retired from
+`test_support`. Tests and harnesses inject data through seams instead: the
+manifest glob base directory anchors relative globs, `project_scope_file`
+accepts an explicit directory for configuration discovery, and environment
+readers are injected into the functions that need them. None of these depend on
+the process working directory or process-global environment state.
 
-Ownership and permitted call sites:
+`make lint` runs rustdoc, Clippy, and Whitaker. Clippy's workspace-wide
+`disallowed-methods` configuration rejects `std::env::set_var`,
+`std::env::remove_var`, and `std::env::set_current_dir` in every target kind
+with warnings denied. Child-process configuration stays confined to the
+`Command` builders: `Command::env`, `Command::env_clear`, and
+`Command::current_dir`.
 
-- Production passes `None`; the sole caller is `from_path_with_registration` in
-  `src/manifest/query.rs`, so ambient current-directory resolution is unchanged.
-- Tests inject a temporary directory or a relative base such as
-  `Some(Path::new("."))`; the seam must not become a general path-configuration
-  API.
+### Scripting standards for automation scripts
 
-Composition rules:
-
-- An absolute parent wins outright; `base` is ignored.
-- A relative parent joins onto `base`; `None` falls back to the process
-  current directory.
-- A relative `base` (for example `Path::new(".")`) is itself anchored at the
-  current directory before joining, so `ManifestWorkspace::root` always stays
-  absolute.
-- Both the `None` fallback and relative `base` anchoring call
-  `env::current_dir()`; either failure reports the
-  `MANIFEST_RESOLVE_WORKSPACE_ROOT` localization key.
-
-This is a working-directory seam, distinct from the three environment-variable
-shapes in [ADR-008](adr-008-environment-seam-taxonomy.md); it mirrors the
-`which` resolver's `cwd_override` precedent in
-[`EnvSnapshot::capture`](#which-environment-capture).
-
-### `EnvLock`
-
-`test_support::env_lock::EnvLock` serializes the few tests that change the
-process working directory. It is retired and retained only until those callers
-migrate; do not add callers or tests.
-[ADR-008](adr-008-environment-seam-taxonomy.md) records its retirement.
-Environment-variable callers migrate to injected `mockable::Env` seams in
-production signatures. Current-working-directory callers migrate to the
-existing working-directory seam, such as an injected base or current-directory
-path, or use absolute paths or `-C/--directory` instead. Until the current
-CWD-only callers migrate, acquire it before `CwdGuard` so restoration occurs
-before the lock is released:
-
-```rust
-use test_support::env_lock::EnvLock;
-
-let _env_lock = EnvLock::acquire();
-```
-
-Do not use this lock to justify process-environment mutation. Environment
-access must remain injected, or confined to a spawned child process. BDD
-scenarios must not acquire this lock: they are in-process tests, and a lock
-would serialize the suite rather than isolate an ambient dependency.
-
-### `CwdGuard`
-
-Tests that call `std::env::set_current_dir` must restore the original working
-directory after the test. `CwdGuard` is available from `test_support`; it
-captures the current directory on construction and restores it on drop:
-
-```rust
-use test_support::CwdGuard;
-use test_support::env_lock::EnvLock;
-
-let _env_lock = EnvLock::acquire();
-let _cwd_guard = CwdGuard::acquire()?;
-std::env::set_current_dir(temp.path())?;
-```
-
-Acquire `EnvLock` and then `CwdGuard` so Rust drops them in reverse declaration
-order: `CwdGuard` restores the CWD first, and `EnvLock` releases second.
-
-These direct CWD tests are the narrow exception for exercising CWD-dependent
-code itself. BDD scenarios instead retain an absolute manifest path or pass
-`-C/--directory` into the CLI; neither approach changes the harness process CWD.
-
-This legacy ordering remains only for current CWD-only callers while they
-migrate; do not add `EnvLock` callers or tests.
-[ADR-008](adr-008-environment-seam-taxonomy.md) records its retirement.
+Python scripts under `scripts/` follow the repository's
+[scripting standards](scripting-standards.md): a `uv` script block with a
+Python 3.14 floor, Cyclopts for parameterized CLIs, `cuprum` for subprocess
+execution, `pathlib` for filesystem access, and pytest coverage in
+`scripts/tests/` mirroring each script's name. The house Python style rules in
+`.rules/` (naming, typing, exception design, context managers, generators, and
+returns) apply to every script and its tests. Refer to
+[`docs/scripting-standards.md`](scripting-standards.md) before introducing or
+changing an automation script.
 
 ### Injected and child-process environments
 
@@ -3125,25 +3077,15 @@ appropriate injected seam, such as `run_with_ninja_program`,
 `StdlibConfig::with_path_override`, `StdlibConfig::with_home_override`, or
 `StdlibConfig::with_command_path_override`. End-to-end tests may call
 `env_clear()` and then apply values with `Command::env`, because the mutation
-is confined to the child. This defines two BDD routes: Route A drives the
-compiled binary with `assert_cmd` and configures only its child environment;
-Route B calls library entry points with an injected environment and keeps the
-scenario's in-process assertions on `Cli`, `Manifest`, `BuildGraph`, or render
-state.
+is confined to the child.
 
 ### Ordering rules
 
 1. Inject environment-dependent inputs whenever the API supports them.
 2. Use an isolated child process for APIs whose contract is ambient discovery.
-3. In BDD, choose Route A for an end-to-end binary assertion or Route B for an
-   injected in-process library assertion.
-4. Retain absolute paths or pass `-C/--directory` instead of changing the BDD
-   harness CWD.
-5. For current legacy CWD-only callers, acquire `EnvLock` and then `CwdGuard`.
-6. Add no `EnvLock` callers or tests;
-   [ADR-008](adr-008-environment-seam-taxonomy.md) records its retirement, and
-   issue #494 tracks removal.
-7. Never mutate the harness process environment.
+3. Inject a base directory through the manifest/glob seams for
+   working-directory-sensitive tests.
+4. Never mutate the harness process environment.
 
 ### `tracing_capture`
 
@@ -3217,18 +3159,18 @@ maintenance.
 
 Table: Scenario state groups and fields
 
-| Group              | Fields                                                                                                                                                                                                                                   | Purpose                                                    |
-| :----------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------- |
-| CLI state          | `cli`, `cli_error`                                                                                                                                                                                                                       | Parsed CLI configuration and parse error capture.          |
-| Manifest state     | `manifest`, `manifest_error`                                                                                                                                                                                                             | Parsed manifest and error capture.                         |
-| IR state           | `build_graph`, `removed_action_id`, `generation_error`                                                                                                                                                                                   | Build graph, negative-test identifiers, generation errors. |
-| Ninja state        | `ninja_content`, `ninja_error`                                                                                                                                                                                                           | Generated Ninja file content and errors.                   |
-| Process state      | `run_status`, `run_error`, `command_stdout`, `command_stderr`, `temp_dir`, `workspace_path`, `command_env`                                                                                                                               | Process results, workspace paths, child environment.       |
-| Stdlib state       | `stdlib_root`, `stdlib_output`, `stdlib_error`, `stdlib_state`, `stdlib_command`, `stdlib_policy`, `stdlib_path_override`, `stdlib_fetch_max_bytes`, `stdlib_command_max_output_bytes`, `stdlib_command_stream_max_bytes`, `stdlib_text` | Stdlib rendering, network policy, and size constraints.    |
-| Localization state | `localization_lock`, `localization_guard`, `locale_config`, `locale_env`, `locale_cli_override`, `locale_system`, `resolved_locale`, `locale_message`                                                                                    | Scenario-level localizer overrides and resolution state.   |
-| HTTP server state  | `http_server`, `stdlib_url`                                                                                                                                                                                                              | Test HTTP server fixture for fetch scenarios.              |
-| Output state       | `output_mode`, `simulated_no_color`, `simulated_term`, `output_prefs`, `simulated_no_emoji`, `rendered_prefix`                                                                                                                           | Accessibility and output preference resolution.            |
-| Environment state  | `env_vars_forward`                                                                                                                                                                                                                       | Child environment map for Route A scenarios.               |
+| Group              | Fields                                                                                                                                                                                                                                   | Purpose                                                      |
+| :----------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------- |
+| CLI state          | `cli`, `cli_error`                                                                                                                                                                                                                       | Parsed CLI configuration and parse error capture.            |
+| Manifest state     | `manifest`, `manifest_error`                                                                                                                                                                                                             | Parsed manifest and error capture.                           |
+| IR state           | `build_graph`, `removed_action_id`, `generation_error`                                                                                                                                                                                   | Build graph, negative-test identifiers, generation errors.   |
+| Ninja state        | `ninja_content`, `ninja_error`                                                                                                                                                                                                           | Generated Ninja file content and errors.                     |
+| Process state      | `run_status`, `run_error`, `command_stdout`, `command_stderr`, `temp_dir`, `workspace_path`, `command_env`                                                                                                                               | Process results, workspace paths, child environment.         |
+| Stdlib state       | `stdlib_root`, `stdlib_output`, `stdlib_error`, `stdlib_state`, `stdlib_command`, `stdlib_policy`, `stdlib_path_override`, `stdlib_fetch_max_bytes`, `stdlib_command_max_output_bytes`, `stdlib_command_stream_max_bytes`, `stdlib_text` | Stdlib rendering, network policy, and size constraints.      |
+| Localization state | `localization_lock`, `localization_guard`, `locale_config`, `locale_env`, `locale_cli_override`, `locale_system`, `resolved_locale`, `locale_message`                                                                                    | Scenario-level localizer overrides and resolution state.     |
+| HTTP server state  | `http_server`, `stdlib_url`                                                                                                                                                                                                              | Test HTTP server fixture for fetch scenarios.                |
+| Output state       | `output_mode`, `simulated_no_color`, `simulated_term`, `output_prefs`, `simulated_no_emoji`, `rendered_prefix`                                                                                                                           | Accessibility and output preference resolution.              |
+| Environment state  | `env_vars_forward`                                                                                                                                                                                                                       | Child process environment map forwarded to spawned commands. |
 
 ### Key `TestWorld` methods
 
@@ -3450,9 +3392,10 @@ uses the bare `EnvProvider` name.
 Tests for injected configuration discovery should provide a map-backed
 `ConfigEnvProvider`. End-to-end tests of the ambient `ConfigStdEnvProvider`
 adapter must run in an isolated child configured with `env_clear()` followed by
-`Command::env`. BDD configuration steps use the injected route; direct CWD
-tests alone may use `EnvLock` alongside `CwdGuard`. Neither guard justifies
-environment mutation.
+`Command::env`. The retired `EnvLock`/`CwdGuard` utilities are gone;
+working-directory-dependent config tests inject the anchor directory (for
+example `project_scope_file` with an explicit directory) instead of changing
+the process environment.
 
 Unit tests that only need to verify explicit config path precedence should test
 `explicit_config_path_with_env` with an injected provider instead of mutating
@@ -4296,48 +4239,6 @@ selected Ninja program through `dispatch::execute`. Handlers consume the
 context rather than resolving output or process configuration again; tests
 should inject the program through `run_with_ninja_program` when they need a
 deterministic child executable.
-
-### Module: `runner::generation`
-
-`src/runner/generation.rs` owns the runner's reusable, in-memory generation
-pipeline. It separates manifest loading, IR construction, and Ninja bundle
-synthesis from command reporting and process execution. The read-only pipeline
-is `load_manifest` (optionally observing manifest stages), then `build_graph`,
-then `ninja_text`. Its final value is `GeneratedNinja`, including any dyndep
-sidecars, rather than a materialized file or a running Ninja process.
-
-`load_manifest` uses the manifest-query registration: it permits only its
-read-only helpers and rejects template access to the environment, filesystem,
-network, clock, and shell. `load_manifest_for_build` is a separate, explicitly
-effectful loader for build, clean, generate, and graph commands. It receives a
-network policy and enables the full build stdlib; it is not a dry-run or
-background-query primitive.
-
-#### Generation reuse boundary
-
-- **Ownership:** `runner::generation` is a private runner submodule. It owns
-  the three read-only generation steps, the explicitly effectful build loader,
-  their input/output hand-offs, and the manifest and IR error contexts. It does
-  not own `StatusReporter` updates, command dispatch, dyndep publication, or
-  Ninja execution.
-- **Permitted call-sites:** `runner::generate_ninja` composes the complete
-  build pipeline through `load_manifest_for_build` for build, clean, and
-  generate commands. `runner::graph::handle_graph` may stop after `build_graph`
-  to render the graph, and `runner::help_query` uses `load_manifest` for its
-  read-only target catalogue. Runner unit tests may compose the read-only steps
-  directly. New dry-run or background-generation work may use `load_manifest`,
-  `build_graph`, and `ninja_text` only within the runner boundary; a public or
-  cross-subsystem consumer requires an explicit application boundary rather
-  than widening these internal helpers.
-- **Composition rules:** command adapters report stages before or after the
-  relevant step and wrap `ninja_text` with runner-owned generation telemetry.
-  Only `load_manifest_with_stage_reporting` translates `StageObserver` events
-  into status updates and selects the effectful build loader. Consumers must
-  not call manifest parsing, IR generation, or `ninja_gen::generate_bundle`
-  directly in parallel with this pipeline. Before an adapter writes or executes
-  a returned bundle, it must use the existing capability-injected
-  dyndep-publication path to materialize its sidecars; the read-only steps
-  never write files, start processes, or invoke effectful template helpers.
 
 ### Module: `runner::reporter`
 

@@ -1163,15 +1163,23 @@ providing a secure bridge to the underlying system.
   these are normalized to the host platform before matching. Results contain
   only files (directories are ignored) and path separators are normalized to
   `/`. Leading-dot entries are matched by wildcards. Empty results are
-  represented as `[]`. Invalid patterns surface as `SyntaxError`; filesystem
-  iteration errors surface as `InvalidOperation`, matching minijinja error
-  semantics. On Unix, backslash escapes for glob metacharacters (`[`, `]`, `{`,
-  `}`, `*`, `?`) are preserved during separator normalization. A backslash
-  before `*` or `?` is kept only when the wildcard is trailing or followed by
-  an alphanumeric, `_`, or `-`; otherwise it becomes a path separator so
-  `config\*.yml` maps to `config/*.yml`. On Windows, backslash escapes are not
-  supported. This provides globbing support not available in Ninja itself,
-  which does not support globbing.[^3]
+  represented as `[]`. The manifest parse boundary supplies the manifest
+  directory or workspace root to `glob_paths(pattern, base)` and internal
+  `expand_glob(pattern, base)`: relative patterns, including parent-relative
+  ones, resolve from that root and retain their pattern-relative spelling after
+  base stripping, while absolute patterns remain absolute. With an injected
+  manifest root, this expansion does not read or mutate process-global
+  working-directory state. `from_str_with_env` passes `manifest_root: None`, so
+  unbased relative patterns resolve from the process working directory. Invalid
+  patterns surface as `SyntaxError`; filesystem iteration errors surface as
+  `InvalidOperation`, matching minijinja error semantics. On Unix, backslash
+  escapes for glob metacharacters (`[`, `]`, `{`, `}`, `*`, `?`) are preserved
+  during separator normalization. A backslash before `*` or `?` is kept only
+  when the wildcard is trailing or followed by an alphanumeric, `_`, or `-`;
+  otherwise it becomes a path separator so `config\*.yml` maps to
+  `config/*.yml`. On Windows, backslash escapes are not supported. This
+  provides globbing support not available in Ninja itself, which does not
+  support globbing.[^3]
 
   The Rust query returns those UTF-8 paths unchanged. The Jinja `glob()`
   adapter adds the narrower command-safety boundary: it exposes a result only
@@ -3074,7 +3082,7 @@ flowchart LR
 ```
 
 Netsuke configuration discovery is implemented in `src/cli/discovery.rs`.
-Explicit file selection is handled by `explicit_config_path_with_env(...)`,
+Explicit file selection is handled by `selector::resolve_config_selector(...)`,
 which applies the precedence `--config` > `NETSUKE_CONFIG`.
 `discover_file_layers(...)` performs one overall discovery pass, applying the
 `-C/--directory` flag as the project-discovery root. Its automatic path first
@@ -3159,8 +3167,10 @@ arguments then override the file layers.
 
 1. **Explicit override**: `--config <PATH>` and `NETSUKE_CONFIG` are evaluated
    in that precedence order before discovery. These explicit selectors bypass
-   automatic discovery and ignore the project-root anchor supplied by
-   `-C/--directory`.
+   automatic discovery. A relative explicit selector resolves from the process
+   working directory and is not rebased by `-C/--directory`; an absolute
+   selector remains unchanged. The `-C/--directory` project-root anchor applies
+   to manifest lookup and automatic project configuration discovery.
 
 2. **Project scope**: Configuration files in the current working directory (or
    the directory specified via `-C/--directory`):
@@ -3203,9 +3213,9 @@ manual flag repetition.
 
 **Implementation notes**:
 
-- The `explicit_config_path_with_env(...)` helper resolves explicit config
-  selectors before automatic discovery so missing or invalid explicit files
-  remain hard errors.
+- `selector::resolve_config_selector(...)` resolves explicit config selectors
+  before automatic discovery so missing or invalid explicit files remain hard
+  errors.
 - The `merge_with_config_and_env()` function in `src/cli/merge.rs` performs
   discovery and delegates to the ordinary merge query, which discards its
   collected events. The application startup boundary replays retained bounded
@@ -3236,10 +3246,11 @@ manual flag repetition.
   automatic discovery. If an explicit selector is set, the selected file is
   loaded directly and bypasses discovery, but still participates in the normal
   precedence ladder: defaults < file < environment < CLI.
-- Relative paths passed to `--config` are resolved against the process current
-  working directory, not the `-C/--directory` anchor. This keeps config-file
-  selection aligned with normal shell path semantics while `-C` continues to
-  scope project discovery and manifest lookup.
+- Relative paths passed to `--config` (and `NETSUKE_CONFIG`) resolve from the
+  process working directory independently of `-C/--directory`. Absolute
+  selectors retain their original spelling. `-C` continues to anchor project
+  discovery and manifest lookup. Pass an absolute path when the selector must
+  not depend on the invoking directory (see ADR-004).
 
 ### 8.5 Manual Pages
 

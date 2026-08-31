@@ -3,7 +3,7 @@
 //!
 //! `make test` is the single command local development and continuous
 //! integration (CI) both run. These tests pin the runner contract it encodes:
-//! non-doctest tests go through cargo-nextest, and doctests run separately
+//! non-doctest tests go through cargo-nextest and doctests run separately
 //! because nextest cannot execute them.
 //!
 //! They also pin the `RUSTFLAGS` contract shared by every recipe that sets the
@@ -24,21 +24,20 @@ mod makefile;
 
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
-use makefile::{read_repo_file, target_prerequisites, target_recipe};
+use makefile::{phony_targets, read_repo_file, target_prerequisites, target_recipe};
 use toml::Value;
 
+/// Verify that `make test` orders the nextest pass before the doctest pass.
 #[test]
 fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()> {
     let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
 
     let prerequisites =
         target_prerequisites(&makefile, "test").context("Makefile should declare a test target")?;
-    for expected in ["test-nextest", "doctest"] {
-        ensure!(
-            prerequisites.iter().any(|name| name == expected),
-            "make test should depend on {expected}, found {prerequisites:?}"
-        );
-    }
+    ensure!(
+        prerequisites == ["test-nextest", "doctest"],
+        "make test must depend on nextest and doctests, found {prerequisites:?}"
+    );
 
     let nextest_recipe = target_recipe(&makefile, "test-nextest")
         .context("Makefile should declare a test-nextest target")?;
@@ -80,6 +79,55 @@ fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()>
     ensure!(
         doctest_recipe.contains("--workspace"),
         "doctest should cover the workspace, found {doctest_recipe:?}"
+    );
+    Ok(())
+}
+
+/// Keep the glob-expansion benchmark available through the Makefile.
+#[test]
+fn benchmark_glob_expansion_target_is_phony_and_runs_the_expected_bench() -> Result<()> {
+    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
+    let phony = phony_targets(&makefile);
+    ensure!(
+        phony.contains(&"bench-glob-expansion"),
+        ".PHONY must include bench-glob-expansion, found {phony:?}"
+    );
+    let recipe = target_recipe(&makefile, "bench-glob-expansion")
+        .context("Makefile should declare a bench-glob-expansion recipe")?;
+    ensure!(
+        recipe.contains("$(CARGO) bench --bench glob_expansion"),
+        "bench-glob-expansion must invoke the glob_expansion bench, found {recipe:?}"
+    );
+    Ok(())
+}
+
+/// Verify that the formatter recipe handles an empty Markdown file set portably.
+#[test]
+fn check_fmt_portably_skips_markdown_validation_without_files() -> Result<()> {
+    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
+    let recipe =
+        target_recipe(&makefile, "check-fmt").context("Makefile should declare check-fmt")?;
+    ensure!(
+        !recipe
+            .lines()
+            .filter(|line| line.contains("xargs"))
+            .flat_map(str::split_whitespace)
+            .any(|argument| {
+                argument == "-r"
+                    || argument == "--no-run-if-empty"
+                    || argument.strip_prefix('-').is_some_and(|short_flags| {
+                        !short_flags.starts_with('-') && short_flags.contains('r')
+                    })
+            }),
+        "check-fmt must not rely on GNU-only xargs -r, found {recipe:?}"
+    );
+    ensure!(
+        recipe.contains("if [ \"$$#\" -gt 0 ]"),
+        "check-fmt must guard against an empty Markdown input, found {recipe:?}"
+    );
+    ensure!(
+        recipe.contains("scripts/check-markdown-format.sh \"$$@\""),
+        "check-fmt must validate every discovered Markdown path, found {recipe:?}"
     );
     Ok(())
 }

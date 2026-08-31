@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-markdown-format test-typos-config build release lint lint-clippy lint-whitaker lint-python doc-coverage doc-coverage-test fmt check-fmt typecheck typecheck-python markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-dev-fast dev-fast-check dev-build dev-test bench-build bench-config-load
+.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-markdown-format test-typos-config build release lint lint-clippy lint-whitaker lint-python doc-coverage doc-coverage-test fmt check-fmt typecheck typecheck-python markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-dev-fast dev-fast-check dev-build dev-test bench-build bench-config-load bench-glob-expansion
 
 RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 # Export this path before shell probes expand it, so Make does not interpolate
@@ -95,7 +95,7 @@ DF12_PYTHON_LINTS_REF ?= v0.3.0
 DF12_PYTHON_LINTS = git+https://github.com/leynos/df12-python-lints.git@$(DF12_PYTHON_LINTS_REF)
 DF12_PYLINT_MESSAGES = R9101,C9102,R9103,R9104,C9105,C9106,C9107,R9108,R9109,R9110,R9111,R9112,C9112
 DF12_PYLINT = $(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
-	--from '$(DF12_PYTHON_LINTS)' pylint \
+	--from 'pylint' --with '$(DF12_PYTHON_LINTS)' pylint \
 	--disable=all --load-plugins=df12_python_lints \
 	--enable=$(DF12_PYLINT_MESSAGES)
 AMBRLEAKS = $(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
@@ -123,7 +123,6 @@ MD_FILES_FIND = find . -type f -name '*.md' \
 PROVER_TOOLS_SOURCE ?= git+https://github.com/leynos/rust-prover-tools@b07ef696f8373d54ae68e517d39d47a5d27a5bd5
 PROVER_TOOLS ?= uv tool run --from $(PROVER_TOOLS_SOURCE) prover-tools
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
-export RUSTDOC_FLAGS
 VERUS_FLAGS ?=
 VERUS_INSTALL_FLAGS ?=
 WHITAKER ?= whitaker
@@ -204,7 +203,10 @@ fmt: ## Format Rust, Python, and Markdown sources
 check-fmt: ## Verify formatting
 	$(CARGO) fmt --all -- --check
 	$(RUFF) format --check $(PYTHON_SOURCES)
-	@$(MD_FILES_FIND) | xargs -0 -r scripts/check-markdown-format.sh
+	@$(MD_FILES_FIND) | xargs -0 sh -c '\
+		if [ "$$#" -gt 0 ]; then \
+			scripts/check-markdown-format.sh "$$@"; \
+		fi' sh
 
 typecheck: typecheck-python ## Typecheck all targets and features
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) check --all-targets --all-features $(BUILD_JOBS)
@@ -220,7 +222,7 @@ typecheck-python: ## Typecheck the Python sources with ty
 		--extra-search-path scripts $(PYTHON_SOURCES)
 
 markdownlint: spelling ## Lint Markdown and enforce en-GB-oxendict spelling
-	$(MDLINT) "**/*.md"
+	@unset FORCE_COLOR; $(MDLINT) "**/*.md"
 
 spelling: spelling-config ## Enforce en-GB-oxendict spelling in Markdown prose
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) scripts/typos_rollout_check.py --repository .
@@ -228,7 +230,7 @@ spelling: spelling-config ## Enforce en-GB-oxendict spelling in Markdown prose
 		$(UV) tool run typos@$(TYPOS_VERSION) --config typos.toml --force-exclude
 
 spelling-config: spelling-helper-test ## Generate and validate the spelling configuration
-	@$(UV_ENV) $(UV) run --no-project scripts/generate_typos_config.py
+	@$(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) scripts/generate_typos_config.py
 	@git ls-files --error-unmatch typos.toml >/dev/null
 	@git diff --exit-code -- typos.toml
 
@@ -298,6 +300,9 @@ bench-build: dev-fast-check ## Time clean and incremental debug builds for both 
 
 bench-config-load: ## Benchmark cached configuration loading without layer copies
 	$(CARGO) bench --bench config_load_cached_merge
+
+bench-glob-expansion: ## Benchmark manifest glob expansion with an injected base
+	$(CARGO) bench --bench glob_expansion
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \

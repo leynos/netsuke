@@ -84,6 +84,14 @@ The Rust `manifest::glob_paths` query retains its previous contract and
 continues to return any matching UTF-8 file path because its callers own their
 downstream escaping boundary.
 
+Relative manifest glob patterns, including parent-relative patterns, now
+resolve from the manifest directory or workspace root rather than the process
+working directory. Relative results retain their pattern-relative spelling
+after the workspace base is stripped; absolute patterns remain absolute. The
+manifest parse boundary supplies this base, so glob expansion does not read or
+mutate process-global working-directory state. Callers of the Rust
+`glob_paths(pattern, base)` API can supply the same base explicitly.
+
 ## Policy enum parsing
 
 The public policy enums no longer implement `clap::ValueEnum`. This removes the

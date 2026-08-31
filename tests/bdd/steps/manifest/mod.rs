@@ -68,8 +68,9 @@ pub(super) fn get_string_from_string_or_list(
 }
 
 fn parse_manifest_inner(world: &TestWorld, path: &ManifestPath) {
-    // Convert relative test data paths to absolute while the process CWD stays
-    // at the project root, where relative glob patterns resolve correctly.
+    // Convert relative test data paths to absolute; manifest parsing injects
+    // the manifest directory as the glob base, so relative glob patterns
+    // resolve against that directory rather than the process working directory.
     let manifest_path = if std::path::Path::new(path.as_str()).is_relative()
         && path.as_str().starts_with("tests/")
     {

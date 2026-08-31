@@ -256,12 +256,10 @@ pub(super) fn unescape_literal_escapes(prefix: &str) -> String {
 
 /// Open the directory used as the capability root for the glob.
 ///
-/// Returns `Ok(None)` when the literal prefix does not exist (or is not a
-/// directory); the pattern can match nothing in that case, mirroring the
-/// empty result the matcher would produce.
-pub(super) fn open_root_dir(pattern: &GlobPattern) -> io::Result<Option<GlobRoot>> {
-    let prefix = literal_dir_path(pattern);
-    match open_literal_prefix(Utf8Path::new(&prefix)) {
+/// Returns `Ok(None)` when the literal prefix does not exist (or is not a directory).
+pub(super) fn open_root_dir(search: &str, base: Option<&Utf8Path>) -> io::Result<Option<GlobRoot>> {
+    let prefix = literal_dir_path(search);
+    match open_literal_prefix(Utf8Path::new(&prefix), base) {
         Ok(dir) => Ok(Some(GlobRoot {
             dir,
             prefix: Utf8PathBuf::from(prefix),
@@ -273,12 +271,9 @@ pub(super) fn open_root_dir(pattern: &GlobPattern) -> io::Result<Option<GlobRoot
 
 /// Open `prefix` without following a symbolic link in its literal components.
 ///
-/// The only ambient opening establishes the lexical filesystem root for an
-/// absolute prefix, or the current directory for a relative one. Subsequent
-/// normal components use `open_dir_nofollow`, while `..` deliberately moves
-/// through the parent-directory capability so parent-relative patterns retain
-/// their existing behaviour.
-fn open_literal_prefix(prefix: &Utf8Path) -> io::Result<Dir> {
+/// The ambient opening establishes the filesystem root for an absolute prefix;
+/// a relative one is opened at the injected `base` (`.` when none).
+fn open_literal_prefix(prefix: &Utf8Path, injected_base: Option<&Utf8Path>) -> io::Result<Dir> {
     let (base, remainder) = if prefix.is_absolute() {
         let root = prefix.ancestors().last().ok_or_else(|| {
             io::Error::new(
@@ -294,7 +289,7 @@ fn open_literal_prefix(prefix: &Utf8Path) -> io::Result<Dir> {
         })?;
         (root, remainder)
     } else {
-        (Utf8Path::new("."), prefix)
+        (injected_base.unwrap_or_else(|| Utf8Path::new(".")), prefix)
     };
     let mut dir = Dir::open_ambient_dir(base, ambient_authority())?.into_std_file();
 
@@ -325,9 +320,9 @@ fn open_literal_prefix(prefix: &Utf8Path) -> io::Result<Dir> {
 
     Ok(Dir::from_std_file(dir))
 }
-/// Return the filesystem path represented by a pattern's literal prefix.
-fn literal_dir_path(pattern: &GlobPattern) -> String {
-    unescape_literal_escapes(literal_dir_prefix(pattern.normalized()))
+/// Return the filesystem path represented by a normalised pattern's literal prefix.
+fn literal_dir_path(normalized: &str) -> String {
+    unescape_literal_escapes(literal_dir_prefix(normalized))
 }
 /// Report whether `err` means the literal prefix names no usable directory.
 ///
@@ -382,19 +377,19 @@ pub(super) fn process_glob_entry(
             "glob matched a non-UTF-8 path".to_owned(),
         )
     })?;
-    names_a_file(root, &utf_path)
+    names_a_file(root, utf_path)
         .map_err(|err| create_io_error(pattern, pattern.raw().len(), err.to_string()))
 }
 
 /// Classify whether a match names a regular file reachable through the
 /// capability, returning a bounded reason when it does not.
-fn names_a_file(root: &GlobRoot, path: &Utf8Path) -> io::Result<GlobEntry> {
-    let relative = root.relativise(path)?;
+fn names_a_file(root: &GlobRoot, path: Utf8PathBuf) -> io::Result<GlobEntry> {
+    let relative = root.relativise(&path)?;
     let Some(metadata) = root.metadata_relative(relative)? else {
         return Ok(GlobEntry::UnreachableSymlink(relative.to_path_buf()));
     };
     if metadata.is_file() {
-        return Ok(GlobEntry::Path(path.as_str().replace('\\', "/")));
+        return Ok(GlobEntry::Path(path));
     }
     Ok(GlobEntry::NotAFile)
 }

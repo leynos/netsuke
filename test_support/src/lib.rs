@@ -8,8 +8,6 @@
 //! - computing SHA-256 hashes for cache keys (hash module)
 //! - spawning lightweight HTTP servers for network tests (http module)
 //! - sandboxing PATH and HOME for the dev-fast target tests (`dev_fast` module)
-//! - retaining the legacy `env_lock`/`EnvLock` seam until its callers migrate
-//!   ([ADR-008](../../docs/adr-008-environment-seam-taxonomy.md))
 //!
 //! All items are intended for use in tests within this workspace; avoid using
 //! them in production code.
@@ -19,12 +17,9 @@
 pub mod check_ninja;
 pub mod command_helper;
 pub mod config_metrics;
-pub mod cwd_guard;
-
 #[cfg(unix)]
 pub mod dev_fast;
 pub mod env;
-pub mod env_lock;
 pub mod exec;
 pub mod fixture;
 pub mod fluent;
@@ -40,9 +35,6 @@ pub mod ninja_gen;
 pub mod stdlib_assert;
 /// Re-export the SHA-256 helper for concise call sites.
 pub use hash::sha256_hex;
-
-/// Re-export of [`cwd_guard::CwdGuard`] for ergonomics in tests.
-pub use cwd_guard::CwdGuard;
 
 /// Re-export localizer helpers for integration tests.
 pub use localizer::{
