@@ -127,6 +127,7 @@ bundles:
         tag: rust-quality/v1.4.2
         subdir: bundles/rust-quality
         digest: sha256:4e9f2d...
+    name: df12.rust-quality
     version: "=1.4.2"
     as: rust
     with:
@@ -268,13 +269,17 @@ normal checkout where practical.
 It then:
 
 1. validates `subdir` as a repository-relative, non-escaping path;
-2. locates `NetsukeBundle.yaml` in that directory;
-3. parses and validates the RFC 0003 descriptor;
-4. verifies bundle name and semantic version against the import;
-5. verifies Netsuke and manifest-format compatibility;
-6. computes the RFC 0003 canonical content digest over reachable bundle
-   content; and
-7. compares it with the mandatory manifest digest and lock record.
+2. traverses the selected Git tree one component at a time, accepting only
+   directory entries and rejecting any symlink component before locating
+   `NetsukeBundle.yaml`; the descriptor entry itself must also be a regular
+   file, not a symlink;
+3. locates `NetsukeBundle.yaml` in that directory;
+4. parses and validates the RFC 0003 descriptor;
+5. verifies bundle name and semantic version against the import;
+6. verifies Netsuke and manifest-format compatibility;
+7. computes the RFC 0003 canonical content digest over graph-reachable bundle
+   content and every regular file declared by `runtime_resources`; and
+8. compares it with the mandatory manifest digest and lock record.
 
 A matching Git commit with a mismatched canonical digest fails. A matching
 digest under a different unexpected tag or commit also fails normal lock
@@ -282,7 +287,8 @@ verification.
 
 The digest binds the selected bundle content rather than the complete upstream
 repository. Unrelated documentation or bundles elsewhere in the repository do
-not alter it unless the selected bundle declares them as reachable resources.
+not alter it unless the selected bundle declares them as graph-reachable
+content or `runtime_resources`.
 
 ## 9. Lock-file provenance
 

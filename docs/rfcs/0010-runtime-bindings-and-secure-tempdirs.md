@@ -247,8 +247,22 @@ If the producer fails, is cancelled, exceeds a capture limit, emits invalid
 text, or encounters a cleanup error before commit, Netsuke does not publish the
 binding.
 
-For a structured pipeline, a captured value commits only after every stage has
-completed successfully according to RFC 0001's pipeline policy.
+For a structured pipeline, capability preparation is an explicit pre-spawn
+phase. The runner reserves every declared directory-binding name, creates and
+validates each secure temporary directory, and builds a pending capability map
+before starting any stage. It atomically commits that map only if preparation
+completes successfully; no stage starts, and no prepared binding becomes
+visible, when preparation fails. A directory binding produced by this phase is
+therefore visible to every stage that consumes it, including stages that start
+concurrently. Its producer-success condition is successful capability
+preparation, not the eventual exit status of the stage that uses the directory.
+
+Text captures and other execution-produced bindings retain the ordinary
+producer-success rule: they are not visible until their producer execution unit
+succeeds. A captured value in a pipeline commits only after every stage has
+completed successfully according to RFC 0001's pipeline policy. A stage must
+not consume an execution-produced binding from another stage before that
+binding has committed.
 
 ## 6. Manifest syntax
 
@@ -778,6 +792,8 @@ Manifest compilation rejects:
 - unknown capture, pipe, `cwd`, or tempdir keys;
 - invalid or dynamic environment names;
 - duplicate normalized producer names in one binding scope;
+- a pipeline stage that consumes an execution-produced binding from another
+  stage, because that binding cannot commit before pipeline spawn;
 - zero or excessive capture limits;
 - standard-output capture combined with another standard-output sink;
 - `pipe: stderr` combined with another standard-error sink;
@@ -796,8 +812,10 @@ Runtime validation rejects:
 - missing or non-directory paths;
 - capture overflow;
 - invalid captured UTF-8;
-- secure temporary-directory creation or permission failure; and
-- incomplete secure cleanup.
+- secure temporary-directory creation or permission failure;
+- incomplete secure cleanup; and
+- a failed pre-spawn capability-preparation commit, which must leave every
+  prepared directory binding unpublished and start no pipeline stage.
 
 ## 14. Diagnostics and observability
 
@@ -935,6 +953,12 @@ The implementation must include:
 - command-scoped and sequence-scoped lifetime;
 - use across adjacent commands and pipeline stages;
 - creation failure before any pipeline spawn;
+- atomic pre-spawn capability preparation and commit for all pipeline directory
+  bindings;
+- every consuming pipeline stage seeing a directory binding after successful
+  preparation;
+- no stage starting, and no directory binding becoming visible, after
+  preparation failure;
 - cleanup after success, failure, cancellation, timeout, and spawn error;
 - no symlink following during recursive removal;
 - cleanup failure as primary or secondary error;
@@ -944,6 +968,10 @@ The implementation must include:
 Property tests should generate bounded command sequences and assert:
 
 - a binding is visible only after its producer commits;
+- a prepared directory binding commits only after the complete capability
+  preparation phase succeeds;
+- an execution-produced binding is not visible to another pipeline stage
+  before its producer succeeds;
 - no text binding acquires directory capability;
 - every created secure tempdir has exactly one cleanup owner; and
 - pipeline stream selection has at most one source for each downstream stdin.

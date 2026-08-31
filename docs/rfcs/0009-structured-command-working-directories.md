@@ -111,6 +111,8 @@ The field table gains:
 | ----- | ----------- | ----------------------------------- | -------------------------------- |
 | `cwd` | string path | Netsuke effective working directory | Child process working directory. |
 
+Table 1: Structured-command fields.
+
 Unknown-key rejection remains unchanged.
 
 `cwd` is valid on every structured command block, whether singular, in a
@@ -169,8 +171,9 @@ does not prefix argv with a shell command.
 Executable resolution follows RFC 0001 section 9 with this clarification:
 
 - a bare program name is resolved through the effective child `PATH`;
-- a relative program containing a path separator is interpreted relative to
-  the command's effective `cwd`; and
+- a relative program containing a path separator is resolved against the
+  normalized `cwd` to an absolute, capability-checked executable path before
+  `current_dir` is set; and
 - an absolute executable remains subject to existing capability and platform
   policy.
 
@@ -323,9 +326,13 @@ pub struct CommandBlock {
     pub stdout: Option<Utf8PathBuf>,
     pub stderr: Option<Utf8PathBuf>,
     pub tee: Option<Utf8PathBuf>,
-    pub pipe_stdout: bool,
+    pub pipe: PipeStream,
 }
 ```
+
+`PipeStream` is the RFC 0001 enum with `None`, `Stdout`, and `Stderr` variants.
+The `pipe: true` compatibility spelling normalizes to `Stdout`; RFC 0010
+refines the `Stderr` selection with its raw-byte pipeline semantics.
 
 The rendered `ProcessSpec` also carries a normalized, capability-relative
 working-directory value or directory handle.
@@ -448,7 +455,9 @@ RFC 0001's test strategy gains:
 
 - direct and shell commands observing the requested directory;
 - default-directory compatibility tests;
-- relative executable resolution from `cwd`;
+- relative executable resolution from `cwd`, including normalization of
+  separator-containing paths to absolute capability-checked paths before
+  `current_dir` is set;
 - paths containing spaces and Unicode;
 - lexical `..`, absolute, and symlink escape rejection;
 - missing, non-directory, and permission failures;

@@ -118,7 +118,8 @@ bundle:
   version: 1.4.2
   manifest: Netsukefile.bundle.yaml
   runtime_resources:
-    - tools/run-quality-check
+    - path: tools/run-quality-check
+      executable: true
   requires:
     netsuke: ">=0.2.0, <0.3.0"
     manifest: ">=1.1.0, <2.0.0"
@@ -127,6 +128,7 @@ parameters:
   cargo:
     type: string
     default: cargo
+    expose: non-secret
   features:
     type: sequence<string>
     default: []
@@ -150,15 +152,19 @@ Unknown descriptor keys are errors. The descriptor is parsed without Jinja.
 `runtime_resources` is required, including when its value is an explicit empty
 list. It names every regular file that the bundle makes available to a spawned
 process or reads as runtime data but that is not reachable from the descriptor
-or entry-manifest include graph. Each resource path is a literal,
-bundle-relative, normalized path to one regular file. It may not contain Jinja,
-glob syntax, parent traversal, or a symlink escape. A bundle must declare every
-executable script, helper binary, configuration file, and data file it uses at
-runtime. The resolver opens each declared resource through the selected bundle
-directory capability and includes its path, mode, and bytes in the canonical
-content digest. The manifest compiler must reject a bundle-relative runtime
-file reference that is neither graph-reachable nor declared in
-`runtime_resources`.
+or entry-manifest include graph. Each resource is a mapping with a required
+`path` and `executable` boolean. The path is a literal, bundle-relative,
+normalized path to one regular file. It may not contain Jinja, glob syntax,
+parent traversal, or a symlink escape. A bundle must declare every executable
+script, helper binary, configuration file, and data file it uses at runtime.
+The declared `executable` value is the resource's platform-independent mode:
+the canonical digest writes exactly one mode byte, `0x01` for `true` and `0x00`
+for `false`; it never derives this value from host permission bits. The
+resolver opens each declared resource through the selected bundle directory
+capability and includes its path, mode byte, and exact bytes in the canonical
+content digest. Duplicate resource paths are errors. The manifest compiler must
+reject a bundle-relative runtime file reference that is neither graph-reachable
+nor declared in `runtime_resources`.
 
 ## 5. Import syntax
 
@@ -212,21 +218,73 @@ build/bundle-catalogue/rust-quality/
     └── NetsukeBundle.yaml
 ```
 
-Netsuke examines immediate children in sorted byte order and parses each
-descriptor. The import's required `name` selects the matching declared bundle
-identity; candidates declaring another name do not participate in version
-selection. Directory names are hints only. They need not equal the version,
-although a mismatch should produce a diagnostic or policy warning because it is
-likely confusing.
+Netsuke examines immediate children in sorted byte order and classifies each
+descriptor before version selection. A candidate is valid only when its
+`bundle.name` and `bundle.version` fields are present and strictly parse as a
+bundle identifier and Semantic Version, respectively. A missing or malformed
+field is a malformed candidate: resolution fails with the candidate's
+repository-relative path and parse diagnostic, regardless of the directory
+name. Directory names are hints only and cannot repair or exclude malformed
+metadata. A valid candidate declaring another name is diagnosed as an
+out-of-scope candidate and does not participate in selection. A valid candidate
+with the requested name but an incompatible version is simply not selected.
 
-Selection chooses the highest stable semantic version satisfying the
-requirement. Pre-release versions participate only when the requirement itself
-admits a pre-release. Build metadata does not affect precedence.
+Selection chooses the highest semantic version satisfying the requirement.
+Pre-release versions participate only when the requirement itself admits a
+pre-release. Build metadata does not affect precedence.
+
+### 5.3 Semantic Version requirements
+
+Requirements are comma-separated comparator sets. Whitespace around commas and
+comparators is insignificant. The grammar is:
+
+```plaintext
+requirement   = comparator ("," comparator)*
+comparator    = operator? version | "^" version
+operator      = "=" | ">" | ">=" | "<" | "<="
+version       = major ["." minor ["." patch]] ["-" prerelease]
+                ["+" build]
+```
+
+`major`, `minor`, and `patch` are non-negative decimal integers without leading
+zeroes, except for zero itself. Pre-release and build identifiers use the
+Semantic Versioning 2.0.0 rules. A bare three-component version means an exact
+version. A bare `1.4` means `>=1.4.0, <1.5.0`, and a bare `1` means
+`>=1.0.0, <2.0.0`. When an operator is present, omitted components are zero, so
+`>=1.4` means `>=1.4.0` and `<2` means `<2.0.0`.
+
+The caret operator admits compatible changes: `^1.4` means `>=1.4.0, <2.0.0`;
+`^0.4` means `>=0.4.0, <0.5.0`; and `^0.0.3` means `>=0.0.3, <0.0.4`. A
+candidate with a pre-release identifier is excluded unless at least one
+comparator in the set contains a pre-release identifier with the same major,
+minor, and patch tuple. Thus `^1.4` excludes `1.4.0-rc.1`, while
+`>=1.4.0-rc.1, <1.5.0` admits it. Build metadata is ignored for precedence and
+requirement matching.
+
+The resolver applies every comparator in a set, then selects the highest
+matching version after applying the pre-release rule. These selection vectors
+are normative:
+
+| Requirement            | Candidates                          | Result                |
+| ---------------------- | ----------------------------------- | --------------------- |
+| `^1.4`                 | `1.3.9`, `1.4.1`, `1.9.0`, `2.0.0`  | select `1.9.0`        |
+| `^1.4`                 | `1.3.9`, `2.0.0`                    | no compatible version |
+| `>=1.4, <2.0`          | `1.4.0`, `1.9.9`, `2.0.0`           | select `1.9.9`        |
+| bare `1.4`             | `1.4.0`, `1.4.9`, `1.5.0`           | select `1.4.9`        |
+| `^1.4`                 | `1.4.0-rc.1`, `1.4.1-beta`, `1.4.1` | select `1.4.1`        |
+| `>=1.4.0-rc.1, <1.5.0` | `1.4.0-rc.2`, `1.4.0-beta`          | select `1.4.0-rc.2`   |
+
+Table 2: Semantic Version requirement selection vectors.
+
+Malformed descriptors fail during candidate classification, before any vector
+is selected. Candidates with valid metadata but another name or an incompatible
+version are excluded without changing the highest-compatible selection among
+valid candidates.
 
 Two candidates with the same bundle name and semantic version but different
 canonical content digests are an ambiguity error.
 
-### 5.3 Import fields
+### 5.4 Import fields
 
 | Field              | Type                         | Default             | Meaning                             |
 | ------------------ | ---------------------------- | ------------------- | ----------------------------------- |
@@ -258,6 +316,14 @@ The initial type vocabulary is:
 Every parameter may define a default. A parameter without a default is
 required. Unknown supplied parameters are errors. Values are validated before
 the entry manifest's Jinja expressions evaluate.
+
+Parameter values are redacted in human diagnostics, JSON metadata, and debug
+metadata by default. A declaration may opt into exposure only with the exact
+annotation `expose: non-secret`; no other annotation exposes a value. This
+annotation is an assertion by the bundle author that the value is safe to
+display, not a request to infer safety from the parameter name or type. The
+future explicit `secret` parameter type remains always redacted and cannot be
+combined with `expose: non-secret`.
 
 Parameter expressions in the importing manifest may use the ordinary pure
 manifest context, but they must render to the declared type. They may not
@@ -337,8 +403,13 @@ A bundle import fails when:
 - the lock record selects different content.
 
 Netsuke must not silently choose an older candidate because a newer compatible
-candidate contains malformed metadata. Malformed candidates within the searched
-version range make resolution fail with provenance.
+candidate contains malformed metadata. Candidate classification fails before
+selection when any descriptor has a missing or malformed `bundle.name` or
+`bundle.version`; the failure includes the candidate's repository-relative path
+and parse diagnostic. This fail-closed rule applies even when the directory
+name would look outside the requested range, because directory names are not
+authoritative. Only candidates with strictly valid metadata can be excluded as
+out of scope or incompatible and then omitted from highest-compatible selection.
 
 ## 10. Tagged Git relationship
 
@@ -371,9 +442,20 @@ Netsuke computes a digest over a canonical bundle tree containing:
 - every regular file reachable from the descriptor and entry-manifest include
   graph;
 - every regular file named by `runtime_resources`;
-- normalized workspace-relative paths within the bundle;
-- file type and executable bit where semantically relevant; and
+- normalized paths relative to the selected bundle root, encoded with `/` as
+  the separator;
+- file type metadata and, for each declared runtime resource, exactly one
+  platform-independent mode byte (`0x01` for executable and `0x00` for
+  non-executable); and
 - exact file bytes.
+
+The canonical stream sorts those bundle-root-relative paths bytewise and
+encodes each record as its normalized path, file-type marker, declared mode
+byte when present, and length-prefixed exact bytes. Resource mode bytes come
+only from the descriptor's `executable` boolean, never from host filesystem
+permission bits. The bundle root is not part of a record, so relocating an
+otherwise identical bundle to another workspace or Git subdirectory preserves
+its digest.
 
 The canonicalization excludes:
 
@@ -434,12 +516,11 @@ Every declaration originating from a bundle retains:
 - nested bundle chain.
 
 Human diagnostics should remain concise. JSON metadata may expose the complete
-bounded provenance object without leaking absolute paths or parameter values
-that may contain secrets.
-
-Secret-shaped parameters must be passed through a future explicit secret type;
-the initial parameter model should document that ordinary values may appear in
-debug metadata and therefore must not carry credentials.
+bounded provenance object without leaking absolute paths or parameter values.
+Parameter values remain redacted unless their declaration carries the explicit
+`expose: non-secret` annotation. Secret-shaped parameters must be passed
+through a future explicit `secret` type, which remains redacted regardless of
+annotations.
 
 ## 14. Security and capability boundaries
 
@@ -484,8 +565,8 @@ Human and JSON output should show:
 - exported declaration names; and
 - compatibility requirements.
 
-Parameter values are redacted or summarized by type unless the schema marks
-them safe for display.
+Parameter values are redacted by default and may be displayed only when the
+schema carries `expose: non-secret`; secret-typed values are always redacted.
 
 ## 16. Compatibility and migration
 
@@ -541,7 +622,7 @@ The implementation must include:
 
 - direct exact-version success and mismatch tests;
 - catalogue highest-compatible selection;
-- stable versus pre-release selection;
+- comparator-set, omitted-component, caret, and pre-release selection vectors;
 - malformed candidate and duplicate identity/version failures;
 - catalogue candidates with distinct declared names, proving selection uses the
   import's required name before comparing compatible versions;
@@ -553,9 +634,12 @@ The implementation must include:
 - content-digest stability across timestamp changes;
 - digest changes for reachable and declared runtime-resource byte, mode, and
   path changes;
+- resource mode digest changes use descriptor `executable: true` versus
+  `executable: false`, independent of host permission bits;
 - missing, escaping, non-regular, and undeclared runtime-resource failures;
 - lock verification and atomic update tests;
-- JSON provenance snapshots with redaction; and
+- JSON provenance snapshots proving default redaction and explicit
+  `expose: non-secret` opt-in; and
 - property tests over bounded version catalogues and parameter maps.
 
 Cross-platform tests must cover path spelling and Windows case behaviour

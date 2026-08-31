@@ -169,21 +169,26 @@ likely to encounter duplicate-name errors.
 
 For each composition unit, Netsuke performs these steps:
 
-1. Parse YAML sufficiently to identify `includes` without rendering Jinja.
-2. For each include in declaration order:
+1. Initialise a composition-wide `visited` map keyed by canonical include
+   identity. The map retains the first include chain that loaded each identity.
+2. Parse YAML sufficiently to identify `includes` without rendering Jinja.
+3. For each include in declaration order:
    1. resolve `path` against the including file's parent directory;
    2. open the path through the workspace directory capability;
    3. resolve symlinks and obtain its canonical include identity;
    4. reject paths outside the effective workspace boundary;
    5. reject a canonical identity already active on the recursion stack;
-   6. parse the fragment;
-   7. recursively compose that fragment's includes; and
-   8. append the fragment's declarations to the composition stream.
-3. Append the including file's own declarations.
-4. Validate declaration identities and references over the complete stream.
-5. Evaluate manifest-time Jinja and expand `foreach` and `when` using the
+   6. reject a canonical identity already present in `visited`, reporting the
+      first and attempted include chains;
+   7. add the identity and its current chain to `visited`;
+   8. parse the fragment;
+   9. recursively compose that fragment's includes; and
+   10. append the fragment's declarations to the composition stream.
+4. Append the including file's own declarations.
+5. Validate declaration identities and references over the complete stream.
+6. Evaluate manifest-time Jinja and expand `foreach` and `when` using the
    composed context.
-6. Build and validate the IR.
+7. Build and validate the IR.
 
 For root `R` including `A` then `B`, where `A` includes `C`, the composition
 order is:
@@ -198,8 +203,11 @@ Duplicates remain errors.
 ### 6.1 Repeated includes
 
 Including the same canonical fragment more than once is an error, even when it
-would enter through different relative spellings or symlinks. The diagnostic
-shows both include chains.
+would enter through different relative spellings or symlinks. The
+composition-wide `visited` map catches this after the first load, even when the
+first identity is no longer on the recursion stack. The duplicate-identity
+diagnostic shows both the chain that first loaded the fragment and the
+attempted chain that reached it again.
 
 A future bundle RFC may permit multiple instantiated copies through distinct
 namespaces and parameters. Plain includes model source decomposition, not
