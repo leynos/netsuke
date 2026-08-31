@@ -54,10 +54,14 @@ pub use process::{
     CommandEnv, MAX_RETAINED_DYNDEP_FILES, NinjaBuildRequest, NinjaJobCount, NinjaProcessOptions,
     NinjaToolRequest, StderrMode, run_ninja_tool_with, run_ninja_with,
 };
-pub use recipe_shell_telemetry::{BASH_PREFLIGHT_TOTAL, RECIPE_SHELL_RESOLUTIONS_TOTAL};
+pub use recipe_shell_telemetry::{
+    BASH_PREFLIGHT_TOTAL, LEGACY_RECIPE_EXECUTION_DURATION, LEGACY_RECIPE_EXECUTIONS_TOTAL,
+    RECIPE_SHELL_RESOLUTIONS_TOTAL,
+};
 
 use dyndep_publication::{materialize_dyndep_bundle, prune_dyndep_bundle};
 use path_helpers::{ensure_manifest_exists_or_error, resolve_manifest_path, resolve_output_path};
+use recipe_shell_telemetry::{LegacyRecipeOperation, instrument_legacy_recipe_operation};
 
 /// Runtime dependencies shared by command dispatch handlers.
 struct ExecutionContext<'a> {
@@ -167,6 +171,17 @@ fn on_task_progress_callback(reporter: &dyn StatusReporter) -> impl FnMut(u32, u
 ///
 /// Returns an error if manifest generation or Ninja execution fails.
 fn handle_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> Result<()> {
+    instrument_legacy_recipe_operation(LegacyRecipeOperation::Build, context.recipe_shell, || {
+        execute_build(cli, args, context)
+    })
+}
+
+/// Execute the build operation after runner telemetry begins.
+///
+/// # Errors
+///
+/// Returns an error if manifest generation or Ninja execution fails.
+fn execute_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> Result<()> {
     let bundle = generate_ninja_with_shell(
         cli,
         context.reporter,
@@ -234,6 +249,23 @@ struct NinjaToolSpec<'a> {
 ///
 /// Returns an error if manifest generation or Ninja execution fails.
 fn handle_ninja_tool(
+    cli: &Cli,
+    tool: NinjaToolSpec<'_>,
+    context: &ExecutionContext<'_>,
+) -> Result<()> {
+    instrument_legacy_recipe_operation(
+        LegacyRecipeOperation::NinjaTool,
+        context.recipe_shell,
+        || execute_ninja_tool(cli, tool, context),
+    )
+}
+
+/// Execute a Ninja tool operation after runner telemetry begins.
+///
+/// # Errors
+///
+/// Returns an error if manifest generation or Ninja execution fails.
+fn execute_ninja_tool(
     cli: &Cli,
     tool: NinjaToolSpec<'_>,
     context: &ExecutionContext<'_>,

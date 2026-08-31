@@ -5,16 +5,44 @@
 //! only the selected interpreter and fixed result categories at the runner
 //! boundary.
 
+use crate::ir::IrGenError;
+use crate::ninja_gen::NinjaGenError;
 use crate::recipe_shell::RecipeShell;
 use anyhow::Result;
-use metrics::{counter, describe_counter};
-use std::sync::Once;
+use metrics::{counter, describe_counter, describe_histogram, histogram};
+use std::{sync::Once, time::Instant};
 use tracing::{field, info};
+
+use super::RunnerError;
 
 /// Count recipe-shell resolution outcomes by bounded interpreter and category.
 pub const RECIPE_SHELL_RESOLUTIONS_TOTAL: &str = "netsuke_runner_recipe_shell_resolutions_total";
 /// Count Bash compatibility preflight outcomes by bounded probe result.
 pub const BASH_PREFLIGHT_TOTAL: &str = "netsuke_runner_recipe_shell_bash_preflight_total";
+/// Count complete legacy-recipe runner operations by bounded labels.
+pub const LEGACY_RECIPE_EXECUTIONS_TOTAL: &str = "netsuke_runner_legacy_recipe_executions_total";
+/// Measure complete legacy-recipe runner operation duration by bounded labels.
+pub const LEGACY_RECIPE_EXECUTION_DURATION: &str =
+    "netsuke_runner_legacy_recipe_execution_duration_seconds";
+
+/// Identify one complete runner operation that prepares a Ninja invocation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum LegacyRecipeOperation {
+    /// Represent a Ninja build invocation.
+    Build,
+    /// Represent a Ninja tool invocation.
+    NinjaTool,
+}
+
+impl LegacyRecipeOperation {
+    /// Return the fixed telemetry label for this operation.
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Build => "build",
+            Self::NinjaTool => "ninja_tool",
+        }
+    }
+}
 
 /// Classify an explicit Bash runtime probe without exposing process details.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -114,6 +142,84 @@ pub(super) fn instrument_bash_preflight<T>(
     result
 }
 
+/// Record bounded telemetry around a complete generated-recipe runner operation.
+///
+/// The closure owns shell validation, manifest lowering, Ninja generation, and
+/// Ninja invocation so each operation emits exactly one counter and duration.
+pub(super) fn instrument_legacy_recipe_operation<T>(
+    operation: LegacyRecipeOperation,
+    shell: RecipeShell,
+    execute: impl FnOnce() -> Result<T>,
+) -> Result<T> {
+    describe_metrics();
+    let operation_label = operation.label();
+    let recipe_shell = shell_label(shell);
+    let span = tracing::info_span!(
+        "runner.legacy_recipe.operation",
+        operation = operation_label,
+        recipe_shell,
+        outcome = field::Empty,
+        failure_category = field::Empty,
+    );
+    let _guard = span.enter();
+    let started = Instant::now();
+    let result = execute();
+    let (outcome, failure_category) = match &result {
+        Ok(_) => ("success", "none"),
+        Err(error) => ("error", legacy_recipe_failure_category(error)),
+    };
+    span.record("outcome", outcome);
+    span.record("failure_category", failure_category);
+    info!(
+        operation = operation_label,
+        recipe_shell, outcome, failure_category, "Completed generated-recipe runner operation"
+    );
+    counter!(
+        LEGACY_RECIPE_EXECUTIONS_TOTAL,
+        "operation" => operation_label,
+        "recipe_shell" => recipe_shell,
+        "outcome" => outcome,
+        "failure_category" => failure_category,
+    )
+    .increment(1);
+    histogram!(
+        LEGACY_RECIPE_EXECUTION_DURATION,
+        "operation" => operation_label,
+        "recipe_shell" => recipe_shell,
+        "outcome" => outcome,
+        "failure_category" => failure_category,
+    )
+    .record(started.elapsed());
+    result
+}
+
+/// Classify a runner-operation failure without exposing controlled details.
+fn legacy_recipe_failure_category(error: &anyhow::Error) -> &'static str {
+    if error
+        .chain()
+        .any(|cause| cause.downcast_ref::<RunnerError>().is_some())
+    {
+        "manifest"
+    } else if error
+        .chain()
+        .any(|cause| cause.downcast_ref::<IrGenError>().is_some())
+    {
+        "graph"
+    } else if error
+        .chain()
+        .any(|cause| cause.downcast_ref::<NinjaGenError>().is_some())
+    {
+        "ninja_generation"
+    } else if error
+        .chain()
+        .any(|cause| cause.downcast_ref::<std::io::Error>().is_some())
+    {
+        "ninja_io"
+    } else {
+        "other"
+    }
+}
+
 /// Map one recipe-shell variant onto its fixed telemetry label.
 const fn shell_label(shell: RecipeShell) -> &'static str {
     match shell {
@@ -134,6 +240,14 @@ fn describe_metrics() {
         describe_counter!(
             BASH_PREFLIGHT_TOTAL,
             "Counts explicit Bash compatibility preflight outcomes by bounded labels."
+        );
+        describe_counter!(
+            LEGACY_RECIPE_EXECUTIONS_TOTAL,
+            "Counts complete runner build and Ninja-tool operations by bounded labels."
+        );
+        describe_histogram!(
+            LEGACY_RECIPE_EXECUTION_DURATION,
+            "Measures complete runner build and Ninja-tool operation duration in seconds by bounded labels."
         );
     });
 }
@@ -241,4 +355,7 @@ mod tests {
                 && !event.contains("do not expose this process detail")
         }));
     }
+
+    #[path = "recipe_shell_telemetry_operation_tests.rs"]
+    mod legacy_recipe_operation_tests;
 }
