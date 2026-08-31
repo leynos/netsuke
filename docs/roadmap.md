@@ -26,6 +26,9 @@ Each phase validates a product hypothesis:
   template standard library makes declarative build manifests markedly easier
   to write without weakening determinism or the capability boundary, including
   proportionate quality-gate selection from a deterministic Git changeset.
+- Phase 7 validates that Netsukefile authors adopt manifest-time testing when
+  it is deterministic, mock-friendly, and runs through the same compiler as the
+  build.
 
 Each phase carries one hypothesis, and Phase 6 is the capability track for
 template standard-library work. Phases 3 to 5 predate that separation: each
@@ -74,7 +77,7 @@ These command and flag spellings are the public grammar assumed by this
 roadmap. Examples must use this list unless a task explicitly extends it.
 
 - Top-level commands: `build`, `check`, `clean`, `generate`, `graph`,
-  `context`, `skill-path`, `runs`, `profile`, and `feedback`.
+  `context`, `skill-path`, `runs`, `profile`, `feedback`, and `test`.
 - Resource verbs: `list`, `get`, `save`, `delete`, `add`, `send`, and `prune`.
 - Structured output: `--json`.
 - Non-interactive execution: `--no-input`.
@@ -672,7 +675,9 @@ configuration, inspect run history, route artefacts, and report friction.
   - [ ] Verify successful JSON mode writes exactly one stdout document and
     empty stderr.
   - [ ] Verify failing JSON mode writes empty stdout and exactly one stderr
-    diagnostic document.
+    diagnostic document. For `netsuke test` this means a command failure,
+    not a completed run reporting failed cases; see invariant I8 and
+    `6.6.2`.
   - [ ] Depend on OrthoConfig `7.2.1`, `7.2.5`, and `8.1.1`.
 
 - [ ] 5.5.3. Add error-remediation and exit-code tests.
@@ -1239,3 +1244,211 @@ untracked-file discovery, or per-linter file selection.
   - Success: the documented example omits its Rust target for a Python-only
     changeset, includes it for every Rust path class, and passes the repository
     documentation and behavioural gates.
+
+## 7. Netsukefile testing framework
+
+Hypothesis: Netsukefile authors adopt manifest-time testing when it is
+deterministic, mock-friendly, and runs through the same compiler pipeline as
+the build.
+
+Objective: deliver the `netsuke test` command and YAML test dialect specified in
+[RFC 0007](rfcs/0007-netsukefile-testing-framework.md), the
+[UX and semantic design](netsuke-test-framework-ux-design.md), and the
+[technical design](netsuke-test-framework-technical-design.md).
+
+### 7.1. Seams and loader options
+
+- [ ] 7.1.1. Add the clock provider seam to the stdlib time module. See
+  [technical design §5.2](netsuke-test-framework-technical-design.md).
+  - [ ] Register `now()` through an injected `ClockProvider` closure held in
+    `StdlibConfig`.
+  - [ ] Preserve current behaviour when no provider is supplied.
+  - [ ] Test an injected provider value, repeated `now()` calls returning
+    it, and the ambient fallback when no provider is configured, all
+    registered through `StdlibConfig`.
+  - [ ] Record the seam classification per
+    [ADR-008](adr-008-environment-seam-taxonomy.md).
+
+- [ ] 7.1.2. Introduce the options-carrying manifest loader entry point. See
+  [technical design §4.3](netsuke-test-framework-technical-design.md).
+  - [ ] Add `ManifestLoadOptions` and `TemplateOverlays`, with existing
+    entry points as thin wrappers.
+  - [ ] Extend `StdlibRegistration` with a `Test` mode beside `Full` and
+    `ManifestQuery` rather than adding a parallel boundary mechanism.
+  - [ ] Reuse the `manifest_query_operation_error` diagnostic shape and
+    `disabled_env_reader` established by `netsuke help targets`.
+  - [ ] Register overlays after stdlib and manifest macros and before
+    `foreach` expansion.
+  - [ ] Add differential tests showing the build path is unchanged
+    (invariants I4 and I7).
+
+- [ ] 7.1.3. Spike MiniJinja overlay shadowing for macro substitution.
+  Requires: 7.1.2. See
+  [technical design §5.4](netsuke-test-framework-technical-design.md).
+  - [ ] Pin `add_function` replacement semantics with a test.
+  - [ ] Rewrite the `MACRO_IMPORTS_GLOBAL` prelude for substituted names;
+    `add_function` alone is shadowed by the generated
+    `{% from ... import %}` statement at render time.
+  - [ ] Pin runner-side handle capture for spy passthrough.
+  - [ ] Fall back to filtered macro registration if shadowing fails.
+
+- [ ] 7.1.4. Dogfood the seams before dialect work begins. Requires:
+  7.1.1, 7.1.2, 7.1.3.
+  - [ ] Run the differential fidelity suite over the repository's example
+    manifests.
+  - [ ] Record the evidence in the RFC before starting 7.2.
+
+### 7.2. Test dialect parsing and discovery
+
+- [ ] 7.2.1. Add the optional `tests` block to the manifest schema. See
+  [UX design §3](netsuke-test-framework-ux-design.md).
+  - [ ] Keep `deny_unknown_fields` semantics for the block itself.
+  - [ ] Verify build-path neutrality with differential snapshots.
+  - [ ] Document the minimum-version consequence for older parsers.
+
+- [ ] 7.2.2. Implement the test-suite AST and parser. See
+  [technical design §6](netsuke-test-framework-technical-design.md).
+  - [ ] Partition known keys from dynamic `test_*` keys.
+  - [ ] Enforce the closed-schema and nearest-known-key diagnostics.
+  - [ ] Enforce the expression/template field split at parse time.
+  - [ ] Enforce the `netsuke_test_version` contract from RFC 0007: accept
+    the supported major and a minor at most the supported minor, with
+    tests for missing, malformed, unsupported-major, and newer-minor
+    values.
+
+- [ ] 7.2.3. Implement discovery and imports. Requires: 7.2.1, 7.2.2.
+  - [ ] Resolve `tests.root`, include and exclude patterns, and support
+    files.
+  - [ ] Confine imports to the test tree.
+  - [ ] Fail empty selections without `--allow-empty`.
+
+### 7.3. Mock engine
+
+- [ ] 7.3.1. Implement doubles, matchers, and the journal. Requires: 7.1.2.
+  See [UX design §8](netsuke-test-framework-ux-design.md) and
+  [technical design §7](netsuke-test-framework-technical-design.md).
+  - [ ] Implement stub, mock, and spy kinds with first-match-wins entries.
+  - [ ] Compile the closed matcher vocabulary at parse time.
+  - [ ] Journal every call with per-case isolation (invariants I1 and I3).
+
+- [ ] 7.3.2. Implement verification and reporting hooks. Requires: 7.3.1.
+  - [ ] Fail unmet mock expectations at end of case.
+  - [ ] Warn on unused doubles with the `lenient` opt-out.
+  - [ ] Render unmatched-call reports with suggested YAML entries.
+
+- [ ] 7.3.3. Implement macro substitution doubles. Requires: 7.1.3, 7.3.1.
+  - [ ] Register journalling wrappers over compiled stand-in macros.
+  - [ ] Journal calls under `substitutes.<name>`.
+
+### 7.4. Fixture engine
+
+- [ ] 7.4.1. Add sandbox-rooted `glob()` and file-test adapters for the
+  test registration. Requires: 7.1.2. See
+  [technical design §5.5](netsuke-test-framework-technical-design.md).
+  - [ ] Resolve relative glob patterns against the case sandbox rather
+    than the process working directory.
+  - [ ] Resolve file-test paths through the sandbox handle instead of
+    `open_ambient_dir`, rejecting escapes.
+  - [ ] Leave the build path's ADR-010 behaviour unchanged.
+
+- [ ] 7.4.2. Implement the fixture lifecycle. See
+  [UX design §9](netsuke-test-framework-ux-design.md) and
+  [technical design §8](netsuke-test-framework-technical-design.md).
+  - [ ] Resolve `uses` dependencies with a topological sort.
+  - [ ] Run structured filesystem actions inside a `cap-std` sandbox.
+  - [ ] Guarantee reverse-order teardown on every exit path
+    (invariant I2, property-tested).
+
+- [ ] 7.4.3. Implement sandbox retention. Requires: 7.4.2.
+  - [ ] Support `--keep` for failing cases and print retained paths.
+
+### 7.5. Actions, assertions, and result views
+
+- [ ] 7.5.1. Implement pipeline actions. Requires: 7.1.2. See
+  [technical design §9](netsuke-test-framework-technical-design.md).
+  - [ ] Compose `load_manifest`, `build_graph`, and `generate_ninja` from
+    public library functions.
+  - [ ] Accumulate `results` across the case in execution order so
+    assertions can compare stages.
+  - [ ] Deny network, commands, and ambient environment under test
+    (invariant I5).
+
+- [ ] 7.5.2. Implement the case supervisor and frame protocol. Requires:
+  7.4.3, 7.5.1. See
+  [technical design §9.1](netsuke-test-framework-technical-design.md).
+  - [ ] Run each case in a killable child process, keeping discovery,
+    scheduling, and reporting in the parent.
+  - [ ] Enforce the deadline with `wait_timeout`, then kill and reap,
+    reusing the pattern in `src/stdlib/command/execution.rs`.
+  - [ ] Carry `CaseResult` over length-prefixed `serde_json` frames
+    versioned like `src/json_envelope.rs`; add no new dependency.
+  - [ ] Synthesize an errored result with a timeout diagnostic when no
+    complete frame arrived, preserving any partial journal.
+  - [ ] Assign teardown ownership per the design's table, retain
+    timed-out sandboxes, and reap every child including on interrupt.
+  - [ ] Test a deliberately non-cooperative template expression,
+    termination, timeout reporting, fixture cleanup, child reaping, and
+    single-document `--json` output (invariant I10).
+
+- [ ] 7.5.3. Confine subject-manifest paths. Requires: 7.5.1. See
+  [UX design §10](netsuke-test-framework-ux-design.md) and
+  [technical design §8](netsuke-test-framework-technical-design.md).
+  - [ ] Resolve and validate the action `manifest` argument,
+    `given.subject`, and case-level `subject` after template evaluation
+    and before `open_manifest_workspace`.
+  - [ ] Reject absolute paths and sandbox escapes, including through
+    existing symlinked components.
+  - [ ] Admit the enclosing project's Netsukefile read-only, without
+    granting write access to the project root.
+  - [ ] Keep valid relative fixture paths working.
+  - [ ] Test every path source — the action `manifest` argument,
+    `given.subject`, and case-level `subject` — against an absolute path
+    and a traversal path such as `../../outside/Netsukefile`.
+  - [ ] Test a symlink escape, gated on the platform supporting symbolic
+    links.
+  - [ ] Test that a valid relative fixture manifest still resolves, and
+    that the enclosing-project Netsukefile is admitted read-only.
+
+- [ ] 7.5.4. Implement result views. Requires: 7.5.1.
+  - [ ] Expose manifest, graph, and Ninja views with the documented helper
+    surface.
+  - [ ] Keep views stable across internal IR changes.
+
+- [ ] 7.5.5. Implement assertion evaluation. Requires: 7.5.4.
+  - [ ] Normalize scalar and structured assertions.
+  - [ ] Distinguish failures from errors end to end.
+  - [ ] Implement `expect_failure` with named diagnostics.
+  - [ ] Render failing expressions with substituted actual values.
+
+### 7.6. Command, localization, and reporting
+
+- [ ] 7.6.1. Wire the `test` subcommand.
+  Requires: 7.2.3, 7.4.3, 7.5.2, 7.5.3, 7.5.5. See
+  [UX design §12](netsuke-test-framework-ux-design.md).
+  - [ ] Add filters, tags, `--list`, `--fail-fast`, `--timeout`, `--keep`,
+    and `--allow-empty`; consume the global `--json` and `--jobs`.
+  - [ ] Map exit codes 0 to 3 and 130 as specified.
+  - [ ] Implement per-case timeouts, interrupt handling, and
+    case-conservation reporting (invariant I9).
+
+- [ ] 7.6.2. Localize and report. Requires: 7.6.1.
+  - [ ] Add Fluent keys for report lines, diagnostics, and warnings.
+  - [ ] Emit one JSON document per run under the stream-purity contract
+    (invariant I8).
+
+- [ ] 7.6.3. Document the framework. Requires: 7.6.1.
+  - [ ] Add a users' guide chapter for authoring and running tests.
+  - [ ] Document the `--accessibility` output contract for `test` in the
+    users' guide, covering how case results, failure diagnostics, and the
+    run summary render under `--accessibility on`.
+  - [ ] Record the accessibility findings for `test` output in the
+    accessibility documentation, cross-referencing `3.8.3`.
+  - [ ] Update `contents.md`, the quickstart, and `context --json` follow-on
+    notes.
+  - [ ] Validate the documentation updates: check the users' guide and
+    accessibility entries against the shipped output, and keep the
+    documented contract in step with the display-policy behaviour.
+
+**Success criterion:** a Netsukefile author can write the worked example from
+[UX design §14.2](netsuke-test-framework-ux-design.md) and run it to a green
+result on a machine with no compiler, no network, and a fixed clock.

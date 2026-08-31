@@ -18,6 +18,11 @@ operator, user, and contributor references are easier to find.
 - [git-change-detection-helpers-design.md](git-change-detection-helpers-design.md):
   Git change-detection and glob-matching contracts and verification guidance
   for maintainers, reviewers, and manifest authors.
+- [UX and semantic design](netsuke-test-framework-ux-design.md): Test
+  dialect, mocking model, and command surface for the Netsukefile testing
+  framework.
+- [Technical design](netsuke-test-framework-technical-design.md):
+  Implementation architecture for the Netsukefile testing framework.
 - [roadmap.md](roadmap.md): Phased implementation plan and tracked delivery
   work.
 - [archive/roadmap-completed-foundations.md](archive/roadmap-completed-foundations.md):
@@ -32,6 +37,9 @@ operator, user, and contributor references are easier to find.
 - [rfcs/0001-structured-command-blocks.md](rfcs/0001-structured-command-blocks.md):
   Proposed structured command blocks, shell-free argv templates, typed Jinja
   interpolation, stream routing, and pipeline semantics.
+- [rfcs/0007-netsukefile-testing-framework.md](rfcs/0007-netsukefile-testing-framework.md):
+  Proposed Netsukefile testing framework: the `netsuke test` command, the YAML
+  test dialect, and its mocking model.
 
 ## Decision records
 
