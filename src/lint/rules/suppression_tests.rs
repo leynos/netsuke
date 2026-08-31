@@ -82,6 +82,21 @@ fn suppression_without_reason_rejects_an_empty_reason() {
     );
 }
 
+/// A manifest whose bare directive is itself silenced by a file-scope one.
+///
+/// The inner directive states no reason, so it produces a
+/// `suppression-without-reason` finding; the file-scope directive silences
+/// that finding. Both tests below read this, from opposite ends: one that the
+/// finding is silenced, and one that silencing it counts as work.
+const FILE_SCOPE_SILENCES_A_DIRECTIVE_FINDING: &str = concat!(
+    "netsuke_version: \"1.0.0\"\n",
+    "# netsuke-lint-file: allow suppression-without-reason -- reasons live in the tracker\n",
+    "targets:\n",
+    "  # netsuke-lint: allow background-job\n",
+    "  - name: out\n",
+    "    command: \"feh preview &\"\n",
+);
+
 /// A file-scope directive silencing a directive-stage finding counts as used.
 ///
 /// The counts are taken across two passes so this holds: the directive here
@@ -90,29 +105,19 @@ fn suppression_without_reason_rejects_an_empty_reason() {
 /// silenced nothing.
 #[test]
 fn a_directive_silencing_a_directive_finding_is_not_unused() {
-    let yaml = concat!(
-        "netsuke_version: \"1.0.0\"\n",
-        "# netsuke-lint-file: allow suppression-without-reason -- reasons live in the tracker\n",
-        "targets:\n",
-        "  # netsuke-lint: allow background-job\n",
-        "  - name: out\n",
-        "    command: \"feh preview &\"\n",
+    crate::assert_lint_silent_by_default!(
+        FILE_SCOPE_SILENCES_A_DIRECTIVE_FINDING,
+        "unused-suppression"
     );
-    crate::assert_lint_silent_by_default!(yaml, "suppression-without-reason");
-    crate::assert_lint_silent_by_default!(yaml, "unused-suppression");
 }
 
+/// A file-scope directive silences the reasonless directive beneath it.
 #[test]
 fn suppression_without_reason_is_suppressed_by_a_directive() {
-    let yaml = concat!(
-        "netsuke_version: \"1.0.0\"\n",
-        "# netsuke-lint-file: allow suppression-without-reason -- reasons live in the tracker\n",
-        "targets:\n",
-        "  # netsuke-lint: allow background-job\n",
-        "  - name: out\n",
-        "    command: \"feh preview &\"\n",
+    crate::assert_lint_silent!(
+        FILE_SCOPE_SILENCES_A_DIRECTIVE_FINDING,
+        "suppression-without-reason"
     );
-    crate::assert_lint_silent!(yaml, "suppression-without-reason");
 }
 
 /// Usage is measured against the rules that actually ran, so these cases use

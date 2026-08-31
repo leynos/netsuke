@@ -402,11 +402,36 @@ fn check_explain_and_policy_examples_run() -> Result<()> {
         );
     }
 
+    // The documented selectors disable the `clarity` category, then promote one
+    // of its rules back to `error` under a `warning` threshold. Running them
+    // against a manifest that violates that rule is what shows the selectors
+    // take effect: asserting only that the command succeeds would pass just as
+    // well if they were ignored entirely.
     let policy = documented_example("guide-check-policy")?;
     let arguments: Vec<&str> = policy.body.split_whitespace().skip(1).collect();
-    let suppressed = manifest_workspace("guide-check-suppression")?;
-    let run = run_netsuke_in(suppressed.path(), &arguments)?;
-    assert_success(&run, "check policy example")?;
+    let policy_workspace = tempfile::tempdir().context("create the policy workspace")?;
+    test_fs::write(
+        policy_workspace.path().join("Netsukefile"),
+        concat!(
+            "netsuke_version: \"1.0.0\"\n",
+            "targets:\n",
+            "  - name: output.txt\n",
+            "    sources: input.txt\n",
+            "    command: \"cp input.txt output.txt\"\n",
+        ),
+    )
+    .context("write the policy fixture manifest")?;
+    let run = run_netsuke_in(policy_workspace.path(), &arguments)?;
+    ensure!(
+        !run.success,
+        "the promoted rule should reach the threshold: {}{}",
+        run.stdout,
+        run.stderr
+    );
+    ensure!(
+        format!("{}{}", run.stdout, run.stderr).contains("literal-recipe-path"),
+        "the promoted rule should be the one reported"
+    );
     Ok(())
 }
 
