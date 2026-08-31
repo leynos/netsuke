@@ -3302,6 +3302,19 @@ completion files are staged as portable shell-completion sidecars under
 `completions/<shell>/` in release archives. The build script also performs the
 localization key audit against Fluent bundles.
 
+`ReleaseHelpCli` is the sole release-help metadata composition site.
+`CliConfig` supplies layered configuration-field metadata, while
+`Cli::command()` supplies parser-only metadata: the `-C/--directory` and
+`--config` selectors and documented subcommands. `ReleaseHelpCli` projects
+existing CLI Fluent keys onto published configuration fields, omits the
+structural `cmds` container, and adds both selectors as help-only metadata with
+no environment or file source. It must not add selector precedence,
+configuration loading, or discovery policy to OrthoConfig. Those
+responsibilities remain in `src/cli/discovery.rs`: [ADR 004] governs `--config`
+precedence and fail-closed selected-file loading, while [ADR 014] governs
+`-C/--directory` project-discovery rooting and manifest lookup. This boundary
+avoids a duplicate CLI model and is recorded in [ADR 016].
+
 Manual pages are generated under
 `target/orthohelp/<target>/release/man/man1/netsuke.1`. Windows targets also
 generate PowerShell external help under
@@ -3311,6 +3324,10 @@ release helper honours `SOURCE_DATE_EPOCH` to produce reproducible manual
 dates, emitting a warning and falling back to `1970-01-01` when the environment
 value is invalid. Release artefacts include these generated help files; the
 published crate remains code-only.
+
+[ADR 004]: adr-004-explicit-config-selection-outside-orthoconfig.md
+[ADR 014]: adr-014-base-directory-seam-and-dir-anchoring.md
+[ADR 016]: adr-016-public-cli-metadata-source-of-truth.md
 
 ### 8.6 Release Automation
 

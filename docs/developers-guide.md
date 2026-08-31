@@ -1169,12 +1169,19 @@ the policy, rejects tracked drift, and scans every tracked Markdown file.
 
 Release builds generate their manual and PowerShell help explicitly with
 `cargo-orthohelp`, rather than consuming the ordinary-build help artefacts from
-`build.rs`. The metadata root is `netsuke::cli::ReleaseHelpCli`, which combines
-`CliConfig` field metadata with the Clap command surface, including
-`help targets`, so the release manual and PowerShell help remain aligned with
-the CLI. During ordinary Cargo builds, `build.rs` generates the local manual
-page and shell completions, and audits the localization keys. Release
-automation installs the pinned tool with:
+`build.rs`. The metadata root is `netsuke::cli::ReleaseHelpCli`, the sole
+permitted composition site for release help. `CliConfig` supplies only layered
+configuration fields; `Cli::command()` supplies parser-only flags such as
+`-C/--directory` and `--config`, plus documented subcommands, including
+`help targets`. The adapter projects existing CLI Fluent keys onto published
+configuration fields and adds parser-only help metadata without adding an
+environment or file source. It omits the structural `cmds` container. Keep
+`--config` selector precedence and fail-closed loading in
+`src/cli/discovery.rs`, as required by [ADR 004]. Keep `-C/--directory`
+project-discovery rooting and manifest lookup in that discovery boundary, as
+required by [ADR 014]. During ordinary Cargo builds, `build.rs` generates the
+local manual page and shell completions, and audits the localization keys.
+Release automation installs the pinned tool with:
 
 ```bash
 cargo install cargo-orthohelp --version 0.9.0 --locked
@@ -1211,6 +1218,15 @@ tests, plain `#[rstest]` parametrized cases for exhaustive state-enumeration
 unit tests, and `rstest-bdd` release-help scenarios.
 `src/cli/config_path_precedence_tests.rs` is the canonical exhaustive
 state-enumeration example.
+
+When a future parser-only flag needs generated help, inject it through
+`ReleaseHelpCli`; do not add it to `CliConfig` or create another parser
+metadata model. Declare its Fluent key with `define_keys!` in
+`src/localization/keys.rs`, then add in-process, snapshot, and release-help
+artefact coverage for the composed surface.
+
+[ADR 004]: adr-004-explicit-config-selection-outside-orthoconfig.md
+[ADR 014]: adr-014-base-directory-seam-and-dir-anchoring.md
 
 Use `googletest` matchers for structural or diagnostic assertions and
 `pretty_assertions` for ordered collection equality where its diff is useful.

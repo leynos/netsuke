@@ -5,6 +5,8 @@ mod script_functions;
 
 use anyhow::{Context, Result};
 use insta::Settings;
+use netsuke::cli::ReleaseHelpCli;
+use ortho_config::docs::OrthoConfigDocs;
 use rstest::fixture;
 use std::{
     ffi::OsString,
@@ -17,6 +19,7 @@ use tempfile::TempDir;
 
 const SCRIPT_PATH: &str = "scripts/generate-release-help.sh";
 
+/// Return the repository path of the release-help generation script.
 pub fn script_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(SCRIPT_PATH)
 }
@@ -26,14 +29,22 @@ pub struct ScriptFixture {
     fake_bin_dir: PathBuf,
     pub log_path: PathBuf,
     pub out_dir: PathBuf,
+    metadata_path: PathBuf,
 }
 
+/// Prepare an isolated fixture for release-help generation tests.
+///
+/// # Errors
+///
+/// Returns an error when the temporary directories or fake executable cannot
+/// be created.
 #[fixture]
 pub fn script_fixture() -> Result<ScriptFixture> {
     let temp_dir = tempfile::tempdir().context("create release help test tempdir")?;
     let fake_bin_dir = temp_dir.path().join("bin");
     let out_dir = temp_dir.path().join("out");
     let log_path = temp_dir.path().join("cargo-orthohelp-args.log");
+    let metadata_path = temp_dir.path().join("release-help-metadata.json");
     fs::create_dir_all(&fake_bin_dir).context("create fake cargo-orthohelp bin directory")?;
     write_fake_cargo_orthohelp(&fake_bin_dir.join("cargo-orthohelp"))?;
     Ok(ScriptFixture {
@@ -41,9 +52,16 @@ pub fn script_fixture() -> Result<ScriptFixture> {
         fake_bin_dir,
         log_path,
         out_dir,
+        metadata_path,
     })
 }
 
+/// Write an executable fake `cargo-orthohelp` script to `path`.
+///
+/// # Errors
+///
+/// Returns an error when the script cannot be written, inspected, or marked
+/// executable.
 pub fn write_fake_cargo_orthohelp(path: &Path) -> Result<()> {
     fs::write(path, fake_cargo_orthohelp_script())
         .with_context(|| format!("write fake cargo-orthohelp script {}", path.display()))?;
@@ -55,8 +73,7 @@ pub fn write_fake_cargo_orthohelp(path: &Path) -> Result<()> {
         .with_context(|| format!("mark fake cargo-orthohelp executable {}", path.display()))
 }
 
-pub const fn fake_cargo_orthohelp_script() -> &'static str {
-    r#"#!/usr/bin/env bash
+const FAKE_CARGO_ORTHOHELP_PROLOGUE: &str = r#"#!/usr/bin/env bash
 set -euo pipefail
 
 printf '%s\n' "$*" >>"${ORTHOHELP_FAKE_LOG}"
@@ -93,7 +110,44 @@ if [[ "${ORTHOHELP_FAKE_SKIP_OUTPUT:-}" == "$format" ]]; then
   exit 0
 fi
 
-case "$format" in
+"#;
+
+const FAKE_CARGO_ORTHOHELP_METADATA: &str = r#"mapfile -t public_cli_surface < <(
+  python3 - "${ORTHOHELP_FAKE_METADATA:?release-help metadata is required}" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as metadata_file:
+    metadata = json.load(metadata_file)
+
+parser_only_fields = [
+    field
+    for field in metadata["fields"]
+    if field["cli"] and field["env"] is None and field["file"] is None
+]
+if not parser_only_fields:
+    raise ValueError("release-help metadata must include parser-only selectors")
+
+parser_only_flags = []
+for field in parser_only_fields:
+    cli = field["cli"]
+    long = cli["long"]
+    if not long:
+        raise ValueError(f"parser-only {field['name']} metadata must have a long flag")
+    short = cli["short"]
+    parser_only_flags.append(f"-{short}/--{long}" if short else f"--{long}")
+
+print(" ".join(parser_only_flags))
+print(" ".join(command["app_name"] for command in metadata["subcommands"]))
+PY
+)
+parser_only_flags="${public_cli_surface[0]}"
+subcommands="${public_cli_surface[1]}"
+
+"#;
+
+const FAKE_CARGO_ORTHOHELP_OUTPUT: &str = r#"case "$format" in
+
   man)
     mkdir -p "$out_dir/man/man1"
     cat >"$out_dir/man/man1/netsuke.1" <<'MAN'
@@ -103,6 +157,12 @@ netsuke \- dependency-aware build orchestration
 .SH SYNOPSIS
 .B netsuke
 [OPTIONS]
+MAN
+    cat >>"$out_dir/man/man1/netsuke.1" <<MAN
+.SH OPTIONS
+.B $parser_only_flags
+.SH COMMANDS
+$subcommands
 MAN
     ;;
   ps)
@@ -116,15 +176,33 @@ MAN
     <command:details>
       <command:name>$module_name</command:name>
     </command:details>
+    <command:description>
+      <maml:para xmlns:maml="http://schemas.microsoft.com/maml/2004/10">$parser_only_flags $subcommands</maml:para>
+    </command:description>
   </command:command>
 </helpItems>
 MAML
     printf 'TOPIC\n    about_%s\n' "$module_name" >"$help_dir/about_$module_name.help.txt"
     ;;
 esac
-"#
+"#;
+
+/// Build the fake cargo-orthohelp executable script from its components.
+pub fn fake_cargo_orthohelp_script() -> String {
+    [
+        FAKE_CARGO_ORTHOHELP_PROLOGUE,
+        FAKE_CARGO_ORTHOHELP_METADATA,
+        FAKE_CARGO_ORTHOHELP_OUTPUT,
+    ]
+    .concat()
 }
 
+/// Prepend the fixture's fake `cargo-orthohelp` directory to `PATH`.
+///
+/// # Errors
+///
+/// Returns an error when the resulting platform-specific `PATH` cannot be
+/// constructed.
 #[expect(
     clippy::disallowed_methods,
     reason = "locating build artefacts Cargo reports through the environment; there is no seam to inject and no process state to isolate"
@@ -146,6 +224,7 @@ pub struct ReleaseHelpRun<'a> {
 }
 
 impl<'a> ReleaseHelpRun<'a> {
+    /// Create release-help run settings for a target triple.
     pub const fn for_target(target: &'a str) -> Self {
         Self {
             target,
@@ -156,29 +235,50 @@ impl<'a> ReleaseHelpRun<'a> {
         }
     }
 
+    /// Set the PowerShell module name for the run.
     pub const fn module_name(mut self, value: &'a str) -> Self {
         self.module_name = value;
         self
     }
 
+    /// Set the source date epoch used by the run.
     pub const fn source_date_epoch(mut self, value: &'a str) -> Self {
         self.source_date_epoch = Some(value);
         self
     }
 
+    /// Configure the run to make the fake generator fail.
     pub const fn fail_cargo(mut self) -> Self {
         self.fail_cargo = true;
         self
     }
 
+    /// Configure the run to omit one generated output format.
     pub const fn skip_output(mut self, format: &'a str) -> Self {
         self.skip_output = Some(format);
         self
     }
 }
 
+/// Run the release-help script with the supplied fixture and settings.
+///
+/// # Errors
+///
+/// Returns an error when metadata cannot be serialised or written, the test
+/// command environment cannot be prepared, or the script cannot be started.
 pub fn run_release_help(fixture: &ScriptFixture, run: ReleaseHelpRun<'_>) -> Result<Output> {
     let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    fs::write(
+        &fixture.metadata_path,
+        serde_json::to_vec(&ReleaseHelpCli::get_doc_metadata())
+            .context("serialise release-help metadata for fake cargo-orthohelp")?,
+    )
+    .with_context(|| {
+        format!(
+            "write release-help metadata fixture {}",
+            fixture.metadata_path.display()
+        )
+    })?;
     let mut command = Command::new("bash");
     command
         .arg(script_path())
@@ -189,6 +289,7 @@ pub fn run_release_help(fixture: &ScriptFixture, run: ReleaseHelpRun<'_>) -> Res
         .current_dir(repo_root)
         .env("PATH", path_with_fake_cargo_orthohelp(fixture)?)
         .env("ORTHOHELP_FAKE_LOG", &fixture.log_path)
+        .env("ORTHOHELP_FAKE_METADATA", &fixture.metadata_path)
         .env_remove("GITHUB_RUN_ID")
         .env_remove("GITHUB_RUN_ATTEMPT")
         .env_remove("RELEASE_HELP_BUILD_ID")
@@ -210,6 +311,7 @@ pub fn run_release_help(fixture: &ScriptFixture, run: ReleaseHelpRun<'_>) -> Res
     command.output().context("run release help script")
 }
 
+/// Configure snapshot storage for release-help artefacts.
 pub fn snapshot_settings() -> Settings {
     let mut settings = Settings::clone_current();
     settings.set_snapshot_path(concat!(
@@ -219,6 +321,11 @@ pub fn snapshot_settings() -> Settings {
     settings
 }
 
+/// Read the arguments recorded by the fake generator.
+///
+/// # Errors
+///
+/// Returns an error when the fake generator log cannot be read.
 pub fn logged_args(fixture: &ScriptFixture) -> Result<String> {
     fs::read_to_string(&fixture.log_path).with_context(|| {
         format!(

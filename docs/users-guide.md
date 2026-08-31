@@ -1050,7 +1050,8 @@ yields Simplified Chinese.
 
 Manual pages and PowerShell help shipped in releases are generated in `en-US`
 only. Translated copy reaches users through the running binary, which embeds
-every catalogue.
+every catalogue. The generated help describes the complete public CLI, including
+`-C/--directory`, `--config`, and the documented command tree.
 
 ### Anchor a project with `--directory`
 

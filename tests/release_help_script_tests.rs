@@ -18,6 +18,15 @@ use release_help::{
 use rstest::rstest;
 use std::{fs, process::Command};
 
+const DOCUMENTED_SUBCOMMANDS: [&str; 5] = ["build", "clean", "graph", "generate", "help"];
+const PARSER_ONLY_SELECTORS: [&str; 2] = ["-C/--directory", "--config"];
+
+/// Generate and verify a manual page for a non-Windows target.
+///
+/// # Errors
+///
+/// Returns an error when the fixture, generated artefact, log, or assertions
+/// cannot be read or validated.
 #[rstest]
 fn generates_manual_page_for_non_windows_target(
     script_fixture: Result<ScriptFixture>,
@@ -73,6 +82,12 @@ fn generates_manual_page_for_non_windows_target(
     Ok(())
 }
 
+/// Generate and verify PowerShell help for a Windows target.
+///
+/// # Errors
+///
+/// Returns an error when the fixture, generated artefacts, logs, or assertions
+/// cannot be read or validated.
 #[rstest]
 fn generates_powershell_help_for_windows_target(
     script_fixture: Result<ScriptFixture>,
@@ -144,6 +159,11 @@ fn generates_powershell_help_for_windows_target(
     Ok(())
 }
 
+/// Assert that a generated manual page has the expected public structure.
+///
+/// # Errors
+///
+/// Returns an error when a required manual-page section or CLI item is absent.
 fn assert_man_page_structure(man_page: &str) -> Result<()> {
     ensure!(
         man_page.contains(".TH NETSUKE 1 \"1970-01-01\""),
@@ -161,9 +181,15 @@ fn assert_man_page_structure(man_page: &str) -> Result<()> {
         man_page.contains(".SH SYNOPSIS") && man_page.contains(".B netsuke"),
         "man page should include SYNOPSIS for the binary: {man_page}"
     );
+    assert_public_cli_surface(man_page, "man page")?;
     Ok(())
 }
 
+/// Assert that generated PowerShell help has the expected public structure.
+///
+/// # Errors
+///
+/// Returns an error when a required PowerShell artefact or CLI item is absent.
 fn assert_powershell_help_structure(
     ps_module: &str,
     ps_manifest: &str,
@@ -186,9 +212,33 @@ fn assert_powershell_help_structure(
         about_help.contains("about_CustomNetsuke"),
         "about help should name the requested module: {about_help}"
     );
+    assert_public_cli_surface(maml, "MAML help")?;
     Ok(())
 }
 
+/// Assert that generated help exposes the complete public CLI surface.
+fn assert_public_cli_surface(document: &str, format_name: &str) -> Result<()> {
+    for selector in PARSER_ONLY_SELECTORS {
+        ensure!(
+            document.contains(selector),
+            "{format_name} should include the parser-only {selector} selector: {document}"
+        );
+    }
+    for subcommand in DOCUMENTED_SUBCOMMANDS {
+        ensure!(
+            document.contains(subcommand),
+            "{format_name} should include the {subcommand} subcommand: {document}"
+        );
+    }
+    Ok(())
+}
+
+/// Verify the manual date selected from `SOURCE_DATE_EPOCH`.
+///
+/// # Errors
+///
+/// Returns an error when release-help generation, output reading, or date
+/// assertions fail.
 #[rstest]
 #[case(None, "1970-01-01")]
 #[case(Some("86400"), "1970-01-02")]
@@ -221,6 +271,12 @@ fn resolves_manual_date_from_source_date_epoch(
     Ok(())
 }
 
+/// Verify that cargo-orthohelp failures reach the release-help caller.
+///
+/// # Errors
+///
+/// Returns an error when the fixture or failure diagnostics cannot be read or
+/// validated.
 #[rstest]
 fn propagates_cargo_orthohelp_failures(script_fixture: Result<ScriptFixture>) -> Result<()> {
     let fixture = script_fixture?;
@@ -255,6 +311,12 @@ fn propagates_cargo_orthohelp_failures(script_fixture: Result<ScriptFixture>) ->
     Ok(())
 }
 
+/// Verify that missing expected help output fails generation.
+///
+/// # Errors
+///
+/// Returns an error when the fixture or expected failure diagnostics cannot
+/// be read or validated.
 #[rstest]
 #[case("x86_64-unknown-linux-gnu", "man", "manual page was not generated")]
 #[case(
@@ -292,6 +354,12 @@ fn fails_when_expected_help_output_is_missing(
     Ok(())
 }
 
+/// Verify that generation stops when cargo-orthohelp is unavailable.
+///
+/// # Errors
+///
+/// Returns an error when the script output or missing-tool diagnostics cannot
+/// be read or validated.
 #[test]
 fn fails_before_generation_when_cargo_orthohelp_is_missing() -> Result<()> {
     let output = Command::new("/usr/bin/bash")
@@ -324,6 +392,12 @@ fn fails_before_generation_when_cargo_orthohelp_is_missing() -> Result<()> {
     Ok(())
 }
 
+/// Verify that invalid release-help argument counts are rejected.
+///
+/// # Errors
+///
+/// Returns an error when the script output or usage diagnostics cannot be read
+/// or validated.
 #[rstest]
 #[case(&[])]
 #[case(&["target", "netsuke", "out"])]

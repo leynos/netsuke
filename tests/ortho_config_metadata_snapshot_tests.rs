@@ -1,11 +1,11 @@
-//! Contract test for the `OrthoConfig` documentation metadata Netsuke emits.
+//! Contract test for the release-help metadata Netsuke emits.
 //!
 //! `cargo-orthohelp` consumes this serialised IR. The snapshot projects only
 //! Netsuke's schema choices, keeping release-help compatibility visible without
 //! coupling the application to unrelated upstream IR fields.
 
 use insta::assert_yaml_snapshot;
-use netsuke::cli::CliConfig;
+use netsuke::cli::ReleaseHelpCli;
 use ortho_config::OrthoConfigDocs;
 use serde::Serialize;
 
@@ -22,7 +22,7 @@ struct MetadataSnapshot {
     precedence: Vec<String>,
     discovery: Option<DiscoverySnapshot>,
     fields: Vec<FieldSnapshot>,
-    subcommand_count: usize,
+    subcommands: Vec<SubcommandSnapshot>,
 }
 
 #[derive(Serialize)]
@@ -37,6 +37,7 @@ struct DiscoverySnapshot {
 #[derive(Serialize)]
 struct FieldSnapshot {
     name: String,
+    help_id: String,
     cli: Option<CliSourceSnapshot>,
     environment: Option<String>,
     file: Option<String>,
@@ -51,6 +52,13 @@ struct CliSourceSnapshot {
     possible_values: Vec<String>,
 }
 
+#[derive(Serialize)]
+struct SubcommandSnapshot {
+    name: String,
+    about_id: String,
+}
+
+/// Select the snapshot merge strategy for a configuration field.
 fn merge_strategy(field_name: &str) -> &'static str {
     if APPEND_MERGE_FIELDS.contains(&field_name) {
         "append"
@@ -59,8 +67,9 @@ fn merge_strategy(field_name: &str) -> &'static str {
     }
 }
 
+/// Project release-help metadata into the stable snapshot representation.
 fn metadata_snapshot() -> MetadataSnapshot {
-    let metadata = CliConfig::get_doc_metadata();
+    let metadata = ReleaseHelpCli::get_doc_metadata();
     let precedence = metadata
         .sections
         .precedence
@@ -96,6 +105,7 @@ fn metadata_snapshot() -> MetadataSnapshot {
         .iter()
         .map(|field| FieldSnapshot {
             name: field.name.clone(),
+            help_id: field.help_id.clone(),
             cli: field.cli.as_ref().map(|cli| CliSourceSnapshot {
                 long: cli.long.clone(),
                 short: cli.short,
@@ -107,17 +117,26 @@ fn metadata_snapshot() -> MetadataSnapshot {
             merge_strategy: merge_strategy(&field.name),
         })
         .collect();
+    let subcommands = metadata
+        .subcommands
+        .iter()
+        .map(|subcommand| SubcommandSnapshot {
+            name: subcommand.app_name.clone(),
+            about_id: subcommand.about_id.clone(),
+        })
+        .collect();
 
     MetadataSnapshot {
         ir_version: metadata.ir_version,
         precedence,
         discovery,
         fields,
-        subcommand_count: metadata.subcommands.len(),
+        subcommands,
     }
 }
 
+/// Keep the release-help metadata contract snapshot stable.
 #[test]
-fn cli_config_documentation_metadata_is_stable() {
+fn release_help_documentation_metadata_is_stable() {
     assert_yaml_snapshot!(metadata_snapshot());
 }
