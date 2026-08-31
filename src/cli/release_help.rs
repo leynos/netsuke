@@ -213,6 +213,18 @@ mod tests {
     use super::*;
     use anyhow::{Context, Result, ensure};
 
+    /// Resolve a release-help metadata description through the English localizer.
+    fn localized_release_help_description(
+        find_help_id: impl FnOnce(&DocMetadata) -> Option<String>,
+        missing_message: &'static str,
+    ) -> Result<String> {
+        let metadata = ReleaseHelpCli::get_doc_metadata();
+        let help_id = find_help_id(&metadata).context(missing_message)?;
+        crate::cli_localization::build_localizer(Some("en-US"))
+            .lookup(&help_id, None)
+            .context("release help metadata should resolve its description")
+    }
+
     #[test]
     fn metadata_documents_help_targets_through_the_help_subcommand() {
         let metadata = ReleaseHelpCli::get_doc_metadata();
@@ -244,16 +256,16 @@ mod tests {
 
     #[test]
     fn release_help_metadata_localizes_the_help_targets_description() -> Result<()> {
-        let metadata = ReleaseHelpCli::get_doc_metadata();
-        let help = metadata
-            .subcommands
-            .iter()
-            .find(|command| command.app_name == "help")
-            .context("release help metadata should include the help command")?;
-        let localizer = crate::cli_localization::build_localizer(Some("en-US"));
-        let description = localizer
-            .lookup(&help.about_id, None)
-            .context("release help metadata should resolve its help description")?;
+        let description = localized_release_help_description(
+            |metadata| {
+                metadata
+                    .subcommands
+                    .iter()
+                    .find(|command| command.app_name == "help")
+                    .map(|command| command.about_id.clone())
+            },
+            "release help metadata should include the help command",
+        )?;
 
         ensure!(
             description.contains("help targets"),
@@ -265,16 +277,16 @@ mod tests {
     /// Verify that the configuration selector description resolves through localization.
     #[test]
     fn release_help_metadata_localizes_the_config_description() -> Result<()> {
-        let metadata = ReleaseHelpCli::get_doc_metadata();
-        let config = metadata
-            .fields
-            .iter()
-            .find(|field| field.name == "config")
-            .context("release help metadata should include the config selector")?;
-        let localizer = crate::cli_localization::build_localizer(Some("en-US"));
-        let description = localizer
-            .lookup(&config.help_id, None)
-            .context("release help metadata should resolve its config description")?;
+        let description = localized_release_help_description(
+            |metadata| {
+                metadata
+                    .fields
+                    .iter()
+                    .find(|field| field.name == "config")
+                    .map(|field| field.help_id.clone())
+            },
+            "release help metadata should include the config selector",
+        )?;
 
         ensure!(
             description == "Path to a configuration file, bypassing automatic discovery.",
