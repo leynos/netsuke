@@ -14,6 +14,44 @@ type SnapshotEntry = (CompositeKey, Option<Unit>, Option<SharedString>, DebugVal
 /// Fixed three-label layout used by recipe-shell counters.
 type MetricLabels = [(&'static str, &'static str); 3];
 
+/// Define the rejected label variants for recipe-shell resolution metrics.
+const INVALID_RECIPE_SHELL_RESOLUTION_SERIES: [MetricLabels; 3] = [
+    [
+        ("recipe_shell", "unbounded"),
+        ("outcome", "success"),
+        ("error_category", "none"),
+    ],
+    [
+        ("recipe_shell", "powershell"),
+        ("outcome", "unbounded"),
+        ("error_category", "none"),
+    ],
+    [
+        ("recipe_shell", "powershell"),
+        ("outcome", "success"),
+        ("error_category", "unbounded"),
+    ],
+];
+
+/// Define the rejected label variants for Bash preflight metrics.
+const INVALID_BASH_PREFLIGHT_SERIES: [MetricLabels; 3] = [
+    [
+        ("recipe_shell", "powershell"),
+        ("outcome", "error"),
+        ("probe_outcome", "not_found"),
+    ],
+    [
+        ("recipe_shell", "bash"),
+        ("outcome", "unbounded"),
+        ("probe_outcome", "not_found"),
+    ],
+    [
+        ("recipe_shell", "bash"),
+        ("outcome", "error"),
+        ("probe_outcome", "unbounded"),
+    ],
+];
+
 /// Record the valid, invalid, and unrelated series used to verify filtering.
 fn record_mixed_metric_series(recorder: &ConfigMetricsRecorder) {
     metrics::with_local_recorder(recorder, || {
@@ -167,44 +205,9 @@ fn recorder_retains_bounded_recipe_shell_series() {
         record_valid_recipe_shell_series();
         record_invalid_recipe_shell_series(
             RECIPE_SHELL_RESOLUTIONS_TOTAL,
-            &[
-                [
-                    ("recipe_shell", "unbounded"),
-                    ("outcome", "success"),
-                    ("error_category", "none"),
-                ],
-                [
-                    ("recipe_shell", "powershell"),
-                    ("outcome", "unbounded"),
-                    ("error_category", "none"),
-                ],
-                [
-                    ("recipe_shell", "powershell"),
-                    ("outcome", "success"),
-                    ("error_category", "unbounded"),
-                ],
-            ],
+            &INVALID_RECIPE_SHELL_RESOLUTION_SERIES,
         );
-        record_invalid_recipe_shell_series(
-            BASH_PREFLIGHT_TOTAL,
-            &[
-                [
-                    ("recipe_shell", "powershell"),
-                    ("outcome", "error"),
-                    ("probe_outcome", "not_found"),
-                ],
-                [
-                    ("recipe_shell", "bash"),
-                    ("outcome", "unbounded"),
-                    ("probe_outcome", "not_found"),
-                ],
-                [
-                    ("recipe_shell", "bash"),
-                    ("outcome", "error"),
-                    ("probe_outcome", "unbounded"),
-                ],
-            ],
-        );
+        record_invalid_recipe_shell_series(BASH_PREFLIGHT_TOTAL, &INVALID_BASH_PREFLIGHT_SERIES);
     });
 
     let snapshot = snapshotter.snapshot().into_vec();
