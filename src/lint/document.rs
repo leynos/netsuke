@@ -125,6 +125,22 @@ impl Node {
         }
     }
 
+    /// Interpret the scalar as a YAML Boolean, when it spells one.
+    ///
+    /// The manifest parser accepts the YAML 1.1 spellings case-insensitively,
+    /// so `phony: yes` and `always: On` produce the same typed manifest as
+    /// `true`. A rule that compared against the literal `"true"` would miss
+    /// those and silently stop applying to the target.
+    #[must_use]
+    pub fn as_bool(&self) -> Option<bool> {
+        let value = self.as_str()?.to_ascii_lowercase();
+        match value.as_str() {
+            "y" | "yes" | "true" | "on" => Some(true),
+            "n" | "no" | "false" | "off" => Some(false),
+            _ => None,
+        }
+    }
+
     /// Report the scalar's presentation style, when this node is a scalar.
     #[must_use]
     pub const fn scalar_style(&self) -> Option<ScalarStyle> {

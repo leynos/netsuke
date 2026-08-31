@@ -62,6 +62,26 @@ fn literal_recipe_path_leaves_correct_manifests_alone(#[case] yaml: &str) {
     crate::assert_lint_silent!(yaml, "literal-recipe-path");
 }
 
+/// The parser accepts YAML 1.1 Boolean spellings, so a rule that only
+/// recognized `true` would start reporting valid phony targets.
+#[rstest]
+#[case("yes")]
+#[case("on")]
+#[case("True")]
+fn literal_recipe_path_accepts_every_phony_spelling(#[case] spelling: &str) {
+    let yaml = format!(
+        concat!(
+            "netsuke_version: \"1.0.0\"\n",
+            "targets:\n",
+            "  - name: check\n",
+            "    phony: {}\n",
+            "    command: \"run check\"\n",
+        ),
+        spelling
+    );
+    crate::assert_lint_silent!(&yaml, "literal-recipe-path");
+}
+
 #[test]
 fn literal_recipe_path_is_suppressed_by_a_directive() {
     let yaml = concat!(

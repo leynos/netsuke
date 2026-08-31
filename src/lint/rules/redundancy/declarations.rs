@@ -149,8 +149,8 @@ impl DocumentRule for RedundantAlways {
 fn is_flag_set(item: &Item<'_>, field: &str) -> bool {
     item.node
         .get(field)
-        .and_then(Node::as_str)
-        .is_some_and(|value| value == "true")
+        .and_then(Node::as_bool)
+        .unwrap_or_default()
 }
 
 /// Report whether an item is phony, explicitly or by being an action.

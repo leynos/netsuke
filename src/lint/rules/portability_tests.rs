@@ -33,6 +33,29 @@ fn bashism_leaves_portable_and_quoted_text_alone(#[case] body: &str) {
     crate::assert_lint_silent!(&script(body), "bashism");
 }
 
+/// A shell keyword is only a keyword in command position.
+///
+/// `function`, `source`, and `local` are ordinary arguments elsewhere, so
+/// matching them anywhere reported search patterns and file names as
+/// non-portable syntax.
+#[rstest]
+#[case("grep function main.c")]
+#[case("find . -name local")]
+#[case("grep -l source *.c")]
+#[case("cc -o source main.c")]
+fn bashism_ignores_keywords_outside_command_position(#[case] body: &str) {
+    crate::assert_lint_silent!(&script(body), "bashism");
+}
+
+/// The same words in command position are still reported.
+#[rstest]
+#[case("source ./env.sh")]
+#[case("local value=1")]
+#[case("function build { cp in out; }")]
+fn bashism_still_reports_keywords_in_command_position(#[case] body: &str) {
+    crate::assert_lint_fires!(&script(body), "bashism", 1);
+}
+
 #[test]
 fn bashism_names_the_portable_alternative() {
     let messages = crate::lint_messages!(&script("if [[ -f in ]]; then :; fi"), "bashism");
