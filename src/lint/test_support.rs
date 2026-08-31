@@ -14,7 +14,6 @@ use anyhow::{Context, Result};
 use crate::ir::BuildGraph;
 use crate::lint::finding::Finding;
 use crate::lint::policy::Policy;
-use crate::lint::severity::Severity;
 use crate::lint::{Outcome, Request, analyse};
 use crate::manifest;
 
@@ -103,19 +102,6 @@ pub fn spans_for(yaml: &str, rule: &str) -> Result<Vec<String>> {
                 },
             )
         })
-        .collect())
-}
-
-/// Report the severities the findings of `rule` carry.
-///
-/// # Errors
-///
-/// Returns an error when `rule` is not registered or the fixture does not
-/// compile.
-pub fn severities_for(yaml: &str, rule: &str) -> Result<Vec<Severity>> {
-    Ok(lint_only(yaml, rule)?
-        .iter()
-        .map(|finding| finding.severity)
         .collect())
 }
 
