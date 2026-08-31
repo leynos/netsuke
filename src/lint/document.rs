@@ -334,10 +334,18 @@ impl LineIndex {
         let Some(start) = line.checked_sub(1).and_then(|index| self.starts.get(index)) else {
             return Span::new(text.len(), text.len());
         };
-        let end = self
+        // `starts` points past the `\n`, so subtracting one drops it. A CRLF
+        // line ends `\r\n`, leaving the `\r` inside the span unless it is
+        // dropped too.
+        let after_newline = self
             .starts
             .get(line)
             .map_or(text.len(), |next| next.saturating_sub(1));
+        let end = text
+            .as_bytes()
+            .get(after_newline.wrapping_sub(1))
+            .filter(|byte| **byte == b'\r')
+            .map_or(after_newline, |_| after_newline.saturating_sub(1));
         Span::new(*start, end.max(*start))
     }
 

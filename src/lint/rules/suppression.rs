@@ -116,11 +116,16 @@ impl DirectiveRule for UnusedSuppression {
         &UNUSED_SUPPRESSION
     }
 
+    fn consumes_usage(&self) -> bool {
+        true
+    }
+
     /// Report directives that silenced nothing.
     ///
-    /// Usage is measured against the document, manifest, and graph stages
-    /// only. A directive is not credited for silencing another directive's
-    /// finding, which keeps the rule from depending on its own result.
+    /// The counts include the findings the other directive rules produced,
+    /// because a directive that silenced one of those has done its job. They
+    /// exclude this rule's own findings, which keeps it from depending on its
+    /// own result.
     fn check(&self, ctx: &DirectiveContext<'_>, sink: &mut FindingSink<'_>) {
         for (directive, used) in ctx.directives.iter().zip(ctx.usage) {
             let names_known_rule = directive.rules.iter().any(|name| registry::is_known(name));

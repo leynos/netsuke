@@ -116,11 +116,15 @@ fn target_names(targets: &[Target]) -> Vec<Option<String>> {
 
 /// Match expanded items to authored nodes.
 ///
-/// Positional correspondence is used when the section's authored length equals
-/// its expanded length, which holds for every manifest that does not use
-/// `foreach`. Otherwise each expanded item is matched to the sole authored
-/// item whose literal `name` scalar equals it; an authored name containing a
-/// template is never literal, and an ambiguous match resolves to nothing.
+/// Positional correspondence is used only when the section declares no
+/// `foreach` and its authored length equals its expanded length. Equal lengths
+/// alone are not enough: a `foreach` over a one-element list leaves the count
+/// unchanged while shifting which authored item produced which expanded one,
+/// and a wrong span is worse than none.
+///
+/// Otherwise each expanded item is matched to the sole authored item whose
+/// literal `name` scalar equals it; an authored name containing a template is
+/// never literal, and an ambiguous match resolves to nothing.
 fn match_by_name<'a>(
     section: Option<&'a Node>,
     expanded_len: usize,
@@ -130,7 +134,8 @@ fn match_by_name<'a>(
         return vec![None; expanded_len];
     };
     let authored: Vec<&Node> = node.items().collect();
-    if authored.len() == expanded_len {
+    let expands = authored.iter().any(|item| item.get("foreach").is_some());
+    if !expands && authored.len() == expanded_len {
         return authored.into_iter().map(Some).collect();
     }
     expanded_names
