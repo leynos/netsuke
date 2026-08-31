@@ -305,8 +305,8 @@ fn dependabot_updates_have_expected_policy() -> Result<()> {
     let config = dependabot_config()?;
     ensure!(config.version == 2, "Dependabot config version should be 2");
     ensure!(
-        config.updates.len() == 2,
-        "Dependabot config should define GitHub Actions and Cargo updates"
+        config.updates.len() == 3,
+        "Dependabot config should define GitHub Actions, Cargo, and rust-toolchain updates"
     );
 
     assert_update_policy(
@@ -319,6 +319,12 @@ fn dependabot_updates_have_expected_policy() -> Result<()> {
         update_for(&config, "cargo")?,
         "daily",
         &["dependencies", "cargo"],
+        5,
+    );
+    assert_update_policy(
+        update_for(&config, "rust-toolchain")?,
+        "weekly",
+        &["dependencies", "rust-toolchain"],
         5,
     );
     Ok(())

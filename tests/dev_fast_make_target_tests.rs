@@ -148,9 +148,10 @@ fn build_targets_do_not_evaluate_a_config_override(#[case] target: &str) -> Resu
 #[case("dev-test")]
 fn build_targets_propagate_cargo_failure(#[case] target: &str) -> Result<()> {
     let scenario = BuildScenario::prepare()?;
-    let cargo = scenario
-        .sandbox()
-        .write_fake(&scenario.sandbox().bin(), "failing-cargo", "exit 17")?;
+    let cargo =
+        scenario
+            .sandbox()
+            .write_fake(&scenario.sandbox().bin(), "failing-cargo", "exit 17")?;
     let invocation = MakeInvocation::new(target).variable("CARGO", cargo);
     let output = scenario.sandbox().run_make(&invocation)?;
 
