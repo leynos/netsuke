@@ -282,8 +282,8 @@ fn dependency_only_manifest_ninja_snapshot() -> Result<()> {
         targets: []
     "#;
     let manifest = manifest::from_str(manifest_yaml)?;
-    let ir = BuildGraph::from_manifest(&manifest)?;
-    let ninja_content = ninja_gen::generate(&ir)?;
+    let ir = BuildGraph::from_manifest_for_shell(&manifest, ninja_gen::RecipeShell::Posix)?;
+    let ninja_content = generate_posix(&ir)?;
 
     ensure!(
         ninja_content.contains("build all: phony | check-fmt lint"),
