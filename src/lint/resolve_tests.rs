@@ -80,6 +80,32 @@ fn a_literal_name_resolves_after_expansion() {
     );
 }
 
+/// A `foreach` that leaves the count unchanged must not resolve positionally.
+///
+/// One authored item expanding to one target keeps the section's length, so a
+/// length-only test would map the generated target onto the wrong declaration
+/// and point every finding at it.
+#[test]
+fn a_single_element_foreach_does_not_resolve_positionally() {
+    let yaml = concat!(
+        "netsuke_version: \"1.0.0\"\n",
+        "vars:\n",
+        "  items:\n",
+        "    - only\n",
+        "targets:\n",
+        "  - foreach: items\n",
+        "    name: \"{{ item }}\"\n",
+        "    command: \"touch {{ outs }}\"\n",
+    );
+    let (doc, parsed) = provenance!(yaml);
+    assert_eq!(parsed.targets.len(), 1, "the fixture should keep the count");
+    let found = Provenance::new(&doc, &parsed);
+    assert!(
+        found.target(0).is_none(),
+        "a generated target must not borrow the authored item's span"
+    );
+}
+
 /// A templated name is not literal, so a generated target resolves to nothing
 /// rather than to the wrong declaration.
 #[test]

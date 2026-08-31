@@ -430,12 +430,12 @@ chain, reads the terminal, or varies with time.
 
 Table: flags added by `netsuke check`
 
-| Flag                     | Purpose                                                                                                               |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| `--rule <NAME=SEVERITY>` | Repeatable policy selector, described in section 7.                                                                   |
-| `--fail-on <SEVERITY>`   | Threshold at which findings fail the command.                                                                         |
-| `--limit <N>`            | Maximum findings reported, keeping the first in source order. `0` disables the limit and reports every finding.       |
-| `--explain [NAME]`       | Print the rule reference for one rule, or the whole catalogue when no name is given, instead of analysing a manifest. |
+| Flag                     | Purpose                                                                                                                                                                                            |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--rule <NAME=SEVERITY>` | Repeatable policy selector, described in section 7.                                                                                                                                                |
+| `--fail-on <SEVERITY>`   | Threshold at which findings fail the command.                                                                                                                                                      |
+| `--limit <N>`            | Maximum findings reported, keeping the first in source order. `0` disables the limit and reports every finding. The verdict is decided before bounding, so truncation never changes the exit code. |
+| `--explain [NAME]`       | Print the rule reference for one rule, or the whole catalogue when no name is given, instead of analysing a manifest.                                                                              |
 
 `--explain` is a mode of `check` rather than a top-level `explain` command
 because the roadmap defers that noun until it has a clear user-facing workflow,
