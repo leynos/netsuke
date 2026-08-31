@@ -303,6 +303,9 @@ const fn help_topic_about_key(topic: HelpTopicName) -> &'static str {
 /// Inspect raw arguments and extract the `--locale` value when present.
 ///
 /// When multiple `--locale` flags are provided, the last one is used.
+/// This valued scanner intentionally remains separate from the bare
+/// `json_hint_from_args` flag scanner. Extract `find_option_value` only when a
+/// second valued pre-clap option needs the same handling.
 #[must_use]
 pub fn locale_hint_from_args(args: &[OsString]) -> Option<String> {
     let mut hint = None;
@@ -344,6 +347,9 @@ pub(crate) fn parse_bool_hint(value: &str) -> Option<bool> {
 ///
 /// The helper mirrors clap's flag semantics, so `--json=value` is ignored
 /// rather than interpreted as a boolean assignment.
+/// It intentionally remains separate from the valued `locale_hint_from_args`
+/// scanner; extract `find_option_value` when a second valued pre-clap option
+/// needs the same handling.
 #[must_use]
 pub fn json_hint_from_args(args: &[OsString]) -> Option<bool> {
     for arg in args {

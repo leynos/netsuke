@@ -245,7 +245,9 @@ them in the order presented to build understanding.
 - `src/cli_l10n.rs` (224 lines): maps clap argument IDs and subcommand
   names to Fluent message keys, localizes command/argument help text, and
   provides raw-argument extractors (`locale_hint_from_args`,
-  `diag_json_hint_from_args`).
+  `json_hint_from_args`). The latter scans only the bare `--json` flag and
+  deliberately ignores `--json=value`, so it no longer mirrors the valued
+  `locale_hint_from_args` scanner.
 - `src/localization/keys.rs`: string constants for every Fluent message key
   used by the CLI.
 - `locales/en-US/messages.ftl`, `locales/es-ES/messages.ftl`: Fluent
@@ -262,9 +264,11 @@ them in the order presented to build understanding.
 
 **Build script:**
 
-- `build.rs`: compiles shared CLI modules via `#[path = ...]` and pins
-  shared symbols with `const _` anchors. Any new public function in
-  `src/cli/mod.rs` or `src/cli_l10n.rs` must be anchored here.
+- `build.rs`: historically compiled shared CLI modules via `#[path = ...]` and
+  pinned shared symbols such as `cli::json_hint_from_args` and
+  `cli_l10n::parse_bool_hint` with `const _` anchors. Superseded: current
+  `build.rs` compiles a narrowed set of reachable module slices instead; keep
+  new dependencies within that slice rather than adding per-symbol anchors.
 
 **Tests:**
 
