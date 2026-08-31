@@ -85,9 +85,9 @@ graph TD
     subgraph parent["parent process"]
         A["netsuke test (CLI)"] --> B[discovery]
         B --> C[test-suite parser]
-        C --> D[case scheduler]
+        C --> D["scheduler owner<br/>queue, fail-fast, report"]
         D --> S["case supervisor<br/>deadline, kill, reap"]
-        R[collector] --> N["report renderer<br/>human / JSON"]
+        D --> N["report renderer<br/>human / JSON"]
     end
     S -->|spawn| E
     subgraph child["child process (one case)"]
@@ -102,15 +102,16 @@ graph TD
         L --> M[assertion evaluator]
         K --> M
     end
-    M -->|CaseResult frames| R
-    S -->|timeout: synthesized error| R
+    M -->|CaseResult frames| D
+    S -->|timeout: synthesized error| D
 ```
 
 _Figure 1: Test case execution flow across the process boundary. Existing
 compiler components (manifest loader, BuildGraph, ninja_gen) are reused
 unchanged apart from overlay injection at environment-construction time. The
 supervisor enforces the deadline and, on expiry, supplies a synthesized errored
-result in place of the child's._
+result in place of the child's. Every result returns to the scheduler owner,
+which alone holds scheduling state and writes the report._
 
 ## 4. Pipeline integration
 
@@ -551,15 +552,15 @@ code. Every selected case still reaches the report exactly once (I9), which
 requires assigning a status to two groups the normal path never produces: a
 case whose child the parent terminated is errored, with an interruption
 diagnostic and whatever journal arrived before the signal; a case that never
-started is skipped. The collector applies the same sorted file and declaration
-ordering it uses for a completed run before rendering, so an interrupted run's
-report is deterministic rather than ordered by how far the run happened to get.
-An interruption report test covers a run containing all three groups —
-finished, terminated, and never started. A SIGKILL of the parent still a
-SIGKILL still leaks, so the recognizable naming scheme plus age-based reaping
-of stale run roots at the start of the next run makes leaks self-healing. A
-case whose sandbox cannot be provisioned is errored and isolated; only failure
-to create the run root itself aborts the run.
+started is skipped. The scheduler owner applies the same sorted file and
+declaration ordering it uses for a completed run before rendering, so an
+interrupted run's report is deterministic rather than ordered by how far the
+run happened to get. An interruption report test covers a run containing all
+three groups — finished, terminated, and never started. A SIGKILL of the parent
+still a SIGKILL still leaks, so the recognizable naming scheme plus age-based
+reaping of stale run roots at the start of the next run makes leaks
+self-healing. A case whose sandbox cannot be provisioned is errored and
+isolated; only failure to create the run root itself aborts the run.
 
 Teardown obligations (UX design §9) are implemented with a completion stack:
 each fixture pushes onto the stack only after its setup finishes, and case
@@ -604,32 +605,42 @@ assertion that needs a missing view (or immediately when the step has no
 `then`).
 
 The scheduler runs cases in parallel up to `--jobs` (defaulting to available
-parallelism), one case per worker, with no shared mutable state at all. A
-worker supervises one child at a time (§9.1) and forwards the finished,
-immutable `CaseResult` — whether the child produced it or the supervisor
-synthesized it after a timeout — down a channel to a single collector, and only
-the collector writes the report. That keeps report assembly free of locking and
-makes ordering a property of the collector rather than of scheduling luck — it
-buffers results and restores sorted file order, then declaration order within
-each file, before rendering. Cases therefore complete in whatever order they
-finish while human and JSON output stay byte-stable; a test that completes
-cases deliberately out of order and diffs both renderings guards this.
+parallelism), one case per worker. Every piece of mutable scheduling state has
+exactly one owner, the _scheduler owner_: the pending-case queue, fail-fast
+state, which cases are claimed, and the conversion of unclaimed cases into
+skipped results. It is also the sole writer of the report. Nothing else in the
+run may read or modify that state.
 
-`--fail-fast` is a scheduling decision, made where results are already
-serialized: the collector observes the first `CaseResult` whose status is
-failed or errored and sets a stop flag. Workers do not test that flag and then
-take work as two steps: checking it and claiming the next case are a single
-atomic operation on the shared queue, so a worker cannot observe a clear flag,
-lose its slice, and claim a case after the failure was recorded. Cases already
-in flight are left alone and run to completion, so their teardown and journal
-handling are unaffected; only unclaimed cases are affected, and the collector
-records each of them as skipped so the report still totals the full selection
-(I9). Making the collector the observation point matters: it is the one place
-that sees every result, so the decision cannot race between workers. A boundary
-test drives preemption into the window between observing the flag and claiming
-work, asserting no case starts after the first failure is recorded. A test that
-selects more cases than `--jobs` and completes them out of order covers all
-three states — finished, in flight at the moment of failure, and never started.
+Workers own no scheduling state. A worker executes only the case the scheduler
+owner assigns it, supervises one child at a time (§9.1), and sends back a
+finished, immutable `CaseResult` — whether the child produced it or the
+supervisor synthesized it after a timeout. Workers never test fail-fast state
+and never claim a case for themselves.
+
+That single ownership is what makes the concurrency tractable. Results arrive
+from many workers at once, but the scheduler owner processes each one in a
+single ordered state transition:
+
+1. Receive a `CaseResult` from a worker.
+2. Classify it as passed, failed, or errored.
+3. If `--fail-fast` is in force and this is the first failed or errored result,
+   activate fail-fast.
+4. If fail-fast is not active, assign the next pending case to the now-idle
+   worker.
+5. Otherwise mark every remaining unclaimed case as skipped.
+
+Because steps 3 and 4 happen inside one transition, no assignment can slip
+between observing a failure and acting on it: the ordering is a property of the
+transition, not of timing. Cases already in flight are untouched and run to
+completion, so their teardown and journal handling are unaffected; only
+unclaimed cases become skipped, which keeps the report totalling the full
+selection (I9).
+
+Sole ownership of the report has the same effect on output. The scheduler owner
+buffers results and restores sorted file order, then declaration order within
+each file, before rendering, so cases may finish in any order while human and
+JSON output stay byte-stable. A test that completes cases deliberately out of
+order and diffs both renderings guards this.
 
 Case execution runs under `catch_unwind` inside the child; a panic that escapes
 it becomes an abnormal child exit, which the supervisor records as an errored
@@ -828,7 +839,12 @@ methods. These are design commitments, not a test-type list.
   report exactly once, as passed, failed, errored, or skipped — including under
   child panic, forced termination, and interruption. _Method:_ scheduler tests
   with injected panics and deadline breaches, asserting report totals against
-  the selection count.
+  the selection count. A deterministic scheduling test additionally drives
+  several results into the scheduler owner concurrently, including the first
+  failed result, and attempts a next-case assignment at the same moment. It
+  asserts that no case is assigned after the transition that recorded the first
+  fail-fast-triggering result, and that every unassigned case is reported as
+  skipped. Driving the transitions rather than sleeping keeps it reproducible.
 - **I10 — the timeout is enforced.** No case exceeds its deadline by more
   than the termination and reaping window, whatever the manifest does.
   _Method:_ a case whose manifest contains a deliberately non-cooperative
