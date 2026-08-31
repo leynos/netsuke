@@ -14,9 +14,16 @@ use rstest::rstest;
 /// Repository-relative path of the rule reference.
 const REFERENCE_PATH: &str = "docs/netsuke-linter-rules.md";
 
-/// Read the rule reference.
+/// Read the rule reference, normalized to LF line endings.
+///
+/// A Windows checkout can hand back CRLF text, which would leave every
+/// heading ending `\r\n` and make [`section`]'s LF-only delimiters match
+/// nothing. Normalizing on read keeps the delimiters in one form rather than
+/// teaching each lookup about both.
 fn reference() -> Result<String> {
-    test_support::fs::read_to_string(REFERENCE_PATH).context("read the lint rule reference")
+    Ok(test_support::fs::read_to_string(REFERENCE_PATH)
+        .context("read the lint rule reference")?
+        .replace("\r\n", "\n"))
 }
 
 /// Collapse every whitespace run so wrapped prose compares as written.
@@ -40,6 +47,40 @@ fn section<'a>(text: &'a str, name: &str) -> Option<&'a str> {
     let rest = text.get(start..)?;
     let end = rest.find("\n### ").or_else(|| rest.find("\n## "));
     Some(end.map_or(rest, |offset| rest.get(..offset).unwrap_or(rest)))
+}
+
+/// A CRLF document must resolve once it has been through [`reference`]'s
+/// normalization, and must not before it.
+///
+/// Both directions are asserted because only the second explains why the
+/// normalization exists: without it a Windows checkout leaves every heading
+/// ending `\r\n`, so `section` matches nothing and every rule looks
+/// undocumented.
+#[test]
+fn crlf_sections_resolve_after_normalization() -> Result<()> {
+    let crlf = concat!(
+        "## Category\r\n",
+        "\r\n",
+        "### first-rule\r\n",
+        "\r\n",
+        "Body text.\r\n",
+        "\r\n",
+        "### second-rule\r\n",
+        "\r\n",
+        "Other body.\r\n",
+    );
+    ensure!(
+        section(crlf, "first-rule").is_none(),
+        "CRLF text should defeat the LF-only lookup, which is what normalization fixes"
+    );
+
+    let normalized = crlf.replace("\r\n", "\n");
+    let body = section(&normalized, "first-rule").context("the normalized text should resolve")?;
+    ensure!(
+        body == "\nBody text.\n",
+        "the section should stop at the next heading, got {body:?}"
+    );
+    Ok(())
 }
 
 #[test]
