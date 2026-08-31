@@ -35,6 +35,7 @@ fn run_ok(cmd: &mut Command) -> Result<String> {
     Ok(stdout)
 }
 
+/// Validate that generated Ninja executes and then becomes a no-op for a touch rule.
 #[test]
 #[cfg(unix)]
 fn touch_manifest_ninja_validation() -> Result<()> {
@@ -100,6 +101,7 @@ fn touch_manifest_ninja_validation() -> Result<()> {
     Ok(())
 }
 
+/// Snapshot only the targets retained after conditional foreach expansion.
 #[test]
 fn conditional_manifest_ninja_snapshot() -> Result<()> {
     let manifest_yaml = r#"
@@ -142,6 +144,7 @@ fn conditional_manifest_ninja_snapshot() -> Result<()> {
     Ok(())
 }
 
+/// Snapshot the deterministic fallback selected by an unavailable command.
 #[test]
 fn command_available_manifest_ninja_snapshot() -> Result<()> {
     // Pin the `command_available` resolver to an empty PATH through the
@@ -197,6 +200,7 @@ fn command_available_manifest_ninja_snapshot() -> Result<()> {
     Ok(())
 }
 
+/// Snapshot fail-fast lowering for a multi-command manifest rule.
 #[test]
 fn multi_command_manifest_ninja_snapshot() -> Result<()> {
     let fixture_dir = Dir::open_ambient_dir(env!("CARGO_MANIFEST_DIR"), ambient_authority())
@@ -233,6 +237,7 @@ fn multi_command_manifest_ninja_snapshot() -> Result<()> {
     Ok(())
 }
 
+/// Snapshot Ninja's implicit-dependency separator for manifest dependencies.
 #[test]
 fn implicit_deps_manifest_ninja_snapshot() -> Result<()> {
     let fixture_dir = Dir::open_ambient_dir(env!("CARGO_MANIFEST_DIR"), ambient_authority())
@@ -262,6 +267,7 @@ fn implicit_deps_manifest_ninja_snapshot() -> Result<()> {
     Ok(())
 }
 
+/// Snapshot dependency-only actions as native Ninja phony nodes.
 #[test]
 fn dependency_only_manifest_ninja_snapshot() -> Result<()> {
     let manifest_yaml = r#"

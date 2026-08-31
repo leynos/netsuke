@@ -231,16 +231,22 @@ def test_mdtablefix_installers_require_the_pinned_version() -> None:
             job_steps(workflow, job_name),
             "Install mdtablefix",
         )
-        run = step.get("run")
-        assert isinstance(run, str), f"{job_name} must configure mdtablefix"
-        assert expected_guard in run, f"{job_name} must pin the expected version"
-        assert "mdtablefix --version" in run, (
-            f"{job_name} must inspect the installed version"
-        )
-        assert "tr -d '\\r'" in run, f"{job_name} must normalise Windows version output"
-        assert expected_match in run, (
-            f"{job_name} must replace a missing or mismatched formatter"
-        )
+        match step.get("run"):
+            case str() as run:
+                assert expected_guard in run, (
+                    f"{job_name} must pin the expected version"
+                )
+                assert "mdtablefix --version" in run, (
+                    f"{job_name} must inspect the installed version"
+                )
+                assert "tr -d '\\r'" in run, (
+                    f"{job_name} must normalise Windows version output"
+                )
+                assert expected_match in run, (
+                    f"{job_name} must replace a missing or mismatched formatter"
+                )
+            case _:
+                pytest.fail(f"{job_name} must configure mdtablefix")
 
 
 def test_build_job_runs_markdown_formatter_checker_tests() -> None:

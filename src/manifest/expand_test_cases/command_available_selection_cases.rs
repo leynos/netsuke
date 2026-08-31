@@ -8,7 +8,7 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 use googletest::prelude::*;
 use minijinja::Environment;
 use rstest::rstest;
-use test_support::write_exec_with_content;
+use test_support::exec::write_exec_with_content;
 
 use super::{actions, expand_foreach};
 use crate::{

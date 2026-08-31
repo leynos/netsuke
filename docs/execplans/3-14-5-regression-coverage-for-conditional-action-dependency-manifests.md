@@ -39,27 +39,30 @@ if any of the following regress:
    including for conditionally-selected actions.
 
 The deliverable is test code plus small deterministic fixtures and
-documentation. The branch also carries the `now(offset=...)` compatibility
-guard in `parse_offset`: after the dependency update accepted offsets beyond a
-civil day, the parser rejects offsets whose absolute whole-hour component is 24
-or greater. This preserves the documented ISO 8601 input contract while leaving
-valid offsets unchanged.
+documentation. The branch also carries two compatibility boundaries: the
+`parse_offset` guard rejects offsets whose absolute whole-hour component is 24
+or greater after the dependency update accepted values beyond a civil day, and
+`register_legacy_boolean_formatter` preserves lowercase Boolean interpolation
+for existing manifests. Together these preserve the documented ISO 8601 input
+and historical MiniJinja rendering contracts while leaving other behaviour
+unchanged.
 
 ## Constraints
 
 Hard invariants that must hold throughout implementation. Violation requires
 escalation, not workarounds.
 
-- This is primarily a **test-and-documentation** change. The one production
-  compatibility guard in `src/stdlib/time/mod.rs` is in scope: `parse_offset`
+- This is primarily a test-and-documentation change, with two production
+  compatibility boundaries in scope. `parse_offset` in `src/stdlib/time/mod.rs`
   must reject parsed offsets whose absolute whole-hour component is 24 or
-  greater, because the dependency update accepts values beyond a civil day. Do
-  not modify other production semantics in `src/manifest/`, `src/ir/`,
-  `src/ninja_gen.rs`, or `src/stdlib/`. Any further production change requires
-  escalation. The single test-only seam exception remains available only if an
-  existing public or `pub(crate)` surface cannot drive a required scenario; any
-  such seam must be recorded in the Decision Log and must not change runtime
-  behaviour.
+  greater because the dependency update accepts values beyond a civil day.
+  `register_legacy_boolean_formatter` in `src/stdlib/register.rs` must preserve
+  lowercase Boolean interpolation for existing manifests. Do not modify other
+  production semantics in `src/manifest/`, `src/ir/`, `src/ninja_gen.rs`, or
+  `src/stdlib/`. Any further production change requires escalation. The single
+  test-only seam exception remains available only if an existing public or
+  `pub(crate)` surface cannot drive a required scenario; any such seam must be
+  recorded in the Decision Log and must not change runtime behaviour.
 - Do not weaken or delete existing tests. New tests are additive. Existing
   passing tests must continue to pass unchanged.
 - Preserve the existing implicit `phony: true` behaviour for actions; tests
@@ -174,14 +177,17 @@ escalation, not workarounds.
       dependencies after reverting the throwaway spike.
 - [x] (2026-07-28 23:14Z) Stage B: added B.1–B.5 tests and fixtures with a
       passing focused run and assertion-level sabotage evidence for each.
-- [x] (2026-07-29 00:49Z) Stage C: updated the users' guide, developers' guide,
-      component design, and roadmap; recorded why no ADR is warranted.
-- [x] (2026-07-29 00:55Z) Stage D: passed the full gate stack and final
+- [x] (2026-08-30) Stage C: updated the users' guide, developers' guide,
+      component design, and roadmap; recorded the Boolean formatter contract
+      and why no ADR is warranted.
+- [x] (2026-08-30) Stage D: passed the full gate stack and final
       CodeRabbit review; roadmap item 3.14.5 is complete.
 - [x] (2026-08-31) Reviewed the `now(offset=...)` compatibility guard after
       review feedback; recorded its production scope, documented the accepted
-      and rejected offset forms, and added the boundary to the validation
-      scope.
+      and rejected offset forms, added focused property-based boundary
+      coverage, and added the boundary to the validation scope.
+- [x] (2026-08-31) Added explicit example-based `parse_offset("Z")` and
+      `parse_offset("z")` regression cases, each asserting UTC.
 - [x] (2026-08-31) Rebased onto
       `origin/chore/enforce-markdown-table-formatting`; retained its canonical
       non-mutating Markdown check and regenerated the lockfile from that
@@ -224,6 +230,12 @@ escalation, not workarounds.
 - Observation: meaningful coverage already exists and must not be duplicated.
   Evidence and inventory are in "Context and orientation". Impact: 3.14.5 is a
   *gap-fill*, not a green-field test suite.
+
+- Observation: the MiniJinja dependency update changed Boolean interpolation
+  spelling in string fields. The registration-wide formatter is therefore the
+  narrow compatibility boundary for existing manifests; non-Boolean values
+  continue through MiniJinja's normal formatter. Date/Author: 2026-08-30,
+  review follow-up.
 
 - Observation: `#[googletest::test]` and `#[rstest]` interoperate under the
   current dependency set when the googletest attribute comes first. Evidence:
@@ -270,9 +282,9 @@ escalation, not workarounds.
 
 ## Decision log
 
-- Decision: Treat 3.14.5 as test-and-docs only; the implementation
-  (3.14.2–3.14.4) is already complete. Rationale: the roadmap marks
-  3.14.2/3.14.3/3.14.4 done; recon confirms the behaviour is present. The
+- Decision: Treat 3.14.5 as primarily test-and-documentation work; the
+  implementation (3.14.2–3.14.4) is already complete. Rationale: the roadmap
+  marks 3.14.2/3.14.3/3.14.4 done; recon confirms the behaviour is present. The
   roadmap bullet text is literally "Test …". Date/Author: 2026-06-15, planning
   agent.
 
@@ -317,13 +329,13 @@ escalation, not workarounds.
   `fresh=true`. Recording this prevents future cargo-culted serialization.
   Date/Author: 2026-06-15, planning agent.
 
-- Decision: Defer property-based and bounded-model coverage of the same
-  invariants to roadmap 4.2.x (Kani) and 4.3.2 (Proptest for manifest expansion
-  invariants). Rationale: 3.14.5 is scoped to example/behavioural/snapshot
-  regression coverage; 4.3.2 already owns "foreach preserves non-control
-  fields", "when is removed after evaluation", and "item/index injected".
-  Duplicating that here would create two owners for one invariant. Date/Author:
-  2026-06-15, planning agent.
+- Decision: Defer property-based and bounded-model coverage of the manifest
+  expansion invariants to roadmap 4.2.x (Kani) and 4.3.2 (Proptest for manifest
+  expansion invariants). Rationale: 3.14.5 is scoped to
+  example/behavioural/snapshot regression coverage; 4.3.2 already owns "foreach
+  preserves non-control fields", "when is removed after evaluation", and
+  "item/index injected". Duplicating that here would create two owners for one
+  invariant. Date/Author: 2026-06-15, planning agent.
 
 - Decision: `ortho_config` is out of scope for this item.
   Rationale: `ortho_config` governs layered CLI/configuration precedence
@@ -367,6 +379,14 @@ escalation, not workarounds.
   parsing, where both `+24:00` and `-24:00` are rejected before timestamp
   conversion. Date/Author: 2026-08-31, review follow-up.
 
+- Decision: Register `register_legacy_boolean_formatter` at the standard
+  library registration boundary as one global policy. Rationale: this keeps
+  Boolean values interpolated into string fields at the historical lowercase
+  `true`/`false` spelling across all helpers, while delegating non-Boolean
+  values to MiniJinja's normal formatter. Per-helper or per-call formatters
+  would create inconsistent manifest behaviour. Date/Author: 2026-08-30, review
+  follow-up.
+
 - Decision: Adopt the target branch's canonical Markdown-formatting contract
   during the rebase. Rationale: `make check-fmt` now checks Rust, Python, and
   Markdown formatting, while `scripts/check-markdown-format.sh` formats
@@ -378,10 +398,11 @@ escalation, not workarounds.
 ## Outcomes & retrospective
 
 Stage A completed without requiring a new seam or changing production code
-outside the pre-existing `parse_offset` compatibility guard. The approved dev
-dependencies resolve to googletest 0.14.3 and pretty_assertions 1.4.1. The real
-resolver injection, expansion entry point, and deterministic Ninja dependency
-ordering all remain available as planned.
+outside the two in-scope compatibility boundaries: the `parse_offset` guard and
+the registration-wide legacy Boolean formatter. The approved dev dependencies
+resolve to googletest 0.14.3 and pretty_assertions 1.4.1. The real resolver
+injection, expansion entry point, and deterministic Ninja dependency ordering
+all remain available as planned.
 
 B.1 now pins complementary action selection through the real resolver in both
 deterministic worlds. The present case also combines action `foreach` with
@@ -417,13 +438,20 @@ states the manifest/stdlib port boundary in the design, and marks roadmap item
 architecture and behaviour are unchanged.
 
 The completed change is primarily test-and-documentation work, with the
-`parse_offset` compatibility guard explicitly retained as the sole production
-behaviour boundary. It adds deterministic real-resolver unit coverage,
-selection-time impurity coverage, conditional IR dependency assertions, a
-reviewed Ninja snapshot with real-Ninja validation, and one combined BDD
-scenario. All five focused sabotage checks failed at the intended assertion.
-The final branch-wide formatting, documentation, type, lint, and test gates
-passed, and CodeRabbit reported no actionable findings.
+`parse_offset` guard and registration-wide legacy Boolean formatter explicitly
+retained as the two production compatibility boundaries. It adds deterministic
+real-resolver unit coverage, selection-time impurity coverage, conditional IR
+dependency assertions, a reviewed Ninja snapshot with real-Ninja validation,
+and one combined BDD scenario. It also adds property-based coverage showing
+that signed offsets below 24 hours are accepted while both signs at 24 hours
+and above are rejected. All five focused sabotage checks failed at the intended
+assertion. The prior branch-wide formatting, documentation, type, lint, and
+test gates passed, and CodeRabbit reported no actionable findings. The current
+follow-up also passes all recorded validation gates: `make check-fmt`,
+`make lint-clippy`, `make typecheck`, and `make lint`; the corrected
+generated-name selection run passes 2/2 after the requested positional filter
+selected 0 tests, time passes 31/31, Ninja passes 7/7, IR passes 23/23, doc
+coverage is 99.04%, and `make test` passes 2,654/2,654 tests plus 33 doctests.
 
 ## Context and orientation
 
@@ -764,6 +792,13 @@ and the existing suite unchanged.
 
 ## Validation and acceptance
 
+Validation status for the current review follow-up is complete.
+`make check-fmt`, `make lint-clippy`, `make typecheck`, and `make lint` passed;
+the corrected generated-name selection run passed 2/2 after the requested
+positional filter selected 0 tests, time passed 31/31, Ninja passed 7/7, IR
+passed 23/23, doc coverage was 99.04%, and `make test` passed 2,654/2,654 tests
+plus 33 doctests.
+
 Acceptance is behavioural:
 
 1. `make test` passes with the new tests present.
@@ -780,6 +815,9 @@ Acceptance is behavioural:
    the generated file builds and a second pass reports "no work to do".
 4. BDD scenarios for selection and deps emission pass via the `bdd_tests`
    harness.
+5. Time parsing has explicit example-based regression cases for both `Z` and
+   `z`, each successfully producing UTC; property-based cases cover signed
+   numeric offsets below and at or beyond the 24-hour boundary.
 
 Quality criteria ("done"):
 
@@ -789,7 +827,8 @@ Quality criteria ("done"):
   with `-D warnings`.
 - Docs: users-guide, developers-guide, component architecture (and ADR if
   created) updated; markdown lint clean.
-- Review: `coderabbit review --agent` concerns all resolved.
+- Review: `coderabbit review --agent` concerns all resolved after the current
+  documentation and test follow-up is validated.
 
 ## Idempotence and recovery
 
@@ -1010,6 +1049,20 @@ Skills to load while implementing:
 
 ## Revision note
 
+- 2026-08-30 — Recorded the registration-wide
+  `register_legacy_boolean_formatter` policy and its user-visible contract:
+  Boolean interpolation in string fields retains lowercase `true`/`false`,
+  while non-Boolean values use MiniJinja's normal formatter. Added the
+  corresponding users' guide example and retained the `parse_offset` guard as
+  the production compatibility boundary.
+
+- 2026-08-31 — Review follow-up records that `parse_offset` rejects parsed
+  offsets whose absolute whole-hour component is 24 or greater, aligning
+  `now(offset=...)` with the ISO 8601 civil-day limit. User documentation and
+  property-based boundary coverage are present. Explicit example-based `Z` and
+  `z` cases now assert UTC, and the updated documentation and test follow-up
+  passes its complete validation stack.
+
 - 2026-06-15 — Revised after a community-of-experts review (Logisphere crew:
   structural, contract/correctness, alternatives/DX, reliability/ops lenses).
   What changed and why:
@@ -1094,7 +1147,8 @@ Skills to load while implementing:
 - 2026-08-31 — Recorded the `now(offset=...)` compatibility guard and its
   user-facing contract after review. Validation scope now includes `Z`/`z`,
   signed offsets below 24 hours, and rejection of both signs at `24:00` and
-  beyond; the full gate stack remains the required final validation.
+  beyond; the explicit examples, property cases, and full gate stack now pass
+  as recorded under Validation and acceptance.
 
 - 2026-08-31 — Rebased onto `origin/chore/enforce-markdown-table-formatting`.
   Kept the target's canonical `mdtablefix` checker instead of replaying older

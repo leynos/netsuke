@@ -14,7 +14,12 @@ use netsuke::{
     ninja_gen::generate,
 };
 use rstest::rstest;
-use std::{ffi::OsString, process::Command};
+use std::{
+    ffi::OsString,
+    fmt::{self, Debug, Display, Formatter},
+    path::Path,
+    process::Command,
+};
 use tempfile::TempDir;
 use test_support::ninja::ninja_integration_workspace;
 
@@ -70,6 +75,15 @@ fn required_ninja_workspace() -> Result<TempDir> {
     ninja_integration_workspace().context("Ninja is required for dollar-escaping tests")
 }
 
+/// Render a path with its escaped debug representation for invalid UTF-8 diagnostics.
+struct DebugPath<'path>(&'path Path);
+
+impl Display for DebugPath<'_> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        Debug::fmt(self.0, formatter)
+    }
+}
+
 /// An isolated workspace containing a generated Ninja file and its output.
 struct NinjaWorkspace {
     /// Keeps the temporary directory alive while Ninja uses its contents.
@@ -85,7 +99,7 @@ impl NinjaWorkspace {
     fn create(ninja_file: &str) -> anyhow::Result<Self> {
         let temporary_directory = required_ninja_workspace()?;
         let path = Utf8PathBuf::from_path_buf(temporary_directory.path().to_path_buf()).map_err(
-            |non_utf8| anyhow::anyhow!("non-UTF-8 temporary path: {}", non_utf8.display()),
+            |non_utf8| anyhow::anyhow!("non-UTF-8 temporary path: {}", DebugPath(&non_utf8)),
         )?;
         let directory = Dir::open_ambient_dir(&path, ambient_authority())
             .with_context(|| format!("open Ninja workspace {path}"))?;

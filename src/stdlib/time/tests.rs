@@ -72,6 +72,17 @@ fn now_applies_custom_offset(env: Environment<'static>) -> Result<()> {
     Ok(())
 }
 
+/// Accept upper- and lower-case UTC shorthand offsets.
+#[rstest]
+#[case::uppercase("Z")]
+#[case::lowercase("z")]
+fn now_accepts_utc_shorthand(env: Environment<'static>, #[case] offset: &str) -> Result<()> {
+    let value = eval_expression(&env, &format!("now(offset='{offset}')"))?;
+    let captured = value_as_timestamp(&value)?;
+    ensure!(captured.offset() == UtcOffset::UTC);
+    Ok(())
+}
+
 #[rstest]
 #[case::nonsense("bogus")]
 #[case::missing_sign("01:00")]

@@ -16,6 +16,7 @@ use netsuke::{
 };
 use rstest::rstest;
 
+/// Generate the expected action and target counts for each manifest fixture.
 #[rstest]
 #[case::minimal_manifest("tests/data/minimal.yml", 1, 1)]
 #[case::duplicate_rules("tests/data/duplicate_rules.yml", 2, 2)]
@@ -39,6 +40,7 @@ fn manifest_fixture_generates_expected_ir(
     Ok(())
 }
 
+/// Preserve declaration order while interpolating command-list entries.
 #[rstest]
 fn command_list_entries_are_interpolated_in_order() -> Result<()> {
     let yaml = r#"
@@ -70,6 +72,7 @@ fn command_list_entries_are_interpolated_in_order() -> Result<()> {
     Ok(())
 }
 
+/// Report an IR error when a target names no declared rule.
 #[rstest]
 fn missing_rule_fails() -> Result<()> {
     let manifest = manifest::from_path("tests/data/missing_rule.yml")?;
@@ -83,6 +86,7 @@ fn missing_rule_fails() -> Result<()> {
     Ok(())
 }
 
+/// Exclude skipped conditional entries from all IR validation and graph output.
 #[rstest]
 #[case::skipped_target_duplicate_output(
     concat!(
@@ -146,6 +150,7 @@ fn skipped_manifest_conditions_do_not_contribute_to_ir(
     Ok(())
 }
 
+/// Lower manifest dependencies into the implicit Ninja dependency class.
 #[rstest]
 #[case::target_deps(
     concat!(
@@ -212,6 +217,7 @@ fn manifest_deps_populate_implicit_deps(
     Ok(())
 }
 
+/// Exclude manifest dependencies from recipe input interpolation.
 #[rstest]
 fn manifest_deps_do_not_contribute_to_recipe_inputs() -> Result<()> {
     let yaml = concat!(
@@ -258,6 +264,7 @@ fn manifest_deps_do_not_contribute_to_recipe_inputs() -> Result<()> {
     Ok(())
 }
 
+/// Preserve distinct explicit, implicit, and order-only dependency classes.
 #[rstest]
 fn conditional_action_deps_populate_distinct_ir_classes() -> Result<()> {
     let manifest = manifest::from_path("tests/data/conditional_action_deps.yml")?;
@@ -321,6 +328,7 @@ struct ExpectedEdge<'a> {
     is_phony: bool,
 }
 
+/// Assert one conditional action's IR edge and dependency classes.
 fn assert_conditional_edge(
     graph: &BuildGraph,
     output: &str,
@@ -360,6 +368,7 @@ fn assert_conditional_edge(
     Ok(())
 }
 
+/// Lower dependency-only entries into deduplicated phony actions.
 #[test]
 fn dependency_only_entries_lower_to_deduplicated_phony_actions() -> Result<()> {
     let yaml = concat!(
@@ -399,6 +408,7 @@ fn dependency_only_entries_lower_to_deduplicated_phony_actions() -> Result<()> {
     Ok(())
 }
 
+/// Keep a target description separate from its rule's progress text.
 #[rstest]
 fn target_descriptions_do_not_replace_rule_progress_text() -> Result<()> {
     let yaml = concat!(
@@ -438,6 +448,7 @@ enum ExpectedError {
     CircularDependency(Vec<String>),
 }
 
+/// Map invalid manifest structures to their expected IR generation errors.
 #[rstest]
 #[case(
     "tests/data/duplicate_outputs.yml",

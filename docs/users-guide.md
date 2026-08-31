@@ -824,6 +824,22 @@ every helper's signature, defaults, purity, platform caveats, and executable
 examples. Host-observing helpers belong only in trusted manifests: Netsuke
 bounds command and network output, but does not sandbox template evaluation.
 
+When a Boolean is interpolated into a string field, Netsuke renders it as
+lowercase `true` or `false`. For example, this writes `true` to `status.txt`:
+
+<!-- tested-example: guide-boolean-string-interpolation -->
+
+```yaml
+netsuke_version: "1.0.0"
+
+vars:
+  enabled: true
+
+targets:
+  - name: status.txt
+    command: "printf '%s\\n' '{{ enabled }}' > {{ outs }}"
+```
+
 The `now(offset=...)` helper accepts `Z` or `z` for UTC and signed ISO 8601
 offsets whose absolute hour component is below 24. Offsets such as `+24:00`,
 `-24:00`, and larger absolute hour values are rejected as invalid.
