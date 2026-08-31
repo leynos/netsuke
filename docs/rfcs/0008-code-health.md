@@ -232,20 +232,24 @@ replace these deterministic properties. Each property uses bounded generators,
 asserts the stated invariant, and retains a minimized regression case when it
 fails:
 
-| Invariant                            | Generator and property                                                                                                                                | Bound                                           |
-| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------: |
-| Input, output, and recursion budgets | Generate byte vectors and nested templates; assert rejection or output within the budget table and recursion at most 64                               | 1 MiB input; 4 MiB output; 64 frames            |
-| Temporary storage and corpus limits  | Generate sequences of accepted corpus entries; assert cumulative size is rejected above the job limit and never writes outside the test directory     | 64 MiB temporary; 256 MiB corpus                |
-| Per-input and per-job execution      | Generate bounded batches of inputs; assert each case and the batch stay within their deadline, classifying timeout as a failure                       | 1 second per input; 10 minutes per job          |
-| Workflow references and job graph    | Generate finite jobs, `needs` edges, action SHAs, and local paths; assert every accepted reference resolves and every rejected graph reports its rule | 32 jobs; 64 edges; 40-character SHAs            |
-| Exception schema                     | Generate rule IDs, scopes, globs, owners, references, and ISO dates; assert unknown rules, empty or unbounded scopes, and unsupported globs reject    | 32 entries; 8 scopes each; 128-character fields |
+| Invariant                            | Generator and property                                                                                                                                                                                                                                                        | Bound                                           |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------: |
+| Input, output, and recursion budgets | Generate byte vectors and nested templates; assert rejection or output within the budget table and recursion at most 64                                                                                                                                                       | 1 MiB input; 4 MiB output; 64 frames            |
+| Temporary storage and corpus limits  | Generate sequences of accepted corpus entries; assert cumulative size is rejected above the job limit and never writes outside the test directory                                                                                                                             | 64 MiB temporary; 256 MiB corpus                |
+| Per-input and per-job execution      | Generate bounded batches of inputs; assert each case and the batch stay within deterministic fuel and operation budgets. A separate bounded harness watchdog reports an explicit timeout result.                                                                              | 10,000 fuel units per input; 1,000,000 per job  |
+| Workflow references and job graph    | Generate finite jobs, `needs` edges, action SHAs, and local paths; assert every accepted reference resolves and every rejected graph reports its rule                                                                                                                         | 32 jobs; 64 edges; 40-character SHAs            |
+| Exception schema                     | Generate rule IDs, rule-specific subjects, scopes, globs, owners, references, and ISO dates; assert each subject shape, missing or malformed subjects, unknown rules, empty or unbounded scopes, unsupported globs, invalid calendar dates, and expiry before creation reject | 32 entries; 8 scopes each; 128-character fields |
 
 _Table 2: Property and bounded-verification coverage._
 
 The generators must include boundary values immediately below, at, and above
-each limit. A failing case is stored as a fixture, linked to the rule it
-exposes, and rerun by the ordinary deterministic test suite; deleting a
-regression input requires an explicit review record.
+each limit, including the fuel and operation ceilings. A failing case is stored
+as a fixture, linked to the rule it exposes, and rerun by the ordinary
+deterministic test suite; deleting a regression input requires an explicit
+review record. The property suite uses fuel or operation counts rather than
+wall-clock assertions. Harnesses may apply the Table 1 watchdog limits as a
+separate bounded check, returning an explicit timeout result when the watchdog
+expires.
 
 Run short smoke corpora on pull requests only when they fit the deterministic
 blocking budget. Run longer fuzzing sessions on a schedule, archive new
@@ -392,7 +396,9 @@ contracts differ.
   unbounded or resource-heavy work in scheduled jobs with the exact input,
   output, recursion, temporary-storage, corpus, per-input, and per-job limits
   in the budget table above (1 MiB, 4 MiB, 64 frames, 64 MiB, 256 MiB, 1
-  second, and 10 minutes respectively).
+  second, and 10 minutes respectively). Property tests use the deterministic
+  fuel and operation budgets in Table 2; the elapsed-time values are only
+  bounded harness watchdogs and must produce an explicit timeout result.
 - Keep the blocking documentation validator repository-only and network-free;
   validate external URL syntax there, and reserve reachability for a
   non-blocking scheduled check with explicit timeouts and classified failures.
@@ -420,7 +426,9 @@ contracts differ.
   run without a panic, timeout, or uncontrolled filesystem access. The smoke
   and scheduled jobs enforce the budget table exactly: 1 MiB input, 4 MiB
   output, 64 recursion frames, 64 MiB temporary storage, 256 MiB corpus, 1
-  second per input, and 10 minutes per job.
+  second per input, and 10 minutes per job. These elapsed-time limits are
+  bounded harness watchdogs with an explicit timeout result; property tests
+  enforce the deterministic fuel and operation budgets in Table 2.
 - Twenty consecutive scheduled fuzz runs publish the target name, corpus
   revision, execution budget, and crash result; any new crash is reproduced by
   a deterministic regression test before the run is considered healthy.
@@ -460,7 +468,9 @@ Run smoke cases where practical and longer sessions on a scheduled workflow.
 Publish minimized crashers as regression fixtures, retain failure artefacts,
 and document the schedule and the exact budget-table values (1 MiB input, 4 MiB
 output, 64 recursion frames, 64 MiB temporary storage, 256 MiB corpus, 1 second
-per input, and 10 minutes per job) in the tier registry.
+per input, and 10 minutes per job) in the tier registry. The elapsed-time
+values are bounded harness watchdogs that return an explicit timeout result;
+property tests use the deterministic fuel and operation budgets in Table 2.
 
 ### Phase 4: Ratchet and review
 

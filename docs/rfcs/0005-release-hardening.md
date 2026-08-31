@@ -20,10 +20,10 @@ stronger existing pinning, verification, and release contracts.
 
 Netsuke's [Cargo manifest](../../Cargo.toml) has no explicit
 `[profile.release]`. Cargo therefore builds release binaries with overflow
-checks and debug assertions disabled, even though six production `debug_assert`
-sites express assumptions about valid state. A release-only arithmetic defect
-or violated assumption can consequently become an undiagnosed correctness or
-safety problem.
+checks and debug assertions disabled, even though seven production
+`debug_assert*` sites express assumptions about valid state. A release-only
+arithmetic defect or violated assumption can consequently become an undiagnosed
+correctness or safety problem.
 
 The repository also has no Gitleaks, `cargo-audit`, `cargo-deny`,
 `cargo-about`, or `cargo-unmaintained` gate. Existing quality checks are useful
@@ -42,7 +42,7 @@ missed by an earlier review.
 
 - `Cargo.toml` has no `[profile.release]`; release overflow checks and debug
   assertions therefore use Cargo's defaults.
-- Six production `debug_assert` sites exist. The current test and lint gates
+- Seven production `debug_assert*` sites exist. The current test and lint gates
   do not establish that every release path is safe when those assertions are
   enabled.
 - The [CI workflow](../../.github/workflows/ci.yml) already uses SHA-pinned
@@ -98,11 +98,27 @@ use the pinned nightly toolchain wherever the existing release workflow
 supplies that requirement.
 
 The release test set must exercise every supported command path that can reach
-the six production assertions, including boundary inputs for arithmetic that
-can overflow. A valid supported input must not fail because a newly enabled
-assertion detects a violated internal invariant. An intentional rejection must
-remain a documented, deterministic error rather than an accidental assertion
-failure.
+the seven production `debug_assert*` sites, including boundary inputs for
+arithmetic that can overflow. The sites are:
+
+- `src/ir/cycle_support.rs`
+- `src/ir/cycle_detector.rs`
+- `src/ir/cmd_interpolate/mod.rs`
+- `src/stdlib/time/format.rs`
+- `src/stdlib/command/quote.rs`
+- `src/ninja_gen/mod.rs`
+- `src/cli/discovery_layers.rs`
+
+Coverage must also include the supported `Recipe::Rule` rejection path in
+`src/ninja_gen/mod.rs`: `NamedAction::write_into` calls
+`NamedAction::shell_text`, which calls `NamedAction::reject_rule_recipe` for
+that recipe. With `cfg!(debug_assertions)`, the path must panic; without it,
+the path must return `NinjaGenError::UnsafeNinjaValue`. Release-profile tests
+must exercise and assert the behaviour for the applicable profile, alongside
+the boundary inputs. A valid supported input must not fail because a newly
+enabled assertion detects a violated internal invariant. An intentional
+rejection must remain a documented, deterministic error rather than an
+accidental assertion failure.
 
 Before enabling the profile as a blocking requirement, CI must record a
 baseline from the current profile and a candidate measurement from the new
@@ -266,8 +282,11 @@ but it must not bypass admission for a real publication.
   baseline for any supported target. The report must include unstripped size as
   a diagnostic, but the stripped-size limit is the admission criterion.
 - The release-profile test suite must pass for all supported targets and must
-  cover every production `debug_assert` site and selected arithmetic boundary
-  cases without assertion or overflow failures.
+  cover all seven production `debug_assert*` sites and selected arithmetic
+  boundary cases without assertion or overflow failures. It must also cover the
+  `Recipe::Rule` rejection through `NamedAction::write_into`, asserting a
+  debug-assertion panic and the release-profile
+  `NinjaGenError::UnsafeNinjaValue` result in their respective profiles.
 - A clean candidate must produce zero unwaived Gitleaks findings, zero denied
   or unknown licences, zero unwaived dependency advisories, a complete notice
   inventory, and a current history-scan result.
@@ -324,7 +343,7 @@ reviewed decision and repeat the measurement phase.
 
 ### Option A: Keep Cargo defaults and rely on tests
 
-This avoids release overhead and configuration changes, but leaves six
+This avoids release overhead and configuration changes, but leaves seven
 production assertions disabled and does not detect release-only overflow. It
 does not address secret history, dependency policy, or the absence of a single
 publication decision, so it is rejected.

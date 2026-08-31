@@ -1261,11 +1261,10 @@ boundaries, then workflow drift, stale exceptions, and malformed-input failures
 can be closed without displacing the fast checks required for pull-request
 review.
 
-This phase implements [RFC 0002](rfcs/0002-code-health.md). It establishes the
+This phase implements [RFC 0008](rfcs/0008-code-health.md). It establishes the
 deterministic policy spine before adding scheduled coverage-guided depth, so
 the repository can distinguish blocking contract failures from longer-running
 health signals.
-
 
 ### 7.1. Establish one inventory and health-policy authority
 
@@ -1287,9 +1286,9 @@ boundary for the blocking validator and later scheduled jobs.
     protected approval before a registry change can affect blocking results.
   - Record the chosen boundary and reuse policy in an Architectural Decision
     Record (ADR) and the developer documentation before implementation.
-  - See [RFC 0002 §Health tiers and exception/allowlist
-    registry](rfcs/0002-code-health.md#health-tiers-and-exceptionallowlist-registry)
-    and [§Open questions](rfcs/0002-code-health.md#open-questions).
+  - See [RFC 0008 §Health tiers and exception/allowlist
+    registry](rfcs/0008-code-health.md#health-tiers-and-exceptionallowlist-registry)
+    and [§Open questions](rfcs/0008-code-health.md#open-questions).
   - Success: the registry has one documented schema and cannot represent an
     ownerless, unscoped, non-expiring, or subjectless exception, nor accept an
     unprotected policy change.
@@ -1301,10 +1300,10 @@ boundary for the blocking validator and later scheduled jobs.
     scripts, configuration paths, and health producers.
   - Return stable source locations and identifiers so each diagnostic names a
     file, YAML path, rule, and remediation.
-  - See [RFC 0002 §Repository-wide workflow-policy
-    validator](rfcs/0002-code-health.md#repository-wide-workflow-policy-validator)
+  - See [RFC 0008 §Repository-wide workflow-policy
+    validator](rfcs/0008-code-health.md#repository-wide-workflow-policy-validator)
     and [§Gate self-consistency
-    contracts](rfcs/0002-code-health.md#gate-self-consistency-contracts).
+    contracts](rfcs/0008-code-health.md#gate-self-consistency-contracts).
   - Success: a clean checkout produces a deterministic inventory without
     GitHub credentials, network access, or process-global environment mutation.
 - [ ] 7.1.3. Run the inventory and registry in report-only mode.
@@ -1314,8 +1313,8 @@ boundary for the blocking validator and later scheduled jobs.
   - Correct the known formal-verification documentation drift while preserving
     the existing Proptest, Kani, coverage, mutation, and no-blanket-retry
     contracts.
-  - See [RFC 0002 §Phase 1: Inventory and
-    report](rfcs/0002-code-health.md#phase-1-inventory-and-report).
+  - See [RFC 0008 §Phase 1: Inventory and
+    report](rfcs/0008-code-health.md#phase-1-inventory-and-report).
   - Success: every reported finding has an owner and disposition, and the clean
     checkout has no unexplained inventory or tier mismatch.
 
@@ -1329,14 +1328,22 @@ schedule.
 - [ ] 7.2.1. Enforce repository-wide workflow security rules.
   - Requires 7.1.2 and 7.1.3.
   - Reject mutable external references, implicit or excessive permissions,
-    unsafe `pull_request_target` execution, contradictory concurrency policy,
-    and `continue-on-error` health jobs without a registered exception.
+    unsafe `pull_request_target` or privileged `workflow_run` execution,
+    contradictory concurrency policy, and `continue-on-error` health jobs
+    without a registered exception. For `workflow_run`, reject untrusted
+    checkout content, unverified artefacts, and untrusted pull-request data
+    reaching shell commands unless the required controls are enforced.
   - Preserve full lower-case commit-SHA pins and test each rule with valid and
-    invalid YAML fixtures, including quoted and multiline values.
-  - See [RFC 0002 §Repository-wide workflow-policy
-    validator](rfcs/0002-code-health.md#repository-wide-workflow-policy-validator).
+    invalid YAML fixtures, including quoted and multiline values, both
+    privileged triggers, untrusted checkout and artefact-provenance cases, and
+    pull-request data flowing to shell commands.
+  - See [RFC 0008 §Repository-wide workflow-policy
+    validator](rfcs/0008-code-health.md#repository-wide-workflow-policy-validator).
   - Success: every security-policy class has a stable failing fixture and an
-    actionable rule identifier, while all tracked workflows pass.
+    actionable rule identifier, including `pull_request_target` and privileged
+    `workflow_run` coverage for untrusted checkout content, verified artefact
+    provenance, and pull-request data reaching shell commands, while all
+    tracked workflows pass.
 - [ ] 7.2.2. Enforce gate, reference, and documentation consistency.
   - Requires 7.1.2 and 7.1.3.
   - Resolve local workflows and actions, Make targets, nextest profiles,
@@ -1347,10 +1354,10 @@ schedule.
   - Make focused workflow-contract tests consume the shared inventory where it
     removes duplicate parsing, while preserving their domain-specific
     assertions.
-  - See [RFC 0002 §Gate self-consistency
-    contracts](rfcs/0002-code-health.md#gate-self-consistency-contracts)
+  - See [RFC 0008 §Gate self-consistency
+    contracts](rfcs/0008-code-health.md#gate-self-consistency-contracts)
     and [§Documentation
-    consistency](rfcs/0002-code-health.md#documentation-consistency).
+    consistency](rfcs/0008-code-health.md#documentation-consistency).
   - Success: every tracked workflow and indexed documentation reference
     resolves, or is explicitly marked as historical under the documented rule.
 - [ ] 7.2.3. Enforce tier and exception hygiene through the canonical gate.
@@ -1360,10 +1367,10 @@ schedule.
     a registry entry.
   - Add the validator to a canonical Make target and the per-pull-request CI
     path without weakening existing gates or adding blanket retries.
-  - See [RFC 0002 §Health tiers and exception/allowlist
-    registry](rfcs/0002-code-health.md#health-tiers-and-exceptionallowlist-registry)
+  - See [RFC 0008 §Health tiers and exception/allowlist
+    registry](rfcs/0008-code-health.md#health-tiers-and-exceptionallowlist-registry)
     and [§Phase 2: Block deterministic
-    contracts](rfcs/0002-code-health.md#phase-2-block-deterministic-contracts).
+    contracts](rfcs/0008-code-health.md#phase-2-block-deterministic-contracts).
   - Success: twenty measured runs on the standard CI runner complete in under
     two minutes each and produce the same classifications for the same tree.
 - [ ] 7.2.4. Add an end-to-end workflow-policy regression corpus.
@@ -1372,11 +1379,10 @@ schedule.
     `pull_request_target`, missing local references, broken tiers, invalid
     exceptions, shell quoting, comments, and multiline commands in combination.
   - Exercise every tracked workflow through the same command that CI invokes.
-  - See [RFC 0002 §Acceptance
-    criteria](rfcs/0002-code-health.md#acceptance-criteria).
+  - See [RFC 0008 §Acceptance
+    criteria](rfcs/0008-code-health.md#acceptance-criteria).
   - Success: each policy class fails independently and in representative
     combinations, while the repository corpus passes without allowlist drift.
-
 
 ### 7.3. Add bounded coverage-guided fuzzing at compiler boundaries
 
@@ -1392,9 +1398,9 @@ remain scheduled.
     output, and writes outside a capability-scoped temporary directory.
   - Document the harness ownership and composition rules before extracting any
     new shared boundary.
-  - See [RFC 0002 §Scheduled cargo-fuzz
-    targets](rfcs/0002-code-health.md#scheduled-cargo-fuzz-targets)
-    and [§Open questions](rfcs/0002-code-health.md#open-questions).
+  - See [RFC 0008 §Scheduled cargo-fuzz
+    targets](rfcs/0008-code-health.md#scheduled-cargo-fuzz-targets)
+    and [§Open questions](rfcs/0008-code-health.md#open-questions).
   - Success: a fixed input always yields the same bounded value or typed error,
     and a harness defect cannot invoke user commands or escape its test root.
 - [ ] 7.3.2. Implement the `manifest_yaml` fuzz boundary.
@@ -1402,8 +1408,8 @@ remain scheduled.
   - Exercise arbitrary bytes, invalid UTF-8, malformed YAML, nesting pressure,
     valid minimal manifests, and current parser limits.
   - Check in minimized valid, malformed, and boundary smoke inputs.
-  - See [RFC 0002 §Scheduled cargo-fuzz
-    targets](rfcs/0002-code-health.md#scheduled-cargo-fuzz-targets).
+  - See [RFC 0008 §Scheduled cargo-fuzz
+    targets](rfcs/0008-code-health.md#scheduled-cargo-fuzz-targets).
   - Success: bounded parsing returns a typed result without panic, timeout, or
     uncontrolled filesystem access.
 - [ ] 7.3.3. Implement the `jinja_expansion` fuzz boundary.
@@ -1411,8 +1417,8 @@ remain scheduled.
   - Exercise undefined values, malformed templates, nested control flow,
     expansion-size pressure, and the current control-key and binding rules.
   - Check in minimized valid, malformed, and boundary smoke inputs.
-  - See [RFC 0002 §Scheduled cargo-fuzz
-    targets](rfcs/0002-code-health.md#scheduled-cargo-fuzz-targets).
+  - See [RFC 0008 §Scheduled cargo-fuzz
+    targets](rfcs/0008-code-health.md#scheduled-cargo-fuzz-targets).
   - Success: expansion is bounded and deterministic and preserves current
     semantics without panic.
 - [ ] 7.3.4. Implement the `command_interpolation` fuzz boundary.
@@ -1421,8 +1427,8 @@ remain scheduled.
     substitutions, unmatched delimiters, and malformed UTF-8.
   - Preserve the current whole-placeholder rewriting contract.
   - Check in minimized valid, malformed, and boundary smoke inputs.
-  - See [RFC 0002 §Scheduled cargo-fuzz
-    targets](rfcs/0002-code-health.md#scheduled-cargo-fuzz-targets).
+  - See [RFC 0008 §Scheduled cargo-fuzz
+    targets](rfcs/0008-code-health.md#scheduled-cargo-fuzz-targets).
   - Success: the target produces a deterministic typed result without panic,
     timeout, or command execution.
 - [ ] 7.3.5. Implement the `path_processing` fuzz boundary.
@@ -1431,8 +1437,8 @@ remain scheduled.
     deep paths within the current capability boundary.
   - Preserve capability-root confinement and current path classifications.
   - Check in minimized valid, malformed, and boundary smoke inputs.
-  - See [RFC 0002 §Scheduled cargo-fuzz
-    targets](rfcs/0002-code-health.md#scheduled-cargo-fuzz-targets).
+  - See [RFC 0008 §Scheduled cargo-fuzz
+    targets](rfcs/0008-code-health.md#scheduled-cargo-fuzz-targets).
   - Success: the target produces a deterministic typed result without panic,
     timeout, uncontrolled filesystem access, or path escape.
 - [ ] 7.3.6. Implement the `ninja_emission` fuzz boundary.
@@ -1440,24 +1446,29 @@ remain scheduled.
   - Exercise valid and rejected intermediate representation values, hostile
     names and commands, ordering variation, and output-size limits.
   - Check in minimized valid, malformed, and boundary smoke inputs.
-  - See [RFC 0002 §Scheduled cargo-fuzz
-    targets](rfcs/0002-code-health.md#scheduled-cargo-fuzz-targets).
+  - See [RFC 0008 §Scheduled cargo-fuzz
+    targets](rfcs/0008-code-health.md#scheduled-cargo-fuzz-targets).
   - Success: equivalent input produces deterministic output accepted by the
     renderer contract, or a typed error, without running Ninja.
 - [ ] 7.3.7. Integrate fuzz smoke checks, scheduled campaigns, and crash
   promotion.
-  - Requires 7.2.3, 7.3.2, 7.3.3, 7.3.4, 7.3.5, and 7.3.6.
+  - Requires 7.2.3, 7.3.2, 7.3.3, 7.3.4, 7.3.5, 7.3.6, and the bounded
+    Proptest suites for the range invariants, size and performance limits,
+    limit-edge cases, the 256-case bound, and retained regressions.
   - Run only measured, deterministic smoke corpora on pull requests; run longer
     budgeted campaigns on a scheduled workflow.
+  - Promote a fuzz target only after its bounded properties cover those
+    invariants and retained regression inputs.
   - Publish target, corpus revision, execution budget, and crash result, retain
     failure artefacts, and minimize each crasher.
   - Require a deterministic regression test before deleting or quarantining a
     crasher, and do not use blanket retries.
-  - See [RFC 0002 §Phase 3: Add scheduled
-    fuzzing](rfcs/0002-code-health.md#phase-3-add-scheduled-fuzzing).
-  - Success: every target has a passing smoke corpus and any scheduled failure
-    remains visible until its minimized regression test passes.
-
+  - See [RFC 0008 §Phase 3: Add scheduled
+    fuzzing](rfcs/0008-code-health.md#phase-3-add-scheduled-fuzzing).
+  - Success: every target has a passing smoke corpus and bounded properties
+    cover the range invariants, size and performance limits, limit edges, the
+    256-case bound, and retained regressions before promotion; any scheduled
+    failure remains visible until its minimized regression test passes.
 
 ### 7.4. Ratchet health signals from measured evidence
 
@@ -1471,8 +1482,8 @@ temporary exceptions instead of normalizing them.
     scheduled fuzz runs with revisions, budgets, outcomes, crash regressions,
     coverage trends, mutation survivors, and exception age.
   - Distinguish tool or runner outages from product and policy failures.
-  - See [RFC 0002 §Phase 4: Ratchet and
-    review](rfcs/0002-code-health.md#phase-4-ratchet-and-review).
+  - See [RFC 0008 §Phase 4: Ratchet and
+    review](rfcs/0008-code-health.md#phase-4-ratchet-and-review).
   - Success: the evidence has no unexplained missing run, hidden retry, stale
     crasher, or ownerless exception.
 - [ ] 7.4.2. Promote only stable signals and reconcile documentation.
@@ -1483,8 +1494,8 @@ temporary exceptions instead of normalizing them.
   - Remove resolved exceptions, review unmaintained entries, and align the
     tier registry, workflows, Make targets, developer guide, and formal
     verification guide.
-  - See [RFC 0002 §Compatibility and
-    migration](rfcs/0002-code-health.md#compatibility-and-migration).
+  - See [RFC 0008 §Compatibility and
+    migration](rfcs/0008-code-health.md#compatibility-and-migration).
   - Success: the registry and documentation agree with every producing job,
     and each surviving exception remains narrow, owned, justified, and current.
 
@@ -1495,11 +1506,10 @@ dependency policy, and archive checks to deterministic evidence for the exact
 tag commit, then publication can fail closed before an invalid or
 under-evidenced artefact becomes a release.
 
-This phase implements [RFC 0001](rfcs/0001-release-hardening.md). It keeps
+This phase implements [RFC 0005](rfcs/0005-release-hardening.md). It keeps
 measurement separate from enforcement, then makes the existing publication job
 consume one read-only admission decision without changing public command or
 archive naming contracts.
-
 
 ### 8.1. Settle the release evidence and operating contracts
 
@@ -1517,10 +1527,10 @@ must share.
     first-version evidence needs external attestation.
   - Record substantive decisions as ADRs and update release architecture and
     developer documentation.
-  - See [RFC 0001 §Open
-    questions](rfcs/0001-release-hardening.md#open-questions) and
+  - See [RFC 0005 §Open
+    questions](rfcs/0005-release-hardening.md#open-questions) and
     [§Phase 1: Measure and
-    inventory](rfcs/0001-release-hardening.md#phase-1-measure-and-inventory).
+    inventory](rfcs/0005-release-hardening.md#phase-1-measure-and-inventory).
   - Success: every threshold, freshness rule, waiver, and retained artefact has
     one documented owner and source of truth.
 - [ ] 8.1.2. Define and validate the release-evidence manifest schema.
@@ -1531,8 +1541,8 @@ must share.
     byte size, and SHA-256 digest.
   - Reject unknown, missing, stale, malformed, duplicated, or contradictory
     evidence and require exactly one sidecar per archive.
-  - See [RFC 0001 §Release-admission
-    evidence](rfcs/0001-release-hardening.md#release-admission-evidence).
+  - See [RFC 0005 §Release-admission
+    evidence](rfcs/0005-release-hardening.md#release-admission-evidence).
   - Success: schema fixtures prove every required field and exact-commit
     relation, including negative cases, without granting publish permissions.
 - [ ] 8.1.3. Capture reproducible release-profile baselines.
@@ -1542,11 +1552,10 @@ must share.
     8.1.1.
   - Record stripped and unstripped binary sizes and representative-workload
     timings with the evidence inputs needed to reproduce them.
-  - See [RFC 0001 §Release-mode
-    invariants](rfcs/0001-release-hardening.md#release-mode-invariants).
+  - See [RFC 0005 §Release-mode
+    invariants](rfcs/0005-release-hardening.md#release-mode-invariants).
   - Success: five repeated baseline runs per supported target are retained and
     identify their exact commit and build inputs.
-
 
 ### 8.2. Enable and exercise release-mode invariants
 
@@ -1560,21 +1569,28 @@ the accepted size and performance budgets.
     `debug-assertions = true`, and prove packaging jobs do not override it.
   - Preserve the pinned nightly toolchain, Polonius, Kani, and existing
     all-target and all-feature gates.
-  - See [RFC 0001 §Release-mode
-    invariants](rfcs/0001-release-hardening.md#release-mode-invariants).
+  - See [RFC 0005 §Release-mode
+    invariants](rfcs/0005-release-hardening.md#release-mode-invariants).
   - Success: every supported target builds with both invariants enabled and no
     release path silently restores Cargo defaults.
 - [ ] 8.2.2. Add end-to-end release-path invariant coverage.
-  - Requires 8.2.1.
+  - Requires 8.2.1 and bounded Proptest suites for release arithmetic, digest
+    and commit binding, freshness, archive cardinality, size and performance
+    limits, limit-edge cases, the 256-case bound, and retained regressions.
   - Exercise every supported command path that can reach a production
     `debug_assert`, selected arithmetic boundaries, valid inputs, and
     intentionally rejected inputs in release mode.
+  - Run the bounded property cases before release admission, including the
+    256-case bound and regression inputs retained from prior failures.
   - Require supported failures to remain typed, documented errors rather than
     assertion failures or arithmetic panics.
-  - See [RFC 0001 §Measurable acceptance
-    criteria](rfcs/0001-release-hardening.md#measurable-acceptance-criteria).
+  - See [RFC 0005 §Measurable acceptance
+    criteria](rfcs/0005-release-hardening.md#measurable-acceptance-criteria).
   - Success: all production assertion sites and selected overflow boundaries
-    are covered across supported targets without weakening an invariant.
+    are covered across supported targets without weakening an invariant, and
+    bounded properties cover release arithmetic, digest and commit binding,
+    freshness, archive cardinality, size and performance limits, limit edges,
+    the 256-case bound, and retained regressions before admission.
 - [ ] 8.2.3. Enforce release-profile size and performance budgets.
   - Requires 8.1.2, 8.1.3, and 8.2.2.
   - Run five candidate measurements with the same inputs as the baseline and
@@ -1582,11 +1598,10 @@ the accepted size and performance budgets.
   - Fail when any target's median representative workload is more than 5%
     slower or its stripped binary is more than 10% larger; retain unstripped
     size as a diagnostic.
-  - See [RFC 0001 §Measurable acceptance
-    criteria](rfcs/0001-release-hardening.md#measurable-acceptance-criteria).
+  - See [RFC 0005 §Measurable acceptance
+    criteria](rfcs/0005-release-hardening.md#measurable-acceptance-criteria).
   - Success: repeated measurements are reproducible, exact-commit-bound, and
     fail closed when either budget is exceeded.
-
 
 ### 8.3. Enforce secret, dependency, and licence policy
 
@@ -1604,8 +1619,8 @@ temporary waivers into permanent trust.
   - Redact findings and require false-positive suppressions to identify the
     pattern, path, reviewer, rationale, and expiry without disabling the
     repository scan.
-  - See [RFC 0001 §Secret
-    scanning](rfcs/0001-release-hardening.md#secret-scanning).
+  - See [RFC 0005 §Secret
+    scanning](rfcs/0005-release-hardening.md#secret-scanning).
   - Success: a synthetic secret fails each candidate event without printing
     secret material, while an unpinned scanner or broad suppression fails
     policy validation.
@@ -1619,8 +1634,8 @@ temporary waivers into permanent trust.
     result whose resolved SHA matches the exact release-tag commit.
   - Treat a late, missing, unavailable, or newly failing scan as unknown or
     failed, never passed.
-  - See [RFC 0001 §Secret
-    scanning](rfcs/0001-release-hardening.md#secret-scanning).
+  - See [RFC 0005 §Secret
+    scanning](rfcs/0005-release-hardening.md#secret-scanning).
   - Success: release evidence rejects stale history scans and identifies a
     finding without disclosing its content.
 - [ ] 8.3.3. Add versioned advisory and dependency policy.
@@ -1631,8 +1646,8 @@ temporary waivers into permanent trust.
     and denied or unknown licences.
   - Require waivers to name the advisory, dependency, reason, owner, approval,
     and expiry; generated output cannot waive a failed policy.
-  - See [RFC 0001 §Dependency and licence
-    policy](rfcs/0001-release-hardening.md#dependency-and-licence-policy).
+  - See [RFC 0005 §Dependency and licence
+    policy](rfcs/0005-release-hardening.md#dependency-and-licence-policy).
   - Success: clean policy output is reproducible from the committed lockfile,
     tool versions, registry state, and policy files, and every advisory,
     source, ban, and licence negative fixture fails closed.
@@ -1644,8 +1659,8 @@ temporary waivers into permanent trust.
     dependencies; report transitive findings for owned review.
   - Require each exception to name the dependency, reason, owner, approval,
     and expiry; generated output cannot waive a failed policy.
-  - See [RFC 0001 §Dependency and licence
-    policy](rfcs/0001-release-hardening.md#dependency-and-licence-policy).
+  - See [RFC 0005 §Dependency and licence
+    policy](rfcs/0005-release-hardening.md#dependency-and-licence-policy).
   - Success: the notice inventory is complete and reproducible, and each
     unmaintained finding has the blocking or review outcome defined by policy.
 
@@ -1662,8 +1677,8 @@ runs prove the failure boundary before any job receives release permissions.
     archive checksum results under the schema from 8.1.2.
   - Bind every producer to the tag commit and record tool versions, policy
     inputs, and immutable log or artefact identities.
-  - See [RFC 0001 §Release-admission
-    evidence](rfcs/0001-release-hardening.md#release-admission-evidence).
+  - See [RFC 0005 §Release-admission
+    evidence](rfcs/0005-release-hardening.md#release-admission-evidence).
   - Success: a candidate has exactly one successful, reproducible result for
     every required gate, target, archive, and checksum sidecar.
 - [ ] 8.4.2. Add the read-only release-admission job.
@@ -1673,8 +1688,8 @@ runs prove the failure boundary before any job receives release permissions.
     on its success.
   - Preserve existing archive names, target coverage, checksum sidecars,
     `cargo-binstall` resolution, action SHA pins, and release staging policy.
-  - See [RFC 0001 §Phase 4: Turn on
-    admission](rfcs/0001-release-hardening.md#phase-4-turn-on-admission).
+  - See [RFC 0005 §Phase 4: Turn on
+    admission](rfcs/0005-release-hardening.md#phase-4-turn-on-admission).
   - Success: no job with publication permission can run before successful
     exact-commit admission.
 - [ ] 8.4.3. Add end-to-end release-admission dry-run coverage.
@@ -1684,10 +1699,10 @@ runs prove the failure boundary before any job receives release permissions.
     checksum-mismatch combinations without publishing assets.
   - Prove tool outages and expired waivers remain unknown or failed, and prove
     a dry run cannot bypass admission for a real publication event.
-  - See [RFC 0001 §Failure modes and
-    mitigations](rfcs/0001-release-hardening.md#failure-modes-and-mitigations)
+  - See [RFC 0005 §Failure modes and
+    mitigations](rfcs/0005-release-hardening.md#failure-modes-and-mitigations)
     and [§Measurable acceptance
-    criteria](rfcs/0001-release-hardening.md#measurable-acceptance-criteria).
+    criteria](rfcs/0005-release-hardening.md#measurable-acceptance-criteria).
   - Success: every invalid matrix case blocks before upload, while clean
     evidence preserves the established archive and sidecar contract.
 - [ ] 8.4.4. Enable publication admission and document rollback.
@@ -1698,8 +1713,8 @@ runs prove the failure boundary before any job receives release permissions.
   - Limit rollback to disabling publication while retaining checks and
     evidence; do not remove release invariants or widen thresholds to clear a
     failed release.
-  - See [RFC 0001 §Compatibility and
-    migration](rfcs/0001-release-hardening.md#compatibility-and-migration).
+  - See [RFC 0005 §Compatibility and
+    migration](rfcs/0005-release-hardening.md#compatibility-and-migration).
   - Success: a real release is publishable only from the admitted exact tag
     commit, and its retained evidence reproduces the admission decision.
 ## 7. Netsukefile testing framework
