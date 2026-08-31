@@ -95,11 +95,18 @@ fn preceded_by_space(text: &str, index: usize) -> bool {
 
 /// Report the length of a block scalar, clipped to its indented body.
 ///
-/// A block scalar owns its header line plus every following line that is blank
-/// or indented further than the header. The scanner's reported end can reach
-/// past that into the next declaration.
+/// The scanner reports a block scalar's span from its first *content*
+/// character, not from the `|` or `>` header, so the indent to compare against
+/// is the body's own. YAML sets a block's indentation from that first
+/// non-empty line and continues the body while later lines are blank or
+/// indented at least as far; the scanner's reported end can reach past that
+/// into the next declaration.
+///
+/// Comparing against the header line's indent instead would end the block at
+/// its second line, leaving every rule that scans a multi-line `script:` body
+/// seeing only the first line of it.
 fn block_len(text: &str, span: Span, slice: &str) -> usize {
-    let header_indent = line_indent(text, span.start);
+    let body_indent = line_indent(text, span.start);
     let mut length = first_line_len(slice);
     let mut pending = length;
     for line in slice
@@ -111,7 +118,7 @@ fn block_len(text: &str, span: Span, slice: &str) -> usize {
             pending = pending.saturating_add(line.len());
             continue;
         }
-        if indent_of(line) <= header_indent {
+        if indent_of(line) < body_indent {
             break;
         }
         pending = pending.saturating_add(line.len());

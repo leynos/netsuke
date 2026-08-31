@@ -44,6 +44,20 @@ fn bashism_names_the_portable_alternative() {
     );
 }
 
+/// A rule must see every line of a multi-line script, not just the first.
+#[test]
+fn bashism_reports_a_construct_below_the_first_script_line() {
+    let yaml = concat!(
+        "netsuke_version: \"1.0.0\"\n",
+        "targets:\n",
+        "  - name: out\n",
+        "    script: |\n",
+        "      echo start\n",
+        "      if [[ -f in ]]; then cp in out; fi\n",
+    );
+    crate::assert_lint_fires!(yaml, "bashism", 1);
+}
+
 #[test]
 fn bashism_is_suppressed_by_a_directive() {
     let yaml = concat!(

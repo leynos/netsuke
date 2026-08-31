@@ -125,3 +125,42 @@ fn line_lookup_maps_offsets_to_one_based_lines() {
     assert_eq!(doc.lines().line_of(targets.span.start), 2);
     assert_eq!(doc.lines().line_count(), 3);
 }
+
+/// A block scalar's span must cover its whole body and stop before the next
+/// declaration.
+///
+/// The scanner reports the span from the first content character rather than
+/// the `|` header, so an indent comparison anchored on the header line ends
+/// the block after its first line — leaving every rule that scans a multi-line
+/// `script:` seeing only that line.
+#[test]
+fn a_block_scalar_span_covers_every_body_line() {
+    let text = concat!(
+        "netsuke_version: \"1.0.0\"\n",
+        "targets:\n",
+        "  - name: out\n",
+        "    script: |\n",
+        "      echo one\n",
+        "      echo two\n",
+        "      echo three\n",
+        "  - name: next\n",
+        "    command: \"echo done\"\n",
+    );
+    let doc = document!(text);
+    let script = doc
+        .section("targets")
+        .and_then(|node| node.items().next())
+        .and_then(|node| node.get("script"))
+        .expect("script should be indexed");
+    let covered = doc.slice(script.span);
+    for line in ["echo one", "echo two", "echo three"] {
+        assert!(
+            covered.contains(line),
+            "span should cover {line:?}, got {covered:?}"
+        );
+    }
+    assert!(
+        !covered.contains("next"),
+        "span should stop before the next declaration, got {covered:?}"
+    );
+}
