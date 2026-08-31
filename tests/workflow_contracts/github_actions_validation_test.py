@@ -45,7 +45,7 @@ ACTIONLINT_VERSION = "1.7.12"
 ACTIONLINT_SHA256 = "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
 ACTIONLINT_INSTALLER_COMMIT = "914e7df21a07ef503a81201c76d2b11c789d3fca"
 ACTIONLINT_ARCHIVE = (
-    f"actionlint_{_shell_variable('ACTIONLINT_VERSION')}_linux_x86_64.tar.gz"
+    f"actionlint_{_shell_variable('ACTIONLINT_VERSION')}_linux_amd64.tar.gz"
 )
 ACTIONLINT_RAW_BASE = "https://raw.githubusercontent.com/rhysd/actionlint"
 ACTIONLINT_SCRIPT = "scripts/download-actionlint.bash"
@@ -74,7 +74,7 @@ ACTIONLINT_SCRIPT_CONTRACTS = (
     ),
     (
         f'readonly ACTIONLINT_ARCHIVE="{ACTIONLINT_ARCHIVE}"',
-        "the actionlint installer must request the published Linux x86-64 archive",
+        "the actionlint installer must request the published Linux amd64 archive",
     ),
     (
         f"readonly ACTIONLINT_RAW_BASE='{ACTIONLINT_RAW_BASE}'",
@@ -378,7 +378,7 @@ def test_github_actions_lint_preserves_linter_exit_contract(
     with CmdMox() as cmd_mox:
         yamllint = (
             cmd_mox
-            .mock("yamllint")
+            .spy("yamllint")
             .with_args("--config-file", ".yamllint.yml", ".github/workflows")
             .returns(exit_code=yamllint_exit)
             .in_order()
