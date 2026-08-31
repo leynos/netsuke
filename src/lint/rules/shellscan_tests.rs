@@ -4,11 +4,14 @@ use rstest::rstest;
 
 use super::{Mask, find_all, find_words, is_word_bounded, leading_word, segments};
 
+/// An operator outside quotes is shell syntax and is reported.
 #[test]
 fn a_match_outside_quotes_is_active() {
     assert_eq!(find_all("a && b", "&&").len(), 1);
 }
 
+/// An operator inside a shell quote or a Jinja delimiter is text, not
+/// syntax, so it is not reported.
 #[rstest]
 #[case("echo 'a && b'")]
 #[case("echo \"a && b\"")]
@@ -28,12 +31,15 @@ fn an_escaped_quote_does_not_change_the_state() {
     assert_eq!(find_all("echo \\\" && b", "&&").len(), 1);
 }
 
+/// Inside single quotes a backslash is literal, so it cannot escape the
+/// closing quote.
 #[test]
 fn a_single_quote_protects_a_backslash() {
     assert_eq!(find_all("echo 'a\\' && b", "&&").len(), 1);
 }
 
 #[rstest]
+/// A word-bounded needle matches a whole word only, never a substring.
 #[case("make all", "make", 1)]
 #[case("makeinfo manual", "make", 0)]
 #[case("run/make all", "make", 0)]
@@ -46,11 +52,13 @@ fn word_matching_respects_boundaries(
     assert_eq!(find_words(text, needle).len(), expected);
 }
 
+/// An empty needle matches nothing rather than every position.
 #[test]
 fn an_empty_needle_matches_nothing() {
     assert_eq!(find_all("anything", ""), Vec::new());
 }
 
+/// A match at the start or end of the text is still word-bounded.
 #[test]
 fn word_boundaries_hold_at_the_ends_of_the_text() {
     assert!(is_word_bounded("make", 0, 4));
@@ -59,6 +67,7 @@ fn word_boundaries_hold_at_the_ends_of_the_text() {
 }
 
 #[rstest]
+/// Segments split on shell-active separators and on nothing else.
 #[case("a && b", vec!["a ", " b"])]
 #[case("a || b", vec!["a ", " b"])]
 #[case("a | b", vec!["a ", " b"])]
@@ -70,6 +79,7 @@ fn segments_split_on_shell_active_separators(#[case] text: &str, #[case] expecte
     assert_eq!(found, expected);
 }
 
+/// Each segment's reported offset indexes back to that segment.
 #[test]
 fn segment_offsets_locate_each_part() {
     let text = "one && two";
@@ -80,6 +90,7 @@ fn segment_offsets_locate_each_part() {
 }
 
 #[rstest]
+/// The leading word skips indentation and any leading assignment.
 #[case("  make all", Some("make"))]
 #[case("VAR=1 make all", Some("make"))]
 #[case("   ", None)]
@@ -90,6 +101,7 @@ fn the_leading_word_skips_indentation_and_assignments(
     assert_eq!(leading_word(segment).map(|(_, word)| word), expected);
 }
 
+/// The leading word's offset indexes to the word itself.
 #[test]
 fn the_leading_word_reports_its_offset() {
     let segment = "  VAR=1 make all";
@@ -134,6 +146,7 @@ fn the_leading_word_offset_skips_a_repeated_assignment_value() {
     assert_eq!(segment.get(offset..offset + word.len()), Some("gcc"));
 }
 
+/// An offset past the scanned text is inactive rather than panicking.
 #[test]
 fn a_mask_reports_nothing_active_past_the_end() {
     assert!(!Mask::new("abc").is_active(99));
