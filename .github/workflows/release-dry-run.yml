@@ -5,13 +5,9 @@ name: Release Dry Run
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
 
-permissions:
-  actions: read
-  contents: read
-
 jobs:
   release:
     uses: ./.github/workflows/release.yml
     with:
       dry-run: true
-      run-release-admission: false
+    secrets: inherit

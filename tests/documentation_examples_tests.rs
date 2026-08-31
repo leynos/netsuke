@@ -38,7 +38,6 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-output-streams",
     "guide-project-anchor",
     "guide-project-config",
-    "guide-release-candidate-action",
     "guide-serial-dependency-order-manifest",
     "guide-source-install",
     "guide-utility-commands",
