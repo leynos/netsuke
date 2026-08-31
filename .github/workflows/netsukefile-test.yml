@@ -1,3 +1,4 @@
+---
 name: Netsukefile Build Test
 
 on:
@@ -115,5 +116,3 @@ jobs:
         env:
           NINJA_MANIFEST: action.ninja
         run: scripts/assert-file-absent.sh unused.txt
-
----
