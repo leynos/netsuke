@@ -1,207 +1,94 @@
-# 🛡️ Reliable Testing in Rust via Dependency Injection
+# Reliable testing in Rust via dependency injection
 
-Writing robust, reliable, and parallelizable tests requires an intentional
-approach to handling external dependencies such as environment variables, the
-filesystem, or the system clock. Functions that directly call `std::env::var` or
-`SystemTime::now()` are difficult to test because they depend on global,
-non-deterministic state.
+Environment variables are process-global state. A test that changes the harness
+environment can race another test, leak a value after a failure, or make a
+passing result depend on test order. Netsuke therefore injects environment
+input; it never changes the harness process to arrange a test. The policy and
+its three seam shapes are recorded in
+[ADR-008](adr-008-environment-seam-taxonomy.md).
 
-This leads to several problems:
+## Use `mockable::Env` at an environment boundary
 
-- **Flaky Tests:** A test might pass or fail depending on the environment it
-  runs in.
-- **Parallel Execution Conflicts:** Tests that modify the same global
-  environment variable (`std::env::set_var`) will interfere with each other
-  when run with `cargo test`.
-- **State Corruption:** A test that panics can fail to clean up its changes to
-  the environment, poisoning subsequent tests.
+Use `mockable::Env` when a boundary reads a precedence ladder, is exercised by
+several tests, or is likely to acquire more environment input. Keep the trait
+at the module-owned boundary, rather than introducing a shared environment
+service. Production supplies `mockable::DefaultEnv`; tests supply a configured
+`mockable::MockEnv`.
 
-The solution is a classic software design pattern: **Dependency Injection
-(DI)**. Instead of a function reaching out to the global state, its
-dependencies are provided as arguments. The `mockable` crate offers a
-convenient set of traits (`Env`, `Clock`, etc.) to implement this pattern for
-common system interactions in Rust.
-
-______________________________________________________________________
-
-## ✨ Mocking Environment Variables
-
-### 1. Add `mockable`
-
-First, add the crate to development dependencies in `Cargo.toml`.
-
-```toml
-[dev-dependencies]
-mockable = "0.3"
-```
-
-### 2. The Untestable Code (Before)
-
-Directly calling `std::env` makes it hard to test all logic paths.
+The Ninja resolver demonstrates the pattern. Its testable query receives the
+reader, while the public production function supplies the default adapter:
 
 ```rust
-pub fn get_api_key() -> Option<String> {
-    match std::env::var("API_KEY") {
-        Ok(key) if !key.is_empty() => Some(key),
-        _ => None,
+use camino::Utf8PathBuf;
+use mockable::{DefaultEnv, Env};
+use std::path::PathBuf;
+
+fn resolve_program_with(env: &impl Env) -> Utf8PathBuf {
+    match env.os_string("NETSUKE_NINJA") {
+        Some(value) if !value.is_empty() => Utf8PathBuf::from_path_buf(PathBuf::from(value))
+            .unwrap_or_else(|_| Utf8PathBuf::from("ninja")),
+        _ => Utf8PathBuf::from("ninja"),
     }
+}
+
+fn resolve_program() -> Utf8PathBuf {
+    resolve_program_with(&DefaultEnv)
 }
 ```
 
-### 3. Refactoring for Testability (After)
-
-The function is refactored to accept a generic type that implements the
-`mockable::Env` trait.
+The unit test controls the response without writing an environment variable:
 
 ```rust
-use mockable::Env;
+use mockable::MockEnv;
+use std::ffi::OsString;
 
-pub fn get_api_key(env: &impl Env) -> Option<String> {
-    match env.var("API_KEY") {
-        Ok(key) if !key.is_empty() => Some(key),
-        _ => None,
-    }
-}
+let mut env = MockEnv::new();
+env.expect_os_string()
+    .times(1)
+    .withf(|key| key == "NETSUKE_NINJA")
+    .return_const(Some(OsString::from("/opt/ninja")));
+
+assert_eq!(resolve_program_with(&env), Utf8PathBuf::from("/opt/ninja"));
 ```
 
-The function's core logic remains unchanged, but its dependency on the
-environment is now explicit and injectable.
+This pattern makes the lookup count and variable name part of the test
+contract. A missing, empty, or non-UTF-8 value is another mock response, not a
+reason to modify the process environment. Use a narrow closure instead when a
+single caller reads one variable, and use the `EnvReader` `Arc` closure where a
+registered `Send + Sync` callback requires it; ADR-008 defines those choices.
 
-### 4. Writing Isolated Unit Tests
+## Configure child processes explicitly
 
-Tests can use `MockEnv`, an in-memory mock, to simulate any environmental
-condition without touching the actual process environment.
+End-to-end tests are the sole exception because they configure a separate
+process, not the harness. Clear the child's inherited environment and add only
+the values the command requires:
 
 ```rust
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use mockable::{MockEnv, Env};
-
-    #[test]
-    fn test_get_api_key_present() {
-        let mut env = MockEnv::new();
-        env.set_var("API_KEY", "secret123");
-        assert_eq!(get_api_key(&env), Some("secret123".to_string()));
-    }
-
-    #[test]
-    fn test_get_api_key_missing() {
-        let env = MockEnv::new();
-        assert_eq!(get_api_key(&env), None);
-    }
-
-    #[test]
-    fn test_get_api_key_present_but_empty() {
-        let mut env = MockEnv::new();
-        env.set_var("API_KEY", "");
-        assert_eq!(get_api_key(&env), None);
-    }
-}
+let mut command = assert_cmd::Command::new(netsuke_executable);
+command
+    .env_clear()
+    .env("HOME", isolated_home)
+    .env("PATH", controlled_path)
+    .env("NETSUKE_NINJA", ninja_path);
 ```
 
-These tests are fast, completely isolated from each other, and will never fail
-due to external state.
+`Command::env` affects only the spawned command. It is not an endorsement of
+`std::env::set_var` or `std::env::remove_var` in the test process.
 
-### 5. Usage in Production Code
+## Retired anti-pattern: process-wide guards
 
-In production code, inject the "real" implementation, `RealEnv`, which calls
-the actual `std::env` functions.
+`EnvLock`, `EnvVarGuard`, and equivalent scope guards are not alternative
+testing strategies. They were abandoned because a lock merely serializes shared
+mutable state: the dependency remains ambient, parallel and property tests lose
+concurrency, and unrelated code can still observe the temporary value. Do not
+add a lock, a `serial_test` annotation, or a guard to make in-process
+environment mutation appear safe. Change the boundary to accept the injected
+value instead.
 
-```rust
-use mockable::RealEnv;
+## Checklist
 
-fn main() {
-    let env = RealEnv::new();
-    if let Some(api_key) = get_api_key(&env) {
-        println!("API Key found!");
-    } else {
-        println!("API Key not configured.");
-    }
-}
-```
-
-______________________________________________________________________
-
-## 🔩 Handling Other Non-Deterministic Dependencies
-
-This dependency injection pattern also applies to other non-deterministic
-dependencies such as the system clock. `mockable` provides a `Clock` trait for
-this purpose.
-
-### Untestable Code
-
-```rust
-use std::time::{SystemTime, Duration};
-
-fn is_cache_entry_stale(creation_time: SystemTime) -> bool {
-    let timeout = Duration::from_secs(300);
-    match SystemTime::now().duration_since(creation_time) {
-        Ok(age) => age > timeout,
-        Err(_) => false,
-    }
-}
-```
-
-### Testable Refactor
-
-```rust
-use mockable::Clock;
-use std::time::{SystemTime, Duration};
-
-fn is_cache_entry_stale(creation_time: SystemTime, clock: &impl Clock) -> bool {
-    let timeout = Duration::from_secs(300);
-    match clock.now().duration_since(creation_time) {
-        Ok(age) => age > timeout,
-        Err(_) => false,
-    }
-}
-```
-
-### Testing with `MockClock`
-
-```rust
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use mockable::{MockClock, Clock};
-    use std::time::{Duration, SystemTime};
-
-    #[test]
-    fn test_cache_is_not_stale() {
-        let mut clock = MockClock::new();
-        let creation_time = clock.now();
-        clock.advance(Duration::from_secs(100));
-        assert!(!is_cache_entry_stale(creation_time, &clock));
-    }
-
-    #[test]
-    fn test_cache_is_stale() {
-        let mut clock = MockClock::new();
-        let creation_time = clock.now();
-        clock.advance(Duration::from_secs(301));
-        assert!(is_cache_entry_stale(creation_time, &clock));
-    }
-}
-```
-
-In production, an instance of `RealClock::new()` would be used.
-
-______________________________________________________________________
-
-## 📌 Key Takeaways
-
-- **The Problem is Non-Determinism:** Directly accessing global state like
-  `std::env` or `SystemTime::now` makes code hard to test.
-- **The Solution is Dependency Injection:** Pass dependencies into functions as
-  arguments.
-- **Use** `mockable` **Traits:** Abstract dependencies behind traits such as
-  `impl Env` or `impl Clock`.
-- **`Mock*` for Tests:** Use `MockEnv` and `MockClock` in unit tests for
-  isolated, deterministic control.
-- **`Real*` for Production:** Use `RealEnv` and `RealClock` in the application
-  to interact with the actual system.
-- **`RealEnv` is NOT a Scope Guard:** `RealEnv` directly mutates the global
-  process environment without automatic cleanup. For integration tests that
-  require modifying the live environment, consider a crate such as `temp_env`.
-  For unit tests, `MockEnv` is preferable.
+- Pass environment input through a module-owned seam.
+- Use `DefaultEnv` only at the production composition boundary.
+- Use `MockEnv` to describe each unit-test response.
+- Use `Command::env` only to configure an isolated child process.
+- Never mutate or lock the harness process environment.
