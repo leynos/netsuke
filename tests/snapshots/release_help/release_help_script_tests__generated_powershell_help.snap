@@ -17,7 +17,7 @@ function Invoke-CustomNetsuke { param() }
       <command:name>CustomNetsuke</command:name>
     </command:details>
     <command:description>
-      <maml:para xmlns:maml="http://schemas.microsoft.com/maml/2004/10">--config build clean graph generate help</maml:para>
+      <maml:para xmlns:maml="http://schemas.microsoft.com/maml/2004/10">-C/--directory --config build clean graph generate help</maml:para>
     </command:description>
   </command:command>
 </helpItems>

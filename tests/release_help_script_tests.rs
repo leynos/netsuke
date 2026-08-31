@@ -19,6 +19,7 @@ use rstest::rstest;
 use std::{fs, process::Command};
 
 const DOCUMENTED_SUBCOMMANDS: [&str; 5] = ["build", "clean", "graph", "generate", "help"];
+const PARSER_ONLY_SELECTORS: [&str; 2] = ["-C/--directory", "--config"];
 
 #[rstest]
 fn generates_manual_page_for_non_windows_target(
@@ -193,11 +194,14 @@ fn assert_powershell_help_structure(
     Ok(())
 }
 
+/// Assert that generated help exposes the complete public CLI surface.
 fn assert_public_cli_surface(document: &str, format_name: &str) -> Result<()> {
-    ensure!(
-        document.contains("--config"),
-        "{format_name} should include the parser-only config selector: {document}"
-    );
+    for selector in PARSER_ONLY_SELECTORS {
+        ensure!(
+            document.contains(selector),
+            "{format_name} should include the parser-only {selector} selector: {document}"
+        );
+    }
     for subcommand in DOCUMENTED_SUBCOMMANDS {
         ensure!(
             document.contains(subcommand),

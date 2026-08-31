@@ -107,16 +107,28 @@ import sys
 with open(sys.argv[1], encoding="utf-8") as metadata_file:
     metadata = json.load(metadata_file)
 
-config = next(field for field in metadata["fields"] if field["name"] == "config")
-config_long = config["cli"]["long"]
-if not config_long:
-    raise ValueError("release-help config metadata must have a long flag")
+parser_only_fields = [
+    field
+    for field in metadata["fields"]
+    if field["cli"] and field["env"] is None and field["file"] is None
+]
+if not parser_only_fields:
+    raise ValueError("release-help metadata must include parser-only selectors")
 
-print(f"--{config_long}")
+parser_only_flags = []
+for field in parser_only_fields:
+    cli = field["cli"]
+    long = cli["long"]
+    if not long:
+        raise ValueError(f"parser-only {field['name']} metadata must have a long flag")
+    short = cli["short"]
+    parser_only_flags.append(f"-{short}/--{long}" if short else f"--{long}")
+
+print(" ".join(parser_only_flags))
 print(" ".join(command["app_name"] for command in metadata["subcommands"]))
 PY
 )
-config_flag="${public_cli_surface[0]}"
+parser_only_flags="${public_cli_surface[0]}"
 subcommands="${public_cli_surface[1]}"
 
 "#;
@@ -135,7 +147,7 @@ netsuke \- dependency-aware build orchestration
 MAN
     cat >>"$out_dir/man/man1/netsuke.1" <<MAN
 .SH OPTIONS
-.B $config_flag
+.B $parser_only_flags
 .SH COMMANDS
 $subcommands
 MAN
@@ -152,7 +164,7 @@ MAN
       <command:name>$module_name</command:name>
     </command:details>
     <command:description>
-      <maml:para xmlns:maml="http://schemas.microsoft.com/maml/2004/10">$config_flag $subcommands</maml:para>
+      <maml:para xmlns:maml="http://schemas.microsoft.com/maml/2004/10">$parser_only_flags $subcommands</maml:para>
     </command:description>
   </command:command>
 </helpItems>
@@ -162,6 +174,7 @@ MAML
 esac
 "#;
 
+/// Build the fake cargo-orthohelp executable script from its components.
 pub fn fake_cargo_orthohelp_script() -> String {
     [
         FAKE_CARGO_ORTHOHELP_PROLOGUE,

@@ -222,7 +222,7 @@ fn flag_help_key(arg_id: &str, subcommand: Option<Subcommand>) -> Option<&'stati
 }
 
 /// Return the help key for a top-level flag, when one is known.
-fn top_level_flag_help_key(arg_id: &str) -> Option<&'static str> {
+pub(crate) fn top_level_flag_help_key(arg_id: &str) -> Option<&'static str> {
     match arg_id {
         "file" => Some(keys::CLI_FLAG_FILE_HELP),
         "directory" => Some(keys::CLI_FLAG_DIRECTORY_HELP),

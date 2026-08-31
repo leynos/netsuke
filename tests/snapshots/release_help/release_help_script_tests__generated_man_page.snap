@@ -9,6 +9,6 @@ netsuke \- dependency-aware build orchestration
 .B netsuke
 [OPTIONS]
 .SH OPTIONS
-.B --config
+.B -C/--directory --config
 .SH COMMANDS
 build clean graph generate help

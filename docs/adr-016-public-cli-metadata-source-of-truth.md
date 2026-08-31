@@ -6,15 +6,15 @@ Accepted.
 
 ## Date
 
-2026-08-30.
+2026-08-30
 
 ## Context and problem statement
 
 OrthoConfig v0.9.0 exposes documentation metadata for `CliConfig`'s layered
 configuration fields. Netsuke's parser also exposes public CLI surface that is
-not a configuration field: the `--config` selector and command tree. A
-release-help generator that consumes only `CliConfig` therefore omits public,
-localized CLI documentation.
+not a configuration field: the `-C/--directory` and `--config` selectors and
+command tree. A release-help generator that consumes only `CliConfig` therefore
+omits public, localized CLI documentation.
 
 The missing selector must not become a layered configuration source. ADR 004
 assigns selector precedence, explicit-file loading, and fail-closed behaviour to
@@ -25,10 +25,11 @@ established ownership boundary.
 
 `ReleaseHelpCli` is the sole composition site for Netsuke's release-help
 metadata. It starts with `CliConfig::get_doc_metadata()`, then reads
-`Cli::command()` to add parser-only `--config` metadata and documented
-subcommands. It projects existing CLI Fluent keys onto published configuration
-fields and omits the structural `cmds` container. The synthetic selector uses
-the Fluent `cli.flag.config.help` key and has no environment or file source.
+`Cli::command()` to add parser-only `-C/--directory` and `--config` metadata,
+alongside documented subcommands. It projects existing CLI Fluent keys onto
+published configuration fields and omits the structural `cmds` container. The
+synthetic selectors use their Fluent help keys and have no environment or file
+source.
 
 `ReleaseHelpCli` supplies metadata only. It does not resolve a selector, load a
 file, establish precedence, or decide failure behaviour. `discovery.rs` retains
@@ -44,15 +45,17 @@ the public `--config` and `NETSUKE_CONFIG` policy defined by ADR 004.
   keys to the published field metadata.
 - **Localization remains explicit.** Parser-only fields carry declared Fluent
   keys, rather than relying on inferred message-name conventions.
-- **Policy stays separate from description.** Describing `--config` in help
-  does not transfer its precedence or fail-closed loading semantics.
+- **Policy stays separate from description.** Describing the parser-only
+  selectors in help does not transfer config-selector precedence, project-root
+  discovery, or fail-closed loading semantics.
 
 ## Consequences
 
-Generated Unix manuals and Windows PowerShell help include the selector and
-documented subcommands. Contributors add future parser-only release-help
-surface in `ReleaseHelpCli`, declare its Fluent key through `define_keys!`, and
-cover the composition with unit, snapshot, and artefact tests.
+Generated Unix manuals and Windows PowerShell help include the `-C/--directory`
+and `--config` selectors and documented subcommands. Contributors add future
+parser-only release-help surface in `ReleaseHelpCli`, declare its Fluent key
+through `define_keys!`, and cover the composition with unit, snapshot, and
+artefact tests.
 
 `CliConfig` must not gain parser-only fields, and a second parser metadata
 model must not be introduced. Changes to selector policy still update ADR 004,
@@ -62,9 +65,9 @@ standalone public configuration setting.
 
 ## Alternatives considered
 
-- **Put `--config` in `CliConfig`.** Rejected because the selector is not a
-  layered configuration field and would falsely imply environment or file
-  sources.
+- **Put the parser-only selectors in `CliConfig`.** Rejected because
+  `-C/--directory` and `--config` are not layered configuration fields and
+  would falsely imply environment or file sources.
 - **Move selector handling into OrthoConfig.** Rejected because it would give a
   generic library Netsuke-specific precedence and fail-closed loading policy.
 - **Maintain a second parser documentation model.** Rejected because two CLI

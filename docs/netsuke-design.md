@@ -3304,13 +3304,14 @@ localization key audit against Fluent bundles.
 
 `ReleaseHelpCli` is the sole release-help metadata composition site. `CliConfig`
 supplies layered configuration-field metadata, while `Cli::command()` supplies
-parser-only metadata: the `--config` selector and documented subcommands.
-`ReleaseHelpCli` projects existing CLI Fluent keys onto published configuration
-fields, omits the structural `cmds` container, and adds `--config` as help-only
-metadata with no environment or file source. It must not add selector
-precedence, configuration loading, or discovery policy to OrthoConfig. Those
-responsibilities remain in `src/cli/discovery.rs` under [ADR 004], including
-`--config` precedence and fail-closed selected-file loading. This boundary
+parser-only metadata: the `-C/--directory` and `--config` selectors and
+documented subcommands. `ReleaseHelpCli` projects existing CLI Fluent keys onto
+published configuration fields, omits the structural `cmds` container, and adds
+both selectors as help-only metadata with no environment or file source. It
+must not add selector precedence, configuration loading, or discovery policy to
+OrthoConfig. Those responsibilities remain in `src/cli/discovery.rs` under
+[ADR 004], including `--config` precedence, `-C/--directory`
+project-discovery rooting, and fail-closed selected-file loading. This boundary
 avoids a duplicate CLI model and is recorded in [ADR 016].
 
 Manual pages are generated under

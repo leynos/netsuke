@@ -5,12 +5,13 @@
 //! for `CliConfig` and adds parser-only arguments and Clap subcommands that
 //! users can invoke.
 
-use anyhow::{Context, Result};
-use clap::{ArgAction, Command, CommandFactory};
+use anyhow::{Context, Result, bail};
+use clap::{Arg, ArgAction, Command, CommandFactory};
 use ortho_config::docs::{CliMetadata, DocMetadata, FieldMetadata, OrthoConfigDocs, ValueType};
+use std::collections::HashSet;
 
 use super::{Cli, CliConfig};
-use crate::localization::keys;
+use crate::{cli_l10n::top_level_flag_help_key, localization::keys};
 
 /// Documentation root used by release help generators.
 ///
@@ -23,22 +24,27 @@ use crate::localization::keys;
 /// ```
 pub struct ReleaseHelpCli;
 
-impl OrthoConfigDocs for ReleaseHelpCli {
-    fn get_doc_metadata() -> DocMetadata {
+impl ReleaseHelpCli {
+    /// Compose complete release-help metadata from configuration and parser sources.
+    fn try_get_doc_metadata() -> Result<DocMetadata> {
         let mut metadata = CliConfig::get_doc_metadata();
         keys::CLI_ABOUT.clone_into(&mut metadata.about_id);
-        localized_config_help(&mut metadata.fields);
-        match documented_clap_config_field(&Cli::command()) {
-            Ok(config) => metadata.fields.push(config),
+        metadata.fields = localized_config_help(metadata.fields)?;
+        let parser_fields = documented_clap_parser_fields(&Cli::command(), &metadata.fields)?;
+        metadata.fields.extend(parser_fields);
+        metadata.subcommands = documented_clap_subcommands(&metadata);
+        Ok(metadata)
+    }
+}
+
+impl OrthoConfigDocs for ReleaseHelpCli {
+    fn get_doc_metadata() -> DocMetadata {
+        match Self::try_get_doc_metadata() {
+            Ok(metadata) => metadata,
             Err(error) => {
-                tracing::error!(
-                    ?error,
-                    "release help omits parser-only config metadata because the parser contract changed"
-                );
+                panic!("release-help metadata contract is invalid: {error}");
             }
         }
-        metadata.subcommands = documented_clap_subcommands(&metadata);
-        metadata
     }
 }
 
@@ -47,81 +53,90 @@ impl OrthoConfigDocs for ReleaseHelpCli {
 /// `CliConfig` remains the source of the fields and their configuration
 /// sources. The structural `cmds` container is not a public configuration
 /// setting, so release help omits it rather than inventing a separate model.
-fn localized_config_help(fields: &mut Vec<FieldMetadata>) {
-    fields.retain_mut(|field| {
-        let Some(help_key) = localized_config_help_key(&field.name) else {
-            tracing::error!(
-                field = %field.name,
-                "release help omits a configuration field without a declared Fluent help key"
-            );
-            return false;
-        };
-        help_key.clone_into(&mut field.help_id);
-        field.long_help_id = None;
-        true
-    });
+fn localized_config_help(fields: Vec<FieldMetadata>) -> Result<Vec<FieldMetadata>> {
+    fields
+        .into_iter()
+        .filter(|field| field.name != "cmds")
+        .map(|mut field| {
+            let help_key = top_level_flag_help_key(&field.name).with_context(|| {
+                format!(
+                    "release-help configuration field {} must declare a top-level Fluent help key",
+                    field.name
+                )
+            })?;
+            help_key.clone_into(&mut field.help_id);
+            field.long_help_id = None;
+            Ok(field)
+        })
+        .collect()
 }
 
-/// Return the existing Fluent key that documents a published configuration field.
-fn localized_config_help_key(name: &str) -> Option<&'static str> {
-    Some(match name {
-        "file" => keys::CLI_FLAG_FILE_HELP,
-        "jobs" => keys::CLI_FLAG_JOBS_HELP,
-        "verbose" => keys::CLI_FLAG_VERBOSE_HELP,
-        "locale" => keys::CLI_FLAG_LOCALE_HELP,
-        "fetch_allow_scheme" => keys::CLI_FLAG_FETCH_ALLOW_SCHEME_HELP,
-        "fetch_allow_host" => keys::CLI_FLAG_FETCH_ALLOW_HOST_HELP,
-        "fetch_block_host" => keys::CLI_FLAG_FETCH_BLOCK_HOST_HELP,
-        "fetch_default_deny" => keys::CLI_FLAG_FETCH_DEFAULT_DENY_HELP,
-        "json" => keys::CLI_FLAG_JSON_HELP,
-        "no_input" => keys::CLI_FLAG_NO_INPUT_HELP,
-        "color" => keys::CLI_FLAG_COLOR_HELP,
-        "emoji" => keys::CLI_FLAG_EMOJI_HELP,
-        "progress" => keys::CLI_FLAG_PROGRESS_HELP,
-        "accessibility" => keys::CLI_FLAG_ACCESSIBILITY_HELP,
-        "default_targets" => keys::CLI_FLAG_DEFAULT_TARGETS_HELP,
-        _ => return None,
-    })
-}
-
-/// Build release-help metadata for Netsuke's parser-only `--config` selector.
+/// Build release-help metadata for every parser-only top-level selector.
 ///
-/// The selector has no configuration, environment, or file source: discovery
-/// retains that policy in `discovery.rs` under ADR 004.
+/// The selectors have no configuration, environment, or file source. Discovery
+/// retains their policy in `discovery.rs` under ADR 004.
 ///
 /// # Errors
 ///
-/// Returns an error when the parser no longer exposes the required `config`
-/// argument, which would leave generated release help incomplete.
-fn documented_clap_config_field(command: &Command) -> Result<FieldMetadata> {
-    let config = command
+/// Returns an error when a parser-only selector lacks a Fluent key or path
+/// metadata, which would leave generated release help incomplete.
+fn documented_clap_parser_fields(
+    command: &Command,
+    configuration_fields: &[FieldMetadata],
+) -> Result<Vec<FieldMetadata>> {
+    let configuration_field_names = configuration_fields
+        .iter()
+        .map(|field| field.name.as_str())
+        .collect::<HashSet<_>>();
+
+    command
         .get_arguments()
-        .find(|argument| argument.get_id() == "config")
-        .context("Cli::command() should expose its parser-only config argument")?;
+        .filter(|argument| argument.get_id() != "help")
+        .filter(|argument| !configuration_field_names.contains(argument.get_id().as_str()))
+        .map(|argument| documented_clap_parser_field(command, argument.get_id().as_str()))
+        .collect()
+}
+
+/// Build release-help metadata for one parser-only top-level selector.
+///
+/// # Errors
+///
+/// Returns an error when the parser no longer exposes the selector, omits its
+/// Fluent key, or changes its path value type.
+fn documented_clap_parser_field(command: &Command, argument_id: &str) -> Result<FieldMetadata> {
+    let argument = command
+        .get_arguments()
+        .find(|argument| argument.get_id() == argument_id)
+        .with_context(|| {
+            format!("Cli::command() should expose its parser-only {argument_id} argument")
+        })?;
+    let help_id = top_level_flag_help_key(argument_id).with_context(|| {
+        format!("parser-only {argument_id} argument must declare a top-level Fluent help key")
+    })?;
 
     Ok(FieldMetadata {
-        name: config.get_id().as_str().to_owned(),
-        help_id: keys::CLI_FLAG_CONFIG_HELP.to_owned(),
+        name: argument.get_id().as_str().to_owned(),
+        help_id: help_id.to_owned(),
         long_help_id: None,
-        value: Some(ValueType::Path),
+        value: Some(parser_only_value_type(argument)?),
         default: None,
-        required: config.is_required_set(),
+        required: argument.is_required_set(),
         deprecated: None,
         cli: Some(CliMetadata {
-            long: config.get_long().map(str::to_owned),
-            short: config.get_short(),
-            value_name: config
+            long: argument.get_long().map(str::to_owned),
+            short: argument.get_short(),
+            value_name: argument
                 .get_value_names()
                 .and_then(|names| names.first())
                 .map(ToString::to_string),
-            multiple: matches!(config.get_action(), &ArgAction::Append),
-            takes_value: config.get_action().takes_values(),
-            possible_values: config
+            multiple: matches!(argument.get_action(), &ArgAction::Append),
+            takes_value: argument.get_action().takes_values(),
+            possible_values: argument
                 .get_possible_values()
                 .iter()
                 .map(|value| value.get_name().to_owned())
                 .collect(),
-            hide_in_help: config.is_hide_set(),
+            hide_in_help: argument.is_hide_set(),
         }),
         env: None,
         file: None,
@@ -129,6 +144,21 @@ fn documented_clap_config_field(command: &Command) -> Result<FieldMetadata> {
         links: Vec::new(),
         notes: Vec::new(),
     })
+}
+
+/// Return the metadata value type for a parser-only selector.
+///
+/// # Errors
+///
+/// Returns an error when a new parser-only selector requires a value type that
+/// release help does not yet model.
+fn parser_only_value_type(argument: &Arg) -> Result<ValueType> {
+    match argument.get_id().as_str() {
+        "config" | "directory" => Ok(ValueType::Path),
+        argument_id => {
+            bail!("parser-only {argument_id} argument requires an explicit release-help value type")
+        }
+    }
 }
 
 /// Return documentation metadata for every Clap subcommand with an about key.
@@ -173,64 +203,15 @@ fn release_help_about_key(name: &str) -> Option<&'static str> {
 }
 
 #[cfg(test)]
+#[path = "release_help_metadata_tests.rs"]
+mod metadata_tests;
+
+#[cfg(test)]
 mod tests {
     //! Tests for release-help metadata assembled from the Clap command tree.
 
     use super::*;
     use anyhow::{Context, Result, ensure};
-    use rstest::rstest;
-
-    #[rstest]
-    #[case(Cli::command(), Some("config"))]
-    #[case(Command::new("netsuke"), None)]
-    fn config_metadata_requires_the_parser_argument(
-        #[case] command: Command,
-        #[case] expected_config_long: Option<&str>,
-    ) -> Result<()> {
-        let extraction = documented_clap_config_field(&command);
-
-        if let Some(config_long) = expected_config_long {
-            let extracted_field =
-                extraction.context("config argument should produce release-help metadata")?;
-            let cli = extracted_field
-                .cli
-                .context("config metadata should retain its CLI source")?;
-            ensure!(
-                extracted_field.name == "config",
-                "config metadata should retain its name"
-            );
-            ensure!(
-                extracted_field.help_id == keys::CLI_FLAG_CONFIG_HELP,
-                "config metadata should use the localized config help key"
-            );
-            ensure!(
-                cli.long.as_deref() == Some(config_long),
-                "config metadata should retain its long flag"
-            );
-            ensure!(
-                cli.value_name.as_deref() == Some("FILE"),
-                "config metadata should retain its path value name"
-            );
-            ensure!(cli.takes_value, "config selector should accept a path");
-            ensure!(
-                extracted_field.env.is_none(),
-                "config selector must not gain an environment source"
-            );
-            ensure!(
-                extracted_field.file.is_none(),
-                "config selector must not gain a file source"
-            );
-        } else {
-            let error = extraction
-                .err()
-                .context("missing config argument should fail metadata extraction")?;
-            ensure!(
-                error.to_string().contains("parser-only config argument"),
-                "missing config error should identify the parser contract: {error}"
-            );
-        }
-        Ok(())
-    }
 
     #[test]
     fn metadata_documents_help_targets_through_the_help_subcommand() {
@@ -281,6 +262,7 @@ mod tests {
         Ok(())
     }
 
+    /// Verify that the configuration selector description resolves through localization.
     #[test]
     fn release_help_metadata_localizes_the_config_description() -> Result<()> {
         let metadata = ReleaseHelpCli::get_doc_metadata();

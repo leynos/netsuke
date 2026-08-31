@@ -140,6 +140,16 @@ fields:
     environment: NETSUKE_DEFAULT_TARGETS
     file: default_targets
     merge_strategy: append
+  - name: directory
+    help_id: cli.flag.directory.help
+    cli:
+      long: directory
+      short: C
+      multiple: false
+      possible_values: []
+    environment: ~
+    file: ~
+    merge_strategy: replace
   - name: config
     help_id: cli.flag.config.help
     cli:

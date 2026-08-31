@@ -1142,14 +1142,14 @@ Release builds generate their manual and PowerShell help explicitly with
 `build.rs`. The metadata root is `netsuke::cli::ReleaseHelpCli`, the sole
 permitted composition site for release help. `CliConfig` supplies only layered
 configuration fields; `Cli::command()` supplies parser-only flags such as
-`--config` and documented subcommands, including `help targets`. The adapter
-projects existing CLI Fluent keys onto published configuration fields and adds
-parser-only help metadata without adding an environment or file source. It
-omits the structural `cmds` container. Keep selector precedence and fail-closed
-loading in `src/cli/discovery.rs`, as required by [ADR 004]. During ordinary
-Cargo builds, `build.rs` generates the local manual page and shell completions,
-and audits the localization keys. Release automation installs the pinned tool
-with:
+`-C/--directory` and `--config`, plus documented subcommands, including
+`help targets`. The adapter projects existing CLI Fluent keys onto published
+configuration fields and adds parser-only help metadata without adding an
+environment or file source. It omits the structural `cmds` container. Keep
+selector precedence and fail-closed loading in `src/cli/discovery.rs`, as
+required by [ADR 004]. During ordinary Cargo builds, `build.rs` generates the
+local manual page and shell completions, and audits the localization keys.
+Release automation installs the pinned tool with:
 
 ```bash
 cargo install cargo-orthohelp --version 0.9.0 --locked
@@ -1188,10 +1188,10 @@ unit tests, and `rstest-bdd` release-help scenarios.
 state-enumeration example.
 
 When a future parser-only flag needs generated help, inject it through
-`ReleaseHelpCli`; do not add it to `CliConfig` or create another parser metadata
-model. Declare its Fluent key with `define_keys!` in `src/localization/keys.rs`,
-then add in-process, snapshot, and release-help artefact coverage for the
-composed surface.
+`ReleaseHelpCli`; do not add it to `CliConfig` or create another parser
+metadata model. Declare its Fluent key with `define_keys!` in
+`src/localization/keys.rs`, then add in-process, snapshot, and release-help
+artefact coverage for the composed surface.
 
 [ADR 004]: adr-004-explicit-config-selection-outside-orthoconfig.md
 
