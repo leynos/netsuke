@@ -1,7 +1,7 @@
 //! Differential tests for shell dollars preserved through the Ninja backend.
 //!
 //! These tests use Ninja itself as the lexer oracle. The generated command
-//! must be the shell text held by the IR after Netsuke lowers `$in` and `$out`.
+//! must be the shell text held by the IR after Netsuke lowers recipe markers.
 
 use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8PathBuf;
@@ -186,6 +186,8 @@ fn ninja_output(
 )]
 #[case::multiple_shell_variables("echo $RUSTFLAGS-$PATH", "echo $$RUSTFLAGS-$$PATH")]
 #[case::unrelated_identifier("echo $input", "echo $$input")]
+#[case::legacy_marker_aliases("echo $in $out", "echo $$in $$out")]
+#[case::marker_like_shell_variables("echo $ins $outs", "echo $$ins $$outs")]
 #[case::literal_dollars("echo $$", "echo $$$$")]
 fn backend_doubles_every_residual_shell_dollar(#[case] command: &str, #[case] expected: &str) {
     let ninja = generate_posix(&graph(
@@ -230,7 +232,7 @@ fn shell_default_reaches_the_child_shell(
     #[case] expected: &str,
 ) -> Result<()> {
     let manifest = manifest::from_str(
-        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    command: 'printf %s \"${NETSUKE_TEST_SENTINEL:-fallback}\" > $out'\n",
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    command: 'printf %s \"${NETSUKE_TEST_SENTINEL:-fallback}\" > {{ outs }}'\n",
     )?;
     let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
         &manifest,
@@ -255,7 +257,7 @@ fn command_list_default_reaches_the_child_shell(
     #[case] expected: &str,
 ) -> Result<()> {
     let manifest = manifest::from_str(
-        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    command:\n      - 'printf %s \"${NETSUKE_TEST_SENTINEL:-fallback}\" > $out'\n",
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    command:\n      - 'printf %s \"${NETSUKE_TEST_SENTINEL:-fallback}\" > {{ outs }}'\n",
     )?;
     let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
         &manifest,
@@ -272,8 +274,8 @@ fn command_list_default_reaches_the_child_shell(
 
 /// Verify that manifest placeholder syntax lowers inside scalar and list recipes.
 #[rstest]
-#[case::scalar("command: 'cat $in > $out'")]
-#[case::command_list("command:\n      - 'cat $in > $out'")]
+#[case::scalar("command: 'cat {{ ins }} > {{ outs }}'")]
+#[case::command_list("command:\n      - 'cat {{ ins }} > {{ outs }}'")]
 fn placeholder_lowering_precedes_backend_escaping(#[case] recipe: &str) -> Result<()> {
     let manifest = manifest::from_str(&format!(
         "netsuke_version: '1.0.0'\ntargets:\n  - name: output.txt\n    sources: input.txt\n    {recipe}\n"
@@ -295,12 +297,13 @@ fn placeholder_lowering_precedes_backend_escaping(#[case] recipe: &str) -> Resul
 #[rstest]
 fn scripts_lower_placeholders_without_command_parser_validation() -> Result<()> {
     let manifest = manifest::from_str(
-        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: in\n    script: |\n      cat $in > $out\n      # apostrophe's comment and a heredoc must remain valid\n      cat <<'EOF' >> $out\n      done\n      EOF\n",
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: in\n    script: |\n      cat {{ ins }} > {{ outs }}\n      # apostrophe's comment and a heredoc must remain valid\n      cat <<'EOF' >> {{ outs }}\n      done\n      EOF\n",
     )?;
     let graph = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::Posix)?;
     let ninja = generate_posix(&graph)?;
     ensure!(
-        !ninja.contains("\\$out") && !ninja.contains("$in"),
+        !ninja.contains("__NETSUKE_OUTS_PLACEHOLDER__")
+            && !ninja.contains("__NETSUKE_INS_PLACEHOLDER__"),
         "script placeholders must be lowered before backend escaping:\n{ninja}"
     );
     let actual = ninja_output(&ninja, None, Some(("in", "script input")))?;
@@ -321,7 +324,7 @@ fn script_default_reaches_the_child_shell(
     #[case] expected: &str,
 ) -> Result<()> {
     let manifest = manifest::from_str(
-        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    script: 'printf %s \"${NETSUKE_TEST_SENTINEL:-fallback}\" > $out'\n",
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    script: 'printf %s \"${NETSUKE_TEST_SENTINEL:-fallback}\" > {{ outs }}'\n",
     )?;
     let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
         &manifest,
@@ -341,7 +344,7 @@ fn script_default_reaches_the_child_shell(
 #[rstest]
 fn script_placeholders_execute_against_real_paths() -> Result<()> {
     let manifest = manifest::from_str(
-        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: in\n    script: \"printf '%s' $in > $out\"\n",
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: in\n    script: \"printf '%s' {{ ins }} > {{ outs }}\"\n",
     )?;
     let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
         &manifest,
@@ -356,11 +359,40 @@ fn script_placeholders_execute_against_real_paths() -> Result<()> {
     Ok(())
 }
 
+/// Verify a double-quoted script marker cannot create a second POSIX command.
+#[cfg(unix)]
+#[rstest]
+fn quoted_script_marker_cannot_inject_a_command_boundary() -> Result<()> {
+    let manifest = manifest::from_str(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: 'x\";id;echo\"y'\n    script: 'echo \"{{ outs }}\"'\n",
+    )?;
+    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
+        &manifest,
+        RecipeShell::Posix,
+    )?)?;
+    let commands = ninja_commands(&ninja, "x\";id;echo\"y")?;
+    let output = Command::new("/bin/sh")
+        .args(["-ec", &commands])
+        .output()
+        .context("run the generated script command")?;
+    ensure!(
+        output.status.success(),
+        "generated script command failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    ensure!(
+        output.stdout == b"x\";id;echo\"y\n",
+        "script marker must remain one argument, got: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    Ok(())
+}
+
 /// Verify that placeholder-looking text inside backticks is rejected before escaping.
 #[rstest]
 fn placeholders_inside_backticks_are_rejected_before_backend_escaping() -> Result<()> {
     let manifest = manifest::from_str(
-        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: in\n    script: 'echo `basename $out`'\n",
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: in\n    script: 'echo `basename {{ outs }}`'\n",
     )?;
     let result = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::Posix);
     ensure!(
@@ -400,7 +432,7 @@ fn command_control_characters_are_rejected(#[case] command: &str) {
 fn unsafe_paths_are_rejected(#[case] input: &str) {
     let result = generate_posix(&graph(
         Recipe::Command {
-            command: "cat $in > $out".into(),
+            command: "cat $ins > $outs".into(),
         },
         input,
         "out",

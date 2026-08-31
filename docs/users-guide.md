@@ -1631,14 +1631,18 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   Multiple native commands inside one entry are not individually instrumented;
   terminating PowerShell errors also stop the list. The POSIX brace-group,
   `eval`, background-job, and `exec` restrictions do not apply to this route.
-- Write shell dollar expressions normally. `$PATH`, `$RUSTFLAGS`, and
-  `${CARGO:-cargo}` reach POSIX routes unchanged; PowerShell routes use `$name`
-  or `$env:NAME`. Netsuke performs the required Ninja escaping after it lowers
-  `$in`, `$out`, `{{ ins }}`, and `{{ outs }}`. On POSIX and Bash routes, a
-  `$in` or `$out` token inside backticks is rejected because Netsuke cannot
-  safely lower it there. PowerShell uses backticks as its native escape syntax,
-  so they do not suppress placeholder interpolation.
-- Build and default-target paths reject `$`, colons, `|`, and control
+- Write shell dollar expressions normally. `$PATH`, `$RUSTFLAGS`, `$ins`, and
+  `$outs` are literal shell variables; PowerShell routes use `$name` or
+  `$env:NAME`. Netsuke escapes those dollars as `$$` only in generated Ninja so
+  the shell receives them unchanged. `{{ ins }}` and `{{ outs }}` are the only
+  Netsuke markers for input and output paths. On POSIX and Bash routes, Netsuke
+  encodes a marker for its unquoted, single-quoted, or double-quoted shell
+  context, and rejects one in a command substitution or backticks. In
+  PowerShell, use markers unquoted; Netsuke rejects quoted and
+  command-substitution marker sites rather than risking a context escape.
+  PowerShell uses backticks as its native escape syntax, so they do not
+  suppress marker interpolation.
+- Build and default-target paths reject `$`, spaces, colons, `|`, and control
   characters because Ninja cannot represent them without ambiguity. Generation
   also rejects newline, carriage-return, and NUL characters in emitted metadata
   such as descriptions, `depfile`, `deps`, and `pool`.
@@ -1646,10 +1650,9 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   `$PATH`. On POSIX and Bash routes, `$$` is the shell's process identifier;
   PowerShell interprets `$$` as its automatic variable containing the last
   token received by the session. Keeping the extra dollar can therefore change
-  the command's result. Existing script actions that use `$in` or `$out` will
-  receive the same paths after this release, but their generated action
-  identifiers change once because lowering now happens before Ninja emission;
-  Ninja may therefore rebuild those targets once.
+  the command's result. Replace any former `$in` or `$out` path placeholder with
+  `{{ ins }}` or `{{ outs }}` respectively; literal `$ins` and `$outs` remain
+  shell variables.
 
 Do not run an untrusted `Netsukefile`. Prefer explicit inputs, avoid embedding
 secrets in commands or URLs, and pin dependencies used by recipes.

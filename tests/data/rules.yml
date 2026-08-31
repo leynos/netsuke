@@ -1,7 +1,7 @@
 netsuke_version: "1.0.0"
 rules:
   - name: compile
-    command: "cc -c $in -o $out"
+    command: "cc -c {{ ins }} -o {{ outs }}"
 targets:
   - name: hello.o
     sources: hello.c

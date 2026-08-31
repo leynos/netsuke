@@ -2,10 +2,10 @@ netsuke_version: 1.0.0
 targets:
   - name: "out file"
     sources: "in file"
-    command: "cat $in > $out"
+    command: "cat {{ ins }} > {{ outs }}"
   - name: "plain-output"
     sources: "-in file"
-    command: "printf %s $in > $out"
+    command: "printf %s {{ ins }} > {{ outs }}"
   - name: "o'utfile"
     sources: "-in file"
-    command: "printf %s $in > $out"
+    command: "printf %s {{ ins }} > {{ outs }}"

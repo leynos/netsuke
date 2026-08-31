@@ -15,7 +15,7 @@ use rstest::rstest;
     "  - name: all\n",
     "    dependency_order: serial\n",
     "    deps: [check-fmt, lint, test]\n",
-    "    command: echo $out\n",
+    "    command: echo {{ outs }}\n",
 ), "all", false, &["check-fmt", "lint", "test"])]
 #[case::action_serial(concat!(
     "netsuke_version: '1.0.0'\n",
@@ -23,7 +23,7 @@ use rstest::rstest;
     "  - name: gate\n",
     "    dependency_order: serial\n",
     "    deps: [fmt, clippy]\n",
-    "    command: echo $out\n",
+    "    command: echo {{ outs }}\n",
     "targets: []\n",
 ), "gate", true, &["fmt", "clippy"])]
 fn serial_dependency_order_survives_lowering(
@@ -68,7 +68,7 @@ fn explicit_parallel_dependency_order_survives_lowering() -> Result<()> {
         "  - name: all\n",
         "    dependency_order: parallel\n",
         "    deps: [check-fmt, lint]\n",
-        "    command: echo $out\n",
+        "    command: echo {{ outs }}\n",
     );
     let manifest = manifest::from_str(yaml)?;
     let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;
@@ -91,7 +91,7 @@ fn parallel_dependency_order_lowering_is_default() -> Result<()> {
         "targets:\n",
         "  - name: all\n",
         "    deps: [check-fmt, lint]\n",
-        "    command: echo $out\n",
+        "    command: echo {{ outs }}\n",
     );
     let manifest = manifest::from_str(yaml)?;
     let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;

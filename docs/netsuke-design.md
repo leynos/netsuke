@@ -286,14 +286,16 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   hashing the action. POSIX and explicit Bash routes use the
   [`shell-quote`](https://docs.rs/shell-quote/latest/shell_quote/) crate (Sh
   mode); the default Windows PowerShell route uses single-quoted literals and
-  doubles embedded apostrophes. Standalone `$in` and `$out` tokens are resolved
-  at the same boundary. On POSIX and Bash routes, backtick-delimited text with
-  no placeholder remains unchanged, but a span containing `{{ ins }}`,
-  `{{ outs }}`, `$in`, or `$out` is rejected. Longer identifiers such as
-  `$input` are not placeholders and remain literal. PowerShell backticks use
-  native escape semantics and do not suppress interpolation. A scalar command
-  is emitted unchanged. On Unix and the explicit Windows Bash compatibility
-  route, a list is lowered to brace groups that evaluate each entry through a
+  doubles embedded apostrophes. Only `{{ ins }}` and `{{ outs }}` are Netsuke
+  path markers; `$ins` and `$outs` are literal shell variables. On POSIX and
+  Bash routes, markers are encoded for their unquoted, single-quoted, or
+  double-quoted context, and markers inside command substitutions or backticks
+  are rejected. PowerShell permits markers only at unquoted sites and rejects
+  other shell-sensitive contexts. PowerShell backticks use native escape
+  semantics and do not suppress interpolation. A scalar command remains
+  unwrapped, but still undergoes marker lowering and backend escaping and
+  validation. On Unix and the explicit Windows Bash compatibility route, a
+  list is lowered to brace groups that evaluate each entry through a
   shell-quoted `eval` payload and are joined by `&&`. The groups run in
   declaration order in one shell process and stop at the first non-zero exit,
   so working directory, environment, and shell variables carry forward. The
@@ -447,7 +449,7 @@ Table: Dependency field lowering semantics
 
 The cleaner model is:
 
-- `sources` contribute to `ins` / `$in`.
+- `sources` contribute to `{{ ins }}`.
 - `deps` affect ordering and rebuild decisions, but do not appear in `ins`.
 - `order_only_deps` affect ordering only.
 - `dependency_order` changes only the scheduling policy for direct `deps`.
@@ -562,11 +564,11 @@ Netsuke should add four complementary capabilities.
 
 #### Backend dollar escaping
 
-After Netsuke has resolved its own placeholders (`ins`, `outs`, `$in`, and
-`$out`) and before writing a Ninja file, the Ninja backend escapes every
-remaining literal dollar signs in command and script text as `$$`. This keeps
-shell variables such as `$PATH`, `${CARGO:-cargo}`, and `$RUSTFLAGS` readable
-in the manifest while preserving the existing generated Ninja semantics.
+After Netsuke has resolved its own placeholders (`{{ ins }}` and `{{ outs }}`)
+and before writing a Ninja file, the Ninja backend escapes every remaining
+literal dollar signs in command and script text as `$$`. This keeps shell
+variables such as `$PATH`, `${CARGO:-cargo}`, and `$RUSTFLAGS` readable in the
+manifest while preserving the existing generated Ninja semantics.
 
 This is a backend concern, not an IR concern. The IR continues to contain plain
 command or script text with no Ninja-specific escaping. The backend conversion
@@ -1912,11 +1914,12 @@ distributed build system), only a new generator module (`IR -> NewBackend`)
 would need to be written, leaving the entire front-end parsing and validation
 logic untouched.
 
-Importantly, the IR contains **no Ninja-isms**. Placeholders such as `$in` and
-`$out` are resolved to plain lists of file paths, and command strings are
-expanded before hashing. This deliberate absence of Ninja-specific syntax makes
-the IR a stable contract that future back-ends--distributed builders, remote
-executors, or otherwise--can consume without modification.
+Importantly, the IR contains **no Ninja-isms**. Netsuke markers such as
+`{{ ins }}` and `{{ outs }}` are resolved to plain lists of file paths, and
+command strings are expanded before hashing. This deliberate absence of
+Ninja-specific syntax makes the IR a stable contract that future
+back-ends--distributed builders, remote executors, or otherwise--can consume
+without modification.
 
 Furthermore, the IR is the ideal stage at which to perform graph-level analysis
 and optimizations, such as detecting circular dependencies, pruning unused
@@ -2182,10 +2185,9 @@ structures to the Ninja file syntax.
    actions are omitted because they have no command to execute. Their edges
    select Ninja's built-in `phony` rule. The IR already contains ordinary
    command text: its input and output paths have replaced Netsuke's `ins`/
-   `outs` and `$in`/`$out` placeholders during lowering. Scalar commands are
-   emitted as-is. List commands are emitted as the brace-group, `eval`, and
-   `&&` chain described in §2.3, including the bounded failure marker for each
-   one-based entry.
+   `outs` markers during lowering. Scalar commands are emitted as-is. List
+   commands are emitted as the brace-group, `eval`, and `&&` chain described in
+   §2.3, including the bounded failure marker for each one-based entry.
 
    When an action's `recipe` is a script, the generated rule wraps the script
    in the configured platform-specific interpreter. Unix uses `/bin/sh -e -c`,
@@ -2498,30 +2500,22 @@ routes use its `QuoteRefExt::quoted` method with `Sh` mode, producing
 POSIX-compatible quoted path arguments before the command is hashed. The
 default Windows PowerShell route instead emits paths as PowerShell
 single-quoted literals and doubles embedded apostrophes. This automatic quoting
-applies only to Netsuke-owned `$in`, `$out`, `{{ ins }}`, and `{{ outs }}`
-substitutions; arbitrary Jinja values and handwritten shell fragments remain
-the manifest author's responsibility. Unmatched-backtick checks and `shlex`
-command validation apply only to POSIX and Bash routes. PowerShell treats
-backticks as native escape syntax rather than interpolation-protection
-delimiters.
+applies only to Netsuke-owned `{{ ins }}` and `{{ outs }}` substitutions;
+arbitrary Jinja values and handwritten shell fragments remain the manifest
+author's responsibility. Unmatched-backtick checks and `shlex` command
+validation apply only to POSIX and Bash routes. PowerShell treats backticks as
+native escape syntax rather than interpolation-protection delimiters.
 
-### 6.3 Implementation strategy
+### 6.3 Implementation Strategy
 
 The command interpolation logic in `src/ir/cmd_interpolate/mod.rs` prepares one
-shell-specific quoted input/output binding set per recipe and applies it to
-each scalar or list entry. It replaces the delayed `{{ ins }}`/`{{ outs }}`
-markers and standalone `$in`/`$out` tokens outside POSIX and Bash backticks. A
-backtick-delimited span with no placeholder remains literal, while a span
-containing `{{ ins }}`, `{{ outs }}`, `$in`, or `$out` is rejected. Longer
-identifiers such as `$input` are not placeholders and remain literal.
-PowerShell treats backticks as native escape syntax and does not use them as
-interpolation-protection delimiters. The POSIX and Bash routes apply
-`shell-quote` in `Sh` mode to Netsuke-owned path substitutions; PowerShell
-emits single-quoted path literals and doubles embedded apostrophes. Unbalanced
-backticks or text that `shlex` cannot parse produce an IR error only on POSIX
-and Bash routes, before an action is hashed. Ninja generation then receives
-fully expanded command text and is responsible only for preserving the scalar
-form or constructing the list-entry shell boundaries.
+shell-specific input/output binding set per recipe and applies it to each scalar
+or list entry. It replaces only delayed `{{ ins }}`/`{{ outs }}` markers,
+preserves dollar-prefixed shell variables, and encodes POSIX path text for the
+active quote context. Markers in backticks or command substitutions and text
+that `shlex` cannot parse produce an IR error before an action is hashed. Ninja
+generation then receives fully expanded command text and preserves scalar form
+or constructs list-entry shell boundaries.
 
 ### 6.4 Automatic Security as a "Friendliness" Feature
 

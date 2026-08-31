@@ -22,7 +22,7 @@ targets:
       first: rendered-first
       second: rendered-second
     command:
-      - "test -f $in && echo '{{ first }}' > $out"
+      - "test -f {{ ins }} && echo '{{ first }}' > {{ outs }}"
       - "echo '{{ second }}' >> {{ outs }}"
 "#,
     )?;
@@ -40,7 +40,7 @@ fn assert_rendered_direct_target(manifest: &NetsukeManifest) -> Result<()> {
     ensure!(
         command.to_string_vec()
             == [
-                "test -f $in && echo 'rendered-first' > $out",
+                "test -f __NETSUKE_INS_PLACEHOLDER__ && echo 'rendered-first' > __NETSUKE_OUTS_PLACEHOLDER__",
                 "echo 'rendered-second' >> __NETSUKE_OUTS_PLACEHOLDER__",
             ],
         "rendered direct-target command entries should preserve declaration order: {command:?}"

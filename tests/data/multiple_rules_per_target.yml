@@ -1,9 +1,9 @@
 netsuke_version: "1.0.0"
 rules:
   - name: compile1
-    command: "cc -c $in -o $out"
+    command: "cc -c {{ ins }} -o {{ outs }}"
   - name: compile2
-    command: "cc -c $in -o $out"
+    command: "cc -c {{ ins }} -o {{ outs }}"
 targets:
   - name: hello.o
     sources: hello.c

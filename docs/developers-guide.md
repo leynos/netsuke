@@ -381,11 +381,13 @@ The lowering stages have deliberately separate responsibilities:
   one-based entry position.
 - `src/ir/from_manifest_support.rs` prepares one shell-quoted input/output
   binding set for the recipe, then interpolates every scalar or list entry with
-  that set. `{{ ins }}` and `{{ outs }}` markers and standalone `$in` and
-  `$out` tokens are resolved per entry. A placeholder within backticks is
-  rejected because Netsuke cannot lower it safely; scripts use substitution
-  without command-shaped parsing, so heredocs and comments remain valid. The
-  resulting action contains ordinary command text and no Ninja placeholders.
+  that set. Only `{{ ins }}` and `{{ outs }}` markers are resolved per entry.
+  Literal `$ins` and `$outs` remain shell variables and are escaped for Ninja
+  pass-through. POSIX lowering tracks unquoted, single-quoted, and
+  double-quoted text, and rejects markers within command substitutions because
+  it cannot lower them safely; scripts therefore retain heredocs and comments
+  without accepting an unsafe marker context. The resulting action contains
+  ordinary command text and no Ninja placeholders.
 - `src/ninja_gen/mod.rs` delegates completed recipe text to
   `src/ninja_gen_recipe_shell.rs`. On Unix, and for the explicit Windows Bash
   compatibility route, a scalar remains POSIX shell text. A list puts each
@@ -2157,7 +2159,7 @@ unit tests where a small fixed set of cases must all be verified.
 `src/ir/from_manifest.rs` lowers manifest `sources` into `BuildEdge.inputs`,
 manifest `deps` into `BuildEdge.implicit_deps`, and manifest `order_only_deps`
 into `BuildEdge.order_only_deps`. Keep those classes separate: recipe
-interpolation (`$in` and `{{ ins }}`) receives only `BuildEdge.inputs`, while
+interpolation (`{{ ins }}`) receives only `BuildEdge.inputs`, while
 `src/ninja_gen/mod.rs` renders implicit deps with Ninja's single-pipe separator.
 
 `ast::DependencyOrder` is the closed manifest enum responsible for YAML and
@@ -2246,10 +2248,10 @@ durable decision and its alternatives.
 `src/ir/cmd_interpolate.rs` owns the private `INS_TOKEN` and `OUTS_TOKEN`
 constants used between manifest rendering and IR command interpolation.
 `src/manifest/render.rs` may emit these tokens while rendering `{{ ins }}` and
-`{{ outs }}`, and the interpolation module must consume them alongside `$in` and
-`$out`. Keep the constants private to the crate and use them only for this
-two-stage recipe pipeline; they are implementation markers, not manifest or
-Ninja syntax and not a general token registry.
+`{{ outs }}`, and the interpolation module must consume only those markers.
+Keep the constants private to the crate and use them only for this two-stage
+recipe pipeline; they are implementation markers, not manifest or Ninja syntax
+and not a general token registry.
 
 Generated strategies that are reusable across crate boundaries belong in
 `test_support`. Because `test_support` is compiled as a library, dependencies

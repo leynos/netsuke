@@ -23,36 +23,36 @@ fn interpolate_command_rejects_unbalanced_backticks() {
     }
 }
 
-/// Verify POSIX interpolation replaces short input and output placeholders.
+/// Verify POSIX interpolation replaces manifest-owned input and output markers.
 #[test]
 fn interpolate_command_replaces_placeholders() {
     let ins = vec![Utf8PathBuf::from("in"), Utf8PathBuf::from("aux")];
     let outs = vec![Utf8PathBuf::from("out")];
-    let command = interpolate_command_with_shell("cp $in $out", &ins, &outs, RecipeShell::Posix)
-        .expect("command");
-    assert_eq!(command, "cp in aux out");
-}
-
-/// Verify POSIX interpolation rejects short placeholders inside backticks.
-#[test]
-fn interpolate_command_rejects_short_placeholders_in_backticks() {
-    let ins = vec![Utf8PathBuf::from("src")];
-    let outs = vec![Utf8PathBuf::from("out")];
-    let error = interpolate_command_with_shell(
-        "echo `cat $in` && echo $out",
+    let command = interpolate_command_with_shell(
+        &format!("cp {INS_TOKEN} {OUTS_TOKEN}"),
         &ins,
         &outs,
         RecipeShell::Posix,
     )
-    .expect_err("placeholders inside backticks should be rejected");
-    assert!(matches!(error, IrGenError::InvalidCommand { .. }));
+    .expect("command");
+    assert_eq!(command, "cp in aux out");
 }
 
+/// Verify POSIX interpolation preserves dollar-prefixed shell variables.
+#[test]
+fn interpolate_command_preserves_dollar_prefixed_shell_variables() {
+    let ins = vec![Utf8PathBuf::from("src")];
+    let outs = vec![Utf8PathBuf::from("out")];
+    let error =
+        interpolate_command_with_shell("echo $in $out $ins $outs", &ins, &outs, RecipeShell::Posix)
+            .expect("literal shell variables must remain valid");
+    assert_eq!(error, "echo $in $out $ins $outs");
+}
 /// Verify POSIX interpolation rejects template placeholders inside backticks.
 #[test]
 fn interpolate_command_rejects_template_placeholders_in_backticks() {
     let error = interpolate_command_with_shell(
-        &format!("echo `{INS_TOKEN}` $out"),
+        &format!("echo `{INS_TOKEN}` {OUTS_TOKEN}"),
         &[],
         &[Utf8PathBuf::from("out")],
         RecipeShell::Posix,
@@ -65,24 +65,116 @@ fn interpolate_command_rejects_template_placeholders_in_backticks() {
 #[test]
 fn interpolate_command_replaces_template_placeholders() {
     let command = interpolate_command_with_shell(
-        &format!("{INS_TOKEN} $out {OUTS_TOKEN}"),
+        &format!("{INS_TOKEN} {OUTS_TOKEN}"),
         &[Utf8PathBuf::from("in")],
         &[Utf8PathBuf::from("out")],
         RecipeShell::Posix,
     )
     .expect("command");
-    assert_eq!(command, "in out out");
+    assert_eq!(command, "in out");
 }
 
-/// Verify that PowerShell interpolation doubles apostrophes in single-quoted literals.
+/// Verify that PowerShell interpolation doubles apostrophes in marker replacements.
 #[test]
 fn power_shell_bindings_quote_apostrophes_as_single_literals() {
-    assert_power_shell_path_interpolation(
-        "source's file",
-        "output's file",
-        "Copy-Item 'source''s file' 'output''s file'",
-        "PowerShell-safe placeholders should interpolate",
+    let bindings = CommandBindings::new(
+        &[Utf8PathBuf::from("source's file")],
+        &[Utf8PathBuf::from("output's file")],
+        RecipeShell::PowerShell,
     );
+    let command = interpolate_command_with_bindings(
+        &format!("Copy-Item {INS_TOKEN} {OUTS_TOKEN}"),
+        &bindings,
+    )
+    .expect("PowerShell-safe placeholders should interpolate");
+    assert_eq!(command, "Copy-Item 'source''s file' 'output''s file'");
+}
+
+/// Verify POSIX markers are encoded safely in unquoted and quoted command text.
+#[test]
+fn interpolate_command_encodes_markers_for_quote_contexts() {
+    for (marker, expected_path, unquoted) in [
+        (INS_TOKEN, "input", "input"),
+        (OUTS_TOKEN, "x\";id;echo\"y", "x'\";id;echo\"y'"),
+    ] {
+        let cases = [
+            (format!("echo {marker}"), format!("echo {unquoted}")),
+            (
+                format!("echo '{marker}'"),
+                format!("echo '{expected_path}'"),
+            ),
+            (
+                format!("echo \"{marker}\""),
+                format!("echo \"{}\"", quote_double_quoted_path(expected_path)),
+            ),
+        ];
+        for (template, expected) in cases {
+            let command = interpolate_command_with_shell(
+                &template,
+                &[Utf8PathBuf::from("input")],
+                &[Utf8PathBuf::from("x\";id;echo\"y")],
+                RecipeShell::Posix,
+            )
+            .expect("context-safe command should interpolate");
+            assert_eq!(command, expected);
+        }
+    }
+}
+
+/// Verify POSIX command substitution rejects recipe markers before shell execution.
+#[test]
+fn interpolate_command_rejects_markers_in_command_substitutions() {
+    for marker in [INS_TOKEN, OUTS_TOKEN] {
+        for template in [
+            format!("echo $(printf %s {marker})"),
+            format!("echo \"$(printf %s {marker})\""),
+        ] {
+            let error = interpolate_command_with_shell(
+                &template,
+                &[Utf8PathBuf::from("in")],
+                &[Utf8PathBuf::from("out")],
+                RecipeShell::Posix,
+            )
+            .expect_err("markers inside command substitutions must be rejected");
+            assert!(matches!(error, IrGenError::InvalidCommand { .. }));
+        }
+    }
+}
+
+/// Verify scripts apply the same quote-context safeguards as command recipes.
+#[test]
+fn interpolate_script_applies_quote_context_safeguards() {
+    let bindings = CommandBindings::new(
+        &[Utf8PathBuf::from("in")],
+        &[Utf8PathBuf::from("out")],
+        RecipeShell::Posix,
+    );
+    for (marker, replacement) in [(INS_TOKEN, "in"), (OUTS_TOKEN, "out")] {
+        for (template, expected_result) in [
+            (format!("echo {marker}"), Ok(format!("echo {replacement}"))),
+            (
+                format!("echo '{marker}'"),
+                Ok(format!("echo '{replacement}'")),
+            ),
+            (
+                format!("echo \"{marker}\""),
+                Ok(format!("echo \"{replacement}\"")),
+            ),
+            (format!("echo $(printf %s {marker})"), Err(())),
+        ] {
+            match expected_result {
+                Ok(expected_command) => assert_eq!(
+                    interpolate_script_with_bindings(&template, &bindings)
+                        .expect("context-safe script should interpolate"),
+                    expected_command
+                ),
+                Err(()) => assert!(matches!(
+                    interpolate_script_with_bindings(&template, &bindings),
+                    Err(IrGenError::InvalidCommand { .. })
+                )),
+            }
+        }
+    }
 }
 
 #[test]
@@ -119,4 +211,20 @@ fn power_shell_bindings_allow_escaped_double_quotes() {
     let command = interpolate_command_with_bindings(r#"Write-Output "a`"b""#, &bindings)
         .expect("PowerShell escaped double quotes should interpolate");
     assert_eq!(command, r#"Write-Output "a`"b""#);
+}
+
+/// Verify PowerShell rejects markers in quote and command-substitution regions.
+#[test]
+fn power_shell_rejects_markers_without_a_context_safe_encoder() {
+    let bindings = CommandBindings::new(&[], &[Utf8PathBuf::from("out")], RecipeShell::PowerShell);
+    for template in [
+        format!("Write-Output '{OUTS_TOKEN}'"),
+        format!("Write-Output \"{OUTS_TOKEN}\""),
+        format!("Write-Output $(Write-Output {OUTS_TOKEN})"),
+    ] {
+        assert!(matches!(
+            interpolate_command_with_bindings(&template, &bindings),
+            Err(IrGenError::InvalidCommand { .. })
+        ));
+    }
 }

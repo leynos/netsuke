@@ -23,12 +23,12 @@ use super::super::{
 #[path = "sort_utils.rs"]
 mod sort_utils;
 
-/// The `$in`/`$out` substitution views for one action under construction.
+/// The `{{ ins }}`/`{{ outs }}` substitution views for one action under construction.
 #[derive(Clone, Copy)]
 pub(super) struct ActionBindings<'a> {
-    /// Paths the target's recipe consumes via `$in`.
+    /// Paths the target's recipe consumes via `{{ ins }}`.
     pub(super) inputs: &'a [Utf8PathBuf],
-    /// Paths the target's recipe produces via `$out`.
+    /// Paths the target's recipe produces via `{{ outs }}`.
     pub(super) outputs: &'a [Utf8PathBuf],
     /// Interpreter that will receive the completed legacy recipe text.
     pub(super) shell: RecipeShell,
@@ -36,7 +36,7 @@ pub(super) struct ActionBindings<'a> {
 
 /// Register one action under its content hash, deduplicating identical ones.
 ///
-/// Command recipes interpolate their `$in`/`$out` bindings; equivalent
+/// Command recipes interpolate their `{{ ins }}`/`{{ outs }}` bindings; equivalent
 /// expanded commands share one action hash.
 ///
 /// # Errors

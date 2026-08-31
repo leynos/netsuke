@@ -40,7 +40,7 @@ fn command_words(body: &str) -> Result<Vec<String>> {
 #[rstest]
 fn inputs_and_outputs_are_quoted() -> Result<()> {
     let words = command_words(
-        "targets:\n  - name: 'out file'\n    sources: 'in file'\n    command: \"cat $in > $out\"\n",
+        "targets:\n  - name: 'out file'\n    sources: 'in file'\n    command: \"cat {{ ins }} > {{ outs }}\"\n",
     )?;
     let expected = ["cat", "in file", ">", "out file"].map(str::to_owned);
     ensure!(
@@ -53,7 +53,7 @@ fn inputs_and_outputs_are_quoted() -> Result<()> {
 #[rstest]
 fn multiple_inputs_outputs_with_special_chars_are_quoted() -> Result<()> {
     let words = command_words(
-        "targets:\n  - name: ['out file', 'out&2']\n    sources: ['in file', 'input$1']\n    command: \"echo $in && echo $out\"\n",
+        "targets:\n  - name: ['out file', 'out&2']\n    sources: ['in file', 'input$1']\n    command: \"echo {{ ins }} && echo {{ outs }}\"\n",
     )?;
     let expected = [
         "echo", "in file", "input$1", "&&", "echo", "out file", "out&2",
@@ -69,7 +69,7 @@ fn multiple_inputs_outputs_with_special_chars_are_quoted() -> Result<()> {
 #[rstest]
 fn variable_name_overlap_not_rewritten() -> Result<()> {
     let words = command_words(
-        "targets:\n  - name: 'out file'\n    sources: in\n    command: \"echo $input > $out\"\n",
+        "targets:\n  - name: 'out file'\n    sources: in\n    command: \"echo $input > {{ outs }}\"\n",
     )?;
     let expected = ["echo", "$input", ">", "out file"].map(str::to_owned);
     ensure!(words == expected, "unexpected placeholder rewriting");
@@ -79,7 +79,7 @@ fn variable_name_overlap_not_rewritten() -> Result<()> {
 #[rstest]
 fn output_variable_overlap_not_rewritten() -> Result<()> {
     let words = command_words(
-        "targets:\n  - name: out\n    sources: in\n    command: \"echo $output_dir > $out\"\n",
+        "targets:\n  - name: out\n    sources: in\n    command: \"echo $output_dir > {{ outs }}\"\n",
     )?;
     let expected = ["echo", "$output_dir", ">", "out"].map(str::to_owned);
     ensure!(words == expected, "unexpected output placeholder rewriting");
@@ -89,7 +89,7 @@ fn output_variable_overlap_not_rewritten() -> Result<()> {
 #[rstest]
 fn newline_in_paths_is_quoted() -> Result<()> {
     let words = command_words(
-        "targets:\n  - name: \"o'ut\\nfile\"\n    sources: \"-in file\"\n    command: \"printf %s $in > $out\"\n",
+        "targets:\n  - name: \"o'ut\\nfile\"\n    sources: \"-in file\"\n    command: \"printf %s {{ ins }} > {{ outs }}\"\n",
     )?;
     let expected = ["printf", "%s", "-in file", ">", "o'ut\nfile"].map(str::to_owned);
     ensure!(words == expected, "expected newline to be preserved");
