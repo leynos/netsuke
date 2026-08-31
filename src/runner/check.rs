@@ -8,7 +8,7 @@
 //! Findings are the command's result rather than its failure mode: the
 //! `--fail-on` threshold decides whether they are reported as a successful
 //! result document or as a failure diagnostic. See
-//! `docs/adr-015-manifest-linting-under-netsuke-check.md`.
+//! `docs/adr-016-manifest-linting-under-netsuke-check.md`.
 
 use anyhow::{Context, Result};
 

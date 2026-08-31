@@ -335,7 +335,7 @@ and agents.
     `feedback`.
     - [x] `check` lints the selected manifest. See
       [manifest linter design](netsuke-linter-design.md) and
-      [ADR-015](adr-015-manifest-linting-under-netsuke-check.md).
+      [ADR-016](adr-016-manifest-linting-under-netsuke-check.md).
   - [ ] Rename `--file` to `--manifest`, keeping `-f` as an intentional
     shorthand.
   - [ ] Depend on OrthoConfig `7.1.1` to `7.1.3` for shared vocabulary policy
@@ -2003,6 +2003,7 @@ runs prove the failure boundary before any job receives release permissions.
     migration](rfcs/0005-release-hardening.md#compatibility-and-migration).
   - Success: a real release is publishable only from the admitted exact tag
     commit, and its retained evidence reproduces the admission decision.
+
 ## 10. Manifest linting
 
 Hypothesis: the v0.4.0 linter is a prototype whose rule set was chosen from the
@@ -2017,7 +2018,7 @@ findings that changed a manifest, not by the number of rules registered.
 
 Scope: everything behind `netsuke check`. The
 [manifest linter design](netsuke-linter-design.md) is a living document and
-[ADR-015](adr-015-manifest-linting-under-netsuke-check.md) records the
+[ADR-016](adr-016-manifest-linting-under-netsuke-check.md) records the
 decisions it currently rests on; both are expected to change under this phase,
 and a task that supersedes either must say so. The v0.4.0 rule identifiers are
 already treated as permanent, so a rule withdrawn here keeps its name reserved.
@@ -2061,7 +2062,7 @@ is a proposal rather than a contract.
 
 This step answers how far the linter's text can move into the localization
 catalogues without letting the emitted text and the rule reference drift apart,
-which is the risk [ADR-015](adr-015-manifest-linting-under-netsuke-check.md)
+which is the risk [ADR-016](adr-016-manifest-linting-under-netsuke-check.md)
 cited when it deferred the work. It is sequenced after step 10.1 so the prose
 being translated is prose the rules have earned.
 

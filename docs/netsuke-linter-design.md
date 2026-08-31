@@ -15,7 +15,7 @@
   operators wiring `netsuke check` into `make`, continuous integration (CI),
   editors, and agents.
 - **Documents that take precedence:**
-  - [ADR-015](adr-015-manifest-linting-under-netsuke-check.md) owns the command
+  - [ADR-016](adr-016-manifest-linting-under-netsuke-check.md) owns the command
     placement, the findings-as-data output contract, and the sequencing that
     keeps rule prose in the registry for the prototype period.
   - [ADR-003](adr-003-agent-consistent-human-first-cli.md) owns the command-line
@@ -108,7 +108,7 @@ These are assumed by every later section rather than re-justified.
 1. **No new top-level noun.** `check` is already in the canonical command
    vocabulary and is listed as unbuilt work in roadmap task 3.15.1. The linter
    is that command. See
-   [ADR-015](adr-015-manifest-linting-under-netsuke-check.md).
+   [ADR-016](adr-016-manifest-linting-under-netsuke-check.md).
 2. **Non-interactive and deterministic.** No prompts, no network, no clock, and
    no dependence on terminal capabilities for the analysis itself. Two runs
    over the same manifest and configuration produce byte-identical findings in
@@ -620,7 +620,7 @@ catalogues under roadmap step 7.2, keyed by the rule's stable name; rule
 identifiers never move, because they are values a user types and a machine
 matches. The command's framing text — help, summary, threshold message, and
 errors — is already localized.
-[ADR-015](adr-015-manifest-linting-under-netsuke-check.md) records why the
+[ADR-016](adr-016-manifest-linting-under-netsuke-check.md) records why the
 prose migration waits for the rule set to settle.
 
 **The rule set will grow faster than the engine.** The registry is a static
