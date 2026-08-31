@@ -83,6 +83,36 @@ fn crlf_sections_resolve_after_normalization() -> Result<()> {
     Ok(())
 }
 
+/// Every registered rule is documented exactly once.
+///
+/// The count matters as much as the membership: a duplicated heading reads as
+/// two records of one rule, and set membership alone would accept it.
+#[test]
+fn every_rule_is_documented_exactly_once() -> Result<()> {
+    let text = reference()?;
+    let headings = documented_rules(&text);
+    let rows = catalogue_rows(&text);
+    for meta in catalogue() {
+        let heading_count = headings.iter().filter(|name| *name == meta.name).count();
+        ensure!(
+            heading_count == 1,
+            "`{}` has {heading_count} sections; expected exactly one",
+            meta.name
+        );
+        let anchor = format!("[`{}`](#{})", meta.name, meta.name);
+        let row_count = rows
+            .iter()
+            .filter(|cells| cells.first().is_some_and(|cell| *cell == anchor))
+            .count();
+        ensure!(
+            row_count == 1,
+            "`{}` has {row_count} catalogue rows; expected exactly one",
+            meta.name
+        );
+    }
+    Ok(())
+}
+
 #[test]
 fn the_reference_documents_every_registered_rule() -> Result<()> {
     let text = reference()?;
