@@ -1477,6 +1477,13 @@ make dev-test           # the nextest pass via Cranelift and mold
 missing tool reports an installation hint before Cargo is invoked rather than
 surfacing as an opaque codegen-backend or linker error.
 
+`DEV_FAST_CONFIG` defaults to `tools/dev-fast/config.toml` and may be
+overridden for a local experiment, for example
+`make DEV_FAST_CONFIG=tools/dev-fast/config.local.toml dev-build`. The Makefile
+passes the selected path explicitly with Cargo's `--config` option; keep the
+fragment out of `.cargo/config.toml` so it cannot affect ordinary, release,
+coverage, or verification builds.
+
 ### Toolchain contract
 
 Two pins fix the linker; the toolchain is not pinned separately. Change the

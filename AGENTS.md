@@ -533,7 +533,11 @@ collaboration.
 
 `make dev-build` and `make dev-test` compile with the opt-in Cranelift
 backend and the mold linker configured in `tools/dev-fast/config.toml`.
-They require a nightly toolchain and, on Linux, a `mold` binary on the
-`PATH`. The fragment is passed explicitly with `--config`, so release,
-coverage, and verification builds are unaffected; never copy its contents
-into `.cargo/config.toml`, which Cargo applies to every build.
+Run `make install-dev-fast` to install the pinned nightly's
+`rustc-codegen-cranelift-preview` component and, on Linux, the pinned `mold`
+release. `make dev-fast-check` preflights those prerequisites before Cargo is
+invoked. Linux `x86_64` and `aarch64` hosts use `mold`; macOS and Windows use
+their platform linker instead. The fragment is passed explicitly with
+`--config`, so release, coverage, and verification builds are unaffected;
+never copy its contents into `.cargo/config.toml`, which Cargo applies to every
+build.
