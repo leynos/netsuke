@@ -15,6 +15,9 @@ operator, user, and contributor references are easier to find.
   execution design document.
 - [netsuke-cli-design-document.md](netsuke-cli-design-document.md): Command-line
   interface design and user-experience requirements.
+- [git-change-detection-helpers-design.md](git-change-detection-helpers-design.md):
+  Git change-detection and glob-matching contracts and verification guidance
+  for maintainers, reviewers, and manifest authors.
 - [roadmap.md](roadmap.md): Phased implementation plan and tracked delivery
   work.
 - [archive/roadmap-completed-foundations.md](archive/roadmap-completed-foundations.md):
@@ -75,6 +78,9 @@ operator, user, and contributor references are easier to find.
 - [ADR-014](adr-014-backend-text-escaping-seam.md):
   Ninja backend escaping boundary decision record, preserving ordinary shell
   dollar syntax in manifests without coupling the IR to Ninja.
+- [ADR-015](adr-015-use-bounded-git-cli-for-change-detection.md):
+  Feature-private, bounded Git CLI queries for standard-library change
+  detection.
 
 ## Proposals
 
