@@ -64,7 +64,7 @@ jobs:
           command -v awk
           awk --version
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@8add2d99854a5b77548eae98cca59202e68fefc8
+        uses: leynos/shared-actions/.github/actions/setup-rust@18b2ea047ab1c761db2c4171aa7e73945badf3ec
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           # Preserve warnings-as-errors through toolchain setup.
@@ -167,7 +167,7 @@ jobs:
       - name: Test
         run: make test
       - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@8add2d99854a5b77548eae98cca59202e68fefc8
+        uses: leynos/shared-actions/.github/actions/generate-coverage@18b2ea047ab1c761db2c4171aa7e73945badf3ec
         with:
           language: rust
           output-path: lcov.info
@@ -179,7 +179,7 @@ jobs:
         if: env.CS_ACCESS_TOKEN != '' && github.event_name == 'pull_request'
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@8add2d99854a5b77548eae98cca59202e68fefc8
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@18b2ea047ab1c761db2c4171aa7e73945badf3ec
         with:
           path: lcov.info
           format: lcov
@@ -215,7 +215,7 @@ jobs:
       - name: Install GNU Make
         run: choco install make --yes --no-progress
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@8add2d99854a5b77548eae98cca59202e68fefc8
+        uses: leynos/shared-actions/.github/actions/setup-rust@18b2ea047ab1c761db2c4171aa7e73945badf3ec
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           # Preserve warnings-as-errors through toolchain setup.
@@ -336,7 +336,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@8add2d99854a5b77548eae98cca59202e68fefc8
+        uses: leynos/shared-actions/.github/actions/setup-rust@18b2ea047ab1c761db2c4171aa7e73945badf3ec
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           rustflags: -D warnings
@@ -366,7 +366,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@8add2d99854a5b77548eae98cca59202e68fefc8
+        uses: leynos/shared-actions/.github/actions/setup-rust@18b2ea047ab1c761db2c4171aa7e73945badf3ec
         with:
           toolchain: stable
       - name: Install uv
