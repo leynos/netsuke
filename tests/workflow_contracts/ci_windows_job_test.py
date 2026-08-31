@@ -32,13 +32,15 @@ EXPECTED_WINDOWS_BASH_MAKEFILE_GATES = (
     "make SHELL=bash test",
 )
 
-#: Doc and audit gates already covered on Linux; duplicating them on Windows
-#: buys nothing but runtime.
+#: Doc and audit gates already covered on Linux, plus the retired Bash
+#: Whitaker gate. Duplicating or restoring them on Windows buys nothing but
+#: runtime and can bypass the PowerShell wrapper.
 EXCLUDED_WINDOWS_RUNS = (
     "make spelling",
     "make markdownlint",
     "make nixie",
     "make test-workflow-contracts",
+    "make SHELL=bash lint-whitaker",
 )
 
 #: Linux-only audit actions the Windows job must not invoke.
@@ -163,6 +165,19 @@ def test_windows_job_runs_check_fmt_lint_and_test(
     )
 
 
+def test_windows_job_installs_whitaker_before_linting(
+    windows_steps: list[dict[str, object]],
+) -> None:
+    """The shared installer must precede the PowerShell Whitaker invocation."""
+    step_names = [str(step.get("name", "")) for step in windows_steps]
+    install_index = step_names.index("Install Whitaker")
+    lint_index = step_names.index("Lint (Whitaker)")
+    assert install_index < lint_index, (
+        "Install Whitaker must precede Lint (Whitaker) so the PowerShell wrapper "
+        f"exists before it is invoked, got step order {step_names!r}"
+    )
+
+
 def test_windows_job_runs_whitaker_through_powershell_wrapper(
     windows_steps: list[dict[str, object]],
 ) -> None:
@@ -236,7 +251,8 @@ def test_windows_job_does_not_duplicate_doc_and_audit_gates(
 
     `make spelling`, `make markdownlint`, `make nixie`, coverage generation,
     the CodeScene gate, and `make test-workflow-contracts` are already covered
-    on Linux; duplicating them on Windows buys nothing.
+    on Linux. `make SHELL=bash lint-whitaker` is replaced by the PowerShell
+    wrapper. Duplicating or restoring any of them on Windows buys nothing.
     """
     runs = [normalise_run(run) for run in step_runs(windows_steps)]
     duplicated = [command for command in EXCLUDED_WINDOWS_RUNS if command in runs]

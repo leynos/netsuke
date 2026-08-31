@@ -711,24 +711,54 @@ cargo binstall --no-confirm --locked \
   "cargo-nextest@$NEXTEST_VERSION"
 ```
 
-Install the separately versioned Whitaker installer with:
+`make check-fmt` verifies Markdown formatting as well as Rust formatting, and
+needs `mdtablefix` on `PATH`. CI pins the version in `MDTABLEFIX_VERSION` in
+`.github/workflows/ci.yml`. Install that same version locally so local runs
+match CI; read the pin from the workflow rather than copying the number, so the
+two cannot drift:
 
 ```bash
-WHITAKER_INSTALLER_VERSION="$(sed -n "s/.*WHITAKER_INSTALLER_VERSION: '\\(.*\\)'.*/\\1/p" \
+MDTABLEFIX_VERSION="$(sed -n "s/.*MDTABLEFIX_VERSION: '\(.*\)'.*/\1/p" \
   .github/workflows/ci.yml)"
-# Build from crates.io:
-cargo install --locked whitaker-installer --version "$WHITAKER_INSTALLER_VERSION"
+cargo install --locked mdtablefix --version "$MDTABLEFIX_VERSION"
 # or, for a prebuilt binary:
 cargo binstall --no-confirm --locked \
-  "whitaker-installer@$WHITAKER_INSTALLER_VERSION"
+  "mdtablefix@$MDTABLEFIX_VERSION"
+```
+
+Version drift matters here beyond reproducibility: a different `mdtablefix`
+version may reflow prose differently, which would make `make check-fmt` fail on
+an otherwise clean tree.
+
+CI installs Whitaker through the SHA-pinned
+`leynos/shared-actions/.github/actions/install-whitaker` action. Both build
+jobs pass its required `installer-version: '0.2.7'` input; there is no
+`WHITAKER_INSTALLER_VERSION` workflow variable. Read that action input before
+installing locally so the local installer matches CI:
+
+```bash
+INSTALLER_VERSION='0.2.7' # Read from the Install Whitaker action input in CI.
+cargo install --locked whitaker-installer \
+  --version "$INSTALLER_VERSION"
+# or, for a prebuilt binary:
+cargo binstall --no-confirm --locked \
+  "whitaker-installer@$INSTALLER_VERSION"
 ```
 
 `whitaker-installer` and the lint libraries are separate artefacts with
-separate versions. `WHITAKER_INSTALLER_VERSION` pins the installer — the tool
-that stages libraries — and nothing else. The installer keeps its own checkout
-of the Whitaker repository under `~/.local/share/whitaker`, updates it with
-`git pull`, and stages the libraries from its default branch. Lint behaviour
-therefore tracks Whitaker HEAD.
+separate versions. The shared action's `installer-version` input pins the
+installer — the tool that stages libraries — and nothing else. The installer
+keeps its own checkout of the Whitaker repository under
+`~/.local/share/whitaker`, updates it with `git pull`, and stages the libraries
+from its default branch. Lint behaviour therefore tracks Whitaker HEAD.
+
+The Linux build job installs Nixie through the similarly SHA-pinned
+`leynos/shared-actions/.github/actions/install-nixie` action. Its required
+`python-version: '3.14'` input satisfies Nixie CLI's Python 3.14-or-newer
+requirement. `Install Nixie` follows `Setup uv` and precedes
+`Validate Mermaid diagrams`, which runs `make nixie`; preserve that order when
+maintaining the workflow so Mermaid validation always has the installed CLI
+available.
 
 **Running the lint libraries at HEAD is deliberate.** Netsuke follows the suite
 as it develops, so new lints and fixes arrive without a version bump here. Do
@@ -3574,9 +3604,10 @@ setup action, then runs its Makefile gates through Git Bash with `SHELL=bash`.
 That override is required because GNU Make otherwise selects `cmd.exe` on
 Windows, while Netsuke's recipes use POSIX shell syntax. It installs the
 workflow-pinned `cargo-nextest`; the shared Rust setup action supplies
-`rustfmt` and Clippy. The shared Whitaker installer produces a PowerShell
-wrapper on Windows, so `Lint (Whitaker)` invokes that wrapper directly rather
-than through a Bash shim.
+`rustfmt` and Clippy. The SHA-pinned shared Whitaker installer receives the same
+`installer-version: '0.2.7'` input as Linux and produces a PowerShell wrapper
+on Windows, so `Lint (Whitaker)` invokes that wrapper directly rather than
+through a Bash shim or `make SHELL=bash lint-whitaker`.
 
 To reproduce the platform gate, use a Windows environment with those tools
 provisioned and run the following in order:
