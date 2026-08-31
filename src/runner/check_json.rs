@@ -83,19 +83,25 @@ struct CheckResult {
 }
 
 /// Finding counts for one check.
+///
+/// The severity tallies describe the whole run, while `reported` and `omitted`
+/// describe the bounded output, so `error + warning + advice` always equals
+/// `reported + omitted`. Counting the tallies before the limit is what lets a
+/// consumer see that a run found an error even when `--limit` kept it out of
+/// `findings`.
 #[derive(Debug, Serialize)]
 struct Summary {
-    /// Findings reported at error severity.
+    /// Findings at error severity across the whole run.
     error: usize,
-    /// Findings reported at warning severity.
+    /// Findings at warning severity across the whole run.
     warning: usize,
-    /// Findings reported at advice severity.
+    /// Findings at advice severity across the whole run.
     advice: usize,
-    /// Total findings reported.
+    /// Findings present in `findings`, after `--limit` applies.
     reported: usize,
-    /// Findings a directive silenced.
+    /// Findings a directive silenced, and so never counted above.
     suppressed: usize,
-    /// Findings `--limit` excluded from the report.
+    /// Findings `--limit` excluded from `findings`.
     omitted: usize,
 }
 

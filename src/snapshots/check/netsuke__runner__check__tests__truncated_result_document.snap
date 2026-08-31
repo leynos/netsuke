@@ -14,8 +14,8 @@ expression: rendered
     "fail_on": "error",
     "summary": {
       "error": 0,
-      "warning": 1,
-      "advice": 0,
+      "warning": 3,
+      "advice": 2,
       "reported": 1,
       "suppressed": 0,
       "omitted": 4
