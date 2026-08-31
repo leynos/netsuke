@@ -81,6 +81,30 @@ fn a_limit_bounds_the_report_and_records_what_it_dropped(
     assert_eq!(built.truncated(), truncated);
 }
 
+/// The verdict must survive truncation.
+///
+/// Findings are ordered by source position, not severity, so with `--limit 1`
+/// an early advisory is what remains in the output. If the verdict were taken
+/// from the bounded list, the later error would vanish and a run that found an
+/// error-level finding would report success.
+#[test]
+fn a_limit_does_not_hide_a_failing_finding() {
+    let built = report!(&[Severity::Advice, Severity::Error], 1, FailOn::Error);
+    assert_eq!(built.findings().len(), 1, "output is bounded");
+    assert_eq!(
+        built.findings().first().map(|finding| finding.severity),
+        Some(Severity::Advice),
+        "the earlier finding is the one shown"
+    );
+    assert_eq!(built.failing_count(), 1, "the truncated error still counts");
+    assert!(built.is_failure(), "the run must still fail");
+    assert_eq!(
+        built.count_at(Severity::Error),
+        1,
+        "the summary describes the whole run"
+    );
+}
+
 #[rstest]
 #[case(FailOn::Error, 1, true)]
 #[case(FailOn::Warning, 2, true)]
