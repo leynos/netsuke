@@ -160,7 +160,7 @@ fn report_target(target: &Target, node: Option<&Node>, sink: &mut FindingSink<'_
     }
 }
 
-/// Borrow the entries of a `StringOrList` without allocating.
+/// Collect the entries of a `StringOrList`, borrowing the string data.
 fn entries(list: &StringOrList) -> Vec<&str> {
     match list {
         StringOrList::Empty => Vec::new(),

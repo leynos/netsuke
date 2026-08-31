@@ -146,3 +146,49 @@ fn a_directive_names_only_the_rules_it_lists() {
     assert!(directive.names("one"));
     assert!(!directive.names("two"));
 }
+
+proptest::proptest! {
+    /// A `#` inside a block scalar is never a directive, whatever follows it.
+    ///
+    /// This is the invariant the span-aware scanner exists to hold: a `script`
+    /// block is shell text, and a shell comment in it must not be able to
+    /// disable a lint rule. The example cases pin specific shapes; this covers
+    /// arbitrary comment bodies inside the block.
+    #[test]
+    fn a_hash_inside_a_script_block_never_yields_a_directive(
+        body in proptest::collection::vec(
+            proptest::sample::select(vec![
+                "# netsuke-lint: allow background-job -- inside a script",
+                "# netsuke-lint-file: allow bashism -- inside a script",
+                "echo hi  # netsuke-lint: allow unused-var -- trailing",
+                "echo plain",
+                "# ordinary comment",
+            ]),
+            1..4,
+        ),
+    ) {
+        let mut indented = String::new();
+        for line in &body {
+            indented.push_str("      ");
+            indented.push_str(line);
+            indented.push('\n');
+        }
+        let yaml = format!(
+            concat!(
+                "netsuke_version: \"1.0.0\"\n",
+                "targets:\n",
+                "  - name: out\n",
+                "    script: |\n",
+                "{}",
+            ),
+            indented
+        );
+        let doc = Document::parse(yaml.clone()).expect("fixture should index");
+        proptest::prop_assert_eq!(
+            collect(&doc).len(),
+            0,
+            "a script block's contents are shell text, not directives: {}",
+            yaml
+        );
+    }
+}
