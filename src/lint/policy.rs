@@ -126,7 +126,7 @@ impl Policy {
         self.resolved.get(name).copied().flatten()
     }
 
-    /// Report whether any rule is enabled.
+    /// Report whether no rule is enabled.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.resolved.values().all(Option::is_none)

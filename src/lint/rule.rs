@@ -288,3 +288,61 @@ impl<'a> FindingSink<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    //! Tests for the rule metadata vocabulary.
+
+    use super::Category;
+
+    /// Every category round-trips through its selector spelling.
+    ///
+    /// The spelling is what a user writes in `--rule <category>=<severity>`,
+    /// so a category that does not parse back is unreachable from the command
+    /// line even though it is registered.
+    #[test]
+    fn categories_round_trip_through_their_selector() {
+        for category in Category::ALL {
+            assert_eq!(
+                Category::parse(category.as_str()),
+                Some(category),
+                "`{}` does not parse back",
+                category.as_str()
+            );
+        }
+    }
+
+    /// No two categories share a selector spelling.
+    #[test]
+    fn category_selectors_are_distinct() {
+        let mut spellings: Vec<&str> = Category::ALL.iter().map(|entry| entry.as_str()).collect();
+        let total = spellings.len();
+        spellings.sort_unstable();
+        spellings.dedup();
+        assert_eq!(spellings.len(), total, "two categories share a spelling");
+    }
+
+    /// `Category::ALL` must list every variant.
+    ///
+    /// The match is the witness: adding a variant fails to compile here until
+    /// it is also added to `ALL`, which the selector tests iterate.
+    #[test]
+    fn all_lists_every_variant() {
+        for category in Category::ALL {
+            // Exhaustive by construction; a new variant breaks this arm list.
+            let named = match category {
+                Category::Correctness => "correctness",
+                Category::Caching => "caching",
+                Category::Portability => "portability",
+                Category::Determinism => "determinism",
+                Category::Redundancy => "redundancy",
+                Category::Hygiene => "hygiene",
+                Category::Clarity => "clarity",
+                Category::Migration => "migration",
+                Category::Suppression => "suppression",
+            };
+            assert_eq!(category.as_str(), named);
+        }
+        assert_eq!(Category::ALL.len(), 9, "ALL should list every variant");
+    }
+}

@@ -24,6 +24,42 @@ fn background_job_leaves_joining_and_redirecting_alone(#[case] command: &str) {
     crate::assert_lint_silent!(&manifest(command), "background-job");
 }
 
+proptest::proptest! {
+    /// A trailing unquoted `&` is reported; anything else is not.
+    ///
+    /// The examples above pin the cases a reader would think of. This covers
+    /// the boundary between them, where quoting and redirection meet the
+    /// trailing-ampersand test that decides whether a command detaches.
+    #[test]
+    fn only_a_trailing_unquoted_ampersand_detaches(
+        body in proptest::sample::select(vec![
+            "run", "run x", "a && b", "cmd > log 2>&1", "cmd 2>&1 | tee log",
+            "echo 'a & b'", "echo \"a & b\"",
+        ]),
+        detached in proptest::bool::ANY,
+    ) {
+        // A block scalar carries the body verbatim, so a generated command
+        // containing quotes stays valid YAML.
+        let suffix = if detached { " &" } else { "" };
+        let yaml = format!(
+            concat!(
+                "netsuke_version: \"1.0.0\"\n",
+                "targets:\n",
+                "  - name: out\n",
+                "    command: |-\n",
+                "      {}{}\n",
+            ),
+            body, suffix
+        );
+        let fired = crate::lint_rules_fired!(&yaml);
+        proptest::prop_assert_eq!(
+            fired.contains(&"background-job"),
+            detached,
+            "command {:?} should{} report", yaml, if detached { "" } else { " not" }
+        );
+    }
+}
+
 #[test]
 fn background_job_points_at_the_ampersand() {
     assert_eq!(
