@@ -15,6 +15,9 @@ operator, user, and contributor references are easier to find.
   execution design document.
 - [netsuke-cli-design-document.md](netsuke-cli-design-document.md): Command-line
   interface design and user-experience requirements.
+- [git-change-detection-helpers-design.md](git-change-detection-helpers-design.md):
+  Git change-detection and glob-matching contracts and verification guidance
+  for maintainers, reviewers, and manifest authors.
 - [roadmap.md](roadmap.md): Phased implementation plan and tracked delivery
   work.
 - [archive/roadmap-completed-foundations.md](archive/roadmap-completed-foundations.md):

@@ -52,6 +52,12 @@ environment mutations. Production receives the absolute workspace path and
 optional command `PATH` override through `StdlibConfig`; tests supply scripted
 port responses.
 
+The associated pure `matches_glob()` filter enforces fixed v1 preflight limits
+of 64 supplied patterns and 65,536 aggregate UTF-8 pattern bytes. Duplicate
+patterns count towards both limits. The filter rejects an over-limit set before
+compiling or allocating any compiled patterns; these limits are not
+configurable.
+
 ## Rationale
 
 - **Git remains the semantic authority.** Revision peeling, object lookup, and
@@ -85,14 +91,17 @@ low-cardinality telemetry. A future Git-backed feature must either fit the
 three declared operations or propose a new decision; it must not widen the port
 into arbitrary Git execution.
 
+The `matches_glob()` filter must retain tests for its fixed pattern-count and
+pattern-byte preflight limits, including duplicate-pattern accounting and
+rejection before compilation. The limits are part of the v1 contract rather
+than configuration.
+
 ## Outstanding decisions
 
 Before this proposal is accepted, resolve:
 
 - whether Git operations should receive a dedicated timeout or continue using
-  the shared command wait policy; and
-- whether `matches_glob()` needs a configurable pattern budget after measured
-  workload evidence identifies a concrete bound.
+  the shared command wait policy.
 
 ## Alternatives considered
 

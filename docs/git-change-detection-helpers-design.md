@@ -103,6 +103,11 @@ to construct a temporary pattern list. The public v1 contract does not accept a
 sequence as the pattern argument; that alternative can be added compatibly if
 real manifests need data-driven pattern sets.
 
+Before compiling any pattern, the filter rejects a set containing more than 64
+supplied patterns or more than 65,536 aggregate UTF-8 pattern bytes. Duplicate
+patterns count towards both limits. These are fixed v1 limits, not configurable
+settings, and the preflight check occurs before allocating compiled patterns.
+
 `git_changed_files` joins MiniJinja's global namespace and must join the
 manifest loader's `RESERVED_VAR_NAMES`; otherwise a manifest variable could
 replace the function after registration. `matches_glob` occupies MiniJinja's
@@ -241,15 +246,18 @@ two meanings for `**/*.rs`.
 
 Pattern matching has worst-case work proportional to the number of input paths
 times the number of patterns. The changed-path output byte limit bounds the
-path side. V1 accepts any non-empty variadic pattern set because manifests are
-trusted executable configuration, but the implementation must compile each
-distinct pattern once per filter call, not once per path. A configurable
-pattern budget needs measured evidence and is deferred.
+path side, while the fixed v1 limits bound the pattern side. The implementation
+must compile each distinct pattern once per filter call, not once per path, and
+must reject an over-limit set before compiling or allocating any compiled
+patterns.
 
 Filter tests must cover a valid path followed by a non-string member, escaped
-metacharacters, separator normalization, and invalid braces. The first case
-must prove that validation completes before an early matching result can be
-returned.
+metacharacters, separator normalization, invalid braces, exact-boundary
+acceptance, count and byte overages, duplicate patterns counting towards both
+limits, and rejection before compilation or allocation. The first case must
+prove that validation completes before an early matching result can be
+returned; over-limit cases must prove rejection precedes pattern compilation
+and allocation.
 
 ## 7. Architecture and ownership
 
@@ -328,16 +336,17 @@ errors only at registration. Its observable categories are:
 
 *Table 1: Git helper failure mapping.*
 
-| Condition                                              | MiniJinja kind     | Behaviour                                                          |
-| ------------------------------------------------------ | ------------------ | ------------------------------------------------------------------ |
-| Wrong value type, no glob patterns, or malformed range | `InvalidOperation` | Reject before host inspection.                                     |
-| Invalid glob syntax                                    | `SyntaxError`      | Name the invalid pattern and parser detail.                        |
-| Missing workspace path or Git executable               | `InvalidOperation` | Explain the required configuration or executable.                  |
-| Unknown or non-commit revision                         | `InvalidOperation` | Identify the endpoint without printing command output unboundedly. |
-| No merge base or multiple merge bases                  | `InvalidOperation` | Reject the three-dot comparison.                                   |
-| Git exit failure                                       | `InvalidOperation` | Include the operation, exit status, and bounded stderr.            |
-| Output exceeds the configured capture limit            | `InvalidOperation` | Report the byte limit and operation.                               |
-| Non-UTF-8 or malformed NUL output                      | `InvalidOperation` | Reject the whole result.                                           |
+| Condition                                               | MiniJinja kind     | Behaviour                                                                                                         |
+| ------------------------------------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| Wrong value type, no glob patterns, or malformed range  | `InvalidOperation` | Reject before host inspection.                                                                                    |
+| More than 64 patterns or 65,536 aggregate pattern bytes | `InvalidOperation` | Report observed count or bytes with its applicable ceiling (64 or 65,536); reject before compiling or allocating. |
+| Invalid glob syntax                                     | `SyntaxError`      | Name the invalid pattern and parser detail.                                                                       |
+| Missing workspace path or Git executable                | `InvalidOperation` | Explain the required configuration or executable.                                                                 |
+| Unknown or non-commit revision                          | `InvalidOperation` | Identify the endpoint without printing command output unboundedly.                                                |
+| No merge base or multiple merge bases                   | `InvalidOperation` | Reject the three-dot comparison.                                                                                  |
+| Git exit failure                                        | `InvalidOperation` | Include the operation, exit status, and bounded stderr.                                                           |
+| Output exceeds the configured capture limit             | `InvalidOperation` | Report the byte limit and operation.                                                                              |
+| Non-UTF-8 or malformed NUL output                       | `InvalidOperation` | Reject the whole result.                                                                                          |
 
 The adapter applies `StdlibConfig::with_command_max_output_bytes()` to each
 stdout stream. It also bounds stderr to the same limit and drains both streams
@@ -374,19 +383,25 @@ Correct implementation requires these invariants:
    Boolean result.
 7. **Purity transition:** validation failures remain pure; starting Git marks
    the render impure, whether Git succeeds or fails.
+8. **Pattern budget:** more than 64 supplied patterns or more than 65,536
+   aggregate UTF-8 pattern bytes is rejected before pattern compilation;
+   duplicate patterns count towards both limits.
 
 Property-based tests should generate valid and invalid range strings, path
-sets, and pattern sets to check invariants 1, 5, and 6 against a simple
-reference predicate. Example-backed tests should use temporary repositories to
-pin two-dot direction, three-dot direction, deletions, newline-bearing names,
-rename representation, no and multiple merge bases, missing Git, output caps,
-and query-mode rejection. They must assert the complete operation and resolved
-ID sequence for both `A..B` and `A...B`, including unique, multiple, and absent
-merge bases. The production adapter's fixed argv must be asserted at the
-injected port so a future edit cannot silently re-enable external diff drivers,
-rename detection, or lazy fetching. A partial-clone test with an instrumented
-remote must prove that a missing promisor object fails locally without remote
-contact.
+sets, and pattern sets, including exact-boundary acceptance, over-limit count
+and byte cases, and duplicate-pattern accounting, to check invariants 1, 5, 6,
+and 8 against a simple reference predicate. Over-limit cases must assert the
+observed value, applicable fixed ceiling, and rejection before pattern
+compilation or allocation. Example-backed tests should use temporary
+repositories to pin two-dot direction, three-dot direction, deletions,
+newline-bearing names, rename representation, no and multiple merge bases,
+missing Git, output caps, and query-mode rejection. They must assert the
+complete operation and resolved-ID sequence for both `A..B` and `A...B`,
+including unique, multiple, and absent merge bases. The production adapter's
+fixed argv must be asserted at the injected port so a future edit cannot
+silently re-enable external diff drivers, rename detection, or lazy fetching. A
+partial-clone test with an instrumented remote must prove that a missing
+promisor object fails locally without remote contact.
 
 The design has one material interaction surface: range kind (`..` or `...`) ×
 change kind (add, modify, delete, rename, or submodule) × glob result (match or
@@ -435,10 +450,11 @@ adapter small and auditable.
 
 Rejected. `globset` efficiently matches multiple patterns, but adding it would
 create a second glob implementation and invite semantic drift from `glob()`.
-The output byte limit bounds changed lists. Compiling the existing `glob`
-patterns once and applying an any-to-any loop avoids another pattern language;
-implementation evidence can justify a specialized matcher later if this loop
-becomes a measured bottleneck.
+The fixed v1 pattern-count and pattern-byte limits, together with the output
+byte limit, bound the inputs. Compiling the existing `glob` patterns once and
+applying an any-to-any loop avoids another pattern language; implementation
+evidence can justify a specialized matcher later if this loop becomes a
+measured bottleneck.
 
 ### 11.6. Enable rename detection
 

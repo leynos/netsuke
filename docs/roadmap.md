@@ -1210,18 +1210,24 @@ untracked-file discovery, or per-linter file selection.
   - Require a sequence of string paths and at least one string pattern; reject
     invalid patterns and validate every path member before returning a Boolean,
     even when an earlier path would match.
+  - Enforce fixed v1 preflight limits of 64 supplied patterns and 65,536
+    aggregate UTF-8 pattern bytes before compiling or allocating compiled
+    patterns; duplicate patterns count towards both limits.
   - Reuse or extract `GlobPattern::new` preprocessing before compiling each
-    pattern once, then return true when any path matches any pattern using
-    case-sensitive, literal-separator, leading-dot, and recursive `**` semantics
-    aligned with `glob()`.
-  - Test escaped metacharacters, separator normalization, invalid braces, and
-    the valid-path-then-non-string validation case.
+    distinct pattern once, then return true when any path matches any pattern
+    using case-sensitive, literal-separator, leading-dot, and recursive `**`
+    semantics aligned with `glob()`.
+  - Test escaped metacharacters, separator normalization, invalid braces,
+    exact-boundary acceptance, count and byte overages, duplicate-pattern
+    accounting, and rejection before compiling or allocating compiled patterns.
   - Register the filter in ordinary and manifest-query environments and add it
     to the standard-library filter inventory.
   - See
     [git-change-detection-helpers-design.md §§3 and 6](git-change-detection-helpers-design.md#3-public-template-contract).
   - Success: property-generated path and pattern collections agree with a
-    simple any-to-any reference predicate, and invalid input fails closed.
+    simple any-to-any reference predicate, invalid input fails closed, and
+    over-limit pattern sets report observed values with their applicable fixed
+    ceiling and are rejected before compilation or allocation.
 - [ ] 6.11.4. Validate and document change-aware manifest gates. Requires
   6.11.3.
   - Add an end-to-end manifest matrix spanning two-dot and three-dot ranges,
