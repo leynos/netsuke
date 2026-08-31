@@ -134,8 +134,7 @@ fn from_str_named(
     });
     let glob_base = glob::GlobBaseCache::new(manifest_root);
     jinja.add_function("glob", move |pattern: String| {
-        let expansion = glob::expand_glob_with_base_cache(&pattern, &glob_base)?;
-        glob::record_expansion(&expansion);
+        let expansion = glob::expand_manifest_template_glob(&pattern, &glob_base)?;
         expansion.into_template_paths(&pattern)
     });
     let _stdlib_state = match stdlib_registration {

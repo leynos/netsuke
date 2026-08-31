@@ -75,6 +75,19 @@ impl GlobBaseCache {
         }
     }
 
+    /// Describe whether this manifest parse was given an injected glob base.
+    ///
+    /// The returned values are the closed `base_mode` label set used only by
+    /// manifest-template expansion diagnostics. They describe parse context;
+    /// an absolute pattern still avoids resolving the configured base.
+    pub(super) const fn mode(&self) -> &'static str {
+        if self.base.is_some() {
+            "injected"
+        } else {
+            "process_working_directory"
+        }
+    }
+
     /// Resolve and retain the configured base when one is available.
     ///
     /// # Errors

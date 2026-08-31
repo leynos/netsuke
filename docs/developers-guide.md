@@ -2437,10 +2437,11 @@ directory, and matches dropped because a symbolic link cannot be resolved
 through the capability, including an unreadable link within the prefix. It
 aggregates every skipped entry while retaining at most the first four
 unreachable-symlink paths as a trace sample. The `src/manifest/mod.rs` adapter
-records those observations after the query at the Jinja `glob` helper's
-orchestration boundary, via `glob::record_expansion`. Keeping recording there
-leaves the expansion query free of metrics and tracing side effects while
-keeping a degraded expansion visible without having to reproduce it.
+records those observations and the whole expansion duration at the Jinja `glob`
+helper's orchestration boundary, via `glob::expand_manifest_template_glob`.
+Keeping recording there leaves the expansion query free of metrics and tracing
+side effects while keeping a degraded or failed template expansion visible
+without having to reproduce it.
 
 - **Metrics** — `netsuke_manifest_glob_expansions_total`, labelled
   `outcome` (`matched`, `unopenable_prefix`), and
@@ -2451,15 +2452,23 @@ keeping a degraded expansion visible without having to reproduce it.
   rule in `AGENTS.md`. The Jinja adapter additionally records
   `netsuke_manifest_glob_rejections_total` with `outcome=unsafe_path` and
   `error_category=shell_quoting_required` when its shell-safety boundary
-  rejects a match.
+  rejects a match. It also records
+  `netsuke_manifest_template_glob_expansions_total`, labelled with the closed
+  `base_mode` (`injected`, `process_working_directory`) and `outcome`
+  (`matched`, `unopenable_prefix`, `error`) sets, plus the unlabelled
+  `netsuke_manifest_template_glob_expansion_duration_seconds` histogram. The
+  base mode describes whether the parse was given a manifest root; absolute
+  patterns still avoid resolving that root.
 - **Tracing** — every caller-controlled path field is replaced with the stable
   `<redacted>` marker: patterns, prefixes, and sampled relative matches. A
   skipped unreachable-symlink event is emitted only for the retained sample,
   with no more than four such events per expansion. Metrics retain only bounded
   aggregate status and reason data; errors may retain the caller's original
-  original pattern so invalid input can be explained precisely. Adapter
-  rejection events use the same `<redacted>` path marker and carry only the
-  bounded outcome and error category.
+  pattern so invalid input can be explained precisely. Adapter rejection events
+  use the same `<redacted>` path marker and carry only the bounded outcome and
+  error category. Template-expansion success, unopenable prefix, and error
+  events carry only the same bounded mode and outcome fields; errors use the
+  fixed `expansion_failure` category.
 
 ## Test isolation utilities
 

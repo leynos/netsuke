@@ -23,8 +23,9 @@
 //! with the same redaction, so its relative form cannot disclose a filename
 //! selected by the pattern.
 
-use super::{GlobExpansion, GlobOutcome, GlobSkippedEntries};
+use super::{GlobBaseCache, GlobExpansion, GlobOutcome, GlobSkippedEntries};
 use metrics::{counter, describe_counter, describe_histogram, histogram};
+use minijinja::Error;
 use std::{sync::Once, time::Duration};
 
 /// Metric name counting glob expansions by outcome.
@@ -38,6 +39,11 @@ const BASE_CACHE_TOTAL: &str = "netsuke_manifest_glob_base_cache_total";
 /// Metric name recording injected-base canonicalization latency.
 const BASE_CANONICALIZATION_DURATION: &str =
     "netsuke_manifest_glob_base_canonicalization_duration_seconds";
+/// Metric name counting manifest-template glob expansion results.
+const TEMPLATE_EXPANSIONS_TOTAL: &str = "netsuke_manifest_template_glob_expansions_total";
+/// Metric name recording end-to-end manifest-template glob expansion latency.
+const TEMPLATE_EXPANSION_DURATION: &str =
+    "netsuke_manifest_template_glob_expansion_duration_seconds";
 /// Stable marker replacing caller-controlled paths in tracing events.
 const REDACTED_PATH: &str = "<redacted>";
 
@@ -71,6 +77,17 @@ fn describe_metrics() {
             BASE_CANONICALIZATION_DURATION,
             "Records the duration in seconds of injected manifest glob-base \
              canonicalization."
+        );
+        describe_counter!(
+            TEMPLATE_EXPANSIONS_TOTAL,
+            "Counts manifest-template glob expansion results labelled by \
+             base_mode (injected or process_working_directory) and outcome \
+             (matched, unopenable_prefix, or error)."
+        );
+        describe_histogram!(
+            TEMPLATE_EXPANSION_DURATION,
+            "Records the end-to-end duration in seconds of manifest-template \
+             glob expansion."
         );
     });
 }
@@ -128,6 +145,67 @@ fn record_base_cache_canonicalization(outcome: &'static str, duration: Duration)
 /// Record the elapsed duration of one injected-base canonicalization.
 fn record_base_canonicalization_duration(duration: Duration) {
     histogram!(BASE_CANONICALIZATION_DURATION).record(duration.as_secs_f64());
+}
+
+/// Expand and observe a manifest-template glob without instrumenting queries.
+///
+/// This adapter is the only expansion path that emits whole-operation
+/// telemetry. Direct [`super::glob_paths`] callers remain pure so library
+/// users can query the filesystem without installing observability backends.
+pub(in crate::manifest) fn expand_manifest_template_glob(
+    pattern: &str,
+    base: &GlobBaseCache,
+) -> std::result::Result<GlobExpansion, Error> {
+    let base_mode = base.mode();
+    let _span =
+        tracing::debug_span!("manifest.template_glob", operation = "expand", base_mode).entered();
+    let started = std::time::Instant::now();
+    let result = super::expand_glob_with_base_cache(pattern, base);
+    record_template_expansion(&result, started.elapsed(), base_mode);
+    result
+}
+
+/// Record one completed or failed manifest-template glob expansion.
+fn record_template_expansion(
+    result: &std::result::Result<GlobExpansion, Error>,
+    duration: Duration,
+    base_mode: &'static str,
+) {
+    describe_metrics();
+    histogram!(TEMPLATE_EXPANSION_DURATION).record(duration.as_secs_f64());
+    if let Ok(expansion) = result {
+        record(expansion);
+        let outcome = match expansion.outcome {
+            GlobOutcome::Matched => "matched",
+            GlobOutcome::UnopenablePrefix => "unopenable_prefix",
+        };
+        counter!(
+            TEMPLATE_EXPANSIONS_TOTAL,
+            "base_mode" => base_mode,
+            "outcome" => outcome
+        )
+        .increment(1);
+        tracing::debug!(
+            operation = "manifest_template_glob_expansion",
+            base_mode,
+            outcome,
+            "manifest template glob expansion completed"
+        );
+    } else {
+        counter!(
+            TEMPLATE_EXPANSIONS_TOTAL,
+            "base_mode" => base_mode,
+            "outcome" => "error"
+        )
+        .increment(1);
+        tracing::debug!(
+            operation = "manifest_template_glob_expansion",
+            base_mode,
+            outcome = "error",
+            error_category = "expansion_failure",
+            "manifest template glob expansion failed"
+        );
+    }
 }
 
 /// Record a path rejected by the manifest-template shell-safety adapter.

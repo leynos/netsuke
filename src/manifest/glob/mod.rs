@@ -44,6 +44,7 @@ mod walk;
 pub(super) use base::GlobBaseCache;
 use base::PreparedGlob;
 use camino::{Utf8Path, Utf8PathBuf};
+pub(super) use diagnostics::expand_manifest_template_glob;
 use errors::{GlobErrorContext, GlobErrorType, create_glob_error};
 use normalize::normalize_separators;
 use validate::validate_brace_matching;
@@ -379,15 +380,6 @@ fn strip_base(base: Option<&Utf8Path>, path: &Utf8Path) -> String {
     // not first allocate a normalized String only to allocate again to rebase.
     relative.as_str().replace('\\', "/")
 }
-/// Record the bounded observations from a completed expansion.
-///
-/// `glob_paths` deliberately does not call this function: it is a pure query.
-/// The manifest-template adapter records observations after it calls
-/// [`expand_glob`].
-pub(super) fn record_expansion(expansion: &GlobExpansion) {
-    diagnostics::record(expansion);
-}
-
 #[cfg(test)]
 mod tests;
 
