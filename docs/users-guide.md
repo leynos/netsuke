@@ -627,10 +627,14 @@ netsuke_version: "1.0.0"
 actions:
   - name: test-fast
     command: "cargo nextest run"
+    deps:
+      - config/test-profile.toml
     when: command_available("cargo-nextest")
 
   - name: test-fast
     command: "cargo test"
+    deps:
+      - config/test-profile.toml
     when: not command_available("cargo-nextest")
 
 targets: []
@@ -638,6 +642,12 @@ targets: []
 defaults:
   - test-fast
 ```
+
+Netsuke evaluates both guards while loading the manifest, without running
+either recipe, so exactly one `test-fast` action enters the build graph. The
+selected action's `deps` become Ninja implicit dependencies: changes to
+`config/test-profile.toml` make the action stale, but the path is not appended
+to `cargo nextest run` or `cargo test` as a recipe argument.
 
 Both helpers accept:
 
@@ -813,6 +823,26 @@ See the [template standard-library guide](stdlib-yaml-and-jinja-guide.md) for
 every helper's signature, defaults, purity, platform caveats, and executable
 examples. Host-observing helpers belong only in trusted manifests: Netsuke
 bounds command and network output, but does not sandbox template evaluation.
+
+When a Boolean is interpolated into a string field, Netsuke renders it as
+lowercase `true` or `false`. For example, this writes `true` to `status.txt`:
+
+<!-- tested-example: guide-boolean-string-interpolation -->
+
+```yaml
+netsuke_version: "1.0.0"
+
+vars:
+  enabled: true
+
+targets:
+  - name: status.txt
+    command: "printf '%s\\n' '{{ enabled }}' > {{ outs }}"
+```
+
+The `now(offset=...)` helper accepts `Z` or `z` for UTC and signed ISO 8601
+offsets whose absolute hour component is below 24. Offsets such as `+24:00`,
+`-24:00`, and larger absolute hour values are rejected as invalid.
 
 One helper deserves a note here because its result depends on the host's
 environment. `path | expanduser` expands a leading `~` against the home

@@ -14,7 +14,12 @@ use netsuke::{
     ninja_gen::generate,
 };
 use rstest::rstest;
-use std::{ffi::OsString, process::Command};
+use std::{
+    ffi::OsString,
+    fmt::{self, Debug, Display, Formatter},
+    path::Path,
+    process::Command,
+};
 use tempfile::TempDir;
 use test_support::ninja::ninja_integration_workspace;
 
@@ -33,6 +38,7 @@ fn host_path() -> Result<OsString> {
         .context("host PATH is required to run Ninja")
 }
 
+/// Build the action used by a generated single-edge test graph.
 const fn action(recipe: Recipe) -> Action {
     Action {
         recipe,
@@ -44,6 +50,7 @@ const fn action(recipe: Recipe) -> Action {
     }
 }
 
+/// Build a single-action graph for a command-escaping scenario.
 fn graph(recipe: Recipe, input: &str, output: &str) -> BuildGraph {
     let edge = BuildEdge {
         action_id: "action".into(),
@@ -63,8 +70,18 @@ fn graph(recipe: Recipe, input: &str, output: &str) -> BuildGraph {
     graph
 }
 
+/// Create an isolated workspace after confirming that Ninja is available.
 fn required_ninja_workspace() -> Result<TempDir> {
     ninja_integration_workspace().context("Ninja is required for dollar-escaping tests")
+}
+
+/// Render a path with its escaped debug representation for invalid UTF-8 diagnostics.
+struct DebugPath<'path>(&'path Path);
+
+impl Display for DebugPath<'_> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        Debug::fmt(self.0, formatter)
+    }
 }
 
 /// An isolated workspace containing a generated Ninja file and its output.
@@ -81,8 +98,9 @@ impl NinjaWorkspace {
     /// Creates an isolated workspace and writes the generated Ninja file into it.
     fn create(ninja_file: &str) -> anyhow::Result<Self> {
         let temporary_directory = required_ninja_workspace()?;
-        let path = Utf8PathBuf::from_path_buf(temporary_directory.path().to_path_buf())
-            .map_err(|non_utf8| anyhow::anyhow!("non-UTF-8 temporary path: {non_utf8:?}"))?;
+        let path = Utf8PathBuf::from_path_buf(temporary_directory.path().to_path_buf()).map_err(
+            |non_utf8| anyhow::anyhow!("non-UTF-8 temporary path: {}", DebugPath(&non_utf8)),
+        )?;
         let directory = Dir::open_ambient_dir(&path, ambient_authority())
             .with_context(|| format!("open Ninja workspace {path}"))?;
         let workspace = Self {
@@ -97,6 +115,7 @@ impl NinjaWorkspace {
         Ok(workspace)
     }
 }
+/// Query Ninja's effective commands for a generated target.
 fn ninja_commands(ninja_file: &str, target: &str) -> Result<String> {
     let workspace = NinjaWorkspace::create(ninja_file)?;
 
@@ -117,6 +136,7 @@ fn ninja_commands(ninja_file: &str, target: &str) -> Result<String> {
     String::from_utf8(output.stdout).context("Ninja command output was not UTF-8")
 }
 
+/// Run a generated Ninja target and read its shell-produced output.
 #[cfg(unix)]
 fn ninja_output(
     ninja_file: &str,
@@ -153,6 +173,7 @@ fn ninja_output(
         .context("read shell output from generated target")
 }
 
+/// Verify that remaining shell dollars are doubled for Ninja.
 #[rstest]
 #[case::shell_variable("echo $NETSUKE_TEST_SENTINEL", "echo $$NETSUKE_TEST_SENTINEL")]
 #[case::shell_default(
@@ -178,6 +199,7 @@ fn backend_doubles_every_residual_shell_dollar(#[case] command: &str, #[case] ex
     );
 }
 
+/// Verify that Netsuke placeholders lower before residual dollars are escaped.
 #[rstest]
 #[case::scalar(Recipe::Command { command: "echo $NETSUKE_TEST_SENTINEL".into() })]
 #[case::command_list(Recipe::Command {
@@ -237,6 +259,8 @@ fn command_list_default_reaches_the_child_shell(
     );
     Ok(())
 }
+
+/// Verify that manifest placeholder syntax lowers inside scalar and list recipes.
 #[rstest]
 #[case::scalar("command: 'cat $in > $out'")]
 #[case::command_list("command:\n      - 'cat $in > $out'")]
@@ -295,6 +319,8 @@ fn script_default_reaches_the_child_shell(
     );
     Ok(())
 }
+
+/// Verify that script placeholders run against their real input and output paths.
 #[cfg(unix)]
 #[rstest]
 fn script_placeholders_execute_against_real_paths() -> Result<()> {
@@ -310,6 +336,8 @@ fn script_placeholders_execute_against_real_paths() -> Result<()> {
     );
     Ok(())
 }
+
+/// Verify that placeholder-looking text inside backticks is rejected before escaping.
 #[rstest]
 fn placeholders_inside_backticks_are_rejected_before_backend_escaping() -> Result<()> {
     let manifest = manifest::from_str(
@@ -323,6 +351,7 @@ fn placeholders_inside_backticks_are_rejected_before_backend_escaping() -> Resul
     Ok(())
 }
 
+/// Verify that command control characters cannot inject Ninja syntax.
 #[rstest]
 #[case::newline("echo safe\nbuild injected: action")]
 #[case::carriage_return("echo safe\rbuild injected: action")]
@@ -340,6 +369,7 @@ fn command_control_characters_are_rejected(#[case] command: &str) {
     );
 }
 
+/// Verify that Ninja-unsafe path characters are rejected during generation.
 #[rstest]
 #[case::dollar("input$file")]
 #[case::space("input file")]
@@ -363,6 +393,7 @@ fn unsafe_paths_are_rejected(#[case] input: &str) {
     );
 }
 
+/// Verify that commands without dollars retain their exact text.
 #[rstest]
 fn dollar_free_commands_remain_byte_identical() -> Result<()> {
     let ninja = generate(&graph(

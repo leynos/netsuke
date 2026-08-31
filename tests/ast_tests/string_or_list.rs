@@ -68,9 +68,7 @@ fn string_or_list_variants() -> Result<()> {
                 let expected = vec!["hello".to_owned(), "world".to_owned()];
                 ensure!(
                     names == &expected,
-                    "unexpected names: got {:?}, expected {:?}",
-                    names,
-                    expected
+                    "unexpected names: got {names:?}, expected {expected:?}"
                 );
             }
             other => bail!("Expected List variant, got: {other:?}"),

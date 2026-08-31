@@ -235,19 +235,13 @@ and agents.
   - [x] Return `false` for absent commands instead of raising
     `netsuke::jinja::which::not_found`.
   - [x] Preserve argument validation diagnostics for invalid options.
-- [ ] 3.14.5. Add regression coverage for conditional action dependency
-  manifests.
-  - [ ] Test action-level `when` and action-level `foreach`.
-  - [ ] Test complementary nextest and legacy branches select exactly one
+- [x] 3.14.5. Add regression coverage for conditional action dependency
+  manifests. Depends on 3.14.2, 3.14.3, and 3.14.4.
+  - [x] Test action-level `when` and action-level `foreach`.
+  - [x] Test complementary nextest and legacy branches select exactly one
     action.
-  - [ ] Test absent-command fallback without invoking `shell()`.
-  - [ ] Test `deps` lowering in the IR and emitted Ninja build statements.
-  - Note: the manifest-expansion building blocks already exist in
-    `src/manifest/expand_test_cases/action_condition_cases.rs` and the BDD
-    scenarios in `tests/bdd/steps/conditional_manifest.rs`. The outstanding gap
-    is end-to-end coverage that traces a conditionally selected action through
-    `deps` lowering into emitted Ninja, plus the named nextest-versus-legacy
-    scenario (existing tests use a generic `preferred-tool`).
+  - [x] Test absent-command fallback without invoking `shell()`.
+  - [x] Test `deps` lowering in the IR and emitted Ninja build statements.
 - [ ] 3.14.6. Add rule-level `deps_from` for compiler dependency imports.
   Requires 3.14.3. See
   [netsuke-design.md §2.3](netsuke-design.md#planned-compiler-dependency-import).

@@ -29,7 +29,7 @@ fn stdlib_env(root: &Utf8Path, path_override: OsString) -> Result<Environment<'s
 fn stdlib_workspace() -> Result<StdlibWorkspace> {
     let temp = tempfile::tempdir().context("create temp workspace")?;
     let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
-        .map_err(|path| anyhow!("temp path should be UTF-8: {path:?}"))?;
+        .map_err(|path| anyhow!("temp path should be UTF-8: {}", path.display()))?;
     Ok(StdlibWorkspace { _temp: temp, root })
 }
 

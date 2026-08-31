@@ -106,16 +106,14 @@ fn assert_config_metrics_snapshot(stderr: &str) -> Result<()> {
         let expected_record = expected_counter.record;
         ensure!(
             contains_metric_record(snapshot, expected_counter),
-            "expected counter {:?} in snapshot: {snapshot}",
-            expected_record,
+            "expected counter {expected_record:?} in snapshot: {snapshot}",
         );
     }
     for expected_histogram in expected_histograms {
         let expected_record = expected_histogram.record;
         ensure!(
             contains_non_empty_histogram_record(snapshot, expected_histogram),
-            "expected histogram {:?} in snapshot: {snapshot}",
-            expected_record,
+            "expected histogram {expected_record:?} in snapshot: {snapshot}",
         );
     }
     Ok(())

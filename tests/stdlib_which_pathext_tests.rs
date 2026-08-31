@@ -55,7 +55,7 @@ impl ToolWorkspace {
 fn tool_workspace() -> Result<ToolWorkspace> {
     let temp = tempfile::tempdir().context("create temp workspace")?;
     let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
-        .map_err(|path| anyhow!("temp path should be UTF-8: {path:?}"))?;
+        .map_err(|path| anyhow!("temp path should be UTF-8: {}", path.display()))?;
     let dir = Dir::open_ambient_dir(&root, ambient_authority())
         .with_context(|| format!("open workspace {root}"))?;
     let bin = root.join("bin");

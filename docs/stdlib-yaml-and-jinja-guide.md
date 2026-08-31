@@ -260,9 +260,11 @@ defaults:
 ## Work with time
 
 - `now([offset=...])` is host-observing and returns the current timestamp.
-  With no offset it uses UTC; `offset` accepts `Z` or a signed offset such as
-  `+02:00`. The value exposes `iso8601`, `unix_timestamp`, and `offset`.
-  Example: `{{ now(offset='+02:00').iso8601 }}`.
+  With no offset it uses UTC; `offset` accepts `Z` or `z` for UTC and signed
+  ISO 8601 numeric offsets such as `+02:00`. The absolute whole-hour component
+  must be below 24; `+24:00` and `-24:00` are invalid and return the existing
+  invalid-offset error. The value exposes `iso8601`, `unix_timestamp`, and
+  `offset`. Example: `{{ now(offset='+02:00').iso8601 }}`.
 - `timedelta(**components)` is pure. It accepts `weeks`, `days`, `hours`,
   `minutes`, `seconds`, `milliseconds`, `microseconds`, and `nanoseconds`.
   Every component defaults to zero and may be negative. The result exposes

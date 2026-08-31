@@ -153,6 +153,47 @@ def test_makefile_clippy_flags_stay_workspace_wide() -> None:
     )
 
 
+def test_makefile_check_fmt_runs_markdown_format_checker() -> None:
+    """Protect Markdown formatting from being silently removed from make check-fmt."""
+    makefile_lines = MAKEFILE_PATH.read_text(encoding="utf-8").splitlines()
+    target_index = next(
+        (
+            index
+            for index, line in enumerate(makefile_lines)
+            if line.startswith("check-fmt:")
+        ),
+        None,
+    )
+    assert target_index is not None, "the Makefile must define a check-fmt target"
+
+    top_level_target = re.compile(r"^[A-Za-z0-9_.%/-]+:")
+    recipe_lines = []
+    for line in makefile_lines[target_index + 1 :]:
+        if top_level_target.match(line):
+            break
+        if line.startswith("\t"):
+            recipe_lines.append(line)
+    recipe = "\n".join(recipe_lines)
+    expected_pipeline = (
+        "@$(MD_FILES_FIND) | xargs -0 -r scripts/check-markdown-format.sh"
+    )
+
+    required_fragments = {
+        "$(MD_FILES_FIND)": "discover Markdown files with $(MD_FILES_FIND)",
+        "scripts/check-markdown-format.sh": "invoke the Markdown format checker",
+        "xargs -0 -r": "batch Markdown paths with NUL delimiters and skip empty input",
+    }
+    missing_fragments = [
+        description
+        for fragment, description in required_fragments.items()
+        if fragment not in recipe
+    ]
+    assert not missing_fragments, "check-fmt must " + "; ".join(missing_fragments)
+    assert recipe.count(expected_pipeline) == 1, (
+        "check-fmt must contain exactly one Markdown format checker pipeline"
+    )
+
+
 def test_nextest_version_declared_once_at_workflow_scope() -> None:
     r"""NEXTEST_VERSION is declared once, at workflow scope.
 
@@ -231,16 +272,22 @@ def test_mdtablefix_installers_require_the_pinned_version() -> None:
             job_steps(workflow, job_name),
             "Install mdtablefix",
         )
-        run = step.get("run")
-        assert isinstance(run, str), f"{job_name} must configure mdtablefix"
-        assert expected_guard in run, f"{job_name} must pin the expected version"
-        assert "mdtablefix --version" in run, (
-            f"{job_name} must inspect the installed version"
-        )
-        assert "tr -d '\\r'" in run, f"{job_name} must normalise Windows version output"
-        assert expected_match in run, (
-            f"{job_name} must replace a missing or mismatched formatter"
-        )
+        match step.get("run"):
+            case str() as run:
+                assert expected_guard in run, (
+                    f"{job_name} must pin the expected version"
+                )
+                assert "mdtablefix --version" in run, (
+                    f"{job_name} must inspect the installed version"
+                )
+                assert "tr -d '\\r'" in run, (
+                    f"{job_name} must normalise Windows version output"
+                )
+                assert expected_match in run, (
+                    f"{job_name} must replace a missing or mismatched formatter"
+                )
+            case _:
+                pytest.fail(f"{job_name} must configure mdtablefix")
 
 
 def test_build_job_runs_markdown_formatter_checker_tests() -> None:

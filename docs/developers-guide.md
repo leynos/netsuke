@@ -116,6 +116,12 @@ script recipe bodies untouched. This boundary is what permits a recipe to
 contain a build-only helper without causing `help targets` to execute or
 otherwise evaluate that helper; it does not alter full-render behaviour.
 
+The standard-library registration boundary owns MiniJinja's value formatter. It
+preserves the historical lowercase `true` and `false` spelling when a Boolean
+helper result is interpolated into a string field, while delegating all
+non-Boolean values to MiniJinja's `escape_formatter`. Keep this as one
+registration-wide policy: do not add per-helper or per-call formatter variants.
+
 Helpers excluded from the query allowlist are registered as deliberate
 query-disabled stubs by the standard-library adapter. The stubs return a
 stable, classified MiniJinja operation error. Manifest expansion recognizes
@@ -2344,6 +2350,37 @@ targets:
     when: "item != 'tests' or env.CI == 'true'"
     command: "cargo clippy --manifest-path {{ item }}/Cargo.toml"
 ```
+
+### Testing conditional manifest boundaries
+
+Keep command-availability tests deterministic and at the narrowest useful
+boundary:
+
+- For a present bare command, create a fake cross-platform executable in a
+  temporary directory and inject that directory with
+  `StdlibConfig::with_path_override`.
+- For an absent bare command, combine an empty `path_override`, a
+  guaranteed-absent name, and `cwd_mode="never"`. The empty override alone is
+  insufficient because an empty PATH entry can resolve to the current directory.
+- External integration tests cannot inject a `StdlibConfig` through the public
+  manifest loader. Use a guaranteed-absent direct path containing a separator
+  in those fixtures; direct resolution bypasses PATH traversal. Do not mutate
+  process PATH to simulate absence.
+
+Use `googletest` only for the in-crate white-box conditional-expansion tests.
+When combining it with `rstest`, place `#[googletest::test]` before `#[rstest]`
+so each generated case is registered once. Return `googletest::Result<()>`, use
+matchers for the behavioural assertions, and convert fallible fixture setup with
+`.or_fail()?`. Existing integration and behavioural tests retain the
+`anyhow::ensure!` convention; use `pretty_assertions` only where an ordinary
+value-equality diff is materially clearer, never for snapshot comparison.
+
+`StdlibState::is_impure()` is the observable for selection-time boundary tests.
+An absent `command_available` branch should leave it `false`; a control that
+invokes `shell` from a `when` expression should make it `true`. This flag
+covers all impure stdlib helpers (`shell`, `grep`, and `fetch`), so fixtures
+must avoid the latter two and describe the assertion as "no impure helper ran",
+not as a shell-specific counter.
 
 ## Manifest glob module boundary
 

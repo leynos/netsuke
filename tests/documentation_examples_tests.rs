@@ -18,6 +18,7 @@ use test_support::netsuke::{NetsukeRun, run_netsuke_in, run_netsuke_in_with_env}
 const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-accessible-output",
     "guide-binstall-install",
+    "guide-boolean-string-interpolation",
     "guide-cli-usage",
     "guide-command-available-manifest",
     "guide-command-list",
@@ -158,6 +159,7 @@ fn every_documented_fence_has_a_known_unique_identifier() -> Result<()> {
 #[rstest]
 #[case("readme-first-build-manifest")]
 #[case("guide-first-build-manifest")]
+#[case("guide-boolean-string-interpolation")]
 #[case("guide-complete-manifest")]
 #[case("guide-foreach-manifest")]
 #[case("guide-macro-manifest")]

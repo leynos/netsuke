@@ -97,8 +97,7 @@ fn generation_steps_run_without_reporter() -> anyhow::Result<()> {
     );
     anyhow::ensure!(
         ninja_text.contains("build hello:"),
-        "expected generated Ninja to contain the hello build edge:\n{}",
-        ninja_text
+        "expected generated Ninja to contain the hello build edge:\n{ninja_text}"
     );
     Ok(())
 }

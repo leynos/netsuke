@@ -16,8 +16,8 @@ use camino::Utf8Path;
 use cap_std::fs::FileTypeExt;
 use cap_std::{ambient_authority, fs, fs_utf8::Dir};
 use minijinja::{
-    Environment, Error, ErrorKind, State,
-    value::{Kwargs, Value},
+    Environment, Error, ErrorKind, State, escape_formatter,
+    value::{Kwargs, Value, ValueKind},
 };
 use std::sync::Arc;
 
@@ -102,6 +102,7 @@ pub fn register_with_config(
     env: &mut Environment<'_>,
     config: StdlibConfig,
 ) -> anyhow::Result<StdlibState> {
+    register_legacy_boolean_formatter(env);
     let state = StdlibState::default();
     register_read_only_helpers(env, &config);
     time::register_functions(env);
@@ -110,6 +111,18 @@ pub fn register_with_config(
     network::register_functions(env, Arc::clone(&impure), network_config);
     command::register(env, impure, command_config);
     Ok(state)
+}
+
+/// Preserve lowercase Boolean interpolation for existing manifests.
+fn register_legacy_boolean_formatter(env: &mut Environment<'_>) {
+    env.set_formatter(|out, state, value| {
+        if value.kind() == ValueKind::Bool {
+            out.write_str(if value.is_true() { "true" } else { "false" })
+                .map_err(Error::from)
+        } else {
+            escape_formatter(out, state, value)
+        }
+    });
 }
 
 /// Register helpers suitable for manifest queries that must avoid side effects.
