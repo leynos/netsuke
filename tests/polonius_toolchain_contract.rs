@@ -102,13 +102,15 @@ const WORKFLOW_EXPECTATIONS: [WorkflowExpectation; 5] = [
     PACKAGING_WORKFLOW,
 ];
 
-/// Returns the single shared-actions commit SHA the checked workflows pin.
+/// Returns the single shared-actions commit SHA the checked toolchain actions
+/// pin.
 ///
 /// The SHA's value is owned by the workflow files (and the pin-bump process
 /// that updates them); this contract derives it rather than restating it, so
-/// a complete bump stays green while a partial bump — some workflows moved,
-/// others left behind — fails on the disagreement. The broader shape-only
-/// sweep across every workflow lives in `workflow_shared_actions_pins`.
+/// a complete bump stays green while a partial bump — some toolchain actions
+/// moved, others left behind — fails on the disagreement. Other shared
+/// actions may use independent pins; the broader shape-only sweep across every
+/// workflow lives in `workflow_shared_actions_pins`.
 fn shared_actions_sha() -> Result<String> {
     let mut refs = Vec::new();
     for expectation in WORKFLOW_EXPECTATIONS {
@@ -122,7 +124,12 @@ fn shared_actions_sha() -> Result<String> {
             "{} should pin at least one shared action",
             expectation.path
         );
-        refs.extend(extracted);
+        let expected_prefix = format!("{}@", expectation.action);
+        refs.extend(
+            extracted
+                .into_iter()
+                .filter(|reference| reference.starts_with(&expected_prefix)),
+        );
     }
     shared_actions::consistent_pin(&refs)
 }
