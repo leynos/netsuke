@@ -287,8 +287,10 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   [`shell-quote`](https://docs.rs/shell-quote/latest/shell_quote/) crate (Sh
   mode); the default Windows PowerShell route uses single-quoted literals and
   doubles embedded apostrophes. Standalone `$in` and `$out` tokens are resolved
-  at the same boundary. On POSIX and Bash routes, tokens inside backticks are
-  preserved and a placeholder there is rejected; PowerShell backticks use
+  at the same boundary. On POSIX and Bash routes, backtick-delimited text with
+  no placeholder remains unchanged, but a span containing `{{ ins }}`,
+  `{{ outs }}`, `$in`, or `$out` is rejected. Longer identifiers such as
+  `$input` are not placeholders and remain literal. PowerShell backticks use
   native escape semantics and do not suppress interpolation. A scalar command
   is emitted unchanged. On Unix and the explicit Windows Bash compatibility
   route, a list is lowered to brace groups that evaluate each entry through a
@@ -2503,21 +2505,24 @@ command validation apply only to POSIX and Bash routes. PowerShell treats
 backticks as native escape syntax rather than interpolation-protection
 delimiters.
 
+
 ### 6.3 Implementation strategy
 
 The command interpolation logic in `src/ir/cmd_interpolate/mod.rs` prepares one
 shell-specific quoted input/output binding set per recipe and applies it to
 each scalar or list entry. It replaces the delayed `{{ ins }}`/`{{ outs }}`
-markers and standalone `$in`/`$out` tokens. POSIX and Bash routes preserve
-backtick-delimited text, while PowerShell treats backticks as native escape
-syntax and does not use them as interpolation-protection delimiters. The POSIX
-and Bash routes apply `shell-quote` in `Sh` mode to Netsuke-owned path
-substitutions; PowerShell emits single-quoted path literals and doubles
-embedded apostrophes. Unbalanced backticks or text that `shlex` cannot parse
-produce an IR error only on POSIX and Bash routes, before an action is hashed.
-Ninja generation then receives fully expanded command text and is responsible
-only for preserving the scalar form or constructing the list-entry shell
-boundaries.
+markers and standalone `$in`/`$out` tokens outside POSIX and Bash backticks. A
+backtick-delimited span with no placeholder remains literal, while a span
+containing `{{ ins }}`, `{{ outs }}`, `$in`, or `$out` is rejected. Longer
+identifiers such as `$input` are not placeholders and remain literal.
+PowerShell treats backticks as native escape syntax and does not use them as
+interpolation-protection delimiters. The POSIX and Bash routes apply
+`shell-quote` in `Sh` mode to Netsuke-owned path substitutions; PowerShell
+emits single-quoted path literals and doubles embedded apostrophes. Unbalanced
+backticks or text that `shlex` cannot parse produce an IR error only on POSIX
+and Bash routes, before an action is hashed. Ninja generation then receives
+fully expanded command text and is responsible only for preserving the scalar
+form or constructing the list-entry shell boundaries.
 
 ### 6.4 Automatic Security as a "Friendliness" Feature
 

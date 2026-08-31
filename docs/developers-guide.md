@@ -2029,8 +2029,9 @@ The hoist step that makes that template resolvable is covered by
 `tests/workflow_contracts/hoist_binstall_archives_test.py`, which combines
 example-based cases with Hypothesis property tests over generated target sets
 and staging states. Run it with `make test-workflow-contracts`; the target
-provisions `pytest`, `pyyaml`, and `hypothesis` through `uv run --with`, so
-`uv` is the only prerequisite and no virtual environment needs creating by hand.
+provisions `pytest`, `pyyaml`, `hypothesis`, and `cmd-mox==0.2.0` through
+`uv run --with`, so `uv` is the only prerequisite and no virtual environment
+needs creating by hand.
 
 ### Configuration-precedence regression tests
 
