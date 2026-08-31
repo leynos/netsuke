@@ -1235,8 +1235,10 @@ rule = ["clarity=off", "unreachable-target=warning"]
 fail_on = "warning"
 ```
 
-`--limit <N>` caps the number of findings reported, truncating the least severe
-first; `0` disables the limit and reports every finding.
+`--limit <N>` caps the number of findings reported, keeping the first in source
+order; `0` disables the limit and reports every finding. Truncation bounds the
+report only: the exit code still reflects every finding, so a run cannot pass
+because the finding that reached the threshold fell outside the limit.
 
 Silence one finding with a comment that names the rules it allows and states a
 reason. A directive on its own line governs the declaration beneath it,

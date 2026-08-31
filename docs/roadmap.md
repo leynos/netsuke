@@ -2158,8 +2158,48 @@ completion is what turns the prototype into a supported feature.
     grammar, so an author writing a directive can see the promise it rests on.
   - Success: the policy is published and the rule reference links to it.
 
+### 7.5. Pay down the prototype's structural debt
+
+This step answers whether the linter's internals can carry a growing rule set
+and a production workload, as distinct from whether the rules themselves are
+right. Each task is a refactor of code the prototype already ships, so none
+changes a finding, an identifier, or an output schema; they are separated from
+steps 7.1 to 7.4 because they are reviewable independently and none blocks the
+freeze.
+
+- [ ] 7.5.1. Move the `miette` dependency out of the lint core into an adapter.
+  - `src/lint` currently converts its own `Span` and `Severity` into `miette`
+    types, implements `Diagnostic` on its finding projection, and owns a
+    `NamedSource`, so the core cannot be used without the reporting framework.
+  - Keep findings, spans, severities, reports, and policy framework-free, and
+    convert them at the runner boundary where the diagnostics are rendered.
+  - Success: `src/lint` names no `miette` type, and the JSON and human output
+    are byte-identical to their current snapshots.
+- [ ] 7.5.2. Add runner-boundary telemetry for `netsuke check`.
+  - The command loads a manifest, builds a graph, indexes the source, and runs
+    every rule without emitting a metric or a span, unlike its sibling
+    commands.
+  - Record a bounded invocation counter and a duration histogram labelled by
+    outcome and a finite error category, following the pattern in
+    `src/runner/help_telemetry.rs`.
+  - Keep labels low-cardinality: no rule names, manifest paths, or finding
+    text.
+  - Success: a check run emits one counter and one histogram observation, and
+    the label vocabulary is enumerated in a test.
+- [ ] 7.5.3. Scan each recipe once when matching graph outputs.
+  - `undeclared-target-input` rebuilds the shell-active mask for every
+    (recipe, output) pair, so its cost grows with targets multiplied by
+    outputs.
+  - Extract each recipe's shell-active words once, then intersect them with an
+    indexed output set.
+  - Success: the rule reports exactly what it does now on the example
+    manifests, and its cost grows with the manifest's size rather than with its
+    square.
+
 **Success criterion:** every shipped rule has a recorded disposition drawn from
 manifests its authors did not write; a finding's prose is localized while its
-identifiers are not; findings from expanded manifests carry source spans; and
-the JSON documents, exit classes, and rule-name guarantees are snapshotted,
-published, and stable enough that a downstream consumer can depend on them.
+identifiers are not; findings from expanded manifests carry source spans; the
+lint core names no reporting framework and the command reports its own
+telemetry; and the JSON documents, exit classes, and rule-name guarantees are
+snapshotted, published, and stable enough that a downstream consumer can depend
+on them.

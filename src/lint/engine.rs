@@ -59,13 +59,21 @@ impl Outcome {
 pub fn run(analysis: &Analysis<'_>, policy: &Policy) -> Outcome {
     let directives = suppress::collect(analysis.document);
     let mut findings = run_stage_rules(analysis, policy);
-    let usage = usage_counts(&findings, &directives);
-    findings.extend(run_directive_rules(
-        analysis.document,
-        policy,
-        &directives,
-        &usage,
-    ));
+    // Two directive passes. The rules that only inspect a directive's text run
+    // first; the counts are then recomputed so a rule reading them sees those
+    // findings too, and a directive silencing one is credited for it.
+    for consumes_usage in [false, true] {
+        let usage = usage_counts(&findings, &directives);
+        findings.extend(run_directive_rules(
+            &DirectivePass {
+                document: analysis.document,
+                directives: &directives,
+                usage: &usage,
+                consumes_usage,
+            },
+            policy,
+        ));
+    }
     let before = findings.len();
     findings.retain(|finding| !is_suppressed(finding, &directives));
     let suppressed = before - findings.len();
@@ -103,22 +111,20 @@ fn run_stage_rules(analysis: &Analysis<'_>, policy: &Policy) -> Vec<Finding> {
 }
 
 /// Run each enabled directive rule over the collected directives.
-fn run_directive_rules(
-    document: &Document,
-    policy: &Policy,
-    directives: &[Directive],
-    usage: &[usize],
-) -> Vec<Finding> {
+fn run_directive_rules(pass: &DirectivePass<'_>, policy: &Policy) -> Vec<Finding> {
     let ctx = DirectiveContext {
-        directives,
-        usage,
-        document,
+        directives: pass.directives,
+        usage: pass.usage,
+        document: pass.document,
     };
     let mut findings = Vec::new();
     for entry in registry::all() {
         let Registered::Directive(rule) = entry else {
             continue;
         };
+        if rule.consumes_usage() != pass.consumes_usage {
+            continue;
+        }
         let Some(severity) = policy.severity_of(rule.meta().name) else {
             continue;
         };
@@ -126,6 +132,19 @@ fn run_directive_rules(
         rule.check(&ctx, &mut sink);
     }
     findings
+}
+
+/// One pass of the directive stage.
+struct DirectivePass<'a> {
+    /// The authored source, for span context.
+    document: &'a Document,
+    /// Every directive found in the manifest.
+    directives: &'a [Directive],
+    /// How many findings each directive has silenced so far.
+    usage: &'a [usize],
+    /// Which half of the stage this pass runs: the rules that read the counts,
+    /// or the rules that do not.
+    consumes_usage: bool,
 }
 
 /// Bind a sink to `entry` when policy enables it.
