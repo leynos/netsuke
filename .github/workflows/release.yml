@@ -76,11 +76,11 @@ jobs:
       - id: release_modes
         name: Determine release modes
         uses: >-
-          leynos/shared-actions/.github/actions/determine-release-modes@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+          leynos/shared-actions/.github/actions/determine-release-modes@00fdcd5ff52c3f9eda64bb8a51869f7dff1b3ecf
       - id: ensure_version
         name: Read package version from Cargo.toml
         uses: >-
-          leynos/shared-actions/.github/actions/ensure-cargo-version@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+          leynos/shared-actions/.github/actions/ensure-cargo-version@00fdcd5ff52c3f9eda64bb8a51869f7dff1b3ecf
         with:
           check-tag: ${{ fromJSON(steps.release_modes.outputs['should-publish']) }}
       - id: wix_extension_version
@@ -107,7 +107,7 @@ jobs:
       - id: bin_name
         name: Extract binary name from Cargo.toml
         uses: >-
-          leynos/shared-actions/.github/actions/export-cargo-metadata@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+          leynos/shared-actions/.github/actions/export-cargo-metadata@00fdcd5ff52c3f9eda64bb8a51869f7dff1b3ecf
         with:
           manifest-path: ${{ steps.manifest_path.outputs.value }}
           fields: bin-name
@@ -222,7 +222,7 @@ jobs:
           persist-credentials: false
       - name: Setup Rust
         uses: >-
-          leynos/shared-actions/.github/actions/setup-rust@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+          leynos/shared-actions/.github/actions/setup-rust@00fdcd5ff52c3f9eda64bb8a51869f7dff1b3ecf
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           rustflags: -D warnings
@@ -275,7 +275,7 @@ jobs:
         # Pins the interpreter the hoist script runs under to the Python 3.14
         # baseline the repository's Python tooling targets, rather than
         # whichever `python3` the runner image happens to ship.
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
         # v8.3.2
         with:
           python-version: '3.14'
@@ -297,7 +297,7 @@ jobs:
       - id: upload_assets
         name: Upload artefacts to release
         uses: >-
-          leynos/shared-actions/.github/actions/upload-release-assets@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+          leynos/shared-actions/.github/actions/upload-release-assets@00fdcd5ff52c3f9eda64bb8a51869f7dff1b3ecf
         with:
           release-tag: ${{ github.ref_name }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}

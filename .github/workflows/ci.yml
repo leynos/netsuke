@@ -64,13 +64,13 @@ jobs:
           command -v awk
           awk --version
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+        uses: leynos/shared-actions/.github/actions/setup-rust@00fdcd5ff52c3f9eda64bb8a51869f7dff1b3ecf
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           # Preserve warnings-as-errors through toolchain setup.
           rustflags: -D warnings
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc  # v2.86.7
         with:
           tool: nextest@${{ env.NEXTEST_VERSION }}
       - name: Show rustc version
@@ -113,7 +113,7 @@ jobs:
       - name: Setup uv
         # Installed before the Format step: `make check-fmt` and `make lint`
         # run the uv-driven Ruff, Pylint, df12, and ambrleaks gates.
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
         with:
           python-version: ${{ env.PYTHON_BASELINE }}
           # This Rust workspace has no Python dependency manifest. Cache the
@@ -167,7 +167,7 @@ jobs:
       - name: Test
         run: make test
       - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+        uses: leynos/shared-actions/.github/actions/generate-coverage@00fdcd5ff52c3f9eda64bb8a51869f7dff1b3ecf
         with:
           language: rust
           output-path: lcov.info
@@ -179,7 +179,7 @@ jobs:
         if: env.CS_ACCESS_TOKEN != '' && github.event_name == 'pull_request'
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@00fdcd5ff52c3f9eda64bb8a51869f7dff1b3ecf
         with:
           path: lcov.info
           format: lcov
@@ -215,7 +215,7 @@ jobs:
       - name: Install GNU Make
         run: choco install make --yes --no-progress
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+        uses: leynos/shared-actions/.github/actions/setup-rust@00fdcd5ff52c3f9eda64bb8a51869f7dff1b3ecf
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           # Preserve warnings-as-errors through toolchain setup.
@@ -223,7 +223,7 @@ jobs:
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc  # v2.86.7
         with:
           tool: nextest@${{ env.NEXTEST_VERSION }}
       - name: Show rustc version
@@ -266,7 +266,7 @@ jobs:
       - name: Setup uv
         # `make check-fmt` runs the uv-driven Ruff format check on every
         # platform, so the Windows job needs uv on the PATH as well.
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
         with:
           python-version: ${{ env.PYTHON_BASELINE }}
           enable-cache: 'false'
@@ -336,7 +336,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+        uses: leynos/shared-actions/.github/actions/setup-rust@00fdcd5ff52c3f9eda64bb8a51869f7dff1b3ecf
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           rustflags: -D warnings
@@ -366,11 +366,11 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+        uses: leynos/shared-actions/.github/actions/setup-rust@00fdcd5ff52c3f9eda64bb8a51869f7dff1b3ecf
         with:
           toolchain: stable
       - name: Install uv
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990  # v8.3.2
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
         with:
           # The Kani job has no Python dependency manifest; its explicit cache
           # below owns the Rust toolchain artefacts.
