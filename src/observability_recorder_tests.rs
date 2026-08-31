@@ -11,6 +11,8 @@ use metrics_util::{CompositeKey, MetricKind, debugging::DebugValue};
 use netsuke::runner::{BASH_PREFLIGHT_TOTAL, RECIPE_SHELL_RESOLUTIONS_TOTAL};
 
 type SnapshotEntry = (CompositeKey, Option<Unit>, Option<SharedString>, DebugValue);
+/// Fixed three-label layout used by recipe-shell counters.
+type MetricLabels = [(&'static str, &'static str); 3];
 
 /// Record the valid, invalid, and unrelated series used to verify filtering.
 fn record_mixed_metric_series(recorder: &ConfigMetricsRecorder) {
@@ -137,54 +139,22 @@ fn record_valid_recipe_shell_series() {
     .increment(1);
 }
 
-/// Record recipe-shell resolution counters rejected for one invalid label each.
-fn record_invalid_recipe_shell_resolution_series() {
-    counter!(
-        RECIPE_SHELL_RESOLUTIONS_TOTAL,
-        "recipe_shell" => "unbounded",
-        "outcome" => "success",
-        "error_category" => "none"
-    )
-    .increment(1);
-    counter!(
-        RECIPE_SHELL_RESOLUTIONS_TOTAL,
-        "recipe_shell" => "powershell",
-        "outcome" => "unbounded",
-        "error_category" => "none"
-    )
-    .increment(1);
-    counter!(
-        RECIPE_SHELL_RESOLUTIONS_TOTAL,
-        "recipe_shell" => "powershell",
-        "outcome" => "success",
-        "error_category" => "unbounded"
-    )
-    .increment(1);
-}
-
-/// Record Bash preflight counters rejected for one invalid label each.
-fn record_invalid_bash_preflight_series() {
-    counter!(
-        BASH_PREFLIGHT_TOTAL,
-        "recipe_shell" => "powershell",
-        "outcome" => "error",
-        "probe_outcome" => "not_found"
-    )
-    .increment(1);
-    counter!(
-        BASH_PREFLIGHT_TOTAL,
-        "recipe_shell" => "bash",
-        "outcome" => "unbounded",
-        "probe_outcome" => "not_found"
-    )
-    .increment(1);
-    counter!(
-        BASH_PREFLIGHT_TOTAL,
-        "recipe_shell" => "bash",
-        "outcome" => "error",
-        "probe_outcome" => "unbounded"
-    )
-    .increment(1);
+/// Record every invalid fixed-shape series for one recipe-shell counter.
+fn record_invalid_recipe_shell_series(metric_name: &'static str, series: &[MetricLabels]) {
+    for &[
+        (first_key, first_value),
+        (second_key, second_value),
+        (third_key, third_value),
+    ] in series
+    {
+        counter!(
+            metric_name,
+            first_key => first_value,
+            second_key => second_value,
+            third_key => third_value
+        )
+        .increment(1);
+    }
 }
 
 /// Retain only the fixed recipe-shell counter vocabulary exposed by the runner.
@@ -195,8 +165,46 @@ fn recorder_retains_bounded_recipe_shell_series() {
 
     metrics::with_local_recorder(&recorder, || {
         record_valid_recipe_shell_series();
-        record_invalid_recipe_shell_resolution_series();
-        record_invalid_bash_preflight_series();
+        record_invalid_recipe_shell_series(
+            RECIPE_SHELL_RESOLUTIONS_TOTAL,
+            &[
+                [
+                    ("recipe_shell", "unbounded"),
+                    ("outcome", "success"),
+                    ("error_category", "none"),
+                ],
+                [
+                    ("recipe_shell", "powershell"),
+                    ("outcome", "unbounded"),
+                    ("error_category", "none"),
+                ],
+                [
+                    ("recipe_shell", "powershell"),
+                    ("outcome", "success"),
+                    ("error_category", "unbounded"),
+                ],
+            ],
+        );
+        record_invalid_recipe_shell_series(
+            BASH_PREFLIGHT_TOTAL,
+            &[
+                [
+                    ("recipe_shell", "powershell"),
+                    ("outcome", "error"),
+                    ("probe_outcome", "not_found"),
+                ],
+                [
+                    ("recipe_shell", "bash"),
+                    ("outcome", "unbounded"),
+                    ("probe_outcome", "not_found"),
+                ],
+                [
+                    ("recipe_shell", "bash"),
+                    ("outcome", "error"),
+                    ("probe_outcome", "unbounded"),
+                ],
+            ],
+        );
     });
 
     let snapshot = snapshotter.snapshot().into_vec();
