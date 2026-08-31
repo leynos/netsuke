@@ -3086,8 +3086,8 @@ base-directory capability that the test needs instead.
 `make lint` runs rustdoc, Clippy, and Whitaker. Clippy's workspace-wide
 `disallowed-methods` configuration rejects `std::env::set_var`,
 `std::env::remove_var`, and `std::env::set_current_dir` in every target kind
-with warnings denied. The sole environment exception is an end-to-end test that
-configures its own child with `Command::env_clear`, `Command::env`, and, when
+with warnings denied. The sole environment exception is a test that configures
+an isolated child process with `Command::env_clear`, `Command::env`, and, when
 needed, `Command::current_dir`. Those calls affect only the spawned process;
 they do not mutate the test harness.
 
