@@ -36,7 +36,6 @@ jobs:
       # default (see docs/adr-006-adopt-polonius-nightly-toolchain.md), so CI
       # builds with the dated nightly pinned in rust-toolchain.toml.
       NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
-      WHITAKER_INSTALLER_VERSION: '0.2.7'
       # Real-Ninja integration coverage must not silently skip when a runner
       # image lacks the backend executable.
       NETSUKE_REQUIRE_NINJA: '1'
@@ -120,28 +119,20 @@ jobs:
           # shared spelling dictionary below rather than a uv cache with no
           # durable dependency key.
           enable-cache: 'false'
+      - name: Install Nixie
+        uses: >-
+          leynos/shared-actions/.github/actions/install-nixie@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+        with:
+          python-version: '3.14'
       - name: Markdown formatter checker tests
         run: make test-markdown-format
       - name: Format
         run: make check-fmt
-      - name: Cache Whitaker installer
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
-        with:
-          path: |
-            ~/.cargo/bin/whitaker-installer
-            ~/.cache/cargo-binstall
-          key: whitaker-installer-${{ runner.os }}-${{ runner.arch }}-${{ env.WHITAKER_INSTALLER_VERSION }}
       - name: Install Whitaker
-        run: |
-          if ! command -v whitaker-installer >/dev/null 2>&1; then
-            if cargo binstall --version >/dev/null 2>&1; then
-              cargo binstall --no-confirm --locked "whitaker-installer@${WHITAKER_INSTALLER_VERSION}"
-            else
-              echo "cargo-binstall unavailable; building whitaker-installer from crates.io"
-              cargo install --locked whitaker-installer --version "${WHITAKER_INSTALLER_VERSION}"
-            fi
-          fi
-          whitaker-installer
+        uses: >-
+          leynos/shared-actions/.github/actions/install-whitaker@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+        with:
+          installer-version: '0.2.7'
       - name: Lint
         run: make lint
       - name: Typecheck
@@ -162,6 +153,8 @@ jobs:
             oxendict-${{ runner.os }}-${{ env.NETSUKE_RUST_TOOLCHAIN }}-${{ hashFiles('typos.local.toml') }}-
       - name: Spelling
         run: make spelling
+      - name: Validate Mermaid diagrams
+        run: make nixie
       - name: Workflow contract tests
         run: make test-workflow-contracts
       - name: Test
@@ -201,7 +194,6 @@ jobs:
       # default (see docs/adr-006-adopt-polonius-nightly-toolchain.md), so CI
       # builds with the dated nightly pinned in rust-toolchain.toml.
       NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
-      WHITAKER_INSTALLER_VERSION: '0.2.7'
     defaults:
       run:
         # The Makefile uses POSIX shell constructs throughout; Git Bash is
@@ -276,41 +268,35 @@ jobs:
         # Clippy and `cargo doc` over the whole workspace under `-D warnings`,
         # including the `#[cfg(windows)]` arms.
         run: make SHELL=bash lint-clippy
-      - name: Cache Whitaker installer
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
-        with:
-          path: |
-            ~/.cargo/bin/whitaker-installer
-            ~/.cache/cargo-binstall
-          key: whitaker-installer-${{ runner.os }}-${{ runner.arch }}-${{ env.WHITAKER_INSTALLER_VERSION }}
       - name: Install Whitaker
-        # Installs and runs on windows-latest (verified in #562); the same
-        # binstall-with-cargo-install-fallback path as the Linux job. On
-        # Windows the installer ships `whitaker` as a PowerShell wrapper
-        # (.ps1), which Git Bash cannot execute, so shim `whitaker` in the
-        # cargo bin directory (already on PATH) to run the wrapper through
-        # PowerShell. A failure here blocks the merge.
-        run: |
-          if ! command -v whitaker-installer >/dev/null 2>&1; then
-            if cargo binstall --version >/dev/null 2>&1; then
-              cargo binstall --no-confirm --locked "whitaker-installer@${WHITAKER_INSTALLER_VERSION}"
-            else
-              echo "cargo-binstall unavailable; building whitaker-installer from crates.io"
-              cargo install --locked whitaker-installer --version "${WHITAKER_INSTALLER_VERSION}"
-            fi
-          fi
-          whitaker-installer
-          if [ -f "${HOME}/.local/bin/whitaker.ps1" ]; then
-            printf '%s\n' \
-              '#!/bin/bash' \
-              "exec powershell -NoProfile -ExecutionPolicy Bypass -File \"\${HOME}/.local/bin/whitaker.ps1\" \"\$@\"" \
-              > "${CARGO_HOME:-$HOME/.cargo}/bin/whitaker"
-            chmod +x "${CARGO_HOME:-$HOME/.cargo}/bin/whitaker"
-          fi
+        uses: >-
+          leynos/shared-actions/.github/actions/install-whitaker@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+        with:
+          installer-version: '0.2.7'
       - name: Lint (Whitaker)
         # Whitaker/Dylint over the workspace under `-D warnings`, including
-        # the `#[cfg(windows)]` arms. A failure blocks the merge.
-        run: make SHELL=bash lint-whitaker
+        # the `#[cfg(windows)]` arms. The shared installer supplies a
+        # PowerShell wrapper on Windows, so invoke it from PowerShell rather
+        # than Git Bash. A failure blocks the merge.
+        shell: pwsh
+        run: |
+          $whitaker = Join-Path $HOME '.local\bin\whitaker.ps1'
+          $env:RUSTFLAGS = "$env:RUSTFLAGS -D warnings"
+          $env:DYLINT_TOML = Get-Content dylint.toml -Raw
+          & $whitaker --all --no-deps --package netsuke-build '--' --all-targets --all-features
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+          Push-Location test_support
+          try {
+            $env:DYLINT_TOML = Get-Content dylint.toml -Raw
+            & $whitaker --all --no-deps --package test_support '--' --all-targets --all-features
+            if ($LASTEXITCODE -ne 0) {
+              exit $LASTEXITCODE
+            }
+          } finally {
+            Pop-Location
+          }
       - name: Test
         # cargo-nextest plus doctests under `-D warnings`,
         # compiling and running the `#[cfg(windows)]` test tree. A failure

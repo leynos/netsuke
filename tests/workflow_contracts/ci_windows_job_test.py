@@ -24,28 +24,58 @@ from workflow_loading import (
 
 WINDOWS_JOB = "build-test-windows"
 
-#: The platform-sensitive gates the Windows job must run through the Makefile
-#: with ``SHELL=bash``, so the POSIX recipes execute under Git Bash.
-EXPECTED_WINDOWS_RUNS = (
+#: The Git Bash Makefile gates the Windows job must run through the Makefile,
+#: so the POSIX recipes execute under Git Bash.
+EXPECTED_WINDOWS_BASH_MAKEFILE_GATES = (
     "make SHELL=bash check-fmt",
     "make SHELL=bash lint-clippy",
-    "make SHELL=bash lint-whitaker",
     "make SHELL=bash test",
 )
 
-#: Doc and audit gates already covered on Linux; duplicating them on Windows
-#: buys nothing but runtime.
+#: Doc and audit gates already covered on Linux, plus the retired Bash
+#: Whitaker gate. Duplicating or restoring them on Windows buys nothing but
+#: runtime and can bypass the PowerShell wrapper.
 EXCLUDED_WINDOWS_RUNS = (
     "make spelling",
     "make markdownlint",
     "make nixie",
     "make test-workflow-contracts",
+    "make SHELL=bash lint-whitaker",
 )
 
 #: Linux-only audit actions the Windows job must not invoke.
 EXCLUDED_WINDOWS_ACTIONS = (
     "leynos/shared-actions/.github/actions/generate-coverage",
     "leynos/shared-actions/.github/actions/upload-codescene-coverage",
+)
+
+#: Required wrapper, configuration, and root-package lint fragments.
+WHITAKER_WORKSPACE_FRAGMENTS = (
+    "Join-Path $HOME '.local\\bin\\whitaker.ps1'",
+    '$env:RUSTFLAGS = "$env:RUSTFLAGS -D warnings"',
+    "$env:DYLINT_TOML = Get-Content dylint.toml -Raw",
+    (
+        "& $whitaker --all --no-deps --package netsuke-build '--' "
+        "--all-targets --all-features"
+    ),
+    "Push-Location test_support",
+)
+
+#: Required nested-package lint and location-restoration fragments.
+WHITAKER_TEST_SUPPORT_FRAGMENTS = (
+    "$env:DYLINT_TOML = Get-Content dylint.toml -Raw",
+    (
+        "& $whitaker --all --no-deps --package test_support '--' "
+        "--all-targets --all-features"
+    ),
+    "finally {",
+    "Pop-Location",
+)
+
+#: Required guard that preserves a native Whitaker failure as the step result.
+WHITAKER_EXIT_GUARD_FRAGMENTS = (
+    "if ($LASTEXITCODE -ne 0) {",
+    "exit $LASTEXITCODE",
 )
 
 
@@ -124,46 +154,93 @@ def test_windows_setup_rust_keeps_warnings(
 def test_windows_job_runs_check_fmt_lint_and_test(
     windows_steps: list[dict[str, object]],
 ) -> None:
-    """The Windows job runs check-fmt, lint, and test as merge gates.
-
-    Every quality gate must run through the Makefile with `SHELL=bash` so the
-    POSIX-shell recipes execute under Git Bash on the Windows runner.
-    """
+    """Assert that listed Makefile gates run exactly once under Git Bash."""
     runs = [normalise_run(run) for run in step_runs(windows_steps)]
-    counts = {command: runs.count(command) for command in EXPECTED_WINDOWS_RUNS}
+    bash_makefile_gates = EXPECTED_WINDOWS_BASH_MAKEFILE_GATES
+    counts = {command: runs.count(command) for command in bash_makefile_gates}
     assert set(counts.values()) == {1}, (
-        f"{WINDOWS_JOB} must run each of {list(EXPECTED_WINDOWS_RUNS)!r} exactly "
-        f"once, got occurrence counts {counts!r} from run steps: {runs!r}"
+        f"{WINDOWS_JOB} must run each Git Bash Makefile gate "
+        f"{list(EXPECTED_WINDOWS_BASH_MAKEFILE_GATES)!r} exactly once, got "
+        f"occurrence counts {counts!r} from run steps: {runs!r}"
     )
 
 
-def test_windows_whitaker_shim_preserves_runtime_bash_expansion(
+def test_windows_job_installs_whitaker_before_linting(
     windows_steps: list[dict[str, object]],
 ) -> None:
-    """The Whitaker shim preserves quoted arguments until Bash runs it."""
-    step = named_step(windows_steps, "Install Whitaker")
-    run = step.get("run")
-    assert isinstance(run, str), "Install Whitaker must define a Bash script"
-    expected_shim_command = (
-        "exec powershell -NoProfile -ExecutionPolicy Bypass -File "
-        '"${HOME}/.local/bin/whitaker.ps1" "$@"'
+    """The shared installer must precede the PowerShell Whitaker invocation."""
+    step_names = [str(step.get("name", "")) for step in windows_steps]
+    install_index = step_names.index("Install Whitaker")
+    lint_index = step_names.index("Lint (Whitaker)")
+    assert install_index < lint_index, (
+        "Install Whitaker must precede Lint (Whitaker) so the PowerShell wrapper "
+        f"exists before it is invoked, got step order {step_names!r}"
     )
-    expected_generation_command = (
-        expected_shim_command
-        .replace("${HOME}", r"\${HOME}")
-        .replace("$@", r"\$@")
-        .replace('"', r"\"")
+
+
+def test_windows_job_runs_whitaker_through_powershell_wrapper(
+    windows_steps: list[dict[str, object]],
+) -> None:
+    """Assert that Windows runs both Whitaker packages through PowerShell."""
+    step_name = "Lint (Whitaker)"
+    step = named_step(windows_steps, step_name)
+    assert step.get("shell") == "pwsh", (
+        f"{step_name} must declare the PowerShell Core shell, got {step.get('shell')!r}"
     )
-    assert f'"{expected_generation_command}"' in run, (
-        "Install Whitaker must generate the PowerShell wrapper with normal Bash "
-        f"quotes at runtime: {expected_shim_command!r}"
+    match step.get("run"):
+        case str() as run:
+            pass
+        case _:
+            pytest.fail(f"{step_name} must declare a PowerShell run block")
+
+    missing = [
+        fragment for fragment in WHITAKER_WORKSPACE_FRAGMENTS if fragment not in run
+    ]
+    assert not missing, (
+        f"{step_name} must resolve the PowerShell wrapper, append -D warnings, "
+        f"load the workspace Dylint configuration, pass the quoted separator to "
+        f"lint netsuke-build, and enter "
+        f"test_support; missing {missing!r}"
     )
-    assert r"-File \"${HOME}/.local/bin/whitaker.ps1\"" not in run, (
-        "Install Whitaker must not write literal backslash-quoted PowerShell "
-        "paths into the generated shim"
+
+    _, _, run_after_push = run.partition("Push-Location test_support")
+    missing = [
+        fragment
+        for fragment in WHITAKER_TEST_SUPPORT_FRAGMENTS
+        if fragment not in run_after_push
+    ]
+    assert not missing, (
+        f"{step_name} must load test_support's Dylint configuration after entering it, "
+        f"pass the quoted separator to lint test_support, and restore the location "
+        f"in finally; missing "
+        f"{missing!r}"
     )
-    assert r"\"$@\"" not in run, (
-        "Install Whitaker must forward arguments with normal quoted Bash expansion"
+
+    _, _, run_after_workspace_lint = run.partition(WHITAKER_WORKSPACE_FRAGMENTS[3])
+    workspace_exit_guard, _, _ = run_after_workspace_lint.partition(
+        "Push-Location test_support"
+    )
+    missing = [
+        fragment
+        for fragment in WHITAKER_EXIT_GUARD_FRAGMENTS
+        if fragment not in workspace_exit_guard
+    ]
+    assert not missing, (
+        f"{step_name} must stop before entering test_support when linting "
+        f"netsuke-build fails; missing {missing!r}"
+    )
+
+    _, _, run_after_test_support_lint = run_after_push.partition(
+        WHITAKER_TEST_SUPPORT_FRAGMENTS[1]
+    )
+    test_support_exit_guard, _, _ = run_after_test_support_lint.partition("} finally {")
+    missing = [
+        fragment
+        for fragment in WHITAKER_EXIT_GUARD_FRAGMENTS
+        if fragment not in test_support_exit_guard
+    ]
+    assert not missing, (
+        f"{step_name} must propagate a test_support lint failure; missing {missing!r}"
     )
 
 
@@ -174,7 +251,8 @@ def test_windows_job_does_not_duplicate_doc_and_audit_gates(
 
     `make spelling`, `make markdownlint`, `make nixie`, coverage generation,
     the CodeScene gate, and `make test-workflow-contracts` are already covered
-    on Linux; duplicating them on Windows buys nothing.
+    on Linux. `make SHELL=bash lint-whitaker` is replaced by the PowerShell
+    wrapper. Duplicating or restoring any of them on Windows buys nothing.
     """
     runs = [normalise_run(run) for run in step_runs(windows_steps)]
     duplicated = [command for command in EXCLUDED_WINDOWS_RUNS if command in runs]

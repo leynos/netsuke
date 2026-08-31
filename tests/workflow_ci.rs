@@ -15,6 +15,10 @@ enum StepField {
     Runs,
 }
 
+const INSTALL_NIXIE_ACTION: &str = "leynos/shared-actions/.github/actions/install-nixie";
+const INSTALL_WHITAKER_ACTION: &str = "leynos/shared-actions/.github/actions/install-whitaker";
+const WHITAKER_INSTALLER_VERSION: &str = "0.2.7";
+
 impl StepField {
     const fn yaml_key(self) -> &'static str {
         match self {
@@ -227,6 +231,79 @@ fn behavioural_ci_workflow_runs_tests_through_the_make_target() -> Result<()> {
     ensure!(
         step_input(setup_uv, YamlKey("enable-cache")) == Some("false"),
         "the manifest-free spelling job must not enable uv's automatic cache"
+    );
+    Ok(())
+}
+
+#[test]
+fn behavioural_ci_workflow_uses_shared_tool_installers() -> Result<()> {
+    let contents = workflow_contents("ci.yml").expect("CI workflow should be readable");
+    let workflow: Value = serde_yaml::from_str(&contents).context("parse CI workflow YAML")?;
+
+    for job_name in ["build-test", "build-test-windows"] {
+        let job = job(&workflow, job_name)?;
+        let whitaker = named_step(steps(job)?, "Install Whitaker")?;
+        let uses = mapping_get(whitaker, YamlKey("uses"))
+            .and_then(Value::as_str)
+            .context("Install Whitaker should reference the shared installer action")?;
+        ensure!(
+            is_pinned_action_ref(uses, INSTALL_WHITAKER_ACTION),
+            "{job_name} Install Whitaker should use a commit-pinned shared installer, found {uses:?}"
+        );
+        ensure!(
+            step_input(whitaker, YamlKey("installer-version")) == Some(WHITAKER_INSTALLER_VERSION),
+            "{job_name} Install Whitaker should retain installer version {WHITAKER_INSTALLER_VERSION}"
+        );
+        ensure!(
+            mapping_get(whitaker, YamlKey("run")).is_none(),
+            "{job_name} Install Whitaker should not retain an ad hoc installation script"
+        );
+    }
+
+    let windows_whitaker = named_step(
+        steps(job(&workflow, "build-test-windows")?)?,
+        "Lint (Whitaker)",
+    )?;
+    let windows_whitaker_run = mapping_get(windows_whitaker, YamlKey("run"))
+        .and_then(Value::as_str)
+        .context("Windows Whitaker lint should define a PowerShell script")?;
+    ensure!(
+        mapping_get(windows_whitaker, YamlKey("shell")).and_then(Value::as_str) == Some("pwsh"),
+        "Windows Whitaker lint should run from PowerShell"
+    );
+    ensure!(
+        windows_whitaker_run.contains("whitaker.ps1")
+            && windows_whitaker_run.contains("Push-Location test_support"),
+        "Windows Whitaker lint should run both packages through the installed PowerShell wrapper"
+    );
+
+    let linux_steps = steps(job(&workflow, "build-test")?)?;
+    let nixie = named_step(linux_steps, "Install Nixie")?;
+    let uses = mapping_get(nixie, YamlKey("uses"))
+        .and_then(Value::as_str)
+        .context("Install Nixie should reference the shared installer action")?;
+    ensure!(
+        is_pinned_action_ref(uses, INSTALL_NIXIE_ACTION),
+        "Install Nixie should use a commit-pinned shared installer, found {uses:?}"
+    );
+    ensure!(
+        step_input(nixie, YamlKey("python-version")) == Some("3.14"),
+        "Install Nixie should use Python 3.14, which nixie-cli requires"
+    );
+    ensure!(
+        step_index(linux_steps, "Setup uv")? < step_index(linux_steps, "Install Nixie")?
+            && step_index(linux_steps, "Install Nixie")?
+                < step_index(linux_steps, "Validate Mermaid diagrams")?,
+        "Nixie should install after uv and before Mermaid validation"
+    );
+    ensure!(
+        mapping_get(nixie, YamlKey("run")).is_none(),
+        "Install Nixie should not retain an ad hoc installation script"
+    );
+    let validation = named_step(linux_steps, "Validate Mermaid diagrams")?;
+    ensure!(
+        mapping_get(validation, YamlKey("run")).and_then(Value::as_str) == Some("make nixie"),
+        "Validate Mermaid diagrams should run the canonical make target"
     );
     Ok(())
 }
