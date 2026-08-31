@@ -4408,8 +4408,7 @@ This is the manifest-time boundary for conditional planning. Downstream layers
 receive only selected entries and must not reinterpret manifest condition keys.
 The returned `ExpansionReport` contains exact `FilteringStats` counts for
 target and action entries excluded during expansion, plus bounded metadata for
-the excluded entries. Expansion is a pure transformation: it emits no
-tracing.
+the excluded entries. Expansion is a pure transformation: it emits no tracing.
 
 `ExpansionReport.filtered_entries` retains at most 64 `FilteredEntry` records,
 in expansion order. The `ExpansionReport.omitted_filtered_entries` count tracks
@@ -4454,7 +4453,11 @@ reaching telemetry.
   the report. The loading orchestrator calls it after expansion to emit one
   bounded debug event for each retained `FilteredEntry` and an aggregate
   summary, including the exact counts and omitted-entry count. Other callers
-  may consume the report without installing a tracing subscriber.
+  may consume the report without installing a tracing subscriber. Normal
+  manifest loading supplies the optional report observer; manifest-query
+  loading supplies none and remains telemetry-free. Keep this observer boundary
+  in the loading orchestrator rather than adding side effects to
+  `expand_foreach`.
 
 ### Executable availability predicate
 

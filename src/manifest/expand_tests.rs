@@ -97,6 +97,7 @@ pub(super) fn indexes(entries: &[ManifestValue], section: &str) -> Result<Vec<u6
         .collect()
 }
 
+/// Verify static and foreach exclusions report exact bounded metadata.
 #[test]
 fn expand_foreach_returns_filtering_stats() -> Result<()> {
     let env = Environment::new();
@@ -173,6 +174,7 @@ actions:
     Ok(())
 }
 
+/// Verify report retention truncates entries without losing aggregate counts.
 #[test]
 fn expand_foreach_bounds_retained_filtered_entries() -> Result<()> {
     let env = Environment::new();

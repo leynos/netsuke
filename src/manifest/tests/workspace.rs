@@ -5,6 +5,7 @@ use super::super::{
 };
 use crate::ast::Recipe;
 use crate::stdlib::NetworkPolicy;
+use crate::test_tracing_capture::with_test_subscriber;
 use anyhow::{Context, Result as AnyResult, anyhow, ensure};
 use camino::Utf8Path;
 use rstest::rstest;
@@ -12,6 +13,7 @@ use std::{path::Path, sync::Arc};
 use tempfile::tempdir;
 use test_support::fs as test_fs;
 use test_support::{hash, http};
+use tracing::level_filters::LevelFilter;
 use url::Url;
 
 #[rstest]
@@ -317,6 +319,36 @@ targets: []
     ensure!(
         !temp.path().join(".netsuke").exists(),
         "query should not create a build-output directory"
+    );
+    Ok(())
+}
+
+#[test]
+fn manifest_query_does_not_emit_expansion_telemetry() -> AnyResult<()> {
+    let temp = tempdir().context("create telemetry-free query workspace")?;
+    let manifest_path = temp.path().join("Netsukefile");
+    test_fs::write(
+        &manifest_path,
+        concat!(
+            "netsuke_version: \"1.0.0\"\n",
+            "targets:\n",
+            "  - name: skipped-query-target\n",
+            "    command: echo skipped\n",
+            "    when: 'false'\n",
+        ),
+    )?;
+
+    let events = with_test_subscriber(LevelFilter::DEBUG, |captured| {
+        from_path_for_manifest_query(&manifest_path, None)?;
+        Ok::<_, anyhow::Error>(captured.snapshot())
+    })?;
+
+    ensure!(
+        events.iter().all(
+            |event| !event.contains("filtered manifest entry by when expression")
+                && !event.contains("expanded manifest foreach and when directives")
+        ),
+        "manifest queries must not emit expansion telemetry: {events:?}"
     );
     Ok(())
 }

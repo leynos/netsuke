@@ -611,6 +611,23 @@ runtime branch. Runtime decisions belong in a command or script.
 
 Top-level actions support the same `foreach` and `when` keys.
 
+
+### Diagnose manifest expansion
+
+Pass `--verbose` to a normal manifest-loading command to inspect manifest-time
+filtering. Netsuke emits a debug event with the exact number of filtered
+targets and actions, including entries whose metadata is not retained. It also
+emits at most 64 per-entry events for each expansion. The aggregate event's
+`omitted_filtered_entries` field reports how many additional filtered entries
+were excluded from those bounded records.
+
+Each retained event contains only the entry's `section`, an eight-character
+`entry_name_hash`, an optional zero-based `iteration_index`, and the byte
+length of its `when_expression` in `when_expression_len`. Raw entry names,
+`foreach` item values, and `when` expressions are never emitted. Manifest query
+loading, such as `netsuke help targets`, remains side-effect-free and does not
+emit these expansion events.
+
 ### Discover files with `glob`
 
 `glob(pattern)` expands a shell-style pattern to the sorted list of matching
