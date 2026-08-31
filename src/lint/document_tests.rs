@@ -37,6 +37,24 @@ fn a_line_span_excludes_its_terminator() {
     assert_eq!(text.get(span.start..span.end), Some("alpha"));
 }
 
+/// A CRLF line span excludes both bytes of its terminator.
+///
+/// Leaving the `\r` inside would put it in every directive scan's line text
+/// and in the block spans computed from those lines.
+#[test]
+fn a_crlf_line_span_excludes_the_whole_terminator() {
+    let text = "alpha\r\nbeta\r\n";
+    let index = LineIndex::new(text);
+    for (line, expected) in [(1, "alpha"), (2, "beta")] {
+        let span = index.line_span(line, text);
+        assert_eq!(
+            text.get(span.start..span.end),
+            Some(expected),
+            "line {line} should omit its terminator"
+        );
+    }
+}
+
 /// A line number past the end must not panic; the linter asks about lines that
 /// a directive scan is walking towards.
 #[test]

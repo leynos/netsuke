@@ -91,6 +91,9 @@ pub fn collect(doc: &Document) -> Vec<Directive> {
 struct Comment<'a> {
     /// Byte offset of the `#` that opens the comment.
     hash_offset: usize,
+    /// Byte length of the comment as written, including the `#` and any
+    /// surrounding whitespace that trimming the body removed.
+    raw_len: usize,
     /// Comment body with the leading `#` and surrounding space removed.
     body: &'a str,
     /// Whether manifest content precedes the comment on the same line.
@@ -104,13 +107,14 @@ fn find_comment<'a>(text: &'a str, line_start: usize, scalars: &[Span]) -> Optio
             let offset = line_start.saturating_add(*index);
             opens_comment(text, *index) && !scalars.iter().any(|span| span.contains_offset(offset))
         })
-        .map(|(index, _)| Comment {
-            hash_offset: line_start.saturating_add(index),
-            body: text
-                .get(index.saturating_add(1)..)
-                .unwrap_or_default()
-                .trim(),
-            has_leading_content: !text.get(..index).unwrap_or_default().trim().is_empty(),
+        .map(|(index, _)| {
+            let raw = text.get(index..).unwrap_or_default();
+            Comment {
+                hash_offset: line_start.saturating_add(index),
+                raw_len: raw.trim_end().len(),
+                body: raw.get(1..).unwrap_or_default().trim(),
+                has_leading_content: !text.get(..index).unwrap_or_default().trim().is_empty(),
+            }
         })
 }
 
@@ -127,12 +131,11 @@ fn opens_comment(text: &str, index: usize) -> bool {
 /// Parse a comment into a directive, ignoring comments that are not ours.
 fn parse_comment(doc: &Document, line: usize, comment: &Comment<'_>) -> Option<Directive> {
     let (is_file, rest) = strip_prefix(comment.body)?;
+    // Span the directive as written. Using the trimmed body would under-cover
+    // it by however much whitespace the trim removed.
     let span = Span::new(
         comment.hash_offset,
-        comment
-            .hash_offset
-            .saturating_add(comment.body.len())
-            .saturating_add(1),
+        comment.hash_offset.saturating_add(comment.raw_len),
     );
     let (rules, reason) = parse_body(rest);
     let scope = if is_file {

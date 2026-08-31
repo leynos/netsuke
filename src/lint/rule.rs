@@ -183,6 +183,17 @@ pub struct ManifestContext<'a> {
 pub trait DirectiveRule: Sync {
     /// Describe the rule.
     fn meta(&self) -> &'static RuleMeta;
+
+    /// Report whether this rule reads the per-directive usage counts.
+    ///
+    /// The directive stage runs in two passes so that a rule reading the
+    /// counts sees the findings the other directive rules produced. Without
+    /// that ordering a directive silencing another directive's finding would
+    /// be counted as having silenced nothing.
+    fn consumes_usage(&self) -> bool {
+        false
+    }
+
     /// Inspect `ctx` and report findings.
     fn check(&self, ctx: &DirectiveContext<'_>, sink: &mut FindingSink<'_>);
 }

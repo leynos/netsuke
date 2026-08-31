@@ -82,6 +82,26 @@ fn suppression_without_reason_rejects_an_empty_reason() {
     );
 }
 
+/// A file-scope directive silencing a directive-stage finding counts as used.
+///
+/// The counts are taken across two passes so this holds: the directive here
+/// silences the `suppression-without-reason` finding the bare directive below
+/// it produces, which is work, and it must not then be reported as having
+/// silenced nothing.
+#[test]
+fn a_directive_silencing_a_directive_finding_is_not_unused() {
+    let yaml = concat!(
+        "netsuke_version: \"1.0.0\"\n",
+        "# netsuke-lint-file: allow suppression-without-reason -- reasons live in the tracker\n",
+        "targets:\n",
+        "  # netsuke-lint: allow background-job\n",
+        "  - name: out\n",
+        "    command: \"feh preview &\"\n",
+    );
+    crate::assert_lint_silent_by_default!(yaml, "suppression-without-reason");
+    crate::assert_lint_silent_by_default!(yaml, "unused-suppression");
+}
+
 #[test]
 fn suppression_without_reason_is_suppressed_by_a_directive() {
     let yaml = concat!(
