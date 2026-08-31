@@ -11,7 +11,7 @@ use netsuke::{
     ast::{Recipe, StringOrList},
     ir::{Action, BuildEdge, BuildGraph, DependencyOrder},
     manifest,
-    ninja_gen::generate,
+    ninja_gen::{RecipeShell, generate_with_shell},
 };
 use rstest::rstest;
 use std::{
@@ -26,6 +26,10 @@ use test_support::ninja::ninja_integration_workspace;
 const SENTINEL: &str = "NETSUKE_TEST_SENTINEL";
 const SENTINEL_VALUE: &str = "sentinel-value";
 
+/// Render Ninja content with explicit POSIX shell semantics.
+fn generate_posix(graph: &BuildGraph) -> Result<String> {
+    generate_with_shell(graph, RecipeShell::Posix).map_err(Into::into)
+}
 /// Read the host `PATH` for isolated real-Ninja child processes.
 ///
 /// # Errors
@@ -184,7 +188,7 @@ fn ninja_output(
 #[case::unrelated_identifier("echo $input", "echo $$input")]
 #[case::literal_dollars("echo $$", "echo $$$$")]
 fn backend_doubles_every_residual_shell_dollar(#[case] command: &str, #[case] expected: &str) {
-    let ninja = generate(&graph(
+    let ninja = generate_posix(&graph(
         Recipe::Command {
             command: command.into(),
         },
@@ -207,7 +211,7 @@ fn backend_doubles_every_residual_shell_dollar(#[case] command: &str, #[case] ex
 })]
 #[case::script(Recipe::Script { script: "echo $NETSUKE_TEST_SENTINEL".into() })]
 fn ninja_expands_only_netsuke_placeholders(#[case] recipe: Recipe) -> Result<()> {
-    let ninja = generate(&graph(recipe, "in", "out"))?;
+    let ninja = generate_posix(&graph(recipe, "in", "out"))?;
     let commands = ninja_commands(&ninja, "out")?;
     ensure!(
         commands.contains(SENTINEL) && commands.contains('$'),
@@ -228,7 +232,10 @@ fn shell_default_reaches_the_child_shell(
     let manifest = manifest::from_str(
         "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    command: 'printf %s \"${NETSUKE_TEST_SENTINEL:-fallback}\" > $out'\n",
     )?;
-    let ninja = generate(&BuildGraph::from_manifest(&manifest)?)?;
+    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
+        &manifest,
+        RecipeShell::Posix,
+    )?)?;
 
     let actual = ninja_output(&ninja, environment_value, None)?;
     ensure!(
@@ -250,7 +257,10 @@ fn command_list_default_reaches_the_child_shell(
     let manifest = manifest::from_str(
         "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    command:\n      - 'printf %s \"${NETSUKE_TEST_SENTINEL:-fallback}\" > $out'\n",
     )?;
-    let ninja = generate(&BuildGraph::from_manifest(&manifest)?)?;
+    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
+        &manifest,
+        RecipeShell::Posix,
+    )?)?;
 
     let actual = ninja_output(&ninja, environment_value, None)?;
     ensure!(
@@ -268,7 +278,10 @@ fn placeholder_lowering_precedes_backend_escaping(#[case] recipe: &str) -> Resul
     let manifest = manifest::from_str(&format!(
         "netsuke_version: '1.0.0'\ntargets:\n  - name: output.txt\n    sources: input.txt\n    {recipe}\n"
     ))?;
-    let ninja = generate(&BuildGraph::from_manifest(&manifest)?)?;
+    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
+        &manifest,
+        RecipeShell::Posix,
+    )?)?;
     let commands = ninja_commands(&ninja, "output.txt")?;
     ensure!(
         commands.contains("cat input.txt > output.txt"),
@@ -284,8 +297,8 @@ fn scripts_lower_placeholders_without_command_parser_validation() -> Result<()> 
     let manifest = manifest::from_str(
         "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: in\n    script: |\n      cat $in > $out\n      # apostrophe's comment and a heredoc must remain valid\n      cat <<'EOF' >> $out\n      done\n      EOF\n",
     )?;
-    let graph = BuildGraph::from_manifest(&manifest)?;
-    let ninja = generate(&graph)?;
+    let graph = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::Posix)?;
+    let ninja = generate_posix(&graph)?;
     ensure!(
         !ninja.contains("\\$out") && !ninja.contains("$in"),
         "script placeholders must be lowered before backend escaping:\n{ninja}"
@@ -310,7 +323,10 @@ fn script_default_reaches_the_child_shell(
     let manifest = manifest::from_str(
         "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    script: 'printf %s \"${NETSUKE_TEST_SENTINEL:-fallback}\" > $out'\n",
     )?;
-    let ninja = generate(&BuildGraph::from_manifest(&manifest)?)?;
+    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
+        &manifest,
+        RecipeShell::Posix,
+    )?)?;
 
     let actual = ninja_output(&ninja, environment_value, None)?;
     ensure!(
@@ -327,7 +343,10 @@ fn script_placeholders_execute_against_real_paths() -> Result<()> {
     let manifest = manifest::from_str(
         "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: in\n    script: \"printf '%s' $in > $out\"\n",
     )?;
-    let ninja = generate(&BuildGraph::from_manifest(&manifest)?)?;
+    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
+        &manifest,
+        RecipeShell::Posix,
+    )?)?;
 
     let actual = ninja_output(&ninja, None, Some(("in", "script input")))?;
     ensure!(
@@ -343,7 +362,7 @@ fn placeholders_inside_backticks_are_rejected_before_backend_escaping() -> Resul
     let manifest = manifest::from_str(
         "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: in\n    script: 'echo `basename $out`'\n",
     )?;
-    let result = BuildGraph::from_manifest(&manifest);
+    let result = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::Posix);
     ensure!(
         result.is_err(),
         "a placeholder protected by backticks must not silently reach the shell"
@@ -356,7 +375,7 @@ fn placeholders_inside_backticks_are_rejected_before_backend_escaping() -> Resul
 #[case::newline("echo safe\nbuild injected: action")]
 #[case::carriage_return("echo safe\rbuild injected: action")]
 fn command_control_characters_are_rejected(#[case] command: &str) {
-    let result = generate(&graph(
+    let result = generate_posix(&graph(
         Recipe::Command {
             command: command.into(),
         },
@@ -372,7 +391,6 @@ fn command_control_characters_are_rejected(#[case] command: &str) {
 /// Verify that Ninja-unsafe path characters are rejected during generation.
 #[rstest]
 #[case::dollar("input$file")]
-#[case::space("input file")]
 #[case::colon("input:file")]
 #[case::pipe("input|file")]
 #[case::tab("input\tfile")]
@@ -380,7 +398,7 @@ fn command_control_characters_are_rejected(#[case] command: &str) {
 #[case::carriage_return("input\rfile")]
 #[case::newline("input\nfile")]
 fn unsafe_paths_are_rejected(#[case] input: &str) {
-    let result = generate(&graph(
+    let result = generate_posix(&graph(
         Recipe::Command {
             command: "cat $in > $out".into(),
         },
@@ -396,7 +414,7 @@ fn unsafe_paths_are_rejected(#[case] input: &str) {
 /// Verify that commands without dollars retain their exact text.
 #[rstest]
 fn dollar_free_commands_remain_byte_identical() -> Result<()> {
-    let ninja = generate(&graph(
+    let ninja = generate_posix(&graph(
         Recipe::Command {
             command: "echo hi".into(),
         },

@@ -371,27 +371,39 @@ The lowering stages have deliberately separate responsibilities:
   rejected because Netsuke cannot lower it safely; scripts use substitution
   without command-shaped parsing, so heredocs and comments remain valid. The
   resulting action contains ordinary command text and no Ninja placeholders.
-- `src/ninja_gen/mod.rs` turns completed shell text into a Ninja value exactly
-  once. That boundary doubles residual dollar signs and rejects control
-  characters after IR lowering and before file emission. Paths remain distinct
-  from shell text and are rejected when they contain `$`, spaces, colons, or
-  control characters. For a list, it puts each entry in a brace group and joins
-  the groups with `&&`. Each group uses `eval` with a shell-quoted entry
-  payload. This keeps an inline comment or a trailing control operator such as
-  `&` inside the entry from consuming the generated group terminator. Braces
-  run in the current shell, not a subshell, so directory changes, environment
-  assignments, and shell variables can carry from one entry to the next. The
-  `&&` chain remains fail-fast. Each entry may start at most one background
-  job; the generated wrapper waits for that job before it evaluates a later
-  entry. Ninja generation rejects entries that start more than one background
-  job. It also rejects entries whose nested `eval` payload makes the
-  background-job count dynamic because the wrapper cannot safely determine
-  which jobs to wait for. A direct simple `exec`, optionally prefixed by shell
-  assignments, is evaluated in a retaining subshell so its success or failure
-  remains visible to the wrapper; a successful `exec` ends the remaining chain.
-  Structured or nested `exec` forms are rejected during Ninja generation
-  because the wrapper cannot supervise them without changing their shell
-  semantics.
+- `src/ninja_gen/mod.rs` delegates completed recipe text to
+  `src/ninja_gen_recipe_shell.rs`. On Unix, and for the explicit Windows Bash
+  compatibility route, a scalar remains POSIX shell text. A list puts each
+  entry in a brace group and joins the groups with `&&`; `eval` receives a
+  shell-quoted payload, which keeps inline comments and trailing control
+  operators inside the entry boundary. Braces preserve current-shell state and
+  the chain remains fail-fast. The existing background-job and `exec`
+  validation rules apply to this POSIX route.
+- On Windows, `RecipeShell::PowerShell` renders scalar commands and scripts as
+  encoded `powershell.exe` invocations while they fit the Windows command-line
+  limit. Recipes up to 1 MiB use Ninja's per-edge `rspfile` and
+  `rspfile_content` bindings; larger recipes are rejected before Netsuke
+  allocates UTF-16LE and Base64 payloads. Ninja derives a unique `$out`-based
+  `.ps1` response-file name, creates it in the edge's working directory with an
+  ASCII PowerShell bootstrap containing the Base64 UTF-16LE payload, and
+  invokes it with `powershell.exe -File "$rspfile"`. The bootstrap removes its
+  own `$PSCommandPath` in a `finally` block after the recipe succeeds or fails;
+  query-only generation emits the bindings without creating files. An ordered
+  list becomes one PowerShell script that checks `$LASTEXITCODE` immediately
+  after each generated list entry, preserving PowerShell state while stopping
+  before a later entry can overwrite a non-zero status. Multiple native
+  commands inside one entry are not individually instrumented. Terminating
+  PowerShell errors also stop the list. The POSIX command-list analyser is
+  deliberately not applied to this route. The runner resolves
+  `NETSUKE_WINDOWS_SHELL` and preflights `bash.exe` only when the optional
+  compatibility route is selected; `help targets` stays outside this execution
+  boundary.
+- The brace-group, `eval`, background-job, and `exec` validation rules described
+  above apply only to Unix and the explicit Windows Bash compatibility route.
+  PowerShell uses its per-entry `$LASTEXITCODE` and terminating-error checks
+  instead. In shell-dollar documentation, `$$` therefore means a process
+  identifier only for POSIX/Bash; PowerShell's `$$` automatic variable contains
+  the last token received by the session.
 - `src/runner/process` forwards the command's output and recognizes the
   bounded `netsuke command-list failure: action HASH, entry M` marker. A failed
   list therefore retains the original exit status while adding the fixed-width
@@ -432,18 +444,14 @@ behavioural contract for these boundaries.
 
 ### Ninja text-escaping seam
 
-`ShellText` is completed, backend-agnostic command or script text from the IR.
-It deliberately does not implement `Display`: writers must not serialize it by
-accident. `NinjaValue` is the escaped value accepted by a Ninja `command`
-binding. `escape_ninja_value` is its only constructor and is fallible so
-control characters fail before emission.
-
-The seam is owned by `src/ninja_gen_escape.rs`. Only the Ninja action writer
-may compose a completed command and convert its `ShellText` into a
-`NinjaValue`; no lowering code or future backend may call it. Metadata fields
-use the same escaping boundary when emitted to Ninja, so literal dollars are
-not interpreted as Ninja variables and newline, carriage-return, and NUL
-characters are rejected. Add a separate, explicitly documented conversion for
+The seam is owned by `src/ninja_gen_escape.rs`. The Ninja action writer may
+compose a completed command and hand it to the selected renderer. POSIX and
+Bash routes convert `ShellText` through `escape_ninja_value`; the encoded
+PowerShell transport returns a private `NinjaValue` without exposing its
+payload to Ninja parsing. No IR or manifest lowering may call either route.
+Descriptions, `depfile`, `deps`, and `pool` retain their existing raw emission
+semantics because they are not shell text, although metadata is still checked
+for control characters. Add a separate, explicitly documented conversion for
 any new Ninja grammar position rather than reusing command escaping.
 
 ## Package and target naming
@@ -549,7 +557,9 @@ affected workflow passes it through the relevant shared action's
 job-level override would win over the action's exported value and silently drop
 whatever the action set.
 
-Five CI jobs across four workflows carry the contract:
+Five CI jobs across four workflows carry the contract.
+
+Table: CI jobs and their shared Rust setup.
 
 | Workflow                                                              | Job                  | Shared action        | `with.rustflags`            |
 | --------------------------------------------------------------------- | -------------------- | -------------------- | --------------------------- |
@@ -609,6 +619,38 @@ cargo nextest run --test polonius_toolchain_contract
 Keep this section and the [Polonius migration notes](polonius.md) in step: both
 describe the same no-directive, pinned-toolchain contract, and the notes record
 the remaining harness consequences of that policy.
+
+### Windows native recipe smoke workflow
+
+The pull-request `windows-native-recipe-smoke` job in
+[`ci.yml`](../.github/workflows/ci.yml) is the native Windows execution gate.
+It waits for the successful `build-test-windows` job, then runs on
+`windows-latest` with `pwsh` as the shell for every `run` step. It checks out
+the pull request source, installs the pinned nightly from `rust-toolchain.toml`
+through the shared Rust setup action, installs Ninja, and builds the `netsuke`
+binary from that checkout. The job then invokes:
+
+```powershell
+./scripts/windows-recipe-smoke.ps1 `
+  -Netsuke ./target/debug/netsuke.exe `
+  -Manifest ./tests/data/windows-recipe-smoke.yml
+```
+
+The fixture exercises the Windows PowerShell legacy-recipe contract, including
+target discovery, scalar and script recipes, ordered-list state and failure,
+path quoting, and the large-recipe response-file transport. The job
+deliberately does not set `SHELL=bash` or use Git Bash for its invocation, so
+the launch boundary remains an ordinary PowerShell session.
+`build-test-windows` continues to use Git Bash only for the repository's POSIX
+Makefile quality gates.
+
+The release workflow has a second `windows-native-recipe-smoke` job for the
+tagged source. It uses the same `pwsh` defaults, pinned Rust toolchain, Ninja
+installation, binary build, smoke script, and
+`tests/data/windows-recipe-smoke.yml` fixture. The smoke job builds the tagged
+source itself; the release publication job separately requires both this smoke
+job and the platform package jobs in its `needs` list. Consequently, release
+publication cannot proceed unless the native Windows smoke test passes.
 
 ## Quality gates
 
@@ -4239,6 +4281,54 @@ selected Ninja program through `dispatch::execute`. Handlers consume the
 context rather than resolving output or process configuration again; tests
 should inject the program through `run_with_ninja_program` when they need a
 deterministic child executable.
+
+### Module: `runner::generation`
+
+`src/runner/generation.rs` owns the runner's reusable, in-memory generation
+pipeline. It separates manifest loading, IR construction, and Ninja bundle
+synthesis from command reporting and process execution. The read-only pipeline
+is `load_manifest` (optionally observing manifest stages), then
+`build_graph_for_shell`, then `ninja_text_for_shell`. Its final value is
+`GeneratedNinja`, including any dyndep sidecars, rather than a materialized
+file or a running Ninja process. `generate_ninja_with_shell` is the
+orchestration boundary: it selects the legacy `RecipeShell`, performs the shell
+preflight, and carries the same selection through graph lowering and Ninja
+synthesis.
+
+`load_manifest` uses the manifest-query registration: it permits only its
+read-only helpers and rejects template access to the environment, filesystem,
+network, clock, and shell. `load_manifest_for_build` is a separate, explicitly
+effectful loader for build, clean, generate, and graph commands. It receives a
+network policy and enables the full build stdlib; it is not a dry-run or
+background-query primitive.
+
+#### Generation reuse boundary
+
+- **Ownership:** `runner::generation` is a private runner submodule. It owns
+  the three read-only generation steps, the explicitly effectful build loader,
+  their input/output hand-offs, and the manifest and IR error contexts. It does
+  not own `StatusReporter` updates, command dispatch, dyndep publication, or
+  Ninja execution.
+- **Permitted call-sites:** `runner::generate_ninja_with_shell` composes the
+  complete shell-aware build pipeline through `load_manifest_for_build` for
+  build, clean, and generate commands. `runner::graph::handle_graph` may stop
+  after the backend-neutral `build_graph` to render the graph, and
+  `runner::help_query` uses `load_manifest` for its read-only target catalogue.
+  Runner unit tests may compose the read-only steps directly. New dry-run or
+  background-generation work may use `load_manifest`, `build_graph_for_shell`,
+  and `ninja_text_for_shell` only within the runner boundary; a public or
+  cross-subsystem consumer requires an explicit application boundary rather
+  than widening these internal helpers.
+- **Composition rules:** command adapters report stages before or after the
+  relevant step and wrap `ninja_text_for_shell` with runner-owned, shell-aware
+  generation telemetry. Only `load_manifest_with_stage_reporting` translates
+  `StageObserver` events into status updates and selects the effectful build
+  loader. Consumers must not call manifest parsing, IR generation, or
+  `ninja_gen::generate_bundle_for_shell` directly in parallel with this
+  pipeline. Before an adapter writes or executes a returned bundle, it must use
+  the existing capability-injected dyndep-publication path to materialize its
+  sidecars; the read-only steps never write files, start processes, or invoke
+  effectful template helpers.
 
 ### Module: `runner::reporter`
 

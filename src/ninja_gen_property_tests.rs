@@ -7,8 +7,8 @@ use proptest::prelude::*;
 use test_support::ninja_gen::paths_strategy;
 
 use super::{
-    DisplayEdge, GeneratedDyndep, GeneratedNinja, NinjaGenError, generate, generate_bundle,
-    test_support::command_action,
+    DisplayEdge, GeneratedDyndep, GeneratedNinja, NinjaGenError, RecipeShell, generate,
+    generate_bundle, generate_into_with_shell, test_support::command_action,
 };
 use crate::{
     ast::{Recipe, StringOrList},
@@ -22,8 +22,7 @@ use std::collections::{HashMap, HashSet};
 mod dependency_only;
 #[path = "ninja_gen_property_tests/ninja_oracle.rs"]
 mod ninja_oracle;
-use ninja_oracle::{NinjaCommandOracle, scalar_command_strategy, scalar_graph};
-use proptest::test_runner::TestRunner;
+use ninja_oracle::scalar_graph;
 
 fn edge_strategy_with_ranges(
     input_range: std::ops::Range<usize>,
@@ -70,6 +69,17 @@ fn format_edge(edge: &BuildEdge) -> String {
         implicit_deps: &edge.implicit_deps,
     }
     .to_string()
+}
+
+/// Render a `BuildGraph` with `RecipeShell::Posix` and return its Ninja text.
+///
+/// # Errors
+///
+/// Propagates [`NinjaGenError`] when the graph cannot be rendered.
+fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
+    let mut ninja = String::new();
+    generate_into_with_shell(graph, &mut ninja, RecipeShell::Posix)?;
+    Ok(ninja)
 }
 
 fn build_line(formatted: &str) -> Option<&str> {
@@ -176,39 +186,7 @@ fn command_list_entry_strategy() -> impl Strategy<Value = String> {
 }
 
 fn canonical_shell_single_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', r"'\''").replace('$', "$$"))
-}
-
-/// Verify real Ninja preserves scalar command text after backend escaping.
-#[test]
-fn scalar_command_output_matches_ninja_oracle() {
-    let prepared_oracle =
-        NinjaCommandOracle::try_create().expect("prepare real-Ninja command oracle");
-    let Some(oracle) = prepared_oracle else {
-        return;
-    };
-    let mut runner = TestRunner::new(ProptestConfig {
-        cases: 128,
-        ..ProptestConfig::default()
-    });
-    runner
-        .run(&scalar_command_strategy(), |(command, braced_command)| {
-            prop_assert!(
-                braced_command.contains("${"),
-                "braced property input must contain a shell braced expansion"
-            );
-            for candidate in [&command, &braced_command] {
-                let ninja = generate(&scalar_graph(candidate.clone()))
-                    .expect("scalar command should generate");
-                let oracle_output = oracle.run_ninja_commands(&ninja)?;
-                let observed = oracle_output
-                    .strip_suffix("\r\n")
-                    .or_else(|| oracle_output.strip_suffix('\n'));
-                prop_assert_eq!(observed, Some(candidate.as_str()));
-            }
-            Ok(())
-        })
-        .expect("real-Ninja command oracle property should hold");
+    format!("'{}'", value.replace('\'', r"'\''"))
 }
 
 proptest! {
@@ -249,12 +227,16 @@ proptest! {
 
     #[test]
     fn command_lists_preserve_order_boundaries_and_fail_fast_joins(entries in prop::collection::vec(command_list_entry_strategy(), 1..9)) {
-        let ninja = generate(&command_list_graph(&entries)).expect("non-empty command list should generate");
+        let ninja = generate_posix(&command_list_graph(&entries))
+            .expect("non-empty command list should generate");
         let command_line = ninja.lines().find(|line| line.starts_with("  command = "))
             .expect("generated action should include a command line");
         let mut previous = 0;
         for entry in &entries {
-            let expected_entry = format!("eval {}", canonical_shell_single_quote(&format!("echo {entry}")));
+            let expected_entry = format!(
+                "eval {}",
+                canonical_shell_single_quote(&format!("echo {entry}")).replace('$', "$$")
+            );
             let expected_count = entries.iter().filter(|candidate| *candidate == entry).count();
             prop_assert_eq!(
                 command_line.matches(&expected_entry).count(),
@@ -277,16 +259,18 @@ proptest! {
     }
 
     #[test]
-    fn programmatic_empty_command_lists_are_rejected(() in Just(())) {
+    fn programmatic_empty_command_lists_are_rejected(_case in Just(())) {
         let graph = command_graph(StringOrList::List(Vec::new()));
         let error = generate(&graph).expect_err("empty command recipe should be rejected");
         let is_stable_empty_recipe_error = matches!(error, NinjaGenError::EmptyCommandRecipe { action_index: 1 });
         prop_assert!(is_stable_empty_recipe_error);
     }
 
+    /// Verify scalar POSIX recipes retain direct command rendering without list boundaries.
     #[test]
     fn scalar_command_output_retains_the_preexisting_form(command in "echo [a-z]{1,12}") {
-        let ninja = generate(&scalar_graph(command.clone())).expect("scalar command should generate");
+        let ninja = generate_posix(&scalar_graph(command.clone()))
+            .expect("scalar command should generate");
         let expected_command_line = format!("  command = {command}\n");
         let retains_scalar_form = ninja.contains(&expected_command_line);
         let uses_list_boundary = ninja.contains("_netsuke_background_before=$${!:-}");

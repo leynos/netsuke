@@ -57,8 +57,8 @@ fn touch_manifest_ninja_validation() -> Result<()> {
     "#;
 
     let manifest = manifest::from_str(manifest_yaml)?;
-    let ir = BuildGraph::from_manifest(&manifest)?;
-    let ninja_content = ninja_gen::generate(&ir)?;
+    let ir = BuildGraph::from_manifest_for_shell(&manifest, ninja_gen::RecipeShell::Posix)?;
+    let ninja_content = generate_posix(&ir)?;
 
     let mut settings = Settings::new();
     settings.set_snapshot_path(concat!(
@@ -120,8 +120,8 @@ fn conditional_manifest_ninja_snapshot() -> Result<()> {
     "#;
 
     let manifest = manifest::from_str(manifest_yaml)?;
-    let ir = BuildGraph::from_manifest(&manifest)?;
-    let ninja_content = ninja_gen::generate(&ir)?;
+    let ir = BuildGraph::from_manifest_for_shell(&manifest, ninja_gen::RecipeShell::Posix)?;
+    let ninja_content = generate_posix(&ir)?;
 
     ensure!(
         ninja_content.contains("build out/kept:") && ninja_content.contains(" in/kept"),
@@ -176,8 +176,8 @@ fn command_available_manifest_ninja_snapshot() -> Result<()> {
         &manifest::process_env_reader(),
         config,
     )?;
-    let ir = BuildGraph::from_manifest(&manifest)?;
-    let ninja_content = ninja_gen::generate(&ir)?;
+    let ir = BuildGraph::from_manifest_for_shell(&manifest, ninja_gen::RecipeShell::Posix)?;
+    let ninja_content = generate_posix(&ir)?;
 
     ensure!(
         ninja_content.contains("fallback"),
@@ -210,8 +210,8 @@ fn multi_command_manifest_ninja_snapshot() -> Result<()> {
         .context("read tests/data/multi_command.yml")?;
 
     let manifest = manifest::from_str(&manifest_yaml)?;
-    let ir = BuildGraph::from_manifest(&manifest)?;
-    let ninja_content = ninja_gen::generate(&ir)?;
+    let ir = BuildGraph::from_manifest_for_shell(&manifest, ninja_gen::RecipeShell::Posix)?;
+    let ninja_content = generate_posix(&ir)?;
 
     ensure!(
         ninja_content.contains("if eval 'echo check-fmt'")
@@ -247,8 +247,8 @@ fn implicit_deps_manifest_ninja_snapshot() -> Result<()> {
         .context("read tests/data/implicit_deps.yml")?;
 
     let manifest = manifest::from_str(&manifest_yaml)?;
-    let ir = BuildGraph::from_manifest(&manifest)?;
-    let ninja_content = ninja_gen::generate(&ir)?;
+    let ir = BuildGraph::from_manifest_for_shell(&manifest, ninja_gen::RecipeShell::Posix)?;
+    let ninja_content = generate_posix(&ir)?;
 
     ensure!(
         ninja_content.contains(" | "),
@@ -282,8 +282,8 @@ fn dependency_only_manifest_ninja_snapshot() -> Result<()> {
         targets: []
     "#;
     let manifest = manifest::from_str(manifest_yaml)?;
-    let ir = BuildGraph::from_manifest(&manifest)?;
-    let ninja_content = ninja_gen::generate(&ir)?;
+    let ir = BuildGraph::from_manifest_for_shell(&manifest, ninja_gen::RecipeShell::Posix)?;
+    let ninja_content = generate_posix(&ir)?;
 
     ensure!(
         ninja_content.contains("build all: phony | check-fmt lint"),
@@ -304,4 +304,9 @@ fn dependency_only_manifest_ninja_snapshot() -> Result<()> {
     });
 
     Ok(())
+}
+
+/// Render Ninja content with explicit POSIX shell semantics.
+fn generate_posix(graph: &BuildGraph) -> Result<String> {
+    ninja_gen::generate_with_shell(graph, ninja_gen::RecipeShell::Posix).map_err(Into::into)
 }

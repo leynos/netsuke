@@ -96,22 +96,39 @@ pub(super) fn build_graph(manifest: &NetsukeManifest) -> Result<BuildGraph> {
         .context(localization::message(keys::RUNNER_CONTEXT_BUILD_GRAPH))
 }
 
+/// Translate a manifest into a graph for one legacy recipe interpreter.
+///
+/// # Errors
+///
+/// Returns an error when graph construction or validation fails (for example
+/// on circular dependencies or duplicate outputs).
+pub(super) fn build_graph_for_shell(
+    manifest: &NetsukeManifest,
+    shell: crate::recipe_shell::RecipeShell,
+) -> Result<BuildGraph> {
+    BuildGraph::from_manifest_for_shell(manifest, shell)
+        .context(localization::message(keys::RUNNER_CONTEXT_BUILD_GRAPH))
+}
+
 /// Generate the Ninja bundle for a build graph.
 ///
 /// # Examples
 ///
 /// ```rust,ignore
-/// let generated = ninja_text(&graph)?;
+/// let generated = ninja_text_for_shell(&graph, RecipeShell::host_default())?;
 /// let (text, sidecars) = generated.into_parts();
 /// assert!(text.contains("build hello:"));
 /// assert!(sidecars.is_empty());
 /// ```
 ///
+/// Generate Ninja text using the selected legacy-recipe interpreter.
+///
 /// # Errors
 ///
 /// Returns an error when Ninja synthesis fails.
-pub(super) fn ninja_text(
+pub(super) fn ninja_text_for_shell(
     graph: &BuildGraph,
+    shell: crate::recipe_shell::RecipeShell,
 ) -> Result<ninja_gen::GeneratedNinja, ninja_gen::NinjaGenError> {
-    ninja_gen::generate_bundle(graph)
+    ninja_gen::dyndep::generate_bundle_for_shell(graph, shell)
 }

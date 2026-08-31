@@ -2,8 +2,8 @@
 
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use proptest::prelude::*;
-use std::process::Command;
+use proptest::{prelude::*, test_runner::TestRunner};
+use std::{fmt::Write as _, process::Command};
 use tempfile::TempDir;
 use test_support::ninja::{NinjaWorkspaceError, ninja_integration_workspace};
 
@@ -11,6 +11,8 @@ use crate::{
     ast::StringOrList,
     ir::{BuildEdge, BuildGraph, DependencyOrder},
 };
+
+use super::generate_posix;
 
 /// Generate ordinary and explicitly braced scalar shell commands.
 pub(super) fn scalar_command_strategy() -> impl Strategy<Value = (String, String)> {
@@ -91,19 +93,25 @@ impl NinjaCommandOracle {
         }))
     }
 
-    /// Publish a generated Ninja file into the isolated oracle workspace.
-    fn write_build_file(&self, ninja_file: &str) -> Result<(), TestCaseError> {
+    /// Ask Ninja to parse generated files and return their expanded command text.
+    pub(super) fn ninja_commands(
+        &self,
+        ninja_files: &[String],
+    ) -> Result<Vec<String>, TestCaseError> {
+        let ninja_file = batch_ninja_files(ninja_files)?;
         self.directory
-            .write("build.ninja", ninja_file)
-            .map_err(|error| TestCaseError::fail(format!("write generated Ninja file: {error}")))
-    }
+            .write("build.ninja", &ninja_file)
+            .map_err(|error| TestCaseError::fail(format!("write generated Ninja file: {error}")))?;
 
-    /// Run Ninja's command tool after publishing a generated build file.
-    pub(super) fn run_ninja_commands(&self, ninja_file: &str) -> Result<String, TestCaseError> {
-        self.write_build_file(ninja_file)?;
-
+        let targets = (0..ninja_files.len())
+            .map(|index| format!("out-{index}"))
+            .collect::<Vec<_>>();
         let output = Command::new("ninja")
-            .args(["-f", "build.ninja", "-t", "commands", "out"])
+            .arg("-f")
+            .arg("build.ninja")
+            .arg("-t")
+            .arg("commands")
+            .args(&targets)
             .current_dir(self.path.as_std_path())
             .output()
             .map_err(|error| TestCaseError::fail(format!("run Ninja command oracle: {error}")))?;
@@ -113,8 +121,64 @@ impl NinjaCommandOracle {
                 String::from_utf8_lossy(&output.stderr)
             )));
         }
-        String::from_utf8(output.stdout).map_err(|error| {
-            TestCaseError::fail(format!("Ninja command output was not UTF-8: {error}"))
-        })
+        String::from_utf8(output.stdout)
+            .map(|stdout| stdout.lines().map(str::to_owned).collect())
+            .map_err(|error| {
+                TestCaseError::fail(format!("Ninja command output was not UTF-8: {error}"))
+            })
     }
+}
+
+/// Combine generated scalar Ninja files into one command-oracle invocation.
+fn batch_ninja_files(ninja_files: &[String]) -> Result<String, TestCaseError> {
+    let mut batch = String::new();
+    for (index, ninja_file) in ninja_files.iter().enumerate() {
+        let command = ninja_file
+            .lines()
+            .find_map(|line| line.strip_prefix("  command = "))
+            .ok_or_else(|| TestCaseError::fail("generated scalar Ninja file had no command"))?;
+        writeln!(batch, "rule action-{index}")
+            .map_err(|error| TestCaseError::fail(format!("write rule: {error}")))?;
+        writeln!(batch, "  command = {command}")
+            .map_err(|error| TestCaseError::fail(format!("write command: {error}")))?;
+        writeln!(batch, "build out-{index}: action-{index}")
+            .map_err(|error| TestCaseError::fail(format!("write target: {error}")))?;
+    }
+    Ok(batch)
+}
+
+/// Verify that Ninja preserves scalar commands through the explicit POSIX renderer.
+#[test]
+fn scalar_command_output_matches_ninja_oracle() {
+    let prepared_oracle =
+        NinjaCommandOracle::try_create().expect("prepare real-Ninja command oracle");
+    let Some(oracle) = prepared_oracle else {
+        return;
+    };
+    let mut runner = TestRunner::new(ProptestConfig {
+        cases: 128,
+        ..ProptestConfig::default()
+    });
+    runner
+        .run(&scalar_command_strategy(), |(command, braced_command)| {
+            prop_assert!(
+                braced_command.contains("${"),
+                "braced property input must contain a shell braced expansion"
+            );
+            let candidates = [&command, &braced_command];
+            let ninja_files = candidates
+                .iter()
+                .map(|candidate| {
+                    generate_posix(&scalar_graph((*candidate).clone()))
+                        .expect("scalar command should generate")
+                })
+                .collect::<Vec<_>>();
+            let observed = oracle.ninja_commands(&ninja_files)?;
+            prop_assert_eq!(observed.len(), candidates.len());
+            for (candidate, observed_command) in candidates.iter().zip(observed) {
+                prop_assert_eq!(observed_command, candidate.as_str());
+            }
+            Ok(())
+        })
+        .expect("real-Ninja command oracle property should hold");
 }

@@ -1,6 +1,6 @@
 //! Unit tests for [`netsuke::ninja_gen`] Ninja file generation.
 //!
-//! Exercises [`netsuke::ninja_gen::generate`] by constructing
+//! Exercises [`netsuke::ninja_gen::generate_with_shell`] by constructing
 //! [`netsuke::ir::BuildGraph`] values directly and asserting the emitted Ninja
 //! syntax. Snapshot tests use `insta` to guard output stability.
 
@@ -8,8 +8,13 @@ use camino::Utf8PathBuf;
 use insta::{Settings, assert_snapshot};
 use netsuke::ast::Recipe;
 use netsuke::ir::{Action, BuildEdge, BuildGraph};
-use netsuke::ninja_gen::generate;
+use netsuke::ninja_gen::{NinjaGenError, RecipeShell, generate_with_shell};
 use rstest::rstest;
+
+/// Render Ninja content with explicit POSIX shell semantics.
+fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
+    generate_with_shell(graph, RecipeShell::Posix)
+}
 
 #[rstest]
 #[case::phony_target_runs_command(
@@ -211,7 +216,7 @@ fn generate_ninja_scenarios(
     graph.actions.insert(edge.action_id.clone(), action);
     graph.targets.insert(target_path, edge);
 
-    let ninja = generate(&graph).expect("generate ninja manifest");
+    let ninja = generate_posix(&graph).expect("generate POSIX Ninja manifest");
     assert_eq!(
         ninja, expected,
         "generated ninja manifest did not match expectation",
@@ -221,7 +226,7 @@ fn generate_ninja_scenarios(
 #[rstest]
 fn generate_empty_graph() {
     let graph = BuildGraph::default();
-    let ninja = generate(&graph).expect("generate empty ninja manifest");
+    let ninja = generate_posix(&graph).expect("generate POSIX Ninja manifest");
     assert_eq!(ninja, "", "expected empty ninja manifest");
 }
 
@@ -257,7 +262,7 @@ fn generate_multiline_script_snapshot() {
     );
     graph.default_targets.push(Utf8PathBuf::from("out"));
 
-    let ninja = generate(&graph).expect("generate script ninja manifest");
+    let ninja = generate_posix(&graph).expect("generate POSIX Ninja manifest");
     let mut settings = Settings::new();
     settings.set_snapshot_path(concat!(
         env!("CARGO_MANIFEST_DIR"),

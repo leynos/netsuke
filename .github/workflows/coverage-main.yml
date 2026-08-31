@@ -24,7 +24,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@8add2d99854a5b77548eae98cca59202e68fefc8
+        uses: leynos/shared-actions/.github/actions/setup-rust@18b2ea047ab1c761db2c4171aa7e73945badf3ec
         with:
           # Match rust-toolchain.toml: the tree needs the nightly-default
           # Polonius borrow checker (see
@@ -34,7 +34,7 @@ jobs:
           # cargo-llvm-cov appends its instrumentation flags to this value.
           rustflags: -D warnings
       - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@8add2d99854a5b77548eae98cca59202e68fefc8
+        uses: leynos/shared-actions/.github/actions/generate-coverage@18b2ea047ab1c761db2c4171aa7e73945badf3ec
         with:
           language: rust
           output-path: lcov.info
@@ -44,7 +44,7 @@ jobs:
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
         if: env.CS_ACCESS_TOKEN != ''
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@8add2d99854a5b77548eae98cca59202e68fefc8
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@18b2ea047ab1c761db2c4171aa7e73945badf3ec
         with:
           path: lcov.info
           format: lcov

@@ -12,6 +12,7 @@ use camino::Utf8PathBuf;
 
 use crate::ast::{MISSING_RECIPE_ERROR, NetsukeManifest, Recipe, Rule};
 use crate::localization::{self, keys};
+use crate::recipe_shell::RecipeShell;
 
 use super::{
     cycle::{self, CycleDetectionReport},
@@ -28,6 +29,15 @@ use support::{
     register_action, resolve_rule, to_paths,
 };
 
+/// Groups the stable inputs required while lowering manifest targets.
+#[derive(Clone, Copy)]
+struct TargetLoweringContext<'a> {
+    /// Rules available to rule-backed targets.
+    rule_map: &'a IrHashMap<String, Arc<Rule>>,
+    /// Interpreter that will receive completed legacy recipe text.
+    shell: RecipeShell,
+}
+
 impl BuildGraph {
     /// Transform a manifest into a [`BuildGraph`].
     ///
@@ -37,6 +47,24 @@ impl BuildGraph {
     /// are specified for a single target, no rule is provided, or a directly
     /// deserialized manifest violates the recipe contract.
     pub fn from_manifest(manifest: &NetsukeManifest) -> Result<Self, IrGenError> {
+        Self::from_manifest_for_shell(manifest, RecipeShell::host_default())
+    }
+
+    /// Transform a manifest into a graph for one legacy recipe interpreter.
+    ///
+    /// Path placeholders are lowered at this boundary, so their quoting must
+    /// match the interpreter that later receives the completed recipe text.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IrGenError`] when a referenced rule is missing, multiple rules
+    /// are specified for a single target, no rule is provided, or a directly
+    /// deserialized manifest violates the recipe contract.
+    #[doc(hidden)]
+    pub fn from_manifest_for_shell(
+        manifest: &NetsukeManifest,
+        shell: RecipeShell,
+    ) -> Result<Self, IrGenError> {
         manifest
             .validate_recipes()
             .map_err(|_| IrGenError::InvalidManifest {
@@ -46,7 +74,15 @@ impl BuildGraph {
         let mut rule_map = IrHashMap::<String, Arc<Rule>>::default();
 
         Self::process_rules(manifest, &mut rule_map);
-        Self::process_targets(manifest, &mut graph.actions, &mut graph.targets, &rule_map)?;
+        Self::process_targets(
+            manifest,
+            &mut graph.actions,
+            &mut graph.targets,
+            TargetLoweringContext {
+                rule_map: &rule_map,
+                shell,
+            },
+        )?;
         Self::process_defaults(manifest, &mut graph.default_targets);
 
         graph.detect_cycles()?;
@@ -84,7 +120,7 @@ impl BuildGraph {
         manifest: &NetsukeManifest,
         actions: &mut IrHashMap<String, Action>,
         targets: &mut IrHashMap<Utf8PathBuf, BuildEdge>,
-        rule_map: &IrHashMap<String, Arc<Rule>>,
+        context: TargetLoweringContext<'_>,
     ) -> Result<(), IrGenError> {
         for target in manifest.actions.iter().chain(&manifest.targets) {
             let outputs = to_paths(&target.name);
@@ -102,7 +138,7 @@ impl BuildGraph {
             let action_id = match &target.recipe {
                 Recipe::Rule { rule } => {
                     let target_name = get_target_display_name(&outputs);
-                    let tmpl = resolve_rule(rule, rule_map, &target_name)?;
+                    let tmpl = resolve_rule(rule, context.rule_map, &target_name)?;
                     // Target descriptions are deliberately omitted: rule
                     // descriptions remain the sole source of Ninja progress
                     // text.
@@ -113,6 +149,7 @@ impl BuildGraph {
                         ActionBindings {
                             inputs: &inputs,
                             outputs: &outputs,
+                            shell: context.shell,
                         },
                     )?
                 }
@@ -123,6 +160,7 @@ impl BuildGraph {
                     ActionBindings {
                         inputs: &inputs,
                         outputs: &outputs,
+                        shell: context.shell,
                     },
                 )?,
             };

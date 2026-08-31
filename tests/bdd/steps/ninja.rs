@@ -7,7 +7,7 @@ use anyhow::{Context, Result, anyhow, ensure};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use mockable::{DefaultEnv, Env};
-use netsuke::ninja_gen;
+use netsuke::ninja_gen::{self, RecipeShell};
 use rstest_bdd_macros::{then, when};
 use std::process::Command;
 use test_support::ninja::ninja_integration_workspace;
@@ -90,7 +90,9 @@ fn assert_error_mentions_action_id(world: &TestWorld) -> Result<()> {
 
 #[when("the ninja file is generated")]
 fn generate_ninja(world: &TestWorld) -> Result<()> {
-    let result = world.build_graph.with_ref(ninja_gen::generate);
+    let result = world
+        .build_graph
+        .with_ref(|graph| ninja_gen::generate_with_shell(graph, RecipeShell::Posix));
     match result.context("build graph should be available")? {
         Ok(n) => {
             world.ninja_content.set(n);

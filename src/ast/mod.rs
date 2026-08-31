@@ -153,18 +153,18 @@ pub struct Rule {
 /// `script`, or `rule` determines an executable variant.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum Recipe {
-    /// A shell command, given as a scalar or an ordered list executed by a
-    /// fail-fast shell chain.
+    /// A shell command, given as a scalar or an ordered list executed by the
+    /// selected interpreter's fail-fast sequence.
     Command {
-        /// A scalar command passes through unchanged; list entries are
-        /// evaluated in brace groups joined by a fail-fast `&&` chain. An
-        /// empty value is reserved for dependency-only manifest entries.
+        /// A scalar command and each list entry are rendered for the selected
+        /// legacy-recipe interpreter. An empty value is reserved for
+        /// dependency-only manifest entries.
         #[serde(skip_serializing_if = "StringOrList::is_empty_marker")]
         command: StringOrList,
     },
-    /// An embedded multi-line script.
+    /// An embedded multi-line script for the selected legacy-recipe interpreter.
     Script {
-        /// Shell script content rendered into a `printf %b` pipeline.
+        /// Script content rendered for the selected interpreter.
         script: String,
     },
     /// Invoke another named rule.

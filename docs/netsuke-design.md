@@ -282,36 +282,42 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   Each entry may include the placeholders `{{ ins }}` and `{{ outs }}`. Jinja
   renders a scalar or each list entry separately with the same recipe context;
   the placeholders are delayed until IR lowering, then replaced in every entry
-  with space-separated, POSIX-shell-quoted input and output paths using the
+  with space-separated paths quoted for the selected recipe shell before
+  hashing the action. POSIX and explicit Bash routes use the
   [`shell-quote`](https://docs.rs/shell-quote/latest/shell_quote/) crate (Sh
-  mode) before hashing the action. Standalone `$in` and `$out` tokens are
-  resolved at the same boundary, while tokens inside backticks are preserved. A
-  scalar command is emitted unchanged. A list is lowered to brace groups that
-  evaluate each entry through a shell-quoted `eval` payload and are joined by
-  `&&`. The groups run in declaration order in one shell process and stop at
-  the first non-zero exit, so working directory, environment, and shell
-  variables carry forward. The `eval` boundary keeps an entry's inline comments
-  or trailing control operators from consuming the generated group terminator.
-  A failed entry emits a bounded action/entry marker for the runner to include
-  in the failure diagnostic. The resulting command must be parsable by
-  [shlex](https://docs.rs/shlex/latest/shlex/) (POSIX mode). An empty command
-  list is rejected during manifest deserialization. Plain command strings
-  remain shell text; authors should use structured recipes or explicit quoting
-  helpers for arbitrary variables.
+  mode); the default Windows PowerShell route uses single-quoted literals and
+  doubles embedded apostrophes. Standalone `$in` and `$out` tokens are resolved
+  at the same boundary. On POSIX and Bash routes, tokens inside backticks are
+  preserved and a placeholder there is rejected; PowerShell backticks use
+  native escape semantics and do not suppress interpolation. A scalar command
+  is emitted unchanged. On Unix and the explicit Windows Bash compatibility
+  route, a list is lowered to brace groups that evaluate each entry through a
+  shell-quoted `eval` payload and are joined by `&&`. The groups run in
+  declaration order in one shell process and stop at the first non-zero exit,
+  so working directory, environment, and shell variables carry forward. The
+  `eval` boundary keeps an entry's inline comments or trailing control
+  operators from consuming the generated group terminator. A failed entry emits
+  a bounded action/entry marker for the runner to include in the failure
+  diagnostic. The resulting POSIX command must be parsable by
+  [shlex](https://docs.rs/shlex/latest/shlex/) (POSIX mode). On Windows with
+  the default PowerShell route, the list is instead one encoded PowerShell
+  script that checks `$LASTEXITCODE` after each generated list entry and stops
+  before a later entry can overwrite the failure. An entry remains opaque
+  recipe text, so multiple native commands separated by semicolons inside one
+  entry are not checked individually. An empty command list is rejected during
+  manifest deserialization. Plain command strings remain shell text; authors
+  should use structured recipes or explicit quoting helpers for arbitrary
+  variables.
 
 - `script`: A multi-line script declared with the YAML `|` block style. The
-  entire block is passed to an interpreter. If the first line begins with `#!`
-  Netsuke executes the script verbatim, respecting the shebang. Otherwise, the
-  block is wrapped in the interpreter specified by the optional `interpreter`
-  field (defaulting to `/bin/sh -e`). For `/bin/sh` scripts, each interpolation
-  is automatically passed through the `shell_escape` filter unless a `| raw`
-  filter is applied. Future versions will allow configurable script languages
-  with their own escaping rules. On Windows, scripts default to
-  `powershell -Command` unless the manifest's `interpreter` field overrides the
-  setting. Rules must provide exactly one of `command`, `script`, or `rule`.
-  Actions and targets may omit a recipe when their `deps` list is non-empty;
-  these entries are dependency-only aggregates and must not use a no-op command
-  such as `command: ":"`.
+  entire block is passed to the selected recipe interpreter. On Unix, the POSIX
+  route uses `/bin/sh -e -c`. On Windows, the default PowerShell route passes
+  the script through the same encoded, non-interactive `powershell.exe`
+  transport as scalar commands; the explicit Bash compatibility route uses
+  `bash.exe -e -c`. Exactly one of `command`, `script`, or `rule` must be
+  provided. Actions and targets may omit a recipe when their `deps` list is
+  non-empty; these entries are dependency-only aggregates and must not use a
+  no-op command such as `command: ":"`.
 
   Internally, these options deserialize into a shared recipe representation.
   Presence of exactly one of `command`, `script`, or `rule` determines an
@@ -2121,6 +2127,38 @@ This transformation involves several steps:
    leaves the input graph untouched. Missing dependencies encountered during
    traversal are logged, collected, and returned alongside any cycle to aid
    diagnostics.
+
+#### Legacy recipe shell selection
+
+`RecipeShell` is the backend boundary for completed legacy recipe text. The
+host default is POSIX shell text on Unix and Windows PowerShell on Windows.
+PowerShell recipes are encoded as UTF-16LE Base64 and emitted as
+`powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass
+-EncodedCommand …`,
+so the shell that launched Netsuke does not select the recipe interpreter. On
+Windows, `NETSUKE_WINDOWS_SHELL=bash` selects the explicit Bash compatibility
+route; the runner verifies `bash.exe --version` before build or Ninja-tool
+execution and reports an actionable error when the runtime is unavailable.
+
+The PowerShell route gives each scalar command and script a fresh process. An
+ordered command list uses one shared process, checks `$LASTEXITCODE`
+immediately after each generated list entry, and exits on the first non-zero
+status; terminating PowerShell errors have the same fail-fast effect. Multiple
+native commands inside one entry are not individually instrumented. The POSIX
+and Bash routes retain the brace-group, `eval`, background-job, and `exec`
+validation and rendering rules. Target discovery and generation do not execute
+recipes, so they do not require the optional Bash runtime.
+
+PowerShell recipes that fit within the 32,766-character Windows command-line
+limit use `-EncodedCommand`. For larger recipes, Netsuke emits Ninja's per-edge
+`rspfile` and `rspfile_content` bindings instead: Ninja writes the unique
+`$out`-derived `.ps1` response file immediately before the action. It contains
+an ASCII PowerShell bootstrap and the Base64 UTF-16LE recipe payload. The
+command invokes it with `powershell.exe -File "$rspfile"`; PowerShell decodes
+the payload, and the bootstrap removes its own `$PSCommandPath` in a `finally`
+block after the recipe succeeds or fails. The per-edge name isolates concurrent
+actions in the build working directory; generation and target-discovery queries
+create no response files.
 
 ### 5.4 Ninja file synthesis (`src/ninja_gen/mod.rs`)
 

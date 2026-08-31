@@ -11,7 +11,7 @@ use crate::bdd::helpers::parse_store::store_parse_outcome;
 use crate::bdd::steps::manifest::environment::manifest_env_reader;
 use anyhow::{Context, Result, anyhow, ensure};
 use camino::Utf8PathBuf;
-use netsuke::{ir::BuildGraph, stdlib::NetworkPolicy};
+use netsuke::{ir::BuildGraph, ninja_gen::RecipeShell, stdlib::NetworkPolicy};
 use rstest_bdd_macros::{given, then, when};
 
 // ---------------------------------------------------------------------------
@@ -234,7 +234,10 @@ fn compile_manifest_impl(world: &TestWorld, path: &str) {
         &env_reader,
         None,
     )
-    .and_then(|m| BuildGraph::from_manifest(&m).context("building IR from manifest"))
+    .and_then(|m| {
+        BuildGraph::from_manifest_for_shell(&m, RecipeShell::Posix)
+            .context("building IR from manifest")
+    })
     .with_context(|| format!("IR generation failed for {path}"))
     .map_err(|e| e.to_string());
     store_parse_outcome(&world.build_graph, &world.generation_error, outcome);

@@ -2,8 +2,10 @@
 //!
 //! Provides [`interpolate_command`], which substitutes `$in`, `$out`,
 //! `__NETSUKE_INS_PLACEHOLDER__`, and `__NETSUKE_OUTS_PLACEHOLDER__` tokens
-//! in recipe command strings while preserving backtick-delimited regions from
-//! interpolation.  Called by [`super::from_manifest`] during IR lowering.
+//! in recipe command strings. POSIX-compatible routes preserve
+//! backtick-delimited regions from interpolation; PowerShell routes interpret
+//! backticks as their native escape character. Called by [`super::from_manifest`]
+//! during IR lowering.
 
 use crate::localization::{self, keys};
 use camino::Utf8PathBuf;
@@ -13,6 +15,7 @@ use shell_quote::{QuoteRefExt, Sh};
 use std::cell::Cell;
 
 use super::IrGenError;
+use crate::recipe_shell::RecipeShell;
 
 mod substitution;
 
@@ -25,6 +28,8 @@ use substitution::SubstitutionTraversal;
 /// each command.
 #[derive(Debug, Clone)]
 pub(crate) struct CommandBindings {
+    /// Selects the interpreter whose command syntax is valid after lowering.
+    shell: RecipeShell,
     /// Quoted and joined input paths for `$in` substitution.
     ins: String,
     /// Quoted and joined output paths for `$out` substitution.
@@ -34,11 +39,12 @@ pub(crate) struct CommandBindings {
 impl CommandBindings {
     /// Quote the paths once for every command in one recipe.
     #[must_use]
-    pub(crate) fn new(inputs: &[Utf8PathBuf], outputs: &[Utf8PathBuf]) -> Self {
+    pub(crate) fn new(inputs: &[Utf8PathBuf], outputs: &[Utf8PathBuf], shell: RecipeShell) -> Self {
         record_binding_preparation();
         Self {
-            ins: quote_paths(inputs).join(" "),
-            outs: quote_paths(outputs).join(" "),
+            shell,
+            ins: quote_paths(inputs, shell).join(" "),
+            outs: quote_paths(outputs, shell).join(" "),
         }
     }
 }
@@ -48,6 +54,7 @@ thread_local! {
     static BINDING_PREPARATIONS: Cell<usize> = const { Cell::new(0) };
 }
 
+/// Count one binding preparation in test builds.
 #[cfg(test)]
 fn record_binding_preparation() {
     BINDING_PREPARATIONS.with(|count| count.set(count.get() + 1));
@@ -67,22 +74,25 @@ pub(crate) fn binding_preparations() -> usize {
     BINDING_PREPARATIONS.with(Cell::get)
 }
 
-/// Shell-quote each path, producing one quoted string per path.
-fn quote_paths(paths: &[Utf8PathBuf]) -> Vec<String> {
-    paths
-        .iter()
-        .map(|path| {
-            // Utf8PathBuf guarantees UTF-8, and shell quoting should preserve it.
-            let bytes: Vec<u8> = path.as_str().quoted(Sh);
-            match String::from_utf8(bytes) {
-                Ok(text) => text,
-                Err(err) => {
-                    debug_assert!(false, "shell quoting produced non UTF-8 bytes: {err}");
-                    String::from_utf8_lossy(err.as_bytes()).into_owned()
-                }
-            }
-        })
-        .collect()
+/// Quote each path for the selected legacy recipe interpreter.
+fn quote_paths(paths: &[Utf8PathBuf], shell: RecipeShell) -> Vec<String> {
+    paths.iter().map(|path| quote_path(path, shell)).collect()
+}
+
+/// Quote one path for the selected legacy recipe interpreter.
+fn quote_path(path: &Utf8PathBuf, shell: RecipeShell) -> String {
+    if shell == RecipeShell::PowerShell {
+        return format!("'{}'", path.as_str().replace('\'', "''"));
+    }
+    // Utf8PathBuf guarantees UTF-8, and shell quoting should preserve it.
+    let bytes: Vec<u8> = path.as_str().quoted(Sh);
+    match String::from_utf8(bytes) {
+        Ok(text) => text,
+        Err(err) => {
+            debug_assert!(false, "shell quoting produced non UTF-8 bytes: {err}");
+            String::from_utf8_lossy(err.as_bytes()).into_owned()
+        }
+    }
 }
 
 /// Returns `true` when the command contains an odd number of backticks.
@@ -96,13 +106,15 @@ fn has_unmatched_backticks(s: &str) -> bool {
     s.chars().filter(|&c| c == '`').count().rem_euclid(2) != 0
 }
 
+/// Interpolate `template` with an explicit legacy recipe shell for structural tests.
 #[cfg(test)]
-pub(crate) fn interpolate_command(
+pub(crate) fn interpolate_command_with_shell(
     template: &str,
     inputs: &[Utf8PathBuf],
     outputs: &[Utf8PathBuf],
+    shell: RecipeShell,
 ) -> Result<String, IrGenError> {
-    let bindings = CommandBindings::new(inputs, outputs);
+    let bindings = CommandBindings::new(inputs, outputs, shell);
     interpolate_command_with_bindings(template, &bindings)
 }
 
@@ -111,8 +123,8 @@ pub(crate) fn interpolate_command_with_bindings(
     template: &str,
     bindings: &CommandBindings,
 ) -> Result<String, IrGenError> {
-    let interpolated = substitute(template, &bindings.ins, &bindings.outs)?;
-    if has_unmatched_backticks(&interpolated) || shlex::split(&interpolated).is_none() {
+    let interpolated = substitute(template, bindings)?;
+    if !is_valid_command_for_shell(&interpolated, bindings.shell) {
         return Err(invalid_command_error(interpolated));
     }
     Ok(interpolated)
@@ -121,14 +133,14 @@ pub(crate) fn interpolate_command_with_bindings(
 /// Interpolate a script without requiring command-shaped shell syntax.
 ///
 /// Script recipes may contain heredocs, comments, and other valid shell text
-/// that `shlex` cannot parse as a command. Backticks remain an explicit
-/// exclusion: placeholders within them would otherwise evade lowering and
-/// become silently empty shell variables after the Ninja backend escapes `$`.
+/// that `shlex` cannot parse as a command. POSIX-compatible routes retain the
+/// backtick exclusion: placeholders within them would otherwise evade lowering
+/// and become silently empty shell variables after the Ninja backend escapes `$`.
 pub(crate) fn interpolate_script_with_bindings(
     template: &str,
     bindings: &CommandBindings,
 ) -> Result<String, IrGenError> {
-    substitute(template, &bindings.ins, &bindings.outs)
+    substitute(template, bindings)
 }
 
 /// Builds the diagnostic for a command rejected during placeholder expansion.
@@ -140,6 +152,14 @@ fn invalid_command_error(command: String) -> IrGenError {
         snippet,
         message,
     }
+}
+
+/// Report whether `command` satisfies the selected shell's command syntax boundary.
+fn is_valid_command_for_shell(command: &str, shell: RecipeShell) -> bool {
+    if shell == RecipeShell::PowerShell {
+        return true;
+    }
+    !has_unmatched_backticks(command) && shlex::split(command).is_some()
 }
 
 /// Returns whether `ch` is a valid identifier character (ASCII letter, digit, or underscore).
@@ -259,14 +279,14 @@ fn try_match_token<'a>(
     Some((replacement, matched_len))
 }
 
-/// Replace input and output tokens while rejecting protected placeholders.
+/// Replace input and output tokens using the selected shell's backtick semantics.
 ///
 /// A placeholder inside backticks cannot be safely lowered because command
 /// substitution shields it from the normal replacement path. Reject it during
 /// the same traversal so malformed commands never reach the Ninja backend.
-fn substitute(template: &str, ins: &str, outs: &str) -> Result<String, IrGenError> {
+fn substitute(template: &str, bindings: &CommandBindings) -> Result<String, IrGenError> {
     let chars: Vec<char> = template.chars().collect();
-    let mut traversal = SubstitutionTraversal::new(template, &chars, ins, outs);
+    let mut traversal = SubstitutionTraversal::new(template, &chars, bindings);
     let mut pos = 0;
     while pos < chars.len() {
         pos = traversal.append_substitution_at_position(pos)?;
@@ -286,67 +306,5 @@ pub(crate) const OUTS_TOKEN: &str = "__NETSUKE_OUTS_PLACEHOLDER__";
 #[path = "../cmd_interpolate_property_tests.rs"]
 mod property_tests;
 #[cfg(test)]
-mod tests {
-    //! Unit tests for command interpolation and backtick validation.
-    use super::*;
-
-    use camino::Utf8PathBuf;
-
-    #[test]
-    fn interpolate_command_rejects_unbalanced_backticks() {
-        let path = Utf8PathBuf::from("a");
-        let err = interpolate_command(
-            "echo `",
-            std::slice::from_ref(&path),
-            std::slice::from_ref(&path),
-        )
-        .expect_err("command should be rejected");
-        match err {
-            IrGenError::InvalidCommand { command, .. } => {
-                assert_eq!(command, "echo `");
-            }
-            other => panic!("unexpected error: {other:?}"),
-        }
-    }
-
-    #[test]
-    fn interpolate_command_replaces_placeholders() {
-        let ins = vec![Utf8PathBuf::from("in"), Utf8PathBuf::from("aux")];
-        let outs = vec![Utf8PathBuf::from("out")];
-        let command = interpolate_command("cp $in $out", &ins, &outs).expect("command");
-        assert_eq!(command, "cp in aux out");
-    }
-
-    /// Reject short placeholders protected by command-substitution backticks.
-    #[test]
-    fn interpolate_command_rejects_short_placeholders_in_backticks() {
-        let ins = vec![Utf8PathBuf::from("src")];
-        let outs = vec![Utf8PathBuf::from("out")];
-        let error = interpolate_command("echo `cat $in` && echo $out", &ins, &outs)
-            .expect_err("placeholders inside backticks should be rejected");
-        assert!(matches!(error, IrGenError::InvalidCommand { .. }));
-    }
-
-    /// Reject template placeholders protected by command-substitution backticks.
-    #[test]
-    fn interpolate_command_rejects_template_placeholders_in_backticks() {
-        let error = interpolate_command(
-            &format!("echo `{INS_TOKEN}` $out"),
-            &[],
-            &[Utf8PathBuf::from("out")],
-        )
-        .expect_err("template placeholders inside backticks should be rejected");
-        assert!(matches!(error, IrGenError::InvalidCommand { .. }));
-    }
-
-    #[test]
-    fn interpolate_command_replaces_template_placeholders() {
-        let command = interpolate_command(
-            &format!("{INS_TOKEN} $out {OUTS_TOKEN}"),
-            &[Utf8PathBuf::from("in")],
-            &[Utf8PathBuf::from("out")],
-        )
-        .expect("command");
-        assert_eq!(command, "in out out");
-    }
-}
+#[path = "../cmd_interpolate_tests.rs"]
+mod tests;

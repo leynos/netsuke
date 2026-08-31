@@ -13,6 +13,7 @@ use netsuke::{
     ast::{Recipe, StringOrList},
     ir::{BuildGraph, IrGenError},
     manifest, ninja_gen,
+    recipe_shell::RecipeShell,
 };
 use rstest::rstest;
 
@@ -56,7 +57,8 @@ fn command_list_entries_are_interpolated_in_order() -> Result<()> {
             rule: build
     "#;
     let manifest = manifest::from_str(yaml)?;
-    let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;
+    let graph = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::Posix)
+        .context("expected graph generation")?;
     let action = graph
         .actions
         .values()
@@ -232,7 +234,8 @@ fn manifest_deps_do_not_contribute_to_recipe_inputs() -> Result<()> {
         "    rule: compile\n",
     );
     let manifest = manifest::from_str(yaml)?;
-    let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;
+    let graph = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::Posix)
+        .context("expected graph generation")?;
     let edge = graph
         .targets
         .get(&Utf8PathBuf::from("out/app"))

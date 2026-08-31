@@ -11,6 +11,7 @@ use camino::Utf8PathBuf;
 use crate::ast::{Recipe, Rule, StringOrList};
 use crate::hasher::ActionHasher;
 use crate::localization::{self, keys};
+use crate::recipe_shell::RecipeShell;
 
 use super::super::{
     cmd_interpolate::{
@@ -29,6 +30,8 @@ pub(super) struct ActionBindings<'a> {
     pub(super) inputs: &'a [Utf8PathBuf],
     /// Paths the target's recipe produces via `$out`.
     pub(super) outputs: &'a [Utf8PathBuf],
+    /// Interpreter that will receive the completed legacy recipe text.
+    pub(super) shell: RecipeShell,
 }
 
 /// Register one action under its content hash, deduplicating identical ones.
@@ -90,7 +93,7 @@ fn resolve_command(
     command: StringOrList,
     bindings: ActionBindings<'_>,
 ) -> Result<StringOrList, IrGenError> {
-    let command_bindings = CommandBindings::new(bindings.inputs, bindings.outputs);
+    let command_bindings = CommandBindings::new(bindings.inputs, bindings.outputs, bindings.shell);
     match command {
         StringOrList::String(scalar_command) => Ok(StringOrList::String(
             interpolate_command_with_bindings(&scalar_command, &command_bindings)?,
@@ -110,7 +113,7 @@ fn resolve_command(
 fn resolve_script(script: &str, bindings: ActionBindings<'_>) -> Result<String, IrGenError> {
     interpolate_script_with_bindings(
         script,
-        &CommandBindings::new(bindings.inputs, bindings.outputs),
+        &CommandBindings::new(bindings.inputs, bindings.outputs, bindings.shell),
     )
 }
 

@@ -65,6 +65,19 @@ pub enum NinjaGenError {
         /// One-based stable position in the command list.
         entry_index: usize,
     },
+    /// Completed recipe text cannot be represented safely in one Ninja binding.
+    #[error("recipe text contains an unsafe Ninja control character")]
+    UnsafeNinjaValue,
+    /// A PowerShell recipe exceeds the bounded in-memory encoding limit.
+    #[error(
+        "PowerShell recipe is {actual_bytes} bytes, exceeding the {maximum_bytes}-byte encoding limit"
+    )]
+    PowerShellRecipeTooLarge {
+        /// UTF-8 byte length of the completed recipe before PowerShell wrapping.
+        actual_bytes: usize,
+        /// Largest completed recipe Netsuke encodes in memory.
+        maximum_bytes: usize,
+    },
     /// A graph with serial dependencies cannot be represented by a single
     /// build-file string; callers must use [`crate::ninja_gen::generate_bundle`].
     #[error("{message}")]
@@ -90,9 +103,12 @@ pub enum NinjaGenError {
         /// Localized error message.
         message: LocalizedMessage,
     },
-    /// A scalar command or script cannot be represented in one Ninja binding.
-    #[error("Ninja binding contains an unsafe control character")]
-    UnsafeNinjaValue,
+    /// A path cannot be represented consistently in a Ninja build edge.
+    #[error("Ninja path contains an unsafe character: {path}")]
+    UnsafeNinjaPath {
+        /// Path rejected before its build edge reaches the generated file.
+        path: String,
+    },
     /// Formatting the Ninja output failed.
     #[error("{message}")]
     Format {

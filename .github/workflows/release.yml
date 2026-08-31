@@ -76,11 +76,11 @@ jobs:
       - id: release_modes
         name: Determine release modes
         uses: >-
-          leynos/shared-actions/.github/actions/determine-release-modes@8add2d99854a5b77548eae98cca59202e68fefc8
+          leynos/shared-actions/.github/actions/determine-release-modes@18b2ea047ab1c761db2c4171aa7e73945badf3ec
       - id: ensure_version
         name: Read package version from Cargo.toml
         uses: >-
-          leynos/shared-actions/.github/actions/ensure-cargo-version@8add2d99854a5b77548eae98cca59202e68fefc8
+          leynos/shared-actions/.github/actions/ensure-cargo-version@18b2ea047ab1c761db2c4171aa7e73945badf3ec
         with:
           check-tag: ${{ fromJSON(steps.release_modes.outputs['should-publish']) }}
       - id: wix_extension_version
@@ -107,7 +107,7 @@ jobs:
       - id: bin_name
         name: Extract binary name from Cargo.toml
         uses: >-
-          leynos/shared-actions/.github/actions/export-cargo-metadata@8add2d99854a5b77548eae98cca59202e68fefc8
+          leynos/shared-actions/.github/actions/export-cargo-metadata@18b2ea047ab1c761db2c4171aa7e73945badf3ec
         with:
           manifest-path: ${{ steps.manifest_path.outputs.value }}
           fields: bin-name
@@ -204,6 +204,40 @@ jobs:
       stage-target: ${{ matrix.target_key }}
       artifact-suffix: ${{ matrix.artefact_suffix }}
 
+  windows-native-recipe-smoke:
+    needs: metadata
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
+    steps:
+      - uses: >-
+          actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Rust
+        uses: >-
+          leynos/shared-actions/.github/actions/setup-rust@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+        with:
+          toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
+          rustflags: -D warnings
+      - name: Install Ninja
+        uses: >-
+          seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67
+        # v6
+      - name: Build Netsuke
+        run: cargo build --locked --bin netsuke
+      - name: Exercise native Windows recipes
+        run: >-
+          ./scripts/windows-recipe-smoke.ps1
+          -Netsuke ./target/debug/netsuke.exe
+          -Manifest ./tests/data/windows-recipe-smoke.yml
+
   release:
     if: needs.metadata.outputs.should_publish == 'true'
     permissions:
@@ -213,6 +247,7 @@ jobs:
       - build-linux
       - build-windows
       - build-macos
+      - windows-native-recipe-smoke
     runs-on: ubuntu-latest
     steps:
       - uses: >-
@@ -262,7 +297,7 @@ jobs:
       - id: upload_assets
         name: Upload artefacts to release
         uses: >-
-          leynos/shared-actions/.github/actions/upload-release-assets@8add2d99854a5b77548eae98cca59202e68fefc8
+          leynos/shared-actions/.github/actions/upload-release-assets@18b2ea047ab1c761db2c4171aa7e73945badf3ec
         with:
           release-tag: ${{ github.ref_name }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}

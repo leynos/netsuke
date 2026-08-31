@@ -1,7 +1,7 @@
 //! Dispatch parsed commands and emit their successful JSON result documents.
 
 use super::{
-    ExecutionContext, NinjaContent, NinjaToolSpec, generate_ninja, graph, handle_build,
+    ExecutionContext, NinjaContent, NinjaToolSpec, generate_ninja_with_shell, graph, handle_build,
     handle_ninja_tool, help, materialize_dyndep_bundle, process, prune_dyndep_bundle,
     resolve_output_path,
 };
@@ -70,7 +70,7 @@ fn execute_generate(
     output: Option<&std::path::PathBuf>,
     context: &ExecutionContext<'_>,
 ) -> Result<()> {
-    let bundle = generate_ninja(cli, context.reporter, None)?;
+    let bundle = generate_ninja_with_shell(cli, context.reporter, None, context.recipe_shell)?;
     let publication = materialize_dyndep_bundle(cli, &bundle)?;
     prune_dyndep_bundle(cli, bundle.dyndep_files(), &publication)?;
     let ninja = NinjaContent::new(bundle.into_parts().0);

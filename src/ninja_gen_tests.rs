@@ -1,7 +1,9 @@
 //! Unit tests for Ninja file generation and rule synthesis.
-
 use super::test_support::command_action;
-use super::{NamedAction, NinjaGenError, generate, generate_bundle, generate_into};
+use super::{
+    NamedAction, NinjaGenError, RecipeShell, generate, generate_bundle, generate_into,
+    generate_into_with_shell,
+};
 use crate::ast::{Recipe, StringOrList};
 use crate::ir::{Action, BuildEdge, BuildGraph, DependencyOrder};
 use anyhow::{Context, Result, bail, ensure};
@@ -92,7 +94,7 @@ fn generate_simple_ninja() -> Result<()> {
     graph.targets.insert(Utf8PathBuf::from("out"), edge);
     graph.default_targets.push(Utf8PathBuf::from("out"));
 
-    let ninja = generate(&graph)?;
+    let ninja = generate_posix(&graph)?;
     let expected = concat!(
         "rule a\n",
         "  command = echo hi\n\n",
@@ -152,7 +154,7 @@ fn string_generation_apis_reject_reserved_paths() -> Result<()> {
     Ok(())
 }
 
-/// Verify every optional metadata binding escapes literal Ninja dollars.
+/// Verify each supported metadata binding escapes literal dollars for Ninja output.
 #[rstest]
 #[case::description("description")]
 #[case::depfile("depfile")]
@@ -178,7 +180,7 @@ fn metadata_values_escape_ninja_dollars(#[case] field: &str) -> Result<()> {
     Ok(())
 }
 
-/// Verify every optional metadata binding rejects unsafe control characters.
+/// Verify each supported metadata binding rejects newline, carriage-return, and NUL values.
 #[rstest]
 #[case::description("description")]
 #[case::depfile("depfile")]
@@ -224,7 +226,7 @@ fn generate_script_ninja_round_trips() -> Result<()> {
     graph.actions.insert("a".into(), action);
     graph.targets.insert(Utf8PathBuf::from("out"), edge);
 
-    let ninja = generate(&graph)?;
+    let ninja = generate_posix(&graph)?;
     ensure!(ninja.contains("rule a"));
     ensure!(ninja.contains("command = /bin/sh -e -c"));
     ensure!(ninja.contains(r"echo '\''a b'\''"));
@@ -257,7 +259,7 @@ fn generate_command_list_ninja_joins_a_fail_fast_chain() -> Result<()> {
     graph.actions.insert("a".into(), action);
     graph.targets.insert(Utf8PathBuf::from("out"), edge);
 
-    let ninja = generate(&graph)?;
+    let ninja = generate_posix(&graph)?;
     ensure!(
         ninja.contains("command = { _netsuke_background_before=$${!:-};"),
         "first list boundary should start the generated command:\n{ninja}"
@@ -306,7 +308,7 @@ fn nested_command_list_exec_returns_a_typed_generation_error() {
     let mut graph = BuildGraph::default();
     graph.actions.insert("nested-exec".into(), action);
 
-    let error = generate(&graph).expect_err("nested exec should not generate Ninja");
+    let error = generate_posix(&graph).expect_err("nested exec should not generate Ninja");
     assert!(
         matches!(
             error,
@@ -343,7 +345,7 @@ fn unsafe_command_list_entries_return_typed_generation_errors(
     graph.actions.insert("unsafe".into(), action);
     let mut ninja = String::new();
 
-    let error = generate_into(&graph, &mut ninja)
+    let error = generate_into_with_shell(&graph, &mut ninja, RecipeShell::Posix)
         .expect_err("unsafe command-list entries should not generate Ninja");
     assert!(
         matches!(
@@ -375,3 +377,12 @@ fn assert_shell_command_tolerates_complex_syntax() {
     let command = r#"/bin/sh -c "echo 'nested quotes' && echo \"double\" && (echo subshell)""#;
     NamedAction::assert_shell_command(command);
 }
+/// Generate Ninja text using the explicit POSIX compatibility renderer.
+fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
+    let mut ninja = String::new();
+    generate_into_with_shell(graph, &mut ninja, RecipeShell::Posix)?;
+    Ok(ninja)
+}
+
+#[path = "ninja_gen_tests/power_shell.rs"]
+mod power_shell;
