@@ -30,13 +30,24 @@ use std::{
 pub(super) fn resolve_relative_glob_base(
     base: &Utf8Path,
 ) -> std::result::Result<Utf8PathBuf, Error> {
-    let canonical = dunce::canonicalize(base.as_std_path())
-        .map_err(|error| create_base_error(base, error.to_string()))?;
+    resolve_relative_glob_base_for_template(base).map_err(super::GlobExpansionFailure::into_error)
+}
+
+/// Resolve an injected base while retaining a bounded preparation failure.
+fn resolve_relative_glob_base_for_template(
+    base: &Utf8Path,
+) -> std::result::Result<Utf8PathBuf, super::GlobExpansionFailure> {
+    let canonical = dunce::canonicalize(base.as_std_path()).map_err(|error| {
+        super::GlobExpansionFailure::BaseCanonicalization(create_base_error(
+            base,
+            error.to_string(),
+        ))
+    })?;
     Utf8PathBuf::from_path_buf(canonical).map_err(|path| {
-        create_base_error(
+        super::GlobExpansionFailure::Utf8Conversion(create_base_error(
             base,
             format!("canonical base path is not valid UTF-8: {}", path.display()),
-        )
+        ))
     })
 }
 
@@ -75,16 +86,18 @@ impl GlobBaseCache {
         }
     }
 
-    /// Describe whether this manifest parse was given an injected glob base.
+    /// Classify a pattern and parse context for template expansion telemetry.
     ///
     /// The returned values are the closed `base_mode` label set used only by
-    /// manifest-template expansion diagnostics. They describe parse context;
-    /// an absolute pattern still avoids resolving the configured base.
-    pub(super) const fn mode(&self) -> &'static str {
-        if self.base.is_some() {
-            "injected"
+    /// manifest-template expansion diagnostics. Absolute patterns bypass the
+    /// configured base and therefore remain distinct from relative patterns.
+    pub(super) fn mode(&self, pattern: &Utf8Path) -> &'static str {
+        if pattern.is_absolute() {
+            "absolute_pattern"
+        } else if self.base.is_some() {
+            "relative_with_base"
         } else {
-            "process_working_directory"
+            "relative_without_base"
         }
     }
 
@@ -94,20 +107,23 @@ impl GlobBaseCache {
     ///
     /// Returns the canonicalization error from the injected base on its first
     /// relative use.
-    fn resolve(&self) -> std::result::Result<Option<Utf8PathBuf>, Error> {
+    fn resolve(&self) -> std::result::Result<Option<Utf8PathBuf>, super::GlobExpansionFailure> {
         let _span = tracing::debug_span!("manifest.glob_base", operation = "resolve").entered();
         let Some(base) = self.base.as_deref() else {
             diagnostics::record_base_cache_bypass();
             return Ok(None);
         };
-        let cached = self.lock_resolved(base)?.clone();
+        let cached = self
+            .lock_resolved(base)
+            .map_err(super::GlobExpansionFailure::BaseCanonicalization)?
+            .clone();
         if cached.is_some() {
             diagnostics::record_base_cache_hit();
             return Ok(cached);
         }
 
         let started = Instant::now();
-        let canonical = match resolve_relative_glob_base(base) {
+        let canonical = match resolve_relative_glob_base_for_template(base) {
             Ok(canonical) => {
                 diagnostics::record_base_cache_miss(started.elapsed());
                 canonical
@@ -117,7 +133,9 @@ impl GlobBaseCache {
                 return Err(error);
             }
         };
-        let mut resolved = self.lock_resolved(base)?;
+        let mut resolved = self
+            .lock_resolved(base)
+            .map_err(super::GlobExpansionFailure::BaseCanonicalization)?;
         if let Some(published) = resolved.as_ref() {
             return Ok(Some(published.clone()));
         }
@@ -186,11 +204,22 @@ impl PreparedGlob {
     ///
     /// Returns an error when the pattern fails brace validation or its first
     /// relative use cannot canonicalize the injected base.
+    #[cfg(test)]
     pub(super) fn new_with_base_cache(
         pattern: &str,
         base: &GlobBaseCache,
     ) -> std::result::Result<Self, Error> {
-        let pattern_state = GlobPattern::new(pattern)?;
+        Self::new_with_base_cache_for_template(pattern, base)
+            .map_err(super::GlobExpansionFailure::into_error)
+    }
+
+    /// Prepare `pattern` while retaining a bounded template failure outcome.
+    pub(super) fn new_with_base_cache_for_template(
+        pattern: &str,
+        base: &GlobBaseCache,
+    ) -> std::result::Result<Self, super::GlobExpansionFailure> {
+        let pattern_state =
+            GlobPattern::new(pattern).map_err(super::GlobExpansionFailure::InvalidPattern)?;
         let resolved_base = (!Utf8Path::new(pattern_state.normalized()).is_absolute())
             .then(|| base.resolve())
             .transpose()?

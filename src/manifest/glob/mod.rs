@@ -45,7 +45,7 @@ pub(super) use base::GlobBaseCache;
 use base::PreparedGlob;
 use camino::{Utf8Path, Utf8PathBuf};
 pub(super) use diagnostics::expand_manifest_template_glob;
-use errors::{GlobErrorContext, GlobErrorType, create_glob_error};
+use errors::{GlobErrorContext, GlobErrorType, GlobExpansionFailure, create_glob_error};
 use normalize::normalize_separators;
 use validate::validate_brace_matching;
 use walk::{open_root_dir, process_glob_entry};
@@ -284,7 +284,7 @@ pub(super) fn expand_glob(
     base: Option<&Utf8Path>,
 ) -> std::result::Result<GlobExpansion, Error> {
     let prepared = PreparedGlob::new(pattern, base)?;
-    expand_prepared_glob(&prepared)
+    expand_prepared_glob(&prepared).map_err(GlobExpansionFailure::into_error)
 }
 
 /// Expand a pattern using a manifest-owned injected-base cache.
@@ -292,16 +292,18 @@ pub(super) fn expand_glob(
 /// The cache retains a successful canonicalization across `glob()` calls in
 /// one manifest parse. It is consulted only after the normalized pattern has
 /// been found relative, so absolute patterns still avoid base resolution.
-pub(super) fn expand_glob_with_base_cache(
+fn expand_glob_with_base_cache(
     pattern: &str,
     base: &GlobBaseCache,
-) -> std::result::Result<GlobExpansion, Error> {
-    let prepared = PreparedGlob::new_with_base_cache(pattern, base)?;
+) -> std::result::Result<GlobExpansion, GlobExpansionFailure> {
+    let prepared = PreparedGlob::new_with_base_cache_for_template(pattern, base)?;
     expand_prepared_glob(&prepared)
 }
 
 /// Expand one already-prepared glob search and collect its diagnostic data.
-fn expand_prepared_glob(prepared: &PreparedGlob) -> std::result::Result<GlobExpansion, Error> {
+fn expand_prepared_glob(
+    prepared: &PreparedGlob,
+) -> std::result::Result<GlobExpansion, GlobExpansionFailure> {
     use glob::{MatchOptions, glob_with};
 
     let opts = MatchOptions {
@@ -311,7 +313,7 @@ fn expand_prepared_glob(prepared: &PreparedGlob) -> std::result::Result<GlobExpa
     };
 
     let entries = glob_with(prepared.search(), opts).map_err(|e| {
-        create_glob_error(
+        GlobExpansionFailure::InvalidPattern(create_glob_error(
             &GlobErrorContext {
                 pattern: prepared.pattern.raw().to_owned(),
                 error_char: char::from(0),
@@ -319,7 +321,7 @@ fn expand_prepared_glob(prepared: &PreparedGlob) -> std::result::Result<GlobExpa
                 error_type: GlobErrorType::InvalidPattern,
             },
             Some(e.to_string()),
-        )
+        ))
     })?;
 
     // `search` already embeds the injected base (`base.join(normalized)`), so
@@ -327,7 +329,7 @@ fn expand_prepared_glob(prepared: &PreparedGlob) -> std::result::Result<GlobExpa
     // rather than passing `base` again: doing the latter would reopen the base
     // directory and then traverse its own name, doubling the path component.
     let Some(root) = open_root_dir(prepared.search(), None).map_err(|e| {
-        create_glob_error(
+        GlobExpansionFailure::CapabilityRootIo(create_glob_error(
             &GlobErrorContext {
                 pattern: prepared.pattern.raw().to_owned(),
                 error_char: char::from(0),
@@ -335,7 +337,7 @@ fn expand_prepared_glob(prepared: &PreparedGlob) -> std::result::Result<GlobExpa
                 error_type: GlobErrorType::IoError,
             },
             Some(e.to_string()),
-        )
+        ))
     })?
     else {
         // The pattern's literal directory prefix does not exist, so the
@@ -350,7 +352,9 @@ fn expand_prepared_glob(prepared: &PreparedGlob) -> std::result::Result<GlobExpa
     let mut paths = Vec::new();
     let mut skipped = GlobSkippedEntries::default();
     for entry in entries {
-        match process_glob_entry(entry, &prepared.pattern, &root)? {
+        match process_glob_entry(entry, &prepared.pattern, &root)
+            .map_err(GlobExpansionFailure::GlobEntryProcessing)?
+        {
             GlobEntry::Path(path) => paths.push(strip_base(prepared.strip.as_deref(), &path)),
             GlobEntry::UnreachableSymlink(relative) => {
                 skipped.record_unreachable_symlink(relative);

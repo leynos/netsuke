@@ -95,7 +95,7 @@ DF12_PYTHON_LINTS_REF ?= v0.3.0
 DF12_PYTHON_LINTS = git+https://github.com/leynos/df12-python-lints.git@$(DF12_PYTHON_LINTS_REF)
 DF12_PYLINT_MESSAGES = R9101,C9102,R9103,R9104,C9105,C9106,C9107,R9108,R9109,R9110,R9111,R9112,C9112
 DF12_PYLINT = $(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
-	--from '$(DF12_PYTHON_LINTS)' pylint \
+	--from 'pylint' --with '$(DF12_PYTHON_LINTS)' pylint \
 	--disable=all --load-plugins=df12_python_lints \
 	--enable=$(DF12_PYLINT_MESSAGES)
 AMBRLEAKS = $(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
@@ -123,7 +123,6 @@ MD_FILES_FIND = find . -type f -name '*.md' \
 PROVER_TOOLS_SOURCE ?= git+https://github.com/leynos/rust-prover-tools@b07ef696f8373d54ae68e517d39d47a5d27a5bd5
 PROVER_TOOLS ?= uv tool run --from $(PROVER_TOOLS_SOURCE) prover-tools
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
-export RUSTDOC_FLAGS
 VERUS_FLAGS ?=
 VERUS_INSTALL_FLAGS ?=
 WHITAKER ?= whitaker
@@ -223,7 +222,7 @@ typecheck-python: ## Typecheck the Python sources with ty
 		--extra-search-path scripts $(PYTHON_SOURCES)
 
 markdownlint: spelling ## Lint Markdown and enforce en-GB-oxendict spelling
-	$(MDLINT) "**/*.md"
+	@unset FORCE_COLOR; $(MDLINT) "**/*.md"
 
 spelling: spelling-config ## Enforce en-GB-oxendict spelling in Markdown prose
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) scripts/typos_rollout_check.py --repository .

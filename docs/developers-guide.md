@@ -2454,11 +2454,16 @@ without having to reproduce it.
   `error_category=shell_quoting_required` when its shell-safety boundary
   rejects a match. It also records
   `netsuke_manifest_template_glob_expansions_total`, labelled with the closed
-  `base_mode` (`injected`, `process_working_directory`) and `outcome`
-  (`matched`, `unopenable_prefix`, `error`) sets, plus the unlabelled
-  `netsuke_manifest_template_glob_expansion_duration_seconds` histogram. The
-  base mode describes whether the parse was given a manifest root; absolute
-  patterns still avoid resolving that root.
+  `base_mode` (`absolute_pattern`, `relative_without_base`,
+  `relative_with_base`) and `outcome` (`matched`, `unopenable_prefix`,
+  `invalid_pattern`, `base_canonicalization_failure`, `utf8_conversion_failure`,
+  `capability_root_io_failure`, `glob_entry_processing_failure`) sets, plus
+  the unlabelled `netsuke_manifest_template_glob_expansion_duration_seconds`
+  histogram. The base mode classifies the pattern and manifest-root context;
+  absolute patterns bypass the configured root without resolving it. Direct
+  `glob_paths` queries remain pure and emit no metrics or tracing.
+  Template-boundary tracing uses the same bounded mode and outcome fields, with
+  caller-controlled paths and error text redacted.
 - **Tracing** — every caller-controlled path field is replaced with the stable
   `<redacted>` marker: patterns, prefixes, and sampled relative matches. A
   skipped unreachable-symlink event is emitted only for the retained sample,
@@ -2467,8 +2472,8 @@ without having to reproduce it.
   pattern so invalid input can be explained precisely. Adapter rejection events
   use the same `<redacted>` path marker and carry only the bounded outcome and
   error category. Template-expansion success, unopenable prefix, and error
-  events carry only the same bounded mode and outcome fields; errors use the
-  fixed `expansion_failure` category.
+  events carry only the same bounded mode and outcome fields; failures use the
+  closed outcome set documented above.
 
 ## Test isolation utilities
 

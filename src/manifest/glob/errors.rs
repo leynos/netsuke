@@ -3,6 +3,48 @@ use minijinja::{Error, ErrorKind};
 
 use crate::localization::{self, keys};
 
+/// Classify a manifest-template glob failure before it becomes a render error.
+///
+/// The variants are deliberately the closed `outcome` label set emitted by the
+/// manifest-template telemetry boundary. They retain the existing rendered
+/// error so direct callers continue to receive the same diagnostic detail.
+pub(super) enum GlobExpansionFailure {
+    /// A pattern was rejected before or during glob compilation.
+    InvalidPattern(Error),
+    /// Resolving an injected base could not canonicalize its filesystem path.
+    BaseCanonicalization(Error),
+    /// A resolved filesystem path could not be represented as UTF-8.
+    Utf8Conversion(Error),
+    /// Opening the capability-scoped literal prefix failed unexpectedly.
+    CapabilityRootIo(Error),
+    /// Processing an entry returned by the glob walker failed.
+    GlobEntryProcessing(Error),
+}
+
+impl GlobExpansionFailure {
+    /// Return the bounded metric outcome for this failure.
+    pub(super) const fn outcome(&self) -> &'static str {
+        match self {
+            Self::InvalidPattern(_) => "invalid_pattern",
+            Self::BaseCanonicalization(_) => "base_canonicalization_failure",
+            Self::Utf8Conversion(_) => "utf8_conversion_failure",
+            Self::CapabilityRootIo(_) => "capability_root_io_failure",
+            Self::GlobEntryProcessing(_) => "glob_entry_processing_failure",
+        }
+    }
+
+    /// Recover the existing render error after recording its bounded outcome.
+    pub(super) fn into_error(self) -> Error {
+        match self {
+            Self::InvalidPattern(error)
+            | Self::BaseCanonicalization(error)
+            | Self::Utf8Conversion(error)
+            | Self::CapabilityRootIo(error)
+            | Self::GlobEntryProcessing(error) => error,
+        }
+    }
+}
+
 /// Context describing a glob pattern failure.
 #[derive(Debug)]
 pub(super) struct GlobErrorContext {

@@ -19,6 +19,9 @@ use rstest::rstest;
 use tempfile::tempdir;
 use test_support::fs as test_fs;
 
+#[path = "template_modes.rs"]
+mod template_modes;
+
 /// Expand and record at the manifest adapter's telemetry boundary.
 fn expand_and_record(pattern: &str) -> Result<Vec<String>> {
     let base = GlobBaseCache::new(None);
@@ -102,9 +105,9 @@ fn a_completed_expansion_counts_its_matches() -> Result<()> {
         counter_value_with_labels(
             &snapshot,
             TEMPLATE_EXPANSIONS,
-            &[("base_mode", "injected"), ("outcome", "matched")]
+            &[("base_mode", "relative_with_base"), ("outcome", "matched")]
         ) == Some(1),
-        "the template boundary should record one injected matched result: {snapshot:?}"
+        "the template boundary should record one based matched result: {snapshot:?}"
     );
     ensure!(
         has_histogram(&snapshot, TEMPLATE_EXPANSION_DURATION),
@@ -113,7 +116,7 @@ fn a_completed_expansion_counts_its_matches() -> Result<()> {
     ensure!(
         events.iter().any(|event| {
             event.contains("operation=\"manifest_template_glob_expansion\"")
-                && event.contains("base_mode=\"injected\"")
+                && event.contains("base_mode=\"relative_with_base\"")
                 && event.contains("outcome=\"matched\"")
                 && event.contains("manifest template glob expansion completed")
         }),
@@ -154,9 +157,12 @@ fn an_unopenable_prefix_counts_and_names_the_prefix() -> Result<()> {
         counter_value_with_labels(
             &snapshot,
             TEMPLATE_EXPANSIONS,
-            &[("base_mode", "injected"), ("outcome", "unopenable_prefix")]
+            &[
+                ("base_mode", "relative_with_base"),
+                ("outcome", "unopenable_prefix"),
+            ]
         ) == Some(1),
-        "the template boundary should record one injected unopenable result: {snapshot:?}"
+        "the template boundary should record one based unopenable result: {snapshot:?}"
     );
     ensure!(
         has_histogram(&snapshot, TEMPLATE_EXPANSION_DURATION),
@@ -165,7 +171,7 @@ fn an_unopenable_prefix_counts_and_names_the_prefix() -> Result<()> {
     ensure!(
         events.iter().any(|event| {
             event.contains("operation=\"manifest_template_glob_expansion\"")
-                && event.contains("base_mode=\"injected\"")
+                && event.contains("base_mode=\"relative_with_base\"")
                 && event.contains("outcome=\"unopenable_prefix\"")
                 && event.contains("manifest template glob expansion completed")
         }),
@@ -198,8 +204,8 @@ fn a_failed_template_expansion_records_a_bounded_error_outcome() -> Result<()> {
             &snapshot,
             TEMPLATE_EXPANSIONS,
             &[
-                ("base_mode", "process_working_directory"),
-                ("outcome", "error"),
+                ("base_mode", "relative_without_base"),
+                ("outcome", "invalid_pattern"),
             ]
         ) == Some(1),
         "the template boundary should record one unbased error result: {snapshot:?}"
@@ -211,7 +217,8 @@ fn a_failed_template_expansion_records_a_bounded_error_outcome() -> Result<()> {
     ensure!(
         events.iter().any(|event| {
             event.contains("operation=\"manifest_template_glob_expansion\"")
-                && event.contains("outcome=\"error\"")
+                && event.contains("base_mode=\"relative_without_base\"")
+                && event.contains("outcome=\"invalid_pattern\"")
                 && event.contains("error_category=\"expansion_failure\"")
                 && event.contains("manifest template glob expansion failed")
         }),

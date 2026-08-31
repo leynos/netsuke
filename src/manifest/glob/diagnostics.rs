@@ -23,7 +23,8 @@
 //! with the same redaction, so its relative form cannot disclose a filename
 //! selected by the pattern.
 
-use super::{GlobBaseCache, GlobExpansion, GlobOutcome, GlobSkippedEntries};
+use super::{GlobBaseCache, GlobExpansion, GlobExpansionFailure, GlobOutcome, GlobSkippedEntries};
+use camino::Utf8Path;
 use metrics::{counter, describe_counter, describe_histogram, histogram};
 use minijinja::Error;
 use std::{sync::Once, time::Duration};
@@ -81,8 +82,11 @@ fn describe_metrics() {
         describe_counter!(
             TEMPLATE_EXPANSIONS_TOTAL,
             "Counts manifest-template glob expansion results labelled by \
-             base_mode (injected or process_working_directory) and outcome \
-             (matched, unopenable_prefix, or error)."
+             base_mode (absolute_pattern, relative_without_base, or \
+             relative_with_base) and outcome (matched, unopenable_prefix, \
+             invalid_pattern, base_canonicalization_failure, \
+             utf8_conversion_failure, capability_root_io_failure, or \
+             glob_entry_processing_failure)."
         );
         describe_histogram!(
             TEMPLATE_EXPANSION_DURATION,
@@ -156,55 +160,68 @@ pub(in crate::manifest) fn expand_manifest_template_glob(
     pattern: &str,
     base: &GlobBaseCache,
 ) -> std::result::Result<GlobExpansion, Error> {
-    let base_mode = base.mode();
-    let _span =
-        tracing::debug_span!("manifest.template_glob", operation = "expand", base_mode).entered();
+    let normalized = super::normalize::normalize_separators(pattern);
+    let base_mode = base.mode(Utf8Path::new(&normalized));
+    let span = tracing::debug_span!(
+        "manifest.template_glob",
+        operation = "expand",
+        base_mode,
+        outcome = tracing::field::Empty,
+    );
+    let _guard = span.enter();
     let started = std::time::Instant::now();
     let result = super::expand_glob_with_base_cache(pattern, base);
-    record_template_expansion(&result, started.elapsed(), base_mode);
-    result
+    let outcome = record_template_expansion(&result, started.elapsed(), base_mode);
+    span.record("outcome", outcome);
+    result.map_err(GlobExpansionFailure::into_error)
 }
 
 /// Record one completed or failed manifest-template glob expansion.
 fn record_template_expansion(
-    result: &std::result::Result<GlobExpansion, Error>,
+    result: &std::result::Result<GlobExpansion, GlobExpansionFailure>,
     duration: Duration,
     base_mode: &'static str,
-) {
+) -> &'static str {
     describe_metrics();
     histogram!(TEMPLATE_EXPANSION_DURATION).record(duration.as_secs_f64());
-    if let Ok(expansion) = result {
-        record(expansion);
-        let outcome = match expansion.outcome {
-            GlobOutcome::Matched => "matched",
-            GlobOutcome::UnopenablePrefix => "unopenable_prefix",
-        };
-        counter!(
-            TEMPLATE_EXPANSIONS_TOTAL,
-            "base_mode" => base_mode,
-            "outcome" => outcome
-        )
-        .increment(1);
-        tracing::debug!(
-            operation = "manifest_template_glob_expansion",
-            base_mode,
-            outcome,
-            "manifest template glob expansion completed"
-        );
-    } else {
-        counter!(
-            TEMPLATE_EXPANSIONS_TOTAL,
-            "base_mode" => base_mode,
-            "outcome" => "error"
-        )
-        .increment(1);
-        tracing::debug!(
-            operation = "manifest_template_glob_expansion",
-            base_mode,
-            outcome = "error",
-            error_category = "expansion_failure",
-            "manifest template glob expansion failed"
-        );
+    match result {
+        Ok(expansion) => {
+            record(expansion);
+            let outcome = match expansion.outcome {
+                GlobOutcome::Matched => "matched",
+                GlobOutcome::UnopenablePrefix => "unopenable_prefix",
+            };
+            counter!(
+                TEMPLATE_EXPANSIONS_TOTAL,
+                "base_mode" => base_mode,
+                "outcome" => outcome
+            )
+            .increment(1);
+            tracing::debug!(
+                operation = "manifest_template_glob_expansion",
+                base_mode,
+                outcome,
+                "manifest template glob expansion completed"
+            );
+            outcome
+        }
+        Err(failure) => {
+            let outcome = failure.outcome();
+            counter!(
+                TEMPLATE_EXPANSIONS_TOTAL,
+                "base_mode" => base_mode,
+                "outcome" => outcome
+            )
+            .increment(1);
+            tracing::debug!(
+                operation = "manifest_template_glob_expansion",
+                base_mode,
+                outcome,
+                error_category = "expansion_failure",
+                "manifest template glob expansion failed"
+            );
+            outcome
+        }
     }
 }
 
