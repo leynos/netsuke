@@ -158,14 +158,14 @@ Observable success means:
   sites stayed stable while tokens became authoritative for prefixes and
   spacing.
 
-- Observation: strict clippy/lint behaviour has already required `build.rs`
-  anchors for shared CLI helpers. Evidence: `build.rs` contains `const _`
-  symbol anchors for `cli::json_hint_from_args`, `cli_l10n::parse_bool_hint`,
-  and related helpers. Impact: new theme parsing helpers must follow the same
-  pattern. Superseded: the build script then recompiled library modules with
-  module-level `#[expect(dead_code, ...)]` attributes (and `unused_imports` for
-  `cli`), not per-symbol anchors; it now narrows its compiled module slice
-  instead.
+- Observation: strict clippy/lint behaviour historically required `build.rs`
+  anchors for shared CLI helpers. Historical evidence: an earlier `build.rs`
+  revision used `const _` symbol anchors for `cli::json_hint_from_args`,
+  `cli_l10n::parse_bool_hint`, and related helpers. Impact: new theme parsing
+  helpers then had to follow that pattern. Superseded: current `build.rs`
+  compiles a narrowed set of reachable module slices instead, keeping rustc's
+  unused-item analysis meaningful without per-symbol anchors or module-wide
+  `#[expect(dead_code, ...)]` suppressions.
 
 - Observation: the repository already contained a dormant `tests/cli_tests/`
   module tree that was not an active Cargo integration target. Evidence:

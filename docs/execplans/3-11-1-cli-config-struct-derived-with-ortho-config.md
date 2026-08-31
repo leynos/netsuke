@@ -264,9 +264,11 @@ them in the order presented to build understanding.
 
 **Build script:**
 
-- `build.rs`: compiles shared CLI modules via `#[path = ...]` and pins
-  shared symbols with `const _` anchors. Any new public function in
-  `src/cli/mod.rs` or `src/cli_l10n.rs` must be anchored here.
+- `build.rs`: historically compiled shared CLI modules via `#[path = ...]` and
+  pinned shared symbols such as `cli::json_hint_from_args` and
+  `cli_l10n::parse_bool_hint` with `const _` anchors. Superseded: current
+  `build.rs` compiles a narrowed set of reachable module slices instead; keep
+  new dependencies within that slice rather than adding per-symbol anchors.
 
 **Tests:**
 
