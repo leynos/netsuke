@@ -478,9 +478,10 @@ any new Ninja grammar position rather than reusing command escaping.
 [ADR-015](adr-015-manifest-linting-under-netsuke-check.md) records the
 decisions behind it; this section is the mechanics.
 
-A new rule touches four places and nothing else. It does not touch the
-command-line interface, the output schema, or the localization catalogues,
-which is the property that keeps the rule set cheap to grow.
+A new rule touches four implementation places, plus the tests described at the
+end of this section, and nothing else. It does not touch the command-line
+interface, the output schema, or the localization catalogues, which is the
+property that keeps the rule set cheap to grow.
 
 1. **Pick the stage.** A rule binds to exactly one of four: `Document` sees the
    authored source with exact spans and unexpanded templates, `Manifest` sees

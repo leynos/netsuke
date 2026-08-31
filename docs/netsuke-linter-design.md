@@ -135,6 +135,8 @@ stages consumes the artefact produced immediately above it, a fourth stage
 inspects the suppression directives themselves, and all four feed one finding
 sink.
 
+Figure: the linter's four stage hooks over the compiler pipeline
+
 ```mermaid
 flowchart TD
     SRC["Netsukefile source text"]
@@ -432,7 +434,7 @@ Table: flags added by `netsuke check`
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------- |
 | `--rule <NAME=SEVERITY>` | Repeatable policy selector, described in section 7.                                                                   |
 | `--fail-on <SEVERITY>`   | Threshold at which findings fail the command.                                                                         |
-| `--limit <N>`            | Maximum findings reported. `0` means unbounded.                                                                       |
+| `--limit <N>`            | Maximum findings reported, keeping the first in source order. `0` disables the limit and reports every finding.       |
 | `--explain [NAME]`       | Print the rule reference for one rule, or the whole catalogue when no name is given, instead of analysing a manifest. |
 
 `--explain` is a mode of `check` rather than a top-level `explain` command
@@ -455,7 +457,7 @@ rule that `--json` is the only structured result mode.
 
 ### 9.2 JSON output
 
-`netsuke check --json` emits exactly one document, using the shared envelope.
+`netsuke --json check` emits exactly one document, using the shared envelope.
 The per-finding object is the existing diagnostic entry shape, so a consumer
 parses one finding representation regardless of which branch it arrives in.
 
@@ -523,8 +525,8 @@ A consumer reads `result.findings` when present and `diagnostics[0].related`
 otherwise. Both arrays are bounded by `--limit`, and `result.truncated` or the
 threshold message states when truncation occurred.
 
-`--explain --json` emits a result document whose `result.command` is
-`check-explain` and whose `result.rules` array carries the registry: name,
+`netsuke --json check --explain` emits a result document whose `result.command`
+is `check-explain` and whose `result.rules` array carries the registry: name,
 category, stage, default severity, diagnostic code, summary, rationale,
 remediation, and documentation URL for every rule. This is the catalogue an
 editor or agent reads to build a rule picker without scraping prose.

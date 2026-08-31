@@ -427,7 +427,7 @@ cli.subcommand.check.flag.limit.help = Số phát hiện tối đa được báo
 cli.subcommand.check.flag.explain.help = In tài liệu tham chiếu quy tắc thay vì kiểm tra tệp kê khai.
 check.threshold_exceeded = Các phát hiện đã chạm ngưỡng { $severity }: { $failing } trên { $reported } đã báo cáo.
 check.threshold_exceeded.help = Hãy sửa các phát hiện đã báo cáo, điều chỉnh --rule hoặc nới --fail-on.
-check.summary.counts = Kết quả kiểm tra — lỗi: { $errors }, cảnh báo: { $warnings }, khuyến nghị: { $advice }, đã chặn: { $suppressed }.
+check.summary.counts = Kết quả kiểm tra — lỗi: { $errors }, cảnh báo: { $warnings }, khuyến nghị: { $advice }, đã ẩn: { $suppressed }.
 check.summary.clean = Không có phát hiện nào.
 check.summary.truncated = Đang hiển thị { $shown } phát hiện; --limit đã bỏ qua { $omitted } phát hiện khác.
 check.rule.malformed = Bộ chọn { $selector } không được viết dạng NAME=SEVERITY.

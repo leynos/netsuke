@@ -1235,7 +1235,8 @@ rule = ["clarity=off", "unreachable-target=warning"]
 fail_on = "warning"
 ```
 
-`--limit <N>` caps the number of findings reported; `0` reports all of them.
+`--limit <N>` caps the number of findings reported, truncating the least severe
+first; `0` disables the limit and reports every finding.
 
 Silence one finding with a comment that names the rules it allows and states a
 reason. A directive on its own line governs the declaration beneath it,
@@ -1268,7 +1269,7 @@ writes a diagnostic document whose single top-level entry is the threshold
 summary and whose `related` array holds the same findings. Both arrays use the
 same per-finding shape as any other Netsuke diagnostic, so a consumer reads
 `result.findings` when it is present and `diagnostics[0].related` otherwise.
-`netsuke check --explain --json` emits the rule catalogue as a result document
+`netsuke --json check --explain` emits the rule catalogue as a result document
 whose `result.command` is `check-explain`.
 
 ## Configure Netsuke

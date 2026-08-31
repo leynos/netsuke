@@ -2,11 +2,13 @@
 
 ## Status
 
-Accepted, with the rule set shipped as a prototype. `netsuke check` is the
-manifest linter: findings are the command's result rather than its failure
-mode, and rule identifiers are stable kebab-case names owned by a static
-registry. Rule prose stays in that registry for the prototype period and moves
-to the Fluent catalogues under roadmap step 7.2; rule identifiers never move.
+Accepted.
+
+`netsuke check` is the manifest linter, shipped with the rule set as a
+prototype: findings are the command's result rather than its failure mode, and
+rule identifiers are stable kebab-case names owned by a static registry. Rule
+prose stays in that registry for the prototype period and moves to the Fluent
+catalogues under roadmap step 7.2; rule identifiers never move.
 
 Roadmap phase 7 owns the work that turns the prototype into a supported
 feature. The rule set, the default severities, and everything in the

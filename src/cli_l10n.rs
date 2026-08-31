@@ -306,6 +306,25 @@ mod tests {
         assert_eq!(about.long, long, "{name} long about key");
     }
 
+    /// Every `check` flag resolves to its own localized help key, and an
+    /// unrecognized identifier falls through rather than borrowing one.
+    ///
+    /// The fallback case is the one worth pinning: a routing table that
+    /// returned some key for an unknown argument would silently mislabel any
+    /// flag added later without being wired up here.
+    #[rstest]
+    #[case("rule", Some(keys::CLI_SUBCOMMAND_CHECK_FLAG_RULE_HELP))]
+    #[case("fail_on", Some(keys::CLI_SUBCOMMAND_CHECK_FLAG_FAIL_ON_HELP))]
+    #[case("limit", Some(keys::CLI_SUBCOMMAND_CHECK_FLAG_LIMIT_HELP))]
+    #[case("explain", Some(keys::CLI_SUBCOMMAND_CHECK_FLAG_EXPLAIN_HELP))]
+    #[case("no_such_flag", None)]
+    fn check_flags_resolve_to_their_help_keys(
+        #[case] arg_id: &str,
+        #[case] expected: Option<&str>,
+    ) {
+        assert_eq!(flag_help_key(arg_id, Some(Subcommand::Check)), expected);
+    }
+
     /// No two subcommands may share an about key.
     ///
     /// A copy-and-paste slip in the routing table is otherwise invisible: two

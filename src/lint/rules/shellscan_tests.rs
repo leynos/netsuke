@@ -97,6 +97,43 @@ fn the_leading_word_reports_its_offset() {
     assert_eq!(segment.get(offset..offset + word.len()), Some(word));
 }
 
+/// A shell comment is prose the shell never runs, so constructs inside one
+/// must not be reported.
+#[rstest]
+#[case("# source the environment", "source")]
+#[case("cc -c a.c  # use function here", "function")]
+#[case("printf x\n# local note", "local")]
+fn a_construct_inside_a_shell_comment_is_inert(#[case] text: &str, #[case] needle: &str) {
+    assert_eq!(find_words(text, needle), Vec::new());
+}
+
+/// A `#` inside a word is ordinary text, and a comment ends at the newline.
+#[rstest]
+#[case("cc -o a#b source ./env.sh", "source", 1)]
+#[case("echo '# source'", "source", 0)]
+#[case("# note\nsource ./env.sh", "source", 1)]
+fn comment_detection_respects_word_and_line_boundaries(
+    #[case] text: &str,
+    #[case] needle: &str,
+    #[case] expected: usize,
+) {
+    assert_eq!(find_words(text, needle).len(), expected);
+}
+
+/// The leading word is located by position, not by searching for its text.
+///
+/// `CC=gcc gcc -c a.c` repeats `gcc` inside the assignment, so an offset
+/// recovered with `find` would point at the assignment's value instead of the
+/// command.
+#[test]
+fn the_leading_word_offset_skips_a_repeated_assignment_value() {
+    let segment = "CC=gcc gcc -c a.c";
+    let (offset, word) = leading_word(segment).expect("the segment names a command");
+    assert_eq!(word, "gcc");
+    assert_eq!(offset, 7, "the offset should point past the assignment");
+    assert_eq!(segment.get(offset..offset + word.len()), Some("gcc"));
+}
+
 #[test]
 fn a_mask_reports_nothing_active_past_the_end() {
     assert!(!Mask::new("abc").is_active(99));
