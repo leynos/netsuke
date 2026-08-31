@@ -1244,6 +1244,7 @@ untracked-file discovery, or per-linter file selection.
   - Success: the documented example omits its Rust target for a Python-only
     changeset, includes it for every Rust path class, and passes the repository
     documentation and behavioural gates.
+
 ## 7. Netsukefile testing framework
 
 Hypothesis: Netsukefile authors adopt manifest-time testing when it is
