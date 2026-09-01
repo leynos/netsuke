@@ -8,6 +8,7 @@ use crate::stdlib::NetworkPolicy;
 use crate::test_tracing_capture::with_test_subscriber;
 use anyhow::{Context, Result as AnyResult, anyhow, ensure};
 use camino::Utf8Path;
+use metrics_util::debugging::DebuggingRecorder;
 use rstest::rstest;
 use std::{path::Path, sync::Arc};
 use tempfile::tempdir;
@@ -338,9 +339,13 @@ fn manifest_query_does_not_emit_expansion_telemetry() -> AnyResult<()> {
         ),
     )?;
 
-    let events = with_test_subscriber(LevelFilter::DEBUG, |captured| {
-        from_path_for_manifest_query(&manifest_path, None)?;
-        Ok::<_, anyhow::Error>(captured.snapshot())
+    let recorder = DebuggingRecorder::new();
+    let snapshotter = recorder.snapshotter();
+    let events = metrics::with_local_recorder(&recorder, || {
+        with_test_subscriber(LevelFilter::DEBUG, |captured| {
+            from_path_for_manifest_query(&manifest_path, None)?;
+            Ok::<_, anyhow::Error>(captured.snapshot())
+        })
     })?;
 
     ensure!(
@@ -350,6 +355,19 @@ fn manifest_query_does_not_emit_expansion_telemetry() -> AnyResult<()> {
         ),
         "manifest queries must not emit expansion telemetry: {events:?}"
     );
+    let snapshot = snapshotter.snapshot().into_vec();
+    for metric_name in [
+        "netsuke_manifest_filtered_targets_total",
+        "netsuke_manifest_filtered_actions_total",
+        "netsuke_manifest_omitted_filtered_entries_total",
+    ] {
+        ensure!(
+            snapshot
+                .iter()
+                .all(|(key, _, _, _)| key.key().name() != metric_name),
+            "manifest queries must not emit {metric_name}: {snapshot:?}"
+        );
+    }
     Ok(())
 }
 const QUERY_SECRET: &str = "help-query-secret";

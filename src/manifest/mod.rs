@@ -40,8 +40,8 @@ mod expand;
 mod glob;
 mod hints;
 mod jinja_macros;
-mod loading;
 mod load_stage;
+mod loading;
 mod parse_with_config;
 mod query;
 mod render;
@@ -395,7 +395,6 @@ pub fn from_path_with_policy_and_env(
 }
 
 mod env_reader;
-mod workspace;
-
 #[cfg(test)]
 mod tests;
+mod workspace;
