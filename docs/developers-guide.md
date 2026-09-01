@@ -625,10 +625,10 @@ the remaining harness consequences of that policy.
 The pull-request `windows-native-recipe-smoke` job in
 [`ci.yml`](../.github/workflows/ci.yml) is the native Windows execution gate.
 It waits for the successful `build-test-windows` job, then runs on
-`windows-latest` with `pwsh` as the shell for every `run` step. It checks out
-the pull request source, installs the pinned nightly from `rust-toolchain.toml`
-through the shared Rust setup action, installs Ninja, and builds the `netsuke`
-binary from that checkout. The job then invokes:
+`namespace-profile-netsuke-windows` with `pwsh` as the shell for every `run`
+step. It checks out the pull request source, installs the pinned nightly from
+`rust-toolchain.toml` through the shared Rust setup action, installs Ninja, and
+builds the `netsuke` binary from that checkout. The job then invokes:
 
 ```powershell
 ./scripts/windows-recipe-smoke.ps1 `
@@ -651,6 +651,40 @@ installation, binary build, smoke script, and
 source itself; the release publication job separately requires both this smoke
 job and the platform package jobs in its `needs` list. Consequently, release
 publication cannot proceed unless the native Windows smoke test passes.
+
+## GitHub Actions runner profiles
+
+Repository-owned jobs run on Namespace runner profiles where the service
+provides the required native architecture. The profile tags and workflow labels
+are an external deployment contract: configure them in the Namespace workspace
+connected to the repository before merging a workflow change that names them.
+
+Table: Namespace runner profiles used by Netsuke.
+
+| Profile tag            | Workflow label                          | Operating system    | Machine shape | Intended workload                         |
+| ---------------------- | --------------------------------------- | ------------------- | ------------- | ----------------------------------------- |
+| `netsuke-ci`           | `nscloud-netsuke-ci`                    | Ubuntu 24.04        | 8 vCPU, 16 GB | Full Linux formatting, lint and test CI   |
+| `netsuke`              | `nscloud-netsuke`                       | Ubuntu 24.04        | 4 vCPU, 8 GB  | Packaging, coverage and utility jobs      |
+| `netsuke-ubuntu-22-04` | `nscloud-netsuke-ubuntu-22-04`          | Ubuntu 22.04        | 4 vCPU, 8 GB  | Ubuntu 22.04 compatibility build          |
+| `netsuke-windows-ci`   | `namespace-profile-netsuke-windows-ci`  | Windows Server 2022 | 8 vCPU, 16 GB | Full Windows formatting, lint and test CI |
+| `netsuke-windows`      | `namespace-profile-netsuke-windows`     | Windows Server 2022 | 4 vCPU, 8 GB  | Windows packaging and smoke tests         |
+| `netsuke-macos-arm64`  | `namespace-profile-netsuke-macos-arm64` | macOS Sequoia       | 6 vCPU, 14 GB | ARM64 macOS packaging                     |
+
+Use `nsc github profile list -o json` and `nsc github profile describe` to
+inspect the deployed profiles. Treat profile creation, updates, deletion and
+base-image rebuilds as infrastructure changes; review the effective profile
+specification before applying them.
+
+The `nsc github profile create` command provisions Linux profiles. Native
+Windows and macOS profiles are created in the Namespace dashboard and use the
+`namespace-profile-*` label form. Linux profiles created by the CLI use
+`nscloud-*`. The x86_64 macOS package remains on `macos-15-intel` because
+Namespace's macOS estate is ARM64-only. The mutation-testing and Dependabot
+auto-merge callers also retain the runners selected by their SHA-pinned
+reusable workflows in `leynos/shared-actions`; a caller cannot override a
+reusable workflow's `runs-on` value. The workflow contract tests in
+`tests/workflow_contracts/namespace_runners_test.py` hold these ownership and
+platform boundaries.
 
 ## Quality gates
 
@@ -3632,11 +3666,11 @@ cannot run elsewhere.
 
 The `build-test-windows` job in `.github/workflows/ci.yml` is a merge gate: it
 compiles, lints (Clippy and Whitaker), and tests the `#[cfg(windows)]` suite on
-`windows-latest` under `-D warnings`, so a Windows-gated test or lint finding
-blocks a merge. The split still stands: host-independent rules stay in the
-`#[cfg(any(windows, test))]` unit tests so every host — including a developer
-on Unix — exercises them, while the Windows-gated suite covers the behaviour
-that only exists there.
+`namespace-profile-netsuke-windows-ci` under `-D warnings`, so a Windows-gated
+test or lint finding blocks a merge. The split still stands: host-independent
+rules stay in the `#[cfg(any(windows, test))]` unit tests so every host —
+including a developer on Unix — exercises them, while the Windows-gated suite
+covers the behaviour that only exists there.
 
 The Windows job installs GNU Make through Chocolatey and Ninja through the
 setup action, then runs its Makefile gates through Git Bash with `SHELL=bash`.

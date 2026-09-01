@@ -26,7 +26,7 @@ env:
 
 jobs:
   build-test:
-    runs-on: ubuntu-latest
+    runs-on: nscloud-netsuke-ci
     permissions:
       contents: read
     env:
@@ -184,7 +184,7 @@ jobs:
   build-test-windows:
     # Gates merges: the `#[cfg(windows)]` tree is compiled, linted, and tested
     # under `-D warnings` on this platform (see #518).
-    runs-on: windows-latest
+    runs-on: namespace-profile-netsuke-windows-ci
     permissions:
       contents: read
     env:
@@ -197,8 +197,9 @@ jobs:
     defaults:
       run:
         # The Makefile uses POSIX shell constructs throughout; Git Bash is
-        # preinstalled on windows-latest. GNU Make's default recipe shell on
-        # Windows is cmd.exe, so every make invocation overrides SHELL to bash.
+        # preinstalled on the Namespace Windows image. GNU Make's default recipe
+        # shell on Windows is cmd.exe, so every make invocation overrides SHELL
+        # to bash.
         shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -308,7 +309,7 @@ jobs:
     # PowerShell-launched Netsuke directs Ninja legacy recipes to the
     # PowerShell interpreter selected by the Windows contract (#599).
     needs: build-test-windows
-    runs-on: windows-latest
+    runs-on: namespace-profile-netsuke-windows
     permissions:
       contents: read
     env:
@@ -338,7 +339,7 @@ jobs:
 
   kani-smoke:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: nscloud-netsuke
     timeout-minutes: 20
     permissions:
       contents: read

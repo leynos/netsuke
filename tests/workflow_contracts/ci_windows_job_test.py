@@ -100,10 +100,11 @@ def windows_steps() -> list[dict[str, object]]:
     return job_steps(load_workflow(), WINDOWS_JOB)
 
 
-def test_windows_job_runs_on_windows_latest(windows_job: dict[str, object]) -> None:
-    """The Windows job must actually run on a Windows runner."""
-    assert windows_job.get("runs-on") == "windows-latest", (
-        f"{WINDOWS_JOB} must run on windows-latest so the "
+def test_windows_job_runs_on_namespace_windows(windows_job: dict[str, object]) -> None:
+    """The Windows job must run on the full-gate Namespace profile."""
+    expected_runner = "namespace-profile-netsuke-windows-ci"
+    assert windows_job.get("runs-on") == expected_runner, (
+        f"{WINDOWS_JOB} must run on {expected_runner} so the "
         f"#[cfg(windows)] tree is compiled, got {windows_job.get('runs-on')!r}"
     )
 

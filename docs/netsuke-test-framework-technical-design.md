@@ -684,8 +684,8 @@ Timeout behaviour in the parent:
    already bounds stdlib command helpers.
 3. On expiry, kill the child and reap it. `std::process::Child::kill` maps
    to `SIGKILL` on Unix and `TerminateProcess` on Windows, so termination needs
-   no platform-specific code; CI covers both (`ubuntu-latest` and
-   `windows-latest`).
+   no platform-specific code; CI covers both through the Namespace Ubuntu and
+   Windows profiles.
 4. Collect a partial result if the protocol delivered one complete frame
    before termination; otherwise synthesize an errored `CaseResult` carrying a
    timeout diagnostic.
