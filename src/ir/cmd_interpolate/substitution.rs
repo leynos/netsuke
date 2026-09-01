@@ -3,6 +3,26 @@
 use super::{CommandBindings, IrGenError, QuoteContext, find_substitution, invalid_command_error};
 use crate::recipe_shell::RecipeShell;
 
+/// Classify whether the active shell region permits recipe-marker lowering.
+#[derive(Clone, Copy)]
+enum MarkerProtection {
+    /// Reject a marker because the shell region cannot safely encode it.
+    Protected,
+    /// Lower a marker using the current shell quote context.
+    Unprotected,
+}
+
+impl MarkerProtection {
+    /// Classify a shell-context predicate without exposing a Boolean at call sites.
+    const fn from_protected_region(is_protected: bool) -> Self {
+        if is_protected {
+            Self::Protected
+        } else {
+            Self::Unprotected
+        }
+    }
+}
+
 /// Track one-pass substitution while retaining the original error template.
 ///
 /// This helper is private to `cmd_interpolate`: it groups immutable template
@@ -75,7 +95,9 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         self.append_marker_for_context(
             pos,
             ch,
-            self.in_backticks || self.command_substitution_depth > 0,
+            MarkerProtection::from_protected_region(
+                self.in_backticks || self.command_substitution_depth > 0,
+            ),
         )
     }
 
@@ -94,8 +116,10 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         self.append_marker_for_context(
             pos,
             ch,
-            !matches!(self.quote_context, QuoteContext::Unquoted)
-                || self.command_substitution_depth > 0,
+            MarkerProtection::from_protected_region(
+                !matches!(self.quote_context, QuoteContext::Unquoted)
+                    || self.command_substitution_depth > 0,
+            ),
         )
     }
 
@@ -182,10 +206,10 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         &mut self,
         pos: usize,
         ch: char,
-        is_protected: bool,
+        protection: MarkerProtection,
     ) -> Result<usize, IrGenError> {
         let substitution = find_substitution(self.chars, pos);
-        if is_protected {
+        if matches!(protection, MarkerProtection::Protected) {
             return self.append_protected_character(pos, ch, substitution);
         }
         Ok(self.append_unprotected_character(pos, ch, substitution))
