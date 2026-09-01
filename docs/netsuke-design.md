@@ -38,18 +38,18 @@ build artefact now follows a six-stage pipeline. This data flow validates the
 manifest as YAML first, then resolves all dynamic logic into a static plan
 before execution, a critical requirement for compatibility with Ninja.
 
-1. Stage 1: Manifest Ingestion
+- Stage 1: Manifest Ingestion
 
    The process begins by locating and reading the user's project manifest file
    (e.g., Netsukefile) from the filesystem into memory as a raw string.
 
-2. Stage 2: Initial YAML Parsing
+- Stage 2: Initial YAML Parsing
 
    The raw string is parsed with `serde_saphyr` into an untyped
    `serde_json::Value`. This step ensures the manifest is valid YAML before any
    templating takes place.
 
-3. Stage 3: Template Expansion
+- Stage 3: Template Expansion
 
    Netsuke walks the parsed `Value`, evaluating Jinja macros, variables, and the
    `foreach` and `when` keys in top-level `targets` and `actions`. Each
@@ -61,14 +61,14 @@ before execution, a critical requirement for compatibility with Ninja.
    Structural Jinja blocks (`{% ... %}`) are not permitted to reshape mappings
    or sequences.
 
-4. Stage 4: Deserialization & Final Rendering
+- Stage 4: Deserialization & Final Rendering
 
    The expanded `Value` is deserialized into strongly typed Rust structs. Jinja
    expressions are then rendered, but only within string fields. Structural
    templating using `{% %}` blocks is forbidden; all control flow must appear
    in YAML values.
 
-   **Manifest rendering modes and discovery**
+  #### Manifest rendering modes and discovery
 
    Netsuke has two rendering policies. Full rendering evaluates every manifest
    field for `build`, `generate`, and normal manifest rendering, retaining the
@@ -89,7 +89,7 @@ before execution, a critical requirement for compatibility with Ninja.
    not treated as simultaneously active. Full rendering and normal build
    selection remain unchanged.
 
-5. Stage 5: IR Generation & Validation
+- Stage 5: IR Generation & Validation
 
    The AST is traversed to construct a canonical, fully resolved Intermediate
    Representation (IR) of the build. This IR represents the build as a static
@@ -101,7 +101,7 @@ before execution, a critical requirement for compatibility with Ninja.
    aggregate. Circular dependencies and missing inputs are also detected at
    this stage.
 
-6. Stage 6: Ninja Synthesis & Execution
+- Stage 6: Ninja Synthesis & Execution
 
    The final, validated IR is traversed by a code generator. This generator
    synthesizes the content of a `build.ninja` file, translating the IR's nodes

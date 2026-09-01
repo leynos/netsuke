@@ -1103,7 +1103,7 @@ routes to `rust-types-and-apis` for the newtype seam, `rust-errors` for the
 fallible constructor, and `rust-unit-testing` for the assertion style;
 `hexagonal-architecture` for the domain-versus-adapter boundary; `proptest` for
 the widened generators; `execplans` for keeping this document current;
-`arch-decision-records` for ADR-011; and `firecrawl-mcp` for any further Ninja
+`arch-decision-records` for ADR-014; and `firecrawl-mcp` for any further Ninja
 documentation lookup.
 
 `ortho_config` is named in the task brief but is not applicable: this change

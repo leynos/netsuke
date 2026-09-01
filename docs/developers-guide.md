@@ -699,7 +699,7 @@ validation remain consistent across the workflows under test.
 `make test` runs the non-doctest suite through
 [cargo-nextest](https://nexte.st/) and the doctests separately. CI pins the
 runner version in `NEXTEST_VERSION` in `.github/workflows/ci.yml`. Install that
-same version locally so local runs match CI; read the pin from the workflow
+same version locally, so local runs match CI; read the pin from the workflow
 rather than copying the number, so the two cannot drift:
 
 ```bash
@@ -713,7 +713,7 @@ cargo binstall --no-confirm --locked \
 
 `make check-fmt` verifies Markdown formatting as well as Rust formatting, and
 needs `mdtablefix` on `PATH`. CI pins the version in `MDTABLEFIX_VERSION` in
-`.github/workflows/ci.yml`. Install that same version locally so local runs
+`.github/workflows/ci.yml`. Install that same version locally, so local runs
 match CI; read the pin from the workflow rather than copying the number, so the
 two cannot drift:
 
@@ -729,6 +729,8 @@ cargo binstall --no-confirm --locked \
 Version drift matters here beyond reproducibility: a different `mdtablefix`
 version may reflow prose differently, which would make `make check-fmt` fail on
 an otherwise clean tree.
+
+Install the separately versioned Whitaker installer with:
 
 CI installs Whitaker through the SHA-pinned
 `leynos/shared-actions/.github/actions/install-whitaker` action. Both build

@@ -716,9 +716,13 @@ unit's output as its `stdin`.
 At unit start, the runner records the current identity (including an explicit
 absent state) of every configured destination in that unit's set. It then opens
 a provisional handle for each destination without truncation. Input handles are
-read-only; output handles may create a missing file but must not truncate it.
-The handles use non-following flags, or the closest platform-equivalent safe
-handle semantics, where available.
+read-only and never create files. For an output whose recorded identity is
+absent, provisional creation must be atomic and exclusive (`O_CREAT | O_EXCL`,
+or the closest platform-equivalent safe handle semantics). If another actor
+creates that path first and exclusive creation reports `EEXIST`, the execution
+unit is rejected as a race; the runner must not reopen or truncate that path.
+Existing output handles use non-following flags and must not truncate during
+provisional open.
 
 For each provisional handle, the runner freshly resolves the current path and
 compares that identity with the identity obtained from the handle. A path that
@@ -1321,8 +1325,11 @@ The implementation should include:
 - truncate and path-resolution tests for every stream field and every pair of
   configured stream destinations, including relative aliases, symlinks, and
   hard links, verifying that collisions are rejected before any output
-  truncation; race-focused tests replace a path during validation or opening
-  and verify that the replacement is rejected without truncating its target;
+  truncation; a deterministic race test must use a test-controlled barrier to
+  record an absent output identity, have a competing process create the path
+  before provisional open, and verify that exclusive creation loses with
+  `EEXIST`, rejects the execution unit, and does not truncate the competing
+  process's file;
 - action-plan lifecycle tests covering build-time cleanup after all Ninja and
   runner children finish, persistent `generate --output` sidecars, exclusive
   leases, atomic publication, replacement and deletion cleanup, and bounded
