@@ -3123,8 +3123,8 @@ different set of variables from the English source catalogue. Missing or
 drifted strings therefore fail CI before release. CLI execution and dispatch
 live in `src/runner/mod.rs`, keeping `main.rs` focused on parsing. Process
 management, Ninja invocation, argument redaction, and the temporary file
-helpers reside in `src/runner/process/mod.rs`, allowing the runner entry point to
-delegate low-level concerns. The working directory flag mirrors Ninja's `-C`
+helpers reside in `src/runner/process/mod.rs`, allowing the runner entry point
+to delegate low-level concerns. The working directory flag mirrors Ninja's `-C`
 option but is resolved internally: Netsuke runs Ninja with a configured working
 directory and resolves relative output paths (for example `generate --output`)
 under the same directory so behaviour matches a real directory change. Error
