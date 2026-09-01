@@ -23,9 +23,32 @@ use std::collections::BTreeSet;
 use tempfile::tempdir;
 use test_support::fs as test_fs;
 
-/// Generate a small tree of safe (lowercase ASCII) path segments.
+/// Prefix a raw lowercase suffix to form a portable fixture directory component.
+///
+/// The fixed prefix prevents Windows reserved device names, such as `con` and
+/// future `comN` or `lptN` values, from reaching fixture creation.
+fn portable_segment(raw: &str) -> String {
+    format!("segment-{raw}")
+}
+
+/// Generate a small tree of safe portable filesystem path segments.
+///
+/// The fixed `segment-` prefix prevents Windows reserved device names from
+/// reaching fixture creation while preserving lowercase random suffixes and
+/// readable Proptest shrinking.
 fn segments() -> impl Strategy<Value = Vec<String>> {
-    collection::vec("[a-z]{1,5}", 0..4)
+    collection::vec("[a-z]{1,5}", 0..4).prop_map(|raw_segments| {
+        raw_segments
+            .into_iter()
+            .map(|raw_segment| portable_segment(&raw_segment))
+            .collect()
+    })
+}
+
+/// Prevent a Windows device name from becoming a complete fixture component.
+#[test]
+fn portable_segment_prefixes_windows_device_name() {
+    assert_eq!(portable_segment("con"), "segment-con");
 }
 
 /// The expected pattern-relative spelling of `segments` joined to `leaf.txt`.
