@@ -6,7 +6,10 @@
 //! as `command_available` resolution without mutating the process
 //! environment.
 
-use super::{EnvReader, ManifestName, ManifestParse, StdlibRegistration, from_str_named};
+use super::{
+    EnvReader, ManifestName, ManifestParse, StdlibRegistration, from_str_named,
+    trace_expansion_report,
+};
 use crate::{ast::NetsukeManifest, stdlib::StdlibConfig};
 use anyhow::Result;
 
@@ -68,6 +71,7 @@ pub fn from_str_with_env_and_config(
             stdlib_registration: Some(StdlibRegistration::Full(Box::new(stdlib_config))),
             env_reader,
             manifest_root: None,
+            expansion_report_observer: Some(trace_expansion_report),
         },
         &mut None,
     )

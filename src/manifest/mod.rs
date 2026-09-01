@@ -41,6 +41,7 @@ mod glob;
 mod hints;
 mod jinja_macros;
 mod load_stage;
+mod loading;
 mod parse_with_config;
 mod query;
 mod render;
@@ -49,6 +50,7 @@ mod render;
 pub type ManifestValue = serde_json::Value;
 /// JSON object mapping string keys to manifest values.
 pub type ManifestMap = serde_json::Map<String, ManifestValue>;
+
 pub use diagnostics::{
     ManifestError, ManifestName, ManifestSource, map_data_error, map_yaml_error,
 };
@@ -56,6 +58,7 @@ pub use env_reader::{EnvReadError, EnvReader, process_env_reader};
 pub(crate) use expand::expand_foreach;
 pub use glob::glob_paths;
 pub use load_stage::ManifestLoadStage;
+use loading::{notify_stage, trace_expansion_report};
 pub use parse_with_config::from_str_with_env_and_config;
 pub(crate) use query::from_path_for_manifest_query;
 pub use render::render_manifest;
@@ -64,16 +67,9 @@ use self::{env_reader::env_var_with, jinja_macros::register_manifest_macros};
 #[cfg(test)]
 use workspace::open_manifest_workspace;
 
-/// Invoke the stage callback when present.
-fn notify_stage(
-    on_stage: &mut Option<&mut dyn FnMut(ManifestLoadStage)>,
-    stage: ManifestLoadStage,
-) {
-    if let Some(cb) = on_stage.as_mut() {
-        cb(stage);
-    }
-}
-
+/// Receives normal-loader reports; manifest queries supply `None` to stay
+/// telemetry-free.
+type ExpansionReportObserver = fn(&expand::ExpansionReport);
 /// Parse a manifest string using Jinja for value templating.
 ///
 /// The input YAML must be valid on its own. Jinja expressions are evaluated
@@ -93,6 +89,8 @@ struct ManifestParse<'a> {
     /// Manifest workspace root, anchoring relative `glob()` patterns; `None`
     /// falls back to the process current directory at the composition root.
     manifest_root: Option<camino::Utf8PathBuf>,
+    /// Optional observer for reports produced by normal manifest loading.
+    expansion_report_observer: Option<ExpansionReportObserver>,
 }
 
 /// Selects the stdlib surface available while rendering a manifest.
@@ -102,10 +100,10 @@ enum StdlibRegistration {
     /// The read-only stdlib used to inspect manifest discovery metadata.
     ManifestQuery,
 }
-/// Parse, render, and validate a manifest with injected glob-base data.
+/// Parse, render, and validate a manifest with injected loading boundaries.
 ///
 /// Render Jinja values, anchor relative `glob()` patterns at `manifest_root`,
-/// and validate recipes after expansion so rendered rules are checked.
+/// notify the optional expansion observer, and validate rendered recipes.
 fn from_str_named(
     yaml: &str,
     parse: ManifestParse<'_>,
@@ -116,6 +114,7 @@ fn from_str_named(
         stdlib_registration,
         env_reader,
         manifest_root,
+        expansion_report_observer,
     } = parse;
     let is_manifest_query = matches!(stdlib_registration, Some(StdlibRegistration::ManifestQuery));
     notify_stage(on_stage, ManifestLoadStage::InitialYamlParsing);
@@ -152,7 +151,10 @@ fn from_str_named(
     notify_stage(on_stage, ManifestLoadStage::TemplateExpansion);
     register_manifest_macros(&doc, &mut jinja)?;
 
-    expand_foreach(&mut doc, &jinja)?;
+    let expansion_report = expand_foreach(&mut doc, &jinja)?;
+    if let Some(observe_expansion_report) = expansion_report_observer {
+        observe_expansion_report(&expansion_report);
+    }
 
     notify_stage(on_stage, ManifestLoadStage::FinalRendering);
     let manifest: NetsukeManifest =
@@ -303,6 +305,7 @@ pub fn from_str_with_env(yaml: &str, env_reader: &EnvReader) -> Result<NetsukeMa
             stdlib_registration: None,
             env_reader,
             manifest_root: None,
+            expansion_report_observer: Some(trace_expansion_report),
         },
         &mut None,
     )
@@ -392,7 +395,6 @@ pub fn from_path_with_policy_and_env(
 }
 
 mod env_reader;
-mod workspace;
-
 #[cfg(test)]
 mod tests;
+mod workspace;

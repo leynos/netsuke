@@ -97,38 +97,127 @@ pub(super) fn indexes(entries: &[ManifestValue], section: &str) -> Result<Vec<u6
         .collect()
 }
 
-#[test]
-fn expand_foreach_returns_filtering_stats() -> Result<()> {
-    let env = Environment::new();
+/// Build a manifest containing static and foreach exclusions in both sections.
+fn sample_manifest_with_static_and_foreach_exclusions() -> Result<ManifestValue> {
     let yaml = "targets:
   - name: skipped-target
     command: echo skipped
     when: 'false'
   - name: kept-target
     command: echo kept
+  - name: skipped-foreach-target
+    command: echo {{ item }}
+    foreach:
+      - skip
+      - keep
+    when: item != 'skip'
 actions:
   - name: skipped-action
     command: echo skipped
     when: 'false'
-  - name: each-action
+  - name: skipped-foreach-action
     command: echo {{ item }}
     foreach:
       - skip
       - keep
     when: item != 'skip'";
-    let mut doc: ManifestValue = serde_saphyr::from_str(yaml)?;
+    Ok(serde_saphyr::from_str(yaml)?)
+}
 
-    let stats = expand_foreach(&mut doc, &env)?;
+/// Build retained filtering metadata for the static and foreach exclusions.
+fn expected_static_and_foreach_filtered_entries() -> Vec<FilteredEntry> {
+    vec![
+        FilteredEntry {
+            section: "targets".into(),
+            entry_name_hash: "63563386".into(),
+            iteration_index: None,
+            when_expression_len: 5,
+        },
+        FilteredEntry {
+            section: "targets".into(),
+            entry_name_hash: "d743b39a".into(),
+            iteration_index: Some(0),
+            when_expression_len: 14,
+        },
+        FilteredEntry {
+            section: "actions".into(),
+            entry_name_hash: "b61bdf58".into(),
+            iteration_index: None,
+            when_expression_len: 5,
+        },
+        FilteredEntry {
+            section: "actions".into(),
+            entry_name_hash: "a4642f66".into(),
+            iteration_index: Some(0),
+            when_expression_len: 14,
+        },
+    ]
+}
+
+/// Verify static and foreach exclusions report exact bounded metadata.
+#[test]
+fn expand_foreach_returns_filtering_stats() -> Result<()> {
+    let env = Environment::new();
+    let mut doc = sample_manifest_with_static_and_foreach_exclusions()?;
+
+    let report = expand_foreach(&mut doc, &env)?;
 
     anyhow::ensure!(
-        stats
+        report.stats
             == FilteringStats {
-                filtered_targets: 1,
+                filtered_targets: 2,
                 filtered_actions: 2,
             },
-        "unexpected filtering stats: {stats:?}"
+        "unexpected filtering stats: {report:?}"
     );
-    anyhow::ensure!(targets(&doc)?.len() == 1, "expected one kept target");
+    anyhow::ensure!(
+        report.filtered_entries == expected_static_and_foreach_filtered_entries(),
+        "unexpected retained filtering entries: {report:?}"
+    );
+    anyhow::ensure!(
+        report.omitted_filtered_entries == 0,
+        "small expansion should retain every filtering entry: {report:?}"
+    );
+    anyhow::ensure!(targets(&doc)?.len() == 2, "expected two kept targets");
     anyhow::ensure!(actions(&doc)?.len() == 1, "expected one kept action");
+    Ok(())
+}
+
+/// Verify report retention truncates entries without losing aggregate counts.
+#[test]
+fn expand_foreach_bounds_retained_filtered_entries() -> Result<()> {
+    let env = Environment::new();
+    let filtered_count = FILTERED_ENTRY_RETENTION_LIMIT + 1;
+    let foreach_values = (0..filtered_count)
+        .map(|index| format!("      - {index}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let yaml = format!(
+        "targets:\n  - name: skipped-foreach-target\n    command: echo {{{{ item }}}}\n    foreach:\n{foreach_values}\n    when: 'false'"
+    );
+    let mut doc: ManifestValue = serde_saphyr::from_str(&yaml)?;
+
+    let report = expand_foreach(&mut doc, &env)?;
+
+    anyhow::ensure!(
+        report.stats
+            == FilteringStats {
+                filtered_targets: filtered_count,
+                filtered_actions: 0,
+            },
+        "aggregate counts must include entries beyond the retention limit: {report:?}"
+    );
+    anyhow::ensure!(
+        report.filtered_entries.len() == FILTERED_ENTRY_RETENTION_LIMIT,
+        "retained filtering entries must be bounded: {report:?}"
+    );
+    anyhow::ensure!(
+        report.omitted_filtered_entries == 1,
+        "report must record entries omitted by the retention limit: {report:?}"
+    );
+    anyhow::ensure!(
+        targets(&doc)?.is_empty(),
+        "fully filtered foreach expansion should retain no manifest entries"
+    );
     Ok(())
 }

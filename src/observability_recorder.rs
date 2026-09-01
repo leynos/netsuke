@@ -53,6 +53,15 @@ const BASH_PREFLIGHT_OUTCOMES: [&str; 2] = ["success", "error"];
 /// Bounded probe results emitted by Bash compatibility preflight.
 const BASH_PREFLIGHT_PROBE_OUTCOMES: [&str; 4] =
     ["success", "not_found", "launch_failed", "non_zero_exit"];
+
+/// Counter recording filtered manifest targets during normal manifest loading.
+const FILTERED_TARGETS_TOTAL: &str = "netsuke_manifest_filtered_targets_total";
+
+/// Counter recording filtered manifest actions during normal manifest loading.
+const FILTERED_ACTIONS_TOTAL: &str = "netsuke_manifest_filtered_actions_total";
+
+/// Counter recording filtering records omitted from bounded manifest reports.
+const OMITTED_FILTERED_ENTRIES_TOTAL: &str = "netsuke_manifest_omitted_filtered_entries_total";
 /// Bounded runner-operation values emitted by legacy-recipe telemetry.
 const LEGACY_RECIPE_OPERATION_VALUES: [&str; 2] = ["build", "ninja_tool"];
 /// Bounded outcomes emitted by legacy-recipe operation telemetry.
@@ -107,6 +116,9 @@ impl ConfigMetricsRecorder {
                 | BASH_PREFLIGHT_TOTAL
                 | LEGACY_RECIPE_EXECUTIONS_TOTAL
                 | LEGACY_RECIPE_EXECUTION_DURATION
+                | FILTERED_TARGETS_TOTAL
+                | FILTERED_ACTIONS_TOTAL
+                | OMITTED_FILTERED_ENTRIES_TOTAL
         )
     }
 
@@ -157,6 +169,9 @@ impl ConfigMetricsRecorder {
                     ("failure_category", &LEGACY_RECIPE_FAILURE_CATEGORIES),
                 ],
             ),
+            FILTERED_TARGETS_TOTAL | FILTERED_ACTIONS_TOTAL | OMITTED_FILTERED_ENTRIES_TOTAL => {
+                exact_labels(key, &[])
+            }
             _ => false,
         }
     }

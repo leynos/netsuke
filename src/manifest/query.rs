@@ -6,8 +6,9 @@
 //! network requests, cache writes, or command execution.
 
 use super::{
-    EnvReader, ManifestLoadStage, ManifestName, ManifestParse, NetsukeManifest, StdlibConfig,
-    StdlibRegistration, env_reader::disabled_env_reader, from_str_named, notify_stage,
+    EnvReader, ExpansionReportObserver, ManifestLoadStage, ManifestName, ManifestParse,
+    NetsukeManifest, StdlibConfig, StdlibRegistration, env_reader::disabled_env_reader,
+    from_str_named, loading::trace_expansion_report, notify_stage,
     workspace::open_manifest_workspace,
 };
 use crate::{localization, localization::keys, stdlib::NetworkPolicy};
@@ -64,13 +65,19 @@ fn from_path_with_registration(
                 .with_arg("path", path_ref.display().to_string())
         })?;
     let name = ManifestName::new(path_ref.display().to_string());
-    let stdlib_registration = match mode {
-        ManifestLoadMode::Full(policy) => StdlibRegistration::Full(Box::new(
-            StdlibConfig::new(workspace.dir)?
-                .with_workspace_root_path(&workspace.root)?
-                .with_network_policy(policy),
-        )),
-        ManifestLoadMode::ManifestQuery => StdlibRegistration::ManifestQuery,
+    let (stdlib_registration, expansion_report_observer): (
+        StdlibRegistration,
+        Option<ExpansionReportObserver>,
+    ) = match mode {
+        ManifestLoadMode::Full(policy) => (
+            StdlibRegistration::Full(Box::new(
+                StdlibConfig::new(workspace.dir)?
+                    .with_workspace_root_path(&workspace.root)?
+                    .with_network_policy(policy),
+            )),
+            Some(trace_expansion_report),
+        ),
+        ManifestLoadMode::ManifestQuery => (StdlibRegistration::ManifestQuery, None),
     };
     let manifest_root = Some(workspace.root);
     from_str_named(
@@ -80,6 +87,7 @@ fn from_path_with_registration(
             stdlib_registration: Some(stdlib_registration),
             env_reader,
             manifest_root,
+            expansion_report_observer,
         },
         &mut on_stage,
     )
