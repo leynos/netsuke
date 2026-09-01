@@ -190,26 +190,31 @@ fn recorder_retains_bounded_cli_path_validation_series() {
         "only the two bounded CLI path-validation series are retained"
     );
     for source in ["file", "directory"] {
-        assert!(
-            snapshot.iter().any(|entry| {
-                entry.0.kind() == MetricKind::Counter
-                    && entry.0.key().name() == PATH_VALIDATION_TOTAL
-                    && entry.0.key().labels().count() == 2
-                    && entry
-                        .0
-                        .key()
-                        .labels()
-                        .any(|label| label.key() == "source" && label.value() == source)
-                    && entry
-                        .0
-                        .key()
-                        .labels()
-                        .any(|label| label.key() == "reason" && label.value() == "non_utf8")
-                    && matches!(entry.3, DebugValue::Counter(1))
-            }),
-            "recorder should retain the {source:?} path-validation series: {snapshot:?}"
-        );
+        assert_path_validation_counter(&snapshot, source);
     }
+}
+
+/// Verify one retained CLI path-validation counter with the specified source and the `non_utf8` reason.
+fn assert_path_validation_counter(snapshot: &[SnapshotEntry], source: &str) {
+    assert!(
+        snapshot.iter().any(|entry| {
+            entry.0.kind() == MetricKind::Counter
+                && entry.0.key().name() == PATH_VALIDATION_TOTAL
+                && entry.0.key().labels().count() == 2
+                && entry
+                    .0
+                    .key()
+                    .labels()
+                    .any(|label| label.key() == "source" && label.value() == source)
+                && entry
+                    .0
+                    .key()
+                    .labels()
+                    .any(|label| label.key() == "reason" && label.value() == "non_utf8")
+                && matches!(entry.3, DebugValue::Counter(1))
+        }),
+        "recorder should retain the {source:?} path-validation series: {snapshot:?}"
+    );
 }
 /// Record the two valid counter series emitted for recipe-shell operations.
 fn record_valid_recipe_shell_series() {
