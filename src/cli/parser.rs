@@ -118,11 +118,36 @@ pub(crate) fn configured_command(localizer: Option<&Arc<dyn Localizer>>) -> clap
     configure_validation_parsers(command, &parser_localizer)
 }
 
-/// Install localized value parsers on CLI arguments with localized validation.
-fn configure_validation_parsers(
+/// Install localized UTF-8 path parsers on the build-file and working-directory arguments.
+fn configure_utf8_path_parsers(
     mut command: clap::Command,
     localizer: &Arc<dyn Localizer>,
 ) -> clap::Command {
+    let file_parser = LocalizedUtf8PathParser::new(
+        Arc::clone(localizer),
+        keys::CLI_FILE_NON_UTF8,
+        "Manifest path is not valid UTF-8.",
+    );
+    let directory_parser = LocalizedUtf8PathParser::new(
+        Arc::clone(localizer),
+        keys::CLI_DIRECTORY_NON_UTF8,
+        "Working directory path is not valid UTF-8.",
+    );
+
+    command = command.mut_arg("file", |arg| {
+        arg.value_parser(ValueParser::new(file_parser))
+    });
+    command.mut_arg("directory", |arg| {
+        arg.value_parser(ValueParser::new(directory_parser))
+    })
+}
+
+/// Install localized value parsers on non-path CLI arguments.
+fn configure_validation_parsers(
+    initial_command: clap::Command,
+    localizer: &Arc<dyn Localizer>,
+) -> clap::Command {
+    let mut command = configure_utf8_path_parsers(initial_command, localizer);
     let jobs_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_jobs);
     let locale_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_locale);
     let scheme_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_scheme);
@@ -147,23 +172,6 @@ fn configure_validation_parsers(
         parse_accessibility_policy,
         accessibility_policy_possible_values(),
     );
-    let file_parser = LocalizedUtf8PathParser::new(
-        Arc::clone(localizer),
-        keys::CLI_FILE_NON_UTF8,
-        "Manifest path is not valid UTF-8.",
-    );
-    let directory_parser = LocalizedUtf8PathParser::new(
-        Arc::clone(localizer),
-        keys::CLI_DIRECTORY_NON_UTF8,
-        "Working directory path is not valid UTF-8.",
-    );
-
-    command = command.mut_arg("file", |arg| {
-        arg.value_parser(ValueParser::new(file_parser))
-    });
-    command = command.mut_arg("directory", |arg| {
-        arg.value_parser(ValueParser::new(directory_parser))
-    });
     command = command.mut_arg("jobs", |arg| {
         arg.value_parser(ValueParser::new(jobs_parser))
     });

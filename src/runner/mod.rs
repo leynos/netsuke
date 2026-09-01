@@ -67,6 +67,7 @@ struct ExecutionContext<'a> {
     reporter: &'a dyn StatusReporter,
     /// Whether the command may stream task-progress updates.
     progress_enabled: bool,
+    /// Resolved executable path used to invoke Ninja.
     ninja_program: &'a Utf8Path,
     /// Explicit interpreter for generated legacy recipe text.
     recipe_shell: crate::recipe_shell::RecipeShell,

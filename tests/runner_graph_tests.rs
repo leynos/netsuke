@@ -21,7 +21,7 @@ use fixtures::create_test_manifest;
 /// Convert a test filesystem path into the UTF-8 CLI boundary type.
 fn utf8_path(path: &std::path::Path) -> Result<Utf8PathBuf> {
     Utf8PathBuf::from_path_buf(path.to_path_buf())
-        .map_err(|non_utf8| anyhow::anyhow!("test path is not valid UTF-8: {non_utf8:?}"))
+        .map_err(|non_utf8| anyhow::anyhow!("test path is not valid UTF-8: {}", non_utf8.display()))
 }
 
 fn run_graph(cli: &Cli) -> Result<()> {

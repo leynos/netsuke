@@ -72,11 +72,14 @@ fn run_build_uses_cli_default_targets_when_no_targets_are_requested(
     let (temp, manifest_path) = create_test_manifest()?;
     let cli = Cli {
         file: Utf8PathBuf::from_path_buf(manifest_path).map_err(|non_utf8| {
-            anyhow::anyhow!("manifest path is not valid UTF-8: {non_utf8:?}")
+            anyhow::anyhow!("manifest path is not valid UTF-8: {}", non_utf8.display())
         })?,
         directory: Some(
             Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).map_err(|non_utf8| {
-                anyhow::anyhow!("temporary directory is not valid UTF-8: {non_utf8:?}")
+                anyhow::anyhow!(
+                    "temporary directory is not valid UTF-8: {}",
+                    non_utf8.display()
+                )
             })?,
         ),
         default_targets: vec![String::from("hello")],

@@ -39,7 +39,7 @@ fn ninja_with_exit_code(#[default(0u8)] exit_code: u8) -> Result<(tempfile::Temp
 /// Convert a temporary test path into the UTF-8 runner boundary type.
 fn utf8_path(path: &std::path::Path) -> Result<Utf8PathBuf> {
     Utf8PathBuf::from_path_buf(path.to_path_buf())
-        .map_err(|non_utf8| anyhow::anyhow!("test path is not valid UTF-8: {non_utf8:?}"))
+        .map_err(|non_utf8| anyhow::anyhow!("test path is not valid UTF-8: {}", non_utf8.display()))
 }
 
 /// Helper: test that a command fails when ninja exits with non-zero status.

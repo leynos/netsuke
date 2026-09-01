@@ -2359,11 +2359,10 @@ child process's execution environment.
 
 Every invocation is described by a borrowed request bundle rather than a long
 parameter list: `NinjaBuildRequest` for a build and `NinjaToolRequest` for
-`ninja -t <tool>`. Each names the UTF-8 resolved program,
-`NinjaProcessOptions` (an optional UTF-8 working directory and job count), the
-UTF-8 generated build file, the targets or tool, a `&CommandEnv` describing
-the child's environment, and the
-`stderr_mode: StderrMode` policy field. `run_ninja_with` and
+`ninja -t <tool>`. Each names the UTF-8 resolved program, `NinjaProcessOptions`
+(an optional UTF-8 working directory and job count), the UTF-8 generated build
+file, the targets or tool, a `&CommandEnv` describing the child's environment,
+and the `stderr_mode: StderrMode` policy field. `run_ninja_with` and
 `run_ninja_tool_with` consume these; the convenience wrappers `run_ninja` and
 `run_ninja_tool` live in `runner::ninja_process_adapter`, translate `Cli` state
 at the runner boundary, call them with `CommandEnv::inherit()`, and derive the

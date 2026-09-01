@@ -226,8 +226,12 @@ fn cli_uses_temp_dir(world: &TestWorld) -> Result<()> {
             .path()
             .to_path_buf()
     };
-    let utf8_temp_path = Utf8PathBuf::from_path_buf(temp_path)
-        .map_err(|non_utf8| anyhow!("temporary directory is not valid UTF-8: {non_utf8:?}"))?;
+    let utf8_temp_path = Utf8PathBuf::from_path_buf(temp_path).map_err(|non_utf8| {
+        anyhow!(
+            "temporary directory is not valid UTF-8: {}",
+            non_utf8.display()
+        )
+    })?;
     world
         .cli
         .with_mut(|cli| {

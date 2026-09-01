@@ -51,12 +51,13 @@ fn explicit_absolute_config_ignores_cli_directory() -> Result<()> {
     // this is what would actually load instead of `selector`.
     test_support::fs::write(cli_directory.join("selector.toml"), "theme = \"dark\"\n")
         .context("write -C decoy config")?;
-    let cli_directory = Utf8PathBuf::from_path_buf(cli_directory)
-        .map_err(|non_utf8| anyhow::anyhow!("CLI directory is not valid UTF-8: {non_utf8:?}"))?;
+    let cli_directory_path = Utf8PathBuf::from_path_buf(cli_directory).map_err(|non_utf8| {
+        anyhow::anyhow!("CLI directory is not valid UTF-8: {}", non_utf8.display())
+    })?;
 
     let cli = Cli {
         config: Some(selector.clone()),
-        directory: Some(cli_directory),
+        directory: Some(cli_directory_path),
         ..Cli::default()
     };
     let discovered = discover_file_layers(&cli, &TestEnv::default());
@@ -70,12 +71,13 @@ fn explicit_relative_config_ignores_cli_directory() -> Result<()> {
     let temp = tempdir().context("create temp dir")?;
     let cli_directory = temp.path().join("cli-dir");
     test_support::fs::create_dir(&cli_directory).context("create -C directory")?;
-    let cli_directory = Utf8PathBuf::from_path_buf(cli_directory)
-        .map_err(|non_utf8| anyhow::anyhow!("CLI directory is not valid UTF-8: {non_utf8:?}"))?;
+    let cli_directory_path = Utf8PathBuf::from_path_buf(cli_directory).map_err(|non_utf8| {
+        anyhow::anyhow!("CLI directory is not valid UTF-8: {}", non_utf8.display())
+    })?;
 
     let cli = Cli {
         config: Some(PathBuf::from("relative.toml")),
-        directory: Some(cli_directory),
+        directory: Some(cli_directory_path),
         ..Cli::default()
     };
 
@@ -109,12 +111,13 @@ fn cli_selector_wins_over_environment_with_directory() -> Result<()> {
     let temp = tempdir().context("create temp dir")?;
     let cli_directory = temp.path().join("cli-dir");
     test_support::fs::create_dir(&cli_directory).context("create -C directory")?;
-    let cli_directory = Utf8PathBuf::from_path_buf(cli_directory)
-        .map_err(|non_utf8| anyhow::anyhow!("CLI directory is not valid UTF-8: {non_utf8:?}"))?;
+    let cli_directory_path = Utf8PathBuf::from_path_buf(cli_directory).map_err(|non_utf8| {
+        anyhow::anyhow!("CLI directory is not valid UTF-8: {}", non_utf8.display())
+    })?;
 
     let cli = Cli {
         config: Some(PathBuf::from("cli.toml")),
-        directory: Some(cli_directory),
+        directory: Some(cli_directory_path),
         ..Cli::default()
     };
     let env = TestEnv::default().with_var(CONFIG_ENV_VAR, "env.toml");
@@ -132,11 +135,12 @@ fn env_config_selector_ignores_cli_directory() -> Result<()> {
     let temp = tempdir().context("create temp dir")?;
     let cli_directory = temp.path().join("cli-dir");
     test_support::fs::create_dir(&cli_directory).context("create -C directory")?;
-    let cli_directory = Utf8PathBuf::from_path_buf(cli_directory)
-        .map_err(|non_utf8| anyhow::anyhow!("CLI directory is not valid UTF-8: {non_utf8:?}"))?;
+    let cli_directory_path = Utf8PathBuf::from_path_buf(cli_directory).map_err(|non_utf8| {
+        anyhow::anyhow!("CLI directory is not valid UTF-8: {}", non_utf8.display())
+    })?;
 
     let cli = Cli {
-        directory: Some(cli_directory),
+        directory: Some(cli_directory_path),
         ..Cli::default()
     };
     let env = TestEnv::default().with_var(CONFIG_ENV_VAR, "env-selector.toml");

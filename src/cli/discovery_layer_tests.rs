@@ -20,8 +20,9 @@ use std::path::{Path, PathBuf};
 
 /// Convert a temporary test directory into the CLI's UTF-8 path type.
 fn utf8_directory(path: &Path) -> Result<Utf8PathBuf> {
-    Utf8PathBuf::from_path_buf(path.to_path_buf())
-        .map_err(|non_utf8| anyhow::anyhow!("test directory is not valid UTF-8: {non_utf8:?}"))
+    Utf8PathBuf::from_path_buf(path.to_path_buf()).map_err(|non_utf8| {
+        anyhow::anyhow!("test directory is not valid UTF-8: {}", non_utf8.display())
+    })
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -198,7 +199,7 @@ fn existing_project_scope_layer_is_not_appended_twice() -> Result<()> {
     let cli = Cli {
         directory: Some(
             Utf8PathBuf::from_path_buf(non_canonical).map_err(|non_utf8| {
-                anyhow::anyhow!("test directory is not valid UTF-8: {non_utf8:?}")
+                anyhow::anyhow!("test directory is not valid UTF-8: {}", non_utf8.display())
             })?,
         ),
         ..Cli::default()
@@ -307,7 +308,7 @@ fn normalization_failure_does_not_fail_discovery() -> Result<()> {
     let alias = project_dir.join(".");
     let cli = Cli {
         directory: Some(Utf8PathBuf::from_path_buf(alias).map_err(|non_utf8| {
-            anyhow::anyhow!("test directory is not valid UTF-8: {non_utf8:?}")
+            anyhow::anyhow!("test directory is not valid UTF-8: {}", non_utf8.display())
         })?),
         ..Cli::default()
     };

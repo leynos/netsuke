@@ -81,8 +81,11 @@ already-removed `prepend_dir_to_path` helper, so it requires no migration.
 ## Implementation references
 
 - Path convention: [`AGENTS.md`](../AGENTS.md) and [`CRUSH.md`](../CRUSH.md)
-- Design boundary: [Netsuke design, section 3](netsuke-design.md#section-3-parsing-and-deserialization-strategy)
-  and [section 6](netsuke-design.md#section-6-process-management-and-secure-execution)
+- Design boundary:
+  [Netsuke design, section 3](netsuke-design.md#section-3-parsing-and-deserialization-strategy)
+  and
+  [section 6](netsuke-design.md#section-6-process-management-and-secure-execution)
 - CLI boundary: [`src/cli/`](../src/cli/)
 - Ninja process adapter: [`src/runner/process/`](../src/runner/process/)
-- Runner adapter: [`src/runner/ninja_process_adapter.rs`](../src/runner/ninja_process_adapter.rs)
+- Runner adapter:
+  [`src/runner/ninja_process_adapter.rs`](../src/runner/ninja_process_adapter.rs)

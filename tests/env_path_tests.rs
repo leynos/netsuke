@@ -20,19 +20,6 @@ use std::{
 };
 use test_support::env::prepend_path_value;
 
-
-//! Tests for composing isolated child-process `PATH` values.
-//!
-//! Composition is pure (`test_support::env::prepend_path_value`) and the
-//! runner applies the result as data via `CommandEnv`, so nothing here
-//! mutates the parent process: no test carries `#[serial]` and none needs
-//! process-global environment or working-directory coordination.
-//!
-//! These are the named cases; the invariants they instantiate live in
-//! `env_path_property_tests.rs`, which Cargo builds as its own target.
-#[cfg(unix)]
-};
-
 #[rstest]
 fn prepend_dir_to_path_preserves_existing_entries() -> Result<()> {
     let original = std::env::join_paths(["one", "two"])?;
