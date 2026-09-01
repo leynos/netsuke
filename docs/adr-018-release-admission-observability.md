@@ -42,31 +42,31 @@ The release-admission script emits exactly three metrics as JSON Lines (JSONL):
 The script validates every metric name and label against this closed vocabulary
 before writing one JSONL record. `none` is used for `error_category` on a
 successful operation or gate. A failed operation is classified as one of
-`api_error`, `fetch_error`, `stale_evidence`, `missing_evidence`, `mismatch`,
-or `timeout`; an unclassified failure fails closed as `outcome=unknown` and
+`api_error`, `fetch_error`, `stale_evidence`, `missing_evidence`, `mismatch`, or
+`timeout`; an unclassified failure fails closed as `outcome=unknown` and
 `error_category=unknown`. Missing or stale admission evidence remains a gate
 failure and cannot be converted into a successful result by telemetry.
 
 Operation counters and duration observations are emitted at the end of each
 fixed operation boundary. The gate counter is emitted at the gate's final
-success or failure boundary, including the error category selected for an
-early failure. No revision, run ID, path, URL, workflow content, or other
+success or failure boundary, including the error category selected for an early
+failure. No revision, run ID, path, URL, workflow content, or other
 identifier-derived value may be a label. Duration values are observations only
 and carry no operation-specific identifiers beyond the fixed operation name.
 
 The workflow writes JSONL to the configured runner temporary metrics path
 (`NETSUKE_RELEASE_ADMISSION_METRICS_FILE`, currently
 `${runner.temp}/release-admission-metrics.jsonl`), uploads the completed file
-as the `release-admission-metrics` workflow artefact, and appends a concise gate
-outcome line to `GITHUB_STEP_SUMMARY`. GitHub Actions' configured workflow or
-repository artefact-retention policy governs how long the JSONL artefact is
-available. This contract does not define or imply a Prometheus, OTLP, or
-statsd endpoint.
+as the `release-admission-metrics` workflow artefact, and appends a concise
+gate outcome line to `GITHUB_STEP_SUMMARY`. GitHub Actions' configured workflow
+or repository artefact-retention policy governs how long the JSONL artefact is
+available. This contract does not define or imply a Prometheus, OTLP, or statsd
+endpoint.
 
 Metric names and label names are published interfaces. Renaming a metric or a
-label is a breaking change and requires an updated ADR, workflow consumers,
-and contract tests. Adding a label or vocabulary value also requires an
-explicit contract review because it changes the bounded series set.
+label is a breaking change and requires an updated ADR, workflow consumers, and
+contract tests. Adding a label or vocabulary value also requires an explicit
+contract review because it changes the bounded series set.
 
 ## Rationale
 
@@ -85,8 +85,8 @@ explicit contract review because it changes the bounded series set.
 
 Operators inspect the gate counter first. A `failure` or `unknown` outcome
 blocks publication and should be correlated with operation counter records,
-their fixed `error_category`, and duration observations in the downloaded
-JSONL artefact. The job summary is an at-a-glance indication only; it does not
+their fixed `error_category`, and duration observations in the downloaded JSONL
+artefact. The job summary is an at-a-glance indication only; it does not
 replace the per-operation records.
 
 The JSONL file is an export artefact, not a continuously aggregated time
@@ -108,8 +108,8 @@ operator hand-off without a new service dependency.
 ### Labels containing revisions, run IDs, paths, or URLs
 
 Rejected. These values are unbounded and may contain sensitive repository or
-workflow information. They belong, where needed, in ordinary workflow logs,
-not in metric dimensions.
+workflow information. They belong, where needed, in ordinary workflow logs, not
+in metric dimensions.
 
 ### One aggregate gate metric without operation metrics
 
@@ -133,7 +133,9 @@ safe and diagnosable.
 - Metric allowlist and JSONL validation:
   [`release_admission_metrics.py`](../tests/workflow_contracts/release_admission_metrics.py)
 - Script and workflow contract tests:
-  [`test_require_release_admission_canaries.py`](../scripts/tests/test_require_release_admission_canaries.py)
+  [`test_release_admission_metrics.py`](../scripts/tests/test_release_admission_metrics.py)
+  and
+  [`release_admission_metrics_test.py`](../tests/workflow_contracts/release_admission_metrics_test.py)
 - Operator guidance:
   [`developers-guide.md`](developers-guide.md#release-admission-observability)
 - Release-admission design and sequencing:
