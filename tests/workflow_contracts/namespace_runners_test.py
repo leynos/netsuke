@@ -103,27 +103,24 @@ def test_namespace_linux_jobs_install_ninja_before_use(
     ), f"{workflow_name} job {job_name} must install Ninja before {first_consumer!r}"
 
 
-def test_linux_release_build_uses_the_general_namespace_profile() -> None:
-    """Require Linux packaging to pass the general profile to its workflow."""
+@pytest.mark.parametrize(
+    ("job_name", "expected_runner"),
+    [
+        ("build-linux", "namespace-profile-netsuke"),
+        ("build-windows", "namespace-profile-netsuke-windows"),
+    ],
+)
+def test_release_build_uses_the_general_namespace_profile(
+    job_name: str,
+    expected_runner: str,
+) -> None:
+    """Require packaging to pass its platform's general Namespace profile."""
     workflow = load_workflow(WORKFLOW_DIR / "release.yml")
-    build_linux = workflow_job(workflow, "build-linux")
-    inputs = require_mapping(build_linux.get("with"), "jobs.build-linux.with")
+    build_job = workflow_job(workflow, job_name)
+    inputs = require_mapping(build_job.get("with"), f"jobs.{job_name}.with")
     actual_runner = inputs.get("runner")
-    assert actual_runner == "namespace-profile-netsuke", (
-        "release.yml build-linux must pass namespace-profile-netsuke to the package "
-        f"workflow, got {actual_runner!r}"
-    )
-
-
-def test_windows_release_build_uses_the_general_namespace_profile() -> None:
-    """Require Windows packaging to pass its general Namespace profile."""
-    workflow = load_workflow(WORKFLOW_DIR / "release.yml")
-    build_windows = workflow_job(workflow, "build-windows")
-    inputs = require_mapping(build_windows.get("with"), "jobs.build-windows.with")
-    actual_runner = inputs.get("runner")
-    expected_runner = "namespace-profile-netsuke-windows"
     assert actual_runner == expected_runner, (
-        f"release.yml build-windows must pass {expected_runner} to the package "
+        f"release.yml {job_name} must pass {expected_runner} to the package "
         f"workflow, got {actual_runner!r}"
     )
 
