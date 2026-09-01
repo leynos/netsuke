@@ -37,6 +37,22 @@ operator, user, and contributor references are easier to find.
 - [rfcs/0001-structured-command-blocks.md](rfcs/0001-structured-command-blocks.md):
   Proposed structured command blocks, shell-free argv templates, typed Jinja
   interpolation, stream routing, and pipeline semantics.
+- [rfcs/0009-structured-command-working-directories.md][rfc-0009]:
+  Normative amendment adding capability-scoped per-command working directories
+  to RFC 0001.
+- [rfcs/0010-runtime-bindings-and-secure-tempdirs.md][rfc-0010]:
+  Normative amendment adding bounded stdout environment capture, standard-error
+  pipelines, environment-selected working directories, and secure temporary
+  execution directories to RFC 0001.
+- [rfcs/0002-repository-relative-includes.md][rfc-0002]:
+  Deterministic repository-relative manifest includes with cycle detection,
+  provenance, namespaces, and duplicate rejection.
+- [rfcs/0003-versioned-local-bundles.md](rfcs/0003-versioned-local-bundles.md):
+  Versioned local bundles with typed parameters, explicit exports, SemVer
+  selection, canonical digests, and lock records.
+- [rfcs/0004-digest-pinned-external-bundles.md][rfc-0004]:
+  Later digest-pinned external Git bundles with exact tag resolution, immutable
+  object provenance, bounded acquisition, caching, and offline verification.
 - [RFC 0005: Harden release integrity and
   admission](rfcs/0005-release-hardening.md): Proposed release-profile
   invariants, secret and dependency policy, and exact-commit release admission.
@@ -51,6 +67,11 @@ operator, user, and contributor references are easier to find.
   fuzzing](rfcs/0008-code-health.md): Proposed workflow-policy validation, gate
   self-consistency, health-signal ownership, and scheduled coverage-guided
   fuzzing.
+
+[rfc-0009]: rfcs/0009-structured-command-working-directories.md
+[rfc-0010]: rfcs/0010-runtime-bindings-and-secure-tempdirs.md
+[rfc-0002]: rfcs/0002-repository-relative-includes.md
+[rfc-0004]: rfcs/0004-digest-pinned-external-bundles.md
 
 ## Decision records
 

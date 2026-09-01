@@ -717,6 +717,72 @@ explicit, structured, and self-documenting nature.
 | Target Build    | my_program: main.o utils.o\\t$(CC) $^ -o $@                                        | { targets: { name: my_program, rule: link, sources: [main.o, utils.o] }                                           |
 | Readability     | Relies on cryptic automatic variables ($@, $\<, $^) and implicit pattern matching. | Uses explicit, descriptive keys (name, rule, sources) and standard YAML list/map syntax.                          |
 
+### 2.8 Manifest composition and bundle resolution
+
+RFC 0003 defines deterministic resolution for versioned local bundles. The
+following sequence shows how a manifest resolves, validates, and locks a
+namespaced bundle.
+
+For screen readers: The manifest asks the resolver to resolve a bundle source
+and version. The resolver enumerates sorted catalogue candidates, selects the
+highest compatible SemVer, validates parameters and exports, obtains the
+canonical content digest, verifies the lock, and returns namespaced exported
+declarations.
+
+```mermaid
+sequenceDiagram
+    participant Manifest
+    participant Resolver
+    participant Catalogue
+    participant Bundle
+    participant Lock
+
+    Manifest->>Resolver: resolve bundle source and version
+    Resolver->>Catalogue: enumerate candidates in sorted order
+    Catalogue-->>Resolver: bundle descriptors
+    Resolver->>Resolver: select highest compatible SemVer
+    Resolver->>Bundle: validate parameters and exports
+    Bundle-->>Resolver: canonical content digest
+    Resolver->>Lock: verify selected version and digests
+    Lock-->>Resolver: lock status
+    Resolver-->>Manifest: namespaced exported declarations
+```
+
+Figure: Local bundle resolution and lock verification.
+
+RFC 0004 extends this composition flow to external Git bundles. It preserves
+the same verification boundary while adding exact reference resolution,
+provenance, and content-addressed caching.
+
+For screen readers: The manifest asks the Git resolver for an exact tag or
+commit. The resolver fetches normalized Git references or a full commit, then
+the verifier checks the subdirectory, metadata, SemVer, and canonical digest.
+The verifier reads or publishes the verified content-addressed bundle, compares
+tag, peeled-commit, and digest values with the lock, and returns a verified
+bundle instance to the manifest.
+
+```mermaid
+sequenceDiagram
+    participant Manifest
+    participant GitResolver
+    participant GitRemote
+    participant Cache
+    participant Verifier
+    participant Lock
+
+    Manifest->>GitResolver: resolve exact tag or commit
+    GitResolver->>GitRemote: fetch normalized refs/tags/... or full commit
+    GitRemote-->>GitResolver: Git objects and tag provenance
+    GitResolver->>Verifier: verify subdir, metadata, SemVer, and canonical digest
+    Verifier->>Cache: read or publish content-addressed bundle
+    Cache-->>Verifier: verified content
+    Verifier->>Lock: compare tag, peeled commit, and digest
+    Lock-->>Verifier: lock verification result
+    Verifier-->>Manifest: verified bundle instance
+```
+
+Figure: External Git bundle verification and cache-backed lock resolution.
+
 ## Section 3: Parsing and Deserialization Strategy
 
 Once the Jinja evaluation stage has produced a pure YAML string, the next
@@ -2367,6 +2433,35 @@ delegates the core task scheduling and execution to the Ninja binary, it
 remains responsible for invoking Ninja correctly and, most importantly, for
 ensuring that the commands it generates for Ninja to run are constructed
 securely.
+
+### Structured command working directories
+
+RFC 0009 gives structured commands an explicit, capability-checked working
+directory. The sequence below shows that resolution and validation happen
+before the child process receives its `current_dir`.
+
+For screen readers: The compiler provides a process specification with a
+working directory to the action runner. The runner asks the workspace
+capability to resolve and validate that directory, receives a
+capability-relative directory, spawns the child process with that directory as
+its current directory, and receives the process result.
+
+```mermaid
+sequenceDiagram
+    participant Compiler
+    participant ActionRunner
+    participant WorkspaceCapability
+    participant ChildProcess
+
+    Compiler->>ActionRunner: provide ProcessSpec with cwd
+    ActionRunner->>WorkspaceCapability: resolve and validate cwd
+    WorkspaceCapability-->>ActionRunner: capability-relative directory
+    ActionRunner->>ChildProcess: spawn with current_dir(cwd)
+    ChildProcess-->>ActionRunner: process result
+```
+
+Figure: Capability-checked working-directory resolution for a structured
+command.
 
 ### 6.1 Invoking Ninja
 
