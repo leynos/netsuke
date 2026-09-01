@@ -16,7 +16,7 @@
 #![cfg(all(unix, target_os = "linux"))]
 
 use anyhow::{Context, Result, ensure};
-use rstest::rstest;
+use rstest::{fixture, rstest};
 use std::process::Command;
 use test_support::dev_fast::{
     BuildScenario, DEV_FAST_CONFIG_PATH, FakeRelease, MakeInvocation, RecordingCargo, Sandbox,
@@ -31,6 +31,12 @@ const TEST_MOLD_VERSION: &str = "9.9.9";
 struct BuildTarget {
     name: &'static str,
     subcommand: &'static [&'static str],
+}
+
+/// Prepare a hermetic dev-fast scenario for a Make target contract test.
+#[fixture]
+fn prepared_build_scenario() -> Result<BuildScenario> {
+    BuildScenario::prepare()
 }
 
 #[rstest]
@@ -54,8 +60,9 @@ struct BuildTarget {
 )]
 fn build_targets_select_the_pinned_toolchain_and_fragment(
     #[case] target: BuildTarget,
+    #[from(prepared_build_scenario)] scenario_res: Result<BuildScenario>,
 ) -> Result<()> {
-    let scenario = BuildScenario::prepare()?;
+    let scenario = scenario_res?;
     let invocation = scenario.run(target.name)?;
     ensure!(
         invocation.toolchain() == pinned_toolchain()?,
@@ -76,6 +83,15 @@ fn build_targets_select_the_pinned_toolchain_and_fragment(
         target.subcommand,
         invocation.arguments()
     );
+    ensure!(
+        !invocation
+            .arguments()
+            .iter()
+            .any(|argument| argument == "--locked"),
+        "`{}` should leave lockfile verification disabled by default, got `{:?}`",
+        target.name,
+        invocation.arguments()
+    );
     // The linker is resolved by PATH order, so leading the prefix is the
     // whole mechanism by which the pinned mold, and not a system one, gets
     // used.
@@ -91,8 +107,11 @@ fn build_targets_select_the_pinned_toolchain_and_fragment(
 #[rstest]
 #[case("dev-build")]
 #[case("dev-test")]
-fn build_targets_forward_config_and_lockfile_overrides(#[case] target: &str) -> Result<()> {
-    let scenario = BuildScenario::prepare()?;
+fn build_targets_forward_config_and_lockfile_overrides(
+    #[case] target: &str,
+    #[from(prepared_build_scenario)] scenario_res: Result<BuildScenario>,
+) -> Result<()> {
+    let scenario = scenario_res?;
     let config = "tools/dev-fast/config.local.toml";
     let invocation = MakeInvocation::new(target)
         .variable("CARGO", scenario.cargo().executable())
@@ -122,8 +141,11 @@ fn build_targets_forward_config_and_lockfile_overrides(#[case] target: &str) -> 
 #[rstest]
 #[case("dev-build")]
 #[case("dev-test")]
-fn build_targets_do_not_evaluate_a_config_override(#[case] target: &str) -> Result<()> {
-    let scenario = BuildScenario::prepare()?;
+fn build_targets_do_not_evaluate_a_config_override(
+    #[case] target: &str,
+    #[from(prepared_build_scenario)] scenario_res: Result<BuildScenario>,
+) -> Result<()> {
+    let scenario = scenario_res?;
     let marker = scenario.sandbox().home().join("config-evaluation-marker");
     let config = format!("`touch {marker}`");
     let invocation = MakeInvocation::new(target)
@@ -146,8 +168,11 @@ fn build_targets_do_not_evaluate_a_config_override(#[case] target: &str) -> Resu
 #[rstest]
 #[case("dev-build")]
 #[case("dev-test")]
-fn build_targets_propagate_cargo_failure(#[case] target: &str) -> Result<()> {
-    let scenario = BuildScenario::prepare()?;
+fn build_targets_propagate_cargo_failure(
+    #[case] target: &str,
+    #[from(prepared_build_scenario)] scenario_res: Result<BuildScenario>,
+) -> Result<()> {
+    let scenario = scenario_res?;
     let cargo =
         scenario
             .sandbox()

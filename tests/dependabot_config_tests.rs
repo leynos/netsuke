@@ -321,11 +321,16 @@ fn dependabot_updates_have_expected_policy() -> Result<()> {
         &["dependencies", "cargo"],
         5,
     );
+    let rust_toolchain_update = update_for(&config, "rust-toolchain")?;
     assert_update_policy(
-        update_for(&config, "rust-toolchain")?,
+        rust_toolchain_update,
         "weekly",
         &["dependencies", "rust-toolchain"],
         5,
+    );
+    ensure!(
+        rust_toolchain_update.directory.as_deref() == Some("/"),
+        "rust-toolchain updates should target the repository root"
     );
     Ok(())
 }
