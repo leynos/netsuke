@@ -702,7 +702,6 @@ explicit, structured, and self-documenting nature.
 | Target Build    | my_program: main.o utils.o\\t$(CC) $^ -o $@                                        | { targets: { name: my_program, rule: link, sources: [main.o, utils.o] }                                           |
 | Readability     | Relies on cryptic automatic variables ($@, $\<, $^) and implicit pattern matching. | Uses explicit, descriptive keys (name, rule, sources) and standard YAML list/map syntax.                          |
 
-
 ### 2.8 Manifest composition and bundle resolution
 
 RFC 0003 defines deterministic resolution for versioned local bundles. The
@@ -2419,7 +2418,6 @@ delegates the core task scheduling and execution to the Ninja binary, it
 remains responsible for invoking Ninja correctly and, most importantly, for
 ensuring that the commands it generates for Ninja to run are constructed
 securely.
-
 
 ### Structured command working directories
 
