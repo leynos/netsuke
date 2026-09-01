@@ -358,7 +358,7 @@ accept these new snapshots:
 - As an alternative, when confident in the outputs, run
   `cargo insta accept --all` to accept all changes in one go.
 
-Once accepted, re-run `cargo insta test --test-runner nextest` - it should pass
+Once accepted, re-run `cargo insta test --test-runner nextest` — it should pass
 because the recorded snapshots now match the output. Commit the new/updated
 `.snap` files to version control. **Always include the snapshot files** so that
 CI can validate against them.
@@ -417,6 +417,9 @@ jobs:
       - name: Install cargo-insta (snapshot review tool)
         run: cargo install cargo-insta
 
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
       - name: Run tests (including snapshot tests)
         env:
           INSTA_UPDATE: no   # Ensure tests fail on any snapshot mismatch (no auto-update in CI)
@@ -433,7 +436,7 @@ jobs:
 - Install `cargo-insta` to run the canonical snapshot command and review
   changes. Its presence also enables `cargo insta` subcommands in CI if needed
   (for example, to print a summary or ensure no unused snapshots with
-  `cargo insta test --unreferenced=reject`).
+  `cargo insta test --unreferenced=reject --test-runner nextest`).
 
 - The caches for Cargo help speed up CI. Ensure you include the snapshot files
   in the repository so that tests can find the expected outputs.

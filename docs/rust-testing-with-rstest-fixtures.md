@@ -1127,8 +1127,8 @@ for maintainability and scalability.
     `tests/` directory (e.g., `tests/common/fixtures.rs`) and re-exporting
     public fixtures.
   - Alternatively, define shared fixtures in a non-test-gated public module
-    in the library crate (e.g., `src/lib.rs` or `src/fixtures.rs`) and `use`
-    them in integration tests.
+    in the library crate (e.g., `src/lib.rs`) and `use` them in integration
+    tests.
 - **Naming Conventions:** Use clear, descriptive names for fixtures that
   indicate what they provide or set up. Test function names should clearly
   state what behaviour they are verifying.
