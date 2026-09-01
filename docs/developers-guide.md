@@ -2228,13 +2228,16 @@ never after a failed clean. Do not introduce age-based cleanup or mutate an
 existing content-addressed sidecar. See
 [ADR-012](adr-012-bound-dyndep-sidecar-retention.md) for the durable policy.
 
-`src/runner/dyndep_generation_telemetry.rs` owns runner-boundary generation
-telemetry, and `src/runner/process/dyndep_telemetry.rs` owns publication
-telemetry. They may wrap their respective boundaries with bounded
-outcome-and-duration metrics and spans. Do not put manifest paths, action IDs,
-sidecar names, or content in those fields; `src/ninja_gen` generation and
-rendering must remain telemetry-free so their query responsibilities stay
-explicit.
+`src/runner/graph_generation_telemetry.rs` owns runner-boundary manifest-to-IR
+graph-generation telemetry, while `src/runner/dyndep_generation_telemetry.rs`
+owns dyndep bundle-generation telemetry and
+`src/runner/process/dyndep_telemetry.rs` owns publication telemetry. They may
+wrap their respective boundaries with bounded outcome-and-duration metrics and
+spans. Graph-generation outcomes include the fixed
+`invalid_command_interpolation` category for `IrGenError::InvalidCommand`;
+other failures use `other`. Do not put manifest paths, action IDs, sidecar
+names, or content in those fields; `src/ninja_gen` generation and rendering
+must remain telemetry-free so their query responsibilities stay explicit.
 
 The intended serial guarantee is path-scoped. A later dependency that is
 independently reachable elsewhere in the requested graph may start via that
@@ -4510,10 +4513,11 @@ background-query primitive.
   cross-subsystem consumer requires an explicit application boundary rather
   than widening these internal helpers.
 - **Composition rules:** command adapters report stages before or after the
-  relevant step and wrap `ninja_text_for_shell` with runner-owned, shell-aware
-  generation telemetry. Only `load_manifest_with_stage_reporting` translates
-  `StageObserver` events into status updates and selects the effectful build
-  loader. Consumers must not call manifest parsing, IR generation, or
+  relevant step and wrap `build_graph_for_shell` and dyndep bundle synthesis
+  with their respective runner-owned, shell-aware generation telemetry. Only
+  `load_manifest_with_stage_reporting` translates `StageObserver` events into
+  status updates and selects the effectful build loader. Consumers must not
+  call manifest parsing, IR generation, or
   `ninja_gen::generate_bundle_for_shell` directly in parallel with this
   pipeline. Before an adapter writes or executes a returned bundle, it must use
   the existing capability-injected dyndep-publication path to materialize its

@@ -123,6 +123,33 @@ mod tests {
         }
     }
 
+    /// Build a non-interpolation graph-generation failure for label coverage.
+    fn invalid_manifest_error() -> IrGenError {
+        IrGenError::InvalidManifest {
+            message: "invalid manifest",
+        }
+    }
+
+    /// Report whether one metric key has the expected bounded graph-generation labels.
+    fn has_graph_generation_labels(
+        key: &metrics_util::CompositeKey,
+        outcome: &str,
+        error_category: &str,
+        recipe_shell: &str,
+    ) -> bool {
+        [
+            ("outcome", outcome),
+            ("error_category", error_category),
+            ("recipe_shell", recipe_shell),
+        ]
+        .into_iter()
+        .all(|(name, value)| {
+            key.key()
+                .labels()
+                .any(|label| label.key() == name && label.value() == value)
+        })
+    }
+
     /// Locate one graph-generation counter with the supplied bounded labels.
     fn graph_generation_count(
         snapshot: &[(
@@ -133,29 +160,22 @@ mod tests {
         )],
         outcome: &str,
         error_category: &str,
+        recipe_shell: &str,
     ) -> Option<u64> {
-        snapshot.iter().find_map(|(key, _, _, value)| {
-            let has_outcome = key
-                .key()
-                .labels()
-                .any(|label| label.key() == "outcome" && label.value() == outcome);
-            let has_category = key
-                .key()
-                .labels()
-                .any(|label| label.key() == "error_category" && label.value() == error_category);
-            match (key.kind(), key.key().name(), value) {
+        snapshot.iter().find_map(
+            |(key, _, _, value)| match (key.kind(), key.key().name(), value) {
                 (MetricKind::Counter, GRAPH_GENERATIONS_TOTAL, DebugValue::Counter(count))
-                    if has_outcome && has_category =>
+                    if has_graph_generation_labels(key, outcome, error_category, recipe_shell) =>
                 {
                     Some(*count)
                 }
                 _ => None,
-            }
-        })
+            },
+        )
     }
 
     #[test]
-    fn graph_generation_records_success_and_interpolation_failure() {
+    fn graph_generation_records_bounded_outcome_labels() {
         let recorder = DebuggingRecorder::new();
         let snapshotter = recorder.snapshotter();
         metrics::with_local_recorder(&recorder, || {
@@ -166,15 +186,34 @@ mod tests {
             })
             .expect_err("interpolation failure should be preserved");
             assert!(matches!(error, IrGenError::InvalidCommand { .. }));
+            instrument_graph_generation(RecipeShell::Bash, || Ok::<_, IrGenError>(()))
+                .expect("Bash graph generation should be preserved");
+            let non_interpolation_error =
+                instrument_graph_generation(RecipeShell::PowerShell, || {
+                    Err::<(), _>(invalid_manifest_error())
+                })
+                .expect_err("non-interpolation failure should be preserved");
+            assert!(matches!(
+                non_interpolation_error,
+                IrGenError::InvalidManifest { .. }
+            ));
         });
 
         let snapshot = snapshotter.snapshot().into_vec();
         assert_eq!(
-            graph_generation_count(&snapshot, "success", "none"),
+            graph_generation_count(&snapshot, "success", "none", "posix"),
             Some(1)
         );
         assert_eq!(
-            graph_generation_count(&snapshot, "error", "invalid_command_interpolation"),
+            graph_generation_count(&snapshot, "error", "invalid_command_interpolation", "posix"),
+            Some(1)
+        );
+        assert_eq!(
+            graph_generation_count(&snapshot, "success", "none", "bash"),
+            Some(1)
+        );
+        assert_eq!(
+            graph_generation_count(&snapshot, "error", "other", "powershell"),
             Some(1)
         );
         let duration_samples = snapshot
@@ -187,6 +226,19 @@ mod tests {
                 _ => 0,
             })
             .sum::<usize>();
-        assert_eq!(duration_samples, 2);
+        assert_eq!(duration_samples, 4);
+    }
+
+    /// Verify telemetry helpers expose only bounded shell and error labels.
+    #[test]
+    fn graph_generation_telemetry_labels_are_bounded() {
+        assert_eq!(shell_name(RecipeShell::Posix), "posix");
+        assert_eq!(shell_name(RecipeShell::Bash), "bash");
+        assert_eq!(shell_name(RecipeShell::PowerShell), "powershell");
+        assert_eq!(
+            error_category(&invalid_command_error()),
+            "invalid_command_interpolation"
+        );
+        assert_eq!(error_category(&invalid_manifest_error()), "other");
     }
 }

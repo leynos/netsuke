@@ -23,6 +23,16 @@ impl MarkerProtection {
     }
 }
 
+/// Identify one command-substitution delimiter recognised during traversal.
+enum CommandSubstitutionDelimiter {
+    /// Begin a nested `$()` command substitution.
+    Start,
+    /// Open a grouped expression within the active command substitution.
+    NestedOpen,
+    /// Close a grouped expression or the active command substitution.
+    Close,
+}
+
 /// Retain parsing state for one active command substitution.
 ///
 /// A command substitution has its own quoting rules, independent of its
@@ -203,20 +213,39 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
 
     /// Track `$()` nesting and preserve its delimiters before marker handling.
     fn append_command_substitution_delimiter(&mut self, pos: usize, ch: char) -> Option<usize> {
+        match self.classify_command_substitution_delimiter(pos, ch)? {
+            CommandSubstitutionDelimiter::Start => {
+                self.command_substitutions.push(CommandSubstitution::new());
+                self.output.push_str("$(");
+                Some(pos + 2)
+            }
+            CommandSubstitutionDelimiter::NestedOpen => {
+                self.increment_command_substitution_parenthesis_depth();
+                self.output.push(ch);
+                Some(pos + 1)
+            }
+            CommandSubstitutionDelimiter::Close => {
+                self.decrement_command_substitution_parenthesis_depth();
+                self.output.push(ch);
+                Some(pos + 1)
+            }
+        }
+    }
+
+    /// Classify a character that delimits an active command substitution.
+    fn classify_command_substitution_delimiter(
+        &self,
+        pos: usize,
+        ch: char,
+    ) -> Option<CommandSubstitutionDelimiter> {
         if !self.matches_single_quote_context() && self.starts_command_substitution(pos, ch) {
-            self.command_substitutions.push(CommandSubstitution::new());
-            self.output.push_str("$(");
-            return Some(pos + 2);
+            return Some(CommandSubstitutionDelimiter::Start);
         }
         if self.starts_nested_command_substitution_parenthesis(ch) {
-            self.increment_command_substitution_parenthesis_depth();
-            self.output.push(ch);
-            return Some(pos + 1);
+            return Some(CommandSubstitutionDelimiter::NestedOpen);
         }
         if !self.matches_single_quote_context() && self.ends_command_substitution(ch) {
-            self.decrement_command_substitution_parenthesis_depth();
-            self.output.push(ch);
-            return Some(pos + 1);
+            return Some(CommandSubstitutionDelimiter::Close);
         }
         None
     }
