@@ -4,9 +4,10 @@
 //! command-interpolation failures. It records only the selected shell and
 //! fixed outcome categories, never manifest text, paths, or recipe contents.
 
-use std::{sync::Once, time::Instant};
+use std::sync::Once;
 
 use metrics::{counter, describe_counter, describe_histogram, histogram};
+use monotony::MonotonicClock;
 use tracing::field;
 
 use crate::{ir::IrGenError, recipe_shell::RecipeShell};
@@ -17,10 +18,14 @@ const GRAPH_GENERATIONS_TOTAL: &str = "netsuke_runner_graph_generations_total";
 const GRAPH_GENERATION_DURATION: &str = "netsuke_runner_graph_generation_duration_seconds";
 
 /// Instrument one manifest-to-IR graph-generation operation.
-pub(super) fn instrument_graph_generation<T>(
+pub(super) fn instrument_graph_generation<T, Clock>(
+    clock: &Clock,
     shell: RecipeShell,
     generate: impl FnOnce() -> Result<T, IrGenError>,
-) -> Result<T, IrGenError> {
+) -> Result<T, IrGenError>
+where
+    Clock: MonotonicClock + ?Sized,
+{
     describe_metrics();
     let recipe_shell = shell_name(shell);
     let span = tracing::trace_span!(
@@ -30,7 +35,7 @@ pub(super) fn instrument_graph_generation<T>(
         error_category = field::Empty,
     );
     let _guard = span.enter();
-    let started = Instant::now();
+    let started = clock.now();
     let result = generate();
     let (outcome, error_category) = record_outcome(&span, &result);
     counter!(
@@ -46,7 +51,7 @@ pub(super) fn instrument_graph_generation<T>(
         "error_category" => error_category,
         "recipe_shell" => recipe_shell,
     )
-    .record(started.elapsed());
+    .record(clock.now().duration_since(started));
     result
 }
 
@@ -112,6 +117,8 @@ mod tests {
         MetricKind,
         debugging::{DebugValue, DebuggingRecorder},
     };
+    use monotony::test_util::FixedMonotonicClock;
+    use std::time::Duration;
 
     /// Build one interpolation failure without exposing its command contents to metrics.
     fn invalid_command_error() -> IrGenError {
@@ -128,6 +135,15 @@ mod tests {
         IrGenError::InvalidManifest {
             message: "invalid manifest",
         }
+    }
+
+    /// Instrument one graph-generation operation with a deterministic clock.
+    fn instrument_with_fixed_clock<T>(
+        shell: RecipeShell,
+        generate: impl FnOnce() -> Result<T, IrGenError>,
+    ) -> Result<T, IrGenError> {
+        let clock = FixedMonotonicClock::with_elapsed(Duration::ZERO);
+        instrument_graph_generation(&clock, shell, generate)
     }
 
     /// Report whether one metric key has the expected bounded graph-generation labels.
@@ -179,17 +195,17 @@ mod tests {
         let recorder = DebuggingRecorder::new();
         let snapshotter = recorder.snapshotter();
         metrics::with_local_recorder(&recorder, || {
-            instrument_graph_generation(RecipeShell::Posix, || Ok::<_, IrGenError>(()))
+            instrument_with_fixed_clock(RecipeShell::Posix, || Ok::<_, IrGenError>(()))
                 .expect("successful graph generation should be preserved");
-            let error = instrument_graph_generation(RecipeShell::Posix, || {
+            let error = instrument_with_fixed_clock(RecipeShell::Posix, || {
                 Err::<(), _>(invalid_command_error())
             })
             .expect_err("interpolation failure should be preserved");
             assert!(matches!(error, IrGenError::InvalidCommand { .. }));
-            instrument_graph_generation(RecipeShell::Bash, || Ok::<_, IrGenError>(()))
+            instrument_with_fixed_clock(RecipeShell::Bash, || Ok::<_, IrGenError>(()))
                 .expect("Bash graph generation should be preserved");
             let non_interpolation_error =
-                instrument_graph_generation(RecipeShell::PowerShell, || {
+                instrument_with_fixed_clock(RecipeShell::PowerShell, || {
                     Err::<(), _>(invalid_manifest_error())
                 })
                 .expect_err("non-interpolation failure should be preserved");

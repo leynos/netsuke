@@ -70,7 +70,7 @@ fn execute_generate(
     output: Option<&std::path::PathBuf>,
     context: &ExecutionContext<'_>,
 ) -> Result<()> {
-    let bundle = generate_ninja_with_shell(cli, context.reporter, None, context.recipe_shell)?;
+    let bundle = generate_ninja_with_shell(cli, context.reporter, None, &context.graph_generation)?;
     let publication = materialize_dyndep_bundle(cli, &bundle)?;
     prune_dyndep_bundle(cli, bundle.dyndep_files(), &publication)?;
     let ninja = NinjaContent::new(bundle.into_parts().0);

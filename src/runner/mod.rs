@@ -7,19 +7,21 @@ mod dispatch;
 mod dyndep_generation_telemetry;
 mod dyndep_publication;
 mod error;
+mod graph_generation;
 mod graph_generation_telemetry;
 mod reporter;
 use crate::cli::{BuildArgs, Cli, Commands};
-use crate::localization::{self, keys};
+use crate::localization::keys;
+use crate::manifest;
 use crate::output_mode;
 use crate::output_prefs::OutputPrefs;
 use crate::status::{LocalizationKey, PipelineStage, StatusReporter, report_pipeline_stage};
-use crate::{manifest, ninja_gen};
 use anyhow::{Context, Result};
 pub use camino::{Utf8Path, Utf8PathBuf};
 pub use error::RunnerError;
+use monotony::StdMonotonicClock;
 use std::io::IsTerminal;
-use tracing::{debug, info};
+use tracing::info;
 
 /// Default Ninja executable to invoke.
 pub const NINJA_PROGRAM: &str = "ninja";
@@ -59,7 +61,8 @@ pub use recipe_shell_telemetry::{
 };
 
 use dyndep_publication::{materialize_dyndep_bundle, prune_dyndep_bundle};
-use path_helpers::{ensure_manifest_exists_or_error, resolve_manifest_path, resolve_output_path};
+use graph_generation::{GraphGenerationContext, generate_ninja_with_shell};
+use path_helpers::resolve_output_path;
 use recipe_shell_telemetry::{LegacyRecipeOperation, instrument_legacy_recipe_operation};
 
 /// Runtime dependencies shared by command dispatch handlers.
@@ -70,8 +73,8 @@ struct ExecutionContext<'a> {
     progress_enabled: bool,
     /// Resolved executable path used to invoke Ninja.
     ninja_program: &'a Utf8Path,
-    /// Explicit interpreter for generated legacy recipe text.
-    recipe_shell: crate::recipe_shell::RecipeShell,
+    /// Context that selects and measures graph generation.
+    graph_generation: GraphGenerationContext<'a>,
 }
 
 /// Target list passed through to Ninja; an empty slice uses IR defaults.
@@ -144,11 +147,15 @@ fn run_with_ninja_program_resolver(
     }
     let ninja_program = configured_program.map_or_else(resolve_program, Utf8Path::to_owned);
     let recipe_shell = recipe_shell::resolve_recipe_shell()?;
+    let clock = StdMonotonicClock;
     let context = ExecutionContext {
         reporter: reporter.as_ref(),
         progress_enabled,
         ninja_program: &ninja_program,
-        recipe_shell,
+        graph_generation: GraphGenerationContext {
+            recipe_shell,
+            clock: &clock,
+        },
     };
     dispatch::execute(cli, command, &context)
 }
@@ -166,9 +173,11 @@ fn on_task_progress_callback(reporter: &dyn StatusReporter) -> impl FnMut(u32, u
 ///
 /// Returns an error if manifest generation or Ninja execution fails.
 fn handle_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> Result<()> {
-    instrument_legacy_recipe_operation(LegacyRecipeOperation::Build, context.recipe_shell, || {
-        execute_build(cli, args, context)
-    })
+    instrument_legacy_recipe_operation(
+        LegacyRecipeOperation::Build,
+        context.graph_generation.recipe_shell,
+        || execute_build(cli, args, context),
+    )
 }
 
 /// Execute the build operation after runner telemetry begins.
@@ -181,7 +190,7 @@ fn execute_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) ->
         cli,
         context.reporter,
         Some(keys::STATUS_TOOL_BUILD.into()),
-        context.recipe_shell,
+        &context.graph_generation,
     )?;
     let publication = materialize_dyndep_bundle(cli, &bundle)?;
     prune_dyndep_bundle(cli, bundle.dyndep_files(), &publication)?;
@@ -249,7 +258,7 @@ fn handle_ninja_tool(
 ) -> Result<()> {
     instrument_legacy_recipe_operation(
         LegacyRecipeOperation::NinjaTool,
-        context.recipe_shell,
+        context.graph_generation.recipe_shell,
         || execute_ninja_tool(cli, tool, context),
     )
 }
@@ -269,8 +278,12 @@ fn execute_ninja_tool(
         subcommand = tool.name,
         "Preparing Ninja tool invocation"
     );
-    let bundle =
-        generate_ninja_with_shell(cli, context.reporter, Some(tool.key), context.recipe_shell)?;
+    let bundle = generate_ninja_with_shell(
+        cli,
+        context.reporter,
+        Some(tool.key),
+        &context.graph_generation,
+    )?;
     let publication = materialize_dyndep_bundle(cli, &bundle)?;
     let (ninja_file, dyndep_files) = bundle.into_parts();
     let ninja = NinjaContent::new(ninja_file);
@@ -308,57 +321,6 @@ fn execute_ninja_tool(
     context.reporter.report_complete(tool.key);
     drop(publication);
     Ok(())
-}
-
-/// Generate a Ninja bundle from the manifest referenced by `cli`.
-///
-/// # Errors
-///
-/// Returns an error if the manifest cannot be loaded or translated.
-///
-/// # Examples
-/// ```ignore
-/// use netsuke::cli::Cli;
-/// use netsuke::ninja_gen::GeneratedNinja;
-/// # let _: Option<GeneratedNinja> = None;
-/// ```
-/// Generate Ninja output using one selected legacy-recipe interpreter.
-pub(super) fn generate_ninja_with_shell(
-    cli: &Cli,
-    reporter: &dyn StatusReporter,
-    tool_key: Option<LocalizationKey>,
-    recipe_shell: crate::recipe_shell::RecipeShell,
-) -> Result<ninja_gen::GeneratedNinja> {
-    recipe_shell::validate_recipe_shell(recipe_shell)?;
-    let manifest_path = resolve_manifest_path(cli)?;
-    ensure_manifest_exists_or_error(cli, reporter, &manifest_path)?;
-
-    let policy = cli
-        .network_policy()
-        .context(localization::message(keys::RUNNER_CONTEXT_NETWORK_POLICY))?;
-    let manifest = load_manifest_with_stage_reporting(&manifest_path, policy, reporter)?;
-    if tracing::enabled!(tracing::Level::DEBUG) {
-        let ast_json = serde_json::to_string_pretty(&manifest).context(localization::message(
-            keys::RUNNER_CONTEXT_SERIALISE_MANIFEST,
-        ))?;
-        debug!("AST:\n{ast_json}");
-    }
-
-    report_pipeline_stage(reporter, PipelineStage::IrGenerationValidation, None);
-    let graph = graph_generation_telemetry::instrument_graph_generation(recipe_shell, || {
-        generation::build_graph_for_shell(&manifest, recipe_shell)
-    })
-    .context(localization::message(keys::RUNNER_CONTEXT_BUILD_GRAPH))?;
-
-    report_pipeline_stage(
-        reporter,
-        PipelineStage::NinjaSynthesisAndExecution,
-        tool_key,
-    );
-    dyndep_generation_telemetry::instrument_bundle_generation(&graph, || {
-        generation::ninja_text_for_shell(&graph, recipe_shell)
-    })
-    .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))
 }
 
 /// Map manifest-loading stages onto the status reporter's pipeline stages.
