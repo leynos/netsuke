@@ -306,7 +306,7 @@ fn non_utf8_ninja_paths_fail_early(
         [
             OsString::from("netsuke"),
             OsString::from(flag),
-            OsString::from_vec(vec![0xff]),
+            OsString::from_vec(b"manifest-\xff".to_vec()),
         ],
         &localizer,
     )
@@ -318,7 +318,9 @@ fn non_utf8_ninja_paths_fail_early(
         err.kind()
     );
     ensure!(
-        err.to_string().contains(expected_diagnostic) && err.to_string().contains("UTF-8"),
+        err.to_string().contains(expected_diagnostic)
+            && err.to_string().contains("UTF-8")
+            && err.to_string().contains("manifest-"),
         "non-UTF-8 {flag} should render its localized diagnostic, got {err}"
     );
     Ok(())

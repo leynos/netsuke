@@ -269,3 +269,42 @@ fn merge_logs_malformed_environment_layer_failure() -> Result<()> {
     assert_contains(&events, "environment configuration layer failed")?;
     Ok(())
 }
+
+/// Reject a raw non-UTF-8 manifest environment value during environment extraction.
+#[cfg(unix)]
+#[rstest]
+fn merge_rejects_non_utf8_manifest_environment_value() -> Result<()> {
+    use std::os::unix::ffi::OsStringExt;
+
+    let env = TestEnv {
+        entries: vec![(
+            OsString::from("NETSUKE_FILE"),
+            OsString::from_vec(b"manifest-\xff".to_vec()),
+        )],
+    };
+    let (events, merge_ok) = merge_and_capture(&["netsuke"], &env)?;
+
+    ensure!(
+        !merge_ok,
+        "a non-UTF-8 NETSUKE_FILE value must fail environment extraction"
+    );
+    assert_contains(&events, "rejected non-UTF-8 injected configuration")?;
+    assert_contains(&events, "failure_kind=\"non_utf8_value\"")?;
+    assert_contains(&events, "layer=\"environment\"")?;
+    assert_contains(&events, "environment configuration layer failed")?;
+    ensure!(
+        events.iter().all(|event| !event.contains("manifest-")),
+        "environment extraction must not expose the rejected path: {events:#?}"
+    );
+
+    let localizer = Arc::from(netsuke::cli_localization::build_localizer(None));
+    let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
+        .context("parse CLI args for raw environment-value merge test")?;
+    let error = netsuke::cli::merge_with_config_and_env(&cli, &matches, &env)
+        .expect_err("a non-UTF-8 NETSUKE_FILE value must be rejected");
+    ensure!(
+        error.to_string().contains("non-UTF-8 environment value"),
+        "environment extraction must return its fixed diagnostic, got {error}"
+    );
+    Ok(())
+}

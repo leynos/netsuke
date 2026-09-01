@@ -4,12 +4,12 @@ This guide signposts the v0.1.0 beta additions: the injectable child environment
 (`CommandEnv`), the named Ninja request types, narrow process options
 (`NinjaProcessOptions`), target/action discovery through `description` and
 `netsuke help targets`, and cached configuration discovery. Most existing
-manifests remain compatible, and callers of the unchanged convenience wrappers
-compile unchanged. Manifests using Jinja `glob()` must use shell-inert matched
-paths. The cached configuration discovery API is a breaking change for callers
-of the unstable Rust API; ordinary CLI users need no action. The Ninja
-invocation chain now requires UTF-8 build-file and working-directory paths;
-non-UTF-8 values are rejected at their input boundary.
+manifests remain compatible, and callers of the convenience wrappers retain
+their child-process behaviour. Manifests using Jinja `glob()` must use
+shell-inert matched paths. The cached configuration discovery API is a breaking
+change for callers of the unstable Rust API; ordinary CLI users need no action.
+The Ninja invocation chain now requires UTF-8 build-file and working-directory
+paths; non-UTF-8 values are rejected at their input boundary.
 
 Rust callers that construct `Target` with a struct literal must add the new
 `description` field (set it to `None` or `Some(...)`); deserialized manifests
@@ -46,7 +46,7 @@ impact
 
 | Area                         | Impact                                                                                                                                                                                                                                                                                                                                                | Where to read more                                                                               |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Convenience wrappers         | Unchanged. `run_ninja` and `run_ninja_tool` behave exactly as before, inheriting the process environment.                                                                                                                                                                                                                                             | [Users' guide](users-guide.md)                                                                   |
+| Convenience wrappers         | Behaviour unchanged. `run_ninja` and `run_ninja_tool` inherit the process environment, but their program and build-file paths now use `&Utf8Path`.                                                                                                                                                                                                    | [Users' guide](users-guide.md)                                                                   |
 | Child environment            | New opt-in `netsuke::runner::CommandEnv` carries additive variable overrides and an injected `PATH` for Ninja child processes.                                                                                                                                                                                                                        | [Users' guide](users-guide.md)                                                                   |
 | Request types                | New `netsuke::runner::NinjaBuildRequest` and `netsuke::runner::NinjaToolRequest` name the program, `NinjaProcessOptions`, build file, targets or tool, a child environment, and a required `stderr_mode: StderrMode` policy for the `*_with` run functions.                                                                                           | [Users' guide](users-guide.md)                                                                   |
 | Cached CLI configuration API | Breaking for callers of the unstable Rust API: use the opt-in cached discovery flow with `ConfigEnvProvider`; `ConfigStdEnvProvider` supplies process-backed access.                                                                                                                                                                                  | [Users' guide](users-guide.md)                                                                   |
@@ -60,18 +60,18 @@ impact
 
 ## Nothing to change for existing callers
 
-The convenience wrappers keep their signatures and their behaviour: the child
-inherits the calling process's environment, and Ninja is resolved exactly as
-before. No caller using these wrappers needs to change to adopt this release. A
-caller that constructs `NinjaBuildRequest`/`NinjaToolRequest` directly must pass
-`options: &options` and supply the required `stderr_mode: StderrMode` field.
+The convenience wrappers keep their child-process behaviour: the child inherits
+the calling process's environment, and Ninja is resolved exactly as before.
+Their program and build-file path parameters now use `&Utf8Path`, so callers
+using `std::path::Path` must convert those values. A caller that constructs
+`NinjaBuildRequest`/`NinjaToolRequest` directly must pass `options: &options`
+and supply the required `stderr_mode: StderrMode` field.
 
 Existing callers that construct `VerboseTimingReporter::new` continue to
 receive timing summaries on stderr. Callers that need to capture or redirect
 those summaries can opt into `VerboseTimingReporter::with_writer`; the
 [users' guide](users-guide.md#capture-verbose-timing-output) documents the
 owned sink and completion-ordering contract.
-
 
 ## Use UTF-8 manifest and working-directory paths
 
@@ -83,12 +83,12 @@ selected by `--file` or `NETSUKE_FILE`, the working directory selected by
 Command-line `--file` and `--directory` values are checked before manifest
 discovery or runner setup. If the operating system supplies bytes that are not
 valid UTF-8, parsing fails with a localized diagnostic naming the affected
-option. A `file` value supplied by a configuration file or by the
-`NETSUKE_FILE` environment variable is checked during post-merge validation and
-fails before the runner uses it.
+option. A `file` value in a configuration file must decode as UTF-8, while a
+`NETSUKE_FILE` value is checked while the environment layer extracts it; both
+fail before the merged configuration reaches the runner.
 
 Callers migrating from a non-UTF-8 path must rename or relocate the manifest or
-working directory so its path is representable as UTF-8, then pass the
+working directory, so its path is representable as UTF-8, then pass the
 supported path through `--file`, `--directory`, configuration, or
 `NETSUKE_FILE` as appropriate. Environment-variable payloads used for the Ninja
 child remain platform-native and are not subject to this path restriction.

@@ -8,9 +8,12 @@
 use super::*;
 use metrics::{SharedString, Unit};
 use metrics_util::{CompositeKey, MetricKind, debugging::DebugValue};
-use netsuke::runner::{
-    BASH_PREFLIGHT_TOTAL, LEGACY_RECIPE_EXECUTION_DURATION, LEGACY_RECIPE_EXECUTIONS_TOTAL,
-    RECIPE_SHELL_RESOLUTIONS_TOTAL,
+use netsuke::{
+    cli::PATH_VALIDATION_TOTAL,
+    runner::{
+        BASH_PREFLIGHT_TOTAL, LEGACY_RECIPE_EXECUTION_DURATION, LEGACY_RECIPE_EXECUTIONS_TOTAL,
+        RECIPE_SHELL_RESOLUTIONS_TOTAL,
+    },
 };
 
 type SnapshotEntry = (CompositeKey, Option<Unit>, Option<SharedString>, DebugValue);
@@ -164,6 +167,50 @@ fn recorder_retains_bounded_timing_summary_sink_series() {
     assert_unlabelled_duration(&snapshot, TIMING_SUMMARY_SINK_WRITE_DURATION, 0.01);
 }
 
+/// Retain only the fixed source and reason labels for CLI path-validation counters.
+#[test]
+fn recorder_retains_bounded_cli_path_validation_series() {
+    let recorder = ConfigMetricsRecorder::new();
+    let snapshotter = recorder.snapshotter();
+
+    metrics::with_local_recorder(&recorder, || {
+        counter!(PATH_VALIDATION_TOTAL, "source" => "file", "reason" => "non_utf8").increment(1);
+        counter!(PATH_VALIDATION_TOTAL, "source" => "directory", "reason" => "non_utf8")
+            .increment(1);
+        counter!(PATH_VALIDATION_TOTAL, "source" => "unbounded", "reason" => "non_utf8")
+            .increment(1);
+        counter!(PATH_VALIDATION_TOTAL, "source" => "file", "reason" => "unbounded").increment(1);
+        counter!(PATH_VALIDATION_TOTAL, "source" => "file").increment(1);
+    });
+
+    let snapshot = snapshotter.snapshot().into_vec();
+    assert_eq!(
+        snapshot.len(),
+        2,
+        "only the two bounded CLI path-validation series are retained"
+    );
+    for source in ["file", "directory"] {
+        assert!(
+            snapshot.iter().any(|entry| {
+                entry.0.kind() == MetricKind::Counter
+                    && entry.0.key().name() == PATH_VALIDATION_TOTAL
+                    && entry.0.key().labels().count() == 2
+                    && entry
+                        .0
+                        .key()
+                        .labels()
+                        .any(|label| label.key() == "source" && label.value() == source)
+                    && entry
+                        .0
+                        .key()
+                        .labels()
+                        .any(|label| label.key() == "reason" && label.value() == "non_utf8")
+                    && matches!(entry.3, DebugValue::Counter(1))
+            }),
+            "recorder should retain the {source:?} path-validation series: {snapshot:?}"
+        );
+    }
+}
 /// Record the two valid counter series emitted for recipe-shell operations.
 fn record_valid_recipe_shell_series() {
     counter!(

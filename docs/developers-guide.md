@@ -89,10 +89,10 @@ The public runner signatures preserve that path vocabulary:
 The process boundary is parser-independent; callers without CLI state construct
 `NinjaProcessOptions` directly.
 
-The legacy `run_ninja` and `run_ninja_tool` helpers retain their existing
-signatures and inherit the parent environment. Callers that need an isolated
-child use `run_ninja_with` or `run_ninja_tool_with` with one of the request
-types. Keep environment selection at this process boundary: do not add
+The `run_ninja` and `run_ninja_tool` helpers inherit the parent environment;
+their program and build-file parameters use `&Utf8Path`. Callers that need an
+isolated child use `run_ninja_with` or `run_ninja_tool_with` with one of the
+request types. Keep environment selection at this process boundary: do not add
 process-wide environment mutation to callers or tests.
 
 `netsuke help targets` is deliberately a different runner path. The dispatch
@@ -3658,18 +3658,13 @@ nor `tracing`, and consulting the switch afterwards is silent. See
 
 #### Ninja program resolver seam
 
-`resolve_ninja_program_utf8_with` in `src/runner/process/ninja_program.rs` takes
-`&impl mockable::Env`, with `mockable::DefaultEnv` as the production adapter
-supplied by the ambient `resolve_ninja_program_utf8` wrapper. The unit tests
-inject a `MockEnv` that pins the `NETSUKE_NINJA` key, so every override branch
-runs without process mutation.
-
-`resolve_ninja_program_with`, in the same module, takes the identical
-`&impl mockable::Env` seam and converts the UTF-8 result into a general platform
-`PathBuf`. It is compiled only under `#[cfg(test)]`: production reaches the
-platform-path form through `resolve_ninja_program`, which itself calls the
-UTF-8 resolver and converts its result, so no production path constructs a
-platform `PathBuf` independently of `resolve_ninja_program_utf8_with`.
+`resolve_ninja_program` in `src/runner/process/ninja_program.rs` is the public
+resolver and returns `Utf8PathBuf`. It supplies `mockable::DefaultEnv` to the
+internal `resolve_ninja_program_utf8_with` seam. Unit tests inject a `MockEnv`
+that pins the `NETSUKE_NINJA` key, so every override branch runs without
+process mutation. A non-empty, valid UTF-8 override becomes the returned
+`Utf8PathBuf`; empty and non-UTF-8 overrides use the default `ninja` path. No
+general platform-path resolver is exposed by this module.
 
 #### `which` environment capture
 
@@ -3991,6 +3986,13 @@ Instruments emitted by `record_config_load_metrics`:
   loading is expected to complete in single-digit milliseconds, so buckets
   above one second exist only to catch pathological filesystem or environment
   stalls.
+
+Raw CLI path validation is a separate parser-boundary metric:
+`netsuke_cli_path_validation_total` is a counter labelled with the bounded
+`source` values `file` and `directory`, and the bounded `reason` value
+`non_utf8`. It records rejected raw operating-system path arguments. Parsing
+can exit before the observability shutdown path is initialized, so these early
+rejections do not appear in a shutdown `metrics snapshot`.
 
 Naming convention: metric names use the `netsuke_` prefix and a `snake_case`
 unit suffix (`_total` for counters, `_seconds` for duration histograms),
@@ -4619,11 +4621,11 @@ exported by this module and must not interpret the environment override
 independently.
 
 `src/runner/ninja_process_adapter.rs` owns the one-way translation from `Cli` to
-`NinjaProcessOptions` and the public CLI-facing wrappers. It converts
-`Cli::directory` to the options' UTF-8 `working_dir`, returning
-`io::ErrorKind::InvalidData` for a non-UTF-8 path. The process module remains
-parser-independent; callers without CLI state construct `NinjaProcessOptions`
-directly.
+`NinjaProcessOptions` and the public CLI-facing wrappers. It clones the
+already-validated `Cli::directory` into the options' UTF-8 `working_dir`; the
+CLI parser, configuration decoder, and environment extractor reject non-UTF-8
+values before this adapter runs. The process module remains parser-independent;
+callers without CLI state construct `NinjaProcessOptions` directly.
 
 ### Module: `runner::process::command_logging`
 
