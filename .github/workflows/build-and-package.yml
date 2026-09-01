@@ -95,7 +95,7 @@ jobs:
           cargo-orthohelp --version | grep -Eq '(^|[[:space:]])0\.9\.0([[:space:]]|$)'
 
       - name: Build release binary
-        uses: leynos/shared-actions/.github/actions/rust-build-release@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+        uses: leynos/shared-actions/.github/actions/rust-build-release@32c8ea649ea44d40119f348ad48861212532061f
         with:
           target: ${{ inputs.target }}
           bin-name: ${{ env.BIN_NAME }}
@@ -115,7 +115,7 @@ jobs:
 
       - name: Stage artefacts
         id: stage
-        uses: leynos/shared-actions/.github/actions/stage-release-artefacts@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+        uses: leynos/shared-actions/.github/actions/stage-release-artefacts@32c8ea649ea44d40119f348ad48861212532061f
         with:
           config-file: .github/release-staging.toml
           target: ${{ inputs['stage-target'] }}
@@ -145,7 +145,7 @@ jobs:
 
       - name: Package Linux artefacts with dependencies
         if: inputs.platform == 'linux'
-        uses: leynos/shared-actions/.github/actions/linux-packages@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+        uses: leynos/shared-actions/.github/actions/linux-packages@32c8ea649ea44d40119f348ad48861212532061f
         with:
           project-dir: .
           package-name: ${{ inputs['bin-name'] }}
@@ -166,7 +166,7 @@ jobs:
       - name: Build Windows installer package
         if: inputs.platform == 'windows'
         id: package_windows
-        uses: leynos/shared-actions/.github/actions/windows-package@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+        uses: leynos/shared-actions/.github/actions/windows-package@32c8ea649ea44d40119f348ad48861212532061f
         with:
           product-name: ${{ inputs['bin-name'] }}
           manufacturer: Leynos
@@ -184,7 +184,7 @@ jobs:
       - name: Build macOS installer package
         if: inputs.platform == 'macos'
         id: package_macos
-        uses: leynos/shared-actions/.github/actions/macos-package@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+        uses: leynos/shared-actions/.github/actions/macos-package@32c8ea649ea44d40119f348ad48861212532061f
         with:
           name: ${{ inputs['bin-name'] }}
           identifier: com.leynos.${{ inputs['bin-name'] }}

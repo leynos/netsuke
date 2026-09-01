@@ -27,7 +27,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+        uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
         with:
           # Match rust-toolchain.toml: the tree needs the nightly-default
           # Polonius borrow checker (see
@@ -39,7 +39,7 @@ jobs:
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
       - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+        uses: leynos/shared-actions/.github/actions/generate-coverage@32c8ea649ea44d40119f348ad48861212532061f
         with:
           language: rust
           output-path: lcov.info
@@ -49,7 +49,7 @@ jobs:
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
         if: env.CS_ACCESS_TOKEN != ''
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@32c8ea649ea44d40119f348ad48861212532061f
         with:
           path: lcov.info
           format: lcov

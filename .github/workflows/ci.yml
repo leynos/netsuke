@@ -63,7 +63,7 @@ jobs:
           command -v awk
           awk --version
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+        uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           # Preserve warnings-as-errors through toolchain setup.
@@ -123,7 +123,7 @@ jobs:
           enable-cache: 'false'
       - name: Install Nixie
         uses: >-
-          leynos/shared-actions/.github/actions/install-nixie@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+          leynos/shared-actions/.github/actions/install-nixie@32c8ea649ea44d40119f348ad48861212532061f
         with:
           python-version: '3.14'
       - name: Markdown formatter checker tests
@@ -132,7 +132,7 @@ jobs:
         run: make check-fmt
       - name: Install Whitaker
         uses: >-
-          leynos/shared-actions/.github/actions/install-whitaker@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+          leynos/shared-actions/.github/actions/install-whitaker@32c8ea649ea44d40119f348ad48861212532061f
         with:
           installer-version: '0.2.7'
       - name: Lint
@@ -162,7 +162,7 @@ jobs:
       - name: Test
         run: make test
       - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+        uses: leynos/shared-actions/.github/actions/generate-coverage@32c8ea649ea44d40119f348ad48861212532061f
         with:
           language: rust
           output-path: lcov.info
@@ -174,7 +174,7 @@ jobs:
         if: env.CS_ACCESS_TOKEN != '' && github.event_name == 'pull_request'
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@32c8ea649ea44d40119f348ad48861212532061f
         with:
           path: lcov.info
           format: lcov
@@ -210,7 +210,7 @@ jobs:
       - name: Install GNU Make
         run: choco install make --yes --no-progress
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+        uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           # Preserve warnings-as-errors through toolchain setup.
@@ -273,7 +273,7 @@ jobs:
         run: make SHELL=bash lint-clippy
       - name: Install Whitaker
         uses: >-
-          leynos/shared-actions/.github/actions/install-whitaker@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+          leynos/shared-actions/.github/actions/install-whitaker@32c8ea649ea44d40119f348ad48861212532061f
         with:
           installer-version: '0.2.7'
       - name: Lint (Whitaker)
@@ -328,7 +328,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+        uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           rustflags: -D warnings
@@ -358,7 +358,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@18b2ea047ab1c761db2c4171aa7e73945badf3ec
+        uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
         with:
           toolchain: stable
       - name: Install uv
