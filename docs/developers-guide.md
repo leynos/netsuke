@@ -2618,6 +2618,20 @@ tests, use the `EnLocalizer` scoped pattern documented in the
 `no_color_env` is shared across output-preference and theme tests that exercise
 optional `NO_COLOR` lookup behaviour.
 
+### Localized CLI help snapshot boundary
+
+`src/cli/parser_tests.rs` exclusively owns the private
+`render_localized_long_help` helper. It builds, localizes, renders, and
+normalizes help as a pure CQRS query with no filesystem I/O. Its only permitted
+callers are `localized_help_includes_config_flag`, `localized_help_snapshot`,
+and `localized_help_topics_include_localized_descriptions`.
+
+`localized_help_snapshot` is the sole command/acceptance layer. Only this test
+may bind `snapshot_settings("cli")` and invoke `assert_snapshot!`, which may
+read or write under `src/snapshots/cli`. Production code and unrelated test
+modules must not use the helper. Broader reuse requires moving it into shared
+test support, justified by new call sites.
+
 ### JSON snapshot version redaction
 
 `src/snapshot_test_support.rs` owns the snapshot settings for versioned JSON
