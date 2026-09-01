@@ -251,10 +251,12 @@ abbreviated   = major ["." minor]
 zeroes, except for zero itself. Pre-release and build identifiers use the
 Semantic Versioning 2.0.0 rules. Only a complete three-component version may
 include pre-release or build metadata; abbreviated versions are valid only when
-neither metadata component is present. A bare three-component version means an
-exact version. A bare `1.4` means `>=1.4.0, <1.5.0`, and a bare `1` means
-`>=1.0.0, <2.0.0`. When an operator is present, omitted components are zero, so
-`>=1.4` means `>=1.4.0` and `<2` means `<2.0.0`.
+neither metadata component is present. A bare three-component version and its
+`=` form mean an exact core-version requirement. Because build metadata is
+ignored for requirement matching and precedence, `=1.4.2` matches a candidate
+declaring `1.4.2+local`. A bare `1.4` means `>=1.4.0, <1.5.0`, and a bare `1`
+means `>=1.0.0, <2.0.0`. When an operator is present, omitted components are
+zero, so `>=1.4` means `>=1.4.0` and `<2` means `<2.0.0`.
 
 The caret operator admits compatible changes: `^1.4` means `>=1.4.0, <2.0.0`;
 `^0.4` means `>=0.4.0, <0.5.0`; and `^0.0.3` means `>=0.0.3, <0.0.4`. A
@@ -276,16 +278,19 @@ are normative:
 | bare `1.4`             | `1.4.0`, `1.4.9`, `1.5.0`           | select `1.4.9`        |
 | `^1.4`                 | `1.4.0-rc.1`, `1.4.1-beta`, `1.4.1` | select `1.4.1`        |
 | `>=1.4.0-rc.1, <1.5.0` | `1.4.0-rc.2`, `1.4.0-beta`          | select `1.4.0-rc.2`   |
+| `=1.4.2`               | `1.4.2+local`                       | select sole candidate |
+| `=1.4.2`               | `1.4.2+one`, `1.4.2+two`            | ambiguity error       |
 
 Table 2: Semantic Version requirement selection vectors.
 
 Malformed descriptors fail during candidate classification, before any vector
 is selected. Candidates with valid metadata but another name or an incompatible
 version are excluded without changing the highest-compatible selection among
-valid candidates.
-
-Two candidates with the same bundle name and semantic version but different
-canonical content digests are an ambiguity error.
+valid candidates. After filtering by declared bundle name and requirement, if
+more than one candidate has the highest-precedence matching version, resolution
+fails with a deterministic ambiguity diagnostic naming every tied candidate's
+repository-relative path and declared version in sorted byte order. This
+applies regardless of canonical content digest; a digest cannot break the tie.
 
 ### 5.4 Import fields
 
