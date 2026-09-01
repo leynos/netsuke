@@ -5,12 +5,13 @@
 Accepted.
 
 `netsuke check` is the manifest linter, shipped with the rule set as a
-prototype: findings are the command's result rather than its failure mode, and
-rule identifiers are stable kebab-case names owned by a static registry. Rule
-prose stays in that registry for the prototype period and moves to the Fluent
-catalogues under roadmap step 7.2; rule identifiers never move.
+prototype: findings are data, and `--fail-on` determines whether Netsuke emits
+a successful result document or a failure diagnostic document. Rule identifiers
+are stable kebab-case names owned by a static registry. Rule prose stays in
+that registry for the prototype period and moves to the Fluent catalogues under
+roadmap step 10.2; rule identifiers never move.
 
-Roadmap phase 7 owns the work that turns the prototype into a supported
+Roadmap phase 10 owns the work that turns the prototype into a supported
 feature. The rule set, the default severities, and everything in the
 [manifest linter design](netsuke-linter-design.md) except the identifiers are
 expected to change under it.
@@ -184,16 +185,16 @@ and worth translating once it is stable. Third, a 35-way obligation on every
 new rule would fall hardest while the rule set is still churning, which is
 exactly the period this phase expects.
 
-Roadmap step 7.2 owns the migration and states its shape: catalogue keys of the
-form `lint.rule.<name>.summary`, the registry's English text retained as the
-fallback so a catalogue gap degrades to the source locale, the reference
+Roadmap step 10.2 owns the migration and states its shape: catalogue keys of
+the form `lint.rule.<name>.summary`, the registry's English text retained as
+the fallback so a catalogue gap degrades to the source locale, the reference
 contract test rebound to the source catalogue, and `--explain --json` left in
 the source locale so an editor building a rule picker gets stable text.
 
 ## Known risks and limitations
 
 - **Rule text is English-only in an otherwise localized CLI.** This is a real
-  inconsistency, accepted only for the prototype period. Roadmap step 7.2
+  inconsistency, accepted only for the prototype period. Roadmap step 10.2
   closes it, and the migration is additive: add the `lint.rule.<name>.*` keys,
   have the registry look them up with the current text as the fallback, and
   translate incrementally. No identifier, schema, or suppression comment

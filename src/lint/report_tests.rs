@@ -2,7 +2,7 @@
 
 use rstest::rstest;
 
-use super::{Bounds, NamedManifest, Report};
+use super::{Bounds, Report};
 use crate::lint::engine::Outcome;
 use crate::lint::finding::Finding;
 use crate::lint::registry;
@@ -36,10 +36,6 @@ fn build_outcome(meta: &'static crate::lint::rule::RuleMeta, severities: &[Sever
 macro_rules! report {
     ($severities:expr, $limit:expr, $threshold:expr $(,)?) => {
         Report::new(
-            NamedManifest {
-                name: "Netsukefile",
-                source: "netsuke_version: \"1.0.0\"\n".to_owned(),
-            },
             outcome!($severities),
             Bounds {
                 limit: $limit,
@@ -162,10 +158,4 @@ fn a_clean_report_never_fails() {
     ] {
         assert!(!report!(&[], 0, threshold).is_failure());
     }
-}
-
-#[test]
-fn the_report_projects_one_diagnostic_per_finding() {
-    let built = report!(&[Severity::Error, Severity::Warning], 0, FailOn::Error);
-    assert_eq!(built.diagnostics().len(), 2);
 }

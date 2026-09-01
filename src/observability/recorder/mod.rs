@@ -27,8 +27,9 @@ use netsuke::{
     },
     manifest::{ENV_LOOKUP_OUTCOME_VALUES, ENV_LOOKUP_TOTAL},
     runner::{
-        BASH_PREFLIGHT_TOTAL, LEGACY_RECIPE_EXECUTION_DURATION, LEGACY_RECIPE_EXECUTIONS_TOTAL,
-        NINJA_STATUS_OVERSIZED_LINES_TOTAL, RECIPE_SHELL_RESOLUTIONS_TOTAL,
+        BASH_PREFLIGHT_TOTAL, CHECK_DURATION, CHECK_TOTAL, LEGACY_RECIPE_EXECUTION_DURATION,
+        LEGACY_RECIPE_EXECUTIONS_TOTAL, NINJA_STATUS_OVERSIZED_LINES_TOTAL,
+        RECIPE_SHELL_RESOLUTIONS_TOTAL,
     },
     stdlib::{
         DIALECT_SOURCE_VALUES, DIALECT_VALUES, FILE_READ_FILTER_VALUES, FILE_READ_OUTCOME_VALUES,
@@ -67,6 +68,14 @@ const BASH_PREFLIGHT_OUTCOMES: [&str; 2] = ["success", "error"];
 /// Bounded probe results emitted by Bash compatibility preflight.
 const BASH_PREFLIGHT_PROBE_OUTCOMES: [&str; 4] =
     ["success", "not_found", "launch_failed", "non_zero_exit"];
+/// Bounded command outcomes emitted by `netsuke check`.
+const CHECK_OUTCOMES: [&str; 5] = [
+    "success",
+    "threshold_failure",
+    "policy_failure",
+    "analysis_failure",
+    "output_failure",
+];
 
 /// Label key naming the `which` search domain on every resolver series.
 const CWD_MODE_LABEL: &str = "cwd_mode";
@@ -135,6 +144,8 @@ impl ConfigMetricsRecorder {
                 | TIMING_SUMMARY_SINK_WRITES_TOTAL
                 | TIMING_SUMMARY_SINK_WRITE_DURATION
                 | RECIPE_SHELL_RESOLUTIONS_TOTAL
+                | CHECK_TOTAL
+                | CHECK_DURATION
                 | BASH_PREFLIGHT_TOTAL
                 | LEGACY_RECIPE_EXECUTIONS_TOTAL
                 | LEGACY_RECIPE_EXECUTION_DURATION
@@ -208,6 +219,7 @@ impl ConfigMetricsRecorder {
             | WHICH_CACHE_TOTAL
             | WHICH_RESOLUTION_TOTAL
             | SHELL_QUOTE_DIALECT_TOTAL => accepts_stdlib_counter_registration(key),
+            CHECK_TOTAL => exact_labels(key, &[(OUTCOME_LABEL, &CHECK_OUTCOMES)]),
             _ => false,
         }
     }
@@ -228,6 +240,7 @@ impl ConfigMetricsRecorder {
                     ("failure_category", &LEGACY_RECIPE_FAILURE_CATEGORIES),
                 ],
             ),
+            CHECK_DURATION => exact_labels(key, &[(OUTCOME_LABEL, &CHECK_OUTCOMES)]),
             _ => false,
         }
     }

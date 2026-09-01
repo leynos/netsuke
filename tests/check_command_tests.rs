@@ -7,7 +7,7 @@
 
 use anyhow::{Context, Result, ensure};
 use rstest::{fixture, rstest};
-use serde_json::Value;
+use serde_json::{Value, json};
 use tempfile::TempDir;
 use test_support::fs as test_fs;
 use test_support::netsuke::{NetsukeRun, run_netsuke_in};
@@ -277,6 +277,76 @@ fn explain_publishes_the_rule_catalogue(clean_workspace: Result<Workspace>) -> R
     Ok(())
 }
 
+/// A named explanation renders only that rule's full metadata in both modes.
+#[rstest]
+fn explain_for_a_known_rule_is_precise_in_text_and_json(
+    clean_workspace: Result<Workspace>,
+) -> Result<()> {
+    let workspace = clean_workspace?;
+    let expected_text = [
+        "manual-ninja-escape",
+        "category: migration    stage: document    default: warning",
+        "code: netsuke::lint::manual_ninja_escape",
+        "summary: recipe doubles a dollar to escape it for Ninja",
+        "rationale: Netsuke now escapes dollars at the Ninja writer boundary, after it has lowered its own placeholders. A recipe that still doubles a dollar reaches the shell as a literal `$$`, whose first two characters expand to the shell's process identifier rather than to the intended variable.",
+        "remediation: Write the shell variable normally, for example `$PATH` rather than `$$PATH`.",
+        "documentation: https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#manual-ninja-escape",
+    ];
+    let text = workspace.run(&["check", "--explain", "manual-ninja-escape"])?;
+    ensure!(
+        text.success,
+        "the text explanation should succeed: {}",
+        text.stderr
+    );
+    for expected in expected_text {
+        ensure!(
+            text.stdout.contains(expected),
+            "the text explanation should contain {expected:?}, got {}",
+            text.stdout
+        );
+    }
+    ensure!(
+        !text.stdout.contains("legacy-placeholder"),
+        "the text explanation must not include an unrelated rule: {}",
+        text.stdout
+    );
+
+    let json_run = workspace.run(&["--json", "check", "--explain", "manual-ninja-escape"])?;
+    ensure!(
+        json_run.success,
+        "the JSON explanation should succeed: {}",
+        json_run.stderr
+    );
+    let json_document = document(&json_run)?;
+    let rules = json_document
+        .pointer("/result/rules")
+        .and_then(Value::as_array)
+        .context("the JSON explanation should carry rules")?;
+    ensure!(rules.len() == 1, "expected exactly one rule, got {rules:?}");
+    ensure!(
+        rules.first()
+            == Some(&json!({
+                "name": "manual-ninja-escape",
+                "category": "migration",
+                "stage": "document",
+                "default_severity": "warning",
+                "code": "netsuke::lint::manual_ninja_escape",
+                "summary": "recipe doubles a dollar to escape it for Ninja",
+                "rationale": "Netsuke now escapes dollars at the Ninja writer boundary, after it has lowered its own placeholders. A recipe that still doubles a dollar reaches the shell as a literal `$$`, whose first two characters expand to the shell's process identifier rather than to the intended variable.",
+                "remediation": "Write the shell variable normally, for example `$PATH` rather than `$$PATH`.",
+                "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#manual-ninja-escape",
+            })),
+        "the JSON explanation should publish the complete known-rule metadata: {rules:?}"
+    );
+    ensure!(
+        !rules
+            .iter()
+            .any(|rule| rule.get("name") == Some(&Value::from("legacy-placeholder"))),
+        "the JSON explanation must not include an unrelated rule: {rules:?}"
+    );
+    Ok(())
+}
+
 #[rstest]
 fn explain_rejects_an_unknown_rule(clean_workspace: Result<Workspace>) -> Result<()> {
     let run = clean_workspace?.run(&["--json", "check", "--explain", "no-such-rule"])?;
@@ -300,6 +370,36 @@ fn human_output_shows_the_offending_source(warning_workspace: Result<Workspace>)
             run.stdout.contains(expected),
             "human output should contain {expected:?}, got {}",
             run.stdout
+        );
+    }
+    Ok(())
+}
+
+/// A human check fails at its selected threshold without writing a result.
+#[rstest]
+fn human_failure_at_the_warning_threshold_uses_stderr(
+    warning_workspace: Result<Workspace>,
+) -> Result<()> {
+    let run = warning_workspace?.run(&[
+        "--locale",
+        "en-US",
+        "--color",
+        "never",
+        "check",
+        "--fail-on",
+        "warning",
+    ])?;
+    ensure!(!run.success, "the warning threshold should fail");
+    ensure!(
+        run.stdout.is_empty(),
+        "a threshold failure should not write a successful result: {}",
+        run.stdout
+    );
+    for expected in ["manual-ninja-escape", "Lint findings reached"] {
+        ensure!(
+            run.stderr.contains(expected),
+            "the failure should contain {expected:?}, got {}",
+            run.stderr
         );
     }
     Ok(())
