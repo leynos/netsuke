@@ -16,11 +16,12 @@
     unused_assignments
 )]
 
-use crate::lint::FindingDiagnostic;
 use crate::localization::LocalizedMessage;
 use miette::Diagnostic;
 use std::path::PathBuf;
 use thiserror::Error;
+
+use super::FindingDiagnostic;
 
 /// Errors raised during command execution.
 #[derive(Debug, Error, Diagnostic)]

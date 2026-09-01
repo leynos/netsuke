@@ -283,9 +283,8 @@ operator, user, and contributor references are easier to find.
   entry isolation with shared mode preserved as the default.
 - [ADR-018](adr-018-manifest-linting-under-netsuke-check.md):
   Manifest-linting decision record, placing the linter under `netsuke check`,
-  treating findings as command results rather than failures, and fixing the
-  rule-identifier and rule-text ownership rules.
-
+  treating findings as data with a threshold-selected success or failure
+  document, and fixing the rule-identifier and rule-text ownership rules.
 - [ADR-0046-agent-consistent-human-first-cli.md](adrs/adr-0046-agent-consistent-human-first-cli.md):
   Human-first, agent-consistent CLI doctrine decision record.
 - [ADR-0047: Kani IR harnesses](adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md):
@@ -316,6 +315,8 @@ operator, user, and contributor references are easier to find.
 - [v0-1-1-migration-guide.md](v0-1-1-migration-guide.md): Migration notes for
   replacing no-op aggregate recipes with dependency-only actions or targets,
   plus the `cwd_mode` label added to the `which` resolver counters.
+- [v0-2-0-migration-guide.md](v0-2-0-migration-guide.md): Migration signpost
+  for the `netsuke check` linter and its rule, severity, and suppression policy.
 - [users-guide.md](users-guide.md): End-user reference for authoring and
   running Netsuke manifests, including executable discovery and
   `command_available` branch selection.

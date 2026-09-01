@@ -5,6 +5,22 @@ use crate::ir::BuildGraph;
 use crate::lint::document::Document;
 use crate::manifest;
 
+/// A fixture whose generated targets and literal target share one authored
+/// manifest, exercising provenance after expansion.
+const EXPANDED_AND_LITERAL_TARGETS: &str = concat!(
+    "netsuke_version: \"1.0.0\"\n",
+    "vars:\n",
+    "  items:\n",
+    "    - one\n",
+    "    - two\n",
+    "targets:\n",
+    "  - foreach: items\n",
+    "    name: \"{{ item }}\"\n",
+    "    command: \"touch {{ outs }}\"\n",
+    "  - name: literal\n",
+    "    command: \"touch {{ outs }}\"\n",
+);
+
 /// Parse a fixture into its document and its expanded manifest.
 ///
 /// The graph is built and discarded: it proves the fixture lowers, which is
@@ -51,20 +67,7 @@ fn positional_correspondence_resolves_every_item() {
 /// When `foreach` changes a section's length, a literal name still resolves.
 #[test]
 fn a_literal_name_resolves_after_expansion() {
-    let yaml = concat!(
-        "netsuke_version: \"1.0.0\"\n",
-        "vars:\n",
-        "  items:\n",
-        "    - one\n",
-        "    - two\n",
-        "targets:\n",
-        "  - foreach: items\n",
-        "    name: \"{{ item }}\"\n",
-        "    command: \"touch {{ outs }}\"\n",
-        "  - name: literal\n",
-        "    command: \"touch {{ outs }}\"\n",
-    );
-    let (doc, parsed) = provenance!(yaml);
+    let (doc, parsed) = provenance!(EXPANDED_AND_LITERAL_TARGETS);
     let found = Provenance::new(&doc, &parsed);
     let literal = parsed
         .targets
@@ -110,20 +113,7 @@ fn a_single_element_foreach_does_not_resolve_positionally() {
 /// rather than to the wrong declaration.
 #[test]
 fn a_generated_target_resolves_to_nothing() {
-    let yaml = concat!(
-        "netsuke_version: \"1.0.0\"\n",
-        "vars:\n",
-        "  items:\n",
-        "    - one\n",
-        "    - two\n",
-        "targets:\n",
-        "  - foreach: items\n",
-        "    name: \"{{ item }}\"\n",
-        "    command: \"touch {{ outs }}\"\n",
-        "  - name: literal\n",
-        "    command: \"touch {{ outs }}\"\n",
-    );
-    let (doc, parsed) = provenance!(yaml);
+    let (doc, parsed) = provenance!(EXPANDED_AND_LITERAL_TARGETS);
     let found = Provenance::new(&doc, &parsed);
     let generated = parsed
         .targets
