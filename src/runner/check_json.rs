@@ -12,6 +12,7 @@ use crate::json_envelope::{GeneratorInfo, SCHEMA_VERSION};
 use crate::lint::{Report, RuleMeta, Severity};
 
 use super::super::check_diagnostics::CheckReport;
+use super::super::check_documentation::rule_documentation_url;
 
 /// Render a passing check as its versioned result document.
 ///
@@ -177,7 +178,7 @@ impl RuleEntry {
             summary: meta.summary,
             rationale: meta.rationale,
             remediation: meta.remediation,
-            url: meta.doc_url(),
+            url: rule_documentation_url(meta.name),
         }
     }
 }
