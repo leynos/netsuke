@@ -23,32 +23,28 @@ use std::collections::BTreeSet;
 use tempfile::tempdir;
 use test_support::fs as test_fs;
 
-/// Prefix a raw lowercase suffix to form a portable fixture directory component.
-///
-/// The fixed prefix prevents Windows reserved device names, such as `con` and
-/// future `comN` or `lptN` values, from reaching fixture creation.
-fn portable_segment(raw: &str) -> String {
-    format!("segment-{raw}")
+const WINDOWS_RESERVED_DEVICE_NAMES: &[&str] = &[
+    "con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8",
+    "com9", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
+];
+
+/// Determine whether `component` is reserved as a Windows device name.
+fn is_windows_reserved_device_name(component: &str) -> bool {
+    WINDOWS_RESERVED_DEVICE_NAMES
+        .iter()
+        .any(|name| component.eq_ignore_ascii_case(name))
 }
 
-/// Generate a small tree of safe portable filesystem path segments.
-///
-/// The fixed `segment-` prefix prevents Windows reserved device names from
-/// reaching fixture creation while preserving lowercase random suffixes and
-/// readable Proptest shrinking.
-fn segments() -> impl Strategy<Value = Vec<String>> {
-    collection::vec("[a-z]{1,5}", 0..4).prop_map(|raw_segments| {
-        raw_segments
-            .into_iter()
-            .map(|raw_segment| portable_segment(&raw_segment))
-            .collect()
+/// Generate one lowercase ASCII path segment that is valid on Windows.
+fn safe_segment() -> impl Strategy<Value = String> {
+    "[a-z]{1,5}".prop_filter("segment must not be a Windows device name", |component| {
+        !is_windows_reserved_device_name(component)
     })
 }
 
-/// Prevent a Windows device name from becoming a complete fixture component.
-#[test]
-fn portable_segment_prefixes_windows_device_name() {
-    assert_eq!(portable_segment("con"), "segment-con");
+/// Generate a small tree of safe (lowercase ASCII) path segments.
+fn segments() -> impl Strategy<Value = Vec<String>> {
+    collection::vec(safe_segment(), 0..4)
 }
 
 /// The expected pattern-relative spelling of `segments` joined to `leaf.txt`.
@@ -166,6 +162,18 @@ proptest! {
             "absolute result {got:?} must retain suffix {suffix:?}"
         );
     }
+}
+
+#[rstest::rstest]
+#[case("nul", true)]
+#[case("COM1", true)]
+#[case("lpt9", true)]
+#[case("nested", false)]
+fn windows_device_names_are_not_safe_path_segments(
+    #[case] component: &str,
+    #[case] is_reserved: bool,
+) {
+    assert_eq!(is_windows_reserved_device_name(component), is_reserved);
 }
 
 /// A parent-relative pattern keeps its `..` spelling in the result.
