@@ -546,6 +546,21 @@ the same per-finding data in both result and failure documents. Keep command
 parsing, output streams, and reporter construction at the runner boundary;
 rules and policy must remain independent of those concerns.
 
+### Check-command telemetry
+
+`src/runner/check_telemetry.rs` instruments the complete `netsuke check`
+command at the runner boundary. `instrument_check` records one
+`netsuke_runner_check_total` counter and one
+`netsuke_runner_check_duration_seconds` histogram for every invocation. Both
+metrics use only the bounded `outcome` label, and the corresponding
+`runner.check` span records the same value.
+
+The outcome vocabulary is fixed: `success`, `threshold_failure`,
+`policy_failure`, `analysis_failure`, and `output_failure`. Do not add rule
+names, manifest paths, finding text, or other caller-controlled values to
+metric labels or span fields. The telemetry adapter owns this instrumentation;
+the lint domain remains free of metrics and tracing concerns.
+
 ## Package and target naming
 
 The crates.io package is `netsuke-build`; the library target, the binary

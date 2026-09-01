@@ -405,6 +405,30 @@ fn human_failure_at_the_warning_threshold_uses_stderr(
     Ok(())
 }
 
+/// Help for `check` renders without requiring a manifest or build tools.
+#[test]
+fn help_check_renders_the_check_command_reference() -> Result<()> {
+    let directory = TempDir::new().context("create a workspace")?;
+    let run = run_netsuke_in(directory.path(), &["help", "check"])?;
+    ensure!(run.success, "check help should succeed: {}", run.stderr);
+    for expected in [
+        "Analyse the selected manifest for constructs that parse but are likely erroneous, unsafe,",
+        "non-portable, or hostile to caching.",
+        "Usage: check [OPTIONS]",
+        "--rule <NAME=SEVERITY>",
+        "--fail-on <SEVERITY>",
+        "--limit <N>",
+        "--explain [<RULE>]",
+    ] {
+        ensure!(
+            run.stdout.contains(expected),
+            "check help should contain {expected:?}, got {}",
+            run.stdout
+        );
+    }
+    Ok(())
+}
+
 /// Write `config` beside the workspace manifest and return its path argument.
 fn write_config(workspace: &Workspace, config: &str) -> Result<String> {
     let path = workspace.directory.path().join("netsuke.toml");
@@ -465,6 +489,41 @@ fn configuration_supplies_selectors_and_limits(warning_workspace: Result<Workspa
     ensure!(
         findings.is_empty(),
         "the configured selector should disable the rule, got {findings:?}"
+    );
+    Ok(())
+}
+
+/// A configured limit bounds the published array, but not the whole-run summary.
+#[test]
+fn configuration_limit_bounds_the_check_document() -> Result<()> {
+    let workspace = Workspace::new(concat!(
+        "netsuke_version: \"1.0.0\"\n",
+        "targets:\n",
+        "  - name: out.txt\n",
+        "    command: \"cp $$A $$B $$C {{ outs }}\"\n",
+    ))?;
+    let config = write_config(&workspace, "[cmds.check]\nlimit = 1\n")?;
+    let run = workspace.run(&["--config", &config, "--json", "check"])?;
+    ensure!(
+        run.success,
+        "configured limit should succeed: {}",
+        run.stderr
+    );
+    let document = document(&run)?;
+    ensure!(
+        document.pointer("/result/truncated") == Some(&Value::from(true)),
+        "configured limit should mark the result as truncated: {}",
+        run.stdout
+    );
+    ensure!(
+        document.pointer("/result/summary/reported") == Some(&Value::from(1)),
+        "configured limit should keep one finding: {}",
+        run.stdout
+    );
+    ensure!(
+        document.pointer("/result/summary/omitted") == Some(&Value::from(2)),
+        "configured limit should account for omitted findings: {}",
+        run.stdout
     );
     Ok(())
 }

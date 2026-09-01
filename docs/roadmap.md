@@ -2167,7 +2167,7 @@ changes a finding, an identifier, or an output schema; they are separated from
 steps 10.1 to 10.4 because they are reviewable independently and none blocks
 the freeze.
 
-- [ ] 10.5.1. Move the `miette` dependency out of the lint core into an adapter.
+- [x] 10.5.1. Move the `miette` dependency out of the lint core into an adapter.
   - `src/lint` currently converts its own `Span` and `Severity` into `miette`
     types, implements `Diagnostic` on its finding projection, and owns a
     `NamedSource`, so the core cannot be used without the reporting framework.
@@ -2175,7 +2175,7 @@ the freeze.
     convert them at the runner boundary where the diagnostics are rendered.
   - Success: `src/lint` names no `miette` type, and the JSON and human output
     are byte-identical to their current snapshots.
-- [ ] 10.5.2. Add runner-boundary telemetry for `netsuke check`.
+- [x] 10.5.2. Add runner-boundary telemetry for `netsuke check`.
   - The command loads a manifest, builds a graph, indexes the source, and runs
     every rule without emitting a metric or a span, unlike its sibling
     commands.

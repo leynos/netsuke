@@ -190,7 +190,7 @@ src/lint/
 ├── engine.rs       stage execution, ordering, suppression application
 ├── rule.rs         RuleMeta, Category, Stage, the four stage traits, FindingSink
 ├── registry.rs     the static rule table and lookup by identifier or category
-├── finding.rs      Finding and its miette Diagnostic projection
+├── finding.rs      framework-neutral Finding and presentation data
 ├── severity.rs     Severity, FailOn, and their parsing
 ├── policy.rs       resolved per-rule severity from selectors
 ├── document.rs     the spanned authored document
@@ -198,7 +198,7 @@ src/lint/
 ├── scalar_span.rs  narrowing scanner-reported scalar spans
 ├── resolve.rs      best-effort span resolution for stages 2 and 3
 ├── suppress.rs     directive scanning and block scoping
-├── report.rs       bounding, counting, and the diagnostic projection
+├── report.rs       bounding, counting, and threshold summaries
 └── rules/          one module per category, rules colocated with their tests
 ```
 
@@ -206,6 +206,12 @@ Rules live in per-category modules rather than one file per rule so that a
 category's shared helpers — shell tokenization, path-word matching — stay
 adjacent to the rules that use them, following the repository's
 group-by-feature convention.
+
+`src/lint/finding.rs` is framework-neutral: it owns the linter's finding,
+location, and presentation data without depending on a diagnostic or
+publication framework. `src/runner/check_diagnostics.rs` is the runner-owned
+`miette` adapter that combines those findings with the manifest source for
+human diagnostics.
 
 ## 4. Source provenance
 
@@ -256,10 +262,10 @@ Category is metadata, not part of the identifier, so that recategorizing a rule
 does not invalidate a configuration file or a suppression comment. This is the
 one place this design departs from Ruff, whose codes embed the category.
 
-Each finding also carries a miette diagnostic code of the form
-`netsuke::lint::<name_in_snake_case>`, matching the existing convention for
-Netsuke diagnostic codes, and a `url` pointing at the rule's section in the
-rule reference.
+The runner's diagnostic adapter projects each finding to a miette diagnostic
+code of the form `netsuke::lint::<name_in_snake_case>`, matching the existing
+convention for Netsuke diagnostic codes, and a `url` pointing at the rule's
+section in the rule reference.
 
 ### 5.2 Metadata
 
