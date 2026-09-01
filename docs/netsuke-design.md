@@ -507,9 +507,13 @@ target and action filtering counts include every excluded entry, while its
 limit. Each retained record contains only the section, an eight-character
 bounded hash of the entry name, an optional iteration index, and the length of
 the `when` expression; raw names, item values, and expressions are not
-returned. Expansion itself emits no tracing. The loading orchestrator owns the
-`trace_expansion_report` adapter that turns the bounded report into debug
-events and an aggregate summary.
+returned. Expansion itself emits no tracing or metrics. The loading
+orchestrator owns the `trace_expansion_report` adapter that turns the bounded
+report into debug events and an aggregate summary, and records the unlabelled,
+fixed-cardinality aggregate counters `netsuke_manifest_filtered_targets_total`,
+`netsuke_manifest_filtered_actions_total`, and
+`netsuke_manifest_omitted_filtered_entries_total`. Manifest-query loading
+bypasses this adapter, emitting neither expansion tracing nor these metrics.
 
 ```yaml
 - foreach: glob('assets/svg/*.svg')

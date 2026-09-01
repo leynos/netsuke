@@ -166,6 +166,43 @@ fn recorder_retains_bounded_timing_summary_sink_series() {
     assert_unlabelled_duration(&snapshot, TIMING_SUMMARY_SINK_WRITE_DURATION, 0.01);
 }
 
+/// Retain only unlabelled manifest-filtering counter series.
+#[test]
+fn recorder_retains_unlabelled_manifest_filtering_counters() {
+    let recorder = ConfigMetricsRecorder::new();
+    let snapshotter = recorder.snapshotter();
+    let expected = [
+        ("netsuke_manifest_filtered_targets_total", 65),
+        ("netsuke_manifest_filtered_actions_total", 2),
+        ("netsuke_manifest_omitted_filtered_entries_total", 3),
+    ];
+
+    metrics::with_local_recorder(&recorder, || {
+        for (name, value) in expected {
+            counter!(name).increment(value);
+            counter!(name, "section" => "targets").increment(value);
+        }
+    });
+
+    let snapshot = snapshotter.snapshot().into_vec();
+    assert_eq!(
+        snapshot.len(),
+        expected.len(),
+        "only unlabelled manifest-filtering counter series should be retained"
+    );
+    for (name, value) in expected {
+        assert!(
+            snapshot.iter().any(|entry| {
+                entry.0.kind() == MetricKind::Counter
+                    && entry.0.key().name() == name
+                    && entry.0.key().labels().next().is_none()
+                    && matches!(entry.3, DebugValue::Counter(observed) if observed == value)
+            }),
+            "expected unlabelled manifest-filtering counter {name}={value}: {snapshot:?}"
+        );
+    }
+}
+
 /// Retain only the fixed source and reason labels for CLI path-validation counters.
 #[test]
 fn recorder_retains_bounded_cli_path_validation_series() {

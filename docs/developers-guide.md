@@ -4453,11 +4453,16 @@ reaching telemetry.
   the report. The loading orchestrator calls it after expansion to emit one
   bounded debug event for each retained `FilteredEntry` and an aggregate
   summary, including the exact counts and omitted-entry count. Other callers
-  may consume the report without installing a tracing subscriber. Normal
-  manifest loading supplies the optional report observer; manifest-query
-  loading supplies none and remains telemetry-free. Keep this observer boundary
-  in the loading orchestrator rather than adding side effects to
-  `expand_foreach`.
+  may consume the report without installing a tracing subscriber. For normal
+  manifest loading, the adapter also increments the unlabelled aggregate
+  counters `netsuke_manifest_filtered_targets_total`,
+  `netsuke_manifest_filtered_actions_total`, and
+  `netsuke_manifest_omitted_filtered_entries_total`. These counters have no
+  labels and fixed cardinality: their values are aggregate counts, never
+  manifest-controlled values. Manifest-query loading supplies no report
+  observer and explicitly suppresses both expansion tracing and these metrics,
+  so it remains telemetry-free. Keep this observer boundary in the loading
+  orchestrator rather than adding side effects to `expand_foreach`.
 
 ### Executable availability predicate
 
