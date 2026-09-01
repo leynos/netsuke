@@ -72,11 +72,11 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
             return Ok(next);
         }
         self.update_quote_context(ch);
-        let substitution = find_substitution(self.chars, pos);
-        if self.in_backticks || self.command_substitution_depth > 0 {
-            return self.append_protected_character(pos, ch, substitution);
-        }
-        Ok(self.append_unprotected_character(pos, ch, substitution))
+        self.append_marker_for_context(
+            pos,
+            ch,
+            self.in_backticks || self.command_substitution_depth > 0,
+        )
     }
 
     /// Preserve PowerShell text while lowering only manifest-owned markers.
@@ -91,13 +91,12 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
             return Ok(next);
         }
         self.update_quote_context(ch);
-        let substitution = find_substitution(self.chars, pos);
-        if !matches!(self.quote_context, QuoteContext::Unquoted)
-            || self.command_substitution_depth > 0
-        {
-            return self.append_protected_character(pos, ch, substitution);
-        }
-        Ok(self.append_unprotected_character(pos, ch, substitution))
+        self.append_marker_for_context(
+            pos,
+            ch,
+            !matches!(self.quote_context, QuoteContext::Unquoted)
+                || self.command_substitution_depth > 0,
+        )
     }
 
     /// Preserve a PowerShell backtick escape without interpreting its next character.
@@ -176,6 +175,20 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
     /// Report whether the traversal is currently enclosed by POSIX single quotes.
     const fn matches_single_quote_context(&self) -> bool {
         matches!(self.quote_context, QuoteContext::Single)
+    }
+
+    /// Lower a marker when its current shell context permits substitution.
+    fn append_marker_for_context(
+        &mut self,
+        pos: usize,
+        ch: char,
+        is_protected: bool,
+    ) -> Result<usize, IrGenError> {
+        let substitution = find_substitution(self.chars, pos);
+        if is_protected {
+            return self.append_protected_character(pos, ch, substitution);
+        }
+        Ok(self.append_unprotected_character(pos, ch, substitution))
     }
 
     /// Append a character protected by backticks or reject its placeholder.
