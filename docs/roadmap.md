@@ -1982,6 +1982,10 @@ runs prove the failure boundary before any job receives release permissions.
     mismatch.
   - Preserve existing archive names, target coverage, checksum sidecars,
     `cargo-binstall` resolution, action SHA pins, and release staging policy.
+  - Emit bounded gate and operation metrics for the admission decision, retain
+    the JSONL metrics file as a workflow artefact, and expose the final outcome
+    in the job summary. See [ADR-018](adr-018-release-admission-observability.md)
+    and the [release-admission observability guidance](developers-guide.md#release-admission-observability).
   - See [RFC 0005 §Phase 4: Turn on
     admission](rfcs/0005-release-hardening.md#phase-4-turn-on-admission).
   - Success: no job with publication permission can run before successful
@@ -2013,7 +2017,6 @@ runs prove the failure boundary before any job receives release permissions.
     migration](rfcs/0005-release-hardening.md#compatibility-and-migration).
   - Success: a real release is publishable only from the admitted exact tag
     commit, and its retained evidence reproduces the admission decision.
-
 ## 10. Property-based testing of generated build scripts
 
 Hypothesis: Netsukefile authors trust the generated build script when the test
