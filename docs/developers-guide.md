@@ -2239,6 +2239,19 @@ other failures use `other`. Do not put manifest paths, action IDs, sidecar
 names, or content in those fields; `src/ninja_gen` generation and rendering
 must remain telemetry-free so their query responsibilities stay explicit.
 
+`instrument_graph_generation` is the graph-construction composition boundary.
+It receives an injected `&impl monotony::MonotonicClock`, which production
+supplies as `monotony::StdMonotonicClock` and tests replace with a deterministic
+clock. The boundary records one
+`netsuke_runner_graph_generations_total` counter increment and one
+`netsuke_runner_graph_generation_duration_seconds` histogram sample for every
+attempt, including failures. Its only labels are the bounded `recipe_shell`
+values `posix`, `bash`, and `powershell`, the `outcome` values `success` and
+`error`, and the `error_category` values `none`,
+`invalid_command_interpolation`, and `other`. Keep clock access and metric
+composition here; callers must not measure graph-generation time with
+`Instant` or add manifest-controlled values to telemetry.
+
 The intended serial guarantee is path-scoped. A later dependency that is
 independently reachable elsewhere in the requested graph may start via that
 other path. Do not broaden the implementation with a global lock, pool, or new
@@ -2248,13 +2261,21 @@ durable decision and its alternatives.
 
 ### Recipe placeholder ownership
 
-`src/ir/cmd_interpolate.rs` owns the private `INS_TOKEN` and `OUTS_TOKEN`
-constants used between manifest rendering and IR command interpolation.
-`src/manifest/render.rs` may emit these tokens while rendering `{{ ins }}` and
-`{{ outs }}`, and the interpolation module must consume only those markers.
-Keep the constants private to the crate and use them only for this two-stage
-recipe pipeline; they are implementation markers, not manifest or Ninja syntax
-and not a general token registry.
+`src/ir/cmd_interpolate/mod.rs` owns the command-interpolation boundary. It
+defines the private `INS_TOKEN` and `OUTS_TOKEN` constants, the
+`CommandBindings` path encodings, the `QuoteContext` classification, and the
+`find_substitution` marker recognizer. The sibling
+`src/ir/cmd_interpolate/substitution.rs` owns `SubstitutionTraversal`, which
+walks one recipe and applies those bindings only after analysing its shell
+context. Keep this split private to `ir`; it is an implementation boundary,
+not a public command-template API.
+
+`src/manifest/render.rs` may emit the private tokens while rendering the only
+accepted manifest markers, `{{ ins }}` and `{{ outs }}`. Literal shell
+variables `$ins` and `$outs` are not Netsuke markers and must pass through as
+shell text for the backend to escape. Keep the private constants and their
+recognition limited to this two-stage recipe pipeline; they are implementation
+markers, not manifest or Ninja syntax and not a general token registry.
 
 Generated strategies that are reusable across crate boundaries belong in
 `test_support`. Because `test_support` is compiled as a library, dependencies
