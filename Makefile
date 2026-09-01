@@ -143,7 +143,7 @@ test-nextest: ## Run all non-doctest Rust tests through cargo-nextest
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) nextest run --workspace --all-targets --all-features $(NEXTEST_BUILD_JOBS)
 
 doctest: ## Run doctests, which cargo-nextest cannot execute
-	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) test --workspace --doc --all-features $(BUILD_JOBS)
+	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) test --workspace --doc --all-features $(BUILD_JOBS)
 
 test-workflow-contracts: ## Validate the mutation-testing caller contract
 	$(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) --with 'pytest>=8' --with 'pyyaml>=6' --with 'hypothesis>=6' --with 'cmd-mox==0.2.0' pytest tests/workflow_contracts -q
@@ -180,7 +180,7 @@ lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
 doc-coverage: doc-coverage-test ## Verify aggregate Rustdoc doc-comment coverage meets the threshold
 	# Runs under the uv-pinned baseline interpreter, not the system python3:
 	# the scripts target Python 3.14 syntax and semantics.
-	@RUSTDOCFLAGS="$${RUSTDOC_FLAGS}" $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
+	@RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
 		scripts/doc-coverage.py --toolchain "$$DOC_COVERAGE_TOOLCHAIN" --threshold "$$DOC_COVERAGE_THRESHOLD"
 
 doc-coverage-test: ## Run documentation-coverage pytest modules

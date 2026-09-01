@@ -135,6 +135,9 @@ fn check_fmt_portably_skips_markdown_validation_without_files() -> Result<()> {
 #[path = "makefile_test_target/rustflags.rs"]
 mod rustflags;
 
+#[path = "makefile_test_target/rustdocflags.rs"]
+mod rustdocflags;
+
 /// Returns every nextest profile override.
 fn all_profile_overrides(config: &Value) -> impl Iterator<Item = &Value> {
     config
