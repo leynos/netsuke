@@ -69,6 +69,11 @@ jobs:
       BIN_NAME: ${{ inputs['bin-name'] }}
       VERSION: ${{ inputs.version }}
       MAN_ARCH: ${{ inputs['package-arch'] != '' && inputs['package-arch'] || 'unknown' }}
+      # rust-build-release-v1 still nests a Node 20 setup-uv action. Namespace
+      # otherwise promotes it to Node 24, which aborts inside libuv on Windows.
+      # Keep the compatibility escape hatch empty on every other platform.
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: >-
+        ${{ inputs.platform == 'windows' && 'true' || '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         # v7.0.1

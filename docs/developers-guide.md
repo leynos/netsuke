@@ -683,6 +683,15 @@ before the first Ninja invocation; `NETSUKE_REQUIRE_NINJA=1` intentionally
 turns a missing backend into a CI failure rather than silently reducing test
 coverage.
 
+The shared `rust-build-release-v1` action currently nests a Node 20 `setup-uv`
+action. Namespace normally promotes deprecated Node action runtimes to Node 24,
+but that combination aborts inside libuv on Windows Server 2022. The reusable
+packaging workflow therefore sets
+`ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true` only when `platform` is
+`windows`; the expression yields an empty value on Linux and macOS. Remove this
+narrow compatibility setting when the shared release action adopts a Node 24
+version of its nested Rust setup action.
+
 The `nsc github profile create` command provisions Linux profiles. Native
 Windows and macOS profiles are created in the Namespace dashboard. Every
 profile uses the `namespace-profile-*` label form, regardless of where it was

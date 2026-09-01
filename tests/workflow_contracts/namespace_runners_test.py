@@ -156,3 +156,16 @@ def test_package_workflow_runs_on_its_caller_selected_profile() -> None:
         "build-and-package.yml must use its caller-selected runner input, "
         f"got {actual_runner!r}"
     )
+
+
+def test_package_workflow_limits_legacy_node_to_windows() -> None:
+    """Permit the nested Node 20 action only for Namespace Windows builds."""
+    workflow = load_workflow(WORKFLOW_DIR / "build-and-package.yml")
+    build = workflow_job(workflow, "build")
+    env = require_mapping(build.get("env"), "jobs.build.env")
+    expected = "${{ inputs.platform == 'windows' && 'true' || '' }}"
+    actual = env.get("ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION")
+    assert actual == expected, (
+        "build-and-package.yml must limit the Node 20 compatibility switch "
+        f"to Windows, got {actual!r}"
+    )
