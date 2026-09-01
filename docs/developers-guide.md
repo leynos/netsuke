@@ -625,10 +625,10 @@ the remaining harness consequences of that policy.
 The pull-request `windows-native-recipe-smoke` job in
 [`ci.yml`](../.github/workflows/ci.yml) is the native Windows execution gate.
 It waits for the successful `build-test-windows` job, then runs on
-`windows-latest` with `pwsh` as the shell for every `run` step. It checks out
-the pull request source, installs the pinned nightly from `rust-toolchain.toml`
-through the shared Rust setup action, installs Ninja, and builds the `netsuke`
-binary from that checkout. The job then invokes:
+`namespace-profile-netsuke-windows` with `pwsh` as the shell for every `run`
+step. It checks out the pull request source, installs the pinned nightly from
+`rust-toolchain.toml` through the shared Rust setup action, installs Ninja, and
+builds the `netsuke` binary from that checkout. The job then invokes:
 
 ```powershell
 ./scripts/windows-recipe-smoke.ps1 `
@@ -651,6 +651,72 @@ installation, binary build, smoke script, and
 source itself; the release publication job separately requires both this smoke
 job and the platform package jobs in its `needs` list. Consequently, release
 publication cannot proceed unless the native Windows smoke test passes.
+
+## GitHub Actions runner profiles
+
+Repository-owned jobs run on Namespace runner profiles where the service
+provides the required native architecture. The profile tags and workflow labels
+are an external deployment contract: configure them in the Namespace workspace
+connected to the repository before merging a workflow change that names them.
+
+Table: Namespace runner profiles used by Netsuke.
+
+| Profile tag            | Workflow label                           | Operating system    | Machine shape | Cache volume | Intended workload                         |
+| ---------------------- | ---------------------------------------- | ------------------- | ------------- | ------------ | ----------------------------------------- |
+| `netsuke-ci`           | `namespace-profile-netsuke-ci`           | Ubuntu 24.04        | 8 vCPU, 16 GB | Disabled     | Full Linux formatting, lint and test CI   |
+| `netsuke`              | `namespace-profile-netsuke`              | Ubuntu 24.04        | 4 vCPU, 8 GB  | Disabled     | Packaging, coverage and utility jobs      |
+| `netsuke-ubuntu-22-04` | `namespace-profile-netsuke-ubuntu-22-04` | Ubuntu 22.04        | 4 vCPU, 8 GB  | Disabled     | Ubuntu 22.04 compatibility build          |
+| `netsuke-windows-ci`   | `namespace-profile-netsuke-windows-ci`   | Windows Server 2022 | 8 vCPU, 16 GB | Disabled     | Full Windows formatting, lint and test CI |
+| `netsuke-windows`      | `namespace-profile-netsuke-windows`      | Windows Server 2022 | 4 vCPU, 8 GB  | Disabled     | Windows packaging and smoke tests         |
+| `netsuke-macos-arm64`  | `namespace-profile-netsuke-macos-arm64`  | macOS Sequoia       | 6 vCPU, 14 GB | Disabled     | ARM64 macOS packaging                     |
+
+Use `nsc github profile list -o json` and `nsc github profile describe` to
+inspect the deployed profiles. Treat profile creation, updates, deletion and
+base-image rebuilds as infrastructure changes; review the effective profile
+specification before applying them.
+
+Cache volumes are disabled for every deployed Netsuke profile. No runner action
+download, toolchain download, dependency or build output persists through a
+Namespace cache volume. Workflows must therefore provision their declared
+prerequisites without relying on state from an earlier runner invocation.
+
+Namespace base images do not promise the same preinstalled tool inventory as
+GitHub-hosted runner images. The full Linux CI and Ubuntu 22.04 Netsukefile
+compatibility jobs therefore install Ninja through the same SHA-pinned
+`seanmiddleditch/gha-setup-ninja` action as the Windows jobs. Keep that setup
+before the first Ninja invocation; `NETSUKE_REQUIRE_NINJA=1` intentionally
+turns a missing backend into a CI failure rather than silently reducing test
+coverage.
+
+The shared `rust-build-release-v1` action currently nests a Node 20 `setup-uv`
+action. Namespace normally promotes deprecated Node action runtimes to Node 24,
+but that combination aborts inside libuv on Windows Server 2022. The reusable
+packaging workflow therefore sets
+`ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true` only when `platform` is
+`windows`; the expression yields an empty value on Linux and macOS. Remove this
+narrow compatibility setting when the shared release action adopts a Node 24
+version of its nested Rust setup action.
+
+The Namespace Windows service also exposes a different environment-derived
+profile from the Windows known folder used by `dotnet tool --global`. Before
+the shared packaging action installs WiX, the reusable workflow appends the
+known-folder `.dotnet\tools` directory to `GITHUB_PATH`. Keep this lookup on
+`Environment.SpecialFolder.UserProfile`; `$HOME` and `USERPROFILE` can name a
+different service profile and leave an installed `wix` executable invisible to
+the next action step.
+
+The `nsc github profile create` command provisions Linux profiles. Native
+Windows and macOS profiles are created in the Namespace dashboard. Every
+profile uses the `namespace-profile-*` label form, regardless of where it was
+created. The x86_64 macOS package remains on `macos-15-intel` because
+Namespace's macOS estate is ARM64-only. The mutation-testing and Dependabot
+auto-merge callers also retain the runners selected by their SHA-pinned
+reusable workflows in `leynos/shared-actions`; a caller cannot override a
+reusable workflow's `runs-on` value. The workflow contract tests in
+`tests/workflow_contracts/` hold these ownership, platform and setup-order
+boundaries. Test-only pure validators live in `namespace_runner_invariants.py`;
+checked-in workflow tests and bounded Hypothesis properties share them, and
+production code must not import them.
 
 ## Quality gates
 
@@ -3632,11 +3698,11 @@ cannot run elsewhere.
 
 The `build-test-windows` job in `.github/workflows/ci.yml` is a merge gate: it
 compiles, lints (Clippy and Whitaker), and tests the `#[cfg(windows)]` suite on
-`windows-latest` under `-D warnings`, so a Windows-gated test or lint finding
-blocks a merge. The split still stands: host-independent rules stay in the
-`#[cfg(any(windows, test))]` unit tests so every host — including a developer
-on Unix — exercises them, while the Windows-gated suite covers the behaviour
-that only exists there.
+`namespace-profile-netsuke-windows-ci` under `-D warnings`, so a Windows-gated
+test or lint finding blocks a merge. The split still stands: host-independent
+rules stay in the `#[cfg(any(windows, test))]` unit tests so every host —
+including a developer on Unix — exercises them, while the Windows-gated suite
+covers the behaviour that only exists there.
 
 The Windows job installs GNU Make through Chocolatey and Ninja through the
 setup action, then runs its Makefile gates through Git Bash with `SHELL=bash`.
@@ -3646,7 +3712,11 @@ workflow-pinned `cargo-nextest`; the shared Rust setup action supplies
 `rustfmt` and Clippy. The SHA-pinned shared Whitaker installer receives the same
 `installer-version: '0.2.7'` input as Linux and produces a PowerShell wrapper
 on Windows, so `Lint (Whitaker)` invokes that wrapper directly rather than
-through a Bash shim or `make SHELL=bash lint-whitaker`.
+through a Bash shim or `make SHELL=bash lint-whitaker`. The installer resolves
+its home through Windows' `FOLDERID_Profile` known folder, not an environment
+variable. The PowerShell step must therefore use
+`Environment.SpecialFolder.UserProfile` as well. In particular, `$HOME` can
+name a different profile when the Actions runner operates as a Windows service.
 
 To reproduce the platform gate, use a Windows environment with those tools
 provisioned and run the following in order:
@@ -3656,7 +3726,8 @@ provisioned and run the following in order:
 3. In PowerShell, run:
 
    ```powershell
-   $whitaker = Join-Path $HOME '.local\bin\whitaker.ps1'
+   $profileHome = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
+   $whitaker = Join-Path $profileHome '.local\bin\whitaker.ps1'
    $env:RUSTFLAGS = "$env:RUSTFLAGS -D warnings"
    $env:DYLINT_TOML = Get-Content dylint.toml -Raw
    & $whitaker --all --no-deps --package netsuke-build '--' --all-targets --all-features

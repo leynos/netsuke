@@ -69,6 +69,11 @@ jobs:
       BIN_NAME: ${{ inputs['bin-name'] }}
       VERSION: ${{ inputs.version }}
       MAN_ARCH: ${{ inputs['package-arch'] != '' && inputs['package-arch'] || 'unknown' }}
+      # rust-build-release-v1 still nests a Node 20 setup-uv action. Namespace
+      # otherwise promotes it to Node 24, which aborts inside libuv on Windows.
+      # Keep the compatibility escape hatch empty on every other platform.
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: >-
+        ${{ inputs.platform == 'windows' && 'true' || '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         # v7.0.1
@@ -129,6 +134,14 @@ jobs:
             echo "artefact_dir=${{ steps.stage.outputs['artifact-dir'] }}"
             echo "powershell_help_dir=${{ steps.stage.outputs.powershell_help_dir }}"
           } >>"$GITHUB_OUTPUT"
+
+      - name: Expose Windows global tool path
+        if: inputs.platform == 'windows'
+        shell: pwsh
+        run: |
+          $profileHome = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
+          $dotnetTools = Join-Path (Join-Path $profileHome '.dotnet') 'tools'
+          $dotnetTools | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Package Linux artefacts with dependencies
         if: inputs.platform == 'linux'

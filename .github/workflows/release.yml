@@ -57,7 +57,9 @@ concurrency:
 
 jobs:
   metadata:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-netsuke
+    permissions:
+      contents: read
     outputs:
       version: ${{ steps.ensure_version.outputs['crate-version'] }}
       bin_name: ${{ steps.bin_name.outputs['bin-name'] }}
@@ -134,7 +136,7 @@ jobs:
     uses: ./.github/workflows/build-and-package.yml
     with:
       platform: linux
-      runner: ubuntu-latest
+      runner: namespace-profile-netsuke
       target: ${{ matrix.target }}
       bin-name: ${{ needs.metadata.outputs.bin_name }}
       version: ${{ needs.metadata.outputs.version }}
@@ -164,7 +166,7 @@ jobs:
     uses: ./.github/workflows/build-and-package.yml
     with:
       platform: windows
-      runner: windows-latest
+      runner: namespace-profile-netsuke-windows
       target: ${{ matrix.target }}
       bin-name: ${{ needs.metadata.outputs.bin_name }}
       version: ${{ needs.metadata.outputs.version }}
@@ -189,7 +191,7 @@ jobs:
             artefact_suffix: macos-x86_64
             target_key: macos-x86_64
           - target: aarch64-apple-darwin
-            runner: macos-15
+            runner: namespace-profile-netsuke-macos-arm64
             artefact_suffix: macos-arm64
             target_key: macos-aarch64
     uses: ./.github/workflows/build-and-package.yml
@@ -206,7 +208,7 @@ jobs:
 
   windows-native-recipe-smoke:
     needs: metadata
-    runs-on: windows-latest
+    runs-on: namespace-profile-netsuke-windows
     permissions:
       contents: read
     defaults:
@@ -248,7 +250,7 @@ jobs:
       - build-windows
       - build-macos
       - windows-native-recipe-smoke
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-netsuke
     steps:
       - uses: >-
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

@@ -26,7 +26,7 @@ env:
 
 jobs:
   build-test:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-netsuke-ci
     permissions:
       contents: read
     env:
@@ -68,6 +68,8 @@ jobs:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           # Preserve warnings-as-errors through toolchain setup.
           rustflags: -D warnings
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
       - name: Install cargo-nextest
         uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
         with:
@@ -184,7 +186,7 @@ jobs:
   build-test-windows:
     # Gates merges: the `#[cfg(windows)]` tree is compiled, linted, and tested
     # under `-D warnings` on this platform (see #518).
-    runs-on: windows-latest
+    runs-on: namespace-profile-netsuke-windows-ci
     permissions:
       contents: read
     env:
@@ -197,8 +199,9 @@ jobs:
     defaults:
       run:
         # The Makefile uses POSIX shell constructs throughout; Git Bash is
-        # preinstalled on windows-latest. GNU Make's default recipe shell on
-        # Windows is cmd.exe, so every make invocation overrides SHELL to bash.
+        # preinstalled on the Namespace Windows image. GNU Make's default recipe
+        # shell on Windows is cmd.exe, so every make invocation overrides SHELL
+        # to bash.
         shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -277,10 +280,13 @@ jobs:
         # Whitaker/Dylint over the workspace under `-D warnings`, including
         # the `#[cfg(windows)]` arms. The shared installer supplies a
         # PowerShell wrapper on Windows, so invoke it from PowerShell rather
-        # than Git Bash. A failure blocks the merge.
+        # than Git Bash. Resolve the Windows known-folder profile, matching
+        # whitaker-installer rather than PowerShell's environment-derived
+        # $HOME. A failure blocks the merge.
         shell: pwsh
         run: |
-          $whitaker = Join-Path $HOME '.local\bin\whitaker.ps1'
+          $profileHome = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
+          $whitaker = Join-Path $profileHome '.local\bin\whitaker.ps1'
           $env:RUSTFLAGS = "$env:RUSTFLAGS -D warnings"
           $env:DYLINT_TOML = Get-Content dylint.toml -Raw
           & $whitaker --all --no-deps --package netsuke-build '--' --all-targets --all-features
@@ -308,7 +314,7 @@ jobs:
     # PowerShell-launched Netsuke directs Ninja legacy recipes to the
     # PowerShell interpreter selected by the Windows contract (#599).
     needs: build-test-windows
-    runs-on: windows-latest
+    runs-on: namespace-profile-netsuke-windows
     permissions:
       contents: read
     env:
@@ -338,7 +344,7 @@ jobs:
 
   kani-smoke:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-netsuke
     timeout-minutes: 20
     permissions:
       contents: read
