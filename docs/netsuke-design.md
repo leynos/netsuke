@@ -2512,13 +2512,13 @@ native escape syntax rather than interpolation-protection delimiters.
 ### 6.3 Implementation Strategy
 
 The command interpolation logic in `src/ir/cmd_interpolate/mod.rs` prepares one
- quoted input/output binding set per recipe and applies it to each scalar or
- list entry. It replaces only the delayed `{{ ins }}`/`{{ outs }}` markers,
- preserves dollar-prefixed shell variables, and encodes POSIX path text for the
+quoted input/output binding set per recipe and applies it to each scalar or
+list entry. It replaces only the delayed `{{ ins }}`/`{{ outs }}` markers,
+preserves dollar-prefixed shell variables, and encodes POSIX path text for the
 active quote context. Markers in backticks or command substitutions and text
- that `shlex` cannot parse produce an IR error before an action is hashed. Ninja
- generation then receives fully expanded command text and is responsible only
- for preserving the scalar form or constructing the list-entry shell boundaries.
+that `shlex` cannot parse produce an IR error before an action is hashed. Ninja
+generation then receives fully expanded command text and is responsible only
+for preserving the scalar form or constructing the list-entry shell boundaries.
 
 ### 6.4 Automatic Security as a "Friendliness" Feature
 
@@ -2529,15 +2529,15 @@ build systems, the burden of correct shell quoting falls on the user, an
 error-prone task that requires specialized knowledge.
 
 Netsuke's design makes identified path substitution safe by default. Netsuke
- applies shell-specific quoting to Netsuke-owned `{{ ins }}` and `{{ outs }}`
- path substitutions before action hashing and Ninja synthesis; arbitrary Jinja
- values and handwritten shell fragments remain the manifest author's
- responsibility. POSIX and explicit Bash routes use `shell-quote` during IR
- command lowering, while the default Windows PowerShell route uses single-quoted
- path literals with doubled apostrophes. This protects users from a common and
- dangerous class of errors by default. The approach embodies a
-deeper form of user-friendliness: one that anticipates and mitigates risks on
-the user's behalf.
+applies shell-specific quoting to Netsuke-owned `{{ ins }}` and `{{ outs }}`
+path substitutions before action hashing and Ninja synthesis; arbitrary Jinja
+values and handwritten shell fragments remain the manifest author's
+responsibility. POSIX and explicit Bash routes use `shell-quote` during IR
+command lowering, while the default Windows PowerShell route uses single-quoted
+path literals with doubled apostrophes. This protects users from a common and
+dangerous class of errors by default. The approach embodies a deeper form of
+user-friendliness: one that anticipates and mitigates risks on the user's
+behalf.
 
 ## Section 7: A Framework for Friendly and Actionable Error Reporting
 

@@ -229,7 +229,10 @@ fn assert_power_shell_path_interpolation(
     let inputs = [Utf8PathBuf::from(input_path)];
     let outputs = [Utf8PathBuf::from(output_path)];
     let bindings = CommandBindings::new(&inputs, &outputs, RecipeShell::PowerShell);
-    let interpolation = interpolate_command_with_bindings("Copy-Item $in $out", &bindings);
+    let interpolation = interpolate_command_with_bindings(
+        &format!("Copy-Item {INS_TOKEN} {OUTS_TOKEN}"),
+        &bindings,
+    );
     assert!(interpolation.is_ok(), "{expect_message}: {interpolation:?}");
     let Ok(command) = interpolation else {
         return;
