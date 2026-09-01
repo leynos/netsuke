@@ -280,8 +280,51 @@ jobs:
         if: always()
         run: sccache --show-stats --stats-format=json
 
+  release-admission-canaries:
+    needs: metadata
+    runs-on: namespace-profile-netsuke
+    permissions:
+      actions: read
+      contents: read
+    env:
+      NETSUKE_RELEASE_ADMISSION_METRICS_FILE: >-
+        ${{ runner.temp }}/release-admission-metrics.jsonl
+    steps:
+      - uses: >-
+          actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        # v7.0.1
+        with:
+          persist-credentials: false
+      - id: release_admission
+        name: Require release-admission evidence
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash .github/scripts/require-release-admission-canaries.sh
+      - name: Summarise release-admission metrics
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## Release-admission gate'
+            echo
+            echo "- Outcome: \`${{ steps.release_admission.outputs.gate-outcome }}\`"
+            echo "- Error category: \`${{ steps.release_admission.outputs.gate-error-category }}\`"
+          } >>"$GITHUB_STEP_SUMMARY"
+      - name: Upload release-admission metrics
+        if: always()
+        uses: >-
+          actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        # v7.0.1
+        with:
+          name: release-admission-metrics
+          path: ${{ env.NETSUKE_RELEASE_ADMISSION_METRICS_FILE }}
+          if-no-files-found: error
+
   release:
-    if: needs.metadata.outputs.should_publish == 'true'
+    if: >-
+      needs.metadata.outputs.should_publish == 'true' &&
+      needs.release-admission-canaries.result == 'success'
     permissions:
       contents: write
     needs:
@@ -290,6 +333,7 @@ jobs:
       - build-windows
       - build-macos
       - windows-native-recipe-smoke
+      - release-admission-canaries
     # Publication is API-bound: it downloads artefacts and calls the releases
     # API, so a GitHub-hosted runner is the right placement.
     runs-on: ubuntu-latest
