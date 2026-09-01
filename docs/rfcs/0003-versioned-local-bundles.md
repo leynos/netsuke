@@ -242,14 +242,17 @@ comparators is insignificant. The grammar is:
 requirement   = comparator ("," comparator)*
 comparator    = operator? version | "^" version
 operator      = "=" | ">" | ">=" | "<" | "<="
-version       = major ["." minor ["." patch]] ["-" prerelease]
-                ["+" build]
+version       = complete | abbreviated
+complete      = major "." minor "." patch ["-" prerelease] ["+" build]
+abbreviated   = major ["." minor]
 ```
 
 `major`, `minor`, and `patch` are non-negative decimal integers without leading
 zeroes, except for zero itself. Pre-release and build identifiers use the
-Semantic Versioning 2.0.0 rules. A bare three-component version means an exact
-version. A bare `1.4` means `>=1.4.0, <1.5.0`, and a bare `1` means
+Semantic Versioning 2.0.0 rules. Only a complete three-component version may
+include pre-release or build metadata; abbreviated versions are valid only when
+neither metadata component is present. A bare three-component version means an
+exact version. A bare `1.4` means `>=1.4.0, <1.5.0`, and a bare `1` means
 `>=1.0.0, <2.0.0`. When an operator is present, omitted components are zero, so
 `>=1.4` means `>=1.4.0` and `<2` means `<2.0.0`.
 
@@ -257,7 +260,7 @@ The caret operator admits compatible changes: `^1.4` means `>=1.4.0, <2.0.0`;
 `^0.4` means `>=0.4.0, <0.5.0`; and `^0.0.3` means `>=0.0.3, <0.0.4`. A
 candidate with a pre-release identifier is excluded unless at least one
 comparator in the set contains a pre-release identifier with the same major,
-minor, and patch tuple. Thus `^1.4` excludes `1.4.0-rc.1`, while
+minor, and patch tuple. Thus, `^1.4` excludes `1.4.0-rc.1`, while
 `>=1.4.0-rc.1, <1.5.0` admits it. Build metadata is ignored for precedence and
 requirement matching.
 

@@ -252,7 +252,7 @@ phase. The runner reserves every declared directory-binding name, creates and
 validates each secure temporary directory, and builds a pending capability map
 before starting any stage. It atomically commits that map only if preparation
 completes successfully; no stage starts, and no prepared binding becomes
-visible, when preparation fails. A directory binding produced by this phase is
+visible when preparation fails. A directory binding produced by this phase is
 therefore visible to every stage that consumes it, including stages that start
 concurrently. Its producer-success condition is successful capability
 preparation, not the eventual exit status of the stage that uses the directory.
@@ -793,7 +793,7 @@ Manifest compilation rejects:
 - invalid or dynamic environment names;
 - duplicate normalized producer names in one binding scope;
 - a pipeline stage that consumes an execution-produced binding from another
-  stage, because that binding cannot commit before pipeline spawn;
+  stage because that binding cannot commit before pipeline spawn;
 - zero or excessive capture limits;
 - standard-output capture combined with another standard-output sink;
 - `pipe: stderr` combined with another standard-error sink;

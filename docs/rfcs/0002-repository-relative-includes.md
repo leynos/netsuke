@@ -179,7 +179,7 @@ For each composition unit, Netsuke performs these steps:
    4. reject paths outside the effective workspace boundary;
    5. reject a canonical identity already active on the recursion stack;
    6. reject a canonical identity already present in `visited`, reporting the
-      first and attempted include chains;
+      first include chain and the attempted include chain;
    7. add the identity and its current chain to `visited`;
    8. parse the fragment;
    9. recursively compose that fragment's includes; and
