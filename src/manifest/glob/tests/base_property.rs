@@ -23,16 +23,19 @@ use std::collections::BTreeSet;
 use tempfile::tempdir;
 use test_support::fs as test_fs;
 
-const WINDOWS_RESERVED_DEVICE_NAMES: &[&str] = &[
+const WINDOWS_RESERVED_DEVICE_STEMS: &[&str] = &[
     "con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8",
     "com9", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
 ];
 
 /// Determine whether `component` is reserved as a Windows device name.
 fn is_windows_reserved_device_name(component: &str) -> bool {
-    WINDOWS_RESERVED_DEVICE_NAMES
+    let stem = component
+        .split_once('.')
+        .map_or(component, |(stem, _)| stem);
+    WINDOWS_RESERVED_DEVICE_STEMS
         .iter()
-        .any(|name| component.eq_ignore_ascii_case(name))
+        .any(|name| stem.eq_ignore_ascii_case(name))
 }
 
 /// Generate one lowercase ASCII path segment that is valid on Windows.
@@ -164,16 +167,26 @@ proptest! {
     }
 }
 
-#[rstest::rstest]
-#[case("nul", true)]
-#[case("COM1", true)]
-#[case("lpt9", true)]
-#[case("nested", false)]
-fn windows_device_names_are_not_safe_path_segments(
-    #[case] component: &str,
-    #[case] is_reserved: bool,
-) {
-    assert_eq!(is_windows_reserved_device_name(component), is_reserved);
+#[test]
+fn windows_device_name_stems_are_not_safe_path_segments() {
+    for device_name in WINDOWS_RESERVED_DEVICE_STEMS {
+        assert!(
+            is_windows_reserved_device_name(device_name),
+            "reserved device name {device_name:?} must be rejected"
+        );
+    }
+    for device_name in ["NuL", "nul.txt"] {
+        assert!(
+            is_windows_reserved_device_name(device_name),
+            "reserved device-name form {device_name:?} must be rejected"
+        );
+    }
+    for component in ["null", "nuls", "com0", "com10"] {
+        assert!(
+            !is_windows_reserved_device_name(component),
+            "ordinary component {component:?} must remain safe"
+        );
+    }
 }
 
 /// A parent-relative pattern keeps its `..` spelling in the result.
