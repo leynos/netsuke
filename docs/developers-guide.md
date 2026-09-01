@@ -2278,6 +2278,16 @@ The sibling `src/ir/cmd_interpolate/substitution.rs` owns
 after analysing its shell context. Keep this split private to `ir`; it is an
 implementation boundary, not a public command-template API.
 
+The private `src/ir/cmd_interpolate/posix_lexical.rs` helper owns the single-pass
+recognition of POSIX comments and heredoc inert regions. It copies those
+comments and heredoc bodies byte-for-byte, leaves markers in them literal, and
+queues declarations FIFO, including quoted delimiters and `<<-` tab-stripping
+delimiters, so their text cannot change the surrounding quote context. This is
+a command-interpolation helper, not a general shell parser, and is not intended
+for reuse outside that boundary. The sibling
+`src/ir/cmd_interpolate/command_substitution.rs` owns the local quote and
+parenthesis state needed to keep protected `$()` bodies isolated.
+
 `src/manifest/render.rs` may emit the internal tokens while rendering the only
 accepted manifest markers, `{{ ins }}` and `{{ outs }}`. Literal shell variables
 `$ins` and `$outs` are not Netsuke markers and must pass through as shell text
