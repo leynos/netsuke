@@ -373,10 +373,9 @@ as `--toolchain`.
   tests that run many cases within one process, and leaves the ambient
   dependency embedded in the production signature. Where injection looks
   impossible the signature is wrong; correct the signature.
-- **`EnvLock` is a retiring exception.** It is retained only while its
-  remaining callers migrate and is tracked for removal in issue #494; it does
-  not relax the rule against process-wide locks. Do not add callers or tests;
-  follow the injected seam decision in
+- **`EnvLock`, `CwdGuard`, and `EnvVarGuard` are retired.** They do not relax
+  the rule against process-wide locks. Do not restore or replace them; follow
+  the injected seam decision in
   [ADR-008](docs/adr-008-environment-seam-taxonomy.md).
 - **Subprocess isolation is the sole exemption.** End-to-end behavioural tests
   invoking `netsuke` through `assert_cmd` may configure the environment via

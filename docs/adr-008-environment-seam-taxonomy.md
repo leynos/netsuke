@@ -207,15 +207,15 @@ ones, resolve from that injected root and retain their pattern-relative result
 spelling; absolute patterns remain absolute. This path neither reads nor
 mutates process-global working-directory state during expansion.
 
-### 2026-08-26: EnvLock retirement
+### 2026-09-01: Environment-guard retirement completed
 
-`EnvLock` is retired rather than hardened. Production signatures must inject
-`mockable::Env`, with `mockable::DefaultEnv` at production boundaries and
-`mockable::MockEnv` in tests. CWD callers must use the existing
-working-directory seam, absolute paths, or the `-C/--directory` route.
+Issues #491, #492, #493, and #494 completed the migration and removal work.
+`EnvLock`, `CwdGuard`, and `EnvVarGuard` are retired.
 
-Migrations are tracked in issues #491, #492, and #493; removal is tracked in
-issue #494. No new `EnvLock` callers or synchronization tests are permitted.
+Production signatures must inject `mockable::Env`, with `mockable::DefaultEnv`
+at production boundaries and `mockable::MockEnv` in tests. CWD callers must use
+the existing working-directory seam, absolute paths, or the `-C/--directory`
+route. Do not restore or replace the retired guards.
 
 ### 2026-08-25: BDD isolation routes
 
