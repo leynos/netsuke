@@ -1,4 +1,10 @@
-//! Bounded process recorder for configuration observability.
+//! Application-owned recorder for bounded configuration and runner metrics.
+//!
+//! The recorder accepts configuration-load, recipe-shell resolution, Bash
+//! preflight, and complete legacy-recipe runner series. The `observability`
+//! composition module installs it at the process boundary; fixed metric names
+//! and label vocabularies prevent manifest- or process-controlled data from
+//! entering the retained snapshot.
 
 use super::{
     CONFIG_LOAD_COUNTER, CONFIG_LOAD_DURATION, DIAG_MODE_PHASE, MERGE_PHASE,

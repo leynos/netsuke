@@ -141,7 +141,7 @@ by the Jinja templating engine.
 This creates a necessary architectural division. All the dynamic logic,
 templating, and configuration must be fully evaluated by Netsuke *before* Ninja
 is ever invoked. The point of this transition is the Intermediate
-Representation (IR) generated in Stage 4. The IR serves as a static snapshot of
+Representation (IR) generated in Stage 5. The IR serves as a static snapshot of
 the build plan after all Jinja logic has been resolved. It is the "object code"
 that the Netsuke "compiler" produces, which can then be handed off to the Ninja
 "assembler" for execution. This mandate for a pre-computed static graph
@@ -2502,7 +2502,7 @@ command validation apply only to POSIX and Bash routes. PowerShell treats
 backticks as native escape syntax rather than interpolation-protection
 delimiters.
 
-### 6.3 Implementation Strategy
+### 6.3 Implementation strategy
 
 The command interpolation logic in `src/ir/cmd_interpolate/mod.rs` prepares one
 shell-specific quoted input/output binding set per recipe and applies it to

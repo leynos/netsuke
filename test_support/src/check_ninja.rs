@@ -6,6 +6,11 @@ use tempfile::TempDir;
 
 use crate::exec::write_exec_with_content;
 
+#[cfg(windows)]
+mod check_ninja_windows;
+#[cfg(windows)]
+pub use check_ninja_windows::fake_ninja_expect_tool;
+
 /// Represents a Ninja tool name (e.g., "clean", "compdb").
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ToolName(&'static str);
@@ -354,7 +359,7 @@ pub fn fake_ninja_expect_tool_with_jobs(
 /// # Errors
 ///
 /// Always returns an error: this factory is only supported on Unix platforms.
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 pub fn fake_ninja_expect_tool(_expected_tool: ToolName) -> Result<(TempDir, PathBuf)> {
     anyhow::bail!("fake_ninja_expect_tool is only supported on Unix platforms")
 }

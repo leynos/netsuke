@@ -3706,8 +3706,10 @@ covers the behaviour that only exists there.
 
 The Windows job installs GNU Make through Chocolatey and Ninja through the
 setup action, then runs its Makefile gates through Git Bash with `SHELL=bash`.
-That override is required because GNU Make otherwise selects `cmd.exe` on
-Windows, while Netsuke's recipes use POSIX shell syntax. It installs the
+That override affects only GNU Make's command execution: GNU Make otherwise
+selects `cmd.exe` on Windows. It does not select the interpreter for Netsuke
+legacy recipes, which default to PowerShell; Git Bash is used for those recipes
+only when the explicit compatibility selection is enabled. It installs the
 workflow-pinned `cargo-nextest`; the shared Rust setup action supplies
 `rustfmt` and Clippy. The SHA-pinned shared Whitaker installer receives the same
 `installer-version: '0.2.7'` input as Linux and produces a PowerShell wrapper
