@@ -211,10 +211,12 @@ injected `PATH`.
 
 Both request types borrow their fields, so one `CommandEnv` and one
 `NinjaProcessOptions` can serve several invocations. Direct request callers now
-pass `options: &options` in place of `cli: &cli`; the adapter converts a CLI
-working directory to UTF-8 and returns `io::ErrorKind::InvalidData` when it
-cannot. Worked examples live in the users' guide's "Drive Ninja with an
-explicit environment" section.
+pass `options: &options` in place of `cli: &cli`.
+`NinjaProcessOptions::working_dir` is `Option<Utf8PathBuf>`. Non-UTF-8 `--file`
+and `--directory` values fail during CLI parsing. Configuration-file and
+`NETSUKE_FILE` manifest values fail at their configuration or environment
+boundary before runner setup. Worked examples live in the users' guide's "Drive
+Ninja with an explicit environment" section.
 
 ## Cached CLI configuration API
 

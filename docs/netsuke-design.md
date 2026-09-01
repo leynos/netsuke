@@ -2766,20 +2766,25 @@ The CLI's structure will be defined using a set of structs annotated with
 `clap`'s derive macros. This provides a single, clear source of truth for the
 entire CLI specification.
 
+`Cli.file` and `Cli.directory` accept only UTF-8 paths. Non-UTF-8 CLI values
+fail during parsing before configuration merge or runner setup.
+
 Rust
 
 ```rust
-use clap::{Args, Parser, Subcommand}; use std::path::PathBuf;
+use camino::Utf8PathBuf;
+use clap::{Args, Parser, Subcommand};
+use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli { /// Path to the Netsuke manifest file to use.
     #[arg(short, long, value_name = "FILE", default_value = "Netsukefile")]
-    file: PathBuf,
+    file: Utf8PathBuf,
 
     /// Change to this directory before doing anything.
     #[arg(short = 'C', long, value_name = "DIR")]
-    directory: Option<PathBuf>,
+    directory: Option<Utf8PathBuf>,
 
     /// Set the number of parallel build jobs.
     #[arg(short, long, value_name = "N")]
