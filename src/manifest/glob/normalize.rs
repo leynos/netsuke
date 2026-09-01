@@ -1,6 +1,10 @@
-//! Separator and escape normalization for glob patterns.
+//! Separator and escape normalisation for glob patterns.
 
-/// Normalise separators and backslash escapes onto the platform native form.
+/// Normalise forward slashes in a glob `pattern` to the platform separator.
+///
+/// Forward slashes are rewritten to [`std::path::MAIN_SEPARATOR`] so manifests
+/// can use `/` portably. On Unix, backslash escapes are preserved for the
+/// follow-up literal-escape pass rather than treated as separators here.
 pub(crate) fn normalize_separators(pattern: &str) -> String {
     let native = std::path::MAIN_SEPARATOR;
     #[cfg(unix)]
@@ -79,7 +83,12 @@ fn push_normalized_backslash(
     out.push('\\');
 }
 
-/// Rewrite backslash-escaped metacharacters as the matching bracket class.
+/// Rewrite selected backslash escapes into bracket character classes.
+///
+/// The `glob` crate treats `\` literally on Unix, so an escaped metacharacter
+/// such as `\*` is converted to the single-element class `[*]` to match the
+/// literal character. Only escapes for `*`, `?`, `[`, `]`, `{`, and `}` are
+/// rewritten; other escapes are left for the `glob` crate to interpret.
 #[cfg(unix)]
 pub(super) fn force_literal_escapes(pattern: &str) -> String {
     let mut out = String::with_capacity(pattern.len());
