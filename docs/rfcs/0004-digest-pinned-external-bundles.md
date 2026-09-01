@@ -30,8 +30,9 @@ The central rule is:
 > canonical content digest bind the selected bytes.
 
 The initial supported external source is a bounded Git repository and optional
-bundle subdirectory. Acquisition is explicit, cacheable, offline-verifiable,
-and observable through redacted provenance metadata.
+bundle subdirectory. Acquisition is explicit through `netsuke bundle fetch`,
+cacheable, offline-verifiable, and observable through redacted provenance
+metadata.
 
 ## 2. Sequencing
 
@@ -108,7 +109,8 @@ The initial external resolver does not:
 - verify publisher identity solely from a Git tag;
 - define a public multi-tenant bundle registry;
 - provide dependency solving across unrelated bundle graphs;
-- permit network access during `netsuke help targets` without a resolved cache;
+- allow metadata queries, including `netsuke help targets`, to fetch external
+  bundles, publish cache entries, or update lock files;
 - mutate the lock file during an ordinary build; or
 - treat transport encryption as content authentication.
 
@@ -199,8 +201,10 @@ selectors are not tag names and are rejected.
 
 ### 6.2 Fetch contract
 
-Netsuke requests the exact normalized tag ref from the configured repository.
-It must not fetch every branch or rely on the remote's default ref.
+The `netsuke bundle fetch` command requests the exact normalized tag ref from
+the configured repository. It must not fetch every branch or rely on the
+remote's default ref. No metadata query or ordinary build may invoke this fetch
+contract.
 
 The resolver may use an embedded Git implementation or a tightly controlled Git
 subprocess adapter. In either case it must:
@@ -320,29 +324,35 @@ The lock record also stores:
   reproducibility comparisons; and
 - any selected verification policy result.
 
-Normal builds never update this record. Update is an explicit operation whose
-human and JSON output shows old and new tag, commit, version, and digest values.
+Normal builds and metadata queries never update this record.
+`netsuke bundle fetch` preserves existing lock files unless the caller supplies
+the explicit `--update-lock` flag. With that flag, the command may update the
+record only after verification, and its human and JSON output shows old and new
+tag, commit, version, and digest values.
 
 ## 10. Network and offline policy
 
-Network access is opt-in at command or configuration level. The conceptual
-modes are:
+Metadata queries and ordinary builds are cache-only in every mode. They may
+read a verified content-addressed cache entry, but they must never initiate
+network access, publish a cache entry, or update a lock file. This includes
+`netsuke help targets`.
 
-- `offline`: use only verified content-addressed cache entries;
-- `locked`: network may fill a missing cache entry, but every identity and
-  digest must match the lock record;
-- `update`: resolve requested tags anew and propose lock changes; and
-- `refresh`: refetch locked identities without changing selection.
+`netsuke bundle fetch` is the sole command permitted to initiate external
+network acquisition or publish a verified cache entry. Its conceptual modes are:
 
-`locked` is the normal connected CI mode. `offline` is the preferred release
-rebuild mode after caches or vendored artefacts are provisioned.
+- `offline`: use only verified content-addressed cache entries and fail without
+  contacting the network;
+- `locked`: acquire only the identities and digest required by the existing
+  lock record, without changing that record;
+- `update`: resolve requested tags anew, with lock changes permitted only when
+  `--update-lock` is also supplied; and
+- `refresh`: refetch locked identities without changing selection or the lock
+  record.
 
-`netsuke help targets` and other metadata queries may use a verified cached
-bundle. They must not initiate network access merely to list targets unless the
-caller explicitly selects a connected metadata mode.
-
-A missing cache in offline mode produces a typed diagnostic naming the bundle
-namespace and expected digest.
+Without `--update-lock`, `netsuke bundle fetch` preserves existing lock files
+in every mode. A missing verified cache entry produces a typed cache-miss
+diagnostic naming the bundle namespace and expected digest; metadata queries
+return that diagnostic rather than attempting acquisition.
 
 ## 11. Content-addressed cache
 
@@ -411,6 +421,11 @@ The mandatory trust chain is:
 4. bundle metadata and compatibility are validated; and
 5. canonical selected content must match the reviewed digest.
 
+The cache-only rule is also a security boundary: metadata queries cannot turn
+an informational command into an unreviewed network fetch or cache publication.
+Only `netsuke bundle fetch` may cross that boundary, and lock changes require
+the explicit `--update-lock` flag.
+
 An annotated tag signature may provide additional publisher identity. A future
 policy may require:
 
@@ -471,6 +486,7 @@ Typed errors should distinguish:
 - bundle compatibility mismatch;
 - canonical digest mismatch;
 - lock tag or commit mismatch;
+- verified cache miss naming the bundle namespace and expected digest;
 - cache corruption; and
 - verification-policy failure.
 
@@ -524,7 +540,8 @@ Older Netsuke versions must reject it clearly.
 ### Phase 4: content-addressed cache and offline mode
 
 - Add atomic verified caches, leases, and bounded stale cleanup.
-- Implement offline, locked, update, and refresh modes.
+- Implement cache-only metadata queries and the explicit `netsuke bundle fetch`
+  command with offline, locked, update, and refresh modes.
 
 ### Phase 5: policy and canaries
 
@@ -551,7 +568,10 @@ The implementation must include:
 - lock update snapshots showing old/new provenance;
 - cache corruption, atomic publication, concurrency, and stale cleanup;
 - offline cache-hit and cache-miss behaviour;
-- metadata queries that never initiate implicit network access;
+- metadata queries that read verified cache entries only and return typed
+  cache-miss errors without network, cache-publication, or lock side effects;
+- `netsuke bundle fetch` acquisition and verified cache publication;
+- ordinary fetch lock preservation and explicit `--update-lock` behaviour;
 - SHA-1 and SHA-256 Git object-format fixtures where supported; and
 - end-to-end tagged Git resolution against a local protocol test server rather
   than the public internet.
@@ -601,7 +621,6 @@ verification representation.
 - Which embedded Git implementation or controlled subprocess boundary best
   satisfies SHA-256 repository support and bounded exact-ref fetches?
 - Should annotated tags be required by policy for organization-owned bundles?
-- Which stable command vocabulary should own lock updates and cache refreshes?
 - Should external bundle caches share infrastructure with `fetch()` resources
   or remain isolated by trust class?
 - Should a later registry map semantic versions to digest-pinned Git tags, or is
@@ -616,7 +635,9 @@ over RFC 0003 bundle semantics.
 
 Support exact human-friendly tags, including annotated and lightweight tags,
 but resolve them to immutable object identities and treat retagging as a
-reviewable provenance change. Reject branches and implicit network access.
+reviewable provenance change. Reject branches and implicit network access;
+reserve network acquisition and cache publication for the explicit
+`netsuke bundle fetch` command, with lock updates gated by `--update-lock`.
 
 This gives Netsuke tagged Git resolution without asking users to pretend that a
 tag is immutable, signed, or sufficient on its own.

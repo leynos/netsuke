@@ -254,9 +254,12 @@ include pre-release or build metadata; abbreviated versions are valid only when
 neither metadata component is present. A bare three-component version and its
 `=` form mean an exact core-version requirement. Because build metadata is
 ignored for requirement matching and precedence, `=1.4.2` matches a candidate
-declaring `1.4.2+local`. A bare `1.4` means `>=1.4.0, <1.5.0`, and a bare `1`
-means `>=1.0.0, <2.0.0`. When an operator is present, omitted components are
-zero, so `>=1.4` means `>=1.4.0` and `<2` means `<2.0.0`.
+declaring `1.4.2+local`. A requirement containing a pre-release identifier
+matches only candidates with the same core tuple and exactly the same ordered
+pre-release identifiers; build metadata remains ignored for matching and
+precedence. A bare `1.4` means `>=1.4.0, <1.5.0`, and a bare `1` means
+`>=1.0.0, <2.0.0`. When an operator is present, omitted components are zero, so
+`>=1.4` means `>=1.4.0` and `<2` means `<2.0.0`.
 
 The caret operator admits compatible changes: `^1.4` means `>=1.4.0, <2.0.0`;
 `^0.4` means `>=0.4.0, <0.5.0`; and `^0.0.3` means `>=0.0.3, <0.0.4`. A
@@ -280,6 +283,9 @@ are normative:
 | `>=1.4.0-rc.1, <1.5.0` | `1.4.0-rc.2`, `1.4.0-beta`          | select `1.4.0-rc.2`   |
 | `=1.4.2`               | `1.4.2+local`                       | select sole candidate |
 | `=1.4.2`               | `1.4.2+one`, `1.4.2+two`            | ambiguity error       |
+| `=1.4.2-rc.1`          | `1.4.2-rc.1`                        | select sole candidate |
+| `=1.4.2-rc.1`          | `1.4.2-rc.2`                        | no compatible version |
+| `=1.4.2-rc.1`          | `1.4.2-rc.1+local`                  | select sole candidate |
 
 Table 2: Semantic Version requirement selection vectors.
 
