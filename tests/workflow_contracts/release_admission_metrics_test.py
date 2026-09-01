@@ -23,6 +23,7 @@ def test_release_admission_metrics_retain_read_only_delivery() -> None:
     workflow = load_workflow(RELEASE_WORKFLOW_PATH)
     admission = workflow_job(workflow, "release-admission-canaries")
     release = workflow_job(workflow, "release")
+    release_needs = release.get("needs")
     permissions = require_mapping(
         admission.get("permissions"), "release-admission-canaries.permissions"
     )
@@ -62,7 +63,8 @@ def test_release_admission_metrics_retain_read_only_delivery() -> None:
     assert upload_step.get("with") == METRICS_ARTIFACT, (
         "the artifact must retain the bounded metrics file"
     )
-    assert "release-admission-canaries" in release.get("needs", []), (
+    assert isinstance(release_needs, list), "release dependencies must be a list"
+    assert "release-admission-canaries" in release_needs, (
         "publication must depend on release admission"
     )
     assert "needs.release-admission-canaries.result == 'success'" in str(
