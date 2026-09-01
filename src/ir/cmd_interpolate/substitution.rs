@@ -48,13 +48,23 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         &mut self,
         pos: usize,
     ) -> Result<usize, IrGenError> {
-        let ch = *self
-            .chars
-            .get(pos)
-            .ok_or_else(|| invalid_command_error(self.template.to_owned()))?;
+        let ch = self.source_character(pos)?;
         if self.bindings.shell == RecipeShell::PowerShell {
             return self.append_power_shell_character(pos, ch);
         }
+        self.append_posix_character(pos, ch)
+    }
+
+    /// Retrieve the source character or produce the interpolation diagnostic.
+    fn source_character(&self, pos: usize) -> Result<char, IrGenError> {
+        self.chars
+            .get(pos)
+            .copied()
+            .ok_or_else(|| invalid_command_error(self.template.to_owned()))
+    }
+
+    /// Preserve POSIX shell syntax while lowering context-safe recipe markers.
+    fn append_posix_character(&mut self, pos: usize, ch: char) -> Result<usize, IrGenError> {
         if let Some(next) = self.append_escaped_character(pos, ch) {
             return Ok(next);
         }
