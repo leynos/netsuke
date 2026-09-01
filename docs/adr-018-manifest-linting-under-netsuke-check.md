@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 016: Host manifest linting under `netsuke check`
+# Architectural decision record (ADR) 018: Host manifest linting under `netsuke check`
 
 ## Status
 
