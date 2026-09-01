@@ -5,6 +5,7 @@
 
 mod check;
 pub mod check_diagnostics;
+mod check_documentation;
 mod check_telemetry;
 mod dispatch;
 mod dyndep_generation_telemetry;

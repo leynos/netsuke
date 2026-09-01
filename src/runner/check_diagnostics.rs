@@ -12,6 +12,8 @@ use thiserror::Error;
 use crate::lint::document::Span;
 use crate::lint::{Bounds, Finding, Outcome, Report, Severity};
 
+use super::check_documentation::rule_documentation_url;
+
 /// A source-backed lint report ready for command-output adapters.
 pub(super) struct CheckReport {
     /// The domain outcome, bounds, and summaries.
@@ -80,7 +82,7 @@ impl FindingDiagnostic {
             code: finding.meta.code(),
             severity: miette_severity(finding.severity),
             help: finding.meta.remediation.to_owned(),
-            url: finding.meta.doc_url(),
+            url: rule_documentation_url(finding.meta.name),
             manifest_source: Arc::clone(source),
             span: finding.span().map(source_span),
             label: finding.meta.name,

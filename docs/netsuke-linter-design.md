@@ -211,7 +211,10 @@ group-by-feature convention.
 location, and presentation data without depending on a diagnostic or
 publication framework. `src/runner/check_diagnostics.rs` is the runner-owned
 `miette` adapter that combines those findings with the manifest source for
-human diagnostics.
+human diagnostics. `src/runner/check_documentation.rs` alone owns the published
+rule-reference URL and derives section links from the stable rule names
+retained by the lint domain. Runner output adapters may use this helper; the
+lint domain exposes no public URL API or publication details.
 
 ## 4. Source provenance
 

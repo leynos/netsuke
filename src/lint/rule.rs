@@ -106,7 +106,7 @@ impl Stage {
 /// The summary, rationale, and remediation live here for the prototype period
 /// so that the emitted diagnostic, the `--explain` output, and the rule
 /// reference document cannot drift apart while the rule set is still settling.
-/// Roadmap step 10.2 moves that prose into the localization catalogues, keyed by
+/// Roadmap task 7.2.1 moves that prose into the localization catalogues, keyed by
 /// [`RuleMeta::name`], and keeps this text as the source-locale fallback. The
 /// identifiers never move: a name, a category, a severity, and a code are
 /// values a user types and a machine matches. See
@@ -135,17 +135,7 @@ impl RuleMeta {
     pub fn code(&self) -> String {
         format!("netsuke::lint::{}", self.name.replace('-', "_"))
     }
-
-    /// Build the documentation anchor for this rule in the rule reference.
-    #[must_use]
-    pub fn doc_url(&self) -> String {
-        format!("{RULE_DOC_BASE}#{}", self.name)
-    }
 }
-
-/// Base URL of the published rule reference, used for each finding's `url`.
-pub const RULE_DOC_BASE: &str =
-    "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md";
 
 /// A rule that inspects the authored source.
 pub trait DocumentRule: Sync {
