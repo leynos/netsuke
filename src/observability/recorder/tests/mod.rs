@@ -111,8 +111,8 @@ fn assert_retained_startup_counter(snapshot: &[SnapshotEntry]) {
     );
 }
 
-/// Assert the process recorder retains the bounded check command telemetry.
-fn assert_check_telemetry(snapshot: &[SnapshotEntry]) {
+/// Assert that the recorder retained the successful check counter.
+fn assert_retained_check_counter(snapshot: &[SnapshotEntry]) {
     assert!(
         snapshot.iter().any(|entry| {
             entry.0.kind() == MetricKind::Counter
@@ -125,6 +125,10 @@ fn assert_check_telemetry(snapshot: &[SnapshotEntry]) {
         }),
         "snapshot should retain the bounded check counter: {snapshot:?}"
     );
+}
+
+/// Assert that the recorder retained the successful check duration.
+fn assert_retained_check_duration(snapshot: &[SnapshotEntry]) {
     assert!(
         snapshot.iter().any(|entry| {
             entry.0.kind() == MetricKind::Histogram
@@ -137,6 +141,12 @@ fn assert_check_telemetry(snapshot: &[SnapshotEntry]) {
         }),
         "snapshot should retain the bounded check duration: {snapshot:?}"
     );
+}
+
+/// Assert the process recorder retains the bounded check command telemetry.
+fn assert_check_telemetry(snapshot: &[SnapshotEntry]) {
+    assert_retained_check_counter(snapshot);
+    assert_retained_check_duration(snapshot);
 }
 
 /// Assert an unlabelled duration has the exact expected histogram sample.
