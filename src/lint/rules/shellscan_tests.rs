@@ -38,8 +38,8 @@ fn a_single_quote_protects_a_backslash() {
     assert_eq!(find_all("echo 'a\\' && b", "&&").len(), 1);
 }
 
-#[rstest]
 /// A word-bounded needle matches a whole word only, never a substring.
+#[rstest]
 #[case("make all", "make", 1)]
 #[case("makeinfo manual", "make", 0)]
 #[case("run/make all", "make", 0)]
@@ -66,8 +66,8 @@ fn word_boundaries_hold_at_the_ends_of_the_text() {
     assert!(!is_word_bounded("remake", 2, 4));
 }
 
-#[rstest]
 /// Segments split on shell-active separators and on nothing else.
+#[rstest]
 #[case("a && b", vec!["a ", " b"])]
 #[case("a || b", vec!["a ", " b"])]
 #[case("a | b", vec!["a ", " b"])]
@@ -89,8 +89,8 @@ fn segment_offsets_locate_each_part() {
     }
 }
 
-#[rstest]
 /// The leading word skips indentation and any leading assignment.
+#[rstest]
 #[case("  make all", Some("make"))]
 #[case("VAR=1 make all", Some("make"))]
 #[case("   ", None)]

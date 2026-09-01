@@ -12,14 +12,12 @@
 //! meaning: a source that fails to parse here has already failed to parse for
 //! the compiler, and `netsuke check` reports that parse error instead.
 
-use miette::SourceSpan;
-
 use super::document_build::{ParseFailure, parse_document};
 
 /// A byte range within the manifest source.
 ///
-/// Offsets are byte offsets so they can be handed straight to `miette` and to
-/// string slicing, unlike the character indices the YAML scanner reports.
+/// Offsets are byte offsets so output adapters and string slicing can use them
+/// directly, unlike the character indices the YAML scanner reports.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Span {
     /// Byte offset of the first byte in the range.
@@ -57,12 +55,6 @@ impl Span {
     #[must_use]
     pub const fn contains_offset(self, offset: usize) -> bool {
         self.start <= offset && offset < self.end
-    }
-}
-
-impl From<Span> for SourceSpan {
-    fn from(span: Span) -> Self {
-        Self::new(span.start.into(), span.len())
     }
 }
 

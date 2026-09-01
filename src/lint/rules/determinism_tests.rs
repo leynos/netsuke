@@ -86,6 +86,7 @@ fn background_job_is_suppressed_by_a_directive() {
 #[case("\"netsuke build\"")]
 #[case("\"cd vendor && make all\"")]
 #[case("\"/usr/bin/make all\"")]
+#[case("\"make.exe -C vendor all\"")]
 fn recursive_build_invocation_reports_a_nested_build(#[case] command: &str) {
     crate::assert_lint_fires!(&manifest(command), "recursive-build-invocation", 1);
 }

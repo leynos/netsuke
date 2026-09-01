@@ -18,7 +18,7 @@ use anyhow::{Context, Result};
 pub(super) fn execute(cli: &Cli, command: Commands, context: &ExecutionContext<'_>) -> Result<()> {
     match command {
         Commands::Build(args) => execute_build(cli, &args, context),
-        Commands::Check(args) => execute_check(cli, &args, context),
+        Commands::Check(args) => execute_check(cli, &args, context.reporter),
         Commands::Generate { output } => execute_generate(cli, output.as_ref(), context),
         Commands::Clean => execute_clean(cli, context),
         Commands::Graph(args) => graph::handle_graph(cli, &args, context.reporter),
@@ -58,8 +58,12 @@ pub(super) fn execute_help(
 ///
 /// Returns an error when the manifest cannot be linted or when findings reach
 /// the failure threshold.
-fn execute_check(cli: &Cli, args: &CheckArgs, context: &ExecutionContext<'_>) -> Result<()> {
-    check::handle_check(cli, args, context.reporter)
+pub(super) fn execute_check(
+    cli: &Cli,
+    args: &CheckArgs,
+    reporter: &dyn crate::status::StatusReporter,
+) -> Result<()> {
+    check::handle_check(cli, args, reporter)
 }
 
 /// Run the build through Ninja and emit its successful JSON result when

@@ -1,6 +1,6 @@
 //! Unit tests for runner path resolution, predicate helpers, and core helpers.
 use super::*;
-use crate::cli::{HelpArgs, HelpTopic};
+use crate::cli::{CheckArgs, HelpArgs, HelpTopic};
 use crate::ir::{BuildEdge, BuildGraph, DependencyOrder};
 use crate::localization;
 use crate::manifest::ManifestLoadStage;
@@ -253,6 +253,32 @@ fn help_targets_bypasses_ninja_program_resolution() -> Result<()> {
     ensure!(
         !resolver_called.get(),
         "help targets must not resolve the Ninja program"
+    );
+    Ok(())
+}
+
+/// Dispatch `check --explain` before resolving build-only dependencies.
+#[test]
+fn check_bypasses_ninja_program_and_recipe_shell_resolution() -> Result<()> {
+    let _lock = localizer_test_lock().map_err(|error| anyhow::anyhow!("{error}"))?;
+    let _guard = set_en_localizer();
+    let cli = Cli {
+        command: Some(Commands::Check(CheckArgs {
+            explain: Some(String::new()),
+            ..CheckArgs::default()
+        })),
+        ..Cli::default()
+    };
+    let resolver_called = Cell::new(false);
+
+    run_with_ninja_program_resolver(&cli, crate::output_prefs::resolve(None), None, || {
+        resolver_called.set(true);
+        PathBuf::from("ninja")
+    })?;
+
+    ensure!(
+        !resolver_called.get(),
+        "check must not resolve the Ninja program or recipe shell"
     );
     Ok(())
 }

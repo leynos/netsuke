@@ -2158,16 +2158,16 @@ completion is what turns the prototype into a supported feature.
     grammar, so an author writing a directive can see the promise it rests on.
   - Success: the policy is published and the rule reference links to it.
 
-### 7.5. Pay down the prototype's structural debt
+### 10.5. Pay down the prototype's structural debt
 
 This step answers whether the linter's internals can carry a growing rule set
 and a production workload, as distinct from whether the rules themselves are
 right. Each task is a refactor of code the prototype already ships, so none
 changes a finding, an identifier, or an output schema; they are separated from
-steps 7.1 to 7.4 because they are reviewable independently and none blocks the
-freeze.
+steps 10.1 to 10.4 because they are reviewable independently and none blocks
+the freeze.
 
-- [ ] 7.5.1. Move the `miette` dependency out of the lint core into an adapter.
+- [ ] 10.5.1. Move the `miette` dependency out of the lint core into an adapter.
   - `src/lint` currently converts its own `Span` and `Severity` into `miette`
     types, implements `Diagnostic` on its finding projection, and owns a
     `NamedSource`, so the core cannot be used without the reporting framework.
@@ -2175,7 +2175,7 @@ freeze.
     convert them at the runner boundary where the diagnostics are rendered.
   - Success: `src/lint` names no `miette` type, and the JSON and human output
     are byte-identical to their current snapshots.
-- [ ] 7.5.2. Add runner-boundary telemetry for `netsuke check`.
+- [ ] 10.5.2. Add runner-boundary telemetry for `netsuke check`.
   - The command loads a manifest, builds a graph, indexes the source, and runs
     every rule without emitting a metric or a span, unlike its sibling
     commands.
@@ -2186,7 +2186,7 @@ freeze.
     text.
   - Success: a check run emits one counter and one histogram observation, and
     the label vocabulary is enumerated in a test.
-- [ ] 7.5.3. Scan each recipe once when matching graph outputs.
+- [ ] 10.5.3. Scan each recipe once when matching graph outputs.
   - `undeclared-target-input` rebuilds the shell-active mask for every
     (recipe, output) pair, so its cost grows with targets multiplied by
     outputs.

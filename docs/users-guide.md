@@ -1266,11 +1266,13 @@ itself reported.
 
 With `--json`, a run in which no finding reaches the failure threshold succeeds
 and writes a result document whose `result.command` is `check` and whose
-`result.findings` array holds every finding. A run in which one does fails and
-writes a diagnostic document whose single top-level entry is the threshold
-summary and whose `related` array holds the same findings. Both arrays use the
-same per-finding shape as any other Netsuke diagnostic, so a consumer reads
-`result.findings` when it is present and `diagnostics[0].related` otherwise.
+`result.findings` array holds every reported finding. A run in which one does
+fail writes a diagnostic document whose single top-level entry is the threshold
+summary and whose `related` array holds the same reported findings. Both arrays
+use the same per-finding shape as any other Netsuke diagnostic, so a consumer
+reads `result.findings` when it is present and `diagnostics[0].related`
+otherwise. `--limit` truncates these stored output arrays; the verdict and
+severity totals are computed from all findings before truncation.
 `netsuke --json check --explain` emits the rule catalogue as a result document
 whose `result.command` is `check-explain`.
 

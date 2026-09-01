@@ -11,13 +11,16 @@ use crate::diagnostic_json::{DiagnosticEntry, diagnostic_entry};
 use crate::json_envelope::{GeneratorInfo, SCHEMA_VERSION};
 use crate::lint::{Report, RuleMeta, Severity};
 
+use super::super::check_diagnostics::CheckReport;
+
 /// Render a passing check as its versioned result document.
 ///
 /// # Errors
 ///
 /// Returns an error when the document cannot be serialized to JSON.
-pub(super) fn render_result(report: &Report) -> Result<String> {
-    let findings = report
+pub(super) fn render_result(check: &CheckReport) -> Result<String> {
+    let report = check.report();
+    let findings = check
         .diagnostics()
         .iter()
         .map(|diagnostic| diagnostic_entry(diagnostic))

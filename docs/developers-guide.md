@@ -520,6 +520,32 @@ whose meaning changes materially takes a new name, because the name is
 simultaneously a configuration key, a suppression token, a documentation
 anchor, and a field in machine output.
 
+### Linter pipeline interfaces
+
+The lint domain exposes a small pipeline rather than a command-specific
+implementation. `lint::Request` borrows the expanded `NetsukeManifest` and
+lowered `BuildGraph`, while owning the source text that the document stage
+indexes. `lint::analyse` builds that source index and returns an `Outcome` with
+deterministically ordered findings and the count of findings suppressed by
+directives. A source-indexing failure is returned as a `ParseFailure`; rules
+are not run when the compiler artefacts and source cannot be reconciled.
+
+`Policy` resolves ordered `--rule` selectors against the registry defaults. The
+engine applies that policy and stamps the resolved severity onto each finding;
+rules do not choose a severity at check time. `registry::catalogue` is the
+stable metadata view used by `--explain`, while `registry::all` is the
+stage-tagged execution view.
+
+The runner combines a neutral `lint::Report` with the manifest source in its
+runner-owned `CheckReport` diagnostic adapter. `Report` owns the output limit,
+threshold verdict, whole-run severity totals, and suppression count. It bounds
+only the findings stored for output: `is_failure`, `failing_count`, and
+`count_at` are computed before the limit is applied. `CheckReport` projects the
+bounded findings into source-backed diagnostics, while the JSON adapter uses
+the same per-finding data in both result and failure documents. Keep command
+parsing, output streams, and reporter construction at the runner boundary;
+rules and policy must remain independent of those concerns.
+
 ## Package and target naming
 
 The crates.io package is `netsuke-build`; the library target, the binary

@@ -39,16 +39,6 @@ impl Severity {
             Self::Error => "error",
         }
     }
-
-    /// Project this severity onto the `miette` severity it renders as.
-    #[must_use]
-    pub const fn to_miette(self) -> miette::Severity {
-        match self {
-            Self::Advice => miette::Severity::Advice,
-            Self::Warning => miette::Severity::Warning,
-            Self::Error => miette::Severity::Error,
-        }
-    }
 }
 
 impl fmt::Display for Severity {
