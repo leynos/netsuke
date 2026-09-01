@@ -88,17 +88,7 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
             self.output.push(ch);
             return Ok(pos + 1);
         }
-        if let Some(next) = self.append_command_substitution_delimiter(pos, ch) {
-            return Ok(next);
-        }
-        self.update_quote_context(ch);
-        self.append_marker_for_context(
-            pos,
-            ch,
-            MarkerProtection::from_protected_region(
-                self.in_backticks || self.command_substitution_depth > 0,
-            ),
-        )
+        self.append_contextual_character(pos, ch, Self::posix_marker_protection)
     }
 
     /// Preserve PowerShell text while lowering only manifest-owned markers.
@@ -109,17 +99,35 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         if self.append_power_shell_single_quote_escape(pos, ch) {
             return Ok(pos + 2);
         }
+        self.append_contextual_character(pos, ch, Self::power_shell_marker_protection)
+    }
+
+    /// Preserve shared shell syntax before lowering a marker for its active context.
+    fn append_contextual_character(
+        &mut self,
+        pos: usize,
+        ch: char,
+        marker_protection: fn(&Self) -> MarkerProtection,
+    ) -> Result<usize, IrGenError> {
         if let Some(next) = self.append_command_substitution_delimiter(pos, ch) {
             return Ok(next);
         }
         self.update_quote_context(ch);
-        self.append_marker_for_context(
-            pos,
-            ch,
-            MarkerProtection::from_protected_region(
-                !matches!(self.quote_context, QuoteContext::Unquoted)
-                    || self.command_substitution_depth > 0,
-            ),
+        self.append_marker_for_context(pos, ch, marker_protection(self))
+    }
+
+    /// Classify POSIX backticks and command substitutions as protected regions.
+    const fn posix_marker_protection(&self) -> MarkerProtection {
+        MarkerProtection::from_protected_region(
+            self.in_backticks || self.command_substitution_depth > 0,
+        )
+    }
+
+    /// Classify PowerShell quotes and command substitutions as protected regions.
+    const fn power_shell_marker_protection(&self) -> MarkerProtection {
+        MarkerProtection::from_protected_region(
+            !matches!(self.quote_context, QuoteContext::Unquoted)
+                || self.command_substitution_depth > 0,
         )
     }
 
