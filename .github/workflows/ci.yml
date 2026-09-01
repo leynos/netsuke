@@ -278,10 +278,13 @@ jobs:
         # Whitaker/Dylint over the workspace under `-D warnings`, including
         # the `#[cfg(windows)]` arms. The shared installer supplies a
         # PowerShell wrapper on Windows, so invoke it from PowerShell rather
-        # than Git Bash. A failure blocks the merge.
+        # than Git Bash. Resolve the Windows known-folder profile, matching
+        # whitaker-installer rather than PowerShell's environment-derived
+        # $HOME. A failure blocks the merge.
         shell: pwsh
         run: |
-          $whitaker = Join-Path $HOME '.local\bin\whitaker.ps1'
+          $profileHome = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
+          $whitaker = Join-Path $profileHome '.local\bin\whitaker.ps1'
           $env:RUSTFLAGS = "$env:RUSTFLAGS -D warnings"
           $env:DYLINT_TOML = Get-Content dylint.toml -Raw
           & $whitaker --all --no-deps --package netsuke-build '--' --all-targets --all-features

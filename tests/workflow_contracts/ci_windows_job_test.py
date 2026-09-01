@@ -51,7 +51,11 @@ EXCLUDED_WINDOWS_ACTIONS = (
 
 #: Required wrapper, configuration, and root-package lint fragments.
 WHITAKER_WORKSPACE_FRAGMENTS = (
-    "Join-Path $HOME '.local\\bin\\whitaker.ps1'",
+    (
+        "$profileHome = [Environment]::GetFolderPath("
+        "[Environment+SpecialFolder]::UserProfile)"
+    ),
+    "Join-Path $profileHome '.local\\bin\\whitaker.ps1'",
     '$env:RUSTFLAGS = "$env:RUSTFLAGS -D warnings"',
     "$env:DYLINT_TOML = Get-Content dylint.toml -Raw",
     (

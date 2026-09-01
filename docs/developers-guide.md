@@ -3680,7 +3680,11 @@ workflow-pinned `cargo-nextest`; the shared Rust setup action supplies
 `rustfmt` and Clippy. The SHA-pinned shared Whitaker installer receives the same
 `installer-version: '0.2.7'` input as Linux and produces a PowerShell wrapper
 on Windows, so `Lint (Whitaker)` invokes that wrapper directly rather than
-through a Bash shim or `make SHELL=bash lint-whitaker`.
+through a Bash shim or `make SHELL=bash lint-whitaker`. The installer resolves
+its home through Windows' `FOLDERID_Profile` known folder, not an environment
+variable. The PowerShell step must therefore use
+`Environment.SpecialFolder.UserProfile` as well. In particular, `$HOME` can
+name a different profile when the Actions runner operates as a Windows service.
 
 To reproduce the platform gate, use a Windows environment with those tools
 provisioned and run the following in order:
@@ -3690,7 +3694,8 @@ provisioned and run the following in order:
 3. In PowerShell, run:
 
    ```powershell
-   $whitaker = Join-Path $HOME '.local\bin\whitaker.ps1'
+   $profileHome = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
+   $whitaker = Join-Path $profileHome '.local\bin\whitaker.ps1'
    $env:RUSTFLAGS = "$env:RUSTFLAGS -D warnings"
    $env:DYLINT_TOML = Get-Content dylint.toml -Raw
    & $whitaker --all --no-deps --package netsuke-build '--' --all-targets --all-features
