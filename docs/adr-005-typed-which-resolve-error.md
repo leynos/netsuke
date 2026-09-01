@@ -1,4 +1,4 @@
-# Architecture Decision Record (ADR): Use a typed `which` resolver error
+# Architecture decision record (ADR): use a typed `which` resolver error
 
 ## Status
 

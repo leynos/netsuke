@@ -3122,14 +3122,17 @@ omit a declared key, carry a key beyond the declared set, or interpolate a
 different set of variables from the English source catalogue. Missing or
 drifted strings therefore fail CI before release. CLI execution and dispatch
 live in `src/runner/mod.rs`, keeping `main.rs` focused on parsing. Process
-management, Ninja invocation, argument redaction, and the temporary file
-helpers reside in `src/runner/process/mod.rs`, allowing the runner entry point
-to delegate low-level concerns. The working directory flag mirrors Ninja's `-C`
-option but is resolved internally: Netsuke runs Ninja with a configured working
-directory and resolves relative output paths (for example `generate --output`)
-under the same directory so behaviour matches a real directory change. Error
-scenarios are validated using clap's `ErrorKind` enumeration in unit tests and
-via rstest-bdd behavioural steps/scenarios.
+management and Ninja invocation live in the process module; argument redaction
+is implemented in `src/runner/process/redaction.rs`, and temporary-file helpers
+are in `src/runner/process/file_io.rs`. The `src/runner/process/mod.rs` module
+owns the process-module composition boundary and re-exports selected APIs,
+allowing the runner entry point to delegate low-level concerns. The working
+directory flag mirrors Ninja's `-C` option but is resolved internally: Netsuke
+runs Ninja with a configured working directory and resolves relative output
+paths (for example `generate --output`) under the same directory so behaviour
+matches a real directory change. Error scenarios are validated using clap's
+`ErrorKind` enumeration in unit tests and via rstest-bdd behavioural
+steps/scenarios.
 
 Real-time stage reporting now uses a six-stage model in `src/status.rs` backed
 by `indicatif::MultiProgress` for standard terminals. The reporter keeps one
