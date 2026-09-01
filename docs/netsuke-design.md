@@ -2505,7 +2505,6 @@ command validation apply only to POSIX and Bash routes. PowerShell treats
 backticks as native escape syntax rather than interpolation-protection
 delimiters.
 
-
 ### 6.3 Implementation strategy
 
 The command interpolation logic in `src/ir/cmd_interpolate/mod.rs` prepares one
