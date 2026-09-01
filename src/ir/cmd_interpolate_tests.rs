@@ -209,6 +209,122 @@ fn interpolate_script_applies_quote_context_safeguards() {
     }
 }
 
+/// Verify comments cannot alter quote context for later command or script markers.
+#[test]
+fn comments_preserve_quote_context_for_later_markers() {
+    let path = "x\"; touch injected; echo \"y";
+    let bindings = CommandBindings::new(
+        &[Utf8PathBuf::from(path)],
+        &[Utf8PathBuf::from(path)],
+        RecipeShell::Posix,
+    );
+    for comment in [
+        "# unmatched apostrophe '\n",
+        "# unmatched double quote \"\n",
+    ] {
+        let template = format!("{comment}echo \"{INS_TOKEN}\"");
+        let expected = format!("{comment}echo \"x\\\"; touch injected; echo \\\"y\"");
+        assert_eq!(
+            interpolate_command_with_bindings(&template, &bindings)
+                .expect("comments must not affect command marker quoting"),
+            expected
+        );
+        assert_eq!(
+            interpolate_script_with_bindings(&template, &bindings)
+                .expect("comments must not affect script marker quoting"),
+            expected
+        );
+    }
+    let continuation_comment = "echo before \\\n# unmatched apostrophe '\n";
+    let continuation_template = format!("{continuation_comment}echo \"{INS_TOKEN}\"");
+    let continuation_expected =
+        format!("{continuation_comment}echo \"x\\\"; touch injected; echo \\\"y\"");
+    assert_eq!(
+        interpolate_script_with_bindings(&continuation_template, &bindings)
+            .expect("continued comment must not affect script marker quoting"),
+        continuation_expected
+    );
+}
+
+/// Verify comments preserve their markers while escaped boundaries remain executable text.
+#[test]
+fn comments_leave_markers_literal_only_after_unescaped_boundaries() {
+    let bindings = CommandBindings::new(
+        &[Utf8PathBuf::from("input")],
+        &[Utf8PathBuf::from("output")],
+        RecipeShell::Posix,
+    );
+    let comment_template = format!("# {INS_TOKEN}\necho \"{OUTS_TOKEN}\"");
+    let comment_expected = format!("# {INS_TOKEN}\necho \"output\"");
+    assert_eq!(
+        interpolate_script_with_bindings(&comment_template, &bindings)
+            .expect("comment marker must remain literal"),
+        comment_expected
+    );
+    for (template, expected) in [
+        (
+            format!("echo escaped\\ # {INS_TOKEN}"),
+            "echo escaped\\ # input",
+        ),
+        (
+            format!("echo escaped\\;# {OUTS_TOKEN}"),
+            "echo escaped\\;# output",
+        ),
+    ] {
+        assert_eq!(
+            interpolate_script_with_bindings(&template, &bindings)
+                .expect("escaped comment boundary must remain executable"),
+            expected
+        );
+    }
+}
+
+/// Verify heredoc data remains literal and cannot alter later marker context.
+#[test]
+fn heredoc_bodies_preserve_quote_context_for_later_markers() {
+    let path = "x\"; touch injected; echo \"y";
+    let bindings = CommandBindings::new(
+        &[Utf8PathBuf::from(path)],
+        &[Utf8PathBuf::from(path)],
+        RecipeShell::Posix,
+    );
+    for (delimiter, terminator) in [
+        ("EOF", "EOF"),
+        ("'EOF'", "EOF"),
+        ("-EOF", "\tEOF"),
+        ("''", ""),
+    ] {
+        let template = format!(
+            "cat <<{delimiter}\nunmatched ' and \" {INS_TOKEN}\n{terminator}\necho \"{OUTS_TOKEN}\""
+        );
+        let expected = format!(
+            "cat <<{delimiter}\nunmatched ' and \" {INS_TOKEN}\n{terminator}\necho \"x\\\"; touch injected; echo \\\"y\""
+        );
+        assert_eq!(
+            interpolate_script_with_bindings(&template, &bindings)
+                .expect("heredoc data must not affect later marker quoting"),
+            expected
+        );
+    }
+}
+
+/// Verify markers in a heredoc declaration lower before its body becomes inert.
+#[test]
+fn heredoc_declaration_markers_are_lowered() {
+    let bindings = CommandBindings::new(
+        &[Utf8PathBuf::from("input")],
+        &[Utf8PathBuf::from("output")],
+        RecipeShell::Posix,
+    );
+    let template = format!("cat <<{OUTS_TOKEN}\n{INS_TOKEN}\noutput\necho \"{INS_TOKEN}\"");
+    let expected = format!("cat <<output\n{INS_TOKEN}\noutput\necho \"input\"");
+    assert_eq!(
+        interpolate_script_with_bindings(&template, &bindings)
+            .expect("heredoc declaration marker must be lowered"),
+        expected
+    );
+}
+
 #[test]
 fn power_shell_bindings_preserve_literal_backticks_in_paths() {
     assert_power_shell_path_interpolation(

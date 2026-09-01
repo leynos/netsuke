@@ -386,17 +386,22 @@ fn escaped_script_marker_reaches_the_declared_output() -> Result<()> {
 /// Verify a double-quoted script marker cannot create a second POSIX command.
 #[cfg(unix)]
 #[rstest]
-fn quoted_script_marker_cannot_inject_a_command_boundary() -> Result<()> {
-    let manifest = manifest::from_str(
-        "netsuke_version: '1.0.0'\ntargets:\n  - name: 'x\";id;echo\"y'\n    script: 'echo \"{{ outs }}\"'\n",
-    )?;
+#[case::apostrophe("# unmatched apostrophe '")]
+#[case::double_quote("# unmatched double quote \"")]
+fn quoted_script_marker_cannot_inject_a_command_boundary(#[case] comment: &str) -> Result<()> {
+    let output_path = "x\"; touch injected; echo \"y";
+    let manifest = manifest::from_str(&format!(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: '{output_path}'\n    script: |\n      {comment}\n      echo \"{{{{ outs }}}}\"\n"
+    ))?;
     let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
         &manifest,
         RecipeShell::Posix,
     )?)?;
-    let commands = ninja_commands(&ninja, "x\";id;echo\"y")?;
+    let commands = ninja_commands(&ninja, output_path)?;
+    let workspace = tempfile::tempdir()?;
     let output = Command::new("/bin/sh")
         .args(["-ec", &commands])
+        .current_dir(workspace.path())
         .output()
         .context("run the generated script command")?;
     ensure!(
@@ -405,9 +410,13 @@ fn quoted_script_marker_cannot_inject_a_command_boundary() -> Result<()> {
         String::from_utf8_lossy(&output.stderr)
     );
     ensure!(
-        output.stdout == b"x\";id;echo\"y\n",
+        output.stdout == format!("{output_path}\n").as_bytes(),
         "script marker must remain one argument, got: {}",
         String::from_utf8_lossy(&output.stdout)
+    );
+    ensure!(
+        !workspace.path().join("injected").exists(),
+        "double-quoted marker must not execute the injected touch command"
     );
     Ok(())
 }

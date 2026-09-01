@@ -1,6 +1,11 @@
 //! Hold the state required for one-pass recipe placeholder substitution.
 
-use super::{CommandBindings, IrGenError, QuoteContext, find_substitution, invalid_command_error};
+use super::{
+    CommandBindings, IrGenError, QuoteContext,
+    command_substitution::{CommandSubstitution, CommandSubstitutionDelimiter},
+    find_substitution, invalid_command_error,
+    posix_lexical::{PosixCharacter, PosixLexicalState},
+};
 use crate::recipe_shell::RecipeShell;
 
 /// Classify whether the active shell region permits recipe-marker lowering.
@@ -19,38 +24,6 @@ impl MarkerProtection {
             Self::Protected
         } else {
             Self::Unprotected
-        }
-    }
-}
-
-/// Identify one command-substitution delimiter recognised during traversal.
-enum CommandSubstitutionDelimiter {
-    /// Begin a nested `$()` command substitution.
-    Start,
-    /// Open a grouped expression within the active command substitution.
-    NestedOpen,
-    /// Close a grouped expression or the active command substitution.
-    Close,
-}
-
-/// Retain parsing state for one active command substitution.
-///
-/// A command substitution has its own quoting rules, independent of its
-/// surrounding command text. Tracking its parenthesis and quote state together
-/// prevents literal parentheses inside its quoted text from closing the region.
-struct CommandSubstitution {
-    /// Record the quote state local to this command-substitution body.
-    quote_context: QuoteContext,
-    /// Count this substitution's opening parenthesis and nested grouped forms.
-    parenthesis_depth: usize,
-}
-
-impl CommandSubstitution {
-    /// Initialise the state required after a `$(` delimiter.
-    const fn new() -> Self {
-        Self {
-            quote_context: QuoteContext::Unquoted,
-            parenthesis_depth: 1,
         }
     }
 }
@@ -75,6 +48,8 @@ pub(super) struct SubstitutionTraversal<'template, 'bindings> {
     quote_context: QuoteContext,
     /// Retain nested `$()` parsing state where path insertion is refused.
     command_substitutions: Vec<CommandSubstitution>,
+    /// Track POSIX comments and heredocs whose text must remain lexically inert.
+    posix_lexical: PosixLexicalState,
 }
 
 impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
@@ -92,6 +67,7 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
             in_backticks: false,
             quote_context: QuoteContext::Unquoted,
             command_substitutions: Vec::new(),
+            posix_lexical: PosixLexicalState::new(),
         }
     }
 
@@ -112,15 +88,51 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
 
     /// Preserve POSIX shell syntax while lowering context-safe recipe markers.
     fn append_posix_character(&mut self, pos: usize, ch: char) -> Result<usize, IrGenError> {
+        let copied_inert_character = {
+            let mut character = PosixCharacter {
+                chars: self.chars,
+                pos,
+                ch,
+                output: &mut self.output,
+            };
+            self.posix_lexical.append_inert_character(&mut character)
+        };
+        if copied_inert_character {
+            return Ok(pos + 1);
+        }
         if let Some(next) = self.append_escaped_character(pos, ch) {
             return Ok(next);
+        }
+        if self.matches_unquoted_quote_context() {
+            let declaration_end = {
+                let mut character = PosixCharacter {
+                    chars: self.chars,
+                    pos,
+                    ch,
+                    output: &mut self.output,
+                };
+                self.posix_lexical
+                    .append_heredoc_declaration(&mut character, self.bindings)
+            };
+            if let Some(next) = declaration_end {
+                return Ok(next);
+            }
+            if PosixLexicalState::starts_comment(self.chars, pos, ch) {
+                self.posix_lexical.begin_comment();
+                self.output.push(ch);
+                return Ok(pos + 1);
+            }
         }
         if ch == '`' && !self.matches_single_quote_context() {
             self.in_backticks ^= true;
             self.output.push(ch);
             return Ok(pos + 1);
         }
-        self.append_contextual_character(pos, ch, Self::posix_marker_protection)
+        let next = self.append_contextual_character(pos, ch, Self::posix_marker_protection)?;
+        if ch == '\n' {
+            self.posix_lexical.begin_pending_heredoc_after_newline(next);
+        }
+        Ok(next)
     }
 
     /// Preserve PowerShell text while lowering only manifest-owned markers.

@@ -16,6 +16,8 @@ use std::cell::Cell;
 use super::IrGenError;
 use crate::recipe_shell::RecipeShell;
 
+mod command_substitution;
+mod posix_lexical;
 mod substitution;
 
 use substitution::SubstitutionTraversal;
@@ -303,6 +305,9 @@ pub const INS_TOKEN: &str = "__NETSUKE_INS_PLACEHOLDER__";
 /// consumed during command interpolation; it is not general template syntax.
 pub const OUTS_TOKEN: &str = "__NETSUKE_OUTS_PLACEHOLDER__";
 
+#[cfg(test)]
+#[path = "posix_lexical_tests.rs"]
+mod posix_lexical_tests;
 #[cfg(test)]
 #[path = "../cmd_interpolate_property_tests.rs"]
 mod property_tests;
