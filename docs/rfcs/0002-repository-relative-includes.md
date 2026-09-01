@@ -169,7 +169,7 @@ likely to encounter duplicate-name errors.
 
 For each composition unit, Netsuke performs these steps:
 
-1. Initialise a composition-wide `visited` map keyed by canonical include
+1. Initialize a composition-wide `visited` map keyed by canonical include
    identity. The map retains the first include chain that loaded each identity.
 2. Parse YAML sufficiently to identify `includes` without rendering Jinja.
 3. For each include in declaration order:
