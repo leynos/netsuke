@@ -57,7 +57,7 @@ concurrency:
 
 jobs:
   metadata:
-    runs-on: nscloud-netsuke
+    runs-on: namespace-profile-netsuke
     outputs:
       version: ${{ steps.ensure_version.outputs['crate-version'] }}
       bin_name: ${{ steps.bin_name.outputs['bin-name'] }}
@@ -134,7 +134,7 @@ jobs:
     uses: ./.github/workflows/build-and-package.yml
     with:
       platform: linux
-      runner: nscloud-netsuke
+      runner: namespace-profile-netsuke
       target: ${{ matrix.target }}
       bin-name: ${{ needs.metadata.outputs.bin_name }}
       version: ${{ needs.metadata.outputs.version }}
@@ -248,7 +248,7 @@ jobs:
       - build-windows
       - build-macos
       - windows-native-recipe-smoke
-    runs-on: nscloud-netsuke
+    runs-on: namespace-profile-netsuke
     steps:
       - uses: >-
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

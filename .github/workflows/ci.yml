@@ -26,7 +26,7 @@ env:
 
 jobs:
   build-test:
-    runs-on: nscloud-netsuke-ci
+    runs-on: namespace-profile-netsuke-ci
     permissions:
       contents: read
     env:
@@ -342,7 +342,7 @@ jobs:
 
   kani-smoke:
     if: github.event_name == 'pull_request'
-    runs-on: nscloud-netsuke
+    runs-on: namespace-profile-netsuke
     timeout-minutes: 20
     permissions:
       contents: read

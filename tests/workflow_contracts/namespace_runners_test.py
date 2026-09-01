@@ -17,7 +17,7 @@ WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
 @pytest.mark.parametrize(
     ("workflow_name", "job_name", "expected_runner"),
     [
-        ("ci.yml", "build-test", "nscloud-netsuke-ci"),
+        ("ci.yml", "build-test", "namespace-profile-netsuke-ci"),
         (
             "ci.yml",
             "build-test-windows",
@@ -28,21 +28,25 @@ WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
             "windows-native-recipe-smoke",
             "namespace-profile-netsuke-windows",
         ),
-        ("ci.yml", "kani-smoke", "nscloud-netsuke"),
-        ("coverage-main.yml", "coverage-upload", "nscloud-netsuke"),
-        ("delayed-pr-comment.yml", "delay_and_comment", "nscloud-netsuke"),
+        ("ci.yml", "kani-smoke", "namespace-profile-netsuke"),
+        ("coverage-main.yml", "coverage-upload", "namespace-profile-netsuke"),
+        (
+            "delayed-pr-comment.yml",
+            "delay_and_comment",
+            "namespace-profile-netsuke",
+        ),
         (
             "netsukefile-test.yml",
             "netsukefile",
-            "nscloud-netsuke-ubuntu-22-04",
+            "namespace-profile-netsuke-ubuntu-22-04",
         ),
-        ("release.yml", "metadata", "nscloud-netsuke"),
+        ("release.yml", "metadata", "namespace-profile-netsuke"),
         (
             "release.yml",
             "windows-native-recipe-smoke",
             "namespace-profile-netsuke-windows",
         ),
-        ("release.yml", "release", "nscloud-netsuke"),
+        ("release.yml", "release", "namespace-profile-netsuke"),
     ],
 )
 def test_repository_owned_jobs_use_namespace_profiles(
@@ -65,8 +69,8 @@ def test_linux_release_build_uses_the_general_namespace_profile() -> None:
     build_linux = workflow_job(workflow, "build-linux")
     inputs = require_mapping(build_linux.get("with"), "jobs.build-linux.with")
     actual_runner = inputs.get("runner")
-    assert actual_runner == "nscloud-netsuke", (
-        "release.yml build-linux must pass nscloud-netsuke to the package "
+    assert actual_runner == "namespace-profile-netsuke", (
+        "release.yml build-linux must pass namespace-profile-netsuke to the package "
         f"workflow, got {actual_runner!r}"
     )
 

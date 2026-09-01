@@ -661,14 +661,14 @@ connected to the repository before merging a workflow change that names them.
 
 Table: Namespace runner profiles used by Netsuke.
 
-| Profile tag            | Workflow label                          | Operating system    | Machine shape | Intended workload                         |
-| ---------------------- | --------------------------------------- | ------------------- | ------------- | ----------------------------------------- |
-| `netsuke-ci`           | `nscloud-netsuke-ci`                    | Ubuntu 24.04        | 8 vCPU, 16 GB | Full Linux formatting, lint and test CI   |
-| `netsuke`              | `nscloud-netsuke`                       | Ubuntu 24.04        | 4 vCPU, 8 GB  | Packaging, coverage and utility jobs      |
-| `netsuke-ubuntu-22-04` | `nscloud-netsuke-ubuntu-22-04`          | Ubuntu 22.04        | 4 vCPU, 8 GB  | Ubuntu 22.04 compatibility build          |
-| `netsuke-windows-ci`   | `namespace-profile-netsuke-windows-ci`  | Windows Server 2022 | 8 vCPU, 16 GB | Full Windows formatting, lint and test CI |
-| `netsuke-windows`      | `namespace-profile-netsuke-windows`     | Windows Server 2022 | 4 vCPU, 8 GB  | Windows packaging and smoke tests         |
-| `netsuke-macos-arm64`  | `namespace-profile-netsuke-macos-arm64` | macOS Sequoia       | 6 vCPU, 14 GB | ARM64 macOS packaging                     |
+| Profile tag            | Workflow label                           | Operating system    | Machine shape | Intended workload                         |
+| ---------------------- | ---------------------------------------- | ------------------- | ------------- | ----------------------------------------- |
+| `netsuke-ci`           | `namespace-profile-netsuke-ci`           | Ubuntu 24.04        | 8 vCPU, 16 GB | Full Linux formatting, lint and test CI   |
+| `netsuke`              | `namespace-profile-netsuke`              | Ubuntu 24.04        | 4 vCPU, 8 GB  | Packaging, coverage and utility jobs      |
+| `netsuke-ubuntu-22-04` | `namespace-profile-netsuke-ubuntu-22-04` | Ubuntu 22.04        | 4 vCPU, 8 GB  | Ubuntu 22.04 compatibility build          |
+| `netsuke-windows-ci`   | `namespace-profile-netsuke-windows-ci`   | Windows Server 2022 | 8 vCPU, 16 GB | Full Windows formatting, lint and test CI |
+| `netsuke-windows`      | `namespace-profile-netsuke-windows`      | Windows Server 2022 | 4 vCPU, 8 GB  | Windows packaging and smoke tests         |
+| `netsuke-macos-arm64`  | `namespace-profile-netsuke-macos-arm64`  | macOS Sequoia       | 6 vCPU, 14 GB | ARM64 macOS packaging                     |
 
 Use `nsc github profile list -o json` and `nsc github profile describe` to
 inspect the deployed profiles. Treat profile creation, updates, deletion and
@@ -676,9 +676,9 @@ base-image rebuilds as infrastructure changes; review the effective profile
 specification before applying them.
 
 The `nsc github profile create` command provisions Linux profiles. Native
-Windows and macOS profiles are created in the Namespace dashboard and use the
-`namespace-profile-*` label form. Linux profiles created by the CLI use
-`nscloud-*`. The x86_64 macOS package remains on `macos-15-intel` because
+Windows and macOS profiles are created in the Namespace dashboard. Every
+profile uses the `namespace-profile-*` label form, regardless of where it was
+created. The x86_64 macOS package remains on `macos-15-intel` because
 Namespace's macOS estate is ARM64-only. The mutation-testing and Dependabot
 auto-merge callers also retain the runners selected by their SHA-pinned
 reusable workflows in `leynos/shared-actions`; a caller cannot override a

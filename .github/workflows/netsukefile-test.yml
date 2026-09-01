@@ -8,7 +8,7 @@ on:
 
 jobs:
   netsukefile:
-    runs-on: nscloud-netsuke-ubuntu-22-04
+    runs-on: namespace-profile-netsuke-ubuntu-22-04
     permissions:
       contents: read
     env:
