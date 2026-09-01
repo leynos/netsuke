@@ -169,6 +169,26 @@ fn a_clean_manifest_reports_nothing(clean_workspace: Result<Workspace>) -> Resul
     Ok(())
 }
 
+/// Check manifests without running their recipes or creating build output.
+#[test]
+fn check_is_read_only_at_the_process_boundary() -> Result<()> {
+    let workspace = Workspace::new(concat!(
+        "netsuke_version: \"1.0.0\"\n",
+        "targets:\n",
+        "  - name: generated.txt\n",
+        "    command: \"touch recipe-ran-marker && touch {{ outs }}\"\n",
+    ))?;
+    let run = workspace.run(&["--json", "check"])?;
+    ensure!(run.success, "check should succeed: {}", run.stderr);
+    for path in ["recipe-ran-marker", "generated.txt", "build.ninja"] {
+        ensure!(
+            !test_fs::exists(workspace.directory.path().join(path)),
+            "check should not create {path}"
+        );
+    }
+    Ok(())
+}
+
 /// `--fail-on never` makes findings purely informational.
 #[rstest]
 fn never_failing_reports_without_failing(warning_workspace: Result<Workspace>) -> Result<()> {
@@ -493,6 +513,38 @@ fn configuration_supplies_selectors_and_limits(warning_workspace: Result<Workspa
     Ok(())
 }
 
+/// An explicit selector restores a category configuration disabled.
+#[rstest]
+fn an_explicit_rule_outranks_the_configuration(warning_workspace: Result<Workspace>) -> Result<()> {
+    let workspace = warning_workspace?;
+    let config = write_config(&workspace, "[cmds.check]\nrule = [\"migration=off\"]\n")?;
+    let run = workspace.run(&[
+        "--config",
+        &config,
+        "--json",
+        "check",
+        "--rule",
+        "migration=warning",
+    ])?;
+    ensure!(
+        run.success,
+        "explicit selector should succeed: {}",
+        run.stderr
+    );
+    let document = document(&run)?;
+    let findings = document
+        .pointer("/result/findings")
+        .and_then(Value::as_array)
+        .context("the result should carry a findings array")?;
+    ensure!(
+        findings.iter().any(|finding| {
+            finding.get("code") == Some(&Value::from("netsuke::lint::manual_ninja_escape"))
+        }),
+        "the explicit selector should restore the migration finding: {findings:?}"
+    );
+    Ok(())
+}
+
 /// A configured limit bounds the published array, but not the whole-run summary.
 #[test]
 fn configuration_limit_bounds_the_check_document() -> Result<()> {
@@ -523,6 +575,58 @@ fn configuration_limit_bounds_the_check_document() -> Result<()> {
     ensure!(
         document.pointer("/result/summary/omitted") == Some(&Value::from(2)),
         "configured limit should account for omitted findings: {}",
+        run.stdout
+    );
+    Ok(())
+}
+
+/// An explicit limit overrides the configured limit in the result summary.
+#[test]
+fn an_explicit_limit_outranks_the_configuration() -> Result<()> {
+    let workspace = Workspace::new(concat!(
+        "netsuke_version: \"1.0.0\"\n",
+        "targets:\n",
+        "  - name: out.txt\n",
+        "    command: \"cp $$A $$B $$C {{ outs }}\"\n",
+    ))?;
+    let config = write_config(&workspace, "[cmds.check]\nlimit = 1\n")?;
+    let run = workspace.run(&["--config", &config, "--json", "check", "--limit", "2"])?;
+    ensure!(run.success, "explicit limit should succeed: {}", run.stderr);
+    let document = document(&run)?;
+    let summary = document
+        .pointer("/result/summary")
+        .context("the result should carry a summary")?;
+    let reported = summary
+        .get("reported")
+        .and_then(Value::as_u64)
+        .context("the summary should report its retained findings")?;
+    let omitted = summary
+        .get("omitted")
+        .and_then(Value::as_u64)
+        .context("the summary should report its omitted findings")?;
+    let total = ["error", "warning", "advice"]
+        .into_iter()
+        .try_fold(0_u64, |count, severity| {
+            summary
+                .get(severity)
+                .and_then(Value::as_u64)
+                .map(|findings| count + findings)
+                .with_context(|| format!("the summary should count {severity} findings"))
+        })?;
+    let expected_omitted = total
+        .checked_sub(reported)
+        .context("reported findings should not exceed the whole-run total")?;
+    ensure!(
+        reported == 2,
+        "the explicit limit should retain two findings"
+    );
+    ensure!(
+        omitted == expected_omitted,
+        "the omitted count should describe the whole-run total"
+    );
+    ensure!(
+        document.pointer("/result/truncated") == Some(&Value::from(true)),
+        "the explicit limit should mark the result as truncated: {}",
         run.stdout
     );
     Ok(())

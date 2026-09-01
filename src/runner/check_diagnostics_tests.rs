@@ -2,6 +2,7 @@
 
 use miette::Diagnostic;
 
+use super::super::check_documentation::rule_documentation_url;
 use super::{CheckReport, FindingDiagnostic};
 use crate::lint::document::Span;
 use crate::lint::registry;
@@ -55,7 +56,7 @@ fn a_spanned_finding_carries_the_rule_metadata() {
     );
     assert_eq!(
         diagnostic.url().map(|url| url.to_string()),
-        Some(meta.doc_url())
+        Some(rule_documentation_url(meta.name))
     );
     assert!(diagnostic.source_code().is_some());
     let labels: Vec<_> = diagnostic

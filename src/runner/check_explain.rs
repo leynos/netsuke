@@ -10,6 +10,7 @@ use crate::cli::Cli;
 use crate::lint::{RuleMeta, catalogue, registry};
 use crate::localization::{self, keys};
 
+use super::super::check_documentation::rule_documentation_url;
 use super::super::error::RunnerError;
 use super::super::process;
 use super::json;
@@ -83,7 +84,10 @@ fn write_full(rendered: &mut String, meta: &RuleMeta) {
     write_line(rendered, &format!("  summary: {}", meta.summary));
     write_line(rendered, &format!("  rationale: {}", meta.rationale));
     write_line(rendered, &format!("  remediation: {}", meta.remediation));
-    write_line(rendered, &format!("  documentation: {}", meta.doc_url()));
+    write_line(
+        rendered,
+        &format!("  documentation: {}", rule_documentation_url(meta.name)),
+    );
 }
 
 /// Write one catalogue line for a rule.
