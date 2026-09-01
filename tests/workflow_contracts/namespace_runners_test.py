@@ -9,9 +9,20 @@ Run via ``make test-workflow-contracts``.
 """
 
 import pytest
-from workflow_loading import REPO_ROOT, load_workflow, require_mapping, workflow_job
+from workflow_loading import (
+    REPO_ROOT,
+    job_steps,
+    load_workflow,
+    named_step,
+    require_mapping,
+    unique_step_index,
+    workflow_job,
+)
 
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
+NINJA_ACTION = (
+    "seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67"
+)
 
 
 @pytest.mark.parametrize(
@@ -61,6 +72,35 @@ def test_repository_owned_jobs_use_namespace_profiles(
         f"{workflow_name} job {job_name} must run on {expected_runner}, "
         f"got {actual_runner!r}"
     )
+
+
+@pytest.mark.parametrize(
+    ("workflow_name", "job_name", "first_consumer"),
+    [
+        ("ci.yml", "build-test", "Show Ninja version"),
+        (
+            "netsukefile-test.yml",
+            "netsukefile",
+            "Build dependent, inline, and foreach targets",
+        ),
+    ],
+)
+def test_namespace_linux_jobs_install_ninja_before_use(
+    workflow_name: str,
+    job_name: str,
+    first_consumer: str,
+) -> None:
+    """Provision pinned Ninja before a Namespace Linux job invokes it."""
+    workflow = load_workflow(WORKFLOW_DIR / workflow_name)
+    steps = job_steps(workflow, job_name)
+    install_step = named_step(steps, "Install Ninja")
+    assert install_step.get("uses") == NINJA_ACTION, (
+        f"{workflow_name} job {job_name} must install pinned Ninja, "
+        f"got {install_step.get('uses')!r}"
+    )
+    assert unique_step_index(steps, "Install Ninja") < unique_step_index(
+        steps, first_consumer
+    ), f"{workflow_name} job {job_name} must install Ninja before {first_consumer!r}"
 
 
 def test_linux_release_build_uses_the_general_namespace_profile() -> None:

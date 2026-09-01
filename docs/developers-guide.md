@@ -675,6 +675,14 @@ inspect the deployed profiles. Treat profile creation, updates, deletion and
 base-image rebuilds as infrastructure changes; review the effective profile
 specification before applying them.
 
+Namespace base images do not promise the same preinstalled tool inventory as
+GitHub-hosted runner images. The full Linux CI and Ubuntu 22.04 Netsukefile
+compatibility jobs therefore install Ninja through the same SHA-pinned
+`seanmiddleditch/gha-setup-ninja` action as the Windows jobs. Keep that setup
+before the first Ninja invocation; `NETSUKE_REQUIRE_NINJA=1` intentionally
+turns a missing backend into a CI failure rather than silently reducing test
+coverage.
+
 The `nsc github profile create` command provisions Linux profiles. Native
 Windows and macOS profiles are created in the Namespace dashboard. Every
 profile uses the `namespace-profile-*` label form, regardless of where it was
