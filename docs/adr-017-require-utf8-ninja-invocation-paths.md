@@ -26,7 +26,7 @@ distinguish encoding failures at their boundary, including `ResolveError`, the
 
 `src/cli/discovery_paths.rs` is a deliberate `std::path` carve-out. It must
 inspect host-provided discovery paths, whose encoding Netsuke cannot constrain.
-Child-process environment payloads likewise remain `OsStr` and `OsString`,
+Child-process environment payloads likewise remain `OsStr` and `OsString`
 because environment-variable values genuinely need not be UTF-8.
 
 ## Decision

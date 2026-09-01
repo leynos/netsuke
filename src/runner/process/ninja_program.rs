@@ -219,15 +219,6 @@ mod tests {
         OsString::from_vec(vec![0xff, b'n', b'i', b'n', b'j', b'a'])
     }
 
-    /// Verify the UTF-8 resolver returns the configured override unchanged.
-    #[rstest]
-    fn resolve_ninja_program_utf8_with_returns_the_resolved_path(
-        #[with(Some(OsString::from("/opt/ninja")))] ninja_env: MockEnv,
-    ) {
-        let resolved = resolve_ninja_program_utf8_with(&ninja_env);
-        assert_eq!(resolved, Utf8PathBuf::from("/opt/ninja"));
-    }
-
     // `proptest!` owns the generated function signature, so rstest cannot
     // inject the fixture. Calling it directly keeps the one-read, exact-key
     // contract without weakening property coverage.

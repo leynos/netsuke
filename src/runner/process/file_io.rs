@@ -254,41 +254,50 @@ mod tests {
     #[test]
     fn create_temp_ninja_file_releases_writer_before_external_read() -> Result<()> {
         let content = NinjaContent::new(String::from("rule cc"));
-        let file = create_temp_ninja_file(&content)?;
-        let path = file.as_path().as_std_path();
+        let captured_path = {
+            let file = create_temp_ninja_file(&content)?;
+            let path = file.as_path().as_std_path().to_path_buf();
 
-        // Ninja reads the file by path, so no writer handle may remain open.
-        let parent = path.parent().context("find temporary file parent")?;
-        let name = path.file_name().context("find temporary file name")?;
-        let directory = cap_fs::Dir::open_ambient_dir(parent, ambient_authority())
-            .context("open temporary file parent")?;
-        drop(
-            directory
-                .open(name)
-                .context("open temporary Ninja file through an external handle")?,
-        );
-        let written = test_fs::read_to_string(path).context("read temp file")?;
-        ensure!(
-            written == content.as_str(),
-            "reopened file contents '{written}' did not match '{expected}'",
-            expected = content.as_str()
-        );
+            // Ninja reads the file by path, so no writer handle may remain open.
+            let parent = path.parent().context("find temporary file parent")?;
+            let name = path.file_name().context("find temporary file name")?;
+            let directory = cap_fs::Dir::open_ambient_dir(parent, ambient_authority())
+                .context("open temporary file parent")?;
+            drop(
+                directory
+                    .open(name)
+                    .context("open temporary Ninja file through an external handle")?,
+            );
+            let written = test_fs::read_to_string(&path).context("read temp file")?;
+            ensure!(
+                written == content.as_str(),
+                "reopened file contents '{written}' did not match '{expected}'",
+                expected = content.as_str()
+            );
 
-        let observed_len = test_fs::file_len(path).context("query temp file metadata")?;
+            let observed_len = test_fs::file_len(&path).context("query temp file metadata")?;
+            ensure!(
+                observed_len == content.as_str().len() as u64,
+                "expected size {} but observed {}",
+                content.as_str().len(),
+                observed_len
+            );
+            let temp_display = path.display().to_string();
+            let has_ninja_ext = path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("ninja"));
+            ensure!(
+                has_ninja_ext,
+                "temporary path should end with .ninja: {temp_display}"
+            );
+            path
+        };
+
         ensure!(
-            observed_len == content.as_str().len() as u64,
-            "expected size {} but observed {}",
-            content.as_str().len(),
-            observed_len
-        );
-        let temp_display = path.display().to_string();
-        let has_ninja_ext = path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("ninja"));
-        ensure!(
-            has_ninja_ext,
-            "temporary path should end with .ninja: {temp_display}"
+            !captured_path.exists(),
+            "temporary Ninja file should be removed after its wrapper drops: {}",
+            captured_path.display()
         );
 
         Ok(())

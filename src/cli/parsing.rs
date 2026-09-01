@@ -1,9 +1,12 @@
 //! Clap value-parser helpers, invoked exclusively from [`super::parser`].
 //!
-//! Each `parse_*` function implements a localization-aware validator for one
-//! typed CLI argument.  They are registered as [`super::parser::LocalizedValueParser`]
-//! instances inside `parse_with_localizer_from` and are never called directly
-//! from outside the `cli` module tree.
+//! Most `parse_*` functions implement a localization-aware validator for one
+//! typed CLI argument and are registered as
+//! [`super::parser::LocalizedValueParser`] instances inside
+//! `parse_with_localizer_from`. The `parse_utf8_path` helper instead receives
+//! raw [`OsStr`] input and is invoked by `LocalizedUtf8PathParser` in
+//! [`super::parser`]. None of these helpers is called directly from outside
+//! the `cli` module tree.
 //!
 //! **Pipeline position:** argument-validation layer, below [`super::parser`].
 //!
@@ -229,4 +232,63 @@ pub(super) fn parse_host_pattern(
     s: &str,
 ) -> Result<HostPattern, String> {
     HostPattern::parse(s).map_err(|err| err.to_string())
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    //! Property coverage for the raw operating-system path parser boundary.
+
+    use super::parse_utf8_path;
+    use crate::cli_localization::build_localizer;
+    use crate::localization::keys;
+    use camino::Utf8PathBuf;
+    use proptest::prelude::*;
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    const PATH_ARGUMENTS: [(&str, &str, &str, &str); 2] = [
+        (
+            "--file",
+            keys::CLI_FILE_NON_UTF8,
+            "Manifest path is not valid UTF-8.",
+            "Manifest path",
+        ),
+        (
+            "--directory",
+            keys::CLI_DIRECTORY_NON_UTF8,
+            "Working directory path is not valid UTF-8.",
+            "Working directory path",
+        ),
+    ];
+
+    proptest! {
+        #[test]
+        fn utf8_path_parser_preserves_valid_paths_and_rejects_invalid_bytes(
+            bytes in prop::collection::vec(any::<u8>(), 0..512)
+        ) {
+            let localizer = build_localizer(None);
+            let value = OsString::from_vec(bytes.clone());
+
+            for (flag, key, fallback, diagnostic_subject) in PATH_ARGUMENTS {
+                match (
+                    String::from_utf8(bytes.clone()),
+                    parse_utf8_path(localizer.as_ref(), &value, key, fallback),
+                ) {
+                    (Ok(valid), Ok(path)) => prop_assert_eq!(path, Utf8PathBuf::from(valid)),
+                    (Err(_), Err(error)) => prop_assert!(
+                        error.contains(diagnostic_subject) && error.contains("not valid UTF-8"),
+                        "{flag} should use its localized UTF-8 diagnostic, got: {error}"
+                    ),
+                    (Ok(valid), Err(error)) => prop_assert!(
+                        false,
+                        "{flag} should accept valid UTF-8 path {valid:?}, got: {error}"
+                    ),
+                    (Err(_), Ok(path)) => prop_assert!(
+                        false,
+                        "{flag} should reject invalid UTF-8 bytes, got: {path}"
+                    ),
+                }
+            }
+        }
+    }
 }

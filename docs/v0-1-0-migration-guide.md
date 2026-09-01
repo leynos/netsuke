@@ -7,7 +7,9 @@ This guide signposts the v0.1.0 beta additions: the injectable child environment
 manifests remain compatible, and callers of the unchanged convenience wrappers
 compile unchanged. Manifests using Jinja `glob()` must use shell-inert matched
 paths. The cached configuration discovery API is a breaking change for callers
-of the unstable Rust API; ordinary CLI users need no action.
+of the unstable Rust API; ordinary CLI users need no action. The Ninja
+invocation chain now requires UTF-8 build-file and working-directory paths;
+non-UTF-8 values are rejected at their input boundary.
 
 Rust callers that construct `Target` with a struct literal must add the new
 `description` field (set it to `None` or `Some(...)`); deserialized manifests
@@ -51,6 +53,7 @@ impact
 | Timing output                | Existing `VerboseTimingReporter::new` keeps its stderr sink; Rust callers can opt into an owned `Write + Send` sink with `with_writer`.                                                                                                                                                                                                               | [Users' guide](users-guide.md#capture-verbose-timing-output)                                     |
 | Glob expansion               | Parent-relative patterns such as `glob('../shared/*.h')` now expand. The Jinja helper rejects matched paths that are not portable unquoted shell words. Metadata checks use a capability rooted at the pattern's longest literal directory prefix; missing or non-directory prefixes return no matches, and unresolvable symlink matches are skipped. | [Users' guide](users-guide.md) and [ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md) |
 | Command recipes              | On Windows, legacy scalar commands, lists, and scripts use Windows PowerShell by default; YAML command lists remain opt-in, ordered, and fail-fast.                                                                                                                                                                                                   | [Windows legacy recipe contract](users-guide.md#windows-legacy-recipe-contract)                  |
+| Ninja invocation paths       | Breaking for non-UTF-8 build-file or working-directory paths. CLI values fail early with a localized diagnostic; configuration-file and environment-sourced manifest paths are rejected during post-merge validation.                                                                                                                                 | [UTF-8 path restriction](users-guide.md#run-the-first-build)                                     |
 | Ninja text escaping          | Write shell dollars normally; spaces in build and default-target paths are escaped for Ninja. Paths containing `$`, colons, `\|`, or control characters remain rejected, as are newline, carriage-return, and NUL metadata values.                                                                                                                    | [Users' guide](users-guide.md#review-the-safety-boundary)                                        |
 | Manifest discovery           | Optional target/action `description` values are shown by the new `netsuke help targets` command. Manifests without them and existing build output are unchanged.                                                                                                                                                                                      | [Users' guide](users-guide.md)                                                                   |
 | Serial dependencies          | New opt-in `dependency_order: serial` runs an action or target's direct `deps` list in declaration order.                                                                                                                                                                                                                                             | [Serial dependency ordering](users-guide.md#run-direct-dependencies-serially)                    |
@@ -68,6 +71,27 @@ receive timing summaries on stderr. Callers that need to capture or redirect
 those summaries can opt into `VerboseTimingReporter::with_writer`; the
 [users' guide](users-guide.md#capture-verbose-timing-output) documents the
 owned sink and completion-ordering contract.
+
+
+## Use UTF-8 manifest and working-directory paths
+
+The Ninja invocation chain accepts only UTF-8 paths. This includes the manifest
+selected by `--file` or `NETSUKE_FILE`, the working directory selected by
+`--directory`, and the paths passed to the unstable Rust Ninja APIs. The
+`directory` setting is CLI-only; it has no configuration-file counterpart.
+
+Command-line `--file` and `--directory` values are checked before manifest
+discovery or runner setup. If the operating system supplies bytes that are not
+valid UTF-8, parsing fails with a localized diagnostic naming the affected
+option. A `file` value supplied by a configuration file or by the
+`NETSUKE_FILE` environment variable is checked during post-merge validation and
+fails before the runner uses it.
+
+Callers migrating from a non-UTF-8 path must rename or relocate the manifest or
+working directory so its path is representable as UTF-8, then pass the
+supported path through `--file`, `--directory`, configuration, or
+`NETSUKE_FILE` as appropriate. Environment-variable payloads used for the Ninja
+child remain platform-native and are not subject to this path restriction.
 
 ## Check filenames used by manifest `glob()`
 

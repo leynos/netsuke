@@ -81,7 +81,7 @@ mod tests {
 
     use super::*;
     use crate::runner::{NinjaJobCount, StderrMode};
-    use anyhow::{Result, ensure};
+    use anyhow::{Context, Result, ensure};
     use camino::{Utf8Path, Utf8PathBuf};
     use rstest::{fixture, rstest};
     use std::ffi::{OsStr, OsString};
@@ -151,6 +151,46 @@ mod tests {
         ensure!(
             actual == expected,
             "build command argument order changed: {actual:?}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn build_configuration_uses_uncanonicalized_missing_build_file() -> Result<()> {
+        let temporary_directory = tempfile::tempdir().context("create temporary directory")?;
+        let utf8_temporary_directory = Utf8PathBuf::from_path_buf(
+            temporary_directory.path().to_path_buf(),
+        )
+        .map_err(|path| anyhow::anyhow!("temporary directory is not UTF-8: {}", path.display()))?;
+        let build_file = utf8_temporary_directory.join("missing-build.ninja");
+        let options = NinjaProcessOptions::default();
+        let target_names = Vec::new();
+        let targets = super::super::BuildTargets::new(&target_names);
+        let env = CommandEnv::inherit();
+        let request = NinjaBuildRequest {
+            program: Utf8Path::new("ninja"),
+            options: &options,
+            build_file: &build_file,
+            targets: &targets,
+            env: &env,
+            stderr_mode: StderrMode::Forward,
+        };
+        let mut cmd = Command::new("ninja");
+
+        ensure!(
+            canonicalize_utf8_path(&build_file).is_err(),
+            "the missing build file must not canonicalize"
+        );
+        configure_ninja_build_command(&mut cmd, &request)?;
+
+        let expected = vec![
+            OsString::from("-f"),
+            build_file.into_std_path_buf().into_os_string(),
+        ];
+        let actual = command_arguments(&cmd);
+        ensure!(
+            actual == expected,
+            "missing build file should be passed unchanged after -f: {actual:?}"
         );
         Ok(())
     }

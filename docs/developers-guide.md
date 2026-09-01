@@ -71,7 +71,22 @@ overrides one variable, and `with_path` replaces the child's `PATH`. The parent
 process is never mutated. `NinjaBuildRequest` and `NinjaToolRequest` borrow the
 program, `NinjaProcessOptions` (`working_dir` and `jobs`), generated build
 file, target list or tool name, and `CommandEnv` needed for one invocation. The
-process boundary is parser-independent; callers without CLI state construct
+`program` and `build_file` fields on both request types are `&Utf8Path`, while
+`NinjaProcessOptions::working_dir` is an `Option<Utf8PathBuf>`. `Cli::file` and
+`Cli::directory` use the corresponding owned `Utf8PathBuf` values. The process
+layer converts these paths to `std::path::Path` only at the lossless
+`std::process::Command` boundary.
+
+The public runner signatures preserve that path vocabulary:
+
+- `run_ninja(program: &Utf8Path, cli: &Cli, build_file: &Utf8Path, targets: &BuildTargets)`
+  invokes a build with the CLI's process options.
+- `run_ninja_tool(program: &Utf8Path, cli: &Cli, build_file: &Utf8Path, tool: &str)`
+  invokes a Ninja tool with the CLI's process options.
+- `run_with_ninja_program(cli: &Cli, prefs: OutputPrefs, program: &Utf8Path)`
+  runs the selected command with a caller-supplied Ninja executable.
+
+The process boundary is parser-independent; callers without CLI state construct
 `NinjaProcessOptions` directly.
 
 The legacy `run_ninja` and `run_ninja_tool` helpers retain their existing
