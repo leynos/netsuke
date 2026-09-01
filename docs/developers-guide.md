@@ -1009,19 +1009,19 @@ publication cannot proceed unless the native Windows smoke test passes.
 
 ## Release-admission observability
 
-The release workflow runs a read-only release-admission gate before publication.
-The gate's GitHub API requests and Git fetches emit bounded JSON Lines (JSONL)
-metrics to a runner-local file. Each fixed operation emits its counter and
-duration at the operation boundary; the final gate boundary emits the overall
-counter, including early failures. The workflow uploads the completed JSONL
-file as a workflow artefact and writes one concise outcome line to
-`GITHUB_STEP_SUMMARY`. In the release workflow,
+The release workflow runs a read-only release-admission gate before
+publication. The gate's GitHub API requests and Git fetches emit bounded JSON
+Lines (JSONL) metrics to a runner-local file. Each fixed operation emits its
+counter and duration at the operation boundary; the final gate boundary emits
+the overall counter, including early failures. The workflow uploads the
+completed JSONL file as a workflow artefact and writes one concise outcome line
+to `GITHUB_STEP_SUMMARY`. In the release workflow,
 `NETSUKE_RELEASE_ADMISSION_METRICS_FILE` points to
-`${runner.temp}/release-admission-metrics.jsonl`, and the file is uploaded under
-the `release-admission-metrics` artefact name.
+`${runner.temp}/release-admission-metrics.jsonl`, and the file is uploaded
+under the `release-admission-metrics` artefact name.
 
-The metric contract is deliberately closed. The only label names are
-`canary`, `operation`, `outcome`, and `error_category`, and the only values are:
+The metric contract is deliberately closed. The only label names are `canary`,
+`operation`, `outcome`, and `error_category`, and the only values are:
 
 - `canary=history_scan|release_candidate|none`;
 - `operation=resolve_tag_commit|fetch_candidate_revision|fetch_workflow_run|check_scan_freshness|verify_evidence`;
@@ -1032,8 +1032,8 @@ The duration instrument carries only the fixed `operation` label. Never add a
 revision, run ID, path, URL, workflow content, or other identifier-derived
 value to a metric label. A successful operation or gate uses
 `error_category=none`. An operation failure maps to its fixed category; an
-unclassified failure maps to `outcome=unknown` and
-`error_category=unknown`, and the admission gate remains fail-closed.
+unclassified failure maps to `outcome=unknown` and `error_category=unknown`,
+and the admission gate remains fail-closed.
 
 Instruments emitted by the gate are:
 
@@ -1045,9 +1045,9 @@ Instruments emitted by the gate are:
   `outcome`, and `error_category` labels. Operators use it to locate the
   failing admission boundary and its classified cause.
 - `netsuke_release_admission_operation_duration_seconds` — histogram. Records
-  the elapsed seconds for each fixed operation with only the `operation`
-  label. Operators use it to compare operation latency across runs without
-  exposing request or repository identifiers.
+  the elapsed seconds for each fixed operation with only the `operation` label.
+  Operators use it to compare operation latency across runs without exposing
+  request or repository identifiers.
 
 To investigate a blocked publication, read the job-summary outcome first, then
 download the release-admission JSONL artefact and inspect the operation counter
