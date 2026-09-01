@@ -342,14 +342,16 @@ PowerShell variables, `$env:` assignments, and locations left by earlier
 entries, but state does not cross action or target boundaries.
 
 Use PowerShell syntax in the default route. `$name` is a PowerShell variable and
-`$env:NAME` reads an environment variable; `${VAR:-default}` is POSIX syntax
-and is not valid PowerShell. Recipe text is protected from Ninja dollar
-expansion, so write ordinary PowerShell dollars rather than `$$`. The rendered
-`{{ ins }}` and `{{ outs }}` paths use single-quoted PowerShell arguments.
-Build and default-target paths containing spaces are escaped for Ninja before
-recipe generation, so `{{ outs }}` can name a whitespace-containing output.
-Quote every other path and argument with PowerShell syntax; arbitrary rendered
-Jinja text is not shell-quoted.
+`$env:NAME` reads an environment variable. PowerShell parses the braced
+variable name in `${VAR:-default}`, but does not perform POSIX default-value
+expansion. Recipe text is protected from Ninja dollar expansion, so write
+ordinary PowerShell dollars rather than `$$`. The rendered `{{ ins }}` and
+`{{ outs }}` paths use literal, single-quoted PowerShell arguments; an
+apostrophe is doubled, so `O'Brien.txt` becomes `'O''Brien.txt'`. Build and
+default-target paths containing spaces are escaped for Ninja before recipe
+generation, so `{{ outs }}` can name a whitespace-containing output. Quote
+every other path and argument with PowerShell syntax; arbitrary rendered Jinja
+text is not shell-quoted.
 
 Recipes that fit within Windows' 32,766-character command-line safety limit use
 the encoded `powershell.exe` invocation described above. Larger scalar
@@ -1284,6 +1286,24 @@ the drained `metrics snapshot`:
 - `netsuke_cli_config_discovery_duration_seconds` — a histogram recording the
   discovery pass duration without labels.
 
+#### Legacy recipe operation metrics
+
+Legacy recipe execution emits two bounded metric series in the drained
+`metrics snapshot`:
+
+- `netsuke_runner_legacy_recipe_executions_total` counts completed build and
+  Ninja-tool runner operations.
+- `netsuke_runner_legacy_recipe_execution_duration_seconds` records the full
+  duration of each such operation, including shell validation, graph lowering,
+  Ninja generation, and Ninja invocation.
+
+Both series use the same fixed labels. `operation` is `build` or `ninja_tool`;
+`recipe_shell` is `posix`, `powershell`, or `bash`; `outcome` is `success` or
+`error`; and `failure_category` is `none`, `manifest`, `graph`,
+`ninja_generation`, `ninja_io`, or `other`. The `ninja_tool` value identifies a
+Ninja-tool operation and does not imply that the tool executes a recipe. Metric
+labels contain no manifest-controlled or process-controlled values.
+
 The annotated [sample configuration](sample-netsuke.toml) lists every key. A
 small project configuration looks like this:
 
@@ -1605,7 +1625,7 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   `$in` or `$out` token inside backticks is rejected because Netsuke cannot
   safely lower it there. PowerShell uses backticks as its native escape syntax,
   so they do not suppress placeholder interpolation.
-- Build and default-target paths reject `$`, spaces, colons, `|`, and control
+- Build and default-target paths reject `$`, colons, `|`, and control
   characters because Ninja cannot represent them without ambiguity. Generation
   also rejects newline, carriage-return, and NUL characters in emitted metadata
   such as descriptions, `depfile`, `deps`, and `pool`.

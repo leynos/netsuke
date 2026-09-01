@@ -141,7 +141,7 @@ by the Jinja templating engine.
 This creates a necessary architectural division. All the dynamic logic,
 templating, and configuration must be fully evaluated by Netsuke *before* Ninja
 is ever invoked. The point of this transition is the Intermediate
-Representation (IR) generated in Stage 4. The IR serves as a static snapshot of
+Representation (IR) generated in Stage 5. The IR serves as a static snapshot of
 the build plan after all Jinja logic has been resolved. It is the "object code"
 that the Netsuke "compiler" produces, which can then be handed off to the Ninja
 "assembler" for execution. This mandate for a pre-computed static graph
@@ -2488,24 +2488,35 @@ Without proper escaping, a malicious or even accidental filename like
 `"my file; rm -rf /;.c"` could be interpreted as multiple commands, leading to
 catastrophic consequences.
 
-For this critical task, the recommended crate is `shell-quote`.
+For this critical task, the recommended crate is `shell-quote` for POSIX and
+explicit Windows Bash routes. It offers a more robust and flexible API than
+other crates such as `shlex` for producing shell-safe arguments.[^22] Those
+routes use its `QuoteRefExt::quoted` method with `Sh` mode, producing
+POSIX-compatible quoted path arguments before the command is hashed. The
+default Windows PowerShell route instead emits paths as PowerShell
+single-quoted literals and doubles embedded apostrophes. This automatic quoting
+applies only to Netsuke-owned `$in`, `$out`, `{{ ins }}`, and `{{ outs }}`
+substitutions; arbitrary Jinja values and handwritten shell fragments remain
+the manifest author's responsibility. Unmatched-backtick checks and `shlex`
+command validation apply only to POSIX and Bash routes. PowerShell treats
+backticks as native escape syntax rather than interpolation-protection
+delimiters.
 
-While other crates like `shlex` exist, `shell-quote` offers a more robust and
-flexible API specifically designed for this purpose.[^22] The current lowering
-path uses its `QuoteRefExt::quoted` method with `Sh` mode, producing
-POSIX-compatible quoted path arguments before the command is hashed. `shlex`
-remains a validation parser; it does not perform the quoting.
+### 6.3 Implementation strategy
 
-### 6.3 Implementation Strategy
-
-The command interpolation logic in `src/ir/cmd_interpolate.rs` prepares one
-quoted input/output binding set per recipe and applies it to each scalar or
-list entry. It replaces the delayed `{{ ins }}`/`{{ outs }}` markers and
-standalone `$in`/`$out` tokens outside backticks, preserving longer identifiers
-and backtick-delimited text. Unbalanced backticks or text that `shlex` cannot
-parse produce an IR error before an action is hashed. Ninja generation then
-receives fully expanded command text and is responsible only for preserving the
-scalar form or constructing the list-entry shell boundaries.
+The command interpolation logic in `src/ir/cmd_interpolate/mod.rs` prepares one
+shell-specific quoted input/output binding set per recipe and applies it to
+each scalar or list entry. It replaces the delayed `{{ ins }}`/`{{ outs }}`
+markers and standalone `$in`/`$out` tokens. POSIX and Bash routes preserve
+backtick-delimited text, while PowerShell treats backticks as native escape
+syntax and does not use them as interpolation-protection delimiters. The POSIX
+and Bash routes apply `shell-quote` in `Sh` mode to Netsuke-owned path
+substitutions; PowerShell emits single-quoted path literals and doubles
+embedded apostrophes. Unbalanced backticks or text that `shlex` cannot parse
+produce an IR error only on POSIX and Bash routes, before an action is hashed.
+Ninja generation then receives fully expanded command text and is responsible
+only for preserving the scalar form or constructing the list-entry shell
+boundaries.
 
 ### 6.4 Automatic Security as a "Friendliness" Feature
 
@@ -2516,11 +2527,13 @@ build systems, the burden of correct shell quoting falls on the user, an
 error-prone task that requires specialized knowledge.
 
 Netsuke's design makes identified path substitution safe by default. Netsuke
-quotes the `ins`/`outs` path values before action hashing and Ninja synthesis;
+applies shell-specific quoting to Netsuke-owned `$in`, `$out`, `{{ ins }}`, and
+`{{ outs }}` path substitutions before action hashing and Ninja synthesis;
 arbitrary Jinja values and handwritten shell fragments remain the manifest
-author's responsibility. By integrating `shell-quote` into IR command lowering,
-before action hashing and Ninja file synthesis, Netsuke protects users from a
-common and dangerous class of errors by default. This approach embodies a
+author's responsibility. POSIX and explicit Bash routes use `shell-quote`
+during IR command lowering, while the default Windows PowerShell route uses
+single-quoted path literals with doubled apostrophes. This protects users from
+a common and dangerous class of errors by default. The approach embodies a
 deeper form of user-friendliness: one that anticipates and mitigates risks on
 the user's behalf.
 

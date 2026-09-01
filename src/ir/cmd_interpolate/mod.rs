@@ -60,8 +60,8 @@ fn record_binding_preparation() {
     BINDING_PREPARATIONS.with(|count| count.set(count.get() + 1));
 }
 
-#[cfg(not(test))]
 /// Skip binding-preparation counting outside test builds.
+#[cfg(not(test))]
 const fn record_binding_preparation() {}
 
 #[cfg(test)]

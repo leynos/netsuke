@@ -1,4 +1,10 @@
-//! Bounded process recorder for configuration observability.
+//! Application-owned recorder for bounded configuration and runner metrics.
+//!
+//! The recorder accepts configuration-load, recipe-shell resolution, Bash
+//! preflight, and complete legacy-recipe runner series. The `observability`
+//! composition module installs it at the process boundary; fixed metric names
+//! and label vocabularies prevent manifest- or process-controlled data from
+//! entering the retained snapshot.
 
 use super::{
     CONFIG_LOAD_COUNTER, CONFIG_LOAD_DURATION, DIAG_MODE_PHASE, MERGE_PHASE,
@@ -10,7 +16,10 @@ use metrics_util::debugging::{DebuggingRecorder, Snapshotter};
 
 use netsuke::{
     cli::{DISCOVERY_DURATION, DISCOVERY_OUTCOME_VALUES, DISCOVERY_TOTAL},
-    runner::{BASH_PREFLIGHT_TOTAL, RECIPE_SHELL_RESOLUTIONS_TOTAL},
+    runner::{
+        BASH_PREFLIGHT_TOTAL, LEGACY_RECIPE_EXECUTION_DURATION, LEGACY_RECIPE_EXECUTIONS_TOTAL,
+        RECIPE_SHELL_RESOLUTIONS_TOTAL,
+    },
 };
 
 /// Counter emitted by the library for bounded timing-summary sink outcomes.
@@ -41,6 +50,19 @@ const BASH_PREFLIGHT_OUTCOMES: [&str; 2] = ["success", "error"];
 /// Bounded probe results emitted by Bash compatibility preflight.
 const BASH_PREFLIGHT_PROBE_OUTCOMES: [&str; 4] =
     ["success", "not_found", "launch_failed", "non_zero_exit"];
+/// Bounded runner-operation values emitted by legacy-recipe telemetry.
+const LEGACY_RECIPE_OPERATION_VALUES: [&str; 2] = ["build", "ninja_tool"];
+/// Bounded outcomes emitted by legacy-recipe operation telemetry.
+const LEGACY_RECIPE_OPERATION_OUTCOMES: [&str; 2] = ["success", "error"];
+/// Bounded failure categories emitted by legacy-recipe operation telemetry.
+const LEGACY_RECIPE_FAILURE_CATEGORIES: [&str; 6] = [
+    "none",
+    "manifest",
+    "graph",
+    "ninja_generation",
+    "ninja_io",
+    "other",
+];
 
 /// Application recorder that retains only bounded observability series.
 ///
@@ -79,6 +101,8 @@ impl ConfigMetricsRecorder {
                 | TIMING_SUMMARY_SINK_WRITE_DURATION
                 | RECIPE_SHELL_RESOLUTIONS_TOTAL
                 | BASH_PREFLIGHT_TOTAL
+                | LEGACY_RECIPE_EXECUTIONS_TOTAL
+                | LEGACY_RECIPE_EXECUTION_DURATION
         )
     }
 
@@ -113,6 +137,15 @@ impl ConfigMetricsRecorder {
                     ("probe_outcome", &BASH_PREFLIGHT_PROBE_OUTCOMES),
                 ],
             ),
+            LEGACY_RECIPE_EXECUTIONS_TOTAL => exact_labels(
+                key,
+                &[
+                    ("operation", &LEGACY_RECIPE_OPERATION_VALUES),
+                    ("recipe_shell", &RECIPE_SHELL_VALUES),
+                    (OUTCOME_LABEL, &LEGACY_RECIPE_OPERATION_OUTCOMES),
+                    ("failure_category", &LEGACY_RECIPE_FAILURE_CATEGORIES),
+                ],
+            ),
             _ => false,
         }
     }
@@ -124,6 +157,15 @@ impl ConfigMetricsRecorder {
             STARTUP_CONFIG_LOAD_DURATION
             | DISCOVERY_DURATION
             | TIMING_SUMMARY_SINK_WRITE_DURATION => exact_labels(key, &[]),
+            LEGACY_RECIPE_EXECUTION_DURATION => exact_labels(
+                key,
+                &[
+                    ("operation", &LEGACY_RECIPE_OPERATION_VALUES),
+                    ("recipe_shell", &RECIPE_SHELL_VALUES),
+                    (OUTCOME_LABEL, &LEGACY_RECIPE_OPERATION_OUTCOMES),
+                    ("failure_category", &LEGACY_RECIPE_FAILURE_CATEGORIES),
+                ],
+            ),
             _ => false,
         }
     }

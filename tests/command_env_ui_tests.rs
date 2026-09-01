@@ -108,6 +108,15 @@ fn ir_gen_error_public_api_fixture_compiles() -> io::Result<()> {
     )
 }
 
+/// The public legacy-recipe metric constants compile for an external embedder.
+#[test]
+fn legacy_recipe_telemetry_public_api_fixture_compiles() -> io::Result<()> {
+    compile_public_api_fixture(
+        "tests/ui/legacy_recipe_telemetry_public_api_pass.rs",
+        "the legacy-recipe telemetry fixture should compile against the public API",
+    )
+}
+
 /// The cached configuration-discovery API compiles for an external embedder.
 #[test]
 fn config_cached_discovery_embedder_fixture_compiles() -> io::Result<()> {

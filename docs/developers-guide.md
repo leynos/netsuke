@@ -3706,8 +3706,10 @@ covers the behaviour that only exists there.
 
 The Windows job installs GNU Make through Chocolatey and Ninja through the
 setup action, then runs its Makefile gates through Git Bash with `SHELL=bash`.
-That override is required because GNU Make otherwise selects `cmd.exe` on
-Windows, while Netsuke's recipes use POSIX shell syntax. It installs the
+That override affects only GNU Make's command execution: GNU Make otherwise
+selects `cmd.exe` on Windows. It does not select the interpreter for Netsuke
+legacy recipes, which default to PowerShell; Git Bash is used for those recipes
+only when the explicit compatibility selection is enabled. It installs the
 workflow-pinned `cargo-nextest`; the shared Rust setup action supplies
 `rustfmt` and Clippy. The SHA-pinned shared Whitaker installer receives the same
 `installer-version: '0.2.7'` input as Linux and produces a PowerShell wrapper
@@ -4497,6 +4499,26 @@ background-query primitive.
   the existing capability-injected dyndep-publication path to materialize its
   sidecars; the read-only steps never write files, start processes, or invoke
   effectful template helpers.
+
+### Module: `runner::recipe_shell_telemetry`
+
+`src/runner/recipe_shell_telemetry.rs` owns bounded observability for shell
+resolution, the explicit Windows Bash preflight, and complete generated-recipe
+runner operations. `LegacyRecipeOperation` distinguishes `build` from
+`ninja_tool`; the latter describes a Ninja tool invocation and does not claim
+that the tool executes a recipe. `instrument_legacy_recipe_operation` wraps
+shell validation, manifest lowering, Ninja generation, and the subsequent Ninja
+invocation so each operation records one counter increment and one duration
+sample on either success or failure.
+
+The legacy-operation metrics use only the fixed labels `operation`,
+`recipe_shell`, `outcome`, and `failure_category`. Their vocabularies are
+`build` or `ninja_tool`; `posix`, `powershell`, or `bash`; `success` or
+`error`; and `none`, `manifest`, `graph`, `ninja_generation`, `ninja_io`, or
+`other`, respectively. No manifest-controlled or process-controlled values may
+be added to metric labels or tracing fields. Keep this instrumentation at the
+runner composition boundary; manifest, IR, and Ninja-generation modules remain
+free of runner telemetry.
 
 ### Module: `runner::reporter`
 

@@ -1,5 +1,4 @@
 //! Hold the state required for one-pass recipe placeholder substitution.
-
 use super::{CommandBindings, IrGenError, find_substitution, invalid_command_error};
 use crate::recipe_shell::RecipeShell;
 

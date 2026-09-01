@@ -133,29 +133,29 @@ found failure. `generate` and `help targets` do not run recipes and therefore
 do not require the optional runtime.
 
 In the default route, write `$name` for a PowerShell variable and `$env:NAME`
-for an environment variable. `${VAR:-default}` is only valid in the explicit
-Bash route. The v0.1.0 dollar-escaping fix means these are ordinary, single
-dollars, not Ninja-escaped `$$` forms. Ordered lists share one PowerShell
-process: Netsuke checks `$LASTEXITCODE` immediately after each generated list
-entry, so a non-zero status or terminating error stops the list before a later
-entry can overwrite it. Multiple native commands inside one entry are not
-individually instrumented. Variables, environment assignments, and
-current-directory changes persist between entries. Each scalar, script, action,
-and target has a fresh shell process. In PowerShell, `{{ ins }}` and
-`{{ outs }}` remain path-quoted. Build and default-target paths containing
-spaces are escaped for Ninja, so whitespace-containing outputs remain valid;
-quote any other path or argument with the selected shell's syntax. Encoded
-PowerShell commands are retained while they fit the Windows command-line limit.
-Larger recipes up to 1 MiB use Ninja's `rspfile` and `rspfile_content`
-bindings, with a unique `$out`-derived `.ps1` name per edge, created in that
-edge's working directory, containing an ASCII PowerShell bootstrap and the
-Base64 UTF-16LE recipe payload. Recipes above that limit are rejected before
-Netsuke allocates their encoded payload. The command invokes it with
-`powershell.exe -File "$rspfile"`. The bootstrap removes its own
-`$PSCommandPath` in a `finally` block after the recipe succeeds or fails.
-Queries do not create response files. On POSIX and Bash routes, `$$` means the
-process identifier; in PowerShell, `$$` is the automatic variable containing
-the last token received by the session.
+for an environment variable. PowerShell parses the braced variable name in
+`${VAR:-default}`, but does not perform POSIX default-value expansion. The
+v0.1.0 dollar-escaping fix means these are ordinary, single dollars, not
+Ninja-escaped `$$` forms. Ordered lists share one PowerShell process: Netsuke
+checks `$LASTEXITCODE` immediately after each generated list entry, so a
+non-zero status or terminating error stops the list before a later entry can
+overwrite it. Multiple native commands inside one entry are not individually
+instrumented. Variables, environment assignments, and current-directory changes
+persist between entries. Each scalar, script, action, and target has a fresh
+shell process. In PowerShell, `{{ ins }}` and `{{ outs }}` remain path-quoted.
+Build and default-target paths containing spaces are escaped for Ninja, so
+whitespace-containing outputs remain valid; quote any other path or argument
+with the selected shell's syntax. Encoded PowerShell commands are retained
+while they fit the Windows command-line limit. Larger recipes up to 1 MiB use
+Ninja's `rspfile` and `rspfile_content` bindings, with a unique `$out`-derived
+`.ps1` name per edge, created in that edge's working directory, containing an
+ASCII PowerShell bootstrap and the Base64 UTF-16LE recipe payload. Recipes
+above that limit are rejected before Netsuke allocates their encoded payload.
+The command invokes it with `powershell.exe -File "$rspfile"`. The bootstrap
+removes its own `$PSCommandPath` in a `finally` block after the recipe succeeds
+or fails. Queries do not create response files. On POSIX and Bash routes, `$$`
+means the process identifier; in PowerShell, `$$` is the automatic variable
+containing the last token received by the session.
 
 For reproducible Windows CI, use a `pwsh` step and let Netsuke select
 PowerShell; do not use a workflow-level `shell: bash` setting as evidence of
