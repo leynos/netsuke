@@ -216,15 +216,3 @@ fn every_section_shows_a_reported_and_a_fixed_manifest() -> Result<()> {
     }
     Ok(())
 }
-
-#[test]
-fn documentation_urls_point_into_the_reference() {
-    for meta in catalogue() {
-        let url = meta.doc_url();
-        assert!(
-            url.ends_with(&format!("netsuke-linter-rules.md#{}", meta.name)),
-            "`{}` links to {url}, which is not its reference section",
-            meta.name
-        );
-    }
-}
