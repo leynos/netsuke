@@ -11,12 +11,15 @@ use crate::cli::Cli;
 use crate::lint::{Report, Severity};
 use crate::localization::{self, keys};
 
+use super::super::check_diagnostics::CheckReport;
+
 /// Render a passing check for a human reader.
 #[must_use]
-pub(super) fn render(report: &Report, cli: &Cli) -> String {
+pub(super) fn render(check: &CheckReport, cli: &Cli) -> String {
+    let report = check.report();
     let mut rendered = String::new();
     if !cli.json {
-        for diagnostic in report.diagnostics() {
+        for diagnostic in check.diagnostics() {
             let printed = MietteReport::new(diagnostic);
             push_line(&mut rendered, &format!("{printed:?}"));
         }

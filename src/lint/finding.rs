@@ -1,15 +1,10 @@
-//! Lint findings and their projection onto `miette` diagnostics.
+//! Lint findings and their neutral presentation data.
 //!
 //! A finding is the linter's own record: rule, severity, message, and where it
-//! applies. Rendering — human or JSON — goes through the diagnostic projection
-//! so that a lint finding and a compiler diagnostic reach a consumer in the
-//! same shape.
+//! applies. Runner adapters project findings onto their chosen output format,
+//! keeping the lint domain independent from diagnostic frameworks.
 
 use std::cmp::Ordering;
-use std::sync::Arc;
-
-use miette::{Diagnostic, LabeledSpan, NamedSource, SourceCode, SourceSpan};
-use thiserror::Error;
 
 use super::document::Span;
 use super::rule::RuleMeta;
@@ -110,21 +105,6 @@ impl Finding {
         self.sort_key().cmp(&other.sort_key())
     }
 
-    /// Project this finding onto a diagnostic carrying the manifest source.
-    #[must_use]
-    pub fn to_diagnostic(&self, source: &Arc<NamedSource<String>>) -> FindingDiagnostic {
-        FindingDiagnostic {
-            message: self.display_message(),
-            code: self.meta.code(),
-            severity: self.severity.to_miette(),
-            help: self.meta.remediation.to_owned(),
-            url: self.meta.doc_url(),
-            manifest_source: Arc::clone(source),
-            span: self.span().map(SourceSpan::from),
-            label: self.meta.name,
-        }
-    }
-
     /// Render the message a reader sees, naming the identifier when the
     /// finding has no span to point at.
     #[must_use]
@@ -133,63 +113,6 @@ impl Finding {
             Location::Span(_) => self.message.clone(),
             Location::Symbol(symbol) => format!("{symbol}: {}", self.message),
         }
-    }
-}
-
-/// A lint finding rendered as a `miette` diagnostic.
-///
-/// The manifest source is shared rather than cloned per finding: a run over a
-/// large manifest can report many findings, and each one would otherwise carry
-/// its own copy of the whole file.
-#[derive(Debug, Error)]
-#[error("{message}")]
-pub struct FindingDiagnostic {
-    /// The reader-facing message.
-    message: String,
-    /// The rule's stable diagnostic code.
-    code: String,
-    /// The resolved severity.
-    severity: miette::Severity,
-    /// The rule's remediation, shown as help.
-    help: String,
-    /// The rule's documentation URL.
-    url: String,
-    /// The manifest source, shared across every finding of one run.
-    manifest_source: Arc<NamedSource<String>>,
-    /// The span to label, when the finding has one.
-    span: Option<SourceSpan>,
-    /// The rule name, used as the span label.
-    label: &'static str,
-}
-
-impl Diagnostic for FindingDiagnostic {
-    fn code(&self) -> Option<Box<dyn std::fmt::Display + '_>> {
-        Some(Box::new(&self.code))
-    }
-
-    fn severity(&self) -> Option<miette::Severity> {
-        Some(self.severity)
-    }
-
-    fn help(&self) -> Option<Box<dyn std::fmt::Display + '_>> {
-        Some(Box::new(&self.help))
-    }
-
-    fn url(&self) -> Option<Box<dyn std::fmt::Display + '_>> {
-        Some(Box::new(&self.url))
-    }
-
-    fn source_code(&self) -> Option<&dyn SourceCode> {
-        self.span
-            .is_some()
-            .then(|| self.manifest_source.as_ref() as &dyn SourceCode)
-    }
-
-    fn labels(&self) -> Option<Box<dyn Iterator<Item = LabeledSpan> + '_>> {
-        let span = self.span?;
-        Some(Box::new(std::iter::once(
-            LabeledSpan::new_primary_with_span(Some(self.label.to_owned()), span),
-        )))
     }
 }
 

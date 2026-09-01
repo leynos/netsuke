@@ -4,6 +4,8 @@
 //! `ninja`, overridable with `NETSUKE_NINJA`).
 
 mod check;
+pub mod check_diagnostics;
+mod check_telemetry;
 mod dispatch;
 mod dyndep;
 mod error;
@@ -17,6 +19,7 @@ use crate::output_prefs::OutputPrefs;
 use crate::status::{LocalizationKey, PipelineStage, StatusReporter, report_pipeline_stage};
 use anyhow::{Context, Result};
 pub use camino::{Utf8Path, Utf8PathBuf};
+pub use check_diagnostics::FindingDiagnostic;
 pub use error::RunnerError;
 use monotony::StdMonotonicClock;
 use std::io::IsTerminal;
@@ -44,6 +47,7 @@ mod ninja;
 mod path_helpers;
 mod process;
 mod recipe_shell;
+pub use check_telemetry::{CHECK_DURATION, CHECK_TOTAL};
 pub use ninja::{NinjaContent, run_ninja, run_ninja_tool};
 #[cfg(doctest)]
 pub use process::doc;
@@ -143,6 +147,9 @@ fn run_with_ninja_program_resolver(
     }));
     if let Commands::Help(args) = &command {
         return dispatch::execute_help(cli, args, reporter.as_ref());
+    }
+    if let Commands::Check(args) = &command {
+        return dispatch::execute_check(cli, args, reporter.as_ref());
     }
     let ninja_program = configured_program.map_or_else(resolve_program, Utf8Path::to_owned);
     let recipe_shell = recipe_shell::resolve_recipe_shell()?;
