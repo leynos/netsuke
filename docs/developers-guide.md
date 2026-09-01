@@ -2268,7 +2268,10 @@ durable decision and its alternatives.
 ### Recipe placeholder ownership
 
 `src/ir/cmd_interpolate/mod.rs` owns the command-interpolation boundary. It
-defines the private `INS_TOKEN` and `OUTS_TOKEN` constants, the
+defines the internal `INS_TOKEN` and `OUTS_TOKEN` interpolation-marker
+constants, which `src/ir/mod.rs` re-exports for runner-facing direct IR recipe
+tests. The constants are not manifest markers, Ninja syntax, or a general
+token registry. The module also defines the
 `CommandBindings` path encodings, the `QuoteContext` classification, and the
 `find_substitution` marker recognizer. The sibling
 `src/ir/cmd_interpolate/substitution.rs` owns `SubstitutionTraversal`, which
@@ -2276,12 +2279,11 @@ walks one recipe and applies those bindings only after analysing its shell
 context. Keep this split private to `ir`; it is an implementation boundary, not
 a public command-template API.
 
-`src/manifest/render.rs` may emit the private tokens while rendering the only
-accepted manifest markers, `{{ ins }}` and `{{ outs }}`. Literal shell variables
-`$ins` and `$outs` are not Netsuke markers and must pass through as shell text
-for the backend to escape. Keep the private constants and their recognition
-limited to this two-stage recipe pipeline; they are implementation markers, not
-manifest or Ninja syntax and not a general token registry.
+`src/manifest/render.rs` may emit the internal tokens while rendering the only
+accepted manifest markers, `{{ ins }}` and `{{ outs }}`. Literal shell
+variables `$ins` and `$outs` are not Netsuke markers and must pass through as
+shell text for the backend to escape. Keep the constants and their recognition
+limited to this two-stage recipe pipeline and its direct IR recipe tests.
 
 Generated strategies that are reusable across crate boundaries belong in
 `test_support`. Because `test_support` is compiled as a library, dependencies
