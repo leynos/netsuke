@@ -661,19 +661,30 @@ connected to the repository before merging a workflow change that names them.
 
 Table: Namespace runner profiles used by Netsuke.
 
-| Profile tag            | Workflow label                           | Operating system    | Machine shape | Intended workload                         |
-| ---------------------- | ---------------------------------------- | ------------------- | ------------- | ----------------------------------------- |
-| `netsuke-ci`           | `namespace-profile-netsuke-ci`           | Ubuntu 24.04        | 8 vCPU, 16 GB | Full Linux formatting, lint and test CI   |
-| `netsuke`              | `namespace-profile-netsuke`              | Ubuntu 24.04        | 4 vCPU, 8 GB  | Packaging, coverage and utility jobs      |
-| `netsuke-ubuntu-22-04` | `namespace-profile-netsuke-ubuntu-22-04` | Ubuntu 22.04        | 4 vCPU, 8 GB  | Ubuntu 22.04 compatibility build          |
-| `netsuke-windows-ci`   | `namespace-profile-netsuke-windows-ci`   | Windows Server 2022 | 8 vCPU, 16 GB | Full Windows formatting, lint and test CI |
-| `netsuke-windows`      | `namespace-profile-netsuke-windows`      | Windows Server 2022 | 4 vCPU, 8 GB  | Windows packaging and smoke tests         |
-| `netsuke-macos-arm64`  | `namespace-profile-netsuke-macos-arm64`  | macOS Sequoia       | 6 vCPU, 14 GB | ARM64 macOS packaging                     |
+| Profile tag            | Workflow label                           | Operating system    | Machine shape | Cache | Intended workload                         |
+| ---------------------- | ---------------------------------------- | ------------------- | ------------- | ----- | ----------------------------------------- |
+| `netsuke-ci`           | `namespace-profile-netsuke-ci`           | Ubuntu 24.04        | 8 vCPU, 16 GB | 50 GB | Full Linux formatting, lint and test CI   |
+| `netsuke`              | `namespace-profile-netsuke`              | Ubuntu 24.04        | 4 vCPU, 8 GB  | 50 GB | Packaging, coverage and utility jobs      |
+| `netsuke-ubuntu-22-04` | `namespace-profile-netsuke-ubuntu-22-04` | Ubuntu 22.04        | 4 vCPU, 8 GB  | 20 GB | Ubuntu 22.04 compatibility build          |
+| `netsuke-windows-ci`   | `namespace-profile-netsuke-windows-ci`   | Windows Server 2022 | 8 vCPU, 16 GB | 50 GB | Full Windows formatting, lint and test CI |
+| `netsuke-windows`      | `namespace-profile-netsuke-windows`      | Windows Server 2022 | 4 vCPU, 8 GB  | 50 GB | Windows packaging and smoke tests         |
+| `netsuke-macos-arm64`  | `namespace-profile-netsuke-macos-arm64`  | macOS Sequoia       | 6 vCPU, 14 GB | 20 GB | ARM64 macOS packaging                     |
 
 Use `nsc github profile list -o json` and `nsc github profile describe` to
 inspect the deployed profiles. Treat profile creation, updates, deletion and
 base-image rebuilds as infrastructure changes; review the effective profile
 specification before applying them.
+
+Each profile attaches a repository-isolated Namespace cache volume. The two
+full CI profiles and the Linux and Windows multi-target profiles use 50 GB; the
+single-build Ubuntu compatibility and ARM64 macOS profiles use the 20 GB
+minimum. All profiles retain runner action and toolchain downloads. Cache
+generations are writable only from `main`; pull requests may read warm content
+but must not publish it. During a measured cold/warm rollout, the rollout
+branch may be added to the cache write allow-list temporarily and must be
+removed after the measurement. Monitor the working set in the Namespace storage
+view and resize to the observed peak plus headroom, because attached snapshot
+usage grows with both cache size and job duration.
 
 Namespace base images do not promise the same preinstalled tool inventory as
 GitHub-hosted runner images. The full Linux CI and Ubuntu 22.04 Netsukefile
