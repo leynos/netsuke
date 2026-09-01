@@ -1,5 +1,6 @@
 //! Tests for report bounding and summarizing.
 
+use proptest::prelude::*;
 use rstest::rstest;
 
 use super::{Bounds, Report};
@@ -157,5 +158,64 @@ fn a_clean_report_never_fails() {
         FailOn::Never,
     ] {
         assert!(!report!(&[], 0, threshold).is_failure());
+    }
+}
+
+proptest! {
+    /// Bound report output without changing whole-run counts or its verdict.
+    #[test]
+    fn report_bounding_preserves_prefix_counts_and_verdict(
+        severities in prop::collection::vec(
+            prop_oneof![
+                Just(Severity::Advice),
+                Just(Severity::Warning),
+                Just(Severity::Error),
+            ],
+            0..32,
+        ),
+        limit in any::<usize>(),
+        threshold in prop_oneof![
+            Just(FailOn::Advice),
+            Just(FailOn::Warning),
+            Just(FailOn::Error),
+            Just(FailOn::Never),
+        ],
+    ) {
+        let built = report!(&severities, limit, threshold);
+        let reported_len = if limit == 0 {
+            severities.len()
+        } else {
+            severities.len().min(limit)
+        };
+        let reported: Vec<Severity> = built
+            .findings()
+            .iter()
+            .map(|finding| finding.severity)
+            .collect();
+        let expected_failing = severities
+            .iter()
+            .filter(|severity| threshold.is_reached_by(**severity))
+            .count();
+
+        let expected_reported: Vec<Severity> = severities
+            .iter()
+            .copied()
+            .take(reported_len)
+            .collect();
+        prop_assert_eq!(reported, expected_reported);
+        prop_assert_eq!(built.truncated(), severities.len() - reported_len);
+        prop_assert_eq!(built.failing_count(), expected_failing);
+        prop_assert_eq!(built.is_failure(), expected_failing > 0);
+        for severity in Severity::ALL {
+            prop_assert_eq!(
+                built.count_at(severity),
+                severities.iter().filter(|found| **found == severity).count(),
+            );
+        }
+        let tallied: usize = Severity::ALL
+            .into_iter()
+            .map(|severity| built.count_at(severity))
+            .sum();
+        prop_assert_eq!(tallied, built.findings().len() + built.truncated());
     }
 }

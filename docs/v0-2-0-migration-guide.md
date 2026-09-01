@@ -1,6 +1,8 @@
 # Migrating to v0.2.0
 
-The v0.2.0 release adds the `netsuke check` manifest linter. Existing manifests
+## v0.4.0 linter signpost
+
+The v0.4.0 release adds the `netsuke check` manifest linter. Existing manifests
 need no changes: checking is read-only, and the command analyses the same
 compiler artefacts as a build without running recipes or creating build output.
 
