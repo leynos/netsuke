@@ -106,7 +106,7 @@ impl Stage {
 /// The summary, rationale, and remediation live here for the prototype period
 /// so that the emitted diagnostic, the `--explain` output, and the rule
 /// reference document cannot drift apart while the rule set is still settling.
-/// Roadmap step 7.2 moves that prose into the localization catalogues, keyed by
+/// Roadmap step 10.2 moves that prose into the localization catalogues, keyed by
 /// [`RuleMeta::name`], and keeps this text as the source-locale fallback. The
 /// identifiers never move: a name, a category, a severity, and a code are
 /// values a user types and a machine matches. See
@@ -130,7 +130,7 @@ pub struct RuleMeta {
 }
 
 impl RuleMeta {
-    /// Build the `miette` diagnostic code for this rule.
+    /// Build the stable diagnostic code for this rule.
     #[must_use]
     pub fn code(&self) -> String {
         format!("netsuke::lint::{}", self.name.replace('-', "_"))

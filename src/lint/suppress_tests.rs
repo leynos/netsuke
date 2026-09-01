@@ -40,6 +40,16 @@ fn a_reason_is_recorded_only_when_stated(#[case] text: &str, #[case] expected: O
     assert_eq!(first!(text).reason.as_deref(), expected);
 }
 
+/// A directive with no named rule cannot suppress every rule by accident.
+#[rstest]
+#[case("a: 1  # netsuke-lint: allow -- no rule named\n")]
+#[case("a: 1  # netsuke-lint: allow --\n")]
+fn an_empty_rule_list_never_names_a_rule(#[case] text: &str) {
+    let directive = first!(text);
+    assert_eq!(directive.rules, Vec::<String>::new());
+    assert!(!directive.names("one"));
+}
+
 /// A `#` inside a scalar is content, not a comment. Without this the shell
 /// comments in a `script:` block would disable rules.
 #[rstest]

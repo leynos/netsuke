@@ -1,25 +1,10 @@
-//! Bounding, counting, and diagnostic projection for lint findings.
+//! Bounding and counting for lint findings.
 //!
-//! Both branches carry the same per-finding object, because a consumer should
-//! parse one finding representation whatever the failure threshold decided.
-//! The projection onto `miette` diagnostics is what makes that possible: the
-//! result document embeds the same entries the diagnostic document does.
-
-use std::sync::Arc;
-
-use miette::NamedSource;
+//! Output adapters project the resulting neutral findings into their format.
 
 use super::engine::Outcome;
-use super::finding::{Finding, FindingDiagnostic};
+use super::finding::Finding;
 use super::severity::{FailOn, Severity};
-
-/// The manifest a report describes.
-pub struct NamedManifest<'a> {
-    /// The display name diagnostics label the source with.
-    pub name: &'a str,
-    /// The manifest source text.
-    pub source: String,
-}
 
 /// How a report is bounded and judged.
 #[derive(Debug, Clone, Copy)]
@@ -32,8 +17,6 @@ pub struct Bounds {
 
 /// Findings selected for one report, together with what was left out.
 pub struct Report {
-    /// The manifest source, shared by every rendered finding.
-    source: Arc<NamedSource<String>>,
     /// Findings within the reporting limit, in output order.
     reported: Vec<Finding>,
     /// Findings at each severity across the whole run, before bounding.
@@ -93,7 +76,7 @@ impl Report {
     /// would let an early advisory hide a later error and report success for a
     /// run that found one.
     #[must_use]
-    pub fn new(manifest: NamedManifest<'_>, outcome: Outcome, bounds: Bounds) -> Self {
+    pub fn new(outcome: Outcome, bounds: Bounds) -> Self {
         let counts = SeverityCounts::tally(&outcome.findings);
         let failing = outcome
             .findings
@@ -107,9 +90,6 @@ impl Report {
         }
         let truncated = total.saturating_sub(reported.len());
         Self {
-            source: Arc::new(
-                NamedSource::new(manifest.name, manifest.source).with_language("yaml"),
-            ),
             reported,
             counts,
             failing,
@@ -162,15 +142,6 @@ impl Report {
     #[must_use]
     pub const fn threshold(&self) -> FailOn {
         self.threshold
-    }
-
-    /// Project every reported finding onto a diagnostic.
-    #[must_use]
-    pub fn diagnostics(&self) -> Vec<FindingDiagnostic> {
-        self.reported
-            .iter()
-            .map(|finding| finding.to_diagnostic(&self.source))
-            .collect()
     }
 }
 

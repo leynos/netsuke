@@ -14,10 +14,12 @@ use anyhow::{Context, Result};
 
 use crate::cli::{CheckArgs, Cli};
 use crate::ir::BuildGraph;
-use crate::lint::{self, Bounds, FailOn, NamedManifest, Policy, PolicyError, Report};
+use crate::lint::{self, Bounds, FailOn, Policy, PolicyError};
 use crate::localization::{self, keys};
 use crate::status::{LocalizationKey, PipelineStage, StatusReporter, report_pipeline_stage};
 
+use super::check_diagnostics::CheckReport;
+use super::check_telemetry::{self, CheckFailure};
 use super::error::RunnerError;
 use super::generation;
 use super::path_helpers::{ensure_manifest_exists, resolve_manifest_path};
@@ -42,19 +44,29 @@ pub(super) fn handle_check(
     args: &CheckArgs,
     reporter: &dyn StatusReporter,
 ) -> Result<()> {
+    check_telemetry::instrument_check(|| handle_check_inner(cli, args, reporter))
+}
+
+/// Execute the check flow while classifying failures for boundary telemetry.
+fn handle_check_inner(
+    cli: &Cli,
+    args: &CheckArgs,
+    reporter: &dyn StatusReporter,
+) -> Result<(), CheckFailure> {
     if let Some(rule) = args.explain.as_deref() {
-        return explain::render(cli, rule);
+        return explain::render(cli, rule).map_err(CheckFailure::Output);
     }
-    let policy = resolve_policy(&args.rule)?;
-    let threshold = parse_threshold(&args.fail_on)?;
+    let policy = resolve_policy(&args.rule).map_err(CheckFailure::Policy)?;
+    let threshold = parse_threshold(&args.fail_on).map_err(CheckFailure::Policy)?;
     let bounds = Bounds {
         limit: args.limit,
         threshold,
     };
-    let report = analyse(cli, reporter, &policy, bounds)?;
-    emit(cli, &report)?;
+    let report = analyse(cli, reporter, &policy, bounds).map_err(CheckFailure::Analysis)?;
+    emit(cli, &report).map_err(CheckFailure::Output)?;
+    finish(&report).map_err(CheckFailure::Threshold)?;
     reporter.report_complete(status_key());
-    finish(&report)
+    Ok(())
 }
 
 /// Load the manifest, lower it, and lint the result.
@@ -63,7 +75,7 @@ fn analyse(
     reporter: &dyn StatusReporter,
     policy: &Policy,
     bounds: Bounds,
-) -> Result<Report> {
+) -> Result<CheckReport> {
     let path = resolve_manifest_path(cli)?;
     ensure_manifest_exists(cli, &path)?;
     let mut on_stage = super::stage_reporting_callback(reporter);
@@ -85,11 +97,9 @@ fn analyse(
             .with_arg("line", failure.line.to_string())
             .with_arg("reason", failure.message),
     })?;
-    Ok(Report::new(
-        NamedManifest {
-            name: &loaded.name,
-            source: loaded.source,
-        },
+    Ok(CheckReport::new(
+        &loaded.name,
+        loaded.source,
         outcome,
         bounds,
     ))
@@ -100,8 +110,8 @@ fn analyse(
 /// A failing report writes nothing here: the threshold diagnostic carries
 /// every finding, so rendering them twice would duplicate the output in human
 /// mode and would put a result document on stdout in JSON mode.
-fn emit(cli: &Cli, report: &Report) -> Result<()> {
-    if report.is_failure() {
+fn emit(cli: &Cli, report: &CheckReport) -> Result<()> {
+    if report.report().is_failure() {
         return Ok(());
     }
     let rendered = if cli.json {
@@ -113,14 +123,15 @@ fn emit(cli: &Cli, report: &Report) -> Result<()> {
 }
 
 /// Convert the report into the command's outcome.
-fn finish(report: &Report) -> Result<()> {
-    if !report.is_failure() {
+fn finish(report: &CheckReport) -> Result<()> {
+    let domain_report = report.report();
+    if !domain_report.is_failure() {
         return Ok(());
     }
     let message = localization::message(keys::CHECK_THRESHOLD_EXCEEDED)
-        .with_arg("severity", report.threshold().as_str())
-        .with_arg("reported", report.findings().len().to_string())
-        .with_arg("failing", report.failing_count().to_string());
+        .with_arg("severity", domain_report.threshold().as_str())
+        .with_arg("reported", domain_report.findings().len().to_string())
+        .with_arg("failing", domain_report.failing_count().to_string());
     Err(RunnerError::LintThresholdExceeded {
         message,
         help: localization::message(keys::CHECK_THRESHOLD_EXCEEDED_HELP),

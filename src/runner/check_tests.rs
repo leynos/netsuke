@@ -8,11 +8,11 @@ use anyhow::{Result, ensure};
 use insta::assert_snapshot;
 
 use crate::ir::BuildGraph;
-use crate::lint::{self, Bounds, FailOn, NamedManifest, Policy, Report};
+use crate::lint::{self, Bounds, FailOn, Policy};
 use crate::manifest;
 use crate::snapshot_test_support::check_json_snapshot_settings;
 
-use super::{json, text};
+use super::{CheckReport, json, text};
 
 /// A manifest that reports one finding at each severity the defaults use.
 const FIXTURE: &str = concat!(
@@ -28,7 +28,7 @@ const FIXTURE: &str = concat!(
 );
 
 /// Lint `FIXTURE` and bound the result to `limit`.
-fn report(limit: usize) -> Result<Report> {
+fn report(limit: usize) -> Result<CheckReport> {
     let parsed = manifest::from_str(FIXTURE)?;
     let graph = BuildGraph::from_manifest(&parsed)?;
     let outcome = lint::analyse(
@@ -40,11 +40,9 @@ fn report(limit: usize) -> Result<Report> {
         &Policy::defaults(),
     )
     .map_err(|failure| anyhow::anyhow!("fixture should index: {}", failure.message))?;
-    Ok(Report::new(
-        NamedManifest {
-            name: "Netsukefile",
-            source: FIXTURE.to_owned(),
-        },
+    Ok(CheckReport::new(
+        "Netsukefile",
+        FIXTURE.to_owned(),
         outcome,
         Bounds {
             limit,
@@ -85,7 +83,8 @@ fn the_rule_catalogue_shape_is_pinned() -> Result<()> {
 #[test]
 fn the_summary_line_states_every_count() -> Result<()> {
     let report = report(0)?;
-    let summary = test_support::fluent::normalize_fluent_isolates(&text::summary_line(&report));
+    let summary =
+        test_support::fluent::normalize_fluent_isolates(&text::summary_line(report.report()));
     for expected in ["errors", "warnings", "advice", "suppressed"] {
         ensure!(
             summary.contains(expected),
@@ -98,10 +97,12 @@ fn the_summary_line_states_every_count() -> Result<()> {
 #[test]
 fn the_truncation_line_states_both_counts() -> Result<()> {
     let report = report(1)?;
-    let omitted = report.truncated();
-    let line = test_support::fluent::normalize_fluent_isolates(&text::truncation_line(&report));
+    let omitted = report.report().truncated();
+    let line =
+        test_support::fluent::normalize_fluent_isolates(&text::truncation_line(report.report()));
     ensure!(
-        line.contains(&report.findings().len().to_string()) && line.contains(&omitted.to_string()),
+        line.contains(&report.report().findings().len().to_string())
+            && line.contains(&omitted.to_string()),
         "the notice should state what was shown and what was omitted, got {line}"
     );
     Ok(())
