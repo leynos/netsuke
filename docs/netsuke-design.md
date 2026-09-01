@@ -1023,6 +1023,12 @@ minimal manifest round-trips correctly. A collection of sample manifests under
 fixtures are loaded by the tests to ensure real-world YAML files behave as
 expected. This suite guards against regressions as the schema evolves.
 
+Environment-dependent tests follow the seam taxonomy in
+[ADR-008](adr-008-environment-seam-taxonomy.md): tests inject a boundary-owned
+reader or value, while an end-to-end test configures only its spawned child
+process. This keeps environment lookup outside the domain behaviour under test
+and avoids process-global mutation or synchronization locks.
+
 ## Section 4: Dynamic Builds with the Jinja Templating Engine
 
 To provide the dynamic capabilities and logical expressiveness that make a

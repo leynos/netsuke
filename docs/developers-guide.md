@@ -3129,22 +3129,29 @@ process.
 - The reader answers by name only. It must not enumerate, and it must not
   mutate.
 
-### Retired process-environment mutation utilities
+### Environment isolation
 
-The `EnvLock`, `CwdGuard`, and `EnvVarGuard` utilities that once serialized
-process working-directory and environment mutation were retired from
-`test_support`. Tests and harnesses inject data through seams instead: the
-manifest glob base directory anchors relative globs, `project_scope_file`
-accepts an explicit directory for configuration discovery, and environment
-readers are injected into the functions that need them. None of these depend on
-the process working directory or process-global environment state.
+Tests must inject environment-dependent input rather than mutate the harness
+process. For a boundary exercised across several tests, use `mockable::Env`:
+production supplies `mockable::DefaultEnv` at the composition boundary, and
+tests supply `mockable::MockEnv`. The other sanctioned shapes — a narrow
+closure for one small lookup and an `EnvReader` for registered `Send + Sync`
+callbacks — are defined in [ADR-008](adr-008-environment-seam-taxonomy.md).
+
+`EnvLock`, `CwdGuard`, and `EnvVarGuard` were retired from `test_support`. They
+must not be restored, extended, or used as a migration path. A process-wide
+lock only serializes access to mutable ambient state: it leaves the production
+boundary implicit, prevents parallel test execution, and cannot make unrelated
+code in the same process safe. Inject the value, environment reader, or
+base-directory capability that the test needs instead.
 
 `make lint` runs rustdoc, Clippy, and Whitaker. Clippy's workspace-wide
 `disallowed-methods` configuration rejects `std::env::set_var`,
 `std::env::remove_var`, and `std::env::set_current_dir` in every target kind
-with warnings denied. Child-process configuration stays confined to the
-`Command` builders: `Command::env`, `Command::env_clear`, and
-`Command::current_dir`.
+with warnings denied. The sole environment exception is a test that configures
+an isolated child process with `Command::env_clear`, `Command::env`, and, when
+needed, `Command::current_dir`. Those calls affect only the spawned process;
+they do not mutate the test harness.
 
 ### Scripting standards for automation scripts
 
