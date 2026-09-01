@@ -78,6 +78,7 @@ def test_repository_owned_jobs_use_namespace_profiles(
     ("workflow_name", "job_name", "first_consumer"),
     [
         ("ci.yml", "build-test", "Show Ninja version"),
+        ("coverage-main.yml", "coverage-upload", "Test and Measure Coverage"),
         (
             "netsukefile-test.yml",
             "netsukefile",
@@ -101,6 +102,16 @@ def test_namespace_linux_jobs_install_ninja_before_use(
     assert unique_step_index(steps, "Install Ninja") < unique_step_index(
         steps, first_consumer
     ), f"{workflow_name} job {job_name} must install Ninja before {first_consumer!r}"
+
+
+def test_main_coverage_requires_real_ninja() -> None:
+    """Reject a main baseline that silently skips real-Ninja tests."""
+    workflow = load_workflow(WORKFLOW_DIR / "coverage-main.yml")
+    coverage_job = workflow_job(workflow, "coverage-upload")
+    env = require_mapping(coverage_job.get("env"), "jobs.coverage-upload.env")
+    assert env.get("NETSUKE_REQUIRE_NINJA") == "1", (
+        "coverage-main.yml must require real-Ninja integration coverage"
+    )
 
 
 @pytest.mark.parametrize(

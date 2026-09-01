@@ -1,0 +1,8 @@
+self-hosted-runner:
+  labels:
+    - namespace-profile-netsuke-ci
+    - namespace-profile-netsuke-windows-ci
+    - namespace-profile-netsuke-windows
+    - namespace-profile-netsuke
+    - namespace-profile-netsuke-ubuntu-22-04
+    - namespace-profile-netsuke-macos-arm64

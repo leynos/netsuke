@@ -19,6 +19,9 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       BUILD_PROFILE: debug
+      # Keep the main baseline aligned with pull-request coverage instead of
+      # silently skipping real-Ninja integration tests.
+      NETSUKE_REQUIRE_NINJA: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -33,6 +36,8 @@ jobs:
           # Preserve warnings-as-errors through toolchain setup;
           # cargo-llvm-cov appends its instrumentation flags to this value.
           rustflags: -D warnings
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
       - name: Test and Measure Coverage
         uses: leynos/shared-actions/.github/actions/generate-coverage@18b2ea047ab1c761db2c4171aa7e73945badf3ec
         with:

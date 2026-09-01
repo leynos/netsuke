@@ -58,6 +58,8 @@ concurrency:
 jobs:
   metadata:
     runs-on: namespace-profile-netsuke
+    permissions:
+      contents: read
     outputs:
       version: ${{ steps.ensure_version.outputs['crate-version'] }}
       bin_name: ${{ steps.bin_name.outputs['bin-name'] }}
