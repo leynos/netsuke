@@ -202,7 +202,7 @@ resolve_tag_commit() {
 }
 
 fetch_candidate_revision() {
-  if ! git fetch --depth 1 --no-tags origin "$GITHUB_SHA"; then
+  if ! git fetch --depth 1 --no-tags origin -- "$GITHUB_SHA"; then
     operation_error_category="$ERROR_FETCH"
     return 1
   fi

@@ -1,11 +1,12 @@
 """Exercise bounded release-admission metrics through fake command adapters."""
 
 import dataclasses
+import importlib.util
 import json
 import os
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the script boundary is under test.
-import sys
 import tempfile
+import typing as typ
 from pathlib import Path
 
 import pytest
@@ -13,15 +14,11 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT / "tests" / "workflow_contracts"))
-
-from release_admission_metrics import (  # ruff: ignore[module-import-not-at-top-of-file] - needs path setup
-    parse_metrics,
-    validate_metrics,
-)
-
 SCRIPT_PATH = (
     REPO_ROOT / ".github" / "scripts" / "require-release-admission-canaries.sh"
+)
+METRICS_VALIDATOR_PATH = (
+    REPO_ROOT / "tests" / "workflow_contracts" / "release_admission_metrics.py"
 )
 BASH_PATH = Path("/usr/bin/bash")
 REVISION = "a" * 40
@@ -47,6 +44,32 @@ class FailureCase:
     extra_environment: dict[str, str]
     operation: str
     error_category: str
+
+
+class MetricsValidator(typ.Protocol):
+    """Describe the runtime interface exported by the workflow validator."""
+
+    def parse_metrics(self, lines: list[str]) -> list[dict[str, object]]:
+        """Parse metrics emitted by the release-admission gate."""
+
+    def validate_metrics(self, records: list[dict[str, object]]) -> None:
+        """Validate the release-admission metric contract."""
+
+
+def load_metrics_validator() -> MetricsValidator:
+    """Load the workflow-contract validator without changing the import path."""
+    specification = importlib.util.spec_from_file_location(
+        "release_admission_metrics_contract", METRICS_VALIDATOR_PATH
+    )
+    if specification is None or specification.loader is None:
+        message = "the release-admission metrics validator must be loadable"
+        raise AssertionError(message)
+    module = importlib.util.module_from_spec(specification)
+    specification.loader.exec_module(module)
+    return typ.cast("MetricsValidator", module)
+
+
+METRICS_VALIDATOR = load_metrics_validator()
 
 
 def expected_operation_labels(
@@ -153,7 +176,9 @@ def _run_gate(
         env=environment,
         text=True,
     )
-    metrics = parse_metrics(metrics_file.read_text(encoding="utf-8").splitlines())
+    metrics = METRICS_VALIDATOR.parse_metrics(
+        metrics_file.read_text(encoding="utf-8").splitlines()
+    )
     calls = [
         json.loads(line)
         for line in call_log.read_text(encoding="utf-8").splitlines()
@@ -180,7 +205,7 @@ def test_gate_emits_each_fixed_operation_and_a_successful_gate(tmp_path: Path) -
     result, metrics, calls = _run_gate(tmp_path)
 
     assert result.returncode == 0, result.stderr
-    validate_metrics(metrics)
+    METRICS_VALIDATOR.validate_metrics(metrics)
     assert {call["command"] for call in calls} == {"gh", "git"}, (
         "the gate must call both GitHub and Git adapters"
     )
@@ -255,7 +280,7 @@ def test_gate_emits_fixed_categories_for_failure_paths(
     )
 
     assert result.returncode != 0, "a failed admission operation must block the gate"
-    validate_metrics(metrics)
+    METRICS_VALIDATOR.validate_metrics(metrics)
     record = _operation_records(metrics, case.operation)[-1]
     assert record["labels"] == expected_operation_labels(
         CANARY_BY_OPERATION[case.operation],
@@ -300,7 +325,7 @@ def test_identifiers_never_become_metric_labels(
         )
 
     assert result.returncode == 0, result.stderr
-    validate_metrics(metrics)
+    METRICS_VALIDATOR.validate_metrics(metrics)
     for record in metrics:
         labels = record["labels"]
         assert isinstance(labels, dict), "every emitted metric must retain labels"
