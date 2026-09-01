@@ -9,19 +9,41 @@ Run via ``make test-workflow-contracts``.
 """
 
 import pytest
+from namespace_runner_invariants import (
+    CALLEE_SELECTED_RUNNER,
+    REQUIRED_RUNNER_ASSIGNMENTS,
+    has_required_runner_assignments,
+    is_valid_ninja_sequence,
+    is_valid_windows_tool_path_sequence,
+)
 from workflow_loading import (
     REPO_ROOT,
     job_steps,
     load_workflow,
-    named_step,
     require_mapping,
-    unique_step_index,
     workflow_job,
 )
 
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
-NINJA_ACTION = (
-    "seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67"
+DIRECT_RUNNER_SOURCES = (
+    ("ci.build-test", "ci.yml", "build-test"),
+    ("ci.build-test-windows", "ci.yml", "build-test-windows"),
+    ("ci.windows-native-recipe-smoke", "ci.yml", "windows-native-recipe-smoke"),
+    ("ci.kani-smoke", "ci.yml", "kani-smoke"),
+    ("coverage-main.coverage-upload", "coverage-main.yml", "coverage-upload"),
+    (
+        "delayed-pr-comment.delay_and_comment",
+        "delayed-pr-comment.yml",
+        "delay_and_comment",
+    ),
+    ("netsukefile-test.netsukefile", "netsukefile-test.yml", "netsukefile"),
+    ("release.metadata", "release.yml", "metadata"),
+    (
+        "release.windows-native-recipe-smoke",
+        "release.yml",
+        "windows-native-recipe-smoke",
+    ),
+    ("release.release", "release.yml", "release"),
 )
 
 
@@ -94,14 +116,10 @@ def test_namespace_linux_jobs_install_ninja_before_use(
     """Provision pinned Ninja before a Namespace Linux job invokes it."""
     workflow = load_workflow(WORKFLOW_DIR / workflow_name)
     steps = job_steps(workflow, job_name)
-    install_step = named_step(steps, "Install Ninja")
-    assert install_step.get("uses") == NINJA_ACTION, (
-        f"{workflow_name} job {job_name} must install pinned Ninja, "
-        f"got {install_step.get('uses')!r}"
+    assert is_valid_ninja_sequence(steps, first_consumer), (
+        f"{workflow_name} job {job_name} must install one pinned Ninja action "
+        f"before {first_consumer!r}"
     )
-    assert unique_step_index(steps, "Install Ninja") < unique_step_index(
-        steps, first_consumer
-    ), f"{workflow_name} job {job_name} must install Ninja before {first_consumer!r}"
 
 
 def test_main_coverage_requires_real_ninja() -> None:
@@ -183,21 +201,66 @@ def test_package_workflow_exposes_native_windows_tool_profile() -> None:
     """Expose native global tools before the shared Windows package action."""
     workflow = load_workflow(WORKFLOW_DIR / "build-and-package.yml")
     steps = job_steps(workflow, "build")
-    step_name = "Expose Windows global tool path"
-    expose_step = named_step(steps, step_name)
-    assert expose_step.get("if") == "inputs.platform == 'windows'", (
-        f"{step_name} must be limited to Windows packaging"
+    assert is_valid_windows_tool_path_sequence(steps), (
+        "build-and-package.yml must expose the known-folder .dotnet tools "
+        "directory exactly once before Windows packaging"
     )
-    assert expose_step.get("shell") == "pwsh", f"{step_name} must use PowerShell"
-    script = str(expose_step.get("run", ""))
-    required_fragments = (
-        "[Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)",
-        "'.dotnet'",
-        "'tools'",
-        "$Env:GITHUB_PATH",
+
+
+def test_checked_in_workflows_satisfy_runner_assignment_contract() -> None:
+    """Apply the generated runner-assignment model to checked-in workflows."""
+    assignments = _checked_in_runner_assignments()
+    assert has_required_runner_assignments(assignments), (
+        "checked-in runner assignments must match the platform contract; "
+        f"expected {REQUIRED_RUNNER_ASSIGNMENTS!r}, got {assignments!r}"
     )
-    missing = [fragment for fragment in required_fragments if fragment not in script]
-    assert not missing, f"{step_name} is missing native profile setup: {missing}"
-    assert unique_step_index(steps, step_name) < unique_step_index(
-        steps, "Build Windows installer package"
-    ), f"{step_name} must run before Windows packaging"
+
+
+def _checked_in_runner_assignments() -> dict[str, str]:
+    """Normalize checked-in direct, matrix, and reusable runner ownership."""
+    assignments = {
+        key: str(
+            workflow_job(load_workflow(WORKFLOW_DIR / workflow), job).get("runs-on")
+        )
+        for key, workflow, job in DIRECT_RUNNER_SOURCES
+    }
+
+    release = load_workflow(WORKFLOW_DIR / "release.yml")
+    for job_name in ("build-linux", "build-windows"):
+        job = workflow_job(release, job_name)
+        inputs = require_mapping(job.get("with"), f"jobs.{job_name}.with")
+        assignments[f"release.{job_name}"] = str(inputs.get("runner"))
+
+    build_macos = workflow_job(release, "build-macos")
+    strategy = require_mapping(build_macos.get("strategy"), "jobs.build-macos.strategy")
+    matrix = require_mapping(strategy.get("matrix"), "jobs.build-macos.strategy.matrix")
+    includes = matrix.get("include")
+    assert isinstance(includes, list), "the build-macos matrix include must be a list"
+    assignments.update({
+        f"release.macos.{item['target']}": str(item["runner"])
+        for item in includes
+        if isinstance(item, dict)
+    })
+
+    package = load_workflow(WORKFLOW_DIR / "build-and-package.yml")
+    assignments["build-and-package.build"] = str(
+        workflow_job(package, "build").get("runs-on")
+    )
+    assignments["mutation-testing.mutation"] = _external_runner_ownership(
+        "mutation-testing.yml", "mutation"
+    )
+    assignments["dependabot-automerge.automerge"] = _external_runner_ownership(
+        "dependabot-automerge.yml", "automerge"
+    )
+    return assignments
+
+
+def _external_runner_ownership(workflow_name: str, job_name: str) -> str:
+    """Normalize an external reusable workflow's callee-owned runner."""
+    job = workflow_job(load_workflow(WORKFLOW_DIR / workflow_name), job_name)
+    uses = str(job.get("uses", ""))
+    if uses.startswith("leynos/shared-actions/.github/workflows/") and not job.get(
+        "runs-on"
+    ):
+        return CALLEE_SELECTED_RUNNER
+    return str(job.get("runs-on"))
