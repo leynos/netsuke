@@ -169,3 +169,27 @@ def test_package_workflow_limits_legacy_node_to_windows() -> None:
         "build-and-package.yml must limit the Node 20 compatibility switch "
         f"to Windows, got {actual!r}"
     )
+
+
+def test_package_workflow_exposes_native_windows_tool_profile() -> None:
+    """Expose native global tools before the shared Windows package action."""
+    workflow = load_workflow(WORKFLOW_DIR / "build-and-package.yml")
+    steps = job_steps(workflow, "build")
+    step_name = "Expose Windows global tool path"
+    expose_step = named_step(steps, step_name)
+    assert expose_step.get("if") == "inputs.platform == 'windows'", (
+        f"{step_name} must be limited to Windows packaging"
+    )
+    assert expose_step.get("shell") == "pwsh", f"{step_name} must use PowerShell"
+    script = str(expose_step.get("run", ""))
+    required_fragments = (
+        "[Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)",
+        "'.dotnet'",
+        "'tools'",
+        "$Env:GITHUB_PATH",
+    )
+    missing = [fragment for fragment in required_fragments if fragment not in script]
+    assert not missing, f"{step_name} is missing native profile setup: {missing}"
+    assert unique_step_index(steps, step_name) < unique_step_index(
+        steps, "Build Windows installer package"
+    ), f"{step_name} must run before Windows packaging"

@@ -692,6 +692,14 @@ packaging workflow therefore sets
 narrow compatibility setting when the shared release action adopts a Node 24
 version of its nested Rust setup action.
 
+The Namespace Windows service also exposes a different environment-derived
+profile from the Windows known folder used by `dotnet tool --global`. Before
+the shared packaging action installs WiX, the reusable workflow appends the
+known-folder `.dotnet\tools` directory to `GITHUB_PATH`. Keep this lookup on
+`Environment.SpecialFolder.UserProfile`; `$HOME` and `USERPROFILE` can name a
+different service profile and leave an installed `wix` executable invisible to
+the next action step.
+
 The `nsc github profile create` command provisions Linux profiles. Native
 Windows and macOS profiles are created in the Namespace dashboard. Every
 profile uses the `namespace-profile-*` label form, regardless of where it was

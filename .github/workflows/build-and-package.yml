@@ -135,6 +135,14 @@ jobs:
             echo "powershell_help_dir=${{ steps.stage.outputs.powershell_help_dir }}"
           } >>"$GITHUB_OUTPUT"
 
+      - name: Expose Windows global tool path
+        if: inputs.platform == 'windows'
+        shell: pwsh
+        run: |
+          $profileHome = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
+          $dotnetTools = Join-Path (Join-Path $profileHome '.dotnet') 'tools'
+          $dotnetTools | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
+
       - name: Package Linux artefacts with dependencies
         if: inputs.platform == 'linux'
         uses: leynos/shared-actions/.github/actions/linux-packages@18b2ea047ab1c761db2c4171aa7e73945badf3ec
