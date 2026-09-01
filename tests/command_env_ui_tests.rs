@@ -28,8 +28,10 @@
 
 #[path = "support/cargo_artifacts.rs"]
 mod cargo_artifacts;
+
 #[path = "support/cargo_features.rs"]
 mod cargo_features;
+
 #[path = "support/rustc_response_file.rs"]
 mod rustc_response_file;
 
@@ -67,6 +69,16 @@ fn policy_from_str_embedder_fixture_compiles_without_clap() -> io::Result<()> {
         "the policy FromStr fixture should compile without Clap",
     )
 }
+
+/// The public lint API fixture compiles for an external embedder.
+#[test]
+fn lint_public_api_fixture_compiles() -> io::Result<()> {
+    compile_public_api_fixture(
+        "tests/ui/lint_public_api_pass.rs",
+        "the lint public API fixture should compile",
+    )
+}
+
 /// Type-check the public cache API only when the Netsuke library is supplied.
 #[rstest]
 #[case::public_api(true)]
@@ -82,6 +94,7 @@ fn cli_configuration_fixture_compiles(#[case] has_netsuke_extern: bool) -> io::R
     }
     Ok(())
 }
+
 /// The public command-list constructors compile for an external embedder.
 #[test]
 fn command_list_public_api_fixture_compiles() -> io::Result<()> {
@@ -139,6 +152,7 @@ fn verbose_timing_reporter_embedder_fixture_compiles() -> io::Result<()> {
     }
     Ok(())
 }
+
 /// Compile one external public-API fixture through the direct-rustc harness.
 fn compile_public_api_fixture(source: &str, failure_message: &str) -> io::Result<()> {
     let rlib = NetsukeRlib::build()?;
@@ -267,6 +281,7 @@ impl NetsukeRlib {
         rustc().arg(response).output()
     }
 }
+
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
