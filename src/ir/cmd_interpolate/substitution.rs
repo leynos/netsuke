@@ -23,6 +23,28 @@ impl MarkerProtection {
     }
 }
 
+/// Retain parsing state for one active command substitution.
+///
+/// A command substitution has its own quoting rules, independent of its
+/// surrounding command text. Tracking its parenthesis and quote state together
+/// prevents literal parentheses inside its quoted text from closing the region.
+struct CommandSubstitution {
+    /// Record the quote state local to this command-substitution body.
+    quote_context: QuoteContext,
+    /// Count this substitution's opening parenthesis and nested grouped forms.
+    parenthesis_depth: usize,
+}
+
+impl CommandSubstitution {
+    /// Initialise the state required after a `$(` delimiter.
+    const fn new() -> Self {
+        Self {
+            quote_context: QuoteContext::Unquoted,
+            parenthesis_depth: 1,
+        }
+    }
+}
+
 /// Track one-pass substitution while retaining the original error template.
 ///
 /// This helper is private to `cmd_interpolate`: it groups immutable template
@@ -41,8 +63,8 @@ pub(super) struct SubstitutionTraversal<'template, 'bindings> {
     in_backticks: bool,
     /// Record the active POSIX quote context outside command substitutions.
     quote_context: QuoteContext,
-    /// Record nested `$()` regions where path insertion is deliberately refused.
-    command_substitution_depth: usize,
+    /// Retain nested `$()` parsing state where path insertion is refused.
+    command_substitutions: Vec<CommandSubstitution>,
 }
 
 impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
@@ -59,7 +81,7 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
             output: String::with_capacity(template.len()),
             in_backticks: false,
             quote_context: QuoteContext::Unquoted,
-            command_substitution_depth: 0,
+            command_substitutions: Vec::new(),
         }
     }
 
@@ -93,7 +115,7 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
 
     /// Preserve PowerShell text while lowering only manifest-owned markers.
     fn append_power_shell_character(&mut self, pos: usize, ch: char) -> Result<usize, IrGenError> {
-        if let Some(next) = self.append_power_shell_escaped_character(pos, ch) {
+        if let Some(next) = self.append_power_shell_escaped_character(pos, ch)? {
             return Ok(next);
         }
         if self.append_power_shell_single_quote_escape(pos, ch) {
@@ -119,27 +141,36 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
     /// Classify POSIX backticks and command substitutions as protected regions.
     const fn posix_marker_protection(&self) -> MarkerProtection {
         MarkerProtection::from_protected_region(
-            self.in_backticks || self.command_substitution_depth > 0,
+            self.in_backticks || self.is_in_command_substitution(),
         )
     }
 
     /// Classify PowerShell quotes and command substitutions as protected regions.
-    const fn power_shell_marker_protection(&self) -> MarkerProtection {
+    fn power_shell_marker_protection(&self) -> MarkerProtection {
         MarkerProtection::from_protected_region(
-            !matches!(self.quote_context, QuoteContext::Unquoted)
-                || self.command_substitution_depth > 0,
+            !matches!(self.active_quote_context(), QuoteContext::Unquoted)
+                || self.is_in_command_substitution(),
         )
     }
 
-    /// Preserve a PowerShell backtick escape without interpreting its next character.
-    fn append_power_shell_escaped_character(&mut self, pos: usize, ch: char) -> Option<usize> {
+    /// Preserve a PowerShell backtick escape unless it would hide a recipe marker.
+    fn append_power_shell_escaped_character(
+        &mut self,
+        pos: usize,
+        ch: char,
+    ) -> Result<Option<usize>, IrGenError> {
         if ch != '`' || self.matches_single_quote_context() {
-            return None;
+            return Ok(None);
         }
-        let next = *self.chars.get(pos + 1)?;
+        if find_substitution(self.chars, pos + 1).is_some() {
+            return Err(invalid_command_error(self.template.to_owned()));
+        }
+        let Some(next) = self.chars.get(pos + 1) else {
+            return Ok(None);
+        };
         self.output.push(ch);
-        self.output.push(next);
-        Some(pos + 2)
+        self.output.push(*next);
+        Ok(Some(pos + 2))
     }
 
     /// Preserve a doubled PowerShell apostrophe inside its single-quoted literal.
@@ -173,17 +204,17 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
     /// Track `$()` nesting and preserve its delimiters before marker handling.
     fn append_command_substitution_delimiter(&mut self, pos: usize, ch: char) -> Option<usize> {
         if !self.matches_single_quote_context() && self.starts_command_substitution(pos, ch) {
-            self.command_substitution_depth += 1;
+            self.command_substitutions.push(CommandSubstitution::new());
             self.output.push_str("$(");
             return Some(pos + 2);
         }
         if self.starts_nested_command_substitution_parenthesis(ch) {
-            self.command_substitution_depth += 1;
+            self.increment_command_substitution_parenthesis_depth();
             self.output.push(ch);
             return Some(pos + 1);
         }
         if !self.matches_single_quote_context() && self.ends_command_substitution(ch) {
-            self.command_substitution_depth -= 1;
+            self.decrement_command_substitution_parenthesis_depth();
             self.output.push(ch);
             return Some(pos + 1);
         }
@@ -196,30 +227,81 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
     }
 
     /// Report whether `ch` opens a grouped expression inside a `$()` region.
-    const fn starts_nested_command_substitution_parenthesis(&self, ch: char) -> bool {
-        !self.matches_single_quote_context() && self.command_substitution_depth > 0 && ch == '('
+    fn starts_nested_command_substitution_parenthesis(&self, ch: char) -> bool {
+        self.is_in_command_substitution() && self.matches_unquoted_quote_context() && ch == '('
     }
 
     /// Report whether `ch` closes the current `$()` expression.
-    const fn ends_command_substitution(&self, ch: char) -> bool {
-        ch == ')' && self.command_substitution_depth > 0
+    fn ends_command_substitution(&self, ch: char) -> bool {
+        self.is_in_command_substitution() && self.matches_unquoted_quote_context() && ch == ')'
     }
 
     /// Change POSIX quote state after retaining a delimiter in the output.
-    const fn update_quote_context(&mut self, ch: char) {
-        match (self.quote_context, ch) {
-            (QuoteContext::Unquoted, '\'') => self.quote_context = QuoteContext::Single,
-            (QuoteContext::Unquoted, '"') => self.quote_context = QuoteContext::Double,
+    fn update_quote_context(&mut self, ch: char) {
+        let quote_context = self.active_quote_context_mut();
+        Self::update_quote_context_for_region(quote_context, ch);
+    }
+
+    /// Report whether the traversal is currently enclosed by POSIX single quotes.
+    fn matches_single_quote_context(&self) -> bool {
+        matches!(self.active_quote_context(), QuoteContext::Single)
+    }
+
+    /// Report whether the active shell region is outside both kinds of quotes.
+    fn matches_unquoted_quote_context(&self) -> bool {
+        matches!(self.active_quote_context(), QuoteContext::Unquoted)
+    }
+
+    /// Report whether the traversal is currently inside a command substitution.
+    const fn is_in_command_substitution(&self) -> bool {
+        !self.command_substitutions.is_empty()
+    }
+
+    /// Return the quote state used by the innermost active shell region.
+    fn active_quote_context(&self) -> QuoteContext {
+        self.command_substitutions
+            .last()
+            .map_or(self.quote_context, |substitution| {
+                substitution.quote_context
+            })
+    }
+
+    /// Return the quote state storage used by the innermost active shell region.
+    fn active_quote_context_mut(&mut self) -> &mut QuoteContext {
+        match self.command_substitutions.last_mut() {
+            Some(substitution) => &mut substitution.quote_context,
+            None => &mut self.quote_context,
+        }
+    }
+
+    /// Update the quote state of one shell region after copying its source character.
+    const fn update_quote_context_for_region(quote_context: &mut QuoteContext, ch: char) {
+        match (*quote_context, ch) {
+            (QuoteContext::Unquoted, '\'') => *quote_context = QuoteContext::Single,
+            (QuoteContext::Unquoted, '"') => *quote_context = QuoteContext::Double,
             (QuoteContext::Single, '\'') | (QuoteContext::Double, '"') => {
-                self.quote_context = QuoteContext::Unquoted;
+                *quote_context = QuoteContext::Unquoted;
             }
             _ => {}
         }
     }
 
-    /// Report whether the traversal is currently enclosed by POSIX single quotes.
-    const fn matches_single_quote_context(&self) -> bool {
-        matches!(self.quote_context, QuoteContext::Single)
+    /// Increase the grouping depth in the innermost command substitution.
+    fn increment_command_substitution_parenthesis_depth(&mut self) {
+        if let Some(substitution) = self.command_substitutions.last_mut() {
+            substitution.parenthesis_depth += 1;
+        }
+    }
+
+    /// Close one grouping level and leave the substitution when its delimiter closes.
+    fn decrement_command_substitution_parenthesis_depth(&mut self) {
+        let Some(substitution) = self.command_substitutions.last_mut() else {
+            return;
+        };
+        substitution.parenthesis_depth -= 1;
+        if substitution.parenthesis_depth == 0 {
+            self.command_substitutions.pop();
+        }
     }
 
     /// Lower a marker when its current shell context permits substitution.
@@ -261,8 +343,10 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
             self.output.push(ch);
             return pos + 1;
         };
-        self.output
-            .push_str(self.bindings.substitution(placeholder, self.quote_context));
+        self.output.push_str(
+            self.bindings
+                .substitution(placeholder, self.active_quote_context()),
+        );
         pos + skip
     }
 

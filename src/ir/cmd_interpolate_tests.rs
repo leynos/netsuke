@@ -138,6 +138,21 @@ fn interpolate_command_rejects_markers_after_nested_subshells() {
     .expect_err("markers inside nested command substitutions must be rejected");
     assert!(matches!(error, IrGenError::InvalidCommand { .. }));
 }
+
+/// Verify quoted parentheses do not close a command substitution early.
+#[test]
+fn interpolate_command_rejects_markers_after_quoted_command_substitution_parentheses() {
+    for marker in [INS_TOKEN, OUTS_TOKEN] {
+        let error = interpolate_command_with_shell(
+            &format!("echo \"$(printf ')' ; echo {marker})\""),
+            &[Utf8PathBuf::from("x;id;echo")],
+            &[Utf8PathBuf::from("x;id;echo")],
+            RecipeShell::Posix,
+        )
+        .expect_err("markers inside quoted command substitutions must be rejected");
+        assert!(matches!(error, IrGenError::InvalidCommand { .. }));
+    }
+}
 /// Verify POSIX command substitution rejects recipe markers before shell execution.
 #[test]
 fn interpolate_command_rejects_markers_in_command_substitutions() {
@@ -244,4 +259,14 @@ fn power_shell_rejects_markers_without_a_context_safe_encoder() {
             Err(IrGenError::InvalidCommand { .. })
         ));
     }
+}
+
+/// Verify a PowerShell escape cannot hide a recipe marker from validation.
+#[test]
+fn power_shell_rejects_markers_after_backticks() {
+    let bindings = CommandBindings::new(&[], &[Utf8PathBuf::from("out")], RecipeShell::PowerShell);
+    let error =
+        interpolate_command_with_bindings(&format!("Write-Output `{OUTS_TOKEN}"), &bindings)
+            .expect_err("PowerShell backticks before markers must not bypass validation");
+    assert!(matches!(error, IrGenError::InvalidCommand { .. }));
 }
