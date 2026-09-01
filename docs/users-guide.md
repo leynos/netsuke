@@ -611,7 +611,6 @@ runtime branch. Runtime decisions belong in a command or script.
 
 Top-level actions support the same `foreach` and `when` keys.
 
-
 ### Diagnose manifest expansion
 
 Pass `--verbose` to a normal manifest-loading command to inspect manifest-time
