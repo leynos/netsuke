@@ -97,10 +97,8 @@ pub(super) fn indexes(entries: &[ManifestValue], section: &str) -> Result<Vec<u6
         .collect()
 }
 
-/// Verify static and foreach exclusions report exact bounded metadata.
-#[test]
-fn expand_foreach_returns_filtering_stats() -> Result<()> {
-    let env = Environment::new();
+/// Build a manifest containing static and foreach exclusions in both sections.
+fn sample_manifest_with_static_and_foreach_exclusions() -> Result<ManifestValue> {
     let yaml = "targets:
   - name: skipped-target
     command: echo skipped
@@ -123,7 +121,44 @@ actions:
       - skip
       - keep
     when: item != 'skip'";
-    let mut doc: ManifestValue = serde_saphyr::from_str(yaml)?;
+    Ok(serde_saphyr::from_str(yaml)?)
+}
+
+/// Build retained filtering metadata for the static and foreach exclusions.
+fn expected_static_and_foreach_filtered_entries() -> Vec<FilteredEntry> {
+    vec![
+        FilteredEntry {
+            section: "targets".into(),
+            entry_name_hash: "63563386".into(),
+            iteration_index: None,
+            when_expression_len: 5,
+        },
+        FilteredEntry {
+            section: "targets".into(),
+            entry_name_hash: "d743b39a".into(),
+            iteration_index: Some(0),
+            when_expression_len: 14,
+        },
+        FilteredEntry {
+            section: "actions".into(),
+            entry_name_hash: "b61bdf58".into(),
+            iteration_index: None,
+            when_expression_len: 5,
+        },
+        FilteredEntry {
+            section: "actions".into(),
+            entry_name_hash: "a4642f66".into(),
+            iteration_index: Some(0),
+            when_expression_len: 14,
+        },
+    ]
+}
+
+/// Verify static and foreach exclusions report exact bounded metadata.
+#[test]
+fn expand_foreach_returns_filtering_stats() -> Result<()> {
+    let env = Environment::new();
+    let mut doc = sample_manifest_with_static_and_foreach_exclusions()?;
 
     let report = expand_foreach(&mut doc, &env)?;
 
@@ -136,33 +171,7 @@ actions:
         "unexpected filtering stats: {report:?}"
     );
     anyhow::ensure!(
-        report.filtered_entries
-            == vec![
-                FilteredEntry {
-                    section: "targets".into(),
-                    entry_name_hash: "63563386".into(),
-                    iteration_index: None,
-                    when_expression_len: 5,
-                },
-                FilteredEntry {
-                    section: "targets".into(),
-                    entry_name_hash: "d743b39a".into(),
-                    iteration_index: Some(0),
-                    when_expression_len: 14,
-                },
-                FilteredEntry {
-                    section: "actions".into(),
-                    entry_name_hash: "b61bdf58".into(),
-                    iteration_index: None,
-                    when_expression_len: 5,
-                },
-                FilteredEntry {
-                    section: "actions".into(),
-                    entry_name_hash: "a4642f66".into(),
-                    iteration_index: Some(0),
-                    when_expression_len: 14,
-                },
-            ],
+        report.filtered_entries == expected_static_and_foreach_filtered_entries(),
         "unexpected retained filtering entries: {report:?}"
     );
     anyhow::ensure!(
