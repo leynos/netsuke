@@ -7,18 +7,16 @@
 //! outside the crate. Nothing here runs: the harness stops at `--emit=metadata`.
 
 use std::io;
-use std::path::Path;
-
 use netsuke::runner::{
     BuildTargets, CommandEnv, NinjaBuildRequest, NinjaProcessOptions, NinjaToolRequest,
-    StderrMode, run_ninja_tool_with, run_ninja_with,
+    StderrMode, Utf8Path, run_ninja_tool_with, run_ninja_with,
 };
 
 /// The pieces an embedder would hold before building requests.
 struct Parts<'a> {
-    program: &'a Path,
+    program: &'a Utf8Path,
     options: &'a NinjaProcessOptions,
-    build_file: &'a Path,
+    build_file: &'a Utf8Path,
     targets: &'a BuildTargets<'a>,
     env: &'a CommandEnv,
 }
@@ -55,9 +53,9 @@ fn main() -> io::Result<()> {
     let options = NinjaProcessOptions::default();
     let targets = BuildTargets::default();
     let parts = Parts {
-        program: Path::new("ninja"),
+        program: Utf8Path::new("ninja"),
         options: &options,
-        build_file: Path::new("build.ninja"),
+        build_file: Utf8Path::new("build.ninja"),
         targets: &targets,
         env: &env,
     };

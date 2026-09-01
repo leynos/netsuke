@@ -6,7 +6,7 @@ use super::command_list_telemetry::COMMAND_LIST_FAILURE_DURATION;
 use super::streaming::ForwardStats;
 use super::*;
 use crate::test_tracing_capture::with_test_subscriber;
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 #[cfg(unix)]
 use metrics_util::{
     MetricKind,
@@ -16,6 +16,7 @@ use metrics_util::{
 use monotony::StdMonotonicClock;
 #[cfg(unix)]
 use monotony::test_util::FixedMonotonicClock;
+#[cfg(unix)]
 use std::path::Path;
 #[cfg(unix)]
 use std::process::Stdio;
@@ -181,6 +182,9 @@ fn run_ninja_with_runs_in_the_requested_working_directory() -> anyhow::Result<()
 
     let working_dir_utf8 = Utf8PathBuf::from_path_buf(working_dir.path().to_path_buf())
         .map_err(|path| anyhow::anyhow!("tempdir path is not UTF-8: {}", path.display()))?;
+    let utf8_fake_ninja = Utf8PathBuf::from_path_buf(fake_ninja)
+        .map_err(|path| anyhow::anyhow!("fake Ninja path is not UTF-8: {}", path.display()))?;
+    let build_file = working_dir_utf8.join("build.ninja");
     let options = NinjaProcessOptions {
         working_dir: Some(working_dir_utf8),
         ..NinjaProcessOptions::default()
@@ -188,9 +192,9 @@ fn run_ninja_with_runs_in_the_requested_working_directory() -> anyhow::Result<()
     let targets = BuildTargets::default();
     let env = CommandEnv::inherit().with_var("RECORD_CWD_TO", &observed_file);
     run_ninja_with(&NinjaBuildRequest {
-        program: &fake_ninja,
+        program: &utf8_fake_ninja,
         options: &options,
-        build_file: working_dir.path().join("build.ninja").as_path(),
+        build_file: &build_file,
         targets: &targets,
         env: &env,
         stderr_mode: StderrMode::Forward,
@@ -219,9 +223,9 @@ fn spawn_failure_logging_honours_explicit_stderr_mode() {
         let targets = BuildTargets::default();
         let events = with_test_subscriber(LevelFilter::WARN, |captured| {
             let result = run_ninja_with(&NinjaBuildRequest {
-                program: Path::new("netsuke-test-missing-ninja"),
+                program: Utf8Path::new("netsuke-test-missing-ninja"),
                 options: &options,
-                build_file: Path::new("build.ninja"),
+                build_file: Utf8Path::new("build.ninja"),
                 targets: &targets,
                 env: &CommandEnv::inherit(),
                 stderr_mode: mode,

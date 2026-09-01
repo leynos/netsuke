@@ -6,6 +6,7 @@
 #![cfg(unix)]
 
 use anyhow::{Context, Result, ensure};
+use camino::{Utf8Path, Utf8PathBuf};
 use netsuke::cli::{BuildArgs, Cli, Commands};
 use netsuke::output_prefs;
 use netsuke::runner::run_with_ninja_program;
@@ -70,8 +71,17 @@ fn run_build_uses_cli_default_targets_when_no_targets_are_requested(
     let fixture = fake_ninja_fixture?;
     let (temp, manifest_path) = create_test_manifest()?;
     let cli = Cli {
-        file: manifest_path,
-        directory: Some(temp.path().to_path_buf()),
+        file: Utf8PathBuf::from_path_buf(manifest_path).map_err(|non_utf8| {
+            anyhow::anyhow!("manifest path is not valid UTF-8: {}", non_utf8.display())
+        })?,
+        directory: Some(
+            Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).map_err(|non_utf8| {
+                anyhow::anyhow!(
+                    "temporary directory is not valid UTF-8: {}",
+                    non_utf8.display()
+                )
+            })?,
+        ),
         default_targets: vec![String::from("hello")],
         command: Some(Commands::Build(BuildArgs {
             targets: Vec::new(),
@@ -79,8 +89,12 @@ fn run_build_uses_cli_default_targets_when_no_targets_are_requested(
         ..Cli::default()
     };
 
-    run_with_ninja_program(&cli, output_prefs::resolve(None), &fixture.ninja_path)
-        .context("run build with cli default targets")?;
+    run_with_ninja_program(
+        &cli,
+        output_prefs::resolve(None),
+        Utf8Path::from_path(&fixture.ninja_path).context("fake ninja path is not valid UTF-8")?,
+    )
+    .context("run build with cli default targets")?;
 
     let logged_args = fs::read_to_string(&fixture.args_log)
         .with_context(|| format!("read fake ninja args log {}", fixture.args_log.display()))?;

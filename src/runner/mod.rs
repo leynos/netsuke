@@ -15,11 +15,9 @@ use crate::output_prefs::OutputPrefs;
 use crate::status::{LocalizationKey, PipelineStage, StatusReporter, report_pipeline_stage};
 use crate::{manifest, ninja_gen};
 use anyhow::{Context, Result};
-use camino::Utf8PathBuf;
+pub use camino::{Utf8Path, Utf8PathBuf};
 pub use error::RunnerError;
-use std::borrow::Cow;
 use std::io::IsTerminal;
-use std::path::Path;
 use tracing::{debug, info};
 
 /// Default Ninja executable to invoke.
@@ -69,11 +67,8 @@ struct ExecutionContext<'a> {
     reporter: &'a dyn StatusReporter,
     /// Whether the command may stream task-progress updates.
     progress_enabled: bool,
-    /// Resolved Ninja executable passed unchanged to [`std::process::Command::new`].
-    ///
-    /// Keep a native [`Path`]: only `NETSUKE_NINJA` resolution performs UTF-8
-    /// conversion, preserving valid non-UTF-8 executable paths.
-    ninja_program: &'a Path,
+    /// Resolved executable path used to invoke Ninja.
+    ninja_program: &'a Utf8Path,
     /// Explicit interpreter for generated legacy recipe text.
     recipe_shell: crate::recipe_shell::RecipeShell,
 }
@@ -118,16 +113,16 @@ pub fn run(cli: &Cli, prefs: OutputPrefs) -> Result<()> {
 /// # Errors
 ///
 /// Returns an error if manifest generation or the selected Ninja process fails.
-pub fn run_with_ninja_program(cli: &Cli, prefs: OutputPrefs, program: &Path) -> Result<()> {
-    run_with_ninja_program_resolver(cli, prefs, Some(program), || program.to_path_buf())
+pub fn run_with_ninja_program(cli: &Cli, prefs: OutputPrefs, program: &Utf8Path) -> Result<()> {
+    run_with_ninja_program_resolver(cli, prefs, Some(program), || program.to_owned())
 }
 
 /// Dispatch a command after resolving Ninja only for commands that require it.
 fn run_with_ninja_program_resolver(
     cli: &Cli,
     prefs: OutputPrefs,
-    configured_program: Option<&Path>,
-    resolve_program: impl FnOnce() -> std::path::PathBuf,
+    configured_program: Option<&Utf8Path>,
+    resolve_program: impl FnOnce() -> Utf8PathBuf,
 ) -> Result<()> {
     let mode = output_mode::resolve(cli.accessibility_override(), Some(cli.color));
     let progress_enabled = cli.progress_enabled() && !cli.json;
@@ -146,13 +141,12 @@ fn run_with_ninja_program_resolver(
     if let Commands::Help(args) = &command {
         return dispatch::execute_help(cli, args, reporter.as_ref());
     }
-    let ninja_program =
-        configured_program.map_or_else(|| Cow::Owned(resolve_program()), Cow::Borrowed);
+    let ninja_program = configured_program.map_or_else(resolve_program, Utf8Path::to_owned);
     let recipe_shell = recipe_shell::resolve_recipe_shell()?;
     let context = ExecutionContext {
         reporter: reporter.as_ref(),
         progress_enabled,
-        ninja_program: ninja_program.as_ref(),
+        ninja_program: &ninja_program,
         recipe_shell,
     };
     dispatch::execute(cli, command, &context)
@@ -198,13 +192,12 @@ fn execute_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) ->
     };
 
     let build_file = process::create_temp_ninja_file(&ninja)?;
-    let build_path: &Path = build_file.as_ref();
+    let build_path = build_file.as_path();
 
     let ctx = || {
         format!(
             "running {} with build file {}",
-            context.ninja_program.display(),
-            build_path.display()
+            context.ninja_program, build_path
         )
     };
     if context.progress_enabled {
@@ -282,14 +275,12 @@ fn execute_ninja_tool(
     let ninja = NinjaContent::new(ninja_file);
 
     let tmp = process::create_temp_ninja_file(&ninja)?;
-    let build_path: &Path = tmp.as_ref();
+    let build_path = tmp.as_path();
 
     let ctx = || {
         format!(
             "running {} -t {} with build file {}",
-            context.ninja_program.display(),
-            tool.name,
-            build_path.display()
+            context.ninja_program, tool.name, build_path
         )
     };
     if context.progress_enabled {

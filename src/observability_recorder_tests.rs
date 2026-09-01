@@ -8,16 +8,18 @@
 use super::*;
 use metrics::{SharedString, Unit};
 use metrics_util::{CompositeKey, MetricKind, debugging::DebugValue};
-use netsuke::runner::{
-    BASH_PREFLIGHT_TOTAL, LEGACY_RECIPE_EXECUTION_DURATION, LEGACY_RECIPE_EXECUTIONS_TOTAL,
-    RECIPE_SHELL_RESOLUTIONS_TOTAL,
+use netsuke::{
+    cli::PATH_VALIDATION_TOTAL,
+    runner::{BASH_PREFLIGHT_TOTAL, RECIPE_SHELL_RESOLUTIONS_TOTAL},
 };
 
 type SnapshotEntry = (CompositeKey, Option<Unit>, Option<SharedString>, DebugValue);
 /// Fixed three-label layout used by recipe-shell counters.
 type MetricLabels = [(&'static str, &'static str); 3];
-/// Fixed four-label layout used by legacy-recipe operation metrics.
-type LegacyMetricLabels = [(&'static str, &'static str); 4];
+
+/// Cover bounded legacy-recipe operation metric registrations separately.
+#[path = "observability_recorder_legacy_recipe_tests.rs"]
+mod legacy_recipe_tests;
 
 /// Define the rejected label variants for recipe-shell resolution metrics.
 const INVALID_RECIPE_SHELL_RESOLUTION_SERIES: [MetricLabels; 3] = [
@@ -164,6 +166,55 @@ fn recorder_retains_bounded_timing_summary_sink_series() {
     assert_unlabelled_duration(&snapshot, TIMING_SUMMARY_SINK_WRITE_DURATION, 0.01);
 }
 
+/// Retain only the fixed source and reason labels for CLI path-validation counters.
+#[test]
+fn recorder_retains_bounded_cli_path_validation_series() {
+    let recorder = ConfigMetricsRecorder::new();
+    let snapshotter = recorder.snapshotter();
+
+    metrics::with_local_recorder(&recorder, || {
+        counter!(PATH_VALIDATION_TOTAL, "source" => "file", "reason" => "non_utf8").increment(1);
+        counter!(PATH_VALIDATION_TOTAL, "source" => "directory", "reason" => "non_utf8")
+            .increment(1);
+        counter!(PATH_VALIDATION_TOTAL, "source" => "unbounded", "reason" => "non_utf8")
+            .increment(1);
+        counter!(PATH_VALIDATION_TOTAL, "source" => "file", "reason" => "unbounded").increment(1);
+        counter!(PATH_VALIDATION_TOTAL, "source" => "file").increment(1);
+    });
+
+    let snapshot = snapshotter.snapshot().into_vec();
+    assert_eq!(
+        snapshot.len(),
+        2,
+        "only the two bounded CLI path-validation series are retained"
+    );
+    for source in ["file", "directory"] {
+        assert_path_validation_counter(&snapshot, source);
+    }
+}
+
+/// Verify one retained CLI path-validation counter with the specified source and the `non_utf8` reason.
+fn assert_path_validation_counter(snapshot: &[SnapshotEntry], source: &str) {
+    assert!(
+        snapshot.iter().any(|entry| {
+            entry.0.kind() == MetricKind::Counter
+                && entry.0.key().name() == PATH_VALIDATION_TOTAL
+                && entry.0.key().labels().count() == 2
+                && entry
+                    .0
+                    .key()
+                    .labels()
+                    .any(|label| label.key() == "source" && label.value() == source)
+                && entry
+                    .0
+                    .key()
+                    .labels()
+                    .any(|label| label.key() == "reason" && label.value() == "non_utf8")
+                && matches!(entry.3, DebugValue::Counter(1))
+        }),
+        "recorder should retain the {source:?} path-validation series: {snapshot:?}"
+    );
+}
 /// Record the two valid counter series emitted for recipe-shell operations.
 fn record_valid_recipe_shell_series() {
     counter!(
@@ -280,111 +331,5 @@ fn assert_timing_summary_counter(snapshot: &[SnapshotEntry], outcome: &str) {
                 && matches!(entry.3, DebugValue::Counter(1))
         }),
         "expected retained timing-summary counter with outcome {outcome}: {snapshot:?}"
-    );
-}
-
-/// Record valid and invalid legacy-recipe operation metric registrations.
-fn record_legacy_recipe_operation_series() {
-    counter!(
-        LEGACY_RECIPE_EXECUTIONS_TOTAL,
-        "operation" => "build",
-        "recipe_shell" => "powershell",
-        "outcome" => "success",
-        "failure_category" => "none"
-    )
-    .increment(1);
-    histogram!(
-        LEGACY_RECIPE_EXECUTION_DURATION,
-        "operation" => "ninja_tool",
-        "recipe_shell" => "bash",
-        "outcome" => "error",
-        "failure_category" => "ninja_io"
-    )
-    .record(0.01);
-    counter!(
-        LEGACY_RECIPE_EXECUTIONS_TOTAL,
-        "operation" => "build",
-        "recipe_shell" => "powershell",
-        "outcome" => "success"
-    )
-    .increment(1);
-    counter!(
-        LEGACY_RECIPE_EXECUTIONS_TOTAL,
-        "operation" => "build",
-        "recipe_shell" => "powershell",
-        "outcome" => "success",
-        "failure_category" => "none",
-        "extra" => "rejected"
-    )
-    .increment(1);
-    histogram!(
-        LEGACY_RECIPE_EXECUTION_DURATION,
-        "operation" => "unbounded",
-        "recipe_shell" => "powershell",
-        "outcome" => "success",
-        "failure_category" => "none"
-    )
-    .record(0.02);
-}
-
-/// Retain only exact bounded legacy-recipe operation metric registrations.
-#[test]
-fn recorder_retains_bounded_legacy_recipe_operation_series() {
-    let recorder = ConfigMetricsRecorder::new();
-    let snapshotter = recorder.snapshotter();
-
-    metrics::with_local_recorder(&recorder, record_legacy_recipe_operation_series);
-
-    let snapshot = snapshotter.snapshot().into_vec();
-    assert_eq!(
-        snapshot.len(),
-        2,
-        "only exact bounded legacy-recipe operation series are retained"
-    );
-    assert_legacy_recipe_metric(
-        &snapshot,
-        MetricKind::Counter,
-        LEGACY_RECIPE_EXECUTIONS_TOTAL,
-        [
-            ("operation", "build"),
-            ("recipe_shell", "powershell"),
-            ("outcome", "success"),
-            ("failure_category", "none"),
-        ],
-    );
-    assert_legacy_recipe_metric(
-        &snapshot,
-        MetricKind::Histogram,
-        LEGACY_RECIPE_EXECUTION_DURATION,
-        [
-            ("operation", "ninja_tool"),
-            ("recipe_shell", "bash"),
-            ("outcome", "error"),
-            ("failure_category", "ninja_io"),
-        ],
-    );
-}
-
-/// Assert that one retained legacy-recipe metric has exactly `labels`.
-fn assert_legacy_recipe_metric(
-    snapshot: &[SnapshotEntry],
-    kind: MetricKind,
-    metric_name: &str,
-    labels: LegacyMetricLabels,
-) {
-    assert!(
-        snapshot.iter().any(|entry| {
-            entry.0.kind() == kind
-                && entry.0.key().name() == metric_name
-                && entry.0.key().labels().count() == labels.len()
-                && labels.iter().all(|(key, value)| {
-                    entry
-                        .0
-                        .key()
-                        .labels()
-                        .any(|label| label.key() == *key && label.value() == *value)
-                })
-        }),
-        "expected retained {metric_name} with bounded labels {labels:?}: {snapshot:?}"
     );
 }

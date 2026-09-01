@@ -4,6 +4,7 @@ use super::{
     BuildTargets, CommandEnv, NinjaBuildRequest, NinjaProcessOptions, StderrMode, run_ninja_with,
 };
 use crate::test_tracing_capture::with_test_subscriber;
+use camino::Utf8PathBuf;
 use std::collections::{BTreeMap, BTreeSet};
 use tracing_subscriber::filter::LevelFilter;
 
@@ -21,14 +22,18 @@ fn capture_public_ninja_execution(level_filter: LevelFilter) -> anyhow::Result<V
     test_support::fs::write(&build_file, "# empty manifest\n")?;
     let fake_ninja =
         write_exec_with_content(workspace.path(), "fake-ninja", "#!/bin/sh\nexit 0\n")?;
+    let utf8_build_file = Utf8PathBuf::from_path_buf(build_file)
+        .map_err(|path| anyhow::anyhow!("build file path is not UTF-8: {}", path.display()))?;
+    let utf8_fake_ninja = Utf8PathBuf::from_path_buf(fake_ninja)
+        .map_err(|path| anyhow::anyhow!("fake Ninja path is not UTF-8: {}", path.display()))?;
     let options = NinjaProcessOptions::default();
     let targets = BuildTargets::default();
     let env = CommandEnv::inherit();
     let (result, events) = with_test_subscriber(level_filter, |captured| {
         let result = run_ninja_with(&NinjaBuildRequest {
-            program: &fake_ninja,
+            program: &utf8_fake_ninja,
             options: &options,
-            build_file: &build_file,
+            build_file: &utf8_build_file,
             targets: &targets,
             env: &env,
             stderr_mode: StderrMode::Forward,

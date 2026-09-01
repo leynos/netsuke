@@ -5,8 +5,7 @@
 //! what an invocation needs; `mod` holds the functions that act on them.
 
 use super::{BuildTargets, CommandEnv, NinjaJobCount, StderrMode};
-use camino::Utf8PathBuf;
-use std::path::Path;
+use camino::{Utf8Path, Utf8PathBuf};
 
 /// Process settings needed to configure a Ninja invocation.
 #[derive(Debug, Clone, Default)]
@@ -21,11 +20,11 @@ pub struct NinjaProcessOptions {
 #[derive(Clone, Copy)]
 pub struct NinjaBuildRequest<'a> {
     /// Ninja executable to invoke.
-    pub program: &'a Path,
+    pub program: &'a Utf8Path,
     /// Process settings supplying the working directory and job count.
     pub options: &'a NinjaProcessOptions,
     /// Generated build file passed with `-f`.
-    pub build_file: &'a Path,
+    pub build_file: &'a Utf8Path,
     /// Targets appended after the base flags.
     pub targets: &'a BuildTargets<'a>,
     /// Environment overrides applied to the child process. Use
@@ -40,11 +39,11 @@ pub struct NinjaBuildRequest<'a> {
 #[derive(Clone, Copy)]
 pub struct NinjaToolRequest<'a> {
     /// Ninja executable to invoke.
-    pub program: &'a Path,
+    pub program: &'a Utf8Path,
     /// Process settings supplying the working directory and job count.
     pub options: &'a NinjaProcessOptions,
     /// Generated build file passed with `-f`.
-    pub build_file: &'a Path,
+    pub build_file: &'a Utf8Path,
     /// Tool name passed to `ninja -t`.
     pub tool: &'a str,
     /// Environment overrides applied to the child process.

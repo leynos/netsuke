@@ -212,6 +212,12 @@ If Netsuke cannot find `Netsukefile`, it reports the missing file and suggests
 `--file`. A different path can be selected with
 `netsuke --file path/to/manifest.yml build`.
 
+Manifest and `--directory` paths must be valid UTF-8. Netsuke rejects an
+invalid path while parsing the command line and identifies the affected option.
+A manifest path supplied by a configuration file must decode as UTF-8, while a
+`NETSUKE_FILE` value is checked while the environment layer extracts it. Both
+fail before manifest discovery or runner setup begins.
+
 The [quick-start guide](quickstart.md) provides a longer walkthrough.
 
 ## Understand the build model
@@ -813,7 +819,9 @@ build and `netsuke::runner::NinjaToolRequest` for `ninja -t <tool>`. Both
 borrow their fields, so one `CommandEnv` and one `NinjaProcessOptions` can
 serve several invocations. The
 [v0.1.0 migration guide](v0-1-0-migration-guide.md) summarizes these additions
-and confirms the wrappers are unchanged.
+and explains the path-type change. The `program` and `build_file` fields are
+borrowed `&Utf8Path`; `NinjaProcessOptions::working_dir` is an
+`Option<Utf8PathBuf>`.
 
 <!-- tested-example: guide-ninja-request-snippet -->
 
@@ -822,7 +830,7 @@ use netsuke::runner::{
     BuildTargets, CommandEnv, NinjaBuildRequest, NinjaProcessOptions, NinjaToolRequest,
     StderrMode, run_ninja_tool_with, run_ninja_with,
 };
-use std::path::Path;
+use camino::Utf8Path;
 
 let options = NinjaProcessOptions::default();
 let targets = BuildTargets::default();
@@ -835,9 +843,9 @@ let env = CommandEnv::inherit()
     .with_path(&path);
 
 let build = NinjaBuildRequest {
-    program: Path::new("/usr/bin/ninja"),
+    program: Utf8Path::new("/usr/bin/ninja"),
     options: &options,
-    build_file: Path::new("build.ninja"),
+    build_file: Utf8Path::new("build.ninja"),
     targets: &targets,
     env: &env,
     // `Suppress` in JSON diagnostics mode keeps the child's output out of
@@ -845,9 +853,9 @@ let build = NinjaBuildRequest {
     stderr_mode: StderrMode::Forward,
 };
 let clean = NinjaToolRequest {
-    program: Path::new("/usr/bin/ninja"),
+    program: Utf8Path::new("/usr/bin/ninja"),
     options: &options,
-    build_file: Path::new("build.ninja"),
+    build_file: Utf8Path::new("build.ninja"),
     tool: "clean",
     env: &env,
     stderr_mode: StderrMode::Forward,
@@ -859,10 +867,11 @@ if std::env::var_os("NETSUKE_GUIDE_RUN").is_some() {
 }
 ```
 
-The convenience wrappers `run_ninja` and `run_ninja_tool` keep their existing
-signatures and behaviour, so a caller that uses them needs no change; the
-request bundles use `options: &options` instead of `cli: &cli` and gained the
-required `stderr_mode` field, so a caller that constructs `NinjaBuildRequest`/
+The convenience wrappers `run_ninja` and `run_ninja_tool` keep their child
+environment behaviour, but their `program` and `build_file` parameters now use
+`&Utf8Path`; `run_with_ninja_program` accepts the same path type. The request
+bundles use `options: &options` instead of `cli: &cli` and gained the required
+`stderr_mode` field, so a caller that constructs `NinjaBuildRequest`/
 `NinjaToolRequest` directly must supply both. Each release records such
 additions in [`CHANGELOG.md`](../CHANGELOG.md), which is where Netsuke
 signposts Rust API changes — with no stability promise attached to them ahead
@@ -1236,6 +1245,10 @@ It includes the bounded configuration-load series:
 - `netsuke_cli_config_discovery_total`, with `outcome=success` or
   `outcome=error`, and `netsuke_cli_config_discovery_duration_seconds`, which
   records the cached discovery pass duration.
+- `netsuke_cli_path_validation_total`, with bounded `source=file` or
+  `source=directory` and `reason=non_utf8`, counts raw CLI path rejections.
+  When parsing exits early for one of these rejections, the counter is not
+  present in a shutdown `metrics snapshot`.
 
 For example, a missing explicit file reports the actionable error first, then
 the bounded tracing fields and the snapshot (timestamps and metric values vary):

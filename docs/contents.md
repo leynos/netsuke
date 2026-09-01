@@ -108,6 +108,9 @@ operator, user, and contributor references are easier to find.
   adr-016-public-cli-metadata-source-of-truth.md): Release-help metadata
   composition boundary for configuration fields, parser-only selectors, and
   subcommands.
+- [ADR-017](adr-017-require-utf8-ninja-invocation-paths.md):
+  UTF-8 Ninja invocation-path boundary decision record, with early diagnostics
+  for unsupported build-file and working-directory encodings.
 
 ## Proposals
 

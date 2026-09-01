@@ -10,6 +10,7 @@
 #![cfg(unix)]
 
 use anyhow::{Context, Result, bail, ensure};
+use camino::{Utf8Path, Utf8PathBuf};
 use netsuke::cli::{Cli, Commands};
 use netsuke::localization::{self, keys};
 use netsuke::output_prefs;
@@ -35,6 +36,12 @@ fn ninja_with_exit_code(#[default(0u8)] exit_code: u8) -> Result<(tempfile::Temp
     fixtures::ninja_with_exit_code(exit_code)
 }
 
+/// Convert a temporary test path into the UTF-8 runner boundary type.
+fn utf8_path(path: &std::path::Path) -> Result<Utf8PathBuf> {
+    Utf8PathBuf::from_path_buf(path.to_path_buf())
+        .map_err(|non_utf8| anyhow::anyhow!("test path is not valid UTF-8: {}", non_utf8.display()))
+}
+
 /// Helper: test that a command fails when ninja exits with non-zero status.
 fn assert_ninja_failure_propagates(command: Commands) -> Result<()> {
     let _lock = localizer_test_lock()
@@ -48,13 +55,17 @@ fn assert_ninja_failure_propagates(command: Commands) -> Result<()> {
         other => bail!("unsupported command for this helper: {other:?}"),
     };
     let cli = Cli {
-        file: manifest_path.clone(),
-        directory: Some(temp.path().to_path_buf()),
+        file: utf8_path(&manifest_path)?,
+        directory: Some(utf8_path(temp.path())?),
         command: Some(command),
         ..Cli::default()
     };
 
-    let Err(err) = run_with_ninja_program(&cli, output_prefs::resolve(None), &ninja_path) else {
+    let Err(err) = run_with_ninja_program(
+        &cli,
+        output_prefs::resolve(None),
+        Utf8Path::from_path(&ninja_path).context("fake ninja path is not valid UTF-8")?,
+    ) else {
         bail!("expected run to fail when ninja exits non-zero");
     };
     let messages: Vec<String> = err
@@ -88,14 +99,18 @@ fn assert_subcommand_succeeds_without_persisting_file(
     let (_ninja_dir, ninja_path) = fixture?;
     let (temp, manifest_path) = create_test_manifest()?;
     let cli = Cli {
-        file: manifest_path.clone(),
-        directory: Some(temp.path().to_path_buf()),
+        file: utf8_path(&manifest_path)?,
+        directory: Some(utf8_path(temp.path())?),
         command: Some(command),
         ..Cli::default()
     };
 
-    run_with_ninja_program(&cli, output_prefs::resolve(None), &ninja_path)
-        .with_context(|| format!("expected {name} subcommand to succeed"))?;
+    run_with_ninja_program(
+        &cli,
+        output_prefs::resolve(None),
+        Utf8Path::from_path(&ninja_path).context("fake ninja path is not valid UTF-8")?,
+    )
+    .with_context(|| format!("expected {name} subcommand to succeed"))?;
 
     ensure!(
         !temp.path().join("build.ninja").exists(),
@@ -117,7 +132,7 @@ fn assert_subcommand_fails_with_invalid_manifest(
     std::fs::copy("tests/data/invalid_version.yml", &manifest_path)
         .with_context(|| format!("copy invalid manifest to {}", manifest_path.display()))?;
     let cli = Cli {
-        file: manifest_path.clone(),
+        file: utf8_path(&manifest_path)?,
         command: Some(command),
         ..Cli::default()
     };

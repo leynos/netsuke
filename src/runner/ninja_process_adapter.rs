@@ -7,34 +7,17 @@
 
 use super::{BuildTargets, CommandEnv, StderrMode, process};
 use crate::cli::Cli;
-use camino::Utf8PathBuf;
-use std::{
-    io::{self, ErrorKind},
-    path::Path,
-};
+use camino::Utf8Path;
+use std::io;
 
 /// Translate CLI state into the narrow options consumed by the process layer.
 ///
 /// # Errors
 ///
-/// Returns [`io::ErrorKind::InvalidData`] when the CLI working directory is
-/// not valid UTF-8, or [`io::ErrorKind::InvalidInput`] when the job count lies
-/// outside the supported `1..=64` range.
+/// Returns [`io::ErrorKind::InvalidInput`] when the job count lies outside the
+/// supported `1..=64` range.
 pub(super) fn ninja_process_options(cli: &Cli) -> io::Result<process::NinjaProcessOptions> {
-    let working_dir = cli
-        .directory
-        .clone()
-        .map(Utf8PathBuf::from_path_buf)
-        .transpose()
-        .map_err(|path| {
-            io::Error::new(
-                ErrorKind::InvalidData,
-                format!(
-                    "Ninja working directory {} is not valid UTF-8",
-                    path.display()
-                ),
-            )
-        })?;
+    let working_dir = cli.directory.clone();
     let jobs = cli.jobs.map(process::NinjaJobCount::try_new).transpose()?;
     Ok(process::NinjaProcessOptions { working_dir, jobs })
 }
@@ -48,9 +31,9 @@ pub(super) fn ninja_process_options(cli: &Cli) -> io::Result<process::NinjaProce
 ///
 /// Returns an [`std::io::Error`] if Ninja cannot execute successfully.
 pub fn run_ninja(
-    program: &Path,
+    program: &Utf8Path,
     cli: &Cli,
-    build_file: &Path,
+    build_file: &Utf8Path,
     targets: &BuildTargets<'_>,
 ) -> std::io::Result<()> {
     let options = ninja_process_options(cli)?;
@@ -73,9 +56,9 @@ pub fn run_ninja(
 ///
 /// Returns an [`std::io::Error`] if Ninja cannot execute successfully.
 pub fn run_ninja_tool(
-    program: &Path,
+    program: &Utf8Path,
     cli: &Cli,
-    build_file: &Path,
+    build_file: &Utf8Path,
     tool: &str,
 ) -> std::io::Result<()> {
     let options = ninja_process_options(cli)?;
@@ -95,30 +78,7 @@ mod tests {
 
     use super::*;
     use anyhow::{Result, ensure};
-
-    #[cfg(unix)]
-    use std::os::unix::ffi::OsStringExt;
-
-    #[cfg(unix)]
-    #[test]
-    fn ninja_process_options_rejects_non_utf8_working_directory() -> Result<()> {
-        let cli = Cli {
-            directory: Some(std::path::PathBuf::from(std::ffi::OsString::from_vec(
-                vec![0xff],
-            ))),
-            ..Cli::default()
-        };
-
-        let Err(error) = ninja_process_options(&cli) else {
-            anyhow::bail!("non-UTF-8 working directory should be rejected");
-        };
-        ensure!(
-            error.kind() == ErrorKind::InvalidData,
-            "invalid working directory returned {:?}, not InvalidData",
-            error.kind()
-        );
-        Ok(())
-    }
+    use std::io::ErrorKind;
 
     #[test]
     fn ninja_process_options_rejects_out_of_range_job_counts() -> Result<()> {

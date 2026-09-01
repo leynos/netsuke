@@ -61,12 +61,8 @@ fn prepare_cli_with_directory(world: &TestWorld) -> Result<()> {
     // Extract current manifest path from CLI
     let cli_manifest_path = world
         .cli
-        .with_ref(|cli| {
-            Utf8Path::from_path(&cli.file)
-                .map(camino::Utf8PathBuf::from)
-                .ok_or_else(|| anyhow!("CLI manifest path is not valid UTF-8"))
-        })
-        .ok_or_else(|| anyhow!("CLI configuration has not been initialised"))??;
+        .with_ref(|cli| cli.file.clone())
+        .ok_or_else(|| anyhow!("CLI configuration has not been initialised"))?;
 
     // Resolve manifest in temp workspace
     let resolved_manifest = ensure_manifest_exists(&temp_path, &cli_manifest_path)
@@ -75,7 +71,7 @@ fn prepare_cli_with_directory(world: &TestWorld) -> Result<()> {
     // Update CLI with resolved path
     world
         .cli
-        .with_mut(|cli| cli.file = resolved_manifest.into_std_path_buf())
+        .with_mut(|cli| cli.file = resolved_manifest)
         .ok_or_else(|| anyhow!("CLI configuration has not been initialised"))?;
 
     Ok(())
@@ -230,10 +226,16 @@ fn cli_uses_temp_dir(world: &TestWorld) -> Result<()> {
             .path()
             .to_path_buf()
     };
+    let utf8_temp_path = Utf8PathBuf::from_path_buf(temp_path).map_err(|non_utf8| {
+        anyhow!(
+            "temporary directory is not valid UTF-8: {}",
+            non_utf8.display()
+        )
+    })?;
     world
         .cli
         .with_mut(|cli| {
-            cli.directory = Some(temp_path);
+            cli.directory = Some(utf8_temp_path);
         })
         .context("CLI configuration has not been initialised")?;
     Ok(())
@@ -261,38 +263,25 @@ fn build_dir_exists(world: &TestWorld) -> Result<()> {
 fn run(world: &TestWorld) -> Result<()> {
     prepare_cli_with_directory(world)?;
     let ninja_path = world.ninja_content.get();
-    let program_path: PathBuf;
+    let program_path: Utf8PathBuf;
     let program = if let Some(ref ninja) = ninja_path {
-        program_path = PathBuf::from(ninja.as_str());
+        program_path = Utf8PathBuf::from(ninja.as_str());
         program_path.as_path()
     } else {
-        Path::new(NINJA_PROGRAM)
+        Utf8Path::new(NINJA_PROGRAM)
     };
     let targets = BuildTargets::default();
     let result = world
         .cli
         .with_ref(|cli| {
-            let working_dir = cli
-                .directory
-                .clone()
-                .map(Utf8PathBuf::from_path_buf)
-                .transpose()
-                .map_err(|path| {
-                    std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        format!(
-                            "CLI working directory {} is not valid UTF-8",
-                            path.display()
-                        ),
-                    )
-                })?;
+            let working_dir = cli.directory.clone();
             runner::run_ninja_with(&runner::NinjaBuildRequest {
                 program,
                 options: &runner::NinjaProcessOptions {
                     working_dir,
                     jobs: cli.jobs.map(runner::NinjaJobCount::try_new).transpose()?,
                 },
-                build_file: Path::new("build.ninja"),
+                build_file: Utf8Path::new("build.ninja"),
                 targets: &targets,
                 env: &world.command_env.borrow(),
                 stderr_mode: runner::StderrMode::from_json_enabled(cli.json),
@@ -307,8 +296,8 @@ fn run(world: &TestWorld) -> Result<()> {
 #[cfg(unix)]
 fn run_subcommand(world: &TestWorld) -> Result<()> {
     let program = world.ninja_content.get().map_or_else(
-        || PathBuf::from(NINJA_PROGRAM),
-        |path| PathBuf::from(path.as_str()),
+        || Utf8PathBuf::from(NINJA_PROGRAM),
+        |path| Utf8PathBuf::from(path.as_str()),
     );
     let result = world
         .cli

@@ -6,6 +6,7 @@
 //! the shared file/stdout sinks.
 
 use anyhow::{Context, Result, bail, ensure};
+use camino::Utf8PathBuf;
 use netsuke::cli::{Cli, Commands, GraphArgs};
 use netsuke::output_prefs;
 use netsuke::runner::run;
@@ -16,6 +17,12 @@ use test_support::{localizer_test_lock, set_en_localizer};
 
 mod fixtures;
 use fixtures::create_test_manifest;
+
+/// Convert a test filesystem path into the UTF-8 CLI boundary type.
+fn utf8_path(path: &std::path::Path) -> Result<Utf8PathBuf> {
+    Utf8PathBuf::from_path_buf(path.to_path_buf())
+        .map_err(|non_utf8| anyhow::anyhow!("test path is not valid UTF-8: {}", non_utf8.display()))
+}
 
 fn run_graph(cli: &Cli) -> Result<()> {
     let _lock = localizer_test_lock()
@@ -30,8 +37,8 @@ fn graph_with_output_writes_dot_file() -> Result<()> {
     let (temp, manifest_path) = create_test_manifest()?;
     let dot_path = temp.path().join("graph.dot");
     let cli = Cli {
-        file: manifest_path,
-        directory: Some(temp.path().to_path_buf()),
+        file: utf8_path(&manifest_path)?,
+        directory: Some(utf8_path(temp.path())?),
         command: Some(Commands::Graph(GraphArgs {
             html: false,
             output: Some("graph.dot".into()),
@@ -108,7 +115,7 @@ fn graph_with_invalid_manifest_reports_error() -> Result<()> {
     std::fs::copy("tests/data/invalid_version.yml", &manifest_path)
         .with_context(|| format!("copy invalid manifest to {}", manifest_path.display()))?;
     let cli = Cli {
-        file: manifest_path,
+        file: utf8_path(&manifest_path)?,
         command: Some(Commands::Graph(GraphArgs::default())),
         ..Cli::default()
     };
@@ -123,8 +130,8 @@ fn graph_html_writes_self_contained_document() -> Result<()> {
     let (temp, manifest_path) = create_test_manifest()?;
     let html_path = temp.path().join("graph.html");
     let cli = Cli {
-        file: manifest_path,
-        directory: Some(temp.path().to_path_buf()),
+        file: utf8_path(&manifest_path)?,
+        directory: Some(utf8_path(temp.path())?),
         command: Some(Commands::Graph(GraphArgs {
             html: true,
             output: Some("graph.html".into()),
@@ -187,8 +194,8 @@ fn graph_is_deterministic_across_repeated_runs() -> Result<()> {
     for tag in ["first", "second"] {
         let dot_path = temp.path().join(format!("graph-{tag}.dot"));
         let cli = Cli {
-            file: manifest_path.clone(),
-            directory: Some(temp.path().to_path_buf()),
+            file: utf8_path(&manifest_path)?,
+            directory: Some(utf8_path(temp.path())?),
             command: Some(Commands::Graph(GraphArgs {
                 html: false,
                 output: Some(format!("graph-{tag}.dot").into()),

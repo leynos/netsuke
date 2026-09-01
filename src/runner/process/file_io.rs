@@ -12,6 +12,26 @@ use std::path::Path;
 use tempfile::{Builder, NamedTempFile, TempPath};
 use tracing::info;
 
+/// Own a temporary Ninja file and expose its UTF-8 path to the runner.
+///
+/// Retain [`TempPath`] solely for automatic cleanup. Every runner caller uses
+/// [`Self::as_path`], which maintains the Ninja invocation chain's UTF-8 path
+/// invariant after the platform temp-file adapter creates the file.
+pub struct TempNinjaFile {
+    /// Temporary-file lease that deletes the file when dropped.
+    _lease: TempPath,
+    /// UTF-8 path passed to Ninja.
+    path: Utf8PathBuf,
+}
+
+impl TempNinjaFile {
+    /// Return the temporary Ninja file path as a UTF-8 path.
+    #[must_use]
+    pub fn as_path(&self) -> &Utf8Path {
+        &self.path
+    }
+}
+
 /// Return `true` when `path` is the CLI sentinel indicating "write to stdout".
 #[must_use]
 pub fn is_stdout_path(path: &Path) -> bool {
@@ -20,10 +40,15 @@ pub fn is_stdout_path(path: &Path) -> bool {
 
 /// Materialize `content` as a temporary Ninja file with no open writer handle.
 ///
-/// Returning [`TempPath`] retains automatic cleanup while releasing the writer
-/// before Ninja reopens the file by path. Windows otherwise rejects Ninja's
-/// read while the original `NamedTempFile` handle remains open.
-pub fn create_temp_ninja_file(content: &NinjaContent) -> AnyResult<TempPath> {
+/// Returning [`TempNinjaFile`] retains automatic cleanup while releasing the
+/// writer before Ninja reopens the file by path. Windows otherwise rejects
+/// Ninja's read while the original `NamedTempFile` handle remains open.
+///
+/// # Errors
+///
+/// Returns an error when the temporary path is not valid UTF-8 or when file
+/// creation, writing, flushing, or synchronization fails.
+pub fn create_temp_ninja_file(content: &NinjaContent) -> AnyResult<TempNinjaFile> {
     let mut tmp = Builder::new()
         .prefix("netsuke.")
         .suffix(".ninja")
@@ -34,9 +59,19 @@ pub fn create_temp_ninja_file(content: &NinjaContent) -> AnyResult<TempPath> {
     tmp.flush()
         .context(localization::message(keys::RUNNER_IO_FLUSH_TEMP_NINJA))?;
     sync_temp_ninja_file(&tmp).context(localization::message(keys::RUNNER_IO_SYNC_TEMP_NINJA))?;
-    let path = tmp.into_temp_path();
-    info!("Wrote temporary Ninja file to {}", path.display());
-    Ok(path)
+    let lease = tmp.into_temp_path();
+    let path = Utf8PathBuf::from_path_buf(lease.to_path_buf()).map_err(|path| {
+        anyhow!(
+            localization::message(keys::RUNNER_IO_NON_UTF8_PATH)
+                .with_arg("path", path.display().to_string())
+                .to_string()
+        )
+    })?;
+    info!("Wrote temporary Ninja file to {path}");
+    Ok(TempNinjaFile {
+        _lease: lease,
+        path,
+    })
 }
 
 mod ambient_sync {
@@ -219,41 +254,50 @@ mod tests {
     #[test]
     fn create_temp_ninja_file_releases_writer_before_external_read() -> Result<()> {
         let content = NinjaContent::new(String::from("rule cc"));
-        let file = create_temp_ninja_file(&content)?;
-        let path: &Path = file.as_ref();
+        let captured_path = {
+            let file = create_temp_ninja_file(&content)?;
+            let path = file.as_path().as_std_path().to_path_buf();
 
-        // Ninja reads the file by path, so no writer handle may remain open.
-        let parent = path.parent().context("find temporary file parent")?;
-        let name = path.file_name().context("find temporary file name")?;
-        let directory = cap_fs::Dir::open_ambient_dir(parent, ambient_authority())
-            .context("open temporary file parent")?;
-        drop(
-            directory
-                .open(name)
-                .context("open temporary Ninja file through an external handle")?,
-        );
-        let written = test_fs::read_to_string(path).context("read temp file")?;
-        ensure!(
-            written == content.as_str(),
-            "reopened file contents '{written}' did not match '{expected}'",
-            expected = content.as_str()
-        );
+            // Ninja reads the file by path, so no writer handle may remain open.
+            let parent = path.parent().context("find temporary file parent")?;
+            let name = path.file_name().context("find temporary file name")?;
+            let directory = cap_fs::Dir::open_ambient_dir(parent, ambient_authority())
+                .context("open temporary file parent")?;
+            drop(
+                directory
+                    .open(name)
+                    .context("open temporary Ninja file through an external handle")?,
+            );
+            let written = test_fs::read_to_string(&path).context("read temp file")?;
+            ensure!(
+                written == content.as_str(),
+                "reopened file contents '{written}' did not match '{expected}'",
+                expected = content.as_str()
+            );
 
-        let observed_len = test_fs::file_len(path).context("query temp file metadata")?;
+            let observed_len = test_fs::file_len(&path).context("query temp file metadata")?;
+            ensure!(
+                observed_len == content.as_str().len() as u64,
+                "expected size {} but observed {}",
+                content.as_str().len(),
+                observed_len
+            );
+            let temp_display = path.display().to_string();
+            let has_ninja_ext = path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("ninja"));
+            ensure!(
+                has_ninja_ext,
+                "temporary path should end with .ninja: {temp_display}"
+            );
+            path
+        };
+
         ensure!(
-            observed_len == content.as_str().len() as u64,
-            "expected size {} but observed {}",
-            content.as_str().len(),
-            observed_len
-        );
-        let temp_display = path.display().to_string();
-        let has_ninja_ext = path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("ninja"));
-        ensure!(
-            has_ninja_ext,
-            "temporary path should end with .ninja: {temp_display}"
+            !captured_path.exists(),
+            "temporary Ninja file should be removed after its wrapper drops: {}",
+            captured_path.display()
         );
 
         Ok(())

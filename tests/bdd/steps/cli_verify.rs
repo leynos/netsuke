@@ -111,7 +111,7 @@ pub(super) fn verify_manifest_path(world: &TestWorld, path: &PathString) -> Resu
         actual.as_path() == path.as_path(),
         "expected manifest path {}, got {}",
         path,
-        actual.display()
+        actual.as_str()
     );
     Ok(())
 }
@@ -137,12 +137,24 @@ fn ensure_optional_path(actual: Option<PathBuf>, expected: &PathString, label: &
     Ok(())
 }
 
+/// Assert that an optional UTF-8 path equals the expected generic path.
+fn ensure_optional_utf8_path(
+    actual: Option<&camino::Utf8PathBuf>,
+    expected: &PathString,
+    label: &str,
+) -> Result<()> {
+    ensure!(
+        actual.map(|path| path.as_std_path()) == Some(expected.as_path()),
+        "expected {label} {expected}, got {actual:?}",
+    );
+    Ok(())
+}
 pub(super) fn verify_working_directory(world: &TestWorld, directory: &PathString) -> Result<()> {
     let actual = world
         .cli
         .with_ref(|cli| cli.directory.clone())
         .context("CLI has not been parsed")?;
-    ensure_optional_path(actual, directory, "working directory")
+    ensure_optional_utf8_path(actual.as_ref(), directory, "working directory")
 }
 
 pub(super) fn verify_cli_policy_allows(world: &TestWorld, url: &UrlString) -> Result<()> {

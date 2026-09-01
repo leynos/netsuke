@@ -1,10 +1,10 @@
 //! Application-owned recorder for bounded configuration and runner metrics.
 //!
-//! The recorder accepts configuration-load, recipe-shell resolution, Bash
-//! preflight, and complete legacy-recipe runner series. The `observability`
-//! composition module installs it at the process boundary; fixed metric names
-//! and label vocabularies prevent manifest- or process-controlled data from
-//! entering the retained snapshot.
+//! The recorder accepts configuration-load, CLI path-validation, recipe-shell
+//! resolution, Bash preflight, and complete legacy-recipe runner series. The
+//! `observability` composition module installs it at the process boundary;
+//! fixed metric names and label vocabularies prevent manifest- or
+//! process-controlled data from entering the retained snapshot.
 
 use super::{
     CONFIG_LOAD_COUNTER, CONFIG_LOAD_DURATION, DIAG_MODE_PHASE, MERGE_PHASE,
@@ -15,7 +15,10 @@ use metrics_util::MetricKind;
 use metrics_util::debugging::{DebuggingRecorder, Snapshotter};
 
 use netsuke::{
-    cli::{DISCOVERY_DURATION, DISCOVERY_OUTCOME_VALUES, DISCOVERY_TOTAL},
+    cli::{
+        DISCOVERY_DURATION, DISCOVERY_OUTCOME_VALUES, DISCOVERY_TOTAL,
+        PATH_VALIDATION_REASON_VALUES, PATH_VALIDATION_SOURCE_VALUES, PATH_VALIDATION_TOTAL,
+    },
     runner::{
         BASH_PREFLIGHT_TOTAL, LEGACY_RECIPE_EXECUTION_DURATION, LEGACY_RECIPE_EXECUTIONS_TOTAL,
         RECIPE_SHELL_RESOLUTIONS_TOTAL,
@@ -97,6 +100,7 @@ impl ConfigMetricsRecorder {
                 | STARTUP_CONFIG_LOAD_DURATION
                 | DISCOVERY_TOTAL
                 | DISCOVERY_DURATION
+                | PATH_VALIDATION_TOTAL
                 | TIMING_SUMMARY_SINK_WRITES_TOTAL
                 | TIMING_SUMMARY_SINK_WRITE_DURATION
                 | RECIPE_SHELL_RESOLUTIONS_TOTAL
@@ -118,6 +122,13 @@ impl ConfigMetricsRecorder {
             ),
             STARTUP_CONFIG_LOAD_COUNTER => exact_labels(key, &[(OUTCOME_LABEL, &OUTCOME_VALUES)]),
             DISCOVERY_TOTAL => exact_labels(key, &[(OUTCOME_LABEL, &DISCOVERY_OUTCOME_VALUES)]),
+            PATH_VALIDATION_TOTAL => exact_labels(
+                key,
+                &[
+                    ("source", &PATH_VALIDATION_SOURCE_VALUES),
+                    ("reason", &PATH_VALIDATION_REASON_VALUES),
+                ],
+            ),
             TIMING_SUMMARY_SINK_WRITES_TOTAL => {
                 exact_labels(key, &[(OUTCOME_LABEL, &TIMING_SUMMARY_SINK_WRITE_OUTCOMES)])
             }

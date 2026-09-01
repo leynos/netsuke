@@ -17,7 +17,14 @@ use std::{
 };
 
 /// The external crates required by the real build-script CLI slice.
-const REQUIRED_EXTERNS: &[&str] = &["clap", "ortho_config", "serde", "thiserror", "tracing"];
+const REQUIRED_EXTERNS: &[&str] = &[
+    "camino",
+    "clap",
+    "ortho_config",
+    "serde",
+    "thiserror",
+    "tracing",
+];
 
 /// The exact module declarations that the fixture mirrors from `build.rs`.
 const BUILD_SLICE_MODULES: &[(&str, &str)] = &[

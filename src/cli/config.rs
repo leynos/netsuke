@@ -3,10 +3,10 @@
 //! [`CliConfig`] is the single typed schema used for configuration discovery
 //! and merging. It captures global CLI settings plus per-subcommand defaults
 //! under the `cmds` namespace.
+use camino::Utf8PathBuf;
 use ortho_config::{OrthoConfig, OrthoResult, PostMergeContext, PostMergeHook};
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::path::PathBuf;
 use std::str::FromStr;
 
 use super::validation::validation_error;
@@ -183,7 +183,7 @@ pub struct CommandConfigs {
 pub struct CliConfig {
     /// Path to the Netsuke manifest file to use.
     #[ortho_config(default = default_manifest_path())]
-    pub file: PathBuf,
+    pub file: Utf8PathBuf,
 
     /// Set the number of parallel build jobs.
     pub jobs: Option<usize>,
@@ -274,7 +274,7 @@ impl Default for CliConfig {
 
 impl CliConfig {
     /// Return the default manifest file path used when no file is supplied.
-    pub(super) fn default_manifest_path() -> PathBuf {
+    pub(super) fn default_manifest_path() -> Utf8PathBuf {
         default_manifest_path()
     }
 }
@@ -292,6 +292,7 @@ const fn jobs_out_of_bounds(jobs: usize) -> bool {
 
 impl PostMergeHook for CliConfig {
     fn post_merge(&mut self, _ctx: &PostMergeContext) -> OrthoResult<()> {
+        validate_manifest_path(self)?;
         validate_non_interactive(self)?;
         validate_jobs(self)?;
         Ok(())
@@ -299,8 +300,26 @@ impl PostMergeHook for CliConfig {
 }
 
 /// Return the default manifest file path, `Netsukefile` in the working directory.
-fn default_manifest_path() -> PathBuf {
-    PathBuf::from("Netsukefile")
+fn default_manifest_path() -> Utf8PathBuf {
+    Utf8PathBuf::from("Netsukefile")
+}
+
+/// Verify that the merged manifest path remains valid UTF-8.
+///
+/// The `Utf8PathBuf` field makes this invariant structural for file and
+/// environment layers. The final validation keeps the post-merge seam
+/// explicit, so any future untyped source is rejected at configuration
+/// composition rather than later during runner setup.
+///
+/// # Errors
+///
+/// Returns a validation error when the merged manifest path is not UTF-8.
+fn validate_manifest_path(config: &CliConfig) -> OrthoResult<()> {
+    if config.file.as_std_path().to_str().is_some() {
+        Ok(())
+    } else {
+        Err(validation_error("file", "manifest path is not valid UTF-8"))
+    }
 }
 
 /// Validate that non-interactive mode stays enabled after merging.

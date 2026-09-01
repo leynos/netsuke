@@ -66,6 +66,12 @@ pub const DISCOVERY_TOTAL: &str = "netsuke_cli_config_discovery_total";
 pub const DISCOVERY_DURATION: &str = "netsuke_cli_config_discovery_duration_seconds";
 /// Bounded outcome values admitted on the discovery counter series.
 pub const DISCOVERY_OUTCOME_VALUES: [&str; 2] = ["success", "error"];
+/// Counter recording rejected UTF-8-only CLI path values by source and reason.
+pub const PATH_VALIDATION_TOTAL: &str = "netsuke_cli_path_validation_total";
+/// Bounded source values admitted on the CLI path-validation counter series.
+pub const PATH_VALIDATION_SOURCE_VALUES: [&str; 2] = ["file", "directory"];
+/// Bounded rejection reasons admitted on the CLI path-validation counter series.
+pub const PATH_VALIDATION_REASON_VALUES: [&str; 1] = ["non_utf8"];
 #[cfg(test)]
 #[path = "merge_logging_proptests.rs"]
 mod merge_logging_proptests;

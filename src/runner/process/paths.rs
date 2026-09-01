@@ -13,28 +13,21 @@ use std::path::{Path, PathBuf};
 ///
 /// # Errors
 ///
-/// Returns an error when `path` is not valid UTF-8 or canonicalization fails.
-pub fn canonicalize_utf8_path(path: &Path) -> io::Result<Utf8PathBuf> {
-    let utf8 = Utf8Path::from_path(path).ok_or_else(|| {
-        io::Error::new(
-            ErrorKind::InvalidData,
-            format!("path {} is not valid UTF-8", path.display()),
-        )
-    })?;
-
-    if utf8.as_str().is_empty() || utf8 == Utf8Path::new(".") {
+/// Returns an error when canonicalization fails.
+pub fn canonicalize_utf8_path(path: &Utf8Path) -> io::Result<Utf8PathBuf> {
+    if path.as_str().is_empty() || path == Utf8Path::new(".") {
         return canonicalize_current_dir();
     }
 
-    if utf8.parent().is_none() && utf8.file_name().is_none() {
-        return Ok(canonicalize_root_path(utf8));
+    if path.parent().is_none() && path.file_name().is_none() {
+        return Ok(canonicalize_root_path(path));
     }
 
-    if utf8.is_relative() {
-        return canonicalize_relative_path(utf8);
+    if path.is_relative() {
+        return canonicalize_relative_path(path);
     }
 
-    canonicalize_absolute_path(utf8)
+    canonicalize_absolute_path(path)
 }
 
 /// Canonicalize the current working directory to a UTF-8 path.

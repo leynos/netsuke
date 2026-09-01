@@ -1,6 +1,7 @@
 //! CLI parsing coverage.
 
 use anyhow::{Context, Result, ensure};
+use camino::Utf8PathBuf;
 use clap::error::ErrorKind;
 use netsuke::cli::{
     AccessibilityPolicy, BuildArgs, Cli, ColourPolicy, Commands, EmojiPolicy, ProgressPolicy,
@@ -16,8 +17,8 @@ use std::sync::Arc;
 
 struct CliCase {
     argv: Vec<&'static str>,
-    file: PathBuf,
-    directory: Option<PathBuf>,
+    file: Utf8PathBuf,
+    directory: Option<Utf8PathBuf>,
     jobs: Option<usize>,
     verbose: bool,
     locale: Option<&'static str>,
@@ -38,7 +39,7 @@ impl Default for CliCase {
     fn default() -> Self {
         Self {
             argv: Vec::new(),
-            file: PathBuf::from("Netsukefile"),
+            file: Utf8PathBuf::from("Netsukefile"),
             directory: None,
             jobs: None,
             verbose: false,
@@ -64,8 +65,8 @@ impl Default for CliCase {
 #[case(CliCase { argv: vec!["netsuke"], ..CliCase::default() })]
 #[case(CliCase {
     argv: vec!["netsuke", "--file", "alt.yml", "-C", "work", "-j", "4", "build", "a", "b"],
-    file: PathBuf::from("alt.yml"),
-    directory: Some(PathBuf::from("work")),
+    file: Utf8PathBuf::from("alt.yml"),
+    directory: Some(Utf8PathBuf::from("work")),
     jobs: Some(4),
     expected_cmd: Commands::Build(BuildArgs {
         targets: vec!["a".into(), "b".into()],
@@ -287,6 +288,43 @@ fn parse_cli_errors(#[case] argv: Vec<&str>, #[case] expected_error: ErrorKind) 
     Ok(())
 }
 
+/// Reject non-UTF-8 Ninja invocation paths while CLI parsing still owns the
+/// original operating-system string.
+#[cfg(unix)]
+#[rstest]
+#[case::file("--file", "Manifest path")]
+#[case::directory("--directory", "Working directory path")]
+fn non_utf8_ninja_paths_fail_early(
+    #[case] flag: &str,
+    #[case] expected_diagnostic: &str,
+) -> Result<()> {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let localizer = Arc::from(cli_localization::build_localizer(None));
+    let err = netsuke::cli::parse_with_localizer_from(
+        [
+            OsString::from("netsuke"),
+            OsString::from(flag),
+            OsString::from_vec(b"manifest-\xff".to_vec()),
+        ],
+        &localizer,
+    )
+    .expect_err("non-UTF-8 Ninja path should fail during CLI parsing");
+
+    ensure!(
+        err.kind() == ErrorKind::ValueValidation,
+        "non-UTF-8 {flag} should be a value validation error, got {:?}",
+        err.kind()
+    );
+    ensure!(
+        err.to_string().contains(expected_diagnostic)
+            && err.to_string().contains("UTF-8")
+            && err.to_string().contains("manifest-"),
+        "non-UTF-8 {flag} should render its localized diagnostic, got {err}"
+    );
+    Ok(())
+}
 #[test]
 fn emoji_never_forces_ascii_output() -> Result<()> {
     let cli = Cli {
