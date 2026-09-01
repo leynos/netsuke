@@ -5,6 +5,7 @@
 //! build or Ninja-tool orchestration boundary, not merely its helper.
 
 use anyhow::{Context, Result, ensure};
+use camino::{Utf8Path, Utf8PathBuf};
 use metrics_util::{
     CompositeKey, MetricKind,
     debugging::{DebugValue, DebuggingRecorder},
@@ -31,24 +32,33 @@ const fn host_recipe_shell_label() -> &'static str {
     if cfg!(windows) { "powershell" } else { "posix" }
 }
 
+/// Convert a temporary test path into the UTF-8 runner boundary type.
+fn utf8_path(path: &Path) -> Result<&Utf8Path> {
+    Utf8Path::from_path(path).context("test path is not valid UTF-8")
+}
+
 /// Capture one actual runner operation under an isolated metrics recorder.
 fn capture_operation(cli: &Cli, ninja_program: &Path) -> (Result<()>, Snapshot) {
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
-    let result = metrics::with_local_recorder(&recorder, || {
-        run_with_ninja_program(cli, output_prefs::resolve(None), ninja_program)
+    let result = utf8_path(ninja_program).and_then(|utf8_program| {
+        metrics::with_local_recorder(&recorder, || {
+            run_with_ninja_program(cli, output_prefs::resolve(None), utf8_program)
+        })
     });
     (result, snapshotter.snapshot().into_vec())
 }
 
 /// Construct a CLI that invokes one command from a manifest in `directory`.
-fn runner_cli(directory: &Path, manifest: PathBuf, command: Option<Commands>) -> Cli {
-    Cli {
-        file: manifest,
-        directory: Some(directory.to_path_buf()),
+fn runner_cli(directory: &Path, manifest: PathBuf, command: Option<Commands>) -> Result<Cli> {
+    let file = Utf8PathBuf::from_path_buf(manifest)
+        .map_err(|path| anyhow::anyhow!("test path is not valid UTF-8: {}", path.display()))?;
+    Ok(Cli {
+        file,
+        directory: Some(utf8_path(directory)?.to_owned()),
         command,
         ..Cli::default()
-    }
+    })
 }
 
 /// Write one manifest into a fresh temporary project and return its owner and path.
@@ -117,7 +127,7 @@ fn assert_metric(snapshot: &Snapshot, kind: MetricKind, name: &str, labels: &[(&
 fn build_dispatch_records_successful_legacy_recipe_operation() -> Result<()> {
     let (_ninja_directory, ninja_program) = fake_ninja_check_build_file()?;
     let (directory, manifest) = temporary_manifest(include_str!("data/minimal.yml"))?;
-    let cli = runner_cli(directory.path(), manifest, None);
+    let cli = runner_cli(directory.path(), manifest, None)?;
 
     let (result, snapshot) = capture_operation(&cli, &ninja_program);
     result.context("the injected Ninja build should succeed")?;
@@ -130,7 +140,7 @@ fn build_dispatch_records_successful_legacy_recipe_operation() -> Result<()> {
 fn ninja_tool_dispatch_records_successful_legacy_recipe_operation() -> Result<()> {
     let (_ninja_directory, ninja_program) = fake_ninja_expect_tool(ToolName::new("clean"))?;
     let (directory, manifest) = temporary_manifest(include_str!("data/minimal.yml"))?;
-    let cli = runner_cli(directory.path(), manifest, Some(Commands::Clean));
+    let cli = runner_cli(directory.path(), manifest, Some(Commands::Clean))?;
 
     let (result, snapshot) = capture_operation(&cli, &ninja_program);
     result.context("the injected Ninja tool should succeed")?;
@@ -143,13 +153,13 @@ fn ninja_tool_dispatch_records_successful_legacy_recipe_operation() -> Result<()
 fn build_dispatch_records_bounded_legacy_recipe_failure_categories() -> Result<()> {
     let temporary_directory = tempfile::tempdir().context("create missing-manifest directory")?;
     let missing_manifest = temporary_directory.path().join("Netsukefile");
-    let missing_cli = runner_cli(temporary_directory.path(), missing_manifest, None);
+    let missing_cli = runner_cli(temporary_directory.path(), missing_manifest, None)?;
     let (missing_result, missing_snapshot) = capture_operation(&missing_cli, Path::new("ninja"));
     ensure!(missing_result.is_err(), "the missing manifest should fail");
     assert_operation(&missing_snapshot, "build", "error", "manifest");
 
     let (graph_directory, graph_manifest) = temporary_manifest(include_str!("data/circular.yml"))?;
-    let graph_cli = runner_cli(graph_directory.path(), graph_manifest, None);
+    let graph_cli = runner_cli(graph_directory.path(), graph_manifest, None)?;
     let (graph_result, graph_snapshot) = capture_operation(&graph_cli, Path::new("ninja"));
     ensure!(graph_result.is_err(), "the circular graph should fail");
     assert_operation(&graph_snapshot, "build", "error", "graph");
@@ -162,7 +172,7 @@ fn build_dispatch_records_bounded_legacy_recipe_failure_categories() -> Result<(
         "    command: \"echo hi\"\n",
     );
     let (generation_directory, generation_manifest) = temporary_manifest(unsafe_manifest)?;
-    let generation_cli = runner_cli(generation_directory.path(), generation_manifest, None);
+    let generation_cli = runner_cli(generation_directory.path(), generation_manifest, None)?;
     let (generation_result, generation_snapshot) =
         capture_operation(&generation_cli, Path::new("ninja"));
     ensure!(
@@ -173,7 +183,7 @@ fn build_dispatch_records_bounded_legacy_recipe_failure_categories() -> Result<(
 
     let (io_directory, io_manifest) = temporary_manifest(include_str!("data/minimal.yml"))?;
     let missing_ninja = io_directory.path().join("missing-ninja");
-    let io_cli = runner_cli(io_directory.path(), io_manifest, None);
+    let io_cli = runner_cli(io_directory.path(), io_manifest, None)?;
     let (io_result, io_snapshot) = capture_operation(&io_cli, &missing_ninja);
     ensure!(
         io_result.is_err(),
