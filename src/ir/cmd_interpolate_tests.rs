@@ -93,9 +93,14 @@ fn power_shell_bindings_quote_apostrophes_as_single_literals() {
 /// Verify POSIX markers are encoded safely in unquoted and quoted command text.
 #[test]
 fn interpolate_command_encodes_markers_for_quote_contexts() {
-    for (marker, expected_path, unquoted) in [
-        (INS_TOKEN, "input", "input"),
-        (OUTS_TOKEN, "x\";id;echo\"y", "x'\";id;echo\"y'"),
+    for (marker, expected_path, unquoted, double_quoted) in [
+        (INS_TOKEN, "input", "input", "input"),
+        (
+            OUTS_TOKEN,
+            "x\";id;echo\"y",
+            "x'\";id;echo\"y'",
+            "x\\\";id;echo\\\"y",
+        ),
     ] {
         let cases = [
             (format!("echo {marker}"), format!("echo {unquoted}")),
@@ -105,7 +110,7 @@ fn interpolate_command_encodes_markers_for_quote_contexts() {
             ),
             (
                 format!("echo \"{marker}\""),
-                format!("echo \"{}\"", quote_double_quoted_path(expected_path)),
+                format!("echo \"{double_quoted}\""),
             ),
         ];
         for (template, expected) in cases {
@@ -121,6 +126,18 @@ fn interpolate_command_encodes_markers_for_quote_contexts() {
     }
 }
 
+/// Verify command substitutions retain protection across nested parentheses.
+#[test]
+fn interpolate_command_rejects_markers_after_nested_subshells() {
+    let error = interpolate_command_with_shell(
+        &format!("echo \"$( (true); echo {INS_TOKEN} )\""),
+        &[Utf8PathBuf::from("x; touch injected")],
+        &[],
+        RecipeShell::Posix,
+    )
+    .expect_err("markers inside nested command substitutions must be rejected");
+    assert!(matches!(error, IrGenError::InvalidCommand { .. }));
+}
 /// Verify POSIX command substitution rejects recipe markers before shell execution.
 #[test]
 fn interpolate_command_rejects_markers_in_command_substitutions() {

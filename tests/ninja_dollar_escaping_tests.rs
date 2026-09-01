@@ -359,6 +359,30 @@ fn script_placeholders_execute_against_real_paths() -> Result<()> {
     Ok(())
 }
 
+/// Verify an escaped script marker still lowers to the declared Ninja output.
+#[cfg(unix)]
+#[rstest]
+fn escaped_script_marker_reaches_the_declared_output() -> Result<()> {
+    let manifest = manifest::from_str(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    script: 'printf %s escaped > \\{{ outs }}'\n",
+    )?;
+    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
+        &manifest,
+        RecipeShell::Posix,
+    )?)?;
+    let commands = ninja_commands(&ninja, "out")?;
+    ensure!(
+        commands.contains("\\out"),
+        "the escaped marker must lower to the declared output path:\n{commands}"
+    );
+    let actual = ninja_output(&ninja, None, None)?;
+    ensure!(
+        actual == "escaped",
+        "expected escaped marker output, got {actual:?}"
+    );
+    Ok(())
+}
+
 /// Verify a double-quoted script marker cannot create a second POSIX command.
 #[cfg(unix)]
 #[rstest]

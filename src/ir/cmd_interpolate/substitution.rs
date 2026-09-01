@@ -136,9 +136,9 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         if ch != '`' || self.matches_single_quote_context() {
             return None;
         }
+        let next = *self.chars.get(pos + 1)?;
         self.output.push(ch);
-        let next = self.chars.get(pos + 1)?;
-        self.output.push(*next);
+        self.output.push(next);
         Some(pos + 2)
     }
 
@@ -161,9 +161,12 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         if ch != '\\' || self.matches_single_quote_context() {
             return None;
         }
+        if find_substitution(self.chars, pos + 1).is_some() {
+            return None;
+        }
+        let next = *self.chars.get(pos + 1)?;
         self.output.push(ch);
-        let next = self.chars.get(pos + 1)?;
-        self.output.push(*next);
+        self.output.push(next);
         Some(pos + 2)
     }
 
@@ -173,6 +176,11 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
             self.command_substitution_depth += 1;
             self.output.push_str("$(");
             return Some(pos + 2);
+        }
+        if self.starts_nested_command_substitution_parenthesis(ch) {
+            self.command_substitution_depth += 1;
+            self.output.push(ch);
+            return Some(pos + 1);
         }
         if !self.matches_single_quote_context() && self.ends_command_substitution(ch) {
             self.command_substitution_depth -= 1;
@@ -185,6 +193,11 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
     /// Report whether `ch` starts a POSIX or PowerShell `$()` expression.
     fn starts_command_substitution(&self, pos: usize, ch: char) -> bool {
         ch == '$' && self.chars.get(pos + 1) == Some(&'(')
+    }
+
+    /// Report whether `ch` opens a grouped expression inside a `$()` region.
+    const fn starts_nested_command_substitution_parenthesis(&self, ch: char) -> bool {
+        !self.matches_single_quote_context() && self.command_substitution_depth > 0 && ch == '('
     }
 
     /// Report whether `ch` closes the current `$()` expression.

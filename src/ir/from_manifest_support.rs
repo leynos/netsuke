@@ -30,7 +30,7 @@ pub(super) struct ActionBindings<'a> {
     pub(super) inputs: &'a [Utf8PathBuf],
     /// Paths the target's recipe produces via `{{ outs }}`.
     pub(super) outputs: &'a [Utf8PathBuf],
-    /// Interpreter that will receive the completed legacy recipe text.
+    /// Shell-specific lowering context for recipe paths in the legacy recipe.
     pub(super) shell: RecipeShell,
 }
 

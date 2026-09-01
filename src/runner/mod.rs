@@ -7,6 +7,7 @@ mod dispatch;
 mod dyndep_generation_telemetry;
 mod dyndep_publication;
 mod error;
+mod graph_generation_telemetry;
 mod reporter;
 use crate::cli::{BuildArgs, Cli, Commands};
 use crate::localization::{self, keys};
@@ -344,7 +345,10 @@ pub(super) fn generate_ninja_with_shell(
     }
 
     report_pipeline_stage(reporter, PipelineStage::IrGenerationValidation, None);
-    let graph = generation::build_graph_for_shell(&manifest, recipe_shell)?;
+    let graph = graph_generation_telemetry::instrument_graph_generation(recipe_shell, || {
+        generation::build_graph_for_shell(&manifest, recipe_shell)
+    })
+    .context(localization::message(keys::RUNNER_CONTEXT_BUILD_GRAPH))?;
 
     report_pipeline_stage(
         reporter,

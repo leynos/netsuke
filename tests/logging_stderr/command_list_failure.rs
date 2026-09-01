@@ -33,7 +33,7 @@ targets:
     command:
       - "{first_entry}"
       - "false"
-      - "echo unexpected >> {{ outs }}"
+      - "echo unexpected >> {{{{ outs }}}}"
 "#,
         )
         .as_bytes(),

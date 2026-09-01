@@ -52,14 +52,14 @@ proptest! {
     #[test]
     fn dollar_prefixed_shell_variables_are_preserved(inputs in paths_strategy("in", 1..10), outputs in paths_strategy("out", 1..10)) {
         let command = interpolate_command_with_shell(
-            "echo $in then $out",
+            "echo $in then $out then $ins then $outs",
             &inputs,
             &outputs,
             RecipeShell::Posix,
         )
         .expect("literal shell variables should remain valid");
 
-        prop_assert_eq!(command, "echo $in then $out");
+        prop_assert_eq!(command, "echo $in then $out then $ins then $outs");
     }
 
     /// Quote apostrophe-bearing PowerShell paths as single literals.

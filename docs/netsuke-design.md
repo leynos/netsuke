@@ -296,14 +296,13 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   unwrapped, but still undergoes marker lowering and backend conversion such as
   escaping and validation. On Unix and the explicit Windows Bash compatibility
   route, a list is lowered to brace groups that evaluate each entry through a
-  shell-quoted
-  `eval` payload and are joined by `&&`. The groups run in declaration order in
-  one shell process and stop at the first non-zero exit, so working directory,
-  environment, and shell variables carry forward. The `eval` boundary keeps an
-  entry's inline comments or trailing control operators from consuming the
-  generated group terminator. A failed entry emits a bounded action/entry
-  marker for the runner to include in the failure diagnostic. The resulting
-  POSIX command must be parsable by
+  shell-quoted `eval` payload and are joined by `&&`. The groups run in
+  declaration order in one shell process and stop at the first non-zero exit,
+  so working directory, environment, and shell variables carry forward. The
+  `eval` boundary keeps an entry's inline comments or trailing control
+  operators from consuming the generated group terminator. A failed entry emits
+  a bounded action/entry marker for the runner to include in the failure
+  diagnostic. The resulting POSIX command must be parsable by
   [shlex](https://docs.rs/shlex/latest/shlex/) (POSIX mode). On Windows with
   the default PowerShell route, the list is instead one encoded PowerShell
   script that checks `$LASTEXITCODE` after each generated list entry and stops
@@ -2188,9 +2187,10 @@ structures to the Ninja file syntax.
    actions are omitted because they have no command to execute. Their edges
    select Ninja's built-in `phony` rule. The IR already contains ordinary
    command text: its input and output paths have replaced Netsuke's `{{ ins }}`/
-   `{{ outs }}` markers during lowering. Scalar commands remain unwrapped. List
-   commands are emitted as the brace-group, `eval`, and `&&` chain described in
-   §2.3, including the bounded failure marker for each one-based entry.
+   `{{ outs }}` markers during lowering. Scalar commands remain unwrapped.
+   List commands are emitted as the brace-group, `eval`, and `&&` chain
+   described in §2.3, including the bounded failure marker for each one-based
+   entry.
 
    When an action's `recipe` is a script, the generated rule wraps the script
    in the configured platform-specific interpreter. Unix uses `/bin/sh -e -c`,
