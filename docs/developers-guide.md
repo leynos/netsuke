@@ -475,7 +475,7 @@ any new Ninja grammar position rather than reusing command escaping.
 
 `netsuke check` is driven by a static registry in `src/lint/registry.rs`. The
 [manifest linter design](netsuke-linter-design.md) specifies the model and
-[ADR-016](adr-016-manifest-linting-under-netsuke-check.md) records the
+[ADR-018](adr-018-manifest-linting-under-netsuke-check.md) records the
 decisions behind it; this section is the mechanics.
 
 A new rule touches four implementation places, plus the tests described at the
