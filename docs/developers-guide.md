@@ -2252,6 +2252,11 @@ values `posix`, `bash`, and `powershell`, the `outcome` values `success` and
 composition here; callers must not measure graph-generation time with
 `Instant` or add manifest-controlled values to telemetry.
 
+The private `GraphGenerationContext` groups the selected `RecipeShell` and
+injected monotonic clock solely for this graph-generation composition path. It
+is not a general runner context, shared state container, or reusable public
+API; keep unrelated runner inputs and concerns outside it.
+
 The intended serial guarantee is path-scoped. A later dependency that is
 independently reachable elsewhere in the requested graph may start via that
 other path. Do not broaden the implementation with a global lock, pool, or new
