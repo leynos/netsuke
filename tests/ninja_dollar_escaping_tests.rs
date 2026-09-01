@@ -9,7 +9,7 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 use mockable::{DefaultEnv, Env};
 use netsuke::{
     ast::{Recipe, StringOrList},
-    ir::{Action, BuildEdge, BuildGraph, DependencyOrder},
+    ir::{Action, BuildEdge, BuildGraph, DependencyOrder, INS_TOKEN, OUTS_TOKEN},
     manifest,
     ninja_gen::{RecipeShell, generate_with_shell},
 };
@@ -456,7 +456,7 @@ fn command_control_characters_are_rejected(#[case] command: &str) {
 fn unsafe_paths_are_rejected(#[case] input: &str) {
     let result = generate_posix(&graph(
         Recipe::Command {
-            command: "cat $ins > $outs".into(),
+            command: format!("cat {INS_TOKEN} > {OUTS_TOKEN}").into(),
         },
         input,
         "out",

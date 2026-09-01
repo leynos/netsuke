@@ -297,11 +297,11 @@ fn substitute(template: &str, bindings: &CommandBindings) -> Result<String, IrGe
 
 /// Internal marker emitted for `{{ ins }}` during manifest rendering and
 /// consumed during command interpolation; it is not general template syntax.
-pub(crate) const INS_TOKEN: &str = "__NETSUKE_INS_PLACEHOLDER__";
+pub const INS_TOKEN: &str = "__NETSUKE_INS_PLACEHOLDER__";
 
 /// Internal marker emitted for `{{ outs }}` during manifest rendering and
 /// consumed during command interpolation; it is not general template syntax.
-pub(crate) const OUTS_TOKEN: &str = "__NETSUKE_OUTS_PLACEHOLDER__";
+pub const OUTS_TOKEN: &str = "__NETSUKE_OUTS_PLACEHOLDER__";
 
 #[cfg(test)]
 #[path = "../cmd_interpolate_property_tests.rs"]
