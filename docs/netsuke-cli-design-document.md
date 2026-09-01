@@ -84,7 +84,7 @@ consumer parses one representation.
 
 The [manifest linter design](netsuke-linter-design.md) specifies the rule model
 and the output schemas, and
-[ADR-016](adr-016-manifest-linting-under-netsuke-check.md) records why linting
+[ADR-018](adr-018-manifest-linting-under-netsuke-check.md) records why linting
 lives under `check` rather than under a new noun.
 
 ### Discover manifest operations
