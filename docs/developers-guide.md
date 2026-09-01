@@ -977,6 +977,59 @@ source itself; the release publication job separately requires both this smoke
 job and the platform package jobs in its `needs` list. Consequently, release
 publication cannot proceed unless the native Windows smoke test passes.
 
+
+## Release-admission observability
+
+The release workflow runs a read-only release-admission gate before publication.
+The gate's GitHub API requests and Git fetches emit bounded JSON Lines (JSONL)
+metrics to a runner-local file. Each fixed operation emits its counter and
+duration at the operation boundary; the final gate boundary emits the overall
+counter, including early failures. The workflow uploads the completed JSONL
+file as a workflow artefact and writes one concise outcome line to
+`GITHUB_STEP_SUMMARY`. In the release workflow,
+`NETSUKE_RELEASE_ADMISSION_METRICS_FILE` points to
+`${runner.temp}/release-admission-metrics.jsonl`, and the file is uploaded under
+the `release-admission-metrics` artefact name.
+
+The metric contract is deliberately closed. The only label names are
+`canary`, `operation`, `outcome`, and `error_category`, and the only values are:
+
+- `canary=history_scan|release_candidate|none`;
+- `operation=resolve_tag_commit|fetch_candidate_revision|fetch_workflow_run|check_scan_freshness|verify_evidence`;
+- `outcome=success|failure|unknown`; and
+- `error_category=none|api_error|fetch_error|stale_evidence|missing_evidence|mismatch|timeout|unknown`.
+
+The duration instrument carries only the fixed `operation` label. Never add a
+revision, run ID, path, URL, workflow content, or other identifier-derived
+value to a metric label. A successful operation or gate uses
+`error_category=none`. An operation failure maps to its fixed category; an
+unclassified failure maps to `outcome=unknown` and
+`error_category=unknown`, and the admission gate remains fail-closed.
+
+Instruments emitted by the gate are:
+
+- `netsuke_release_admission_gate_total` — counter. Records the final gate
+  outcome with `outcome` and `error_category` labels. Operators use it to
+  confirm that publication was admitted or identify a blocked/unknown run.
+- `netsuke_release_admission_operation_total` — counter. Records one result
+  for each fixed GitHub API request or Git fetch, with `canary`, `operation`,
+  `outcome`, and `error_category` labels. Operators use it to locate the
+  failing admission boundary and its classified cause.
+- `netsuke_release_admission_operation_duration_seconds` — histogram. Records
+  the elapsed seconds for each fixed operation with only the `operation`
+  label. Operators use it to compare operation latency across runs without
+  exposing request or repository identifiers.
+
+To investigate a blocked publication, read the job-summary outcome first, then
+download the release-admission JSONL artefact and inspect the operation counter
+records alongside their duration observations. A missing artefact is not
+evidence of a successful gate. GitHub Actions applies the repository or
+workflow's configured artefact-retention period. This export is intentionally
+not a Prometheus, OpenTelemetry Protocol (OTLP), or statsd endpoint; no scrape
+or push service is implied. Metric or label renames are breaking contract
+changes and require an ADR and updated workflow-contract tests. See
+[ADR-018](adr-018-release-admission-observability.md) for the durable decision.
+
 ## GitHub Actions runner placement
 
 Ubicloud offers Linux runners only. The estate therefore splits along one line:
