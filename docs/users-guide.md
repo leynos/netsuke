@@ -621,12 +621,20 @@ emits at most 64 per-entry events for each expansion. The aggregate event's
 `omitted_filtered_entries` field reports how many additional filtered entries
 were excluded from those bounded records.
 
+Normal manifest loading also records these aggregate counters:
+
+- `netsuke_manifest_filtered_targets_total`
+- `netsuke_manifest_filtered_actions_total`
+- `netsuke_manifest_omitted_filtered_entries_total`
+
+The counters have no labels and never contain raw manifest values.
+
 Each retained event contains only the entry's `section`, an eight-character
 `entry_name_hash`, an optional zero-based `iteration_index`, and the byte
 length of its `when_expression` in `when_expression_len`. Raw entry names,
 `foreach` item values, and `when` expressions are never emitted. Manifest query
-loading, such as `netsuke help targets`, remains side-effect-free and does not
-emit these expansion events.
+loading, including `netsuke help targets`, remains side-effect-free and emits
+neither these expansion events nor expansion metrics.
 
 ### Discover files with `glob`
 
