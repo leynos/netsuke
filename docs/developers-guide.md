@@ -4498,6 +4498,26 @@ background-query primitive.
   sidecars; the read-only steps never write files, start processes, or invoke
   effectful template helpers.
 
+### Module: `runner::recipe_shell_telemetry`
+
+`src/runner/recipe_shell_telemetry.rs` owns bounded observability for shell
+resolution, the explicit Windows Bash preflight, and complete generated-recipe
+runner operations. `LegacyRecipeOperation` distinguishes `build` from
+`ninja_tool`; the latter describes a Ninja tool invocation and does not claim
+that the tool executes a recipe. `instrument_legacy_recipe_operation` wraps
+shell validation, manifest lowering, Ninja generation, and the subsequent Ninja
+invocation so each operation records one counter increment and one duration
+sample on either success or failure.
+
+The legacy-operation metrics use only the fixed labels `operation`,
+`recipe_shell`, `outcome`, and `failure_category`. Their vocabularies are
+`build` or `ninja_tool`; `posix`, `powershell`, or `bash`; `success` or
+`error`; and `none`, `manifest`, `graph`, `ninja_generation`, `ninja_io`, or
+`other`, respectively. No manifest-controlled or process-controlled values may
+be added to metric labels or tracing fields. Keep this instrumentation at the
+runner composition boundary; manifest, IR, and Ninja-generation modules remain
+free of runner telemetry.
+
 ### Module: `runner::reporter`
 
 `src/runner/reporter.rs` owns construction of the run's `StatusReporter` from

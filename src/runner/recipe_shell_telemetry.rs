@@ -1,8 +1,10 @@
-//! Bounded observability for legacy recipe-shell resolution and preflight.
+//! Bounded observability for recipe-shell selection and legacy runner work.
 //!
-//! Recipe text, environment values, command lines, paths, Bash output, and
-//! process statuses are all user-controlled or unbounded. This module records
-//! only the selected interpreter and fixed result categories at the runner
+//! This module records shell-resolution and Bash-preflight outcomes, as well as
+//! complete generated-recipe build and Ninja-tool operations. Recipe text,
+//! environment values, command lines, paths, Bash output, and process statuses
+//! are user-controlled or unbounded, so operation telemetry uses only bounded
+//! operation, shell, outcome, and failure-category labels at the runner
 //! boundary.
 
 use crate::ir::IrGenError;
