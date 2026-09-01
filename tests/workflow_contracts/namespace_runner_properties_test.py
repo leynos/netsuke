@@ -31,6 +31,7 @@ RUNNER_MUTATIONS = (
     "swapped-platforms",
     "intel-macos-replaced",
 )
+SEQUENCE_KINDS = ("ninja", "windows")
 
 
 def _irrelevant_steps(names: list[str]) -> list[dict[str, object]]:
@@ -170,51 +171,58 @@ def _github_hosted_runner_for(selected_key: str) -> str:
     return "ubuntu-latest"
 
 
-@settings(max_examples=36, derandomize=True, deadline=None)
-@example(mutation="missing", before=[], between=[], after=[])
-@example(mutation="duplicate", before=[], between=[], after=[])
-@example(mutation="after-consumer", before=[], between=[], after=[])
-@given(
-    mutation=st.sampled_from(SEQUENCE_MUTATIONS),
-    before=st.lists(st.sampled_from(IRRELEVANT_STEP_NAMES), max_size=2),
-    between=st.lists(st.sampled_from(IRRELEVANT_STEP_NAMES), max_size=2),
-    after=st.lists(st.sampled_from(IRRELEVANT_STEP_NAMES), max_size=2),
-)
-def test_generated_ninja_sequences_accept_only_valid_setup(
+def _generated_sequence_is_valid(
+    sequence_kind: str,
     mutation: str,
-    before: list[str],
-    between: list[str],
-    after: list[str],
-) -> None:
-    """Accept only one pinned Ninja setup before its first consumer."""
-    steps = _mutate_ninja_sequence(_ninja_sequence(before, between, after), mutation)
-    assert is_valid_ninja_sequence(steps, NINJA_CONSUMER) is (mutation == "valid"), (
-        f"mutation={mutation!r}, steps={steps!r}"
-    )
+    segments: tuple[list[str], list[str], list[str]],
+) -> tuple[bool, list[dict[str, object]]]:
+    """Build, mutate, and validate one generated setup sequence."""
+    before, between, after = segments
+    if sequence_kind == "ninja":
+        steps = _mutate_ninja_sequence(
+            _ninja_sequence(before, between, after), mutation
+        )
+        return is_valid_ninja_sequence(steps, NINJA_CONSUMER), steps
 
-
-@settings(max_examples=36, derandomize=True, deadline=None)
-@example(mutation="missing", before=[], between=[], after=[])
-@example(mutation="duplicate", before=[], between=[], after=[])
-@example(mutation="after-consumer", before=[], between=[], after=[])
-@given(
-    mutation=st.sampled_from(SEQUENCE_MUTATIONS),
-    before=st.lists(st.sampled_from(IRRELEVANT_STEP_NAMES), max_size=2),
-    between=st.lists(st.sampled_from(IRRELEVANT_STEP_NAMES), max_size=2),
-    after=st.lists(st.sampled_from(IRRELEVANT_STEP_NAMES), max_size=2),
-)
-def test_generated_windows_sequences_accept_only_valid_path_setup(
-    mutation: str,
-    before: list[str],
-    between: list[str],
-    after: list[str],
-) -> None:
-    """Accept only one known-folder path setup before Windows packaging."""
     steps = _mutate_windows_sequence(
         _windows_sequence(before, between, after), mutation
     )
-    assert is_valid_windows_tool_path_sequence(steps) is (mutation == "valid"), (
-        f"mutation={mutation!r}, steps={steps!r}"
+    return is_valid_windows_tool_path_sequence(steps), steps
+
+
+@settings(max_examples=48, derandomize=True, deadline=None)
+@example(sequence_kind="ninja", mutation="missing", segments=([], [], []))
+@example(sequence_kind="ninja", mutation="duplicate", segments=([], [], []))
+@example(
+    sequence_kind="ninja",
+    mutation="after-consumer",
+    segments=([], [], []),
+)
+@example(sequence_kind="windows", mutation="missing", segments=([], [], []))
+@example(sequence_kind="windows", mutation="duplicate", segments=([], [], []))
+@example(
+    sequence_kind="windows",
+    mutation="after-consumer",
+    segments=([], [], []),
+)
+@given(
+    sequence_kind=st.sampled_from(SEQUENCE_KINDS),
+    mutation=st.sampled_from(SEQUENCE_MUTATIONS),
+    segments=st.tuples(
+        st.lists(st.sampled_from(IRRELEVANT_STEP_NAMES), max_size=2),
+        st.lists(st.sampled_from(IRRELEVANT_STEP_NAMES), max_size=2),
+        st.lists(st.sampled_from(IRRELEVANT_STEP_NAMES), max_size=2),
+    ),
+)
+def test_generated_setup_sequences_accept_only_valid_order(
+    sequence_kind: str,
+    mutation: str,
+    segments: tuple[list[str], list[str], list[str]],
+) -> None:
+    """Accept only valid Ninja and Windows prerequisite setup order."""
+    is_valid, steps = _generated_sequence_is_valid(sequence_kind, mutation, segments)
+    assert is_valid is (mutation == "valid"), (
+        f"sequence_kind={sequence_kind!r}, mutation={mutation!r}, steps={steps!r}"
     )
 
 

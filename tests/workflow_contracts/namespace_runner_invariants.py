@@ -85,14 +85,8 @@ def is_valid_windows_tool_path_sequence(
         return False
 
     path_index = path_indices[0]
-    path_step = steps[path_index]
-    script = str(path_step.get("run", ""))
-    return bool(
-        path_step.get("name") == WINDOWS_PATH_STEP_NAME
-        and path_step.get("if") == "inputs.platform == 'windows'"
-        and path_step.get("shell") == "pwsh"
-        and all(fragment in script for fragment in WINDOWS_PATH_FRAGMENTS)
-        and path_index < package_indices[0]
+    return _is_valid_windows_path_step(steps[path_index]) and (
+        path_index < package_indices[0]
     )
 
 
@@ -110,4 +104,15 @@ def _is_windows_path_candidate(step: dict[str, object]) -> bool:
             "$Env:GITHUB_PATH" in script
             and ("SpecialFolder" in script or ".dotnet" in script)
         )
+    )
+
+
+def _is_valid_windows_path_step(step: dict[str, object]) -> bool:
+    """Validate the guarded PowerShell known-folder path setup itself."""
+    script = str(step.get("run", ""))
+    return bool(
+        step.get("name") == WINDOWS_PATH_STEP_NAME
+        and step.get("if") == "inputs.platform == 'windows'"
+        and step.get("shell") == "pwsh"
+        and all(fragment in script for fragment in WINDOWS_PATH_FRAGMENTS)
     )
