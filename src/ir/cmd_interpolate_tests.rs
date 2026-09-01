@@ -77,26 +77,40 @@ fn interpolate_command_replaces_template_placeholders() {
 /// Verify that PowerShell interpolation doubles apostrophes in single-quoted literals.
 #[test]
 fn power_shell_bindings_quote_apostrophes_as_single_literals() {
-    let bindings = CommandBindings::new(
-        &[Utf8PathBuf::from("source's file")],
-        &[Utf8PathBuf::from("output's file")],
-        RecipeShell::PowerShell,
+    assert_power_shell_path_interpolation(
+        "source's file",
+        "output's file",
+        "Copy-Item 'source''s file' 'output''s file'",
+        "PowerShell-safe placeholders should interpolate",
     );
-    let command = interpolate_command_with_bindings("Copy-Item $in $out", &bindings)
-        .expect("PowerShell-safe placeholders should interpolate");
-    assert_eq!(command, "Copy-Item 'source''s file' 'output''s file'");
 }
 
 #[test]
 fn power_shell_bindings_preserve_literal_backticks_in_paths() {
-    let bindings = CommandBindings::new(
-        &[Utf8PathBuf::from("source`file")],
-        &[Utf8PathBuf::from("output`file")],
-        RecipeShell::PowerShell,
+    assert_power_shell_path_interpolation(
+        "source`file",
+        "output`file",
+        "Copy-Item 'source`file' 'output`file'",
+        "PowerShell single-quoted paths should preserve literal backticks",
     );
-    let command = interpolate_command_with_bindings("Copy-Item $in $out", &bindings)
-        .expect("PowerShell single-quoted paths should preserve literal backticks");
-    assert_eq!(command, "Copy-Item 'source`file' 'output`file'");
+}
+
+/// Assert PowerShell interpolation for one input/output path pair.
+fn assert_power_shell_path_interpolation(
+    input_path: &str,
+    output_path: &str,
+    expected_command: &str,
+    expect_message: &str,
+) {
+    let inputs = [Utf8PathBuf::from(input_path)];
+    let outputs = [Utf8PathBuf::from(output_path)];
+    let bindings = CommandBindings::new(&inputs, &outputs, RecipeShell::PowerShell);
+    let interpolation = interpolate_command_with_bindings("Copy-Item $in $out", &bindings);
+    assert!(interpolation.is_ok(), "{expect_message}: {interpolation:?}");
+    let Ok(command) = interpolation else {
+        return;
+    };
+    assert_eq!(command, expected_command);
 }
 /// Verify that PowerShell-specific escaped double quotes bypass POSIX syntax checks.
 #[test]
