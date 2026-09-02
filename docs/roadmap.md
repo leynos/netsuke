@@ -2006,7 +2006,6 @@ runs prove the failure boundary before any job receives release permissions.
   - Success: a real release is publishable only from the admitted exact tag
     commit, and its retained evidence reproduces the admission decision.
 
-
 ## 11. Allow-listed structured-command shell selection
 
 Hypothesis: a structured command can select a required shell dialect portably
@@ -2020,7 +2019,6 @@ structured-command design in
 [RFC 0001](rfcs/0001-structured-command-blocks.md); primitive work may land
 before that design's AST exists, but command integration depends on RFC 0001
 implementation work tracked by issue `#593`.
-
 
 ### 11.1. Settle the contract before implementation
 
@@ -2044,7 +2042,6 @@ before any schema or runtime code exists.
   - Success: accepted architecture and proposed schema documents define every
     required decision, while the production source tree remains unchanged.
 
-
 ### 11.2. Resolve trusted shells without expanding manifest authority
 
 This step builds data and resolution primitives independently of the future
@@ -2053,38 +2050,54 @@ outside the execution domain.
 
 - [ ] 11.2.1. Add the manifest-facing shell selection vocabulary.
   - Requires 11.1.1.
-  - Add a finite built-in `ShellName` enum with `sh`, `bash`, `pwsh`, and
-    `powershell`, including host availability, fixed arguments, parsing, and a
-    host-default mapping modelled on `RecipeShell` and `DependencyOrder`.
+  - Add the finite `BuiltInShell` enum with `sh`, `bash`, `pwsh`, and
+    `powershell`, plus a validated `ShellName` registry-name type capable of
+    retaining configured names such as `dash`. Include host availability,
+    fixed arguments, parsing, and a host-default mapping modelled on
+    `RecipeShell` and `DependencyOrder`.
   - Add a Boolean-or-name selection type whose three variants preserve direct,
     platform-default, and named manifest intent; reject every other YAML type.
   - Keep the types data-only and do not wire them into a structured-command AST
     that RFC 0001 has not yet implemented.
-  - Success: unit and serialization tests prove the finite names, host rules,
-    fixed invocations, and exact `false`, `true`, and string mappings without
-    changing command execution.
+  - Success: unit and serialization tests prove the finite built-in names,
+    configured-name retention, host rules, fixed invocations, and exact
+    `false`, `true`, and string mappings without changing command execution.
 - [ ] 11.2.2. Add trusted configured shell definitions.
   - Requires 11.2.1.
   - Add append-merged `CliConfig` shell definitions with validated `name`,
     `executable`, and fixed `args`, reserving built-in names and rejecting
     duplicate merged names.
+  - Require the trusted operator invariant that `args` is a complete fixed
+    prefix: appending exactly one rendered source argument must invoke the
+    executable's source evaluator. Structural validation cannot infer the
+    executable-specific switch, so a violation is a trusted operator policy
+    error.
   - Perform field-local checks during deserialization and collision checks in
     `PostMergeHook`; keep definitions out of Netsukefiles and command-line
-    flags. Treat configured definitions as host-eligible and let resolution
-    decide their availability.
+    flags. System and user operator configuration are trusted registry sources.
+    Automatically discovered project `.netsuke.toml` is never trusted for
+    definitions, and `--config` or another explicit config selection alone
+    does not grant that authority. Project configuration may select existing
+    registry names only; project-owned definitions require a separate explicit
+    trust mechanism. Treat configured definitions as host-eligible and let
+    resolution decide their availability.
   - Add commented sample configuration and document any new OrthoConfig merge
     behaviour in the configuration guide.
   - Success: configuration and post-merge tests cover valid entries, invalid
-    names, executable shapes, argument bounds, reserved names, duplicates, and
-    layered composition with actionable configuration-key errors.
+    names, executable shapes, argument bounds, reserved names, duplicates,
+    untrusted project definitions, and layered composition with actionable
+    configuration-key errors.
 - [ ] 11.2.3. Resolve selections into a complete execution value.
   - Requires 11.2.1 and 11.2.2.
   - Build a feature-private registry from `CliConfig` and resolve bare
     executables from trusted host `PATH` and Windows `PATHEXT` through
     `mockable::Env`, before applying a command environment overlay.
-  - Reuse executable probing where appropriate, but disable current-directory
-    and workspace fallback so repository content cannot replace an allow-listed
-    shell.
+  - Before invoking `which`, reject every empty or non-absolute trusted `PATH`
+    component. Never convert a rejected component relative to the current
+    directory or pass it to `which`; reject with a typed trusted-environment
+    misconfiguration naming only a bounded component index. Reuse executable
+    probing where appropriate, but disable current-directory and workspace
+    fallback so repository content cannot replace an allow-listed shell.
   - Classify unknown, unsupported, unavailable, and misconfigured outcomes in a
     crate-internal typed error, convert it to user diagnostics once, and carry
     only the resolved name, executable, and fixed arguments into the execution
@@ -2092,8 +2105,21 @@ outside the execution domain.
   - Success: injected-environment and probe tests cover each failure class,
     host-default and named resolution, absolute and bare configured
     executables, bounded diagnostics, and resistance to command `PATH` and
-    workspace replacement.
+    workspace replacement. Deterministic `MockEnv` and probe tests run on
+    Unix-like and Windows paths and include a repository-local candidate below
+    a relative `PATH` component.
 
+- [ ] 11.2.4. Property-test shell selection invariants.
+  - Requires 11.2.1, 11.2.2, and 11.2.3.
+  - Generate valid and invalid registry names and Boolean-or-string YAML
+    values, merged definitions with bounded fixed-argument lists, and injected
+    `PATH` and `PATHEXT` states.
+  - Check that direct, platform-default, and named selections lower to their
+    respective invariants, including rejection of empty and relative trusted
+    `PATH` components without probing repository-local candidates.
+  - Success: bounded property runs reproduce failures from their seeds and
+    prove that configured names remain representable while built-in names stay
+    finite, reserved, and host-aware.
 
 ### 11.3. Carry named shells through structured execution boundaries
 
@@ -2143,6 +2169,7 @@ selection does not alter Netsuke-managed topology.
   - Success: user, operator, developer, sample-configuration, and security
     guidance agree with ADR-019 and make the Netsukefile-versus-`CliConfig`
     authority boundary explicit.
+
 ## 10. Property-based testing of generated build scripts
 
 Hypothesis: Netsukefile authors trust the generated build script when the test

@@ -8,7 +8,7 @@ configuration entries.
 
 ## Date
 
-2026-09-02.
+2026-09-02
 
 ## Context and problem statement
 
@@ -28,7 +28,8 @@ safety guarantee and from the existing shebang-based `script` contract.
 
 ### Selection contract and scope
 
-The structured command `shell` field is a `Boolean | ShellName` union:
+The structured command `shell` field is a `Boolean | ShellName` union, where
+`ShellName` is a validated registry-name newtype:
 
 - an absent field or `false` selects direct argv execution;
 - `true` selects the platform default shell; and
@@ -47,9 +48,9 @@ neighbouring structured stage.
 
 ### Built-in registry
 
-The initial built-in set is the following finite enumeration. Netsuke appends
-the rendered `invoke` source as the final process argument after the fixed
-arguments shown in the table.
+The initial `BuiltInShell` set is the following finite enumeration. Netsuke
+appends the rendered `invoke` source as the final process argument after the
+fixed arguments shown in the table.
 
 | Name         | Supported hosts       | Executable       | Resolution                                        | Fixed arguments                                        |
 | ------------ | --------------------- | ---------------- | ------------------------------------------------- | ------------------------------------------------------ |
@@ -65,12 +66,19 @@ Windows. This preserves RFC 0001 section 10.1 even when a similarly named
 configured entry exists. Built-in names are reserved and cannot be overridden.
 
 Shell resolution captures the host `PATH` and, on Windows, `PATHEXT` through the
-[`mockable::Env` seam](adr-008-environment-seam-taxonomy.md). It may reuse the
-executable lookup machinery under `src/stdlib/which/`, but it disables
-current-directory and workspace fallback. It also resolves before applying a
-structured command's `env` overlay. These rules keep executable authority with
-the Netsuke operator: manifest-controlled `PATH` values and repository-local
-files cannot replace an allow-listed shell.
+[`mockable::Env` seam](adr-008-environment-seam-taxonomy.md). Before invoking
+`which`, it rejects every empty or non-absolute `PATH` component. No rejected
+component is converted relative to the current directory or passed to
+executable lookup. A trusted-environment misconfiguration is reported with a
+bounded component index, never a complete `PATH` value. Deterministic tests
+must inject `MockEnv` and a probe on both Unix-like and Windows paths,
+including a repository-local candidate beneath a relative component.
+
+The resolver may reuse the executable lookup machinery under
+`src/stdlib/which/`, but it disables current-directory and workspace fallback.
+It also resolves before applying a structured command's `env` overlay. These
+rules keep executable authority with the Netsuke operator: manifest-controlled
+`PATH` values and repository-local files cannot replace an allow-listed shell.
 
 ### Configured shell registry
 
@@ -95,8 +103,11 @@ Each `ShellDefinition` contains exactly `name`, `executable`, and `args`:
 - `args` must contain between one and sixteen fixed arguments;
 - every fixed argument must contain no NUL, and their combined encoded size
   must not exceed 4 KiB; and
-- Netsuke always appends the rendered shell source after `args`; configuration
-  must therefore include the shell's source-evaluation switch.
+- Netsuke always appends exactly one rendered shell-source argument after
+  `args`. The trusted operator invariant is that `args` is a complete fixed
+  prefix such that this append invokes the executable's source evaluator.
+  Structural validation cannot infer the executable-specific switch; violating
+  this invariant is a trusted operator policy error.
 
 Field-local rules run while each entry is deserialized. `PostMergeHook` checks
 reserved-name collisions and duplicate configured names after all configuration
@@ -108,10 +119,15 @@ host where the merged configuration is active, and executable resolution
 determines its availability on that host. A missing configured executable is
 therefore unavailable, not an unsupported built-in.
 
-The configuration file is the authority boundary. A configured executable may
-be an absolute host path because the operator who controls `CliConfig` already
-controls Netsuke's execution policy. A Netsukefile may only select the
-validated name; it cannot provide or alter the executable or fixed arguments.
+System and user operator configuration are trusted registry sources. An
+automatically discovered project `.netsuke.toml` is never trusted for shell
+definitions, and selecting a file with `--config` does not grant it shell
+definition authority. A separate explicit trust mechanism is required for any
+project-owned definitions. Project configuration may select existing registry
+names only. A configured executable may be an absolute host path because the
+operator who controls trusted `CliConfig` already controls Netsuke's execution
+policy. A Netsukefile may only select the validated name; it cannot provide or
+alter the executable or fixed arguments.
 
 The shell registry is feature-private. The composition root constructs it from
 `CliConfig`, and structured-command validation and lowering consume it. It is
@@ -122,10 +138,12 @@ handling, or arbitrary executable discovery.
 ### Lowering and execution intermediate representation
 
 The Abstract Syntax Tree (AST) preserves the three user choices as `Direct`,
-`PlatformDefault`, and `Named(ShellName)`. Resolution converts either shell
-choice into a `ResolvedShell` containing a registry name, a resolved executable
-path, and fixed arguments. The execution intermediate representation (IR)
-contains no Boolean selector and no unresolved configuration lookup:
+`PlatformDefault`, and `Named(ShellName)`. Resolution resolves a `ShellName`
+against the finite `BuiltInShell` set first and then trusted configured
+entries. It converts either shell choice into a `ResolvedShell` containing a
+registry name, a resolved executable path, and fixed arguments. The execution
+intermediate representation (IR) contains no Boolean selector and no unresolved
+configuration lookup:
 
 ```rust,no_run
 pub enum ProcessKind {
@@ -155,6 +173,9 @@ Resolution uses a crate-internal typed error with at least these categories:
   current platform;
 - **unavailable shell:** the definition supports the platform, but its
   executable is absent, not executable, or cannot be resolved safely; and
+- **trusted-environment misconfiguration:** a host `PATH` or `PATHEXT` value
+  violates the safe-resolution contract, such as an empty or relative `PATH`
+  component; and
 - **misconfigured shell:** a configured definition violates its field or
   collision rules, or a persisted action plan contains an invalid shell
   definition.

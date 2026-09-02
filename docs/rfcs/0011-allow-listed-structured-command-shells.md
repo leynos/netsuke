@@ -3,11 +3,11 @@
 ## Preamble
 
 - **RFC number:** 0011
+- **Status:** Proposed
+- **Created:** 2026-09-02
 - **Amends:** RFC 0001, Structured command blocks and argv templates
 - **Governing decision:** ADR-019, Select allow-listed structured-command
   shells
-- **Status:** Proposed
-- **Created:** 2026-09-02
 - **Target:** Structured command schema, shell registry, and execution IR
 
 ## 1. Summary
@@ -158,8 +158,11 @@ Configuration loading enforces these rules:
   path containing a separator;
 - `args` contains between one and sixteen entries without NUL;
 - the combined encoded argument size does not exceed 4 KiB; and
-- `args` includes the shell's source-evaluation switch because Netsuke always
-  appends source as the final argument.
+- Netsuke appends exactly one rendered source argument after `args`; the
+  trusted operator invariant is that `args` is a complete fixed prefix such
+  that this append invokes the executable's source evaluator. Structural
+  validation cannot infer the executable-specific switch, so violating this
+  invariant is a trusted operator policy error.
 
 Field-local validation occurs during deserialization. A `PostMergeHook`
 validates reserved names and uniqueness after configuration layers compose. An
@@ -170,9 +173,13 @@ where the merged configuration is active, and executable resolution decides
 whether they are available there. A missing configured executable is therefore
 unavailable rather than an unsupported built-in.
 
-This authority belongs exclusively to trusted Netsuke configuration. The
-Netsukefile may select a validated name but cannot declare, override, or amend
-its executable and arguments.
+System and user operator configuration are trusted registry sources. An
+automatically discovered project `.netsuke.toml` is never trusted for shell
+definitions, and selecting a file with `--config` does not grant it shell
+definition authority. A separate explicit trust mechanism is required for any
+project-owned definitions. Project configuration may select existing registry
+names only. The Netsukefile may select a validated name but cannot declare,
+override, or amend its executable and arguments.
 
 ### 5.3 Resolution authority
 
@@ -181,10 +188,15 @@ Resolution reads the trusted host `PATH` and Windows `PATHEXT` through the
 [ADR-008](../adr-008-environment-seam-taxonomy.md). It occurs before the
 structured command's `env` overlay is applied.
 
-The resolver may reuse the `which` subsystem's executable probing but must
-disable current-directory and workspace fallback. A manifest-controlled `PATH`
-and a repository-local executable therefore cannot replace an allow-listed
-shell.
+Before invoking the `which` subsystem, the resolver rejects every empty or
+non-absolute trusted `PATH` component. It never converts a rejected component
+relative to the current directory or passes it to `which`. A typed
+trusted-environment misconfiguration reports only a bounded component index,
+not the complete `PATH`. Deterministic tests inject `MockEnv` and an executable
+probe on Unix-like and Windows paths, including a repository-local candidate
+beneath a relative component. The resolver also disables current-directory and
+workspace fallback. A manifest-controlled `PATH` and a repository-local
+executable therefore cannot replace an allow-listed shell.
 
 The registry is private to structured-command shell selection. MiniJinja
 helpers, legacy recipes, and script interpreters do not consume it.
@@ -257,6 +269,9 @@ Shell resolution classifies failures internally as:
 - **unsupported shell** when a valid built-in does not support the host;
 - **unavailable shell** when the executable cannot be resolved or executed
   safely; and
+- **trusted-environment misconfiguration** when `PATH` or `PATHEXT` violates
+  the safe-resolution contract, such as through an empty or relative `PATH`
+  component; and
 - **misconfigured shell** when a configured definition or persisted action
   plan violates its contract.
 
@@ -329,8 +344,8 @@ reject unknown variants rather than falling back to the host default.
 
 ### 10.3 Phase 3: Build shell-selection primitives
 
-- Add the finite built-in `ShellName` domain type and the Boolean-or-name
-  manifest selection type.
+- Add the finite `BuiltInShell` domain enum and the validated `ShellName`
+  registry-name type, plus the Boolean-or-name manifest selection type.
 - Add configured `ShellDefinition` values and post-merge registry validation
   to `CliConfig`.
 - Add trusted executable resolution, a typed internal error, and explicit
@@ -363,6 +378,10 @@ Implementation must include:
   invalid paths and arguments, and post-merge collision validation;
 - resolver tests with `mockable::MockEnv` and injected executable probes for
   found, unavailable, unsupported, and ambiguous cases;
+- bounded property tests generating valid and invalid shell names and YAML
+  values, merged definitions with bounded argument lists, injected `PATH` and
+  `PATHEXT` states, and the direct, platform-default, and named lowering
+  invariants;
 - tests proving command-level `env` and workspace executables cannot replace a
   trusted shell;
 - conversion tests proving direct selection never enters shell resolution and

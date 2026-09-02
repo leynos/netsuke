@@ -164,8 +164,10 @@ This RFC uses the following terms:
   execution fields defined by this RFC.
 - **Argv template:** The Netsuke-defined, shell-free notation accepted by
   `invoke` when `shell` is absent or `false`.
-- **Shell name:** A built-in or trusted configured identifier that selects one
-  fixed shell executable and argument sequence.
+- **Shell name:** A validated registry-name identifier that selects one fixed
+  shell executable and argument sequence. The initial built-in names are
+  represented by the finite `BuiltInShell` enum; trusted configuration may add
+  other names.
 - **Word:** One syntactic argv position before typed expression expansion.
 - **Scalar interpolation:** A Jinja expression that evaluates to a string,
   number, or Boolean value.
@@ -607,10 +609,12 @@ it cannot validate every callee's application grammar.
 
 ### 10.1 Selection and source handling
 
-The `shell` field is a `Boolean | ShellName` union. An absent field or `false`
-selects direct argv execution. `true` selects the platform default shell. A
-string selects an allow-listed shell name from the finite built-in registry or
-trusted Netsuke configuration.
+The `shell` field is a `Boolean | ShellName` union. Here `ShellName` is a
+validated registry-name type; the finite initial built-in set is represented by
+`BuiltInShell`, and trusted configuration may add names such as `dash`. An
+absent field or `false` selects direct argv execution. `true` selects the
+platform default shell. A string selects an allow-listed name from the built-in
+or trusted configured registry.
 
 In either shell case, Netsuke does not apply the argv-template grammar. It
 renders `invoke` as one shell-source string using the existing command-template
@@ -1065,6 +1069,13 @@ pub enum ShellSelection {
     Named(ShellName),
 }
 
+pub enum BuiltInShell {
+    Sh,
+    Bash,
+    Pwsh,
+    PowerShell,
+}
+
 pub enum PipeStream {
     None,
     Stdout,
@@ -1291,8 +1302,8 @@ After acceptance and implementation:
 ### 20.1 Phase 1: Schema and template compiler
 
 - Add the heterogeneous command-item AST and deny unknown fields.
-- Add Boolean-or-name shell selection and the finite built-in `ShellName`
-  vocabulary defined by RFC 0011.
+  - Add Boolean-or-name shell selection, the finite `BuiltInShell` vocabulary,
+    and the validated configured `ShellName` type defined by RFC 0011.
 - Implement the argv-template lexer and typed fragment representation.
 - Integrate MiniJinja expression compilation without render-then-reparse.
 - Add shape, interpolation, and pipeline-topology validation.
