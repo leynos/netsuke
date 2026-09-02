@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-markdown-format test-typos-config build release lint lint-clippy lint-whitaker lint-python github-actions-lint doc-coverage doc-coverage-test fmt check-fmt typecheck typecheck-python markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-dev-fast dev-fast-check dev-build dev-test bench-build bench-config-load bench-glob-expansion
+.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-coverage-artifact test-markdown-format test-typos-config build release lint lint-clippy lint-whitaker lint-python github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-dev-fast dev-fast-check dev-build dev-test bench-build bench-config-load bench-glob-expansion
 
 RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 # Export this path before shell probes expand it, so Make does not interpolate
@@ -65,6 +65,7 @@ UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
 # build-and-package.yml; the workflow contract tests hold the Makefile and CI
 # in sync.
 PYTHON_BASELINE ?= 3.14
+COVERAGE_ARTIFACT_DIR ?= coverage-artifact
 # Pin Ruff so `make` invokes the same version everywhere; floating the version
 # causes version-skew lint failures because rule sets differ between releases.
 # CI pins the same value in .github/workflows/ci.yml; a contract test in
@@ -150,8 +151,13 @@ test-nextest: ## Run all non-doctest Rust tests through cargo-nextest
 doctest: ## Run doctests, which cargo-nextest cannot execute
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) test --workspace --doc --all-features $(BUILD_JOBS)
 
-test-workflow-contracts: ## Validate the mutation-testing caller contract
+test-workflow-contracts: ## Validate GitHub Actions workflow contracts
 	$(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) --with 'pytest>=8' --with 'pyyaml>=6' --with 'hypothesis>=6' --with 'cmd-mox==0.2.0' pytest tests/workflow_contracts -q
+
+test-coverage-artifact: ## Test hostile LCOV artefact validation
+	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
+		--with pytest==9.0.2 python -m pytest scripts/tests/test_validate_coverage_artifact.py \
+		-c /dev/null --rootdir=. -p no:cacheprovider
 
 test-markdown-format: ## Validate the Markdown formatter checker
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
@@ -202,6 +208,10 @@ doc-coverage-test: ## Run documentation-coverage pytest modules
 		scripts/tests/test_doc_coverage.py -c /dev/null --rootdir=. \
 		-p no:cacheprovider --cov=doc_coverage_model --cov=doc_coverage_cargo \
 		--cov=doc_coverage_runner --cov=doc_coverage_module
+
+validate-coverage-artifact: ## Validate downloaded coverage artefact as hostile data
+	$(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
+		scripts/validate-coverage-artifact.py --artifact-dir "$(COVERAGE_ARTIFACT_DIR)"
 
 fmt: ## Format Rust, Python, and Markdown sources
 	$(CARGO) fmt --all

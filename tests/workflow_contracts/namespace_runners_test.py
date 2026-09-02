@@ -32,6 +32,11 @@ DIRECT_RUNNER_SOURCES = (
     ("ci.kani-smoke", "ci.yml", "kani-smoke"),
     ("coverage-main.coverage-upload", "coverage-main.yml", "coverage-upload"),
     (
+        "coverage-pr-submit.submit-coverage",
+        "coverage-pr-submit.yml",
+        "submit-coverage",
+    ),
+    (
         "delayed-pr-comment.delay_and_comment",
         "delayed-pr-comment.yml",
         "delay_and_comment",
@@ -63,6 +68,11 @@ DIRECT_RUNNER_SOURCES = (
         ),
         ("ci.yml", "kani-smoke", "namespace-profile-netsuke"),
         ("coverage-main.yml", "coverage-upload", "namespace-profile-netsuke"),
+        (
+            "coverage-pr-submit.yml",
+            "submit-coverage",
+            "namespace-profile-netsuke",
+        ),
         (
             "delayed-pr-comment.yml",
             "delay_and_comment",
