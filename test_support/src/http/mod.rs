@@ -9,17 +9,16 @@ use std::{
     fmt,
     io::{self, Read},
     net::{SocketAddr, TcpListener, TcpStream},
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    },
+    sync::{Arc, atomic::AtomicUsize},
     thread,
     time::{Duration, Instant},
 };
 
 mod response;
+mod server;
 
 pub use self::response::HttpResponse;
+use self::server::run_http_server;
 
 /// Override for the timeout in milliseconds within which a client must connect.
 pub(crate) const ENV_HTTP_ACCEPT_TIMEOUT_MS: &str = "NETSUKE_TEST_HTTP_ACCEPT_TIMEOUT_MS";
@@ -220,37 +219,6 @@ fn spawn_http_server_responses_with_config(
             addr,
         },
     ))
-}
-
-/// Serve the configured responses in request order.
-#[expect(
-    clippy::panic,
-    reason = "test HTTP helper should fail fast when networking fails"
-)]
-fn run_http_server(
-    listener: &TcpListener,
-    responses: &[HttpResponse],
-    config: &HttpServerConfig,
-    requests: &AtomicUsize,
-) {
-    for response in responses {
-        let mut stream = accept_connection(
-            listener,
-            config.accept_deadline(),
-            config.poll_interval,
-            config.accept_timeout,
-        );
-        if let Err(err) = stream.set_nonblocking(true) {
-            panic!("failed to configure stream non-blocking: {err}");
-        }
-        let bytes_read = read_request(&mut stream, config.read_deadline(), config.poll_interval);
-        if bytes_read > 0 {
-            requests.fetch_add(1, Ordering::Relaxed);
-            if let Err(err) = response::write_response(&mut stream, response) {
-                panic!("failed to write fixture response: {err}");
-            }
-        }
-    }
 }
 
 /// Return whether `deadline` has passed.

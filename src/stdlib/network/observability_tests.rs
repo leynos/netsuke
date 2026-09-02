@@ -66,6 +66,13 @@ fn fetch_records_bounded_policy_decisions(cache_workspace: Result<CacheWorkspace
         .join()
         .map_err(|err| anyhow::anyhow!("redirector server thread panicked: {err:?}"))?;
 
+    assert_bounded_policy_events(&events)?;
+    assert_impure_flags(&allowed_impure, &rejected_impure)?;
+    Ok(())
+}
+
+/// Assert that policy telemetry is complete while redirect identifiers stay redacted.
+fn assert_bounded_policy_events(events: &[String]) -> Result<()> {
     ensure!(
         events
             .iter()
@@ -88,6 +95,11 @@ fn fetch_records_bounded_policy_decisions(cache_workspace: Result<CacheWorkspace
             || event.contains("redirect-secret")),
         "redirect policy events must not disclose raw hosts or userinfo: {events:#?}",
     );
+    Ok(())
+}
+
+/// Assert that both fetch paths record their impurity before network work starts.
+fn assert_impure_flags(allowed_impure: &AtomicBool, rejected_impure: &AtomicBool) -> Result<()> {
     ensure!(
         allowed_impure.load(Ordering::Relaxed),
         "allowed fetch should mark its template impure",

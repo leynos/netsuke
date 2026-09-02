@@ -55,37 +55,41 @@ fn join_server(server: http::HttpServer, name: &str) -> Result<()> {
         .map_err(|err| anyhow!("{name} server thread panicked: {err:?}"))
 }
 
-/// Verify a blocked redirect target receives no request.
-#[rstest]
-fn fetch_rejects_redirect_to_blocked_host_before_connecting() -> Result<()> {
+/// Assert that an initial allowed origin cannot connect to its denied target.
+///
+/// This helper is intentionally limited to the direct policy-rejection cases
+/// below. Cache-mode coverage composes a distinct helper because it must also
+/// exercise cache initialisation and storage behaviour.
+fn assert_redirect_rejected_before_connecting(
+    policy: NetworkPolicy,
+    expected_details: &str,
+) -> Result<()> {
     let (target_url, target_requests, target_server) =
-        match http::spawn_http_server_responses([HttpResponse::new(200, "blocked target")]) {
+        match http::spawn_http_server_responses([HttpResponse::new(200, "denied target")]) {
             Ok(server) => server,
             Err(err) if err.kind() == io::ErrorKind::PermissionDenied => {
-                tracing::warn!("Skipping redirect-block test: cannot bind HTTP listener ({err})");
+                tracing::warn!("Skipping redirect policy test: cannot bind HTTP listener ({err})");
                 return Ok(());
             }
-            Err(err) => return Err(err).context("spawn blocked target server"),
+            Err(err) => return Err(err).context("spawn denied redirect target"),
         };
     let (redirector_loopback_url, _redirector_requests, redirector_server) =
         http::spawn_http_server_responses([
             HttpResponse::new(302, "").with_header("Location", target_url)
         ])
         .context("spawn redirector server")?;
-    let policy = NetworkPolicy::default()
-        .allow_scheme("http")?
-        .deny_all_hosts()
-        .allow_hosts(["localhost"])?
-        .block_host("127.0.0.1")?;
     let redirector_url = localhost_url(&redirector_loopback_url)?;
 
-    let err = render_fetch(policy, &redirector_url).expect_err("blocked redirect should fail");
+    let err = match render_fetch(policy, &redirector_url) {
+        Ok(rendered) => bail!("denied redirect unexpectedly rendered: {rendered:?}"),
+        Err(err) => err,
+    };
     ensure!(
-        err.to_string().contains("Redirect URL"),
-        "blocked redirect should report redirect policy failure: {err}"
+        err.to_string().contains(expected_details),
+        "redirect should report its policy failure: {err}"
     );
     join_server(redirector_server, "redirector")?;
-    join_server(target_server, "blocked target")?;
+    join_server(target_server, "denied redirect target")?;
     ensure!(
         target_requests.load(std::sync::atomic::Ordering::Relaxed) == 0,
         "denied target must receive no request",
@@ -93,44 +97,25 @@ fn fetch_rejects_redirect_to_blocked_host_before_connecting() -> Result<()> {
     Ok(())
 }
 
+/// Verify a blocked redirect target receives no request.
+#[rstest]
+fn fetch_rejects_redirect_to_blocked_host_before_connecting() -> Result<()> {
+    let policy = NetworkPolicy::default()
+        .allow_scheme("http")?
+        .deny_all_hosts()
+        .allow_hosts(["localhost"])?
+        .block_host("127.0.0.1")?;
+    assert_redirect_rejected_before_connecting(policy, "Redirect URL")
+}
+
 /// Verify default-deny rejects a redirect target outside the allowlist.
 #[rstest]
 fn fetch_rejects_non_allowlisted_redirect_before_connecting() -> Result<()> {
-    let (target_url, target_requests, target_server) =
-        match http::spawn_http_server_responses([HttpResponse::new(200, "not allowlisted")]) {
-            Ok(server) => server,
-            Err(err) if err.kind() == io::ErrorKind::PermissionDenied => {
-                tracing::warn!(
-                    "Skipping redirect-allowlist test: cannot bind HTTP listener ({err})"
-                );
-                return Ok(());
-            }
-            Err(err) => return Err(err).context("spawn non-allowlisted target server"),
-        };
-    let (redirector_loopback_url, _redirector_requests, redirector_server) =
-        http::spawn_http_server_responses([
-            HttpResponse::new(302, "").with_header("Location", target_url)
-        ])
-        .context("spawn default-deny redirector server")?;
     let policy = NetworkPolicy::default()
         .allow_scheme("http")?
         .deny_all_hosts()
         .allow_hosts(["localhost"])?;
-    let redirector_url = localhost_url(&redirector_loopback_url)?;
-
-    let err =
-        render_fetch(policy, &redirector_url).expect_err("non-allowlisted redirect should fail");
-    ensure!(
-        err.to_string().contains("not on the allowlist"),
-        "default-deny redirect should preserve its policy reason: {err}"
-    );
-    join_server(redirector_server, "default-deny redirector")?;
-    join_server(target_server, "non-allowlisted target")?;
-    ensure!(
-        target_requests.load(std::sync::atomic::Ordering::Relaxed) == 0,
-        "non-allowlisted target must receive no request",
-    );
-    Ok(())
+    assert_redirect_rejected_before_connecting(policy, "not on the allowlist")
 }
 
 /// Verify allowed same-origin relative redirects preserve GET semantics.
