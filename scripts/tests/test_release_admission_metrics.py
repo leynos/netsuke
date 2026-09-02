@@ -34,7 +34,19 @@ SUCCESS_GATE_OUTPUTS = {
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class FailureCase:
-    """Describe one fixed release-admission failure classification."""
+    """Describe one fixed release-admission failure classification.
+
+    Attributes
+    ----------
+    evidence_state
+        Fixed evidence freshness state supplied to the shell boundary.
+    extra_environment
+        Fake-boundary inputs that select one controlled failure mode.
+    operation
+        Fixed admission operation expected to emit the failed counter.
+    error_category
+        Documented bounded category expected from that operation.
+    """
 
     evidence_state: str
     extra_environment: dict[str, str]
@@ -142,9 +154,9 @@ if [[ -n "${NETSUKE_FAKE_GH_DELAY_SECONDS:-}" ]]; then
   sleep "$NETSUKE_FAKE_GH_DELAY_SECONDS"
 fi
 if [[ "$*" == *"/commits/"* ]]; then
-  printf '%s\\n' "$GITHUB_SHA"
+  printf '%s\\n' "${NETSUKE_FAKE_RESOLVED_REVISION:-$GITHUB_SHA}"
 else
-  printf '%s\\n' "${NETSUKE_FAKE_WORKFLOW_RUN_ID:-1001}"
+  printf '%s\\n' "${NETSUKE_FAKE_WORKFLOW_RUN_ID-1001}"
 fi
 """,
         encoding="utf-8",
@@ -226,10 +238,23 @@ def _run_gate(
     return result, metrics, calls, outputs
 
 
-def _operation_records(
+def operation_records(
     metrics: list[dict[str, object]], operation: str
 ) -> list[dict[str, object]]:
-    """Return metric records emitted for the named fixed operation."""
+    """Return operation-counter records emitted for one fixed operation.
+
+    Parameters
+    ----------
+    metrics
+        Parsed release-admission metric records.
+    operation
+        One fixed operation from ``CANARY_BY_OPERATION``.
+
+    Returns
+    -------
+    list[dict[str, object]]
+        Counter records whose bounded ``operation`` label matches the request.
+    """
     return [
         record
         for record in metrics
@@ -271,7 +296,7 @@ def test_gate_emits_each_fixed_operation_and_a_successful_gate(tmp_path: Path) -
         "each fixed operation must emit one duration metric"
     )
     for operation, canary in CANARY_BY_OPERATION.items():
-        records = _operation_records(metrics, operation)
+        records = operation_records(metrics, operation)
         assert len(records) == 1, f"{operation} must emit one operation counter"
         assert records[0]["labels"] == expected_operation_labels(
             canary, operation, "success", "none"
@@ -290,94 +315,6 @@ def test_gate_emits_each_fixed_operation_and_a_successful_gate(tmp_path: Path) -
     assert outputs["metrics-file"] == str(
         tmp_path / "release-admission-metrics.jsonl"
     ), "the successful gate must publish its metrics-file output"
-
-
-@pytest.mark.parametrize(
-    "case",
-    [
-        pytest.param(
-            FailureCase(
-                "fresh",
-                {"NETSUKE_FAKE_GH_FAILURE": "true"},
-                "resolve_tag_commit",
-                "api_error",
-            ),
-            id="api-error",
-        ),
-        pytest.param(
-            FailureCase(
-                "fresh",
-                {"NETSUKE_FAKE_GIT_FAILURE": "true"},
-                "fetch_candidate_revision",
-                "fetch_error",
-            ),
-            id="fetch-error",
-        ),
-        pytest.param(
-            FailureCase("stale", {}, "check_scan_freshness", "stale_evidence"),
-            id="stale-evidence",
-        ),
-        pytest.param(
-            FailureCase("missing", {}, "check_scan_freshness", "missing_evidence"),
-            id="missing-evidence",
-        ),
-        pytest.param(
-            FailureCase("unexpected", {}, "check_scan_freshness", "unknown"),
-            id="unknown-evidence",
-        ),
-        pytest.param(
-            FailureCase(
-                "fresh",
-                {
-                    "NETSUKE_FAKE_GH_DELAY_SECONDS": "2",
-                    "NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS": "1",
-                },
-                "resolve_tag_commit",
-                "timeout",
-            ),
-            id="operation-timeout",
-        ),
-    ],
-)
-def test_gate_emits_fixed_categories_for_failure_paths(
-    tmp_path: Path,
-    case: FailureCase,
-) -> None:
-    """Verify each controlled failure retains its bounded metric category.
-
-    Parameters
-    ----------
-    tmp_path, case
-        Isolated output directory and one admission failure variant.
-
-    Notes
-    -----
-    A failure emits operation, gate, and summary records before a non-zero exit.
-    """
-    result, metrics, _, outputs = _run_gate(
-        tmp_path,
-        evidence_state=case.evidence_state,
-        extra_environment=case.extra_environment,
-    )
-
-    assert result.returncode != 0, "a failed admission operation must block the gate"
-    METRICS_VALIDATOR.validate_metrics(metrics)
-    record = _operation_records(metrics, case.operation)[-1]
-    assert record["labels"] == expected_operation_labels(
-        CANARY_BY_OPERATION[case.operation],
-        case.operation,
-        "failure",
-        case.error_category,
-    ), f"{case.operation} must retain its fixed error category"
-    assert metrics[-1]["labels"] == expected_gate_labels(
-        "failure", case.error_category
-    ), "the gate must retain the operation's error category"
-    assert outputs["gate-outcome"] == "failure", (
-        "failed operations must reach the workflow summary output"
-    )
-    assert outputs["gate-error-category"] == case.error_category, (
-        "failed operations must retain their bounded category in workflow output"
-    )
 
 
 def test_validator_rejects_non_finite_metric_values() -> None:
