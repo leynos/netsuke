@@ -132,6 +132,7 @@ mod tests {
     use sha2::{Digest, Sha256};
     use tempfile::TempDir;
 
+    use super::super::fs_utils::FileReadLimits;
     use super::{compute_hash, to_lower_hex};
 
     /// Name of the fixture file staged inside the temporary directory.
@@ -171,7 +172,7 @@ mod tests {
         let payload = patterned(size);
         let (_dir, file) = fixture(&payload)?;
 
-        let streamed = compute_hash(&file, "sha256")?;
+        let streamed = compute_hash(&file, "sha256", &FileReadLimits { max_bytes: u64::MAX, follow_symlinks: false })?;
         let one_shot = to_lower_hex(&Sha256::digest(&payload));
 
         ensure!(
@@ -190,7 +191,7 @@ mod tests {
             "ba7816bf8f01cfea414140de5dae2223",
             "b00361a396177a9cb410ff61f20015ad",
         );
-        let digest = compute_hash(&file, "sha256")?;
+        let digest = compute_hash(&file, "sha256", &FileReadLimits { max_bytes: u64::MAX, follow_symlinks: false })?;
         ensure!(
             digest == expected,
             "expected the published digest {expected} but streamed {digest}"
@@ -211,6 +212,7 @@ mod tests {
         use proptest::prelude::*;
         use sha2::{Digest, Sha256};
 
+        use super::super::fs_utils::FileReadLimits;
         use super::{compute_hash, fixture, to_lower_hex};
 
         proptest! {
@@ -224,7 +226,11 @@ mod tests {
             ) {
                 let (_dir, file) = fixture(&payload).expect("stage the payload");
 
-                let streamed = compute_hash(&file, "sha256").expect("hash the payload");
+                let streamed = compute_hash(
+                    &file,
+                    "sha256",
+                    &FileReadLimits { max_bytes: u64::MAX, follow_symlinks: false },
+                ).expect("hash the payload");
                 let one_shot = to_lower_hex(&Sha256::digest(&payload));
 
                 prop_assert_eq!(streamed, one_shot);
