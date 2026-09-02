@@ -149,6 +149,16 @@ quoting belong to the escaping seam's own tests, not to Netsukefile authors.
 The view carries helpers mirroring the graph view's surface: `action(target)`,
 `actions_for_rule(name)`, and `has_action(target)`.
 
+The projections use a canonical order. `result.actions` sorts first by the
+primary key `target`, then by `rule`, and finally by the canonical
+serialization of `argv`, `env`, `cwd`, `inputs`, `outputs`, `pool`, `depfile`,
+and `dyndep` as tie-breakers. `actions_for_rule(name)` applies the same
+ordering to its filtered entries, with `target` as its primary key and the same
+canonical serialization as its tie-breaker. Map keys are serialized in
+lexicographic order. Identical manifests therefore produce identical ordered
+projections regardless of declaration order or IR iteration order, and
+quantified-action results use that same order.
+
 Because the result views are additive-only, this projection introduces no
 compatibility burden on existing tests, and internal IR types remain unexposed.
 
@@ -163,7 +173,13 @@ MiniJinja engine with no new expression semantics:
 
 A failing quantified assertion reports the binding that falsified it, alongside
 the substituted actual values, using the FAIL versus ERROR taxonomy of UX
-design §11.3 unchanged.
+design §11.3 unchanged. Environment data is redacted at every external
+boundary: environment keys are replaced with stable opaque key tokens, and
+environment values are replaced with the fixed `<redacted>` marker. The
+redactor applies to `result.actions.env`, substituted values in failure
+reports, and persisted regression artefacts; assertions still compare the
+constructed environment semantically, so redaction does not change whether a
+case is a FAIL or an ERROR.
 
 ### 3. The `forall` block
 
@@ -177,6 +193,8 @@ draws a target name and a flag ordering, builds the graph, and asserts
 environment closure and source uniqueness over every generated action.
 
 ```yaml
+netsuke_test_version: "1.1"
+
 test_command_env_is_closed_over_declared_vars:
   description: Generated invocations never leak ambient environment.
   forall:
@@ -185,6 +203,7 @@ test_command_env_is_closed_over_declared_vars:
   steps:
     - given:
         let:
+          declared_env: []
           name: "{{ target_name }}"
           flags: "{{ flag_order }}"
     - when: build_graph
@@ -211,10 +230,12 @@ _Table 2: Initial `forall` domain constructors._
 Expansion is deterministic. When the Cartesian product of the declared domains
 is at most the expansion ceiling, the family is enumerated exhaustively. Above
 the ceiling, the runner samples with a pseudo-random number generator seeded
-from a fixed default; the seed appears verbatim in every failure report, and
-`netsuke test --seed <n>` replays it. This mirrors the `derandomize=True` and
-pinned-`@example` convention of the workflow contract suites and the
-`proptest-regressions/` replay convention.
+with the fixed default seed `0`; the seed appears verbatim in every failure
+report. `netsuke test --seed <n>` selects the reported seed, but replays the
+reported case only when the generated tuple inputs persisted with that report
+are also available. A seed without the tuple inputs is insufficient for replay.
+This mirrors the `derandomize=True` and pinned-`@example` convention of the
+workflow contract suites and the `proptest-regressions/` replay convention.
 
 On failure, the runner delta-reduces the drawn tuple towards domain minima and
 reports the smallest falsifying binding set it finds, then persists the seed
@@ -247,6 +268,8 @@ generated build script is invariant under declaration reordering and locally
 unaffected by unrelated additions.
 
 ```yaml
+netsuke_test_version: "1.1"
+
 test_generation_is_order_invariant:
   description: Declaration order never changes the generated script.
   subject:
