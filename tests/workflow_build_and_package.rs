@@ -150,10 +150,27 @@ fn workflow_step_body<'a>(contents: &'a str, step_name: &str) -> Vec<&'a str> {
         .collect()
 }
 
+/// Check that the Windows package action keeps its upgrade family stable.
+fn assert_windows_package_upgrade_family_wiring(contents: &str) {
+    let windows_package_step =
+        workflow_step_body(contents, "Build Windows installer package").join("\n");
+    for expected in [
+        "product-name: ${{ inputs['bin-name'] }}",
+        "install-dir-name: ${{ inputs['bin-name'] }}",
+        "version: ${{ inputs.version }}",
+    ] {
+        assert!(
+            windows_package_step.contains(expected),
+            "windows-package should preserve its upgrade family contract: {expected}"
+        );
+    }
+}
+
 #[test]
 fn behavioural_build_and_package_wiring_matches_shared_actions() {
     let contents = workflow_contents("build-and-package.yml")
         .expect("build-and-package workflow should be readable");
+    assert_windows_package_upgrade_family_wiring(&contents);
 
     assert!(
         contents.contains("stage-release-artefacts@"),
