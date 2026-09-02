@@ -129,13 +129,29 @@ def _validated_directory(artifact_dir: pathlib.Path) -> pathlib.Path:
 def _validated_coverage_path(directory: pathlib.Path) -> pathlib.Path:
     """Return the sole regular coverage member after validating its boundary."""
     members = list(directory.iterdir())
+    coverage_path = _sole_coverage_member(members)
+    _reject_symlink_member(coverage_path)
+    return _resolve_contained_regular_member(coverage_path, directory)
+
+
+def _sole_coverage_member(members: list[pathlib.Path]) -> pathlib.Path:
+    """Return the sole expected member or reject an unexpected directory shape."""
     names = sorted(member.name for member in members)
     if names != [EXPECTED_MEMBER]:
         raise ValidationError(ValidationIssue.UNEXPECTED_MEMBERS, names)
+    return members[0]
 
-    coverage_path = members[0]
+
+def _reject_symlink_member(coverage_path: pathlib.Path) -> None:
+    """Reject a symbolic-link coverage member before resolving it."""
     if coverage_path.is_symlink():
         raise ValidationError(ValidationIssue.SYMLINK_MEMBER)
+
+
+def _resolve_contained_regular_member(
+    coverage_path: pathlib.Path, directory: pathlib.Path
+) -> pathlib.Path:
+    """Resolve a regular member and require it to remain in its directory."""
     if not coverage_path.is_file():
         raise ValidationError(ValidationIssue.NON_REGULAR_MEMBER)
     resolved_path = coverage_path.resolve(strict=True)
@@ -152,16 +168,35 @@ def _is_lcov_record(line: str) -> bool:
 def _validate_lcov_text(text: str) -> None:
     """Reject empty, malformed, or incomplete LCOV text."""
     lines = text.splitlines()
+    _require_lcov_lines(lines)
+    _validate_lcov_records(lines)
+    _require_lcov_records(lines)
+    _require_final_terminator(lines)
+
+
+def _require_lcov_lines(lines: list[str]) -> None:
+    """Reject a report that has no LCOV records."""
     if not lines:
         raise ValidationError(ValidationIssue.EMPTY_REPORT)
+
+
+def _validate_lcov_records(lines: list[str]) -> None:
+    """Reject every line that is not a recognised LCOV record."""
     for line_number, line in enumerate(lines, start=1):
         if not _is_lcov_record(line):
             raise ValidationError(ValidationIssue.INVALID_RECORD, line_number)
 
+
+def _require_lcov_records(lines: list[str]) -> None:
+    """Require source, line-data, and terminating records in one report."""
     record_text = "\n".join(lines)
     for required in ("SF:", "DA:", "end_of_record"):
         if required not in record_text:
             raise ValidationError(ValidationIssue.MISSING_RECORD, required)
+
+
+def _require_final_terminator(lines: list[str]) -> None:
+    """Require the final record to close the last LCOV source section."""
     if lines[-1] != "end_of_record":
         raise ValidationError(ValidationIssue.MISSING_TERMINATOR)
 
