@@ -8,15 +8,65 @@ use super::{
     ENV_HTTP_ACCEPT_TIMEOUT_MS, ENV_HTTP_POLL_INTERVAL_MS, ENV_HTTP_READ_TIMEOUT_MS,
     HttpServerConfig, accept_connection, duration_from_env, take_duration_warnings,
 };
+use super::{HttpResponse, response::render_response};
 
 use mockable::MockEnv;
 use rstest::{fixture, rstest};
 use std::{
     collections::HashMap,
-    net::TcpListener,
+    io::{Read, Write},
+    net::{TcpListener, TcpStream},
     panic,
     time::{Duration, Instant},
 };
+
+#[test]
+fn response_rendering_preserves_status_headers_and_body() {
+    let response = HttpResponse::new(302, "next")
+        .with_header("Location", "/redirected")
+        .with_header("X-Test", "fixture");
+
+    assert_eq!(
+        render_response(&response),
+        "HTTP/1.1 302 Found\r\nLocation: /redirected\r\nX-Test: fixture\r\nContent-Length: 4\r\nConnection: close\r\n\r\nnext"
+    );
+}
+
+#[test]
+fn response_server_counts_each_client_request() -> anyhow::Result<()> {
+    let (url, requests, server) = super::spawn_http_server_responses([
+        HttpResponse::new(302, "").with_header("Location", "/next"),
+        HttpResponse::new(200, "done"),
+    ])?;
+
+    send_request(&url)?;
+    send_request(&url)?;
+    server
+        .join()
+        .map_err(|err| anyhow::anyhow!("fixture server panicked: {err:?}"))?;
+
+    anyhow::ensure!(
+        requests.load(std::sync::atomic::Ordering::Relaxed) == 2,
+        "fixture should count both client requests",
+    );
+    Ok(())
+}
+
+/// Send one minimal HTTP request to the fixture at `url`.
+fn send_request(url: &str) -> anyhow::Result<()> {
+    let address = url
+        .strip_prefix("http://")
+        .ok_or_else(|| anyhow::anyhow!("fixture URL must use HTTP: {url}"))?;
+    let mut stream = TcpStream::connect(address)?;
+    stream.write_all(b"GET / HTTP/1.1\r\nHost: fixture\r\nConnection: close\r\n\r\n")?;
+    let mut response = String::new();
+    stream.read_to_string(&mut response)?;
+    anyhow::ensure!(
+        response.starts_with("HTTP/1.1 "),
+        "fixture response should begin with an HTTP status line",
+    );
+    Ok(())
+}
 
 fn fixture_env(entries: &[(&str, &str)]) -> MockEnv {
     let values: HashMap<String, String> = entries
