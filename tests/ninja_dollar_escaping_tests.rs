@@ -381,18 +381,16 @@ fn script_double_quoted_placeholders_quote_shell_punctuation() -> Result<()> {
     )
 }
 
-/// Verify single-quoted script placeholders reject shell-punctuation paths.
+/// Verify single-quoted script placeholders keep shell punctuation inert.
+#[cfg(unix)]
 #[rstest]
-fn script_single_quoted_placeholders_reject_shell_punctuation() -> Result<()> {
-    let manifest = manifest::from_str(
-        "netsuke_version: '1.0.0'\ntargets:\n  - name: 'foo;id'\n    sources: in\n    script: \"echo '$out'\"\n",
-    )?;
-    let result = BuildGraph::from_manifest(&manifest);
-    ensure!(
-        result.is_err(),
-        "single-quoted placeholders must reject paths that could terminate the quote"
-    );
-    Ok(())
+fn script_single_quoted_placeholders_quote_shell_punctuation() -> Result<()> {
+    assert_script_output(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: 'foo;id'\n    script: \"printf '%s' '$in' > '$out'\"\n",
+        ("foo;id", "script input"),
+        "foo;id",
+        "single-quoted script interpolation must not execute shell punctuation",
+    )
 }
 
 /// Verify an escaped script marker still lowers to the declared Ninja output.

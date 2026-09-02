@@ -1,8 +1,9 @@
 //! Command interpolation utilities for IR actions.
 //!
-//! Provides [`interpolate_command`], which substitutes `$in`, `$out`, and the
-//! internal markers emitted for `{{ ins }}` and `{{ outs }}` in recipe command
-//! strings. Literal `$ins` and `$outs` remain shell variables.
+//! Provides [`interpolate_command`], which substitutes the internal markers
+//! emitted for `{{ ins }}` and `{{ outs }}` in recipe command strings. Script
+//! recipes additionally support `$in` and `$out`; literal shell variables
+//! remain unchanged in command recipes.
 //! POSIX-compatible routes track shell quoting so path text is encoded for its
 //! insertion context. Called by [`super::from_manifest`] during IR lowering.
 
@@ -18,9 +19,11 @@ use crate::recipe_shell::RecipeShell;
 
 mod command_substitution;
 mod posix_lexical;
+mod script_substitution;
 mod substitution;
 
-use substitution::{ScriptSubstitutionTraversal, SubstitutionTraversal};
+use script_substitution::ScriptSubstitutionTraversal;
+use substitution::SubstitutionTraversal;
 
 /// Contextual path substitutions prepared for one recipe.
 ///
@@ -198,9 +201,9 @@ pub(crate) fn interpolate_command_with_bindings(
 ///
 /// Script recipes may contain heredocs, comments, and other valid shell text
 /// that `shlex` cannot parse as a command. The traversal preserves each
-/// placeholder's shell-quoting context: single-quoted and backtick-protected
-/// placeholders are rejected rather than permitting a path to terminate the
-/// protected region.
+/// placeholder's shell-quoting context. Backtick-protected placeholders are
+/// rejected; single-quoted and double-quoted sites use their matching safe
+/// path encodings.
 pub(crate) fn interpolate_script_with_bindings(
     template: &str,
     bindings: &CommandBindings,
@@ -247,21 +250,26 @@ pub(super) enum QuoteContext {
     Double,
 }
 
-/// Finds the appropriate recipe placeholder at `pos`.
+/// Find an internal recipe placeholder at `pos`.
 ///
 /// # Examples
 /// ```rust,ignore
-/// let chars: Vec<char> = "$in".chars().collect();
+/// let chars: Vec<char> = INS_TOKEN.chars().collect();
 /// let res = find_substitution(&chars, 0);
 /// assert!(matches!(res, Some((Placeholder::Inputs, _))));
 /// ```
 pub(super) fn find_substitution(chars: &[char], pos: usize) -> Option<(Placeholder, usize)> {
+    try_match_token(chars, pos, INS_TOKEN, Placeholder::Inputs)
+        .or_else(|| try_match_token(chars, pos, OUTS_TOKEN, Placeholder::Outputs))
+}
+
+/// Find an internal or short-form script placeholder at `pos`.
+pub(super) fn find_script_substitution(chars: &[char], pos: usize) -> Option<(Placeholder, usize)> {
     try_match_dollar_placeholder(chars, pos, &['i', 'n'], Placeholder::Inputs)
         .or_else(|| {
             try_match_dollar_placeholder(chars, pos, &['o', 'u', 't'], Placeholder::Outputs)
         })
-        .or_else(|| try_match_token(chars, pos, INS_TOKEN, Placeholder::Inputs))
-        .or_else(|| try_match_token(chars, pos, OUTS_TOKEN, Placeholder::Outputs))
+        .or_else(|| find_substitution(chars, pos))
 }
 
 /// Match one standalone dollar-prefixed placeholder at `pos`.
