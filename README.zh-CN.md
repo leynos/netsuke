@@ -203,4 +203,4 @@ ______________________________________________________________________
 ## 贡献指南
 
 欢迎贡献；请先阅读[开发者指南](docs/developers-guide.md)，自动化贡献者还应遵循
-[AGENTS.md](AGENTS.md)。 </content> </invoke>
+[AGENTS.md](AGENTS.md)。

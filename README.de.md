@@ -258,4 +258,4 @@ ______________________________________________________________________
 
 Beiträge sind willkommen. Beginnen Sie mit dem
 [Entwicklerhandbuch](docs/developers-guide.md); automatisierte Mitwirkende
-sollten außerdem [AGENTS.md](AGENTS.md) befolgen. </content> </invoke>
+sollten außerdem [AGENTS.md](AGENTS.md) befolgen.

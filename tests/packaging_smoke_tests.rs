@@ -4,7 +4,9 @@
 //! build-script sources remain in its manifest, where an omission would
 //! otherwise fail only during release.
 
+use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use netsuke::locale_catalogues::SUPPORTED_LOCALES;
 use std::collections::BTreeSet;
 use std::env;
@@ -32,6 +34,36 @@ fn required_catalogue_paths() -> Vec<String> {
         .iter()
         .map(|entry| format!("locales/{}/messages.ftl", entry.tag()))
         .collect()
+}
+
+/// Every README in the crate root must ship in the package; the localization
+/// menu at the top of each edition links its siblings by relative path, so an
+/// unpackaged translation leaves dead links for anyone reading the crate from
+/// an unpacked or vendored source tree. Deriving the set from the crate root
+/// rather than listing it here means a newly added translation is required to
+/// be packaged without anyone remembering to update this test.
+fn required_readme_paths() -> Result<Vec<String>> {
+    let crate_root = Dir::open_ambient_dir(env!("CARGO_MANIFEST_DIR"), ambient_authority())
+        .context("open the crate root")?;
+    let mut readmes = Vec::new();
+    for entry_result in crate_root.read_dir(".").context("read the crate root")? {
+        let entry = entry_result.context("read a crate-root entry")?;
+        let name = entry.file_name().context("read a crate-root entry name")?;
+        if name.starts_with("README")
+            && Utf8Path::new(&name)
+                .extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("md"))
+        {
+            readmes.push(name);
+        }
+    }
+    readmes.sort();
+    // A sweep that silently matched nothing would make the assertion vacuous.
+    ensure!(
+        !readmes.is_empty(),
+        "the crate root should contain at least one README"
+    );
+    Ok(readmes)
 }
 
 /// Create a Cargo subprocess that writes build artefacts beneath `target_dir`.
@@ -99,7 +131,9 @@ fn packaged_manifest_retains_build_script_sources() {
             .map(|path| normalize_packaged_path(path.trim()))
             .collect::<BTreeSet<_>>();
 
-        assert_required_paths_present(&packaged_paths);
+        let readme_paths = required_readme_paths()
+            .unwrap_or_else(|error| panic!("collect the crate-root READMEs: {error}"));
+        assert_required_paths_present(&packaged_paths, &readme_paths);
         assert_forbidden_roots_absent(&packaged_paths);
     });
 }
@@ -121,7 +155,7 @@ fn normalize_packaged_path(path: &str) -> String {
     path.replace('\\', "/")
 }
 
-fn assert_required_paths_present(packaged_paths: &BTreeSet<String>) {
+fn assert_required_paths_present(packaged_paths: &BTreeSet<String>, readme_paths: &[String]) {
     for required_path in REQUIRED_PACKAGED_FILES {
         assert!(
             packaged_paths.contains(required_path),
@@ -130,6 +164,13 @@ fn assert_required_paths_present(packaged_paths: &BTreeSet<String>) {
     }
 
     for required_path in required_catalogue_paths() {
+        assert!(
+            packaged_paths.contains(required_path.as_str()),
+            "packaged manifest should contain `{required_path}`"
+        );
+    }
+
+    for required_path in readme_paths {
         assert!(
             packaged_paths.contains(required_path.as_str()),
             "packaged manifest should contain `{required_path}`"

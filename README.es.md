@@ -266,4 +266,4 @@ ______________________________________________________________________
 
 Las contribuciones son bienvenidas. Comience con la
 [guía del desarrollador](docs/developers-guide.md); los colaboradores
-automatizados también deben seguir [AGENTS.md](AGENTS.md). </content> </invoke>
+automatizados también deben seguir [AGENTS.md](AGENTS.md).
