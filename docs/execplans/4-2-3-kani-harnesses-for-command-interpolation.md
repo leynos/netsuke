@@ -7,7 +7,7 @@ be kept up to date as work proceeds.
 
 Status: IN PROGRESS
 
-Revision 2.21. See `Revision note` at the foot of this document.
+Revision 2.22. See `Revision note` at the foot of this document.
 
 ## Purpose / big picture
 
@@ -1873,3 +1873,11 @@ JSON scope assertion passed;
 `cargo test --lib ir::cmd_interpolate::property_tests::scanner_agrees_with_independent_specification`
 passed (1/1); and `make check-fmt`, `make markdownlint`, and `make nixie`
 passed.
+
+**Revision 2.22 (2026-09-02).** The minimal compile-fixture refactor now
+centralizes the duplicated cfg(kani) compile-pass success and stderr assertion
+in `assert_kani_fixture_compiles` within `tests/kani_cfg_ui_tests.rs`. The two
+named contract tests and all failure tests, helpers, and fixtures remain
+unchanged. Validation passed with `cargo test --test kani_cfg_ui_tests` (5
+passed), `make check-fmt`, and `make lint`. CodeRabbit remains queued with no
+fresh verdict, so the plan remains `IN PROGRESS`.
