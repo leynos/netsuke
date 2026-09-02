@@ -206,10 +206,11 @@ def test_test_shell_step_verifies_the_staged_awk(test_shell_script: str) -> None
 
 
 def test_workflow_runs_make_lint() -> None:
-    """CI runs the lint gate through the Makefile, not an ad hoc command."""
+    """CI runs the lint gate through the trusted Makefile binary."""
     runs = step_runs(job_steps(load_workflow(), "build-test"))
-    assert "make lint" in runs, (
-        f"the build-test job must run `make lint`, got run steps: {runs!r}"
+    expected = '/usr/bin/make ACTIONLINT="$GITHUB_WORKSPACE/actionlint" lint'
+    assert expected in runs, (
+        f"the build-test job must run `{expected}`, got run steps: {runs!r}"
     )
 
 

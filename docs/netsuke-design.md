@@ -286,23 +286,25 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   hashing the action. POSIX and explicit Bash routes use the
   [`shell-quote`](https://docs.rs/shell-quote/latest/shell_quote/) crate (Sh
   mode); the default Windows PowerShell route uses single-quoted literals and
-  doubles embedded apostrophes. Only `{{ ins }}` and `{{ outs }}` are Netsuke
-  path markers; `$ins` and `$outs` are literal shell variables. On POSIX and
-  Bash routes, markers are encoded for their unquoted, single-quoted, or
-  double-quoted context, and markers inside command substitutions or backticks
-  are rejected. PowerShell permits markers only at unquoted sites and rejects
-  other shell-sensitive contexts. PowerShell backticks use native escape
-  semantics and do not suppress interpolation. A scalar command is emitted
-  unwrapped, but still undergoes marker lowering and backend conversion such as
-  escaping and validation. On Unix and the explicit Windows Bash compatibility
-  route, a list is lowered to brace groups that evaluate each entry through a
-  shell-quoted `eval` payload and are joined by `&&`. The groups run in
-  declaration order in one shell process and stop at the first non-zero exit,
-  so working directory, environment, and shell variables carry forward. The
-  `eval` boundary keeps an entry's inline comments or trailing control
-  operators from consuming the generated group terminator. A failed entry emits
-  a bounded action/entry marker for the runner to include in the failure
-  diagnostic. The resulting POSIX command must be parsable by
+  doubles embedded apostrophes. Delayed `{{ ins }}` and `{{ outs }}` resolve at
+  this boundary for every recipe; standalone `$in` and `$out` resolve only in
+  scripts. `$in`, `$out`, `$ins`, and `$outs` remain literal shell variables in
+  command recipes. Script markers are encoded for their unquoted,
+  single-quoted, or double-quoted POSIX or Bash context. Markers inside command
+  substitutions or backticks are rejected. PowerShell permits markers only at
+  unquoted sites and rejects other shell-sensitive contexts. Longer identifiers
+  such as `$input` and `$output`, and non-placeholder text inside backticks,
+  remain unchanged. A scalar command is emitted unchanged, but still undergoes
+  marker lowering and backend conversion such as escaping and validation. On
+  Unix and the explicit Windows Bash compatibility route, a list is lowered to
+  brace groups that evaluate each entry through a shell-quoted `eval` payload
+  and are joined by `&&`. The groups run in declaration order in one shell
+  process and stop at the first non-zero exit, so working directory,
+  environment, and shell variables carry forward. The `eval` boundary keeps an
+  entry's inline comments or trailing control operators from consuming the
+  generated group terminator. A failed entry emits a bounded action/entry
+  marker for the runner to include in the failure diagnostic. The resulting
+  POSIX command must be parsable by
   [shlex](https://docs.rs/shlex/latest/shlex/) (POSIX mode). On Windows with
   the default PowerShell route, the list is instead one encoded PowerShell
   script that checks `$LASTEXITCODE` after each generated list entry and stops
@@ -2623,12 +2625,19 @@ native escape syntax rather than interpolation-protection delimiters.
 
 The command interpolation logic in `src/ir/cmd_interpolate/mod.rs` prepares one
 quoted input/output binding set per recipe and applies it to each scalar or
-list entry. It replaces only the delayed `{{ ins }}`/`{{ outs }}` markers,
-preserves dollar-prefixed shell variables, and encodes POSIX path text for the
-active quote context. Markers in backticks or command substitutions and text
-that `shlex` cannot parse produce an IR error before an action is hashed. Ninja
-generation then receives fully expanded command text and is responsible only
-for preserving the scalar form or constructing the list-entry shell boundaries.
+list entry. It replaces delayed `{{ ins }}`/`{{ outs }}` markers everywhere and
+standalone `$in`/`$out` tokens in scripts. Command lowering encodes POSIX path
+text for its active quote context and rejects markers in backticks or command
+substitutions. Script lowering retains comments and multiline shell syntax, and
+uses the same contextual path encodings while rejecting backtick-protected
+markers. The private `script_substitution` module owns this script-only lexical
+traversal; command recipes continue to use `substitution`, and both consume the
+shared bindings without composing their traversal states. Longer identifiers
+such as `$input` and `$output`, and non-placeholder text inside backticks,
+remain unchanged. Unbalanced backticks or command text that `shlex` cannot
+parse produce an IR error before an action is hashed. Ninja generation then
+receives fully expanded command text and is responsible only for preserving the
+scalar form or constructing the list-entry shell boundaries.
 
 ### 6.4 Automatic Security as a "Friendliness" Feature
 
@@ -2640,14 +2649,14 @@ error-prone task that requires specialized knowledge.
 
 Netsuke's design makes identified path substitution safe by default. Netsuke
 applies shell-specific quoting to Netsuke-owned `{{ ins }}` and `{{ outs }}`
-path substitutions before action hashing and Ninja synthesis; arbitrary Jinja
-values and handwritten shell fragments remain the manifest author's
-responsibility. POSIX and explicit Bash routes use `shell-quote` during IR
-command lowering, while the default Windows PowerShell route uses single-quoted
-path literals with doubled apostrophes. This protects users from a common and
-dangerous class of errors by default. The approach embodies a deeper form of
-user-friendliness: one that anticipates and mitigates risks on the user's
-behalf.
+path substitutions, and to script `$in` and `$out` substitutions, before action
+hashing and Ninja synthesis; arbitrary Jinja values and handwritten shell
+fragments remain the manifest author's responsibility. POSIX and explicit Bash
+routes use `shell-quote` during IR command lowering, while the default Windows
+PowerShell route uses single-quoted path literals with doubled apostrophes.
+This protects users from a common and dangerous class of errors by default. The
+approach embodies a deeper form of user-friendliness: one that anticipates and
+mitigates risks on the user's behalf.
 
 ## Section 7: A Framework for Friendly and Actionable Error Reporting
 

@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-markdown-format test-typos-config build release lint lint-clippy lint-whitaker lint-python doc-coverage doc-coverage-test fmt check-fmt typecheck typecheck-python markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-dev-fast dev-fast-check dev-build dev-test bench-build bench-config-load bench-glob-expansion
+.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-markdown-format test-typos-config build release lint lint-clippy lint-whitaker lint-python github-actions-lint doc-coverage doc-coverage-test fmt check-fmt typecheck typecheck-python markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-dev-fast dev-fast-check dev-build dev-test bench-build bench-config-load bench-glob-expansion
 
 RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 # Export this path before shell probes expand it, so Make does not interpolate
@@ -51,9 +51,12 @@ export DEV_FAST_CONFIG DEV_FAST_PREFIX
 DEV_FAST_TOOLCHAIN = $$(awk -F'"' '/^[[:space:]]*channel[[:space:]]*=/ { print $$2; exit }' "$$RUST_TOOLCHAIN_FILE")
 MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
 NIXIE ?= nixie
+YAMLLINT ?= yamllint
+ACTIONLINT ?= actionlint
 # Single source of truth for the typos version; the markdownlint target and CI
 # both consume it, so the Makefile and CI cannot drift apart.
 TYPOS_VERSION ?= 1.48.0
+YAMLLINT_VERSION ?= 1.38.0
 UV ?= uv
 UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
 # The Python baseline every uv-driven helper pins. Bump this alongside the
@@ -159,7 +162,7 @@ test-typos-config: spelling-helper-test ## Verify the shared spelling-policy int
 target/%/$(APP): ## Build binary in debug or release mode
 	$(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP)
 
-lint: lint-clippy lint-whitaker lint-python ## Run the Rust and Python lint suites with warnings denied
+lint: lint-clippy lint-whitaker lint-python github-actions-lint ## Run the Rust, Python, and GitHub Actions lint suites with warnings denied
 
 lint-python: ## Run Ruff, Pylint, the df12 house lints, and ambrleaks over the Python sources
 	$(RUFF) check $(PYTHON_SOURCES)
@@ -176,6 +179,10 @@ lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
 	# Run from the crate directory as well so Whitaker loads the narrow
 	# `test_support::fs` exemption from test_support/dylint.toml.
 	cd test_support && DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(WHITAKER) --all --no-deps --package test_support -- --all-targets --all-features
+
+github-actions-lint: ## Validate GitHub Actions workflows
+	$(YAMLLINT) --config-file .yamllint.yml .github/workflows
+	$(ACTIONLINT)
 
 doc-coverage: doc-coverage-test ## Verify aggregate Rustdoc doc-comment coverage meets the threshold
 	# Runs under the uv-pinned baseline interpreter, not the system python3:
@@ -217,7 +224,7 @@ typecheck-python: ## Typecheck the Python sources with ty
 	# would layer the extras through `.pth` chaining, which ty cannot follow.
 	$(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
 		--from ty==$(TY_VERSION) --with pytest==9.0.2 --with pytest-cov==7.0.0 \
-		--with 'pyyaml>=6' --with 'hypothesis>=6' \
+		--with 'pyyaml>=6' --with 'hypothesis>=6' --with 'cmd-mox==0.2.0' \
 		ty check --python-version $(PYTHON_BASELINE) \
 		--extra-search-path scripts $(PYTHON_SOURCES)
 

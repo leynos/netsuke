@@ -209,6 +209,15 @@ fn interpolate_script_applies_quote_context_safeguards() {
     }
 }
 
+#[test]
+fn nested_script_command_substitutions_keep_markers_protected() {
+    let bindings = CommandBindings::new(&[], &[], RecipeShell::Posix);
+    let error =
+        interpolate_script_with_bindings(&format!("echo $( (true); echo {INS_TOKEN} )"), &bindings)
+            .expect_err("markers inside nested script command substitutions must be rejected");
+    assert!(matches!(error, IrGenError::InvalidCommand { .. }));
+}
+
 /// Verify comments cannot alter quote context for later command or script markers.
 #[test]
 fn comments_preserve_quote_context_for_later_markers() {

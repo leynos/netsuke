@@ -1,10 +1,11 @@
 //! Command interpolation utilities for IR actions.
 //!
 //! Provides [`interpolate_command`], which substitutes the internal markers
-//! emitted for `{{ ins }}` and `{{ outs }}` in recipe command strings. Literal
-//! `$ins` and `$outs` remain shell variables. POSIX-compatible routes track
-//! shell quoting so path text is encoded for its insertion context. Called by
-//! [`super::from_manifest`] during IR lowering.
+//! emitted for `{{ ins }}` and `{{ outs }}` in recipe command strings. Script
+//! recipes additionally support `$in` and `$out`; literal shell variables
+//! remain unchanged in command recipes.
+//! POSIX-compatible routes track shell quoting so path text is encoded for its
+//! insertion context. Called by [`super::from_manifest`] during IR lowering.
 
 use crate::localization::{self, keys};
 use camino::Utf8PathBuf;
@@ -18,8 +19,10 @@ use crate::recipe_shell::RecipeShell;
 
 mod command_substitution;
 mod posix_lexical;
+mod script_substitution;
 mod substitution;
 
+use script_substitution::ScriptSubstitutionTraversal;
 use substitution::SubstitutionTraversal;
 
 /// Contextual path substitutions prepared for one recipe.
@@ -197,14 +200,15 @@ pub(crate) fn interpolate_command_with_bindings(
 /// Interpolate a script without requiring command-shaped shell syntax.
 ///
 /// Script recipes may contain heredocs, comments, and other valid shell text
-/// that `shlex` cannot parse as a command. POSIX-compatible routes retain the
-/// backtick exclusion: placeholders within them would otherwise evade lowering
-/// and become silently empty shell variables after the Ninja backend escapes `$`.
+/// that `shlex` cannot parse as a command. The traversal preserves each
+/// placeholder's shell-quoting context. Backtick-protected placeholders are
+/// rejected; single-quoted and double-quoted sites use their matching safe
+/// path encodings.
 pub(crate) fn interpolate_script_with_bindings(
     template: &str,
     bindings: &CommandBindings,
 ) -> Result<String, IrGenError> {
-    substitute(template, bindings)
+    substitute_script(template, bindings)
 }
 
 /// Builds the diagnostic for a command rejected during placeholder expansion.
@@ -246,7 +250,7 @@ pub(super) enum QuoteContext {
     Double,
 }
 
-/// Finds the appropriate substitution marker at `pos`.
+/// Find an internal recipe placeholder at `pos`.
 ///
 /// # Examples
 /// ```rust,ignore
@@ -257,6 +261,37 @@ pub(super) enum QuoteContext {
 pub(super) fn find_substitution(chars: &[char], pos: usize) -> Option<(Placeholder, usize)> {
     try_match_token(chars, pos, INS_TOKEN, Placeholder::Inputs)
         .or_else(|| try_match_token(chars, pos, OUTS_TOKEN, Placeholder::Outputs))
+}
+
+/// Find an internal or short-form script placeholder at `pos`.
+pub(super) fn find_script_substitution(chars: &[char], pos: usize) -> Option<(Placeholder, usize)> {
+    try_match_dollar_placeholder(chars, pos, &['i', 'n'], Placeholder::Inputs)
+        .or_else(|| {
+            try_match_dollar_placeholder(chars, pos, &['o', 'u', 't'], Placeholder::Outputs)
+        })
+        .or_else(|| find_substitution(chars, pos))
+}
+
+/// Match one standalone dollar-prefixed placeholder at `pos`.
+fn try_match_dollar_placeholder(
+    chars: &[char],
+    pos: usize,
+    name: &[char],
+    placeholder: Placeholder,
+) -> Option<(Placeholder, usize)> {
+    let name_length = name.len();
+    let matches_name = chars.get(pos) == Some(&'$')
+        && name
+            .iter()
+            .enumerate()
+            .all(|(offset, character)| chars.get(pos + offset + 1) == Some(character));
+    let has_boundaries = chars
+        .get(pos.wrapping_sub(1))
+        .is_none_or(|character| !character.is_ascii_alphanumeric() && *character != '_')
+        && chars
+            .get(pos + name_length + 1)
+            .is_none_or(|character| !character.is_ascii_alphanumeric() && *character != '_');
+    (matches_name && has_boundaries).then_some((placeholder, name_length + 1))
 }
 
 /// Return the replacement and matched length when `token` starts at `pos`.
@@ -297,6 +332,19 @@ fn substitute(template: &str, bindings: &CommandBindings) -> Result<String, IrGe
     Ok(traversal.finish())
 }
 
+/// Replace script placeholders while retaining their POSIX shell quote context.
+///
+/// A script can validly contain syntax that `shlex` does not accept, so this
+/// performs only the context tracking needed to keep injected paths inert.
+fn substitute_script(template: &str, bindings: &CommandBindings) -> Result<String, IrGenError> {
+    let chars: Vec<char> = template.chars().collect();
+    let mut traversal = ScriptSubstitutionTraversal::new(template, &chars, bindings);
+    let mut pos = 0;
+    while pos < chars.len() {
+        pos = traversal.append_substitution_at_position(pos)?;
+    }
+    Ok(traversal.finish())
+}
 /// Internal marker emitted for `{{ ins }}` during manifest rendering and
 /// consumed during command interpolation; it is not general template syntax.
 pub const INS_TOKEN: &str = "__NETSUKE_INS_PLACEHOLDER__";

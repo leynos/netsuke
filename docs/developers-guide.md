@@ -813,7 +813,88 @@ Version drift matters here beyond reproducibility: a different `mdtablefix`
 version may reflow prose differently, which would make `make check-fmt` fail on
 an otherwise clean tree.
 
-Install the separately versioned Whitaker installer with:
+### GitHub Actions validation
+
+`make lint` includes `make github-actions-lint`, which runs `yamllint` against
+the checked GitHub Actions workflows and then runs `actionlint`. The
+repository's [`.yamllint.yml`](../.yamllint.yml) accepts GitHub's unquoted `on`
+key and caps workflow lines at 120 columns.
+
+Install the pinned YAML linter locally with
+`uv tool install "yamllint==1.38.0"`. CI caches the `uv` tool directories and
+installs that exact version. Run the workflow checks with
+`make github-actions-lint` after installing both linters.
+
+The following shell commands reproduce CI's actionlint v1.7.12 setup. They
+download the installer at its pinned commit and the Linux `x86_64` release
+archive, verify the archive's SHA-256, and feed that verified archive to the
+installer so it cannot download a different artefact:
+
+```bash
+ACTIONLINT_VERSION='1.7.12'
+ACTIONLINT_SHA256='8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8'
+ACTIONLINT_INSTALLER_COMMIT='914e7df21a07ef503a81201c76d2b11c789d3fca'
+ACTIONLINT_ARCHIVE="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+ACTIONLINT_RAW_BASE='https://raw.githubusercontent.com/rhysd/actionlint'
+ACTIONLINT_RELEASE_ROOT='https://github.com/rhysd/actionlint/releases/download'
+ACTIONLINT_INSTALLER_URL="${ACTIONLINT_RAW_BASE}/${ACTIONLINT_INSTALLER_COMMIT}/scripts"
+ACTIONLINT_INSTALLER_URL+='/download-actionlint.bash'
+ACTIONLINT_RELEASE_URL="${ACTIONLINT_RELEASE_ROOT}/v${ACTIONLINT_VERSION}/${ACTIONLINT_ARCHIVE}"
+ACTIONLINT_INSTALLER_PATH="$(mktemp)"
+ACTIONLINT_ARCHIVE_PATH="$(mktemp)"
+trap 'rm -f "${ACTIONLINT_INSTALLER_PATH}" "${ACTIONLINT_ARCHIVE_PATH}"' EXIT
+curl --fail --location --show-error --output "${ACTIONLINT_INSTALLER_PATH}" \
+  "${ACTIONLINT_INSTALLER_URL}"
+curl --fail --location --show-error --output "${ACTIONLINT_ARCHIVE_PATH}" \
+  "${ACTIONLINT_RELEASE_URL}"
+printf '%s  %s\n' "${ACTIONLINT_SHA256}" "${ACTIONLINT_ARCHIVE_PATH}" \
+  | sha256sum --check --
+curl() {
+  if [[ "${*: -1}" == "${ACTIONLINT_RELEASE_URL}" ]]; then
+    cat "${ACTIONLINT_ARCHIVE_PATH}"
+  else
+    command curl "$@"
+  fi
+}
+export -f curl
+bash "${ACTIONLINT_INSTALLER_PATH}" "${ACTIONLINT_VERSION}"
+make github-actions-lint
+```
+
+[`tests/workflow_contracts/github_actions_validation_test.py`][github-actions-validation-test]
+verifies the Makefile delegation, YAML policy, tool pins, and trusted CI
+invocation.
+
+[github-actions-validation-test]:
+  ../tests/workflow_contracts/github_actions_validation_test.py
+
+For screen readers: the following sequence shows how CI restores or builds the
+pinned linting tools, verifies actionlint before installation, and passes the
+checked-out binary to the Makefile workflow-lint target.
+
+```mermaid
+sequenceDiagram
+    participant CI as Linux CI
+    participant Cache as Tool caches
+    participant GitHub as GitHub release
+    participant Make as /usr/bin/make
+    participant Linters as yamllint and actionlint
+
+    CI->>Cache: Restore yamllint and actionlint
+    alt actionlint cache miss
+        CI->>GitHub: Download pinned installer and v1.7.12 archive
+        CI->>CI: sha256sum --check archive
+        CI->>CI: Install actionlint
+        CI->>Cache: Save actionlint
+    end
+    CI->>CI: uv tool install yamllint==1.38.0
+    CI->>Make: ACTIONLINT=$GITHUB_WORKSPACE/actionlint lint
+    Make->>Linters: Run yamllint with .yamllint.yml
+    Make->>Linters: Run actionlint
+```
+
+**Figure**: GitHub Actions lint-tool setup and invocation sequence, including
+cache restoration, archive verification, and the delegated Makefile checks.
 
 CI installs Whitaker through the SHA-pinned
 `leynos/shared-actions/.github/actions/install-whitaker` action. Both build

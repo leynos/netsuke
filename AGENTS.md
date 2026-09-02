@@ -188,17 +188,20 @@ directive anywhere.
     RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings" \
     cargo clippy --workspace --all-targets --all-features -- -D warnings
     whitaker --all -- --all-targets --all-features
+    yamllint --config-file .yamllint.yml .github/workflows
+    actionlint
     ```
 
     linting every target with all features enabled, denying all Clippy
-    warnings, and running the Whitaker Dylint suite (see
+    warnings, running the Whitaker Dylint suite (see
     `docs/whitaker-users-guide.md`; install via `cargo install
     whitaker-installer && whitaker-installer`). `make lint-clippy` runs the
     Clippy-only subset when Whitaker is unavailable. `make lint` also runs
     `make lint-python`, which lints the Python sources with Ruff, Pylint, the
     df12 house lints, and `ambrleaks`; see "Python tooling and baseline" in
     `docs/developers-guide.md` for the gate inventory and the Python 3.14
-    baseline it enforces.
+    baseline it enforces. `make github-actions-lint` validates GitHub Actions
+    workflows with yamllint and actionlint alone; `make lint` includes it.
   - `make test` executes:
 
     ```sh

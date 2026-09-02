@@ -1,3 +1,4 @@
+---
 name: delayed-pr-comment
 on:
   workflow_dispatch:

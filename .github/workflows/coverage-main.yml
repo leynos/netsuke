@@ -1,3 +1,4 @@
+---
 name: Coverage (main)
 
 # CodeScene accepts `cs-coverage upload` only for analysed branches, so

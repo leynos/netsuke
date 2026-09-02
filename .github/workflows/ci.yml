@@ -1,3 +1,4 @@
+---
 name: CI
 
 on:
@@ -36,6 +37,10 @@ jobs:
       # default (see docs/adr-006-adopt-polonius-nightly-toolchain.md), so CI
       # builds with the dated nightly pinned in rust-toolchain.toml.
       NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
+      YAMLLINT_VERSION: '1.38.0'
+      UV_CACHE_DIR: ${{ github.workspace }}/.uv-cache
+      UV_TOOL_DIR: ${{ github.workspace }}/.uv-tools
+      UV_TOOL_BIN_DIR: ${{ github.workspace }}/.uv-bin
       # Real-Ninja integration coverage must not silently skip when a runner
       # image lacks the backend executable.
       NETSUKE_REQUIRE_NINJA: '1'
@@ -121,6 +126,58 @@ jobs:
           # shared spelling dictionary below rather than a uv cache with no
           # durable dependency key.
           enable-cache: 'false'
+      - name: Cache yamllint
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            .uv-cache
+            .uv-tools
+            .uv-bin
+          key: yamllint-${{ runner.os }}-${{ runner.arch }}-${{ env.YAMLLINT_VERSION }}
+      - name: Install yamllint
+        run: |
+          uv tool install "yamllint==${YAMLLINT_VERSION}"
+          echo "${UV_TOOL_BIN_DIR}" >> "$GITHUB_PATH"
+      - name: Cache actionlint
+        id: cache_actionlint
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: actionlint
+          key: actionlint-${{ runner.os }}-${{ runner.arch }}-1.7.12
+      - name: Download actionlint
+        id: get_actionlint
+        if: steps.cache_actionlint.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          readonly ACTIONLINT_VERSION='1.7.12'
+          readonly ACTIONLINT_SHA256='8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8'
+          readonly ACTIONLINT_INSTALLER_COMMIT='914e7df21a07ef503a81201c76d2b11c789d3fca'
+          readonly ACTIONLINT_ARCHIVE="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          readonly ACTIONLINT_RAW_BASE='https://raw.githubusercontent.com/rhysd/actionlint'
+          readonly ACTIONLINT_SCRIPT='scripts/download-actionlint.bash'
+          readonly ACTIONLINT_INSTALLER_URL="${ACTIONLINT_RAW_BASE}/${ACTIONLINT_INSTALLER_COMMIT}/${ACTIONLINT_SCRIPT}"
+          readonly ACTIONLINT_RELEASE_ROOT='https://github.com/rhysd/actionlint/releases/download'
+          readonly ACTIONLINT_RELEASE_BASE="${ACTIONLINT_RELEASE_ROOT}/v${ACTIONLINT_VERSION}"
+          readonly ACTIONLINT_RELEASE_URL="${ACTIONLINT_RELEASE_BASE}/${ACTIONLINT_ARCHIVE}"
+          ACTIONLINT_INSTALLER_PATH="$(mktemp)"
+          ACTIONLINT_ARCHIVE_PATH="$(mktemp)"
+          trap 'rm -f "${ACTIONLINT_INSTALLER_PATH}" "${ACTIONLINT_ARCHIVE_PATH}"' EXIT
+          # Feed the verified archive to reviewed installer without second download.
+          curl() {
+            if [[ "${*: -1}" == "${ACTIONLINT_RELEASE_URL}" ]]; then
+              cat "${ACTIONLINT_ARCHIVE_PATH}"
+            else
+              command curl "$@"
+            fi
+          }
+          export -f curl
+          command curl --fail --location --show-error --output "${ACTIONLINT_INSTALLER_PATH}" \
+            "${ACTIONLINT_INSTALLER_URL}"
+          command curl --fail --location --show-error --output "${ACTIONLINT_ARCHIVE_PATH}" \
+            "${ACTIONLINT_RELEASE_URL}"
+          printf '%s  %s\n' "${ACTIONLINT_SHA256}" "${ACTIONLINT_ARCHIVE_PATH}" | sha256sum --check --
+          bash "${ACTIONLINT_INSTALLER_PATH}" "${ACTIONLINT_VERSION}"
+        shell: bash
       - name: Install Nixie
         uses: >-
           leynos/shared-actions/.github/actions/install-nixie@32c8ea649ea44d40119f348ad48861212532061f
@@ -136,7 +193,7 @@ jobs:
         with:
           installer-version: '0.2.7'
       - name: Lint
-        run: make lint
+        run: /usr/bin/make ACTIONLINT="$GITHUB_WORKSPACE/actionlint" lint
       - name: Typecheck
         run: make typecheck
       - name: Doc coverage
@@ -150,7 +207,9 @@ jobs:
           path: |
             .typos-oxendict-base.json
             .typos-oxendict-base.toml
-          key: oxendict-${{ runner.os }}-${{ env.NETSUKE_RUST_TOOLCHAIN }}-${{ hashFiles('typos.local.toml') }}-${{ github.run_id }}
+          key: >-
+            oxendict-${{ runner.os }}-${{ env.NETSUKE_RUST_TOOLCHAIN }}-${{
+            hashFiles('typos.local.toml') }}-${{ github.run_id }}
           restore-keys: |
             oxendict-${{ runner.os }}-${{ env.NETSUKE_RUST_TOOLCHAIN }}-${{ hashFiles('typos.local.toml') }}-
       - name: Spelling

@@ -1,3 +1,4 @@
+---
 name: dependabot-automerge
 
 # Uses pull_request_target to enable auto-merge with write permissions.
