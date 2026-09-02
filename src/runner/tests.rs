@@ -5,6 +5,7 @@ use crate::ir::{BuildEdge, BuildGraph, DependencyOrder};
 use crate::localization;
 use crate::manifest::ManifestLoadStage;
 use crate::status::{LocalizationKey, StageNumber, StatusReporter};
+use crate::test_tracing_capture::with_test_subscriber;
 use crate::{ninja_gen::NinjaGenError, recipe_shell::RecipeShell};
 use anyhow::{Result, ensure};
 use camino::Utf8PathBuf;
@@ -15,6 +16,7 @@ use std::path::Path;
 use std::sync::{Mutex, PoisonError};
 use std::time::Duration;
 use test_support::{localizer_test_lock, set_en_localizer};
+use tracing_subscriber::filter::LevelFilter;
 
 const MINIMAL_MANIFEST: &str = concat!(
     "netsuke_version: \"1.0.0\"\n",
@@ -226,6 +228,47 @@ fn runner_reports_the_complete_generation_stage_sequence() -> Result<()> {
     ensure!(
         ninja_text.contains("build hello:"),
         "runner generation should produce the hello build edge: {ninja_text}"
+    );
+    Ok(())
+}
+
+#[test]
+fn runner_does_not_log_manifest_content_at_debug_level() -> Result<()> {
+    const SENTINEL: &str = "s3cr3t-manifest-sentinel";
+    const MANIFEST: &str = concat!(
+        "netsuke_version: \"1.0.0\"\n",
+        "targets:\n",
+        "  - name: s3cr3t-manifest-sentinel\n",
+        "    deps:\n",
+        "      - s3cr3t-manifest-sentinel-dependency\n",
+        "    command: echo s3cr3t-manifest-sentinel\n",
+    );
+    let (temp, manifest_path) = write_manifest(MANIFEST)?;
+    let cli = Cli {
+        file: manifest_path,
+        directory: Some(
+            Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+                .map_err(|path| anyhow::anyhow!("non-UTF-8 temp path: {}", path.display()))?,
+        ),
+        command: Some(Commands::Generate { output: None }),
+        ..Cli::default()
+    };
+    let reporter = StageRecordingReporter::default();
+    let clock = FixedMonotonicClock::with_elapsed(Duration::ZERO);
+    let graph_generation = GraphGenerationContext {
+        recipe_shell: RecipeShell::host_default(),
+        clock: &clock,
+    };
+
+    let (generation, events) = with_test_subscriber(LevelFilter::DEBUG, |captured| {
+        let generation = generate_ninja_with_shell(&cli, &reporter, None, &graph_generation);
+        (generation, captured.snapshot())
+    });
+    generation?;
+
+    ensure!(
+        !events.iter().any(|event| event.contains(SENTINEL)),
+        "manifest content must not reach DEBUG events: {events:?}"
     );
     Ok(())
 }
