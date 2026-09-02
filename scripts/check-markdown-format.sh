@@ -50,9 +50,12 @@ unformatted=()
 for index in "${!original_files[@]}"; do
   original_file="${original_files[$index]}"
   staged_file="${staged_files[$index]}"
-  if ! cmp -s "$staged_file" "$original_file" \
-    && ! sed $'s/$/\r/' "$staged_file" | cmp -s - "$original_file"; then
-    unformatted+=("$original_file")
+  if ! cmp -s "$staged_file" "$original_file"; then
+    crlf_staged_file="${staged_file}.crlf"
+    sed $'s/$/\r/' "$staged_file" > "$crlf_staged_file"
+    if ! cmp -s "$crlf_staged_file" "$original_file"; then
+      unformatted+=("$original_file")
+    fi
   fi
 done
 
