@@ -44,6 +44,11 @@ DIRECT_RUNNER_SOURCES = (
     ("ci.kani-smoke", "ci.yml", "kani-smoke"),
     ("coverage-main.coverage-upload", "coverage-main.yml", "coverage-upload"),
     (
+        "coverage-pr-submit.submit-coverage",
+        "coverage-pr-submit.yml",
+        "submit-coverage",
+    ),
+    (
         "delayed-pr-comment.delay_and_comment",
         "delayed-pr-comment.yml",
         "delay_and_comment",
@@ -69,6 +74,11 @@ DIRECT_RUNNER_SOURCES = (
         ("ci-windows.yml", "windows-native-recipe-smoke", "windows-latest"),
         ("ci.yml", "kani-smoke", UBICLOUD_DEFAULT_LABEL),
         ("coverage-main.yml", "coverage-upload", UBICLOUD_LARGE_LABEL),
+        (
+            "coverage-pr-submit.yml",
+            "submit-coverage",
+            UBICLOUD_DEFAULT_LABEL,
+        ),
         ("delayed-pr-comment.yml", "delay_and_comment", "ubuntu-latest"),
         ("netsukefile-test.yml", "netsukefile", UBICLOUD_COMPAT_LABEL),
         ("release.yml", "metadata", "ubuntu-latest"),

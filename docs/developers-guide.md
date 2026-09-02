@@ -1294,6 +1294,41 @@ workflow, job, and step helpers in
 workflow-specific projections and assertions, so parsing and structural
 validation remain consistent across the workflows under test.
 
+
+### PR coverage trust boundary
+
+The pull-request CI job is deliberately unprivileged. It builds, tests, and
+generates `lcov.info`, then uploads only that file as the short-lived
+`pr-coverage-lcov` artefact. It does not receive `CS_ACCESS_TOKEN`. This
+matters because PR-controlled commands can persist `BASH_ENV`, `GITHUB_PATH`,
+and other state for later steps on their own runner.
+
+[`coverage-pr-submit.yml`](../.github/workflows/coverage-pr-submit.yml) is a
+separate `workflow_run` workflow whose definition comes from the default
+branch. After a successful same-repository `pull_request` CI run, it starts a
+fresh runner, checks out only the default branch's validation tooling, and
+downloads the artefact into `coverage-artifact/`. It never checks out or
+executes the PR tree or artefact contents. Before the CodeScene action can see
+the secret, `make validate-coverage-artifact` rejects every member except a
+bounded, regular UTF-8 `lcov.info` file with recognized LCOV records.
+
+Eligibility is enforced by the trusted workflow definition, its successful
+pull-request and same-repository-head guards, and the step-local
+`CS_ACCESS_TOKEN` presence guard. Fork PRs still receive the complete
+unprivileged CI result but do not enter the secret-bearing submission job. The
+repository or organization Actions policy must continue to restrict the
+CodeScene credential to this trusted phase. A protected environment with
+independent reviewers is an optional stronger control for organizations that
+need explicit human approval before any coverage submission.
+
+The trusted workflow creates the `CodeScene coverage` Check Run against the
+originating PR `head_sha`; it reports `neutral` when no token is available.
+Branch-protection configuration may therefore need an organization-level update
+to require this Check Run name instead of the former in-job coverage step.
+`tests/workflow_contracts/trust_boundary_test.py` and its Hypothesis companion
+prevent the secret from returning to a pull-request workflow, a trusted
+checkout from drifting to PR content, or the validator from being skipped.
+
 `make test` runs the non-doctest suite through
 [cargo-nextest](https://nexte.st/) and the doctests separately. CI pins the
 runner version in `NEXTEST_VERSION` in `.github/workflows/ci.yml`. Install that
