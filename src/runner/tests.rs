@@ -273,7 +273,7 @@ fn check_bypasses_ninja_program_and_recipe_shell_resolution() -> Result<()> {
 
     run_with_ninja_program_resolver(&cli, crate::output_prefs::resolve(None), None, || {
         resolver_called.set(true);
-        PathBuf::from("ninja")
+        Utf8PathBuf::from("ninja")
     })?;
 
     ensure!(

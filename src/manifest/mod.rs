@@ -58,7 +58,7 @@ pub use env_reader::{EnvReadError, EnvReader, process_env_reader};
 pub(crate) use expand::expand_foreach;
 pub use glob::glob_paths;
 pub use load_stage::ManifestLoadStage;
-use loading::{notify_stage, trace_expansion_report};
+use loading::{ExpansionReportObserver, notify_stage, trace_expansion_report};
 pub use parse_with_config::from_str_with_env_and_config;
 pub(crate) use query::{
     LoadedManifest, from_path_for_manifest_query, from_path_for_manifest_query_with_source,
@@ -69,9 +69,6 @@ use self::{env_reader::env_var_with, jinja_macros::register_manifest_macros};
 #[cfg(test)]
 use workspace::open_manifest_workspace;
 
-/// Receives normal-loader reports; manifest queries supply `None` to stay
-/// telemetry-free.
-type ExpansionReportObserver = fn(&expand::ExpansionReport);
 /// Parse a manifest string using Jinja for value templating.
 ///
 /// The input YAML must be valid on its own. Jinja expressions are evaluated
