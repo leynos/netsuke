@@ -43,28 +43,42 @@ def test_release_admission_metrics_retain_read_only_delivery() -> None:
     producer exists. Its summary always runs, and its artifact upload preserves
     failure diagnostics while respecting the reusable dry-run contract.
     """
+    admission, release, admission_step, summary_step, upload_step = _workflow_parts()
+    _assert_admission_job_contract(admission, admission_step)
+    _assert_metrics_delivery_contract(summary_step, upload_step)
+    _assert_release_scaffold_boundary(release)
+
+
+def _workflow_parts() -> tuple[dict[str, object], ...]:
+    """Return the workflow mappings exercised by the delivery contract."""
     workflow = load_workflow(RELEASE_WORKFLOW_PATH)
-    admission = workflow_job(workflow, "release-admission-canaries")
-    release = workflow_job(workflow, "release")
-    release_needs = release.get("needs")
+    steps = job_steps(workflow, "release-admission-canaries")
+    assert step_index_by_key(
+        steps, "name", "Require release-admission evidence"
+    ) < step_index_by_key(steps, "name", "Upload release-admission metrics"), (
+        "the gate must write metrics before their artifact upload"
+    )
+    return (
+        workflow_job(workflow, "release-admission-canaries"),
+        workflow_job(workflow, "release"),
+        _step_named(steps, "Require release-admission evidence"),
+        _step_named(steps, "Summarise release-admission metrics"),
+        _step_named(steps, "Upload release-admission metrics"),
+    )
+
+
+def _step_named(steps: list[dict[str, object]], name: str) -> dict[str, object]:
+    """Return the required workflow step with the supplied fixed name."""
+    return next(step for step in steps if step.get("name") == name)
+
+
+def _assert_admission_job_contract(
+    admission: dict[str, object], admission_step: dict[str, object]
+) -> None:
+    """Assert the admission job retains its read-only non-blocking boundary."""
     permissions = require_mapping(
         admission.get("permissions"), "release-admission-canaries.permissions"
     )
-    steps = job_steps(workflow, "release-admission-canaries")
-    admission_step = next(
-        step
-        for step in steps
-        if step.get("name") == "Require release-admission evidence"
-    )
-    summary_step = next(
-        step
-        for step in steps
-        if step.get("name") == "Summarise release-admission metrics"
-    )
-    upload_step = next(
-        step for step in steps if step.get("name") == "Upload release-admission metrics"
-    )
-
     assert permissions == ADMISSION_PERMISSIONS, (
         "admission must retain read-only permissions"
     )
@@ -78,11 +92,12 @@ def test_release_admission_metrics_retain_read_only_delivery() -> None:
     assert "require-release-admission-canaries.sh" in str(admission_step.get("run")), (
         "admission must execute the instrumented gate"
     )
-    assert step_index_by_key(
-        steps, "name", "Require release-admission evidence"
-    ) < step_index_by_key(steps, "name", "Upload release-admission metrics"), (
-        "the gate must write metrics before their artifact upload"
-    )
+
+
+def _assert_metrics_delivery_contract(
+    summary_step: dict[str, object], upload_step: dict[str, object]
+) -> None:
+    """Assert the summary and artefact preserve failure-path diagnostics."""
     assert summary_step.get("if") == "always()", (
         "the summary must run after both successful and failed admission checks"
     )
@@ -102,6 +117,11 @@ def test_release_admission_metrics_retain_read_only_delivery() -> None:
     assert upload_step.get("if") == UPLOAD_CONDITION, (
         "the upload must retain failures while respecting the dry-run contract"
     )
+
+
+def _assert_release_scaffold_boundary(release: dict[str, object]) -> None:
+    """Assert publication defers enforcement until evidence production exists."""
+    release_needs = release.get("needs")
     assert isinstance(release_needs, list), "release dependencies must be a list"
     assert "release-admission-canaries" not in release_needs, (
         "publication must not depend on a scaffold without an evidence producer"
