@@ -1484,8 +1484,8 @@ passes the selected path explicitly with Cargo's `--config` option; keep the
 fragment out of `.cargo/config.toml` so it cannot affect ordinary, release,
 coverage, or verification builds.
 
-`CARGO_LOCKED` defaults to empty. Set `CARGO_LOCKED=--locked` when you want
-`dev-build` and `dev-test` to verify the repository lockfile, for example
+`CARGO_LOCKED` defaults to empty. Set `CARGO_LOCKED=--locked` to enable
+repository lockfile verification for `dev-build` and `dev-test`, for example
 `make CARGO_LOCKED=--locked dev-test`.
 
 ### Toolchain contract
