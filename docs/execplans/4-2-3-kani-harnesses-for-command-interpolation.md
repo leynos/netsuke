@@ -7,7 +7,7 @@ be kept up to date as work proceeds.
 
 Status: IN PROGRESS
 
-Revision 2.20. See `Revision note` at the foot of this document.
+Revision 2.21. See `Revision note` at the foot of this document.
 
 ## Purpose / big picture
 
@@ -1861,3 +1861,15 @@ manifest harness recorded in Revision 2.19. CodeRabbit was queued through
 `comenq` as queue id `2ebbb791`, with an approximate posting delay of 3h15m, so
 no fresh CodeRabbit verdict exists yet. The plan remains `IN PROGRESS` pending
 the CodeRabbit verdict.
+
+**Revision 2.21 (2026-09-02).** Inspection confirmed that
+`src/ir/cmd_interpolate_property_support.rs` is private test support under
+`cfg(test)`. Its generated templates, bindings, and fragments must remain
+unconstrained `String`/`&str` values so tests cover placeholders, backticks,
+quotes, empty values, and malformed values. A file-scoped CodeScene suppression
+was added for the String Heavy Function Arguments metric rather than
+introducing newtypes or refactoring the test seam. Validation completed: the
+JSON scope assertion passed;
+`cargo test --lib ir::cmd_interpolate::property_tests::scanner_agrees_with_independent_specification`
+passed (1/1); and `make check-fmt`, `make markdownlint`, and `make nixie`
+passed.
