@@ -1856,4 +1856,8 @@ coverage at 99.13%, `make markdownlint`, and `make nixie`. Windows-host
 execution remains pending because this workspace is Linux; it is not claimed as
 passed. The full `make kani-ir` run is deliberately not claimed because the
 capped run timed out in the unrelated manifest harness recorded in Revision
-2.19. The plan remains `IN PROGRESS` pending CodeRabbit and Windows CI.
+2.19. CodeRabbit was queued through `comenq` as queue id `2ebbb791`, with an
+approximate posting delay of 3h15m, so no fresh CodeRabbit verdict exists yet.
+Windows-host execution remains pending because this workspace is Linux; the
+queued Windows hosted CI is the path for that validation. The plan remains
+`IN PROGRESS` pending the CodeRabbit verdict and Windows CI.
