@@ -5,9 +5,9 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: COMPLETE
+Status: IN PROGRESS
 
-Revision 2.18. See `Revision note` at the foot of this document.
+Revision 2.20. See `Revision note` at the foot of this document.
 
 ## Purpose / big picture
 
@@ -1615,12 +1615,13 @@ not apply POSIX `shlex` validation.
 ## Outcomes & retrospective
 
 This work adds two exhaustive Kani kernel proofs without changing command
-interpolation behaviour. The eight-character sigil window is complete for its
-local decision; the short-marker proof establishes exact, boundary-independent
-length-generic matching. The full scanner and guard could not meet the cap even
-at six characters, so the independent Proptest properties cover the 256/8
-residual range instead. `ADR-004` records that boundary, the local-oracle
-policy, and its limits.
+interpolation behaviour. The historical eight-character sigil proof is
+superseded by the target branch's marker-only lowering; the post-rebase
+shell-variable and marker proofs establish the active boundary-independent
+matching decisions. The full scanner and guard could not meet the cap even at
+six characters, so the independent Proptest properties cover the 256/8 residual
+range instead. `ADR-004` records that boundary, the local-oracle policy, and
+its limits.
 
 The developers' guide now records the established `$$in` and marker-asymmetry
 behaviour. `docs/users-guide.md` remains unchanged because that contract is not
@@ -1841,3 +1842,18 @@ while preserving the historical observations and measurements above.
   reaching the existing five-minute cap at
   `ir::from_manifest::verification::missing_rule_shape_is_rejected` (exit 124);
   it is not recorded as a full-suite pass.
+
+**Revision 2.20 (2026-09-02).** A post-rebase review confirmed the active
+marker-only contract and identified follow-up coverage and documentation work.
+The developers' guide now requires a caption for the Kani harness inventory;
+the standalone compile-time fixture, test refinements, and supplemental-patch
+checks remain part of this repair round. The focused absent-path and
+normalizer-failure properties passed, as did the 34 command-interpolation tests
+and all five Kani `cfg` UI tests. On this Linux workspace,
+`make SHELL=bash test` passed with 2,782 tests and 3 skipped; the full gate set
+also passed: `make check-fmt`, `make lint`, `make typecheck`, `make test`, doc
+coverage at 99.13%, `make markdownlint`, and `make nixie`. Windows-host
+execution remains pending because this workspace is Linux; it is not claimed as
+passed. The full `make kani-ir` run is deliberately not claimed because the
+capped run timed out in the unrelated manifest harness recorded in Revision
+2.19. The plan remains `IN PROGRESS` pending CodeRabbit and Windows CI.

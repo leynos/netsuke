@@ -57,6 +57,39 @@ fn cfg_kani_is_accepted_by_compile_time_policy() -> io::Result<()> {
     Ok(())
 }
 
+/// Verify command-interpolation Kani declarations compile under `cfg(kani)`.
+#[test]
+fn command_interpolation_kani_wiring_compiles() -> io::Result<()> {
+    let output = rustc_with_kani_check_cfg("tests/ui/cfg_kani_cmd_interpolate_wiring_pass.rs")?;
+
+    if !output.status.success() {
+        return Err(io::Error::other(format!(
+            "command-interpolation Kani wiring should compile:\n{}",
+            stderr(&output),
+        )));
+    }
+    Ok(())
+}
+
+/// Verify marker declarations fail to compile without their underscore prefix.
+#[test]
+fn marker_prefix_invariant_is_rejected_at_compile_time() -> io::Result<()> {
+    let output = rustc_with_kani_check_cfg("tests/ui/cfg_kani_marker_prefix_compile_fail.rs")?;
+    let stderr = stderr(&output);
+
+    if output.status.success() {
+        return Err(io::Error::other(
+            "marker tokens without underscore prefixes should fail to compile",
+        ));
+    }
+    if !stderr.contains("marker fallback in find_substitution only runs at underscore positions") {
+        return Err(io::Error::other(format!(
+            "marker-prefix diagnostic should explain the invariant:\n{stderr}",
+        )));
+    }
+    Ok(())
+}
+
 /// Unknown cfg names fail under the same check-cfg declaration.
 #[test]
 fn unknown_cfg_is_rejected_by_compile_time_policy() -> io::Result<()> {
@@ -91,6 +124,7 @@ fn compile_ui_fixture(source: &str, output_path: &Path) -> io::Result<Output> {
     Command::new(rustc())
         .arg("--edition=2024")
         .arg("--crate-type=bin")
+        .arg("--cfg=kani")
         .arg("--check-cfg=cfg(kani)")
         .arg("-Dunexpected-cfgs")
         .arg(source_path)

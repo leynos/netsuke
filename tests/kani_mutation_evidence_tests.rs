@@ -222,6 +222,7 @@ fn supplemental_property_location(patch_stem: &str) -> Result<(Utf8PathBuf, Stri
 fn supplemental_property_patches() -> Result<BTreeSet<String>> {
     let root = Dir::open_ambient_dir(manifest_dir(), ambient_authority())
         .context("open workspace root")?;
+    let available_patch_stems = patch_stems()?;
     let mut patches = BTreeSet::new();
     for patch_stem in SUPPLEMENTAL_PROPERTY_PATCHES {
         let (source_path, property_name) = supplemental_property_location(patch_stem)?;
@@ -235,6 +236,10 @@ fn supplemental_property_patches() -> Result<BTreeSet<String>> {
                 .any(|name| name == property_name),
             "supplemental patch {patch_stem} names missing property {property_name} \
              in {source_path}",
+        );
+        ensure!(
+            available_patch_stems.contains(*patch_stem),
+            "supplemental patch {patch_stem} is missing {MUTATIONS_DIR}/{patch_stem}.patch",
         );
         patches.insert((*patch_stem).to_owned());
     }

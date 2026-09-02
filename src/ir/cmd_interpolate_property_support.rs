@@ -154,6 +154,11 @@ pub(super) fn has_odd_backticks(command: &str) -> bool {
     command.chars().filter(|&ch| ch == '`').count() & 1 == 1
 }
 
+/// Report whether `command` satisfies the POSIX command-syntax guard.
+pub(super) fn is_valid_posix_command(command: &str) -> bool {
+    !has_odd_backticks(command) && shlex::split(command).is_some()
+}
+
 /// Generate one character that can interact with interpolation syntax.
 fn template_character_strategy() -> impl Strategy<Value = char> {
     prop::sample::select(vec!['$', '`', 'i', 'n', 'o', 'u', 't', '_', 'a', ' '])

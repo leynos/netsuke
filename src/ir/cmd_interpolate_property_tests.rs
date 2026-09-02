@@ -15,7 +15,7 @@ use super::{
 use support::{
     adversarial_template_strategy, assert_matches_specification,
     eight_placeholder_template_strategy, has_odd_backticks, interpolation_template_strategy,
-    posix_bindings, raw_binding_strategy, safe_text_strategy,
+    is_valid_posix_command, posix_bindings, raw_binding_strategy, safe_text_strategy,
 };
 
 proptest! {
@@ -186,14 +186,12 @@ proptest! {
 
         match (specification, interpolate_command_with_bindings(&template, &bindings)) {
             (Ok(expected_command), Ok(command)) => {
-                let is_valid = !has_odd_backticks(&expected_command)
-                    && shlex::split(&expected_command).is_some();
+                let is_valid = is_valid_posix_command(&expected_command);
                 prop_assert!(is_valid, "guard accepted an invalid substituted command");
                 prop_assert_eq!(command, expected_command);
             }
             (Ok(expected_command), Err(IrGenError::InvalidCommand { command, .. })) => {
-                let is_valid = !has_odd_backticks(&expected_command)
-                    && shlex::split(&expected_command).is_some();
+                let is_valid = is_valid_posix_command(&expected_command);
                 prop_assert!(!is_valid, "guard rejected a valid substituted command");
                 prop_assert_eq!(command, expected_command);
             }

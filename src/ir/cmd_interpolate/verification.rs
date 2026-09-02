@@ -2,7 +2,7 @@
 //!
 //! The shell-variable proof checks every symbolic `$` position in an
 //! eight-character window. Literal `$in` and `$out` must remain shell text, so
-//! the recogniser must return no Netsuke substitution there. A separate proof
+//! the recognizer must return no Netsuke substitution there. A separate proof
 //! drives exact matching through the public recogniser using the production
 //! marker tokens.
 

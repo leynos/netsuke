@@ -31,6 +31,11 @@ fn path_string() -> impl Strategy<Value = String> {
     "[A-Za-z0-9._/-]{0,64}"
 }
 
+/// Generate one portable filename component without path traversal.
+fn path_component() -> impl Strategy<Value = String> {
+    "[A-Za-z0-9][A-Za-z0-9._-]{0,63}"
+}
+
 fn project_alias(temp: &Path, project_name: &str, spelling: u8) -> PathBuf {
     let project = temp.join(project_name);
     match spelling {
@@ -90,9 +95,15 @@ proptest! {
     ///
     /// The caller owns the fallback; see `collect_file_layers`.
     #[test]
-    fn normalized_path_key_reports_absent_paths(value in path_string()) {
-        let absent = format!("/nonexistent-netsuke-proptest/{value}");
-        prop_assert!(normalized_path_key(&FsPathNormalizer, &absent).is_err());
+    fn normalized_path_key_reports_absent_paths(value in path_component()) {
+        let temp = tempdir().expect("create temp dir for absent-path normalization");
+        let absent = temp.path().join(format!(".netsuke-absent-{value}"));
+        let result = normalized_path_key(&FsPathNormalizer, &absent.to_string_lossy());
+
+        prop_assert!(
+            result.is_err(),
+            "absent path {absent:?} should not normalize: {result:?}"
+        );
     }
 
     /// Normalization is idempotent, so repeated comparison cannot drift.

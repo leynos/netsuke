@@ -3,21 +3,21 @@
 use super::*;
 
 use camino::Utf8PathBuf;
+use rstest::rstest;
 
 /// Verify PowerShell rejects markers in quote and command-substitution regions.
-#[test]
-fn power_shell_rejects_markers_without_a_context_safe_encoder() {
+#[rstest]
+#[case::single_quoted(format!("Write-Output '{OUTS_TOKEN}'"))]
+#[case::double_quoted(format!("Write-Output \"{OUTS_TOKEN}\""))]
+#[case::command_substitution(format!("Write-Output $(Write-Output {OUTS_TOKEN})"))]
+fn power_shell_rejects_markers_without_a_context_safe_encoder(#[case] template: String) {
     let bindings = CommandBindings::new(&[], &[Utf8PathBuf::from("out")], RecipeShell::PowerShell);
-    for template in [
-        format!("Write-Output '{OUTS_TOKEN}'"),
-        format!("Write-Output \"{OUTS_TOKEN}\""),
-        format!("Write-Output $(Write-Output {OUTS_TOKEN})"),
-    ] {
-        assert!(matches!(
-            interpolate_command_with_bindings(&template, &bindings),
-            Err(IrGenError::InvalidCommand { .. })
-        ));
-    }
+    let result = interpolate_command_with_bindings(&template, &bindings);
+
+    assert!(
+        matches!(&result, Err(IrGenError::InvalidCommand { .. })),
+        "PowerShell template {template:?} should reject an unsafe marker, got {result:?}"
+    );
 }
 
 /// Verify a PowerShell escape cannot hide a recipe marker from validation.

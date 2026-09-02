@@ -1812,6 +1812,8 @@ not select a Netsuke marker. Scanner, protected-placeholder, and guard
 behaviour remains covered by the adversarial Proptest suite over the documented
 256-character, eight-placeholder range.
 
+Table: Kani harnesses for Netsuke's intermediate-representation invariants.
+
 | Harness                                                     | Module                                   | Property                                                                                                | Bound                 | Notes                                                                                                                                                                     |
 | ----------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `duplicate_output_always_rejected`                          | `src/ir/from_manifest_verification.rs`   | A duplicate path in one target is detected and the reported duplicate path is preserved.                | `#[kani::unwind(12)]` | Drives production `find_duplicates` with symbolic duplicate names. Full manifest lowering reaches action hashing before duplicate assertions become tractable under Kani. |
