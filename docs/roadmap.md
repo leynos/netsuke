@@ -1982,10 +1982,13 @@ runs prove the failure boundary before any job receives release permissions.
     mismatch.
   - Preserve existing archive names, target coverage, checksum sidecars,
     `cargo-binstall` resolution, action SHA pins, and release staging policy.
-  - Emit bounded gate and operation metrics for the admission decision, retain
-    the JSONL metrics file as a workflow artefact, and expose the final outcome
-    in the job summary. See [ADR-018](adr-018-release-admission-observability.md)
-    and the [release-admission observability guidance](developers-guide.md#release-admission-observability).
+  - Instrument the non-blocking RFC 0005 scaffold with bounded gate and
+    operation metrics, retain the JSONL metrics file as a workflow artefact,
+    and expose the final outcome in the job summary. Connect publication to
+    the admission result only once a real evidence producer is available. See
+    [ADR-018](adr-018-release-admission-observability.md) and the
+    [release-admission observability
+    guidance](developers-guide.md#release-admission-observability).
   - See [RFC 0005 §Phase 4: Turn on
     admission](rfcs/0005-release-hardening.md#phase-4-turn-on-admission).
   - Success: no job with publication permission can run before successful

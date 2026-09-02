@@ -980,13 +980,15 @@ publication cannot proceed unless the native Windows smoke test passes.
 
 ## Release-admission observability
 
-The release workflow runs a read-only release-admission gate before
+The release workflow runs a read-only release-admission canary scaffold before
 publication. The gate's GitHub API requests and Git fetches emit bounded JSON
 Lines (JSONL) metrics to a runner-local file. Each fixed operation emits its
 counter and duration at the operation boundary; the final gate boundary emits
-the overall counter, including early failures. The workflow uploads the
-completed JSONL file as a workflow artefact and writes one concise outcome line
-to `GITHUB_STEP_SUMMARY`. In the release workflow,
+the overall counter, including early failures. The scaffold is currently
+non-blocking for publication; the publication dependency is enabled once a real
+RFC 0005 evidence producer is connected. The workflow uploads the completed
+JSONL file as a workflow artefact and writes one concise outcome line to
+`GITHUB_STEP_SUMMARY`. In the release workflow,
 `NETSUKE_RELEASE_ADMISSION_METRICS_FILE` points to
 `${runner.temp}/release-admission-metrics.jsonl`, and the file is uploaded
 under the `release-admission-metrics` artefact name.
@@ -995,22 +997,31 @@ The metric contract is deliberately closed. The only label names are `canary`,
 `operation`, `outcome`, and `error_category`, and the only values are:
 
 - `canary=history_scan|release_candidate|none`;
-- `operation=resolve_tag_commit|fetch_candidate_revision|fetch_workflow_run|check_scan_freshness|verify_evidence`;
+- `operation=resolve_tag_commit|fetch_candidate_revision|fetch_workflow_run|`
+  `check_scan_freshness|verify_evidence`;
 - `outcome=success|failure|unknown`; and
-- `error_category=none|api_error|fetch_error|stale_evidence|missing_evidence|mismatch|timeout|unknown`.
+- `error_category=none|api_error|fetch_error|stale_evidence|missing_evidence|`
+  `mismatch|timeout|unknown`.
 
 The duration instrument carries only the fixed `operation` label. Never add a
 revision, run ID, path, URL, workflow content, or other identifier-derived
 value to a metric label. A successful operation or gate uses
 `error_category=none`. An operation failure maps to its fixed category; an
 unclassified failure maps to `outcome=unknown` and `error_category=unknown`,
-and the admission gate remains fail-closed.
+and metric classification remains fail-closed.
+
+Each operation has a 30-second timeout by default. Set
+`NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS` only to an integer from 1
+through 300 seconds, inclusive. A timed-out operation emits `outcome=failure`
+with `error_category=timeout`; invalid timeout configuration fails closed as
+`outcome=failure` with `error_category=unknown`.
 
 Instruments emitted by the gate are:
 
-- `netsuke_release_admission_gate_total` — counter. Records the final gate
+- `netsuke_release_admission_gate_total` — counter. Records the final canary
   outcome with `outcome` and `error_category` labels. Operators use it to
-  confirm that publication was admitted or identify a blocked/unknown run.
+  identify a successful, failed, or unknown canary result. It does not gate
+  publication until a real evidence producer is connected.
 - `netsuke_release_admission_operation_total` — counter. Records one result
   for each fixed GitHub API request or Git fetch, with `canary`, `operation`,
   `outcome`, and `error_category` labels. Operators use it to locate the
@@ -1020,10 +1031,10 @@ Instruments emitted by the gate are:
   Operators use it to compare operation latency across runs without exposing
   request or repository identifiers.
 
-To investigate a blocked publication, read the job-summary outcome first, then
+To investigate a failed canary, read the job-summary outcome first, then
 download the release-admission JSONL artefact and inspect the operation counter
 records alongside their duration observations. A missing artefact is not
-evidence of a successful gate. GitHub Actions applies the repository or
+evidence of a successful canary. GitHub Actions applies the repository or
 workflow's configured artefact-retention period. This export is intentionally
 not a Prometheus, OpenTelemetry Protocol (OTLP), or statsd endpoint; no scrape
 or push service is implied. Metric or label renames are breaking contract

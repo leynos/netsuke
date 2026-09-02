@@ -283,12 +283,10 @@ jobs:
   release-admission-canaries:
     needs: metadata
     runs-on: namespace-profile-netsuke
+    continue-on-error: true
     permissions:
       actions: read
       contents: read
-    env:
-      NETSUKE_RELEASE_ADMISSION_METRICS_FILE: >-
-        ${{ runner.temp }}/release-admission-metrics.jsonl
     steps:
       - uses: >-
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -300,6 +298,8 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NETSUKE_RELEASE_ADMISSION_METRICS_FILE: >-
+            ${{ runner.temp }}/release-admission-metrics.jsonl
         run: bash .github/scripts/require-release-admission-canaries.sh
       - name: Summarise release-admission metrics
         if: always()
@@ -312,19 +312,21 @@ jobs:
             echo "- Error category: \`${{ steps.release_admission.outputs.gate-error-category }}\`"
           } >>"$GITHUB_STEP_SUMMARY"
       - name: Upload release-admission metrics
-        if: always()
+        if: >-
+          always() && needs.metadata.outputs.should_upload_workflow_artifacts == 'true'
         uses: >-
           actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         # v7.0.1
+        env:
+          NETSUKE_RELEASE_ADMISSION_METRICS_FILE: >-
+            ${{ runner.temp }}/release-admission-metrics.jsonl
         with:
           name: release-admission-metrics
           path: ${{ env.NETSUKE_RELEASE_ADMISSION_METRICS_FILE }}
           if-no-files-found: error
 
   release:
-    if: >-
-      needs.metadata.outputs.should_publish == 'true' &&
-      needs.release-admission-canaries.result == 'success'
+    if: needs.metadata.outputs.should_publish == 'true'
     permissions:
       contents: write
     needs:
@@ -333,7 +335,6 @@ jobs:
       - build-windows
       - build-macos
       - windows-native-recipe-smoke
-      - release-admission-canaries
     # Publication is API-bound: it downloads artefacts and calls the releases
     # API, so a GitHub-hosted runner is the right placement.
     runs-on: ubuntu-latest
