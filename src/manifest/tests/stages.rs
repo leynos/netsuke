@@ -25,7 +25,7 @@ fn stage_callback_reports_expected_order_for_valid_manifest(
             "netsuke_version: \"1.0.0\"\n",
             "rules:\n",
             "  - name: touch\n",
-            "    command: \"touch $out\"\n",
+            "    command: \"touch {{ outs }}\"\n",
             "targets:\n",
             "  - name: out.txt\n",
             "    rule: touch\n",

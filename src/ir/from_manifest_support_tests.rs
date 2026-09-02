@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::ir::cmd_interpolate::{binding_preparations, reset_binding_preparations};
+use crate::ir::{INS_TOKEN, OUTS_TOKEN};
 use crate::recipe_shell::RecipeShell;
 use proptest::prelude::*;
 
@@ -9,7 +10,7 @@ use proptest::prelude::*;
 fn large_command_list_prepares_path_bindings_once() {
     reset_binding_preparations();
     let entries = (0..64)
-        .map(|index| format!("printf {index} $in $out"))
+        .map(|index| format!("printf {index} {INS_TOKEN} {OUTS_TOKEN}"))
         .collect();
     let mut actions = IrHashMap::default();
     register_action(
@@ -39,7 +40,7 @@ proptest! {
     ) {
         let entries: Vec<String> = labels
             .iter()
-            .map(|label| format!("echo {label} $in $out"))
+            .map(|label| format!("echo {label} {INS_TOKEN} {OUTS_TOKEN}"))
             .collect();
         let mut actions = IrHashMap::default();
         let action_id = register_action(

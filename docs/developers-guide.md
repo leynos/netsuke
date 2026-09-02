@@ -381,11 +381,13 @@ The lowering stages have deliberately separate responsibilities:
   one-based entry position.
 - `src/ir/from_manifest_support.rs` prepares one shell-quoted input/output
   binding set for the recipe, then interpolates every scalar or list entry with
-  that set. `{{ ins }}` and `{{ outs }}` markers and standalone `$in` and
-  `$out` tokens are resolved per entry. A placeholder within backticks is
-  rejected because Netsuke cannot lower it safely; scripts use substitution
-  without command-shaped parsing, so heredocs and comments remain valid. The
-  resulting action contains ordinary command text and no Ninja placeholders.
+  that set. Only `{{ ins }}` and `{{ outs }}` markers are resolved per entry.
+  Literal `$ins` and `$outs` remain shell variables and are escaped for Ninja
+  pass-through. POSIX lowering tracks unquoted, single-quoted, and
+  double-quoted text, and rejects markers within command substitutions because
+  it cannot lower them safely; scripts therefore retain heredocs and comments
+  without accepting an unsafe marker context. The resulting action contains
+  ordinary command text and no Ninja placeholders.
 - `src/ninja_gen/mod.rs` delegates completed recipe text to
   `src/ninja_gen_recipe_shell.rs`. On Unix, and for the explicit Windows Bash
   compatibility route, a scalar remains POSIX shell text. A list puts each
@@ -2157,7 +2159,7 @@ unit tests where a small fixed set of cases must all be verified.
 `src/ir/from_manifest.rs` lowers manifest `sources` into `BuildEdge.inputs`,
 manifest `deps` into `BuildEdge.implicit_deps`, and manifest `order_only_deps`
 into `BuildEdge.order_only_deps`. Keep those classes separate: recipe
-interpolation (`$in` and `{{ ins }}`) receives only `BuildEdge.inputs`, while
+interpolation (`{{ ins }}`) receives only `BuildEdge.inputs`, while
 `src/ninja_gen/mod.rs` renders implicit deps with Ninja's single-pipe separator.
 
 `ast::DependencyOrder` is the closed manifest enum responsible for YAML and
@@ -2226,13 +2228,35 @@ never after a failed clean. Do not introduce age-based cleanup or mutate an
 existing content-addressed sidecar. See
 [ADR-012](adr-012-bound-dyndep-sidecar-retention.md) for the durable policy.
 
-`src/runner/dyndep_generation_telemetry.rs` owns runner-boundary generation
-telemetry, and `src/runner/process/dyndep_telemetry.rs` owns publication
-telemetry. They may wrap their respective boundaries with bounded
-outcome-and-duration metrics and spans. Do not put manifest paths, action IDs,
-sidecar names, or content in those fields; `src/ninja_gen` generation and
-rendering must remain telemetry-free so their query responsibilities stay
-explicit.
+`src/runner/graph_generation_telemetry.rs` owns runner-boundary manifest-to-IR
+graph-generation telemetry, while `src/runner/dyndep_generation_telemetry.rs`
+owns dyndep bundle-generation telemetry and
+`src/runner/process/dyndep_telemetry.rs` owns publication telemetry. They may
+wrap their respective boundaries with bounded outcome-and-duration metrics and
+spans. Graph-generation outcomes include the fixed
+`invalid_command_interpolation` category for `IrGenError::InvalidCommand`;
+other failures use `other`. Do not put manifest paths, action IDs, sidecar
+names, or content in those fields; `src/ninja_gen` generation and rendering
+must remain telemetry-free so their query responsibilities stay explicit.
+
+`instrument_graph_generation` is the graph-construction composition boundary.
+It receives an injected `&impl monotony::MonotonicClock`, which production
+supplies as `monotony::StdMonotonicClock` and tests replace with a
+deterministic clock. The boundary records one
+`netsuke_runner_graph_generations_total` counter increment and one
+`netsuke_runner_graph_generation_duration_seconds` histogram sample for every
+attempt, including failures. Its only labels are the bounded `recipe_shell`
+values `posix`, `bash`, and `powershell`, the `outcome` values `success` and
+`error`, and the `error_category` values `none`,
+`invalid_command_interpolation`, and `other`. Keep clock access and metric
+composition here; callers must not measure graph-generation time with `Instant`
+or add manifest-controlled values to telemetry.
+
+The runner-internal `GraphGenerationContext` in
+`src/runner/graph_generation.rs` groups the selected `RecipeShell` and injected
+monotonic clock solely for this graph-generation composition path. It is not a
+general runner context, shared state container, or reusable public API; keep
+unrelated runner inputs and concerns outside it.
 
 The intended serial guarantee is path-scoped. A later dependency that is
 independently reachable elsewhere in the requested graph may start via that
@@ -2243,13 +2267,32 @@ durable decision and its alternatives.
 
 ### Recipe placeholder ownership
 
-`src/ir/cmd_interpolate.rs` owns the private `INS_TOKEN` and `OUTS_TOKEN`
-constants used between manifest rendering and IR command interpolation.
-`src/manifest/render.rs` may emit these tokens while rendering `{{ ins }}` and
-`{{ outs }}`, and the interpolation module must consume them alongside `$in` and
-`$out`. Keep the constants private to the crate and use them only for this
-two-stage recipe pipeline; they are implementation markers, not manifest or
-Ninja syntax and not a general token registry.
+`src/ir/cmd_interpolate/mod.rs` owns the command-interpolation boundary. It
+defines the internal `INS_TOKEN` and `OUTS_TOKEN` interpolation-marker
+constants, which `src/ir/mod.rs` re-exports for runner-facing direct IR recipe
+tests. The constants are not manifest markers, Ninja syntax, or a general token
+registry. The module also defines the `CommandBindings` path encodings, the
+`QuoteContext` classification, and the `find_substitution` marker recognizer.
+The sibling `src/ir/cmd_interpolate/substitution.rs` owns
+`SubstitutionTraversal`, which walks one recipe and applies those bindings only
+after analysing its shell context. Keep this split private to `ir`; it is an
+implementation boundary, not a public command-template API.
+
+The private `src/ir/cmd_interpolate/posix_lexical.rs` helper owns the
+single-pass recognition of POSIX comments and heredoc inert regions. It copies
+those comments and heredoc bodies byte-for-byte, leaves markers in them
+literal, and queues declarations FIFO, including quoted delimiters and `<<-`
+tab-stripping delimiters, so their text cannot change the surrounding quote
+context. This is a command-interpolation helper, not a general shell parser,
+and is not intended for reuse outside that boundary. The sibling
+`src/ir/cmd_interpolate/command_substitution.rs` owns the local quote and
+parenthesis state needed to keep protected `$()` bodies isolated.
+
+`src/manifest/render.rs` may emit the internal tokens while rendering the only
+accepted manifest markers, `{{ ins }}` and `{{ outs }}`. Literal shell variables
+`$ins` and `$outs` are not Netsuke markers and must pass through as shell text
+for the backend to escape. Keep the constants and their recognition limited to
+this two-stage recipe pipeline and its direct IR recipe tests.
 
 Generated strategies that are reusable across crate boundaries belong in
 `test_support`. Because `test_support` is compiled as a library, dependencies
@@ -4541,10 +4584,11 @@ background-query primitive.
   cross-subsystem consumer requires an explicit application boundary rather
   than widening these internal helpers.
 - **Composition rules:** command adapters report stages before or after the
-  relevant step and wrap `ninja_text_for_shell` with runner-owned, shell-aware
-  generation telemetry. Only `load_manifest_with_stage_reporting` translates
-  `StageObserver` events into status updates and selects the effectful build
-  loader. Consumers must not call manifest parsing, IR generation, or
+  relevant step and wrap `build_graph_for_shell` and dyndep bundle synthesis
+  with their respective runner-owned, shell-aware generation telemetry. Only
+  `load_manifest_with_stage_reporting` translates `StageObserver` events into
+  status updates and selects the effectful build loader. Consumers must not
+  call manifest parsing, IR generation, or
   `ninja_gen::generate_bundle_for_shell` directly in parallel with this
   pipeline. Before an adapter writes or executes a returned bundle, it must use
   the existing capability-injected dyndep-publication path to materialize its

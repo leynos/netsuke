@@ -245,7 +245,7 @@ fn help_targets_renders_foreach_descriptions_without_changing_rule_progress() ->
 rules:
   - name: render-report
     description: Render reports through the shared rule
-    command: touch $out
+    command: touch {{ outs }}
 actions:
   - name: check-{{ item }}
     description: Run {{ item }}

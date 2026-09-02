@@ -1,11 +1,10 @@
 //! Command interpolation utilities for IR actions.
 //!
-//! Provides [`interpolate_command`], which substitutes `$in`, `$out`,
-//! `__NETSUKE_INS_PLACEHOLDER__`, and `__NETSUKE_OUTS_PLACEHOLDER__` tokens
-//! in recipe command strings. POSIX-compatible routes preserve
-//! backtick-delimited regions from interpolation; PowerShell routes interpret
-//! backticks as their native escape character. Called by [`super::from_manifest`]
-//! during IR lowering.
+//! Provides [`interpolate_command`], which substitutes the internal markers
+//! emitted for `{{ ins }}` and `{{ outs }}` in recipe command strings. Literal
+//! `$ins` and `$outs` remain shell variables. POSIX-compatible routes track
+//! shell quoting so path text is encoded for its insertion context. Called by
+//! [`super::from_manifest`] during IR lowering.
 
 use crate::localization::{self, keys};
 use camino::Utf8PathBuf;
@@ -17,11 +16,13 @@ use std::cell::Cell;
 use super::IrGenError;
 use crate::recipe_shell::RecipeShell;
 
+mod command_substitution;
+mod posix_lexical;
 mod substitution;
 
 use substitution::SubstitutionTraversal;
 
-/// Quoted `$in` and `$out` substitutions prepared for one recipe.
+/// Contextual path substitutions prepared for one recipe.
 ///
 /// A rule command list shares its input/output bindings, so lowering creates
 /// this once and reuses it for every entry rather than re-quoting paths for
@@ -30,10 +31,21 @@ use substitution::SubstitutionTraversal;
 pub(crate) struct CommandBindings {
     /// Selects the interpreter whose command syntax is valid after lowering.
     shell: RecipeShell,
-    /// Quoted and joined input paths for `$in` substitution.
-    ins: String,
-    /// Quoted and joined output paths for `$out` substitution.
-    outs: String,
+    /// Input paths encoded for unquoted, single-quoted, and double-quoted sites.
+    ins: PathSubstitutions,
+    /// Output paths encoded for unquoted, single-quoted, and double-quoted sites.
+    outs: PathSubstitutions,
+}
+
+/// Retain path text encoded for each POSIX shell quote context.
+#[derive(Debug, Clone)]
+struct PathSubstitutions {
+    /// Use when the marker is not enclosed by shell quotes.
+    unquoted: String,
+    /// Use between an existing pair of POSIX single quotes.
+    single_quoted: String,
+    /// Use between an existing pair of POSIX double quotes.
+    double_quoted: String,
 }
 
 impl CommandBindings {
@@ -43,8 +55,48 @@ impl CommandBindings {
         record_binding_preparation();
         Self {
             shell,
-            ins: quote_paths(inputs, shell).join(" "),
-            outs: quote_paths(outputs, shell).join(" "),
+            ins: PathSubstitutions::new(inputs, shell),
+            outs: PathSubstitutions::new(outputs, shell),
+        }
+    }
+
+    /// Select a binding encoded for the marker's shell quote context.
+    fn substitution(&self, placeholder: Placeholder, context: QuoteContext) -> &str {
+        let paths = match placeholder {
+            Placeholder::Inputs => &self.ins,
+            Placeholder::Outputs => &self.outs,
+        };
+        match context {
+            QuoteContext::Unquoted => &paths.unquoted,
+            QuoteContext::Single => &paths.single_quoted,
+            QuoteContext::Double => &paths.double_quoted,
+        }
+    }
+}
+
+impl PathSubstitutions {
+    /// Encode paths for each POSIX quote context used during marker lowering.
+    fn new(paths: &[Utf8PathBuf], shell: RecipeShell) -> Self {
+        let unquoted = quote_paths(paths, shell).join(" ");
+        if shell == RecipeShell::PowerShell {
+            return Self {
+                single_quoted: unquoted.clone(),
+                double_quoted: unquoted.clone(),
+                unquoted,
+            };
+        }
+        Self {
+            unquoted,
+            single_quoted: paths
+                .iter()
+                .map(|path| path.as_str().replace('\'', "'\"'\"'"))
+                .collect::<Vec<_>>()
+                .join("' '"),
+            double_quoted: paths
+                .iter()
+                .map(|path| quote_double_quoted_path(path.as_str()))
+                .collect::<Vec<_>>()
+                .join("\" \""),
         }
     }
 }
@@ -93,6 +145,18 @@ fn quote_path(path: &Utf8PathBuf, shell: RecipeShell) -> String {
             String::from_utf8_lossy(err.as_bytes()).into_owned()
         }
     }
+}
+
+/// Escape one path for insertion between existing POSIX double quotes.
+fn quote_double_quoted_path(path: &str) -> String {
+    path.chars()
+        .flat_map(|ch| {
+            matches!(ch, '\\' | '"' | '$' | '`')
+                .then_some('\\')
+                .into_iter()
+                .chain([ch])
+        })
+        .collect()
 }
 
 /// Returns `true` when the command contains an odd number of backticks.
@@ -162,107 +226,46 @@ fn is_valid_command_for_shell(command: &str, shell: RecipeShell) -> bool {
     !has_unmatched_backticks(command) && shlex::split(command).is_some()
 }
 
-/// Returns whether `ch` is a valid identifier character (ASCII letter, digit, or underscore).
-///
-/// # Examples
-/// ```rust,ignore
-/// assert!(is_identifier_char('a'));
-/// assert!(!is_identifier_char('-'));
-/// ```
-const fn is_identifier_char(ch: char) -> bool {
-    ch.is_ascii_alphanumeric() || ch == '_'
+/// Identifies the private marker emitted for a Netsuke recipe placeholder.
+#[derive(Debug, Clone, Copy)]
+pub(super) enum Placeholder {
+    /// Select the input-path binding.
+    Inputs,
+    /// Select the output-path binding.
+    Outputs,
 }
 
-/// Checks if `pattern` matches `chars` starting at `pos`.
-///
-/// # Examples
-/// ```rust,ignore
-/// let chars: Vec<char> = "in-out".chars().collect();
-/// assert!(matches_pattern_at_position(&chars, 0, &['i', 'n']));
-/// assert!(!matches_pattern_at_position(&chars, 3, &['i', 'n']));
-/// ```
-fn matches_pattern_at_position(chars: &[char], pos: usize, pattern: &[char]) -> bool {
-    pattern
-        .iter()
-        .enumerate()
-        .all(|(off, ch)| matches!(chars.get(pos + off), Some(c) if c == ch))
+/// Records the POSIX quote context surrounding a recipe marker.
+#[derive(Debug, Clone, Copy)]
+pub(super) enum QuoteContext {
+    /// The marker is outside shell quotes.
+    Unquoted,
+    /// The marker is inside POSIX single quotes.
+    Single,
+    /// The marker is inside POSIX double quotes.
+    Double,
 }
 
-/// Ensures characters around the token are not identifier characters.
+/// Finds the appropriate substitution marker at `pos`.
 ///
 /// # Examples
 /// ```rust,ignore
-/// let chars: Vec<char> = "$in".chars().collect();
-/// assert!(has_valid_word_boundaries(&chars, 0, 2));
-/// let chars: Vec<char> = "$input".chars().collect();
-/// assert!(!has_valid_word_boundaries(&chars, 0, 2));
+/// let chars: Vec<char> = INS_TOKEN.chars().collect();
+/// let res = find_substitution(&chars, 0);
+/// assert!(matches!(res, Some((Placeholder::Inputs, _))));
 /// ```
-fn has_valid_word_boundaries(chars: &[char], pos: usize, len: usize) -> bool {
-    let prev_ok = chars
-        .get(pos.wrapping_sub(1))
-        .is_none_or(|c| !is_identifier_char(*c));
-    let next_ok = chars
-        .get(pos + len + 1)
-        .is_none_or(|c| !is_identifier_char(*c));
-    prev_ok && next_ok
-}
-
-/// Returns the skip length when `pattern` matches at `pos`.
-///
-/// # Examples
-/// ```rust,ignore
-/// let chars: Vec<char> = "$in".chars().collect();
-/// let res = try_match_placeholder(&chars, 0, &['i', 'n']);
-/// assert_eq!(res, Some(3));
-/// ```
-fn try_match_placeholder(chars: &[char], pos: usize, pattern: &[char]) -> Option<usize> {
-    if matches_pattern_at_position(chars, pos + 1, pattern)
-        && has_valid_word_boundaries(chars, pos, pattern.len())
-    {
-        Some(pattern.len() + 1)
-    } else {
-        None
-    }
-}
-
-/// Finds the appropriate substitution for `$in` or `$out` at `pos`.
-///
-/// # Examples
-/// ```rust,ignore
-/// let chars: Vec<char> = "$in".chars().collect();
-/// let res = find_substitution(&chars, 0, "a", "");
-/// assert_eq!(res, Some(("a", 3)));
-/// ```
-fn find_substitution<'a>(
-    chars: &[char],
-    pos: usize,
-    ins: &'a str,
-    outs: &'a str,
-) -> Option<(&'a str, usize)> {
-    (chars
-        .get(pos)
-        .is_some_and(|ch| *ch == '$')
-        .then_some(())
-        .and_then(|()| {
-            try_match_placeholder(chars, pos, &['i', 'n'])
-                .map(|skip| (ins, skip))
-                .or_else(|| {
-                    try_match_placeholder(chars, pos, &['o', 'u', 't']).map(|skip| (outs, skip))
-                })
-        }))
-    .or_else(|| {
-        try_match_token(chars, pos, INS_TOKEN, ins)
-            .or_else(|| try_match_token(chars, pos, OUTS_TOKEN, outs))
-    })
+pub(super) fn find_substitution(chars: &[char], pos: usize) -> Option<(Placeholder, usize)> {
+    try_match_token(chars, pos, INS_TOKEN, Placeholder::Inputs)
+        .or_else(|| try_match_token(chars, pos, OUTS_TOKEN, Placeholder::Outputs))
 }
 
 /// Return the replacement and matched length when `token` starts at `pos`.
-fn try_match_token<'a>(
+fn try_match_token(
     chars: &[char],
     pos: usize,
     token: &str,
-    replacement: &'a str,
-) -> Option<(&'a str, usize)> {
+    placeholder: Placeholder,
+) -> Option<(Placeholder, usize)> {
     let token_len = token.chars().count();
     if pos + token_len > chars.len() {
         return None;
@@ -276,7 +279,7 @@ fn try_match_token<'a>(
         matched_len += 1;
     }
 
-    Some((replacement, matched_len))
+    Some((placeholder, matched_len))
 }
 
 /// Replace input and output tokens using the selected shell's backtick semantics.
@@ -296,12 +299,15 @@ fn substitute(template: &str, bindings: &CommandBindings) -> Result<String, IrGe
 
 /// Internal marker emitted for `{{ ins }}` during manifest rendering and
 /// consumed during command interpolation; it is not general template syntax.
-pub(crate) const INS_TOKEN: &str = "__NETSUKE_INS_PLACEHOLDER__";
+pub const INS_TOKEN: &str = "__NETSUKE_INS_PLACEHOLDER__";
 
 /// Internal marker emitted for `{{ outs }}` during manifest rendering and
 /// consumed during command interpolation; it is not general template syntax.
-pub(crate) const OUTS_TOKEN: &str = "__NETSUKE_OUTS_PLACEHOLDER__";
+pub const OUTS_TOKEN: &str = "__NETSUKE_OUTS_PLACEHOLDER__";
 
+#[cfg(test)]
+#[path = "posix_lexical_tests.rs"]
+mod posix_lexical_tests;
 #[cfg(test)]
 #[path = "../cmd_interpolate_property_tests.rs"]
 mod property_tests;

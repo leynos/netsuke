@@ -49,7 +49,7 @@ fn touch_manifest_ninja_validation() -> Result<()> {
         netsuke_version: "1.0.0"
         rules:
           - name: touch
-            command: "python3 -c 'import os,sys; open(sys.argv[1],\"a\").close()' $out"
+            command: "python3 -c 'import os,sys; open(sys.argv[1],\"a\").close()' {{ outs }}"
         targets:
           - name: out/a
             sources: in/a
@@ -108,7 +108,7 @@ fn conditional_manifest_ninja_snapshot() -> Result<()> {
         netsuke_version: "1.0.0"
         rules:
           - name: touch
-            command: "touch $out"
+            command: "touch {{ outs }}"
         targets:
           - name: out/{{ item }}
             sources: in/{{ item }}
@@ -163,7 +163,7 @@ fn command_available_manifest_ninja_snapshot() -> Result<()> {
             when: not command_available("netsuke-command-that-should-not-exist", cwd_mode="never")
         rules:
           - name: touch
-            command: "touch $out"
+            command: "touch {{ outs }}"
         targets:
           - name: out/result
             sources: in/source

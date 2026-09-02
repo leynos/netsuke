@@ -3,7 +3,7 @@
 //! Validates the full manifest-to-IR pipeline: that `sources` populate
 //! `edge.inputs`, that `deps` populate `edge.implicit_deps` (and are excluded
 //! from `edge.inputs`), that recipe command interpolation excludes implicit
-//! deps from `$in`/`{{ ins }}`, and that `phony` and error-path cases are
+//! deps from `{{ ins }}`, and that `phony` and error-path cases are
 //! handled correctly.  Uses `rstest` parameterisation and reads fixture files
 //! from `tests/data/`.
 
@@ -49,8 +49,8 @@ fn command_list_entries_are_interpolated_in_order() -> Result<()> {
         rules:
           - name: build
             command:
-              - echo first $in
-              - echo second $out
+              - echo first {{ ins }}
+              - echo second {{ outs }}
         targets:
           - name: out/app
             sources: src/main.c
@@ -160,7 +160,7 @@ fn skipped_manifest_conditions_do_not_contribute_to_ir(
         "targets:\n",
         "  - name: out/app\n",
         "    deps: [include/config.h, generated/stamp]\n",
-        "    command: echo $out\n",
+        "    command: echo {{ outs }}\n",
     ),
     "out/app",
     false,
@@ -171,7 +171,7 @@ fn skipped_manifest_conditions_do_not_contribute_to_ir(
         "actions:\n",
         "  - name: regenerate\n",
         "    deps: [schemas/user.yml, tools/generator]\n",
-        "    command: echo $out\n",
+        "    command: echo {{ outs }}\n",
         "targets: []\n",
     ),
     "regenerate",
@@ -226,7 +226,7 @@ fn manifest_deps_do_not_contribute_to_recipe_inputs() -> Result<()> {
         "netsuke_version: '1.0.0'\n",
         "rules:\n",
         "  - name: compile\n",
-        "    command: echo $in {{ ins }} > $out\n",
+        "    command: echo {{ ins }} {{ ins }} > {{ outs }}\n",
         "targets:\n",
         "  - name: out/app\n",
         "    sources: src/main.c\n",

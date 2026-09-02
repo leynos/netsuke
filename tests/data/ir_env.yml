@@ -6,4 +6,4 @@ netsuke_version: "1.0.0"
 targets:
   - name: "out/{{ env('NETSUKE_TEST_IR_ENV') }}"
     sources: "src/{{ env('NETSUKE_TEST_IR_ENV') }}.c"
-    command: "cc -o $out $in"
+    command: "cc -o {{ outs }} {{ ins }}"

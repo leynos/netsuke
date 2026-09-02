@@ -33,7 +33,7 @@ targets:
     command:
       - "{first_entry}"
       - "false"
-      - "echo unexpected >> $out"
+      - "echo unexpected >> {{{{ outs }}}}"
 "#,
         )
         .as_bytes(),
@@ -52,7 +52,7 @@ fn run_failing_build(temp: &TempDir, arguments: &[&str]) -> Result<std::process:
 
 #[test]
 fn failed_command_list_entry_is_attributed_in_human_output() -> Result<()> {
-    let Some(temp) = failing_command_list_workspace("echo first > $out")? else {
+    let Some(temp) = failing_command_list_workspace("echo first > {{ outs }}")? else {
         return Ok(());
     };
     let output = run_failing_build(&temp, &["--progress", "never", "build"])?;
@@ -77,7 +77,7 @@ fn failed_command_list_entry_is_attributed_in_human_output() -> Result<()> {
 
 #[test]
 fn failed_command_list_entry_is_attributed_in_json_diagnostics() -> Result<()> {
-    let Some(temp) = failing_command_list_workspace("echo first > $out")? else {
+    let Some(temp) = failing_command_list_workspace("echo first > {{ outs }}")? else {
         return Ok(());
     };
     let output = run_failing_build(&temp, &["--json", "build"])?;
@@ -100,7 +100,7 @@ fn failed_command_list_entry_is_attributed_in_json_diagnostics() -> Result<()> {
 
 #[test]
 fn failed_command_list_entry_is_attributed_in_tracing_output() -> Result<()> {
-    let Some(temp) = failing_command_list_workspace("echo first > $out")? else {
+    let Some(temp) = failing_command_list_workspace("echo first > {{ outs }}")? else {
         return Ok(());
     };
     let output = run_failing_build(&temp, &["--verbose", "--progress", "never", "build"])?;
@@ -119,7 +119,7 @@ fn failed_command_list_entry_is_attributed_in_tracing_output() -> Result<()> {
 #[test]
 fn large_command_stdout_retains_command_list_failure_attribution() -> Result<()> {
     let Some(temp) = failing_command_list_workspace(
-        "echo first > $out && i=0; while [ $i -lt 65536 ]; do printf 'xxxx\\\\n'; i=$((i + 1)); done",
+        "echo first > {{ outs }} && i=0; while [ $i -lt 65536 ]; do printf 'xxxx\\\\n'; i=$((i + 1)); done",
     )?
     else {
         return Ok(());

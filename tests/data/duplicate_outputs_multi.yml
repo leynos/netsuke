@@ -4,9 +4,9 @@ targets:
       - foo.o
       - bar.o
     sources: foo.c
-    command: "cc -c $in -o $out"
+    command: "cc -c {{ ins }} -o {{ outs }}"
   - name:
       - bar.o
       - foo.o
     sources: bar.c
-    command: "cc -c $in -o $out"
+    command: "cc -c {{ ins }} -o {{ outs }}"

@@ -97,8 +97,8 @@ output and some leaf files so the long-lived structure remains visible.
 - `src/ninja_gen/`: Ninja rendering and staged-dyndep bundle generation.
 - `src/runner/`: Process execution, path handling, runner errors, command
   orchestration, capability-injected dyndep publication, and bounded generation
-  and publication telemetry, including `dyndep_generation_telemetry.rs` and
-  `process/dyndep_telemetry.rs`.
+  and publication telemetry, including `graph_generation_telemetry.rs`,
+  `dyndep_generation_telemetry.rs`, and `process/dyndep_telemetry.rs`.
 - `src/snapshots/`: Checked-in `insta` snapshots for source-level snapshot
   tests.
 - `src/stdlib/`: Netsuke standard library modules exposed to manifest

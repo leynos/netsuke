@@ -1,7 +1,7 @@
 netsuke_version: "1.0.0"
 rules:
   - name: compile
-    command: "echo $in {{ ins }} > $out"
+    command: "echo {{ ins }} {{ ins }} > {{ outs }}"
 targets:
   - name: out/app
     sources: src/main.c
@@ -14,4 +14,4 @@ actions:
     deps:
       - schemas/user.yml
       - tools/generator
-    command: "echo $out"
+    command: "echo {{ outs }}"

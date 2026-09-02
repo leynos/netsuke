@@ -1,7 +1,7 @@
 //! Property tests for command interpolation token boundaries.
 //!
-//! These properties ensure `interpolate_command` replaces placeholders outside
-//! backticks with quoted paths, rejects placeholders within backticks, and
+//! These properties ensure `interpolate_command` replaces manifest markers outside
+//! protected regions with quoted paths, rejects markers within them, and
 //! rejects unbalanced backtick input as an invalid command.
 
 use proptest::prelude::*;
@@ -16,10 +16,10 @@ fn safe_text_strategy() -> impl Strategy<Value = String> {
 }
 
 proptest! {
-    /// Reject short placeholders in backticks for every generated path binding.
+    /// Reject manifest markers in backticks for every generated path binding.
     #[test]
-    fn dollar_tokens_inside_backticks_are_rejected(prefix in safe_text_strategy(), suffix in safe_text_strategy(), inputs in paths_strategy("in", 1..10), outputs in paths_strategy("out", 1..10)) {
-        let template = format!("echo {prefix} `printf '$in $out'` {suffix}");
+    fn manifest_tokens_inside_backticks_are_rejected(prefix in safe_text_strategy(), suffix in safe_text_strategy(), inputs in paths_strategy("in", 1..10), outputs in paths_strategy("out", 1..10)) {
+        let template = format!("echo {prefix} `printf '{INS_TOKEN} {OUTS_TOKEN}'` {suffix}");
         let error = interpolate_command_with_shell(&template, &inputs, &outputs, RecipeShell::Posix)
             .expect_err("placeholders inside backticks should be rejected");
 
@@ -50,23 +50,16 @@ proptest! {
     }
 
     #[test]
-    fn short_placeholders_outside_backticks_are_replaced(inputs in paths_strategy("in", 1..10), outputs in paths_strategy("out", 1..10)) {
+    fn dollar_prefixed_shell_variables_are_preserved(inputs in paths_strategy("in", 1..10), outputs in paths_strategy("out", 1..10)) {
         let command = interpolate_command_with_shell(
-            "echo $in then $out",
+            "echo $in then $out then $ins then $outs",
             &inputs,
             &outputs,
             RecipeShell::Posix,
         )
-        .expect("command should interpolate");
+        .expect("literal shell variables should remain valid");
 
-        prop_assert!(!command.contains("$in"));
-        prop_assert!(!command.contains("$out"));
-        for input in inputs {
-            prop_assert!(command.contains(input.as_str()));
-        }
-        for output in outputs {
-            prop_assert!(command.contains(output.as_str()));
-        }
+        prop_assert_eq!(command, "echo $in then $out then $ins then $outs");
     }
 
     /// Quote apostrophe-bearing PowerShell paths as single literals.
@@ -78,7 +71,7 @@ proptest! {
         let input = camino::Utf8PathBuf::from(format!("{prefix}'input"));
         let output = camino::Utf8PathBuf::from(format!("{suffix}'output"));
         let command = interpolate_command_with_shell(
-            "Write-Output $in $out",
+            &format!("Write-Output {INS_TOKEN} {OUTS_TOKEN}"),
             std::slice::from_ref(&input),
             std::slice::from_ref(&output),
             RecipeShell::PowerShell,
@@ -91,9 +84,9 @@ proptest! {
         prop_assert!(command.contains(&expected_output));
     }
 
-    /// Reject every supported placeholder token when backticks protect it.
+    /// Reject every manifest marker when backticks protect it.
     #[test]
-    fn tokens_inside_backticks_are_rejected(token in prop::sample::select(vec!["$in", "$out", INS_TOKEN, OUTS_TOKEN]), inputs in paths_strategy("in", 1..10), outputs in paths_strategy("out", 1..10)) {
+    fn tokens_inside_backticks_are_rejected(token in prop::sample::select(vec![INS_TOKEN, OUTS_TOKEN]), inputs in paths_strategy("in", 1..10), outputs in paths_strategy("out", 1..10)) {
         let template = format!("echo `{token}`");
         let error = interpolate_command_with_shell(&template, &inputs, &outputs, RecipeShell::Posix)
             .expect_err("placeholders inside backticks should be rejected");
@@ -106,7 +99,7 @@ proptest! {
 
     #[test]
     fn unbalanced_backticks_are_rejected(prefix in safe_text_strategy(), suffix in safe_text_strategy(), inputs in paths_strategy("in", 1..10), outputs in paths_strategy("out", 1..10)) {
-        let template = format!("echo {prefix} ` $in {suffix}");
+        let template = format!("echo {prefix} ` {INS_TOKEN} {suffix}");
         let err = interpolate_command_with_shell(&template, &inputs, &outputs, RecipeShell::Posix)
             .expect_err("unbalanced backticks should fail");
 

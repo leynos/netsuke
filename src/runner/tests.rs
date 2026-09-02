@@ -2,15 +2,18 @@
 use super::*;
 use crate::cli::{HelpArgs, HelpTopic};
 use crate::ir::{BuildEdge, BuildGraph, DependencyOrder};
+use crate::localization;
 use crate::manifest::ManifestLoadStage;
 use crate::status::{LocalizationKey, StageNumber, StatusReporter};
 use crate::{ninja_gen::NinjaGenError, recipe_shell::RecipeShell};
 use anyhow::{Result, ensure};
 use camino::Utf8PathBuf;
+use monotony::test_util::FixedMonotonicClock;
 use rstest::rstest;
 use std::cell::Cell;
 use std::path::Path;
 use std::sync::{Mutex, PoisonError};
+use std::time::Duration;
 use test_support::{localizer_test_lock, set_en_localizer};
 
 const MINIMAL_MANIFEST: &str = concat!(
@@ -207,7 +210,12 @@ fn runner_reports_the_complete_generation_stage_sequence() -> Result<()> {
     };
     let reporter = StageRecordingReporter::default();
 
-    let generated = generate_ninja_with_shell(&cli, &reporter, None, RecipeShell::host_default())?;
+    let clock = FixedMonotonicClock::with_elapsed(Duration::ZERO);
+    let graph_generation = GraphGenerationContext {
+        recipe_shell: RecipeShell::host_default(),
+        clock: &clock,
+    };
+    let generated = generate_ninja_with_shell(&cli, &reporter, None, &graph_generation)?;
     let (ninja_text, _) = generated.into_parts();
 
     let stages = reporter.stages();

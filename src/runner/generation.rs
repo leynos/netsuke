@@ -16,7 +16,7 @@ use anyhow::{Context, Result};
 use camino::Utf8Path;
 
 use crate::ast::NetsukeManifest;
-use crate::ir::BuildGraph;
+use crate::ir::{BuildGraph, IrGenError};
 use crate::localization::{self, keys};
 use crate::stdlib::NetworkPolicy;
 use crate::{manifest, ninja_gen};
@@ -105,9 +105,8 @@ pub(super) fn build_graph(manifest: &NetsukeManifest) -> Result<BuildGraph> {
 pub(super) fn build_graph_for_shell(
     manifest: &NetsukeManifest,
     shell: crate::recipe_shell::RecipeShell,
-) -> Result<BuildGraph> {
+) -> std::result::Result<BuildGraph, IrGenError> {
     BuildGraph::from_manifest_for_shell(manifest, shell)
-        .context(localization::message(keys::RUNNER_CONTEXT_BUILD_GRAPH))
 }
 
 /// Generate the Ninja bundle for a build graph.

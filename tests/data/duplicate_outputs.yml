@@ -2,7 +2,7 @@ netsuke_version: "1.0.0"
 targets:
   - name: hello.o
     sources: hello.c
-    command: "cc -c $in -o $out"
+    command: "cc -c {{ ins }} -o {{ outs }}"
   - name: hello.o
     sources: world.c
-    command: "cc -c $in -o $out"
+    command: "cc -c {{ ins }} -o {{ outs }}"

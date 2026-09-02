@@ -4,7 +4,7 @@
 //! graph), [`BuildEdge`] (a single target with its `inputs`, `implicit_deps`,
 //! and `order_only_deps`), and [`Action`] (a deduplicated build rule plus
 //! recipe).  `implicit_deps` mirror Ninja's `|` syntax — they trigger
-//! rebuilds but are not passed to `$in`.  Consumed by [`crate::ninja_gen`]
+//! rebuilds but are not passed to `{{ ins }}`. Consumed by [`crate::ninja_gen`]
 //! for Ninja file emission and by [`super::cycle`] for cycle detection.
 
 use crate::localization::LocalizedMessage;
