@@ -41,7 +41,7 @@ ______________________________________________________________________
   comandos legible por máquina.
 - **Sin una cadena de herramientas privilegiada**: use el mismo modelo de
   manifiesto para Rust, C, Python, proyectos web o cualquier otra cosa que un
-  comando pueda compilar.
+  comando pueda generar.
 
 ______________________________________________________________________
 

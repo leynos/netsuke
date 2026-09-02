@@ -40,7 +40,7 @@ ______________________________________________________________________
   por máquina, em `--json`.
 - **Nenhuma toolchain privilegiada**: use o mesmo modelo de manifesto para
   Rust, C, Python, projetos web ou qualquer outra coisa que um comando consiga
-  construir.
+  gerar.
 
 ______________________________________________________________________
 
