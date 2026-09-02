@@ -1,15 +1,17 @@
 # Migrating to v0.1.0
 
-This guide signposts the v0.1.0 beta additions: the injectable child environment
-(`CommandEnv`), the named Ninja request types, narrow process options
-(`NinjaProcessOptions`), target/action discovery through `description` and
-`netsuke help targets`, and cached configuration discovery. Most existing
-manifests remain compatible, and callers of the convenience wrappers retain
-their child-process behaviour. Manifests using Jinja `glob()` must use
-shell-inert matched paths. The cached configuration discovery API is a breaking
-change for callers of the unstable Rust API; ordinary CLI users need no action.
-The Ninja invocation chain now requires UTF-8 build-file and working-directory
-paths; non-UTF-8 values are rejected at their input boundary.
+This guide covers the released v0.1.0-beta3 additions: the injectable child
+environment (`CommandEnv`), the named Ninja request types, narrow process
+options (`NinjaProcessOptions`), target/action discovery through `description`
+and `netsuke help targets`, and cached configuration discovery. It also covers
+manifest-relative glob expansion, UTF-8 CLI path boundaries, the Windows
+PowerShell-default legacy recipe contract, and brace-only `{{ ins }}` and
+`{{ outs }}` path markers. Most existing manifests remain compatible, and
+callers of the convenience wrappers retain their child-process behaviour.
+Manifests using Jinja `glob()` must use shell-inert matched paths. The cached
+configuration discovery API is a breaking change for callers of the unstable
+Rust API; ordinary CLI users need no action. Non-UTF-8 build-file and
+working-directory paths are rejected at their input boundary.
 
 Rust callers that construct `Target` with a struct literal must add the new
 `description` field (set it to `None` or `Some(...)`); deserialized manifests
@@ -94,12 +96,14 @@ child remain platform-native and are not subject to this path restriction.
 
 ## Check filenames used by manifest `glob()`
 
-This beta release tightens the Jinja `glob()` helper. A manifest that expands a
+The beta3 release tightens the Jinja `glob()` helper. A manifest that expands a
 matched filename containing whitespace, control characters, or shell
 punctuation now fails during manifest loading. ASCII letters, digits, `/`, `:`,
-comma, full stop, underscore, and hyphen remain accepted. This prevents a
-checkout filename from becoming executable shell syntax when a `foreach` item
-is interpolated into a `command` or `script`.
+comma, full stop, underscore, and hyphen remain accepted. This beta3 change
+prevents a checkout filename from becoming executable shell syntax when a
+`foreach` item is interpolated into a `command` or `script`.
+
+Published beta2 does not reject these non-portable unquoted filenames.
 
 Rename affected files to use the accepted character set, or change the manifest
 so filesystem-derived paths do not cross the Jinja command-template boundary.
@@ -225,6 +229,10 @@ seam, and `ConfigStdEnvProvider` supplies process-backed access for production
 callers. Deterministic tests and other adapters can implement
 `ConfigEnvProvider` without mutating the process environment. This is a
 breaking change without a deprecation period or stable compatibility guarantee.
+
+Published beta2 already provides `merge_with_cached_file_layers`. The
+observer-based `CachedMergeInput` flow described below is a beta3 change and is
+not available in that release.
 
 For the normal flow:
 

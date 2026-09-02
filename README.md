@@ -44,7 +44,8 @@ Netsuke currently requires:
 
 ### Installation
 
-Netsuke v0.1.0-beta2 is available from crates.io. Where
+The latest published prerelease is Netsuke v0.1.0-beta3 (v0.1.0-beta2 preceded
+it), available from crates.io. Where
 [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) is available,
 prefer it: it fetches a prebuilt release binary and avoids the toolchain
 requirement below.
@@ -66,7 +67,7 @@ cargo +nightly-2026-08-23 install netsuke-build
 ```
 
 Pre-built installers are available from the
-[v0.1.0-beta2 GitHub release](https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta2):
+[v0.1.0-beta3 GitHub release](https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta3):
 
 | Platform | Architectures                        | Packages                         |
 | -------- | ------------------------------------ | -------------------------------- |
@@ -79,7 +80,7 @@ as a dependency. Ninja must be installed separately when using the macOS or
 Windows installer. The Windows MSI installs to `C:\Program Files\netsuke` and
 does not update `PATH`. SHA-256 checksum files accompany standalone binaries
 and staged help and licence files. Installer packages do not have checksum
-sidecars in v0.1.0-beta2. See the
+sidecars in v0.1.0-beta3. See the
 [user's guide](docs/users-guide.md#install-netsuke) for platform-specific
 commands and Windows setup.
 
@@ -130,15 +131,19 @@ ______________________________________________________________________
 
 ## What works today
 
-The core build-system compiler is implemented:
+Netsuke v0.1.0-beta3's core build-system compiler provides:
 
 - YAML 1.2 manifest parsing with duplicate-key and schema validation;
 - Jinja variables, macros, `foreach`, `when`, globbing, environment helpers,
   executable discovery, and opt-in network helpers;
 - reusable rules, targets, actions, defaults, and explicit, implicit, and
   order-only dependencies;
+- target and action discovery through `netsuke help targets`, including
+  conditional entries without recipe rendering;
 - a deterministic intermediate build graph with duplicate-output, missing-rule,
   and cycle checks;
+- Windows legacy-recipe execution through Windows PowerShell by default, with
+  an explicit Git Bash or MSYS2 compatibility route;
 - Ninja generation and execution, plus `clean` and standalone manifest
   generation;
 - reproducible dependency graphs as Graphviz DOT or self-contained,
@@ -148,33 +153,41 @@ The core build-system compiler is implemented:
 - unit, behavioural, integration, property, snapshot, and initial Kani
   verification coverage.
 
-The v0.1.0-beta2 release provides packages for Linux, macOS, and Windows,
-including platform help artefacts. It is the first public release of this work.
+The beta3 release also supports dependency-only action and target aggregates:
+nodes with a non-empty `deps` list may omit a recipe.
 
 ______________________________________________________________________
 
-## v0.1.0-beta2 status
+## Release and development status
 
-v0.1.0-beta2 is a useful preview for early adopters, not a declaration that
-Netsuke is finished or that every interface is stable. The compiler pipeline
-and ordinary local-build workflow are substantial; the command-line interface,
-configuration vocabulary, and advanced recipe model are still evolving.
+The v0.1.0-beta3 release is a useful preview for early adopters, not a
+declaration that Netsuke is finished or that every interface is stable. The
+compiler pipeline and ordinary local-build workflow are substantial; the
+command-line interface, configuration vocabulary, and advanced recipe model
+remain pre-stable.
 
 Pin the Netsuke version in automation and expect some command names, flags,
 diagnostic schemas, and manifest details to change before 1.0.
 
+The following limitations apply to beta3.
+
 Known limitations include:
 
-- recipes are shell strings; structured executable arguments and recipe
+- recipes remain shell strings: Unix scripts use `/bin/sh -e`, Windows legacy
+  recipes use Windows PowerShell by default, and the Windows Bash compatibility
+  route is an explicit opt-in; structured executable arguments and recipe
   environment mappings are not implemented yet;
-- shell dollar expressions use ordinary shell syntax; see the [users' guide
-  safety boundary](docs/users-guide.md#review-the-safety-boundary);
 - compiler-generated dependency imports such as GCC depfiles are planned but
   not yet part of the manifest model;
 - `--json` emits exactly one versioned result or diagnostic document for each
   command, but the schema may still change before 1.0;
-- accessibility, terminal rendering, configuration precedence, and
-  cross-platform compiler invariants need broader verification.
+- colour rendering is not implemented;
+- accessibility still needs assistive-technology verification.
+
+The beta3 release fixes beta2's shell-dollar limitation with Ninja-aware
+escaping, so ordinary shell expressions can be written normally. Beta2
+manifests that use literal shell dollar expressions require migration; see the
+[users' guide safety boundary](docs/users-guide.md#review-the-safety-boundary).
 
 A `Netsukefile` can execute commands and use impure template helpers. Treat it
 with the same care as a `Makefile`: review untrusted manifests before running
@@ -193,8 +206,8 @@ Work after the first release is organized around three priorities:
    environment mappings, compiler dependency imports, and better
    conditional-action feedback.
 3. **Strengthen confidence**: expand Kani and property-test coverage, verify
-   accessibility with assistive technology, and add regression coverage for
-   configuration precedence and terminal rendering.
+   accessibility with assistive technology and add regression coverage for
+   terminal rendering.
 
 Longer-term work explores machine-readable context, profiles, run history,
 artefact delivery, and local-first feedback for human and agent workflows. The

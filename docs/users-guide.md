@@ -1,12 +1,12 @@
 # Netsuke user's guide
 
-This guide is for people evaluating or using Netsuke v0.1.0-beta2. It covers
-the first build, the manifest format, templating, command-line usage,
-configuration, diagnostics, accessibility, and the current safety boundary.
+This guide documents Netsuke v0.1.0-beta3. It covers the first build, the
+manifest format, templating, command-line usage, configuration, diagnostics,
+accessibility, and the current safety boundary.
 
-Netsuke v0.1.0-beta2 is an early-adopter release. The compiler pipeline is
-useful, but command names, flags, diagnostic schemas, and some manifest details
-may change before 1.0. Pin the Netsuke version in automated workflows.
+Beta3 is an early-adopter release. The compiler pipeline is useful, but command
+names, flags, diagnostic schemas, and some manifest details may change before
+1.0. Pin the Netsuke version in automated workflows.
 
 ## Install Netsuke
 
@@ -18,7 +18,7 @@ by default.
 Inside a checkout, `rustup` automatically selects the pinned toolchain from
 `rust-toolchain.toml`; no command-line argument is required.
 
-Netsuke v0.1.0-beta2 is available from crates.io. Where
+Netsuke v0.1.0-beta3 is available from crates.io. Where
 [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) is available,
 prefer it: it fetches a prebuilt release binary and avoids the toolchain
 requirement below.
@@ -40,7 +40,7 @@ cargo +nightly-2026-08-23 install netsuke-build
 ```
 
 Pre-built installers are available from the
-[v0.1.0-beta2 GitHub release](https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta2):
+[v0.1.0-beta3 GitHub release](https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta3):
 
 | Platform | Architectures                        | Packages                         |
 | -------- | ------------------------------------ | -------------------------------- |
@@ -64,7 +64,7 @@ licence. Ninja must be installed separately when using the macOS or Windows
 installer. The Windows MSI installs to `C:\Program Files\netsuke` and does not
 update `PATH`.
 
-The MSI installer supports pre-release SemVer versions such as `0.1.0-beta2`:
+The MSI installer supports pre-release SemVer versions such as `0.1.0-beta3`:
 the pre-release suffix cannot be represented in an MSI product version, so the
 installer carries the numeric release triple (`0.1.0`) while the full version
 remains in the package and release names. Because successive pre-releases share
@@ -73,7 +73,7 @@ installation for that version series rather than installing alongside it.
 
 SHA-256 checksum files accompany standalone binaries and staged help,
 completion, and licence files. Installer packages do not have checksum sidecars
-in v0.1.0-beta2. Windows PowerShell help files are published beside each MSI as
+in v0.1.0-beta3. Windows PowerShell help files are published beside each MSI as
 sidecar artefacts rather than embedded in the installer.
 
 Each standalone release archive also contains generated shell completion
@@ -130,7 +130,7 @@ MSI:
 
 ```powershell
 $architecture = 'amd64' # Use 'arm64' for the Arm64 MSI.
-$releaseUri = 'https://api.github.com/repos/leynos/netsuke/releases/tags/v0.1.0-beta2'
+$releaseUri = 'https://api.github.com/repos/leynos/netsuke/releases/tags/v0.1.0-beta3'
 $release = Invoke-RestMethod -Uri $releaseUri
 
 $documents = [Environment]::GetFolderPath('MyDocuments')
@@ -140,7 +140,7 @@ $editionDirectory = if ($PSVersionTable.PSEdition -eq 'Desktop') {
     'PowerShell'
 }
 $moduleRoot = Join-Path $documents "$editionDirectory\Modules"
-$moduleDirectory = Join-Path $moduleRoot 'Netsuke\0.1.0-beta2'
+$moduleDirectory = Join-Path $moduleRoot 'Netsuke\0.1.0-beta3'
 $helpDirectory = Join-Path $moduleDirectory 'en-US'
 New-Item -ItemType Directory -Path $helpDirectory -Force | Out-Null
 
@@ -288,7 +288,7 @@ The top-level fields are:
 - `defaults`: target or action names used when `build` receives no explicit
   targets.
 
-`defaults` entries are literal names in v0.1.0-beta2; Jinja expressions are not
+`defaults` entries are literal names in beta3; Jinja expressions are not
 rendered in this field.
 
 `vars` keys named `env` or `glob` are rejected because those names identify
@@ -467,8 +467,7 @@ A target supports these fields:
 - `sources`: explicit inputs. They affect freshness and become `{{ ins }}`.
 - `deps`: implicit dependencies. They affect freshness but do not become
   recipe arguments. Declare them on each target; reusable rules reject `deps`.
-  The planned rule-level `deps_from` contract is not implemented in
-  v0.1.0-beta2.
+  The planned rule-level `deps_from` contract is not implemented in beta3.
 - `dependency_order`: scheduling policy for the `deps` list. `parallel` is the
   default; `serial` runs a list with more than one dependency in declaration
   order.
@@ -488,8 +487,7 @@ list of strings.
 
 Netsuke quotes paths inserted through `{{ ins }}` and `{{ outs }}`. Other Jinja
 values render as ordinary command text and are not automatically shell-quoted.
-The `shell_escape` filter described in older drafts is not implemented in
-v0.1.0-beta2.
+The `shell_escape` filter described in older drafts is not implemented in beta3.
 
 Cycle detection follows `sources` and `deps`. Order-only dependencies enforce
 ordering but do not participate in cycle detection.
@@ -773,8 +771,8 @@ Both helpers accept:
 - `cwd_mode="auto"|"always"|"never"`: control bounded project-directory
   fallback searching.
 
-The `env(name)` function reads one required environment variable. v0.1.0-beta2
-does not accept a default argument; an absent or non-Unicode value is an error.
+The `env(name)` function reads one required environment variable. Beta3 does
+not accept a default argument; an absent or non-Unicode value is an error.
 
 ### Inject the environment reader for tests
 
@@ -847,6 +845,11 @@ and explains the path-type change. The `program` and `build_file` fields are
 borrowed `&Utf8Path`; `NinjaProcessOptions::working_dir` is an
 `Option<Utf8PathBuf>`.
 
+The `options: &options` field and associated `NinjaProcessOptions` shape shown
+here are beta3 additions. Published beta2 request types use `cli: &cli`
+instead, so beta2 callers must not assume this API shape is available in that
+release.
+
 <!-- tested-example: guide-ninja-request-snippet -->
 
 ```rust
@@ -905,6 +908,10 @@ of 1.0.
 
 Rust callers that wrap a `StatusReporter` can send verbose timing summaries to
 an owned sink with `VerboseTimingReporter::with_writer`:
+
+The writer/completion behaviour described here is a beta3 addition. Published
+beta2 callers must not assume this timing-writer behaviour;
+`VerboseTimingReporter::new` remains the stderr-writing default.
 
 <!-- tested-example: guide-verbose-timing-reporter -->
 
@@ -1184,22 +1191,27 @@ The standard-library reference describes the full helper set available while
 rendering a normal build manifest. The query allowlist above is the deliberate
 exception for `netsuke help targets`.
 
+Recipe-body skipping and conditional catalogue entries are beta3 behaviour.
+Published beta2 `help targets` does not provide those semantics.
+
 ## Configure Netsuke
 
 Configuration precedence, from lowest to highest, is:
 
-1. Built-in defaults.
-2. System configuration.
-3. User configuration.
-4. Project `.netsuke.toml`.
-5. `NETSUKE_` environment variables.
-6. Explicit command-line options.
+1. One automatically discovered base winner: user configuration, otherwise
+   system configuration, otherwise built-in defaults.
+2. Project `.netsuke.toml`.
+3. `NETSUKE_` environment variables.
+4. Explicit command-line options.
 
 System and user configuration are discovered from platform conventions rather
-than two separately named Netsuke layers. On Unix this means the XDG base
-directories and the home directory; on Windows it means the application-data
-directories, such as `%APPDATA%\netsuke\config.toml`. Their relative order
-follows those platform conventions.
+than merged as two separately named Netsuke layers. On Unix, this means the XDG
+base directories and the home directory; on Windows it means the
+application-data directories, such as `%APPDATA%\netsuke\config.toml`.
+Automatic discovery chooses one exclusive winner among system configuration,
+user configuration, and built-in defaults. Netsuke then appends the project
+`.netsuke.toml` layer, so project values can override the winner while fields
+present only in the winner remain available.
 
 An explicit selector bypasses automatic discovery. Selectors are checked in
 this order:
@@ -1306,6 +1318,10 @@ layer counts, CLI override leaf keys, and validation `key`/`reason` fields.
 Configuration values and raw paths are never included. Ordinary
 `merge_with_config*` and `merge_with_cached_file_layers` calls discard their
 collected events and do not emit merge tracing.
+
+The observer-based cached discovery and merge flow described here is a beta3
+improvement. Published beta2 already provides `merge_with_cached_file_layers`,
+but not this observer-based flow.
 
 #### Bounded configuration metrics
 
@@ -1476,9 +1492,9 @@ colour alone. Emoji policy values are:
 - `never`: ASCII-safe prefixes.
 - `auto`: Unicode in standard output and ASCII in accessible output.
 
-The colour policy is separate. Colour rendering is not implemented in
-v0.1.0-beta2, so `color` currently affects mode selection but does not add
-coloured terminal text.
+The colour policy is separate. Colour rendering is not implemented in beta3, so
+`color` currently affects mode selection but does not add coloured terminal
+text.
 
 Verbose mode adds per-stage timing after a successful command. Failed commands
 do not print a timing summary.
@@ -1518,7 +1534,7 @@ stderr has this shape:
   "schema_version": 1,
   "generator": {
     "name": "netsuke",
-    "version": "0.1.0-beta2"
+    "version": "0.1.0-beta3"
   },
   "diagnostics": [
     {
@@ -1558,7 +1574,7 @@ Exactly one outcome branch is present:
   - `source`, `primary_span`, and `labels`: optional source locations.
   - `related`: nested diagnostics using the same shape.
 
-**Triage:** Treat schema version `1` as pre-stable for v0.1.0-beta2 and check
+**Triage:** Treat schema version `1` as pre-stable for v0.1.0-beta3 and check
 `schema_version` before parsing other fields.
 
 ## Configure network access
