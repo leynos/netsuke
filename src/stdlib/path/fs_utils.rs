@@ -1,13 +1,15 @@
 //! UTF-8 file-system helpers for stdlib filters using cap-std Dir handles: metadata queries,
 //! opening files for streaming, and safe error translation.
-use std::io;
+use std::io::{self, BufRead, BufReader, Read};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{
     ambient_authority, fs,
-    fs_utf8::{Dir, File, OpenOptions},
+    fs_utf8::{Dir, File, OpenOptions, OpenOptionsExt},
 };
 use minijinja::Error;
+#[cfg(unix)]
+use rustix::fs::OFlags;
 
 use crate::localization::{self, keys};
 
@@ -22,6 +24,130 @@ pub(super) struct ParentDir {
     pub entry: String,
     /// The parent directory's own path.
     pub dir_path: Utf8PathBuf,
+}
+
+/// Per-call limits for the file-reading filters.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct FileReadLimits {
+    /// Maximum number of bytes the read may consume.
+    pub max_bytes: u64,
+    /// Whether the final path component may be a symlink.
+    pub follow_symlinks: bool,
+}
+
+/// Read a bounded chunk of `file`, rejecting reads that exceed `max_bytes`.
+///
+/// Returns the bytes read so far, or `None` when the source has been
+/// exhausted. Returns an error once the running total passes `max_bytes`.
+pub(crate) fn read_bounded_chunk<'a>(
+    file: &mut File,
+    buffer: &'a mut [u8],
+    total: &mut u64,
+    max_bytes: u64,
+    path: &Utf8Path,
+) -> Result<Option<&'a [u8]>, Error> {
+    let read = file.read(buffer).map_err(|err| {
+        io_to_error(path, &localization::message(keys::STDLIB_PATH_ACTION_READ), err)
+    })?;
+    if read == 0 {
+        return Ok(None);
+    }
+    *total = total.saturating_add(u64::try_from(read).unwrap_or(u64::MAX));
+    if *total > max_bytes {
+        return Err(file_too_large_error(path, max_bytes));
+    }
+    Ok(Some(&buffer[..read]))
+}
+
+/// Build the localized byte-budget diagnostic for `path` and `limit`.
+pub(crate) fn file_too_large_error(path: &Utf8Path, limit: u64) -> Error {
+    Error::new(
+        minijinja::ErrorKind::InvalidOperation,
+        localization::message(keys::STDLIB_PATH_FILE_TOO_LARGE)
+            .with_arg("path", path.as_str())
+            .with_arg("limit", limit)
+            .to_string(),
+    )
+}
+
+/// Build the localized non-regular-file diagnostic for `path`.
+pub(crate) fn not_regular_file_error(path: &Utf8Path) -> Error {
+    Error::new(
+        minijinja::ErrorKind::InvalidOperation,
+        localization::message(keys::STDLIB_PATH_NOT_REGULAR_FILE)
+            .with_arg("path", path.as_str())
+            .to_string(),
+    )
+}
+
+/// Open `path` for reading under the file-reading safety policy.
+///
+/// The final path component is opened without following symlinks unless
+/// `limits.follow_symlinks` opts in, and the opened object must be a regular
+/// file, checked on the opened handle so devices and FIFOs are rejected
+/// race-free.
+///
+/// # Errors
+///
+/// Returns a template error when the parent directory cannot be opened, the
+/// target cannot be opened, the final component is a symlink while following
+/// is disabled, or the opened object is not a regular file.
+pub(crate) fn open_file_checked(
+    path: &Utf8Path,
+    limits: &FileReadLimits,
+) -> Result<File, Error> {
+    let parent = open_parent_dir(path)?;
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    if !limits.follow_symlinks {
+        options.custom_flags(i32::try_from(OFlags::NOFOLLOW.bits()).map_err(|err| {
+            io_to_error(
+                path,
+                &localization::message(keys::STDLIB_PATH_ACTION_OPEN_FILE),
+                io::Error::new(io::ErrorKind::InvalidInput, err),
+            )
+        })?);
+    }
+    #[cfg(windows)]
+    if !limits.follow_symlinks {
+        // Windows has no O_NOFOLLOW equivalent through cap-std; reject a
+        // symlink final component before opening.
+        let metadata = parent
+            .handle
+            .symlink_metadata(Utf8Path::new(&parent.entry))
+            .map_err(|err| {
+                io_to_error(
+                    path,
+                    &localization::message(keys::STDLIB_PATH_ACTION_STAT),
+                    err,
+                )
+            })?;
+        if metadata.file_type().is_symlink() {
+            return Err(not_regular_file_error(path));
+        }
+    }
+    let file = parent
+        .handle
+        .open_with(Utf8Path::new(&parent.entry), &options)
+        .map_err(|err| {
+            io_to_error(
+                path,
+                &localization::message(keys::STDLIB_PATH_ACTION_OPEN_FILE),
+                err,
+            )
+        })?;
+    let metadata = file.metadata().map_err(|err| {
+        io_to_error(
+            path,
+            &localization::message(keys::STDLIB_PATH_ACTION_STAT),
+            err,
+        )
+    })?;
+    if !metadata.is_file() {
+        return Err(not_regular_file_error(path));
+    }
+    Ok(file)
 }
 
 /// Open a path's parent directory with ambient authority.
@@ -119,10 +245,23 @@ pub(super) fn file_size(path: &Utf8Path) -> Result<u64, Error> {
 /// # Errors
 ///
 /// Returns a template error when the parent directory cannot be opened, the
-/// file cannot be read, or its contents are not valid UTF-8.
-pub(super) fn read_utf8(path: &Utf8Path) -> Result<String, Error> {
-    with_parent_dir(path, keys::STDLIB_PATH_ACTION_READ, |handle, entry| {
-        handle.read_to_string(Utf8Path::new(entry))
+/// file cannot be read, its contents are not valid UTF-8, or the read exceeds
+/// the configured byte budget.
+pub(crate) fn read_utf8(path: &Utf8Path, limits: &FileReadLimits) -> Result<String, Error> {
+    let mut file = open_file_checked(path, limits)?;
+    let mut total: u64 = 0;
+    let mut buffer = [0_u8; 8192];
+    let mut bytes = Vec::new();
+    while let Some(chunk) = read_bounded_chunk(&mut file, &mut buffer, &mut total, limits.max_bytes, path)? {
+        bytes.extend_from_slice(chunk);
+    }
+    String::from_utf8(bytes).map_err(|_| {
+        Error::new(
+            minijinja::ErrorKind::InvalidOperation,
+            localization::message(keys::STDLIB_PATH_IO_INVALID_DATA)
+                .with_arg("path", path.as_str())
+                .to_string(),
+        )
     })
 }
 
@@ -130,22 +269,35 @@ pub(super) fn read_utf8(path: &Utf8Path) -> Result<String, Error> {
 ///
 /// # Errors
 ///
-/// Returns a template error when the file cannot be opened or read as UTF-8.
-pub(super) fn linecount(path: &Utf8Path) -> Result<usize, Error> {
-    let content = read_utf8(path)?;
-    Ok(content.lines().count())
-}
-
-/// Open the file at `path` for reading through a capability handle.
-///
-/// # Errors
-///
-/// Returns a template error when the parent directory cannot be opened or the
-/// target file cannot be opened for reading.
-pub(crate) fn open_file(path: &Utf8Path) -> Result<File, Error> {
-    with_parent_dir(path, keys::STDLIB_PATH_ACTION_OPEN_FILE, |handle, entry| {
-        let mut options = OpenOptions::new();
-        options.read(true);
-        handle.open_with(Utf8Path::new(entry), &options)
-    })
+/// Returns a template error when the file cannot be opened or read, or when
+/// the read exceeds the configured byte budget.
+pub(crate) fn linecount(path: &Utf8Path, limits: &FileReadLimits) -> Result<usize, Error> {
+    let mut file = open_file_checked(path, limits)?;
+    let mut reader = BufReader::new(&mut file);
+    let mut lines: usize = 0;
+    let mut total: u64 = 0;
+    let mut buffer = Vec::new();
+    loop {
+        buffer.clear();
+        let read = reader
+            .read_until(b'\n', &mut buffer)
+            .map_err(|err| {
+                io_to_error(
+                    path,
+                    &localization::message(keys::STDLIB_PATH_ACTION_READ),
+                    err,
+                )
+            })?;
+        if read == 0 {
+            break;
+        }
+        total = total.saturating_add(u64::try_from(read).unwrap_or(u64::MAX));
+        if total > limits.max_bytes {
+            return Err(file_too_large_error(path, limits.max_bytes));
+        }
+        if !buffer.is_empty() {
+            lines += 1;
+        }
+    }
+    Ok(lines)
 }
