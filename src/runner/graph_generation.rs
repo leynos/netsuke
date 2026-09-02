@@ -12,7 +12,6 @@ use super::{
 use crate::localization::{self, keys};
 use crate::ninja_gen;
 use monotony::MonotonicClock;
-use tracing::debug;
 
 /// Supply the dependencies that select and measure graph generation.
 ///
@@ -52,12 +51,6 @@ pub(super) fn generate_ninja_with_shell(
         .network_policy()
         .context(localization::message(keys::RUNNER_CONTEXT_NETWORK_POLICY))?;
     let manifest = load_manifest_with_stage_reporting(&manifest_path, policy, reporter)?;
-    if tracing::enabled!(tracing::Level::DEBUG) {
-        let ast_json = serde_json::to_string_pretty(&manifest).context(localization::message(
-            keys::RUNNER_CONTEXT_SERIALISE_MANIFEST,
-        ))?;
-        debug!("AST:\n{ast_json}");
-    }
 
     report_pipeline_stage(reporter, PipelineStage::IrGenerationValidation, None);
     let graph = graph_generation_telemetry::instrument_graph_generation(
