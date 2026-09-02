@@ -17,11 +17,7 @@ fn verbose_generate_never_emits_rendered_secret() -> Result<()> {
     let repository = Dir::open_ambient_dir(env!("CARGO_MANIFEST_DIR"), ambient_authority())
         .context("open repository root")?;
     repository
-        .copy(
-            "tests/data/env_secret_sites.yml",
-            &workspace,
-            "Netsukefile",
-        )
+        .copy("tests/data/env_secret_sites.yml", &workspace, "Netsukefile")
         .context("copy secret fixture into workspace")?;
 
     let run = run_netsuke_in_with_env(
@@ -43,8 +39,9 @@ fn verbose_generate_never_emits_rendered_secret() -> Result<()> {
         !run.stderr.contains(SENTINEL),
         "rendered secret must not appear on stderr"
     );
-    let generated =
-        workspace.read_to_string("build.ninja").context("read generated Ninja file")?;
+    let generated = workspace
+        .read_to_string("build.ninja")
+        .context("read generated Ninja file")?;
     ensure!(
         generated.contains(SENTINEL),
         "env('CI_SECRET') must still resolve in generated output"
