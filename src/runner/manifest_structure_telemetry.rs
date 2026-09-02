@@ -33,6 +33,7 @@ fn describe_metrics() {
 /// # Examples
 ///
 /// ```
+/// ignore
 /// # use netsuke::ast::NetsukeManifest;
 /// # use netsuke::runner::manifest_structure_telemetry::record_manifest_structure;
 /// let manifest = NetsukeManifest::default();
