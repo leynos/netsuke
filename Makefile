@@ -45,6 +45,9 @@ KANI_VERSION_FILE ?= tools/kani/VERSION
 MOLD_VERSION_FILE ?= tools/mold/VERSION
 MOLD_SHA256SUMS_FILE ?= tools/mold/SHA256SUMS
 DEV_FAST_CONFIG ?= tools/dev-fast/config.toml
+# Preserve the raw override before export: otherwise Make expands a caller's
+# literal dollar signs while preparing the environment for the recipe shell.
+override DEV_FAST_CONFIG := $(value DEV_FAST_CONFIG)
 DEV_FAST_PREFIX ?= $(HOME)/.local
 # Exported rather than interpolated into the recipes. Make hands an exported
 # variable to the child process directly, so a path containing a quote cannot
