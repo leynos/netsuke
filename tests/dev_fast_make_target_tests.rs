@@ -32,7 +32,6 @@ struct BuildTarget {
     name: &'static str,
     subcommand: &'static [&'static str],
 }
-
 /// Prepare a hermetic dev-fast scenario for a Make target contract test.
 #[fixture]
 fn prepared_build_scenario() -> Result<BuildScenario> {
@@ -105,10 +104,11 @@ fn build_targets_select_the_pinned_toolchain_and_fragment(
 }
 
 #[rstest]
-#[case("dev-build")]
-#[case("dev-test")]
+#[case::dev_build("dev-build", &["--locked", "--config"])]
+#[case::dev_test("dev-test", &["nextest", "run", "--locked"])]
 fn build_targets_forward_config_and_lockfile_overrides(
     #[case] target: &str,
+    #[case] lockfile_arguments: &[&str],
     #[from(prepared_build_scenario)] scenario_res: Result<BuildScenario>,
 ) -> Result<()> {
     let scenario = scenario_res?;
@@ -126,8 +126,9 @@ fn build_targets_forward_config_and_lockfile_overrides(
     );
     let recorded = scenario.cargo().sole_invocation()?;
     ensure!(
-        recorded.contains_sequence(&["--locked"]),
-        "{target} should forward CARGO_LOCKED, got `{:?}`",
+        recorded.contains_sequence(lockfile_arguments),
+        "{target} should place CARGO_LOCKED as `{:?}`, got `{:?}`",
+        lockfile_arguments,
         recorded.arguments()
     );
     ensure!(

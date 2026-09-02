@@ -305,7 +305,7 @@ dev-build: dev-fast-check ## Build the debug binary with Cranelift and mold
 	RUSTUP_TOOLCHAIN=$(DEV_FAST_TOOLCHAIN) $(CARGO) $(CARGO_LOCKED) --config "$$DEV_FAST_CONFIG" build $(BUILD_JOBS) --bin $(APP)
 
 dev-test: dev-fast-check ## Run the nextest pass with Cranelift and mold
-	RUSTUP_TOOLCHAIN=$(DEV_FAST_TOOLCHAIN) $(CARGO) $(CARGO_LOCKED) --config "$$DEV_FAST_CONFIG" nextest run --workspace --all-targets --all-features $(NEXTEST_BUILD_JOBS)
+	RUSTUP_TOOLCHAIN=$(DEV_FAST_TOOLCHAIN) $(CARGO) --config "$$DEV_FAST_CONFIG" nextest run $(CARGO_LOCKED) --workspace --all-targets --all-features $(NEXTEST_BUILD_JOBS)
 
 bench-build: dev-fast-check ## Time clean and incremental debug builds for both paths
 	@CARGO="$(CARGO)" scripts/bench-build.sh
