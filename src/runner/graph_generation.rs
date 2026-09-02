@@ -4,6 +4,7 @@
 //! clock, pipeline reporting, and observability. It keeps the pure generation
 //! queries in [`super::generation`] free of runner infrastructure.
 
+use super::manifest_structure_telemetry::record_manifest_structure;
 use super::{
     Cli, Context, LocalizationKey, PipelineStage, Result, StatusReporter,
     dyndep_generation_telemetry, generation, graph_generation_telemetry,
@@ -12,7 +13,6 @@ use super::{
 use crate::localization::{self, keys};
 use crate::ninja_gen;
 use monotony::MonotonicClock;
-use super::manifest_structure_telemetry::record_manifest_structure;
 
 /// Supply the dependencies that select and measure graph generation.
 ///
