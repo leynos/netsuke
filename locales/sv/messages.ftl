@@ -88,7 +88,6 @@ runner.manifest.current_directory_label = den aktuella katalogen
 runner.manifest.default_not_declared = Manifestets standardvärde '{ $default }' anger ingen deklarerad åtgärd eller något mål.
 runner.context.network_policy = Nätverkspolicyn kunde inte byggas.
 runner.context.load_manifest = Manifestet i { $path } kunde inte läsas in.
-runner.context.serialise_manifest = Manifestet kunde inte serialiseras.
 runner.context.build_graph = Grafen kunde inte byggas utifrån manifestet.
 runner.context.generate_ninja = Ninja-manifestet kunde inte skapas.
 runner.context.render_graph = Grafartefakten kunde inte renderas.

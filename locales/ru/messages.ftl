@@ -88,7 +88,6 @@ runner.manifest.current_directory_label = текущий каталог
 runner.manifest.default_not_declared = Значение по умолчанию в манифесте '{ $default }' не называет объявленное действие или цель.
 runner.context.network_policy = Не удалось построить сетевую политику.
 runner.context.load_manifest = Не удалось загрузить манифест по пути { $path }.
-runner.context.serialise_manifest = Не удалось сериализовать манифест.
 runner.context.build_graph = Не удалось построить граф по манифесту.
 runner.context.generate_ninja = Не удалось создать манифест Ninja.
 runner.context.render_graph = Не удалось отобразить артефакт графа.

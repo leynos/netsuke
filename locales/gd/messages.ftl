@@ -88,7 +88,6 @@ runner.manifest.current_directory_label = am pasgan làithreach
 runner.manifest.default_not_declared = Chan eil bun-roghainn a’ mhanifest '{ $default }' ag ainmeachadh gnìomh no targaid dhearbhaichte.
 runner.context.network_policy = Cha b' urrainnear poileasaidh an lìonraidh a thogail.
 runner.context.load_manifest = Cha b' urrainnear am foirm-liosta a luchdachadh o { $path }.
-runner.context.serialise_manifest = Cha b' urrainnear am foirm-liosta a shreathachadh.
 runner.context.build_graph = Cha b' urrainnear graf a thogail on fhoirm-liosta.
 runner.context.generate_ninja = Cha b' urrainnear am foirm-liosta Ninja a dhèanamh.
 runner.context.render_graph = Cha b' urrainnear toradh a' ghraf a reandarachadh.

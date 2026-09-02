@@ -77,7 +77,6 @@ define_keys! {
     RUNNER_MANIFEST_DEFAULT_NOT_DECLARED => "runner.manifest.default_not_declared",
     RUNNER_CONTEXT_NETWORK_POLICY => "runner.context.network_policy",
     RUNNER_CONTEXT_LOAD_MANIFEST => "runner.context.load_manifest",
-    RUNNER_CONTEXT_SERIALISE_MANIFEST => "runner.context.serialise_manifest",
     RUNNER_CONTEXT_BUILD_GRAPH => "runner.context.build_graph",
     RUNNER_CONTEXT_GENERATE_NINJA => "runner.context.generate_ninja",
     RUNNER_CONTEXT_RENDER_GRAPH => "runner.context.render_graph",
