@@ -45,19 +45,32 @@
 # Default build targets when the CLI does not name any targets.
 # default_targets = ["fmt", "lint", "test"]
 
-# Additional URL schemes allowed for the `fetch` helper.
+# Additional URL schemes allowed for the `fetch` helper. When this file is the
+# primary project `.netsuke.toml`, allow entries are project requests and are
+# ignored unless an operator enables `trust_project_fetch_policy` in a trusted
+# layer. A project cannot enable that opt-in for itself.
 # fetch_allow_scheme = ["https"]
 
-# Hostnames allowed when `fetch_default_deny = true`.
+# Hostnames allowed when `fetch_default_deny = true`. The same project-request
+# rule applies to these entries.
 # Supports wildcards such as `*.example.com`.
 # fetch_allow_host = ["example.com", "*.example.com"]
 
-# Hostnames that are always blocked.
+# Hostnames that are always blocked. Block entries accumulate across layers and
+# take precedence over allow entries.
 # Supports wildcards such as `*.example.com`.
 # fetch_block_host = ["metadata.internal"]
 
-# Deny all fetch hosts by default and allow only the declared allowlist.
+# Deny all fetch hosts by default and allow only the declared allowlist. Without
+# the opt-in, a project may set this to true to tighten the operator policy; a
+# project false cannot weaken an operator's default-deny setting.
 # fetch_default_deny = false
+
+# Allow the primary project file's fetch grants to append to operator values.
+# Set this only in system or user configuration, through
+# NETSUKE_TRUST_PROJECT_FETCH_POLICY, or with --trust-project-fetch-policy;
+# a project file cannot self-authorize.
+# trust_project_fetch_policy = false
 
 # CLI-only controls such as `--config`, `--directory`, and subcommands are not
 # read from config files.

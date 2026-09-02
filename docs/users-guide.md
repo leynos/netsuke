@@ -1580,12 +1580,37 @@ Exactly one outcome branch is present:
 ## Configure network access
 
 `fetch()` allows HTTPS by default. Network policy can be tightened or extended
-with global flags or their configuration equivalents:
+with global flags or their configuration equivalents. Fetch policy has a trust
+boundary that differs from ordinary configuration precedence: system and user
+configuration, `NETSUKE_` environment variables, and explicit CLI options are
+operator policy, while the primary project `.netsuke.toml` is an untrusted
+project request.
 
 - `--fetch-allow-scheme <SCHEME>`
 - `--fetch-allow-host <HOST>`
 - `--fetch-block-host <HOST>`
 - `--fetch-default-deny`
+- `--trust-project-fetch-policy`
+
+By default, project configuration may only narrow the operator policy. A project
+`fetch_default_deny = true` can enable default-deny, but a project
+`fetch_default_deny = false` cannot disable an operator's default-deny setting.
+Project `fetch_block_host` entries accumulate with entries from the other
+layers, and a block always wins over an allow. Project `fetch_allow_scheme` and
+`fetch_allow_host` entries are ignored by default; the project cannot enable
+them by setting `trust_project_fetch_policy` itself.
+
+An operator who deliberately trusts a checkout can set
+`trust_project_fetch_policy = true` in system or user configuration, set
+`NETSUKE_TRUST_PROJECT_FETCH_POLICY=true`, or pass
+`--trust-project-fetch-policy`. With that opt-in, project allow-scheme and
+allow-host entries are appended to the operator values, and a project
+`fetch_default_deny` value applies directly. The opt-in is resolved only from
+operator-controlled layers.
+
+This boundary currently applies to the primary project `.netsuke.toml` only.
+Files reached through that file's `extends` chain are not included in this
+first trust-boundary change and retain their existing configuration semantics.
 
 Host patterns may contain wildcards such as `*.example.com`. A block rule wins
 over an allow rule. `--fetch-default-deny` permits only explicitly allowed

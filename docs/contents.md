@@ -140,6 +140,9 @@ operator, user, and contributor references are easier to find.
 - [ADR-017](adr-017-require-utf8-ninja-invocation-paths.md):
   UTF-8 Ninja invocation-path boundary decision record, with early diagnostics
   for unsupported build-file and working-directory encodings.
+- [ADR-018](adr-018-trust-aware-fetch-policy-merge.md):
+  Trust-aware merging of project fetch-policy requests with operator-enforced
+  network policy.
 - [ADR-019](adr-019-structured-command-shell-selection.md): Allow-listed
   structured-command shell selection, trusted configuration authority,
   resolution, lowering, diagnostics, and safety boundaries.
