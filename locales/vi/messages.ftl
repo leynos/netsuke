@@ -16,6 +16,7 @@ cli.flag.fetch_allow_scheme.help = Các lược đồ URL bổ sung được ph�
 cli.flag.fetch_allow_host.help = Tên máy chủ được phép khi bật chế độ từ chối mặc định.
 cli.flag.fetch_block_host.help = Tên máy chủ luôn bị chặn, kể cả khi được phép ở nơi khác.
 cli.flag.fetch_default_deny.help = Mặc định từ chối mọi máy chủ; chỉ cho phép danh sách đã khai báo.
+cli.flag.trust_project_fetch_policy.help = Allow project configuration to widen fetch-policy grants.
 cli.flag.json.help = Xuất dữ liệu JSON máy đọc được.
 cli.flag.no_input.help = Không bao giờ đọc dữ liệu nhập tương tác.
 cli.flag.color.help = Chính sách xuất màu (auto, always, never).

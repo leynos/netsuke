@@ -16,6 +16,7 @@ cli.flag.fetch_allow_scheme.help = Scheme URL suplimentare permise pentru ajutor
 cli.flag.fetch_allow_host.help = Numele de gazde permise atunci când refuzul implicit este activ.
 cli.flag.fetch_block_host.help = Numele de gazde blocate întotdeauna, chiar dacă sunt permise în altă parte.
 cli.flag.fetch_default_deny.help = Refuză implicit toate gazdele; permite doar lista declarată.
+cli.flag.trust_project_fetch_policy.help = Allow project configuration to widen fetch-policy grants.
 cli.flag.json.help = Produce ieșire JSON care poate fi prelucrată automat.
 cli.flag.no_input.help = Nu citi niciodată date introduse interactiv.
 cli.flag.color.help = Politica de ieșire colorată (auto, always, never).

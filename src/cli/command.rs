@@ -26,6 +26,10 @@ use crate::host_pattern::HostPattern;
 
 /// A modern, friendly build system that uses YAML and Jinja, powered by Ninja.
 #[derive(Debug, Parser, Serialize, Deserialize)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each Boolean maps to an independent command-line configuration key"
+)]
 #[command(
     name = "netsuke",
     bin_name = "netsuke",
@@ -89,6 +93,10 @@ pub struct Cli {
     /// Deny all hosts by default; only allow the declared allowlist.
     #[arg(long = "fetch-default-deny")]
     pub fetch_default_deny: bool,
+
+    /// Allow project configuration to widen fetch-policy grants.
+    #[arg(long = "trust-project-fetch-policy")]
+    pub trust_project_fetch_policy: bool,
 
     /// Emit machine-readable JSON output.
     #[arg(long)]
@@ -159,6 +167,7 @@ impl Default for Cli {
             fetch_allow_host: Vec::new(),
             fetch_block_host: Vec::new(),
             fetch_default_deny: false,
+            trust_project_fetch_policy: false,
             json: false,
             interaction: InteractionArgs::default(),
             color: ColourPolicy::Auto,

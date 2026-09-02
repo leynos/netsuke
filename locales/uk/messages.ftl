@@ -16,6 +16,7 @@ cli.flag.fetch_allow_scheme.help = Додаткові схеми URL, дозво
 cli.flag.fetch_allow_host.help = Назви вузлів, дозволені за увімкненої типової заборони.
 cli.flag.fetch_block_host.help = Назви вузлів, які блокуються завжди, навіть якщо дозволені деінде.
 cli.flag.fetch_default_deny.help = Типово забороняти всі вузли; дозволяти лише оголошений перелік.
+cli.flag.trust_project_fetch_policy.help = Allow project configuration to widen fetch-policy grants.
 cli.flag.json.help = Виводити машиночитний JSON.
 cli.flag.no_input.help = Ніколи не читати інтерактивне введення.
 cli.flag.color.help = Політика кольорового виводу (auto, always, never).

@@ -16,6 +16,7 @@ cli.flag.fetch_allow_scheme.help = סכימות URL נוספות המותרות 
 cli.flag.fetch_allow_host.help = שמות מארחים המותרים כאשר הדחייה כברירת מחדל פעילה.
 cli.flag.fetch_block_host.help = שמות מארחים החסומים תמיד, גם אם הותרו במקום אחר.
 cli.flag.fetch_default_deny.help = דחיית כל המארחים כברירת מחדל; התרת הרשימה המוצהרת בלבד.
+cli.flag.trust_project_fetch_policy.help = ‏Allow project configuration to widen fetch-policy grants.
 cli.flag.json.help = פלט JSON הניתן לקריאה במכונה.
 cli.flag.no_input.help = לעולם לא לקרוא קלט אינטראקטיבי.
 cli.flag.color.help = מדיניות הפלט הצבעוני (auto, always, never).

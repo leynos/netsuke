@@ -31,12 +31,14 @@ use serde_json::{Map, Value, json};
 
 use super::MergeEvent;
 use super::command::{BuildArgs, Cli, Commands};
-use super::config::{BuildConfig, CliConfig};
+use super::config::CliConfig;
 use super::discovery::{
     DiscoveredLayers, EnvProvider, StdEnvProvider, discover_file_layers,
     push_discovered_file_layers,
 };
 use super::environment::EnvironmentLayer;
+use super::fetch_policy::reconcile_fetch_policy;
+use super::merge_apply::apply_config;
 use super::merge_input::{CachedMergeInput, MergeComposition};
 use super::merge_observability::{
     collect_override_leaf_paths, is_empty_configuration_value, validation_rejection_reason,
@@ -117,7 +119,7 @@ where
     let mut events = Vec::new();
 
     push_defaults_layer(&mut composition, &mut events);
-    push_discovered_file_layers(
+    composition.project_fetch_policy_request = push_discovered_file_layers(
         &mut composition.composer,
         &mut composition.errors,
         discovered,
@@ -126,8 +128,13 @@ where
     push_environment_layer(env, &mut composition, &mut events);
     push_cli_layer(cli, matches, &mut composition, &mut events);
 
+    let project_fetch_policy_request =
+        std::mem::take(&mut composition.project_fetch_policy_request);
     let merged = match composition.into_merge_result() {
-        Ok(config) => Ok(apply_config(cli, config)),
+        Ok(config) => Ok(apply_config(
+            cli,
+            reconcile_fetch_policy(config, project_fetch_policy_request),
+        )),
         Err(error) => {
             collect_validation_rejection(&mut events, error.as_ref());
             Err(error)
@@ -253,6 +260,12 @@ fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Va
         &cli.fetch_default_deny,
         &mut root,
     )?;
+    maybe_insert_explicit(
+        matches,
+        "trust_project_fetch_policy",
+        &cli.trust_project_fetch_policy,
+        &mut root,
+    )?;
     maybe_insert_explicit(matches, "json", &cli.json, &mut root)?;
     maybe_insert_explicit(matches, "no_input", &cli.no_input(), &mut root)?;
     maybe_insert_explicit(matches, "color", &cli.color, &mut root)?;
@@ -329,63 +342,4 @@ where
     T: Serialize,
 {
     serde_json::to_value(value).map_err(|err| validation_error(field, &err.to_string()))
-}
-
-/// Apply the merged configuration over the parsed CLI input, producing the
-/// resolved runtime `Cli`.
-fn apply_config(parsed: &Cli, config: CliConfig) -> Cli {
-    let build_defaults = resolved_build_config(&config);
-    Cli {
-        file: config.file,
-        directory: parsed.directory.clone(),
-        config: parsed.config.clone(),
-        jobs: config.jobs,
-        verbose: config.verbose,
-        locale: config.locale,
-        fetch_allow_scheme: config.fetch_allow_scheme,
-        fetch_allow_host: config.fetch_allow_host,
-        fetch_block_host: config.fetch_block_host,
-        fetch_default_deny: config.fetch_default_deny,
-        json: config.json,
-        interaction: super::command::InteractionArgs {
-            no_input: config.no_input.is_enabled(),
-        },
-        color: config.color,
-        emoji: config.emoji,
-        progress: config.progress,
-        accessibility: config.accessibility,
-        default_targets: build_defaults.targets.clone(),
-        command: Some(resolve_command(parsed.command.as_ref(), &build_defaults)),
-    }
-}
-
-/// Resolve the effective build defaults, combining root-level default targets
-/// with subcommand-level targets.
-fn resolved_build_config(config: &CliConfig) -> BuildConfig {
-    let mut build = config.cmds.build.clone();
-    if build.targets.is_empty() {
-        build.targets.clone_from(&config.default_targets);
-    } else if !config.default_targets.is_empty() {
-        let mut targets = config.default_targets.clone();
-        targets.extend(build.targets);
-        build.targets = targets;
-    }
-    build
-}
-
-/// Resolve the final command, substituting default targets when none were given.
-fn resolve_command(parsed: Option<&Commands>, build_defaults: &BuildConfig) -> Commands {
-    match parsed {
-        Some(Commands::Build(args)) => Commands::Build(BuildArgs {
-            targets: if args.targets.is_empty() {
-                build_defaults.targets.clone()
-            } else {
-                args.targets.clone()
-            },
-        }),
-        Some(other) => other.clone(),
-        None => Commands::Build(BuildArgs {
-            targets: build_defaults.targets.clone(),
-        }),
-    }
 }

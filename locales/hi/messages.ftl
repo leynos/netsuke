@@ -16,6 +16,7 @@ cli.flag.fetch_allow_scheme.help = fetch सहायक के लिए अत
 cli.flag.fetch_allow_host.help = डिफ़ॉल्ट अस्वीकृति सक्रिय होने पर अनुमत होस्ट नाम।
 cli.flag.fetch_block_host.help = वे होस्ट नाम जो सदैव अवरुद्ध रहते हैं, भले ही अन्यत्र अनुमत हों।
 cli.flag.fetch_default_deny.help = डिफ़ॉल्ट रूप से सभी होस्ट अस्वीकार करें; केवल घोषित सूची को अनुमति दें।
+cli.flag.trust_project_fetch_policy.help = Allow project configuration to widen fetch-policy grants.
 cli.flag.json.help = मशीन-पठनीय JSON निर्गत करें।
 cli.flag.no_input.help = संवादात्मक इनपुट कभी न पढ़ें।
 cli.flag.color.help = रंगीन निर्गम की नीति (auto, always, never)।

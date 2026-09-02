@@ -8,6 +8,8 @@ mod config_discovery;
 mod config_precedence_ladder;
 mod config_selection;
 mod display_policy_domain;
+#[cfg(unix)]
+mod fetch_policy_trust;
 mod helpers;
 mod locale;
 mod merge;

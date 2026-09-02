@@ -10,6 +10,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use super::command::Cli;
+use crate::host_pattern::HostPattern;
 
 #[path = "discovery_environment.rs"]
 mod environment;
@@ -63,6 +64,21 @@ const DISCOVERY_ENV_KEYS: [&str; 7] = [
     "LOCALAPPDATA",
 ];
 
+/// Project-scoped fetch-policy restrictions captured before generic merging.
+///
+/// Project configuration is untrusted relative to operator configuration. The
+/// merge boundary uses this request to preserve restrictions without allowing
+/// the project layer to widen operator grants.
+#[derive(Debug, Default)]
+pub(crate) struct ProjectFetchPolicyRequest {
+    /// Optional request to deny every host by default.
+    pub(crate) default_deny: Option<bool>,
+    /// Additional schemes requested by the project configuration.
+    pub(crate) allow_scheme: Vec<String>,
+    /// Additional hosts requested by the project configuration.
+    pub(crate) allow_host: Vec<HostPattern>,
+}
+
 /// File layers and loading errors produced by one discovery pass.
 ///
 /// The diagnostic pre-pass borrows the layers to resolve JSON output, then the
@@ -73,6 +89,8 @@ pub struct DiscoveredLayers {
     layers: Vec<MergeLayer<'static>>,
     /// Whether any discovered layer requested JSON output.
     json_preference: bool,
+    /// Fetch-policy restrictions requested by the primary project file.
+    project_fetch_policy_request: ProjectFetchPolicyRequest,
     /// Loading errors deferred beside the layers that may still be usable.
     errors: Vec<Arc<ortho_config::OrthoError>>,
     /// Bounded trace for composition boundaries to emit after the merge.
@@ -99,8 +117,12 @@ impl DiscoveredLayers {
     /// Consume into the raw layers and deferred discovery errors.
     pub(crate) fn into_parts(
         self,
-    ) -> (Vec<MergeLayer<'static>>, Vec<Arc<ortho_config::OrthoError>>) {
-        (self.layers, self.errors)
+    ) -> (
+        Vec<MergeLayer<'static>>,
+        Vec<Arc<ortho_config::OrthoError>>,
+        ProjectFetchPolicyRequest,
+    ) {
+        (self.layers, self.errors, self.project_fetch_policy_request)
     }
 }
 
@@ -157,11 +179,16 @@ fn discover_file_layers_with_normalizer(
     let diagnostics = DiscoveryDiagnostics::new(trace, load_warning);
     let layers = match outcome {
         Ok(discovered_layers) => {
-            let (layers, json_preference) =
-                layers::retain_layers_and_resolve_json(discovered_layers);
+            let (layers, json_preference, project_fetch_policy_request) =
+                layers::retain_layers_and_resolve_json(
+                    discovered_layers,
+                    cli.directory.as_deref().map(camino::Utf8Path::as_std_path),
+                    normalizer,
+                );
             DiscoveredLayers {
                 layers,
                 json_preference,
+                project_fetch_policy_request,
                 errors: Vec::new(),
                 diagnostics,
             }
@@ -169,6 +196,7 @@ fn discover_file_layers_with_normalizer(
         Err(error) => DiscoveredLayers {
             layers: Vec::new(),
             json_preference: Cli::default().json,
+            project_fetch_policy_request: ProjectFetchPolicyRequest::default(),
             errors: vec![error],
             diagnostics,
         },
