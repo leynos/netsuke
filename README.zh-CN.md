@@ -51,8 +51,7 @@ Netsuke目前需要：
 
 ### 安装
 
-最新发布的预发布版本是Netsuke
-v0.1.0-beta3（此前为v0.1.0-beta2），可从crates.io获取；若可以使用
+最新发布的预发布版本是Netsuke v0.1.0-beta3，可从crates.io获取；若可以使用
 [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall)
 ，则优先使用它：它会获取预构建的发行版二进制文件，从而避免下文提到的工具链要求。
 

@@ -62,8 +62,8 @@ Netsuke nécessite actuellement :
 
 ### Installation
 
-La dernière préversion publiée est Netsuke v0.1.0-beta3 (précédée par
-v0.1.0-beta2), disponible sur crates.io. Lorsque
+La dernière préversion publiée est Netsuke v0.1.0-beta3, disponible sur
+crates.io. Lorsque
 [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) est
 disponible, préférez-le : il récupère un binaire de version prêt à l'emploi et
 évite l'exigence de chaîne d'outils ci-dessous.
