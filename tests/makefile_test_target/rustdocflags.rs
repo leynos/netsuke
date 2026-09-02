@@ -1,151 +1,82 @@
-//! Contract model for Makefile recipes that set `RUSTDOCFLAGS`.
+//! Contract model for Cargo's Rustdoc environment in Makefile recipes.
 //!
-//! The repository contract names its caller-overridable value
-//! `RUSTDOC_FLAGS`, but Cargo accepts only `RUSTDOCFLAGS`. Each covered recipe
-//! must therefore use the Make substitution `$(RUSTDOC_FLAGS)` when assigning
-//! Cargo's environment variable. Unlike `rustflags.rs`, this module asserts on
-//! the extracted Make token directly: a `sh -c` expansion would not model Make
-//! substitution. A completeness check makes new Rustdoc-flag recipes opt into
-//! this contract deliberately.
+//! The caller-overridable `RUSTDOC_FLAGS` Make variable carries the shared
+//! default Rustdoc configuration, but Cargo accepts only `RUSTDOCFLAGS`.
+//! Make exports the supported name directly, which preserves literal caller
+//! values without re-parsing them in a shell. It explicitly unexports the
+//! unsupported name, preventing Cargo from warning about it. The Unix
+//! behavioural test exercises that real Make-to-Cargo boundary with a fake
+//! Cargo executable; static checks keep the safe export shape intact.
 
 use super::{read_repo_file, target_recipe};
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
-use std::collections::BTreeSet;
 
-/// The prefix introducing a quoted `RUSTDOCFLAGS` assignment in a recipe.
-const RUSTDOCFLAGS_PREFIX: &str = "RUSTDOCFLAGS=\"";
-/// The Make substitution that supplies Cargo's supported environment variable.
-const RUSTDOC_FLAGS_TOKEN: &str = "$(RUSTDOC_FLAGS)";
+#[cfg(unix)]
+use assert_cmd::Command;
+#[cfg(unix)]
+use std::path::Path;
+#[cfg(unix)]
+use tempfile::tempdir;
+#[cfg(unix)]
+use test_support::{fs, write_exec_with_content};
 
-/// A recipe line that assigns `RUSTDOCFLAGS`, and the contract it must meet.
-#[derive(Clone, Copy, Debug)]
-struct RustdocflagsCase {
-    /// The Make target owning the recipe.
-    target: &'static str,
-    /// Substring selecting the recipe line.
-    line_marker: &'static str,
-}
+/// The caller-overridable Make default for the Rustdoc configuration.
+const RUSTDOC_FLAGS_DEFAULT: &str = "RUSTDOC_FLAGS ?= --cfg docsrs -D warnings";
+/// The directive that prevents Cargo from receiving its unsupported name.
+const RUSTDOC_FLAGS_UNEXPORT: &str = "unexport RUSTDOC_FLAGS";
+/// The safe Make-level mapping to Cargo's supported environment variable.
+const RUSTDOCFLAGS_EXPORT: &str = "export RUSTDOCFLAGS := $(RUSTDOC_FLAGS)";
 
-impl RustdocflagsCase {
-    /// Describe the documentation-test recipe.
-    const fn doctest() -> Self {
-        Self {
-            target: "doctest",
-            line_marker: "--doc",
-        }
-    }
-
-    /// Describe the Rustdoc invocation in the Clippy lint target.
-    const fn lint_rustdoc() -> Self {
-        Self {
-            target: "lint-clippy",
-            line_marker: "doc --workspace",
-        }
-    }
-
-    /// Describe the aggregate documentation-coverage recipe.
-    const fn doc_coverage() -> Self {
-        Self {
-            target: "doc-coverage",
-            line_marker: "$(UV_ENV)",
-        }
-    }
-}
-
-/// Enumerate every `RUSTDOCFLAGS`-setting recipe under contract.
-const RUSTDOCFLAGS_CASES: [RustdocflagsCase; 3] = [
-    RustdocflagsCase::doctest(),
-    RustdocflagsCase::lint_rustdoc(),
-    RustdocflagsCase::doc_coverage(),
-];
-
-/// Extract the double-quoted `RUSTDOCFLAGS` assignment from a recipe line.
-fn rustdocflags_assignment(line: &str) -> Option<&str> {
-    let start = line.find(RUSTDOCFLAGS_PREFIX)? + RUSTDOCFLAGS_PREFIX.len();
-    let rest = line.get(start..)?;
-    let end = rest.find('\"')?;
-    rest.get(..end)
-}
-
-/// Return the recipe line `case` selects.
-fn recipe_line(makefile: &str, case: RustdocflagsCase) -> Result<String> {
-    let recipe = target_recipe(makefile, case.target)
-        .with_context(|| format!("Makefile should declare a {} target", case.target))?;
-    recipe
-        .lines()
-        .find(|line| line.contains(RUSTDOCFLAGS_PREFIX) && line.contains(case.line_marker))
-        .map(str::trim)
-        .map(ToOwned::to_owned)
-        .with_context(|| {
-            format!(
-                "{} should set RUSTDOCFLAGS on a line matching {:?}",
-                case.target, case.line_marker
-            )
-        })
-}
-
-/// Assert that `case` supplies Cargo's Rustdoc flags through Make substitution.
-fn assert_make_substitution(makefile: &str, case: RustdocflagsCase) -> Result<()> {
-    let line = recipe_line(makefile, case)?;
-    let assignment = rustdocflags_assignment(&line).with_context(|| {
-        format!(
-            "{} should assign a double-quoted RUSTDOCFLAGS value",
-            case.target
-        )
-    })?;
-    ensure!(
-        assignment == RUSTDOC_FLAGS_TOKEN,
-        "{} should assign RUSTDOCFLAGS from {RUSTDOC_FLAGS_TOKEN:?}, found {assignment:?}",
-        case.target
-    );
-    Ok(())
-}
-
-#[test]
-fn unit_extracts_the_rustdocflags_assignment_from_a_recipe_line() {
-    assert_eq!(
-        rustdocflags_assignment(r#"\tRUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) x"#),
-        Some(RUSTDOC_FLAGS_TOKEN)
-    );
-    assert_eq!(rustdocflags_assignment("\tcargo build"), None);
-}
-
-#[test]
-fn behavioural_rustdocflags_recipes_use_the_repository_contract() -> Result<()> {
-    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
-    for case in RUSTDOCFLAGS_CASES {
-        assert_make_substitution(&makefile, case)?;
-    }
-    Ok(())
-}
+#[cfg(unix)]
+/// An override whose quotes must reach Rustdoc unchanged.
+const QUOTED_RUSTDOC_FLAGS: &str = "--cfg feature=\"x\"";
 
 #[test]
 fn behavioural_rustdocflags_default_preserves_rustdoc_warning_denial() -> Result<()> {
     let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
-    let default = makefile
-        .lines()
-        .find(|line| line.starts_with("RUSTDOC_FLAGS ?="))
-        .context("Makefile should declare the RUSTDOC_FLAGS default")?;
     ensure!(
-        default.contains("--cfg docsrs"),
-        "RUSTDOC_FLAGS should preserve the docsrs configuration: {default:?}"
-    );
-    ensure!(
-        default.contains("-D warnings"),
-        "RUSTDOC_FLAGS should deny Rustdoc warnings: {default:?}"
+        makefile.lines().any(|line| line == RUSTDOC_FLAGS_DEFAULT),
+        "Makefile should retain {RUSTDOC_FLAGS_DEFAULT:?}"
     );
     Ok(())
 }
 
 #[test]
-fn behavioural_doctest_sets_cargos_rustdocflags_variable() -> Result<()> {
+fn behavioural_make_exports_supported_rustdocflags_after_unexporting_unsupported_name() -> Result<()>
+{
     let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
-    let recipe = target_recipe(&makefile, "doctest").context("Makefile should declare doctest")?;
+    let default_index = makefile
+        .lines()
+        .position(|line| line == RUSTDOC_FLAGS_DEFAULT)
+        .context("Makefile should declare the RUSTDOC_FLAGS default")?;
+    let unexport_index = makefile
+        .lines()
+        .position(|line| line == RUSTDOC_FLAGS_UNEXPORT)
+        .context("Makefile should unexport the unsupported RUSTDOC_FLAGS name")?;
+    let export_index = makefile
+        .lines()
+        .position(|line| line == RUSTDOCFLAGS_EXPORT)
+        .context("Makefile should export Cargo's supported RUSTDOCFLAGS name")?;
+
     ensure!(
-        recipe.contains(RUSTDOCFLAGS_PREFIX),
-        "doctest should set Cargo's RUSTDOCFLAGS variable"
+        default_index < unexport_index && unexport_index < export_index,
+        "the RUSTDOC_FLAGS default, unexport, and supported export must remain ordered"
     );
+    Ok(())
+}
+
+#[test]
+fn behavioural_rustdoc_consumers_rely_on_the_safe_make_export() -> Result<()> {
+    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
+    for target in ["doctest", "lint-clippy", "doc-coverage"] {
+        let recipe = target_recipe(&makefile, target)
+            .with_context(|| format!("Makefile should declare a {target} target"))?;
+        ensure!(
+            !recipe.contains("RUSTDOCFLAGS="),
+            "{target} must rely on Make's exported RUSTDOCFLAGS rather than interpolate flags in a shell: {recipe:?}"
+        );
+    }
     Ok(())
 }
 
@@ -173,29 +104,100 @@ fn behavioural_makefile_never_exports_or_shell_expands_rustdoc_flags() -> Result
     Ok(())
 }
 
-#[test]
-fn behavioural_every_rustdocflags_recipe_line_is_under_contract() -> Result<()> {
-    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
-    let declared: BTreeSet<String> = makefile
-        .lines()
-        .filter(|line| line.starts_with('\t') && line.contains(RUSTDOCFLAGS_PREFIX))
-        .map(|line| line.trim().to_owned())
-        .collect();
-    let covered: BTreeSet<String> = RUSTDOCFLAGS_CASES
-        .iter()
-        .map(|case| recipe_line(&makefile, *case))
-        .collect::<Result<_>>()?;
+#[cfg(unix)]
+/// Run `doctest` with a caller-supplied Rustdoc override through one source.
+fn run_doctest_with_override(
+    fake_cargo: &Path,
+    log: &Path,
+    source: &str,
+    command_line: bool,
+) -> Result<String> {
+    let mut make = Command::new("make");
+    make.current_dir(env!("CARGO_MANIFEST_DIR"))
+        .arg("--no-print-directory")
+        .arg("-f")
+        .arg("Makefile")
+        .env("CARGO", fake_cargo)
+        .env("RUSTDOC_ENVIRONMENT_LOG", log);
+    if command_line {
+        make.arg(format!("RUSTDOC_FLAGS={QUOTED_RUSTDOC_FLAGS}"));
+    } else {
+        make.env("RUSTDOC_FLAGS", QUOTED_RUSTDOC_FLAGS);
+    }
+    make.arg("doctest");
 
-    let uncovered: Vec<&String> = declared.difference(&covered).collect();
+    let output = make
+        .output()
+        .with_context(|| format!("run doctest with a {source} Rustdoc override"))?;
     ensure!(
-        uncovered.is_empty(),
-        "every recipe setting RUSTDOCFLAGS needs a RustdocflagsCase; uncovered: {uncovered:#?}"
+        output.status.success(),
+        "doctest with a {source} override should call fake Cargo successfully: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    fs::read_to_string(log).context("read fake Cargo environment log")
+}
+
+#[cfg(unix)]
+/// Assert that Cargo receives the exact supported Rustdoc configuration.
+fn assert_doctest_record(record: &str, source: &str) -> Result<()> {
+    let mut fields = record.lines().map(|line| {
+        line.split_once('\t')
+            .with_context(|| format!("malformed fake Cargo record {line:?}"))
+    });
+    let rustdocflags = fields
+        .next()
+        .transpose()?
+        .context("fake Cargo record should include RUSTDOCFLAGS")?;
+    let unsupported = fields
+        .next()
+        .transpose()?
+        .context("fake Cargo record should include RUSTDOC_FLAGS presence")?;
+    let arguments = fields
+        .next()
+        .transpose()?
+        .context("fake Cargo record should include arguments")?;
+
+    ensure!(
+        rustdocflags == ("rustdocflags", QUOTED_RUSTDOC_FLAGS),
+        "a {source} override must retain its literal quoted Rustdoc value, found {rustdocflags:?}"
     );
     ensure!(
-        covered.len() == RUSTDOCFLAGS_CASES.len(),
-        "each RustdocflagsCase should select a distinct recipe line, {} cases selected {} lines",
-        RUSTDOCFLAGS_CASES.len(),
-        covered.len()
+        unsupported == ("unsupported", ""),
+        "a {source} override must not leak RUSTDOC_FLAGS to Cargo, found {unsupported:?}"
     );
+    ensure!(
+        arguments.0 == "arguments"
+            && arguments
+                .1
+                .contains("test --workspace --doc --all-features"),
+        "doctest should invoke Cargo's documentation-test arguments, found {arguments:?}"
+    );
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn behavioural_doctest_passes_quote_bearing_overrides_only_as_rustdocflags() -> Result<()> {
+    let temporary = tempdir().context("create fake Cargo directory")?;
+    let log = temporary.path().join("cargo-environment.log");
+    let fake_cargo = write_exec_with_content(
+        temporary.path(),
+        "cargo",
+        concat!(
+            "#!/bin/sh\n",
+            ": \"${RUSTDOC_ENVIRONMENT_LOG:?}\"\n",
+            "{\n",
+            "  printf 'rustdocflags\\t%s\\n' \"${RUSTDOCFLAGS-}\"\n",
+            "  printf 'unsupported\\t%s\\n' \"${RUSTDOC_FLAGS+present}\"\n",
+            "  printf 'arguments\\t%s\\n' \"$*\"\n",
+            "} > \"$RUSTDOC_ENVIRONMENT_LOG\"\n"
+        ),
+    )
+    .context("write fake Cargo executable")?;
+
+    for (source, command_line) in [("environment", false), ("command line", true)] {
+        let record = run_doctest_with_override(&fake_cargo, &log, source, command_line)?;
+        assert_doctest_record(&record, source)?;
+    }
     Ok(())
 }

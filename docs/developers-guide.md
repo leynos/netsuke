@@ -1507,6 +1507,12 @@ The fragment sets the `codegen-backend` unstable flag,
   `rustflags` in a Cargo configuration file, so the `dev-*` targets
   deliberately do not set it. Exporting `RUSTFLAGS` in the shell silently
   disables `mold` for these targets.
+- **`RUSTDOC_FLAGS`.** Make defaults this caller-overridable variable to
+  `--cfg docsrs -D warnings` and exports it as Cargo's supported `RUSTDOCFLAGS`
+  environment variable for `make doctest`, the rustdoc stage of
+  `make lint-clippy`, and `make doc-coverage`. The unsupported `RUSTDOC_FLAGS`
+  name is not exported, so Cargo cannot warn about it. Caller overrides retain
+  their literal contents, including quotes in Rust `--cfg` values.
 - **Release and packaging.** `make release` and everything under
   `.github/workflows/build-and-package.yml` use the release profile, the LLVM
   backend, and the platform linker. Cranelift is applied to the `dev` profile
