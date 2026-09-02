@@ -138,8 +138,12 @@ Netsuke v0.1.0-beta3's core build-system compiler provides:
   executable discovery, and opt-in network helpers;
 - reusable rules, targets, actions, defaults, and explicit, implicit, and
   order-only dependencies;
+- target and action discovery through `netsuke help targets`, including
+  conditional entries without recipe rendering;
 - a deterministic intermediate build graph with duplicate-output, missing-rule,
   and cycle checks;
+- Windows legacy-recipe execution through Windows PowerShell by default, with
+  an explicit Git Bash or MSYS2 compatibility route;
 - Ninja generation and execution, plus `clean` and standalone manifest
   generation;
 - reproducible dependency graphs as Graphviz DOT or self-contained,
@@ -169,19 +173,16 @@ The following limitations apply to beta3.
 
 Known limitations include:
 
-- recipes are shell strings; structured executable arguments and recipe
+- recipes remain shell strings: Unix scripts use `/bin/sh -e`, Windows legacy
+  recipes use Windows PowerShell by default, and the Windows Bash compatibility
+  route is an explicit opt-in; structured executable arguments and recipe
   environment mappings are not implemented yet;
 - compiler-generated dependency imports such as GCC depfiles are planned but
   not yet part of the manifest model;
 - `--json` emits exactly one versioned result or diagnostic document for each
   command, but the schema may still change before 1.0;
-- `script` recipes invoke `/bin/sh -e`; there is no portable PowerShell
-  abstraction;
-- beta3 does not enforce PowerShell as the Windows recipe interpreter, and
-  native Windows recipe execution is not yet release-validated;
 - colour rendering is not implemented;
-- accessibility and cross-platform compiler invariants need broader
-  verification.
+- accessibility still needs assistive-technology verification.
 
 The beta3 release fixes beta2's shell-dollar limitation with Ninja-aware
 escaping, so ordinary shell expressions can be written normally. Beta2

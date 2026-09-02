@@ -3,13 +3,15 @@
 This guide covers the released v0.1.0-beta3 additions: the injectable child
 environment (`CommandEnv`), the named Ninja request types, narrow process
 options (`NinjaProcessOptions`), target/action discovery through `description`
-and `netsuke help targets`, and cached configuration discovery. Most existing
-manifests remain compatible, and callers of the convenience wrappers retain
-their child-process behaviour. Manifests using Jinja `glob()` must use
-shell-inert matched paths. The cached configuration discovery API is a breaking
-change for callers of the unstable Rust API; ordinary CLI users need no action.
-The Ninja invocation chain now requires UTF-8 build-file and working-directory
-paths; non-UTF-8 values are rejected at their input boundary.
+and `netsuke help targets`, and cached configuration discovery. It also covers
+manifest-relative glob expansion, UTF-8 CLI path boundaries, the Windows
+PowerShell-default legacy recipe contract, and brace-only `{{ ins }}` and
+`{{ outs }}` path markers. Most existing manifests remain compatible, and
+callers of the convenience wrappers retain their child-process behaviour.
+Manifests using Jinja `glob()` must use shell-inert matched paths. The cached
+configuration discovery API is a breaking change for callers of the unstable
+Rust API; ordinary CLI users need no action. Non-UTF-8 build-file and
+working-directory paths are rejected at their input boundary.
 
 Rust callers that construct `Target` with a struct literal must add the new
 `description` field (set it to `None` or `Some(...)`); deserialized manifests

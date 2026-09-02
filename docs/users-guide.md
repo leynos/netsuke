@@ -771,9 +771,8 @@ Both helpers accept:
 - `cwd_mode="auto"|"always"|"never"`: control bounded project-directory
   fallback searching.
 
-The `env(name)` function reads one required environment variable. The current
-development source does not accept a default argument; an absent or non-Unicode
-value is an error.
+The `env(name)` function reads one required environment variable. Beta3 does
+not accept a default argument; an absent or non-Unicode value is an error.
 
 ### Inject the environment reader for tests
 
