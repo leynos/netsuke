@@ -33,6 +33,9 @@ Each phase validates a product hypothesis:
   input fuzzing can close workflow drift and malformed-input failures.
 - Phase 9 validates that exact-commit evidence can make release publication
   fail closed without changing Netsuke's public or archive contracts.
+- Phase 10 validates that quantified, property-based observation of generated
+  invocations and environments lets Netsukefile tests catch build-script
+  generator regressions that fixed fixtures miss.
 
 Each phase carries one hypothesis, and Phase 6 is the capability track for
 template standard-library work. Phases 3 to 5 predate that separation: each
@@ -1998,3 +2001,99 @@ runs prove the failure boundary before any job receives release permissions.
     migration](rfcs/0005-release-hardening.md#compatibility-and-migration).
   - Success: a real release is publishable only from the admitted exact tag
     commit, and its retained evidence reproduces the admission decision.
+
+## 10. Property-based testing of generated build scripts
+
+Hypothesis: Netsukefile authors trust the generated build script when the test
+dialect can quantify over families of manifests and observe invocations and
+environments structurally, rather than asserting on single fixtures and raw
+Ninja text.
+
+Objective: deliver the `result.actions` view, the declarative `forall`
+generation block, the metamorphic `mutations` vocabulary, and the coverage lint
+specified in [RFC 0012](rfcs/0012-netsukefile-property-testing.md), extending
+the phase 7 framework without reopening its closed dialect.
+
+### 10.1. Structured observation of invocations and environments
+
+This step answers whether plan-mode projections can expose command lines and
+constructed environments host-independently. Its outcome fixes the assertion
+surface that every later property builds on. See
+[RFC 0012 §1](rfcs/0012-netsukefile-property-testing.md#1-the-resultactions-view)
+and [§2](rfcs/0012-netsukefile-property-testing.md#2-quantified-assertions).
+
+- [ ] 10.1.1. Pin the recipe shell for plan-mode projections.
+  - Requires 7.5.1.
+  - Add the `from_manifest_for_shell` constructor anticipated by the
+    [technical design §9](netsuke-test-framework-technical-design.md), leaving
+    the host-default build path unchanged.
+  - Success: identical manifests project identical recipe text across
+    supported hosts, shown by a differential test over pinned shells.
+- [ ] 10.1.2. Implement the `result.actions` view.
+  - Requires 7.5.4 and 10.1.1.
+  - Project each build edge's rule, tokenized argv, environment map, inputs,
+    outputs, and working-directory, pool, depfile, and dyndep bindings per
+    RFC 0012 Table 1.
+  - Add the `action`, `actions_for_rule`, and `has_action` helpers, keeping
+    the view additive-only and decoupled from internal IR types.
+- [ ] 10.1.3. Implement quantified assertions.
+  - Requires 7.5.5 and 10.1.2.
+  - Add `for_all_actions` and `for_all_targets`, evaluated by the existing
+    MiniJinja engine, reporting the falsifying binding with substituted
+    actual values under the established FAIL and ERROR taxonomy.
+
+### 10.2. Declarative bounded generation
+
+This step answers whether a closed domain vocabulary with deterministic
+expansion is expressive enough for real Netsukefile properties, informing
+whether further constructors are warranted before the dialect stabilizes. See
+[RFC 0012 §3](rfcs/0012-netsukefile-property-testing.md#3-the-forall-block) and
+[§5](rfcs/0012-netsukefile-property-testing.md#5-engine-and-determinism).
+
+- [ ] 10.2.1. Parse the `forall` block and domain vocabulary.
+  - Requires 7.2.2.
+  - Compile the closed constructors of RFC 0012 Table 2 at parse time with
+    nearest-known-key diagnostics, matching the mock matcher convention.
+  - Raise `netsuke_test_version` to 1.1 and gate the new keys on it, so 1.0
+    runners fail closed under the RFC 0007 version contract.
+- [ ] 10.2.2. Implement deterministic expansion, sampling, and replay.
+  - Requires 10.2.1 and 7.5.2.
+  - Enumerate exhaustively at or below the expansion ceiling; above it,
+    sample from the seeded `proptest` generator; name the seed in every
+    failure report and honour `netsuke test --seed`.
+  - Persist regression tuples under the test tree, replay them before fresh
+    generation, and delta-reduce failing tuples towards domain minima.
+  - Success: repeated default runs are byte-identical, and a reported
+    failure replays from its seed alone.
+
+### 10.3. Metamorphic relations, coverage, and adoption
+
+This step answers whether built-in two-run relations catch generator
+regressions that authors would not have written down as fixtures. See
+[RFC 0012 §4](rfcs/0012-netsukefile-property-testing.md#4-built-in-metamorphic-relations)
+and
+[§6](rfcs/0012-netsukefile-property-testing.md#6-coverage-completeness-lint).
+
+- [ ] 10.3.1. Implement the `mutations` vocabulary.
+  - Requires 10.1.2 and 10.2.2.
+  - Implement `permute_declarations`, `insert_irrelevant_target`,
+    `rename_target`, and `remove_declared_input` per RFC 0012 Table 3,
+    running base and mutant pipelines inside the case sandbox and asserting
+    the named relation.
+  - Success: seeded regression suites demonstrate each mutation detecting a
+    deliberately introduced generator defect.
+- [ ] 10.3.2. Implement the coverage completeness lint.
+  - Requires 10.3.1.
+  - Report rules that interpolate commands or construct environments without
+    property coverage; keep the report advisory by default and promote it to
+    a failure under `--strict-coverage`.
+- [ ] 10.3.3. Dogfood and document the property dialect.
+  - Requires 10.3.2.
+  - Add property suites over the repository's example manifests covering the
+    order-invariance, locality, and environment-closure relations end to end.
+  - Extend the users' guide testing chapter, `contents.md`, and the RFC 0012
+    open questions with the measured expansion-ceiling evidence.
+
+**Success criterion:** the worked examples in RFC 0012 §§3-4 run to a green
+result deterministically on a machine with no compiler and no network, and a
+seeded property failure replays identically from the values in its report.

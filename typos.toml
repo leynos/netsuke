@@ -15,6 +15,12 @@ extend-exclude = [
     ".venv",
     ".vtcode/**",
     "Cargo.lock",
+    "README.de.md",
+    "README.es.md",
+    "README.fr.md",
+    "README.ja.md",
+    "README.pt-BR.md",
+    "README.zh-CN.md",
     "bun.lock",
     "data/typos-oxendict-base.toml",
     "dist",
@@ -58,6 +64,7 @@ extend-ignore-re = [
     "\\blocalisation\\b",
     "\\brust-analyzer\\b",
     "`[^`\\n]+`",
+    "align=\"center\"",
     "mis-grouping",
 ]
 

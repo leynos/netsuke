@@ -58,6 +58,11 @@ output and some leaf files so the long-lived structure remains visible.
 - `Makefile`: Canonical quality-gate and workflow commands. Prefer these
   targets over direct tool invocations.
 - `README.md`: Public project overview and first contact documentation.
+- `README.de.md`, `README.es.md`, `README.fr.md`, `README.ja.md`,
+  `README.pt-BR.md`, and `README.zh-CN.md`: Translated editions of the project
+  overview, linked from the localization menu at the top of each README. They
+  follow [the localization glossary](localization-glossary.md) and are exempt
+  from the en-GB-oxendict spelling gate via `typos.local.toml`.
 - `.github/actions/`: Reusable GitHub Actions used by workflow definitions.
 - `.github/workflows/`: Continuous Integration (CI), release, packaging, and
   repository automation workflows.

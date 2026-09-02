@@ -54,6 +54,8 @@ raizing = "raising"
 # The shared dictionary corrects this en-GB term to American spelling; this
 # repository's prose deliberately retains the required local form.
 ignore = ["mis-grouping",
+  # HTML attribute value in the README localization menus; not prose.
+  "align=\"center\"",
   "\\blocalisation\\b",
   "`[^`\\n]+`",
   "NETSUKE_COLOR",
@@ -81,7 +83,15 @@ ignore = ["mis-grouping",
 ]
 
 [files]
+# Translated READMEs are not en-GB prose; the en-GB-oxendict scan does not
+# apply to them.
 exclude = [
   ".vtcode/**",
+  "README.de.md",
+  "README.es.md",
+  "README.fr.md",
+  "README.ja.md",
+  "README.pt-BR.md",
+  "README.zh-CN.md",
   "scripts/tests/test_typos_rollout_hardening.py",
 ]

@@ -63,12 +63,17 @@ operator, user, and contributor references are easier to find.
 - [rfcs/0007-netsukefile-testing-framework.md](rfcs/0007-netsukefile-testing-framework.md):
   Proposed Netsukefile testing framework: the `netsuke test` command, the YAML
   test dialect, and its mocking model.
+- [rfcs/0012-netsukefile-property-testing.md][rfc-0012]:
+  Proposed property-testing extension to RFC 0007: the `result.actions` view,
+  bounded declarative generation, and built-in metamorphic relations over
+  generated build scripts.
 - [RFC 0008: Repository-wide code-health contracts and
   fuzzing](rfcs/0008-code-health.md): Proposed workflow-policy validation, gate
   self-consistency, health-signal ownership, and scheduled coverage-guided
   fuzzing.
 
 [rfc-0009]: rfcs/0009-structured-command-working-directories.md
+[rfc-0012]: rfcs/0012-netsukefile-property-testing.md
 [rfc-0010]: rfcs/0010-runtime-bindings-and-secure-tempdirs.md
 [rfc-0002]: rfcs/0002-repository-relative-includes.md
 [rfc-0004]: rfcs/0004-digest-pinned-external-bundles.md
