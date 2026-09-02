@@ -15,7 +15,9 @@ use camino::Utf8Path;
 #[cfg(unix)]
 use assert_cmd::Command;
 #[cfg(unix)]
-use std::path::Path;
+use proptest::prelude::*;
+#[cfg(unix)]
+use std::path::{Path, PathBuf};
 #[cfg(unix)]
 use tempfile::tempdir;
 #[cfg(unix)]
@@ -26,11 +28,22 @@ const RUSTDOC_FLAGS_DEFAULT: &str = "RUSTDOC_FLAGS ?= --cfg docsrs -D warnings";
 /// The directive that prevents Cargo from receiving its unsupported name.
 const RUSTDOC_FLAGS_UNEXPORT: &str = "unexport RUSTDOC_FLAGS";
 /// The safe Make-level mapping to Cargo's supported environment variable.
-const RUSTDOCFLAGS_EXPORT: &str = "export RUSTDOCFLAGS := $(RUSTDOC_FLAGS)";
+const RUSTDOCFLAGS_EXPORT: &str = "export RUSTDOCFLAGS := $(value RUSTDOC_FLAGS)";
 
+/// An override whose shell-sensitive values must reach Rustdoc unchanged.
 #[cfg(unix)]
-/// An override whose quotes must reach Rustdoc unchanged.
-const QUOTED_RUSTDOC_FLAGS: &str = "--cfg feature=\"x\"";
+const SHELL_SENSITIVE_RUSTDOC_FLAGS: &str = r#"--cfg marker="price$5 \"path\\name\"; &"#;
+
+/// Describe one caller-supplied Rustdoc override source and value.
+#[cfg(unix)]
+struct RustdocOverride<'flags> {
+    /// Store the exact Rustdoc flags supplied by the caller.
+    rustdoc_flags: &'flags str,
+    /// Identify where Make receives the caller override.
+    source: &'static str,
+    /// Distinguish a Make command-line assignment from an environment value.
+    command_line: bool,
+}
 
 #[test]
 fn behavioural_rustdocflags_default_preserves_rustdoc_warning_denial() -> Result<()> {
@@ -104,13 +117,12 @@ fn behavioural_makefile_never_exports_or_shell_expands_rustdoc_flags() -> Result
     Ok(())
 }
 
-#[cfg(unix)]
 /// Run `doctest` with a caller-supplied Rustdoc override through one source.
+#[cfg(unix)]
 fn run_doctest_with_override(
     fake_cargo: &Path,
     log: &Path,
-    source: &str,
-    command_line: bool,
+    override_config: &RustdocOverride<'_>,
 ) -> Result<String> {
     let mut make = Command::new("make");
     make.current_dir(env!("CARGO_MANIFEST_DIR"))
@@ -119,32 +131,36 @@ fn run_doctest_with_override(
         .arg("Makefile")
         .env("CARGO", fake_cargo)
         .env("RUSTDOC_ENVIRONMENT_LOG", log);
-    if command_line {
-        make.arg(format!("RUSTDOC_FLAGS={QUOTED_RUSTDOC_FLAGS}"));
+    if override_config.command_line {
+        make.arg(format!("RUSTDOC_FLAGS={}", override_config.rustdoc_flags));
     } else {
-        make.env("RUSTDOC_FLAGS", QUOTED_RUSTDOC_FLAGS);
+        make.env("RUSTDOC_FLAGS", override_config.rustdoc_flags);
     }
     make.arg("doctest");
 
-    let output = make
-        .output()
-        .with_context(|| format!("run doctest with a {source} Rustdoc override"))?;
+    let output = make.output().with_context(|| {
+        format!(
+            "run doctest with a {} Rustdoc override",
+            override_config.source
+        )
+    })?;
     ensure!(
         output.status.success(),
-        "doctest with a {source} override should call fake Cargo successfully: {}",
+        "doctest with a {} override should call fake Cargo successfully: {}",
+        override_config.source,
         String::from_utf8_lossy(&output.stderr)
     );
     fs::read_to_string(log).context("read fake Cargo environment log")
 }
 
-#[cfg(unix)]
 /// Assert that Cargo receives the exact supported Rustdoc configuration.
-fn assert_doctest_record(record: &str, source: &str) -> Result<()> {
+#[cfg(unix)]
+fn assert_doctest_record(record: &str, rustdoc_flags: &str, source: &str) -> Result<()> {
     let mut fields = record.lines().map(|line| {
         line.split_once('\t')
             .with_context(|| format!("malformed fake Cargo record {line:?}"))
     });
-    let rustdocflags = fields
+    let cargo_rustdocflags = fields
         .next()
         .transpose()?
         .context("fake Cargo record should include RUSTDOCFLAGS")?;
@@ -158,8 +174,8 @@ fn assert_doctest_record(record: &str, source: &str) -> Result<()> {
         .context("fake Cargo record should include arguments")?;
 
     ensure!(
-        rustdocflags == ("rustdocflags", QUOTED_RUSTDOC_FLAGS),
-        "a {source} override must retain its literal quoted Rustdoc value, found {rustdocflags:?}"
+        cargo_rustdocflags == ("rustdocflags", rustdoc_flags),
+        "a {source} override must retain its literal Rustdoc value, found {cargo_rustdocflags:?}"
     );
     ensure!(
         unsupported == ("unsupported", ""),
@@ -175,13 +191,11 @@ fn assert_doctest_record(record: &str, source: &str) -> Result<()> {
     Ok(())
 }
 
+/// Create a Cargo stand-in that records its environment and arguments.
 #[cfg(unix)]
-#[test]
-fn behavioural_doctest_passes_quote_bearing_overrides_only_as_rustdocflags() -> Result<()> {
-    let temporary = tempdir().context("create fake Cargo directory")?;
-    let log = temporary.path().join("cargo-environment.log");
-    let fake_cargo = write_exec_with_content(
-        temporary.path(),
+fn write_fake_cargo(directory: &Path) -> Result<PathBuf> {
+    write_exec_with_content(
+        directory,
         "cargo",
         concat!(
             "#!/bin/sh\n",
@@ -193,11 +207,60 @@ fn behavioural_doctest_passes_quote_bearing_overrides_only_as_rustdocflags() -> 
             "} > \"$RUSTDOC_ENVIRONMENT_LOG\"\n"
         ),
     )
-    .context("write fake Cargo executable")?;
+    .context("write fake Cargo executable")
+}
+
+/// Generate valid, shell-sensitive Rustdoc overrides with bounded entropy.
+#[cfg(unix)]
+fn rustdoc_flags_strategy() -> impl Strategy<Value = String> {
+    "[a-z]{0,12}".prop_map(|suffix| format!(r#"--cfg marker="price$5 \"path\\name\"; & {suffix}""#))
+}
+
+#[cfg(unix)]
+#[test]
+fn behavioural_doctest_passes_shell_sensitive_overrides_only_as_rustdocflags() -> Result<()> {
+    let temporary = tempdir().context("create fake Cargo directory")?;
+    let log = temporary.path().join("cargo-environment.log");
+    let fake_cargo = write_fake_cargo(temporary.path())?;
 
     for (source, command_line) in [("environment", false), ("command line", true)] {
-        let record = run_doctest_with_override(&fake_cargo, &log, source, command_line)?;
-        assert_doctest_record(&record, source)?;
+        let override_config = RustdocOverride {
+            rustdoc_flags: SHELL_SENSITIVE_RUSTDOC_FLAGS,
+            source,
+            command_line,
+        };
+        let record = run_doctest_with_override(&fake_cargo, &log, &override_config)?;
+        assert_doctest_record(&record, SHELL_SENSITIVE_RUSTDOC_FLAGS, source)?;
     }
     Ok(())
+}
+
+#[cfg(unix)]
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(16))]
+
+    #[test]
+    fn property_doctest_preserves_rustdoc_override_values(
+        rustdoc_flags in rustdoc_flags_strategy(),
+    ) {
+        let temporary = tempdir().expect("create fake Cargo directory");
+        let log = temporary.path().join("cargo-environment.log");
+        let fake_cargo = write_fake_cargo(temporary.path()).expect("write fake Cargo executable");
+
+        for (source, command_line) in [("environment", false), ("command line", true)] {
+            let override_config = RustdocOverride {
+                rustdoc_flags: &rustdoc_flags,
+                source,
+                command_line,
+            };
+            let record = run_doctest_with_override(
+                &fake_cargo,
+                &log,
+                &override_config,
+            )
+            .expect("run doctest through fake Cargo");
+            assert_doctest_record(&record, &rustdoc_flags, source)
+                .expect("preserve the Rustdoc override in Cargo's environment");
+        }
+    }
 }
