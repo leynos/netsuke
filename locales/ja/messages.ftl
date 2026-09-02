@@ -88,7 +88,6 @@ runner.manifest.current_directory_label = 現在のディレクトリー
 runner.manifest.default_not_declared = マニフェストの既定値 '{ $default }' は、宣言されたアクションまたはターゲットを指していません。
 runner.context.network_policy = ネットワークポリシーを構築できませんでした。
 runner.context.load_manifest = { $path } のマニフェストを読み込めませんでした。
-runner.context.serialise_manifest = マニフェストを直列化できませんでした。
 runner.context.build_graph = マニフェストからグラフを構築できませんでした。
 runner.context.generate_ninja = Ninja マニフェストを生成できませんでした。
 runner.context.render_graph = グラフ成果物を描画できませんでした。

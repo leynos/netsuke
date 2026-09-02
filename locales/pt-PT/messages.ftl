@@ -89,7 +89,6 @@ runner.manifest.current_directory_label = a pasta atual
 runner.manifest.default_not_declared = A predefinição do manifesto '{ $default }' não designa uma ação ou alvo declarado.
 runner.context.network_policy = Não foi possível construir a política de rede.
 runner.context.load_manifest = Não foi possível carregar o manifesto em { $path }.
-runner.context.serialise_manifest = Não foi possível serializar o manifesto.
 runner.context.build_graph = Não foi possível construir o grafo a partir do manifesto.
 runner.context.generate_ninja = Não foi possível gerar o manifesto Ninja.
 runner.context.render_graph = Não foi possível representar o artefacto do grafo.

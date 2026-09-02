@@ -88,7 +88,6 @@ runner.manifest.current_directory_label = הספרייה הנוכחית
 runner.manifest.default_not_declared = ברירת המחדל של המניפסט '{ $default }' אינה מציינת פעולה או יעד מוצהרים.
 runner.context.network_policy = לא ניתן היה לבנות את מדיניות הרשת.
 runner.context.load_manifest = לא ניתן היה לטעון את המניפסט מ‑{ $path }.
-runner.context.serialise_manifest = לא ניתן היה לבצע סריאליזציה למניפסט.
 runner.context.build_graph = לא ניתן היה לבנות גרף מהמניפסט.
 runner.context.generate_ninja = לא ניתן היה ליצור את מניפסט Ninja.
 runner.context.render_graph = לא ניתן היה לעבד את תוצר הגרף.

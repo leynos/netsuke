@@ -88,7 +88,6 @@ runner.manifest.current_directory_label = ไดเรกทอรีปัจ�
 runner.manifest.default_not_declared = ค่าเริ่มต้นของรายการ '{ $default }' ไม่ได้ระบุการดำเนินการหรือเป้าหมายที่ประกาศไว้
 runner.context.network_policy = สร้างนโยบายเครือข่ายไม่สำเร็จ
 runner.context.load_manifest = โหลดไฟล์รายการที่ { $path } ไม่สำเร็จ
-runner.context.serialise_manifest = ทำให้ไฟล์รายการเป็นลำดับข้อมูลไม่สำเร็จ
 runner.context.build_graph = สร้างกราฟจากไฟล์รายการไม่สำเร็จ
 runner.context.generate_ninja = สร้างไฟล์รายการ Ninja ไม่สำเร็จ
 runner.context.render_graph = แสดงผลลัพธ์กราฟไม่สำเร็จ

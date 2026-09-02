@@ -88,7 +88,6 @@ runner.manifest.current_directory_label = az aktuális könyvtár
 runner.manifest.default_not_declared = A(z) '{ $default }' jegyzék-alapértelmezés nem nevez meg deklarált műveletet vagy célt.
 runner.context.network_policy = A hálózati szabályt nem sikerült felépíteni.
 runner.context.load_manifest = A jegyzéket nem sikerült betölteni innen: { $path }.
-runner.context.serialise_manifest = A jegyzéket nem sikerült sorosítani.
 runner.context.build_graph = A gráfot nem sikerült felépíteni a jegyzékből.
 runner.context.generate_ninja = A Ninja-jegyzéket nem sikerült előállítani.
 runner.context.render_graph = A gráfterméket nem sikerült megjeleníteni.

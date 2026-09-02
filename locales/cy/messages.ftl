@@ -88,7 +88,6 @@ runner.manifest.current_directory_label = y cyfeiriadur cyfredol
 runner.manifest.default_not_declared = Nid yw rhagosodiad y maniffest '{ $default }' yn enwi gweithred neu darged datganedig.
 runner.context.network_policy = Methwyd â llunio'r polisi rhwydwaith.
 runner.context.load_manifest = Methwyd â llwytho'r maniffest o { $path }.
-runner.context.serialise_manifest = Methwyd â chyfresoli'r maniffest.
 runner.context.build_graph = Methwyd â llunio graff o'r maniffest.
 runner.context.generate_ninja = Methwyd â chreu'r maniffest Ninja.
 runner.context.render_graph = Methwyd â rendro arteffact y graff.
