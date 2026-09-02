@@ -143,11 +143,14 @@ operator, user, and contributor references are easier to find.
 - [ADR-018](adr-018-terminate-ninja-options-before-build-target-operands.md):
   Ninja target operand-boundary decision record, preventing forwarded targets
   from being parsed as Ninja options.
-- [ADR-020](adr-020-release-admission-observability.md):
-  Bounded metrics and operator-facing export for the release-admission gate.
 - [ADR-019](adr-019-structured-command-shell-selection.md): Allow-listed
   structured-command shell selection, trusted configuration authority,
   resolution, lowering, diagnostics, and safety boundaries.
+- [ADR-020](adr-020-release-admission-observability.md):
+  Bounded metrics and operator-facing export for the release-admission gate.
+- [ADR-021](adr-021-trust-aware-fetch-policy-merge.md):
+  Trust-aware merging of project fetch-policy requests with operator-enforced
+  network policy.
 
 ## Proposals
 
