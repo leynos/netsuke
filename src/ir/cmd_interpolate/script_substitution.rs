@@ -51,6 +51,16 @@ struct ScriptCommandSubstitution {
     parenthesis_depth: usize,
 }
 
+/// Identify a command-substitution delimiter in a script traversal.
+enum ScriptCommandSubstitutionDelimiter {
+    /// Begin a `$()` command substitution.
+    Start,
+    /// Open a grouped expression in the active command substitution.
+    NestedOpen,
+    /// Close a grouped expression or command substitution.
+    Close,
+}
+
 impl ScriptCommandSubstitution {
     /// Initialise the outermost group of one command substitution.
     const fn new() -> Self {
@@ -90,6 +100,20 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             .chars
             .get(pos)
             .ok_or_else(|| invalid_command_error(self.template.to_owned()))?;
+        if let Some(next) = self.append_non_substitution_character(pos, ch) {
+            return Ok(next);
+        }
+
+        let substitution = find_script_substitution(self.chars, pos);
+        let next = self.append_substitution_or_character(pos, ch, substitution)?;
+        if ch == '\n' {
+            self.posix_lexical.begin_pending_heredoc_after_newline(next);
+        }
+        Ok(next)
+    }
+
+    /// Process source characters that do not require placeholder substitution.
+    fn append_non_substitution_character(&mut self, pos: usize, ch: char) -> Option<usize> {
         let copied_inert_character = {
             let mut character = PosixCharacter {
                 chars: self.chars,
@@ -100,40 +124,34 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             self.posix_lexical.append_inert_character(&mut character)
         };
         if copied_inert_character {
-            return Ok(pos + 1);
+            return Some(pos + 1);
         }
         if self.is_escaped {
             self.output.push(ch);
             self.is_escaped = false;
-            return Ok(pos + 1);
+            return Some(pos + 1);
         }
         if self.should_escape_next(pos, ch) {
             self.output.push(ch);
             self.is_escaped = true;
-            return Ok(pos + 1);
+            return Some(pos + 1);
         }
         if let Some(next) = self.append_unquoted_posix_lexical_character(pos, ch) {
-            return Ok(next);
+            return Some(next);
         }
         if self.starts_comment(pos, ch) {
             self.output.push(ch);
             self.posix_lexical.begin_comment();
-            return Ok(pos + 1);
+            return Some(pos + 1);
         }
         if let Some(next) = self.append_command_substitution_delimiter(pos, ch) {
-            return Ok(next);
+            return Some(next);
         }
         if self.update_quote_context(ch) {
             self.output.push(ch);
-            return Ok(pos + 1);
+            return Some(pos + 1);
         }
-
-        let substitution = find_script_substitution(self.chars, pos);
-        let next = self.append_substitution_or_character(pos, ch, substitution)?;
-        if ch == '\n' {
-            self.posix_lexical.begin_pending_heredoc_after_newline(next);
-        }
-        Ok(next)
+        None
     }
 
     /// Preserve unquoted POSIX heredoc declarations before their bodies become inert.
@@ -226,27 +244,40 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
 
     /// Preserve `$()` delimiters while rejecting placeholders within their scope.
     fn append_command_substitution_delimiter(&mut self, pos: usize, ch: char) -> Option<usize> {
+        match self.classify_command_substitution_delimiter(pos, ch)? {
+            ScriptCommandSubstitutionDelimiter::Start => {
+                self.command_substitutions
+                    .push(ScriptCommandSubstitution::new());
+                self.output.push_str("$(");
+                Some(pos + 2)
+            }
+            ScriptCommandSubstitutionDelimiter::NestedOpen => {
+                self.increment_command_substitution_parenthesis_depth();
+                self.output.push(ch);
+                Some(pos + 1)
+            }
+            ScriptCommandSubstitutionDelimiter::Close => {
+                self.decrement_command_substitution_parenthesis_depth()?;
+                self.output.push(ch);
+                Some(pos + 1)
+            }
+        }
+    }
+
+    /// Classify a character that delimits an active script command substitution.
+    fn classify_command_substitution_delimiter(
+        &self,
+        pos: usize,
+        ch: char,
+    ) -> Option<ScriptCommandSubstitutionDelimiter> {
         if self.starts_command_substitution(pos, ch) {
-            self.command_substitutions
-                .push(ScriptCommandSubstitution::new());
-            self.output.push_str("$(");
-            return Some(pos + 2);
+            return Some(ScriptCommandSubstitutionDelimiter::Start);
         }
         if self.is_unquoted_command_substitution() && ch == '(' {
-            if let Some(substitution) = self.command_substitutions.last_mut() {
-                substitution.parenthesis_depth += 1;
-            }
-            self.output.push(ch);
-            return Some(pos + 1);
+            return Some(ScriptCommandSubstitutionDelimiter::NestedOpen);
         }
         if self.is_unquoted_command_substitution() && ch == ')' {
-            let substitution = self.command_substitutions.last_mut()?;
-            substitution.parenthesis_depth -= 1;
-            if substitution.parenthesis_depth == 0 {
-                self.command_substitutions.pop();
-            }
-            self.output.push(ch);
-            return Some(pos + 1);
+            return Some(ScriptCommandSubstitutionDelimiter::Close);
         }
         None
     }
@@ -285,6 +316,23 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
     /// Report whether a `$()` command substitution is active.
     const fn is_in_command_substitution(&self) -> bool {
         !self.command_substitutions.is_empty()
+    }
+
+    /// Increase the grouping depth in the innermost command substitution.
+    fn increment_command_substitution_parenthesis_depth(&mut self) {
+        if let Some(substitution) = self.command_substitutions.last_mut() {
+            substitution.parenthesis_depth += 1;
+        }
+    }
+
+    /// Close one grouping level and leave the substitution when its delimiter closes.
+    fn decrement_command_substitution_parenthesis_depth(&mut self) -> Option<()> {
+        let substitution = self.command_substitutions.last_mut()?;
+        substitution.parenthesis_depth -= 1;
+        if substitution.parenthesis_depth == 0 {
+            self.command_substitutions.pop();
+        }
+        Some(())
     }
 
     /// Finish the traversal and return the generated shell text.
