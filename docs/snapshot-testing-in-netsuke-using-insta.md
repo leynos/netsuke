@@ -457,9 +457,9 @@ The CI process can be enhanced to make snapshot reviews easier:
 - Use `actions/upload-artifact` to upload the `.snap.new` files or diff results
   when tests fail so they can be downloaded from the CI logs for inspection.
 
-- Or run `cargo insta test --diff` in CI to print diffs to the log for quick
-  viewing of what changed (the `INSTA_OUTPUT` env var can control diff vs
-  summary output).
+- Or run `cargo insta test --test-runner nextest --diff` in CI to print diffs
+  to the log for quick viewing of what changed (the `INSTA_OUTPUT` env var can
+  control diff vs summary output).
 
 However, the simplest approach is to let
 `cargo insta test --test-runner nextest` report failures and use the report as
