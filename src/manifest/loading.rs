@@ -4,6 +4,10 @@ use super::{ManifestLoadStage, expand::ExpansionReport};
 use metrics::{counter, describe_counter};
 use std::sync::Once;
 
+/// Receives normal-loader reports; manifest queries supply `None` to stay
+/// telemetry-free.
+pub(super) type ExpansionReportObserver = fn(&ExpansionReport);
+
 /// Metric name counting filtered manifest targets.
 const FILTERED_TARGETS_TOTAL: &str = "netsuke_manifest_filtered_targets_total";
 /// Metric name counting filtered manifest actions.
