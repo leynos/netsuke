@@ -10,6 +10,8 @@ mod hash_filters;
 mod io_filters;
 #[path = "std_filter_tests/network_functions.rs"]
 mod network_functions;
+#[path = "std_filter_tests/network_redirect_tests.rs"]
+mod network_redirect_tests;
 #[path = "std_filter_tests/path_filters.rs"]
 mod path_filters;
 #[path = "std_filter_tests/support.rs"]

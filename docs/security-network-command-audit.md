@@ -36,6 +36,15 @@ introduces, and concrete remediation tasks that would harden the helpers.
     `--fetch-block-host` CLI options. `--fetch-default-deny` switches the
     policy to "block by default" with an explicit allowlist. Policy violations
     surface as `InvalidOperation` errors without opening a network connection.
+- [x] **Redirects bypass outbound request policy.** *(Status: remediated in
+  issue #647.)* An allowed HTTP endpoint could redirect `fetch` to a target
+  that the initial policy would block, including link-local metadata services.
+  **Remediation:** ureq automatic redirects are disabled. Netsuke resolves and
+  evaluates every `Location` target before opening its connection, bounds
+  chains to five hops, detects loops, strips cross-origin URL credentials, and
+  redacts redirect diagnostics. Cached responses retain the original requested
+  URL as their key; every cache miss validates its complete redirect chain
+  before a response body is stored.
 - [x] **Response bodies are read without a size limit.** `fetch_remote` reads
   the entire HTTP response into memory before returning or caching it. An
   attacker controlling the endpoint can stream unbounded data and exhaust
