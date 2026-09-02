@@ -367,16 +367,8 @@ fn power_shell_bindings_allow_escaped_double_quotes() {
 /// Verify PowerShell substitutes placeholders following native backtick escapes.
 #[test]
 fn power_shell_backticks_do_not_protect_command_placeholders() {
-    let bindings = CommandBindings::new(
-        &[Utf8PathBuf::from("input")],
-        &[Utf8PathBuf::from("output")],
-        RecipeShell::PowerShell,
-    );
-    let command = interpolate_command_with_bindings(
-        &format!("Write-Output `$in `$out `{INS_TOKEN}"),
-        &bindings,
-    )
-    .expect("PowerShell placeholders following backticks should interpolate");
+    let command = power_shell_backtick_substitution(interpolate_command_with_bindings)
+        .expect("PowerShell command placeholders following backticks should interpolate");
 
     assert_eq!(command, "Write-Output `'input' `'output' `'input'");
 }
@@ -384,18 +376,22 @@ fn power_shell_backticks_do_not_protect_command_placeholders() {
 /// Verify PowerShell scripts preserve native backticks while substituting tokens.
 #[test]
 fn power_shell_backticks_do_not_protect_script_placeholders() {
+    let script = power_shell_backtick_substitution(interpolate_script_with_bindings)
+        .expect("PowerShell script placeholders following backticks should interpolate");
+
+    assert_eq!(script, "Write-Output `'input' `'output' `'input'");
+}
+
+/// Interpolate PowerShell placeholders after native backtick escapes.
+fn power_shell_backtick_substitution(
+    interpolate: impl FnOnce(&str, &CommandBindings) -> Result<String, IrGenError>,
+) -> Result<String, IrGenError> {
     let bindings = CommandBindings::new(
         &[Utf8PathBuf::from("input")],
         &[Utf8PathBuf::from("output")],
         RecipeShell::PowerShell,
     );
-    let script = interpolate_script_with_bindings(
-        &format!("Write-Output `$in `$out `{INS_TOKEN}"),
-        &bindings,
-    )
-    .expect("PowerShell script placeholders following backticks should interpolate");
-
-    assert_eq!(script, "Write-Output `'input' `'output' `'input'");
+    interpolate(&format!("Write-Output `$in `$out `{INS_TOKEN}"), &bindings)
 }
 
 /// Verify PowerShell rejects markers in quote and command-substitution regions.

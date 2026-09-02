@@ -7,7 +7,7 @@ be kept up to date as work proceeds.
 
 Status: COMPLETE
 
-Revision 2.13. See `Revision note` at the foot of this document.
+Revision 2.18. See `Revision note` at the foot of this document.
 
 ## Purpose / big picture
 
@@ -1815,3 +1815,34 @@ required local validation passed: `make check-fmt`, `make test`,
 targeted marker proof passed all four covers in 885.665 seconds, and the sigil
 proof passed all five covers in 47.017 seconds. A CodeRabbit re-review will be
 requested next; its outcome is not yet recorded.
+
+**Revision 2.14 (2026-09-02).** Reopen the plan for one post-review code-health
+repair. CodeScene confirmed that the deliberate string-heavy property-oracle
+inputs are non-actionable. The duplicate PowerShell command/script test setup
+was fixed with a shared test-only assertion while retaining separate
+entry-point tests. Deterministic gates and the queued CodeRabbit review must be
+reconfirmed; no outcomes are recorded yet.
+
+**Revision 2.15 (2026-09-02).** The post-CodeScene gate run found Whitaker's
+`no_expect_outside_tests` violation on the extracted helper. The helper and its
+two test entry points now return and propagate `Result<(), IrGenError>` rather
+than calling `expect`. Revalidation remains pending.
+
+**Revision 2.16 (2026-09-02).** The Result-returning helper then triggered
+Clippy's `panic-in-result-fn` check because it asserted. The helper now only
+prepares and interpolates, returning `Result<String, IrGenError>`; separately
+named test entry points assert the expected values. Revalidation remains
+pending, and the plan remains `IN PROGRESS`.
+
+**Revision 2.17 (2026-09-02).** The `panic-in-result-fn` check also applies to
+Result-returning tests. The shared helper remains fallible and assertion-free,
+while the two recognized void `#[test]` functions now call it with test-boundary
+`expect` and assert the outputs. Revalidation remains pending, and the plan
+remains `IN PROGRESS`.
+
+**Revision 2.18 (2026-09-02).** Complete the post-CodeScene repair after the
+green gate run: `make check-fmt`, `make test` (2,737 tests, 3 skipped, plus 32
+doctests with 6 ignored), `make typecheck`, `make lint`, doc coverage at 99.10%,
+`make markdownlint`, and `make nixie` all passed. The prior full
+`make kani-ir` result remains applicable: 15/15 proofs passed. CodeRabbit
+review remains queued.
