@@ -1,3 +1,15 @@
+<!-- markdownlint-disable MD013 MD033 MD041 -->
+
+<div align="center">
+
+[English](README.md) | [Deutsch](README.de.md) | [Español](README.es.md) |
+[Français](README.fr.md) | [日本語](README.ja.md) |
+[Português do Brasil](README.pt-BR.md) | [简体中文](README.zh-CN.md)
+
+</div>
+
+<!-- markdownlint-enable MD013 MD033 MD041 -->
+
 # 🧵 Netsuke
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](
