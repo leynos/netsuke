@@ -115,6 +115,15 @@ fn assert_release_installation_contract() -> Result<()> {
             );
         }
     }
+    let users_guide =
+        test_fs::read_to_string("docs/users-guide.md").context("read docs/users-guide.md")?;
+    ensure!(
+        users_guide.contains(concat!(
+            "installing a later beta or final MSI\n",
+            "replaces the existing installation"
+        )),
+        "users' guide should document MSI replacement within a version series"
+    );
     Ok(())
 }
 
