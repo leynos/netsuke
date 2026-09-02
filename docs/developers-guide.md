@@ -478,10 +478,10 @@ any new Ninja grammar position rather than reusing command escaping.
 [ADR-018](adr-018-manifest-linting-under-netsuke-check.md) records the
 decisions behind it; this section is the mechanics.
 
-A new rule touches four implementation places, plus the tests described at the
-end of this section, and nothing else. It does not touch the command-line
-interface, the output schema, or the localization catalogues, which is the
-property that keeps the rule set cheap to grow.
+A new rule touches four implementation places, the repository localization
+update, and the tests described at the end of this section. It does not touch
+the command-line interface or the output schema, which keeps the rule set cheap
+to grow.
 
 1. **Pick the stage.** A rule binds to exactly one of four: `Document` sees the
    authored source with exact spans and unexpanded templates, `Manifest` sees
@@ -502,8 +502,10 @@ property that keeps the rule set cheap to grow.
    are what `--explain` prints and what the rule reference must restate.
    Default to `DefaultSeverity::Off` when the rule encodes a project convention
    rather than a defect.
-4. **Register and document it.** Add it to the category module's `rules()`
-   function, then add a section to
+4. **Register, localize, and document it.** Add it to the category module's
+   `rules()` function, update the repository localization catalogues for the
+   user-facing summary, rationale, and remediation text owned by `RuleMeta` and
+   exposed by `--explain`, then add a section to
    [the rule reference](netsuke-linter-rules.md) with a reported and a fixed
    manifest. `tests/lint_rule_reference_tests.rs` checks the two against each
    other in both directions and will fail until they agree.
@@ -4099,7 +4101,7 @@ clocks from `monotony::test_util`, such as `FixedMonotonicClock` and
 `SystemConfigurationLoadClock`, or call `Instant::now` directly at these
 boundaries. Whenever a mockable monotonic clock is introduced, use `monotony`
 as the repository-approved mechanism. The dependency choice is
-`monotony = "0.1.0"`; its public contract keeps the production clock
+`monotony = "1.0.0"`; its public contract keeps the production clock
 abstraction dependency-free while its `test-util` feature provides
 deterministic test clocks.
 

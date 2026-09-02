@@ -437,4 +437,4 @@ check.rule.unknown = Väljaren anger { $name }, som varken är en regel eller en
 check.rule.severity = Väljaren { $name } anger allvarsgraden { $severity }; förväntade en av { $values }.
 check.fail_on.invalid = Okänd feltröskel { $value }; förväntade en av { $values }.
 check.source_index = Kunde inte indexera { $path } för diagnostik på rad { $line }: { $reason }.
-status.tool.check = Kontrollera
+status.tool.check = Kontroll
