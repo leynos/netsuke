@@ -1,6 +1,6 @@
-# ADR: Replace `serde-yml` with `serde-saphyr` for YAML Parsing in Netsuke
+# ADR: replace `serde-yml` with `serde-saphyr` for YAML parsing in Netsuke
 
-## Context and Problem Statement
+## Context and problem statement
 
 Netsuke is a YAML-based build system that currently uses the **`serde-yml`**
 crate (a fork of `serde_yaml`) to deserialize YAML manifests into Rust structs.
@@ -18,7 +18,7 @@ robust and actively maintained YAML+Serde library. There are no constraints
 requiring extremely small binaries or WebAssembly support, so the selection can
 focus on the best available solution without platform limitations.
 
-## Decision Outcome (Summary)
+## Decision outcome (summary)
 
 This ADR replaces `serde-yml` with **`serde-saphyr`** for YAML parsing in
 Netsuke. The `serde-saphyr` crate is a new Serde deserialization framework
@@ -48,9 +48,9 @@ it offers:
 In summary, `serde-saphyr` best meets the selection criteria and will replace
 `serde-yml` as the YAML deserialization library in Netsuke.
 
-## Detailed Rationale
+## Detailed rationale
 
-### Alternatives Considered and Comparison
+### Alternatives considered and comparison
 
 Several YAML+Serde libraries were evaluated against the project requirements:
 
@@ -192,7 +192,7 @@ Saphyr. Meanwhile, `serde_saphyr` is already delivering these advantages today.
 Adopting it now positions Netsuke on a forward-looking path with minimal
 downsides.
 
-## Implementation Plan
+## Implementation plan
 
 - **Update Dependencies:** Remove `serde-yml` from `Cargo.toml` and add
   `serde-saphyr` (at the latest stable version, e.g. `0.0.x`). No native C
@@ -291,7 +291,7 @@ downsides.
   untrusted manifest input might tighten the limits, whereas a fully trusted
   environment might loosen them). For now, stick with defaults and monitor.
 
-## Consequences and Risks
+## Consequences and risks
 
 **Positive consequences:**
 
@@ -354,7 +354,7 @@ outweigh the minor risks. Proceed with the migration and monitor for any issues
 in CI and subsequent usage. This decision positions Netsuke to have a robust
 YAML foundation moving forward.
 
-## Appendix: References and Further Reading
+## Appendix: references and further reading
 
 - **`serde-saphyr` crate:** *YAML Deserializer for Serde built on Saphyr.* –
   Crates.io serde-saphyr, Docs.rs serde_saphyr documentation. (Introduces the

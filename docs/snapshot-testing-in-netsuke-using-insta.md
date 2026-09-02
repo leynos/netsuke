@@ -312,16 +312,17 @@ property test separately varies valid `SemVer` generator versions.
 > [Test execution](developers-guide.md#test-execution). `cargo insta` needs to
 > be told which runner to drive, so use
 > `cargo insta test --test-runner nextest` and `cargo insta review` when
-> accepting changes. The `cargo test` invocations below are the generic form.
+> accepting changes. The commands below use this same runner.
 
-To execute the snapshot tests, run `cargo test`. All tests (including our new
-snapshot tests) will run. On the first run (or whenever a snapshot differs from
-expectations), test failures will indicate snapshot changes.
+To execute the snapshot tests, run `cargo insta test --test-runner nextest`.
+All tests (including our new snapshot tests) will run. On the first run (or
+whenever a snapshot differs from expectations), test failures will indicate
+snapshot changes.
 
 **Example:**
 
 ```bash
-$ cargo test
+$ cargo insta test --test-runner nextest
 running 2 tests
 test simple_manifest_ir_snapshot ... FAILED
 test simple_manifest_ninja_snapshot ... FAILED
@@ -357,10 +358,10 @@ accept these new snapshots:
 - As an alternative, when confident in the outputs, run
   `cargo insta accept --all` to accept all changes in one go.
 
-Once accepted, re-run `cargo test` - it should pass because the recorded
-snapshots now match the output. Commit the new/updated `.snap` files to version
-control. **Always include the snapshot files** so that CI can validate against
-them.
+Once accepted, re-run `cargo insta test --test-runner nextest` — it should pass
+because the recorded snapshots now match the output. Commit the new/updated
+`.snap` files to version control. **Always include the snapshot files** so that
+CI can validate against them.
 
 **Deterministic Failures:** If a snapshot test fails unexpectedly in the
 future, it means the IR or Ninja output changed. This could reveal a regression
@@ -377,9 +378,9 @@ or a legitimate update:
 ## Integrating Snapshot Tests into GitHub Actions CI
 
 Automating snapshot tests in CI ensures that changes to Netsuke do not
-introduce regressions without notice. Use GitHub Actions to run `cargo test`
-(which includes the snapshot tests) on every push or pull request. Here’s how
-to set it up:
+introduce regressions without notice. Use GitHub Actions to run
+`cargo insta test --test-runner nextest` (which includes the snapshot tests) on
+every push or pull request. Here’s how to set it up:
 
 **1. CI Workflow Setup:** In the repository (e.g.,
 `.github/workflows/test.yml`), use a Rust toolchain action and run tests. For
@@ -416,10 +417,13 @@ jobs:
       - name: Install cargo-insta (snapshot review tool)
         run: cargo install cargo-insta
 
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
       - name: Run tests (including snapshot tests)
         env:
           INSTA_UPDATE: no   # Ensure tests fail on any snapshot mismatch (no auto-update in CI)
-        run: cargo test --all --all-features
+        run: cargo insta test --test-runner nextest --all --all-features
 ```
 
 **Notes:**
@@ -429,10 +433,10 @@ jobs:
   `auto` mode already treats CI specially (it will not auto-accept in CI), but
   setting `no` is an explicit safeguard.
 
-- Install `cargo-insta` mainly for completeness - running `cargo test` does not
-  strictly require the CLI tool, but its presence enables `cargo insta`
-  subcommands in CI if needed (for example, to print a summary or ensure no
-  unused snapshots with `cargo insta test --unreferenced=reject`).
+- Install `cargo-insta` to run the canonical snapshot command and review
+  changes. Its presence also enables `cargo insta` subcommands in CI if needed
+  (for example, to print a summary or ensure no unused snapshots with
+  `cargo insta test --unreferenced=reject --test-runner nextest`).
 
 - The caches for Cargo help speed up CI. Ensure you include the snapshot files
   in the repository so that tests can find the expected outputs.
@@ -453,12 +457,13 @@ The CI process can be enhanced to make snapshot reviews easier:
 - Use `actions/upload-artifact` to upload the `.snap.new` files or diff results
   when tests fail so they can be downloaded from the CI logs for inspection.
 
-- Or run `cargo insta test --diff` in CI to print diffs to the log for quick
-  viewing of what changed (the `INSTA_OUTPUT` env var can control diff vs
-  summary output).
+- Or run `cargo insta test --test-runner nextest --diff` in CI to print diffs
+  to the log for quick viewing of what changed (the `INSTA_OUTPUT` env var can
+  control diff vs summary output).
 
-However, the simplest approach is to let `cargo test` report failures and use
-those as a signal to update snapshots locally.
+However, the simplest approach is to let
+`cargo insta test --test-runner nextest` report failures and use the report as
+a signal to update snapshots locally.
 
 ## Conclusion
 

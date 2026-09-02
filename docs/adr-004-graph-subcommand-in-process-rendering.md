@@ -1,4 +1,4 @@
-# Architecture Decision Record (ADR): Render the `graph` subcommand in-process
+# Architecture decision record (ADR): render the `graph` subcommand in-process
 
 ## Status
 
