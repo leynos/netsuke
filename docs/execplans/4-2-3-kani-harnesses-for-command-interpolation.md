@@ -1853,11 +1853,11 @@ and all five Kani `cfg` UI tests. On this Linux workspace,
 `make SHELL=bash test` passed with 2,782 tests and 3 skipped; the full gate set
 also passed: `make check-fmt`, `make lint`, `make typecheck`, `make test`, doc
 coverage at 99.13%, `make markdownlint`, and `make nixie`. Windows-host
-execution remains pending because this workspace is Linux; it is not claimed as
-passed. The full `make kani-ir` run is deliberately not claimed because the
-capped run timed out in the unrelated manifest harness recorded in Revision
-2.19. CodeRabbit was queued through `comenq` as queue id `2ebbb791`, with an
-approximate posting delay of 3h15m, so no fresh CodeRabbit verdict exists yet.
-Windows-host execution remains pending because this workspace is Linux; the
-queued Windows hosted CI is the path for that validation. The plan remains
-`IN PROGRESS` pending the CodeRabbit verdict and Windows CI.
+execution remains pending locally because this workspace is Linux. The hosted
+`build-test-windows` Test step passed `make SHELL=bash test` in source run
+`33664620259` for commit `d9495016`. The full `make kani-ir` run is
+deliberately not claimed because the capped run timed out in the unrelated
+manifest harness recorded in Revision 2.19. CodeRabbit was queued through
+`comenq` as queue id `2ebbb791`, with an approximate posting delay of 3h15m, so
+no fresh CodeRabbit verdict exists yet. The plan remains `IN PROGRESS` pending
+the CodeRabbit verdict.
