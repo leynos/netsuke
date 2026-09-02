@@ -31,7 +31,10 @@ readonly ERROR_MISMATCH='mismatch'
 readonly ERROR_TIMEOUT='timeout'
 readonly ERROR_UNKNOWN='unknown'
 
+readonly DEFAULT_OPERATION_TIMEOUT_SECONDS=30
+readonly MAX_OPERATION_TIMEOUT_SECONDS=300
 readonly metrics_file="${NETSUKE_RELEASE_ADMISSION_METRICS_FILE:-${RUNNER_TEMP:-/tmp}/netsuke-release-admission-metrics.jsonl}"
+readonly operation_timeout_seconds="${NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS:-$DEFAULT_OPERATION_TIMEOUT_SECONDS}"
 gate_outcome="$OUTCOME_UNKNOWN"
 gate_error_category="$ERROR_UNKNOWN"
 workflow_run_id=''
@@ -69,6 +72,15 @@ is_error_category() {
 
 is_metric_value() {
   [[ "$1" =~ ^[0-9]+([.][0-9]+)?$ ]]
+}
+
+is_operation_timeout() {
+  [[ "$1" =~ ^[1-9][0-9]*$ && ${#1} -le 3 ]] && \
+    (( 10#$1 <= MAX_OPERATION_TIMEOUT_SECONDS ))
+}
+
+run_bounded_command() {
+  timeout --foreground "${operation_timeout_seconds}s" "$@"
 }
 
 write_unknown_metric() {
@@ -148,7 +160,7 @@ PY
 
 record_gate_result() {
   emit_metric "$GATE_METRIC" "$CANARY_NONE" "$OPERATION_VERIFY_EVIDENCE" \
-    "$gate_outcome" "$gate_error_category" 1 || true
+    "$gate_outcome" "$gate_error_category" 1
   {
     printf 'gate-outcome=%s\n' "$gate_outcome"
     printf 'gate-error-category=%s\n' "$gate_error_category"
@@ -190,9 +202,16 @@ run_operation() {
 }
 
 resolve_tag_commit() {
-  local resolved_revision
-  if ! resolved_revision="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}" --jq '.sha')"; then
-    operation_error_category="$ERROR_API"
+  local command_status resolved_revision
+  if resolved_revision="$(run_bounded_command gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}" --jq '.sha')"; then
+    :
+  else
+    command_status=$?
+    if [[ "$command_status" -eq 124 ]]; then
+      operation_error_category="$ERROR_TIMEOUT"
+    else
+      operation_error_category="$ERROR_API"
+    fi
     return 1
   fi
   if [[ "$resolved_revision" != "$GITHUB_SHA" ]]; then
@@ -202,15 +221,31 @@ resolve_tag_commit() {
 }
 
 fetch_candidate_revision() {
-  if ! git fetch --depth 1 --no-tags origin -- "$GITHUB_SHA"; then
-    operation_error_category="$ERROR_FETCH"
+  local command_status
+  if run_bounded_command git fetch --depth 1 --no-tags origin -- "$GITHUB_SHA"; then
+    :
+  else
+    command_status=$?
+    if [[ "$command_status" -eq 124 ]]; then
+      operation_error_category="$ERROR_TIMEOUT"
+    else
+      operation_error_category="$ERROR_FETCH"
+    fi
     return 1
   fi
 }
 
 fetch_workflow_run() {
-  if ! workflow_run_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${GITHUB_SHA}&per_page=1" --jq '.workflow_runs[0].id // empty')"; then
-    operation_error_category="$ERROR_API"
+  local command_status
+  if workflow_run_id="$(run_bounded_command gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${GITHUB_SHA}&per_page=1" --jq '.workflow_runs[0].id // empty')"; then
+    :
+  else
+    command_status=$?
+    if [[ "$command_status" -eq 124 ]]; then
+      operation_error_category="$ERROR_TIMEOUT"
+    else
+      operation_error_category="$ERROR_API"
+    fi
     return 1
   fi
 }
@@ -246,6 +281,13 @@ mkdir -p "$(dirname "$metrics_file")"
 : "${GITHUB_REPOSITORY:?GITHUB_REPOSITORY must identify the release repository}"
 : "${GITHUB_SHA:?GITHUB_SHA must identify the release candidate revision}"
 trap finish_gate EXIT
+
+if ! is_operation_timeout "$operation_timeout_seconds"; then
+  printf '%s\n' 'release-admission operation timeout must be between 1 and 300 seconds' >&2
+  gate_outcome="$OUTCOME_FAILURE"
+  gate_error_category="$ERROR_UNKNOWN"
+  exit 1
+fi
 
 # This is intentionally limited RFC 0005 admission scaffolding. It supplies
 # fixed operation boundaries and fails closed until the evidence producer sets

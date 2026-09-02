@@ -10,10 +10,11 @@ Accepted.
 
 ## Context and problem statement
 
-The release-admission gate makes GitHub API requests and Git fetches before the
-release workflow can publish artefacts. A failed request, fetch, or evidence
-check blocks publication, but the workflow previously left operators to infer
-the failure from command output. Operators need to distinguish the failed
+The release-admission canary scaffold makes GitHub API requests and Git fetches
+before the release workflow can publish artefacts. A failed request, fetch, or
+evidence check is recorded for operator review, but the current scaffold is
+non-blocking: publication will become conditional only when a real RFC 0005
+evidence producer is connected. Operators need to distinguish the failed
 operation and its latency without turning revisions, run IDs, paths, URLs, or
 workflow content into metric dimensions.
 
@@ -28,16 +29,19 @@ The release-admission script emits exactly three metrics as JSON Lines (JSONL):
 
 - `netsuke_release_admission_gate_total` is a counter for the final gate
   outcome. Its labels are `outcome=success|failure|unknown` and
-  `error_category=none|api_error|fetch_error|stale_evidence|missing_evidence|mismatch|timeout|unknown`.
+  `error_category=none|api_error|fetch_error|stale_evidence|missing_evidence|`
+  `mismatch|timeout|unknown`.
 - `netsuke_release_admission_operation_total` is a counter emitted once after
   each fixed GitHub API request or Git fetch operation. Its labels are
   `canary=history_scan|release_candidate|none`,
-  `operation=resolve_tag_commit|fetch_candidate_revision|fetch_workflow_run|check_scan_freshness|verify_evidence`,
-  `outcome=success|failure|unknown`, and
-  `error_category=none|api_error|fetch_error|stale_evidence|missing_evidence|mismatch|timeout|unknown`.
+  `operation=resolve_tag_commit|fetch_candidate_revision|fetch_workflow_run|`
+  `check_scan_freshness|verify_evidence`, `outcome=success|failure|unknown`, and
+  `error_category=none|api_error|fetch_error|stale_evidence|missing_evidence|`
+  `mismatch|timeout|unknown`.
 - `netsuke_release_admission_operation_duration_seconds` is a histogram
   emitted once after each fixed operation. It has only the label
-  `operation=resolve_tag_commit|fetch_candidate_revision|fetch_workflow_run|check_scan_freshness|verify_evidence`.
+  `operation=resolve_tag_commit|fetch_candidate_revision|fetch_workflow_run|`
+  `check_scan_freshness|verify_evidence`.
 
 The script validates every metric name and label against this closed vocabulary
 before writing one JSONL record. `none` is used for `error_category` on a
@@ -53,6 +57,12 @@ success or failure boundary, including the error category selected for an early
 failure. No revision, run ID, path, URL, workflow content, or other
 identifier-derived value may be a label. Duration values are observations only
 and carry no operation-specific identifiers beyond the fixed operation name.
+
+Each operation has a 30-second timeout by default. Set
+`NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS` only to an integer from 1
+through 300 seconds, inclusive. An operation that reaches its timeout emits
+`outcome=failure` with `error_category=timeout`; invalid timeout configuration
+fails closed as `outcome=failure` with `error_category=unknown`.
 
 The workflow writes JSONL to the configured runner temporary metrics path
 (`NETSUKE_RELEASE_ADMISSION_METRICS_FILE`, currently
@@ -78,16 +88,20 @@ contract review because it changes the bounded series set.
 - **Durable short-lived reporting.** A JSONL workflow artefact survives the
   runner process and can be downloaded with the run; the job summary exposes
   the top-level outcome without requiring a metrics service.
-- **Fail-closed admission.** Telemetry classification cannot turn unknown,
-  missing, stale, or contradictory evidence into permission to publish.
+- **Fail-closed classification.** Telemetry classification cannot turn
+  unknown, missing, stale, or contradictory evidence into a successful
+  admission result. Publication remains non-blocking until the evidence
+  producer is connected.
 
 ## Consequences
 
-Operators inspect the gate counter first. A `failure` or `unknown` outcome
-blocks publication and should be correlated with operation counter records,
-their fixed `error_category`, and duration observations in the downloaded JSONL
-artefact. The job summary is an at-a-glance indication only; it does not
-replace the per-operation records.
+Operators inspect the gate counter first. A `failure` or `unknown` outcome is
+an actionable canary result and should be correlated with operation counter
+records, their fixed `error_category`, and duration observations in the
+downloaded JSONL artefact. The job summary is an at-a-glance indication only;
+it does not replace the per-operation records. The current scaffold does not
+block publication; that dependency is enabled only after a real evidence
+producer is connected.
 
 The JSONL file is an export artefact, not a continuously aggregated time
 series. Consumers must tolerate multiple records for an operation across
@@ -113,9 +127,9 @@ in metric dimensions.
 
 ### One aggregate gate metric without operation metrics
 
-Rejected. An aggregate outcome says that publication was blocked but cannot
-identify whether an API request, fetch, freshness check, or evidence check
-failed, nor which operation's latency needs investigation.
+Rejected. An aggregate outcome says that the canary result was unsuccessful but
+cannot identify whether an API request, fetch, freshness check, or evidence
+check failed, nor which operation's latency needs investigation.
 
 ### Best-effort or free-form error labels
 

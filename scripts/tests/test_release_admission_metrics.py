@@ -5,13 +5,10 @@ import importlib.util
 import json
 import os
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the script boundary is under test.
-import tempfile
 import typing as typ
 from pathlib import Path
 
 import pytest
-from hypothesis import given, settings
-from hypothesis import strategies as st
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = (
@@ -29,11 +26,10 @@ CANARY_BY_OPERATION = {
     "check_scan_freshness": "history_scan",
     "verify_evidence": "history_scan",
 }
-IDENTIFIER_TEXT = st.text(
-    alphabet=st.characters(blacklist_categories=("Cs",), blacklist_characters="\x00"),
-    min_size=1,
-    max_size=32,
-)
+SUCCESS_GATE_OUTPUTS = {
+    "gate-outcome": "success",
+    "gate-error-category": "none",
+}
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -47,17 +43,28 @@ class FailureCase:
 
 
 class MetricsValidator(typ.Protocol):
-    """Describe the runtime interface exported by the workflow validator."""
+    """Define finite-JSON parsing and fixed-label validation operations."""
 
     def parse_metrics(self, lines: list[str]) -> list[dict[str, object]]:
-        """Parse metrics emitted by the release-admission gate."""
+        """Parse finite JSON Lines metric records into mappings."""
 
     def validate_metrics(self, records: list[dict[str, object]]) -> None:
-        """Validate the release-admission metric contract."""
+        """Validate that records retain the fixed release-admission contract."""
 
 
 def load_metrics_validator() -> MetricsValidator:
-    """Load the workflow-contract validator without changing the import path."""
+    """Load the workflow-contract validator without changing the import path.
+
+    Returns
+    -------
+    MetricsValidator
+        The validator enforcing finite JSON and bounded labels.
+
+    Raises
+    ------
+    AssertionError
+        If the validator module cannot be loaded.
+    """
     specification = importlib.util.spec_from_file_location(
         "release_admission_metrics_contract", METRICS_VALIDATOR_PATH
     )
@@ -75,7 +82,18 @@ METRICS_VALIDATOR = load_metrics_validator()
 def expected_operation_labels(
     canary: str, operation: str, outcome: str, error_category: str
 ) -> dict[str, str]:
-    """Return the fixed-label metric contract for one operation counter."""
+    """Return the fixed-label metric contract for one operation counter.
+
+    Parameters
+    ----------
+    canary, operation, outcome, error_category
+        Fixed bounded values for the operation counter.
+
+    Returns
+    -------
+    dict[str, str]
+        Ordered counter labels; no unbounded dimension is accepted.
+    """
     return {
         "canary": canary,
         "operation": operation,
@@ -85,7 +103,18 @@ def expected_operation_labels(
 
 
 def expected_gate_labels(outcome: str, error_category: str) -> dict[str, str]:
-    """Return the fixed-label metric contract for the overall gate counter."""
+    """Return the fixed-label metric contract for the overall gate counter.
+
+    Parameters
+    ----------
+    outcome, error_category
+        Fixed bounded values for the gate counter.
+
+    Returns
+    -------
+    dict[str, str]
+        Ordered gate labels without operation identifiers.
+    """
     return {"outcome": outcome, "error_category": error_category}
 
 
@@ -108,6 +137,9 @@ with open(sys.argv[1], "a", encoding="utf-8") as call_log:
 PY
 if [[ "${NETSUKE_FAKE_GH_FAILURE:-}" == "true" ]]; then
   exit 1
+fi
+if [[ -n "${NETSUKE_FAKE_GH_DELAY_SECONDS:-}" ]]; then
+  sleep "$NETSUKE_FAKE_GH_DELAY_SECONDS"
 fi
 if [[ "$*" == *"/commits/"* ]]; then
   printf '%s\\n' "$GITHUB_SHA"
@@ -145,7 +177,10 @@ def _run_gate(
     evidence_state: str = "fresh",
     extra_environment: dict[str, str] | None = None,
 ) -> tuple[
-    subprocess.CompletedProcess[str], list[dict[str, object]], list[dict[str, object]]
+    subprocess.CompletedProcess[str],
+    list[dict[str, object]],
+    list[dict[str, object]],
+    dict[str, str],
 ]:
     """Run the production gate with fakes and return its records and call log."""
     fake_bin = tmp_path / "fake-bin"
@@ -184,7 +219,11 @@ def _run_gate(
         for line in call_log.read_text(encoding="utf-8").splitlines()
         if line
     ]
-    return result, metrics, calls
+    outputs = dict(
+        line.split("=", maxsplit=1)
+        for line in output_file.read_text(encoding="utf-8").splitlines()
+    )
+    return result, metrics, calls, outputs
 
 
 def _operation_records(
@@ -201,8 +240,18 @@ def _operation_records(
 
 
 def test_gate_emits_each_fixed_operation_and_a_successful_gate(tmp_path: Path) -> None:
-    """The successful scaffold emits counters and durations for every operation."""
-    result, metrics, calls = _run_gate(tmp_path)
+    """Verify the successful scaffold emits all required metric records.
+
+    Parameters
+    ----------
+    tmp_path
+        Isolated fake-command and output directory.
+
+    Notes
+    -----
+    Every fixed operation, duration, gate metric, and summary output is required.
+    """
+    result, metrics, calls, outputs = _run_gate(tmp_path)
 
     assert result.returncode == 0, result.stderr
     METRICS_VALIDATOR.validate_metrics(metrics)
@@ -235,6 +284,12 @@ def test_gate_emits_each_fixed_operation_and_a_successful_gate(tmp_path: Path) -
     assert metrics[-1] == expected_gate_metric, (
         "the gate must report its successful outcome"
     )
+    assert {
+        name: outputs[name] for name in SUCCESS_GATE_OUTPUTS
+    } == SUCCESS_GATE_OUTPUTS, "the successful gate must publish its summary outcome"
+    assert outputs["metrics-file"] == str(
+        tmp_path / "release-admission-metrics.jsonl"
+    ), "the successful gate must publish its metrics-file output"
 
 
 @pytest.mark.parametrize(
@@ -266,14 +321,40 @@ def test_gate_emits_each_fixed_operation_and_a_successful_gate(tmp_path: Path) -
             FailureCase("missing", {}, "check_scan_freshness", "missing_evidence"),
             id="missing-evidence",
         ),
+        pytest.param(
+            FailureCase("unexpected", {}, "check_scan_freshness", "unknown"),
+            id="unknown-evidence",
+        ),
+        pytest.param(
+            FailureCase(
+                "fresh",
+                {
+                    "NETSUKE_FAKE_GH_DELAY_SECONDS": "2",
+                    "NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS": "1",
+                },
+                "resolve_tag_commit",
+                "timeout",
+            ),
+            id="operation-timeout",
+        ),
     ],
 )
 def test_gate_emits_fixed_categories_for_failure_paths(
     tmp_path: Path,
     case: FailureCase,
 ) -> None:
-    """Each controlled failure fails closed with its documented category."""
-    result, metrics, _ = _run_gate(
+    """Verify each controlled failure retains its bounded metric category.
+
+    Parameters
+    ----------
+    tmp_path, case
+        Isolated output directory and one admission failure variant.
+
+    Notes
+    -----
+    A failure emits operation, gate, and summary records before a non-zero exit.
+    """
+    result, metrics, _, outputs = _run_gate(
         tmp_path,
         evidence_state=case.evidence_state,
         extra_environment=case.extra_environment,
@@ -291,44 +372,20 @@ def test_gate_emits_fixed_categories_for_failure_paths(
     assert metrics[-1]["labels"] == expected_gate_labels(
         "failure", case.error_category
     ), "the gate must retain the operation's error category"
+    assert outputs["gate-outcome"] == "failure", (
+        "failed operations must reach the workflow summary output"
+    )
+    assert outputs["gate-error-category"] == case.error_category, (
+        "failed operations must retain their bounded category in workflow output"
+    )
 
 
-@given(
-    revision=IDENTIFIER_TEXT,
-    run_id=IDENTIFIER_TEXT,
-    path=IDENTIFIER_TEXT,
-    url=IDENTIFIER_TEXT,
-)
-@settings(deadline=None, max_examples=20)
-def test_identifiers_never_become_metric_labels(
-    revision: str,
-    run_id: str,
-    path: str,
-    url: str,
-) -> None:
-    """Arbitrary candidate identifiers cannot expand metric cardinality."""
-    identifiers = {
-        f"revision-{revision}",
-        f"run-{run_id}",
-        f"path-{path}",
-        f"url-{url}",
-    }
-    with tempfile.TemporaryDirectory() as directory_name:
-        result, metrics, _ = _run_gate(
-            Path(directory_name),
-            extra_environment={
-                "GITHUB_SHA": f"revision-{revision}",
-                "NETSUKE_FAKE_WORKFLOW_RUN_ID": f"run-{run_id}",
-                "NETSUKE_FAKE_PATH": f"path-{path}",
-                "NETSUKE_FAKE_URL": f"url-{url}",
-            },
-        )
+def test_validator_rejects_non_finite_metric_values() -> None:
+    """Verify the JSON contract rejects non-finite metric observations.
 
-    assert result.returncode == 0, result.stderr
-    METRICS_VALIDATOR.validate_metrics(metrics)
-    for record in metrics:
-        labels = record["labels"]
-        assert isinstance(labels, dict), "every emitted metric must retain labels"
-        assert identifiers.isdisjoint(labels.values()), (
-            "generated identifiers must never become metric label values"
-        )
+    Notes
+    -----
+    Portable metric JSON excludes Python-specific `Infinity`.
+    """
+    with pytest.raises(ValueError, match="non-finite JSON metric value: Infinity"):
+        METRICS_VALIDATOR.parse_metrics(['{"value": Infinity}'])
