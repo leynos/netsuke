@@ -52,7 +52,7 @@ build-script generator:
   families of manifests. The
   [UX design §15](../netsuke-test-framework-ux-design.md) defers even simple
   data-driven case tables, so each additional input shape today costs a
-  hand-written case, and omission bugs (a mutation the author never thought to
+  handwritten case, and omission bugs (a mutation the author never thought to
   write down) go untested.
 
 Netsuke's own verification demonstrates the value of closing this gap: the
