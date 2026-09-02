@@ -19,6 +19,11 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-accessible-output",
     "guide-binstall-install",
     "guide-boolean-string-interpolation",
+    "guide-check-command",
+    "guide-check-config",
+    "guide-check-explain",
+    "guide-check-policy",
+    "guide-check-suppression",
     "guide-cli-usage",
     "guide-command-available-manifest",
     "guide-command-list",
@@ -129,6 +134,31 @@ fn assert_generates_valid_ninja(run: &NetsukeRun, context: &str) -> Result<()> {
         "{context} should generate a Ninja manifest"
     );
     assert_default_edges_exist(&run.stdout, context)
+}
+
+/// Assert that a documented configuration file is accepted by a command.
+///
+/// The two configuration examples differ only in which file they write and
+/// which command reads it, so sharing the setup keeps the thing under test —
+/// that the documented file is accepted as written — in one place.
+fn documented_configuration_example_is_accepted(
+    example_id: &str,
+    config_filename: &str,
+    command_arguments: &[&str],
+    context: &str,
+) -> Result<()> {
+    let example = documented_example(example_id)?;
+    let workspace = manifest_workspace("guide-first-build-manifest")?;
+    let config_path = workspace.path().join(config_filename);
+    test_fs::write(&config_path, example.body)
+        .with_context(|| format!("write documented config {config_filename}"))?;
+    let config = config_path
+        .to_str()
+        .context("temporary config path should be UTF-8")?;
+    let mut arguments = vec!["--config", config];
+    arguments.extend_from_slice(command_arguments);
+    let run = run_netsuke_in(workspace.path(), &arguments)?;
+    assert_success(&run, context)
 }
 
 fn run_with_fake_ninja(workspace: &Path, args: &[&str]) -> Result<NetsukeRun> {
@@ -334,20 +364,122 @@ fn help_targets_example_lists_described_targets() -> Result<()> {
     );
     Ok(())
 }
+
+/// The documented `netsuke check` invocation must run and report cleanly.
+#[test]
+fn check_example_reports_a_clean_manifest() -> Result<()> {
+    let example = documented_example("guide-check-command")?;
+    ensure!(example.body == "netsuke check\n", "check example drifted");
+    let workspace = manifest_workspace("guide-first-build-manifest")?;
+    let run = run_netsuke_in(workspace.path(), &["--locale", "en-US", "check"])?;
+    assert_success(&run, "check example")?;
+    ensure!(
+        normalize_fluent_isolates(&run.stdout).contains("Lint results"),
+        "check should print a summary, got {}",
+        run.stdout
+    );
+    Ok(())
+}
+
+/// Every documented `netsuke check` invocation must run as written.
+///
+/// The `--explain` catalogue is checked for a rule it must contain, and the
+/// policy example for the effect its selectors claim: a `clarity=off` category
+/// selector followed by a rule selector that promotes one of that category's
+/// rules to `error` must still report that rule.
+#[test]
+fn check_explain_and_policy_examples_run() -> Result<()> {
+    let workspace = manifest_workspace("guide-first-build-manifest")?;
+    let explain = documented_example("guide-check-explain")?;
+    for line in explain.body.lines() {
+        let arguments: Vec<&str> = line.split_whitespace().skip(1).collect();
+        let run = run_netsuke_in(workspace.path(), &arguments)?;
+        assert_success(&run, line)?;
+        ensure!(
+            run.stdout.contains("directory-dep-not-order-only"),
+            "`{line}` should describe the rule it names, got {}",
+            run.stdout
+        );
+    }
+
+    // The documented selectors disable the `clarity` category, then promote one
+    // of its rules back to `error` under a `warning` threshold. Running them
+    // against a manifest that violates that rule is what shows the selectors
+    // take effect: asserting only that the command succeeds would pass just as
+    // well if they were ignored entirely.
+    let policy = documented_example("guide-check-policy")?;
+    let arguments: Vec<&str> = policy.body.split_whitespace().skip(1).collect();
+    let policy_workspace = tempfile::tempdir().context("create the policy workspace")?;
+    test_fs::write(
+        policy_workspace.path().join("Netsukefile"),
+        concat!(
+            "netsuke_version: \"1.0.0\"\n",
+            "targets:\n",
+            "  - name: output.txt\n",
+            "    sources: input.txt\n",
+            "    command: \"cp input.txt output.txt\"\n",
+        ),
+    )
+    .context("write the policy fixture manifest")?;
+    let run = run_netsuke_in(policy_workspace.path(), &arguments)?;
+    ensure!(
+        !run.success,
+        "the promoted rule should reach the threshold: {}{}",
+        run.stdout,
+        run.stderr
+    );
+    ensure!(
+        format!("{}{}", run.stdout, run.stderr).contains("literal-recipe-path"),
+        "the promoted rule should be the one reported"
+    );
+    Ok(())
+}
+
+/// The documented configuration example must be accepted and take effect.
+#[test]
+fn check_configuration_example_is_accepted() -> Result<()> {
+    documented_configuration_example_is_accepted(
+        "guide-check-config",
+        "check.toml",
+        &["--json", "check", "--explain"],
+        "check configuration example",
+    )
+}
+
+/// The documented suppression comment must silence the finding it names.
+///
+/// Without the directive the manifest reports `background-job`; with it, the
+/// run is clean. Asserting both directions is what proves the example teaches
+/// a working suppression rather than a manifest that never had a finding.
+#[test]
+fn check_suppression_example_silences_its_finding() -> Result<()> {
+    let workspace = manifest_workspace("guide-check-suppression")?;
+    let clean = run_netsuke_in(workspace.path(), &["--json", "check", "--fail-on", "never"])?;
+    assert_success(&clean, "suppressed check example")?;
+    let document: Value =
+        serde_json::from_str(&clean.stdout).context("parse the check result document")?;
+    let findings = document
+        .pointer("/result/findings")
+        .and_then(Value::as_array)
+        .context("the result should carry a findings array")?;
+    ensure!(
+        findings.is_empty(),
+        "the documented directive should silence every finding, got {findings:?}"
+    );
+    ensure!(
+        document.pointer("/result/summary/suppressed") == Some(&Value::from(1)),
+        "the directive should be recorded as having suppressed one finding"
+    );
+    Ok(())
+}
 #[test]
 fn project_configuration_example_is_accepted() -> Result<()> {
-    let example = documented_example("guide-project-config")?;
-    let workspace = manifest_workspace("guide-first-build-manifest")?;
-    let config_path = workspace.path().join("example.toml");
-    test_fs::write(&config_path, example.body).context("write documented config")?;
-    let config = config_path
-        .to_str()
-        .context("temporary config path should be UTF-8")?;
-    let run = run_netsuke_in(
-        workspace.path(),
-        &["--config", config, "--progress", "never", "generate"],
-    )?;
-    assert_success(&run, "project configuration example")
+    documented_configuration_example_is_accepted(
+        "guide-project-config",
+        "example.toml",
+        &["--progress", "never", "generate"],
+        "project configuration example",
+    )
 }
 
 #[test]

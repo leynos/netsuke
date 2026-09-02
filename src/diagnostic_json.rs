@@ -89,9 +89,18 @@ impl DiagnosticDocument {
     }
 }
 
+/// Render a diagnostic as one JSON schema entry.
+///
+/// `netsuke check` uses this so a lint finding carried in a successful result
+/// document is byte-identical to the same finding carried in a failure
+/// document, and a consumer parses one shape either way.
+pub(crate) fn diagnostic_entry(diagnostic: &dyn Diagnostic) -> DiagnosticEntry {
+    DiagnosticEntry::from_diagnostic(diagnostic)
+}
+
 /// One miette diagnostic rendered into the JSON schema.
 #[derive(Debug, Serialize, PartialEq, Eq)]
-struct DiagnosticEntry {
+pub(crate) struct DiagnosticEntry {
     /// The rendered diagnostic message.
     message: String,
     /// The diagnostic's machine-readable code, when it has one.

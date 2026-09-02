@@ -422,3 +422,22 @@ example.errors_found = { $count ->
     [one] { $count } त्रुटि मिली।
    *[other] { $count } त्रुटियाँ मिलीं।
 }
+
+# मैनिफ़ेस्ट जाँच (`netsuke check`).
+cli.subcommand.check.about = बिल्ड बनाए या चलाए बिना मैनिफ़ेस्ट की जाँच करें।
+cli.subcommand.check.long_about = चुने हुए मैनिफ़ेस्ट में ऐसी संरचनाएँ खोजें जो पार्स तो हो जाती हैं, पर सम्भवतः त्रुटिपूर्ण, असुरक्षित, अपोर्टेबल या कैशिंग के लिए हानिकारक हैं।
+cli.subcommand.check.flag.rule.help = किसी नियम या श्रेणी की गंभीरता NAME=SEVERITY के रूप में निर्धारित करें।
+cli.subcommand.check.flag.fail_on.help = वह गंभीरता जिस पर निष्कर्ष कमांड को विफल कर देते हैं।
+cli.subcommand.check.flag.limit.help = रिपोर्ट किए जाने वाले निष्कर्षों की अधिकतम संख्या; 0 सभी को रिपोर्ट करता है।
+cli.subcommand.check.flag.explain.help = मैनिफ़ेस्ट जाँचने के बजाय नियम-संदर्भ छापें।
+check.threshold_exceeded = निष्कर्ष { $severity } सीमा तक पहुँच गए: रिपोर्ट किए गए { $reported } में से { $failing }।
+check.threshold_exceeded.help = रिपोर्ट किए गए निष्कर्ष ठीक करें, --rule समायोजित करें, या --fail-on ढीला करें।
+check.summary.counts = जाँच परिणाम — त्रुटियाँ: { $errors }, चेतावनियाँ: { $warnings }, सुझाव: { $advice }, दबाए गए: { $suppressed }।
+check.summary.clean = कोई निष्कर्ष नहीं।
+check.summary.truncated = { $shown } निष्कर्ष दिखाए जा रहे हैं; --limit ने { $omitted } और छोड़ दिए।
+check.rule.malformed = चयनकर्ता { $selector } NAME=SEVERITY के रूप में नहीं लिखा गया है।
+check.rule.unknown = चयनकर्ता { $name } बताता है, जो न नियम है न श्रेणी।
+check.rule.severity = चयनकर्ता { $name } गंभीरता { $severity } बताता है; { $values } में से एक अपेक्षित था।
+check.fail_on.invalid = अज्ञात विफलता सीमा { $value }; { $values } में से एक अपेक्षित था।
+check.source_index = पंक्ति { $line } पर निदान हेतु { $path } को अनुक्रमित नहीं किया जा सका: { $reason }।
+status.tool.check = जाँच

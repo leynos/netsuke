@@ -145,6 +145,10 @@ The core build-system compiler is implemented:
   accessible HTML;
 - layered configuration, localized output, accessibility preferences,
   progress reporting, stage timings, and versioned JSON results or diagnostics;
+- read-only `netsuke check` semantic analysis for likely manifest errors,
+  portability problems, and cache or determinism hazards; see the
+  [users' guide](docs/users-guide.md#lint-a-manifest-with-netsuke-check) for
+  rules, policy, suppressions, and JSON output;
 - unit, behavioural, integration, property, snapshot, and initial Kani
   verification coverage.
 

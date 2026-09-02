@@ -20,8 +20,8 @@ use netsuke::{
         PATH_VALIDATION_REASON_VALUES, PATH_VALIDATION_SOURCE_VALUES, PATH_VALIDATION_TOTAL,
     },
     runner::{
-        BASH_PREFLIGHT_TOTAL, LEGACY_RECIPE_EXECUTION_DURATION, LEGACY_RECIPE_EXECUTIONS_TOTAL,
-        RECIPE_SHELL_RESOLUTIONS_TOTAL,
+        BASH_PREFLIGHT_TOTAL, CHECK_DURATION, CHECK_TOTAL, LEGACY_RECIPE_EXECUTION_DURATION,
+        LEGACY_RECIPE_EXECUTIONS_TOTAL, RECIPE_SHELL_RESOLUTIONS_TOTAL,
     },
 };
 
@@ -53,6 +53,14 @@ const BASH_PREFLIGHT_OUTCOMES: [&str; 2] = ["success", "error"];
 /// Bounded probe results emitted by Bash compatibility preflight.
 const BASH_PREFLIGHT_PROBE_OUTCOMES: [&str; 4] =
     ["success", "not_found", "launch_failed", "non_zero_exit"];
+/// Bounded command outcomes emitted by `netsuke check`.
+const CHECK_OUTCOMES: [&str; 5] = [
+    "success",
+    "threshold_failure",
+    "policy_failure",
+    "analysis_failure",
+    "output_failure",
+];
 
 /// Counter recording filtered manifest targets during normal manifest loading.
 const FILTERED_TARGETS_TOTAL: &str = "netsuke_manifest_filtered_targets_total";
@@ -113,6 +121,8 @@ impl ConfigMetricsRecorder {
                 | TIMING_SUMMARY_SINK_WRITES_TOTAL
                 | TIMING_SUMMARY_SINK_WRITE_DURATION
                 | RECIPE_SHELL_RESOLUTIONS_TOTAL
+                | CHECK_TOTAL
+                | CHECK_DURATION
                 | BASH_PREFLIGHT_TOTAL
                 | LEGACY_RECIPE_EXECUTIONS_TOTAL
                 | LEGACY_RECIPE_EXECUTION_DURATION
@@ -172,6 +182,7 @@ impl ConfigMetricsRecorder {
             FILTERED_TARGETS_TOTAL | FILTERED_ACTIONS_TOTAL | OMITTED_FILTERED_ENTRIES_TOTAL => {
                 exact_labels(key, &[])
             }
+            CHECK_TOTAL => exact_labels(key, &[(OUTCOME_LABEL, &CHECK_OUTCOMES)]),
             _ => false,
         }
     }
@@ -192,6 +203,7 @@ impl ConfigMetricsRecorder {
                     ("failure_category", &LEGACY_RECIPE_FAILURE_CATEGORIES),
                 ],
             ),
+            CHECK_DURATION => exact_labels(key, &[(OUTCOME_LABEL, &CHECK_OUTCOMES)]),
             _ => false,
         }
     }

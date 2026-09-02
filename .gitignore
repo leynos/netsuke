@@ -18,6 +18,7 @@ __pycache__/
 .uv-cache/
 .uv-tools/
 .pytest_cache/
+.hypothesis/
 .typos-oxendict-base.json
 .typos-oxendict-base.toml
 *.swo

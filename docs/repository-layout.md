@@ -28,6 +28,8 @@ output and some leaf files so the long-lived structure remains visible.
 ├── src/
 │   ├── cli/
 │   ├── ir/
+│   ├── lint/
+│   │   └── rules/
 │   ├── localization/
 │   ├── manifest/
 │   ├── ninja_gen/
@@ -90,6 +92,10 @@ output and some leaf files so the long-lived structure remains visible.
 - `src/cli/`: Command-line configuration, parsing, validation, and merge logic.
 - `src/ir/`: Intermediate representation generation, interpolation, graph, and
   cycle logic.
+- `src/lint/`: Manifest linting — the rule registry, the typed rule interface,
+  the spanned document index, suppression scanning, and policy resolution behind
+  `netsuke check`. Rules live under `src/lint/rules/`, grouped by the concern
+  they address.
 - `src/localization/`: Localization key definitions and runtime localization
   support.
 - `src/manifest/`: Manifest parsing, expansion, rendering, diagnostics, and

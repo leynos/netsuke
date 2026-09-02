@@ -417,3 +417,22 @@ example.errors_found = { $count ->
     [0] Không tìm thấy lỗi nào.
    *[other] Tìm thấy { $count } lỗi.
 }
+
+# Kiểm tra tệp kê khai (`netsuke check`).
+cli.subcommand.check.about = Kiểm tra tệp kê khai mà không tạo hay chạy bản dựng.
+cli.subcommand.check.long_about = Rà soát tệp kê khai đã chọn để tìm cấu trúc tuy phân tích được nhưng nhiều khả năng sai, không an toàn, kém khả chuyển hoặc bất lợi cho bộ nhớ đệm.
+cli.subcommand.check.flag.rule.help = Đặt mức nghiêm trọng cho một quy tắc hoặc hạng mục, viết dạng NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Mức nghiêm trọng khiến các phát hiện làm lệnh thất bại.
+cli.subcommand.check.flag.limit.help = Số phát hiện tối đa được báo cáo; 0 báo cáo tất cả.
+cli.subcommand.check.flag.explain.help = In tài liệu tham chiếu quy tắc thay vì kiểm tra tệp kê khai.
+check.threshold_exceeded = Các phát hiện đã chạm ngưỡng { $severity }: { $failing } trên { $reported } đã báo cáo.
+check.threshold_exceeded.help = Hãy sửa các phát hiện đã báo cáo, điều chỉnh --rule hoặc nới --fail-on.
+check.summary.counts = Kết quả kiểm tra — lỗi: { $errors }, cảnh báo: { $warnings }, khuyến nghị: { $advice }, đã ẩn: { $suppressed }.
+check.summary.clean = Không có phát hiện nào.
+check.summary.truncated = Đang hiển thị { $shown } phát hiện; --limit đã bỏ qua { $omitted } phát hiện khác.
+check.rule.malformed = Bộ chọn { $selector } không được viết dạng NAME=SEVERITY.
+check.rule.unknown = Bộ chọn nêu { $name }, vốn không phải quy tắc cũng không phải hạng mục.
+check.rule.severity = Bộ chọn { $name } nêu mức nghiêm trọng { $severity }; cần một trong { $values }.
+check.fail_on.invalid = Ngưỡng thất bại không xác định { $value }; cần một trong { $values }.
+check.source_index = Không thể lập chỉ mục { $path } cho chẩn đoán tại dòng { $line }: { $reason }.
+status.tool.check = Kiểm tra

@@ -33,14 +33,16 @@ Each phase validates a product hypothesis:
   input fuzzing can close workflow drift and malformed-input failures.
 - Phase 9 validates that exact-commit evidence can make release publication
   fail closed without changing Netsuke's public or archive contracts.
+- Phase 10 validates that the manifest linter shipped as a v0.4.0 prototype
+  earns the rule set, severities, and contracts it will have to keep.
 
-Each phase carries one hypothesis, and Phase 6 is the capability track for
-template standard-library work. Phases 3 to 5 predate that separation: each
-mixes capability delivery with verification and consistency work under a single
-hypothesis, and they are not being re-partitioned. New template
-standard-library work belongs in Phase 6, while repository and release
-hardening belong in Phases 8 and 9, rather than being appended to whichever
-phase happens to be open.
+Each phase carries one hypothesis. Phase 6 is the capability track for template
+standard-library work and Phase 10 is the track for manifest linting. Phases 3
+to 5 predate that separation: each mixes capability delivery with verification
+and consistency work under a single hypothesis, and they are not being
+re-partitioned. New template standard-library work belongs in Phase 6 and new
+lint work in Phase 10, while repository and release hardening belong in Phases
+8 and 9, rather than being appended to whichever phase happens to be open.
 
 The roadmap keeps user-facing product grammar separate from implementation
 detail. Public tasks name Netsuke capabilities first. Implementation adapters,
@@ -331,6 +333,9 @@ and agents.
   - [x] Remove `build --emit`; use `generate --output`.
   - [ ] Add `check`, `context`, `skill-path`, `runs`, `profile`, and
     `feedback`.
+    - [x] `check` lints the selected manifest. See
+      [manifest linter design](netsuke-linter-design.md) and
+      [ADR-018](adr-018-manifest-linting-under-netsuke-check.md).
   - [ ] Rename `--file` to `--manifest`, keeping `-f` as an intentional
     shorthand.
   - [ ] Depend on OrthoConfig `7.1.1` to `7.1.3` for shared vocabulary policy
@@ -1998,3 +2003,203 @@ runs prove the failure boundary before any job receives release permissions.
     migration](rfcs/0005-release-hardening.md#compatibility-and-migration).
   - Success: a real release is publishable only from the admitted exact tag
     commit, and its retained evidence reproduces the admission decision.
+
+## 10. Manifest linting
+
+Hypothesis: the v0.4.0 linter is a prototype whose rule set was chosen from the
+evidence available before anyone had used it; if that prototype is exercised
+against real manifests and the findings are fed back into the rules, their
+severities, and their prose, `netsuke check` earns a rule set worth freezing,
+and the contracts it then fixes — identifiers, output schema, and suppression
+grammar — can be relied on rather than merely published.
+
+Kind: capability, in a deliberately provisional state. Value is measured by
+findings that changed a manifest, not by the number of rules registered.
+
+Scope: everything behind `netsuke check`. The
+[manifest linter design](netsuke-linter-design.md) is a living document and
+[ADR-018](adr-018-manifest-linting-under-netsuke-check.md) records the
+decisions it currently rests on; both are expected to change under this phase,
+and a task that supersedes either must say so. The v0.4.0 rule identifiers are
+already treated as permanent, so a rule withdrawn here keeps its name reserved.
+
+Two decisions are explicitly provisional and are settled by steps in this
+phase: which rules deserve their default severity, and whether rule prose stays
+in the registry. Nothing else in the linter's contract should be treated as
+frozen until step 10.4 completes.
+
+### 10.1. Learn what the prototype actually finds
+
+This step answers whether the shipped rules fire on defects that authors then
+fix, or on constructs they consider correct. Its outcome decides which rules
+graduate unchanged, which change default severity, and which are withdrawn, so
+it gates the freeze in step 10.4. Until it completes, a rule's default severity
+is a proposal rather than a contract.
+
+- [ ] 10.1.1. Lint a corpus of real manifests and record every finding.
+  - Cover Netsuke's own examples, the manifests in downstream repositories,
+    and any manifest supplied through issue reports.
+  - Record, per rule, how many findings were acted on, dismissed as correct,
+    or judged unclear.
+  - Success: every shipped rule has a recorded outcome from at least one
+    manifest its authors did not write.
+- [ ] 10.1.2. Classify each rule's evidence and propose a disposition. Requires
+  10.1.1.
+  - Propose one of: keep, change default severity, narrow the detection,
+    convert to opt-in, or withdraw.
+  - A rule whose findings were mostly dismissed is a candidate for opt-in or
+    withdrawal, not for a better message.
+  - Success: every rule carries a written disposition citing the evidence
+    behind it.
+- [ ] 10.1.3. Apply the dispositions and record them in the design document.
+  Requires 10.1.2.
+  - A withdrawn rule keeps its name reserved and its reference section states
+    that it was withdrawn and why.
+  - Success: the registry, the rule reference, and the design document agree,
+    and the contract tests still bind them.
+
+### 10.2. Localize lint output
+
+This step answers how far the linter's text can move into the localization
+catalogues without letting the emitted text and the rule reference drift apart,
+which is the risk [ADR-018](adr-018-manifest-linting-under-netsuke-check.md)
+cited when it deferred the work. It is sequenced after step 10.1 so the prose
+being translated is prose the rules have earned.
+
+Rule identifiers stay untranslated. A rule name, its category name, its
+severity name, and its diagnostic code are values a user types into a
+configuration file or a suppression comment and a machine matches exactly; the
+[translators' guide](translators-guide.md) already covers that class. Only the
+prose is localized.
+
+- [ ] 10.2.1. Move rule summary, rationale, and remediation into the
+  localization catalogues, keyed by the rule's stable name. Requires 10.1.3.
+  - Key each message as `lint.rule.<name>.summary`, `.rationale`, and
+    `.remediation` so the key follows the rule rather than its category.
+  - Keep the registry's English text as the fallback, so a catalogue gap
+    degrades to the source locale rather than to an empty diagnostic.
+  - Success: `netsuke --locale <tag> check` reports a finding's message and
+    remediation in that locale, while its `rule`, `category`, `severity`, and
+    `code` fields are byte-identical across locales.
+- [ ] 10.2.2. Localize the framing text `--explain` prints. Requires 10.2.1.
+  - Cover the catalogue's column headings and the single-rule reference
+    layout.
+  - Keep the machine-readable `--explain --json` catalogue in the source
+    locale, so an editor building a rule picker gets stable text.
+  - Success: `--explain` prose is localized and `--explain --json` is not.
+- [ ] 10.2.3. Bind the rule reference to the source catalogue. Requires 10.2.1.
+  - Extend the reference contract test to compare against the source-locale
+    messages rather than the registry constants.
+  - Success: a rule whose catalogue text changes fails the contract test until
+    its reference section is updated.
+- [ ] 10.2.4. Translate the rule messages for every shipped locale. Requires
+  10.2.1.
+  - Follow the [localization glossary](localization-glossary.md) and
+    [style guide](localization-styleguide.md).
+  - Leave manifest identifiers such as `order_only_deps`, `{{ outs }}`, and
+    `dependency_order` verbatim.
+  - Success: the build-script localization audit passes with no catalogue
+    carrying an untranslated copy of a rule message.
+
+### 10.3. Close the gaps the prototype left open
+
+This step answers whether the analysis can reach the constructs it currently
+cannot see, and whether its diagnostics can point at them. Each task is
+independent, so the step can be delivered incrementally, but all of it precedes
+the freeze in step 10.4.
+
+- [ ] 10.3.1. Give expanded manifest and graph findings exact source spans.
+  - Thread provenance through `foreach` expansion so a generated target's
+    finding points at the declaration that generated it.
+  - Success: a manifest whose targets all come from `foreach` reports no
+    finding without a span.
+- [ ] 10.3.2. Add rules for the constructs v0.2.0 structured commands make
+  expressible. Requires the structured command syntax.
+  - Give the shell-oriented rules a structured remediation target rather than
+    an ordered `command` list.
+  - Success: `bashism`, `background-job`, and `command-chain-not-list` name
+    the structured form in their remediation.
+- [ ] 10.3.3. Extend `undeclared-target-input` using git-aware change detection.
+  Requires the v0.3.0 change-detection work.
+  - Report a recipe that reads a tracked file the graph does not declare, not
+    only one that reads another target's output.
+  - Success: a recipe reading an undeclared tracked source is reported, and a
+    recipe reading a generated file already in the dependency closure is not.
+- [ ] 10.3.4. Add rules for dependency and provider configuration. Requires the
+  v0.3.0 dependency and provider work.
+  - Cover the ambiguous and weakly reproducible provider configurations that
+    the manifest cannot yet express.
+  - Success: every provider configuration the design names as ambiguous has a
+    rule, and each cites the design section that defines it.
+
+### 10.4. Freeze the contracts the linter publishes
+
+This step answers whether the linter's published surfaces are stable enough to
+promise. It is last because every earlier step can still change them, and its
+completion is what turns the prototype into a supported feature.
+
+- [ ] 10.4.1. Snapshot the `netsuke check` JSON documents as v1. Requires 10.1.3
+  and 10.2.1.
+  - Cover the result document, the threshold diagnostic, and the `--explain`
+    catalogue.
+  - Depend on roadmap task 3.15.3, which snapshots every v1 JSON schema.
+  - Success: a field added, renamed, or removed in any of the three documents
+    fails a snapshot test.
+- [ ] 10.4.2. Give lint failures their own exit class. Requires 10.4.1.
+  - Distinguish "findings reached the threshold" from "the manifest could not
+    be analysed", which currently share exit code 1.
+  - Depend on roadmap task 3.15.5, which defines the exit-code taxonomy.
+  - Success: a CI script can tell a lint failure from a broken manifest
+    without parsing output.
+- [ ] 10.4.3. Publish the rule-stability policy. Requires 10.1.3.
+  - State what a rule name guarantees, what may change within a name, and what
+    requires a new one.
+  - Record it in the [users' guide](users-guide.md) beside the suppression
+    grammar, so an author writing a directive can see the promise it rests on.
+  - Success: the policy is published and the rule reference links to it.
+
+### 10.5. Pay down the prototype's structural debt
+
+This step answers whether the linter's internals can carry a growing rule set
+and a production workload, as distinct from whether the rules themselves are
+right. Each task is a refactor of code the prototype already ships, so none
+changes a finding, an identifier, or an output schema; they are separated from
+steps 10.1 to 10.4 because they are reviewable independently and none blocks
+the freeze.
+
+- [x] 10.5.1. Move the `miette` dependency out of the lint core into an adapter.
+  - `src/lint` currently converts its own `Span` and `Severity` into `miette`
+    types, implements `Diagnostic` on its finding projection, and owns a
+    `NamedSource`, so the core cannot be used without the reporting framework.
+  - Keep findings, spans, severities, reports, and policy framework-free, and
+    convert them at the runner boundary where the diagnostics are rendered.
+  - Success: `src/lint` names no `miette` type, and the JSON and human output
+    are byte-identical to their current snapshots.
+- [x] 10.5.2. Add runner-boundary telemetry for `netsuke check`.
+  - The command loads a manifest, builds a graph, indexes the source, and runs
+    every rule without emitting a metric or a span, unlike its sibling
+    commands.
+  - Record a bounded invocation counter and a duration histogram labelled by
+    outcome and a finite error category, following the pattern in
+    `src/runner/help_telemetry.rs`.
+  - Keep labels low-cardinality: no rule names, manifest paths, or finding
+    text.
+  - Success: a check run emits one counter and one histogram observation, and
+    the label vocabulary is enumerated in a test.
+- [ ] 10.5.3. Scan each recipe once when matching graph outputs.
+  - `undeclared-target-input` rebuilds the shell-active mask for every
+    (recipe, output) pair, so its cost grows with targets multiplied by
+    outputs.
+  - Extract each recipe's shell-active words once, then intersect them with an
+    indexed output set.
+  - Success: the rule reports exactly what it does now on the example
+    manifests, and its cost grows with the manifest's size rather than with its
+    square.
+
+**Success criterion:** every shipped rule has a recorded disposition drawn from
+manifests its authors did not write; a finding's prose is localized while its
+identifiers are not; findings from expanded manifests carry source spans; the
+lint core names no reporting framework and the command reports its own
+telemetry; and the JSON documents, exit classes, and rule-name guarantees are
+snapshotted, published, and stable enough that a downstream consumer can depend
+on them.

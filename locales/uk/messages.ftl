@@ -426,3 +426,22 @@ example.errors_found = { $count ->
     [many] Знайдено { $count } помилок.
    *[other] Знайдено { $count } помилки.
 }
+
+# Перевірка маніфесту (`netsuke check`).
+cli.subcommand.check.about = Перевірити маніфест без створення та запуску збірки.
+cli.subcommand.check.long_about = Проаналізувати обраний маніфест на конструкції, які розбираються, але, ймовірно, є хибними, небезпечними, непереносними або шкідливими для кешування.
+cli.subcommand.check.flag.rule.help = Задати важливість правила або категорії у вигляді NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Важливість, за якої знахідки спричиняють невдачу команди.
+cli.subcommand.check.flag.limit.help = Найбільша кількість повідомлених знахідок; 0 повідомляє про всі.
+cli.subcommand.check.flag.explain.help = Вивести довідник правил замість аналізу маніфесту.
+check.threshold_exceeded = Знахідки досягли порога { $severity }: { $failing } із { $reported } повідомлених.
+check.threshold_exceeded.help = Виправте повідомлені знахідки, змініть --rule або послабте --fail-on.
+check.summary.counts = Результати перевірки — помилки: { $errors }, попередження: { $warnings }, поради: { $advice }, придушено: { $suppressed }.
+check.summary.clean = Знахідок немає.
+check.summary.truncated = Показано знахідок: { $shown }; --limit пропустив ще { $omitted }.
+check.rule.malformed = Селектор { $selector } записано не у вигляді NAME=SEVERITY.
+check.rule.unknown = Селектор вказує { $name }, що не є ні правилом, ні категорією.
+check.rule.severity = Селектор { $name } вказує важливість { $severity }; очікувалося одне з { $values }.
+check.fail_on.invalid = Невідомий поріг невдачі { $value }; очікувалося одне з { $values }.
+check.source_index = Не вдалося проіндексувати { $path } для діагностики в рядку { $line }: { $reason }.
+status.tool.check = Перевірка

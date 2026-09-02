@@ -424,3 +424,22 @@ example.errors_found = { $count ->
     [many] נמצאו { $count } שגיאות.
    *[other] נמצאו { $count } שגיאות.
 }
+
+# בדיקת קובץ המניפסט (`netsuke check`).
+cli.subcommand.check.about = בדוק את המניפסט בלי לייצר בנייה ובלי להריץ אותה.
+cli.subcommand.check.long_about = סרוק את המניפסט הנבחר אחר מבנים שאמנם מנותחים תחבירית אך קרוב לוודאי שגויים, לא בטוחים, לא ניידים או פוגעים במטמון.
+cli.subcommand.check.flag.rule.help = קבע את חומרת הכלל או הקטגוריה, בכתיב NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = החומרה שבה ממצאים מכשילים את הפקודה.
+cli.subcommand.check.flag.limit.help = מספר הממצאים המרבי לדיווח; 0 מדווח על כולם.
+cli.subcommand.check.flag.explain.help = הדפס את מדריך הכללים במקום לבדוק מניפסט.
+check.threshold_exceeded = הממצאים הגיעו לסף { $severity }: { $failing } מתוך { $reported } שדווחו.
+check.threshold_exceeded.help = תקן את הממצאים שדווחו, התאם את ‎--rule או הרפה את ‎--fail-on.
+check.summary.counts = תוצאות הבדיקה — שגיאות: { $errors }, אזהרות: { $warnings }, המלצות: { $advice }, הושתקו: { $suppressed }.
+check.summary.clean = אין ממצאים.
+check.summary.truncated = מוצגים { $shown } ממצאים; ‎--limit השמיט { $omitted } נוספים.
+check.rule.malformed = הבורר { $selector } אינו כתוב בכתיב NAME=SEVERITY.
+check.rule.unknown = הבורר מציין את { $name }, שאינו כלל ואינו קטגוריה.
+check.rule.severity = הבורר { $name } מציין את החומרה { $severity }; נדרש אחד מתוך { $values }.
+check.fail_on.invalid = סף כישלון לא מוכר { $value }; נדרש אחד מתוך { $values }.
+check.source_index = לא ניתן לאנדקס את { $path } לצורך אבחון בשורה { $line }: { $reason }.
+status.tool.check = בדיקה

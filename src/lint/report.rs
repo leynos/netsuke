@@ -1,0 +1,150 @@
+//! Bounding and counting for lint findings.
+//!
+//! Output adapters project the resulting neutral findings into their format.
+
+use super::engine::Outcome;
+use super::finding::Finding;
+use super::severity::{FailOn, Severity};
+
+/// How a report is bounded and judged.
+#[derive(Debug, Clone, Copy)]
+pub struct Bounds {
+    /// Maximum findings to report; zero reports every finding.
+    pub limit: usize,
+    /// The severity at which findings fail the command.
+    pub threshold: FailOn,
+}
+
+/// Findings selected for one report, together with what was left out.
+pub struct Report {
+    /// Findings within the reporting limit, in output order.
+    reported: Vec<Finding>,
+    /// Findings at each severity across the whole run, before bounding.
+    counts: SeverityCounts,
+    /// Findings reaching the threshold across the whole run, before bounding.
+    failing: usize,
+    /// Findings the limit excluded.
+    truncated: usize,
+    /// Findings a directive silenced.
+    suppressed: usize,
+    /// The threshold that decides whether the command failed.
+    threshold: FailOn,
+}
+
+/// Findings at each severity across one run.
+#[derive(Debug, Clone, Copy, Default)]
+struct SeverityCounts {
+    /// Findings reported at error severity.
+    error: usize,
+    /// Findings reported at warning severity.
+    warning: usize,
+    /// Findings reported at advice severity.
+    advice: usize,
+}
+
+impl SeverityCounts {
+    /// Tally `findings` by severity.
+    fn tally(findings: &[Finding]) -> Self {
+        let mut counts = Self::default();
+        for finding in findings {
+            match finding.severity {
+                Severity::Error => counts.error = counts.error.saturating_add(1),
+                Severity::Warning => counts.warning = counts.warning.saturating_add(1),
+                Severity::Advice => counts.advice = counts.advice.saturating_add(1),
+            }
+        }
+        counts
+    }
+
+    /// Report the tally for one severity.
+    const fn at(self, severity: Severity) -> usize {
+        match severity {
+            Severity::Error => self.error,
+            Severity::Warning => self.warning,
+            Severity::Advice => self.advice,
+        }
+    }
+}
+
+impl Report {
+    /// Build a report from an outcome, bounding its output to `limit`
+    /// findings.
+    ///
+    /// A `limit` of zero reports every finding. The verdict and the severity
+    /// tallies come from the whole outcome before bounding: findings are
+    /// ordered by source position rather than severity, so truncating first
+    /// would let an early advisory hide a later error and report success for a
+    /// run that found one.
+    #[must_use]
+    pub fn new(outcome: Outcome, bounds: Bounds) -> Self {
+        let counts = SeverityCounts::tally(&outcome.findings);
+        let failing = outcome
+            .findings
+            .iter()
+            .filter(|finding| bounds.threshold.is_reached_by(finding.severity))
+            .count();
+        let total = outcome.findings.len();
+        let mut reported = outcome.findings;
+        if bounds.limit > 0 && total > bounds.limit {
+            reported.truncate(bounds.limit);
+        }
+        let truncated = total.saturating_sub(reported.len());
+        Self {
+            reported,
+            counts,
+            failing,
+            truncated,
+            suppressed: outcome.suppressed,
+            threshold: bounds.threshold,
+        }
+    }
+
+    /// Borrow the reported findings.
+    #[must_use]
+    pub fn findings(&self) -> &[Finding] {
+        &self.reported
+    }
+
+    /// Report how many findings the limit excluded.
+    #[must_use]
+    pub const fn truncated(&self) -> usize {
+        self.truncated
+    }
+
+    /// Report how many findings a directive silenced.
+    #[must_use]
+    pub const fn suppressed(&self) -> usize {
+        self.suppressed
+    }
+
+    /// Count the findings at `severity` across the whole run.
+    ///
+    /// This counts before `--limit` applies, so a summary describes what the
+    /// run found rather than what fitted in the output.
+    #[must_use]
+    pub const fn count_at(&self, severity: Severity) -> usize {
+        self.counts.at(severity)
+    }
+
+    /// Count the findings reaching the failure threshold across the whole run.
+    #[must_use]
+    pub const fn failing_count(&self) -> usize {
+        self.failing
+    }
+
+    /// Report whether the command fails because of these findings.
+    #[must_use]
+    pub const fn is_failure(&self) -> bool {
+        self.failing_count() > 0
+    }
+
+    /// Report the threshold this report was built against.
+    #[must_use]
+    pub const fn threshold(&self) -> FailOn {
+        self.threshold
+    }
+}
+
+#[cfg(test)]
+#[path = "report_tests.rs"]
+mod tests;

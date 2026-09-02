@@ -1579,6 +1579,7 @@ dependencies = [
  "rstest-bdd",
  "rstest-bdd-macros",
  "rustix",
+ "saphyr-parser",
  "semver",
  "serde",
  "serde-saphyr",

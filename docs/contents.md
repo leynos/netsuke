@@ -15,7 +15,7 @@ operator, user, and contributor references are easier to find.
   execution design document.
 - [netsuke-cli-design-document.md](netsuke-cli-design-document.md): Command-line
   interface design and user-experience requirements.
-- [git-change-detection-helpers-design.md](git-change-detection-helpers-design.md):
+- [Git change-detection helpers](git-change-detection-helpers-design.md):
   Git change-detection and glob-matching contracts and verification guidance
   for maintainers, reviewers, and manifest authors.
 - [UX and semantic design](netsuke-test-framework-ux-design.md): Test
@@ -23,18 +23,24 @@ operator, user, and contributor references are easier to find.
   framework.
 - [Technical design](netsuke-test-framework-technical-design.md):
   Implementation architecture for the Netsukefile testing framework.
+- [netsuke-linter-design.md](netsuke-linter-design.md): Manifest linter design,
+  covering the rule model, compiler-stage hooks, suppression grammar, policy
+  configuration, and output schemas behind `netsuke check`.
+- [netsuke-linter-rules.md](netsuke-linter-rules.md): Reference for every lint
+  rule `netsuke check` ships, with its category, default severity, rationale,
+  and remediation.
 - [roadmap.md](roadmap.md): Phased implementation plan and tracked delivery
   work.
-- [archive/roadmap-completed-foundations.md](archive/roadmap-completed-foundations.md):
+- [Completed roadmap foundations](archive/roadmap-completed-foundations.md):
   Archived completed roadmap foundations with relevance assessments and
   traceability notes.
-- [formal-verification-methods-in-netsuke.md](formal-verification-methods-in-netsuke.md):
+- [Formal verification methods](formal-verification-methods-in-netsuke.md):
   Recommended scope and delivery order for Kani, Proptest, and optional Verus
   checks.
 
 ## Requests for comments
 
-- [rfcs/0001-structured-command-blocks.md](rfcs/0001-structured-command-blocks.md):
+- [RFC 0001: Structured commands](rfcs/0001-structured-command-blocks.md):
   Proposed structured command blocks, shell-free argv templates, typed Jinja
   interpolation, stream routing, and pipeline semantics.
 - [rfcs/0009-structured-command-working-directories.md][rfc-0009]:
@@ -56,11 +62,11 @@ operator, user, and contributor references are easier to find.
 - [RFC 0005: Harden release integrity and
   admission](rfcs/0005-release-hardening.md): Proposed release-profile
   invariants, secret and dependency policy, and exact-commit release admission.
-- [rfcs/0006-ansible-inspired-template-standard-library.md](rfcs/0006-ansible-inspired-template-standard-library.md):
-  Survey of the ansible-core Jinja standard library, with an explicit
-  disposition for every candidate helper and Netsuke-native contracts for the
-  accepted set.
-- [rfcs/0007-netsukefile-testing-framework.md](rfcs/0007-netsukefile-testing-framework.md):
+- [RFC 0006: Jinja standard library](
+  rfcs/0006-ansible-inspired-template-standard-library.md): Survey of the
+  ansible-core Jinja standard library, with an explicit disposition for every
+  candidate helper and Netsuke-native contracts for the accepted set.
+- [RFC 0007: Netsukefile testing](rfcs/0007-netsukefile-testing-framework.md):
   Proposed Netsukefile testing framework: the `netsuke test` command, the YAML
   test dialect, and its mocking model.
 - [RFC 0008: Repository-wide code-health contracts and
@@ -75,24 +81,24 @@ operator, user, and contributor references are easier to find.
 
 ## Decision records
 
-- [adr-001-replace-serde-yml-with-serde-saphyr.md](adr-001-replace-serde-yml-with-serde-saphyr.md):
+- [ADR-001: YAML parser](adr-001-replace-serde-yml-with-serde-saphyr.md):
   YAML parser migration decision record.
-- [adr-002-replace-cucumber-with-rstest-bdd.md](adr-002-replace-cucumber-with-rstest-bdd.md):
+- [ADR-002: Behavioural testing](adr-002-replace-cucumber-with-rstest-bdd.md):
   Behavioural-testing framework migration decision record.
-- [adr-003-agent-consistent-human-first-cli.md](adr-003-agent-consistent-human-first-cli.md):
+- [ADR-003: CLI doctrine](adr-003-agent-consistent-human-first-cli.md):
   Human-first, agent-consistent CLI doctrine decision record.
-- [adr-003-actions-foreach-when-scope.md](adr-003-actions-foreach-when-scope.md):
+- [ADR-003: `foreach` scope](adr-003-actions-foreach-when-scope.md):
   Manifest control-key scoping decision record.
 - [ADR-004: Kani IR harnesses](adr-004-bound-kani-ir-harnesses-to-small-n.md):
   Kani IR harness bound and Proptest hand-off decision record.
-- [adr-004-graph-subcommand-in-process-rendering.md](adr-004-graph-subcommand-in-process-rendering.md):
+- [ADR-004: Graph rendering](adr-004-graph-subcommand-in-process-rendering.md):
   Graph rendering architecture decision record.
 - [ADR-004](adr-004-explicit-config-selection-outside-orthoconfig.md):
   Explicit configuration selector ownership decision record.
 - [adr-005-typed-which-resolve-error.md](adr-005-typed-which-resolve-error.md):
   Typed executable resolver error decision record for `which` and
   `command_available`.
-- [adr-006-adopt-polonius-nightly-toolchain.md](adr-006-adopt-polonius-nightly-toolchain.md):
+- [ADR-006: Polonius toolchain](adr-006-adopt-polonius-nightly-toolchain.md):
   Pinned-nightly Polonius borrow-checker adoption decision record.
 - [adr-007-publish-as-netsuke-build.md](adr-007-publish-as-netsuke-build.md):
   crates.io package rename decision record, and the package-versus-target
@@ -100,15 +106,17 @@ operator, user, and contributor references are easier to find.
 - [adr-008-environment-seam-taxonomy.md](adr-008-environment-seam-taxonomy.md):
   Environment seam taxonomy decision record: three sanctioned shapes for
   injecting environment-dependent input instead of reading the process directly.
-- [adr-009-bounded-redacted-manifest-telemetry.md](adr-009-bounded-redacted-manifest-telemetry.md):
+- [ADR-009: Manifest telemetry](adr-009-bounded-redacted-manifest-telemetry.md):
   Manifest telemetry decision record, separating observability from evaluation
   and bounding and redacting the emitted metrics and spans.
-- [adr-010-scope-glob-capability-to-literal-prefix.md](adr-010-scope-glob-capability-to-literal-prefix.md):
-  Glob capability-scoping decision record, opening the metadata capability at a
-  pattern's literal directory prefix instead of an ambient root.
-- [adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md](adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md):
-  Serial `deps` ordering decision record, covering staged Ninja dyndep bundles,
-  their scoped execution guarantee, and generated-state ownership.
+- [ADR-010: Glob capability](
+  adr-010-scope-glob-capability-to-literal-prefix.md): Glob capability-scoping
+  decision record, opening the metadata capability at a pattern's literal
+  directory prefix instead of an ambient root.
+- [ADR-011: Serial dependency ordering](
+  adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md): Serial `deps`
+  ordering decision record, covering staged Ninja dyndep bundles, their scoped
+  execution guarantee, and generated-state ownership.
 - [ADR-012](adr-012-bound-dyndep-sidecar-retention.md):
   Deterministic retention, lease, and failure-boundary policy for generated
   dyndep sidecars.
@@ -132,6 +140,10 @@ operator, user, and contributor references are easier to find.
 - [ADR-017](adr-017-require-utf8-ninja-invocation-paths.md):
   UTF-8 Ninja invocation-path boundary decision record, with early diagnostics
   for unsupported build-file and working-directory encodings.
+- [ADR-018](adr-018-manifest-linting-under-netsuke-check.md):
+  Manifest-linting decision record, placing the linter under `netsuke check`,
+  treating findings as data with a threshold-selected success or failure
+  document, and fixing the rule-identifier and rule-text ownership rules.
 
 ## Proposals
 
@@ -147,6 +159,8 @@ operator, user, and contributor references are easier to find.
   additions, plus the stability caveat that covers them.
 - [v0-1-1-migration-guide.md](v0-1-1-migration-guide.md): Migration note for
   replacing no-op aggregate recipes with dependency-only actions or targets.
+- [v0-2-0-migration-guide.md](v0-2-0-migration-guide.md): Migration signpost
+  for the `netsuke check` linter and its rule, severity, and suppression policy.
 - [users-guide.md](users-guide.md): End-user reference for authoring and
   running Netsuke manifests, including executable discovery and
   `command_available` branch selection.
@@ -154,7 +168,7 @@ operator, user, and contributor references are easier to find.
   template standard-library reference with executable YAML and Jinja examples.
 - [ortho-config-users-guide.md](ortho-config-users-guide.md): Configuration
   system guide and precedence reference.
-- [ortho-config-v0-9-0-migration-guide.md](ortho-config-v0-9-0-migration-guide.md):
+- [v0.9.0 OrthoConfig migration](ortho-config-v0-9-0-migration-guide.md):
   Migration guidance for the OrthoConfig v0.9.0 release.
 - [translators-guide.md](translators-guide.md): Localization workflow,
   translation guidance, the locale registry that owns the supported-tag list,
@@ -182,10 +196,11 @@ operator, user, and contributor references are easier to find.
 
 ## Testing and quality references
 
-- [behavioural-testing-in-rust-with-cucumber.md](behavioural-testing-in-rust-with-cucumber.md):
+- [Historical Cucumber testing](behavioural-testing-in-rust-with-cucumber.md):
   Historical behavioural-testing background.
-- [reliable-testing-in-rust-via-dependency-injection.md](reliable-testing-in-rust-via-dependency-injection.md):
-  Dependency-injection testing patterns used by the project.
+- [Dependency-injection testing](
+  reliable-testing-in-rust-via-dependency-injection.md): Dependency-injection
+  testing patterns used by the project.
 - [rstest-bdd-users-guide.md](rstest-bdd-users-guide.md): Current behavioural
   testing framework reference.
 - [rstest-bdd-v0-5-0-migration-guide.md](rstest-bdd-v0-5-0-migration-guide.md):
@@ -196,7 +211,7 @@ operator, user, and contributor references are easier to find.
   `rstest` fixture patterns used in the repository.
 - [whitaker-users-guide.md](whitaker-users-guide.md): Installing and
   configuring the Whitaker Dylint lint suite enforced by `make lint`.
-- [snapshot-testing-in-netsuke-using-insta.md](snapshot-testing-in-netsuke-using-insta.md):
+- [Snapshot testing](snapshot-testing-in-netsuke-using-insta.md):
   Snapshot-testing strategy and examples.
 - [test-isolation-with-ninja-env.md](test-isolation-with-ninja-env.md): Test
   isolation strategy for Ninja process interactions.

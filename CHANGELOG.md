@@ -1,7 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Add `netsuke check`, a semantic linter for Netsukefiles. It analyses the
+  compiler's own artefacts — the authored source with its spans, the expanded
+  manifest, and the lowered build graph — rather than the YAML text, so a rule
+  can tell an order-only directory dependency from a content dependency and
+  recognize that a literal path in a recipe is another target's output.
+  Twenty-four rules ship across nine categories, covering stale escaping
+  workarounds, non-portable shell constructs, dependency shapes that defeat
+  change detection, unused declarations, and the lint directives themselves.
+  Findings are the command's result rather than its failure mode: `--fail-on`
+  sets the severity at which they fail the command, `--rule NAME=SEVERITY`
+  configures one rule or a whole category, and `--explain` prints the rule
+  reference. Suppression is a comment that names the rules it silences and
+  states a reason; there is no blanket disable
+  ([#592](https://github.com/leynos/netsuke/issues/592))
+
 ## [0.1.0-beta2] - 2026-08-19
 
+<!-- markdownlint-disable-next-line MD024 -->
 ### Added
 
 - Add [docs/v0-1-0-migration-guide.md](docs/v0-1-0-migration-guide.md)
