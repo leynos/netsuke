@@ -437,4 +437,4 @@ check.rule.unknown = Vælgeren nævner { $name }, som hverken er en regel eller 
 check.rule.severity = Vælgeren { $name } nævner alvorsgraden { $severity }; forventede en af { $values }.
 check.fail_on.invalid = Ukendt fejltærskel { $value }; forventede en af { $values }.
 check.source_index = Kunne ikke indeksere { $path } til diagnostik på linje { $line }: { $reason }.
-status.tool.check = Kontrollér
+status.tool.check = Kontrol

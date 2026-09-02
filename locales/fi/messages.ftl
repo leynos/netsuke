@@ -439,4 +439,4 @@ check.rule.unknown = Valitsin nimeää kohteen { $name }, joka ei ole sääntö 
 check.rule.severity = Valitsin { $name } nimeää vakavuuden { $severity }; odotettiin jotakin näistä: { $values }.
 check.fail_on.invalid = Tuntematon virhekynnys { $value }; odotettiin jotakin näistä: { $values }.
 check.source_index = Kohdetta { $path } ei voitu indeksoida diagnostiikkaa varten rivillä { $line }: { $reason }.
-status.tool.check = Tarkista
+status.tool.check = Tarkistus

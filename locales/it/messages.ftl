@@ -436,6 +436,6 @@ check.summary.truncated = Vengono mostrati { $shown } rilievi; --limit ne ha ome
 check.rule.malformed = Il selettore { $selector } non è scritto come NAME=SEVERITY.
 check.rule.unknown = Il selettore indica { $name }, che non è né una regola né una categoria.
 check.rule.severity = Il selettore { $name } indica la severità { $severity }; attesa una fra { $values }.
-check.fail_on.invalid = Soglia di errore sconosciuta { $value }; attesa una fra { $values }.
+check.fail_on.invalid = Soglia di fallimento sconosciuta { $value }; attesa una fra { $values }.
 check.source_index = Impossibile indicizzare { $path } per le diagnostiche alla riga { $line }: { $reason }.
 status.tool.check = Verifica

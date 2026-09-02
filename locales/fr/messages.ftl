@@ -439,4 +439,4 @@ check.rule.unknown = Le sélecteur nomme { $name }, qui n'est ni une règle ni u
 check.rule.severity = Le sélecteur { $name } nomme la sévérité { $severity } ; attendu l'une de { $values }.
 check.fail_on.invalid = Seuil d'échec inconnu { $value } ; attendu l'un de { $values }.
 check.source_index = Impossible d'indexer { $path } pour les diagnostics à la ligne { $line } : { $reason }.
-status.tool.check = Vérifier
+status.tool.check = Vérification
