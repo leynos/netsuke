@@ -107,7 +107,7 @@ pub fn register_with_config(
     register_read_only_helpers(env, &config);
     time::register_functions(env);
     let impure = state.impure_flag();
-    let (network_config, command_config) = config.into_components();
+    let (network_config, _file_config, command_config) = config.into_components();
     network::register_functions(env, Arc::clone(&impure), network_config);
     command::register(env, impure, command_config);
     Ok(state)
@@ -143,7 +143,7 @@ pub(crate) fn register_manifest_query(env: &mut Environment<'_>) -> StdlibState 
 /// Register helpers that do not execute a command or make a network request.
 fn register_read_only_helpers(env: &mut Environment<'_>, config: &StdlibConfig) {
     register_file_tests(env);
-    path::register_filters(env, config.home_directory().clone());
+    path::register_filters(env, config.home_directory().clone(), config.file_max_read_bytes());
     collections::register_filters(env);
     let which_cache_capacity = config.which_cache_capacity();
     let which_skip_dirs = WorkspaceSkipList::from_names(config.workspace_skip_dirs());

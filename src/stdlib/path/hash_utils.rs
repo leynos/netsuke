@@ -3,8 +3,6 @@
 //! Streams SHA-256 and SHA-512 digests via cap-std handles,
 //! enables SHA-1 and MD5 behind the `legacy-digests` feature,
 //! and always returns lowercase hexadecimal output.
-use std::io::Read;
-
 use camino::Utf8Path;
 use digest::Digest;
 #[cfg(feature = "legacy-digests")]
@@ -14,10 +12,9 @@ use minijinja::{Error, ErrorKind};
 use sha1::Sha1;
 use sha2::{Sha256, Sha512};
 
-use super::fs_utils;
+use super::fs_utils::{self, FileReadLimits};
 use crate::hex::to_lower_hex;
 use crate::localization::{self, keys};
-use crate::stdlib::io_helpers::io_to_error;
 
 /// Hash the file at `path` with the named algorithm, returning lowercase hex.
 ///
@@ -25,15 +22,19 @@ use crate::stdlib::io_helpers::io_to_error;
 ///
 /// Returns an error when the algorithm is unsupported, is gated behind the
 /// `legacy-digests` feature when unavailable, or the file cannot be read.
-pub(super) fn compute_hash(path: &Utf8Path, alg: &str) -> Result<String, Error> {
+pub(super) fn compute_hash(
+    path: &Utf8Path,
+    alg: &str,
+    limits: &FileReadLimits,
+) -> Result<String, Error> {
     if alg.eq_ignore_ascii_case("sha256") {
-        hash_stream::<Sha256>(path)
+        hash_stream::<Sha256>(path, limits)
     } else if alg.eq_ignore_ascii_case("sha512") {
-        hash_stream::<Sha512>(path)
+        hash_stream::<Sha512>(path, limits)
     } else if alg.eq_ignore_ascii_case("sha1") {
         #[cfg(feature = "legacy-digests")]
         {
-            hash_stream::<Sha1>(path)
+            hash_stream::<Sha1>(path, limits)
         }
         #[cfg(not(feature = "legacy-digests"))]
         {
@@ -48,7 +49,7 @@ pub(super) fn compute_hash(path: &Utf8Path, alg: &str) -> Result<String, Error> 
     } else if alg.eq_ignore_ascii_case("md5") {
         #[cfg(feature = "legacy-digests")]
         {
-            hash_stream::<Md5>(path)
+            hash_stream::<Md5>(path, limits)
         }
         #[cfg(not(feature = "legacy-digests"))]
         {
@@ -76,8 +77,13 @@ pub(super) fn compute_hash(path: &Utf8Path, alg: &str) -> Result<String, Error> 
 /// Returns an error when `alg` is unsupported, when a legacy algorithm is
 /// unavailable without the `legacy-digests` feature, or when the file cannot
 /// be opened or read.
-pub(super) fn compute_digest(path: &Utf8Path, len: usize, alg: &str) -> Result<String, Error> {
-    let mut hash = compute_hash(path, alg)?;
+pub(super) fn compute_digest(
+    path: &Utf8Path,
+    len: usize,
+    alg: &str,
+    limits: &FileReadLimits,
+) -> Result<String, Error> {
+    let mut hash = compute_hash(path, alg, limits)?;
     if len < hash.len() {
         hash.truncate(len);
     }
@@ -89,37 +95,20 @@ pub(super) fn compute_digest(path: &Utf8Path, len: usize, alg: &str) -> Result<S
 /// # Errors
 ///
 /// Returns a template error when the file cannot be opened or a chunk cannot
-/// be read.
-fn hash_stream<H>(path: &Utf8Path) -> Result<String, Error>
+/// be read, or when the file exceeds the configured byte budget.
+fn hash_stream<H>(path: &Utf8Path, limits: &FileReadLimits) -> Result<String, Error>
 where
     H: Digest,
 {
-    let mut file = fs_utils::open_file(path)?;
+    let mut file = fs_utils::open_file_checked(path, limits)?;
     let mut hasher = H::new();
     let mut buffer = [0_u8; 8192];
+    let mut total: u64 = 0;
     loop {
-        let read = file.read(&mut buffer).map_err(|err| {
-            io_to_error(
-                path,
-                &localization::message(keys::STDLIB_PATH_ACTION_READ),
-                err,
-            )
-        })?;
-        if read == 0 {
+        let Some(chunk) =
+            fs_utils::read_bounded_chunk(&mut file, &mut buffer, &mut total, limits.max_bytes, path)?
+        else {
             break;
-        }
-        // A well-behaved Read never reports more bytes than the buffer holds;
-        // clamp to the full buffer rather than panicking on a misbehaving
-        // implementation, but surface the anomaly for diagnosis.
-        let chunk = if let Some(chunk) = buffer.get(..read) {
-            chunk
-        } else {
-            tracing::debug!(
-                read,
-                capacity = buffer.len(),
-                "Read reported more bytes than the buffer holds; clamping to full buffer"
-            );
-            &buffer
         };
         hasher.update(chunk);
     }

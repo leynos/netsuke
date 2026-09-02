@@ -6,8 +6,8 @@ mod which;
 use super::config_types::HomeDirectory;
 pub use super::config_types::{
     DEFAULT_COMMAND_MAX_OUTPUT_BYTES, DEFAULT_COMMAND_MAX_STREAM_BYTES, DEFAULT_COMMAND_TEMP_DIR,
-    DEFAULT_FETCH_CACHE_DIR, DEFAULT_FETCH_MAX_RESPONSE_BYTES, DEFAULT_WHICH_CACHE_CAPACITY,
-    NetworkConfig,
+    DEFAULT_FETCH_CACHE_DIR, DEFAULT_FETCH_MAX_RESPONSE_BYTES, DEFAULT_FILE_MAX_READ_BYTES,
+    DEFAULT_WHICH_CACHE_CAPACITY, FileConfig, NetworkConfig,
 };
 use super::{command, network::NetworkPolicy, which::WORKSPACE_SKIP_DIRS};
 use crate::localization::{self, keys};
@@ -29,6 +29,8 @@ pub struct StdlibConfig {
     network_policy: NetworkPolicy,
     /// Maximum size (in bytes) of HTTP responses fetched by network helpers.
     fetch_max_response_bytes: u64,
+    /// Maximum size (in bytes) read by the file-reading path filters.
+    file_max_read_bytes: u64,
     /// Maximum captured stdout size (in bytes) for command helpers.
     command_max_output_bytes: u64,
     /// Maximum streamed stdout size (in bytes) for command helpers.
@@ -79,6 +81,7 @@ impl StdlibConfig {
             fetch_cache_relative: default,
             network_policy: NetworkPolicy::default(),
             fetch_max_response_bytes: DEFAULT_FETCH_MAX_RESPONSE_BYTES,
+            file_max_read_bytes: DEFAULT_FILE_MAX_READ_BYTES,
             command_max_output_bytes: DEFAULT_COMMAND_MAX_OUTPUT_BYTES,
             command_max_stream_bytes: DEFAULT_COMMAND_MAX_STREAM_BYTES,
             which_cache_capacity,
@@ -162,6 +165,31 @@ impl StdlibConfig {
         );
         self.command_max_output_bytes = max_bytes;
         Ok(self)
+    }
+
+    /// Override the maximum size in bytes the file-reading filters may read.
+    ///
+    /// This budget bounds the `contents`, `linecount`, `hash`, and `digest`
+    /// filters so a manifest cannot exhaust memory or CPU through an
+    /// unexpectedly large input. Raise it for builds that legitimately hash
+    /// large artefacts.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when `max_bytes` is zero.
+    pub fn with_file_max_read_bytes(mut self, max_bytes: u64) -> anyhow::Result<Self> {
+        ensure!(
+            max_bytes > 0,
+            "{}",
+            localization::message(keys::STDLIB_FILE_READ_LIMIT_POSITIVE)
+        );
+        self.file_max_read_bytes = max_bytes;
+        Ok(self)
+    }
+
+    /// The configured maximum size in bytes for file-reading filters.
+    pub(crate) const fn file_max_read_bytes(&self) -> u64 {
+        self.file_max_read_bytes
     }
 
     /// Override the maximum streamed stdout size for stdlib command helpers.
@@ -253,13 +281,14 @@ impl StdlibConfig {
     }
 
     /// Consume the configuration and expose component modules with owned state.
-    pub(crate) fn into_components(self) -> (NetworkConfig, command::CommandConfig) {
+    pub(crate) fn into_components(self) -> (NetworkConfig, FileConfig, command::CommandConfig) {
         let Self {
             workspace_root,
             workspace_root_path,
             fetch_cache_relative,
             network_policy,
             fetch_max_response_bytes,
+            file_max_read_bytes,
             command_max_output_bytes,
             command_max_stream_bytes,
             command_path_override,
@@ -267,6 +296,9 @@ impl StdlibConfig {
         } = self;
 
         let command_root = Arc::clone(&workspace_root);
+        let files = FileConfig {
+            max_read_bytes: file_max_read_bytes,
+        };
         let network = NetworkConfig {
             cache_root: workspace_root,
             cache_relative: fetch_cache_relative,
@@ -282,7 +314,7 @@ impl StdlibConfig {
             command_path_override,
         });
 
-        (network, command)
+        (network, files, command)
     }
 
     /// Validate that a cache path is a non-empty relative path which stays
