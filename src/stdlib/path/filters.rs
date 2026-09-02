@@ -4,11 +4,15 @@
 //! `relative_to`, `realpath`, `expanduser`, `size`, `contents`,
 //! `linecount`, `hash`, and `digest`.
 use camino::Utf8Path;
-use minijinja::{Environment, Error, ErrorKind};
+use minijinja::{
+    Environment, Error, ErrorKind,
+    value::Kwargs,
+};
 
 use super::{fs_utils, hash_utils, path_utils};
 use crate::localization::{self, keys};
 use crate::stdlib::config_types::HomeDirectory;
+use crate::stdlib::path::fs_utils::FileReadLimits;
 
 /// Register the `expanduser` filter.
 ///
@@ -66,7 +70,12 @@ pub(crate) fn register_query_filters(env: &mut Environment<'_>) {
 }
 
 /// Register the file-inspecting path filters and the `expanduser` filter.
-pub(crate) fn register_filters(env: &mut Environment<'_>, home_directory: HomeDirectory) {
+pub(crate) fn register_filters(
+    env: &mut Environment<'_>,
+    home_directory: HomeDirectory,
+    file_max_read_bytes: u64,
+) {
+    let file_max_read_bytes = file_max_read_bytes;
     register_lexical_filters(env);
     env.add_filter("realpath", |raw: String| -> Result<String, Error> {
         path_utils::canonicalize_any(Utf8Path::new(&raw)).map(camino::Utf8PathBuf::into_string)
@@ -78,10 +87,14 @@ pub(crate) fn register_filters(env: &mut Environment<'_>, home_directory: HomeDi
     // Templates using `contents` read from the ambient file system; enable the stdlib only for trusted templates.
     env.add_filter(
         "contents",
-        |raw: String, encoding: Option<String>| -> Result<String, Error> {
+        move |raw: String, encoding: Option<String>, kwargs: Kwargs| -> Result<String, Error> {
             let chosen_encoding = encoding.unwrap_or_else(|| "utf-8".to_owned());
             match chosen_encoding.to_ascii_lowercase().as_str() {
-                "utf-8" | "utf8" => fs_utils::read_utf8(Utf8Path::new(&raw)),
+                "utf-8" | "utf8" => {
+                    let limits = path_call_limits(&kwargs, file_max_read_bytes)?;
+                    kwargs.assert_all_used()?;
+                    fs_utils::read_utf8(Utf8Path::new(&raw), &limits)
+                }
                 other => Err(Error::new(
                     ErrorKind::InvalidOperation,
                     localization::message(keys::STDLIB_PATH_UNSUPPORTED_ENCODING)
@@ -91,22 +104,52 @@ pub(crate) fn register_filters(env: &mut Environment<'_>, home_directory: HomeDi
             }
         },
     );
-    env.add_filter("linecount", |raw: String| -> Result<usize, Error> {
-        fs_utils::linecount(Utf8Path::new(&raw))
-    });
+    env.add_filter(
+        "linecount",
+        move |raw: String, kwargs: Kwargs| -> Result<usize, Error> {
+            let limits = path_call_limits(&kwargs, file_max_read_bytes)?;
+            kwargs.assert_all_used()?;
+            fs_utils::linecount(Utf8Path::new(&raw), &limits)
+        },
+    );
     env.add_filter(
         "hash",
-        |raw: String, alg: Option<String>| -> Result<String, Error> {
+        move |raw: String, alg: Option<String>, kwargs: Kwargs| -> Result<String, Error> {
             let algorithm = alg.unwrap_or_else(|| "sha256".to_owned());
-            hash_utils::compute_hash(Utf8Path::new(&raw), &algorithm)
+            let limits = path_call_limits(&kwargs, file_max_read_bytes)?;
+            kwargs.assert_all_used()?;
+            hash_utils::compute_hash(Utf8Path::new(&raw), &algorithm, &limits)
         },
     );
     env.add_filter(
         "digest",
-        |raw: String, len: Option<usize>, alg: Option<String>| -> Result<String, Error> {
+        move |raw: String,
+         len: Option<usize>,
+         alg: Option<String>,
+         kwargs: Kwargs|
+         -> Result<String, Error> {
             let digest_len = len.unwrap_or(8);
             let algorithm = alg.unwrap_or_else(|| "sha256".to_owned());
-            hash_utils::compute_digest(Utf8Path::new(&raw), digest_len, &algorithm)
+            let limits = path_call_limits(&kwargs, file_max_read_bytes)?;
+            kwargs.assert_all_used()?;
+            hash_utils::compute_digest(Utf8Path::new(&raw), digest_len, &algorithm, &limits)
         },
     );
+}
+
+/// Resolve the per-call read limits from `max_bytes` and `follow_symlinks` kwargs.
+///
+/// `max_bytes` may only narrow the operator-configured ceiling: a call that
+/// asks for more bytes than the configured budget is clamped to the budget
+/// rather than granted a larger read.
+fn path_call_limits(kwargs: &Kwargs, configured_max_read_bytes: u64) -> Result<FileReadLimits, Error> {
+    let max_bytes: Option<u64> = kwargs.get("max_bytes")?;
+    let follow_symlinks: Option<bool> = kwargs.get("follow_symlinks")?;
+    Ok(FileReadLimits {
+        max_bytes: match max_bytes {
+            Some(requested) if requested < configured_max_read_bytes => requested,
+            _ => configured_max_read_bytes,
+        },
+        follow_symlinks: follow_symlinks.unwrap_or(false),
+    })
 }
