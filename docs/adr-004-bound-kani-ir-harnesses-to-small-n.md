@@ -9,13 +9,11 @@ Representation (IR) safety properties with small bounded Kani harnesses and
 delegate larger graph coverage to the future Proptest layer. Extended on
 2026-06-23 to cover cycle canonicalization with a private production-owned
 kernel proved over small integer cycles, plus path-wrapper coverage outside the
-kernel proof. Extended on 2026-08-30 for command interpolation: prove feasible
-local placeholder kernels in Kani and hand the full scanner and guard range to
-Proptest.
+kernel proof.
 
 ## Date
 
-2026-08-30
+2026-06-23.
 
 ## Context and problem statement
 
@@ -125,20 +123,6 @@ using the path comparator. A small direct adapter harness checks the
 wrapper/kernel connection for two-node path cycles, and Proptest continues to
 exercise path-bearing canonicalization up to the larger randomized bounds.
 
-Roadmap item `4.2.3` follows the same boundary. Kani proves that literal `$in`
-and `$out` prefixes do not select a Netsuke marker in an eight-character
-symbolic window, and proves exact matching of both real marker constants through
-`find_substitution` in a 32-character symbolic array. The full scanner timed
-out under the five-minute, 8 GiB cap at both six and eight characters, and the
-guard invokes that scanner. Proptest therefore owns scanner agreement, backtick
-handling, odd-backtick rejection, and guard placement for templates up to 256
-characters with at most eight placeholders.
-
-The interpolation properties may use independent local oracles as assertion
-targets. They do not replace a production path or widen its API: the properties
-continue to invoke production code, and the oracle provides a separately
-written contract against which its result is compared.
-
 ## Known risks and limitations
 
 - The duplicate-output harness does not prove that full manifest lowering
@@ -166,22 +150,28 @@ written contract against which its result is compared.
   strings, the Kani bound should be re-evaluated instead of copied forward.
 - The sibling-file harness layout is a project-local constraint caused by the
   400-line source-file limit, not a general Kani requirement.
-- The command-interpolation Kani proofs do not execute the full scanner,
-  backtick state machine, or `shlex` guard. Their 256-character,
-  eight-placeholder coverage is randomized Proptest evidence, not an exhaustive
-  proof.
-- The marker proof drives both concrete 27-character marker constants through
-  `find_substitution`; longer surrounding command text remains covered by the
-  property tests.
-- Harness-local interpolation oracles can contain transcription errors. Their
-  structural difference from production scanning and mutation evidence reduce
-  that risk but do not make them a second implementation boundary.
 
 ## Related documents
 
 - [`docs/developers-guide.md`](developers-guide.md)
 - [`docs/execplans/4-2-1-kani-harnesses-for-manifest-to-ir-safety-checks.md`](execplans/4-2-1-kani-harnesses-for-manifest-to-ir-safety-checks.md)
 - [`docs/execplans/4-2-2-kani-harnesses-for-cycle-canonicalization.md`](execplans/4-2-2-kani-harnesses-for-cycle-canonicalization.md)
-- [`docs/execplans/4-2-3-kani-harnesses-for-command-interpolation.md`](execplans/4-2-3-kani-harnesses-for-command-interpolation.md)
 - [`docs/formal-verification-methods-in-netsuke.md`](formal-verification-methods-in-netsuke.md)
 - [`docs/roadmap.md`](roadmap.md)
+
+## Addendum — 2026-08-30
+
+Roadmap item `4.2.3` extends the verification boundary established by this ADR.
+Kani proves that literal `$in` and `$out` do not select Netsuke markers in an
+eight-character symbolic window. It also proves exact matching of the real
+marker constants through `find_substitution` in a 32-character symbolic array.
+
+Proptest covers scanner agreement, protected backtick-region handling,
+unmatched-backtick rejection, and guard placement for templates up to 256
+characters and eight placeholders. The independent oracle is an assertion
+target only. It does not replace production code or create a public API.
+
+The Kani proofs do not prove the full scanner, backtick state machine, or
+`shlex` guard. See the
+[`docs/execplans/4-2-3-kani-harnesses-for-command-interpolation.md`](execplans/4-2-3-kani-harnesses-for-command-interpolation.md)
+for the implementation record and validation boundary.

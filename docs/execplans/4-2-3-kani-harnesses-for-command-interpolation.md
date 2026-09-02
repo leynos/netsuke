@@ -7,7 +7,7 @@ be kept up to date as work proceeds.
 
 Status: IN PROGRESS
 
-Revision 2.22. See `Revision note` at the foot of this document.
+Revision 2.24. See `Revision note` at the foot of this document.
 
 ## Purpose / big picture
 
@@ -1881,3 +1881,24 @@ named contract tests and all failure tests, helpers, and fixtures remain
 unchanged. Validation passed with `cargo test --test kani_cfg_ui_tests` (5
 passed), `make check-fmt`, and `make lint`. CodeRabbit remains queued with no
 fresh verdict, so the plan remains `IN PROGRESS`.
+
+**Revision 2.23 (2026-09-03).** Review repair removes the vacuous command-
+interpolation cfg(kani) wiring test and its copied UI fixtures. The real
+production verification module remains covered by `make kani-ir` in the
+`kani-smoke` workflow. ADR-004 restores its historical 2026-06-23 content and
+records the command-interpolation verification boundary in a dated addendum;
+roadmap item `4.2.3` remains completion evidence. The requested test, format,
+lint, Markdown, documentation-coverage, full-suite, and Kani validations are
+pending; no outcomes are recorded in this revision.
+
+**Revision 2.24 (2026-09-03).** Validation passed for
+`cargo test --test kani_cfg_ui_tests` (4 passed), `make check-fmt`, `make lint`,
+`make markdownlint` (34 tests), `make doc-coverage` (99.13%), `make test`
+(2,781 nextest tests, 3 skipped, plus 32 doctests, 6 ignored), and
+`make typecheck`. The initial bare `make kani-ir` failed before any proof
+because Kani's libLLVM loader lacked the documented `LD_LIBRARY_PATH`. The
+corrected documented `LD_LIBRARY_PATH`-capped invocation ran the actual proofs:
+`marker_token_match_is_exact` and `shell_variable_prefix_does_not_match`
+passed, along with six cycle harnesses. It then exited 124 at the five-minute
+cap while `ir::cycle::verification::two_node_cycle_reports_cycle_b_first` was
+starting. This is not a full Kani-suite pass. Status remains `IN PROGRESS`.

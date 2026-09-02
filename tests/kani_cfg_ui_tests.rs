@@ -46,19 +46,14 @@ fn compiled_fixture_validates_kani_cfg_policy_sources() -> io::Result<()> {
 /// `cfg(kani)` compiles when the expected check-cfg declaration is active.
 #[test]
 fn cfg_kani_is_accepted_by_compile_time_policy() -> io::Result<()> {
-    assert_kani_fixture_compiles(
-        "tests/ui/cfg_kani_compile_pass.rs",
-        "cfg(kani) should be accepted",
-    )
-}
-
-/// Verify command-interpolation Kani declarations compile under `cfg(kani)`.
-#[test]
-fn command_interpolation_kani_wiring_compiles() -> io::Result<()> {
-    assert_kani_fixture_compiles(
-        "tests/ui/cfg_kani_cmd_interpolate_wiring_pass.rs",
-        "command-interpolation Kani wiring should compile",
-    )
+    let output = rustc_with_kani_check_cfg("tests/ui/cfg_kani_compile_pass.rs")?;
+    if !output.status.success() {
+        return Err(io::Error::other(format!(
+            "cfg(kani) should be accepted:\n{}",
+            stderr(&output),
+        )));
+    }
+    Ok(())
 }
 
 /// Verify marker declarations fail to compile without their underscore prefix.
@@ -97,18 +92,6 @@ fn unknown_cfg_is_rejected_by_compile_time_policy() -> io::Result<()> {
     if !stderr.contains("netsuke_unknown_cfg_for_ui_test") {
         return Err(io::Error::other(format!(
             "stderr should name the rejected cfg:\n{stderr}",
-        )));
-    }
-    Ok(())
-}
-
-/// Assert that a Kani fixture compiles, including compiler stderr on failure.
-fn assert_kani_fixture_compiles(source: &str, failure_message: &str) -> io::Result<()> {
-    let output = rustc_with_kani_check_cfg(source)?;
-    if !output.status.success() {
-        return Err(io::Error::other(format!(
-            "{failure_message}:\n{}",
-            stderr(&output)
         )));
     }
     Ok(())
