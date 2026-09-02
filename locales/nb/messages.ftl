@@ -16,6 +16,7 @@ cli.flag.fetch_allow_scheme.help = Flere URL-skjemaer som fetch-hjelperen kan br
 cli.flag.fetch_allow_host.help = Vertsnavn som tillates når standardavslaget er slått på.
 cli.flag.fetch_block_host.help = Vertsnavn som alltid blokkeres, selv om de tillates andre steder.
 cli.flag.fetch_default_deny.help = Avvis alle verter som standard; tillat bare den oppgitte listen.
+cli.flag.trust_project_fetch_policy.help = Allow project configuration to widen fetch-policy grants.
 cli.flag.json.help = Skriv ut maskinlesbar JSON.
 cli.flag.no_input.help = Les aldri interaktive inndata.
 cli.flag.color.help = Regel for farget utdata (auto, always, never).

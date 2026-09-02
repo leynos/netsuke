@@ -234,6 +234,7 @@ pub(crate) fn top_level_flag_help_key(arg_id: &str) -> Option<&'static str> {
         "fetch_allow_host" => Some(keys::CLI_FLAG_FETCH_ALLOW_HOST_HELP),
         "fetch_block_host" => Some(keys::CLI_FLAG_FETCH_BLOCK_HOST_HELP),
         "fetch_default_deny" => Some(keys::CLI_FLAG_FETCH_DEFAULT_DENY_HELP),
+        "trust_project_fetch_policy" => Some(keys::CLI_FLAG_TRUST_PROJECT_FETCH_POLICY_HELP),
         "json" => Some(keys::CLI_FLAG_JSON_HELP),
         "no_input" => Some(keys::CLI_FLAG_NO_INPUT_HELP),
         "color" => Some(keys::CLI_FLAG_COLOR_HELP),

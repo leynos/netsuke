@@ -16,6 +16,7 @@ cli.flag.fetch_allow_scheme.help = Lisää URL-skeemoja, jotka fetch-apuri saa k
 cli.flag.fetch_allow_host.help = Sallitut isäntänimet, kun oletusesto on käytössä.
 cli.flag.fetch_block_host.help = Isäntänimet, jotka estetään aina, vaikka ne sallittaisiin muualla.
 cli.flag.fetch_default_deny.help = Estä kaikki isännät oletuksena; salli vain määritelty luettelo.
+cli.flag.trust_project_fetch_policy.help = Allow project configuration to widen fetch-policy grants.
 cli.flag.json.help = Tuota koneluettavaa JSON-tulostetta.
 cli.flag.no_input.help = Älä koskaan lue vuorovaikutteista syötettä.
 cli.flag.color.help = Väritulosteen käytäntö (auto, always, never).

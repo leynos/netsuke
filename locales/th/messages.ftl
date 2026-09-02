@@ -16,6 +16,7 @@ cli.flag.fetch_allow_scheme.help = สกีม URL เพิ่มเติม�
 cli.flag.fetch_allow_host.help = ชื่อโฮสต์ที่อนุญาตเมื่อเปิดการปฏิเสธโดยค่าเริ่มต้น
 cli.flag.fetch_block_host.help = ชื่อโฮสต์ที่ถูกปิดกั้นเสมอ แม้จะได้รับอนุญาตจากที่อื่น
 cli.flag.fetch_default_deny.help = ปฏิเสธโฮสต์ทั้งหมดโดยค่าเริ่มต้น อนุญาตเฉพาะรายการที่ประกาศไว้
+cli.flag.trust_project_fetch_policy.help = Allow project configuration to widen fetch-policy grants.
 cli.flag.json.help = แสดงผลเป็น JSON ที่เครื่องอ่านได้
 cli.flag.no_input.help = ไม่อ่านข้อมูลนำเข้าแบบโต้ตอบเลย
 cli.flag.color.help = นโยบายการแสดงผลแบบมีสี (auto, always, never)

@@ -18,6 +18,7 @@ use std::sync::Arc;
 
 use super::super::command::Cli;
 use super::CONFIG_ENV_VAR;
+use super::ProjectFetchPolicyRequest;
 use super::diagnostics::{
     BoundedConfigPath, ProjectLayerDeduplication, debug_optional_config_path_from_fields,
 };
@@ -31,9 +32,16 @@ use super::paths::{PathNormalizer, normalized_path_key};
 /// configuration tree before the cached merge consumes it.
 pub(super) fn retain_layers_and_resolve_json(
     layers: Vec<MergeLayer<'static>>,
-) -> (Vec<MergeLayer<'static>>, bool) {
+    directory: Option<&Path>,
+    normalizer: &impl PathNormalizer,
+) -> (Vec<MergeLayer<'static>>, bool, ProjectFetchPolicyRequest) {
     let mut json = Cli::default().json;
     let mut retained = Vec::with_capacity(layers.len());
+    let mut project_fetch_policy_request = ProjectFetchPolicyRequest::default();
+    let project_file = project_scope_file(directory);
+    let project_key = project_file
+        .as_deref()
+        .map(|path| comparison_key(normalizer, &path.to_string_lossy()));
     for layer in layers {
         debug_assert_eq!(
             layer.provenance(),
@@ -41,13 +49,63 @@ pub(super) fn retain_layers_and_resolve_json(
             "discovery must retain only file layers"
         );
         let path = layer.path().map(ToOwned::to_owned);
-        let value = layer.into_value();
+        let mut value = layer.into_value();
+        if is_project_scope_layer(path.as_deref(), project_key.as_deref()) {
+            project_fetch_policy_request = take_project_fetch_policy_request(&mut value);
+        }
         if let Some(layer_json) = json_from_value(&value) {
             json = layer_json;
         }
         retained.push(MergeLayer::file(Cow::Owned(value), path));
     }
-    (retained, json)
+    (retained, json, project_fetch_policy_request)
+}
+
+/// Return whether a discovered layer is the primary project configuration file.
+///
+/// Only the primary `.netsuke.toml` is project scope for this trust boundary.
+/// Files loaded through that file's `extends` chain retain their current merge
+/// behaviour until their trust relationship is defined separately.
+fn is_project_scope_layer(
+    candidate_layer_path: Option<&camino::Utf8Path>,
+    candidate_project_key: Option<&Path>,
+) -> bool {
+    let Some((discovered_path, expected_project_path)) =
+        candidate_layer_path.zip(candidate_project_key)
+    else {
+        return false;
+    };
+    expected_project_path.as_os_str() == discovered_path.as_std_path().as_os_str()
+        || expected_project_path
+            .to_str()
+            .is_some_and(|project_path| project_path == discovered_path.as_str())
+}
+
+/// Capture and remove project fetch-policy grants from one JSON layer.
+///
+/// Project configuration may request a narrower policy, but generic precedence
+/// and append merging must not grant it authority to widen operator policy.
+fn take_project_fetch_policy_request(value: &mut serde_json::Value) -> ProjectFetchPolicyRequest {
+    let Some(fields) = value.as_object_mut() else {
+        return ProjectFetchPolicyRequest::default();
+    };
+    let default_deny = fields
+        .remove("fetch_default_deny")
+        .and_then(|field_value| serde_json::from_value(field_value).ok());
+    let allow_scheme = fields
+        .remove("fetch_allow_scheme")
+        .and_then(|field_value| serde_json::from_value(field_value).ok())
+        .unwrap_or_default();
+    let allow_host = fields
+        .remove("fetch_allow_host")
+        .and_then(|field_value| serde_json::from_value(field_value).ok())
+        .unwrap_or_default();
+    fields.remove("trust_project_fetch_policy");
+    ProjectFetchPolicyRequest {
+        default_deny,
+        allow_scheme,
+        allow_host,
+    }
 }
 
 /// Project-scope outcome retained for a later trace replay.
@@ -260,7 +318,7 @@ fn merge_project_scope_layers(
 }
 /// Return the expected project-scope configuration file path, or `None` when
 /// no working directory is available.
-fn project_scope_file(directory: Option<&Path>) -> Option<PathBuf> {
+pub(super) fn project_scope_file(directory: Option<&Path>) -> Option<PathBuf> {
     let root = directory
         .map(PathBuf::from)
         .or_else(|| std::env::current_dir().ok())?;

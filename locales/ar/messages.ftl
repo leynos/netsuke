@@ -16,6 +16,7 @@ cli.flag.fetch_allow_scheme.help = مخطّطات URL إضافية مسموح ب
 cli.flag.fetch_allow_host.help = أسماء المضيفين المسموح بها عند تفعيل الرفض الافتراضي.
 cli.flag.fetch_block_host.help = أسماء المضيفين المحجوبة دائمًا، حتى إن سُمح بها في موضع آخر.
 cli.flag.fetch_default_deny.help = رفض جميع المضيفين افتراضيًا؛ والسماح بالقائمة المعلنة فقط.
+cli.flag.trust_project_fetch_policy.help = ‏Allow project configuration to widen fetch-policy grants.
 cli.flag.json.help = إخراج JSON قابل للقراءة آليًا.
 cli.flag.no_input.help = عدم قراءة أي مدخلات تفاعلية أبدًا.
 cli.flag.color.help = سياسة الإخراج الملوّن (auto أو always أو never).
