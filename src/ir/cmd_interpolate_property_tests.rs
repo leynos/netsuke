@@ -8,8 +8,8 @@ use proptest::prelude::*;
 use test_support::ninja_gen::paths_strategy;
 
 use super::{
-    CommandBindings, INS_TOKEN, IrGenError, OUTS_TOKEN, RecipeShell,
-    interpolate_command_with_bindings, interpolate_command_with_shell, substitute,
+    INS_TOKEN, IrGenError, OUTS_TOKEN, RecipeShell, interpolate_command_with_bindings,
+    interpolate_command_with_shell,
 };
 
 
@@ -20,152 +20,26 @@ use super::{
 //! rejects unbalanced backtick input as an invalid command.
 };
 
-fn safe_text_strategy() -> impl Strategy<Value = String> {
-    // Empty fragments are intentional: surrounding command text may be absent,
-    // and trimming whitespace-only generated text exercises that boundary.
-    "[a-zA-Z0-9_./ -]{0,24}".prop_map(|text| text.trim().to_owned())
-}
 
-fn adversarial_template_strategy() -> impl Strategy<Value = String> {
-    prop::collection::vec(
-        prop::sample::select(vec![
-            '$', '`', 'i', 'n', 'o', 'u', 't', '_', 'a', '\'', '\\', ' ',
-        ]),
-        0..=64,
-    )
-    .prop_map(|chars| chars.into_iter().collect())
-}
+//! Property tests for command interpolation token boundaries.
+//!
+//! These properties ensure `interpolate_command` replaces manifest markers outside
+//! protected regions with quoted paths, rejects markers within them, and
+//! rejects unbalanced backtick input as an invalid command.
+};
+//! Property tests for command interpolation token boundaries.
+//!
+//! These properties ensure `interpolate_command` replaces manifest markers outside
+//! protected regions with quoted paths, rejects markers within them, and
+//! rejects unbalanced backtick input as an invalid command.
+};
 
-fn interpolation_fragment_strategy() -> impl Strategy<Value = String> {
-    prop::collection::vec(
-        prop::sample::select(vec![
-            '$', '`', 'i', 'n', 'o', 'u', 't', '_', 'a', '\'', '"', '\\', ' ',
-        ]),
-        0..=4,
-    )
-    .prop_map(|chars| chars.into_iter().collect())
-}
 
-fn placeholder_strategy() -> impl Strategy<Value = &'static str> {
-    prop::sample::select(vec!["$in", "$out", INS_TOKEN, OUTS_TOKEN])
-}
-
-fn interpolation_template_strategy() -> impl Strategy<Value = String> {
-    prop::collection::vec(
-        (interpolation_fragment_strategy(), placeholder_strategy()),
-        0..=8,
-    )
-    .prop_flat_map(|parts| (Just(parts), interpolation_fragment_strategy()))
-    .prop_map(|(parts, suffix)| join_template_parts(parts, &suffix))
-}
-
-fn eight_placeholder_template_strategy() -> impl Strategy<Value = String> {
-    prop::collection::vec(
-        (interpolation_fragment_strategy(), placeholder_strategy()),
-        8,
-    )
-    .prop_flat_map(|parts| (Just(parts), interpolation_fragment_strategy()))
-    .prop_map(|(parts, suffix)| join_template_parts(parts, &suffix))
-}
-
-fn join_template_parts(parts: Vec<(String, &'static str)>, suffix: &str) -> String {
-    let mut template = String::new();
-    for (fragment, placeholder) in parts {
-        template.push_str(&fragment);
-        template.push_str(placeholder);
-    }
-    template.push_str(suffix);
-    template
-}
-
-fn raw_binding_strategy() -> impl Strategy<Value = String> {
-    prop::collection::vec(prop::sample::select(vec!['a', '`', '\'', '"', ' ']), 0..=3)
-        .prop_map(|chars| chars.into_iter().collect())
-}
-
-/// Build deliberately unquoted POSIX bindings for scanner and guard properties.
-///
-/// These inputs bypass path quoting so the properties can isolate placeholder
-/// recognition and command validation from the production binding preparer.
-fn posix_bindings(ins: String, outs: String) -> CommandBindings {
-    CommandBindings {
-        shell: RecipeShell::Posix,
-        ins,
-        outs,
-    }
-}
-
-fn spec_substitute(template: &str, ins: &str, outs: &str) -> Result<String, String> {
-    let chars = template.chars().collect::<Vec<_>>();
-    let mut result = String::new();
-    let mut pos = 0;
-
-    while pos < chars.len() {
-        let Some(&ch) = chars.get(pos) else {
-            break;
-        };
-        let substitution = spec_match(&chars, pos, ins, outs);
-        if is_protected_by_backticks(&chars, pos) && substitution.is_some() {
-            return Err(template.to_owned());
-        }
-        if let Some((replacement, width)) = substitution {
-            result.push_str(replacement);
-            pos += width;
-        } else {
-            result.push(ch);
-            pos += 1;
-        }
-    }
-    Ok(result)
-}
-
-fn is_protected_by_backticks(chars: &[char], pos: usize) -> bool {
-    chars.iter().take(pos).filter(|&&ch| ch == '`').count() & 1 == 1
-}
-
-fn spec_match<'a>(
-    chars: &[char],
-    pos: usize,
-    ins: &'a str,
-    outs: &'a str,
-) -> Option<(&'a str, usize)> {
-    if chars.get(pos) == Some(&'$') {
-        if token_matches(chars, pos + 1, "in") && sigil_boundaries_are_valid(chars, pos, 2) {
-            return Some((ins, 3));
-        }
-        if token_matches(chars, pos + 1, "out") && sigil_boundaries_are_valid(chars, pos, 3) {
-            return Some((outs, 4));
-        }
-    }
-    if token_matches(chars, pos, INS_TOKEN) {
-        return Some((ins, INS_TOKEN.chars().count()));
-    }
-    token_matches(chars, pos, OUTS_TOKEN).then_some((outs, OUTS_TOKEN.chars().count()))
-}
-
-fn sigil_boundaries_are_valid(chars: &[char], pos: usize, pattern_len: usize) -> bool {
-    chars
-        .get(pos.wrapping_sub(1))
-        .is_none_or(|ch| !is_spec_identifier(*ch))
-        && chars
-            .get(pos + pattern_len + 1)
-            .is_none_or(|ch| !is_spec_identifier(*ch))
-}
-
-fn token_matches(chars: &[char], pos: usize, token: &str) -> bool {
-    token
-        .chars()
-        .enumerate()
-        .all(|(offset, ch)| chars.get(pos + offset) == Some(&ch))
-}
-
-const fn is_spec_identifier(ch: char) -> bool {
-    ch.is_ascii_alphanumeric() || ch == '_'
-}
-
-fn has_odd_backticks(command: &str) -> bool {
-    command.chars().filter(|&ch| ch == '`').count() & 1 == 1
-}
+use support::{
+    adversarial_template_strategy, assert_matches_specification,
+    eight_placeholder_template_strategy, has_odd_backticks, interpolation_template_strategy,
+    posix_bindings, raw_binding_strategy, safe_text_strategy,
+};
 
 proptest! {
     /// Reject manifest markers in backticks for every generated path binding.
@@ -282,19 +156,7 @@ proptest! {
         outs in raw_binding_strategy(),
     ) {
         let bindings = posix_bindings(ins, outs);
-        let specification = spec_substitute(&template, &bindings.ins, &bindings.outs);
-        let substitution = substitute(&template, &bindings);
-
-        match (substitution, specification) {
-            (Ok(actual_output), Ok(expected_output)) => prop_assert_eq!(actual_output, expected_output),
-            (Err(IrGenError::InvalidCommand { command, .. }), Err(expected_template)) => {
-                prop_assert_eq!(command, expected_template);
-            }
-            (unexpected_substitution, unexpected_specification) => prop_assert!(
-                false,
-                "scanner and independent specification disagree: {unexpected_substitution:?} != {unexpected_specification:?}"
-            ),
-        }
+        assert_matches_specification(&template, &bindings)?;
     }
 
     #[test]
@@ -304,19 +166,7 @@ proptest! {
         outs in raw_binding_strategy(),
     ) {
         let bindings = posix_bindings(ins, outs);
-        let specification = spec_substitute(&template, &bindings.ins, &bindings.outs);
-        let substitution = substitute(&template, &bindings);
-
-        match (substitution, specification) {
-            (Ok(actual_output), Ok(expected_output)) => prop_assert_eq!(actual_output, expected_output),
-            (Err(IrGenError::InvalidCommand { command, .. }), Err(expected_template)) => {
-                prop_assert_eq!(command, expected_template);
-            }
-            (unexpected_substitution, unexpected_specification) => prop_assert!(
-                false,
-                "scanner and independent specification disagree: {unexpected_substitution:?} != {unexpected_specification:?}"
-            ),
-        }
+        assert_matches_specification(&template, &bindings)?;
     }
 
     #[test]
@@ -326,7 +176,7 @@ proptest! {
         outs in raw_binding_strategy(),
     ) {
         let bindings = posix_bindings(ins, outs);
-        let specification = spec_substitute(&template, &bindings.ins, &bindings.outs);
+        let specification = support::specification(&template, &bindings);
         let outcome = interpolate_command_with_bindings(&template, &bindings);
 
         if let Ok(substituted) = specification
@@ -351,7 +201,7 @@ proptest! {
         outs in raw_binding_strategy(),
     ) {
         let bindings = posix_bindings(ins, outs);
-        let specification = spec_substitute(&template, &bindings.ins, &bindings.outs);
+        let specification = support::specification(&template, &bindings);
 
         match (specification, interpolate_command_with_bindings(&template, &bindings)) {
             (Ok(expected_command), Ok(command)) => {
@@ -376,3 +226,6 @@ proptest! {
         }
     }
 }
+
+#[path = "cmd_interpolate_property_support.rs"]
+mod support;

@@ -1308,10 +1308,11 @@ select a branch in that control to exercise a feature branch.
 The caller passes two configuration inputs, each carrying intent:
 
 - `exclude-globs` — `src/ir/cycle_verification.rs`,
-  `src/ir/from_manifest_verification.rs`, and `src/ir/graph_kani_map.rs`:
-  modules gated behind `#[cfg(kani)]` mod declarations. `cargo-mutants` does
-  not evaluate that cfg, so mutants inserted there would compile to nothing and
-  survive as noise rather than genuine test gaps.
+  `src/ir/from_manifest_verification.rs`, `src/ir/graph_kani_map.rs`, and
+  `src/ir/cmd_interpolate/verification.rs`: modules gated behind
+  `#[cfg(kani)] mod` declarations. `cargo-mutants` does not evaluate that cfg,
+  so mutants inserted there would compile to nothing and survive as noise
+  rather than genuine test gaps.
 - `extra-args` — `--all-features`, so the mutation run matches the `make test`
   CI baseline; a mismatch would report feature-gated code (the `legacy-digests`
   feature) as untested.
@@ -2653,6 +2654,15 @@ Unix-only unit coverage for the fake-Ninja factories, owned by
 It exercises the `-C` directory argument contract through the public factory
 only. Keep fixture assertions here and production test-helper behaviour in
 `check_ninja.rs`; this split keeps the public helper below the 400-line cap.
+
+
+### `src/ir/cmd_interpolate_property_support.rs`
+
+This test-only sibling module is owned by the command-interpolation property
+tests. It may contain their generators, independent specifications, and shared
+assertions, but it must not be used by production code or the Kani harnesses.
+Keep those proof and production boundaries explicit; move a helper here only
+when it serves more than one command-interpolation property test.
 
 When adding a new `#[path]` support module, follow the same shape: keep it
 private to its parent, give it a `//!` header stating the split reason and

@@ -3,13 +3,13 @@
 //! The sigil proof checks every symbolic `$` position in an eight-character
 //! window. `find_substitution` reads no wider context for `$in` or `$out`, so
 //! that window covers the boundary contract at any command length. A separate
-//! proof drives the marker fallback, avoiding its unrelated long-token loop.
+//! proof drives the marker fallback through the public matcher using the
+//! production marker tokens.
 
 use super::*;
 
 const ALPHABET_T: [u8; 10] = *b"$inout_`a ";
-const ALPHABET_M: [u8; 4] = *b"_XYa";
-const MARKER_TOKEN: &str = "_X_";
+const ALPHABET_M: [u8; 17] = *b"_NETSUKIPLACHODRX";
 
 /// Prove sigil placeholders obey their complete boundary contract.
 #[kani::proof]
@@ -42,20 +42,23 @@ fn sigil_placeholder_match_is_exact() {
 /// Prove marker tokens match exactly and deliberately ignore word boundaries.
 #[kani::proof]
 #[kani::solver(kissat)]
-#[kani::unwind(32)]
+#[kani::unwind(34)]
 fn marker_token_match_is_exact() {
-    let chars = symbolic_chars::<6>(is_marker_byte);
+    let chars = symbolic_chars::<32>(is_marker_byte);
     let pos = symbolic_position(chars.len());
-    let actual = try_match_token(&chars, pos, MARKER_TOKEN, "R");
+    kani::assume(chars[pos] == '_');
+    let actual = find_substitution(&chars, pos, "I", "O");
     let expected = expected_marker_match(&chars, pos);
 
     kani::assert(actual == expected, "marker match agrees with exact text");
     kani::cover!(
-        actual == Some(("R", 3)) && pos > 0 && chars.get(pos - 1).is_some_and(|ch| is_ident(*ch)),
+        actual == Some(("I", INS_TOKEN.len()))
+            && pos > 0
+            && chars.get(pos - 1).is_some_and(|ch| is_ident(*ch)),
         "marker ignores prefix boundaries"
     );
     kani::cover!(
-        pos == 0 && actual == Some(("R", 3)),
+        pos == 0 && actual == Some(("O", OUTS_TOKEN.len())),
         "marker matches at start"
     );
     kani::cover!(
@@ -63,11 +66,12 @@ fn marker_token_match_is_exact() {
         "marker near miss is rejected"
     );
     kani::cover!(
-        pos + MARKER_TOKEN.len() > chars.len(),
+        pos + OUTS_TOKEN.len() > chars.len() && actual.is_none(),
         "marker truncation is rejected"
     );
 }
 
+/// Build symbolic character arrays from a bounded byte alphabet.
 fn symbolic_chars<const N: usize>(is_allowed: fn(u8) -> bool) -> [char; N] {
     let bytes: [u8; N] = kani::any();
     for byte in bytes {
@@ -76,20 +80,24 @@ fn symbolic_chars<const N: usize>(is_allowed: fn(u8) -> bool) -> [char; N] {
     bytes.map(char::from)
 }
 
+/// Choose a symbolic position within a fixed character array.
 fn symbolic_position(len: usize) -> usize {
     let pos = kani::any::<usize>();
     kani::assume(pos < len);
     pos
 }
 
+/// Report whether `byte` belongs to the sigil-proof alphabet.
 fn is_template_byte(byte: u8) -> bool {
     ALPHABET_T.contains(&byte)
 }
 
+/// Report whether `byte` distinguishes a marker-matching behaviour class.
 fn is_marker_byte(byte: u8) -> bool {
     ALPHABET_M.contains(&byte)
 }
 
+/// Specify the expected sigil replacement at one character position.
 fn expected_sigil_match<'a>(
     chars: &[char],
     pos: usize,
@@ -108,48 +116,53 @@ fn expected_sigil_match<'a>(
     None
 }
 
+/// Report whether `$in` starts at `pos`.
 fn has_input_pattern(chars: &[char], pos: usize) -> bool {
     chars.get(pos + 1) == Some(&'i') && chars.get(pos + 2) == Some(&'n')
 }
 
+/// Report whether `$out` starts at `pos`.
 fn has_output_pattern(chars: &[char], pos: usize) -> bool {
     chars.get(pos + 1) == Some(&'o')
         && chars.get(pos + 2) == Some(&'u')
         && chars.get(pos + 3) == Some(&'t')
 }
 
+/// Report whether the preceding character permits a sigil placeholder.
 fn leading_boundary(chars: &[char], pos: usize) -> bool {
     chars
         .get(pos.wrapping_sub(1))
         .is_none_or(|ch| !is_ident(*ch))
 }
 
+/// Report whether the character after a sigil placeholder is valid.
 fn trailing_boundary(chars: &[char], pos: usize, token_len: usize) -> bool {
     chars
         .get(pos + token_len + 1)
         .is_none_or(|ch| !is_ident(*ch))
 }
 
+/// Report whether `ch` is an ASCII identifier character.
 const fn is_ident(ch: char) -> bool {
     ch.is_ascii_alphanumeric() || ch == '_'
 }
 
+/// Specify the marker fallback result at one character position.
 fn expected_marker_match(chars: &[char], pos: usize) -> Option<(&'static str, usize)> {
-    if marker_matches(chars, pos) {
-        Some(("R", 3))
-    } else {
-        None
-    }
+    marker_matches(chars, pos, INS_TOKEN)
+        .then_some(("I", INS_TOKEN.len()))
+        .or_else(|| marker_matches(chars, pos, OUTS_TOKEN).then_some(("O", OUTS_TOKEN.len())))
 }
 
-fn marker_matches(chars: &[char], pos: usize) -> bool {
-    chars.get(pos) == Some(&'_')
-        && chars.get(pos + 1) == Some(&'X')
-        && chars.get(pos + 2) == Some(&'_')
+/// Report whether `token` matches exactly at `pos`.
+fn marker_matches(chars: &[char], pos: usize, token: &str) -> bool {
+    token
+        .chars()
+        .enumerate()
+        .all(|(offset, character)| chars.get(pos + offset) == Some(&character))
 }
 
+/// Report whether an underscore starts a non-matching marker candidate.
 fn marker_near_miss(chars: &[char], pos: usize) -> bool {
-    chars.get(pos) == Some(&'_')
-        && chars.get(pos + 1) == Some(&'Y')
-        && chars.get(pos + 2) == Some(&'_')
+    chars.get(pos) == Some(&'_') && expected_marker_match(chars, pos).is_none()
 }

@@ -305,6 +305,12 @@ pub const INS_TOKEN: &str = "__NETSUKE_INS_PLACEHOLDER__";
 /// consumed during command interpolation; it is not general template syntax.
 pub const OUTS_TOKEN: &str = "__NETSUKE_OUTS_PLACEHOLDER__";
 
+const _: () = assert!(
+    matches!(INS_TOKEN.as_bytes().first(), Some(b'_'))
+        && matches!(OUTS_TOKEN.as_bytes().first(), Some(b'_')),
+    "the marker fallback in find_substitution only runs at underscore positions",
+);
+
 #[cfg(test)]
 #[path = "posix_lexical_tests.rs"]
 mod posix_lexical_tests;

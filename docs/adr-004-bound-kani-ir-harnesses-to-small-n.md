@@ -15,7 +15,7 @@ Proptest.
 
 ## Date
 
-2026-08-30.
+2026-08-30
 
 ## Context and problem statement
 

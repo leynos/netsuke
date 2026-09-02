@@ -192,6 +192,55 @@ fn patch_stem_for_harness(harness: &str) -> String {
     harness.replace("::", "__")
 }
 
+/// Derive the source file and property function named by a supplemental patch.
+fn supplemental_property_location(patch_stem: &str) -> Result<(Utf8PathBuf, String)> {
+    let mut segments: Vec<&str> = patch_stem.split("__").collect();
+    let property_name = segments
+        .pop()
+        .with_context(|| format!("supplemental patch {patch_stem} has no property name"))?;
+    let Some((root, module_segments)) = segments.split_first() else {
+        bail!("supplemental patch {patch_stem} has no module path");
+    };
+    ensure!(
+        *root == "ir",
+        "supplemental patch {patch_stem} must name an ir property module",
+    );
+    ensure!(
+        !module_segments.is_empty(),
+        "supplemental patch {patch_stem} has no property module",
+    );
+    let source_name = module_segments.join("_");
+    Ok((
+        Utf8Path::new("src")
+            .join(root)
+            .join(format!("{source_name}.rs")),
+        property_name.to_owned(),
+    ))
+}
+
+/// Validate and return supplemental patch stems backed by live properties.
+fn supplemental_property_patches() -> Result<BTreeSet<String>> {
+    let root = Dir::open_ambient_dir(manifest_dir(), ambient_authority())
+        .context("open workspace root")?;
+    let mut patches = BTreeSet::new();
+    for patch_stem in SUPPLEMENTAL_PROPERTY_PATCHES {
+        let (source_path, property_name) = supplemental_property_location(patch_stem)?;
+        let source = root
+            .read_to_string(source_path.as_str())
+            .with_context(|| format!("read supplemental property source {source_path}"))?;
+        ensure!(
+            source
+                .lines()
+                .filter_map(declared_function_name)
+                .any(|name| name == property_name),
+            "supplemental patch {patch_stem} names missing property {property_name} \
+             in {source_path}",
+        );
+        patches.insert((*patch_stem).to_owned());
+    }
+    Ok(patches)
+}
+
 /// Return whether the source tree is a Git work tree.
 ///
 /// `cargo-mutants` tests each mutant in a copied source tree without
@@ -262,14 +311,11 @@ fn every_harness_has_mutation_evidence_or_exemption() -> Result<()> {
 #[test]
 fn every_patch_matches_a_harness() -> Result<()> {
     let harnesses = discover_harnesses()?;
+    let supplemental_patches = supplemental_property_patches()?;
     let expected: BTreeSet<String> = harnesses
         .iter()
         .map(|harness| patch_stem_for_harness(harness.as_str()))
-        .chain(
-            SUPPLEMENTAL_PROPERTY_PATCHES
-                .iter()
-                .map(|patch| (*patch).to_owned()),
-        )
+        .chain(supplemental_patches)
         .collect();
     let orphans: Vec<String> = patch_stems()?
         .into_iter()
