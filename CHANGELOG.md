@@ -71,6 +71,8 @@
 
 ### Fixed
 
+- Support beta-to-beta and beta-to-final Windows MSI replacement through WiX
+  major-upgrade metadata.
 - Expand parent-relative glob patterns such as `glob('../shared/*.h')`; their
   matches previously reached the working-directory capability as `../…` and
   were rejected as sandbox escapes
