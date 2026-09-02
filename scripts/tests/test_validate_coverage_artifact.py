@@ -72,6 +72,57 @@ def _write_case(directory: pathlib.Path, case: ArtefactCase) -> None:
 
 
 @pytest.mark.parametrize(
+    ("text", "expected_issue", "expected_detail"),
+    [
+        pytest.param("", "EMPTY_REPORT", None, id="empty"),
+        pytest.param(
+            "TN:\nnot-an-lcov-record\nSF:src/lib.rs\nDA:1,1\nend_of_record\n",
+            "INVALID_RECORD",
+            2,
+            id="invalid-line",
+        ),
+        pytest.param(
+            "TN:\nDA:1,1\nend_of_record\n", "MISSING_RECORD", "SF:", id="missing-sf"
+        ),
+        pytest.param(
+            "TN:\nSF:src/lib.rs\nend_of_record\n",
+            "MISSING_RECORD",
+            "DA:",
+            id="missing-da",
+        ),
+        pytest.param(
+            "TN:\nSF:src/lib.rs\nDA:1,1\n",
+            "MISSING_RECORD",
+            "end_of_record",
+            id="missing-end",
+        ),
+        pytest.param(
+            "TN:\nSF:src/lib.rs\nDA:1,1\nend_of_record\nTN:\n",
+            "MISSING_TERMINATOR",
+            None,
+            id="end-before-final-line",
+        ),
+    ],
+)
+def test_validate_lcov_text_preserves_diagnostic_order(
+    text: str, expected_issue: str, expected_detail: object | None
+) -> None:
+    """Return the first diagnostic defined by the hostile-LCOV contract."""
+    script = _load_script()
+
+    with pytest.raises(script.ValidationError) as captured:
+        script._validate_lcov_text(text)
+
+    error = captured.value
+    assert error.issue is getattr(script.ValidationIssue, expected_issue), (
+        f"expected issue {expected_issue!r}, got {error.issue!r}"
+    )
+    assert error.detail == expected_detail, (
+        f"expected detail {expected_detail!r}, got {error.detail!r}"
+    )
+
+
+@pytest.mark.parametrize(
     "case",
     [
         pytest.param(ArtefactCase("valid", 0), id="valid"),

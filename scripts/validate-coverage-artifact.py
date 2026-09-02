@@ -35,6 +35,7 @@ LCOV_RECORDS = (
     re.compile(r"BRH:[0-9]+"),
     re.compile(r"end_of_record"),
 )
+REQUIRED_LCOV_RECORDS = ("SF:", "DA:", "end_of_record")
 
 
 class ValidationIssue(enum.Enum):
@@ -165,40 +166,60 @@ def _is_lcov_record(line: str) -> bool:
     return any(record.fullmatch(line) is not None for record in LCOV_RECORDS)
 
 
+def _first_invalid_lcov_line(lines: cabc.Sequence[str]) -> int | None:
+    """Return the first one-based line number that is not an LCOV record."""
+    return next(
+        (
+            line_number
+            for line_number, line in enumerate(lines, start=1)
+            if not _is_lcov_record(line)
+        ),
+        None,
+    )
+
+
+def _first_missing_lcov_record(record_text: str) -> str | None:
+    """Return the first required LCOV record that the report omits."""
+    return next(
+        (record for record in REQUIRED_LCOV_RECORDS if record not in record_text), None
+    )
+
+
+_invalid_lcov_line_number = _first_invalid_lcov_line
+_missing_lcov_record = _first_missing_lcov_record
+
+
+def _raise_validation_error_if(
+    *, should_raise: bool, issue: ValidationIssue, detail: object | None = None
+) -> None:
+    """Raise one validation error when its ordered condition is met."""
+    if should_raise:
+        raise ValidationError(issue, detail)
+
+
 def _validate_lcov_text(text: str) -> None:
     """Reject empty, malformed, or incomplete LCOV text."""
     lines = text.splitlines()
-    _require_lcov_lines(lines)
-    _validate_lcov_records(lines)
-    _require_lcov_records(lines)
-    _require_final_terminator(lines)
-
-
-def _require_lcov_lines(lines: list[str]) -> None:
-    """Reject a report that has no LCOV records."""
-    if not lines:
-        raise ValidationError(ValidationIssue.EMPTY_REPORT)
-
-
-def _validate_lcov_records(lines: list[str]) -> None:
-    """Reject every line that is not a recognised LCOV record."""
-    for line_number, line in enumerate(lines, start=1):
-        if not _is_lcov_record(line):
-            raise ValidationError(ValidationIssue.INVALID_RECORD, line_number)
-
-
-def _require_lcov_records(lines: list[str]) -> None:
-    """Require source, line-data, and terminating records in one report."""
-    record_text = "\n".join(lines)
-    for required in ("SF:", "DA:", "end_of_record"):
-        if required not in record_text:
-            raise ValidationError(ValidationIssue.MISSING_RECORD, required)
-
-
-def _require_final_terminator(lines: list[str]) -> None:
-    """Require the final record to close the last LCOV source section."""
-    if lines[-1] != "end_of_record":
-        raise ValidationError(ValidationIssue.MISSING_TERMINATOR)
+    _raise_validation_error_if(
+        should_raise=not lines,
+        issue=ValidationIssue.EMPTY_REPORT,
+    )
+    invalid_line = _first_invalid_lcov_line(lines)
+    _raise_validation_error_if(
+        should_raise=invalid_line is not None,
+        issue=ValidationIssue.INVALID_RECORD,
+        detail=invalid_line,
+    )
+    missing_record = _first_missing_lcov_record("\n".join(lines))
+    _raise_validation_error_if(
+        should_raise=missing_record is not None,
+        issue=ValidationIssue.MISSING_RECORD,
+        detail=missing_record,
+    )
+    _raise_validation_error_if(
+        should_raise=lines[-1] != "end_of_record",
+        issue=ValidationIssue.MISSING_TERMINATOR,
+    )
 
 
 def validate(artifact_dir: pathlib.Path) -> None:
