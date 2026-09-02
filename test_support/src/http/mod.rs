@@ -7,11 +7,19 @@
 use mockable::{DefaultEnv, Env};
 use std::{
     fmt,
-    io::{self, Read, Write},
+    io::{self, Read},
     net::{SocketAddr, TcpListener, TcpStream},
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
     thread,
     time::{Duration, Instant},
 };
+
+mod response;
+
+pub use self::response::HttpResponse;
 
 /// Override for the timeout in milliseconds within which a client must connect.
 pub(crate) const ENV_HTTP_ACCEPT_TIMEOUT_MS: &str = "NETSUKE_TEST_HTTP_ACCEPT_TIMEOUT_MS";
@@ -173,16 +181,40 @@ pub fn spawn_http_server_with_config(
     response_body: impl Into<String>,
     config: HttpServerConfig,
 ) -> io::Result<(String, HttpServer)> {
-    let body = response_body.into();
+    let (url, _requests, server) =
+        spawn_http_server_responses_with_config([HttpResponse::new(200, response_body)], config)?;
+    Ok((url, server))
+}
+
+/// Spawn an HTTP server that emits each response in sequence and counts requests.
+///
+/// # Errors
+///
+/// Propagates failures while starting the fixture server.
+pub fn spawn_http_server_responses(
+    responses: impl IntoIterator<Item = HttpResponse>,
+) -> io::Result<(String, Arc<AtomicUsize>, HttpServer)> {
+    spawn_http_server_responses_with_config(responses, HttpServerConfig::from_env())
+}
+
+/// Spawn an HTTP server using `config`, emitting responses in sequence.
+fn spawn_http_server_responses_with_config(
+    responses: impl IntoIterator<Item = HttpResponse>,
+    config: HttpServerConfig,
+) -> io::Result<(String, Arc<AtomicUsize>, HttpServer)> {
+    let response_sequence = responses.into_iter().collect::<Vec<_>>();
     let listener = TcpListener::bind(("127.0.0.1", 0))?;
     listener.set_nonblocking(true)?;
     let addr = listener.local_addr()?;
     let url = format!("http://{addr}");
+    let requests = Arc::new(AtomicUsize::new(0));
+    let server_requests = Arc::clone(&requests);
     let handle = thread::Builder::new()
         .name("netsuke-http-fixture".into())
-        .spawn(move || run_http_server(&listener, &body, &config))?;
+        .spawn(move || run_http_server(&listener, &response_sequence, &config, &server_requests))?;
     Ok((
         url,
+        requests,
         HttpServer {
             handle: Some(handle),
             addr,
@@ -190,26 +222,34 @@ pub fn spawn_http_server_with_config(
     ))
 }
 
-/// Serve a single request from `listener`, responding with `body`.
+/// Serve the configured responses in request order.
 #[expect(
     clippy::panic,
     reason = "test HTTP helper should fail fast when networking fails"
 )]
-fn run_http_server(listener: &TcpListener, body: &str, config: &HttpServerConfig) {
-    let mut stream = accept_connection(
-        listener,
-        config.accept_deadline(),
-        config.poll_interval,
-        config.accept_timeout,
-    );
-    if let Err(err) = stream.set_nonblocking(true) {
-        panic!("failed to configure stream non-blocking: {err}");
-    }
-    let bytes_read = read_request(&mut stream, config.read_deadline(), config.poll_interval);
-    if bytes_read > 0
-        && let Err(err) = write_response(&mut stream, body)
-    {
-        panic!("failed to write fixture response: {err}");
+fn run_http_server(
+    listener: &TcpListener,
+    responses: &[HttpResponse],
+    config: &HttpServerConfig,
+    requests: &AtomicUsize,
+) {
+    for response in responses {
+        let mut stream = accept_connection(
+            listener,
+            config.accept_deadline(),
+            config.poll_interval,
+            config.accept_timeout,
+        );
+        if let Err(err) = stream.set_nonblocking(true) {
+            panic!("failed to configure stream non-blocking: {err}");
+        }
+        let bytes_read = read_request(&mut stream, config.read_deadline(), config.poll_interval);
+        if bytes_read > 0 {
+            requests.fetch_add(1, Ordering::Relaxed);
+            if let Err(err) = response::write_response(&mut stream, response) {
+                panic!("failed to write fixture response: {err}");
+            }
+        }
     }
 }
 
@@ -292,20 +332,6 @@ fn read_request(stream: &mut TcpStream, deadline: Instant, poll_interval: Durati
         }
         thread::sleep(poll_interval);
     }
-}
-
-/// Write a `200 OK` response carrying `body` to `stream`.
-///
-/// # Errors
-///
-/// Returns an error when the response cannot be written to the stream.
-fn write_response(stream: &mut TcpStream, body: &str) -> io::Result<()> {
-    let response = format!(
-        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-        body.len(),
-        body
-    );
-    stream.write_all(response.as_bytes())
 }
 
 /// Read `var` as whole milliseconds, falling back to `default` when unset or
