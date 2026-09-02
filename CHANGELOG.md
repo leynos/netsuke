@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.0-beta3] - 2026-09-02
+
+- Add injectable Ninja child environments, named Ninja request types, and
+  target/action discovery through `description` and `netsuke help targets`.
+- Add cached configuration discovery and opt-in serial dependency ordering.
+
+- Use Windows PowerShell by default for legacy recipes, with an explicit Bash
+  compatibility route, and require UTF-8 Ninja paths at their input boundary.
+- Scope manifest-relative glob expansion to the pattern's literal directory
+  prefix and distinguish Netsuke path markers from ordinary shell dollars.
+
 ## [0.1.0-beta2] - 2026-08-19
 
 ### Added
@@ -105,5 +116,6 @@
   of truth for the compiler contract
   ([#465](https://github.com/leynos/netsuke/issues/465))
 
+[0.1.0-beta3]: https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta3
 [0.1.0-beta2]: https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta2
 [0.1.0-beta1]: https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta1

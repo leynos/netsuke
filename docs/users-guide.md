@@ -1205,7 +1205,7 @@ Configuration precedence, from lowest to highest, is:
 4. Explicit command-line options.
 
 System and user configuration are discovered from platform conventions rather
-than merged as two separately named Netsuke layers. On Unix this means the XDG
+than merged as two separately named Netsuke layers. On Unix, this means the XDG
 base directories and the home directory; on Windows it means the
 application-data directories, such as `%APPDATA%\netsuke\config.toml`.
 Automatic discovery chooses one exclusive winner among system configuration,
