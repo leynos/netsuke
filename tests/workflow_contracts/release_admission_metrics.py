@@ -100,15 +100,25 @@ def exact_labels(record: dict[str, object]) -> None:
     Raises
     ------
     AssertionError
-        If the metric name, label order, label names, or label values fall
-        outside the fixed release-admission vocabulary.
-    TypeError
-        If the metric name, labels object, or a label value has the wrong type.
+        If the record's label names or order fall outside the fixed contract.
 
     Notes
     -----
     Exact ordering prevents silently accepting an extra, unbounded label.
     """
+    name, expected = _metric_definition(record)
+    labels = _metric_labels(record, name)
+    expected_names = [label for label, _ in expected]
+    if list(labels) != expected_names:
+        message = (
+            f"{name} labels must be exactly {expected_names!r}, got {list(labels)!r}"
+        )
+        raise AssertionError(message)
+    _validate_label_values(name, labels, expected)
+
+
+def _metric_definition(record: dict[str, object]) -> tuple[str, MetricLabels]:
+    """Return the fixed label definition for the metric record's name."""
     name = record.get("name")
     if not isinstance(name, str):
         message = f"release-admission metric must be a string: {name!r}"
@@ -116,18 +126,24 @@ def exact_labels(record: dict[str, object]) -> None:
     if name not in METRIC_LABELS:
         message = f"unknown release-admission metric: {name!r}"
         raise AssertionError(message)
+    return name, METRIC_LABELS[name]
+
+
+def _metric_labels(record: dict[str, object], name: str) -> dict[str, object]:
+    """Return the labels object after ensuring it is a mapping."""
     labels = record.get("labels")
     if not isinstance(labels, dict):
         message = f"{name} labels must be an object"
         raise TypeError(message)
+    return labels
 
-    expected = METRIC_LABELS[name]
-    expected_names = [label for label, _ in expected]
-    if list(labels) != expected_names:
-        message = (
-            f"{name} labels must be exactly {expected_names!r}, got {list(labels)!r}"
-        )
-        raise AssertionError(message)
+
+def _validate_label_values(
+    name: str,
+    labels: dict[str, object],
+    expected: MetricLabels,
+) -> None:
+    """Reject labels whose values fall outside the fixed metric vocabulary."""
     for label, allowed_values in expected:
         value = labels[label]
         if not isinstance(value, str):
@@ -158,15 +174,9 @@ def is_non_negative_metric_value(value: object) -> bool:
     Boolean values and non-finite floats are rejected even though Python treats
     booleans as integers and its JSON decoder can represent infinity.
     """
-    match value:
-        case bool():
-            return False
-        case int():
-            return value >= 0
-        case float():
-            return math.isfinite(value) and value >= 0
-        case _:
-            return False
+    if not isinstance(value, int | float) or isinstance(value, bool):
+        return False
+    return math.isfinite(value) and value >= 0
 
 
 def validate_metrics(records: list[dict[str, object]]) -> None:
@@ -177,12 +187,6 @@ def validate_metrics(records: list[dict[str, object]]) -> None:
     records
         Decoded metric records from :func:`parse_metrics`.
 
-    Raises
-    ------
-    AssertionError
-        If any record violates the fixed labels contract or has an invalid
-        metric value.
-
     Notes
     -----
     Each record must remain within the bounded metric vocabulary before an
@@ -190,7 +194,12 @@ def validate_metrics(records: list[dict[str, object]]) -> None:
     """
     for record in records:
         exact_labels(record)
-        value = record.get("value")
-        if not is_non_negative_metric_value(value):
-            message = "metric values must be non-negative JSON numbers"
-            raise AssertionError(message)
+        _validate_metric_value(record)
+
+
+def _validate_metric_value(record: dict[str, object]) -> None:
+    """Reject a metric observation that is not a finite non-negative number."""
+    value = record.get("value")
+    if not is_non_negative_metric_value(value):
+        message = "metric values must be non-negative JSON numbers"
+        raise AssertionError(message)
