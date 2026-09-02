@@ -482,8 +482,8 @@ result document to stdout:
     "status": "pass",
     "fail_on": "error",
     "summary": {
-      "error": 0, "warning": 2, "advice": 1,
-      "reported": 3, "suppressed": 1, "omitted": 0
+      "error": 0, "warning": 1, "advice": 0,
+      "reported": 1, "suppressed": 1, "omitted": 0
     },
     "truncated": false,
     "findings": [
@@ -638,7 +638,24 @@ reference, and three tests. Nothing about adding a rule requires touching the
 CLI, the output schema, or the localization catalogues, which is the property
 that keeps the growth cheap.
 
-## 13. Future extension points
+## 13. Rejected alternatives
+
+1. **Standalone YAML checker.** A checker that only reads YAML cannot
+   distinguish semantic cases such as order-only directory dependencies or a
+   recipe path that names another target's output. It would duplicate the
+   compiler's interpretation and lose the provenance available at its stages.
+2. **A new top-level command.** A `netsuke lint` noun was rejected because
+   `check` is already the canonical roadmap vocabulary for validation without
+   side effects; adding a synonym would violate the command vocabulary policy.
+   Putting linting behind `generate --lint` was also rejected because it would
+   couple validation to Ninja generation and its artefact output.
+3. **Threading provenance through the compiler.** Carrying source spans through
+   `foreach` expansion and typed deserialization would change the compiler's
+   hot path for the benefit of diagnostics. The linter instead builds a
+   best-effort source index from the same bytes and abstains when a later-stage
+   span cannot be resolved, because a wrong span is worse than no span.
+
+## 14. Future extension points
 
 - **Structured command syntax (v0.2.0).** When recipes can be expressed as
   structured commands rather than shell text, `bashism`,
