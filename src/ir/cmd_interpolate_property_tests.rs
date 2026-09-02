@@ -12,29 +12,6 @@ use super::{
     interpolate_command_with_shell,
 };
 
-
-//! Property tests for command interpolation token boundaries.
-//!
-//! These properties ensure `interpolate_command` replaces manifest markers outside
-//! protected regions with quoted paths, rejects markers within them, and
-//! rejects unbalanced backtick input as an invalid command.
-};
-
-
-//! Property tests for command interpolation token boundaries.
-//!
-//! These properties ensure `interpolate_command` replaces manifest markers outside
-//! protected regions with quoted paths, rejects markers within them, and
-//! rejects unbalanced backtick input as an invalid command.
-};
-//! Property tests for command interpolation token boundaries.
-//!
-//! These properties ensure `interpolate_command` replaces manifest markers outside
-//! protected regions with quoted paths, rejects markers within them, and
-//! rejects unbalanced backtick input as an invalid command.
-};
-
-
 use support::{
     adversarial_template_strategy, assert_matches_specification,
     eight_placeholder_template_strategy, has_odd_backticks, interpolation_template_strategy,
@@ -127,7 +104,11 @@ proptest! {
     fn adversarial_text_rejects_protected_tokens(template in adversarial_template_strategy()) {
         let backtick_count = template.chars().filter(|&ch| ch == '`').count();
         let has_open_backtick = backtick_count & 1 == 1;
-        let protected = if has_open_backtick { "$in $out`" } else { "`$in $out`" };
+        let protected = if has_open_backtick {
+            format!("{INS_TOKEN} {OUTS_TOKEN}`")
+        } else {
+            format!("`{INS_TOKEN} {OUTS_TOKEN}`")
+        };
         let result = interpolate_command_with_shell(
             &format!("{template}{protected}"),
             &[],

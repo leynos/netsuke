@@ -125,15 +125,14 @@ using the path comparator. A small direct adapter harness checks the
 wrapper/kernel connection for two-node path cycles, and Proptest continues to
 exercise path-bearing canonicalization up to the larger randomized bounds.
 
-Roadmap item `4.2.3` follows the same boundary. Kani proves the production
-sigil matcher through an eight-character symbolic window and proves the
-length-generic marker matcher through a six-character short-marker array. The
-sigil proof is complete for its contract because the production decision reads
-only the preceding character and the four following characters. The full
-scanner timed out under the five-minute, 8 GiB cap at both six and eight
-characters, and the guard invokes that scanner. Proptest therefore owns scanner
-agreement, backtick handling, odd-backtick rejection, and guard placement for
-templates up to 256 characters with at most eight placeholders.
+Roadmap item `4.2.3` follows the same boundary. Kani proves that literal `$in`
+and `$out` prefixes do not select a Netsuke marker in an eight-character
+symbolic window, and proves exact matching of both real marker constants through
+`find_substitution` in a 32-character symbolic array. The full scanner timed
+out under the five-minute, 8 GiB cap at both six and eight characters, and the
+guard invokes that scanner. Proptest therefore owns scanner agreement, backtick
+handling, odd-backtick rejection, and guard placement for templates up to 256
+characters with at most eight placeholders.
 
 The interpolation properties may use independent local oracles as assertion
 targets. They do not replace a production path or widen its API: the properties
@@ -171,9 +170,9 @@ written contract against which its result is compared.
   backtick state machine, or `shlex` guard. Their 256-character,
   eight-placeholder coverage is randomized Proptest evidence, not an exhaustive
   proof.
-- The marker proof establishes the length-generic matcher with a short token,
-  not the two concrete 27-character marker constants. Property tests exercise
-  those constants through the production scanner.
+- The marker proof drives both concrete 27-character marker constants through
+  `find_substitution`; longer surrounding command text remains covered by the
+  property tests.
 - Harness-local interpolation oracles can contain transcription errors. Their
   structural difference from production scanning and mutation evidence reduce
   that risk but do not make them a second implementation boundary.

@@ -791,252 +791,40 @@ NEXTEST_VERSION="$(sed -n "s/.*NEXTEST_VERSION: '\(.*\)'.*/\1/p" \
 cargo install cargo-nextest --locked --version "$NEXTEST_VERSION"
 # or, for a prebuilt binary:
 cargo binstall --no-confirm --locked \
-  "whitaker-installer@$INSTALLER_VERSION"
+  "cargo-nextest@$NEXTEST_VERSION"
 ```
 
-`whitaker-installer` and the lint libraries are separate artefacts with
-separate versions. The shared action's `installer-version` input pins the
-installer — the tool that stages libraries — and nothing else. The installer
-keeps its own checkout of the Whitaker repository under
-`~/.local/share/whitaker`, updates it with `git pull`, and stages the libraries
-from its default branch. Lint behaviour therefore tracks Whitaker HEAD.
-
-The Linux build job installs Nixie through the similarly SHA-pinned
-`leynos/shared-actions/.github/actions/install-nixie` action. Its required
-`python-version: '3.14'` input satisfies Nixie CLI's Python 3.14-or-newer
-requirement. `Install Nixie` follows `Setup uv` and precedes
-`Validate Mermaid diagrams`, which runs `make nixie`; preserve that order when
-maintaining the workflow so Mermaid validation always has the installed CLI
-available.
-
-**Running the lint libraries at HEAD is deliberate.** Netsuke follows the suite
-as it develops, so new lints and fixes arrive without a version bump here. Do
-not add a `[workspace.metadata.dylint]` block pinning `whitaker_suite` to a
-`tag` or `rev`. The [Whitaker user's guide](whitaker-users-guide.md) documents
-that form, and it is the right answer for a project wanting reproducible lint
-results, but adopting it here would reverse a standing decision rather than fix
-a defect.
-
-The cost is worth stating plainly: a change upstream can alter lint results
-between two runs with no change in this repository, and a local checkout that
-has not been restaged will disagree with CI, which stages fresh on every job.
-Restaging is what reconciles them.
-
-What the module-scoped exemptions in `dylint.toml` actually depend on is
-[Whitaker PR #315][whitaker-pr-315], which added the `excluded_paths` option,
-so the staged libraries must be recent enough to include it. Libraries staged
-from an older checkout ignore `excluded_paths` silently — the exemptions stop
-applying with no error, and the lint reports the modules they covered. Re-run
-`whitaker-installer` to restage from HEAD. If that checkout has been left on a
-detached HEAD, the installation fails during its `git pull`; put it back on the
-default branch and re-run.
-
-[whitaker-pr-315]: https://github.com/leynos/whitaker/pull/315
-
-Whitaker is configured by `dylint.toml` at the repository root, where each
-sanctioned ambient-filesystem scope for `no_std_fs_operations` carries a
-documented rationale. `docs/whitaker-users-guide.md` is a near-verbatim import
-of the [upstream Whitaker user's guide][whitaker-upstream-guide]; refresh it
-from that URL rather than editing it in place, preserving the "Netsuke
-deviation from upstream" callout, and record Netsuke-specific policy here and in
-`dylint.toml`.
-
-[whitaker-upstream-guide]: https://raw.githubusercontent.com/leynos/whitaker/refs/heads/main/docs/users-guide.md
-
-Prefer `excluded_paths` over `excluded_crates`: a path entry exempts one module
-and its descendants, whereas a crate entry exempts a whole compilation unit.
-The application crate's module-scoped exemptions include
-`netsuke::stdlib::which::lookup` (executable discovery through `PATH` and
-cross-directory symlink canonicalization, which `cap_std` cannot express) and
-`netsuke::runner::process::file_io::ambient_sync` (temporary-file
-synchronization, scoped to the submodule holding only that `sync_all` so the
-rest of `file_io` keeps writing through `cap_std` handles). Configuration
-discovery otherwise uses capability-scoped canonicalization. Its small,
-dedicated path-normalization module, `netsuke::cli::discovery::paths`, remains
-narrowly excluded because `std::fs::canonicalize` preserves the absolute
-comparison keys and cross-directory symlink behaviour that `cap_std` rejects.
-For ordinary man-page and completion generation, the build script compiles its
-inline `cli` facade: the four-file slice containing `src/cli/command.rs`,
-`src/cli/config.rs`, `src/cli/help.rs`, and `src/cli/validation.rs`. The
-`command.rs` module owns the Clap command schema and default-command behaviour,
-including `Cli::with_default_command()`, while runtime discovery remains
-deliberately outside the slice. The broader `netsuke::cli::discovery` module
-remains under the capability policy; no `build_script_build` exception is
-required. The behavioural step definitions, CLI integration tests, and shared
-workflow-reading helper that stage fixtures ambiently are scoped the same way.
-A crate-level entry is justified only when the ambient access lives in the
-crate root itself, where a path entry would be no narrower — that covers the
-enumerated integration-test crates. The `test_support` crate uses
-capability-backed fixture helpers and remains linted by Whitaker under its own
-narrow policy.
-
-The root Whitaker invocation selects only the `netsuke-build` package (the
-Cargo package name behind the `netsuke` targets; see ADR-007) and disables
-Dylint dependency checks. It supplies the root `dylint.toml` contents
-explicitly through `DYLINT_TOML`, so every invocation receives the same
-capability-boundary policy regardless of how Dylint resolves the current crate.
-`test_support` is a workspace member with one sanctioned ambient boundary
-configured per crate. Its second, scoped invocation supplies
-`test_support/dylint.toml` through `DYLINT_TOML`, and uses
-`--package test_support` and `--no-deps` because running from a member
-directory alone would otherwise check the parent workspace. That configuration
-names only `test_support::fs` in `excluded_paths`. The root `excluded_crates`
-must not contain `test_support`: every other module in the crate remains
-subject to the filesystem policy.
-
-Permanent exceptions belong in `dylint.toml`, scoped as narrowly as the lint
-allows. Do not use Rust `#[allow]` or `#[expect]` for `no_std_fs_operations`:
-this Dylint lint is not known to `rustc`, so its exclusions must be configured
-there. Prefer migrating to `cap_std` over any of these; reach for an exclusion
-only when the operation is irreducibly ambient.
-
-To confirm the exclusions have not silently widened, add a temporary
-`std::fs::metadata` call to an unexcluded module — for example
-`src/stdlib/which/cache.rs`, a sibling of the excluded `lookup` module, or the
-body of `src/runner/process/file_io.rs` outside `ambient_sync` — then run
-`make lint-whitaker`. Both sites must still be reported; revert the probe
-afterwards. The same check applies to `test_support`: a `std::fs` call in, say,
-`test_support/src/exec.rs` must be reported even though `test_support::fs` is
-exempt.
-
-When command output is long, preserve exit codes and logs:
+`make check-fmt` verifies Markdown formatting as well as Rust formatting, and
+needs `mdtablefix` on `PATH`. CI pins the version in `MDTABLEFIX_VERSION` in
+`.github/workflows/ci.yml`. Install that same version locally, so local runs
+match CI; read the pin from the workflow rather than copying the number, so the
+two cannot drift:
 
 ```bash
-set -o pipefail
-make test 2>&1 | tee /tmp/netsuke-make-test.log
-```
-
-These gates always use the repository toolchain and the default codegen
-backend. For a faster inner loop between gate runs, see
-[local build acceleration](#local-build-acceleration).
-
-For documentation changes, also run `make fmt`, `make markdownlint`, and
-`make nixie`.
-
+MDTABLEFIX_VERSION="$(sed -n "s/.*MDTABLEFIX_VERSION: '\(.*\)'.*/\1/p" \
+  .github/workflows/ci.yml)"
+cargo install --locked mdtablefix --version "$MDTABLEFIX_VERSION"
 # or, for a prebuilt binary:
 cargo binstall --no-confirm --locked \
-  "whitaker-installer@$INSTALLER_VERSION"
+  "mdtablefix@$MDTABLEFIX_VERSION"
 ```
 
-`whitaker-installer` and the lint libraries are separate artefacts with
-separate versions. The shared action's `installer-version` input pins the
-installer — the tool that stages libraries — and nothing else. The installer
-keeps its own checkout of the Whitaker repository under
-`~/.local/share/whitaker`, updates it with `git pull`, and stages the libraries
-from its default branch. Lint behaviour therefore tracks Whitaker HEAD.
+Version drift matters here beyond reproducibility: a different `mdtablefix`
+version may reflow prose differently, which would make `make check-fmt` fail on
+an otherwise clean tree.
 
-The Linux build job installs Nixie through the similarly SHA-pinned
-`leynos/shared-actions/.github/actions/install-nixie` action. Its required
-`python-version: '3.14'` input satisfies Nixie CLI's Python 3.14-or-newer
-requirement. `Install Nixie` follows `Setup uv` and precedes
-`Validate Mermaid diagrams`, which runs `make nixie`; preserve that order when
-maintaining the workflow so Mermaid validation always has the installed CLI
-available.
+Install the separately versioned Whitaker installer with:
 
-**Running the lint libraries at HEAD is deliberate.** Netsuke follows the suite
-as it develops, so new lints and fixes arrive without a version bump here. Do
-not add a `[workspace.metadata.dylint]` block pinning `whitaker_suite` to a
-`tag` or `rev`. The [Whitaker user's guide](whitaker-users-guide.md) documents
-that form, and it is the right answer for a project wanting reproducible lint
-results, but adopting it here would reverse a standing decision rather than fix
-a defect.
-
-The cost is worth stating plainly: a change upstream can alter lint results
-between two runs with no change in this repository, and a local checkout that
-has not been restaged will disagree with CI, which stages fresh on every job.
-Restaging is what reconciles them.
-
-What the module-scoped exemptions in `dylint.toml` actually depend on is
-[Whitaker PR #315][whitaker-pr-315], which added the `excluded_paths` option,
-so the staged libraries must be recent enough to include it. Libraries staged
-from an older checkout ignore `excluded_paths` silently — the exemptions stop
-applying with no error, and the lint reports the modules they covered. Re-run
-`whitaker-installer` to restage from HEAD. If that checkout has been left on a
-detached HEAD, the installation fails during its `git pull`; put it back on the
-default branch and re-run.
-
-[whitaker-pr-315]: https://github.com/leynos/whitaker/pull/315
-
-Whitaker is configured by `dylint.toml` at the repository root, where each
-sanctioned ambient-filesystem scope for `no_std_fs_operations` carries a
-documented rationale. `docs/whitaker-users-guide.md` is a near-verbatim import
-of the [upstream Whitaker user's guide][whitaker-upstream-guide]; refresh it
-from that URL rather than editing it in place, preserving the "Netsuke
-deviation from upstream" callout, and record Netsuke-specific policy here and in
-`dylint.toml`.
-
-[whitaker-upstream-guide]: https://raw.githubusercontent.com/leynos/whitaker/refs/heads/main/docs/users-guide.md
-
-Prefer `excluded_paths` over `excluded_crates`: a path entry exempts one module
-and its descendants, whereas a crate entry exempts a whole compilation unit.
-The application crate's module-scoped exemptions include
-`netsuke::stdlib::which::lookup` (executable discovery through `PATH` and
-cross-directory symlink canonicalization, which `cap_std` cannot express) and
-`netsuke::runner::process::file_io::ambient_sync` (temporary-file
-synchronization, scoped to the submodule holding only that `sync_all` so the
-rest of `file_io` keeps writing through `cap_std` handles). Configuration
-discovery otherwise uses capability-scoped canonicalization. Its small,
-dedicated path-normalization module, `netsuke::cli::discovery::paths`, remains
-narrowly excluded because `std::fs::canonicalize` preserves the absolute
-comparison keys and cross-directory symlink behaviour that `cap_std` rejects.
-For ordinary man-page and completion generation, the build script compiles its
-inline `cli` facade: the four-file slice containing `src/cli/command.rs`,
-`src/cli/config.rs`, `src/cli/help.rs`, and `src/cli/validation.rs`. The
-`command.rs` module owns the Clap command schema and default-command behaviour,
-including `Cli::with_default_command()`, while runtime discovery remains
-deliberately outside the slice. The broader `netsuke::cli::discovery` module
-remains under the capability policy; no `build_script_build` exception is
-required. The behavioural step definitions, CLI integration tests, and shared
-workflow-reading helper that stage fixtures ambiently are scoped the same way.
-A crate-level entry is justified only when the ambient access lives in the
-crate root itself, where a path entry would be no narrower — that covers the
-enumerated integration-test crates. The `test_support` crate uses
-capability-backed fixture helpers and remains linted by Whitaker under its own
-narrow policy.
-
-The root Whitaker invocation selects only the `netsuke-build` package (the
-Cargo package name behind the `netsuke` targets; see ADR-007) and disables
-Dylint dependency checks. It supplies the root `dylint.toml` contents
-explicitly through `DYLINT_TOML`, so every invocation receives the same
-capability-boundary policy regardless of how Dylint resolves the current crate.
-`test_support` is a workspace member with one sanctioned ambient boundary
-configured per crate. Its second, scoped invocation supplies
-`test_support/dylint.toml` through `DYLINT_TOML`, and uses
-`--package test_support` and `--no-deps` because running from a member
-directory alone would otherwise check the parent workspace. That configuration
-names only `test_support::fs` in `excluded_paths`. The root `excluded_crates`
-must not contain `test_support`: every other module in the crate remains
-subject to the filesystem policy.
-
-Permanent exceptions belong in `dylint.toml`, scoped as narrowly as the lint
-allows. Do not use Rust `#[allow]` or `#[expect]` for `no_std_fs_operations`:
-this Dylint lint is not known to `rustc`, so its exclusions must be configured
-there. Prefer migrating to `cap_std` over any of these; reach for an exclusion
-only when the operation is irreducibly ambient.
-
-To confirm the exclusions have not silently widened, add a temporary
-`std::fs::metadata` call to an unexcluded module — for example
-`src/stdlib/which/cache.rs`, a sibling of the excluded `lookup` module, or the
-body of `src/runner/process/file_io.rs` outside `ambient_sync` — then run
-`make lint-whitaker`. Both sites must still be reported; revert the probe
-afterwards. The same check applies to `test_support`: a `std::fs` call in, say,
-`test_support/src/exec.rs` must be reported even though `test_support::fs` is
-exempt.
-
-When command output is long, preserve exit codes and logs:
+CI installs Whitaker through the SHA-pinned
+`leynos/shared-actions/.github/actions/install-whitaker` action. Both build
+jobs pass its required `installer-version: '0.2.7'` input; there is no
+`WHITAKER_INSTALLER_VERSION` workflow variable. Read that action input before
+installing locally so the local installer matches CI:
 
 ```bash
-set -o pipefail
-make test 2>&1 | tee /tmp/netsuke-make-test.log
-```
-
-These gates always use the repository toolchain and the default codegen
-backend. For a faster inner loop between gate runs, see
-[local build acceleration](#local-build-acceleration).
-
-For documentation changes, also run `make fmt`, `make markdownlint`, and
-`make nixie`.
-
+INSTALLER_VERSION='0.2.7' # Read from the Install Whitaker action input in CI.
+cargo install --locked whitaker-installer \
+  --version "$INSTALLER_VERSION"
 # or, for a prebuilt binary:
 cargo binstall --no-confirm --locked \
   "whitaker-installer@$INSTALLER_VERSION"
@@ -2016,12 +1804,13 @@ N=2, N=3, and N=4, plus one direct adapter harness that checks
 path cycle. Larger path-bearing canonicalization coverage remains owned by the
 `cycle_property_tests.rs` Proptest suite.
 
-Command-interpolation Kani proofs drive the allocation-free placeholder
-matching helpers, not the full scanner. The helpers operate on the scanner's
-private `&[char]` buffer and avoid symbolic UTF-8 encoding in those proofs.
-Scanner, protected-placeholder, and guard behaviour remains covered by the
-adversarial Proptest suite over the documented 256-character, eight-placeholder
-range.
+Command-interpolation Kani proofs drive the allocation-free marker-matching
+helper, not the full scanner. The helper operates on the scanner's private
+`&[char]` buffer and avoids symbolic UTF-8 encoding in the proof. A separate
+proof verifies that literal shell-variable prefixes such as `$in` and `$out` do
+not select a Netsuke marker. Scanner, protected-placeholder, and guard
+behaviour remains covered by the adversarial Proptest suite over the documented
+256-character, eight-placeholder range.
 
 | Harness                                                     | Module                                   | Property                                                                                                | Bound                 | Notes                                                                                                                                                                     |
 | ----------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -2029,8 +1818,8 @@ range.
 | `empty_rule_shape_is_rejected`                              | `src/ir/from_manifest_verification.rs`   | An empty rule selector reaches `IrGenError::EmptyRule` and preserves the target name.                   | `#[kani::unwind(6)]`  | Drives production `resolve_rule` with a symbolic target name and a minimal rule map.                                                                                      |
 | `multiple_rule_shape_is_rejected`                           | `src/ir/from_manifest_verification.rs`   | A multi-rule selector reaches `IrGenError::MultipleRules` and preserves sorted rule names.              | `#[kani::unwind(8)]`  | Drives production `resolve_rule` with symbolic rule ordering over short bounded names.                                                                                    |
 | `missing_rule_shape_is_rejected`                            | `src/ir/from_manifest_verification.rs`   | A missing single rule reaches `IrGenError::RuleNotFound` and preserves target and rule names.           | `#[kani::unwind(6)]`  | Drives production `resolve_rule` with symbolic target and rule names and an empty rule map.                                                                               |
-| `sigil_placeholder_match_is_exact`                          | `src/ir/cmd_interpolate/verification.rs` | `$in` and `$out` match exactly at valid identifier boundaries.                                          | `#[kani::unwind(32)]` | An eight-character symbolic window is complete for the sigil matcher, which reads no wider context.                                                                       |
-| `marker_token_match_is_exact`                               | `src/ir/cmd_interpolate/verification.rs` | A marker matches exact text, irrespective of adjacent identifier characters.                            | `#[kani::unwind(32)]` | Drives the length-generic production matcher with a tractable short marker; the real markers remain property-tested.                                                      |
+| `shell_variable_prefix_does_not_match`                      | `src/ir/cmd_interpolate/verification.rs` | Literal `$in` and `$out` prefixes remain shell text rather than selecting a Netsuke marker.             | `#[kani::unwind(32)]` | Covers every symbolic `$` position in the bounded window, including truncated starts.                                                                                     |
+| `marker_token_match_is_exact`                               | `src/ir/cmd_interpolate/verification.rs` | The real `INS_TOKEN` and `OUTS_TOKEN` match exact text, irrespective of adjacent identifier characters. | `#[kani::unwind(34)]` | Drives both concrete marker constants through `find_substitution`, including prefix, suffix, near-miss, and truncation cases.                                             |
 | `self_dependency_reports_cycle`                             | `src/ir/cycle_verification.rs`           | A self-dependency is reported as a cycle by production traversal.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`, which reuses `CycleDetector::visit` in boolean mode.                                                                                  |
 | `two_node_cycle_reports_cycle_a_first`                      | `src/ir/cycle_verification.rs`           | A two-node cycle is reported when the `a` node is inserted first.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`; the separate insertion-order harnesses cover deterministic map-entry traversal under the Kani map.                                    |
 | `two_node_cycle_reports_cycle_b_first`                      | `src/ir/cycle_verification.rs`           | A two-node cycle is reported when the `b` node is inserted first.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`; this complements the `a`-first harness, so the proof is not tied to one insertion order.                                              |
@@ -2518,23 +2307,20 @@ this two-stage recipe pipeline and its direct IR recipe tests.
 
 ### Command interpolation contract
 
-The scanner substitutes `$in` and `$out` only when neither adjacent character
-is an ASCII letter, digit, or underscore. Thus `x$in`, `$input`, and `$output`
-remain unchanged. A preceding dollar is not an identifier character, so `$$in`
-becomes `$` followed by the input substitution; this existing behaviour is
-intentional for the current contract.
+The scanner recognizes only the internal `INS_TOKEN` and `OUTS_TOKEN` markers
+emitted by manifest rendering. Literal shell variables such as `$in`, `$out`,
+`$ins`, and `$outs` remain unchanged for the selected backend to interpret.
 
 `INS_TOKEN` and `OUTS_TOKEN` are machine-generated markers. They match exact
-text without the sigil forms' boundary rule, so an adjacent identifier
-character does not suppress a marker substitution. On POSIX-compatible routes,
-a placeholder inside a backtick-delimited region is rejected before it can
-evade lowering. PowerShell uses backticks as escapes and does not enter that
-protected region. The POSIX scanner then validates the substituted command: odd
-backticks reject the command, and the `shlex` guard also evaluates that
-substituted text. The odd-backtick and guard properties are complementary: one
-proves rejection of odd substituted backtick counts, while the other proves
-that the guard's success or failure and returned command agree with the
-substituted command.
+text, so an adjacent identifier character does not suppress a marker
+substitution. On POSIX-compatible routes, a placeholder inside a
+backtick-delimited region is rejected before it can evade lowering. PowerShell
+uses backticks as escapes and does not enter that protected region. The POSIX
+scanner then validates the substituted command: odd backticks reject the
+command, and the `shlex` guard also evaluates that substituted text. The
+odd-backtick and guard properties are complementary: one proves rejection of
+odd substituted backtick counts, while the other proves that the guard's
+success or failure and returned command agree with the substituted command.
 
 Generated strategies that are reusable across crate boundaries belong in
 `test_support`. Because `test_support` is compiled as a library, dependencies
@@ -2655,7 +2441,6 @@ It exercises the `-C` directory argument contract through the public factory
 only. Keep fixture assertions here and production test-helper behaviour in
 `check_ninja.rs`; this split keeps the public helper below the 400-line cap.
 
-
 ### `src/ir/cmd_interpolate_property_support.rs`
 
 This test-only sibling module is owned by the command-interpolation property
@@ -2668,6 +2453,11 @@ When adding a new `#[path]` support module, follow the same shape: keep it
 private to its parent, give it a `//!` header stating the split reason and
 ownership, cap its public surface at `pub(super)`, and document it here so the
 boundary inventory stays complete.
+
+The test-only sibling `src/ir/cmd_interpolate_power_shell_tests.rs` owns the
+command-interpolation cases for protected PowerShell contexts. Keep those cases
+in the sibling so the parent test module stays below the 400-line cap;
+production code must not depend on this test module.
 
 ## Behavioural testing strategy
 

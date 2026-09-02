@@ -12,16 +12,18 @@ Revision 2.18. See `Revision note` at the foot of this document.
 ## Purpose / big picture
 
 Netsuke turns a YAML manifest into a Ninja build file. Along the way it must
-turn a recipe template such as `cc -c $in -o $out` into a concrete shell
-command by substituting the target's input and output paths. That substitution
-is security-sensitive: it decides which parts of an author's command text are
-rewritten and which are left alone, and it is the last place that rejects a
-command whose shell syntax has been damaged by the substitution.
+turn manifest placeholders into internal `INS_TOKEN` and `OUTS_TOKEN` markers,
+then lower those markers to a concrete shell command with the target's input
+and output paths. Literal `$in` and `$out` remain shell variables. This
+substitution is security-sensitive: it decides which parts of an author's
+command text are rewritten and which are left alone, and it is the last place
+that rejects a command whose shell syntax has been damaged by the substitution.
 
-Today that logic is covered by five unit tests, three property tests over fixed
-templates, and six example cases in the integration suite. All of those sample
-the input space. None exhausts it, and none of them generates a `$`, a
-backtick, or a quote inside a template.
+The command-interpolation property suite now supplements the unit and
+integration examples with adversarial templates containing `$`, backticks,
+quotes, backslashes, and spaces. Its dense and sparse strategies cover up to
+256 characters and eight placeholders, while the Kani harnesses exhaustively
+cover the two feasible per-position marker decisions.
 
 After this change a maintainer will run one command:
 
@@ -32,10 +34,9 @@ make kani-ir
 and see the bounded model checker Kani prove — exhaustively, over every input
 its bound admits — the two feasible placeholder kernels:
 
-1. `$in` and `$out` are rewritten exactly at whole-token boundaries, so
-   `$input`, `$output`, and `x$in` are never mangled;
-2. marker tokens match exact text, deliberately without the sigil boundary
-   rule.
+1. Literal `$in` and `$out` are left unchanged as shell variables;
+2. the internal marker tokens match exact text, including when adjacent to
+   identifier characters.
 
 The production scanner and guard exceed the five-minute resource cap even at
 small string bounds. Independent Proptest properties therefore cover templates
@@ -45,11 +46,9 @@ the substituted command.
 
 "Exhaustively, within a bound" is the important phrase. Kani does not sample.
 For every input inside the bound it either proves the property or produces a
-concrete counterexample. For property (1) the bound is not even a real
-limitation: the decision it verifies reads at most six characters of context,
-so a six-character window with a symbolic offset covers every string of any
-length. That is a stronger guarantee than the existing tests give, and it is
-what roadmap item 4.2.3 asks for at the feasible Kani boundary.
+concrete counterexample. The shell-variable proof quantifies over every symbolic
+`$` position in its bounded window; the marker proof drives both real marker
+constants through the production recognizer.
 
 This plan adds no independent user-visible behaviour. During the final rebase,
 the target branch's security change began rejecting POSIX placeholders inside
@@ -98,40 +97,30 @@ the Kani verification module is a production dependency.
   `SubstitutionTraversal` in `substitution.rs`. The traversal tracks the
   selected shell's backtick semantics and asks `find_substitution` whether a
   placeholder starts at each position.
-- `find_substitution(chars: &[char], pos, ins, outs) -> Option<(&str, usize)>`
-  in `mod.rs` is the per-position decision. It takes a `&[char]` slice and
-  **allocates nothing**. It recognizes four placeholder forms: `$in`, `$out`,
-  and two internal markers `INS_TOKEN` (`__NETSUKE_INS_PLACEHOLDER__`) and
-  `OUTS_TOKEN` (`__NETSUKE_OUTS_PLACEHOLDER__`). The markers are what
-  `src/manifest/render.rs` (lines 110-151) emits for `{{ ins }}` and
-  `{{ outs }}`; they are machine-generated, not user syntax.
-- `has_valid_word_boundaries(chars, pos, len)` is the token
-  boundary rule. **Note the `len` convention carefully — it is the single
-  easiest thing to get wrong in this task.** `len` here is the pattern length
-  *excluding* the `$` sigil: 2 for `in`, 3 for `out`. The function checks
-  `chars[pos - 1]` and `chars[pos + len + 1]`, so for `$in` at `pos` it probes
-  `pos - 1` and `pos + 3` — the character immediately after the `n`. "Boundary
-  is fine" means the probed character is absent or is not an *identifier
-  character*, where `is_identifier_char` (lines 126-128) means ASCII
-  alphanumeric or underscore. At `pos == 0` the `pos.wrapping_sub(1)` at line
-  155 wraps to `usize::MAX`, `slice::get` returns `None`, and `is_none_or`
-  treats that as fine. Correct, but easy to break.
-- `try_match_placeholder(chars, pos, pattern)` returns
-  `Some(pattern.len() + 1)` — the whole span including the `$`. So the *match
-  length* for `$in` is 3 while the *boundary length* is 2. Two conventions, off
-  by one, in one file.
+- `find_substitution(chars: &[char], pos) -> Option<(Placeholder, usize)>` in
+  `mod.rs` is the per-position decision. It takes a `&[char]` slice and
+  **allocates nothing**. It recognizes only the two internal markers `INS_TOKEN`
+  (`__NETSUKE_INS_PLACEHOLDER__`) and `OUTS_TOKEN`
+  (`__NETSUKE_OUTS_PLACEHOLDER__`), which `src/manifest/render.rs` emits for
+  `{{ ins }}` and `{{ outs }}`. Literal `$in` and `$out` are not Netsuke
+  placeholders.
+- `find_substitution` first checks that the current character is `_`, preserving
+  the invariant that both machine-generated markers begin with an underscore,
+  then tries the two exact marker matches.
 - `try_match_token(chars, pos, token: &str, replacement)`
   matches the internal markers. It applies **no** boundary rule and requires
-  **no** `$` prefix, so `x__NETSUKE_INS_PLACEHOLDER__` *is* rewritten. It takes
-  the token as a parameter, and `find_substitution` reaches it only after its
-  underscore-prefix guard.
+  **no** `$` prefix, so `x__NETSUKE_INS_PLACEHOLDER__` *is* rewritten when the
+  marker begins at the underscore. It takes the token as a parameter, and
+  `find_substitution` reaches it only after its underscore-prefix guard.
 - `has_unmatched_backticks(s)` returns true when the backtick count is odd for
   POSIX-compatible command routes.
 - `interpolate_command_with_bindings(template, bindings)` is
-  the production entry point. It substitutes first, then rejects the result if
-  `has_unmatched_backticks(&interpolated)` **or**
-  `shlex::split(&interpolated).is_none()`. The order matters: the guard runs on
-  the substituted string.
+  the production entry point. It substitutes first, then applies the selected
+  shell's guard to the result. POSIX-compatible routes reject an odd
+  `has_unmatched_backticks(&interpolated)` count or
+  `shlex::split(&interpolated).is_none()`; PowerShell retains its native
+  backtick-escape semantics. The order matters: the guard runs on the
+  substituted string.
 - `interpolate_command_with_shell` is `#[cfg(test)]` only and supplies the
   explicit shell used by structural tests. It is **not** available under
   `cfg(kani)`. Harnesses use `interpolate_command_with_bindings` or call the
@@ -146,21 +135,15 @@ These follow from the rules above. Each was hand-derived and each must appear
 as a characterization test in EP-M1. If any turns out to be false, stop: your
 model of the code is wrong.
 
-| Input                          | Output            | Why                                                                                             |
-| ------------------------------ | ----------------- | ----------------------------------------------------------------------------------------------- |
-| `cp $in $out`                  | `cp <ins> <outs>` | ordinary case                                                                                   |
-| `$input`                       | `$input`          | `chars[pos+3]` is `p`, an identifier character                                                  |
-| `x$in`                         | `x$in`            | `chars[pos-1]` is `x`, an identifier character                                                  |
-| `$$in`                         | `$<ins>`          | at the second `$`, `chars[pos-1]` is `$`, not an identifier character, so it **is** substituted |
-| `$in$out`                      | `<ins>$out`       | at the `$out`, `chars[pos-1]` is `n`, an identifier character                                   |
-| `$in$in`                       | `<ins>$in`        | same reason                                                                                     |
-| `` echo `cat $in` ``           | rejected          | a placeholder inside a backtick region cannot safely lower                                      |
-| `` echo `$in ``                | rejected          | odd backtick count                                                                              |
-| `x__NETSUKE_INS_PLACEHOLDER__` | `x<ins>`          | markers have no boundary rule                                                                   |
-
-The `$$in` row deserves attention: `$$` is Ninja's escape for a literal dollar,
-so an author writing `$$in` to mean the literal text `$in` gets a substitution
-instead. See `Surprises & discoveries`.
+| Input                                    | Output                | Why                                                               |
+| ---------------------------------------- | --------------------- | ----------------------------------------------------------------- |
+| `cp $in $out`                            | unchanged             | literal shell variables are not Netsuke placeholders              |
+| `$input`                                 | unchanged             | no internal marker begins at the dollar sign                      |
+| `echo __NETSUKE_INS_PLACEHOLDER__`       | `echo <ins>`          | the exact input marker is lowered                                 |
+| `x__NETSUKE_INS_PLACEHOLDER__`           | `x<ins>`              | markers have no identifier-boundary rule                          |
+| `` echo `__NETSUKE_INS_PLACEHOLDER__` `` | rejected on POSIX     | a marker inside a protected backtick region cannot safely lower   |
+| `` echo `__NETSUKE_INS_PLACEHOLDER__ ``  | rejected on POSIX     | the substituted command has an odd backtick count                 |
+| `` echo `__NETSUKE_INS_PLACEHOLDER__` `` | lowered on PowerShell | PowerShell treats backticks as native escapes, not protected text |
 
 ### What Kani is and how this repository already uses it
 
@@ -218,11 +201,11 @@ you must follow:
   build scripts fail to load `libLLVM` with an opaque linker error. This is the
   single most likely place to get stuck.
 
-The existing inventory is thirteen harnesses across
+The pre-existing inventory is thirteen harnesses across
 `src/ir/from_manifest_verification.rs` (four) and
 `src/ir/cycle_verification.rs` (nine), documented in the "Kani harness
-inventory" table of `docs/developers-guide.md`. There are twelve mutation
-patches: the adapter harness
+inventory" table of `docs/developers-guide.md`. Before this work there were
+twelve mutation patches: the adapter harness
 `canonicalize_path_wrapper_matches_u8_kernel_for_two_nodes` has none.
 
 ### Continuous integration and its budget
@@ -258,11 +241,10 @@ work.
 
 ### Terms used in this plan
 
-- **Placeholder.** One of `$in`, `$out`, `INS_TOKEN`, `OUTS_TOKEN`.
-- **Sigil form.** The `$in` and `$out` placeholders, which carry a `$` and are
-  subject to the boundary rule.
-- **Marker form.** The two internal tokens, which are not.
-- **Token boundary.** The rule in `has_valid_word_boundaries`.
+- **Placeholder.** One of the internal `INS_TOKEN` or `OUTS_TOKEN` markers.
+- **Shell variable.** Literal `$in` and `$out` text, which remains unchanged.
+- **Marker form.** The two internal tokens, which match exact text without an
+  identifier-boundary rule.
 - **Backtick region.** Characters between an odd-numbered backtick and the next
   one, as tracked by `in_backticks`.
 - **Guard.** The rejection condition in `interpolate_command_with_bindings`.
@@ -318,7 +300,7 @@ There is no Terms of Reference document in this repository. Upstream artefacts:
 Trace links:
 
 ```plaintext
-RM-4.2.3.a -> FV-CMD -> EP-M2 -> ir::cmd_interpolate::verification::sigil_placeholder_match_is_exact
+RM-4.2.3.a -> FV-CMD -> EP-M2 -> ir::cmd_interpolate::verification::shell_variable_prefix_does_not_match
 RM-4.2.3.a -> FV-CMD -> EP-M2 -> ir::cmd_interpolate::verification::marker_token_match_is_exact
 RM-4.2.3.b -> FV-CMD -> EP-M5 -> ir::cmd_interpolate::property_tests::scanner_agrees_with_independent_specification
 RM-4.2.3.c -> FV-CMD -> EP-M5 -> ir::cmd_interpolate::property_tests::substituted_odd_backticks_are_rejected
@@ -389,14 +371,14 @@ Stop and escalate. Do not work around these.
 - **Memory.** If any harness is OOM-killed at the 8 GiB cap, record the bound
   at which it died and stop. Do not raise the cap.
 - **Bound shortfall.** Mechanical rule: if EP-M0 cannot verify the
-  `sigil_placeholder_match_is_exact` shape at a window of at least 8 characters
-  within 6 minutes, **commit nothing to the working branch** and report the
-  measurement table. Do not proceed to EP-M1 on judgement.
+  `shell_variable_prefix_does_not_match` shape at a window of at least 8
+  characters within 6 minutes, **commit nothing to the working branch** and
+  report the measurement table. Do not proceed to EP-M1 on judgement.
 - **Iterations.** If a harness still fails after 3 fix attempts, stop and report
   the counterexample rather than weakening the property.
 - **Behaviour.** If any pre-existing test requires editing, stop.
-- **Ambiguity.** If the substitution semantics turn out to be genuinely
-  ambiguous — see the `$$in` row above — record both readings and ask.
+- **Ambiguity.** If the marker-only substitution semantics turn out to be
+  genuinely ambiguous, record both readings and ask.
 
 ## Risks
 
@@ -429,62 +411,49 @@ Stop and escalate. Do not work around these.
   hitting the 8 GiB cap at N=3. Mitigation: only two harnesses touch
   `interpolate_command_with_bindings`, and both target a window of 6 to 8
   characters — enough to exhibit the specific fault each is designed to catch
-  (a backtick plus a `$in` plus a binding-introduced backtick fits in six).
+  (a backtick plus a marker plus a binding-introduced backtick fits in six).
   Longer inputs are handed to Proptest against the real crate in EP-M5.
   Revision 1's INV-GUARD-A/B split is dropped; it paid full price for no saving.
 
 - **The roadmap's 256-character, 8-placeholder bound is not reachable by
-  Kani.** Severity: medium. Likelihood: high. Mitigation: two things, and this
-  is the plan's main structural answer. First, for `RM-4.2.3.a` the bound
-  largely dissolves: `find_substitution`'s sigil path reads only
-  `chars[pos - 1 ..= pos + 4]`, so an eight-character window with a symbolic
-  offset covers every occurrence in a string of any length. The result is
-  complete for the sigil contract, not merely bounded. Second, where a genuine
-  bound remains (the string-level and guard harnesses), EP-M0 measures it and
-  EP-M5 hands the residual range to Proptest, exactly as `ADR-004` did for
-  roadmap 4.2.1's unreachable 10-node bound.
+  Kani.** Severity: medium. Likelihood: high. Mitigation: the shell-variable
+  proof needs only an eight-character window with a symbolic position, while
+  the marker proof uses a 32-character window containing the real constants.
+  The full scanner and guard retain the genuine resource bound, so EP-M5 hands
+  their residual range to Proptest, exactly as `ADR-004` did for roadmap
+  4.2.1's unreachable 10-node bound.
 
-- **Marker-form placeholders fall outside every plausible alphabet.**
-  Severity: medium. Likelihood: certain if not designed against. `INS_TOKEN` is
-  27 characters containing uppercase letters. No harness alphabet small enough
-  to be tractable contains them, and no harness window small enough is 27
-  characters wide. A harness over such an alphabet would leave
-  `try_match_token` structurally unreachable — a mutation deleting the entire
-  marker arm of `find_substitution` would survive every harness. Mitigation:
-  `try_match_token` already takes the token as a `&str` parameter. A dedicated
-  harness drives it with a **short** token over a matching alphabet, proving
-  the length-generic matching contract and the deliberate absence of a boundary
-  rule. The residual gap — that the specific 27-character constants are not
-  proved — is stated in `ADR-004` and covered by the existing property tests.
+- **Marker-form placeholders fall outside every plausible small alphabet.**
+  Severity: medium. Likelihood: high. The two real markers are 27 characters
+  long and contain uppercase letters, so a small alphabet cannot express them.
+  Mitigation: `marker_token_match_is_exact` drives both concrete constants
+  through `find_substitution` in a 32-character symbolic window. The proof
+  retains the exact-match and boundary-asymmetry checks without introducing a
+  proof-only short-token path.
 
-- **The existing test suite cannot detect a subtle refactor regression.**
-  Severity: high. Likelihood: medium.
-  `src/ir/cmd_interpolate_property_tests.rs` generates only paths;
-  `safe_text_strategy` is `[a-zA-Z0-9_./ -]` with no `$`, no backtick, no
-  quote, and every template is a fixed literal.
-  `tests/command_escaping_tests.rs` is six examples. Total adversarial coverage
-  of the boundary rule is `$input` and `$output_dir`. "Existing tests pass
-  unedited" is therefore necessary but nowhere near sufficient. Mitigation:
-  EP-M1 adds the characterization table above as `#[rstest]` cases **before**
-  touching production, and builds the adversarial Proptest generator (alphabet
-  including `$`, backtick, quote, backslash, space) at EP-M1 rather than
-  deferring it to EP-M5.
+- **Property generators must retain adversarial coverage.** Severity: high.
+  Likelihood: medium. The command-interpolation property suite now generates
+  `$`, backticks, quotes, backslashes, spaces, dense eight-placeholder
+  templates, and sparse templates up to 256 characters. Future simplification
+  of those strategies could silently remove coverage for marker pass-through or
+  protected contexts. Mitigation: retain the hand-derived characterization
+  table, adversarial generators, and residual Proptest properties alongside the
+  Kani harnesses.
 
 - **Mutation patches rot silently and nothing detects it.**
   Severity: medium. Likelihood: certain over time. Nothing in the Makefile, the
   workflows, or the test suite applies the patches under
-  `docs/verification/mutations/`. There are already twelve patches for thirteen
-  harnesses. Mitigation: EP-M2 adds a contract test that runs
+  `docs/verification/mutations/`. The pre-existing inventory had twelve patches
+  for thirteen harnesses. Mitigation: EP-M2 adds a contract test that runs
   `git apply --check` over every patch and asserts every `#[kani::proof]`
   harness has a patch or an explicitly justified exemption. This is cheap, runs
   in `make test`, and is the highest-value single addition in this plan.
 
-- **`$$in` and `x__NETSUKE_INS_PLACEHOLDER__` may be defects rather than
-  contract.** Severity: medium. Likelihood: medium. Mitigation: EP-M1 pins both
-  with characterization tests and asks the maintainer to classify them.
-  Whatever the classification, changing them is a behaviour change and out of
-  scope here (Constraint 1). The proofs document reality; if reality is wrong,
-  that is a separate roadmap item.
+- **Literal shell variables must remain untouched.** Severity: medium.
+  Likelihood: medium. Mitigation: the shell-variable harness and the
+  `dollar_prefixed_shell_variables_are_preserved` property cover literal `$in`,
+  `$out`, `$ins`, and `$outs`. Changing this behaviour is a behaviour change
+  and out of scope here (Constraint 1).
 
 - **`ADR-004` numbering collision.** Severity: low. Likelihood: certain.
   Three files already share the `adr-004` prefix; this is a known accepted
@@ -505,38 +474,28 @@ Stop and escalate. Do not work around these.
   shell expands back to the original path. Out of scope. Note that it emits `'`
   and `\'`, so a path containing a backtick becomes a quoted word that still
   contains a literal backtick character.
-- **AXIOM-WINDOW.** For the sigil forms, `find_substitution(chars, pos, ..)`
-  reads only `chars[pos - 1 ..= pos + 4]`. This is verifiable by inspection of
-  lines 138-211 and is the basis for the completeness claim in `OBL-SIGIL`. It
-  is **discharged, not merely asserted**: the harness quantifies over a symbolic
-  `pos` across an eight-character array, so every window position including
-  both truncated ends is exercised, and the mutation patch perturbs the
-  boundary probe so a wrong window would be caught.
+- **AXIOM-WINDOW.** The shell-variable harness quantifies over a symbolic `$`
+  position across an eight-character array. This covers every bounded position,
+  including both truncated ends, and the marker harness separately supplies a
+  32-character array containing each real marker.
 
 ### Obligations
 
 ______________________________________________________________________
 
-**OBL-SIGIL** — *sigil placeholders match exactly when the contract says they
-should.*
+**OBL-SHELL** — *literal shell-variable prefixes never select a marker.*
 
 Statement: for every character array `chars` over ALPHABET-T and every offset
-`pos` within it, `find_substitution(chars, pos, ins, outs)` returns
-`Some((ins, 3))` **if and only if** `chars[pos] == '$'`,
-`chars[pos + 1] == 'i'`, `chars[pos + 2] == 'n'`, `chars.get(pos - 1)` is
-absent or not an identifier character, and `chars.get(pos + 3)` is absent or
-not an identifier character; and symmetrically returns `Some((outs, 4))` for
-`$out` with the lookahead at `pos + 4`; and returns `None` otherwise.
+`pos` within it, when `chars[pos] == '$'`, `find_substitution(chars, pos)`
+returns `None`. This covers literal `$in`, `$out`, `$ins`, and `$outs`
+prefixes, including truncated starts.
 
 - **Method:** bounded model check (Kani), driving production
   `find_substitution` directly.
-- **Rationale:** this is `RM-4.2.3.a`, including its "`$input` and `$output` are
-  not rewritten accidentally" clause. It is a per-position property over all
-  strings and the failure mode is off-by-one index arithmetic — exactly what
-  exhaustive exploration catches and sampling misses. Stating it as a
-  biconditional makes soundness and completeness one obligation: the empty
-  behaviour fails the "if" direction and an over-eager behaviour fails the
-  "only if" direction, so neither can pass vacuously.
+- **Rationale:** this is `RM-4.2.3.a`'s marker-only contract. It is a
+  per-position property over all strings in the bounded alphabet, and the
+  failure mode is accidentally treating shell variables as Netsuke markers —
+  exactly what exhaustive exploration catches and sampling can miss.
 - **Domain:** `[u8; 8]`, each byte `kani::assume`d to be a member of
 
   ```rust
@@ -551,30 +510,18 @@ not an identifier character; and symmetrically returns `Some((outs, 4))` for
   with `kani::assume(pos < 8)`. Eight characters with a symbolic offset covers
   every window position under AXIOM-WINDOW, including both truncated ends, so
   the result holds for strings of any length.
-- **Oracle:** the right-hand side of the biconditional is computed in the
-  harness by direct indexing and a local `fn is_ident(b: u8) -> bool`. This is
-  an authorized oracle (see `Decision log`); it must be written from the
-  contract, not by calling `has_valid_word_boundaries`.
+- **Oracle:** the shell-variable prefix is identified by direct indexing in
+  the harness, not by calling production matching code.
 - **Artefact:** `src/ir/cmd_interpolate/verification.rs`, harness
-  `sigil_placeholder_match_is_exact`.
+  `shell_variable_prefix_does_not_match`.
 - **Evidence:** capped `make kani-ir` reports `SUCCESS`.
 - **Non-vacuity:**
-  - *Covers.* `kani::cover!` that some input returns `Some` for `$in`; that some
-    input returns `Some` for `$out`; that some input has the pattern present but
-    is rejected by the leading boundary; that some input has it present but is
-    rejected by the trailing boundary; and that some input matches at `pos == 0`
-    (the `wrapping_sub` edge). Any of these reported `UNSATISFIABLE` means the
-    domain is wrong — treat it as a failure.
-  - *Mutation.*
-    `docs/verification/mutations/ir__cmd_interpolate__verification__sigil_placeholder_match_is_exact.patch`
-    deletes the `next_ok` conjunct from `has_valid_word_boundaries`
-    (`src/ir/cmd_interpolate/mod.rs`), so `$ina` rewrites. That breaks the "only
-    if" direction and the harness must fail.
-    **Do not** use the `pos + len + 1` to `pos + len` mutation that revision 1
-    proposed: for `$in`, `len` is 2, so the probe becomes `chars[pos + 2]`,
-    always `n`, always an identifier character, so nothing ever matches and the
-    property would hold vacuously on one side. That mutation tests the opposite
-    obligation and revision 1 had it backwards.
+  - *Covers.* `kani::cover!` that input and output shell-variable prefixes pass
+    through, including a start-position case. Any reported `UNSATISFIABLE`
+    means the domain is wrong — treat it as a failure.
+  - *Mutation.* The harness is validated by the live matcher assertion and the
+    Kani mutation-evidence contract; the superseded sigil mutation patch is no
+    longer applicable to marker-only lowering.
 
 ______________________________________________________________________
 
@@ -582,10 +529,10 @@ ______________________________________________________________________
 ignore token boundaries.*
 
 Statement: for every array `chars` containing either internal marker and every
-offset `pos`, `find_substitution(chars, pos, ins, outs)` returns the matching
-replacement and exact marker length if and only if the marker text starts at
-`pos`; and no property of `chars[pos - 1]` or the character after the marker
-affects the result.
+offset `pos`, `find_substitution(chars, pos)` returns the matching placeholder
+and exact marker length if and only if the marker text starts at `pos`; and no
+property of `chars[pos - 1]` or the character after the marker affects the
+result.
 
 - **Method:** bounded model check (Kani), driving production
   `find_substitution` with the real `INS_TOKEN` and `OUTS_TOKEN` marker forms.
@@ -593,7 +540,7 @@ affects the result.
   fallback reachable through its underscore-prefix guard while retaining the
   exact-match and boundary-asymmetry checks. A mutation in the fallback loop
   must therefore fail through the same entry point used by production.
-- **Domain:** bounded symbolic windows containing each real marker, with
+- **Domain:** a 32-character symbolic window containing each real marker, with
   symbolic positions and explicit prefix, suffix, near-miss, and truncation
   cases. The window is large enough for the marker loop's 27-character span.
 - **Artefact:** `src/ir/cmd_interpolate/verification.rs`, harness
@@ -607,22 +554,21 @@ affects the result.
     `None`.
   - *Mutation.* `...__marker_token_match_is_exact.patch` changes
     `chars.get(pos + i)` to `chars.get(pos)` in `src/ir/cmd_interpolate/mod.rs`.
-- **Residual gap:** none for the marker text itself; the harness drives both
-  checked-in marker constants through `find_substitution`. Longer surrounding
-  command text remains covered by the property tests.
+- **Residual gap:** longer surrounding command text remains covered by the
+  property tests; both checked-in marker constants are driven through
+  `find_substitution` by this harness.
 
 ______________________________________________________________________
 
 **OBL-SPEC** — *the scanner agrees with a declarative specification, so
 backtick regions are preserved.*
 
-Statement: for every `chars` over ALPHABET-T and every short `ins`/`outs`,
+Statement: for every generated template and short `ins`/`outs` binding,
 `substitute(template, &bindings)` agrees with
 `spec_substitute(template, &bindings.ins, &bindings.outs)`, where
 `spec_substitute` is a declarative oracle defined in the property tests.
 
-- **Method:** bounded model check (Kani), differential against a harness-local
-  oracle.
+- **Method:** Proptest differential testing against a harness-local oracle.
 - **Rationale:** this is `RM-4.2.3.b` and more. Stating "backtick regions are
   preserved" directly requires mapping input offsets to output offsets, which
   is awkward and easy to state vacuously. Differential agreement with an
@@ -641,20 +587,23 @@ Statement: for every `chars` over ALPHABET-T and every short `ins`/`outs`,
   - be written from the contract in `Context and orientation`, not by
     paraphrasing `substitute`.
   It is permitted to call production `find_substitution`, because that function
-  is separately pinned by `OBL-SIGIL`; what it must not reuse is `substitute`'s
-  control flow. Quadratic cost is acceptable and expected.
-- **Domain:** `[u8; M]` over ALPHABET-T, `M` from EP-M0 (target 10 to 16);
-  `ins` and `outs` fixed to short concrete backtick-free strings such as `"I"`
-  and `"O"`.
-- **Artefact:** `src/ir/cmd_interpolate/verification.rs`, harness
-  `substitute_agrees_with_spec`.
-- **Evidence:** capped `make kani-ir` reports `SUCCESS`.
+  is separately pinned by `OBL-SHELL` and `OBL-MARKER`; what it must not reuse
+  is `substitute`'s control flow. Quadratic cost is acceptable and expected.
+- **Domain:** generated dense and sparse templates, including the eight-
+  placeholder and 256-character cases; `ins` and `outs` are raw binding strings
+  generated by the property-test support module.
+- **Artefact:** `src/ir/cmd_interpolate_property_tests.rs`, property
+  `scanner_agrees_with_independent_specification`.
+- **Evidence:** the scanner property and its mutation evidence pass under
+  `make test`.
 - **Non-vacuity:**
-  - *Covers.* Some input has a non-empty backtick region **containing a `$in`**;
+  - *Covers.* Some input has a non-empty backtick region **containing a
+    marker**;
     some input has a *closed* backtick region followed by a substituted
     placeholder (catches a stuck `in_backticks` flag); some input produces at
     least two substitutions.
-  - *Mutation.* `...__substitute_agrees_with_spec.patch` removes the
+  - *Mutation.*
+    `...__scanner_agrees_with_independent_specification.patch` removes the
     `if self.in_backticks { ... }` arm in `src/ir/cmd_interpolate/substitution.rs`.
   - *Second mutation, applied during EP-M3 as a one-off check and recorded in
     `Artefacts and notes` rather than committed:* change `i += skip` to
@@ -666,12 +615,12 @@ ______________________________________________________________________
 **OBL-ODD** — *a command whose substituted form has an odd backtick count is
 rejected.*
 
-Statement: for every `chars` over ALPHABET-T and bindings over ALPHABET-B, let
+Statement: for every generated template and binding pair, let
 `s = substitute(template, &bindings)`. If the number of backticks in `s` is
 odd, then `interpolate_command_with_bindings(template, bindings)` returns
 `Err(IrGenError::InvalidCommand { command, .. })` with `command == s`.
 
-- **Method:** bounded model check (Kani).
+- **Method:** Proptest over the residual template and binding range.
 - **Rationale:** this is `RM-4.2.3.c`. The load-bearing word is *substituted*:
   the count is taken after substitution, so a binding that introduces a
   backtick must also trigger rejection.
@@ -679,8 +628,8 @@ odd, then `interpolate_command_with_bindings(template, bindings)` returns
   fold, not by calling `has_unmatched_backticks`.** If the harness calls the
   production predicate, the mutation below flips both sides of the implication
   and the harness passes — fully vacuous. This is an authorized oracle.
-- **Domain:** `[u8; M]` over ALPHABET-T with `M` from EP-M0 (target 6 to 8);
-  `ins` and `outs` symbolic of length at most 2 over
+- **Domain:** generated interpolation templates with residual bindings of
+  length at most 2 over
 
   ```rust
   const ALPHABET_B: [u8; 2] = *b"a`";
@@ -691,16 +640,18 @@ odd, then `interpolate_command_with_bindings(template, bindings)` returns
   interpolation module, so it can construct `CommandBindings` with arbitrary
   raw text without widening the production API or retaining a proof-only
   constructor.
-- **Artefact:** `src/ir/cmd_interpolate/verification.rs`, harness
-  `odd_backticks_are_rejected`.
-- **Evidence:** capped `make kani-ir` reports `SUCCESS`.
+- **Artefact:** `src/ir/cmd_interpolate_property_tests.rs`, property
+  `substituted_odd_backticks_are_rejected`.
+- **Evidence:** the odd-backtick property and its mutation evidence pass under
+  `make test`.
 - **Non-vacuity:**
   - *Covers.* Some input where the template's backtick count is **even** but
     the bindings make the substituted count odd — this is the case that
     distinguishes checking the result from checking the template, and if it is
     `UNSATISFIABLE` the harness is not testing what it claims. Also: some input
     where the template itself is odd; and some input that is accepted.
-  - *Mutation.* `...__odd_backticks_are_rejected.patch` changes
+  - *Mutation.*
+    `...__substituted_odd_backticks_are_rejected.patch` changes
     `rem_euclid(2) != 0` to `== 0` in `src/ir/cmd_interpolate/mod.rs`.
 
 ______________________________________________________________________
@@ -708,7 +659,7 @@ ______________________________________________________________________
 **OBL-GUARD** — *the guard is applied to the substituted command, not the
 template.*
 
-Statement: for every `chars` and bindings in the domain, let
+Statement: for every generated template and binding pair, let
 `s = substitute(template, &bindings)`. Then
 `interpolate_command_with_bindings(template, bindings)` returns `Ok(s)` if and
 only if the harness-computed backtick count of `s` is even **and**
@@ -728,10 +679,10 @@ flips both sides and this harness still passes. `OBL-ODD` pins the meaning and
 `OBL-GUARD` pins the placement; neither alone is sufficient, and the plan must
 say so in the developers' guide.
 
-- **Method:** bounded model check (Kani), against the real `shlex` crate.
-- **Domain:** `[u8; M]` over ALPHABET-T extended with `'` (single quote), with
-  `M` from EP-M0 (target 6 to 8); bindings as `OBL-ODD`. Six characters is
-  enough to exhibit the placement fault: a backtick, a `$in`, and a
+- **Method:** Proptest against the real `shlex` crate.
+- **Domain:** generated interpolation templates over the residual alphabet,
+  extended with `'` (single quote), and bindings as `OBL-ODD`. Six characters
+  is enough to exhibit the placement fault: a backtick, a marker, and a
   binding-introduced backtick fit.
 - **Do not assert the `snippet` field.** `snippet` is
   `interpolated.chars().take(160).collect()`; asserting it drags a
@@ -739,16 +690,17 @@ say so in the developers' guide.
   `#[kani::unwind(161)]`, which Kani applies to *every* loop in the harness
   including `shlex`'s. The `snippet` construction is covered by the existing
   unit tests.
-- **Artefact:** `src/ir/cmd_interpolate/verification.rs`, harness
-  `guard_applies_to_substituted_command`.
-- **Evidence:** capped `make kani-ir` reports `SUCCESS`.
+- **Artefact:** `src/ir/cmd_interpolate_property_tests.rs`, property
+  `guard_uses_the_substituted_command`.
+- **Evidence:** the guard-placement property and its mutation evidence pass
+  under `make test`.
 - **Non-vacuity:**
   - *Covers.* Some input reaches `Ok`; some reaches `Err`; and — the important
     one — some input where `shlex::split` returns `None` while the backtick
     count is **even**. Without that witness the `shlex` conjunct is inert and
     the harness collapses into `OBL-ODD`. The single quote is in the alphabet
     precisely to make it reachable.
-  - *Mutation.* `...__guard_applies_to_substituted_command.patch` changes
+  - *Mutation.* `...__guard_uses_the_substituted_command.patch` changes
     `has_unmatched_backticks(&interpolated)` to
     `has_unmatched_backticks(template)` in `src/ir/cmd_interpolate/mod.rs`.
 
@@ -805,8 +757,8 @@ patch or an explicitly justified exemption.
   patches and nothing validates them. They are handwritten unified diffs, so
   any edit near a patched hunk breaks `git apply` silently. There are already
   twelve patches for thirteen harnesses.
-- **Artefact:** `tests/mutation_evidence_tests.rs`, following the style of the
-  existing `tests/kani_cfg_ui_tests.rs` contract test.
+- **Artefact:** `tests/kani_mutation_evidence_tests.rs`, following the style of
+  the existing `tests/kani_cfg_ui_tests.rs` contract test.
 - **Evidence:** the test fails if a patch is deleted or a harness is added
   without one. Verify by temporarily renaming a patch and observing the failure.
 - **Exemption list.** The test carries a `MUTATION_EXEMPT` constant with one
@@ -819,10 +771,11 @@ patch or an explicitly justified exemption.
 ### Residual gaps (to be recorded in `ADR-004` and the retrospective)
 
 - Strings longer than the EP-M0 bound are covered by Proptest, not proof, for
-  `OBL-SPEC`, `OBL-ODD`, and `OBL-GUARD`. `OBL-SIGIL` has no such gap under
-  AXIOM-WINDOW.
-- The 27-character `INS_TOKEN` and `OUTS_TOKEN` constants are not proved; the
-  length-generic matcher is.
+  `OBL-SPEC`, `OBL-ODD`, and `OBL-GUARD`. `OBL-SHELL` has no such gap for its
+  per-position shell-variable check.
+- The marker harness drives both 27-character `INS_TOKEN` and `OUTS_TOKEN`
+  constants through `find_substitution`; longer surrounding commands remain a
+  property-test concern.
 - `shell_quote`'s output is assumed (AXIOM-QUOTE). The guard harnesses take
   arbitrary bindings, which is stronger than only-quoted bindings, but the
   quoting function itself is unverified.
@@ -853,9 +806,9 @@ Run EP-M0. Write no harness until you have its measurement table.
    to freeze is not what you thought.
 2. **Harness compilation failure (EP-M2).** Write
    `src/ir/cmd_interpolate/verification.rs` with
-   `sigil_placeholder_match_is_exact` and declare the module. Run the capped
-   `make kani-ir`. Expect a compile error naming the missing items. That is the
-   red evidence.
+   `shell_variable_prefix_does_not_match` and declare the module. Run the capped
+   `make kani-ir`. Expect a compile error naming the missing items. That is
+   the red evidence.
 
 ### Stage C — implementation and verification together
 
@@ -936,12 +889,12 @@ the next stage on a failing gate.
   callers are updated in the same commit. The `substitute_before_refactor`
   oracle is a test fixture with a stated deletion point, not a shim.
 
-### EP-M2 — sigil and marker properties proved; patch gate added
+### EP-M2 — shell-variable and marker properties proved; patch gate added
 
-- **Outcome:** `sigil_placeholder_match_is_exact` and
-  `marker_token_match_is_exact` verify; `tests/mutation_evidence_tests.rs`
+- **Outcome:** `shell_variable_prefix_does_not_match` and
+  `marker_token_match_is_exact` verify; `tests/kani_mutation_evidence_tests.rs`
   exists and passes.
-- **Requirements:** discharges `RM-4.2.3.a`, `OBL-SIGIL`, `OBL-MARKER`,
+- **Requirements:** discharges `RM-4.2.3.a`, `OBL-SHELL`, `OBL-MARKER`,
   `OBL-PATCHES`.
 - **Acceptance evidence:** capped `make kani-ir` reports `SUCCESS` for both new
   harnesses and all thirteen pre-existing ones, with every cover `SATISFIED`;
@@ -1000,8 +953,8 @@ the next stage on a failing gate.
     `cfg(kani)` bindings constructor, as the paragraph introducing that table
     already describes the cycle kernel; add a subsection under "Command and
     recipe lowering" stating the placeholder
-    contract now proved — supported placeholders, the boundary rule with the
-    `x$in` and `$$in` behaviours, the marker-form asymmetry, backtick-region
+    contract now proved — supported markers, literal shell-variable pass-through,
+    the marker-form asymmetry, backtick-region
     exclusion, and guard placement, including the explicit note that `OBL-ODD`
     and `OBL-GUARD` are complementary. This is the source material for roadmap
     4.4.1.
@@ -1115,14 +1068,14 @@ timeout --kill-after=20s 5m \
 ```
 
 To iterate on a single harness, add
-`KANI_FLAGS="--harness sigil_placeholder_match_is_exact"` to the `make`
+`KANI_FLAGS="--harness shell_variable_prefix_does_not_match"` to the `make`
 invocation. `KANI_FLAGS` is empty by default (Makefile line 17) and `kani-full`
 passes it straight through, so this needs no Makefile edit.
 
 Expected shape of success:
 
 ```plaintext
-Checking harness ir::cmd_interpolate::verification::sigil_placeholder_match_is_exact...
+Checking harness ir::cmd_interpolate::verification::shell_variable_prefix_does_not_match...
 VERIFICATION:- SUCCESSFUL
 Verification Time: 41.2s
 ```
@@ -1131,7 +1084,7 @@ Expected shape with a mutation applied — this is what you want to see during
 the non-vacuity check, and you must confirm the named check is the intended one:
 
 ```plaintext
-Failed Checks: sigil match agrees with the boundary contract
+ Failed Checks: literal shell-variable prefix was treated as a marker
  File: src/ir/cmd_interpolate/verification.rs, line 63, in ...
 VERIFICATION:- FAILED
 ```
@@ -1166,9 +1119,9 @@ indexing and `match`, not `unwrap`.
 ### Applying and reverting a mutation patch
 
 ```bash
-git apply docs/verification/mutations/ir__cmd_interpolate__verification__sigil_placeholder_match_is_exact.patch
+git apply docs/verification/mutations/ir__cmd_interpolate__verification__marker_token_match_is_exact.patch
 # run the capped single-harness command; expect VERIFICATION:- FAILED
-git apply -R docs/verification/mutations/ir__cmd_interpolate__verification__sigil_placeholder_match_is_exact.patch
+git apply -R docs/verification/mutations/ir__cmd_interpolate__verification__marker_token_match_is_exact.patch
 # re-run; expect VERIFICATION:- SUCCESSFUL
 ```
 
@@ -1219,7 +1172,8 @@ checks. Record the verification time. **Cover:** every `kani::cover!` reported
    `VERIFICATION:- FAILED`; revert and expect success. The harnesses are
    load-bearing.
 3. Temporarily rename any file in `docs/verification/mutations/` and run
-   `make test`. Expect `tests/mutation_evidence_tests.rs` to fail. Restore it.
+   `make test`. Expect `tests/kani_mutation_evidence_tests.rs` to fail. Restore
+   it.
 4. Run `make test`. Expect a pass, and expect `git diff` against the merge base
    to show no modification to any pre-existing test assertion.
 5. Run `netsuke build` against a manifest in `tests/`. Expect a byte-identical
@@ -1233,7 +1187,7 @@ checks. Record the verification time. **Cover:** every `kani::cover!` reported
 ### Quality criteria
 
 - **Tests:** `make test` passes; no pre-existing test edited.
-- **Verification:** `OBL-SIGIL` and `OBL-MARKER` are discharged by Kani with
+- **Verification:** `OBL-SHELL` and `OBL-MARKER` are discharged by Kani with
   mutation evidence and satisfied covers. `OBL-SPEC`, `OBL-ODD`, and
   `OBL-GUARD` are covered by independent Proptest properties over the
   256-character, eight-placeholder residual range; `OBL-EQUIV` is covered by
@@ -1375,6 +1329,17 @@ outside this local completion boundary and must be reported separately by CI.
 - [x] (2026-08-30) EP-M6 documentation, ADR extension, and roadmap close-out.
   All deterministic gates and the capped 15-harness Kani run passed; CodeRabbit
   returned zero findings.
+- [x] (2026-09-02) Rebase alignment and validation: origin/main now uses
+  marker-only lowering, so literal `$in` and `$out` remain shell variables. The
+  active documentation and harness references are updated. After the rebase,
+  `make check-fmt`, `make test`, `make typecheck`, `make lint`, doc-coverage
+  (99.13%), `make markdownlint`, and `make nixie` all passed. Focused capped
+  Kani runs passed: `shell_variable_prefix_does_not_match` satisfied 3/3 covers
+  in 24.92348s, and `marker_token_match_is_exact` satisfied 4/4 covers in
+  97.312706s. The full `make kani-ir` compiled and passed the
+  command-interpolation proofs, then reached the existing five-minute cap at
+  `ir::from_manifest::verification::missing_rule_shape_is_rejected` (exit 124);
+  the full suite is not recorded as passed.
 
 ## Surprises & discoveries
 
@@ -1502,8 +1467,8 @@ and are now marked **accepted**. No decision in this log is outstanding.
   constructor keeps the Kani build warning-free and avoids a seam with no
   surviving proof consumer. **Date/Author:** 2026-08-30, implementation agent.
 
-- **Decision:** Add `tests/mutation_evidence_tests.rs`, a contract test that
-  `git apply --check`s every mutation patch and asserts harness parity.
+- **Decision:** Add `tests/kani_mutation_evidence_tests.rs`, a contract test
+  that `git apply --check`s every mutation patch and asserts harness parity.
   **Rationale:** three independent review lenses identified the absence of any
   gate over `docs/verification/mutations/` as the highest-value cheap addition.
   The discipline is what makes every Kani result in this repository
@@ -1846,3 +1811,33 @@ doctests with 6 ignored), `make typecheck`, `make lint`, doc coverage at 99.10%,
 `make markdownlint`, and `make nixie` all passed. The prior full
 `make kani-ir` result remains applicable: 15/15 proofs passed. CodeRabbit
 review remains queued.
+
+**Revision 2.19 (2026-09-02).** During the rebase onto `origin/main`, the
+target branch's recipe-placeholder lowering became marker-only. Literal `$in`
+and `$out` are shell variables and must pass through unchanged; only the
+internal `INS_TOKEN` and `OUTS_TOKEN` markers are recognized by
+`find_substitution`. This supersedes the earlier sigil-placeholder contract
+while preserving the historical observations and measurements above.
+
+- **Decision:** retain the target branch's marker-only lowering and its
+  underscore-prefix guard. The shell-variable harness is named
+  `shell_variable_prefix_does_not_match`; `marker_token_match_is_exact` drives
+  both real marker constants through `find_substitution`.
+- **Decision:** remove superseded sigil harness and mutation-patch references
+  from the active plan. The marker mutation reference remains
+  `docs/verification/mutations/ir__cmd_interpolate__verification__marker_token_match_is_exact.patch`;
+  the live mutation-evidence contract remains the authority for current patch
+  applicability.
+- **Progress:** updated the active contract, harness inventory, obligation
+  names, milestone references, and verification commands in this plan, plus the
+  corresponding developers' guide, formal-verification methods, and ADR. The
+  post-rebase review remains pending.
+- **Validation:** after the rebase, `make check-fmt`, `make test`,
+  `make typecheck`, `make lint`, doc-coverage (99.13%), `make markdownlint`, and
+  `make nixie` passed. Focused capped Kani runs passed
+  `shell_variable_prefix_does_not_match` with 3/3 covers in 24.92348s and
+  `marker_token_match_is_exact` with 4/4 covers in 97.312706s. Full
+  `make kani-ir` compiled and passed the command-interpolation proofs before
+  reaching the existing five-minute cap at
+  `ir::from_manifest::verification::missing_rule_shape_is_rejected` (exit 124);
+  it is not recorded as a full-suite pass.

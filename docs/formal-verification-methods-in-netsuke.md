@@ -62,17 +62,18 @@ stronger proof obligations become worthwhile.[^7]
 ### Kani for command interpolation
 
 `src/ir/cmd_interpolate/mod.rs` is another high-value target because it is
-compact, load-bearing, and security-sensitive. It replaces `$in` and `$out`.
-POSIX-compatible routes reject placeholders inside backticks and reject
-commands when backticks are unmatched or the interpolated result fails the
-current `shlex` guard. PowerShell treats backticks as native escapes rather
-than protected regions.[^8]
+compact, load-bearing, and security-sensitive. It recognizes only the internal
+`INS_TOKEN` and `OUTS_TOKEN` markers emitted by manifest rendering; literal
+`$in` and `$out` remain shell variables. POSIX-compatible routes reject markers
+inside backticks and reject commands when backticks are unmatched or the
+interpolated result fails the current `shlex` guard. PowerShell treats
+backticks as native escapes rather than protected regions.[^8]
 
 Kani proves two allocation-free kernels. An eight-character symbolic window
-with a symbolic offset proves `$in` and `$out` matching exactly at identifier
-boundaries; this is complete for the sigil matcher because it reads no wider
-context. A six-character symbolic array proves exact, boundary-independent
-matching for a short marker through the length-generic production matcher.
+with a symbolic offset proves that literal `$in` and `$out` prefixes never
+select a Netsuke marker. A 32-character symbolic array with a symbolic position
+drives both real marker constants through `find_substitution`, proving exact,
+boundary-independent matching, including truncated and near-miss candidates.
 
 The production scanner exceeded the five-minute, 8 GiB Kani cap at six and
 eight characters, and the guard necessarily drives that scanner. Adversarial
@@ -261,12 +262,14 @@ Three contracts should be documented before proofs become gating checks.
 
 ### Command placeholder contract
 
-The interpolation layer currently supports `$in` and `$out`, enforces
-identifier-style token boundaries, and, on POSIX-compatible routes, rejects
-substitution inside backticks.[^8] PowerShell treats a backtick as an escape.
-This contract should be documented in the README under a new "Security and
-command interpolation" section, as it is a user-facing guarantee that affects
-manifest authoring. The project documentation should state whether:
+The interpolation layer currently recognizes only the internal `INS_TOKEN` and
+`OUTS_TOKEN` markers emitted by manifest rendering. Literal `$in` and `$out`
+remain shell variables. On POSIX-compatible routes, markers inside backticks
+are rejected, as are commands with unmatched backticks or a substituted result
+that fails the current `shlex` guard.[^8] PowerShell treats a backtick as an
+escape. This contract should be documented in the README under a new "Security
+and command interpolation" section, as it is a user-facing guarantee that
+affects manifest authoring. The project documentation should state whether:
 
 - those are the only supported placeholders,
 - POSIX backtick rejection and PowerShell escape handling are the full contract

@@ -1,11 +1,13 @@
 diff --git a/src/ir/cmd_interpolate/substitution.rs b/src/ir/cmd_interpolate/substitution.rs
 --- a/src/ir/cmd_interpolate/substitution.rs
 +++ b/src/ir/cmd_interpolate/substitution.rs
-@@ -56,5 +56,5 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
-         let substitution =
-             find_substitution(self.chars, pos, &self.bindings.ins, &self.bindings.outs);
--        if self.in_backticks {
-+        if false && self.in_backticks {
-             return self.append_protected_character(pos, ch, substitution);
-         }
-         Ok(self.append_unprotected_character(pos, ch, substitution))
+@@ -386,7 +386,7 @@ fn append_unprotected_character(
+             return pos + 1;
+         };
+         self.output.push_str(
+             self.bindings
+-                .substitution(placeholder, self.active_quote_context()),
++                .substitution(super::Placeholder::Inputs, self.active_quote_context()),
+         );
+         pos + skip
+     }

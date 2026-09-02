@@ -106,9 +106,11 @@ thread_local! {
     static BINDING_PREPARATIONS: Cell<usize> = const { Cell::new(0) };
 }
 
-/// Skip binding-preparation counting outside test builds.
-#[cfg(not(test))]
-const fn record_binding_preparation() {}
+/// Count one binding preparation in test builds.
+#[cfg(test)]
+fn record_binding_preparation() {
+    BINDING_PREPARATIONS.with(|count| count.set(count.get() + 1));
+}
 
 /// Skip binding-preparation counting outside test builds.
 #[cfg(not(test))]
@@ -225,7 +227,7 @@ fn is_valid_command_for_shell(command: &str, shell: RecipeShell) -> bool {
 }
 
 /// Identifies the private marker emitted for a Netsuke recipe placeholder.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Placeholder {
     /// Select the input-path binding.
     Inputs,
@@ -324,3 +326,7 @@ mod verification;
 #[cfg(test)]
 #[path = "../cmd_interpolate_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "../cmd_interpolate_power_shell_tests.rs"]
+mod power_shell_tests;

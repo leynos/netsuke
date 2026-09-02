@@ -6,7 +6,9 @@
 
 use proptest::{prelude::*, test_runner::TestCaseError};
 
-use super::super::{CommandBindings, INS_TOKEN, IrGenError, OUTS_TOKEN, RecipeShell, substitute};
+use super::super::{
+    CommandBindings, INS_TOKEN, IrGenError, OUTS_TOKEN, PathSubstitutions, RecipeShell, substitute,
+};
 
 /// Bound every generated template to the documented residual-range maximum.
 const MAX_TEMPLATE_LENGTH: usize = 256;
@@ -56,8 +58,17 @@ pub(super) fn raw_binding_strategy() -> impl Strategy<Value = String> {
 pub(super) fn posix_bindings(ins: String, outs: String) -> CommandBindings {
     CommandBindings {
         shell: RecipeShell::Posix,
-        ins,
-        outs,
+        ins: raw_path_substitutions(ins),
+        outs: raw_path_substitutions(outs),
+    }
+}
+
+/// Repeat raw path text for every quote context in scanner-only bindings.
+fn raw_path_substitutions(path: String) -> PathSubstitutions {
+    PathSubstitutions {
+        single_quoted: path.clone(),
+        double_quoted: path.clone(),
+        unquoted: path,
     }
 }
 
@@ -84,7 +95,7 @@ pub(super) fn assert_matches_specification(
 
 /// Evaluate the independent POSIX scanner specification for prepared bindings.
 pub(super) fn specification(template: &str, bindings: &CommandBindings) -> Result<String, String> {
-    spec_substitute(template, &bindings.ins, &bindings.outs)
+    spec_substitute(template, &bindings.ins.unquoted, &bindings.outs.unquoted)
 }
 
 /// Model POSIX placeholder replacement independently of production traversal.
@@ -124,28 +135,10 @@ fn spec_match<'a>(
     ins: &'a str,
     outs: &'a str,
 ) -> Option<(&'a str, usize)> {
-    if chars.get(pos) == Some(&'$') {
-        if token_matches(chars, pos + 1, "in") && sigil_boundaries_are_valid(chars, pos, 2) {
-            return Some((ins, 3));
-        }
-        if token_matches(chars, pos + 1, "out") && sigil_boundaries_are_valid(chars, pos, 3) {
-            return Some((outs, 4));
-        }
-    }
     if token_matches(chars, pos, INS_TOKEN) {
         return Some((ins, INS_TOKEN.chars().count()));
     }
     token_matches(chars, pos, OUTS_TOKEN).then_some((outs, OUTS_TOKEN.chars().count()))
-}
-
-/// Report whether sigil placeholder neighbours satisfy identifier boundaries.
-fn sigil_boundaries_are_valid(chars: &[char], pos: usize, pattern_len: usize) -> bool {
-    chars
-        .get(pos.wrapping_sub(1))
-        .is_none_or(|ch| !is_spec_identifier(*ch))
-        && chars
-            .get(pos + pattern_len + 1)
-            .is_none_or(|ch| !is_spec_identifier(*ch))
 }
 
 /// Report whether `token` begins at `pos` in `chars`.
@@ -156,11 +149,6 @@ fn token_matches(chars: &[char], pos: usize, token: &str) -> bool {
         .all(|(offset, ch)| chars.get(pos + offset) == Some(&ch))
 }
 
-/// Report whether `ch` is an ASCII identifier character.
-const fn is_spec_identifier(ch: char) -> bool {
-    ch.is_ascii_alphanumeric() || ch == '_'
-}
-
 /// Report whether `command` contains an unmatched POSIX backtick.
 pub(super) fn has_odd_backticks(command: &str) -> bool {
     command.chars().filter(|&ch| ch == '`').count() & 1 == 1
@@ -168,9 +156,7 @@ pub(super) fn has_odd_backticks(command: &str) -> bool {
 
 /// Generate one character that can interact with interpolation syntax.
 fn template_character_strategy() -> impl Strategy<Value = char> {
-    prop::sample::select(vec![
-        '$', '`', 'i', 'n', 'o', 'u', 't', '_', 'a', '\'', '"', '\\', ' ',
-    ])
+    prop::sample::select(vec!['$', '`', 'i', 'n', 'o', 'u', 't', '_', 'a', ' '])
 }
 
 /// Generate a short fragment for dense eight-placeholder templates.
@@ -179,9 +165,9 @@ fn interpolation_fragment_strategy() -> impl Strategy<Value = String> {
         .prop_map(|chars| chars.into_iter().collect())
 }
 
-/// Generate one supported input or output placeholder spelling.
+/// Generate one manifest-owned input or output placeholder.
 fn placeholder_strategy() -> impl Strategy<Value = &'static str> {
-    prop::sample::select(vec!["$in", "$out", INS_TOKEN, OUTS_TOKEN])
+    prop::sample::select(vec![INS_TOKEN, OUTS_TOKEN])
 }
 
 /// Generate dense templates while retaining the 256-character upper bound.
