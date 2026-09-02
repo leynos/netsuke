@@ -2506,10 +2506,15 @@ The command construction follows this pattern:
    must not let an injected `PATH` choose the executable passes an absolute or
    otherwise resolved path.
 
-2. Arguments passed to Netsuke's own CLI are translated and forwarded to Ninja.
-   For example, a `netsuke build my_target` command results in
-   `Command::new(program).arg("my_target")`. Flags like `-j` for parallelism
-   are also passed through.[^8]
+2. Netsuke-owned Ninja options are followed by a literal `--` before every
+   selected build target. For example, a `netsuke build my_target` command
+   results in an argument sequence ending
+   `-f <generated-build-file> -- my_target`. The terminator keeps configured
+   and explicit target names from being parsed as Ninja options; see
+   [ADR-018](adr-018-terminate-ninja-options-before-build-target-operands.md).
+   When no targets are selected, the command ends with the generated build file
+   and omits the terminator. Flags like `-j` for parallelism are Netsuke-owned
+   options.[^8]
 
 3. The working directory for the Ninja process is set using `.current_dir()`.
    When the user supplies a `-C` flag, Netsuke canonicalizes the path and
