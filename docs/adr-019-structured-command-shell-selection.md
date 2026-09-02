@@ -99,9 +99,14 @@ Each `ShellDefinition` contains exactly `name`, `executable`, and `args`:
   must therefore include the shell's source-evaluation switch.
 
 Field-local rules run while each entry is deserialized. `PostMergeHook` checks
-reserved-name collisions, duplicate configured names, and aggregate limits
-after all configuration layers have composed. An invalid definition fails
-configuration loading before a manifest is compiled.
+reserved-name collisions and duplicate configured names after all configuration
+layers have composed. An invalid definition fails configuration loading before
+a manifest is compiled.
+
+Configured definitions have no platform declaration. Each is eligible on every
+host where the merged configuration is active, and executable resolution
+determines its availability on that host. A missing configured executable is
+therefore unavailable, not an unsupported built-in.
 
 The configuration file is the authority boundary. A configured executable may
 be an absolute host path because the operator who controls `CliConfig` already
@@ -150,9 +155,9 @@ Resolution uses a crate-internal typed error with at least these categories:
   current platform;
 - **unavailable shell:** the definition supports the platform, but its
   executable is absent, not executable, or cannot be resolved safely; and
-- **misconfigured shell:** a configured definition violates its field,
-  collision, or aggregate rules, or a persisted action plan contains an invalid
-  shell definition.
+- **misconfigured shell:** a configured definition violates its field or
+  collision rules, or a persisted action plan contains an invalid shell
+  definition.
 
 Configuration errors identify the configuration key and definition name.
 Manifest diagnostics identify the action, target, or rule, command-list item,

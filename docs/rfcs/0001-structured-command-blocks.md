@@ -3,6 +3,7 @@
 ## Preamble
 
 - **RFC number:** 0001
+- **Amended by:** RFC 0009, RFC 0010, and RFC 0011
 - **Status:** Proposed
 - **Created:** 2026-08-20
 - **Target:** Netsuke manifest format and execution intermediate representation
@@ -30,9 +31,11 @@ A list-valued interpolation may splice multiple arguments only when it occupies
 an entire unquoted argv word. That typed splice is explicit in the template
 structure and does not parse the resulting values.
 
-When `shell: true` is present, `invoke` is deliberately treated as shell
-source. This keeps shell power available while making the trust boundary
-visible. Shell mode does not inherit the direct mode injection guarantee.
+When `shell: true` or a named `shell` selector is present, `invoke` is
+deliberately treated as shell source. This keeps shell power available while
+making the trust boundary visible. Shell mode does not inherit the direct mode
+injection guarantee. [RFC 0011](0011-allow-listed-structured-command-shells.md)
+defines the finite built-in and trusted configured shell registry.
 
 ## 2. Problem
 
@@ -131,7 +134,8 @@ This RFC has the following goals:
   command lists;
 - provide deterministic validation before Ninja starts work;
 - produce precise diagnostics that identify the command item and pipeline stage;
-- retain shell execution through an explicit `shell: true` boundary; and
+- retain shell execution through an explicit Boolean or named `shell`
+  boundary; and
 - keep the generated build graph static and compatible with Ninja scheduling.
 
 ### 4.2 Non-goals
@@ -142,7 +146,7 @@ This RFC does not attempt to:
 - infer build graph inputs or outputs from stream file paths;
 - prevent a called program from interpreting an argument as an option,
   expression, query, or program fragment;
-- sanitize shell source supplied under `shell: true`;
+- sanitize shell source supplied under `shell: true` or a named selector;
 - add runtime Jinja evaluation;
 - add append-mode redirection or merged stdout and stderr;
 - add rich environment operations such as `prepend`, `append`, `default`, or
@@ -160,6 +164,8 @@ This RFC uses the following terms:
   execution fields defined by this RFC.
 - **Argv template:** The Netsuke-defined, shell-free notation accepted by
   `invoke` when `shell` is absent or `false`.
+- **Shell name:** A built-in or trusted configured identifier that selects one
+  fixed shell executable and argument sequence.
 - **Word:** One syntactic argv position before typed expression expansion.
 - **Scalar interpolation:** A Jinja expression that evaluates to a string,
   number, or Boolean value.
@@ -244,8 +250,8 @@ temp_dir: true
 
 | Field            | Type                         | Default             | Meaning                                                                                            |
 | ---------------- | ---------------------------- | ------------------- | -------------------------------------------------------------------------------------------------- |
-| `invoke`         | string                       | required            | Direct argv template, or shell source when `shell: true`.                                          |
-| `shell`          | Boolean                      | `false`             | Select shell execution instead of direct invocation.                                               |
+| `invoke`         | string                       | required            | Direct argv template, or shell source when `shell` is `true` or a name.                            |
+| `shell`          | Boolean or shell name        | `false`             | Select direct, platform-default shell, or named allow-listed shell execution.                      |
 | `env`            | mapping of string to string  | empty               | Exact child-environment overlay.                                                                   |
 | `stdin`          | string path                  | inherited           | Read the child's standard input from a file.                                                       |
 | `stdout`         | string path                  | inherited           | Write standard output to a truncated file.                                                         |
@@ -589,8 +595,8 @@ paths and is the child's working directory.
 On Windows, direct mode must reject a resolved `cmd.exe`, `.bat`, or `.cmd`
 target. Rust preserves Windows batch-file launching through `cmd.exe`, whose
 non-standard argument parser can reinterpret otherwise distinct arguments as
-shell source. The diagnostic must recommend an explicit `shell: true` block. A
-future RFC may define a narrower trusted opt-in.
+shell source. The diagnostic must recommend an explicit `shell: true` block or
+a suitable named shell. A future RFC may define a narrower trusted opt-in.
 
 This restriction does not make arbitrary programs safe interpreters. A program
 may interpret one argument as SQL, a regular expression, a `find` predicate, a
@@ -601,25 +607,33 @@ it cannot validate every callee's application grammar.
 
 ### 10.1 Selection and source handling
 
-With `shell: true`, Netsuke does not apply the argv-template grammar. It renders
-`invoke` as one shell-source string using the existing command-template
-context and launches the platform shell through the structured action runner.
+The `shell` field is a `Boolean | ShellName` union. An absent field or `false`
+selects direct argv execution. `true` selects the platform default shell. A
+string selects an allow-listed shell name from the finite built-in registry or
+trusted Netsuke configuration.
+
+In either shell case, Netsuke does not apply the argv-template grammar. It
+renders `invoke` as one shell-source string using the existing command-template
+context and launches the resolved shell through the structured action runner.
 
 The initial platform defaults are:
 
 - `/bin/sh -c` on Unix-like platforms; and
 - `powershell.exe -NoLogo -NoProfile -NonInteractive -Command` on Windows.
 
-An explicit shell selector is outside this RFC. A future extension may replace
-the Boolean with, or supplement it by, a selector for `sh`, `bash`, `pwsh`, or
-a configured interpreter.
+The initial built-in names are `sh`, `bash`, `pwsh`, and `powershell`, with
+platform support, executable resolution, and fixed arguments defined by
+[ADR-019](../adr-019-structured-command-shell-selection.md). `CliConfig` may
+add names, but a Netsukefile cannot supply an executable or interpreter
+arguments. [RFC 0011](0011-allow-listed-structured-command-shells.md) defines
+the schema, registry, diagnostics, and lowering amendment.
 
 ### 10.2 Interpolation boundary
 
 Jinja evaluation remains compile-time, but rendered values become shell source
 in this mode. An expression may therefore alter quoting, operators, expansion,
-redirection, or control flow. `shell: true` is an explicit opt-in to that
-behaviour and carries no direct-mode injection guarantee.
+redirection, or control flow. `shell: true` and a named selector are explicit
+opt-ins to that behaviour and carry no direct-mode injection guarantee.
 
 Shell-specific escaping filters remain available where suitable. Netsuke must
 not claim that Tree-sitter validation or quote balancing makes arbitrary shell
@@ -629,8 +643,10 @@ interpolation safe.
 
 The `env`, `cwd`, `stdin`, `stdout`, `stderr`, `tee`, `capture_stdout`,
 `temp_dir`, and `pipe` fields retain their Netsuke-managed meanings in shell
-mode. For example, a shell block may participate as one stage in a structured
-pipeline without placing the outer pipe operator in shell source.
+mode. A singular block, sequence item, or pipeline stage may select a name.
+Each stage retains independent working-directory and stream semantics, so a
+shell block may participate in a structured pipeline without placing the outer
+pipe operator in shell source.
 
 ## 11. Environment semantics
 
@@ -1031,7 +1047,7 @@ pub enum CommandItem {
 
 pub struct CommandBlock {
     pub invoke: String,
-    pub shell: bool,
+    pub shell: ShellSelection,
     pub env: BTreeMap<String, String>,
     pub cwd: Option<Utf8PathBuf>,
     pub stdin: Option<Utf8PathBuf>,
@@ -1041,6 +1057,12 @@ pub struct CommandBlock {
     pub pipe: PipeStream,
     pub capture_stdout: Option<usize>,
     pub temp_dir: bool,
+}
+
+pub enum ShellSelection {
+    Direct,
+    PlatformDefault,
+    Named(ShellName),
 }
 
 pub enum PipeStream {
@@ -1094,7 +1116,7 @@ pub enum ExecutionUnit {
 
 pub enum ProcessKind {
     Direct { program: String, args: Vec<String> },
-    Shell { source: String, shell: PlatformShell },
+    Shell { source: String, shell: ResolvedShell },
 }
 
 pub struct ProcessSpec {
@@ -1111,6 +1133,11 @@ pub struct ProcessSpec {
 pipe ends. `cwd` is resolved per block before stream paths are resolved, and
 `temp_dir` is materialized per stage at execution time; neither value is
 inherited from a preceding sequential unit.
+
+`ResolvedShell` contains the allow-listed registry name, resolved executable,
+and fixed invocation arguments. The compiler resolves `PlatformDefault` and
+`Named` before constructing the IR. The runner does not consult `CliConfig` or
+ambient environment state again.
 
 The IR must contain no Ninja-specific quoting. Backend escaping remains the
 responsibility of Ninja synthesis.
@@ -1197,7 +1224,7 @@ Direct mode does not prevent:
 - a sequence value from introducing additional options;
 - a value beginning with `-` from being interpreted as an option;
 - an argument from being interpreted as code by the called program;
-- unsafe use of `shell: true` or legacy command strings; or
+- unsafe use of `shell: true`, a named shell, or legacy command strings; or
 - hostile behaviour by the executable itself.
 
 Manifest authors remain responsible for program-specific boundaries such as
@@ -1227,6 +1254,10 @@ The proposal is additive:
   legacy and shell-mode commands; and
 - no existing manifest is automatically converted to direct invocation.
 
+The named selector is additive syntax. An absent field and both Boolean values
+retain their existing meanings; a string selects a shell understood only by an
+implementation of [RFC 0011](0011-allow-listed-structured-command-shells.md).
+
 A heterogeneous list is new syntax. Its contiguous legacy-string grouping and
 state boundaries are therefore not a compatibility change.
 
@@ -1234,8 +1265,11 @@ state boundaries are therefore not a compatibility change.
 
 Implementation should allocate an additive manifest-format minor version,
 provisionally `1.1.0`, so older Netsuke versions reject the new mapping syntax
-cleanly rather than misinterpret it. The implementation pull request may select
-a different minor version if intervening schema work consumes that number.
+cleanly rather than misinterpret it. Named shell selection ships within that
+not-yet-implemented mapping schema and does not require a second increment. If
+structured mappings ship first, named selection must use the next additive
+minor version. The implementation pull request may select a different minor
+version if intervening schema work consumes the provisional number.
 
 ### 19.3 Documentation migration
 
@@ -1248,7 +1282,7 @@ After acceptance and implementation:
 - the existing rich environment-operation sketch should remain explicitly
   deferred or move to a follow-up RFC;
 - examples requiring shell state should retain legacy syntax or use
-  `shell: true`; and
+  `shell: true` or a named selector; and
 - a migration guide should show mechanical conversions for environment
   assignments, redirections, and simple pipelines.
 
@@ -1257,6 +1291,8 @@ After acceptance and implementation:
 ### 20.1 Phase 1: Schema and template compiler
 
 - Add the heterogeneous command-item AST and deny unknown fields.
+- Add Boolean-or-name shell selection and the finite built-in `ShellName`
+  vocabulary defined by RFC 0011.
 - Implement the argv-template lexer and typed fragment representation.
 - Integrate MiniJinja expression compilation without render-then-reparse.
 - Add shape, interpolation, and pipeline-topology validation.
@@ -1265,6 +1301,8 @@ After acceptance and implementation:
 ### 20.2 Phase 2: Execution IR
 
 - Add direct process, shell process, stream, pipeline, and sequence IR types.
+- Resolve platform-default and named shell selections through the trusted
+  registry, then carry the complete resolved invocation in the shell IR.
 - Normalize maximal legacy string runs into legacy shell groups.
 - Resolve rule items while preserving execution boundaries and cycle checks.
 - Hash the fully rendered execution plan for deterministic graph inspection.
@@ -1336,6 +1374,10 @@ The implementation should include:
   stale-sidecar cleanup;
 - duplicate environment-key tests, including Windows case folding;
 - compatibility snapshots for existing scalar and all-string-list lowering;
+- compatibility tests proving absent and `false` remain direct while `true`
+  retains the platform default;
+- cross-platform tests for every built-in name, configured names, invalid
+  definitions, unsupported hosts, and unavailable executables;
 - rule-cycle and pipeline-boundary tests;
 - Windows `.bat`, `.cmd`, and `cmd.exe` rejection tests;
 - behavioural tests for the motivating coverage example; and
@@ -1421,10 +1463,11 @@ stdin and stdout contracts.
 ## 23. Open questions and future extensions
 
 The following questions do not block the initial syntax but should remain
-visible during review:
+visible during review. Named shell selection is no longer open:
+[ADR-019](../adr-019-structured-command-shell-selection.md) and
+[RFC 0011](0011-allow-listed-structured-command-shells.md) define the
+`Boolean | ShellName` field and its trusted registry.
 
-- Should a future `shell` selector accept names such as `sh`, `bash`, and
-  `pwsh`, or should interpreter selection use a separate field?
 - Should direct Windows batch execution gain an explicit trusted opt-in, or
   should `.bat` and `.cmd` permanently require shell mode?
 - Should a future explicit `args` field coexist with `invoke` as an escape hatch
@@ -1453,6 +1496,10 @@ skyscrapers from argument lists.
 <!-- markdownlint-disable MD013 -->
 
 - [Netsuke design document](../netsuke-design.md)
+- [ADR-019: Select allow-listed structured-command
+  shells](../adr-019-structured-command-shell-selection.md)
+- [RFC 0011: Allow-listed structured-command
+  shells](0011-allow-listed-structured-command-shells.md)
 - [Rust `std::process` module](https://doc.rust-lang.org/stable/std/process/)
 - [Rust `std::process::Command`](https://doc.rust-lang.org/stable/std/process/struct.Command.html)
 - [PowerShell parsing rules](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_parsing)
