@@ -1609,21 +1609,20 @@ response limit. Hosts embedding Netsuke can raise or lower it with
 `StdlibConfig::with_file_max_read_bytes` before registering the standard
 library.
 
-The reading filters also refuse to follow a symlink as the final path
-component and reject anything that is not a regular file once opened,
-including FIFOs and device nodes. A symlinked directory used *inside* a path
-is unaffected; only the final entry is checked. Templates that deliberately
-read through a final symlink can pass `follow_symlinks=true` to accept the
-link:
+The reading filters also refuse to follow a symlink as the final path component
+and reject anything that is not a regular file once opened, including FIFOs and
+device nodes. A symlinked directory used *inside* a path is unaffected; only
+the final entry is checked. Templates that deliberately read through a final
+symlink can pass `follow_symlinks=true` to accept the link:
 
-```
+```jinja
 {{ 'generated/version.txt' | contents(follow_symlinks=true) }}
 ```
 
 A single call may lower the budget with `max_bytes`, but never raise it above
 the configured ceiling:
 
-```
+```jinja
 {{ 'fixtures/big.bin' | hash(max_bytes=1024) }}
 ```
 
