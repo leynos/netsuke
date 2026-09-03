@@ -1615,12 +1615,16 @@ device nodes. A symlinked directory used *inside* a path is unaffected; only
 the final entry is checked. Templates that deliberately read through a final
 symlink can pass `follow_symlinks=true` to accept the link:
 
+<!-- tested-example: guide-file-follow-symlinks-expression -->
+
 ```jinja
 {{ 'generated/version.txt' | contents(follow_symlinks=true) }}
 ```
 
 A single call may lower the budget with `max_bytes`, but never raise it above
 the configured ceiling:
+
+<!-- tested-example: guide-file-max-bytes-expression -->
 
 ```jinja
 {{ 'fixtures/big.bin' | hash(max_bytes=1024) }}
