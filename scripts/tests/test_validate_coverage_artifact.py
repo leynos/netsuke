@@ -45,30 +45,85 @@ def _load_script() -> types.ModuleType:
     return module
 
 
-def _write_case(directory: pathlib.Path, case: ArtefactCase) -> None:
-    """Create the requested valid or hostile artefact fixture."""
-    if case.name == "missing-member":
-        return
+def _write_missing_member(directory: pathlib.Path, case: ArtefactCase) -> None:
+    """Create an empty artefact directory without its expected member."""
+
+
+def _write_symlinked_directory(directory: pathlib.Path, case: ArtefactCase) -> None:
+    """Replace the artefact directory itself with a symbolic link."""
+    real_directory = directory.parent / f"{directory.name}-real"
+    real_directory.mkdir()
+    (real_directory / "lcov.info").write_text(VALID_LCOV, encoding="utf-8")
+    directory.rmdir()
+    directory.symlink_to(real_directory, target_is_directory=True)
+
+
+def _write_non_directory(directory: pathlib.Path, case: ArtefactCase) -> None:
+    """Replace the artefact directory with a regular file."""
+    directory.rmdir()
+    directory.write_text(VALID_LCOV, encoding="utf-8")
+
+
+def _write_directory_member(directory: pathlib.Path, case: ArtefactCase) -> None:
+    """Create the expected member as a directory instead of a file."""
+    (directory / "lcov.info").mkdir()
+
+
+def _write_symlink_member(directory: pathlib.Path, case: ArtefactCase) -> None:
+    """Create a dangling symbolic-link coverage member."""
+    target = directory / "outside-lcov.info"
+    target.write_text(VALID_LCOV, encoding="utf-8")
+    (directory / "lcov.info").symlink_to(target)
+    target.unlink()
+
+
+def _write_symlink_to_valid_external_file(
+    directory: pathlib.Path, case: ArtefactCase
+) -> None:
+    """Link the coverage member at a valid file outside the artefact."""
+    external_file = directory.parent / "external-lcov.info"
+    external_file.write_text(VALID_LCOV, encoding="utf-8")
+    (directory / "lcov.info").symlink_to(external_file)
+
+
+def _write_oversized_member(directory: pathlib.Path, case: ArtefactCase) -> None:
+    """Create a coverage member one byte beyond the configured size bound."""
     coverage_path = directory / "lcov.info"
-    if case.name == "symlink-member":
-        target = directory / "outside-lcov.info"
-        target.write_text(VALID_LCOV, encoding="utf-8")
-        coverage_path.symlink_to(target)
-        target.unlink()
-        return
-    if case.name == "oversized":
-        coverage_path.write_text(VALID_LCOV, encoding="utf-8")
-        coverage_path.write_bytes(b"x" * (16 * 1024 * 1024 + 1))
-        return
-    if case.name == "non-utf8":
-        coverage_path.write_bytes(b"\xff\xfe\x00")
-        return
-    coverage_path.write_text(
+    coverage_path.write_text(VALID_LCOV, encoding="utf-8")
+    coverage_path.write_bytes(b"x" * (16 * 1024 * 1024 + 1))
+
+
+def _write_non_utf8_member(directory: pathlib.Path, case: ArtefactCase) -> None:
+    """Create a coverage member that is not UTF-8 text."""
+    (directory / "lcov.info").write_bytes(b"\xff\xfe\x00")
+
+
+def _write_default_member(directory: pathlib.Path, case: ArtefactCase) -> None:
+    """Write a valid or malformed report, plus any extra hostile member."""
+    (directory / "lcov.info").write_text(
         "unexpected data\n" if case.name == "malformed" else VALID_LCOV,
         encoding="utf-8",
     )
     if case.name == "extra-member":
         (directory / "unexpected.txt").write_text("hostile", encoding="utf-8")
+
+
+ARTEFACT_WRITERS = {
+    "missing-member": _write_missing_member,
+    "symlinked-directory": _write_symlinked_directory,
+    "non-directory": _write_non_directory,
+    "directory-member": _write_directory_member,
+    "symlink-member": _write_symlink_member,
+    "symlink-to-valid-external-file": _write_symlink_to_valid_external_file,
+    "oversized": _write_oversized_member,
+    "non-utf8": _write_non_utf8_member,
+}
+
+
+def _write_case(directory: pathlib.Path, case: ArtefactCase) -> None:
+    """Create the requested valid or hostile artefact fixture."""
+    writer = ARTEFACT_WRITERS.get(case.name, _write_default_member)
+    writer(directory, case)
 
 
 @pytest.mark.parametrize(
@@ -102,6 +157,18 @@ def _write_case(directory: pathlib.Path, case: ArtefactCase) -> None:
             None,
             id="end-before-final-line",
         ),
+        pytest.param(
+            "TN:\nTN:SF:fake\nTN:DA:1,1\nend_of_record\n",
+            "MISSING_RECORD",
+            "SF:",
+            id="fake-embedded-sf-record",
+        ),
+        pytest.param(
+            "TN:\nSF:src/lib.rs\nTN:DA:1,1\nend_of_record\n",
+            "MISSING_RECORD",
+            "DA:",
+            id="fake-embedded-da-record",
+        ),
     ],
 )
 def test_validate_lcov_text_preserves_diagnostic_order(
@@ -129,6 +196,13 @@ def test_validate_lcov_text_preserves_diagnostic_order(
         pytest.param(ArtefactCase("missing-member", 1), id="missing-member"),
         pytest.param(ArtefactCase("extra-member", 1), id="extra-member"),
         pytest.param(ArtefactCase("symlink-member", 1), id="symlink-member"),
+        pytest.param(
+            ArtefactCase("symlink-to-valid-external-file", 1),
+            id="symlink-to-valid-external-file",
+        ),
+        pytest.param(ArtefactCase("directory-member", 1), id="directory-member"),
+        pytest.param(ArtefactCase("symlinked-directory", 1), id="symlinked-directory"),
+        pytest.param(ArtefactCase("non-directory", 1), id="non-directory"),
         pytest.param(ArtefactCase("oversized", 1), id="oversized"),
         pytest.param(ArtefactCase("non-utf8", 1), id="non-utf8"),
         pytest.param(ArtefactCase("malformed", 1), id="malformed"),

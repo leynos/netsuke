@@ -238,6 +238,7 @@ jobs:
           name: pr-coverage-lcov
           path: lcov.info
           retention-days: 3
+          if-no-files-found: error
 
   build-test-windows:
     # Gates merges: the `#[cfg(windows)]` tree is compiled, linted, and tested

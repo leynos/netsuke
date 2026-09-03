@@ -745,6 +745,16 @@ Run these commands before finalizing any change:
 - `make doc-coverage`
 - `make test`
 
+When the change touches the coverage artefact validator
+(`scripts/validate-coverage-artifact.py`) or the trusted coverage workflow
+(`.github/workflows/coverage-pr-submit.yml`), also run:
+
+- `make test-coverage-artifact`
+
+This suite is the pytest module under `scripts/tests/`; `make test` runs only
+the Rust suite and never executes it, so a validator change is untested unless
+this command runs.
+
 When the change touches any Markdown file — documentation, ADRs, execplans, or
 the README — also run:
 
@@ -806,12 +816,16 @@ independent reviewers is an optional stronger control for organizations that
 need explicit human approval before any coverage submission.
 
 The trusted workflow creates the `CodeScene coverage` Check Run against the
-originating PR `head_sha`; it reports `neutral` when no token is available.
+originating PR `head_sha`. It reports `neutral` only when artefact download and
+validation both succeeded and the submission skipped solely because no token is
+available; a failed or skipped download or validation publishes a failing
+check, so a hostile artefact can never produce a non-failing gate.
 Branch-protection configuration may therefore need an organization-level update
 to require this Check Run name instead of the former in-job coverage step.
 `tests/workflow_contracts/trust_boundary_test.py` and its Hypothesis companion
 prevent the secret from returning to a pull-request workflow, a trusted
-checkout from drifting to PR content, or the validator from being skipped.
+checkout from drifting to PR content, a raw secret expression from reaching a
+step's `run` or `with` surfaces, or the validator from being skipped.
 
 `make test` runs the non-doctest suite through
 [cargo-nextest](https://nexte.st/) and the doctests separately. CI pins the
