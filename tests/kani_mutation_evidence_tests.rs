@@ -30,6 +30,17 @@ const MUTATIONS_DIR: &str = "docs/verification/mutations";
 /// fault; record the rationale here and in `docs/developers-guide.md`.
 const EXEMPT_HARNESSES: &[(&str, &str)] = &[];
 
+/// Property-test mutation patches that deliberately have no Kani harness.
+///
+/// They exercise scanner and command-guard contracts that exceed the bounded
+/// Kani resource cap. Keep this list narrow: each entry must name a live
+/// Proptest property, and the patch still has to apply cleanly below.
+const SUPPLEMENTAL_PROPERTY_PATCHES: &[&str] = &[
+    "ir__cmd_interpolate__property_tests__guard_uses_the_substituted_command",
+    "ir__cmd_interpolate__property_tests__scanner_agrees_with_independent_specification",
+    "ir__cmd_interpolate__property_tests__substituted_odd_backticks_are_rejected",
+];
+
 /// The workspace root, taken from the crate manifest directory.
 fn manifest_dir() -> &'static Utf8Path {
     Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -89,28 +100,32 @@ fn declared_function_name(declaration: &str) -> Option<String> {
     Some(name.trim().to_owned())
 }
 
-/// Derive the harness module path for a `*_verification.rs` source file.
+/// Derive the harness module path for a verification source file.
 ///
 /// The repository convention wires harness bodies as `mod verification`
 /// declared by the sibling module they verify, so
-/// `src/ir/cycle_verification.rs` maps to `ir::cycle::verification`.
+/// `src/ir/cycle_verification.rs` maps to `ir::cycle::verification`, while
+/// `src/ir/cmd_interpolate/verification.rs` maps to
+/// `ir::cmd_interpolate::verification`.
 fn module_path_for_source(relative: &Utf8Path) -> Result<String> {
     let stem = relative
         .file_stem()
         .with_context(|| format!("source path {relative} should have a file stem"))?;
-    let Some(parent_module) = stem.strip_suffix("_verification") else {
-        bail!(
-            "{relative} declares a Kani harness outside a `*_verification.rs` \
-             module; move it into the sibling verification module or exempt \
-             it in tests/kani_mutation_evidence_tests.rs with a reason",
-        );
-    };
     let mut segments: Vec<&str> = relative
         .parent()
         .map(|parent| parent.components().map(|c| c.as_str()).collect())
         .unwrap_or_default();
-    segments.push(parent_module);
-    segments.push("verification");
+    if let Some(parent_module) = stem.strip_suffix("_verification") {
+        segments.push(parent_module);
+        segments.push("verification");
+    } else if stem == "verification" {
+        segments.push("verification");
+    } else {
+        bail!(
+            "{relative} declares a Kani harness outside a verification module; \
+             use `*_verification.rs` or `verification.rs` below its module",
+        );
+    }
     Ok(segments.join("::"))
 }
 
@@ -175,6 +190,60 @@ fn patch_stems() -> Result<BTreeSet<String>> {
 /// Convert a full harness path into its expected patch file stem.
 fn patch_stem_for_harness(harness: &str) -> String {
     harness.replace("::", "__")
+}
+
+/// Derive the source file and property function named by a supplemental patch.
+fn supplemental_property_location(patch_stem: &str) -> Result<(Utf8PathBuf, String)> {
+    let mut segments: Vec<&str> = patch_stem.split("__").collect();
+    let property_name = segments
+        .pop()
+        .with_context(|| format!("supplemental patch {patch_stem} has no property name"))?;
+    let Some((root, module_segments)) = segments.split_first() else {
+        bail!("supplemental patch {patch_stem} has no module path");
+    };
+    ensure!(
+        *root == "ir",
+        "supplemental patch {patch_stem} must name an ir property module",
+    );
+    ensure!(
+        !module_segments.is_empty(),
+        "supplemental patch {patch_stem} has no property module",
+    );
+    let source_name = module_segments.join("_");
+    Ok((
+        Utf8Path::new("src")
+            .join(root)
+            .join(format!("{source_name}.rs")),
+        property_name.to_owned(),
+    ))
+}
+
+/// Validate and return supplemental patch stems backed by live properties.
+fn supplemental_property_patches() -> Result<BTreeSet<String>> {
+    let root = Dir::open_ambient_dir(manifest_dir(), ambient_authority())
+        .context("open workspace root")?;
+    let available_patch_stems = patch_stems()?;
+    let mut patches = BTreeSet::new();
+    for patch_stem in SUPPLEMENTAL_PROPERTY_PATCHES {
+        let (source_path, property_name) = supplemental_property_location(patch_stem)?;
+        let source = root
+            .read_to_string(source_path.as_str())
+            .with_context(|| format!("read supplemental property source {source_path}"))?;
+        ensure!(
+            source
+                .lines()
+                .filter_map(declared_function_name)
+                .any(|name| name == property_name),
+            "supplemental patch {patch_stem} names missing property {property_name} \
+             in {source_path}",
+        );
+        ensure!(
+            available_patch_stems.contains(*patch_stem),
+            "supplemental patch {patch_stem} is missing {MUTATIONS_DIR}/{patch_stem}.patch",
+        );
+        patches.insert((*patch_stem).to_owned());
+    }
+    Ok(patches)
 }
 
 /// Return whether the source tree is a Git work tree.
@@ -243,13 +312,15 @@ fn every_harness_has_mutation_evidence_or_exemption() -> Result<()> {
     Ok(())
 }
 
-/// Every mutation patch corresponds to a live harness.
+/// Every mutation patch corresponds to a live harness or supplemental property.
 #[test]
 fn every_patch_matches_a_harness() -> Result<()> {
     let harnesses = discover_harnesses()?;
+    let supplemental_patches = supplemental_property_patches()?;
     let expected: BTreeSet<String> = harnesses
         .iter()
         .map(|harness| patch_stem_for_harness(harness.as_str()))
+        .chain(supplemental_patches)
         .collect();
     let orphans: Vec<String> = patch_stems()?
         .into_iter()

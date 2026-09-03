@@ -61,21 +61,26 @@ stronger proof obligations become worthwhile.[^7]
 
 ### Kani for command interpolation
 
-`src/ir/cmd_interpolate.rs` is another high-value target because it is compact,
-load-bearing, and security-sensitive. `interpolate_command` replaces `$in` and
-`$out`, avoids rewriting inside backticks, and rejects commands when backticks
-are unmatched or the interpolated result fails the current `shlex` guard.[^8]
+`src/ir/cmd_interpolate/mod.rs` is another high-value target because it is
+compact, load-bearing, and security-sensitive. It recognizes only the internal
+`INS_TOKEN` and `OUTS_TOKEN` markers emitted by manifest rendering; literal
+`$in` and `$out` remain shell variables. POSIX-compatible routes reject markers
+inside backticks and reject commands when backticks are unmatched or the
+interpolated result fails the current `shlex` guard. PowerShell treats
+backticks as native escapes rather than protected regions.[^8]
 
-The initial Kani properties should assert that (bounded to command strings up
-to 256 characters with at most 8 placeholder occurrences):
+Kani proves two allocation-free kernels. An eight-character symbolic window
+with a symbolic offset proves that literal `$in` and `$out` prefixes never
+select a Netsuke marker. A 32-character symbolic array with a symbolic position
+drives both real marker constants through `find_substitution`, proving exact,
+boundary-independent matching, including truncated and near-miss candidates.
 
-- Only whole-word `$in` and `$out` placeholders are rewritten.
-- Identifier-containing strings such as `$input` or `$output` are not
-  rewritten accidentally.
-- Backtick-delimited regions are preserved.
-- Odd numbers of backticks are rejected.
-- Successful interpolation always returns a string that passes the current
-  syntactic guard.
+The production scanner exceeded the five-minute, 8 GiB Kani cap at six and
+eight characters, and the guard necessarily drives that scanner. Adversarial
+Proptest properties therefore cover templates of up to 256 characters with at
+most eight placeholders. They independently specify POSIX scanner behaviour,
+verify protected-placeholder and odd-backtick rejection, and verify that the
+real `shlex` guard evaluates the substituted command.
 
 ### Proptest for determinism and manifest semantics
 
@@ -244,8 +249,8 @@ The `kani-smoke` job is a dedicated, pull-request-only job (it runs only when
 - installs `uv` and then installs the pinned Kani toolchain through
   `make install-kani`,
 - runs `make kani-check` and then the bounded harness suite through
-  `make kani-ir` (13 harnesses across the manifest-verification and
-  cycle-verification modules),
+  `make kani-ir` (15 harnesses across the manifest, cycle, and
+  command-interpolation verification modules),
 - caches tool downloads separately from the ordinary Rust build artefacts, and
 - is bounded by a 20-minute job timeout (`timeout-minutes: 20`).
 
@@ -257,15 +262,18 @@ Three contracts should be documented before proofs become gating checks.
 
 ### Command placeholder contract
 
-The interpolation layer currently supports `$in` and `$out`, enforces
-identifier-style token boundaries, and suppresses substitution inside
-backticks.[^8] This contract should be documented in the README under a new
-"Security and command interpolation" section, as it is a user-facing guarantee
-that affects manifest authoring. The project documentation should state whether:
+The interpolation layer currently recognizes only the internal `INS_TOKEN` and
+`OUTS_TOKEN` markers emitted by manifest rendering. Literal `$in` and `$out`
+remain shell variables. On POSIX-compatible routes, markers inside backticks
+are rejected, as are commands with unmatched backticks or a substituted result
+that fails the current `shlex` guard.[^8] PowerShell treats a backtick as an
+escape. This contract should be documented in the README under a new "Security
+and command interpolation" section, as it is a user-facing guarantee that
+affects manifest authoring. The project documentation should state whether:
 
 - those are the only supported placeholders,
-- backtick suppression is the full contract or a temporary subset of shell
-  command-substitution handling, and
+- POSIX backtick rejection and PowerShell escape handling are the full contract
+  or a temporary subset of shell command-substitution handling, and
 - `shlex::split` is part of the semantic acceptance contract or only a guard
   against obviously malformed commands.
 

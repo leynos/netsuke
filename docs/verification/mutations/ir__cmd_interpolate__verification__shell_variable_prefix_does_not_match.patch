@@ -1,0 +1,12 @@
+diff --git a/src/ir/cmd_interpolate/mod.rs b/src/ir/cmd_interpolate/mod.rs
+--- a/src/ir/cmd_interpolate/mod.rs
++++ b/src/ir/cmd_interpolate/mod.rs
+@@ -257,6 +257,6 @@ pub(super) fn find_substitution(chars: &[char], pos: usize) -> Option<(Placeholder, usize)> {
+ pub(super) fn find_substitution(chars: &[char], pos: usize) -> Option<(Placeholder, usize)> {
+-    (chars.get(pos) == Some(&'_')).then_some(()).and_then(|()| {
++    (chars.get(pos) == Some(&'$')).then_some(()).and_then(|()| {
+-        try_match_token(chars, pos, INS_TOKEN, Placeholder::Inputs)
++        try_match_token(chars, pos, "$in", Placeholder::Inputs)
+             .or_else(|| try_match_token(chars, pos, OUTS_TOKEN, Placeholder::Outputs))
+     })
+ }

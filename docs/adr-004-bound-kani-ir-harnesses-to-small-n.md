@@ -158,3 +158,20 @@ exercise path-bearing canonicalization up to the larger randomized bounds.
 - [`docs/execplans/4-2-2-kani-harnesses-for-cycle-canonicalization.md`](execplans/4-2-2-kani-harnesses-for-cycle-canonicalization.md)
 - [`docs/formal-verification-methods-in-netsuke.md`](formal-verification-methods-in-netsuke.md)
 - [`docs/roadmap.md`](roadmap.md)
+
+## Addendum — 2026-08-30
+
+Roadmap item `4.2.3` extends the verification boundary established by this ADR.
+Kani proves that literal `$in` and `$out` do not select Netsuke markers in an
+eight-character symbolic window. It also proves exact matching of the real
+marker constants through `find_substitution` in a 32-character symbolic array.
+
+Proptest covers scanner agreement, protected backtick-region handling,
+unmatched-backtick rejection, and guard placement for templates up to 256
+characters and eight placeholders. The independent oracle is an assertion
+target only. It does not replace production code or create a public API.
+
+The Kani proofs do not prove the full scanner, backtick state machine, or
+`shlex` guard. See the
+[`docs/execplans/4-2-3-kani-harnesses-for-command-interpolation.md`](execplans/4-2-3-kani-harnesses-for-command-interpolation.md)
+for the implementation record and validation boundary.

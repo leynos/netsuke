@@ -10,6 +10,16 @@
           "weight": 0.0
         }
       ]
+    },
+    {
+      "matching_content_path": "src/ir/cmd_interpolate_property_support.rs",
+      "matching_content_path_doc": "Private test-only generated strategies and an independent POSIX scanner oracle must accept unconstrained templates, raw bindings, replacement values, and fragments. Those adversarial values intentionally include placeholders, backticks, quotes, empty text, and malformed forms. Newtypes would add conversion and borrowing noise without enforcing a constraint; reassess if this code becomes production-facing or its inputs gain a meaningful invariant.",
+      "rules": [
+        {
+          "name": "String Heavy Function Arguments",
+          "weight": 0.0
+        }
+      ]
     }
   ]
 }

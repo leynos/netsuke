@@ -28,6 +28,7 @@ EXPECTED_USES_PATH = "leynos/shared-actions/.github/workflows/mutation-cargo.yml
 #: survivors would be noise.
 KANI_EXCLUDES = (
     "src/ir/cycle_verification.rs",
+    "src/ir/cmd_interpolate/verification.rs",
     "src/ir/from_manifest_verification.rs",
     "src/ir/graph_kani_map.rs",
 )

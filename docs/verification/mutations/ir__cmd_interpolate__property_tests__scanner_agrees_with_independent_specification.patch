@@ -1,0 +1,13 @@
+diff --git a/src/ir/cmd_interpolate/substitution.rs b/src/ir/cmd_interpolate/substitution.rs
+--- a/src/ir/cmd_interpolate/substitution.rs
++++ b/src/ir/cmd_interpolate/substitution.rs
+@@ -386,7 +386,7 @@ fn append_unprotected_character(
+             return pos + 1;
+         };
+         self.output.push_str(
+             self.bindings
+-                .substitution(placeholder, self.active_quote_context()),
++                .substitution(super::Placeholder::Inputs, self.active_quote_context()),
+         );
+         pos + skip
+     }

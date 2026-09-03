@@ -7,13 +7,16 @@
 use proptest::prelude::*;
 use test_support::ninja_gen::paths_strategy;
 
-use super::{INS_TOKEN, IrGenError, OUTS_TOKEN, RecipeShell, interpolate_command_with_shell};
+use super::{
+    INS_TOKEN, IrGenError, OUTS_TOKEN, RecipeShell, interpolate_command_with_bindings,
+    interpolate_command_with_shell,
+};
 
-fn safe_text_strategy() -> impl Strategy<Value = String> {
-    // Empty fragments are intentional: surrounding command text may be absent,
-    // and trimming whitespace-only generated text exercises that boundary.
-    "[a-zA-Z0-9_./ -]{0,24}".prop_map(|text| text.trim().to_owned())
-}
+use support::{
+    adversarial_template_strategy, assert_matches_specification,
+    eight_placeholder_template_strategy, has_odd_backticks, interpolation_template_strategy,
+    is_valid_posix_command, posix_bindings, raw_binding_strategy, safe_text_strategy,
+};
 
 proptest! {
     /// Reject manifest markers in backticks for every generated path binding.
@@ -98,6 +101,26 @@ proptest! {
     }
 
     #[test]
+    fn adversarial_text_rejects_protected_tokens(template in adversarial_template_strategy()) {
+        let backtick_count = template.chars().filter(|&ch| ch == '`').count();
+        let has_open_backtick = backtick_count & 1 == 1;
+        let protected = if has_open_backtick {
+            format!("{INS_TOKEN} {OUTS_TOKEN}`")
+        } else {
+            format!("`{INS_TOKEN} {OUTS_TOKEN}`")
+        };
+        let result = interpolate_command_with_shell(
+            &format!("{template}{protected}"),
+            &[],
+            &[],
+            RecipeShell::Posix,
+        );
+        let is_invalid_command = matches!(result, Err(IrGenError::InvalidCommand { .. }));
+
+        prop_assert!(is_invalid_command);
+    }
+
+    #[test]
     fn unbalanced_backticks_are_rejected(prefix in safe_text_strategy(), suffix in safe_text_strategy(), inputs in paths_strategy("in", 1..10), outputs in paths_strategy("out", 1..10)) {
         let template = format!("echo {prefix} ` {INS_TOKEN} {suffix}");
         let err = interpolate_command_with_shell(&template, &inputs, &outputs, RecipeShell::Posix)
@@ -106,4 +129,82 @@ proptest! {
         let is_invalid_command = matches!(err, IrGenError::InvalidCommand { .. });
         prop_assert!(is_invalid_command);
     }
+
+    #[test]
+    fn scanner_agrees_with_independent_specification(
+        template in interpolation_template_strategy(),
+        ins in raw_binding_strategy(),
+        outs in raw_binding_strategy(),
+    ) {
+        let bindings = posix_bindings(ins, outs);
+        assert_matches_specification(&template, &bindings)?;
+    }
+
+    #[test]
+    fn scanner_covers_eight_placeholder_templates(
+        template in eight_placeholder_template_strategy(),
+        ins in raw_binding_strategy(),
+        outs in raw_binding_strategy(),
+    ) {
+        let bindings = posix_bindings(ins, outs);
+        assert_matches_specification(&template, &bindings)?;
+    }
+
+    #[test]
+    fn substituted_odd_backticks_are_rejected(
+        template in interpolation_template_strategy(),
+        ins in raw_binding_strategy(),
+        outs in raw_binding_strategy(),
+    ) {
+        let bindings = posix_bindings(ins, outs);
+        let specification = support::specification(&template, &bindings);
+        let outcome = interpolate_command_with_bindings(&template, &bindings);
+
+        if let Ok(substituted) = specification
+            && has_odd_backticks(&substituted)
+        {
+            match outcome {
+                Err(IrGenError::InvalidCommand { command, .. }) => {
+                    prop_assert_eq!(command, substituted);
+                }
+                unexpected_outcome => prop_assert!(
+                    false,
+                    "odd substituted command was accepted: {unexpected_outcome:?}"
+                ),
+            }
+        }
+    }
+
+    #[test]
+    fn guard_uses_the_substituted_command(
+        template in interpolation_template_strategy(),
+        ins in raw_binding_strategy(),
+        outs in raw_binding_strategy(),
+    ) {
+        let bindings = posix_bindings(ins, outs);
+        let specification = support::specification(&template, &bindings);
+
+        match (specification, interpolate_command_with_bindings(&template, &bindings)) {
+            (Ok(expected_command), Ok(command)) => {
+                let is_valid = is_valid_posix_command(&expected_command);
+                prop_assert!(is_valid, "guard accepted an invalid substituted command");
+                prop_assert_eq!(command, expected_command);
+            }
+            (Ok(expected_command), Err(IrGenError::InvalidCommand { command, .. })) => {
+                let is_valid = is_valid_posix_command(&expected_command);
+                prop_assert!(!is_valid, "guard rejected a valid substituted command");
+                prop_assert_eq!(command, expected_command);
+            }
+            (Err(expected_template), Err(IrGenError::InvalidCommand { command, .. })) => {
+                prop_assert_eq!(command, expected_template);
+            }
+            (unexpected_specification, unexpected_outcome) => prop_assert!(
+                false,
+                "guard and independent specification disagree: {unexpected_outcome:?} != {unexpected_specification:?}"
+            ),
+        }
+    }
 }
+
+#[path = "cmd_interpolate_property_support.rs"]
+mod support;

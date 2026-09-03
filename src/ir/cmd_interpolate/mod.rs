@@ -231,7 +231,7 @@ fn is_valid_command_for_shell(command: &str, shell: RecipeShell) -> bool {
 }
 
 /// Identifies the private marker emitted for a Netsuke recipe placeholder.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Placeholder {
     /// Select the input-path binding.
     Inputs,
@@ -259,8 +259,10 @@ pub(super) enum QuoteContext {
 /// assert!(matches!(res, Some((Placeholder::Inputs, _))));
 /// ```
 pub(super) fn find_substitution(chars: &[char], pos: usize) -> Option<(Placeholder, usize)> {
-    try_match_token(chars, pos, INS_TOKEN, Placeholder::Inputs)
-        .or_else(|| try_match_token(chars, pos, OUTS_TOKEN, Placeholder::Outputs))
+    (chars.get(pos) == Some(&'_')).then_some(()).and_then(|()| {
+        try_match_token(chars, pos, INS_TOKEN, Placeholder::Inputs)
+            .or_else(|| try_match_token(chars, pos, OUTS_TOKEN, Placeholder::Outputs))
+    })
 }
 
 /// Find an internal or short-form script placeholder at `pos`.
@@ -353,12 +355,26 @@ pub const INS_TOKEN: &str = "__NETSUKE_INS_PLACEHOLDER__";
 /// consumed during command interpolation; it is not general template syntax.
 pub const OUTS_TOKEN: &str = "__NETSUKE_OUTS_PLACEHOLDER__";
 
+const _: () = assert!(
+    matches!(INS_TOKEN.as_bytes().first(), Some(b'_'))
+        && matches!(OUTS_TOKEN.as_bytes().first(), Some(b'_')),
+    "the marker fallback in find_substitution only runs at underscore positions",
+);
+
 #[cfg(test)]
 #[path = "posix_lexical_tests.rs"]
 mod posix_lexical_tests;
 #[cfg(test)]
 #[path = "../cmd_interpolate_property_tests.rs"]
 mod property_tests;
+
+#[cfg(kani)]
+mod verification;
+
 #[cfg(test)]
 #[path = "../cmd_interpolate_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "../cmd_interpolate_power_shell_tests.rs"]
+mod power_shell_tests;

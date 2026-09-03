@@ -1177,10 +1177,11 @@ select a branch in that control to exercise a feature branch.
 The caller passes two configuration inputs, each carrying intent:
 
 - `exclude-globs` — `src/ir/cycle_verification.rs`,
-  `src/ir/from_manifest_verification.rs`, and `src/ir/graph_kani_map.rs`:
-  modules gated behind `#[cfg(kani)]` mod declarations. `cargo-mutants` does
-  not evaluate that cfg, so mutants inserted there would compile to nothing and
-  survive as noise rather than genuine test gaps.
+  `src/ir/from_manifest_verification.rs`, `src/ir/graph_kani_map.rs`, and
+  `src/ir/cmd_interpolate/verification.rs`: modules gated behind
+  `#[cfg(kani)] mod` declarations. `cargo-mutants` does not evaluate that cfg,
+  so mutants inserted there would compile to nothing and survive as noise
+  rather than genuine test gaps.
 - `extra-args` — `--all-features`, so the mutation run matches the `make test`
   CI baseline; a mismatch would report feature-gated code (the `legacy-digests`
   feature) as untested.
@@ -1884,21 +1885,33 @@ N=2, N=3, and N=4, plus one direct adapter harness that checks
 path cycle. Larger path-bearing canonicalization coverage remains owned by the
 `cycle_property_tests.rs` Proptest suite.
 
-| Harness                                                     | Module                                 | Property                                                                                                | Bound                 | Notes                                                                                                                                                                     |
-| ----------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `duplicate_output_always_rejected`                          | `src/ir/from_manifest_verification.rs` | A duplicate path in one target is detected and the reported duplicate path is preserved.                | `#[kani::unwind(12)]` | Drives production `find_duplicates` with symbolic duplicate names. Full manifest lowering reaches action hashing before duplicate assertions become tractable under Kani. |
-| `empty_rule_shape_is_rejected`                              | `src/ir/from_manifest_verification.rs` | An empty rule selector reaches `IrGenError::EmptyRule` and preserves the target name.                   | `#[kani::unwind(6)]`  | Drives production `resolve_rule` with a symbolic target name and a minimal rule map.                                                                                      |
-| `multiple_rule_shape_is_rejected`                           | `src/ir/from_manifest_verification.rs` | A multi-rule selector reaches `IrGenError::MultipleRules` and preserves sorted rule names.              | `#[kani::unwind(8)]`  | Drives production `resolve_rule` with symbolic rule ordering over short bounded names.                                                                                    |
-| `missing_rule_shape_is_rejected`                            | `src/ir/from_manifest_verification.rs` | A missing single rule reaches `IrGenError::RuleNotFound` and preserves target and rule names.           | `#[kani::unwind(6)]`  | Drives production `resolve_rule` with symbolic target and rule names and an empty rule map.                                                                               |
-| `self_dependency_reports_cycle`                             | `src/ir/cycle_verification.rs`         | A self-dependency is reported as a cycle by production traversal.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`, which reuses `CycleDetector::visit` in boolean mode.                                                                                  |
-| `two_node_cycle_reports_cycle_a_first`                      | `src/ir/cycle_verification.rs`         | A two-node cycle is reported when the `a` node is inserted first.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`; the separate insertion-order harnesses cover deterministic map-entry traversal under the Kani map.                                    |
-| `two_node_cycle_reports_cycle_b_first`                      | `src/ir/cycle_verification.rs`         | A two-node cycle is reported when the `b` node is inserted first.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`; this complements the `a`-first harness, so the proof is not tied to one insertion order.                                              |
-| `direct_missing_dependency_does_not_report_cycle`           | `src/ir/cycle_verification.rs`         | A single target with an absent dependency is not reported as a cycle.                                   | `#[kani::unwind(6)]`  | Drives production `contains_cycle` and proves that a missing direct dependency does not enter the cycle branch.                                                           |
-| `transitive_missing_dependency_does_not_report_cycle`       | `src/ir/cycle_verification.rs`         | A two-target chain whose deeper dependency is absent is not reported as a cycle.                        | `#[kani::unwind(6)]`  | Drives production `contains_cycle` and proves that an absent dependency below another target does not synthesize a false cycle.                                           |
-| `canonicalize_two_node_cycle_is_canonical`                  | `src/ir/cycle_verification.rs`         | Two-node canonicalization preserves length, closure, interior multiset, smallest start, and rotation.   | `#[kani::unwind(6)]`  | Drives private production `canonicalize_cycle_by` over distinct symbolic `u8` interior IDs. Direct `Utf8PathBuf` proof attempts exceeded the local 8 GiB cap.             |
-| `canonicalize_three_node_cycle_is_canonical`                | `src/ir/cycle_verification.rs`         | Three-node canonicalization preserves length, closure, interior multiset, smallest start, and rotation. | `#[kani::unwind(6)]`  | Drives private production `canonicalize_cycle_by` over distinct symbolic `u8` interior IDs.                                                                               |
-| `canonicalize_four_node_cycle_is_canonical`                 | `src/ir/cycle_verification.rs`         | Four-node canonicalization preserves length, closure, interior multiset, smallest start, and rotation.  | `#[kani::unwind(6)]`  | Drives private production `canonicalize_cycle_by` over distinct symbolic `u8` interior IDs.                                                                               |
-| `canonicalize_path_wrapper_matches_u8_kernel_for_two_nodes` | `src/ir/cycle_verification.rs`         | The path-bearing wrapper agrees with the `u8` kernel for both two-node path orderings.                  | `#[kani::unwind(6)]`  | Drives production `canonicalize_cycle(Vec<Utf8PathBuf>)` once per concrete two-node ordering and compares the result with the kernel's `u8` output.                       |
+Command-interpolation Kani proofs drive the allocation-free marker-matching
+helper, not the full scanner. The helper operates on the scanner's private
+`&[char]` buffer and avoids symbolic UTF-8 encoding in the proof. A separate
+proof verifies that literal shell-variable prefixes such as `$in` and `$out` do
+not select a Netsuke marker. Scanner, protected-placeholder, and guard
+behaviour remains covered by the adversarial Proptest suite over the documented
+256-character, eight-placeholder range.
+
+Table: Kani harnesses for Netsuke's intermediate-representation invariants.
+
+| Harness                                                     | Module                                   | Property                                                                                                | Bound                 | Notes                                                                                                                                                                     |
+| ----------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `duplicate_output_always_rejected`                          | `src/ir/from_manifest_verification.rs`   | A duplicate path in one target is detected and the reported duplicate path is preserved.                | `#[kani::unwind(12)]` | Drives production `find_duplicates` with symbolic duplicate names. Full manifest lowering reaches action hashing before duplicate assertions become tractable under Kani. |
+| `empty_rule_shape_is_rejected`                              | `src/ir/from_manifest_verification.rs`   | An empty rule selector reaches `IrGenError::EmptyRule` and preserves the target name.                   | `#[kani::unwind(6)]`  | Drives production `resolve_rule` with a symbolic target name and a minimal rule map.                                                                                      |
+| `multiple_rule_shape_is_rejected`                           | `src/ir/from_manifest_verification.rs`   | A multi-rule selector reaches `IrGenError::MultipleRules` and preserves sorted rule names.              | `#[kani::unwind(8)]`  | Drives production `resolve_rule` with symbolic rule ordering over short bounded names.                                                                                    |
+| `missing_rule_shape_is_rejected`                            | `src/ir/from_manifest_verification.rs`   | A missing single rule reaches `IrGenError::RuleNotFound` and preserves target and rule names.           | `#[kani::unwind(6)]`  | Drives production `resolve_rule` with symbolic target and rule names and an empty rule map.                                                                               |
+| `shell_variable_prefix_does_not_match`                      | `src/ir/cmd_interpolate/verification.rs` | Literal `$in` and `$out` prefixes remain shell text rather than selecting a Netsuke marker.             | `#[kani::unwind(32)]` | Covers every symbolic `$` position in the bounded window, including truncated starts.                                                                                     |
+| `marker_token_match_is_exact`                               | `src/ir/cmd_interpolate/verification.rs` | The real `INS_TOKEN` and `OUTS_TOKEN` match exact text, irrespective of adjacent identifier characters. | `#[kani::unwind(34)]` | Drives both concrete marker constants through `find_substitution`, including prefix, suffix, near-miss, and truncation cases.                                             |
+| `self_dependency_reports_cycle`                             | `src/ir/cycle_verification.rs`           | A self-dependency is reported as a cycle by production traversal.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`, which reuses `CycleDetector::visit` in boolean mode.                                                                                  |
+| `two_node_cycle_reports_cycle_a_first`                      | `src/ir/cycle_verification.rs`           | A two-node cycle is reported when the `a` node is inserted first.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`; the separate insertion-order harnesses cover deterministic map-entry traversal under the Kani map.                                    |
+| `two_node_cycle_reports_cycle_b_first`                      | `src/ir/cycle_verification.rs`           | A two-node cycle is reported when the `b` node is inserted first.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`; this complements the `a`-first harness, so the proof is not tied to one insertion order.                                              |
+| `direct_missing_dependency_does_not_report_cycle`           | `src/ir/cycle_verification.rs`           | A single target with an absent dependency is not reported as a cycle.                                   | `#[kani::unwind(6)]`  | Drives production `contains_cycle` and proves that a missing direct dependency does not enter the cycle branch.                                                           |
+| `transitive_missing_dependency_does_not_report_cycle`       | `src/ir/cycle_verification.rs`           | A two-target chain whose deeper dependency is absent is not reported as a cycle.                        | `#[kani::unwind(6)]`  | Drives production `contains_cycle` and proves that an absent dependency below another target does not synthesize a false cycle.                                           |
+| `canonicalize_two_node_cycle_is_canonical`                  | `src/ir/cycle_verification.rs`           | Two-node canonicalization preserves length, closure, interior multiset, smallest start, and rotation.   | `#[kani::unwind(6)]`  | Drives private production `canonicalize_cycle_by` over distinct symbolic `u8` interior IDs. Direct `Utf8PathBuf` proof attempts exceeded the local 8 GiB cap.             |
+| `canonicalize_three_node_cycle_is_canonical`                | `src/ir/cycle_verification.rs`           | Three-node canonicalization preserves length, closure, interior multiset, smallest start, and rotation. | `#[kani::unwind(6)]`  | Drives private production `canonicalize_cycle_by` over distinct symbolic `u8` interior IDs.                                                                               |
+| `canonicalize_four_node_cycle_is_canonical`                 | `src/ir/cycle_verification.rs`           | Four-node canonicalization preserves length, closure, interior multiset, smallest start, and rotation.  | `#[kani::unwind(6)]`  | Drives private production `canonicalize_cycle_by` over distinct symbolic `u8` interior IDs.                                                                               |
+| `canonicalize_path_wrapper_matches_u8_kernel_for_two_nodes` | `src/ir/cycle_verification.rs`           | The path-bearing wrapper agrees with the `u8` kernel for both two-node path orderings.                  | `#[kani::unwind(6)]`  | Drives production `canonicalize_cycle(Vec<Utf8PathBuf>)` once per concrete two-node ordering and compares the result with the kernel's `u8` output.                       |
 
 Under `cfg(kani)`, `src/ir/graph.rs::IrHashMap` is a fixed-capacity
 deterministic compatibility layer used by production IR code under proof. Under
@@ -2379,6 +2392,23 @@ accepted manifest markers, `{{ ins }}` and `{{ outs }}`. Literal shell variables
 for the backend to escape. Keep the constants and their recognition limited to
 this two-stage recipe pipeline and its direct IR recipe tests.
 
+### Command interpolation contract
+
+The scanner recognizes only the internal `INS_TOKEN` and `OUTS_TOKEN` markers
+emitted by manifest rendering. Literal shell variables such as `$in`, `$out`,
+`$ins`, and `$outs` remain unchanged for the selected backend to interpret.
+
+`INS_TOKEN` and `OUTS_TOKEN` are machine-generated markers. They match exact
+text, so an adjacent identifier character does not suppress a marker
+substitution. On POSIX-compatible routes, a placeholder inside a
+backtick-delimited region is rejected before it can evade lowering. PowerShell
+uses backticks as escapes and does not enter that protected region. The POSIX
+scanner then validates the substituted command: odd backticks reject the
+command, and the `shlex` guard also evaluates that substituted text. The
+odd-backtick and guard properties are complementary: one proves rejection of
+odd substituted backtick counts, while the other proves that the guard's
+success or failure and returned command agree with the substituted command.
+
 Generated strategies that are reusable across crate boundaries belong in
 `test_support`. Because `test_support` is compiled as a library, dependencies
 used in those strategy signatures, including `proptest`, must be regular
@@ -2498,10 +2528,23 @@ It exercises the `-C` directory argument contract through the public factory
 only. Keep fixture assertions here and production test-helper behaviour in
 `check_ninja.rs`; this split keeps the public helper below the 400-line cap.
 
+### `src/ir/cmd_interpolate_property_support.rs`
+
+This test-only sibling module is owned by the command-interpolation property
+tests. It may contain their generators, independent specifications, and shared
+assertions, but it must not be used by production code or the Kani harnesses.
+Keep those proof and production boundaries explicit; move a helper here only
+when it serves more than one command-interpolation property test.
+
 When adding a new `#[path]` support module, follow the same shape: keep it
 private to its parent, give it a `//!` header stating the split reason and
 ownership, cap its public surface at `pub(super)`, and document it here so the
 boundary inventory stays complete.
+
+The test-only sibling `src/ir/cmd_interpolate_power_shell_tests.rs` owns the
+command-interpolation cases for protected PowerShell contexts. Keep those cases
+in the sibling so the parent test module stays below the 400-line cap;
+production code must not depend on this test module.
 
 ## Behavioural testing strategy
 
