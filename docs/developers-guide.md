@@ -895,11 +895,14 @@ showing peak memory above roughly 6 GB, a halving of wall time that offsets the
 doubled per-minute rate, or a job removed from the critical path. No such
 evidence exists yet, so every Linux job starts at `-2`.
 
-The Ubicloud GitHub App must be granted access to this repository before any
-Ubicloud job can be admitted. As of 2026-09-03 the installation covered other
-repositories in the estate but not this one, so the first Ubicloud run will sit
-unassigned until that grant is made. Treat the grant as a prerequisite of the
-rollout, not a troubleshooting step.
+The Ubicloud GitHub App must cover this repository before any Ubicloud job can
+be admitted. The installation is granted across the account, so this is a
+standing prerequisite rather than an outstanding task. Do not read the Ubicloud
+repository listing as evidence either way: it names only repositories that have
+already run a job, so a repository awaiting its first Ubicloud run is absent
+from it whether or not the grant exists. If a job on a `ubicloud-*` label has
+no runner after about five minutes, the grant is worth rechecking in the
+console before anything else.
 
 Register every intentional Ubicloud label in
 [`.github/actionlint.yaml`](../.github/actionlint.yaml). actionlint rejects an
