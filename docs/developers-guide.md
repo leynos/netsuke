@@ -650,11 +650,14 @@ and `.uv-bin`, together with the `actionlint` binary at the repository root.
 download step reuses the cached binary only when it reports the pinned version,
 so bumping that pin cannot be satisfied by a stale executable.
 
-The immutable `leynos/shared-actions/.github/actions/setup-rust` revision
+The `leynos/shared-actions/.github/actions/setup-rust` revision
 `f9a16065e58324b0714e86c1ebeb8eb4500f1b47` introduces
 `cache-provider: external`, and the same revision installs `whitaker-installer`
 and `cargo-nextest` from checksum-verified official releases with no source
-fallback. All direct callers set that value so setup-rust does not create a
+fallback. That revision is the head of shared-actions pull request 422 and is
+not yet merged, so it is a placeholder: replace every shared-action pin in this
+repository with that pull request's merge commit before merging this work. All
+direct callers set `cache-provider: external` so setup-rust does not create a
 duplicate GitHub cache. `install-whitaker` and `generate-coverage` take the
 same input for the same reason: the volume already owns `~/.cargo/bin`, the
 Whitaker data directory, and the coverage archives. That data directory differs
