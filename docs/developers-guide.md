@@ -764,13 +764,16 @@ than GitHub with `ubi gh leynos/netsuke list-cache-entries`. That command only
 works once the Ubicloud GitHub App covers this repository; see "GitHub Actions
 runner placement" for that prerequisite.
 
-The `leynos/shared-actions/.github/actions/setup-rust` revision
-`f9a16065e58324b0714e86c1ebeb8eb4500f1b47` introduces
-`cache-provider: external`, and the same revision installs `whitaker-installer`
-and `cargo-nextest` from checksum-verified official releases with no source
+Two shared-action pins are in play. `generate-coverage` is pinned to
+`0eceaef0ba362fd6a1e24d14d838d59dc5ac8cea`, the merge of shared-actions pull
+request 428, which adds the `all-features`, `all-targets`, and `doctests`
+inputs the single-execution rule depends on. Every other shared action is
+pinned to `f9a16065e58324b0714e86c1ebeb8eb4500f1b47`, which introduces
+`cache-provider: external` and installs `whitaker-installer` and
+`cargo-nextest` from checksum-verified official releases with no source
 fallback. That revision is the head of shared-actions pull request 422 and is
-not yet merged, so it is a placeholder: replace every shared-action pin in this
-repository with that pull request's merge commit before merging this work.
+not yet merged, so it is a placeholder: replace those pins with that pull
+request's merge commit before merging this work.
 
 CI installs tools from trusted prebuilt releases only. `setup-rust` verifies the
 `cargo-binstall` installer checksum, the formatter jobs install mdtablefix

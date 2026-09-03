@@ -21,14 +21,15 @@ from workflow_loading import (
     named_step,
 )
 
-#: Inputs that make the instrumented run as broad as `make test` was. Without
+#: Inputs that make the coverage run as broad as `make test` was. Without
 #: `all-features` the `legacy-digests` tests in `src/stdlib/path/hash_utils.rs`
 #: and `tests/std_filter_tests/hash_filters.rs` stop running; without
-#: `all-targets` the two `benches/` targets stop compiling.
+#: `all-targets` the two `benches/` targets stop compiling; without `doctests`
+#: nothing runs the doctests, which `cargo llvm-cov nextest` cannot execute.
 REQUIRED_COVERAGE_INPUTS = {
     "all-features": "true",
     "all-targets": "true",
-    "doctests": "false",
+    "doctests": "true",
 }
 
 #: Every job that measures coverage, and the event it is restricted to. Two
@@ -125,24 +126,38 @@ def test_warnings_are_denied_through_the_toolchain_setup() -> None:
         )
 
 
-def test_a_doctest_pass_follows_the_instrumented_run() -> None:
-    """Require the doctests that `cargo llvm-cov nextest` cannot execute."""
+def test_no_bespoke_doctest_step_shadows_the_action() -> None:
+    """Require the doctest pass to come from the coverage action.
+
+    The action runs `cargo test --doc --workspace` under the same feature
+    selection as the instrumented run, so a hand-rolled step beside it would
+    state that selection twice and let the two drift apart.
+    """
     steps = job_steps(load_workflow(WORKFLOW_DIR / "ci.yml"), "build-test")
-    doctests = named_step(steps, "Doctests")
-    assert doctests.get("run") == "make doctest", (
-        "the doctest pass must run the canonical make target"
+    assert not [step for step in steps if step.get("name") == "Doctests"], (
+        "the coverage action's doctests input replaced the bespoke step"
     )
-    coverage_index = steps.index(named_step(steps, "Test and Measure Coverage"))
-    assert coverage_index < steps.index(doctests), (
-        "the doctest pass must follow the instrumented run"
+
+
+def test_the_local_test_target_still_runs_both_passes() -> None:
+    """Keep `make test` running what CI runs, for local parity.
+
+    CI drives the doctests through the coverage action, but a contributor runs
+    `make test`, so the target must still compose both passes with the same
+    breadth.
+    """
+    makefile = MAKEFILE_PATH.read_text(encoding="utf-8")
+    assert "test: test-nextest doctest" in makefile, (
+        "`make test` must compose the nextest and doctest passes"
     )
-    assert doctests.get("if") is None, (
-        "doctests must run on every event, because no coverage run executes them"
-    )
-    recipe = _makefile_recipe("doctest")
+    nextest = _makefile_recipe("test-nextest")
+    for flag in ("--workspace", "--all-targets", "--all-features"):
+        assert flag in nextest, f"the local nextest pass must pass {flag}"
+    doctest = _makefile_recipe("doctest")
     for flag in ("--workspace", "--doc", "--all-features"):
-        assert flag in recipe, f"the doctest pass must pass {flag}"
-    assert "-D warnings" in recipe, "the doctest pass must deny warnings"
+        assert flag in doctest, f"the local doctest pass must pass {flag}"
+    for recipe, label in ((nextest, "nextest"), (doctest, "doctest")):
+        assert "-D warnings" in recipe, f"the local {label} pass must deny warnings"
 
 
 @pytest.mark.parametrize(

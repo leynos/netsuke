@@ -298,13 +298,20 @@ fn behavioural_ci_workflow_runs_tests_through_the_make_target() -> Result<()> {
     let build_test = job(&workflow, "build-test")?;
     let steps = steps(build_test)?;
 
-    // The instrumented coverage run is the lane's only test execution, so the
-    // doctests it cannot execute are the one thing left for a make target.
-    let doctest_step = named_step(steps, "Doctests")?;
-    ensure!(
-        mapping_get(doctest_step, YamlKey("run")).and_then(Value::as_str) == Some("make doctest"),
-        "the Doctests step should run the canonical make target"
-    );
+    // The instrumented coverage run is the lane's only test execution, and it
+    // runs the doctests it cannot instrument through its own `doctests` input.
+    let coverage_step = named_step(steps, "Test and Measure Coverage")?;
+    for (input, expected) in [
+        ("all-features", "true"),
+        ("all-targets", "true"),
+        ("doctests", "true"),
+    ] {
+        ensure!(
+            step_input(coverage_step, YamlKey(input)) == Some(expected),
+            "the coverage run should pass {input}={expected} so it is as broad as the \
+             uninstrumented pass it replaced"
+        );
+    }
     ensure!(
         !steps.iter().any(|step| step_name(step, "Test").is_some()),
         "the uninstrumented test execution should be folded into the coverage run"

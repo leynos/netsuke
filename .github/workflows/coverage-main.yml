@@ -111,7 +111,7 @@ jobs:
       - name: Reset sccache statistics
         run: sccache --zero-stats
       - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
+        uses: leynos/shared-actions/.github/actions/generate-coverage@0eceaef0ba362fd6a1e24d14d838d59dc5ac8cea
         with:
           language: rust
           output-path: lcov.info
@@ -121,8 +121,7 @@ jobs:
           # job writes is comparable with what the ratchet checks against.
           all-features: 'true'
           all-targets: 'true'
-          # `build-test` runs doctests uninstrumented on every event.
-          doctests: 'false'
+          doctests: 'true'
           with-ratchet: 'true'
       - name: Show sccache statistics
         # Zero compile requests here would mean the instrumented build never

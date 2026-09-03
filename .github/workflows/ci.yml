@@ -243,7 +243,7 @@ jobs:
         # from setup-rust's `rustflags` input. Pull requests only; on the
         # trunk `coverage-upload` runs the same set over the same commit.
         if: github.event_name == 'pull_request'
-        uses: leynos/shared-actions/.github/actions/generate-coverage@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
+        uses: leynos/shared-actions/.github/actions/generate-coverage@0eceaef0ba362fd6a1e24d14d838d59dc5ac8cea
         with:
           language: rust
           output-path: lcov.info
@@ -251,15 +251,14 @@ jobs:
           cache-provider: external
           all-features: 'true'
           all-targets: 'true'
-          # Doctests run uninstrumented in the next step: they are cheap there
-          # and `cargo llvm-cov nextest` cannot execute them at all.
-          doctests: 'false'
+          # An uninstrumented `cargo test --doc` after the instrumented run,
+          # under the same feature selection. `cargo llvm-cov nextest` cannot
+          # execute doctests, and stating the selection once keeps the two
+          # passes from drifting apart.
+          doctests: 'true'
           # Compare changed-line coverage against the baseline written by
           # coverage-main.yml (caches saved on main are readable by every PR).
           with-ratchet: 'true'
-      - name: Doctests
-        # Every event, including the trunk: no coverage run executes them.
-        run: make doctest
       - name: Show sccache statistics
         if: always()
         run: |
