@@ -298,14 +298,21 @@ fn behavioural_ci_workflow_runs_tests_through_the_make_target() -> Result<()> {
     let build_test = job(&workflow, "build-test")?;
     let steps = steps(build_test)?;
 
-    let test_step = named_step(steps, "Test")?;
+    // The instrumented coverage run is the lane's only test execution, so the
+    // doctests it cannot execute are the one thing left for a make target.
+    let doctest_step = named_step(steps, "Doctests")?;
     ensure!(
-        mapping_get(test_step, YamlKey("run")).and_then(Value::as_str) == Some("make test"),
-        "the Test step should run the canonical make target"
+        mapping_get(doctest_step, YamlKey("run")).and_then(Value::as_str) == Some("make doctest"),
+        "the Doctests step should run the canonical make target"
     );
     ensure!(
-        step_index(steps, "Install cargo-nextest")? < step_index(steps, "Test")?,
-        "cargo-nextest should be installed before make test runs"
+        !steps.iter().any(|step| step_name(step, "Test").is_some()),
+        "the uninstrumented test execution should be folded into the coverage run"
+    );
+    ensure!(
+        step_index(steps, "Install cargo-nextest")?
+            < step_index(steps, "Test and Measure Coverage")?,
+        "cargo-nextest should be installed before the instrumented run"
     );
     let setup_uv = named_step(steps, "Setup uv")?;
     ensure!(

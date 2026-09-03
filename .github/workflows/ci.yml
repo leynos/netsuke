@@ -15,22 +15,18 @@ on:
 permissions: {}
 
 env:
-  # Single source of truth for the cargo-nextest pin. `make test` runs the
-  # non-doctest suite through nextest, so every job that installs it reads
-  # this value. Declared once at workflow scope so the documented
-  # AGENTS.md `sed` extraction yields exactly one version.
+  # Single source of truth for the cargo-nextest pin, declared once at
+  # workflow scope so the AGENTS.md `sed` extraction yields one version.
   NEXTEST_VERSION: '0.9.133'
   # Pins for the Python lint and typecheck gates. Make's `?=` assignments
-  # yield to the environment, so these values control the versions the `make`
-  # targets below run under. tests/workflow_contracts/python_toolchain_sync_test.py
-  # holds these equal to the Makefile defaults so CI and local runs cannot
-  # drift apart.
+  # yield to the environment, so these choose the versions.
+  # tests/workflow_contracts/python_toolchain_sync_test.py holds them equal
+  # to the Makefile defaults.
   RUFF_VERSION: '0.16.4'
   TY_VERSION: '0.0.74'
   PYTHON_BASELINE: '3.14'
-  # `make check-fmt` verifies Markdown formatting through
-  # scripts/check-markdown-format.sh, which shells out to mdtablefix. Pin it
-  # once so both formatter jobs produce the same canonical output.
+  # `make check-fmt` shells out to mdtablefix. Pin it once so both formatter
+  # jobs produce the same canonical output.
   MDTABLEFIX_VERSION: '0.5.0'
   # vCPU count of the Ubicloud shape every Linux job here runs on. Every
   # worker bound below derives from this one number, and
@@ -48,11 +44,11 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       BUILD_PROFILE: debug
-      # Derived from LINUX_LANE_VCPUS above. Bound compilation and nextest
-      # separately so test workers do not oversubscribe the two vCPUs.
+      # Derived from LINUX_LANE_VCPUS above. The instrumented run reads the
+      # cargo and nextest variables; `make doctest` reads BUILD_JOBS.
       BUILD_JOBS: -j 2
-      NEXTEST_BUILD_JOBS: --build-jobs 2
-      NEXTEST_TEST_JOBS: -j 2
+      CARGO_BUILD_JOBS: '2'
+      NEXTEST_TEST_THREADS: '2'
       RUSTC_WRAPPER: sccache
       # sccache uses the GitHub Actions backend, whose objects land in
       # Ubicloud's own store on a Ubicloud runner. It needs no archive of its
@@ -82,13 +78,11 @@ jobs:
           # the pull request's merge base once the gate is wired in.
           fetch-depth: 0
       - name: Export sccache credentials
-        # Before the installer, so before anything can start the server: a
-        # server started without these stays on local disk all job.
+        # A server started without these stays on local disk all job.
         uses: ./.github/actions/sccache-gha-credentials
       - name: Restore gate caches
         id: caches
-        # Restores before any install or build, so a warm run reuses work an
-        # earlier run completed. Sole owner of every path it lists.
+        # Before any install; sole owner of every path it lists.
         uses: ./.github/actions/linux-gate-cache
         with:
           mode: restore
@@ -99,9 +93,8 @@ jobs:
           sudo apt-get install --yes --no-install-recommends gawk
 
           # Ubuntu exposes awk through an alternatives symlink outside
-          # /usr/bin. The capability-backed sandbox probe deliberately cannot
-          # follow a symlink that escapes its containing directory, so expose
-          # the packaged binary as a regular executable on the job PATH.
+          # /usr/bin, which the capability-backed sandbox probe cannot follow,
+          # so expose the packaged binary as a regular executable on PATH.
           test_shell_bin="${RUNNER_TEMP}/netsuke-test-bin"
           mkdir --parents "${test_shell_bin}"
           install --mode=0755 "$(command -v gawk)" "${test_shell_bin}/awk"
@@ -243,8 +236,30 @@ jobs:
         run: make nixie
       - name: Workflow contract tests
         run: make test-workflow-contracts
-      - name: Test
-        run: make test
+      - name: Test and Measure Coverage
+        # The only test execution on this lane: measuring and testing in one
+        # instrumented run costs one compile instead of two. The flags must
+        # therefore match an uninstrumented run, and `-D warnings` arrives
+        # from setup-rust's `rustflags` input. Pull requests only; on the
+        # trunk `coverage-upload` runs the same set over the same commit.
+        if: github.event_name == 'pull_request'
+        uses: leynos/shared-actions/.github/actions/generate-coverage@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
+        with:
+          language: rust
+          output-path: lcov.info
+          format: lcov
+          cache-provider: external
+          all-features: 'true'
+          all-targets: 'true'
+          # Doctests run uninstrumented in the next step: they are cheap there
+          # and `cargo llvm-cov nextest` cannot execute them at all.
+          doctests: 'false'
+          # Compare changed-line coverage against the baseline written by
+          # coverage-main.yml (caches saved on main are readable by every PR).
+          with-ratchet: 'true'
+      - name: Doctests
+        # Every event, including the trunk: no coverage run executes them.
+        run: make doctest
       - name: Show sccache statistics
         if: always()
         run: |
@@ -255,20 +270,6 @@ jobs:
             cat sccache-stats.txt
             printf '```\n'
           } >> "$GITHUB_STEP_SUMMARY"
-      - name: Test and Measure Coverage
-        # Pull requests only: on the trunk `coverage-upload` measures the
-        # same commit, so a second instrumented build here would also give the
-        # ratchet baseline a second writer. See the developers guide.
-        if: github.event_name == 'pull_request'
-        uses: leynos/shared-actions/.github/actions/generate-coverage@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
-        with:
-          language: rust
-          output-path: lcov.info
-          format: lcov
-          cache-provider: external
-          # Compare changed-line coverage against the baseline written by
-          # coverage-main.yml (caches saved on main are readable by every PR).
-          with-ratchet: 'true'
       - name: Check coverage against CodeScene gates
         if: env.CS_ACCESS_TOKEN != '' && github.event_name == 'pull_request'
         env:
@@ -345,10 +346,9 @@ jobs:
           use-sccache: 'false'
       - name: Install prebuilt Kani
         # Kani ships as two payloads: the Cargo front-end and the verifier
-        # bundle. Both come from pinned archives with published checksums, and
-        # both live under version-qualified directories inside the cached
-        # paths, so a version bump in tools/kani/VERSION cannot be satisfied
-        # by a stale binary left behind by an earlier run.
+        # bundle, both from pinned checksummed archives under
+        # version-qualified directories, so a bump in tools/kani/VERSION
+        # cannot be satisfied by a stale binary.
         run: |
           set -euo pipefail
           kani_version="$(tr -d '\r\n' < tools/kani/VERSION)"

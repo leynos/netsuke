@@ -117,6 +117,12 @@ jobs:
           output-path: lcov.info
           format: lcov
           cache-provider: external
+          # The same set the pull-request gate measures, so the baseline this
+          # job writes is comparable with what the ratchet checks against.
+          all-features: 'true'
+          all-targets: 'true'
+          # `build-test` runs doctests uninstrumented on every event.
+          doctests: 'false'
           with-ratchet: 'true'
       - name: Show sccache statistics
         # Zero compile requests here would mean the instrumented build never

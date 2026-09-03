@@ -65,10 +65,12 @@ DIRECT_RUNNER_SOURCES = (
 #: Jobs placed directly on a Ubicloud label, with the worker-count variables
 #: each one must keep within the shape's vCPU count.
 UBICLOUD_WORKER_BOUNDS = (
+    # The instrumented run reads cargo's and nextest's own variables rather
+    # than the Make variables the folded-away test step consumed.
     (
         "ci.yml",
         "build-test",
-        ("BUILD_JOBS", "NEXTEST_BUILD_JOBS", "NEXTEST_TEST_JOBS"),
+        ("BUILD_JOBS", "CARGO_BUILD_JOBS", "NEXTEST_TEST_THREADS"),
     ),
     ("netsukefile-test.yml", "netsukefile", ("BUILD_JOBS",)),
 )

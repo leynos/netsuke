@@ -2216,61 +2216,53 @@ toolchain homes separately from ordinary Cargo build artefacts.
 
 ### Which job executes which tests
 
-A coverage job and a test-only job are worth running together only when the
-test-only job executes something the coverage job does not. That holds on a
-pull request here and does not hold on the trunk, so the two are separated by
-event rather than merged.
+One instrumented run measures coverage and executes the suite together, so a
+pull request compiles the workspace once instead of twice. A separate
+uninstrumented `cargo nextest` pass would have re-run the same tests for no
+extra signal, so `build-test` no longer has one.
+
+That trade is only honest while the instrumented invocation is as broad as the
+uninstrumented one was. `generate-coverage` defaults to
+`cargo llvm-cov nextest --workspace` with default features and default targets,
+which would have retired real tests, so both coverage callers pass
+`all-features` and `all-targets`. Without the first, the `legacy-digests` tests
+in `src/stdlib/path/hash_utils.rs` and `tests/std_filter_tests/hash_filters.rs`
+stop running; without the second, the two `benches/` targets stop compiling.
+`-D warnings` is not set as `env.RUSTFLAGS`, which
+`tests/polonius_toolchain_contract.rs` forbids; `setup-rust` exports it from its
+`rustflags` input and `cargo llvm-cov` appends its instrumentation to whatever
+it finds, so warnings stay denied.
+
+Doctests are the one thing the instrumented run cannot do at all, so
+`build-test` runs `make doctest` immediately afterwards, on every event.
 
 Table: the executed test set of every job that runs tests.
 
-| Job                                      | Platform     | Command                                    | Features | Targets     | Warnings |
-| ---------------------------------------- | ------------ | ------------------------------------------ | -------- | ----------- | -------- |
-| `build-test` "Test"                      | Ubuntu 24.04 | `cargo nextest run` and `cargo test --doc` | all      | all         | denied   |
-| `build-test` "Test and Measure Coverage" | Ubuntu 24.04 | `cargo llvm-cov nextest --workspace`       | default  | default     | allowed  |
-| `coverage-upload`                        | Ubuntu 24.04 | `cargo llvm-cov nextest --workspace`       | default  | default     | allowed  |
-| `netsukefile`                            | Ubuntu 22.04 | builds a manifest and runs Ninja           | default  | binary only | allowed  |
-| `kani-smoke`                             | Ubuntu 24.04 | `make kani-ir`                             | Kani cfg | harnesses   | allowed  |
-| `build-test-windows`                     | Windows      | `cargo nextest run` and `cargo test --doc` | all      | all         | denied   |
-| `windows-native-recipe-smoke`            | Windows      | a PowerShell recipe fixture                | default  | binary only | denied   |
+| Job                           | Platform     | Command                                    | Features | Targets     | Warnings |
+| ----------------------------- | ------------ | ------------------------------------------ | -------- | ----------- | -------- |
+| `build-test` coverage step    | Ubuntu 24.04 | `cargo llvm-cov nextest --workspace`       | all      | all         | denied   |
+| `build-test` doctest step     | Ubuntu 24.04 | `cargo test --doc`                         | all      | doctests    | denied   |
+| `coverage-upload`             | Ubuntu 24.04 | `cargo llvm-cov nextest --workspace`       | all      | all         | denied   |
+| `netsukefile`                 | Ubuntu 22.04 | builds a manifest and runs Ninja           | default  | binary only | allowed  |
+| `kani-smoke`                  | Ubuntu 24.04 | `make kani-ir`                             | Kani cfg | harnesses   | allowed  |
+| `build-test-windows`          | Windows      | `cargo nextest run` and `cargo test --doc` | all      | all         | denied   |
+| `windows-native-recipe-smoke` | Windows      | a PowerShell recipe fixture                | default  | binary only | denied   |
 
-The merge gate's suite is a strict superset of the coverage run, so folding the
-two would lose real coverage rather than duplicated work. `generate-coverage`
-invokes `cargo llvm-cov nextest --workspace` with default features and default
-targets and does not deny warnings, so folding would stop exercising the
-`legacy-digests` feature, which gates tests in `src/stdlib/path/hash_utils.rs`
-and `tests/std_filter_tests/hash_filters.rs`; would stop compiling the two
-bench targets that `--all-targets` reaches; would stop denying warnings in the
-test tree; and would drop doctests, which `cargo llvm-cov nextest` cannot run
-at all.
-
-The duplication that is real is on the trunk. `build-test` measures coverage
-only on a pull request, where the changed-line gate consumes `lcov.info`. On a
-push to `main`, `coverage-upload` measures the same commit, uploads it, and is
-the sole writer of the ratchet baseline; a second instrumented build in
-`build-test` would pay twice and give that baseline two writers.
+Coverage is measured once per commit. `build-test` measures it only on a pull
+request, where the changed-line gate consumes `lcov.info`. On a push to `main`,
+`coverage-upload` measures the same commit with the same flags, uploads it, and
+is the sole writer of the ratchet baseline, so the baseline is comparable with
+what the ratchet later checks against. A second instrumented build would pay
+twice and give that baseline two writers.
 
 `netsukefile`, `kani-smoke`, and the Windows jobs differ in platform or in
-purpose, so none of them is a candidate for folding.
-`tests/workflow_contracts/test_execution_coverage_test.py` holds the gate's
-flags and the one-producer-per-event split, so a later edit cannot narrow the
-gate into a duplicate of the coverage run.
+purpose, so none is a candidate for folding. The Windows gate keeps its own
+`cargo nextest` pass because no coverage runs there.
 
-`make test` is the canonical entry point and composes two stages:
-
-- `make test-nextest` —
-  `cargo nextest run --workspace --all-targets --all-features`, with
-  `RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings"` (the
-  `$${RUSTFLAGS:+$$RUSTFLAGS }` prefix preserves any `RUSTFLAGS` inherited from
-  the caller). This runs every unit, integration, `rstest`, and `rstest-bdd`
-  test.
-- `make doctest` — `cargo test --workspace --doc --all-features`, with
-  `RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings"`. This preserves flags
-  inherited from the caller while denying warnings. nextest cannot execute
-  doctests, so they need their own pass; the separate target is what makes a
-  broken documentation example fail the gate.
-
-If any stage fails, `make test` fails. Run the individual targets when
-iterating, but treat `make test` as the gate.
+`tests/workflow_contracts/test_execution_coverage_test.py` holds all of this:
+the coverage inputs, the denied warnings, the doctest pass and its position,
+one coverage producer per event, and the absence of any second Linux job running
+`cargo nextest`, `cargo test`, or `make test`.
 
 ### Required real-Ninja coverage
 

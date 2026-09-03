@@ -42,17 +42,17 @@ def _assert_with_inputs(
 def test_coverage_report_is_produced_before_codescene_check() -> None:
     """The CodeScene gate consumes the report the coverage step produces.
 
-    The coverage step runs after ``make test`` so the report reflects the
-    tested tree, and the CodeScene check runs after the coverage step so the
-    report exists in the build pipeline by the time it is read.
+    The coverage step is the lane's test execution as well as its measurement,
+    so the report always reflects the tested tree. The CodeScene check runs
+    after it, so the report exists in the build pipeline by the time it is
+    read.
     """
     steps = job_steps(load_workflow(), "build-test")
-    test_index = unique_step_index(steps, "Test")
     coverage_index = unique_step_index(steps, COVERAGE_STEP)
     codescene_index = unique_step_index(steps, CODESCENE_CHECK_STEP)
-    assert test_index < coverage_index < codescene_index, (
-        "the build-test job must run Test, then coverage, then the CodeScene "
-        f"check; got indices {test_index}, {coverage_index}, {codescene_index}"
+    assert coverage_index < codescene_index, (
+        "the build-test job must run coverage before the CodeScene check; "
+        f"got indices {coverage_index}, {codescene_index}"
     )
 
     _assert_with_inputs(
