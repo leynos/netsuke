@@ -1227,6 +1227,26 @@ defaults. When it finds a candidate that cannot be loaded, such as malformed
 TOML or a file whose `extends` parent is missing, Netsuke reports the load
 error. A broken discovered configuration is therefore not treated as absent.
 
+### Resource budgets
+
+Netsuke bounds each manifest evaluation before it runs a build command or
+answers `help targets`. The defaults are 1,000,000 `MiniJinja` instructions per
+evaluation, 100,000,000 per manifest, 1 MiB per rendered value, 16 MiB
+aggregate rendered output, 4 MiB template source, 10,000 values per `foreach`,
+and 50,000 expanded entries.
+
+The configuration keys are `manifest_evaluation_fuel`, `manifest_fuel`,
+`manifest_rendered_value_bytes`, `manifest_rendered_manifest_bytes`,
+`manifest_source_bytes`, `manifest_foreach_cardinality`, and
+`manifest_expanded_entries`. Set them in a trusted configuration file, as
+`NETSUKE_MANIFEST_EVALUATION_FUEL`, `NETSUKE_MANIFEST_FUEL`, and the matching
+upper-case environment names, or with the corresponding `--manifest-*` flags.
+Project `.netsuke.toml` values may narrow a ceiling but cannot widen a value
+already established by defaults, user configuration, the environment, or the
+CLI. A failure reports `Manifest resource budget exhausted` with its fixed
+stage and numeric limit, never template text, context values, or rendered
+secrets.
+
 On Windows, Netsuke normalizes alternate spellings of a configuration path,
 including short and long path forms, before comparing discovered layers. A
 project `.netsuke.toml` therefore contributes one layer even when two spellings

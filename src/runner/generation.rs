@@ -40,42 +40,39 @@ pub(super) type StageObserver<'a> = Option<&'a mut dyn FnMut(manifest::ManifestL
 /// # Errors
 ///
 /// Returns an error when the manifest cannot be read, parsed, or rendered.
+#[cfg(test)]
 pub(super) fn load_manifest(
     path: &Utf8Path,
     on_stage: StageObserver<'_>,
 ) -> Result<NetsukeManifest> {
-    manifest::from_path_for_manifest_query(path.as_std_path(), on_stage).with_context(|| {
-        localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST).with_arg("path", path.as_str())
-    })
+    load_manifest_with_limits(path, manifest::ManifestBudgetLimits::default(), on_stage)
 }
 
-/// Load and render a manifest with the full, effectful build stdlib.
-///
-/// This loader is only for command execution. Templates may use configured
-/// network, cache, environment, filesystem, clock, and shell helpers.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// let manifest = load_manifest_for_build(
-///     Utf8Path::new("Netsukefile"),
-///     NetworkPolicy::default(),
-///     None,
-/// )?;
-/// // `manifest` may use build-time template helpers before `build_graph`.
-/// ```
-///
-/// # Errors
-///
-/// Returns an error when the manifest cannot be read, parsed, or rendered.
-pub(super) fn load_manifest_for_build(
+/// Load a manifest query with explicit resource ceilings.
+pub(super) fn load_manifest_with_limits(
     path: &Utf8Path,
-    policy: NetworkPolicy,
+    budget_limits: manifest::ManifestBudgetLimits,
     on_stage: StageObserver<'_>,
 ) -> Result<NetsukeManifest> {
-    manifest::from_path_with_policy(path.as_std_path(), policy, on_stage).with_context(|| {
-        localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST).with_arg("path", path.as_str())
-    })
+    manifest::from_path_for_manifest_query_with_limits(path.as_std_path(), budget_limits, on_stage)
+        .with_context(|| {
+            localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST)
+                .with_arg("path", path.as_str())
+        })
+}
+
+/// Load a build manifest with explicit resource ceilings.
+pub(super) fn load_manifest_for_build_with_limits(
+    path: &Utf8Path,
+    policy: NetworkPolicy,
+    budget_limits: manifest::ManifestBudgetLimits,
+    on_stage: StageObserver<'_>,
+) -> Result<NetsukeManifest> {
+    manifest::from_path_with_policy_and_limits(path.as_std_path(), policy, budget_limits, on_stage)
+        .with_context(|| {
+            localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST)
+                .with_arg("path", path.as_str())
+        })
 }
 
 /// Translate a manifest into the build graph intermediate representation.

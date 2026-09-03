@@ -50,7 +50,9 @@ pub(super) fn handle_graph(
     let policy = cli
         .network_policy()
         .context(localization::message(keys::RUNNER_CONTEXT_NETWORK_POLICY))?;
-    let manifest = load_manifest_with_stage_reporting(&manifest_path, policy, reporter)?;
+    let budget_limits = cli.manifest_budget_limits()?;
+    let manifest =
+        load_manifest_with_stage_reporting(&manifest_path, policy, budget_limits, reporter)?;
     report_pipeline_stage(reporter, PipelineStage::IrGenerationValidation, None);
     let graph = generation::build_graph(&manifest)?;
     let view = GraphView::from_build_graph(&graph);

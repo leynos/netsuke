@@ -11,6 +11,25 @@ use std::sync::Arc;
 
 use super::command::Cli;
 
+/// Manifest-budget restrictions requested by the primary project file.
+#[derive(Debug, Default)]
+pub(crate) struct ProjectManifestBudgetRequest {
+    /// Requested per-evaluation instruction limit.
+    pub(crate) evaluation_fuel: Option<u64>,
+    /// Requested aggregate instruction limit.
+    pub(crate) manifest_fuel: Option<u64>,
+    /// Requested per-value rendered-byte limit.
+    pub(crate) rendered_value_bytes: Option<usize>,
+    /// Requested aggregate rendered-byte limit.
+    pub(crate) rendered_manifest_bytes: Option<usize>,
+    /// Requested aggregate source-byte limit.
+    pub(crate) source_bytes: Option<usize>,
+    /// Requested per-foreach cardinality limit.
+    pub(crate) foreach_cardinality: Option<usize>,
+    /// Requested aggregate expansion count.
+    pub(crate) expanded_entries: Option<usize>,
+}
+
 #[path = "discovery_environment.rs"]
 mod environment;
 pub use environment::{EnvProvider, StdEnvProvider};
@@ -73,6 +92,8 @@ pub struct DiscoveredLayers {
     layers: Vec<MergeLayer<'static>>,
     /// Whether any discovered layer requested JSON output.
     json_preference: bool,
+    /// Manifest-budget restrictions requested by the primary project file.
+    project_manifest_budget_request: ProjectManifestBudgetRequest,
     /// Loading errors deferred beside the layers that may still be usable.
     errors: Vec<Arc<ortho_config::OrthoError>>,
     /// Bounded trace for composition boundaries to emit after the merge.
@@ -99,8 +120,16 @@ impl DiscoveredLayers {
     /// Consume into the raw layers and deferred discovery errors.
     pub(crate) fn into_parts(
         self,
-    ) -> (Vec<MergeLayer<'static>>, Vec<Arc<ortho_config::OrthoError>>) {
-        (self.layers, self.errors)
+    ) -> (
+        Vec<MergeLayer<'static>>,
+        Vec<Arc<ortho_config::OrthoError>>,
+        ProjectManifestBudgetRequest,
+    ) {
+        (
+            self.layers,
+            self.errors,
+            self.project_manifest_budget_request,
+        )
     }
 }
 
@@ -157,11 +186,16 @@ fn discover_file_layers_with_normalizer(
     let diagnostics = DiscoveryDiagnostics::new(trace, load_warning);
     let layers = match outcome {
         Ok(discovered_layers) => {
-            let (layers, json_preference) =
-                layers::retain_layers_and_resolve_json(discovered_layers);
+            let (layers, json_preference, project_manifest_budget_request) =
+                layers::retain_layers_and_resolve_json(
+                    discovered_layers,
+                    cli.directory.as_deref().map(camino::Utf8Path::as_std_path),
+                    normalizer,
+                );
             DiscoveredLayers {
                 layers,
                 json_preference,
+                project_manifest_budget_request,
                 errors: Vec::new(),
                 diagnostics,
             }
@@ -169,6 +203,7 @@ fn discover_file_layers_with_normalizer(
         Err(error) => DiscoveredLayers {
             layers: Vec::new(),
             json_preference: Cli::default().json,
+            project_manifest_budget_request: ProjectManifestBudgetRequest::default(),
             errors: vec![error],
             diagnostics,
         },

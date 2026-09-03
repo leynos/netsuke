@@ -16,6 +16,13 @@ cli.flag.fetch_allow_scheme.help = Πρόσθετα σχήματα URL που ε
 cli.flag.fetch_allow_host.help = Ονόματα κόμβων που επιτρέπονται όταν ισχύει η προεπιλεγμένη άρνηση.
 cli.flag.fetch_block_host.help = Ονόματα κόμβων που αποκλείονται πάντοτε, ακόμη κι αν επιτρέπονται αλλού.
 cli.flag.fetch_default_deny.help = Άρνηση όλων των κόμβων από προεπιλογή· να επιτρέπεται μόνο ο δηλωμένος κατάλογος.
+cli.flag.manifest_evaluation_fuel.help = Limit MiniJinja instructions for each manifest evaluation.
+cli.flag.manifest_fuel.help = Limit MiniJinja instructions across one manifest.
+cli.flag.manifest_rendered_value_bytes.help = Limit bytes rendered into one manifest value.
+cli.flag.manifest_rendered_manifest_bytes.help = Limit total bytes rendered across one manifest.
+cli.flag.manifest_source_bytes.help = Limit template and macro source bytes consumed per manifest.
+cli.flag.manifest_foreach_cardinality.help = Limit values processed by one foreach expansion.
+cli.flag.manifest_expanded_entries.help = Limit targets and actions expanded from one manifest.
 cli.flag.json.help = Παραγωγή εξόδου JSON αναγνώσιμης από μηχανή.
 cli.flag.no_input.help = Να μη γίνεται ποτέ ανάγνωση διαδραστικής εισόδου.
 cli.flag.color.help = Πολιτική έγχρωμης εξόδου (auto, always, never).
@@ -421,3 +428,4 @@ example.errors_found = { $count ->
     [one] Βρέθηκε { $count } σφάλμα.
    *[other] Βρέθηκαν { $count } σφάλματα.
 }
+manifest.budget.exceeded = Manifest resource budget exhausted during { $stage } after reaching { $limit }.

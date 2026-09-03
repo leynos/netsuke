@@ -18,6 +18,7 @@ mod diag;
 mod discovery;
 mod environment;
 mod help;
+mod manifest_budget_policy;
 mod merge;
 mod merge_input;
 mod merge_observability;

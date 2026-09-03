@@ -16,6 +16,13 @@ cli.flag.fetch_allow_scheme.help = fetch 輔助函式額外允許的 URL 通訊�
 cli.flag.fetch_allow_host.help = 啟用預設拒絕時仍然允許的主機名稱。
 cli.flag.fetch_block_host.help = 一律封鎖的主機名稱，即使在別處獲得允許。
 cli.flag.fetch_default_deny.help = 預設拒絕所有主機；只放行所宣告的允許清單。
+cli.flag.manifest_evaluation_fuel.help = Limit MiniJinja instructions for each manifest evaluation.
+cli.flag.manifest_fuel.help = Limit MiniJinja instructions across one manifest.
+cli.flag.manifest_rendered_value_bytes.help = Limit bytes rendered into one manifest value.
+cli.flag.manifest_rendered_manifest_bytes.help = Limit total bytes rendered across one manifest.
+cli.flag.manifest_source_bytes.help = Limit template and macro source bytes consumed per manifest.
+cli.flag.manifest_foreach_cardinality.help = Limit values processed by one foreach expansion.
+cli.flag.manifest_expanded_entries.help = Limit targets and actions expanded from one manifest.
 cli.flag.json.help = 輸出機器可讀的 JSON。
 cli.flag.no_input.help = 絕不讀取互動式輸入。
 cli.flag.color.help = 彩色輸出原則（auto、always、never）。
@@ -416,3 +423,4 @@ example.errors_found = { $count ->
     [0] 未發現錯誤。
    *[other] 發現 { $count } 個錯誤。
 }
+manifest.budget.exceeded = Manifest resource budget exhausted during { $stage } after reaching { $limit }.

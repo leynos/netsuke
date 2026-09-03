@@ -80,6 +80,9 @@ operator, user, and contributor references are easier to find.
 
 ## Decision records
 
+- [adr-018-bound-manifest-template-evaluation.md](adr-018-bound-manifest-template-evaluation.md):
+  Manifest evaluation resource budget decision record.
+
 - [adr-001-replace-serde-yml-with-serde-saphyr.md](adr-001-replace-serde-yml-with-serde-saphyr.md):
   YAML parser migration decision record.
 - [adr-002-replace-cucumber-with-rstest-bdd.md](adr-002-replace-cucumber-with-rstest-bdd.md):

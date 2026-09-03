@@ -16,6 +16,13 @@ cli.flag.fetch_allow_scheme.help = طرح‌های URL افزوده که برا�
 cli.flag.fetch_allow_host.help = نام میزبان‌هایی که هنگام فعال‌بودن ردّ پیش‌فرض مجازند.
 cli.flag.fetch_block_host.help = نام میزبان‌هایی که همیشه مسدودند، حتی اگر جای دیگری مجاز باشند.
 cli.flag.fetch_default_deny.help = ردّ همهٔ میزبان‌ها به‌صورت پیش‌فرض؛ تنها فهرست اعلام‌شده مجاز است.
+cli.flag.manifest_evaluation_fuel.help = ‏Limit MiniJinja instructions for each manifest evaluation.
+cli.flag.manifest_fuel.help = ‏Limit MiniJinja instructions across one manifest.
+cli.flag.manifest_rendered_value_bytes.help = ‏Limit bytes rendered into one manifest value.
+cli.flag.manifest_rendered_manifest_bytes.help = ‏Limit total bytes rendered across one manifest.
+cli.flag.manifest_source_bytes.help = ‏Limit template and macro source bytes consumed per manifest.
+cli.flag.manifest_foreach_cardinality.help = ‏Limit values processed by one foreach expansion.
+cli.flag.manifest_expanded_entries.help = ‏Limit targets and actions expanded from one manifest.
 cli.flag.json.help = خروجی JSON خوانا برای ماشین تولید کن.
 cli.flag.no_input.help = هرگز ورودی تعاملی نخوان.
 cli.flag.color.help = سیاست خروجی رنگی (auto، always، never).
@@ -419,3 +426,4 @@ example.errors_found = { $count ->
     [one] ‏{ $count } خطا یافت شد.
    *[other] ‏{ $count } خطا یافت شد.
 }
+manifest.budget.exceeded = ‏Manifest resource budget exhausted during { $stage } after reaching { $limit }.

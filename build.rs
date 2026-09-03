@@ -174,6 +174,7 @@ fn emit_rerun_directives() {
     // Only the modules this script actually compiles need to trigger a rerun.
     println!("cargo:rerun-if-changed=src/cli/command.rs");
     println!("cargo:rerun-if-changed=src/cli/config.rs");
+    println!("cargo:rerun-if-changed=src/cli/manifest_budget_config.rs");
     println!("cargo:rerun-if-changed=src/cli/help.rs");
     println!("cargo:rerun-if-changed=src/cli/validation.rs");
     println!("cargo:rerun-if-changed=src/host_pattern.rs");

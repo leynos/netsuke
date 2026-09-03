@@ -343,10 +343,16 @@ fn stage_reporting_callback(
 pub(super) fn load_manifest_with_stage_reporting(
     manifest_path: &Utf8PathBuf,
     policy: crate::stdlib::NetworkPolicy,
+    budget_limits: manifest::ManifestBudgetLimits,
     reporter: &dyn StatusReporter,
 ) -> Result<crate::ast::NetsukeManifest> {
     let mut on_stage = stage_reporting_callback(reporter);
-    generation::load_manifest_for_build(manifest_path, policy, Some(&mut on_stage))
+    generation::load_manifest_for_build_with_limits(
+        manifest_path,
+        policy,
+        budget_limits,
+        Some(&mut on_stage),
+    )
 }
 
 #[cfg(test)]
