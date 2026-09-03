@@ -28,27 +28,32 @@ env:
   # `make check-fmt` shells out to mdtablefix. Pin it once so both formatter
   # jobs produce the same canonical output.
   MDTABLEFIX_VERSION: '0.5.0'
-  # vCPU count of the Ubicloud shape every Linux job here runs on. Every
-  # worker bound below derives from this one number, and
-  # tests/workflow_contracts/runner_placement_test.py holds them equal.
-  LINUX_LANE_VCPUS: '2'
-  # Ubuntu release of that shape, carried in every compiled-tool cache key.
+  # Ubuntu release of the Ubicloud shapes here, carried in every
+  # compiled-tool cache key.
   NETSUKE_RUNNER_IMAGE: ubuntu2404
 
 jobs:
   build-test:
-    runs-on: ubicloud-standard-2-ubuntu-2404
+    # Escalated from `-2` on the recipe's memory criterion: on the two-vCPU,
+    # 8 GB shape the runner was lost 16 minutes into the instrumented build
+    # (run 33804092672, every later step null, no log). The sampler below
+    # measures the peak so the next run either confirms the escalation or
+    # returns the job to `-2`.
+    runs-on: ubicloud-standard-4-ubuntu-2404
     timeout-minutes: 60
     permissions:
       contents: read
     env:
       CARGO_TERM_COLOR: always
       BUILD_PROFILE: debug
-      # Derived from LINUX_LANE_VCPUS above. The instrumented run reads the
-      # cargo and nextest variables; `make doctest` reads BUILD_JOBS.
-      BUILD_JOBS: -j 2
-      CARGO_BUILD_JOBS: '2'
-      NEXTEST_TEST_THREADS: '2'
+      # vCPU count of this lane's shape. Every worker bound derives from this
+      # one number; tests/workflow_contracts/runner_placement_test.py holds
+      # them equal. The instrumented run reads the cargo and nextest
+      # variables; `make doctest` reads BUILD_JOBS.
+      LINUX_LANE_VCPUS: '4'
+      BUILD_JOBS: -j 4
+      CARGO_BUILD_JOBS: '4'
+      NEXTEST_TEST_THREADS: '4'
       RUSTC_WRAPPER: sccache
       # sccache uses the GitHub Actions backend, whose objects land in
       # Ubicloud's own store on a Ubicloud runner. It needs no archive of its
@@ -80,9 +85,17 @@ jobs:
       - name: Export sccache credentials
         # A server started without these stays on local disk all job.
         uses: ./.github/actions/sccache-gha-credentials
+      - name: Start memory sampler
+        # Samples used memory so the next escalation review cites a
+        # measurement. `cut` rather than `awk` keeps the field reference out
+        # of a single-quoted string, which shellcheck reads as an expression.
+        run: |
+          nohup sh -c 'while sleep 15; do
+            free -m | tr -s " " | cut -d" " -f3 | sed -n 2p
+          done' > mem.log 2>/dev/null &
+          echo "MEM_SAMPLER_PID=$!" >> "$GITHUB_ENV"
       - name: Restore gate caches
         id: caches
-        # Before any install; sole owner of every path it lists.
         uses: ./.github/actions/linux-gate-cache
         with:
           mode: restore
@@ -91,10 +104,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends gawk
-
           # Ubuntu exposes awk through an alternatives symlink outside
-          # /usr/bin, which the capability-backed sandbox probe cannot follow,
-          # so expose the packaged binary as a regular executable on PATH.
+          # /usr/bin, which the sandbox probe cannot follow, so expose the
+          # packaged binary as a regular executable on PATH.
           test_shell_bin="${RUNNER_TEMP}/netsuke-test-bin"
           mkdir --parents "${test_shell_bin}"
           install --mode=0755 "$(command -v gawk)" "${test_shell_bin}/awk"
@@ -132,14 +144,12 @@ jobs:
       - name: Show Ninja version
         run: ninja --version
       - name: Install mdtablefix
-        # Required by `make check-fmt`. The gate cache owns `~/.local/bin`, so
-        # a warm run finds the pinned binary already present.
+        # The gate cache owns `~/.local/bin`, so a warm run finds it present.
         uses: ./.github/actions/install-mdtablefix
         with:
           build-dir: ${{ github.workspace }}/.mdtablefix-build
       - name: Setup uv
-        # Before the Format step: `make check-fmt` and `make lint` run the
-        # uv-driven Ruff, Pylint, df12, and ambrleaks gates.
+        # Before Format: the uv-driven Ruff, Pylint, and df12 gates need it.
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
         with:
           python-version: ${{ env.PYTHON_BASELINE }}
@@ -153,9 +163,8 @@ jobs:
           echo "${UV_TOOL_BIN_DIR}" >> "$GITHUB_PATH"
       - name: Download actionlint
         id: get_actionlint
-        # The gate cache owns `actionlint`. Reuse it only when the cached
-        # binary reports the pinned version, so a version bump cannot be
-        # satisfied by a stale executable.
+        # The gate cache owns `actionlint`. Reuse it only at the pinned
+        # version, so a bump cannot be satisfied by a stale executable.
         run: |
           set -euo pipefail
           readonly ACTIONLINT_VERSION='1.7.12'
@@ -214,8 +223,7 @@ jobs:
       - name: Typecheck
         run: make typecheck
       - name: Doc coverage
-        # Rustdoc coverage across every lib and bin target, gated on the 80%
-        # threshold in AGENTS.md. Runs after `make lint` to reuse its docs.
+        # Gated on the 80% threshold in AGENTS.md; after `make lint`.
         run: make doc-coverage
       - name: Spelling
         run: make spelling
@@ -268,9 +276,15 @@ jobs:
           project-url: https://api.codescene.io/v2/projects/69281
           access-token: ${{ env.CS_ACCESS_TOKEN }}
           installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
+      - name: Report peak memory
+        if: always()
+        run: |
+          kill "${MEM_SAMPLER_PID}" 2>/dev/null || true
+          peak="$(sort --numeric-sort mem.log 2>/dev/null | tail --lines=1)"
+          printf '### Peak memory\n\n- %s MiB on %s vCPUs\n' \
+            "${peak:-unknown}" "${LINUX_LANE_VCPUS}" >> "$GITHUB_STEP_SUMMARY"
       - name: Save gate caches
-        # The trunk run is the single writer for every key this action owns;
-        # the action restricts each save to a push on `main`.
+        # Single writer; the action restricts each save to a push on `main`.
         uses: ./.github/actions/linux-gate-cache
         with:
           mode: save

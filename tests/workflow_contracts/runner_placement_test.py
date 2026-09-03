@@ -21,6 +21,7 @@ from runner_placement_invariants import (
     UBICLOUD_COMPAT_LABEL,
     UBICLOUD_DEFAULT_LABEL,
     UBICLOUD_LABELS,
+    UBICLOUD_LARGE_LABEL,
     has_required_runner_assignments,
     is_bounded_worker_count,
     is_ubicloud_label,
@@ -79,7 +80,7 @@ UBICLOUD_WORKER_BOUNDS = (
 @pytest.mark.parametrize(
     ("workflow_name", "job_name", "expected_runner"),
     [
-        ("ci.yml", "build-test", UBICLOUD_DEFAULT_LABEL),
+        ("ci.yml", "build-test", UBICLOUD_LARGE_LABEL),
         ("ci-windows.yml", "build-test-windows", "windows-latest"),
         ("ci-windows.yml", "windows-native-recipe-smoke", "windows-latest"),
         ("ci.yml", "kani-smoke", UBICLOUD_DEFAULT_LABEL),

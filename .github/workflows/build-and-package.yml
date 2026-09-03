@@ -76,13 +76,13 @@ jobs:
     env:
       BIN_NAME: ${{ inputs['bin-name'] }}
       VERSION: ${{ inputs.version }}
-      # Compile through the compiler cache, as every other lane does. The
-      # nested `rust-build-release` action installs sccache and exports the
-      # backend's credentials itself, so this job sets the wrapper rather than
-      # installing a second sccache beside it. Without the wrapper the
-      # packaging build reports zero compile requests.
+      # Compile through the compiler cache, as every other lane does.
       RUSTC_WRAPPER: sccache
-      SCCACHE_GHA_ENABLED: 'true'
+      # Windows uses a workspace directory: on the GitHub Actions backend this
+      # platform rate-limited 68 of its writes and sccache then failed to
+      # spawn the compiler. The Ubicloud and macOS lanes keep that backend.
+      SCCACHE_GHA_ENABLED: ${{ inputs.platform == 'windows' && 'false' || 'true' }}
+      SCCACHE_DIR: ${{ github.workspace }}/.sccache
       SCCACHE_CACHE_SIZE: 4G
       MAN_ARCH: ${{ inputs['package-arch'] != '' && inputs['package-arch'] || 'unknown' }}
       # rust-build-release-v1 still nests a Node 20 setup-uv action, and the
@@ -102,6 +102,25 @@ jobs:
         # v8.3.2
         with:
           python-version: ${{ inputs['python-version'] }}
+
+      - name: Restore compiler cache
+        id: sccache_cache
+        if: inputs.platform == 'windows'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: .sccache
+          key: netsuke-sccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.target }}-${{ github.sha }}
+          restore-keys: netsuke-sccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.target }}-
+
+      - name: Install sccache
+        # The nested `rust-build-release` action installs sccache only when
+        # its own `use-sccache` path runs; without an explicit installer the
+        # wrapper above pointed at a binary that was never present, which is
+        # what "sccache: error: failed to spawn Command" meant.
+        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        with:
+          tool: sccache@0.16.0
+          fallback: none
 
       - name: Build release binary
         uses: leynos/shared-actions/.github/actions/rust-build-release@7d46a399558914f5a05074e55a560fec0269fd0d
@@ -169,6 +188,15 @@ jobs:
         run: |
           set -euo pipefail
           cargo-orthohelp --version | grep -Eq '(^|[[:space:]])0\.9\.0([[:space:]]|$)'
+
+      - name: Save compiler cache
+        if: >-
+          inputs.platform == 'windows' &&
+          steps.sccache_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: .sccache
+          key: netsuke-sccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.target }}-${{ github.sha }}
 
       - name: Save cargo-orthohelp
         if: steps.orthohelp_cache.outputs.cache-hit != 'true'

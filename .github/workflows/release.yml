@@ -229,7 +229,9 @@ jobs:
       WINDOWS_LANE_VCPUS: '4'
       CARGO_BUILD_JOBS: '4'
       RUSTC_WRAPPER: sccache
-      SCCACHE_GHA_ENABLED: 'true'
+      # Local directory, matching the Windows gate: the GitHub Actions backend
+      # rate-limited every write on this platform.
+      SCCACHE_DIR: ${{ github.workspace }}/.sccache
       SCCACHE_CACHE_SIZE: 4G
     steps:
       - uses: >-
@@ -237,8 +239,6 @@ jobs:
         # v7.0.1
         with:
           persist-credentials: false
-      - name: Export sccache credentials
-        uses: ./.github/actions/sccache-gha-credentials
       - name: Restore gate caches
         # Restore only. `build-test-windows` in ci-windows.yml is the single
         # writer for both Windows key families; a tag run reads the trunk

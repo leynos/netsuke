@@ -70,6 +70,13 @@ SCCACHE_CREDENTIAL_JOBS = (
     ("ci.yml", "build-test"),
     ("netsukefile-test.yml", "netsukefile"),
     ("coverage-main.yml", "coverage-upload"),
+)
+
+#: GitHub-hosted Windows lanes use a workspace directory instead of the
+#: GitHub Actions backend: that backend rate-limited every write there. They
+#: therefore need no Actions cache credentials, and must not set the flag that
+#: would re-enable the backend.
+SCCACHE_LOCAL_DIR_JOBS = (
     ("ci-windows.yml", "build-test-windows"),
     ("ci-windows.yml", "windows-native-recipe-smoke"),
     ("release.yml", "windows-native-recipe-smoke"),

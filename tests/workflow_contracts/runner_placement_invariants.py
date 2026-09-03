@@ -32,20 +32,30 @@ WINDOWS_PATH_FRAGMENTS = (
 #: would also select Ubuntu 24.04 today, but naming the image keeps a change to
 #: Ubicloud's default from silently moving compiled tools onto another glibc.
 UBICLOUD_DEFAULT_LABEL = "ubicloud-standard-2-ubuntu-2404"
+#: The escalated shape, carried only by the merge gate. The recipe treats
+#: `-4` as a ceiling reached on evidence: the two-vCPU shape lost its runner
+#: mid-instrumented-build, and the gate now samples memory so the next review
+#: either confirms the escalation or returns the job to `-2`.
+UBICLOUD_LARGE_LABEL = "ubicloud-standard-4-ubuntu-2404"
 #: The deliberate Ubuntu 22.04 compatibility lane.
 UBICLOUD_COMPAT_LABEL = "ubicloud-standard-2-ubuntu-2204"
-UBICLOUD_LABELS = (UBICLOUD_DEFAULT_LABEL, UBICLOUD_COMPAT_LABEL)
+UBICLOUD_LABELS = (
+    UBICLOUD_DEFAULT_LABEL,
+    UBICLOUD_LARGE_LABEL,
+    UBICLOUD_COMPAT_LABEL,
+)
 
 #: vCPU count of every runner shape the repository selects. Worker bounds are
 #: derived from these numbers, never chosen independently.
 LANE_VCPUS = {
     UBICLOUD_DEFAULT_LABEL: 2,
+    UBICLOUD_LARGE_LABEL: 4,
     UBICLOUD_COMPAT_LABEL: 2,
     "windows-latest": 4,
 }
 
 REQUIRED_RUNNER_ASSIGNMENTS = {
-    "ci.build-test": UBICLOUD_DEFAULT_LABEL,
+    "ci.build-test": UBICLOUD_LARGE_LABEL,
     "ci-windows.build-test-windows": "windows-latest",
     "ci-windows.windows-native-recipe-smoke": "windows-latest",
     "ci.kani-smoke": UBICLOUD_DEFAULT_LABEL,

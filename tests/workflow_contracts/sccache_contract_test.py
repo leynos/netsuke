@@ -13,6 +13,7 @@ from cache_contract_data import (
     ACTION_DIR,
     SCCACHE_CREDENTIAL_JOBS,
     SCCACHE_CREDENTIALS_ACTION,
+    SCCACHE_LOCAL_DIR_JOBS,
     SCCACHE_WRAPPER_JOBS,
     WORKFLOW_DIR,
     lane_steps,
@@ -177,17 +178,47 @@ def test_every_compiling_job_reaches_the_compiler_cache(
     )
 
 
-def test_packaging_takes_sccache_from_the_nested_build_action() -> None:
-    """Keep the packaging lane to a single sccache owner.
+def test_packaging_installs_the_sccache_it_wraps() -> None:
+    """Require the packaging lane to install the binary its wrapper names.
 
-    The shared `rust-build-release` action installs sccache and exports the
-    backend's credentials itself, so this job sets the wrapper rather than
-    installing a second sccache beside it.
+    `RUSTC_WRAPPER` without an installer is what produced "sccache: error:
+    failed to spawn Command" on the Windows packaging build: the nested shared
+    action installs sccache only along a path this caller does not take.
     """
     steps = job_steps(load_workflow(WORKFLOW_DIR / "build-and-package.yml"), "build")
-    installers = [
-        step for step in steps if str(step.get("name", "")) == "Install sccache"
-    ]
-    assert not installers, (
-        f"the packaging job must not install a second sccache: {installers!r}"
+    installer = named_step(steps, "Install sccache")
+    assert installer.get("uses") == (
+        "taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68"
+    ), "the packaging lane must use the pinned sccache installer"
+    inputs = require_mapping(installer.get("with"), "sccache installer inputs")
+    assert inputs.get("tool") == "sccache@0.16.0", (
+        "the packaging lane must install the exact tested release"
+    )
+    assert inputs.get("fallback") == "none", (
+        "the packaging lane must not fall back to a source build"
+    )
+    build_index = steps.index(named_step(steps, "Build release binary"))
+    assert steps.index(installer) < build_index, (
+        "sccache must exist before the build that wraps it"
+    )
+
+
+@pytest.mark.parametrize(("workflow_name", "job_name"), SCCACHE_LOCAL_DIR_JOBS)
+def test_windows_lanes_use_a_workspace_compiler_cache(
+    workflow_name: str, job_name: str
+) -> None:
+    """Require the Windows lanes to keep sccache in a cached workspace directory.
+
+    The GitHub Actions backend rate-limited every write on this platform, so
+    the compiler cache travels as an archive instead. Setting the backend flag
+    here would give the compiler cache two owners again.
+    """
+    job = workflow_job(load_workflow(WORKFLOW_DIR / workflow_name), job_name)
+    env = require_mapping(job.get("env"), f"{job_name} env")
+    assert env.get("SCCACHE_DIR") == "${{ github.workspace }}/.sccache", (
+        f"{workflow_name} {job_name} must name a workspace compiler cache, "
+        f"got {env.get('SCCACHE_DIR')!r}"
+    )
+    assert "SCCACHE_GHA_ENABLED" not in env, (
+        f"{workflow_name} {job_name} must not re-enable the rate-limited backend"
     )

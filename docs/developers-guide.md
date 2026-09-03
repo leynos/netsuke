@@ -722,19 +722,28 @@ not cache its uv stores, because they live under `~/.local/share`, which the
 merge gate's Whitaker cache owns.
 
 The compiler cache is sccache 0.16.0, installed as a checksum-verified prebuilt
-binary through the pinned `taiki-e/install-action` with `fallback: none`. Every
-lane uses sccache's GitHub Actions backend, which needs no archive of its own.
-On a Ubicloud runner those objects land in Ubicloud's own store, confirmed on
-2026-09-03 by finding `sccache/...` keys from another repository's Ubicloud run
-in the console listing; an earlier reading that the backend wrote to GitHub was
-a misattribution of a Windows lane's objects. Setting the repository variable
+binary through the pinned `taiki-e/install-action` with `fallback: none`,
+including on the packaging lane: a `RUSTC_WRAPPER` naming a binary nobody
+installed is what produced "sccache: error: failed to spawn Command" there.
+
+The Ubicloud and macOS lanes use sccache's GitHub Actions backend, which needs
+no archive of its own. The GitHub-hosted Windows lanes do not: on that backend
+the Windows gate recorded 643 failed writes out of 643, and the packaging build
+68, which is GitHub rate limiting. Those lanes keep `SCCACHE_DIR` in a
+workspace directory that the cache action owns, under a rolling key with a
+prefix restore-key, and set no `SCCACHE_GHA_ENABLED` at all. On a Ubicloud
+runner those objects land in Ubicloud's own store, confirmed on 2026-09-03 by
+finding `sccache/...` keys from another repository's Ubicloud run in the
+console listing; an earlier reading that the backend wrote to GitHub was a
+misattribution of a Windows lane's objects. Setting the repository variable
 `NETSUKE_SCCACHE_LOCAL_DIR` to `true` switches the Linux gate to the
 local-directory backend and enables cache step B instead. Exactly one backend
 is ever active. `SCCACHE_CACHE_SIZE` is 4 GB rather than the usual 2 GB,
 because one store now holds two build shapes.
 
-Every Ubicloud lane exports `ACTIONS_RESULTS_URL` and `ACTIONS_RUNTIME_TOKEN`
-through [`sccache-gha-credentials`](../.github/actions/sccache-gha-credentials)
+Every lane on the GitHub Actions backend exports `ACTIONS_RESULTS_URL` and
+`ACTIONS_RUNTIME_TOKEN` through
+[`sccache-gha-credentials`](../.github/actions/sccache-gha-credentials)
 immediately after checkout. The runner hands those variables to JavaScript
 actions rather than to shell steps, so a `run` step cannot see them, and
 `use-sccache: false` stops the shared Rust setup action that would otherwise
@@ -892,30 +901,40 @@ shape would buy nothing and Ubicloud has no single-vCPU option to buy it with.
 
 Table: runner placement for every repository-owned job.
 
-| Workflow and job                               | Runner                            | Reason                                |
-| ---------------------------------------------- | --------------------------------- | ------------------------------------- |
-| `ci.yml` `build-test`                          | `ubicloud-standard-2-ubuntu-2404` | Linux merge gate                      |
-| `ci.yml` `kani-smoke`                          | `ubicloud-standard-2-ubuntu-2404` | Linux merge gate                      |
-| `coverage-main.yml` `coverage-upload`          | `ubicloud-standard-2-ubuntu-2404` | Linux coverage on the trunk           |
-| `netsukefile-test.yml` `netsukefile`           | `ubicloud-standard-2-ubuntu-2204` | Deliberate Ubuntu 22.04 compatibility |
-| `release.yml` `build-linux`                    | `ubicloud-standard-2-ubuntu-2404` | Linux packaging and the dry-run gate  |
-| `ci-windows.yml` `build-test-windows`          | `windows-latest`                  | No Ubicloud Windows image             |
-| `ci-windows.yml` `windows-native-recipe-smoke` | `windows-latest`                  | No Ubicloud Windows image             |
-| `release.yml` `build-windows`                  | `windows-latest`                  | No Ubicloud Windows image             |
-| `release.yml` `windows-native-recipe-smoke`    | `windows-latest`                  | No Ubicloud Windows image             |
-| `release.yml` `build-macos` (x86_64)           | `macos-15-intel`                  | No Ubicloud macOS image               |
-| `release.yml` `build-macos` (aarch64)          | `macos-15`                        | No Ubicloud macOS image               |
-| `release.yml` `metadata`                       | `ubuntu-latest`                   | API-bound administrative job          |
-| `release.yml` `release`                        | `ubuntu-latest`                   | API-bound publication job             |
-| `delayed-pr-comment.yml` `delay_and_comment`   | `ubuntu-latest`                   | Not developer-blocking                |
+| Workflow and job                               | Runner                            | Reason                                  |
+| ---------------------------------------------- | --------------------------------- | --------------------------------------- |
+| `ci.yml` `build-test`                          | `ubicloud-standard-4-ubuntu-2404` | Linux merge gate, escalated on evidence |
+| `ci.yml` `kani-smoke`                          | `ubicloud-standard-2-ubuntu-2404` | Linux merge gate                        |
+| `coverage-main.yml` `coverage-upload`          | `ubicloud-standard-2-ubuntu-2404` | Linux coverage on the trunk             |
+| `netsukefile-test.yml` `netsukefile`           | `ubicloud-standard-2-ubuntu-2204` | Deliberate Ubuntu 22.04 compatibility   |
+| `release.yml` `build-linux`                    | `ubicloud-standard-2-ubuntu-2404` | Linux packaging and the dry-run gate    |
+| `ci-windows.yml` `build-test-windows`          | `windows-latest`                  | No Ubicloud Windows image               |
+| `ci-windows.yml` `windows-native-recipe-smoke` | `windows-latest`                  | No Ubicloud Windows image               |
+| `release.yml` `build-windows`                  | `windows-latest`                  | No Ubicloud Windows image               |
+| `release.yml` `windows-native-recipe-smoke`    | `windows-latest`                  | No Ubicloud Windows image               |
+| `release.yml` `build-macos` (x86_64)           | `macos-15-intel`                  | No Ubicloud macOS image                 |
+| `release.yml` `build-macos` (aarch64)          | `macos-15`                        | No Ubicloud macOS image                 |
+| `release.yml` `metadata`                       | `ubuntu-latest`                   | API-bound administrative job            |
+| `release.yml` `release`                        | `ubuntu-latest`                   | API-bound publication job               |
+| `delayed-pr-comment.yml` `delay_and_comment`   | `ubuntu-latest`                   | Not developer-blocking                  |
 
 `ubicloud-standard-2` alone would also select Ubuntu 24.04 today, but naming
 the image keeps a change to Ubicloud's default from silently moving compiled
 tools onto another glibc. `ubicloud-standard-4` is the ceiling, not the
-default: escalate to it only with evidence from at least three warm runs
-showing peak memory above roughly 6 GB, a halving of wall time that offsets the
-doubled per-minute rate, or a job removed from the critical path. No such
-evidence exists yet, so every Linux job starts at `-2`.
+default: escalate to it only on the recipe's evidence, which is peak memory
+above roughly 6 GB, a halving of wall time that offsets the doubled per-minute
+rate, or a job removed from the critical path.
+
+`build-test` is the one escalated job. On the two-vCPU, 8 GB shape its runner
+was lost 16 minutes into the instrumented build: every later step reported a
+null conclusion and GitHub served no log, which is a VM disappearing rather
+than a step failing (run 33804092672). The instrumented run compiles the whole
+workspace with every feature and every target, so memory is the plausible
+cause, but it was inferred rather than measured. The job therefore samples used
+memory every 15 seconds and prints the peak into its summary. **Return the job
+to `-2` if the peak is well under 6 GB**, and record the measurement either
+way. Every other Linux job stays at `-2`; the trunk coverage job runs the same
+instrumented workload there, so watch its first run on `main`.
 
 The Ubicloud GitHub App must cover this repository before any Ubicloud job can
 be admitted. The installation is granted across the account, so this is a
