@@ -142,31 +142,40 @@ fn is_exact_version(version: &str) -> bool {
         && parts.next().is_none()
 }
 
+/// Path of the composite action that owns the Kani job's cache entry.
+///
+/// The cache steps live in an action rather than inline so `ci.yml` stays
+/// inside the repository's 400-line file limit; see "Cache ownership and
+/// bounded CI resources" in `docs/developers-guide.md`.
+const KANI_CACHE_ACTION: &str = "./.github/actions/kani-cache";
+
 fn ensure_kani_cache_contract(steps: &[Value]) -> Result<()> {
-    let cache_step = named_step(steps, "Set up Kani cache volume")?;
-    ensure!(
-        mapping_get(cache_step, YamlKey("uses")).and_then(Value::as_str)
-            == Some("namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547"),
-        "Kani smoke job should pin the Namespace cache action"
-    );
-    let cache_paths = mapping_get(cache_step, YamlKey("with"))
-        .and_then(Value::as_mapping)
-        .and_then(|with| mapping_get(with, YamlKey("path")))
-        .and_then(Value::as_str);
-    ensure!(
-        cache_paths.is_some_and(|paths| {
-            paths.contains(".kani-cargo")
-                && paths.contains(".kani-home")
-                && paths.contains(".kani-rustup")
-        }),
-        "Kani smoke job should cache the job-local Cargo, Kani, and Rustup homes"
-    );
-    let cache_index = step_index(steps, "Set up Kani cache volume")?;
+    let restore_step = named_step(steps, "Restore Kani payloads")?;
+    let save_step = named_step(steps, "Save Kani payloads")?;
+    for (step, mode, label) in [
+        (restore_step, "restore", "restore"),
+        (save_step, "save", "save"),
+    ] {
+        ensure!(
+            mapping_get(step, YamlKey("uses")).and_then(Value::as_str) == Some(KANI_CACHE_ACTION),
+            "Kani smoke job should {label} through the repository's Kani cache action"
+        );
+        ensure!(
+            step_input(step, YamlKey("mode")) == Some(mode),
+            "Kani smoke job's {label} step should ask for the {mode} mode"
+        );
+    }
+    let restore_index = step_index(steps, "Restore Kani payloads")?;
     let install_index = step_index(steps, "Install prebuilt Kani")?;
+    let save_index = step_index(steps, "Save Kani payloads")?;
     ensure!(
-        cache_index < install_index,
-        "Kani smoke job should mount its cache volume before installing Kani, or a warm \
-         volume cannot skip the download"
+        restore_index < install_index,
+        "Kani smoke job should restore its cache before installing Kani, or a warm \
+         entry cannot skip the download"
+    );
+    ensure!(
+        install_index < save_index,
+        "Kani smoke job should publish its cache only after the payloads exist"
     );
     Ok(())
 }
@@ -400,8 +409,9 @@ fn behavioural_ci_workflow_wires_kani_smoke_job() -> Result<()> {
 
     ensure!(
         mapping_get(kani_job, YamlKey("if")).and_then(Value::as_str)
-            == Some("github.event_name == 'pull_request'"),
-        "Kani smoke job should run for pull requests"
+            == Some("github.event_name != 'workflow_dispatch'"),
+        "Kani smoke job should run for pull requests and for the trunk push that \
+         writes its cache"
     );
 
     let steps = steps(kani_job)?;

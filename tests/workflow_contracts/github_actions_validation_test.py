@@ -14,6 +14,7 @@ Run via ``make test-workflow-contracts``.
 import subprocess
 import typing as typ
 
+import yaml
 from actionlint_installer_contract import (
     ACTIONLINT_CHECKSUM_COMMAND,
     ACTIONLINT_INSTALL_COMMAND,
@@ -29,6 +30,7 @@ from workflow_loading import (
     job_steps,
     load_workflow,
     named_step,
+    require_mapping,
 )
 
 if typ.TYPE_CHECKING:
@@ -66,19 +68,34 @@ def _step_position(steps: list[dict[str, object]], name: str) -> int:
     return steps.index(named_step(steps, name))
 
 
-def _namespace_cache_paths(steps: list[dict[str, object]]) -> str:
-    """Return the Namespace cache volume's mounted paths for the Linux job."""
-    cache_step = named_step(steps, "Set up Namespace cache volume")
-    inputs = cache_step.get("with")
-    assert isinstance(inputs, dict), "the Namespace cache step must declare inputs"
-    return str(inputs.get("path", ""))
+#: The Linux gate's cache steps live in a composite action so `ci.yml` stays
+#: inside the repository's 400-line file limit; the tool directories this
+#: module cares about are declared there.
+GATE_CACHE_ACTION = (
+    REPO_ROOT / ".github" / "actions" / "linux-gate-cache" / "action.yml"
+)
+
+
+def _gate_cache_paths() -> str:
+    """Return every path the Linux gate's cache action claims."""
+    document = yaml.safe_load(GATE_CACHE_ACTION.read_text(encoding="utf-8"))
+    runs = require_mapping(
+        require_mapping(document, "linux-gate-cache").get("runs"), "runs"
+    )
+    steps = runs.get("steps")
+    assert isinstance(steps, list), "the gate cache action must declare steps"
+    return "\n".join(
+        str(require_mapping(step.get("with"), "cache inputs").get("path", ""))
+        for step in steps
+        if "/cache/" in str(step.get("uses", ""))
+    )
 
 
 def _assert_yamllint_ci_contract(steps: list[dict[str, object]]) -> None:
     """Assert that Linux CI provisions the pinned yamllint installation."""
     setup_uv = named_step(steps, "Setup uv")
     install_yamllint = named_step(steps, "Install yamllint")
-    cached_paths = _namespace_cache_paths(steps).splitlines()
+    cached_paths = [line.strip() for line in _gate_cache_paths().splitlines()]
 
     assert setup_uv.get("uses") == (
         "astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990"
@@ -86,11 +103,11 @@ def _assert_yamllint_ci_contract(steps: list[dict[str, object]]) -> None:
     setup_uv_inputs = setup_uv.get("with")
     assert isinstance(setup_uv_inputs, dict), "Setup uv must declare inputs"
     assert setup_uv_inputs.get("enable-cache") == "false", (
-        "setup-uv must not add a second owner beside the Namespace cache volume"
+        "setup-uv must not add a second owner beside the gate cache"
     )
     for uv_path in (".uv-bin", ".uv-cache", ".uv-tools"):
         assert uv_path in cached_paths, (
-            f"the Namespace cache volume must own the uv directory {uv_path}"
+            f"the gate cache must own the uv directory {uv_path}"
         )
     assert install_yamllint.get("run") == (
         'uv tool install "yamllint==${YAMLLINT_VERSION}"\n'
@@ -110,11 +127,9 @@ def _assert_actionlint_ci_contract(steps: list[dict[str, object]]) -> None:
     download_actionlint = named_step(steps, "Download actionlint")
     lint = named_step(steps, "Lint")
     download_script = download_actionlint.get("run")
-    cached_paths = _namespace_cache_paths(steps).splitlines()
+    cached_paths = [line.strip() for line in _gate_cache_paths().splitlines()]
 
-    assert "actionlint" in cached_paths, (
-        "the Namespace cache volume must own the actionlint binary"
-    )
+    assert "actionlint" in cached_paths, "the gate cache must own the actionlint binary"
     assert isinstance(download_script, str), (
         "the actionlint cache-miss step must define its verified installer script"
     )
@@ -141,7 +156,7 @@ def _assert_workflow_linter_provisioning_order(
     assert all(
         _step_position(steps, earlier) < _step_position(steps, later)
         for earlier, later in [
-            ("Set up Namespace cache volume", "Setup uv"),
+            ("Restore gate caches", "Setup uv"),
             ("Setup uv", "Install yamllint"),
             ("Install yamllint", "Download actionlint"),
             ("Download actionlint", "Lint"),

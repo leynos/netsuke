@@ -1,0 +1,78 @@
+---
+name: Kani cache
+description: >-
+  Own the Kani smoke job's three workspace-local directories under one key.
+  Kani is a multi-part tool: the Cargo front-end, the verifier bundle, and the
+  Kani-managed Rust toolchain are separate downloads that must be warm or cold
+  together, so they share one cache entry keyed by the pinned version.
+
+inputs:
+  mode:
+    description: '`restore` reads the trusted generation; `save` publishes it.'
+    required: true
+  cache-hit:
+    description: Restore result, so a save cannot overwrite an exact hit.
+    required: false
+    default: ''
+
+outputs:
+  cache-hit:
+    description: Whether the Kani payloads restored exactly.
+    value: ${{ steps.kani.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    - name: Render Kani cache key
+      id: keys
+      shell: bash
+      env:
+        IS_TRUNK_PUSH: >-
+          ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      # The key carries the pinned version, so raising tools/kani/VERSION
+      # cannot be satisfied by payloads an earlier run left behind, and the
+      # runner image, because the verifier bundle is a compiled artefact.
+      run: |
+        set -euo pipefail
+        kani_version="$(tr -d '\r\n' < tools/kani/VERSION)"
+        lane="${RUNNER_OS}-${RUNNER_ARCH}-${RUNNER_ENVIRONMENT}-${NETSUKE_RUNNER_IMAGE}"
+        {
+          printf 'writer=%s\n' "${IS_TRUNK_PUSH}"
+          printf 'kani=netsuke-kani-v1-%s-%s\n' "${lane}" "${kani_version}"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Restore Kani payloads
+      id: kani
+      if: inputs.mode == 'restore'
+      uses: ubicloud/cache/restore@92361f338d82d2c58a98875f1b5c95cd14cd6b2a  # v4.1.2
+      with:
+        path: |
+          .kani-cargo
+          .kani-home
+          .kani-rustup
+        key: ${{ steps.keys.outputs.kani }}
+
+    - name: Record cache observations
+      if: always() && inputs.mode == 'restore'
+      shell: bash
+      env:
+        KANI_KEY: ${{ steps.keys.outputs.kani }}
+        KANI_HIT: ${{ steps.kani.outputs.cache-hit }}
+      run: |
+        {
+          printf '### Cache observations\n\n'
+          printf -- '- kani key: `%s` hit: `%s`\n' "${KANI_KEY}" "${KANI_HIT:-false}"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Save Kani payloads
+      # This job is the only writer of this key, and only on the trunk.
+      if: >-
+        inputs.mode == 'save' && steps.keys.outputs.writer == 'true' &&
+        inputs['cache-hit'] != 'true'
+      uses: ubicloud/cache/save@92361f338d82d2c58a98875f1b5c95cd14cd6b2a  # v4.1.2
+      with:
+        path: |
+          .kani-cargo
+          .kani-home
+          .kani-rustup
+        key: ${{ steps.keys.outputs.kani }}

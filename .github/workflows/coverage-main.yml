@@ -14,12 +14,17 @@ on:
 
 jobs:
   coverage-upload:
-    runs-on: namespace-profile-netsuke
+    runs-on: ubicloud-standard-2-ubuntu-2404
+    timeout-minutes: 60
     permissions:
       contents: read
     env:
       CARGO_TERM_COLOR: always
       BUILD_PROFILE: debug
+      # `ubicloud-standard-2-ubuntu-2404` supplies two vCPUs; the coverage
+      # action derives its own worker count from this lane constant.
+      LINUX_LANE_VCPUS: '2'
+      NETSUKE_RUNNER_IMAGE: ubuntu2404
       # Keep the main baseline aligned with pull-request coverage instead of
       # silently skipping real-Ninja integration tests.
       NETSUKE_REQUIRE_NINJA: '1'
@@ -27,16 +32,51 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - name: Set up Namespace cache volume
-        id: namespace_cache
-        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547
+      - name: Render cache key
+        # Renders the same Cargo download-store key that
+        # `.github/actions/linux-gate-cache` renders for the merge gate: this
+        # job runs on the same shape and image, so it reads the generation the
+        # gate publishes on the trunk. It is a reader only.
+        # tests/workflow_contracts/cache_ownership_test.py holds the shapes
+        # equal. The toolchain is spelled here rather than taken from
+        # NETSUKE_RUST_TOOLCHAIN because coverage must not declare that
+        # variable; tests/polonius_toolchain_contract.rs holds it absent.
+        run: |
+          set -euo pipefail
+          lane="${RUNNER_OS}-${RUNNER_ARCH}-${RUNNER_ENVIRONMENT}-${NETSUKE_RUNNER_IMAGE}"
+          sources="$(sha256sum Cargo.lock rust-toolchain.toml | sha256sum | cut -c1-16)"
+          {
+            printf 'CARGO_CACHE_PREFIX=netsuke-cargo-v1-%s-nightly-2026-08-23-\n' "${lane}"
+            printf 'CARGO_CACHE_KEY=netsuke-cargo-v1-%s-nightly-2026-08-23-%s\n' \
+              "${lane}" "${sources}"
+          } >> "$GITHUB_ENV"
+      - name: Restore Cargo download store
+        id: cargo_registry
+        # Restore only. `build-test` on the trunk is the single writer of this
+        # key, so this job never races it for a reservation. The uv download
+        # and tool stores are deliberately uncached here: they live under
+        # `~/.local/share`, which the merge gate's Whitaker cache owns, and a
+        # second owner would make warmth and eviction unknowable.
+        uses: ubicloud/cache/restore@92361f338d82d2c58a98875f1b5c95cd14cd6b2a  # v4.1.2
         with:
           path: |
-            ~/.cargo/bin
-            ~/.cargo/git
             ~/.cargo/registry
-            ~/.cache/uv
-            ~/.local/share/uv
+            ~/.cargo/git
+          key: ${{ env.CARGO_CACHE_KEY }}
+          restore-keys: ${{ env.CARGO_CACHE_PREFIX }}
+      - name: Record cache observations
+        if: always()
+        env:
+          REGISTRY_HIT: ${{ steps.cargo_registry.outputs.cache-hit }}
+        run: |
+          {
+            printf '### Cache observations\n\n'
+            # Backticks are literal Markdown code spans in the summary, not
+            # command substitution.
+            # shellcheck disable=SC2016
+            printf -- '- registry key: `%s` hit: `%s`\n' \
+              "${CARGO_CACHE_KEY}" "${REGISTRY_HIT:-false}"
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Setup Rust
         # Pinned to the shared-actions revision that adds `cache-provider`.
         uses: leynos/shared-actions/.github/actions/setup-rust@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
@@ -50,11 +90,6 @@ jobs:
           rustflags: -D warnings
           cache-provider: external
           use-sccache: 'false'
-      - name: Summarize Namespace cache
-        if: always()
-        run: |
-          echo '### Namespace cache' >> "$GITHUB_STEP_SUMMARY"
-          echo "- cache-hit: ${{ steps.namespace_cache.outputs.cache-hit }}" >> "$GITHUB_STEP_SUMMARY"
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
       - name: Test and Measure Coverage

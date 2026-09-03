@@ -108,9 +108,15 @@ def windows_steps() -> list[dict[str, object]]:
     return job_steps(load_workflow(CI_WINDOWS_WORKFLOW_PATH), WINDOWS_JOB)
 
 
-def test_windows_job_runs_on_namespace_windows(windows_job: dict[str, object]) -> None:
-    """The Windows job must run on the full-gate Namespace profile."""
-    expected_runner = "namespace-profile-netsuke-windows-ci"
+def test_windows_job_runs_on_a_github_hosted_runner(
+    windows_job: dict[str, object],
+) -> None:
+    """The Windows job must run on a GitHub-hosted Windows runner.
+
+    Ubicloud publishes Ubuntu images only, so `windows-latest` is the durable
+    placement for this lane rather than a fallback.
+    """
+    expected_runner = "windows-latest"
     assert windows_job.get("runs-on") == expected_runner, (
         f"{WINDOWS_JOB} must run on {expected_runner} so the "
         f"#[cfg(windows)] tree is compiled, got {windows_job.get('runs-on')!r}"

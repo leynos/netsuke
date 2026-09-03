@@ -57,7 +57,11 @@ concurrency:
 
 jobs:
   metadata:
-    runs-on: namespace-profile-netsuke
+    # API-bound administrative work: it reads Cargo metadata and resolves
+    # release modes. There is nothing for a build runner to accelerate, so it
+    # stays on a GitHub-hosted runner.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     outputs:
@@ -136,7 +140,10 @@ jobs:
     uses: ./.github/workflows/build-and-package.yml
     with:
       platform: linux
-      runner: namespace-profile-netsuke
+      # Both Linux targets cross-compile from the x64 shape, as they did
+      # before. Start at the recipe's default and escalate only with
+      # measurements from three warm runs.
+      runner: ubicloud-standard-2-ubuntu-2404
       target: ${{ matrix.target }}
       bin-name: ${{ needs.metadata.outputs.bin_name }}
       version: ${{ needs.metadata.outputs.version }}
@@ -166,7 +173,8 @@ jobs:
     uses: ./.github/workflows/build-and-package.yml
     with:
       platform: windows
-      runner: namespace-profile-netsuke-windows
+      # Ubicloud offers Linux runners only.
+      runner: windows-latest
       target: ${{ matrix.target }}
       bin-name: ${{ needs.metadata.outputs.bin_name }}
       version: ${{ needs.metadata.outputs.version }}
@@ -191,7 +199,7 @@ jobs:
             artefact_suffix: macos-x86_64
             target_key: macos-x86_64
           - target: aarch64-apple-darwin
-            runner: namespace-profile-netsuke-macos-arm64
+            runner: macos-15
             artefact_suffix: macos-arm64
             target_key: macos-aarch64
     uses: ./.github/workflows/build-and-package.yml
@@ -208,7 +216,8 @@ jobs:
 
   windows-native-recipe-smoke:
     needs: metadata
-    runs-on: namespace-profile-netsuke-windows
+    runs-on: windows-latest
+    timeout-minutes: 45
     permissions:
       contents: read
     defaults:
@@ -216,6 +225,8 @@ jobs:
         shell: pwsh
     env:
       NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
+      # The GitHub-hosted `windows-latest` standard runner has four vCPUs.
+      WINDOWS_LANE_VCPUS: '4'
       CARGO_BUILD_JOBS: '4'
       RUSTC_WRAPPER: sccache
       SCCACHE_DIR: ${{ github.workspace }}/.sccache
@@ -225,23 +236,14 @@ jobs:
         # v7.0.1
         with:
           persist-credentials: false
-      - name: Set up Namespace cache volume
-        id: namespace_cache
-        uses: >-
-          namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547
+      - name: Restore gate caches
+        # Restore only. `build-test-windows` in ci-windows.yml is the single
+        # writer for both Windows key families; a tag run reads the trunk
+        # generation by prefix and publishes nothing.
+        uses: ./.github/actions/windows-gate-cache
         with:
-          path: |
-            .sccache
-            ~/.cargo/bin
-            ~/.cargo/git
-            ~/.cargo/registry
-      - name: Summarize Namespace cache
-        if: always()
-        shell: pwsh
-        run: |
-          "### Namespace cache" | Out-File -FilePath $Env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-          "- cache-hit: ${{ steps.namespace_cache.outputs.cache-hit }}" |
-            Out-File -FilePath $Env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          mode: restore
+          profile: smoke
       - name: Install sccache
         uses: >-
           taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68
@@ -284,7 +286,10 @@ jobs:
       - build-windows
       - build-macos
       - windows-native-recipe-smoke
-    runs-on: namespace-profile-netsuke
+    # Publication is API-bound: it downloads artefacts and calls the releases
+    # API, so a GitHub-hosted runner is the right placement.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: >-
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

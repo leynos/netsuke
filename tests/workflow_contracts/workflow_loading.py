@@ -73,6 +73,15 @@ def require_mapping(value: object, description: str) -> dict[str, object]:
             pytest.fail(f"{description} must be a mapping, got {type(other).__name__}")
 
 
+def require_list(value: object, description: str) -> list[object]:
+    """Return ``value`` as a list, failing the test when it is not one."""
+    match value:
+        case list() as items:
+            return items
+        case other:
+            pytest.fail(f"{description} must be a list, got {type(other).__name__}")
+
+
 def _require_string_keys(mapping: dict[str, object], description: str) -> None:
     """Fail unless every key of ``mapping`` is a string."""
     offenders = sorted(repr(key) for key in mapping if not isinstance(key, str))

@@ -9,34 +9,91 @@ on:
 
 jobs:
   netsukefile:
-    runs-on: namespace-profile-netsuke-ubuntu-22-04
+    # The deliberate Ubuntu 22.04 compatibility lane. Ubicloud's default image
+    # is 24.04, so the `-ubuntu-2204` label pins the older glibc this job
+    # exists to exercise, and every cache key below carries that image.
+    runs-on: ubicloud-standard-2-ubuntu-2204
+    timeout-minutes: 45
     permissions:
       contents: read
     env:
       # Match rust-toolchain.toml: the tree needs the nightly-default Polonius
       # borrow checker (see docs/adr-006-adopt-polonius-nightly-toolchain.md).
       NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
-      BUILD_JOBS: -j 4
+      # `ubicloud-standard-2-ubuntu-2204` supplies two vCPUs; BUILD_JOBS is
+      # derived from that one number.
+      LINUX_LANE_VCPUS: '2'
+      BUILD_JOBS: -j 2
       RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: 'true'
+      NETSUKE_RUNNER_IMAGE: ubuntu2204
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - name: Set up Namespace cache volume
-        id: namespace_cache
-        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547
+      - name: Render cache keys
+        # This lane owns its own key family: nothing else in the repository
+        # runs on Ubuntu 22.04, so a 24.04 archive must never reach it. The
+        # shape matches the one `.github/actions/linux-gate-cache` renders,
+        # and tests/workflow_contracts/cache_ownership_test.py holds them so.
+        run: |
+          set -euo pipefail
+          lane="${RUNNER_OS}-${RUNNER_ARCH}-${RUNNER_ENVIRONMENT}-${NETSUKE_RUNNER_IMAGE}"
+          sources="$(sha256sum Cargo.lock rust-toolchain.toml | sha256sum | cut -c1-16)"
+          pins="$(sha256sum .github/workflows/netsukefile-test.yml | cut -c1-16)"
+          {
+            printf 'CARGO_CACHE_PREFIX=netsuke-cargo-v1-%s-%s-\n' \
+              "${lane}" "${NETSUKE_RUST_TOOLCHAIN}"
+            printf 'CARGO_CACHE_KEY=netsuke-cargo-v1-%s-%s-%s\n' \
+              "${lane}" "${NETSUKE_RUST_TOOLCHAIN}" "${sources}"
+            printf 'TOOLS_CACHE_KEY=netsuke-tools-v1-%s-%s\n' "${lane}" "${pins}"
+          } >> "$GITHUB_ENV"
+      - name: Restore Cargo download store
+        id: cargo_registry
+        uses: ubicloud/cache/restore@92361f338d82d2c58a98875f1b5c95cd14cd6b2a  # v4.1.2
         with:
           path: |
-            ~/.cache/sccache
-            ~/.cargo/bin
-            ~/.cargo/git
             ~/.cargo/registry
-      - name: Summarize Namespace cache
+            ~/.cargo/git
+          key: ${{ env.CARGO_CACHE_KEY }}
+          restore-keys: ${{ env.CARGO_CACHE_PREFIX }}
+      - name: Restore tool directories
+        id: tool_dirs
+        uses: ubicloud/cache/restore@92361f338d82d2c58a98875f1b5c95cd14cd6b2a  # v4.1.2
+        with:
+          path: ~/.cargo/bin
+          key: ${{ env.TOOLS_CACHE_KEY }}
+      - name: Export Actions cache credentials for sccache
+        # `use-sccache: false` below stops the shared Rust setup action from
+        # owning the compiler cache, but that action is also what normally
+        # publishes these variables to later `run` steps.
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
+        with:
+          script: |
+            core.exportVariable('ACTIONS_RESULTS_URL', process.env.ACTIONS_RESULTS_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+      - name: Record cache observations
+        # The rendered key travels with its result, so an operator can explain
+        # every miss from the run evidence alone.
         if: always()
+        env:
+          REGISTRY_HIT: ${{ steps.cargo_registry.outputs.cache-hit }}
+          TOOLS_HIT: ${{ steps.tool_dirs.outputs.cache-hit }}
         run: |
-          echo '### Namespace cache' >> "$GITHUB_STEP_SUMMARY"
-          echo "- cache-hit: ${{ steps.namespace_cache.outputs.cache-hit }}" >> "$GITHUB_STEP_SUMMARY"
+          {
+            printf '### Cache observations\n\n'
+            # Backticks are literal Markdown code spans in the summary, not
+            # command substitution.
+            # shellcheck disable=SC2016
+            printf -- '- registry key: `%s` hit: `%s`\n' \
+              "${CARGO_CACHE_KEY}" "${REGISTRY_HIT:-false}"
+            # Backticks are literal Markdown code spans in the summary, not
+            # command substitution.
+            # shellcheck disable=SC2016
+            printf -- '- tools key: `%s` hit: `%s`\n' \
+              "${TOOLS_CACHE_KEY}" "${TOOLS_HIT:-false}"
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Install sccache
         uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
         with:
@@ -133,4 +190,31 @@ jobs:
         run: scripts/assert-file-absent.sh unused.txt
       - name: Show sccache statistics
         if: always()
-        run: sccache --show-stats --stats-format=json
+        run: |
+          sccache --show-stats | tee sccache-stats.txt
+          sccache --show-stats --stats-format=json > sccache-stats.json
+          {
+            printf '### sccache\n\n```text\n'
+            cat sccache-stats.txt
+            printf '```\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+      # This job is the only writer of the Ubuntu 22.04 key family, and only
+      # on the trunk, so a pull request never publishes a competing archive.
+      - name: Save Cargo download store
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+          steps.cargo_registry.outputs.cache-hit != 'true'
+        uses: ubicloud/cache/save@92361f338d82d2c58a98875f1b5c95cd14cd6b2a  # v4.1.2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ env.CARGO_CACHE_KEY }}
+      - name: Save tool directories
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+          steps.tool_dirs.outputs.cache-hit != 'true'
+        uses: ubicloud/cache/save@92361f338d82d2c58a98875f1b5c95cd14cd6b2a  # v4.1.2
+        with:
+          path: ~/.cargo/bin
+          key: ${{ env.TOOLS_CACHE_KEY }}

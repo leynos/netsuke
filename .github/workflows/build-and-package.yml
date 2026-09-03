@@ -9,7 +9,10 @@ name: Build and Package
         required: true
         type: string
       runner:
-        description: Runner label that should execute the job
+        description: >-
+          Runner label that should execute the job. Linux callers pass a
+          Ubicloud label; Windows and macOS callers pass a GitHub-hosted one,
+          because Ubicloud offers Linux runners only.
         required: true
         type: string
       target:
@@ -74,9 +77,12 @@ jobs:
       BIN_NAME: ${{ inputs['bin-name'] }}
       VERSION: ${{ inputs.version }}
       MAN_ARCH: ${{ inputs['package-arch'] != '' && inputs['package-arch'] || 'unknown' }}
-      # rust-build-release-v1 still nests a Node 20 setup-uv action. Namespace
-      # otherwise promotes it to Node 24, which aborts inside libuv on Windows.
-      # Keep the compatibility escape hatch empty on every other platform.
+      # rust-build-release-v1 still nests a Node 20 setup-uv action, and the
+      # promoted Node 24 runtime aborts inside libuv on Windows. The escape
+      # hatch predates the move to GitHub-hosted Windows runners and is
+      # retained unchanged so the packaging lane's behaviour is attributable
+      # to the runner move alone; drop it once a Windows release run without
+      # it succeeds. It stays empty on every other platform.
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: >-
         ${{ inputs.platform == 'windows' && 'true' || '' }}
     steps:

@@ -619,36 +619,109 @@ as workflow-level `env`. Each pin is still declared once at workflow scope in
 value. `tests/workflow_contracts/ci_windows_job_test.py` holds the caller's
 literals equal to those pins, so the two copies cannot drift.
 
-### Namespace cache ownership and bounded CI resources
 
-Namespace runner profiles are provisioned remotely with no more than four vCPUs
-and 8 GiB of memory. The workflows do not repeat that profile configuration;
-they limit Cargo builds and nextest processes to four workers instead.
-`BUILD_JOBS` sets Cargo's `-j 4`, `NEXTEST_BUILD_JOBS` sets `--build-jobs 4`,
-and `NEXTEST_TEST_JOBS` sets nextest's distinct `-j 4` process limit.
+### Cache ownership and bounded CI resources
 
-The attached Namespace cache volume is the sole cache owner for direct Linux
-and Windows Namespace CI jobs. Immediately after checkout and before any
-package, tool, or toolchain install, those jobs call
-`namespacelabs/nscloud-cache-action` at
-`c5f8dab7560444c4bf8dbc64f1b203431873c547`, mount explicit Cargo download,
-tool, uv, workflow-linter, and sccache paths, and write its `cache-hit` output
-to the job summary. Every summary step carries `if: always()`, so a cold run
-reports its miss rather than staying silent. Do not use its `rust` mode: that
-mode mounts Cargo's disposable `target` directory, which conflicts with
-`cargo clean` and duplicates sccache's compiler-cache ownership. Do not add
-`actions/cache` or a setup-action cache to those jobs: two writers make cache
-warmth, eviction, and storage cost unknowable. Cache-volume wiring stays after
-checkout because checkout resets the workspace, and before installers, so a
-successful earlier run can pay for later setup work. The main Linux gate also
-enables Namespace's `apt` mode before installing its packaged shell dependency.
+Ubicloud destroys the runner VM at the end of every job, so warm state reaches
+the next run only through a cache archive. Ownership is therefore the whole
+design: every mutable path has exactly one cache step, every key has exactly
+one writer, and pull requests restore without publishing.
 
-The Linux gate's workflow linters follow the same rule. The volume owns the uv
-download store, tool store, and shim directory under `.uv-cache`, `.uv-tools`,
-and `.uv-bin`, together with the `actionlint` binary at the repository root.
-`setup-uv` therefore runs with `enable-cache: false`, and the actionlint
-download step reuses the cached binary only when it reports the pinned version,
-so bumping that pin cannot be satisfied by a stale executable.
+The Linux merge gate runs on `ubicloud-standard-2-ubuntu-2404`, which supplies
+two vCPUs and 8 GB. The workflows declare that number once as
+`LINUX_LANE_VCPUS` and derive every worker bound from it: `BUILD_JOBS` sets
+Cargo's `-j 2`, `NEXTEST_BUILD_JOBS` sets `--build-jobs 2`, and
+`NEXTEST_TEST_JOBS` sets nextest's distinct `-j 2` process limit. The Windows
+lane declares `WINDOWS_LANE_VCPUS` for the four vCPUs a GitHub-hosted
+`windows-latest` runner supplies. `tests/workflow_contracts/`
+`runner_placement_test.py` holds the flags equal to the declared count, so a
+shape change cannot leave an oversubscribed job behind.
+
+Table: cache owners, their paths, and the key inputs that invalidate them.
+
+| Step | Owner                         | Paths                                                                                         | Key inputs                             |
+| ---- | ----------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------- |
+| A    | `linux-gate-cache`            | `~/.cargo/registry`, `~/.cargo/git`                                                           | lockfile, toolchain, OS/arch/env/image |
+| B    | `linux-gate-cache` (disabled) | `SCCACHE_DIR`                                                                                 | toolchain, profile, commit             |
+| C+D  | `linux-gate-cache`            | `~/.cargo/bin`, `~/.local/bin`, `.uv-bin`, `.uv-cache`, `.uv-tools`, `actionlint`, typos base | tool pins, OS/arch/env/image           |
+| E    | `linux-gate-cache`            | `~/.local/share`                                                                              | `dylint.toml`, installer pin           |
+| Kani | `kani-cache`                  | `.kani-cargo`, `.kani-home`, `.kani-rustup`                                                   | `tools/kani/VERSION`                   |
+| A    | `netsukefile-test.yml`        | `~/.cargo/registry`, `~/.cargo/git`                                                           | as step A, on the 22.04 image          |
+| C    | `netsukefile-test.yml`        | `~/.cargo/bin`                                                                                | workflow pins, 22.04 image             |
+| A    | `windows-gate-cache`          | `~/.cargo/registry`, `~/.cargo/git`                                                           | lockfile, toolchain, `runner.os`/arch  |
+| B    | `windows-gate-cache`          | `.sccache`                                                                                    | toolchain, profile, commit             |
+| C+D  | `windows-gate-cache`          | `~/.cargo/bin`, `~/.local/bin`, `.chocolatey-cache`                                           | workflow pins, `runner.os`/arch        |
+| E    | `windows-gate-cache`          | `~/AppData/Roaming/github`                                                                    | `dylint.toml`, workflow pins           |
+
+Every key carries an explicit `v1` generation so the whole family can be
+invalidated deliberately, and `runner.os`, `runner.arch`, `runner.environment`,
+and the Ubuntu release, so a 24.04 archive can never restore onto the 22.04
+lane and a Linux archive can never restore onto Windows.
+
+Each lane's cache steps live in a composite action rather than inline, because
+the workflow files must stay inside the repository's 400-line limit and because
+one file per lane makes the ownership rule visible in one place: the Linux gate
+uses [`linux-gate-cache`](../.github/actions/linux-gate-cache), the Kani job
+uses [`kani-cache`](../.github/actions/kani-cache), and the Windows jobs use
+[`windows-gate-cache`](../.github/actions/windows-gate-cache). Each action
+renders its keys once, so restore, save, and the observation summary cannot
+drift apart. The Windows action takes a `profile` input: `gate` is the single
+writer of every Windows key, and `smoke` restores that generation by prefix and
+declares no save step at all.
+
+Ubicloud jobs use `ubicloud/cache/restore` and `ubicloud/cache/save` at
+`92361f338d82d2c58a98875f1b5c95cd14cd6b2a` (v4.1.2). Windows jobs use
+`actions/cache/restore` and `actions/cache/save` at
+`55cc8345863c7cc4c66a329aec7e433d2d1c52a9` (v6.1.0). The two are not
+interchangeable: `ubicloud/cache` reads `UBICLOUD_CACHE_URL` and
+`UBICLOUD_RUNTIME_TOKEN`, which exist only inside a Ubicloud VM, so it must
+never appear in a job that can run on a GitHub-hosted label.
+
+Restores run immediately after checkout and before every package, tool, or
+toolchain install, so a warm run reuses work an earlier run completed. Saves
+run only on a push to `main`, and only when that key's restore missed. One job
+writes each key family: `build-test` owns the Ubuntu 24.04 Cargo, tool, and
+Whitaker keys; `netsukefile` owns the Ubuntu 22.04 family; `build-test-windows`
+owns the Windows family; `kani-smoke` owns the Kani key and nothing else. The
+coverage job and both native Windows smoke jobs restore only. `ci.yml`
+therefore carries a `push` trigger on `main`: without a trunk run, no
+generation would ever be written.
+
+Every cache-bearing job publishes a `Record cache observations` step under
+`if: always()` that names the rendered key and its hit result, so a cold run
+reports its miss rather than staying silent and an operator can explain every
+miss from the run evidence alone.
+
+Do not add `actions/cache` or a setup-action cache to a job that already has an
+owner: two writers make cache warmth, eviction, and storage cost unknowable.
+All direct callers set `cache-provider: external` so `setup-rust` creates no
+duplicate GitHub cache; `install-whitaker` and `generate-coverage` take the
+same input for the same reason. `setup-uv` runs with `enable-cache: false`
+because the gate cache already owns the uv download store, tool store, and shim
+directory.
+
+Two paths are deliberately uncached, and both are recorded here rather than
+left to be rediscovered. The reusable packaging workflow
+[`build-and-package.yml`](../.github/workflows/build-and-package.yml) has no
+cache at all: it builds a release profile for a cross-compiled target, so it
+shares no key family with the debug gate, and making it a second writer of the
+Cargo download store would break the single-owner rule. The coverage job does
+not cache its uv stores, because they live under `~/.local/share`, which the
+merge gate's Whitaker cache owns.
+
+The compiler cache is sccache 0.16.0, installed as a checksum-verified prebuilt
+binary through the pinned `taiki-e/install-action` with `fallback: none`. Linux
+uses sccache's GitHub Actions backend, which needs no archive of its own;
+setting the repository variable `NETSUKE_SCCACHE_LOCAL_DIR` to `true` switches
+the gate to the local-directory backend and enables cache step B instead.
+Exactly one backend is ever active. Because the gate sets `use-sccache: false`
+on `setup-rust`, it also exports `ACTIONS_RESULTS_URL` and
+`ACTIONS_RUNTIME_TOKEN` itself; without that step the wrapper silently falls
+back to local disk and the cache saves nothing. Windows keeps `SCCACHE_DIR` in
+an explicit workspace directory under `actions/cache`. Every compiling job
+resets the counters with `sccache --zero-stats` before building and emits both
+human-readable and JSON statistics afterwards under `if: always()`. Coverage
+and Kani leave sccache disabled because their instrumentation boundaries differ.
 
 The `leynos/shared-actions/.github/actions/setup-rust` revision
 `f9a16065e58324b0714e86c1ebeb8eb4500f1b47` introduces
@@ -656,31 +729,7 @@ The `leynos/shared-actions/.github/actions/setup-rust` revision
 and `cargo-nextest` from checksum-verified official releases with no source
 fallback. That revision is the head of shared-actions pull request 422 and is
 not yet merged, so it is a placeholder: replace every shared-action pin in this
-repository with that pull request's merge commit before merging this work. All
-direct callers set `cache-provider: external` so setup-rust does not create a
-duplicate GitHub cache. `install-whitaker` and `generate-coverage` take the
-same input for the same reason: the volume already owns `~/.cargo/bin`, the
-Whitaker data directory, and the coverage archives. That data directory differs
-by platform: Linux uses `~/.local/share/whitaker` and Windows uses
-`~/AppData/Roaming/github/whitaker`, which is where `whitaker-installer`
-actually clones the suite. Jobs using a local sccache directory also set
-`use-sccache: false`: the shared action's sccache path is a separate
-GitHub-backed cache service. The compiling Linux jobs instead install the
-checksum-verified prebuilt sccache 0.16.0 binary through the pinned
-`taiki-e/install-action`, set `RUSTC_WRAPPER=sccache`, cache its local storage,
-and reset and emit JSON statistics around the gate. Linux uses
-`~/.cache/sccache`; Windows sets `SCCACHE_DIR` to the workspace-local
-`.sccache` directory, so the Namespace action can retain it through a Windows
-junction. Coverage and Kani leave sccache disabled because their
-instrumentation boundaries differ.
-
-Both Whitaker jobs run a `Prepare Whitaker cache directory` step first. This is
-a temporary compatibility workaround: `whitaker-installer` 0.2.7 chooses
-between cloning and pulling on directory existence alone, and a mounted cache
-volume creates the data directory even on a cold run, so the installer runs
-`git pull` against a directory that holds no repository. The step deletes the
-directory when it is not a Git repository. Remove it once the installer checks
-for a repository rather than a directory.
+repository with that pull request's merge commit before merging this work.
 
 CI installs tools from trusted prebuilt releases only. `setup-rust` verifies the
 `cargo-binstall` installer checksum, the formatter jobs install mdtablefix
@@ -696,10 +745,10 @@ Kani's Cargo front-end and verifier payload are separate artefacts: the Kani
 job verifies the Cargo QuickInstall front-end archive and the upstream 0.67.0
 Linux verifier bundle against pinned SHA-256 values, and each archive's
 verification gates that same archive's use. The front-end, bundle installation,
-and Kani-managed Rust toolchain live in the job's Namespace cache paths under
-version-qualified directories, so raising the pin in `tools/kani/VERSION`
-cannot be satisfied by a binary an earlier run left behind. A missing binary is
-a CI failure, not permission to compile a tool from source.
+and Kani-managed Rust toolchain live under version-qualified directories inside
+the three cached homes, so raising the pin in `tools/kani/VERSION` cannot be
+satisfied by a binary an earlier run left behind. A missing binary is a CI
+failure, not permission to compile a tool from source.
 
 `NETSUKE_RUST_TOOLCHAIN` follows a separate rule. The CI jobs and Netsukefile
 pin it to the channel in `rust-toolchain.toml` so those jobs provision the
@@ -742,7 +791,7 @@ the remaining harness consequences of that policy.
 The pull-request `windows-native-recipe-smoke` job in
 [`ci-windows.yml`](../.github/workflows/ci-windows.yml) is the native Windows
 execution gate. It waits for the successful `build-test-windows` job, then runs
-on `namespace-profile-netsuke-windows` with `pwsh` as the shell for every `run`
+on GitHub-hosted `windows-latest` with `pwsh` as the shell for every `run`
 step. It checks out the pull request source, installs the pinned nightly from
 `rust-toolchain.toml` through the shared Rust setup action, installs Ninja, and
 builds the `netsuke` binary from that checkout. The job then invokes:
@@ -769,76 +818,90 @@ source itself; the release publication job separately requires both this smoke
 job and the platform package jobs in its `needs` list. Consequently, release
 publication cannot proceed unless the native Windows smoke test passes.
 
-## GitHub Actions runner profiles
 
-Repository-owned jobs run on Namespace runner profiles where the service
-provides the required native architecture. The profile tags and workflow labels
-are an external deployment contract: configure them in the Namespace workspace
-connected to the repository before merging a workflow change that names them.
+## GitHub Actions runner placement
 
-Table: Namespace runner profiles used by Netsuke.
+Ubicloud offers Linux runners only. The estate therefore splits along one line:
+the Linux jobs that block a developer run on Ubicloud, and everything else runs
+on a GitHub-hosted runner. Windows and macOS have no Ubicloud image at all;
+scheduled, delayed-comment, and administrative jobs are API-bound, so a build
+shape would buy nothing and Ubicloud has no single-vCPU option to buy it with.
 
-| Profile tag            | Workflow label                           | Operating system    | Machine shape | Cache volume       | Intended workload                         |
-| ---------------------- | ---------------------------------------- | ------------------- | ------------- | ------------------ | ----------------------------------------- |
-| `netsuke-ci`           | `namespace-profile-netsuke-ci`           | Ubuntu 24.04        | 4 vCPU, 8 GB  | 20 GB; main writes | Full Linux formatting, lint and test CI   |
-| `netsuke`              | `namespace-profile-netsuke`              | Ubuntu 24.04        | 4 vCPU, 8 GB  | 20 GB; main writes | Packaging, coverage and utility jobs      |
-| `netsuke-ubuntu-22-04` | `namespace-profile-netsuke-ubuntu-22-04` | Ubuntu 22.04        | 4 vCPU, 8 GB  | 20 GB; main writes | Ubuntu 22.04 compatibility build          |
-| `netsuke-windows-ci`   | `namespace-profile-netsuke-windows-ci`   | Windows Server 2022 | 4 vCPU, 8 GB  | 20 GB; main writes | Full Windows formatting, lint and test CI |
-| `netsuke-windows`      | `namespace-profile-netsuke-windows`      | Windows Server 2022 | 4 vCPU, 8 GB  | 20 GB; main writes | Windows packaging and smoke tests         |
-| `netsuke-macos-arm64`  | `namespace-profile-netsuke-macos-arm64`  | macOS Sequoia       | 4 vCPU, 7 GB  | 20 GB; main writes | ARM64 macOS packaging                     |
+Table: runner placement for every repository-owned job.
 
-Use `nsc github profile list -o json` and `nsc github profile describe` to
-inspect the deployed profiles. Treat profile creation, updates, deletion and
-base-image rebuilds as infrastructure changes; review the effective profile
-specification before applying them.
+| Workflow and job                               | Runner                            | Reason                                |
+| ---------------------------------------------- | --------------------------------- | ------------------------------------- |
+| `ci.yml` `build-test`                          | `ubicloud-standard-2-ubuntu-2404` | Linux merge gate                      |
+| `ci.yml` `kani-smoke`                          | `ubicloud-standard-2-ubuntu-2404` | Linux merge gate                      |
+| `coverage-main.yml` `coverage-upload`          | `ubicloud-standard-2-ubuntu-2404` | Linux coverage on the trunk           |
+| `netsukefile-test.yml` `netsukefile`           | `ubicloud-standard-2-ubuntu-2204` | Deliberate Ubuntu 22.04 compatibility |
+| `release.yml` `build-linux`                    | `ubicloud-standard-2-ubuntu-2404` | Linux packaging and the dry-run gate  |
+| `ci-windows.yml` `build-test-windows`          | `windows-latest`                  | No Ubicloud Windows image             |
+| `ci-windows.yml` `windows-native-recipe-smoke` | `windows-latest`                  | No Ubicloud Windows image             |
+| `release.yml` `build-windows`                  | `windows-latest`                  | No Ubicloud Windows image             |
+| `release.yml` `windows-native-recipe-smoke`    | `windows-latest`                  | No Ubicloud Windows image             |
+| `release.yml` `build-macos` (x86_64)           | `macos-15-intel`                  | No Ubicloud macOS image               |
+| `release.yml` `build-macos` (aarch64)          | `macos-15`                        | No Ubicloud macOS image               |
+| `release.yml` `metadata`                       | `ubuntu-latest`                   | API-bound administrative job          |
+| `release.yml` `release`                        | `ubuntu-latest`                   | API-bound publication job             |
+| `delayed-pr-comment.yml` `delay_and_comment`   | `ubuntu-latest`                   | Not developer-blocking                |
 
-Every deployed Netsuke profile has a 20 GB cache volume. Only trusted `main`
-jobs may publish updated snapshots; pull-request jobs can consume an existing
-generation without creating a cache stampede. The profile also enables
-Namespace's bundled runner-action and runner-tool download caches. Those
-profile settings do not retain arbitrary Cargo, package-manager, or build
-directories: each workflow must still wire those paths through the pinned
-`nscloud-cache-action`. A configured volume or a `cache-hit` output is not
-evidence of useful work avoided, so retain the sccache and timing observations
-when evaluating warm runs.
+`ubicloud-standard-2` alone would also select Ubuntu 24.04 today, but naming
+the image keeps a change to Ubicloud's default from silently moving compiled
+tools onto another glibc. `ubicloud-standard-4` is the ceiling, not the
+default: escalate to it only with evidence from at least three warm runs
+showing peak memory above roughly 6 GB, a halving of wall time that offsets the
+doubled per-minute rate, or a job removed from the critical path. No such
+evidence exists yet, so every Linux job starts at `-2`.
 
-Namespace base images do not promise the same preinstalled tool inventory as
-GitHub-hosted runner images. The full Linux CI and Ubuntu 22.04 Netsukefile
+Register every intentional Ubicloud label in
+[`.github/actionlint.yaml`](../.github/actionlint.yaml). actionlint rejects an
+unregistered self-hosted label, so a typo or an unreviewed shape fails the lint
+gate rather than queueing forever. The contract tests hold the registered set
+equal to the set actually in use.
+
+Runner labels appear in no job name, so the required status-check contexts
+`build-test`, `kani-smoke`, `netsukefile`, and `release / metadata` are
+unaffected by placement changes. Audit the repository ruleset whenever a runner
+label does reach a matrix job name: GitHub embeds matrix values in the emitted
+context, and a ruleset can otherwise wait forever for a context no workflow
+emits.
+
+The mutation-testing and Dependabot auto-merge callers retain the runners
+selected by their SHA-pinned reusable workflows in `leynos/shared-actions`; a
+caller cannot override a reusable workflow's `runs-on` value. Every Ubicloud
+job declares `timeout-minutes`, because a stuck VM bills for its whole lifetime.
+
+Ubicloud base images do not promise the same preinstalled tool inventory as
+GitHub-hosted runner images. The Linux CI and Ubuntu 22.04 Netsukefile
 compatibility jobs therefore install Ninja through the same SHA-pinned
 `seanmiddleditch/gha-setup-ninja` action as the Windows jobs. Keep that setup
 before the first Ninja invocation; `NETSUKE_REQUIRE_NINJA=1` intentionally
 turns a missing backend into a CI failure rather than silently reducing test
 coverage.
 
-The shared `rust-build-release-v1` action currently nests a Node 20 `setup-uv`
-action. Namespace normally promotes deprecated Node action runtimes to Node 24,
-but that combination aborts inside libuv on Windows Server 2022. The reusable
+The shared `rust-build-release-v1` action nests a Node 20 `setup-uv` action,
+and the promoted Node 24 runtime aborts inside libuv on Windows. The reusable
 packaging workflow therefore sets
 `ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true` only when `platform` is
-`windows`; the expression yields an empty value on Linux and macOS. Remove this
-narrow compatibility setting when the shared release action adopts a Node 24
-version of its nested Rust setup action.
+`windows`; the expression yields an empty value on Linux and macOS. The switch
+predates the move to GitHub-hosted Windows runners and is retained unchanged so
+the packaging lane's behaviour is attributable to the runner move alone; drop
+it once a Windows release run without it succeeds.
 
-The Namespace Windows service also exposes a different environment-derived
-profile from the Windows known folder used by `dotnet tool --global`. Before
-the shared packaging action installs WiX, the reusable workflow appends the
-known-folder `.dotnet\tools` directory to `GITHUB_PATH`. Keep this lookup on
-`Environment.SpecialFolder.UserProfile`; `$HOME` and `USERPROFILE` can name a
-different service profile and leave an installed `wix` executable invisible to
-the next action step.
+Windows exposes a different environment-derived profile from the known folder
+used by `dotnet tool --global`. Before the shared packaging action installs
+WiX, the reusable workflow appends the known-folder `.dotnet\tools` directory to
+`GITHUB_PATH`. Keep this lookup on `Environment.SpecialFolder.UserProfile`;
+`$HOME` and `USERPROFILE` can name a different profile and leave an installed
+`wix` executable invisible to the next action step. The same rule governs the
+Whitaker lint step, which resolves the installer's own profile rather than
+PowerShell's `$HOME`.
 
-The `nsc github profile create` command provisions Linux profiles. Native
-Windows and macOS profiles are created in the Namespace dashboard. Every
-profile uses the `namespace-profile-*` label form, regardless of where it was
-created. The x86_64 macOS package remains on `macos-15-intel` because
-Namespace's macOS estate is ARM64-only. The mutation-testing and Dependabot
-auto-merge callers also retain the runners selected by their SHA-pinned
-reusable workflows in `leynos/shared-actions`; a caller cannot override a
-reusable workflow's `runs-on` value. The workflow contract tests in
-`tests/workflow_contracts/` hold these ownership, platform and setup-order
-boundaries. Test-only pure validators live in `namespace_runner_invariants.py`;
-checked-in workflow tests and bounded Hypothesis properties share them, and
-production code must not import them.
+The workflow contract tests in `tests/workflow_contracts/` hold these
+placement, ownership, and setup-order boundaries. Test-only pure validators
+live in `runner_placement_invariants.py`; checked-in workflow tests and bounded
+Hypothesis properties share them, and production code must not import them.
 
 ## Quality gates
 
@@ -2095,8 +2158,8 @@ Pull requests run a dedicated `kani-smoke` CI job alongside the ordinary
 front-end and Kani release bundle, checks the reported version, and then runs
 the bounded harness suite through `make kani-ir` under a 20-minute job timeout;
 it does not run `make verus`, coverage, CodeScene upload, or the normal build
-matrix. Its Namespace cache volume owns the job-local Kani Cargo, support-file,
-and Rust toolchain homes separately from ordinary Cargo build artefacts.
+matrix. Its cache entry owns the job-local Kani Cargo, support-file, and Rust
+toolchain homes separately from ordinary Cargo build artefacts.
 
 ## Test execution
 
@@ -3996,11 +4059,11 @@ cannot run elsewhere.
 
 The `build-test-windows` job in `.github/workflows/ci-windows.yml` is a merge
 gate: it compiles, lints (Clippy and Whitaker), and tests the `#[cfg(windows)]`
-suite on `namespace-profile-netsuke-windows-ci` under `-D warnings`, so a
-Windows-gated test or lint finding blocks a merge. The split still stands:
-host-independent rules stay in the `#[cfg(any(windows, test))]` unit tests so
-every host — including a developer on Unix — exercises them, while the
-Windows-gated suite covers the behaviour that only exists there.
+suite on GitHub-hosted `windows-latest` under `-D warnings`, so a Windows-gated
+test or lint finding blocks a merge. The split still stands: host-independent
+rules stay in the `#[cfg(any(windows, test))]` unit tests so every host —
+including a developer on Unix — exercises them, while the Windows-gated suite
+covers the behaviour that only exists there.
 
 The Windows job installs GNU Make through Chocolatey and Ninja through the
 setup action, then runs its Makefile gates through Git Bash with `SHELL=bash`.

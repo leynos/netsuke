@@ -1,8 +1,9 @@
+# Runner labels this repository intends to use. actionlint rejects any other
+# label, so a typo or an unreviewed shape fails the lint gate rather than
+# queueing forever. Only Linux labels appear here: Ubicloud offers Linux
+# runners only, and every Windows and macOS job uses a GitHub-hosted label
+# that actionlint already knows.
 self-hosted-runner:
   labels:
-    - namespace-profile-netsuke-ci
-    - namespace-profile-netsuke-windows-ci
-    - namespace-profile-netsuke-windows
-    - namespace-profile-netsuke
-    - namespace-profile-netsuke-ubuntu-22-04
-    - namespace-profile-netsuke-macos-arm64
+    - ubicloud-standard-2-ubuntu-2404
+    - ubicloud-standard-2-ubuntu-2204

@@ -4,6 +4,12 @@ name: CI (Windows)
 # The Windows halves of the merge gate live here so `.github/workflows/ci.yml`
 # stays inside the repository's 400-line file limit. Version pins stay in the
 # caller and arrive as inputs, so there is exactly one place to edit each one.
+#
+# Both jobs run on GitHub-hosted `windows-latest`. Ubicloud offers Linux
+# runners only, so this is the durable placement rather than a fallback, and
+# every cache below uses `actions/cache` keyed by `runner.os` and
+# `runner.arch`: a Linux archive must never restore onto Windows, and
+# `ubicloud/cache` needs runtime variables that only a Ubicloud VM supplies.
 
 'on':
   workflow_call:
@@ -22,6 +28,11 @@ name: CI (Windows)
         type: string
 
 env:
+  # vCPU count of the GitHub-hosted `windows-latest` standard runner (4 vCPU,
+  # 16 GB). Every compilation and test worker bound below is derived from this
+  # one number, and tests/workflow_contracts/runner_placement_test.py holds
+  # them equal.
+  WINDOWS_LANE_VCPUS: '4'
   NEXTEST_VERSION: ${{ inputs['nextest-version'] }}
   MDTABLEFIX_VERSION: ${{ inputs['mdtablefix-version'] }}
   PYTHON_BASELINE: ${{ inputs['python-baseline'] }}
@@ -30,14 +41,15 @@ jobs:
   build-test-windows:
     # Gates merges: the `#[cfg(windows)]` tree is compiled, linted, and tested
     # under `-D warnings` on this platform (see #518).
-    runs-on: namespace-profile-netsuke-windows-ci
+    runs-on: windows-latest
+    timeout-minutes: 90
     permissions:
       contents: read
     env:
       CARGO_TERM_COLOR: always
       BUILD_PROFILE: debug
-      # The attached Namespace profile has four vCPUs. Bound compilation and
-      # nextest separately so test workers do not oversubscribe it.
+      # Derived from WINDOWS_LANE_VCPUS above. Bound compilation and nextest
+      # separately so test workers do not oversubscribe the runner.
       BUILD_JOBS: -j 4
       NEXTEST_BUILD_JOBS: --build-jobs 4
       NEXTEST_TEST_JOBS: -j 4
@@ -50,7 +62,7 @@ jobs:
     defaults:
       run:
         # The Makefile uses POSIX shell constructs throughout; Git Bash is
-        # preinstalled on the Namespace Windows image. GNU Make's default recipe
+        # preinstalled on the GitHub-hosted Windows image. GNU Make's default recipe
         # shell on Windows is cmd.exe, so every make invocation overrides SHELL
         # to bash.
         shell: bash
@@ -58,23 +70,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - name: Set up Namespace cache volume
-        id: namespace_cache
-        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547
+      - name: Restore gate caches
+        id: caches
+        # Restores before every install so a warm run reuses work an earlier
+        # run completed. The action is the sole owner of every path it lists,
+        # and the single writer of every Windows key.
+        uses: ./.github/actions/windows-gate-cache
         with:
-          path: |
-            .sccache
-            .chocolatey-cache
-            ~/.cargo/bin
-            ~/.cargo/git
-            ~/.cargo/registry
-            ~/.local/bin
-            ~/AppData/Roaming/github/whitaker
-      - name: Summarize Namespace cache
-        if: always()
-        run: |
-          echo '### Namespace cache' >> "$GITHUB_STEP_SUMMARY"
-          echo "- cache-hit: ${{ steps.namespace_cache.outputs.cache-hit }}" >> "$GITHUB_STEP_SUMMARY"
+          mode: restore
+          profile: gate
       - name: Install GNU Make
         shell: pwsh
         run: |
@@ -112,10 +116,10 @@ jobs:
       - name: Show Ninja version
         run: ninja --version
       - name: Install mdtablefix
-        # Required by `make check-fmt`. The Namespace cache volume owns
-        # `~/.cargo/bin`, so a warm run finds the pinned binary already
-        # present. `cargo-binstall` is checksum-verified by setup-rust and
-        # fetches a prebuilt release; CI never compiles mdtablefix.
+        # Required by `make check-fmt`. The tool cache owns `~/.cargo/bin`,
+        # so a warm run finds the pinned binary already present.
+        # `cargo-binstall` is checksum-verified by setup-rust and fetches a
+        # prebuilt release; CI never compiles mdtablefix.
         run: |
           expected_mdtablefix_version="mdtablefix ${MDTABLEFIX_VERSION}"
           installed_mdtablefix_version=""
@@ -144,26 +148,13 @@ jobs:
         # Clippy and `cargo doc` over the whole workspace under `-D warnings`,
         # including the `#[cfg(windows)]` arms.
         run: make SHELL=bash lint-clippy
-      - name: Prepare Whitaker cache directory
-        # Compatibility workaround for whitaker-installer 0.2.7, which decides
-        # between cloning and pulling on directory existence alone. The cache
-        # volume creates the mount point even on a cold run, so remove it when
-        # it holds no repository. Delete this step once the installer checks
-        # for a repository rather than a directory.
-        shell: pwsh
-        run: |
-          $data = Join-Path $env:APPDATA 'github\whitaker\data'
-          if ((Test-Path $data) -and -not (Test-Path (Join-Path $data '.git'))) {
-            Write-Output 'removing non-repository Whitaker data directory'
-            Remove-Item -Recurse -Force $data
-          }
       - name: Install Whitaker
         uses: >-
           leynos/shared-actions/.github/actions/install-whitaker@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
         with:
           installer-version: '0.2.7'
-          # The Namespace cache volume owns `~/.cargo/bin` and
-          # `~/.local/share/whitaker`, so the action must not mount a second
+          # The tool and Whitaker cache steps own `~/.cargo/bin` and the
+          # installer's data directory, so the action must not create a second
           # owner for the same paths.
           cache-provider: external
       - name: Lint (Whitaker)
@@ -200,19 +191,39 @@ jobs:
         run: make SHELL=bash test
       - name: Show sccache statistics
         if: always()
-        run: sccache --show-stats --stats-format=json
+        run: |
+          sccache --show-stats | tee sccache-stats.txt
+          sccache --show-stats --stats-format=json > sccache-stats.json
+          {
+            printf '### sccache\n\n```text\n'
+            cat sccache-stats.txt
+            printf '```\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Save gate caches
+        # The action restricts each save to a push on `main` that missed the
+        # key, so a pull request never publishes a competing generation.
+        uses: ./.github/actions/windows-gate-cache
+        with:
+          mode: save
+          profile: gate
+          registry-hit: ${{ steps.caches.outputs['registry-hit'] }}
+          tools-hit: ${{ steps.caches.outputs['tools-hit'] }}
+          whitaker-hit: ${{ steps.caches.outputs['whitaker-hit'] }}
+          sccache-hit: ${{ steps.caches.outputs['sccache-hit'] }}
 
   windows-native-recipe-smoke:
     # This deliberately has no Git-Bash shell override. It proves that a
     # PowerShell-launched Netsuke directs Ninja legacy recipes to the
     # PowerShell interpreter selected by the Windows contract (#599).
     needs: build-test-windows
-    runs-on: namespace-profile-netsuke-windows
+    runs-on: windows-latest
+    timeout-minutes: 45
     permissions:
       contents: read
     env:
       CARGO_TERM_COLOR: always
       NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
+      # Derived from WINDOWS_LANE_VCPUS at workflow scope.
       BUILD_JOBS: -j 4
       CARGO_BUILD_JOBS: '4'
       RUSTC_WRAPPER: sccache
@@ -224,21 +235,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - name: Set up Namespace cache volume
-        id: namespace_cache
-        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547
+      - name: Restore gate caches
+        # Restore only. `build-test-windows` is the single writer for both key
+        # families, so this job reads the generation it published by prefix and
+        # never competes for a reservation.
+        uses: ./.github/actions/windows-gate-cache
         with:
-          path: |
-            .sccache
-            ~/.cargo/bin
-            ~/.cargo/git
-            ~/.cargo/registry
-      - name: Summarize Namespace cache
-        if: always()
-        run: |
-          "### Namespace cache" | Out-File -FilePath $Env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-          "- cache-hit: ${{ steps.namespace_cache.outputs.cache-hit }}" |
-            Out-File -FilePath $Env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          mode: restore
+          profile: smoke
       - name: Install sccache
         uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
         with:
