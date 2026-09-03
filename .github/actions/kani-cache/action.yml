@@ -64,7 +64,7 @@ runs:
         {
           printf '### Cache observations\n\n'
           printf -- '- kani key: `%s` hit: `%s`\n' "${KANI_KEY}" "${KANI_HIT:-false}"
-        } >> "$GITHUB_STEP_SUMMARY"
+        } | tee -a "$GITHUB_STEP_SUMMARY"
 
     - name: Save Kani payloads
       # This job is the only writer of this key, and only on the trunk.

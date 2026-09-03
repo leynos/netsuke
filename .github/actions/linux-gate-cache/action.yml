@@ -184,7 +184,7 @@ runs:
           if [ "${SCCACHE_LOCAL}" = 'true' ]; then
             printf -- '- sccache key: `%s` hit: `%s`\n' "${SCCACHE_KEY}" "${SCCACHE_HIT:-false}"
           fi
-        } >> "$GITHUB_STEP_SUMMARY"
+        } | tee -a "$GITHUB_STEP_SUMMARY"
 
     - name: Save Cargo download store
       if: >-

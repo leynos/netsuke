@@ -170,6 +170,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Probe first, as every other installer here does. The cache restores
+          # `~/.cargo/bin`, and `cargo install` refuses to overwrite a binary
+          # that is already there, so a warm run must not reach either branch.
+          if cargo-orthohelp --version 2>/dev/null | grep -Eq '(^|[[:space:]])0\.9\.0([[:space:]]|$)'; then
+            echo "cargo-orthohelp 0.9.0 restored from the cache"
+            exit 0
+          fi
           if cargo binstall --no-confirm --locked \
             --strategies crate-meta-data,quick-install cargo-orthohelp@0.9.0; then
             exit 0

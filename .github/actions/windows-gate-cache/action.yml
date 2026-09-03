@@ -167,7 +167,7 @@ runs:
             printf -- '- whitaker key: `%s` matched: `%s`\n' \
               "${WHITAKER_KEY}" "${WHITAKER_HIT:-none}"
           fi
-        } >> "$GITHUB_STEP_SUMMARY"
+        } | tee -a "$GITHUB_STEP_SUMMARY"
 
     - name: Save Cargo download store
       if: >-

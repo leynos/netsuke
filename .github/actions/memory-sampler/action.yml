@@ -34,4 +34,4 @@ runs:
         kill "${MEM_SAMPLER_PID}" 2>/dev/null || true
         peak="$(sort --numeric-sort mem.log 2>/dev/null | tail --lines=1)"
         printf '### Peak memory\n\n- %s MiB on %s vCPUs\n' \
-          "${peak:-unknown}" "${LINUX_LANE_VCPUS}" >> "$GITHUB_STEP_SUMMARY"
+          "${peak:-unknown}" "${LINUX_LANE_VCPUS}" | tee -a "$GITHUB_STEP_SUMMARY"

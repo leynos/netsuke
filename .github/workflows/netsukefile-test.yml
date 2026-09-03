@@ -90,7 +90,7 @@ jobs:
             # shellcheck disable=SC2016
             printf -- '- tools key: `%s` hit: `%s`\n' \
               "${TOOLS_CACHE_KEY}" "${TOOLS_HIT:-false}"
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Install sccache
         uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
         with:
@@ -194,7 +194,7 @@ jobs:
             printf '### sccache\n\n```text\n'
             cat sccache-stats.txt
             printf '```\n'
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
       # This job is the only writer of the Ubuntu 22.04 key family, and only
       # on the trunk, so a pull request never publishes a competing archive.
       - name: Save Cargo download store
