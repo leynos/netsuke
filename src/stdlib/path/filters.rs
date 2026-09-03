@@ -4,10 +4,7 @@
 //! `relative_to`, `realpath`, `expanduser`, `size`, `contents`,
 //! `linecount`, `hash`, and `digest`.
 use camino::Utf8Path;
-use minijinja::{
-    Environment, Error, ErrorKind,
-    value::Kwargs,
-};
+use minijinja::{Environment, Error, ErrorKind, value::Kwargs};
 
 use super::{fs_utils, hash_utils, path_utils};
 use crate::localization::{self, keys};
@@ -75,7 +72,6 @@ pub(crate) fn register_filters(
     home_directory: HomeDirectory,
     file_max_read_bytes: u64,
 ) {
-    let file_max_read_bytes = file_max_read_bytes;
     register_lexical_filters(env);
     env.add_filter("realpath", |raw: String| -> Result<String, Error> {
         path_utils::canonicalize_any(Utf8Path::new(&raw)).map(camino::Utf8PathBuf::into_string)
@@ -124,10 +120,10 @@ pub(crate) fn register_filters(
     env.add_filter(
         "digest",
         move |raw: String,
-         len: Option<usize>,
-         alg: Option<String>,
-         kwargs: Kwargs|
-         -> Result<String, Error> {
+              len: Option<usize>,
+              alg: Option<String>,
+              kwargs: Kwargs|
+              -> Result<String, Error> {
             let digest_len = len.unwrap_or(8);
             let algorithm = alg.unwrap_or_else(|| "sha256".to_owned());
             let limits = path_call_limits(&kwargs, file_max_read_bytes)?;
@@ -142,7 +138,10 @@ pub(crate) fn register_filters(
 /// `max_bytes` may only narrow the operator-configured ceiling: a call that
 /// asks for more bytes than the configured budget is clamped to the budget
 /// rather than granted a larger read.
-fn path_call_limits(kwargs: &Kwargs, configured_max_read_bytes: u64) -> Result<FileReadLimits, Error> {
+fn path_call_limits(
+    kwargs: &Kwargs,
+    configured_max_read_bytes: u64,
+) -> Result<FileReadLimits, Error> {
     let max_bytes: Option<u64> = kwargs.get("max_bytes")?;
     let follow_symlinks: Option<bool> = kwargs.get("follow_symlinks")?;
     Ok(FileReadLimits {
