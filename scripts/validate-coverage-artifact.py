@@ -39,7 +39,43 @@ REQUIRED_LCOV_RECORDS = ("SF:", "DA:", "end_of_record")
 
 
 class ValidationIssue(enum.Enum):
-    """Identify one hostile artefact validation failure."""
+    """Identify one hostile artefact validation failure.
+
+    Attributes
+    ----------
+    SYMLINK_DIRECTORY
+        The supplied artefact directory is itself a symbolic link, so its
+        resolved location is not controlled by the trusted workflow.
+    NON_DIRECTORY
+        The supplied artefact path is not a directory.
+    UNEXPECTED_MEMBERS
+        The artefact directory contains a member other than the expected
+        single ``lcov.info`` file, or more members than the validator bounds.
+    SYMLINK_MEMBER
+        The coverage member is a symbolic link.
+    NON_REGULAR_MEMBER
+        The coverage member is not a regular file.
+    ESCAPED_MEMBER
+        The resolved coverage member leaves the artefact directory.
+    EMPTY_REPORT
+        The coverage report contains no records.
+    INVALID_RECORD
+        The coverage report contains a line that is not a recognised LCOV
+        record.
+    MISSING_RECORD
+        The coverage report omits a required record type.
+    MISSING_TERMINATOR
+        The coverage report does not end with ``end_of_record``.
+    OVERSIZED_REPORT
+        The coverage report exceeds the configured size bound.
+    NON_UTF8_REPORT
+        The coverage report is not valid UTF-8 text.
+
+    Examples
+    --------
+    >>> ValidationIssue.MISSING_RECORD.name
+    'MISSING_RECORD'
+    """
 
     SYMLINK_DIRECTORY = enum.auto()
     NON_DIRECTORY = enum.auto()
@@ -56,7 +92,27 @@ class ValidationIssue(enum.Enum):
 
 
 class ValidationError(Exception):
-    """Describe hostile artefact data that cannot reach CodeScene."""
+    """Describe hostile artefact data that cannot reach CodeScene.
+
+    Parameters
+    ----------
+    issue
+        The validation issue that rejected the artefact.
+    detail
+        Optional display detail, such as the offending line number, member
+        names, or an observed-versus-maximum size pair.
+
+    Raises
+    ------
+    ValidationError
+        Raised by the validator whenever hostile artefact data must not
+        reach the secret-bearing submission step.
+
+    Examples
+    --------
+    >>> str(ValidationError(ValidationIssue.EMPTY_REPORT))
+    'coverage report is empty'
+    """
 
     def __init__(self, issue: ValidationIssue, detail: object | None = None) -> None:
         """Record the validation issue and its optional display detail."""
@@ -129,7 +185,7 @@ def _validated_directory(artifact_dir: pathlib.Path) -> pathlib.Path:
 
 def _validated_coverage_path(directory: pathlib.Path) -> pathlib.Path:
     """Return the sole regular coverage member after validating its boundary."""
-    members = list(directory.iterdir())
+    members = _bounded_directory_members(directory)
     coverage_path = _sole_coverage_member(members)
     _reject_symlink_member(coverage_path)
     return _resolve_contained_regular_member(coverage_path, directory)
@@ -141,6 +197,16 @@ def _sole_coverage_member(members: list[pathlib.Path]) -> pathlib.Path:
     if names != [EXPECTED_MEMBER]:
         raise ValidationError(ValidationIssue.UNEXPECTED_MEMBERS, names)
     return members[0]
+
+
+def _bounded_directory_members(directory: pathlib.Path) -> list[pathlib.Path]:
+    """Enumerate artefact members under an explicit member-count bound."""
+    members: list[pathlib.Path] = []
+    for member in directory.iterdir():
+        members.append(member)
+        if len(members) > 1:
+            raise ValidationError(ValidationIssue.UNEXPECTED_MEMBERS, None)
+    return members
 
 
 def _reject_symlink_member(coverage_path: pathlib.Path) -> None:
@@ -178,10 +244,15 @@ def _first_invalid_lcov_line(lines: cabc.Sequence[str]) -> int | None:
     )
 
 
-def _first_missing_lcov_record(record_text: str) -> str | None:
+def _first_missing_lcov_record(lines: cabc.Sequence[str]) -> str | None:
     """Return the first required LCOV record that the report omits."""
     return next(
-        (record for record in REQUIRED_LCOV_RECORDS if record not in record_text), None
+        (
+            record
+            for record in REQUIRED_LCOV_RECORDS
+            if not any(line.startswith(record) for line in lines)
+        ),
+        None,
     )
 
 
@@ -210,7 +281,7 @@ def _validate_lcov_text(text: str) -> None:
         issue=ValidationIssue.INVALID_RECORD,
         detail=invalid_line,
     )
-    missing_record = _first_missing_lcov_record("\n".join(lines))
+    missing_record = _first_missing_lcov_record(lines)
     _raise_validation_error_if(
         should_raise=missing_record is not None,
         issue=ValidationIssue.MISSING_RECORD,
@@ -223,7 +294,34 @@ def _validate_lcov_text(text: str) -> None:
 
 
 def validate(artifact_dir: pathlib.Path) -> None:
-    """Validate one downloaded LCOV artefact without executing its content."""
+    r"""Validate one downloaded LCOV artefact without executing its content.
+
+    Parameters
+    ----------
+    artifact_dir
+        The downloaded artefact directory to inspect. It must resolve to a
+        real directory containing exactly one regular, non-symbolic
+        ``lcov.info`` member inside its own boundary.
+
+    Raises
+    ------
+    ValidationError
+        When the directory shape, member type, member boundary, report size,
+        report encoding, or LCOV record structure violates the hostile-data
+        contract. ``OSError`` may also propagate when the artefact cannot be
+        inspected on disk.
+
+    Examples
+    --------
+    >>> import pathlib, tempfile
+    >>> with tempfile.TemporaryDirectory() as tmp:
+    ...     artefact = pathlib.Path(tmp)
+    ...     (artefact / "lcov.info").write_text(
+    ...         "TN:\\nSF:src/lib.rs\\nDA:1,1\\nend_of_record\\n",
+    ...         encoding="utf-8",
+    ...     )
+    ...     validate(artefact)
+    """
     directory = _validated_directory(artifact_dir)
     coverage_path = _validated_coverage_path(directory)
     size = coverage_path.stat().st_size
@@ -240,7 +338,33 @@ def validate(artifact_dir: pathlib.Path) -> None:
 
 
 def main(argv: cabc.Sequence[str] | None = None) -> int:
-    """Run the artefact gate and return its process exit status."""
+    r"""Run the artefact gate and return its process exit status.
+
+    Parameters
+    ----------
+    argv
+        Command-line arguments to parse. ``None`` means the current process
+        arguments, as :mod:`argparse` defines.
+
+    Returns
+    -------
+    int
+        ``0`` when the artefact passes validation, ``1`` when the artefact
+        fails a hostile-data check, and ``2`` when the artefact cannot be
+        inspected on disk.
+
+    Examples
+    --------
+    >>> import pathlib, tempfile
+    >>> with tempfile.TemporaryDirectory() as tmp:
+    ...     artefact = pathlib.Path(tmp)
+    ...     (artefact / "lcov.info").write_text(
+    ...         "TN:\\nSF:src/lib.rs\\nDA:1,1\\nend_of_record\\n",
+    ...         encoding="utf-8",
+    ...     )
+    ...     main(["--artifact-dir", str(artefact)])
+    0
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--artifact-dir",

@@ -42,7 +42,12 @@ EXPECTED_SUBMISSION_CONDITION = (
 EXPECTED_PR_ARTEFACT_STEP = {
     "name": "Upload PR coverage artefact",
     "uses": "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
-    "with": {"name": ARTEFACT_NAME, "path": ARTEFACT_PATH, "retention-days": 3},
+    "with": {
+        "name": ARTEFACT_NAME,
+        "path": ARTEFACT_PATH,
+        "retention-days": 3,
+        "if-no-files-found": "error",
+    },
 }
 
 
@@ -150,3 +155,34 @@ def test_poisoned_untrusted_environment_cannot_cross_to_submission_runner() -> N
             f"trusted workflow must not consume untrusted {poisoned_name} state"
         )
     assert "workflow_run" in trusted_text, "submission must start in a fresh workflow"
+
+
+def test_isolated_secret_job_detects_non_env_secret_references() -> None:
+    """Reject secret references placed outside a step's environment mapping."""
+    isolated: dict[str, object] = {"permissions": REQUIRED_SECRET_JOB_PERMISSIONS}
+    guarded_secret_step: dict[str, object] = {
+        "name": "Submit",
+        "if": TOKEN_PRESENCE_GUARD,
+        "env": {CREDENTIAL_ENVIRONMENT_KEY: "${{ secrets.CS_ACCESS_TOKEN }}"},
+    }
+
+    assert is_isolated_secret_job(isolated, [guarded_secret_step]), (
+        "the guarded step-local carrier must satisfy the secret-job boundary"
+    )
+
+    mutations: list[dict[str, object]] = [
+        {
+            "name": "Submit",
+            "if": TOKEN_PRESENCE_GUARD,
+            "run": "echo ${{ secrets.CS_ACCESS_TOKEN }}",
+        },
+        {
+            "name": "Submit",
+            "if": TOKEN_PRESENCE_GUARD,
+            "with": {"access-token": "${{ secrets.CS_ACCESS_TOKEN }}"},
+        },
+    ]
+    for mutation in mutations:
+        assert not is_isolated_secret_job(isolated, [mutation]), (
+            f"secret reference in {sorted(mutation)} must break isolation"
+        )
