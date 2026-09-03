@@ -78,11 +78,11 @@ jobs:
       - id: release_modes
         name: Determine release modes
         uses: >-
-          leynos/shared-actions/.github/actions/determine-release-modes@32c8ea649ea44d40119f348ad48861212532061f
+          leynos/shared-actions/.github/actions/determine-release-modes@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
       - id: ensure_version
         name: Read package version from Cargo.toml
         uses: >-
-          leynos/shared-actions/.github/actions/ensure-cargo-version@32c8ea649ea44d40119f348ad48861212532061f
+          leynos/shared-actions/.github/actions/ensure-cargo-version@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
         with:
           check-tag: ${{ fromJSON(steps.release_modes.outputs['should-publish']) }}
       - id: wix_extension_version
@@ -109,7 +109,7 @@ jobs:
       - id: bin_name
         name: Extract binary name from Cargo.toml
         uses: >-
-          leynos/shared-actions/.github/actions/export-cargo-metadata@32c8ea649ea44d40119f348ad48861212532061f
+          leynos/shared-actions/.github/actions/export-cargo-metadata@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
         with:
           manifest-path: ${{ steps.manifest_path.outputs.value }}
           fields: bin-name
@@ -216,22 +216,53 @@ jobs:
         shell: pwsh
     env:
       NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
+      CARGO_BUILD_JOBS: '4'
+      RUSTC_WRAPPER: sccache
+      SCCACHE_DIR: ${{ github.workspace }}/.sccache
     steps:
       - uses: >-
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         # v7.0.1
         with:
           persist-credentials: false
+      - name: Set up Namespace cache volume
+        id: namespace_cache
+        uses: >-
+          namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547
+        with:
+          path: |
+            .sccache
+            ~/.cargo/bin
+            ~/.cargo/git
+            ~/.cargo/registry
+      - name: Summarize Namespace cache
+        if: always()
+        shell: pwsh
+        run: |
+          "### Namespace cache" | Out-File -FilePath $Env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          "- cache-hit: ${{ steps.namespace_cache.outputs.cache-hit }}" |
+            Out-File -FilePath $Env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+      - name: Install sccache
+        uses: >-
+          taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68
+        # v2.85.3
+        with:
+          tool: sccache@0.16.0
+          fallback: none
       - name: Setup Rust
         uses: >-
-          leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
+          leynos/shared-actions/.github/actions/setup-rust@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           rustflags: -D warnings
+          cache-provider: external
+          use-sccache: 'false'
       - name: Install Ninja
         uses: >-
           seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67
         # v6
+      - name: Reset sccache statistics
+        run: sccache --zero-stats
       - name: Build Netsuke
         run: cargo build --locked --bin netsuke
       - name: Exercise native Windows recipes
@@ -239,6 +270,9 @@ jobs:
           ./scripts/windows-recipe-smoke.ps1
           -Netsuke ./target/debug/netsuke.exe
           -Manifest ./tests/data/windows-recipe-smoke.yml
+      - name: Show sccache statistics
+        if: always()
+        run: sccache --show-stats --stats-format=json
 
   release:
     if: needs.metadata.outputs.should_publish == 'true'
@@ -299,7 +333,7 @@ jobs:
       - id: upload_assets
         name: Upload artefacts to release
         uses: >-
-          leynos/shared-actions/.github/actions/upload-release-assets@32c8ea649ea44d40119f348ad48861212532061f
+          leynos/shared-actions/.github/actions/upload-release-assets@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
         with:
           release-tag: ${{ github.ref_name }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}

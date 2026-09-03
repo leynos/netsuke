@@ -142,6 +142,25 @@ fn is_exact_version(version: &str) -> bool {
         && parts.next().is_none()
 }
 
+fn ensure_kani_cache_contract(steps: &[Value]) -> Result<()> {
+    let cache_step = named_step(steps, "Set up Kani cache volume")?;
+    ensure!(
+        mapping_get(cache_step, YamlKey("uses")).and_then(Value::as_str)
+            == Some("namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547"),
+        "Kani smoke job should pin the Namespace cache action"
+    );
+    let cache_paths = mapping_get(cache_step, YamlKey("with"))
+        .and_then(Value::as_mapping)
+        .and_then(|with| mapping_get(with, YamlKey("path")))
+        .and_then(Value::as_str);
+    ensure!(
+        cache_paths
+            .is_some_and(|paths| { paths.contains(".kani-cargo") && paths.contains(".kani-home") }),
+        "Kani smoke job should cache both job-local Kani homes"
+    );
+    Ok(())
+}
+
 #[test]
 fn unit_recognizes_pinned_action_refs() {
     assert!(is_pinned_action_ref(
@@ -342,28 +361,13 @@ fn behavioural_ci_workflow_wires_kani_smoke_job() -> Result<()> {
         "Install uv step should disable automatic caching because Kani uses an explicit cache"
     );
 
-    let cache_step = steps
-        .iter()
-        .find_map(|step| step_name(step, "Cache Kani tools"))
-        .context("Kani smoke job should include the Cache Kani tools step")?;
-    let cache_key = mapping_get(cache_step, YamlKey("with"))
-        .and_then(Value::as_mapping)
-        .and_then(|with| mapping_get(with, YamlKey("key")))
-        .and_then(Value::as_str);
-    ensure!(
-        cache_key
-            == Some("${{ runner.os }}-kani-${{ hashFiles('tools/kani/VERSION', 'Makefile') }}"),
-        "Kani smoke job should cache tools using the Kani version and Makefile"
-    );
+    ensure_kani_cache_contract(steps)?;
 
-    let install_kani_index = steps
-        .iter()
-        .position(|step| step_has(step, StepField::Runs, "make install-kani"))
-        .context("Kani smoke job should install Kani through the Make target")?;
+    let install_kani_index = step_index(steps, "Install Kani release bundle")?;
     let kani_check_index = steps
         .iter()
-        .position(|step| step_has(step, StepField::Runs, "make kani-check"))
-        .context("Kani smoke job should check Kani through the Make target")?;
+        .position(|step| step_name(step, "Kani version check").is_some())
+        .context("Kani smoke job should check the installed Kani version")?;
     let kani_ir_index = steps
         .iter()
         .position(|step| step_has(step, StepField::Runs, "make kani-ir"))
@@ -371,6 +375,14 @@ fn behavioural_ci_workflow_wires_kani_smoke_job() -> Result<()> {
     ensure!(
         install_kani_index < kani_check_index && kani_check_index < kani_ir_index,
         "Kani smoke job should install Kani, check its version, then run the bounded harnesses"
+    );
+    let install_kani = named_step(steps, "Install Kani release bundle")?;
+    let install_command = mapping_get(install_kani, YamlKey("run"))
+        .and_then(Value::as_str)
+        .context("Kani release installation should be a shell command")?;
+    ensure!(
+        install_command.contains("sha256sum --check") && !install_command.contains("cargo install"),
+        "Kani smoke job should verify a release bundle without compiling from source"
     );
     ensure!(
         mapping_get(kani_job, YamlKey("timeout-minutes")).and_then(Value::as_u64) == Some(20),

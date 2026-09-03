@@ -150,6 +150,20 @@ fn workflow_step_body<'a>(contents: &'a str, step_name: &str) -> Vec<&'a str> {
         .collect()
 }
 
+fn assert_shared_build_skips_man_page_discovery(contents: &str) {
+    let rust_build_steps = rust_build_release_step_blocks(contents);
+    assert!(
+        !rust_build_steps.is_empty(),
+        "workflow should call rust-build-release"
+    );
+    for step in rust_build_steps {
+        assert!(
+            step.contains("skip-man-page-discovery: 'true'"),
+            "rust-build-release call should skip embedded man-page discovery"
+        );
+    }
+}
+
 #[test]
 fn behavioural_build_and_package_wiring_matches_shared_actions() {
     let contents = workflow_contents("build-and-package.yml")
@@ -195,8 +209,12 @@ fn behavioural_build_and_package_generates_release_help_with_orthohelp() {
         .expect("build-and-package workflow should be readable");
 
     assert!(
-        contents.contains("cargo install cargo-orthohelp --version 0.9.0 --locked"),
-        "workflow should install the pinned cargo-orthohelp release tool"
+        contents.contains("cargo binstall --no-confirm --locked cargo-orthohelp@0.9.0"),
+        "workflow should install the pinned prebuilt cargo-orthohelp release tool"
+    );
+    assert!(
+        !contents.contains("cargo install cargo-orthohelp"),
+        "workflow should never compile cargo-orthohelp from source"
     );
     assert!(
         contents.contains("scripts/generate-release-help.sh"),
@@ -206,17 +224,7 @@ fn behavioural_build_and_package_generates_release_help_with_orthohelp() {
         contents.contains("\"target/orthohelp/${{ inputs.target }}/release\""),
         "workflow should generate help under target/orthohelp"
     );
-    let rust_build_steps = rust_build_release_step_blocks(&contents);
-    assert!(
-        !rust_build_steps.is_empty(),
-        "workflow should call rust-build-release"
-    );
-    for step in rust_build_steps {
-        assert!(
-            step.contains("skip-man-page-discovery: 'true'"),
-            "rust-build-release call should skip embedded man-page discovery"
-        );
-    }
+    assert_shared_build_skips_man_page_discovery(&contents);
     assert!(
         contents.contains("man-paths: ${{ steps.stage_paths.outputs.man_path }}"),
         "Linux packaging should consume the staged man_path output"

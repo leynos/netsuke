@@ -27,8 +27,19 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
+      - name: Set up Namespace cache volume
+        id: namespace_cache
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547
+        with:
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/git
+            ~/.cargo/registry
+            ~/.cache/uv
+            ~/.local/share/uv
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
+        # Pinned to the shared-actions revision that adds `cache-provider`.
+        uses: leynos/shared-actions/.github/actions/setup-rust@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
         with:
           # Match rust-toolchain.toml: the tree needs the nightly-default
           # Polonius borrow checker (see
@@ -37,20 +48,28 @@ jobs:
           # Preserve warnings-as-errors through toolchain setup;
           # cargo-llvm-cov appends its instrumentation flags to this value.
           rustflags: -D warnings
+          cache-provider: external
+          use-sccache: 'false'
+      - name: Summarize Namespace cache
+        if: always()
+        run: |
+          echo '### Namespace cache' >> "$GITHUB_STEP_SUMMARY"
+          echo "- cache-hit: ${{ steps.namespace_cache.outputs.cache-hit }}" >> "$GITHUB_STEP_SUMMARY"
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
       - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/generate-coverage@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
         with:
           language: rust
           output-path: lcov.info
           format: lcov
+          cache-provider: external
           with-ratchet: 'true'
       - name: Upload coverage data to CodeScene
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
         if: env.CS_ACCESS_TOKEN != ''
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
         with:
           path: lcov.info
           format: lcov

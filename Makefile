@@ -28,6 +28,9 @@ BUILD_JOBS ?=
 # variables separate so a `-j` value is never reinterpreted as a test-thread
 # count.
 NEXTEST_BUILD_JOBS ?=
+# Explicit nextest process concurrency. Keep this distinct from compiler build
+# parallelism: `cargo-nextest` uses `-j` for test processes, not Cargo jobs.
+NEXTEST_TEST_JOBS ?=
 CLIPPY_FLAGS ?= --workspace --all-targets --all-features -- -D warnings
 KANI ?= cargo kani
 KANI_FLAGS ?=
@@ -145,7 +148,7 @@ clean: ## Remove build artefacts
 test: test-nextest doctest ## Run every Rust test with warnings treated as errors
 
 test-nextest: ## Run all non-doctest Rust tests through cargo-nextest
-	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) nextest run --workspace --all-targets --all-features $(NEXTEST_BUILD_JOBS)
+	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) nextest run --workspace --all-targets --all-features $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
 
 doctest: ## Run doctests, which cargo-nextest cannot execute
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) test --workspace --doc --all-features $(BUILD_JOBS)

@@ -1,9 +1,9 @@
 """Hold Netsuke's Namespace runner-profile assignments.
 
 The repository owns direct Linux, Windows, and ARM64 macOS job placement,
-while Intel macOS jobs and externally defined reusable workflows retain their
-existing runner ownership. These contracts prevent an unrelated workflow edit
-from silently moving repository-owned work back to GitHub-hosted runners.
+while Intel macOS, administrative jobs, and externally defined reusable
+workflows retain their existing runner ownership. These contracts prevent an
+unrelated workflow edit from silently changing that ownership.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -66,7 +66,7 @@ DIRECT_RUNNER_SOURCES = (
         (
             "delayed-pr-comment.yml",
             "delay_and_comment",
-            "namespace-profile-netsuke",
+            "ubuntu-latest",
         ),
         (
             "netsukefile-test.yml",
@@ -82,12 +82,12 @@ DIRECT_RUNNER_SOURCES = (
         ("release.yml", "release", "namespace-profile-netsuke"),
     ],
 )
-def test_repository_owned_jobs_use_namespace_profiles(
+def test_repository_owned_jobs_use_required_runners(
     workflow_name: str,
     job_name: str,
     expected_runner: str,
 ) -> None:
-    """Require each repository-owned job to use its Namespace profile."""
+    """Require each repository-owned job to use its intended runner."""
     workflow = load_workflow(WORKFLOW_DIR / workflow_name)
     actual_runner = workflow_job(workflow, job_name).get("runs-on")
     assert actual_runner == expected_runner, (

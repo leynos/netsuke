@@ -601,6 +601,53 @@ declared to accept one and installs rustfmt and clippy itself, so passing it
 only emitted an "Unexpected input(s)" warning on every run;
 `tests/workflow_contracts/ci_lint_test.py` holds that.
 
+
+### Namespace cache ownership and bounded CI resources
+
+Namespace runner profiles are provisioned remotely with no more than four vCPUs
+and 8 GiB of memory. The workflows do not repeat that profile configuration;
+they limit Cargo builds and nextest processes to four workers instead.
+`BUILD_JOBS` sets Cargo's `-j 4`, `NEXTEST_BUILD_JOBS` sets `--build-jobs 4`,
+and `NEXTEST_TEST_JOBS` sets nextest's distinct `-j 4` process limit.
+
+The attached Namespace cache volume is the sole cache owner for direct Linux
+and Windows Namespace CI jobs. Immediately after checkout and before any
+package, tool, or toolchain install, those jobs call
+`namespacelabs/nscloud-cache-action` at
+`c5f8dab7560444c4bf8dbc64f1b203431873c547`, mount explicit Cargo download,
+tool, uv, and sccache paths, and write its `cache-hit` output to the job
+summary. Do not use its `rust` mode: that mode mounts Cargo's disposable
+`target` directory, which conflicts with `cargo clean` and duplicates sccache's
+compiler-cache ownership. Do not add `actions/cache` or a setup-action cache to
+those jobs: two writers make cache warmth, eviction, and storage cost
+unknowable. Cache-volume wiring stays after checkout because checkout resets
+the workspace, and before installers so a successful earlier run can pay for
+later setup work. The main Linux gate also enables Namespace's `apt` mode
+before installing its packaged shell dependency.
+
+The immutable `leynos/shared-actions/.github/actions/setup-rust` revision
+`5daae0a332441d170d88ca648c9e71f0bbe96cb3` is the merged PR #421 commit. It
+introduces `cache-provider: external`; all direct callers set that value so
+setup-rust does not create a duplicate GitHub cache. Jobs using a local sccache
+directory also set `use-sccache: false`: the shared action's sccache path is a
+separate GitHub-backed cache service. The compiling Linux jobs instead install
+the checksum-verified prebuilt sccache 0.16.0 binary through the pinned
+`taiki-e/install-action`, set `RUSTC_WRAPPER=sccache`, cache its local storage,
+and reset and emit JSON statistics around the gate. Linux uses
+`~/.cache/sccache`; Windows sets `SCCACHE_DIR` to the workspace-local
+`.sccache` directory so the Namespace action can retain it through a Windows
+junction. Coverage and Kani leave sccache disabled because their
+instrumentation boundaries differ.
+
+CI installs tools from trusted prebuilt releases only. `setup-rust` verifies the
+`cargo-binstall` installer checksum, and formatter and release jobs require
+`cargo binstall`. Kani's Cargo front-end and verifier payload are separate
+artefacts: the Kani job verifies the Cargo QuickInstall front-end archive and
+the upstream 0.67.0 Linux verifier bundle against pinned SHA-256 values. The
+front-end, bundle installation, and Kani-managed Rust toolchain live in the
+job's Namespace cache paths. A missing binary is a CI failure, not permission
+to compile a tool from source.
+
 `NETSUKE_RUST_TOOLCHAIN` follows a separate rule. The CI jobs and Netsukefile
 pin it to the channel in `rust-toolchain.toml` so those jobs provision the
 dated nightly explicitly; coverage and packaging must leave it unset, because
@@ -678,24 +725,29 @@ connected to the repository before merging a workflow change that names them.
 
 Table: Namespace runner profiles used by Netsuke.
 
-| Profile tag            | Workflow label                           | Operating system    | Machine shape | Cache volume | Intended workload                         |
-| ---------------------- | ---------------------------------------- | ------------------- | ------------- | ------------ | ----------------------------------------- |
-| `netsuke-ci`           | `namespace-profile-netsuke-ci`           | Ubuntu 24.04        | 8 vCPU, 16 GB | Disabled     | Full Linux formatting, lint and test CI   |
-| `netsuke`              | `namespace-profile-netsuke`              | Ubuntu 24.04        | 4 vCPU, 8 GB  | Disabled     | Packaging, coverage and utility jobs      |
-| `netsuke-ubuntu-22-04` | `namespace-profile-netsuke-ubuntu-22-04` | Ubuntu 22.04        | 4 vCPU, 8 GB  | Disabled     | Ubuntu 22.04 compatibility build          |
-| `netsuke-windows-ci`   | `namespace-profile-netsuke-windows-ci`   | Windows Server 2022 | 8 vCPU, 16 GB | Disabled     | Full Windows formatting, lint and test CI |
-| `netsuke-windows`      | `namespace-profile-netsuke-windows`      | Windows Server 2022 | 4 vCPU, 8 GB  | Disabled     | Windows packaging and smoke tests         |
-| `netsuke-macos-arm64`  | `namespace-profile-netsuke-macos-arm64`  | macOS Sequoia       | 6 vCPU, 14 GB | Disabled     | ARM64 macOS packaging                     |
+| Profile tag            | Workflow label                           | Operating system    | Machine shape | Cache volume       | Intended workload                         |
+| ---------------------- | ---------------------------------------- | ------------------- | ------------- | ------------------ | ----------------------------------------- |
+| `netsuke-ci`           | `namespace-profile-netsuke-ci`           | Ubuntu 24.04        | 4 vCPU, 8 GB  | 20 GB; main writes | Full Linux formatting, lint and test CI   |
+| `netsuke`              | `namespace-profile-netsuke`              | Ubuntu 24.04        | 4 vCPU, 8 GB  | 20 GB; main writes | Packaging, coverage and utility jobs      |
+| `netsuke-ubuntu-22-04` | `namespace-profile-netsuke-ubuntu-22-04` | Ubuntu 22.04        | 4 vCPU, 8 GB  | 20 GB; main writes | Ubuntu 22.04 compatibility build          |
+| `netsuke-windows-ci`   | `namespace-profile-netsuke-windows-ci`   | Windows Server 2022 | 4 vCPU, 8 GB  | 20 GB; main writes | Full Windows formatting, lint and test CI |
+| `netsuke-windows`      | `namespace-profile-netsuke-windows`      | Windows Server 2022 | 4 vCPU, 8 GB  | 20 GB; main writes | Windows packaging and smoke tests         |
+| `netsuke-macos-arm64`  | `namespace-profile-netsuke-macos-arm64`  | macOS Sequoia       | 4 vCPU, 7 GB  | 20 GB; main writes | ARM64 macOS packaging                     |
 
 Use `nsc github profile list -o json` and `nsc github profile describe` to
 inspect the deployed profiles. Treat profile creation, updates, deletion and
 base-image rebuilds as infrastructure changes; review the effective profile
 specification before applying them.
 
-Cache volumes are disabled for every deployed Netsuke profile. No runner action
-download, toolchain download, dependency or build output persists through a
-Namespace cache volume. Workflows must therefore provision their declared
-prerequisites without relying on state from an earlier runner invocation.
+Every deployed Netsuke profile has a 20 GB cache volume. Only trusted `main`
+jobs may publish updated snapshots; pull-request jobs can consume an existing
+generation without creating a cache stampede. The profile also enables
+Namespace's bundled runner-action and runner-tool download caches. Those
+profile settings do not retain arbitrary Cargo, package-manager, or build
+directories: each workflow must still wire those paths through the pinned
+`nscloud-cache-action`. A configured volume or a `cache-hit` output is not
+evidence of useful work avoided, so retain the sccache and timing observations
+when evaluating warm runs.
 
 Namespace base images do not promise the same preinstalled tool inventory as
 GitHub-hosted runner images. The full Linux CI and Ubuntu 22.04 Netsukefile
@@ -788,8 +840,6 @@ rather than copying the number, so the two cannot drift:
 ```bash
 NEXTEST_VERSION="$(sed -n "s/.*NEXTEST_VERSION: '\(.*\)'.*/\1/p" \
   .github/workflows/ci.yml)"
-cargo install cargo-nextest --locked --version "$NEXTEST_VERSION"
-# or, for a prebuilt binary:
 cargo binstall --no-confirm --locked \
   "cargo-nextest@$NEXTEST_VERSION"
 ```
@@ -803,8 +853,6 @@ two cannot drift:
 ```bash
 MDTABLEFIX_VERSION="$(sed -n "s/.*MDTABLEFIX_VERSION: '\(.*\)'.*/\1/p" \
   .github/workflows/ci.yml)"
-cargo install --locked mdtablefix --version "$MDTABLEFIX_VERSION"
-# or, for a prebuilt binary:
 cargo binstall --no-confirm --locked \
   "mdtablefix@$MDTABLEFIX_VERSION"
 ```
@@ -813,88 +861,7 @@ Version drift matters here beyond reproducibility: a different `mdtablefix`
 version may reflow prose differently, which would make `make check-fmt` fail on
 an otherwise clean tree.
 
-### GitHub Actions validation
-
-`make lint` includes `make github-actions-lint`, which runs `yamllint` against
-the checked GitHub Actions workflows and then runs `actionlint`. The
-repository's [`.yamllint.yml`](../.yamllint.yml) accepts GitHub's unquoted `on`
-key and caps workflow lines at 120 columns.
-
-Install the pinned YAML linter locally with
-`uv tool install "yamllint==1.38.0"`. CI caches the `uv` tool directories and
-installs that exact version. Run the workflow checks with
-`make github-actions-lint` after installing both linters.
-
-The following shell commands reproduce CI's actionlint v1.7.12 setup. They
-download the installer at its pinned commit and the Linux `x86_64` release
-archive, verify the archive's SHA-256, and feed that verified archive to the
-installer so it cannot download a different artefact:
-
-```bash
-ACTIONLINT_VERSION='1.7.12'
-ACTIONLINT_SHA256='8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8'
-ACTIONLINT_INSTALLER_COMMIT='914e7df21a07ef503a81201c76d2b11c789d3fca'
-ACTIONLINT_ARCHIVE="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
-ACTIONLINT_RAW_BASE='https://raw.githubusercontent.com/rhysd/actionlint'
-ACTIONLINT_RELEASE_ROOT='https://github.com/rhysd/actionlint/releases/download'
-ACTIONLINT_INSTALLER_URL="${ACTIONLINT_RAW_BASE}/${ACTIONLINT_INSTALLER_COMMIT}/scripts"
-ACTIONLINT_INSTALLER_URL+='/download-actionlint.bash'
-ACTIONLINT_RELEASE_URL="${ACTIONLINT_RELEASE_ROOT}/v${ACTIONLINT_VERSION}/${ACTIONLINT_ARCHIVE}"
-ACTIONLINT_INSTALLER_PATH="$(mktemp)"
-ACTIONLINT_ARCHIVE_PATH="$(mktemp)"
-trap 'rm -f "${ACTIONLINT_INSTALLER_PATH}" "${ACTIONLINT_ARCHIVE_PATH}"' EXIT
-curl --fail --location --show-error --output "${ACTIONLINT_INSTALLER_PATH}" \
-  "${ACTIONLINT_INSTALLER_URL}"
-curl --fail --location --show-error --output "${ACTIONLINT_ARCHIVE_PATH}" \
-  "${ACTIONLINT_RELEASE_URL}"
-printf '%s  %s\n' "${ACTIONLINT_SHA256}" "${ACTIONLINT_ARCHIVE_PATH}" \
-  | sha256sum --check --
-curl() {
-  if [[ "${*: -1}" == "${ACTIONLINT_RELEASE_URL}" ]]; then
-    cat "${ACTIONLINT_ARCHIVE_PATH}"
-  else
-    command curl "$@"
-  fi
-}
-export -f curl
-bash "${ACTIONLINT_INSTALLER_PATH}" "${ACTIONLINT_VERSION}"
-make github-actions-lint
-```
-
-[`tests/workflow_contracts/github_actions_validation_test.py`][github-actions-validation-test]
-verifies the Makefile delegation, YAML policy, tool pins, and trusted CI
-invocation.
-
-[github-actions-validation-test]:
-  ../tests/workflow_contracts/github_actions_validation_test.py
-
-For screen readers: the following sequence shows how CI restores or builds the
-pinned linting tools, verifies actionlint before installation, and passes the
-checked-out binary to the Makefile workflow-lint target.
-
-```mermaid
-sequenceDiagram
-    participant CI as Linux CI
-    participant Cache as Tool caches
-    participant GitHub as GitHub release
-    participant Make as /usr/bin/make
-    participant Linters as yamllint and actionlint
-
-    CI->>Cache: Restore yamllint and actionlint
-    alt actionlint cache miss
-        CI->>GitHub: Download pinned installer and v1.7.12 archive
-        CI->>CI: sha256sum --check archive
-        CI->>CI: Install actionlint
-        CI->>Cache: Save actionlint
-    end
-    CI->>CI: uv tool install yamllint==1.38.0
-    CI->>Make: ACTIONLINT=$GITHUB_WORKSPACE/actionlint lint
-    Make->>Linters: Run yamllint with .yamllint.yml
-    Make->>Linters: Run actionlint
-```
-
-**Figure**: GitHub Actions lint-tool setup and invocation sequence, including
-cache restoration, archive verification, and the delegated Makefile checks.
+Install the separately versioned Whitaker installer with:
 
 CI installs Whitaker through the SHA-pinned
 `leynos/shared-actions/.github/actions/install-whitaker` action. Both build
@@ -904,9 +871,6 @@ installing locally so the local installer matches CI:
 
 ```bash
 INSTALLER_VERSION='0.2.7' # Read from the Install Whitaker action input in CI.
-cargo install --locked whitaker-installer \
-  --version "$INSTALLER_VERSION"
-# or, for a prebuilt binary:
 cargo binstall --no-confirm --locked \
   "whitaker-installer@$INSTALLER_VERSION"
 ```
@@ -1030,6 +994,99 @@ backend. For a faster inner loop between gate runs, see
 For documentation changes, also run `make fmt`, `make markdownlint`, and
 `make nixie`.
 
+### GitHub Actions validation
+
+`make lint` includes `make github-actions-lint`, which runs `yamllint` against
+the checked GitHub Actions workflows and then runs `actionlint`. The
+repository's [`.yamllint.yml`](../.yamllint.yml) accepts GitHub's unquoted `on`
+key and caps workflow lines at 120 columns.
+
+Install the pinned YAML linter locally with
+`uv tool install "yamllint==1.38.0"`. CI caches the `uv` tool directories and
+installs that exact version. Run the workflow checks with
+`make github-actions-lint` after installing both linters.
+
+The following shell commands reproduce CI's actionlint v1.7.12 setup. They
+download the installer at its pinned commit and the Linux `x86_64` release
+archive, verify the archive's SHA-256, and feed that verified archive to the
+installer so it cannot download a different artefact:
+
+```bash
+ACTIONLINT_VERSION='1.7.12'
+ACTIONLINT_SHA256='8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8'
+ACTIONLINT_INSTALLER_COMMIT='914e7df21a07ef503a81201c76d2b11c789d3fca'
+ACTIONLINT_ARCHIVE="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+ACTIONLINT_RAW_BASE='https://raw.githubusercontent.com/rhysd/actionlint'
+ACTIONLINT_RELEASE_ROOT='https://github.com/rhysd/actionlint/releases/download'
+ACTIONLINT_INSTALLER_URL="${ACTIONLINT_RAW_BASE}/${ACTIONLINT_INSTALLER_COMMIT}/scripts"
+ACTIONLINT_INSTALLER_URL+='/download-actionlint.bash'
+ACTIONLINT_RELEASE_URL="${ACTIONLINT_RELEASE_ROOT}/v${ACTIONLINT_VERSION}/${ACTIONLINT_ARCHIVE}"
+ACTIONLINT_INSTALLER_PATH="$(mktemp)"
+ACTIONLINT_ARCHIVE_PATH="$(mktemp)"
+trap 'rm -f "${ACTIONLINT_INSTALLER_PATH}" "${ACTIONLINT_ARCHIVE_PATH}"' EXIT
+curl --fail --location --show-error --output "${ACTIONLINT_INSTALLER_PATH}" \
+  "${ACTIONLINT_INSTALLER_URL}"
+curl --fail --location --show-error --output "${ACTIONLINT_ARCHIVE_PATH}" \
+  "${ACTIONLINT_RELEASE_URL}"
+printf '%s  %s\n' "${ACTIONLINT_SHA256}" "${ACTIONLINT_ARCHIVE_PATH}" \
+  | sha256sum --check --
+curl() {
+  if [[ "${*: -1}" == "${ACTIONLINT_RELEASE_URL}" ]]; then
+    cat "${ACTIONLINT_ARCHIVE_PATH}"
+  else
+    command curl "$@"
+  fi
+}
+export -f curl
+bash "${ACTIONLINT_INSTALLER_PATH}" "${ACTIONLINT_VERSION}"
+make github-actions-lint
+```
+
+[`tests/workflow_contracts/github_actions_validation_test.py`][github-actions-validation-test]
+verifies the Makefile delegation, YAML policy, tool pins, and trusted CI
+invocation.
+
+[github-actions-validation-test]:
+  ../tests/workflow_contracts/github_actions_validation_test.py
+
+For screen readers: the following sequence shows how CI restores or builds the
+pinned linting tools, verifies actionlint before installation, and passes the
+checked-out binary to the Makefile workflow-lint target.
+
+```mermaid
+sequenceDiagram
+    participant CI as Linux CI
+    participant Cache as Tool caches
+    participant GitHub as GitHub release
+    participant Make as /usr/bin/make
+    participant Linters as yamllint and actionlint
+
+    CI->>Cache: Restore yamllint and actionlint
+    alt actionlint cache miss
+        CI->>GitHub: Download pinned installer and v1.7.12 archive
+        CI->>CI: sha256sum --check archive
+        CI->>CI: Install actionlint
+        CI->>Cache: Save actionlint
+    end
+    CI->>CI: uv tool install yamllint==1.38.0
+    CI->>Make: ACTIONLINT=$GITHUB_WORKSPACE/actionlint lint
+    Make->>Linters: Run yamllint with .yamllint.yml
+    Make->>Linters: Run actionlint
+```
+
+**Figure**: GitHub Actions lint-tool setup and invocation sequence, including
+cache restoration, archive verification, and the delegated Makefile checks.
+
+CI installs Whitaker through the SHA-pinned
+`leynos/shared-actions/.github/actions/install-whitaker` action. Both build
+jobs pass its required `installer-version: '0.2.7'` input; there is no
+`WHITAKER_INSTALLER_VERSION` workflow variable. Read that action input before
+installing locally so the local installer matches CI:
+
+```bash
+INSTALLER_VERSION='0.2.7' # Read from the Install Whitaker action input in CI.
+cargo install --locked whitaker-installer \
+  --version "$INSTALLER_VERSION"
 ## Workflow pins and Dependabot
 
 Dependabot owns the upgrade of GitHub Actions and reusable workflows, including
@@ -1351,7 +1408,7 @@ local manual page and shell completions, and audits the localization keys.
 Release automation installs the pinned tool with:
 
 ```bash
-cargo install cargo-orthohelp --version 0.9.0 --locked
+cargo binstall --no-confirm --locked cargo-orthohelp@0.9.0
 ```
 
 The workflow then calls:
@@ -1833,19 +1890,20 @@ Install or refresh the pinned Kani tool with:
 make install-kani
 ```
 
-`make install-kani` delegates to the pinned `rust-prover-tools` CLI through
-`uv tool run`. The prover tool reads `tools/kani/VERSION`, runs
-`cargo install --locked kani-verifier --version <version>`, runs
-`cargo kani setup`, and verifies that `cargo kani` is callable. Kani may manage
-its own supporting Rust nightly toolchain during setup. That toolchain must not
-replace the repository's pinned nightly workflow (see
-[ADR-006](adr-006-adopt-polonius-nightly-toolchain.md)). Kani 0.67.0's
-supporting nightly is `nightly-2025-11-21`, which predates the Polonius
-default, so Kani borrow-checks under NLL. That is currently harmless — the tree
-has no `POLONIUS(...)`-tagged sites — but a future tagged site could fail to
-verify under Kani while compiling everywhere else. If that happens, move Kani
-to a build whose nightly is 2026-08-04 or later rather than reinstating a
-`-Zpolonius` directive.
+Local `make install-kani` delegates to the pinned `rust-prover-tools` CLI
+through `uv tool run`. Continuous integration instead downloads both the
+prebuilt `cargo-kani` front-end and Kani's pinned release bundle, checks their
+pinned SHA-256 values, and caches their installation directories. The CI job
+therefore never compiles the verifier from source. Kani manages its own
+supporting Rust nightly toolchain during setup; CI gives that toolchain a
+separate cached `RUSTUP_HOME`. It must not replace the repository's pinned
+nightly workflow (see [ADR-006](adr-006-adopt-polonius-nightly-toolchain.md)).
+Kani 0.67.0's supporting nightly is `nightly-2025-11-21`, which predates the
+Polonius default, so Kani borrow-checks under NLL. That is currently harmless —
+the tree has no `POLONIUS(...)`-tagged sites — but a future tagged site could
+fail to verify under Kani while compiling everywhere else. If that happens,
+move Kani to a build whose nightly is 2026-08-04 or later rather than
+reinstating a `-Zpolonius` directive.
 
 Delegated prover targets print maintainer diagnostics to standard error before
 invoking `rust-prover-tools`. Expect `prover-tools:` lines containing the
@@ -1980,14 +2038,12 @@ long-lived mutable control-plane state. See
 for the design rationale and re-entry criteria.
 
 Pull requests run a dedicated `kani-smoke` CI job alongside the ordinary
-`build-test` job. The job installs `uv`, installs the pinned Kani version
-through `make install-kani`, runs `make kani-check` as a version-drift guard,
-and then runs the bounded harness suite through `make kani-ir` under a
-20-minute job timeout; it does not run `make verus`, coverage, CodeScene
-upload, or the normal build matrix. Its cache is intentionally separate from
-ordinary Cargo build artefacts: the job uses a Kani-specific cache key derived
-from `tools/kani/VERSION` and the Makefile, then caches the job-local Kani
-Cargo home plus Kani support-file home.
+`build-test` job. The job installs the pinned, checksummed `cargo-kani`
+front-end and Kani release bundle, checks the reported version, and then runs
+the bounded harness suite through `make kani-ir` under a 20-minute job timeout;
+it does not run `make verus`, coverage, CodeScene upload, or the normal build
+matrix. Its Namespace cache volume owns the job-local Kani Cargo, support-file,
+and Rust toolchain homes separately from ordinary Cargo build artefacts.
 
 ## Test execution
 
@@ -2020,8 +2076,9 @@ NETSUKE_REQUIRE_NINJA=1 cargo nextest run -E 'test(ninja)'
 
 Cargo spells build parallelism `-j`; nextest reserves `-j` for test concurrency
 and spells build parallelism `--build-jobs`. The Makefile therefore keeps
-`BUILD_JOBS` (Cargo flags) and `NEXTEST_BUILD_JOBS` (nextest flags) as separate
-variables rather than reinterpreting one as the other.
+`BUILD_JOBS` (Cargo flags), `NEXTEST_BUILD_JOBS` (nextest build flags), and
+`NEXTEST_TEST_JOBS` (nextest process-count flags) separate rather than
+reinterpreting one as another.
 
 ### nextest configuration
 

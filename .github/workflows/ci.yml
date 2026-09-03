@@ -33,6 +33,12 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       BUILD_PROFILE: debug
+      # The attached Namespace profile has four vCPUs. Bound compilation and
+      # nextest separately so test workers do not oversubscribe it.
+      BUILD_JOBS: -j 4
+      NEXTEST_BUILD_JOBS: --build-jobs 4
+      NEXTEST_TEST_JOBS: -j 4
+      RUSTC_WRAPPER: sccache
       # The tree requires the Polonius borrow checker, which nightly enables by
       # default (see docs/adr-006-adopt-polonius-nightly-toolchain.md), so CI
       # builds with the dated nightly pinned in rust-toolchain.toml.
@@ -50,6 +56,32 @@ jobs:
           # Full history so the deferred cs-coverage check step can reach
           # the pull request's merge base once the gate is wired in.
           fetch-depth: 0
+      - name: Set up Namespace cache volume
+        id: namespace_cache
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547
+        with:
+          # Explicit paths only. The `rust` mode mounts Cargo's disposable
+          # `target` directory, and the `uv` mode probes a tool this job
+          # redirects with UV_CACHE_DIR, so both are unusable here.
+          cache: |
+            apt
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/git
+            ~/.cargo/registry
+            ~/.cache/sccache
+            ~/.local/share/whitaker
+            .typos-oxendict-base.json
+            .typos-oxendict-base.toml
+            .uv-bin
+            .uv-cache
+            .uv-tools
+            actionlint
+      - name: Summarize Namespace cache
+        if: always()
+        run: |
+          echo '### Namespace cache' >> "$GITHUB_STEP_SUMMARY"
+          echo "- cache-hit: ${{ steps.namespace_cache.outputs.cache-hit }}" >> "$GITHUB_STEP_SUMMARY"
       - name: Install test shell dependencies
         run: |
           sudo apt-get update
@@ -67,18 +99,27 @@ jobs:
 
           command -v awk
           awk --version
+      - name: Install sccache
+        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        with:
+          tool: sccache@0.16.0
+          fallback: none
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/setup-rust@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           # Preserve warnings-as-errors through toolchain setup.
           rustflags: -D warnings
+          cache-provider: external
+          use-sccache: 'false'
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
       - name: Install cargo-nextest
         uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
         with:
           tool: nextest@${{ env.NEXTEST_VERSION }}
+      - name: Reset sccache statistics
+        run: sccache --zero-stats
       - name: Show rustc version
         run: |
           rustup show
@@ -86,17 +127,11 @@ jobs:
           cargo --version
       - name: Show Ninja version
         run: ninja --version
-      - name: Cache mdtablefix
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
-        with:
-          path: |
-            ~/.cargo/bin/mdtablefix
-            ~/.cargo/bin/mdtablefix.exe
-            ~/.cache/cargo-binstall
-          key: mdtablefix-${{ runner.os }}-${{ runner.arch }}-${{ env.MDTABLEFIX_VERSION }}
       - name: Install mdtablefix
-        # Required by `make check-fmt`. Keep the cached binary at the pinned
-        # version and fall back to Cargo when a prebuilt asset is unavailable.
+        # Required by `make check-fmt`. The Namespace cache volume owns
+        # `~/.cargo/bin`, so a warm run finds the pinned binary already
+        # present. `cargo-binstall` is checksum-verified by setup-rust and
+        # fetches a prebuilt release; CI never compiles mdtablefix.
         run: |
           expected_mdtablefix_version="mdtablefix ${MDTABLEFIX_VERSION}"
           installed_mdtablefix_version=""
@@ -104,12 +139,8 @@ jobs:
             installed_mdtablefix_version="$(mdtablefix --version 2>/dev/null | tr -d '\r')"
           fi
           if [[ "${installed_mdtablefix_version}" != "${expected_mdtablefix_version}" ]]; then
-            if cargo binstall --version >/dev/null 2>&1; then
-              cargo binstall --no-confirm --locked "mdtablefix@${MDTABLEFIX_VERSION}"
-            else
-              echo "cargo-binstall unavailable; building mdtablefix from crates.io"
-              cargo install --locked mdtablefix --version "${MDTABLEFIX_VERSION}"
-            fi
+            cargo binstall --no-confirm --locked --disable-strategies compile \
+              "mdtablefix@${MDTABLEFIX_VERSION}"
           fi
           installed_mdtablefix_version="$(mdtablefix --version | tr -d '\r')"
           if [[ "${installed_mdtablefix_version}" != "${expected_mdtablefix_version}" ]]; then
@@ -122,34 +153,28 @@ jobs:
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
         with:
           python-version: ${{ env.PYTHON_BASELINE }}
-          # This Rust workspace has no Python dependency manifest. Cache the
-          # shared spelling dictionary below rather than a uv cache with no
-          # durable dependency key.
+          # The Namespace volume already owns the uv download and tool
+          # stores, so a second GitHub-backed cache would duplicate it.
           enable-cache: 'false'
-      - name: Cache yamllint
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
-        with:
-          path: |
-            .uv-cache
-            .uv-tools
-            .uv-bin
-          key: yamllint-${{ runner.os }}-${{ runner.arch }}-${{ env.YAMLLINT_VERSION }}
       - name: Install yamllint
+        # The Namespace volume owns the uv download store, tool store, and
+        # shim directory, so a warm run reuses the pinned environment.
         run: |
           uv tool install "yamllint==${YAMLLINT_VERSION}"
           echo "${UV_TOOL_BIN_DIR}" >> "$GITHUB_PATH"
-      - name: Cache actionlint
-        id: cache_actionlint
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
-        with:
-          path: actionlint
-          key: actionlint-${{ runner.os }}-${{ runner.arch }}-1.7.12
       - name: Download actionlint
         id: get_actionlint
-        if: steps.cache_actionlint.outputs.cache-hit != 'true'
+        # The Namespace volume owns `actionlint`. Reuse it only when the
+        # cached binary reports the pinned version, so a version bump cannot
+        # be satisfied by a stale executable.
         run: |
           set -euo pipefail
           readonly ACTIONLINT_VERSION='1.7.12'
+          if [[ -x ./actionlint ]] \
+            && [[ "$(./actionlint --version | head --lines=1)" == "${ACTIONLINT_VERSION}" ]]; then
+            echo "actionlint ${ACTIONLINT_VERSION} restored from the cache volume"
+            exit 0
+          fi
           readonly ACTIONLINT_SHA256='8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8'
           readonly ACTIONLINT_INSTALLER_COMMIT='914e7df21a07ef503a81201c76d2b11c789d3fca'
           readonly ACTIONLINT_ARCHIVE="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
@@ -180,7 +205,7 @@ jobs:
         shell: bash
       - name: Install Nixie
         uses: >-
-          leynos/shared-actions/.github/actions/install-nixie@32c8ea649ea44d40119f348ad48861212532061f
+          leynos/shared-actions/.github/actions/install-nixie@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
         with:
           python-version: '3.14'
       - name: Markdown formatter checker tests
@@ -189,9 +214,13 @@ jobs:
         run: make check-fmt
       - name: Install Whitaker
         uses: >-
-          leynos/shared-actions/.github/actions/install-whitaker@32c8ea649ea44d40119f348ad48861212532061f
+          leynos/shared-actions/.github/actions/install-whitaker@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
         with:
           installer-version: '0.2.7'
+          # The Namespace cache volume owns `~/.cargo/bin` and
+          # `~/.local/share/whitaker`, so the action must not mount a second
+          # owner for the same paths.
+          cache-provider: external
       - name: Lint
         run: /usr/bin/make ACTIONLINT="$GITHUB_WORKSPACE/actionlint" lint
       - name: Typecheck
@@ -201,17 +230,6 @@ jobs:
         # target, gated on the 80% threshold stated in AGENTS.md. Runs after
         # `make lint` so it reuses the freshly built doc database.
         run: make doc-coverage
-      - name: Cache shared spelling dictionary
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
-        with:
-          path: |
-            .typos-oxendict-base.json
-            .typos-oxendict-base.toml
-          key: >-
-            oxendict-${{ runner.os }}-${{ env.NETSUKE_RUST_TOOLCHAIN }}-${{
-            hashFiles('typos.local.toml') }}-${{ github.run_id }}
-          restore-keys: |
-            oxendict-${{ runner.os }}-${{ env.NETSUKE_RUST_TOOLCHAIN }}-${{ hashFiles('typos.local.toml') }}-
       - name: Spelling
         run: make spelling
       - name: Validate Mermaid diagrams
@@ -220,12 +238,16 @@ jobs:
         run: make test-workflow-contracts
       - name: Test
         run: make test
+      - name: Show sccache statistics
+        if: always()
+        run: sccache --show-stats --stats-format=json
       - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/generate-coverage@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
         with:
           language: rust
           output-path: lcov.info
           format: lcov
+          cache-provider: external
           # Compare changed-line coverage against the baseline written by
           # coverage-main.yml (caches saved on main are readable by every PR).
           with-ratchet: 'true'
@@ -233,7 +255,7 @@ jobs:
         if: env.CS_ACCESS_TOKEN != '' && github.event_name == 'pull_request'
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
         with:
           path: lcov.info
           format: lcov
@@ -251,6 +273,13 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       BUILD_PROFILE: debug
+      # The attached Namespace profile has four vCPUs. Bound compilation and
+      # nextest separately so test workers do not oversubscribe it.
+      BUILD_JOBS: -j 4
+      NEXTEST_BUILD_JOBS: --build-jobs 4
+      NEXTEST_TEST_JOBS: -j 4
+      RUSTC_WRAPPER: sccache
+      SCCACHE_DIR: ${{ github.workspace }}/.sccache
       # The tree requires the Polonius borrow checker, which nightly enables by
       # default (see docs/adr-006-adopt-polonius-nightly-toolchain.md), so CI
       # builds with the dated nightly pinned in rust-toolchain.toml.
@@ -266,20 +295,52 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
+      - name: Set up Namespace cache volume
+        id: namespace_cache
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547
+        with:
+          path: |
+            .sccache
+            .chocolatey-cache
+            ~/.cargo/bin
+            ~/.cargo/git
+            ~/.cargo/registry
+            ~/.local/bin
+            ~/.local/share/whitaker
+      - name: Summarize Namespace cache
+        if: always()
+        run: |
+          echo '### Namespace cache' >> "$GITHUB_STEP_SUMMARY"
+          echo "- cache-hit: ${{ steps.namespace_cache.outputs.cache-hit }}" >> "$GITHUB_STEP_SUMMARY"
       - name: Install GNU Make
-        run: choco install make --yes --no-progress
+        shell: pwsh
+        run: |
+          $cacheLocation = Join-Path $env:GITHUB_WORKSPACE '.chocolatey-cache'
+          choco install make --yes --no-progress --cache-location="$cacheLocation"
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+      - name: Install sccache
+        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        with:
+          tool: sccache@0.16.0
+          fallback: none
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/setup-rust@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           # Preserve warnings-as-errors through toolchain setup.
           rustflags: -D warnings
+          cache-provider: external
+          use-sccache: 'false'
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
       - name: Install cargo-nextest
         uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
         with:
           tool: nextest@${{ env.NEXTEST_VERSION }}
+      - name: Reset sccache statistics
+        run: sccache --zero-stats
       - name: Show rustc version
         run: |
           rustup show
@@ -287,17 +348,11 @@ jobs:
           cargo --version
       - name: Show Ninja version
         run: ninja --version
-      - name: Cache mdtablefix
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
-        with:
-          path: |
-            ~/.cargo/bin/mdtablefix
-            ~/.cargo/bin/mdtablefix.exe
-            ~/.cache/cargo-binstall
-          key: mdtablefix-${{ runner.os }}-${{ runner.arch }}-${{ env.MDTABLEFIX_VERSION }}
       - name: Install mdtablefix
-        # Required by `make check-fmt`. Keep the cached binary at the pinned
-        # version and fall back to Cargo when a prebuilt asset is unavailable.
+        # Required by `make check-fmt`. The Namespace cache volume owns
+        # `~/.cargo/bin`, so a warm run finds the pinned binary already
+        # present. `cargo-binstall` is checksum-verified by setup-rust and
+        # fetches a prebuilt release; CI never compiles mdtablefix.
         run: |
           expected_mdtablefix_version="mdtablefix ${MDTABLEFIX_VERSION}"
           installed_mdtablefix_version=""
@@ -305,12 +360,8 @@ jobs:
             installed_mdtablefix_version="$(mdtablefix --version 2>/dev/null | tr -d '\r')"
           fi
           if [[ "${installed_mdtablefix_version}" != "${expected_mdtablefix_version}" ]]; then
-            if cargo binstall --version >/dev/null 2>&1; then
-              cargo binstall --no-confirm --locked "mdtablefix@${MDTABLEFIX_VERSION}"
-            else
-              echo "cargo-binstall unavailable; building mdtablefix from crates.io"
-              cargo install --locked mdtablefix --version "${MDTABLEFIX_VERSION}"
-            fi
+            cargo binstall --no-confirm --locked --disable-strategies compile \
+              "mdtablefix@${MDTABLEFIX_VERSION}"
           fi
           installed_mdtablefix_version="$(mdtablefix --version | tr -d '\r')"
           if [[ "${installed_mdtablefix_version}" != "${expected_mdtablefix_version}" ]]; then
@@ -332,9 +383,13 @@ jobs:
         run: make SHELL=bash lint-clippy
       - name: Install Whitaker
         uses: >-
-          leynos/shared-actions/.github/actions/install-whitaker@32c8ea649ea44d40119f348ad48861212532061f
+          leynos/shared-actions/.github/actions/install-whitaker@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
         with:
           installer-version: '0.2.7'
+          # The Namespace cache volume owns `~/.cargo/bin` and
+          # `~/.local/share/whitaker`, so the action must not mount a second
+          # owner for the same paths.
+          cache-provider: external
       - name: Lint (Whitaker)
         # Whitaker/Dylint over the workspace under `-D warnings`, including
         # the `#[cfg(windows)]` arms. The shared installer supplies a
@@ -367,6 +422,9 @@ jobs:
         # compiling and running the `#[cfg(windows)]` test tree. A failure
         # blocks the merge.
         run: make SHELL=bash test
+      - name: Show sccache statistics
+        if: always()
+        run: sccache --show-stats --stats-format=json
 
   windows-native-recipe-smoke:
     # This deliberately has no Git-Bash shell override. It proves that a
@@ -379,6 +437,10 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
+      BUILD_JOBS: -j 4
+      CARGO_BUILD_JOBS: '4'
+      RUSTC_WRAPPER: sccache
+      SCCACHE_DIR: ${{ github.workspace }}/.sccache
     defaults:
       run:
         shell: pwsh
@@ -386,13 +448,37 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
+      - name: Set up Namespace cache volume
+        id: namespace_cache
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547
+        with:
+          path: |
+            .sccache
+            ~/.cargo/bin
+            ~/.cargo/git
+            ~/.cargo/registry
+      - name: Summarize Namespace cache
+        if: always()
+        run: |
+          "### Namespace cache" | Out-File -FilePath $Env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          "- cache-hit: ${{ steps.namespace_cache.outputs.cache-hit }}" |
+            Out-File -FilePath $Env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+      - name: Install sccache
+        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        with:
+          tool: sccache@0.16.0
+          fallback: none
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/setup-rust@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           rustflags: -D warnings
+          cache-provider: external
+          use-sccache: 'false'
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
+      - name: Reset sccache statistics
+        run: sccache --zero-stats
       - name: Build Netsuke
         run: cargo build --locked --bin netsuke
       - name: Exercise native Windows recipes
@@ -400,6 +486,9 @@ jobs:
           ./scripts/windows-recipe-smoke.ps1
           -Netsuke ./target/debug/netsuke.exe
           -Manifest ./tests/data/windows-recipe-smoke.yml
+      - name: Show sccache statistics
+        if: always()
+        run: sccache --show-stats --stats-format=json
 
   kani-smoke:
     if: github.event_name == 'pull_request'
@@ -412,30 +501,74 @@ jobs:
       RUSTUP_TOOLCHAIN: stable
       CARGO_HOME: ${{ github.workspace }}/.kani-cargo
       KANI_HOME: ${{ github.workspace }}/.kani-home
+      RUSTUP_HOME: ${{ github.workspace }}/.kani-rustup
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
-        with:
-          toolchain: stable
-      - name: Install uv
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990  # v8.3.2
-        with:
-          # The Kani job has no Python dependency manifest; its explicit cache
-          # below owns the Rust toolchain artefacts.
-          enable-cache: false
-      - name: Cache Kani tools
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+      - name: Set up Kani cache volume
+        id: namespace_cache
+        # Mounted before every installer so the cold run populates the volume
+        # and a warm run finds the front-end, verifier, and toolchain in place.
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547
         with:
           path: |
             .kani-cargo
             .kani-home
-          key: ${{ runner.os }}-kani-${{ hashFiles('tools/kani/VERSION', 'Makefile') }}
-      - name: Install Kani
-        run: make install-kani
+            .kani-rustup
+      - name: Summarize Kani cache
+        if: always()
+        run: |
+          echo '### Kani cache' >> "$GITHUB_STEP_SUMMARY"
+          echo "- cache-hit: ${{ steps.namespace_cache.outputs.cache-hit }}" >> "$GITHUB_STEP_SUMMARY"
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
+        with:
+          toolchain: stable
+          cache-provider: external
+          # Kani's payloads come from pinned release archives, so this job
+          # needs no binary-install helper.
+          install-binstall: 'false'
+          use-sccache: 'false'
+      - name: Install prebuilt Kani
+        # Kani ships as two payloads: the Cargo front-end and the verifier
+        # bundle. Both come from pinned archives with published checksums, and
+        # both live under versioned directories on the cache volume so a
+        # version bump in tools/kani/VERSION cannot be satisfied by a stale
+        # binary left behind by an earlier run.
+        run: |
+          set -euo pipefail
+          kani_version="$(tr -d '\r\n' < tools/kani/VERSION)"
+          test "${kani_version}" = '0.67.0'
+          frontend_bin="${CARGO_HOME}/frontend/kani-${kani_version}"
+          kani_dir="${KANI_HOME}/kani-${kani_version}"
+          mkdir --parents "${frontend_bin}" "${KANI_HOME}" "${RUSTUP_HOME}"
+          export PATH="${frontend_bin}:${PATH}"
+          echo "${frontend_bin}" >> "$GITHUB_PATH"
+
+          if [[ ! -x "${frontend_bin}/cargo-kani" || ! -x "${frontend_bin}/kani" ]]; then
+            frontend_archive="${RUNNER_TEMP}/kani-verifier-${kani_version}-x86_64-unknown-linux-gnu.tar.gz"
+            curl --fail --location --proto '=https' --tlsv1.2 \
+              "https://github.com/cargo-bins/cargo-quickinstall/releases/download/kani-verifier-${kani_version}/kani-verifier-${kani_version}-x86_64-unknown-linux-gnu.tar.gz" \
+              --output "${frontend_archive}"
+            printf '%s  %s\n' \
+              'ed2bafc239b834e14c6b66fc4838e342e3bc0b814e548e72ea30e84f83dc0974' \
+              "${frontend_archive}" | sha256sum --check --
+            tar --extract --gzip --file "${frontend_archive}" \
+              --directory "${frontend_bin}" cargo-kani kani
+          fi
+
+          if [[ ! -x "${kani_dir}/bin/kani-driver" ]]; then
+            bundle="${RUNNER_TEMP}/kani-${kani_version}-x86_64-unknown-linux-gnu.tar.gz"
+            curl --fail --location --proto '=https' --tlsv1.2 \
+              "https://github.com/model-checking/kani/releases/download/kani-${kani_version}/kani-${kani_version}-x86_64-unknown-linux-gnu.tar.gz" \
+              --output "${bundle}"
+            printf '%s  %s\n' \
+              '3b5f7afd3b51603ee720db7bc1bc4fe46b5a4f5d36daad9939c4b4c658b51ac0' \
+              "${bundle}" | sha256sum --check --
+            cargo kani setup --use-local-bundle "${bundle}"
+          fi
       - name: Kani version check
-        run: make kani-check
+        run: cargo kani --version | grep --fixed-strings "0.67.0"
       - name: Run Kani harnesses
         run: make kani-ir
