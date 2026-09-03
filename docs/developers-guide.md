@@ -601,16 +601,15 @@ declared to accept one and installs rustfmt and clippy itself, so passing it
 only emitted an "Unexpected input(s)" warning on every run;
 `tests/workflow_contracts/ci_lint_test.py` holds that.
 
-
 ### Where the CI workflow lives
 
 The merge gate spans two files. [`ci.yml`](../.github/workflows/ci.yml) holds
 the Linux gate and the Kani smoke job;
 [`ci-windows.yml`](../.github/workflows/ci-windows.yml) holds
-`build-test-windows` and the pull-request `windows-native-recipe-smoke` job,
-and `ci.yml` invokes it through a single `windows` job. The split exists to
-keep both files inside the 400-line limit that AGENTS.md sets for every file in
-the repository; adding a Windows step therefore goes in `ci-windows.yml`.
+`build-test-windows` and the pull-request `windows-native-recipe-smoke` job, and
+`ci.yml` invokes it through a single `windows` job. The split exists to keep
+both files inside the 400-line limit that AGENTS.md sets for every file in the
+repository; adding a Windows step therefore goes in `ci-windows.yml`.
 
 GitHub does not expose the `env` context to a reusable workflow's `with` block,
 so `ci.yml` repeats its `NEXTEST_VERSION`, `MDTABLEFIX_VERSION`, and
@@ -636,8 +635,8 @@ package, tool, or toolchain install, those jobs call
 tool, uv, workflow-linter, and sccache paths, and write its `cache-hit` output
 to the job summary. Every summary step carries `if: always()`, so a cold run
 reports its miss rather than staying silent. Do not use its `rust` mode: that
-mode mounts Cargo's disposable `target` directory, which conflicts with `cargo
-clean` and duplicates sccache's compiler-cache ownership. Do not add
+mode mounts Cargo's disposable `target` directory, which conflicts with
+`cargo clean` and duplicates sccache's compiler-cache ownership. Do not add
 `actions/cache` or a setup-action cache to those jobs: two writers make cache
 warmth, eviction, and storage cost unknowable. Cache-volume wiring stays after
 checkout because checkout resets the workspace, and before installers, so a
@@ -652,17 +651,19 @@ download step reuses the cached binary only when it reports the pinned version,
 so bumping that pin cannot be satisfied by a stale executable.
 
 The immutable `leynos/shared-actions/.github/actions/setup-rust` revision
-`f9a16065e58324b0714e86c1ebeb8eb4500f1b47` introduces `cache-provider:
-external`, and the same revision installs `whitaker-installer` and
-`cargo-nextest` from checksum-verified official releases with no source
-fallback. All direct callers set that value so
-setup-rust does not create a duplicate GitHub cache. `install-whitaker` and
-`generate-coverage` take the same input for the same reason: the volume already
-owns `~/.cargo/bin`, `~/.local/share/whitaker`, and the coverage archives.
-Jobs using a local sccache
-directory also set `use-sccache: false`: the shared action's sccache path is a
-separate GitHub-backed cache service. The compiling Linux jobs instead install
-the checksum-verified prebuilt sccache 0.16.0 binary through the pinned
+`f9a16065e58324b0714e86c1ebeb8eb4500f1b47` introduces
+`cache-provider: external`, and the same revision installs `whitaker-installer`
+and `cargo-nextest` from checksum-verified official releases with no source
+fallback. All direct callers set that value so setup-rust does not create a
+duplicate GitHub cache. `install-whitaker` and `generate-coverage` take the
+same input for the same reason: the volume already owns `~/.cargo/bin`, the
+Whitaker data directory, and the coverage archives. That data directory differs
+by platform: Linux uses `~/.local/share/whitaker` and Windows uses
+`~/AppData/Roaming/github/whitaker`, which is where `whitaker-installer`
+actually clones the suite. Jobs using a local sccache directory also set
+`use-sccache: false`: the shared action's sccache path is a separate
+GitHub-backed cache service. The compiling Linux jobs instead install the
+checksum-verified prebuilt sccache 0.16.0 binary through the pinned
 `taiki-e/install-action`, set `RUSTC_WRAPPER=sccache`, cache its local storage,
 and reset and emit JSON statistics around the gate. Linux uses
 `~/.cache/sccache`; Windows sets `SCCACHE_DIR` to the workspace-local
@@ -670,8 +671,16 @@ and reset and emit JSON statistics around the gate. Linux uses
 junction. Coverage and Kani leave sccache disabled because their
 instrumentation boundaries differ.
 
-CI installs tools from trusted prebuilt releases only. `setup-rust` verifies
-the `cargo-binstall` installer checksum, the formatter jobs install mdtablefix
+Both Whitaker jobs run a `Prepare Whitaker cache directory` step first. This is
+a temporary compatibility workaround: `whitaker-installer` 0.2.7 chooses
+between cloning and pulling on directory existence alone, and a mounted cache
+volume creates the data directory even on a cold run, so the installer runs
+`git pull` against a directory that holds no repository. The step deletes the
+directory when it is not a Git repository. Remove it once the installer checks
+for a repository rather than a directory.
+
+CI installs tools from trusted prebuilt releases only. `setup-rust` verifies the
+`cargo-binstall` installer checksum, the formatter jobs install mdtablefix
 through it, and the release job installs `cargo-orthohelp` through it. Every
 such call passes `--disable-strategies compile`, so a missing prebuilt release
 fails the job instead of quietly compiling the tool. The release job installs
@@ -728,8 +737,7 @@ the remaining harness consequences of that policy.
 The pull-request `windows-native-recipe-smoke` job in
 [`ci-windows.yml`](../.github/workflows/ci-windows.yml) is the native Windows
 execution gate. It waits for the successful `build-test-windows` job, then runs
-on
-`namespace-profile-netsuke-windows` with `pwsh` as the shell for every `run`
+on `namespace-profile-netsuke-windows` with `pwsh` as the shell for every `run`
 step. It checks out the pull request source, installs the pinned nightly from
 `rust-toolchain.toml` through the shared Rust setup action, installs Ninja, and
 builds the `netsuke` binary from that checkout. The job then invokes:
@@ -3982,13 +3990,12 @@ executes, and reserve the Windows-gated suite for behaviour that genuinely
 cannot run elsewhere.
 
 The `build-test-windows` job in `.github/workflows/ci-windows.yml` is a merge
-gate: it
-compiles, lints (Clippy and Whitaker), and tests the `#[cfg(windows)]` suite on
-`namespace-profile-netsuke-windows-ci` under `-D warnings`, so a Windows-gated
-test or lint finding blocks a merge. The split still stands: host-independent
-rules stay in the `#[cfg(any(windows, test))]` unit tests so every host —
-including a developer on Unix — exercises them, while the Windows-gated suite
-covers the behaviour that only exists there.
+gate: it compiles, lints (Clippy and Whitaker), and tests the `#[cfg(windows)]`
+suite on `namespace-profile-netsuke-windows-ci` under `-D warnings`, so a
+Windows-gated test or lint finding blocks a merge. The split still stands:
+host-independent rules stay in the `#[cfg(any(windows, test))]` unit tests so
+every host — including a developer on Unix — exercises them, while the
+Windows-gated suite covers the behaviour that only exists there.
 
 The Windows job installs GNU Make through Chocolatey and Ninja through the
 setup action, then runs its Makefile gates through Git Bash with `SHELL=bash`.

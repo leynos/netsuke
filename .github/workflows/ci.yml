@@ -212,6 +212,22 @@ jobs:
         run: make test-markdown-format
       - name: Format
         run: make check-fmt
+      - name: Prepare Whitaker cache directory
+        # Compatibility workaround for whitaker-installer 0.2.7. It decides
+        # between cloning and pulling on directory existence alone, and the
+        # cache volume creates `~/.local/share/whitaker` even on a cold run,
+        # so the installer runs `git pull` in a directory that is not yet a
+        # repository. Remove the empty mount point and let it clone. Delete
+        # this step once the installer checks for a repository rather than a
+        # directory.
+        run: |
+          set -euo pipefail
+          whitaker_data="${HOME}/.local/share/whitaker"
+          if [[ -d "${whitaker_data}" ]] \
+            && ! git -C "${whitaker_data}" rev-parse --git-dir >/dev/null 2>&1; then
+            echo "removing non-repository Whitaker data directory"
+            rm --recursive --force "${whitaker_data}"
+          fi
       - name: Install Whitaker
         uses: >-
           leynos/shared-actions/.github/actions/install-whitaker@f9a16065e58324b0714e86c1ebeb8eb4500f1b47

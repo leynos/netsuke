@@ -210,34 +210,35 @@ fn behavioural_build_and_package_wiring_matches_shared_actions() {
 /// same, and so does any other flag placed before the crate name. The pattern
 /// therefore allows arbitrary flags and version selectors between the
 /// subcommand and the crate.
-fn assert_orthohelp_comes_from_a_prebuilt_release(contents: &str) {
+fn assert_orthohelp_comes_from_a_prebuilt_release(contents: &str) -> Result<()> {
     let install_body = workflow_step_body(contents, "Install cargo-orthohelp").join("\n");
-    assert!(
+    ensure!(
         install_body.contains("cargo binstall --no-confirm --locked --disable-strategies compile"),
         "workflow should install cargo-orthohelp from a prebuilt release only"
     );
-    assert!(
+    ensure!(
         install_body.contains("cargo-orthohelp@0.9.0"),
         "workflow should pin the cargo-orthohelp release version"
     );
 
     let source_install = regex::Regex::new(r"cargo\s+install\s+(?:-{1,2}\S+\s+)*cargo-orthohelp")
-        .expect("source-install pattern should compile");
-    assert!(
+        .context("compile the cargo-orthohelp source-install pattern")?;
+    ensure!(
         !source_install.is_match(contents),
         "workflow should never compile cargo-orthohelp from source"
     );
 
     let build_index = contents
         .find("- name: Build release binary")
-        .expect("workflow should build the release binary");
+        .context("workflow should build the release binary")?;
     let install_index = contents
         .find("- name: Install cargo-orthohelp")
-        .expect("workflow should install cargo-orthohelp");
-    assert!(
+        .context("workflow should install cargo-orthohelp")?;
+    ensure!(
         build_index < install_index,
         "cargo-orthohelp must be installed after rust-build-release provisions cargo-binstall"
     );
+    Ok(())
 }
 
 #[test]
@@ -245,7 +246,8 @@ fn behavioural_build_and_package_generates_release_help_with_orthohelp() {
     let contents = workflow_contents("build-and-package.yml")
         .expect("build-and-package workflow should be readable");
 
-    assert_orthohelp_comes_from_a_prebuilt_release(&contents);
+    assert_orthohelp_comes_from_a_prebuilt_release(&contents)
+        .expect("cargo-orthohelp should come from a pinned prebuilt release");
     assert!(
         contents.contains("scripts/generate-release-help.sh"),
         "workflow should call the release help script"

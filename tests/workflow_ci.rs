@@ -306,6 +306,47 @@ fn behavioural_ci_workflow_runs_tests_through_the_make_target() -> Result<()> {
     Ok(())
 }
 
+/// Assert that a job installs Whitaker through the pinned shared action.
+fn ensure_shared_whitaker_installer(workflow: &Value, job_name: &'static str) -> Result<()> {
+    let whitaker = named_step(steps(job(workflow, job_name)?)?, "Install Whitaker")?;
+    let uses = mapping_get(whitaker, YamlKey("uses"))
+        .and_then(Value::as_str)
+        .context("Install Whitaker should reference the shared installer action")?;
+    ensure!(
+        is_pinned_action_ref(uses, INSTALL_WHITAKER_ACTION),
+        "{job_name} Install Whitaker should use a commit-pinned shared installer, found {uses:?}"
+    );
+    ensure!(
+        step_input(whitaker, YamlKey("installer-version")) == Some(WHITAKER_INSTALLER_VERSION),
+        "{job_name} Install Whitaker should retain installer version {WHITAKER_INSTALLER_VERSION}"
+    );
+    ensure!(
+        mapping_get(whitaker, YamlKey("run")).is_none(),
+        "{job_name} Install Whitaker should not retain an ad hoc installation script"
+    );
+    Ok(())
+}
+
+/// Assert that Windows lints both packages through the PowerShell wrapper.
+fn ensure_windows_whitaker_wrapper(windows_workflow: &Value) -> Result<()> {
+    let lint = named_step(
+        steps(job(windows_workflow, "build-test-windows")?)?,
+        "Lint (Whitaker)",
+    )?;
+    let script = mapping_get(lint, YamlKey("run"))
+        .and_then(Value::as_str)
+        .context("Windows Whitaker lint should define a PowerShell script")?;
+    ensure!(
+        mapping_get(lint, YamlKey("shell")).and_then(Value::as_str) == Some("pwsh"),
+        "Windows Whitaker lint should run from PowerShell"
+    );
+    ensure!(
+        script.contains("whitaker.ps1") && script.contains("Push-Location test_support"),
+        "Windows Whitaker lint should run both packages through the installed PowerShell wrapper"
+    );
+    Ok(())
+}
+
 #[test]
 fn behavioural_ci_workflow_uses_shared_tool_installers() -> Result<()> {
     let contents = workflow_contents("ci.yml").expect("CI workflow should be readable");
@@ -316,45 +357,9 @@ fn behavioural_ci_workflow_uses_shared_tool_installers() -> Result<()> {
     let windows_workflow: Value =
         serde_yaml::from_str(&windows_contents).context("parse Windows CI workflow YAML")?;
 
-    for (source, job_name) in [
-        (&workflow, "build-test"),
-        (&windows_workflow, "build-test-windows"),
-    ] {
-        let job = job(source, job_name)?;
-        let whitaker = named_step(steps(job)?, "Install Whitaker")?;
-        let uses = mapping_get(whitaker, YamlKey("uses"))
-            .and_then(Value::as_str)
-            .context("Install Whitaker should reference the shared installer action")?;
-        ensure!(
-            is_pinned_action_ref(uses, INSTALL_WHITAKER_ACTION),
-            "{job_name} Install Whitaker should use a commit-pinned shared installer, found {uses:?}"
-        );
-        ensure!(
-            step_input(whitaker, YamlKey("installer-version")) == Some(WHITAKER_INSTALLER_VERSION),
-            "{job_name} Install Whitaker should retain installer version {WHITAKER_INSTALLER_VERSION}"
-        );
-        ensure!(
-            mapping_get(whitaker, YamlKey("run")).is_none(),
-            "{job_name} Install Whitaker should not retain an ad hoc installation script"
-        );
-    }
-
-    let windows_whitaker = named_step(
-        steps(job(&windows_workflow, "build-test-windows")?)?,
-        "Lint (Whitaker)",
-    )?;
-    let windows_whitaker_run = mapping_get(windows_whitaker, YamlKey("run"))
-        .and_then(Value::as_str)
-        .context("Windows Whitaker lint should define a PowerShell script")?;
-    ensure!(
-        mapping_get(windows_whitaker, YamlKey("shell")).and_then(Value::as_str) == Some("pwsh"),
-        "Windows Whitaker lint should run from PowerShell"
-    );
-    ensure!(
-        windows_whitaker_run.contains("whitaker.ps1")
-            && windows_whitaker_run.contains("Push-Location test_support"),
-        "Windows Whitaker lint should run both packages through the installed PowerShell wrapper"
-    );
+    ensure_shared_whitaker_installer(&workflow, "build-test")?;
+    ensure_shared_whitaker_installer(&windows_workflow, "build-test-windows")?;
+    ensure_windows_whitaker_wrapper(&windows_workflow)?;
 
     let linux_steps = steps(job(&workflow, "build-test")?)?;
     let nixie = named_step(linux_steps, "Install Nixie")?;

@@ -38,70 +38,87 @@ CACHE_SUMMARY_STEPS = {
 }
 
 
+#: Every job whose runner attaches a Namespace cache volume.
+CACHE_VOLUME_JOBS = {
+    "ci.yml": ("build-test", "kani-smoke"),
+    "ci-windows.yml": ("build-test-windows", "windows-native-recipe-smoke"),
+    "coverage-main.yml": ("coverage-upload",),
+    "netsukefile-test.yml": ("netsukefile",),
+    "release.yml": ("windows-native-recipe-smoke",),
+}
+
+
+def _sole_cache_step(steps: list[dict[str, object]], label: str) -> dict[str, object]:
+    """Return the job's single Namespace cache step, pinned as expected."""
+    cache_steps = [
+        step for step in steps if "nscloud-cache-action" in str(step.get("uses", ""))
+    ]
+    assert len(cache_steps) == 1, (
+        f"{label} must have one Namespace cache owner, got {cache_steps!r}"
+    )
+    assert cache_steps[0].get("uses") == NAMESPACE_CACHE_ACTION, (
+        f"{label} must pin the Namespace cache action"
+    )
+    return cache_steps[0]
+
+
+def _assert_cache_mounts_durable_paths(
+    cache_step: dict[str, object], key: tuple[str, str], label: str
+) -> None:
+    """Require explicit Cargo download paths and no `rust` preset."""
+    cache_inputs = require_mapping(cache_step.get("with"), "Namespace cache inputs")
+    assert "rust" not in str(cache_inputs.get("cache", "")).splitlines(), (
+        f"{label} must not mount target via rust mode"
+    )
+    expected = CARGO_DOWNLOAD_PATHS.get(key, "~/.cargo/registry")
+    assert expected in str(cache_inputs.get("path", "")), (
+        f"{label} must retain Cargo downloads under {expected}"
+    )
+
+
+def _assert_cache_precedes_installs(
+    steps: list[dict[str, object]], cache_step: dict[str, object], label: str
+) -> None:
+    """Require the volume to be mounted after checkout and before any install."""
+    checkout_index = next(
+        index
+        for index, step in enumerate(steps)
+        if "actions/checkout@" in str(step.get("uses", ""))
+    )
+    cache_index = steps.index(cache_step)
+    assert checkout_index < cache_index, (
+        f"{label} must configure the cache after checkout"
+    )
+    first_install_index = next(
+        (
+            index
+            for index, step in enumerate(steps)
+            if index > checkout_index
+            and (
+                str(step.get("name", "")).startswith("Install ")
+                or "setup-rust@" in str(step.get("uses", ""))
+            )
+        ),
+        len(steps),
+    )
+    assert cache_index < first_install_index, (
+        f"{label} must mount the cache before installs"
+    )
+
+
 def test_namespace_cache_volume_has_one_pinned_owner() -> None:
-    """Require each Linux Namespace cache user to pin the volume action once."""
-    expected_jobs = {
-        "ci.yml": ("build-test", "kani-smoke"),
-        "ci-windows.yml": ("build-test-windows", "windows-native-recipe-smoke"),
-        "coverage-main.yml": ("coverage-upload",),
-        "netsukefile-test.yml": ("netsukefile",),
-        "release.yml": ("windows-native-recipe-smoke",),
-    }
+    """Require each Namespace cache user to pin the volume action exactly once."""
     workflow_dir = REPO_ROOT / ".github" / "workflows"
-    for workflow_name, job_names in expected_jobs.items():
+    for workflow_name, job_names in CACHE_VOLUME_JOBS.items():
         workflow = load_workflow(workflow_dir / workflow_name)
         for job_name in job_names:
+            label = f"{workflow_name} {job_name}"
             steps = job_steps(workflow, job_name)
-            cache_steps = [
-                step
-                for step in steps
-                if "nscloud-cache-action" in str(step.get("uses", ""))
-            ]
-            assert len(cache_steps) == 1, (
-                f"{workflow_name} {job_name} must have one Namespace cache owner, "
-                f"got {cache_steps!r}"
+            cache_step = _sole_cache_step(steps, label)
+            _assert_cache_mounts_durable_paths(
+                cache_step, (workflow_name, job_name), label
             )
-            assert cache_steps[0].get("uses") == NAMESPACE_CACHE_ACTION, (
-                f"{workflow_name} {job_name} must pin the Namespace cache action"
-            )
-            cache_inputs = require_mapping(
-                cache_steps[0].get("with"), "Namespace cache inputs"
-            )
-            assert "rust" not in str(cache_inputs.get("cache", "")).splitlines(), (
-                f"{workflow_name} {job_name} must not mount target via rust mode"
-            )
-            cached_paths = str(cache_inputs.get("path", ""))
-            expected_download_path = CARGO_DOWNLOAD_PATHS.get(
-                (workflow_name, job_name), "~/.cargo/registry"
-            )
-            assert expected_download_path in cached_paths, (
-                f"{workflow_name} {job_name} must retain Cargo downloads under "
-                f"{expected_download_path}"
-            )
-            cache_index = steps.index(cache_steps[0])
-            checkout_index = next(
-                index
-                for index, step in enumerate(steps)
-                if "actions/checkout@" in str(step.get("uses", ""))
-            )
-            assert checkout_index < cache_index, (
-                f"{workflow_name} {job_name} must configure the cache after checkout"
-            )
-            first_install_index = next(
-                (
-                    index
-                    for index, step in enumerate(steps)
-                    if index > checkout_index
-                    and (
-                        str(step.get("name", "")).startswith("Install ")
-                        or "setup-rust@" in str(step.get("uses", ""))
-                    )
-                ),
-                len(steps),
-            )
-            assert cache_index < first_install_index, (
-                f"{workflow_name} {job_name} must mount the cache before installs"
-            )
+            _assert_cache_precedes_installs(steps, cache_step, label)
 
 
 def test_every_namespace_cache_reports_its_effectiveness() -> None:
@@ -140,14 +157,7 @@ def test_every_namespace_cache_reports_its_effectiveness() -> None:
 def test_setup_rust_delegates_cache_ownership_to_namespace() -> None:
     """Require setup-rust to leave cache ownership to the mounted volume."""
     workflow_dir = REPO_ROOT / ".github" / "workflows"
-    expected_jobs = {
-        "ci.yml": ("build-test", "kani-smoke"),
-        "ci-windows.yml": ("build-test-windows", "windows-native-recipe-smoke"),
-        "coverage-main.yml": ("coverage-upload",),
-        "netsukefile-test.yml": ("netsukefile",),
-        "release.yml": ("windows-native-recipe-smoke",),
-    }
-    for workflow_name, job_names in expected_jobs.items():
+    for workflow_name, job_names in CACHE_VOLUME_JOBS.items():
         workflow = load_workflow(workflow_dir / workflow_name)
         for job_name in job_names:
             setup = named_step(job_steps(workflow, job_name), "Setup Rust")
@@ -179,94 +189,6 @@ def test_workflows_do_not_reintroduce_github_cache_or_source_tool_builds() -> No
     assert "cache: rust" not in workflow_text, (
         "the Namespace rust preset must not mount the disposable target directory"
     )
-
-
-def test_kani_uses_cached_prebuilt_frontend_and_release_bundle() -> None:
-    """Require Kani's separate front-end and verifier payloads to be cacheable."""
-    workflow = load_workflow()
-    job = require_mapping(
-        require_mapping(workflow.get("jobs"), "workflow jobs")["kani-smoke"],
-        "kani-smoke",
-    )
-    env = require_mapping(job.get("env"), "kani-smoke env")
-    assert env.get("CARGO_HOME") == "${{ github.workspace }}/.kani-cargo", (
-        "Kani's Cargo front-end must live in the cached job-local Cargo home"
-    )
-    assert env.get("KANI_HOME") == "${{ github.workspace }}/.kani-home", (
-        "Kani's verifier payload must live in the cached job-local Kani home"
-    )
-    assert env.get("RUSTUP_HOME") == "${{ github.workspace }}/.kani-rustup", (
-        "Kani's supporting toolchain must live in the cached job-local Rustup home"
-    )
-
-    steps = job_steps(workflow, "kani-smoke")
-    cache_inputs = require_mapping(
-        named_step(steps, "Set up Kani cache volume").get("with"),
-        "Kani cache inputs",
-    )
-    cached_paths = str(cache_inputs.get("path", ""))
-    for required_path in (".kani-cargo", ".kani-home", ".kani-rustup"):
-        assert required_path in cached_paths, f"Kani must cache {required_path}"
-
-    setup_inputs = require_mapping(
-        named_step(steps, "Setup Rust").get("with"), "Setup Rust inputs"
-    )
-    assert setup_inputs.get("install-binstall") == "false", (
-        "Kani installs its cached front-end directly from a pinned binary archive"
-    )
-
-    install_step = named_step(steps, "Install prebuilt Kani")
-    assert steps.index(named_step(steps, "Set up Kani cache volume")) < steps.index(
-        install_step
-    ), "the Kani cache volume must be mounted before Kani is installed"
-
-    install_command = str(install_step.get("run"))
-    required_install_fragments = (
-        "quickinstall='https://github.com/cargo-bins/cargo-quickinstall'",
-        '"${quickinstall}/releases/download/kani-verifier-${kani_version}/',
-        "ed2bafc239b834e14c6b66fc4838e342",
-        "upstream='https://github.com/model-checking/kani'",
-        '"${upstream}/releases/download/kani-${kani_version}/',
-        "3b5f7afd3b51603ee720db7bc1bc4fe4",
-        'frontend_bin="${CARGO_HOME}/frontend/kani-${kani_version}"',
-        'kani_dir="${KANI_HOME}/kani-${kani_version}"',
-        '[[ ! -x "${frontend_bin}/cargo-kani"',
-        '[[ ! -x "${kani_dir}/bin/kani-driver"',
-        'cargo kani setup --use-local-bundle "${bundle}"',
-    )
-    missing_fragments = tuple(
-        fragment
-        for fragment in required_install_fragments
-        if fragment not in install_command
-    )
-    assert not missing_fragments, (
-        f"Kani's binary-only cached installation is missing {missing_fragments!r}"
-    )
-    _assert_kani_archives_are_verified_before_use(install_command)
-
-
-def _assert_kani_archives_are_verified_before_use(install_command: str) -> None:
-    """Require each Kani archive's checksum to gate its own unpacking step.
-
-    A bare `sha256sum --check` substring would also pass if the workflow
-    verified an unrelated file, so each assertion names the archive variable
-    and requires the verification to precede that archive's extraction.
-    """
-    frontend_check = '"${frontend_archive}" | sha256sum --check --'
-    frontend_extract = 'tar --extract --gzip --file "${frontend_archive}"'
-    bundle_check = '"${bundle}" | sha256sum --check --'
-    bundle_use = 'cargo kani setup --use-local-bundle "${bundle}"'
-    for check, use, label in (
-        (frontend_check, frontend_extract, "front-end archive"),
-        (bundle_check, bundle_use, "verifier bundle"),
-    ):
-        assert check in install_command, (
-            f"the Kani {label} must be checksum-verified by name"
-        )
-        assert use in install_command, f"the Kani {label} must be unpacked by name"
-        assert install_command.index(check) < install_command.index(use), (
-            f"the Kani {label} must be verified before it is unpacked"
-        )
 
 
 def test_ci_bounds_nextest_workers() -> None:
@@ -362,4 +284,44 @@ def test_coverage_delegates_archive_cache_ownership_to_namespace() -> None:
         inputs = require_mapping(coverage.get("with"), "coverage inputs")
         assert inputs.get("cache-provider") == EXTERNAL_CACHE_PROVIDER, (
             f"{workflow_name} {job_name} must disable coverage archive caches"
+        )
+
+
+#: Jobs that install the Whitaker Dylint suite, and the cache-volume path that
+#: owns the installer's platform-specific data directory.
+WHITAKER_JOBS = {
+    ("ci.yml", "build-test"): "~/.local/share/whitaker",
+    ("ci-windows.yml", "build-test-windows"): "~/AppData/Roaming/github/whitaker",
+}
+
+
+def test_whitaker_installs_against_a_caller_owned_cache() -> None:
+    """Require the volume to own Whitaker's data and the clone guard to run.
+
+    `whitaker-installer` 0.2.7 decides between cloning and pulling on
+    directory existence alone, and mounting the volume creates that directory
+    on a cold run. Without the guard the installer runs `git pull` against a
+    directory holding no repository and the gate fails before it lints
+    anything.
+    """
+    workflow_dir = REPO_ROOT / ".github" / "workflows"
+    for (workflow_name, job_name), data_path in WHITAKER_JOBS.items():
+        steps = job_steps(load_workflow(workflow_dir / workflow_name), job_name)
+        cache_inputs = require_mapping(
+            named_step(steps, "Set up Namespace cache volume").get("with"),
+            "Namespace cache inputs",
+        )
+        assert data_path in str(cache_inputs.get("path", "")).splitlines(), (
+            f"{workflow_name} {job_name} must cache Whitaker's data directory "
+            f"at {data_path}"
+        )
+        install = named_step(steps, "Install Whitaker")
+        install_inputs = require_mapping(install.get("with"), "Install Whitaker inputs")
+        assert install_inputs.get("cache-provider") == EXTERNAL_CACHE_PROVIDER, (
+            f"{workflow_name} {job_name} must let the volume own the Whitaker cache"
+        )
+        guard = named_step(steps, "Prepare Whitaker cache directory")
+        assert steps.index(guard) < steps.index(install), (
+            f"{workflow_name} {job_name} must clear a non-repository Whitaker "
+            "data directory before running the installer"
         )

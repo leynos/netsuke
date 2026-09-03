@@ -69,7 +69,7 @@ jobs:
             ~/.cargo/git
             ~/.cargo/registry
             ~/.local/bin
-            ~/.local/share/whitaker
+            ~/AppData/Roaming/github/whitaker
       - name: Summarize Namespace cache
         if: always()
         run: |
@@ -144,6 +144,19 @@ jobs:
         # Clippy and `cargo doc` over the whole workspace under `-D warnings`,
         # including the `#[cfg(windows)]` arms.
         run: make SHELL=bash lint-clippy
+      - name: Prepare Whitaker cache directory
+        # Compatibility workaround for whitaker-installer 0.2.7, which decides
+        # between cloning and pulling on directory existence alone. The cache
+        # volume creates the mount point even on a cold run, so remove it when
+        # it holds no repository. Delete this step once the installer checks
+        # for a repository rather than a directory.
+        shell: pwsh
+        run: |
+          $data = Join-Path $env:APPDATA 'github\whitaker\data'
+          if ((Test-Path $data) -and -not (Test-Path (Join-Path $data '.git'))) {
+            Write-Output 'removing non-repository Whitaker data directory'
+            Remove-Item -Recurse -Force $data
+          }
       - name: Install Whitaker
         uses: >-
           leynos/shared-actions/.github/actions/install-whitaker@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
