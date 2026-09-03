@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = डिफ़ॉल्ट अस्वीकृ�
 cli.flag.fetch_block_host.help = वे होस्ट नाम जो सदैव अवरुद्ध रहते हैं, भले ही अन्यत्र अनुमत हों।
 cli.flag.fetch_default_deny.help = डिफ़ॉल्ट रूप से सभी होस्ट अस्वीकार करें; केवल घोषित सूची को अनुमति दें।
 cli.flag.trust_project_fetch_policy.help = प्रोजेक्ट कॉन्फ़िगरेशन को fetch नीति की अनुमतियाँ बढ़ाने की अनुमति दें।
+
+cli.flag.manifest_evaluation_fuel.help = Limit MiniJinja instructions for each manifest evaluation.
+cli.flag.manifest_fuel.help = Limit MiniJinja instructions across one manifest.
+cli.flag.manifest_rendered_value_bytes.help = Limit bytes rendered into one manifest value.
+cli.flag.manifest_rendered_manifest_bytes.help = Limit total bytes rendered across one manifest.
+cli.flag.manifest_source_bytes.help = Limit template and macro source bytes consumed per manifest.
+cli.flag.manifest_foreach_cardinality.help = Limit values processed by one foreach expansion.
+cli.flag.manifest_expanded_entries.help = Limit targets and actions expanded from one manifest.
 cli.flag.json.help = मशीन-पठनीय JSON निर्गत करें।
 cli.flag.no_input.help = संवादात्मक इनपुट कभी न पढ़ें।
 cli.flag.color.help = रंगीन निर्गम की नीति (auto, always, never)।
@@ -430,3 +438,4 @@ example.errors_found = { $count ->
     [one] { $count } त्रुटि मिली।
    *[other] { $count } त्रुटियाँ मिलीं।
 }
+manifest.budget.exceeded = Manifest resource budget exhausted during { $stage } after reaching { $limit }.

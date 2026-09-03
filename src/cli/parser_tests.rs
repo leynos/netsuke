@@ -32,7 +32,17 @@ fn render_localized_long_help(locale: &str, subcommand: Option<&str>) -> String 
         None => &mut command,
     };
 
-    normalize_fluent_isolates(&help_command.render_long_help().to_string())
+    let rendered = normalize_fluent_isolates(&help_command.render_long_help().to_string());
+    let has_trailing_newline = rendered.ends_with('\n');
+    let mut normalized = rendered
+        .lines()
+        .map(str::trim_end)
+        .collect::<Vec<_>>()
+        .join("\n");
+    if has_trailing_newline {
+        normalized.push('\n');
+    }
+    normalized
 }
 
 /// Verifies localized long help includes `--config <FILE>` and its Fluent-resolved description.

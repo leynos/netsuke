@@ -5,6 +5,24 @@ use crate::stdlib::NetworkPolicy;
 use anyhow::Result;
 
 impl Cli {
+    /// Construct the manifest resource ceilings requested through configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when any merged ceiling is zero.
+    pub fn manifest_budget_limits(&self) -> Result<crate::manifest::ManifestBudgetLimits> {
+        crate::manifest::ManifestBudgetLimits {
+            evaluation_fuel: self.manifest_evaluation_fuel,
+            manifest_fuel: self.manifest_fuel,
+            rendered_value_bytes: self.manifest_rendered_value_bytes,
+            rendered_manifest_bytes: self.manifest_rendered_manifest_bytes,
+            source_bytes: self.manifest_source_bytes,
+            foreach_cardinality: self.manifest_foreach_cardinality,
+            expanded_entries: self.manifest_expanded_entries,
+        }
+        .validate()
+    }
+
     /// Construct the network policy requested through CLI flags.
     ///
     /// Allowlist entries only constrain outbound hosts after

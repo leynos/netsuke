@@ -8,13 +8,14 @@
 use super::ManifestValue;
 use crate::ast::MacroDefinition;
 use crate::localization::{self, keys};
+use crate::manifest::budget::{ManifestBudget, ManifestBudgetStage};
 use anyhow::{Context, Result};
-use minijinja::{Environment, Error, value::Value};
+use minijinja::{Environment, Error, ErrorKind, value::Value};
 use serde::Serialize;
 
 mod call;
 mod invocation;
-mod telemetry;
+pub(crate) mod telemetry;
 
 // Only the manifest test suite reaches the helper through the parent path;
 // `invocation` imports it from the sibling module directly.
@@ -50,16 +51,37 @@ pub(crate) fn evaluate_when_expression(
     env: &Environment,
     expression: &str,
     context: &Value,
+    budget: &ManifestBudget,
 ) -> Result<Option<QueryEvaluation<bool>>> {
-    let Ok(compiled) = env.compile_expression(expression) else {
+    budget
+        .charge_source(expression.len(), ManifestBudgetStage::Source)
+        .map_err(|exhaustion| exhaustion.into_error(ErrorKind::InvalidOperation))?;
+    let fuel = budget
+        .reserve_fuel(ManifestBudgetStage::When)
+        .map_err(|exhaustion| exhaustion.into_error(ErrorKind::OutOfFuel))?;
+    let mut bounded_env = env.clone();
+    bounded_env.set_fuel(Some(fuel));
+    let Ok(compiled) = bounded_env.compile_expression(expression) else {
         return Ok(None);
     };
-    classify_query_evaluation(compiled.eval(context))
-        .map(|evaluation| evaluation.map(|value| value.is_true()))
-        .with_context(|| {
-            localization::message(keys::MANIFEST_WHEN_EVAL_ERROR).with_arg("expr", expression)
-        })
-        .map(Some)
+    let evaluation = compiled.eval(context).map_err(|error| {
+        if error.kind() == ErrorKind::OutOfFuel {
+            budget
+                .fuel_exhaustion(ManifestBudgetStage::When)
+                .into_error(ErrorKind::OutOfFuel)
+        } else {
+            error
+        }
+    });
+    match evaluation {
+        Err(error) if is_budget_error(&error) => Err(error.into()),
+        result => classify_query_evaluation(result)
+            .map(|query_evaluation| query_evaluation.map(|value| value.is_true()))
+            .with_context(|| {
+                localization::message(keys::MANIFEST_WHEN_EVAL_ERROR).with_arg("expr", expression)
+            })
+            .map(Some),
+    }
 }
 
 /// Render a template-form `when` condition with query-disabled classification.
@@ -72,10 +94,28 @@ pub(crate) fn render_when_template(
     env: &Environment,
     template: &str,
     context: &Value,
+    budget: &ManifestBudget,
 ) -> Result<QueryEvaluation<String>> {
-    classify_query_evaluation(render_template(env, template, context)).with_context(|| {
-        localization::message(keys::MANIFEST_WHEN_TEMPLATE_ERROR).with_arg("expr", template)
-    })
+    let evaluation = render_template_at(
+        env,
+        budget,
+        &TemplateRenderRequest {
+            template,
+            context,
+            stage: ManifestBudgetStage::When,
+        },
+    );
+    match evaluation {
+        Err(error) if is_budget_error(&error) => Err(error.into()),
+        result => classify_query_evaluation(result).with_context(|| {
+            localization::message(keys::MANIFEST_WHEN_TEMPLATE_ERROR).with_arg("expr", template)
+        }),
+    }
+}
+
+/// Return whether a `MiniJinja` failure originated at the budget boundary.
+fn is_budget_error(error: &Error) -> bool {
+    matches!(error.kind(), ErrorKind::OutOfFuel | ErrorKind::WriteFailure)
 }
 
 /// Convert a `MiniJinja` result into the query-safe evaluation boundary.
@@ -191,9 +231,25 @@ pub(crate) fn register_macro(
 ///
 /// Returns an error if the YAML shape is invalid, any macro signature is
 /// malformed, or template compilation fails.
+#[cfg(test)]
 pub(crate) fn register_manifest_macros(
     doc: &ManifestValue,
     env: &mut Environment<'static>,
+) -> Result<()> {
+    let budget = ManifestBudget::default();
+    register_manifest_macros_with_budget(doc, env, &budget)
+}
+
+/// Register all manifest macros while charging the shared resource budget.
+///
+/// # Errors
+///
+/// Returns an error if macro source exhausts the budget, the YAML shape is
+/// invalid, a signature is malformed, or template compilation fails.
+pub(crate) fn register_manifest_macros_with_budget(
+    doc: &ManifestValue,
+    env: &mut Environment<'static>,
+    budget: &ManifestBudget,
 ) -> Result<()> {
     let Some(macros) = doc.get("macros").cloned() else {
         return Ok(());
@@ -203,6 +259,12 @@ pub(crate) fn register_manifest_macros(
         .context(localization::message(keys::MANIFEST_MACRO_SEQUENCE_INVALID))?;
 
     for (idx, def) in defs.iter().enumerate() {
+        budget
+            .charge_source(
+                def.signature.len().saturating_add(def.body.len()),
+                ManifestBudgetStage::Source,
+            )
+            .map_err(|exhaustion| exhaustion.into_error(ErrorKind::WriteFailure))?;
         register_macro(env, def, idx).with_context(|| {
             localization::message(keys::MANIFEST_MACRO_REGISTER_FAILED)
                 .with_arg("signature", &def.signature)
@@ -219,18 +281,95 @@ pub(crate) fn register_manifest_macros(
 /// Renders are traced and metered with bounded data only: the outcome, whether
 /// macro imports were present, and — on failure — the `MiniJinja` error kind.
 /// Template text, macro names, and context values never reach telemetry.
+#[cfg(test)]
 pub(crate) fn render_template(
     env: &Environment,
     template: &str,
     context: &impl Serialize,
 ) -> Result<String, Error> {
+    let budget = ManifestBudget::default();
+    render_template_at(
+        env,
+        &budget,
+        &TemplateRenderRequest {
+            template,
+            context,
+            stage: ManifestBudgetStage::Render,
+        },
+    )
+}
+
+/// Render a template with the caller's shared manifest resource budget.
+pub(crate) fn render_template_with_budget(
+    env: &Environment,
+    template: &str,
+    context: &impl Serialize,
+    budget: &ManifestBudget,
+) -> Result<String, Error> {
+    render_template_at(
+        env,
+        budget,
+        &TemplateRenderRequest {
+            template,
+            context,
+            stage: ManifestBudgetStage::Render,
+        },
+    )
+}
+
+/// Borrow one template-render request with its evaluation stage.
+struct TemplateRenderRequest<'a, T: Serialize + ?Sized> {
+    /// Holds the untrusted template source to render.
+    template: &'a str,
+    /// Supplies the serializable Jinja context.
+    context: &'a T,
+    /// Identifies the fixed evaluation stage for accounting and diagnostics.
+    stage: ManifestBudgetStage,
+}
+
+/// Render a template through `MiniJinja`'s streaming output and fuel facilities.
+fn render_template_at<T: Serialize + ?Sized>(
+    env: &Environment,
+    budget: &ManifestBudget,
+    request: &TemplateRenderRequest<'_, T>,
+) -> Result<String, Error> {
     let imports = macro_imports(env);
     let has_macro_imports = imports.is_some();
+    let source = imports.map_or_else(
+        || request.template.to_owned(),
+        |import_block| [import_block.as_str(), request.template].concat(),
+    );
+    budget
+        .charge_source(source.len(), ManifestBudgetStage::Source)
+        .map_err(|exhaustion| exhaustion.into_error(ErrorKind::WriteFailure))?;
+    let fuel = budget
+        .reserve_fuel(request.stage)
+        .map_err(|exhaustion| exhaustion.into_error(ErrorKind::OutOfFuel))?;
+    let mut bounded_env = env.clone();
+    bounded_env.set_fuel(Some(fuel));
     telemetry::instrument_template_render(has_macro_imports, || {
-        imports.map_or_else(
-            || env.render_str(template, context),
-            |import_block| env.render_str(&[import_block.as_str(), template].concat(), context),
-        )
+        let parsed = bounded_env.template_from_str(&source)?;
+        let mut writer = budget.capped_writer();
+        match parsed.render_captured_to(request.context, &mut writer) {
+            Ok(captured) => {
+                if let Some((_, unused)) = captured.state().fuel_levels() {
+                    budget.refund_unused_fuel(unused);
+                }
+                writer.into_string()
+            }
+            Err(error) => writer.exhaustion().map_or_else(
+                || {
+                    if error.kind() == ErrorKind::OutOfFuel {
+                        Err(budget
+                            .fuel_exhaustion(request.stage)
+                            .into_error(ErrorKind::OutOfFuel))
+                    } else {
+                        Err(error)
+                    }
+                },
+                |exhaustion| Err(exhaustion.into_error(ErrorKind::WriteFailure)),
+            ),
+        }
     })
 }
 

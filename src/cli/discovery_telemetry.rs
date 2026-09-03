@@ -87,7 +87,7 @@ mod tests {
     //! Tests for bounded discovery telemetry.
 
     use super::*;
-    use crate::cli::discovery::{DiscoveredLayers, DiscoveryDiagnostics, DiscoveryOutcome};
+    use crate::cli::discovery::{DiscoveredLayers, DiscoveryDiagnostics, DiscoveryOutcome, ProjectManifestBudgetRequest};
     use crate::test_tracing_capture::with_test_subscriber;
     use metrics_util::{
         CompositeKey, MetricKind,
@@ -190,6 +190,7 @@ mod tests {
                 layers,
                 json_preference: false,
                 project_fetch_policy_request: None,
+                project_manifest_budget_request: ProjectManifestBudgetRequest::default(),
                 errors,
                 diagnostics,
             },
@@ -211,6 +212,7 @@ mod tests {
                 layers,
                 json_preference: false,
                 project_fetch_policy_request: None,
+                project_manifest_budget_request: ProjectManifestBudgetRequest::default(),
                 errors: vec![error],
                 diagnostics,
             },

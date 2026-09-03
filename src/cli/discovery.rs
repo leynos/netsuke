@@ -12,6 +12,25 @@ use std::sync::Arc;
 use super::command::Cli;
 use crate::host_pattern::HostPattern;
 
+/// Manifest-budget restrictions requested by the primary project file.
+#[derive(Debug, Default)]
+pub(crate) struct ProjectManifestBudgetRequest {
+    /// Requested per-evaluation instruction limit.
+    pub(crate) evaluation_fuel: Option<u64>,
+    /// Requested aggregate instruction limit.
+    pub(crate) manifest_fuel: Option<u64>,
+    /// Requested per-value rendered-byte limit.
+    pub(crate) rendered_value_bytes: Option<usize>,
+    /// Requested aggregate rendered-byte limit.
+    pub(crate) rendered_manifest_bytes: Option<usize>,
+    /// Requested aggregate source-byte limit.
+    pub(crate) source_bytes: Option<usize>,
+    /// Requested per-foreach cardinality limit.
+    pub(crate) foreach_cardinality: Option<usize>,
+    /// Requested aggregate expansion count.
+    pub(crate) expanded_entries: Option<usize>,
+}
+
 #[path = "discovery_environment.rs"]
 mod environment;
 pub use environment::{EnvProvider, StdEnvProvider};
@@ -93,6 +112,8 @@ pub struct DiscoveredLayers {
     json_preference: bool,
     /// Restriction request quarantined from the primary project layer.
     project_fetch_policy_request: Option<ProjectFetchPolicyRequest>,
+    /// Manifest-budget restrictions quarantined before generic merging.
+    project_manifest_budget_request: ProjectManifestBudgetRequest,
     /// Loading errors deferred beside the layers that may still be usable.
     errors: Vec<Arc<ortho_config::OrthoError>>,
     /// Bounded trace for composition boundaries to emit after the merge.
@@ -123,8 +144,9 @@ impl DiscoveredLayers {
         Vec<MergeLayer<'static>>,
         Vec<Arc<ortho_config::OrthoError>>,
         Option<ProjectFetchPolicyRequest>,
+        ProjectManifestBudgetRequest,
     ) {
-        (self.layers, self.errors, self.project_fetch_policy_request)
+        (self.layers, self.errors, self.project_fetch_policy_request, self.project_manifest_budget_request)
     }
 }
 
@@ -186,6 +208,7 @@ fn discover_file_layers_with_normalizer(
                 layers: resolved.layers,
                 json_preference: resolved.json_preference,
                 project_fetch_policy_request: resolved.project_request,
+                project_manifest_budget_request: resolved.project_budget_request,
                 errors: resolved.errors,
                 diagnostics,
             }
@@ -194,6 +217,7 @@ fn discover_file_layers_with_normalizer(
             layers: Vec::new(),
             json_preference: Cli::default().json,
             project_fetch_policy_request: None,
+            project_manifest_budget_request: ProjectManifestBudgetRequest::default(),
             errors: vec![error],
             diagnostics,
         },

@@ -4,10 +4,54 @@
 //! sequence values, filtering, variable collisions, and source key order.
 
 use super::*;
+use crate::manifest::ManifestBudgetLimits;
 use minijinja::Environment;
 use proptest::prelude::*;
 
 proptest! {
+    /// A bounded foreach consumes no more entries than its configured ceiling.
+    #[test]
+    fn foreach_budget_terminates_deterministically_at_the_cardinality_limit(
+        values in proptest::collection::vec(-100_i16..100, 0..12),
+    ) {
+        const CARDINALITY_LIMIT: usize = 4;
+        let env = Environment::new();
+        let yaml = format!(
+            "targets:\n  - name: generated\n    foreach: {values:?}\n    command: echo {{{{ item }}}}"
+        );
+        let doc: ManifestValue = serde_saphyr::from_str(&yaml)
+            .map_err(|error| TestCaseError::fail(error.to_string()))?;
+        let limits = ManifestBudgetLimits {
+            foreach_cardinality: CARDINALITY_LIMIT,
+            expanded_entries: CARDINALITY_LIMIT,
+            ..ManifestBudgetLimits::default()
+        };
+
+        let mut first = doc.clone();
+        let first_budget = ManifestBudget::new(limits)
+            .map_err(|error| TestCaseError::fail(error.to_string()))?;
+        let first_result = expand_foreach_with_budget(&mut first, &env, &first_budget);
+        let mut second = doc;
+        let second_budget = ManifestBudget::new(limits)
+            .map_err(|error| TestCaseError::fail(error.to_string()))?;
+        let second_result = expand_foreach_with_budget(&mut second, &env, &second_budget);
+
+        if values.len() <= CARDINALITY_LIMIT {
+            first_result.map_err(|error| TestCaseError::fail(error.to_string()))?;
+            second_result.map_err(|error| TestCaseError::fail(error.to_string()))?;
+            let entries = targets(&first)
+                .map_err(|error| TestCaseError::fail(error.to_string()))?;
+            prop_assert_eq!(entries.len(), values.len());
+            prop_assert_eq!(first, second);
+        } else {
+            let first_error = first_result.expect_err("over-limit foreach must fail");
+            let second_error = second_result.expect_err("over-limit foreach must fail");
+            prop_assert!(first_error.to_string().contains("resource budget exhausted"));
+            prop_assert_eq!(first_error.to_string(), second_error.to_string());
+            prop_assert_eq!(first, second);
+        }
+    }
+
     /// Expansion preserves a leading non-object entry and expands each value.
     #[test]
     fn foreach_expands_generated_sequence_values(values in proptest::collection::vec(-100_i16..100, 1..8)) {

@@ -11,7 +11,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use super::super::validation::validation_error;
-use super::ProjectFetchPolicyRequest;
+use super::{ProjectFetchPolicyRequest, ProjectManifestBudgetRequest};
 use super::json::json_from_value;
 use super::paths::{PathNormalizer, comparison_key, project_scope_file};
 
@@ -91,6 +91,8 @@ pub(super) struct ResolvedFileLayers {
     pub(super) json_preference: bool,
     /// Quarantined request from the primary project layer, when present.
     pub(super) project_request: Option<ProjectFetchPolicyRequest>,
+    /// Quarantined manifest-budget restrictions from project layers.
+    pub(super) project_budget_request: ProjectManifestBudgetRequest,
     /// Original typed errors that prevent the generic merge from succeeding.
     pub(super) errors: Vec<Arc<OrthoError>>,
 }
@@ -111,6 +113,10 @@ pub(super) fn retain_layers_and_resolve_json(layers: Vec<ScopedFileLayer>) -> Re
             resolved.json_preference = json;
         }
         if scope == FileScope::Project {
+            match take_project_manifest_budget_request(&mut value) {
+                Ok(request) => resolved.project_budget_request = request,
+                Err(error) => resolved.errors.push(error),
+            }
             match take_project_fetch_policy_request(&mut value) {
                 Ok(request) => resolved.project_request = Some(request),
                 Err(error) => resolved.errors.push(error),
@@ -121,6 +127,49 @@ pub(super) fn retain_layers_and_resolve_json(layers: Vec<ScopedFileLayer>) -> Re
             .push(MergeLayer::file(Cow::Owned(value), path));
     }
     resolved
+}
+
+/// Validate and quarantine manifest limits before generic configuration merging.
+fn take_project_manifest_budget_request(
+    value: &mut serde_json::Value,
+) -> OrthoResult<ProjectManifestBudgetRequest> {
+    let Some(fields) = value.as_object_mut() else {
+        return Ok(ProjectManifestBudgetRequest::default());
+    };
+    let request = ProjectManifestBudgetRequest {
+        evaluation_fuel: parse_project_policy_field(fields, "manifest_evaluation_fuel")?,
+        manifest_fuel: parse_project_policy_field(fields, "manifest_fuel")?,
+        rendered_value_bytes: parse_project_policy_field(fields, "manifest_rendered_value_bytes")?,
+        rendered_manifest_bytes: parse_project_policy_field(fields, "manifest_rendered_manifest_bytes")?,
+        source_bytes: parse_project_policy_field(fields, "manifest_source_bytes")?,
+        foreach_cardinality: parse_project_policy_field(fields, "manifest_foreach_cardinality")?,
+        expanded_entries: parse_project_policy_field(fields, "manifest_expanded_entries")?,
+    };
+    for field in [
+        "manifest_evaluation_fuel",
+        "manifest_fuel",
+        "manifest_rendered_value_bytes",
+        "manifest_rendered_manifest_bytes",
+        "manifest_source_bytes",
+        "manifest_foreach_cardinality",
+        "manifest_expanded_entries",
+    ] {
+        if fields.get(field).is_some_and(|value| value.as_u64() == Some(0)) {
+            return Err(validation_error(field, "must be greater than zero"));
+        }
+    }
+    for field in [
+        "manifest_evaluation_fuel",
+        "manifest_fuel",
+        "manifest_rendered_value_bytes",
+        "manifest_rendered_manifest_bytes",
+        "manifest_source_bytes",
+        "manifest_foreach_cardinality",
+        "manifest_expanded_entries",
+    ] {
+        fields.remove(field);
+    }
+    Ok(request)
 }
 
 /// Capture and remove project fetch-policy grants from one JSON layer.
