@@ -38,6 +38,12 @@ CACHE_SAVE = f"actions/cache/save@{CACHE_PIN}"
 EXTERNAL_CACHE_PROVIDER = "external"
 SETUP_RUST_ACTION = "leynos/shared-actions/.github/actions/setup-rust@"
 SCCACHE_CREDENTIALS_ACTION = "./.github/actions/sccache-gha-credentials"
+#: Local actions that own no cache, so a job may call them alongside its lane
+#: cache action without owning two.
+NON_CACHE_ACTIONS = (
+    SCCACHE_CREDENTIALS_ACTION,
+    "./.github/actions/install-mdtablefix",
+)
 
 #: Cargo's build tree is archived by no cache step anywhere in this
 #: repository. sccache is the single owner of compiler output for every build
@@ -68,6 +74,11 @@ SCCACHE_CREDENTIAL_JOBS = (
     ("ci-windows.yml", "windows-native-recipe-smoke"),
     ("release.yml", "windows-native-recipe-smoke"),
 )
+
+#: The packaging lane's guarded `cargo-orthohelp` source build, permitted by
+#: an explicit exception while leynos/ortho-config#479 is open. It is the one
+#: `cargo install` the estate allows, and only in this form.
+ORTHOHELP_EXCEPTION = "cargo install --locked cargo-orthohelp@0.9.0"
 
 #: Shared-action steps whose own cache would archive a `target` tree unless
 #: the caller owns it. `rust-build-release` forwards the input to its nested

@@ -21,8 +21,9 @@ from cache_contract_data import (
     EXTERNAL_CACHE_PROVIDER,
     FORBIDDEN_CACHE_PATHS,
     GITHUB_CACHE_SOURCES,
+    NON_CACHE_ACTIONS,
     OBSERVATION_SOURCES,
-    SCCACHE_CREDENTIALS_ACTION,
+    ORTHOHELP_EXCEPTION,
     SETUP_RUST_ACTION,
     TARGET_ARCHIVE_OWNERS,
     TRUNK_TRIGGERED_WORKFLOWS,
@@ -99,7 +100,7 @@ def test_each_job_calls_only_its_own_lane_cache_action() -> None:
             str(step.get("uses"))
             for step in steps
             if str(step.get("uses", "")).startswith("./.github/actions/")
-            and str(step.get("uses")) != SCCACHE_CREDENTIALS_ACTION
+            and str(step.get("uses")) not in NON_CACHE_ACTIONS
         }
         assert references == {action}, (
             f"{workflow_name} {job_name} must call {action} and no other cache "
@@ -268,8 +269,19 @@ def test_workflows_do_not_reintroduce_source_tool_builds_or_stale_providers() ->
         for path in sorted(WORKFLOW_DIR.glob("*.yml"))
         + sorted(ACTION_DIR.glob("*/action.yml"))
     )
-    assert "cargo install " not in workflow_text, (
-        "CI tools must use trusted prebuilt binaries rather than source builds"
+    # One documented exception: `ortho-config` publishes no binaries for any
+    # platform (leynos/ortho-config#479), so the packaging lane may compile it
+    # once per cache generation into a dedicated target directory. Every other
+    # source build stays forbidden, and the exception is counted rather than
+    # pattern-matched so a second one cannot hide behind it.
+    source_builds = workflow_text.count("cargo install ")
+    permitted = workflow_text.count(ORTHOHELP_EXCEPTION)
+    assert permitted == 1, (
+        f"the guarded cargo-orthohelp build must appear exactly once, got {permitted}"
+    )
+    assert source_builds == permitted + 1, (
+        "CI tools must use trusted prebuilt binaries rather than source "
+        f"builds; found {source_builds} `cargo install` calls"
     )
     assert "nscloud-cache-action" not in workflow_text, (
         "the Namespace cache volume action must not return"

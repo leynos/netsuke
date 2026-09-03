@@ -125,25 +125,12 @@ jobs:
       - name: Show Ninja version
         run: ninja --version
       - name: Install mdtablefix
-        # Required by `make check-fmt`. The tool cache owns `~/.cargo/bin`,
-        # so a warm run finds the pinned binary already present.
-        # `cargo-binstall` is checksum-verified by setup-rust and fetches a
-        # prebuilt release; CI never compiles mdtablefix.
-        run: |
-          expected_mdtablefix_version="mdtablefix ${MDTABLEFIX_VERSION}"
-          installed_mdtablefix_version=""
-          if command -v mdtablefix >/dev/null 2>&1; then
-            installed_mdtablefix_version="$(mdtablefix --version 2>/dev/null | tr -d '\r')"
-          fi
-          if [[ "${installed_mdtablefix_version}" != "${expected_mdtablefix_version}" ]]; then
-            cargo binstall --no-confirm --locked --disable-strategies compile \
-              "mdtablefix@${MDTABLEFIX_VERSION}"
-          fi
-          installed_mdtablefix_version="$(mdtablefix --version | tr -d '\r')"
-          if [[ "${installed_mdtablefix_version}" != "${expected_mdtablefix_version}" ]]; then
-            echo "expected ${expected_mdtablefix_version}, got ${installed_mdtablefix_version}" >&2
-            exit 1
-          fi
+        # Required by `make check-fmt`. No prebuilt release exists for this
+        # platform, so the action compiles it once per cache generation into
+        # `.mdtablefix-build`, which the tool cache owns.
+        uses: ./.github/actions/install-mdtablefix
+        with:
+          build-dir: ${{ github.workspace }}/.mdtablefix-build
       - name: Setup uv
         # `make check-fmt` runs the uv-driven Ruff format check on every
         # platform, so the Windows job needs uv on the PATH as well.

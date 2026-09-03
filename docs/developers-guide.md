@@ -768,15 +768,41 @@ depends on; and forwards `cache-provider` and `use-sccache` through
 `rust-build-release` to its nested `setup-rust`. One SHA across every
 reference, so a future bump moves them together.
 
-CI installs tools from trusted prebuilt releases only. `setup-rust` verifies the
-`cargo-binstall` installer checksum, the formatter jobs install mdtablefix
-through it, and the release job installs `cargo-orthohelp` through it. Every
-such call passes `--disable-strategies compile`, so a missing prebuilt release
-fails the job instead of quietly compiling the tool: `cargo-binstall`'s default
-strategy list ends in `compile`, and `tests/workflow_contracts/ci_lint_test.py`
-holds the formatter installers to the explicit option. The release job installs
-`cargo-orthohelp` after `rust-build-release`, because that action provides
-`cargo binstall` and nothing before the help-generation step needs the tool.
+CI installs tools from trusted prebuilt releases only, with two recorded
+exceptions and no others. `setup-rust` verifies the `cargo-binstall` installer
+checksum, and every `cargo binstall` call passes binary-only strategies so a
+missing prebuilt release fails the job instead of quietly compiling the tool.
+
+The first exception is `mdtablefix`. Its published releases are fine, but the
+crate's binstall metadata sets `bin-dir = "."`, so resolution fails with
+"bin-dir configuration provided generates empty source path"
+([leynos/mdtablefix#458](https://github.com/leynos/mdtablefix/issues/458)). [`install-mdtablefix`](../.github/actions/install-mdtablefix)
+therefore takes the Linux release tarball directly and verifies it against a
+SHA-256 pinned in the action and cross-checked against the release's own
+`.sha256` sidecar. No Windows binary is published at all, so that lane compiles
+the tool once per cache generation into `.mdtablefix-build`, which the Windows
+tool cache owns and which never shares compiler output with the product. Both
+paths end in an executable-and-version probe, so a stale binary cannot satisfy
+a version bump.
+
+The second is `cargo-orthohelp`. `ortho-config` publishes no binaries for any
+platform
+([leynos/ortho-config#479](https://github.com/leynos/ortho-config/issues/479)),
+so the packaging lane tries binary-only strategies first and, on a genuine
+miss, falls back to `cargo install --locked` with a dedicated
+`CARGO_TARGET_DIR` under `~/.cache/orthohelp-build`. That directory and
+`~/.cargo/bin` are cached under a key carrying the tool version, so the source
+build happens once per generation. This is the one lane whose save is not
+restricted to a push on `main`: no trunk event reaches the release workflow at
+all, so the run that builds the tool must be the run that publishes it, and the
+key is content-addressed by version so concurrent writers produce identical
+archives.
+
+Delete each exception when its issue lands. `tests/workflow_contracts/`
+`cache_ownership_test.py` counts `cargo install` occurrences rather than
+pattern-matching them, so a second source build cannot hide behind the first,
+and `tests/workflow_build_and_package.rs` permits the fallback only in its
+exact guarded form.
 
 Kani's Cargo front-end and verifier payload are separate artefacts: the Kani
 job verifies the Cargo QuickInstall front-end archive and the upstream 0.67.0

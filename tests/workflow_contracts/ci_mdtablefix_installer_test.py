@@ -1,62 +1,90 @@
 """Hold the Markdown formatter installer's version and source-build contract.
 
 `make check-fmt` shells out to `mdtablefix`, so both formatter jobs install a
-pinned release before running it. They must replace a stale executable and
-must never fall back to a source build: `cargo-binstall`'s default strategy
-list ends in `compile`, so a missing prebuilt artefact would otherwise be
-compiled in CI.
+pinned release before running it. The crate's binstall metadata is broken
+(`bin-dir = "."`, leynos/mdtablefix#458), so the installer no longer goes
+through `cargo binstall`: Linux takes the published tarball against a pinned
+SHA-256, and Windows, for which no binary is published at all, compiles once
+per cache generation into a directory that never shares compiler output with
+the product.
 
 Run via ``make test-workflow-contracts``.
 """
 
-import pytest
-from workflow_loading import SETUP_RUST_JOBS, job_steps, load_workflow, named_step
+import yaml
+from workflow_loading import (
+    REPO_ROOT,
+    SETUP_RUST_JOBS,
+    job_steps,
+    load_workflow,
+    named_step,
+    require_mapping,
+)
+
+INSTALL_ACTION = "./.github/actions/install-mdtablefix"
+ACTION_PATH = REPO_ROOT / ".github" / "actions" / "install-mdtablefix" / "action.yml"
 
 #: Fragments the installer script must contain, with the reason for each.
 REQUIRED_FRAGMENTS = (
-    (
-        'expected_mdtablefix_version="mdtablefix ${MDTABLEFIX_VERSION}"',
-        "pin the expected version",
-    ),
+    ('expected="mdtablefix ${MDTABLEFIX_VERSION}"', "pin the expected version"),
     ("mdtablefix --version", "inspect the installed version"),
     ("tr -d '\\r'", "normalise Windows version output"),
+    ('if [[ "${installed}" == "${expected}" ]]', "reuse a cached executable"),
     (
-        '[[ "${installed_mdtablefix_version}" != "${expected_mdtablefix_version}" ]]',
-        "replace a missing or mismatched formatter",
+        '"${MDTABLEFIX_SHA256}" "${tarball}" | sha256sum --check --',
+        "verify the downloaded tarball against the pinned digest by name",
     ),
     (
-        "cargo binstall --no-confirm --locked --disable-strategies compile",
-        (
-            "reject a source build, because cargo-binstall's default "
-            "strategies end in `compile`"
-        ),
+        'tar --extract --gzip --file "${tarball}"',
+        "extract only the executable from the verified tarball",
     ),
+    (
+        'CARGO_TARGET_DIR="${MDTABLEFIX_BUILD_DIR}"',
+        "keep the Windows source build out of the product's target directory",
+    ),
+    ("leynos/mdtablefix#458", "cite the removal condition for the workaround"),
 )
 
-#: Fragments whose presence would mean the job compiles the formatter.
-FORBIDDEN_FRAGMENTS = (("cargo install", "compile mdtablefix from source"),)
 
-
-def test_mdtablefix_installers_require_the_pinned_version() -> None:
-    """Both formatter installers replace stale executables and verify the pin."""
+def test_both_formatter_jobs_use_the_pinned_installer_action() -> None:
+    """Both formatter jobs install mdtablefix through the shared action."""
     for workflow_path, job_name in SETUP_RUST_JOBS:
         step = named_step(
-            job_steps(load_workflow(workflow_path), job_name),
-            "Install mdtablefix",
+            job_steps(load_workflow(workflow_path), job_name), "Install mdtablefix"
         )
-        match step.get("run"):
-            case str() as run:
-                missing = [
-                    reason
-                    for fragment, reason in REQUIRED_FRAGMENTS
-                    if fragment not in run
-                ]
-                assert not missing, f"{job_name} must {'; '.join(missing)}"
-                present = [
-                    reason
-                    for fragment, reason in FORBIDDEN_FRAGMENTS
-                    if fragment in run
-                ]
-                assert not present, f"{job_name} must not {'; '.join(present)}"
-            case _:
-                pytest.fail(f"{job_name} must configure mdtablefix")
+        assert step.get("uses") == INSTALL_ACTION, (
+            f"{job_name} must install mdtablefix through {INSTALL_ACTION}, "
+            f"got {step.get('uses')!r}"
+        )
+        inputs = require_mapping(step.get("with"), f"{job_name} installer inputs")
+        assert inputs.get("build-dir"), (
+            f"{job_name} must give the source build a dedicated target directory"
+        )
+
+
+def test_the_installer_verifies_its_download_and_bounds_its_fallback() -> None:
+    """The installer pins a digest and never builds into the product's target."""
+    document = require_mapping(
+        yaml.safe_load(ACTION_PATH.read_text(encoding="utf-8")), "install-mdtablefix"
+    )
+    runs = require_mapping(document.get("runs"), "runs")
+    steps = runs.get("steps")
+    assert isinstance(steps, list), "the action must declare a step list"
+    assert steps, "the action must declare at least one step"
+    step = require_mapping(steps[0], "the installer step")
+    script = str(step.get("run", ""))
+    missing = [
+        reason for fragment, reason in REQUIRED_FRAGMENTS if fragment not in script
+    ]
+    assert not missing, f"the installer must {'; '.join(missing)}"
+    env = require_mapping(step.get("env"), "the installer env")
+    digest = str(env.get("MDTABLEFIX_SHA256", ""))
+    assert len(digest) == 64, (
+        f"the installer must pin a full SHA-256 digest, got {digest!r}"
+    )
+    assert all(character in "0123456789abcdef" for character in digest), (
+        f"the pinned digest must be lowercase hexadecimal, got {digest!r}"
+    )
+    assert "target/" not in script, (
+        "the source build must not write into the product's target directory"
+    )

@@ -100,6 +100,7 @@ runs:
           ~/.cargo/bin
           ~/.local/bin
           .chocolatey-cache
+          .mdtablefix-build
         key: ${{ steps.keys.outputs.tools }}
 
     - name: Restore Whitaker suite
@@ -160,6 +161,7 @@ runs:
           ~/.cargo/bin
           ~/.local/bin
           .chocolatey-cache
+          .mdtablefix-build
         key: ${{ steps.keys.outputs.tools }}
 
     - name: Save Whitaker suite

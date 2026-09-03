@@ -213,19 +213,34 @@ fn behavioural_build_and_package_wiring_matches_shared_actions() {
 fn assert_orthohelp_comes_from_a_prebuilt_release(contents: &str) -> Result<()> {
     let install_body = workflow_step_body(contents, "Install cargo-orthohelp").join("\n");
     ensure!(
-        install_body.contains("cargo binstall --no-confirm --locked --disable-strategies compile"),
-        "workflow should install cargo-orthohelp from a prebuilt release only"
+        install_body.contains("cargo binstall --no-confirm --locked \\")
+            && install_body.contains("--strategies crate-meta-data,quick-install"),
+        "workflow should try binary-only cargo-binstall strategies first"
     );
     ensure!(
         install_body.contains("cargo-orthohelp@0.9.0"),
         "workflow should pin the cargo-orthohelp release version"
     );
 
+    // `ortho-config` publishes no binaries for any platform
+    // (leynos/ortho-config#479), so a source build is permitted, but only in
+    // this exact guarded form: after the binary-only attempt has genuinely
+    // failed, and into a dedicated target directory that never shares
+    // compiler output with the product. Any other `cargo install` naming the
+    // tool, in this step or elsewhere, is still rejected.
+    let guarded_fallback = "CARGO_TARGET_DIR=\"${ORTHOHELP_BUILD_DIR}\" \\\n            \
+        cargo install --locked cargo-orthohelp@0.9.0";
+    ensure!(
+        install_body.contains("if cargo binstall") && install_body.contains(guarded_fallback),
+        "a cargo-orthohelp source build is permitted only as the guarded \
+         fallback into a dedicated CARGO_TARGET_DIR"
+    );
     let source_install = regex::Regex::new(r"cargo\s+install\s+(?:-{1,2}\S+\s+)*cargo-orthohelp")
         .context("compile the cargo-orthohelp source-install pattern")?;
     ensure!(
-        !source_install.is_match(contents),
-        "workflow should never compile cargo-orthohelp from source"
+        source_install.find_iter(contents).count() == 1,
+        "the guarded fallback should be the only cargo-orthohelp source install \
+         anywhere in the workflow"
     );
 
     let build_index = contents

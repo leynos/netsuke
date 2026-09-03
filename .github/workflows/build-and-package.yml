@@ -119,24 +119,63 @@ jobs:
           # exports the backend's credentials, which is what makes the
           # `RUSTC_WRAPPER` above work without a second installer here.
 
+      - name: Restore cargo-orthohelp
+        id: orthohelp_cache
+        # Owns the tool binary and the dedicated target directory its source
+        # build uses. Keyed by the tool version, so the build below happens
+        # once per generation rather than once per run. This lane is reached
+        # only by tag pushes and the pull-request dry run, never by a push to
+        # `main`, so unlike every other cache here it must publish from
+        # whichever run had to build the tool; the key is content-addressed by
+        # version, so concurrent writers produce identical archives.
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            ~/.cargo/bin
+            ~/.cache/orthohelp-build
+          key: netsuke-orthohelp-v1-${{ runner.os }}-${{ runner.arch }}-0.9.0
+
       - name: Install cargo-orthohelp
         # Runs after `rust-build-release`, which nests the setup-rust action
         # that provisions checksum-verified cargo-binstall: `cargo binstall`
         # does not exist on the runner before that point. `cargo-orthohelp` is
         # first needed by the help-generation step below, so this ordering
-        # costs nothing. Disabling the compile strategy makes a missing
-        # prebuilt release a hard failure rather than a silent source build.
+        # costs nothing.
+        #
+        # Documented exception to the no-source-build rule. `ortho-config`
+        # publishes no binaries for any platform (leynos/ortho-config#479), so
+        # binary-only strategies are tried first and a genuine miss falls back
+        # to a source build. That build uses a dedicated CARGO_TARGET_DIR so it
+        # never shares compiler output with the product, and the cache above
+        # keeps it to once per generation. Delete the fallback once #479 lands.
         shell: bash
+        env:
+          ORTHOHELP_BUILD_DIR: ~/.cache/orthohelp-build
         run: |
           set -euo pipefail
-          cargo binstall --no-confirm --locked --disable-strategies compile \
-            cargo-orthohelp@0.9.0
+          if cargo binstall --no-confirm --locked \
+            --strategies crate-meta-data,quick-install cargo-orthohelp@0.9.0; then
+            exit 0
+          fi
+          echo "::notice title=cargo-orthohelp::no prebuilt release; building from source (leynos/ortho-config#479)"
+          mkdir --parents "${ORTHOHELP_BUILD_DIR}"
+          CARGO_TARGET_DIR="${ORTHOHELP_BUILD_DIR}" \
+            cargo install --locked cargo-orthohelp@0.9.0
 
       - name: Validate cargo-orthohelp version
         shell: bash
         run: |
           set -euo pipefail
           cargo-orthohelp --version | grep -Eq '(^|[[:space:]])0\.9\.0([[:space:]]|$)'
+
+      - name: Save cargo-orthohelp
+        if: steps.orthohelp_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            ~/.cargo/bin
+            ~/.cache/orthohelp-build
+          key: netsuke-orthohelp-v1-${{ runner.os }}-${{ runner.arch }}-0.9.0
 
       - name: Generate release help
         shell: bash
