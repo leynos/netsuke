@@ -69,6 +69,19 @@ SCCACHE_CREDENTIAL_JOBS = (
     ("release.yml", "windows-native-recipe-smoke"),
 )
 
+#: Shared-action steps whose own cache would archive a `target` tree unless
+#: the caller owns it. `rust-build-release` forwards the input to its nested
+#: `setup-rust`, which is what keeps the packaging lane free of a build-tree
+#: archive.
+TARGET_ARCHIVE_OWNERS = (
+    ("ci.yml", "build-test", "Setup Rust"),
+    ("ci.yml", "build-test", "Test and Measure Coverage"),
+    ("coverage-main.yml", "coverage-upload", "Setup Rust"),
+    ("coverage-main.yml", "coverage-upload", "Test and Measure Coverage"),
+    ("netsukefile-test.yml", "netsukefile", "Setup Rust"),
+    ("build-and-package.yml", "build", "Build release binary"),
+)
+
 #: Jobs that compile Rust and must therefore reach the compiler cache. The
 #: packaging job takes its sccache from the nested shared build action, so it
 #: sets the wrapper without installing a second one.

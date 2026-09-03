@@ -685,14 +685,9 @@ instrumented objects the coverage job builds. A `target` archive would be a
 second owner of the same bytes, invalidated far more often than it helped.
 `setup-rust` caches `target/${BUILD_PROFILE}` and `generate-coverage` caches
 the whole tree whenever their `cache-provider` is `github`, so every caller
-passes `external`. One gap remains and is deliberate rather than overlooked:
-the shared `rust-build-release` action nests an older `setup-rust` revision
-that caches `target/${BUILD_PROFILE}` unconditionally and exposes no
-passthrough, so the packaging lane still archives a build tree. The fix belongs
-to shared-actions and is tracked as
-[leynos/shared-actions#426](https://github.com/leynos/shared-actions/issues/426).
-When it lands, the packaging job needs no change beyond confirming that the
-lane caches no build tree.
+passes `external`. The reusable packaging workflow forwards the same input to
+the nested `setup-rust` inside `rust-build-release`, which is what closed the
+last lane that still archived a build tree.
 
 Restores run immediately after checkout and before every package, tool, or
 toolchain install, so a warm run reuses work an earlier run completed. Saves
@@ -764,16 +759,14 @@ than GitHub with `ubi gh leynos/netsuke list-cache-entries`. That command only
 works once the Ubicloud GitHub App covers this repository; see "GitHub Actions
 runner placement" for that prerequisite.
 
-Two shared-action pins are in play. `generate-coverage` is pinned to
-`0eceaef0ba362fd6a1e24d14d838d59dc5ac8cea`, the merge of shared-actions pull
-request 428, which adds the `all-features`, `all-targets`, and `doctests`
-inputs the single-execution rule depends on. Every other shared action is
-pinned to `f9a16065e58324b0714e86c1ebeb8eb4500f1b47`, which introduces
-`cache-provider: external` and installs `whitaker-installer` and
-`cargo-nextest` from checksum-verified official releases with no source
-fallback. That revision is the head of shared-actions pull request 422 and is
-not yet merged, so it is a placeholder: replace those pins with that pull
-request's merge commit before merging this work.
+Every `leynos/shared-actions` reference is pinned to
+`7d46a399558914f5a05074e55a560fec0269fd0d`. That revision introduces
+`cache-provider: external`; installs `whitaker-installer` and `cargo-nextest`
+from checksum-verified official releases with no source fallback; adds the
+`all-features`, `all-targets`, and `doctests` inputs the single-execution rule
+depends on; and forwards `cache-provider` and `use-sccache` through
+`rust-build-release` to its nested `setup-rust`. One SHA across every
+reference, so a future bump moves them together.
 
 CI installs tools from trusted prebuilt releases only. `setup-rust` verifies the
 `cargo-binstall` installer checksum, the formatter jobs install mdtablefix

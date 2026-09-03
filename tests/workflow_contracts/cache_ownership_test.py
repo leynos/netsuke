@@ -24,6 +24,7 @@ from cache_contract_data import (
     OBSERVATION_SOURCES,
     SCCACHE_CREDENTIALS_ACTION,
     SETUP_RUST_ACTION,
+    TARGET_ARCHIVE_OWNERS,
     TRUNK_TRIGGERED_WORKFLOWS,
     UBICLOUD_CACHE_SOURCES,
     WORKFLOW_DIR,
@@ -191,6 +192,25 @@ def test_cache_writers_run_on_a_push_to_the_trunk(workflow_name: str) -> None:
     assert push.get("branches") == ["main"], (
         f"{workflow_name} must run on a push to main, got {push!r}"
     )
+
+
+def test_no_shared_action_enables_its_own_target_archive() -> None:
+    """Require every shared action's built-in cache to stay caller-owned.
+
+    `setup-rust` archives `target/${BUILD_PROFILE}` and `generate-coverage`
+    the whole tree when their `cache-provider` is `github`, so a caller that
+    forgets `external` reintroduces the build-tree archive this repository
+    removed. `rust-build-release` forwards the same input to its nested
+    `setup-rust`, which is what keeps the packaging lane clean.
+    """
+    for workflow_name, job_name, step_name in TARGET_ARCHIVE_OWNERS:
+        workflow = load_workflow(WORKFLOW_DIR / workflow_name)
+        step = named_step(job_steps(workflow, job_name), step_name)
+        inputs = require_mapping(step.get("with"), f"{step_name} inputs")
+        assert inputs.get("cache-provider") == EXTERNAL_CACHE_PROVIDER, (
+            f"{workflow_name} {job_name} {step_name} must not enable its own "
+            "target archive"
+        )
 
 
 def test_shared_actions_delegate_cache_ownership_to_the_caller() -> None:

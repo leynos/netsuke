@@ -78,9 +78,9 @@ jobs:
       VERSION: ${{ inputs.version }}
       # Compile through the compiler cache, as every other lane does. The
       # nested `rust-build-release` action installs sccache and exports the
-      # GitHub Actions backend's credentials itself, so this job sets the
-      # wrapper rather than installing a second sccache and creating a second
-      # owner. Without it the packaging build reports zero compile requests.
+      # backend's credentials itself, so this job sets the wrapper rather than
+      # installing a second sccache beside it. Without the wrapper the
+      # packaging build reports zero compile requests.
       RUSTC_WRAPPER: sccache
       SCCACHE_GHA_ENABLED: 'true'
       SCCACHE_CACHE_SIZE: 4G
@@ -104,21 +104,20 @@ jobs:
           python-version: ${{ inputs['python-version'] }}
 
       - name: Build release binary
-        # This action nests `setup-rust` at an older revision that caches
-        # `target/${BUILD_PROFILE}` unconditionally and exposes no
-        # `cache-provider` passthrough, so this is the one lane where a build
-        # tree is still archived. Every lane this repository owns caches no
-        # `target` tree at all. The fix belongs to shared-actions and is
-        # tracked as leynos/shared-actions#426; drop this note and confirm the
-        # lane caches no build tree once that lands. See "Cache ownership and
-        # bounded CI resources" in docs/developers-guide.md.
-        uses: leynos/shared-actions/.github/actions/rust-build-release@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
+        uses: leynos/shared-actions/.github/actions/rust-build-release@7d46a399558914f5a05074e55a560fec0269fd0d
         with:
           target: ${{ inputs.target }}
           bin-name: ${{ env.BIN_NAME }}
           project-dir: .
           manifest-path: Cargo.toml
           skip-man-page-discovery: 'true'
+          # Forwarded to the nested `setup-rust`, whose own cache would
+          # otherwise archive `target/${BUILD_PROFILE}`. No lane in this
+          # repository archives a build tree; sccache owns compiler output.
+          cache-provider: external
+          # Left enabled deliberately: the nested action installs sccache and
+          # exports the backend's credentials, which is what makes the
+          # `RUSTC_WRAPPER` above work without a second installer here.
 
       - name: Install cargo-orthohelp
         # Runs after `rust-build-release`, which nests the setup-rust action
@@ -151,7 +150,7 @@ jobs:
 
       - name: Stage artefacts
         id: stage
-        uses: leynos/shared-actions/.github/actions/stage-release-artefacts@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
+        uses: leynos/shared-actions/.github/actions/stage-release-artefacts@7d46a399558914f5a05074e55a560fec0269fd0d
         with:
           config-file: .github/release-staging.toml
           target: ${{ inputs['stage-target'] }}
@@ -181,7 +180,7 @@ jobs:
 
       - name: Package Linux artefacts with dependencies
         if: inputs.platform == 'linux'
-        uses: leynos/shared-actions/.github/actions/linux-packages@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
+        uses: leynos/shared-actions/.github/actions/linux-packages@7d46a399558914f5a05074e55a560fec0269fd0d
         with:
           project-dir: .
           package-name: ${{ inputs['bin-name'] }}
@@ -202,7 +201,7 @@ jobs:
       - name: Build Windows installer package
         if: inputs.platform == 'windows'
         id: package_windows
-        uses: leynos/shared-actions/.github/actions/windows-package@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
+        uses: leynos/shared-actions/.github/actions/windows-package@7d46a399558914f5a05074e55a560fec0269fd0d
         with:
           product-name: ${{ inputs['bin-name'] }}
           manufacturer: Leynos
@@ -220,7 +219,7 @@ jobs:
       - name: Build macOS installer package
         if: inputs.platform == 'macos'
         id: package_macos
-        uses: leynos/shared-actions/.github/actions/macos-package@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
+        uses: leynos/shared-actions/.github/actions/macos-package@7d46a399558914f5a05074e55a560fec0269fd0d
         with:
           name: ${{ inputs['bin-name'] }}
           identifier: com.leynos.${{ inputs['bin-name'] }}
