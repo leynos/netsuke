@@ -686,7 +686,9 @@ CI installs tools from trusted prebuilt releases only. `setup-rust` verifies the
 `cargo-binstall` installer checksum, the formatter jobs install mdtablefix
 through it, and the release job installs `cargo-orthohelp` through it. Every
 such call passes `--disable-strategies compile`, so a missing prebuilt release
-fails the job instead of quietly compiling the tool. The release job installs
+fails the job instead of quietly compiling the tool: `cargo-binstall`'s default
+strategy list ends in `compile`, and `tests/workflow_contracts/ci_lint_test.py`
+holds the formatter installers to the explicit option. The release job installs
 `cargo-orthohelp` after `rust-build-release`, because that action provides
 `cargo binstall` and nothing before the help-generation step needs the tool.
 

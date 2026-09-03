@@ -6,6 +6,10 @@ on:
     types: [opened, synchronize, reopened]
   workflow_dispatch:
 
+# Start every job from an empty token and let each one opt in. Both jobs
+# below, and the reusable Windows workflow's caller, take `contents: read`.
+permissions: {}
+
 env:
   # Single source of truth for the cargo-nextest pin. `make test` runs the
   # non-doctest suite through nextest, so every job that installs it reads

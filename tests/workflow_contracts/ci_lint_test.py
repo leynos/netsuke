@@ -29,9 +29,9 @@ import typing as typ
 
 import pytest
 from workflow_loading import (
-    CI_WINDOWS_WORKFLOW_PATH,
     CI_WORKFLOW_PATH,
     MAKEFILE_PATH,
+    SETUP_RUST_JOBS,
     _WorkflowLoader,
     job_steps,
     load_workflow,
@@ -56,13 +56,6 @@ AWK_STAGING_FRAGMENTS = (
     'test_shell_bin="${RUNNER_TEMP}/netsuke-test-bin"',
     'install --mode=0755 "$(command -v gawk)"',
     '"${test_shell_bin}/awk"',
-)
-
-#: Jobs whose `setup-rust` invocations must stay on the shared action's
-#: supported input set.
-SETUP_RUST_JOBS = (
-    (CI_WORKFLOW_PATH, "build-test"),
-    (CI_WINDOWS_WORKFLOW_PATH, "build-test-windows"),
 )
 
 
@@ -360,35 +353,6 @@ def test_setup_rust_does_not_pass_unsupported_components_input() -> None:
                 f"{job_name} Setup Rust must not pass the unsupported "
                 f"'components' input, got {sorted(with_.keys())!r}"
             )
-
-
-def test_mdtablefix_installers_require_the_pinned_version() -> None:
-    """Both formatter installers replace stale executables and verify the pin."""
-    expected_guard = 'expected_mdtablefix_version="mdtablefix ${MDTABLEFIX_VERSION}"'
-    expected_match = (
-        '[[ "${installed_mdtablefix_version}" != "${expected_mdtablefix_version}" ]]'
-    )
-    for workflow_path, job_name in SETUP_RUST_JOBS:
-        step = named_step(
-            job_steps(load_workflow(workflow_path), job_name),
-            "Install mdtablefix",
-        )
-        match step.get("run"):
-            case str() as run:
-                assert expected_guard in run, (
-                    f"{job_name} must pin the expected version"
-                )
-                assert "mdtablefix --version" in run, (
-                    f"{job_name} must inspect the installed version"
-                )
-                assert "tr -d '\\r'" in run, (
-                    f"{job_name} must normalise Windows version output"
-                )
-                assert expected_match in run, (
-                    f"{job_name} must replace a missing or mismatched formatter"
-                )
-            case _:
-                pytest.fail(f"{job_name} must configure mdtablefix")
 
 
 def test_build_job_runs_markdown_formatter_checker_tests() -> None:

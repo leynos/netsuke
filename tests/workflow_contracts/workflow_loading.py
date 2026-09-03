@@ -30,6 +30,14 @@ PACKAGE_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "build-and-package
 RELEASE_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "release.yml"
 MAKEFILE_PATH = REPO_ROOT / "Makefile"
 
+#: The two jobs that call the shared `setup-rust` action directly, paired with
+#: the workflow that declares each. Several suites assert against both, and the
+#: Windows job moved out of `ci.yml` when that file reached its size limit.
+SETUP_RUST_JOBS = (
+    (CI_WORKFLOW_PATH, "build-test"),
+    (CI_WINDOWS_WORKFLOW_PATH, "build-test-windows"),
+)
+
 
 class _WorkflowLoader(yaml.SafeLoader):
     """Loader that resolves booleans the YAML 1.2 way.
