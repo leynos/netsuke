@@ -86,14 +86,9 @@ jobs:
         # A server started without these stays on local disk all job.
         uses: ./.github/actions/sccache-gha-credentials
       - name: Start memory sampler
-        # Samples used memory so the next escalation review cites a
-        # measurement. `cut` rather than `awk` keeps the field reference out
-        # of a single-quoted string, which shellcheck reads as an expression.
-        run: |
-          nohup sh -c 'while sleep 15; do
-            free -m | tr -s " " | cut -d" " -f3 | sed -n 2p
-          done' > mem.log 2>/dev/null &
-          echo "MEM_SAMPLER_PID=$!" >> "$GITHUB_ENV"
+        uses: ./.github/actions/memory-sampler
+        with:
+          mode: start
       - name: Restore gate caches
         id: caches
         uses: ./.github/actions/linux-gate-cache
@@ -278,11 +273,9 @@ jobs:
           installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
       - name: Report peak memory
         if: always()
-        run: |
-          kill "${MEM_SAMPLER_PID}" 2>/dev/null || true
-          peak="$(sort --numeric-sort mem.log 2>/dev/null | tail --lines=1)"
-          printf '### Peak memory\n\n- %s MiB on %s vCPUs\n' \
-            "${peak:-unknown}" "${LINUX_LANE_VCPUS}" >> "$GITHUB_STEP_SUMMARY"
+        uses: ./.github/actions/memory-sampler
+        with:
+          mode: report
       - name: Save gate caches
         # Single writer; the action restricts each save to a push on `main`.
         uses: ./.github/actions/linux-gate-cache

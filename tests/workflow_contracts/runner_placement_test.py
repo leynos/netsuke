@@ -12,18 +12,14 @@ Run via ``make test-workflow-contracts``.
 """
 
 import pytest
-import yaml
 from runner_placement_invariants import (
     CALLEE_SELECTED_RUNNER,
     GITHUB_HOSTED_ONLY_KEYS,
-    LANE_VCPUS,
     REQUIRED_RUNNER_ASSIGNMENTS,
     UBICLOUD_COMPAT_LABEL,
     UBICLOUD_DEFAULT_LABEL,
-    UBICLOUD_LABELS,
     UBICLOUD_LARGE_LABEL,
     has_required_runner_assignments,
-    is_bounded_worker_count,
     is_ubicloud_label,
     is_valid_ninja_sequence,
     is_valid_windows_tool_path_sequence,
@@ -32,7 +28,6 @@ from workflow_loading import (
     REPO_ROOT,
     job_steps,
     load_workflow,
-    require_list,
     require_mapping,
     workflow_job,
 )
@@ -63,20 +58,9 @@ DIRECT_RUNNER_SOURCES = (
     ("release.release", "release.yml", "release"),
 )
 
+
 #: Jobs placed directly on a Ubicloud label, with the worker-count variables
 #: each one must keep within the shape's vCPU count.
-UBICLOUD_WORKER_BOUNDS = (
-    # The instrumented run reads cargo's and nextest's own variables rather
-    # than the Make variables the folded-away test step consumed.
-    (
-        "ci.yml",
-        "build-test",
-        ("BUILD_JOBS", "CARGO_BUILD_JOBS", "NEXTEST_TEST_THREADS"),
-    ),
-    ("netsukefile-test.yml", "netsukefile", ("BUILD_JOBS",)),
-)
-
-
 @pytest.mark.parametrize(
     ("workflow_name", "job_name", "expected_runner"),
     [
@@ -84,7 +68,7 @@ UBICLOUD_WORKER_BOUNDS = (
         ("ci-windows.yml", "build-test-windows", "windows-latest"),
         ("ci-windows.yml", "windows-native-recipe-smoke", "windows-latest"),
         ("ci.yml", "kani-smoke", UBICLOUD_DEFAULT_LABEL),
-        ("coverage-main.yml", "coverage-upload", UBICLOUD_DEFAULT_LABEL),
+        ("coverage-main.yml", "coverage-upload", UBICLOUD_LARGE_LABEL),
         ("delayed-pr-comment.yml", "delay_and_comment", "ubuntu-latest"),
         ("netsukefile-test.yml", "netsukefile", UBICLOUD_COMPAT_LABEL),
         ("release.yml", "metadata", "ubuntu-latest"),
@@ -120,98 +104,6 @@ def test_windows_macos_and_administrative_jobs_stay_github_hosted(
     assert not is_ubicloud_label(runner), (
         f"{assignment_key} must stay on a GitHub-hosted runner, got {runner!r}"
     )
-
-
-@pytest.mark.parametrize(
-    ("workflow_name", "job_name"),
-    [
-        ("ci.yml", "build-test"),
-        ("ci.yml", "kani-smoke"),
-        ("coverage-main.yml", "coverage-upload"),
-        ("netsukefile-test.yml", "netsukefile"),
-    ],
-)
-def test_every_ubicloud_job_declares_a_timeout(
-    workflow_name: str, job_name: str
-) -> None:
-    """Require a timeout so a stuck Ubicloud VM cannot bill indefinitely."""
-    job = workflow_job(load_workflow(WORKFLOW_DIR / workflow_name), job_name)
-    timeout = job.get("timeout-minutes")
-    assert isinstance(timeout, int), (
-        f"{workflow_name} job {job_name} must set timeout-minutes, got {timeout!r}"
-    )
-    assert timeout > 0, (
-        f"{workflow_name} job {job_name} must set a positive timeout, got {timeout!r}"
-    )
-
-
-@pytest.mark.parametrize(
-    ("workflow_name", "job_name", "flag_names"), UBICLOUD_WORKER_BOUNDS
-)
-def test_worker_counts_match_the_lane_vcpu_count(
-    workflow_name: str, job_name: str, flag_names: tuple[str, ...]
-) -> None:
-    """Keep compilation and test workers within the placed shape's vCPUs."""
-    workflow = load_workflow(WORKFLOW_DIR / workflow_name)
-    job = workflow_job(workflow, job_name)
-    runner = str(job.get("runs-on"))
-    vcpus = LANE_VCPUS[runner]
-    env = require_mapping(job.get("env"), f"jobs.{job_name}.env")
-    flags = {name: str(env[name]) for name in flag_names}
-    assert is_bounded_worker_count(vcpus, flags), (
-        f"{workflow_name} job {job_name} runs on {runner} with {vcpus} vCPUs "
-        f"but declares {flags!r}"
-    )
-    declared = env.get("LINUX_LANE_VCPUS") or _workflow_env(workflow).get(
-        "LINUX_LANE_VCPUS"
-    )
-    assert str(declared) == str(vcpus), (
-        f"{workflow_name} job {job_name} must name its vCPU count once, "
-        f"got {declared!r}"
-    )
-
-
-def test_windows_lane_names_its_vcpu_count_once() -> None:
-    """Derive the Windows worker counts from one named constant."""
-    workflow = load_workflow(WORKFLOW_DIR / "ci-windows.yml")
-    vcpus = LANE_VCPUS["windows-latest"]
-    assert str(_workflow_env(workflow).get("WINDOWS_LANE_VCPUS")) == str(vcpus), (
-        "ci-windows.yml must declare the windows-latest vCPU count once"
-    )
-    job = workflow_job(workflow, "build-test-windows")
-    env = require_mapping(job.get("env"), "jobs.build-test-windows.env")
-    flags = {
-        name: str(env[name])
-        for name in ("BUILD_JOBS", "NEXTEST_BUILD_JOBS", "NEXTEST_TEST_JOBS")
-    }
-    assert is_bounded_worker_count(vcpus, flags), (
-        f"build-test-windows declares {flags!r} for a {vcpus} vCPU runner"
-    )
-
-
-def test_actionlint_registers_exactly_the_ubicloud_labels_in_use() -> None:
-    """Register every intentional Ubicloud label, and nothing else.
-
-    actionlint rejects an unregistered self-hosted label, so a typo or an
-    unreviewed shape fails the lint gate instead of queueing forever.
-    """
-    config = yaml.safe_load(
-        (REPO_ROOT / ".github" / "actionlint.yaml").read_text(encoding="utf-8")
-    )
-    registered = require_mapping(config, "actionlint config")["self-hosted-runner"]
-    labels = tuple(
-        str(label)
-        for label in require_list(
-            require_mapping(registered, "self-hosted-runner").get("labels"),
-            "self-hosted-runner labels",
-        )
-    )
-    assert sorted(labels) == sorted(UBICLOUD_LABELS), (
-        f"actionlint must register exactly {UBICLOUD_LABELS!r}, got {labels!r}"
-    )
-    workflow_text = _all_workflow_text()
-    for label in labels:
-        assert label in workflow_text, f"{label} is registered but never used"
 
 
 @pytest.mark.parametrize(

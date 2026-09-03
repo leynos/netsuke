@@ -1,0 +1,37 @@
+---
+name: Memory sampler
+description: >-
+  Record the peak memory a job actually uses, so a runner-shape decision cites
+  a measurement rather than an inference. Both instrumented-build jobs were
+  escalated from `ubicloud-standard-2` after a runner vanished mid-build with
+  no log, which pointed at memory without proving it. Call with `mode: start`
+  after checkout and `mode: report` last, under `if: always()`.
+
+inputs:
+  mode:
+    description: '`start` begins sampling; `report` stops it and publishes.'
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Start memory sampler
+      if: inputs.mode == 'start'
+      shell: bash
+      # `cut` rather than `awk`, because an `awk` field reference inside the
+      # single-quoted `sh -c` body reads to shellcheck as an unexpanded
+      # expression. Line 2 of `free -m`, squeezed, puts "used" in field 3.
+      run: |
+        nohup sh -c 'while sleep 15; do
+          free -m | tr -s " " | cut -d" " -f3 | sed -n 2p
+        done' > mem.log 2>/dev/null &
+        echo "MEM_SAMPLER_PID=$!" >> "$GITHUB_ENV"
+
+    - name: Report peak memory
+      if: always() && inputs.mode == 'report'
+      shell: bash
+      run: |
+        kill "${MEM_SAMPLER_PID}" 2>/dev/null || true
+        peak="$(sort --numeric-sort mem.log 2>/dev/null | tail --lines=1)"
+        printf '### Peak memory\n\n- %s MiB on %s vCPUs\n' \
+          "${peak:-unknown}" "${LINUX_LANE_VCPUS}" >> "$GITHUB_STEP_SUMMARY"

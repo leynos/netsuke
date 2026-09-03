@@ -43,6 +43,7 @@ SCCACHE_CREDENTIALS_ACTION = "./.github/actions/sccache-gha-credentials"
 NON_CACHE_ACTIONS = (
     SCCACHE_CREDENTIALS_ACTION,
     "./.github/actions/install-mdtablefix",
+    "./.github/actions/memory-sampler",
 )
 
 #: Cargo's build tree is archived by no cache step anywhere in this

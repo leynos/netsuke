@@ -905,7 +905,7 @@ Table: runner placement for every repository-owned job.
 | ---------------------------------------------- | --------------------------------- | --------------------------------------- |
 | `ci.yml` `build-test`                          | `ubicloud-standard-4-ubuntu-2404` | Linux merge gate, escalated on evidence |
 | `ci.yml` `kani-smoke`                          | `ubicloud-standard-2-ubuntu-2404` | Linux merge gate                        |
-| `coverage-main.yml` `coverage-upload`          | `ubicloud-standard-2-ubuntu-2404` | Linux coverage on the trunk             |
+| `coverage-main.yml` `coverage-upload`          | `ubicloud-standard-4-ubuntu-2404` | Same instrumented workload as the gate  |
 | `netsukefile-test.yml` `netsukefile`           | `ubicloud-standard-2-ubuntu-2204` | Deliberate Ubuntu 22.04 compatibility   |
 | `release.yml` `build-linux`                    | `ubicloud-standard-2-ubuntu-2404` | Linux packaging and the dry-run gate    |
 | `ci-windows.yml` `build-test-windows`          | `windows-latest`                  | No Ubicloud Windows image               |
@@ -925,16 +925,24 @@ default: escalate to it only on the recipe's evidence, which is peak memory
 above roughly 6 GB, a halving of wall time that offsets the doubled per-minute
 rate, or a job removed from the critical path.
 
-`build-test` is the one escalated job. On the two-vCPU, 8 GB shape its runner
-was lost 16 minutes into the instrumented build: every later step reported a
-null conclusion and GitHub served no log, which is a VM disappearing rather
-than a step failing (run 33804092672). The instrumented run compiles the whole
-workspace with every feature and every target, so memory is the plausible
-cause, but it was inferred rather than measured. The job therefore samples used
-memory every 15 seconds and prints the peak into its summary. **Return the job
+Two jobs are escalated, and for one reason. On the two-vCPU, 8 GB shape
+`build-test` lost its runner 16 minutes into the instrumented build: every
+later step reported a null conclusion and GitHub served no log, which is a VM
+disappearing rather than a step failing (run 33804092672). The instrumented run
+compiles the whole workspace with every feature and every target, so memory is
+the plausible cause, but it was inferred rather than measured.
+
+`coverage-upload` runs that identical workload and is the trunk cache writer,
+so a runner lost there would leave every warm run cold. It is escalated on the
+same evidence rather than waiting to reproduce the failure on `main`. Both jobs
+share one lane size, and a contract holds them equal so a later change cannot
+move one without the other.
+
+Both sample used memory every 15 seconds through
+[`memory-sampler`](../.github/actions/memory-sampler) and print the peak into
+their summaries, so the escalation can actually be reviewed. **Return both jobs
 to `-2` if the peak is well under 6 GB**, and record the measurement either
-way. Every other Linux job stays at `-2`; the trunk coverage job runs the same
-instrumented workload there, so watch its first run on `main`.
+way. Every other Linux job stays at `-2`.
 
 The Ubicloud GitHub App must cover this repository before any Ubicloud job can
 be admitted. The installation is granted across the account, so this is a
@@ -993,6 +1001,9 @@ The workflow contract tests in `tests/workflow_contracts/` hold these
 placement, ownership, and setup-order boundaries. Test-only pure validators
 live in `runner_placement_invariants.py`; checked-in workflow tests and bounded
 Hypothesis properties share them, and production code must not import them.
+Placement lives in `runner_placement_test.py` and the shapes jobs are sized to
+in `runner_shape_test.py`, which also holds the memory measurement that lets an
+escalation be reviewed.
 
 ## Quality gates
 

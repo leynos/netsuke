@@ -14,16 +14,24 @@ on:
 
 jobs:
   coverage-upload:
-    runs-on: ubicloud-standard-2-ubuntu-2404
+    # Escalated alongside `build-test` on the same evidence: this job runs the
+    # identical instrumented workload, and it is the trunk cache writer, so a
+    # runner lost here would leave every warm run cold. The sampler below
+    # measures the peak; see the developers guide for the return-to-`-2`
+    # condition.
+    runs-on: ubicloud-standard-4-ubuntu-2404
     timeout-minutes: 60
     permissions:
       contents: read
     env:
       CARGO_TERM_COLOR: always
       BUILD_PROFILE: debug
-      # `ubicloud-standard-2-ubuntu-2404` supplies two vCPUs; the coverage
-      # action derives its own worker count from this lane constant.
-      LINUX_LANE_VCPUS: '2'
+      # vCPU count of this lane's shape, held equal to the merge gate's by
+      # tests/workflow_contracts/runner_placement_test.py so the two
+      # instrumented jobs cannot drift apart.
+      LINUX_LANE_VCPUS: '4'
+      CARGO_BUILD_JOBS: '4'
+      NEXTEST_TEST_THREADS: '4'
       NETSUKE_RUNNER_IMAGE: ubuntu2404
       # The instrumented coverage build compiles through the same sccache
       # store as the ordinary debug build: the two shapes differ only by
@@ -43,6 +51,10 @@ jobs:
         # Before the installer, so before anything can start the server: a
         # server started without these stays on local disk all job.
         uses: ./.github/actions/sccache-gha-credentials
+      - name: Start memory sampler
+        uses: ./.github/actions/memory-sampler
+        with:
+          mode: start
       - name: Render cache key
         # Renders the same Cargo download-store key that
         # `.github/actions/linux-gate-cache` renders for the merge gate: this
@@ -136,6 +148,11 @@ jobs:
             cat sccache-stats.txt
             printf '```\n'
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Report peak memory
+        if: always()
+        uses: ./.github/actions/memory-sampler
+        with:
+          mode: report
       - name: Upload coverage data to CodeScene
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}

@@ -32,10 +32,15 @@ WINDOWS_PATH_FRAGMENTS = (
 #: would also select Ubuntu 24.04 today, but naming the image keeps a change to
 #: Ubicloud's default from silently moving compiled tools onto another glibc.
 UBICLOUD_DEFAULT_LABEL = "ubicloud-standard-2-ubuntu-2404"
-#: The escalated shape, carried only by the merge gate. The recipe treats
+#: The escalated shape, carried by the two jobs that run the instrumented
+#: build. The recipe treats
 #: `-4` as a ceiling reached on evidence: the two-vCPU shape lost its runner
-#: mid-instrumented-build, and the gate now samples memory so the next review
-#: either confirms the escalation or returns the job to `-2`.
+#: mid-instrumented-build, and both jobs now sample memory so the next review
+#: either confirms the escalation or returns them to `-2`.
+INSTRUMENTED_BUILD_JOBS = (
+    ("ci.yml", "build-test"),
+    ("coverage-main.yml", "coverage-upload"),
+)
 UBICLOUD_LARGE_LABEL = "ubicloud-standard-4-ubuntu-2404"
 #: The deliberate Ubuntu 22.04 compatibility lane.
 UBICLOUD_COMPAT_LABEL = "ubicloud-standard-2-ubuntu-2204"
@@ -59,7 +64,7 @@ REQUIRED_RUNNER_ASSIGNMENTS = {
     "ci-windows.build-test-windows": "windows-latest",
     "ci-windows.windows-native-recipe-smoke": "windows-latest",
     "ci.kani-smoke": UBICLOUD_DEFAULT_LABEL,
-    "coverage-main.coverage-upload": UBICLOUD_DEFAULT_LABEL,
+    "coverage-main.coverage-upload": UBICLOUD_LARGE_LABEL,
     "delayed-pr-comment.delay_and_comment": "ubuntu-latest",
     "netsukefile-test.netsukefile": UBICLOUD_COMPAT_LABEL,
     "release.metadata": "ubuntu-latest",
