@@ -8,7 +8,7 @@ name: Mutation testing
 
 on:
   schedule:
-    - cron: "5 3 * * *" # Daily, 03:05 UTC
+    - cron: "5 3 * * *"  # Daily, 03:05 UTC
   workflow_dispatch:
 
 # Default the token to no scopes; the job opts in explicitly.
@@ -25,7 +25,7 @@ jobs:
   mutation:
     permissions:
       contents: read
-      id-token: write # OIDC workflow-source resolution
+      id-token: write  # OIDC workflow-source resolution
     uses: leynos/shared-actions/.github/workflows/mutation-cargo.yml@32c8ea649ea44d40119f348ad48861212532061f
     with:
       # test_support is deliberately omitted from extra crates: it is a
@@ -33,7 +33,8 @@ jobs:
       # Kani-only verification modules gated behind #[cfg(kani)] mod
       # declarations; cargo-mutants does not evaluate that cfg, so
       # mutants there would compile to nothing and survive as noise.
-      exclude-globs: "src/ir/cycle_verification.rs,src/ir/cmd_interpolate/verification.rs,src/ir/from_manifest_verification.rs,src/ir/graph_kani_map.rs"
+      exclude-globs: "src/ir/cycle_verification.rs,src/ir/cmd_interpolate/verification.rs,\
+        src/ir/from_manifest_verification.rs,src/ir/graph_kani_map.rs"
       # Match the CI baseline (`make test` runs --all-features) so
       # feature-gated tests (legacy-digests) run against mutants.
       extra-args: "--all-features"

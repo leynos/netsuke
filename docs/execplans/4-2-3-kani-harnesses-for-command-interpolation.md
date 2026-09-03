@@ -7,7 +7,7 @@ be kept up to date as work proceeds.
 
 Status: IN PROGRESS
 
-Revision 2.24. See `Revision note` at the foot of this document.
+Revision 2.26. See `Revision note` at the foot of this document.
 
 ## Purpose / big picture
 
@@ -1902,3 +1902,16 @@ corrected documented `LD_LIBRARY_PATH`-capped invocation ran the actual proofs:
 passed, along with six cycle harnesses. It then exited 124 at the five-minute
 cap while `ir::cycle::verification::two_node_cycle_reports_cycle_b_first` was
 starting. This is not a full Kani-suite pass. Status remains `IN PROGRESS`.
+
+**Revision 2.25 (2026-09-03).** The mutation-testing workflow now wraps the
+existing exact `exclude-globs` value with a YAML-escaped line continuation and
+adds the required two spaces before its two inline comments. This preserves the
+Kani verification exclusions and their contract while fixing the reported
+yamllint line-length and comment-spacing warnings. Relevant validation is
+pending.
+
+**Revision 2.26 (2026-09-03).** Focused yamllint validation under the reported
+120-column policy passed, with only unrelated document-start and truthy
+warnings. `make check-fmt` and `make lint` also passed. The mutation workflow's
+comment-spacing and line-length failures are resolved. Status remains
+`IN PROGRESS`.
