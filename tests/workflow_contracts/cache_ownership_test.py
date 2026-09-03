@@ -2,9 +2,10 @@
 
 Ubicloud destroys the runner VM after every job, so warm state arrives only
 through archives. That makes ownership the whole design: each mutable path has
-exactly one cache step, and each lane uses the provider its runner supports.
+exactly one cache step, one action at one pin serves every lane, and Cargo's
+build tree is archived nowhere at all because sccache owns compiler output.
 These checks pin that arrangement so a workflow edit cannot quietly add a
-second owner or move a Ubicloud cache onto a GitHub-hosted runner.
+second owner.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -15,16 +16,16 @@ import pytest
 from cache_contract_data import (
     ACTION_DIR,
     CACHE_ACTION_CALLERS,
+    CACHE_RESTORE,
+    CACHE_SAVE,
     EXTERNAL_CACHE_PROVIDER,
+    FORBIDDEN_CACHE_PATHS,
     GITHUB_CACHE_SOURCES,
-    GITHUB_RESTORE,
-    GITHUB_SAVE,
     OBSERVATION_SOURCES,
+    SCCACHE_CREDENTIALS_ACTION,
     SETUP_RUST_ACTION,
     TRUNK_TRIGGERED_WORKFLOWS,
     UBICLOUD_CACHE_SOURCES,
-    UBICLOUD_RESTORE,
-    UBICLOUD_SAVE,
     WORKFLOW_DIR,
     cache_steps,
     declared_paths,
@@ -45,50 +46,59 @@ if typ.TYPE_CHECKING:
     from pathlib import Path
 
 
-@pytest.mark.parametrize(("source", "job_name"), UBICLOUD_CACHE_SOURCES)
-def test_ubicloud_jobs_use_the_pinned_ubicloud_cache(
+@pytest.mark.parametrize(
+    ("source", "job_name"), UBICLOUD_CACHE_SOURCES + GITHUB_CACHE_SOURCES
+)
+def test_every_lane_uses_the_single_pinned_cache_action(
     source: Path, job_name: str | None
 ) -> None:
-    """Require Linux caches to use the pinned Ubicloud cache action."""
-    for step in cache_steps(lane_steps(source, job_name)):
-        uses = str(step.get("uses"))
-        assert uses in {UBICLOUD_RESTORE, UBICLOUD_SAVE}, (
-            f"{source.name} step {step.get('name')!r} must use the pinned "
-            f"Ubicloud cache action, got {uses!r}"
-        )
+    """Require one cache action at one pin across every lane.
 
-
-@pytest.mark.parametrize(("source", "job_name"), GITHUB_CACHE_SOURCES)
-def test_github_hosted_jobs_use_the_pinned_github_cache(
-    source: Path, job_name: str | None
-) -> None:
-    """Require Windows caches to use the pinned GitHub cache action.
-
-    `ubicloud/cache` needs `UBICLOUD_CACHE_URL` and `UBICLOUD_RUNTIME_TOKEN`,
-    which exist only inside a Ubicloud VM, so a GitHub-hosted job must never
-    reference it.
+    Ubicloud's transparent cache intercepts `actions/cache` at this version,
+    verified from the Ubicloud console listing on 2026-09-03, so the
+    deprecated `ubicloud/cache` fork buys nothing and a second action would be
+    a second thing to audit.
     """
     for step in cache_steps(lane_steps(source, job_name)):
         uses = str(step.get("uses"))
-        assert uses in {GITHUB_RESTORE, GITHUB_SAVE}, (
-            f"{source.name} {job_name} step {step.get('name')!r} must use the "
-            f"pinned GitHub cache action, got {uses!r}"
+        assert uses in {CACHE_RESTORE, CACHE_SAVE}, (
+            f"{source.name} step {step.get('name')!r} must use the pinned "
+            f"cache action, got {uses!r}"
         )
 
 
-def test_ubicloud_cache_is_never_referenced_from_a_github_hosted_job() -> None:
-    """Keep the Ubicloud cache action out of every GitHub-hosted lane."""
-    windows_steps = lane_steps(ACTION_DIR / "windows-gate-cache" / "action.yml", None)
-    referenced = {str(step.get("uses", "")) for step in windows_steps}
-    assert not any("ubicloud/cache" in reference for reference in referenced), (
-        f"the Windows cache action must not use ubicloud/cache: {referenced!r}"
-    )
+@pytest.mark.parametrize(
+    ("source", "job_name"), UBICLOUD_CACHE_SOURCES + GITHUB_CACHE_SOURCES
+)
+def test_no_lane_archives_a_cargo_build_tree(
+    source: Path, job_name: str | None
+) -> None:
+    """Reject any cache step that claims Cargo's `target` directory.
+
+    sccache owns compiler output for every build shape, so a `target` archive
+    would be a second owner of the same bytes, invalidated far more often than
+    it helped. This holds on Windows as well as on Ubicloud. Kani's
+    directories are a tool payload rather than a build tree.
+    """
+    for step in cache_steps(lane_steps(source, job_name)):
+        offenders = [
+            path for path in declared_paths(step) if path in FORBIDDEN_CACHE_PATHS
+        ]
+        assert not offenders, (
+            f"{source.name} step {step.get('name')!r} archives a build tree: "
+            f"{offenders!r}"
+        )
+
+
+def test_each_job_calls_only_its_own_lane_cache_action() -> None:
+    """Keep each job to the cache action for its platform, and no other."""
     for (workflow_name, job_name), action in CACHE_ACTION_CALLERS.items():
         steps = job_steps(load_workflow(WORKFLOW_DIR / workflow_name), job_name)
         references = {
             str(step.get("uses"))
             for step in steps
             if str(step.get("uses", "")).startswith("./.github/actions/")
+            and str(step.get("uses")) != SCCACHE_CREDENTIALS_ACTION
         }
         assert references == {action}, (
             f"{workflow_name} {job_name} must call {action} and no other cache "
@@ -184,7 +194,13 @@ def test_cache_writers_run_on_a_push_to_the_trunk(workflow_name: str) -> None:
 
 
 def test_shared_actions_delegate_cache_ownership_to_the_caller() -> None:
-    """Require every shared action to leave cache ownership to the workflow."""
+    """Require every shared action to leave cache ownership to the workflow.
+
+    `setup-rust` caches `target/${BUILD_PROFILE}` and `generate-coverage`
+    caches the whole `target` tree whenever their `cache-provider` is
+    `github`, so passing `external` is what keeps a build tree out of every
+    lane this repository owns.
+    """
     jobs = (
         ("ci.yml", "build-test"),
         ("ci.yml", "kani-smoke"),
@@ -237,6 +253,9 @@ def test_workflows_do_not_reintroduce_source_tool_builds_or_stale_providers() ->
     )
     assert "nscloud-cache-action" not in workflow_text, (
         "the Namespace cache volume action must not return"
+    )
+    assert "ubicloud/cache" not in workflow_text, (
+        "the deprecated ubicloud/cache fork must not return"
     )
     assert "namespace-profile-" not in workflow_text, (
         "no workflow may name a Namespace runner profile"

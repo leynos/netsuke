@@ -76,6 +76,14 @@ jobs:
     env:
       BIN_NAME: ${{ inputs['bin-name'] }}
       VERSION: ${{ inputs.version }}
+      # Compile through the compiler cache, as every other lane does. The
+      # nested `rust-build-release` action installs sccache and exports the
+      # GitHub Actions backend's credentials itself, so this job sets the
+      # wrapper rather than installing a second sccache and creating a second
+      # owner. Without it the packaging build reports zero compile requests.
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: 'true'
+      SCCACHE_CACHE_SIZE: 4G
       MAN_ARCH: ${{ inputs['package-arch'] != '' && inputs['package-arch'] || 'unknown' }}
       # rust-build-release-v1 still nests a Node 20 setup-uv action, and the
       # promoted Node 24 runtime aborts inside libuv on Windows. The escape
@@ -96,6 +104,13 @@ jobs:
           python-version: ${{ inputs['python-version'] }}
 
       - name: Build release binary
+        # KNOWN GAP: this action nests `setup-rust` at an older revision that
+        # caches `target/${BUILD_PROFILE}` unconditionally and exposes no
+        # `cache-provider` passthrough, so this is the one lane where a build
+        # tree is still archived. Every lane this repository owns caches no
+        # `target` tree at all. Closing the gap needs a shared-actions change
+        # and cannot be done from here; see "Cache ownership and bounded CI
+        # resources" in docs/developers-guide.md.
         uses: leynos/shared-actions/.github/actions/rust-build-release@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
         with:
           target: ${{ inputs.target }}

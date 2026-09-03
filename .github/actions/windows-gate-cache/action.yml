@@ -2,10 +2,12 @@
 name: Windows gate cache
 description: >-
   Own every cache path the Windows jobs depend on. Ubicloud offers Linux
-  runners only, so these jobs run on GitHub-hosted `windows-latest` and use
-  `actions/cache`: `ubicloud/cache` reads runtime variables that only a
-  Ubicloud VM supplies. Every key carries the OS and architecture, so a Linux
-  archive can never restore here.
+  runners only, so these jobs run on GitHub-hosted `windows-latest`. Every key
+  carries the OS and architecture, so a Linux archive can never restore here.
+
+  There is no compiler-cache entry: sccache uses its GitHub Actions backend on
+  these lanes and needs no archive. Cargo's `target` tree is deliberately
+  absent too, because sccache owns compiler output everywhere.
 
 inputs:
   mode:
@@ -29,11 +31,6 @@ inputs:
     description: Restore result for the Whitaker suite.
     required: false
     default: ''
-  sccache-hit:
-    description: Restore result for the compiler cache directory.
-    required: false
-    default: ''
-
 outputs:
   registry-hit:
     description: Whether the Cargo download store restored exactly.
@@ -44,9 +41,6 @@ outputs:
   whitaker-hit:
     description: Whether the Whitaker suite restored exactly.
     value: ${{ steps.whitaker.outputs.cache-hit }}
-  sccache-hit:
-    description: Whether the compiler cache directory restored exactly.
-    value: ${{ steps.sccache.outputs.cache-hit }}
 
 runs:
   using: composite
@@ -70,12 +64,9 @@ runs:
           .github/workflows/ci-windows.yml | sha256sum | cut -c1-16)"
         dylint="$(sha256sum dylint.toml | cut -c1-16)"
         cargo_prefix="netsuke-cargo-v1-${lane}-${NETSUKE_RUST_TOOLCHAIN}-"
-        sccache_prefix="netsuke-sccache-v1-${lane}-${NETSUKE_RUST_TOOLCHAIN}-debug-"
         cargo_key="${cargo_prefix}${sources}"
-        sccache_key="${sccache_prefix}${GITHUB_SHA}"
         if [ "${PROFILE}" = 'smoke' ]; then
           cargo_key="${cargo_prefix}"
-          sccache_key="${sccache_prefix}"
         fi
         {
           printf 'writer=%s\n' "${IS_TRUNK_PUSH}"
@@ -84,8 +75,6 @@ runs:
           printf 'tools=netsuke-tools-v1-%s-%s\n' "${lane}" "${pins}"
           printf 'whitaker=netsuke-whitaker-v1-%s-%s-%s\n' \
             "${lane}" "${pins}" "${dylint}"
-          printf 'sccache=%s\n' "${sccache_key}"
-          printf 'sccache-prefix=%s\n' "${sccache_prefix}"
         } >> "$GITHUB_OUTPUT"
 
     - name: Restore Cargo download store
@@ -124,18 +113,6 @@ runs:
         path: ~/AppData/Roaming/github
         key: ${{ steps.keys.outputs.whitaker }}
 
-    - name: Restore compiler cache
-      id: sccache
-      if: inputs.mode == 'restore'
-      # Step B. Windows keeps sccache in an explicit workspace directory named
-      # by `SCCACHE_DIR`, rather than the GitHub Actions backend, so this step
-      # and that variable name the same path and nothing else caches it.
-      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
-      with:
-        path: .sccache
-        key: ${{ steps.keys.outputs.sccache }}
-        restore-keys: ${{ steps.keys.outputs['sccache-prefix'] }}
-
     - name: Record cache observations
       if: always() && inputs.mode == 'restore'
       shell: bash
@@ -149,15 +126,11 @@ runs:
         TOOLS_HIT: ${{ steps.tools.outputs.cache-matched-key }}
         WHITAKER_KEY: ${{ steps.keys.outputs.whitaker }}
         WHITAKER_HIT: ${{ steps.whitaker.outputs.cache-matched-key }}
-        SCCACHE_KEY: ${{ steps.keys.outputs.sccache }}
-        SCCACHE_HIT: ${{ steps.sccache.outputs.cache-matched-key }}
       run: |
         {
           printf '### Cache observations\n\n'
           printf -- '- registry key: `%s` matched: `%s`\n' \
             "${REGISTRY_KEY}" "${REGISTRY_HIT:-none}"
-          printf -- '- sccache key: `%s` matched: `%s`\n' \
-            "${SCCACHE_KEY}" "${SCCACHE_HIT:-none}"
           if [ "${PROFILE}" = 'gate' ]; then
             printf -- '- tools key: `%s` matched: `%s`\n' \
               "${TOOLS_KEY}" "${TOOLS_HIT:-none}"
@@ -198,11 +171,3 @@ runs:
         path: ~/AppData/Roaming/github
         key: ${{ steps.keys.outputs.whitaker }}
 
-    - name: Save compiler cache
-      if: >-
-        inputs.mode == 'save' && inputs.profile == 'gate' &&
-        steps.keys.outputs.writer == 'true' && inputs['sccache-hit'] != 'true'
-      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
-      with:
-        path: .sccache
-        key: ${{ steps.keys.outputs.sccache }}

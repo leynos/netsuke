@@ -28,19 +28,26 @@ if typ.TYPE_CHECKING:
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
 ACTION_DIR = REPO_ROOT / ".github" / "actions"
 
-UBICLOUD_CACHE_PIN = "92361f338d82d2c58a98875f1b5c95cd14cd6b2a"
-GITHUB_CACHE_PIN = "55cc8345863c7cc4c66a329aec7e433d2d1c52a9"
-UBICLOUD_RESTORE = f"ubicloud/cache/restore@{UBICLOUD_CACHE_PIN}"
-UBICLOUD_SAVE = f"ubicloud/cache/save@{UBICLOUD_CACHE_PIN}"
-GITHUB_RESTORE = f"actions/cache/restore@{GITHUB_CACHE_PIN}"
-GITHUB_SAVE = f"actions/cache/save@{GITHUB_CACHE_PIN}"
+#: One cache action, one pin, on every lane. Ubicloud's transparent cache
+#: intercepts `actions/cache` at v6.1.0, verified from the Ubicloud console
+#: listing on 2026-09-03, so the deprecated `ubicloud/cache` fork is not used
+#: and v4 pins are not either: v4.3.0 left nothing in the Ubicloud store.
+CACHE_PIN = "55cc8345863c7cc4c66a329aec7e433d2d1c52a9"
+CACHE_RESTORE = f"actions/cache/restore@{CACHE_PIN}"
+CACHE_SAVE = f"actions/cache/save@{CACHE_PIN}"
 EXTERNAL_CACHE_PROVIDER = "external"
 SETUP_RUST_ACTION = "leynos/shared-actions/.github/actions/setup-rust@"
+SCCACHE_CREDENTIALS_ACTION = "./.github/actions/sccache-gha-credentials"
 
-#: Every source of cache steps, paired with the provider its runner requires.
-#: `ubicloud/cache` reads runtime variables that only a Ubicloud VM supplies,
-#: so it must never appear in a job that can run on a GitHub-hosted label, and
-#: the reverse archive would never reach the Ubicloud store.
+#: Cargo's build tree is archived by no cache step anywhere in this
+#: repository. sccache is the single owner of compiler output for every build
+#: shape, so a `target` archive would be a second owner of the same bytes and
+#: would be invalidated far more often than it helped. Kani's directories are
+#: a tool payload rather than a build tree, so they are not matched here.
+FORBIDDEN_CACHE_PATHS = ("target", "target/")
+
+#: Every source of cache steps. Ubicloud lanes and GitHub-hosted lanes are
+#: listed separately because their keys differ, not their provider.
 UBICLOUD_CACHE_SOURCES = (
     (ACTION_DIR / "linux-gate-cache" / "action.yml", None),
     (ACTION_DIR / "kani-cache" / "action.yml", None),
@@ -48,6 +55,32 @@ UBICLOUD_CACHE_SOURCES = (
     (WORKFLOW_DIR / "coverage-main.yml", "coverage-upload"),
 )
 GITHUB_CACHE_SOURCES = ((ACTION_DIR / "windows-gate-cache" / "action.yml", None),)
+
+#: Ubicloud lanes whose sccache server must be credentialed before it starts.
+#: A `run` step on Ubicloud cannot see `ACTIONS_RESULTS_URL` or
+#: `ACTIONS_RUNTIME_TOKEN`, so a server started first stays on local disk for
+#: the whole job and reports zero compile requests.
+SCCACHE_CREDENTIAL_JOBS = (
+    ("ci.yml", "build-test"),
+    ("netsukefile-test.yml", "netsukefile"),
+    ("coverage-main.yml", "coverage-upload"),
+    ("ci-windows.yml", "build-test-windows"),
+    ("ci-windows.yml", "windows-native-recipe-smoke"),
+    ("release.yml", "windows-native-recipe-smoke"),
+)
+
+#: Jobs that compile Rust and must therefore reach the compiler cache. The
+#: packaging job takes its sccache from the nested shared build action, so it
+#: sets the wrapper without installing a second one.
+SCCACHE_WRAPPER_JOBS = (
+    ("ci.yml", "build-test"),
+    ("ci-windows.yml", "build-test-windows"),
+    ("ci-windows.yml", "windows-native-recipe-smoke"),
+    ("netsukefile-test.yml", "netsukefile"),
+    ("coverage-main.yml", "coverage-upload"),
+    ("release.yml", "windows-native-recipe-smoke"),
+    ("build-and-package.yml", "build"),
+)
 
 #: Jobs that call a cache action rather than declaring cache steps inline.
 #: They must reference the composite for their platform and no other.

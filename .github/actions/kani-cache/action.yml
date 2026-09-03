@@ -4,7 +4,9 @@ description: >-
   Own the Kani smoke job's three workspace-local directories under one key.
   Kani is a multi-part tool: the Cargo front-end, the verifier bundle, and the
   Kani-managed Rust toolchain are separate downloads that must be warm or cold
-  together, so they share one cache entry keyed by the pinned version.
+  together, so they share one cache entry keyed by the pinned version. Kani's
+  own target directory under `KANI_HOME` is part of that tool payload, not a
+  build tree, which is why it is cached when no other `target` tree is.
 
 inputs:
   mode:
@@ -44,7 +46,7 @@ runs:
     - name: Restore Kani payloads
       id: kani
       if: inputs.mode == 'restore'
-      uses: ubicloud/cache/restore@92361f338d82d2c58a98875f1b5c95cd14cd6b2a  # v4.1.2
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
       with:
         path: |
           .kani-cargo
@@ -69,7 +71,7 @@ runs:
       if: >-
         inputs.mode == 'save' && steps.keys.outputs.writer == 'true' &&
         inputs['cache-hit'] != 'true'
-      uses: ubicloud/cache/save@92361f338d82d2c58a98875f1b5c95cd14cd6b2a  # v4.1.2
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
       with:
         path: |
           .kani-cargo

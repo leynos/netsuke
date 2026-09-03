@@ -25,6 +25,13 @@ jobs:
       # action derives its own worker count from this lane constant.
       LINUX_LANE_VCPUS: '2'
       NETSUKE_RUNNER_IMAGE: ubuntu2404
+      # The instrumented coverage build compiles through the same sccache
+      # store as the ordinary debug build: the two shapes differ only by
+      # flags, which sccache hashes, so they coexist without a `target`
+      # archive and neither shape is left uncached.
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: 'true'
+      SCCACHE_CACHE_SIZE: 4G
       # Keep the main baseline aligned with pull-request coverage instead of
       # silently skipping real-Ninja integration tests.
       NETSUKE_REQUIRE_NINJA: '1'
@@ -32,6 +39,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
+      - name: Export sccache credentials
+        # Before the installer, so before anything can start the server: a
+        # server started without these stays on local disk all job.
+        uses: ./.github/actions/sccache-gha-credentials
       - name: Render cache key
         # Renders the same Cargo download-store key that
         # `.github/actions/linux-gate-cache` renders for the merge gate: this
@@ -57,7 +68,7 @@ jobs:
         # and tool stores are deliberately uncached here: they live under
         # `~/.local/share`, which the merge gate's Whitaker cache owns, and a
         # second owner would make warmth and eviction unknowable.
-        uses: ubicloud/cache/restore@92361f338d82d2c58a98875f1b5c95cd14cd6b2a  # v4.1.2
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -77,6 +88,11 @@ jobs:
             printf -- '- registry key: `%s` hit: `%s`\n' \
               "${CARGO_CACHE_KEY}" "${REGISTRY_HIT:-false}"
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Install sccache
+        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        with:
+          tool: sccache@0.16.0
+          fallback: none
       - name: Setup Rust
         # Pinned to the shared-actions revision that adds `cache-provider`.
         uses: leynos/shared-actions/.github/actions/setup-rust@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
@@ -92,6 +108,8 @@ jobs:
           use-sccache: 'false'
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
+      - name: Reset sccache statistics
+        run: sccache --zero-stats
       - name: Test and Measure Coverage
         uses: leynos/shared-actions/.github/actions/generate-coverage@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
         with:
@@ -100,6 +118,19 @@ jobs:
           format: lcov
           cache-provider: external
           with-ratchet: 'true'
+      - name: Show sccache statistics
+        # Zero compile requests here would mean the instrumented build never
+        # reached the compiler cache, which is a failed integration rather
+        # than a quiet no-op.
+        if: always()
+        run: |
+          sccache --show-stats | tee sccache-stats.txt
+          sccache --show-stats --stats-format=json > sccache-stats.json
+          {
+            printf '### sccache\n\n```text\n'
+            cat sccache-stats.txt
+            printf '```\n'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload coverage data to CodeScene
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}

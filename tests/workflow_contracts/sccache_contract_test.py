@@ -11,6 +11,9 @@ Run via ``make test-workflow-contracts``.
 import pytest
 from cache_contract_data import (
     ACTION_DIR,
+    SCCACHE_CREDENTIAL_JOBS,
+    SCCACHE_CREDENTIALS_ACTION,
+    SCCACHE_WRAPPER_JOBS,
     WORKFLOW_DIR,
     lane_steps,
 )
@@ -70,6 +73,7 @@ def _assert_sccache_contract(workflow_name: str, job_name: str) -> None:
         ("ci-windows.yml", "build-test-windows"),
         ("ci-windows.yml", "windows-native-recipe-smoke"),
         ("netsukefile-test.yml", "netsukefile"),
+        ("coverage-main.yml", "coverage-upload"),
         ("release.yml", "windows-native-recipe-smoke"),
     ],
 )
@@ -102,4 +106,88 @@ def test_linux_gate_selects_exactly_one_sccache_backend() -> None:
     assert len(local_steps) == 2, (
         "the local-directory backend must be wired for restore and save only, "
         f"got {local_steps!r}"
+    )
+
+
+@pytest.mark.parametrize(("workflow_name", "job_name"), SCCACHE_CREDENTIAL_JOBS)
+def test_credentials_are_exported_before_the_server_can_start(
+    workflow_name: str, job_name: str
+) -> None:
+    """Require the credential export before anything starts sccache.
+
+    A `run` step on Ubicloud cannot see `ACTIONS_RESULTS_URL` or
+    `ACTIONS_RUNTIME_TOKEN`, and the shared Rust setup action that normally
+    publishes them is disabled here. `sccache --zero-stats`, `--start-server`,
+    and the first wrapped `rustc` each start the server, and a server started
+    without those variables stays in local-disk mode for the whole job and
+    reports zero compile requests.
+    """
+    steps = job_steps(load_workflow(WORKFLOW_DIR / workflow_name), job_name)
+    export_indices = [
+        index
+        for index, step in enumerate(steps)
+        if str(step.get("uses", "")) == SCCACHE_CREDENTIALS_ACTION
+    ]
+    assert len(export_indices) == 1, (
+        f"{workflow_name} {job_name} must export sccache credentials exactly "
+        f"once, got {export_indices!r}"
+    )
+    export_index = export_indices[0]
+    checkout_indices = [
+        index
+        for index, step in enumerate(steps)
+        if "actions/checkout@" in str(step.get("uses", ""))
+    ]
+    assert checkout_indices, f"{workflow_name} {job_name} must check out first"
+    assert export_index == checkout_indices[0] + 1, (
+        f"{workflow_name} {job_name} must export credentials immediately after checkout"
+    )
+    starters = [
+        index
+        for index, step in enumerate(steps)
+        if str(step.get("name", "")) in {"Install sccache", "Reset sccache statistics"}
+        or "sccache" in str(step.get("run", ""))
+    ]
+    assert starters, f"{workflow_name} {job_name} should touch sccache somewhere"
+    assert export_index < min(starters), (
+        f"{workflow_name} {job_name} must export credentials before anything "
+        "can start the sccache server"
+    )
+
+
+@pytest.mark.parametrize(("workflow_name", "job_name"), SCCACHE_WRAPPER_JOBS)
+def test_every_compiling_job_reaches_the_compiler_cache(
+    workflow_name: str, job_name: str
+) -> None:
+    """Require every Rust build to compile through sccache.
+
+    The coverage and Netsukefile builds produce different object shapes from
+    the merge gate, but sccache hashes the flags, so all of them share one
+    store and none needs a `target` archive. A job that omits the wrapper
+    silently rebuilds everything and reports zero compile requests.
+    """
+    job = workflow_job(load_workflow(WORKFLOW_DIR / workflow_name), job_name)
+    env = require_mapping(job.get("env"), f"{job_name} env")
+    assert env.get("RUSTC_WRAPPER") == "sccache", (
+        f"{workflow_name} {job_name} must compile through sccache"
+    )
+    assert env.get("SCCACHE_CACHE_SIZE") == "4G", (
+        f"{workflow_name} {job_name} must size its store for two build "
+        f"shapes, got {env.get('SCCACHE_CACHE_SIZE')!r}"
+    )
+
+
+def test_packaging_takes_sccache_from_the_nested_build_action() -> None:
+    """Keep the packaging lane to a single sccache owner.
+
+    The shared `rust-build-release` action installs sccache and exports the
+    backend's credentials itself, so this job sets the wrapper rather than
+    installing a second sccache beside it.
+    """
+    steps = job_steps(load_workflow(WORKFLOW_DIR / "build-and-package.yml"), "build")
+    installers = [
+        step for step in steps if str(step.get("name", "")) == "Install sccache"
+    ]
+    assert not installers, (
+        f"the packaging job must not install a second sccache: {installers!r}"
     )

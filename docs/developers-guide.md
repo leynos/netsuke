@@ -649,7 +649,6 @@ Table: cache owners, their paths, and the key inputs that invalidate them.
 | A    | `netsukefile-test.yml`        | `~/.cargo/registry`, `~/.cargo/git`                                                           | as step A, on the 22.04 image          |
 | C    | `netsukefile-test.yml`        | `~/.cargo/bin`                                                                                | workflow pins, 22.04 image             |
 | A    | `windows-gate-cache`          | `~/.cargo/registry`, `~/.cargo/git`                                                           | lockfile, toolchain, `runner.os`/arch  |
-| B    | `windows-gate-cache`          | `.sccache`                                                                                    | toolchain, profile, commit             |
 | C+D  | `windows-gate-cache`          | `~/.cargo/bin`, `~/.local/bin`, `.chocolatey-cache`                                           | workflow pins, `runner.os`/arch        |
 | E    | `windows-gate-cache`          | `~/AppData/Roaming/github`                                                                    | `dylint.toml`, workflow pins           |
 
@@ -669,13 +668,28 @@ drift apart. The Windows action takes a `profile` input: `gate` is the single
 writer of every Windows key, and `smoke` restores that generation by prefix and
 declares no save step at all.
 
-Ubicloud jobs use `ubicloud/cache/restore` and `ubicloud/cache/save` at
-`92361f338d82d2c58a98875f1b5c95cd14cd6b2a` (v4.1.2). Windows jobs use
-`actions/cache/restore` and `actions/cache/save` at
-`55cc8345863c7cc4c66a329aec7e433d2d1c52a9` (v6.1.0). The two are not
-interchangeable: `ubicloud/cache` reads `UBICLOUD_CACHE_URL` and
-`UBICLOUD_RUNTIME_TOKEN`, which exist only inside a Ubicloud VM, so it must
-never appear in a job that can run on a GitHub-hosted label.
+One cache action serves every lane: `actions/cache/restore` and
+`actions/cache/save` at `55cc8345863c7cc4c66a329aec7e433d2d1c52a9` (v6.1.0).
+Ubicloud's transparent cache intercepts that version, confirmed on 2026-09-03
+by finding another repository's Linux keys from it in the Ubicloud console
+listing while its Windows keys landed on GitHub; v4.3.0 left nothing in the
+Ubicloud store. The deprecated `ubicloud/cache` fork is therefore not used,
+which also removes the rule that it may never appear in a job that can run on a
+GitHub-hosted label.
+
+Cargo's `target` tree is archived nowhere, on any lane, Windows included.
+sccache is the single owner of compiler output for every build shape this
+repository produces, and the shapes coexist in one store because sccache hashes
+the flags that distinguish them: ordinary debug objects and the `llvm-cov`
+instrumented objects the coverage job builds. A `target` archive would be a
+second owner of the same bytes, invalidated far more often than it helped.
+`setup-rust` caches `target/${BUILD_PROFILE}` and `generate-coverage` caches
+the whole tree whenever their `cache-provider` is `github`, so every caller
+passes `external`. One gap remains and is deliberate rather than overlooked:
+the shared `rust-build-release` action nests an older `setup-rust` revision
+that caches `target/${BUILD_PROFILE}` unconditionally and exposes no
+passthrough, so the packaging lane still archives a build tree. Closing it
+needs a shared-actions change.
 
 Restores run immediately after checkout and before every package, tool, or
 toolchain install, so a warm run reuses work an earlier run completed. Saves
@@ -710,18 +724,42 @@ not cache its uv stores, because they live under `~/.local/share`, which the
 merge gate's Whitaker cache owns.
 
 The compiler cache is sccache 0.16.0, installed as a checksum-verified prebuilt
-binary through the pinned `taiki-e/install-action` with `fallback: none`. Linux
-uses sccache's GitHub Actions backend, which needs no archive of its own;
-setting the repository variable `NETSUKE_SCCACHE_LOCAL_DIR` to `true` switches
-the gate to the local-directory backend and enables cache step B instead.
-Exactly one backend is ever active. Because the gate sets `use-sccache: false`
-on `setup-rust`, it also exports `ACTIONS_RESULTS_URL` and
-`ACTIONS_RUNTIME_TOKEN` itself; without that step the wrapper silently falls
-back to local disk and the cache saves nothing. Windows keeps `SCCACHE_DIR` in
-an explicit workspace directory under `actions/cache`. Every compiling job
-resets the counters with `sccache --zero-stats` before building and emits both
-human-readable and JSON statistics afterwards under `if: always()`. Coverage
-and Kani leave sccache disabled because their instrumentation boundaries differ.
+binary through the pinned `taiki-e/install-action` with `fallback: none`. Every
+lane uses sccache's GitHub Actions backend, which needs no archive of its own.
+On a Ubicloud runner those objects land in Ubicloud's own store, confirmed on
+2026-09-03 by finding `sccache/...` keys from another repository's Ubicloud run
+in the console listing; an earlier reading that the backend wrote to GitHub was
+a misattribution of a Windows lane's objects. Setting the repository variable
+`NETSUKE_SCCACHE_LOCAL_DIR` to `true` switches the Linux gate to the
+local-directory backend and enables cache step B instead. Exactly one backend
+is ever active. `SCCACHE_CACHE_SIZE` is 4 GB rather than the usual 2 GB,
+because one store now holds two build shapes.
+
+Every Ubicloud lane exports `ACTIONS_RESULTS_URL` and `ACTIONS_RUNTIME_TOKEN`
+through [`sccache-gha-credentials`](../.github/actions/sccache-gha-credentials)
+immediately after checkout. The runner hands those variables to JavaScript
+actions rather than to shell steps, so a `run` step cannot see them, and
+`use-sccache: false` stops the shared Rust setup action that would otherwise
+publish them. The ordering matters as much as the export: `--zero-stats`,
+`--start-server`, and the first wrapped `rustc` all start the server, and a
+server started without those variables stays in local-disk mode for the whole
+job and reports zero compile requests. That symptom has bitten this repository
+before, so a contract test asserts the export runs immediately after checkout
+and before anything that could start the server.
+
+Every job that compiles Rust sets `RUSTC_WRAPPER=sccache`, including the
+coverage job, the Netsukefile compatibility build, and the packaging build. The
+packaging job takes its sccache from the nested shared build action rather than
+installing a second one. Every compiling job resets the counters with
+`sccache --zero-stats` before building and emits both human-readable and JSON
+statistics afterwards under `if: always()`; zero compile requests is a failed
+integration, not a quiet no-op. Kani is the one exception, because its verifier
+bundle ships prebuilt.
+
+After the first run on `main`, confirm the generation reached Ubicloud rather
+than GitHub with `ubi gh leynos/netsuke list-cache-entries`. That command only
+works once the Ubicloud GitHub App covers this repository; see "GitHub Actions
+runner placement" for that prerequisite.
 
 The `leynos/shared-actions/.github/actions/setup-rust` revision
 `f9a16065e58324b0714e86c1ebeb8eb4500f1b47` introduces
@@ -853,6 +891,12 @@ default: escalate to it only with evidence from at least three warm runs
 showing peak memory above roughly 6 GB, a halving of wall time that offsets the
 doubled per-minute rate, or a job removed from the critical path. No such
 evidence exists yet, so every Linux job starts at `-2`.
+
+The Ubicloud GitHub App must be granted access to this repository before any
+Ubicloud job can be admitted. As of 2026-09-03 the installation covered other
+repositories in the estate but not this one, so the first Ubicloud run will sit
+unassigned until that grant is made. Treat the grant as a prerequisite of the
+rollout, not a troubleshooting step.
 
 Register every intentional Ubicloud label in
 [`.github/actionlint.yaml`](../.github/actionlint.yaml). actionlint rejects an

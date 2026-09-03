@@ -26,12 +26,18 @@ jobs:
       BUILD_JOBS: -j 2
       RUSTC_WRAPPER: sccache
       SCCACHE_GHA_ENABLED: 'true'
+      # Sized for two build shapes, matching the merge gate.
+      SCCACHE_CACHE_SIZE: 4G
       NETSUKE_RUNNER_IMAGE: ubuntu2204
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
+      - name: Export sccache credentials
+        # Before the installer, so before anything can start the server: a
+        # server started without these stays on local disk all job.
+        uses: ./.github/actions/sccache-gha-credentials
       - name: Render cache keys
         # This lane owns its own key family: nothing else in the repository
         # runs on Ubuntu 22.04, so a 24.04 archive must never reach it. The
@@ -51,7 +57,7 @@ jobs:
           } >> "$GITHUB_ENV"
       - name: Restore Cargo download store
         id: cargo_registry
-        uses: ubicloud/cache/restore@92361f338d82d2c58a98875f1b5c95cd14cd6b2a  # v4.1.2
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -60,19 +66,10 @@ jobs:
           restore-keys: ${{ env.CARGO_CACHE_PREFIX }}
       - name: Restore tool directories
         id: tool_dirs
-        uses: ubicloud/cache/restore@92361f338d82d2c58a98875f1b5c95cd14cd6b2a  # v4.1.2
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: ~/.cargo/bin
           key: ${{ env.TOOLS_CACHE_KEY }}
-      - name: Export Actions cache credentials for sccache
-        # `use-sccache: false` below stops the shared Rust setup action from
-        # owning the compiler cache, but that action is also what normally
-        # publishes these variables to later `run` steps.
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
-        with:
-          script: |
-            core.exportVariable('ACTIONS_RESULTS_URL', process.env.ACTIONS_RESULTS_URL || '');
-            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
       - name: Record cache observations
         # The rendered key travels with its result, so an operator can explain
         # every miss from the run evidence alone.
@@ -204,7 +201,7 @@ jobs:
         if: >-
           github.event_name == 'push' && github.ref == 'refs/heads/main' &&
           steps.cargo_registry.outputs.cache-hit != 'true'
-        uses: ubicloud/cache/save@92361f338d82d2c58a98875f1b5c95cd14cd6b2a  # v4.1.2
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -214,7 +211,7 @@ jobs:
         if: >-
           github.event_name == 'push' && github.ref == 'refs/heads/main' &&
           steps.tool_dirs.outputs.cache-hit != 'true'
-        uses: ubicloud/cache/save@92361f338d82d2c58a98875f1b5c95cd14cd6b2a  # v4.1.2
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: ~/.cargo/bin
           key: ${{ env.TOOLS_CACHE_KEY }}

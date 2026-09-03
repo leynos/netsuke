@@ -1,0 +1,24 @@
+---
+name: sccache GitHub Actions credentials
+description: >-
+  Publish `ACTIONS_RESULTS_URL` and `ACTIONS_RUNTIME_TOKEN` to `GITHUB_ENV` so
+  sccache's GitHub Actions backend can reach the cache service from a plain
+  `run` step. The runner hands these to JavaScript actions, not to shell
+  steps, so on Ubicloud a `run` step cannot see them; the shared Rust setup
+  action normally publishes them through `mozilla-actions/sccache-action`, but
+  every job here sets `use-sccache: false` so that action never runs.
+
+  Call this immediately after checkout and before anything starts the sccache
+  server. `sccache --zero-stats`, `--start-server`, and the first wrapped
+  `rustc` all start it, and a server that starts without these variables stays
+  in local-disk mode for the whole job, reporting zero compile requests.
+
+runs:
+  using: composite
+  steps:
+    - name: Export Actions cache credentials for sccache
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
+      with:
+        script: |
+          core.exportVariable('ACTIONS_RESULTS_URL', process.env.ACTIONS_RESULTS_URL || '');
+          core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');

@@ -6,10 +6,9 @@ name: CI (Windows)
 # caller and arrive as inputs, so there is exactly one place to edit each one.
 #
 # Both jobs run on GitHub-hosted `windows-latest`. Ubicloud offers Linux
-# runners only, so this is the durable placement rather than a fallback, and
-# every cache below uses `actions/cache` keyed by `runner.os` and
-# `runner.arch`: a Linux archive must never restore onto Windows, and
-# `ubicloud/cache` needs runtime variables that only a Ubicloud VM supplies.
+# runners only, so this is the durable placement rather than a fallback. Every
+# cache is keyed by `runner.os` and `runner.arch`, so a Linux archive can
+# never restore onto Windows.
 
 'on':
   workflow_call:
@@ -54,7 +53,11 @@ jobs:
       NEXTEST_BUILD_JOBS: --build-jobs 4
       NEXTEST_TEST_JOBS: -j 4
       RUSTC_WRAPPER: sccache
-      SCCACHE_DIR: ${{ github.workspace }}/.sccache
+      # The GitHub Actions backend, so the compiler cache needs no archive of
+      # its own and nothing here caches Cargo's `target` tree: sccache is the
+      # single owner of compiler output on every lane.
+      SCCACHE_GHA_ENABLED: 'true'
+      SCCACHE_CACHE_SIZE: 4G
       # The tree requires the Polonius borrow checker, which nightly enables by
       # default (see docs/adr-006-adopt-polonius-nightly-toolchain.md), so CI
       # builds with the dated nightly pinned in rust-toolchain.toml.
@@ -70,6 +73,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
+      - name: Export sccache credentials
+        # Exported before the installer so the sccache server never starts in
+        # local-disk mode. GitHub-hosted runners are believed to supply these
+        # to `run` steps already; exporting costs a second and removes the
+        # zero-request failure mode entirely.
+        uses: ./.github/actions/sccache-gha-credentials
       - name: Restore gate caches
         id: caches
         # Restores before every install so a warm run reuses work an earlier
@@ -209,7 +218,6 @@ jobs:
           registry-hit: ${{ steps.caches.outputs['registry-hit'] }}
           tools-hit: ${{ steps.caches.outputs['tools-hit'] }}
           whitaker-hit: ${{ steps.caches.outputs['whitaker-hit'] }}
-          sccache-hit: ${{ steps.caches.outputs['sccache-hit'] }}
 
   windows-native-recipe-smoke:
     # This deliberately has no Git-Bash shell override. It proves that a
@@ -227,7 +235,8 @@ jobs:
       BUILD_JOBS: -j 4
       CARGO_BUILD_JOBS: '4'
       RUSTC_WRAPPER: sccache
-      SCCACHE_DIR: ${{ github.workspace }}/.sccache
+      SCCACHE_GHA_ENABLED: 'true'
+      SCCACHE_CACHE_SIZE: 4G
     defaults:
       run:
         shell: pwsh
@@ -235,6 +244,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
+      - name: Export sccache credentials
+        # Exported before the installer so the sccache server never starts in
+        # local-disk mode. GitHub-hosted runners are believed to supply these
+        # to `run` steps already; exporting costs a second and removes the
+        # zero-request failure mode entirely.
+        uses: ./.github/actions/sccache-gha-credentials
       - name: Restore gate caches
         # Restore only. `build-test-windows` is the single writer for both key
         # families, so this job reads the generation it published by prefix and

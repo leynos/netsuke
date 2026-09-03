@@ -4,9 +4,8 @@ name: CI
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-  # The trunk run is the cold cache writer. Pull requests restore the trusted
-  # generation and never publish a competing one, so without this trigger no
-  # job would ever populate the Ubicloud caches the gate depends on.
+  # The trunk run is the cold cache writer. Pull requests restore and never
+  # publish, so without this trigger no generation would ever be written.
   push:
     branches: [main]
   workflow_dispatch:
@@ -33,14 +32,11 @@ env:
   # scripts/check-markdown-format.sh, which shells out to mdtablefix. Pin it
   # once so both formatter jobs produce the same canonical output.
   MDTABLEFIX_VERSION: '0.5.0'
-  # The vCPU count of the Ubicloud shape every Linux job in this file runs on.
-  # `ubicloud-standard-2-ubuntu-2404` supplies two vCPUs and 8 GB, the
-  # recipe's default starting shape for a Linux build or test job. Every
-  # compilation and test worker bound below is derived from this one number,
-  # and tests/workflow_contracts/runner_placement_test.py holds them equal.
+  # vCPU count of the Ubicloud shape every Linux job here runs on. Every
+  # worker bound below derives from this one number, and
+  # tests/workflow_contracts/runner_placement_test.py holds them equal.
   LINUX_LANE_VCPUS: '2'
-  # Ubuntu release of that shape. Compiled tools and toolchains are keyed by
-  # it so a 24.04 archive can never restore onto the 22.04 lane.
+  # Ubuntu release of that shape, carried in every compiled-tool cache key.
   NETSUKE_RUNNER_IMAGE: ubuntu2404
 
 jobs:
@@ -58,13 +54,16 @@ jobs:
       NEXTEST_BUILD_JOBS: --build-jobs 2
       NEXTEST_TEST_JOBS: -j 2
       RUSTC_WRAPPER: sccache
-      # sccache uses the GitHub Actions backend, which needs no archive of its
+      # sccache uses the GitHub Actions backend, whose objects land in
+      # Ubicloud's own store on a Ubicloud runner. It needs no archive of its
       # own. Setting the repository variable NETSUKE_SCCACHE_LOCAL_DIR to
       # `true` switches the whole gate to the local-directory backend and
       # enables cache step B; exactly one backend is ever active.
       SCCACHE_GHA_ENABLED: ${{ vars.NETSUKE_SCCACHE_LOCAL_DIR == 'true' && 'false' || 'true' }}
       SCCACHE_DIR: ${{ github.workspace }}/.sccache
-      SCCACHE_CACHE_SIZE: 2G
+      # Sized for two build shapes: the ordinary debug objects and the
+      # `llvm-cov` instrumented ones, which share this store keyed by flags.
+      SCCACHE_CACHE_SIZE: 4G
       # The tree requires the Polonius borrow checker, which nightly enables by
       # default (see docs/adr-006-adopt-polonius-nightly-toolchain.md), so CI
       # builds with the dated nightly pinned in rust-toolchain.toml.
@@ -82,11 +81,14 @@ jobs:
           # Full history so the deferred cs-coverage check step can reach
           # the pull request's merge base once the gate is wired in.
           fetch-depth: 0
+      - name: Export sccache credentials
+        # Before the installer, so before anything can start the server: a
+        # server started without these stays on local disk all job.
+        uses: ./.github/actions/sccache-gha-credentials
       - name: Restore gate caches
         id: caches
-        # Restores before any install or build, so a warm run reuses the
-        # trusted generation instead of repeating work an earlier run
-        # completed. The action is the sole owner of every path it lists.
+        # Restores before any install or build, so a warm run reuses work an
+        # earlier run completed. Sole owner of every path it lists.
         uses: ./.github/actions/linux-gate-cache
         with:
           mode: restore
