@@ -98,7 +98,7 @@ introduces, and concrete remediation tasks that would harden the helpers.
     Windows), the opened handle must be a regular file, and `contents`,
     `linecount`, `hash`, and `digest` stream against a running byte total
     anchored to `StdlibConfig::with_file_max_read_bytes` (default 8 MiB).
-    `linecount` counts terminators incrementally instead of materialising the
+    `linecount` counts terminators incrementally instead of materializing the
     file. Per-call `max_bytes` may narrow the ceiling and a named
     `follow_symlinks=true` opt-in permits link following; rejections surface
     localized diagnostics naming the path and limit without file contents.
