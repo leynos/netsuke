@@ -688,8 +688,11 @@ the whole tree whenever their `cache-provider` is `github`, so every caller
 passes `external`. One gap remains and is deliberate rather than overlooked:
 the shared `rust-build-release` action nests an older `setup-rust` revision
 that caches `target/${BUILD_PROFILE}` unconditionally and exposes no
-passthrough, so the packaging lane still archives a build tree. Closing it
-needs a shared-actions change.
+passthrough, so the packaging lane still archives a build tree. The fix belongs
+to shared-actions and is tracked as
+[leynos/shared-actions#426](https://github.com/leynos/shared-actions/issues/426).
+When it lands, the packaging job needs no change beyond confirming that the
+lane caches no build tree.
 
 Restores run immediately after checkout and before every package, tool, or
 toolchain install, so a warm run reuses work an earlier run completed. Saves
