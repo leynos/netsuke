@@ -40,23 +40,48 @@ pub(crate) struct FileReadLimits {
 /// Returns the bytes read so far, or `None` when the source has been
 /// exhausted. Returns an error once the running total passes `max_bytes`.
 pub(crate) fn read_bounded_chunk<'a>(
+    state: &mut BoundedRead,
     file: &mut File,
     buffer: &'a mut [u8],
-    total: &mut u64,
-    max_bytes: u64,
     path: &Utf8Path,
 ) -> Result<Option<&'a [u8]>, Error> {
     let read = file.read(buffer).map_err(|err| {
-        io_to_error(path, &localization::message(keys::STDLIB_PATH_ACTION_READ), err)
+        io_to_error(
+            path,
+            &localization::message(keys::STDLIB_PATH_ACTION_READ),
+            err,
+        )
     })?;
     if read == 0 {
         return Ok(None);
     }
-    *total = total.saturating_add(u64::try_from(read).unwrap_or(u64::MAX));
-    if *total > max_bytes {
-        return Err(file_too_large_error(path, max_bytes));
+    state.total = state
+        .total
+        .saturating_add(u64::try_from(read).unwrap_or(u64::MAX));
+    if state.total > state.max_bytes {
+        return Err(file_too_large_error(path, state.max_bytes));
     }
-    Ok(Some(&buffer[..read]))
+    // `Read::read` cannot report more than the buffer holds, so index the
+    // slice defensively and treat an over-report as an empty chunk.
+    Ok(Some(buffer.get(..read).unwrap_or(&[])))
+}
+
+/// Running byte total for a bounded read against the configured ceiling.
+pub(crate) struct BoundedRead {
+    /// Bytes consumed so far by this read.
+    total: u64,
+    /// The budget this read may not exceed.
+    max_bytes: u64,
+}
+
+impl BoundedRead {
+    /// Start a bounded read with a fresh running total under `max_bytes`.
+    pub(crate) const fn new(max_bytes: u64) -> Self {
+        Self {
+            total: 0,
+            max_bytes,
+        }
+    }
 }
 
 /// Build the localized byte-budget diagnostic for `path` and `limit`.
@@ -92,40 +117,20 @@ pub(crate) fn not_regular_file_error(path: &Utf8Path) -> Error {
 /// Returns a template error when the parent directory cannot be opened, the
 /// target cannot be opened, the final component is a symlink while following
 /// is disabled, or the opened object is not a regular file.
-pub(crate) fn open_file_checked(
-    path: &Utf8Path,
-    limits: &FileReadLimits,
-) -> Result<File, Error> {
+pub(crate) fn open_file_checked(path: &Utf8Path, limits: &FileReadLimits) -> Result<File, Error> {
     let parent = open_parent_dir(path)?;
     let mut options = OpenOptions::new();
     options.read(true);
+    // Open non-blocking on Unix so a FIFO or device final component cannot
+    // wedge the render worker inside `open`; the flag is cleared once the
+    // opened object is confirmed to be a regular file.
     #[cfg(unix)]
     if !limits.follow_symlinks {
-        options.custom_flags(i32::try_from(OFlags::NOFOLLOW.bits()).map_err(|err| {
-            io_to_error(
-                path,
-                &localization::message(keys::STDLIB_PATH_ACTION_OPEN_FILE),
-                io::Error::new(io::ErrorKind::InvalidInput, err),
-            )
-        })?);
+        apply_unix_open_flags(&mut options, path)?;
     }
     #[cfg(windows)]
     if !limits.follow_symlinks {
-        // Windows has no O_NOFOLLOW equivalent through cap-std; reject a
-        // symlink final component before opening.
-        let metadata = parent
-            .handle
-            .symlink_metadata(Utf8Path::new(&parent.entry))
-            .map_err(|err| {
-                io_to_error(
-                    path,
-                    &localization::message(keys::STDLIB_PATH_ACTION_STAT),
-                    err,
-                )
-            })?;
-        if metadata.file_type().is_symlink() {
-            return Err(not_regular_file_error(path));
-        }
+        reject_windows_symlink(&parent, path)?;
     }
     let file = parent
         .handle
@@ -147,7 +152,81 @@ pub(crate) fn open_file_checked(
     if !metadata.is_file() {
         return Err(not_regular_file_error(path));
     }
+    #[cfg(unix)]
+    if !limits.follow_symlinks {
+        restore_blocking(&file, path)?;
+    }
     Ok(file)
+}
+
+/// Set `O_NOFOLLOW | O_NONBLOCK` on the open options for a policy open.
+///
+/// # Errors
+///
+/// Returns a template error when the platform flag bits do not fit an `i32`.
+#[cfg(unix)]
+fn apply_unix_open_flags(options: &mut OpenOptions, path: &Utf8Path) -> Result<(), Error> {
+    let flags = i32::try_from((OFlags::NOFOLLOW | OFlags::NONBLOCK).bits()).map_err(|err| {
+        io_to_error(
+            path,
+            &localization::message(keys::STDLIB_PATH_ACTION_OPEN_FILE),
+            io::Error::new(io::ErrorKind::InvalidInput, err),
+        )
+    })?;
+    options.custom_flags(flags);
+    Ok(())
+}
+
+/// Reject a symlink final component ahead of an open on Windows.
+///
+/// Windows exposes no `O_NOFOLLOW` through cap-std, so the pre-open
+/// `symlink_metadata` check is the platform's best available guard.
+///
+/// # Errors
+///
+/// Returns a template error when the metadata cannot be read or names a
+/// symlink.
+#[cfg(windows)]
+fn reject_windows_symlink(parent: &ParentDir, path: &Utf8Path) -> Result<(), Error> {
+    let metadata = parent
+        .handle
+        .symlink_metadata(Utf8Path::new(&parent.entry))
+        .map_err(|err| {
+            io_to_error(
+                path,
+                &localization::message(keys::STDLIB_PATH_ACTION_STAT),
+                err,
+            )
+        })?;
+    if metadata.file_type().is_symlink() {
+        return Err(not_regular_file_error(path));
+    }
+    Ok(())
+}
+
+/// Clear `O_NONBLOCK` from `file` after a non-blocking policy open.
+///
+/// # Errors
+///
+/// Returns a template error when the flag swap fails; the caller treats this
+/// as an unreadable file rather than continuing with non-blocking semantics.
+#[cfg(unix)]
+fn restore_blocking(file: &File, path: &Utf8Path) -> Result<(), Error> {
+    let fd = std::os::fd::AsFd::as_fd(file);
+    let flags = rustix::fs::fcntl_getfl(fd).map_err(|err| {
+        io_to_error(
+            path,
+            &localization::message(keys::STDLIB_PATH_ACTION_OPEN_FILE),
+            io::Error::from(err),
+        )
+    })?;
+    rustix::fs::fcntl_setfl(fd, flags & !OFlags::NONBLOCK).map_err(|err| {
+        io_to_error(
+            path,
+            &localization::message(keys::STDLIB_PATH_ACTION_OPEN_FILE),
+            io::Error::from(err),
+        )
+    })
 }
 
 /// Open a path's parent directory with ambient authority.
@@ -249,10 +328,10 @@ pub(super) fn file_size(path: &Utf8Path) -> Result<u64, Error> {
 /// the configured byte budget.
 pub(crate) fn read_utf8(path: &Utf8Path, limits: &FileReadLimits) -> Result<String, Error> {
     let mut file = open_file_checked(path, limits)?;
-    let mut total: u64 = 0;
+    let mut state = BoundedRead::new(limits.max_bytes);
     let mut buffer = [0_u8; 8192];
     let mut bytes = Vec::new();
-    while let Some(chunk) = read_bounded_chunk(&mut file, &mut buffer, &mut total, limits.max_bytes, path)? {
+    while let Some(chunk) = read_bounded_chunk(&mut state, &mut file, &mut buffer, path)? {
         bytes.extend_from_slice(chunk);
     }
     String::from_utf8(bytes).map_err(|_| {
@@ -275,25 +354,25 @@ pub(crate) fn linecount(path: &Utf8Path, limits: &FileReadLimits) -> Result<usiz
     let mut file = open_file_checked(path, limits)?;
     let mut reader = BufReader::new(&mut file);
     let mut lines: usize = 0;
-    let mut total: u64 = 0;
+    let mut state = BoundedRead::new(limits.max_bytes);
     let mut buffer = Vec::new();
     loop {
         buffer.clear();
-        let read = reader
-            .read_until(b'\n', &mut buffer)
-            .map_err(|err| {
-                io_to_error(
-                    path,
-                    &localization::message(keys::STDLIB_PATH_ACTION_READ),
-                    err,
-                )
-            })?;
+        let read = reader.read_until(b'\n', &mut buffer).map_err(|err| {
+            io_to_error(
+                path,
+                &localization::message(keys::STDLIB_PATH_ACTION_READ),
+                err,
+            )
+        })?;
         if read == 0 {
             break;
         }
-        total = total.saturating_add(u64::try_from(read).unwrap_or(u64::MAX));
-        if total > limits.max_bytes {
-            return Err(file_too_large_error(path, limits.max_bytes));
+        state.total = state
+            .total
+            .saturating_add(u64::try_from(read).unwrap_or(u64::MAX));
+        if state.total > state.max_bytes {
+            return Err(file_too_large_error(path, state.max_bytes));
         }
         if !buffer.is_empty() {
             lines += 1;
