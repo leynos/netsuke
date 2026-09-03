@@ -12,8 +12,12 @@
 
 # 🧵 Netsuke
 
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](
-https://deepwiki.com/leynos/netsuke)
+[![Ask DeepWiki][dw]][deepwiki] [![Crates.io Version][crates]][package]
+
+[dw]: https://deepwiki.com/badge.svg
+[deepwiki]: https://deepwiki.com/leynos/netsuke
+[crates]: https://img.shields.io/crates/v/netsuke-build "crates.io package"
+[package]: https://crates.io/crates/netsuke-build
 
 *A friendly build-system compiler: YAML and Jinja in, Ninja out.*
 
