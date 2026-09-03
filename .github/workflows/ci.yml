@@ -264,231 +264,21 @@ jobs:
           access-token: ${{ env.CS_ACCESS_TOKEN }}
           installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
 
-  build-test-windows:
-    # Gates merges: the `#[cfg(windows)]` tree is compiled, linted, and tested
-    # under `-D warnings` on this platform (see #518).
-    runs-on: namespace-profile-netsuke-windows-ci
+  windows:
+    # The Windows merge gates live in a reusable workflow so this file stays
+    # inside the repository's 400-line limit. Version pins stay here, so the
+    # documented `sed` extraction still finds exactly one of each.
+    name: Windows
     permissions:
       contents: read
-    env:
-      CARGO_TERM_COLOR: always
-      BUILD_PROFILE: debug
-      # The attached Namespace profile has four vCPUs. Bound compilation and
-      # nextest separately so test workers do not oversubscribe it.
-      BUILD_JOBS: -j 4
-      NEXTEST_BUILD_JOBS: --build-jobs 4
-      NEXTEST_TEST_JOBS: -j 4
-      RUSTC_WRAPPER: sccache
-      SCCACHE_DIR: ${{ github.workspace }}/.sccache
-      # The tree requires the Polonius borrow checker, which nightly enables by
-      # default (see docs/adr-006-adopt-polonius-nightly-toolchain.md), so CI
-      # builds with the dated nightly pinned in rust-toolchain.toml.
-      NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
-    defaults:
-      run:
-        # The Makefile uses POSIX shell constructs throughout; Git Bash is
-        # preinstalled on the Namespace Windows image. GNU Make's default recipe
-        # shell on Windows is cmd.exe, so every make invocation overrides SHELL
-        # to bash.
-        shell: bash
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Set up Namespace cache volume
-        id: namespace_cache
-        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547
-        with:
-          path: |
-            .sccache
-            .chocolatey-cache
-            ~/.cargo/bin
-            ~/.cargo/git
-            ~/.cargo/registry
-            ~/.local/bin
-            ~/.local/share/whitaker
-      - name: Summarize Namespace cache
-        if: always()
-        run: |
-          echo '### Namespace cache' >> "$GITHUB_STEP_SUMMARY"
-          echo "- cache-hit: ${{ steps.namespace_cache.outputs.cache-hit }}" >> "$GITHUB_STEP_SUMMARY"
-      - name: Install GNU Make
-        shell: pwsh
-        run: |
-          $cacheLocation = Join-Path $env:GITHUB_WORKSPACE '.chocolatey-cache'
-          choco install make --yes --no-progress --cache-location="$cacheLocation"
-          if ($LASTEXITCODE -ne 0) {
-            exit $LASTEXITCODE
-          }
-      - name: Install sccache
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
-        with:
-          tool: sccache@0.16.0
-          fallback: none
-      - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
-        with:
-          toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
-          # Preserve warnings-as-errors through toolchain setup.
-          rustflags: -D warnings
-          cache-provider: external
-          use-sccache: 'false'
-      - name: Install Ninja
-        uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
-      - name: Install cargo-nextest
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
-        with:
-          tool: nextest@${{ env.NEXTEST_VERSION }}
-      - name: Reset sccache statistics
-        run: sccache --zero-stats
-      - name: Show rustc version
-        run: |
-          rustup show
-          rustc --version
-          cargo --version
-      - name: Show Ninja version
-        run: ninja --version
-      - name: Install mdtablefix
-        # Required by `make check-fmt`. The Namespace cache volume owns
-        # `~/.cargo/bin`, so a warm run finds the pinned binary already
-        # present. `cargo-binstall` is checksum-verified by setup-rust and
-        # fetches a prebuilt release; CI never compiles mdtablefix.
-        run: |
-          expected_mdtablefix_version="mdtablefix ${MDTABLEFIX_VERSION}"
-          installed_mdtablefix_version=""
-          if command -v mdtablefix >/dev/null 2>&1; then
-            installed_mdtablefix_version="$(mdtablefix --version 2>/dev/null | tr -d '\r')"
-          fi
-          if [[ "${installed_mdtablefix_version}" != "${expected_mdtablefix_version}" ]]; then
-            cargo binstall --no-confirm --locked --disable-strategies compile \
-              "mdtablefix@${MDTABLEFIX_VERSION}"
-          fi
-          installed_mdtablefix_version="$(mdtablefix --version | tr -d '\r')"
-          if [[ "${installed_mdtablefix_version}" != "${expected_mdtablefix_version}" ]]; then
-            echo "expected ${expected_mdtablefix_version}, got ${installed_mdtablefix_version}" >&2
-            exit 1
-          fi
-      - name: Setup uv
-        # `make check-fmt` runs the uv-driven Ruff format check on every
-        # platform, so the Windows job needs uv on the PATH as well.
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
-        with:
-          python-version: ${{ env.PYTHON_BASELINE }}
-          enable-cache: 'false'
-      - name: Format
-        run: make SHELL=bash check-fmt
-      - name: Lint (Clippy)
-        # Clippy and `cargo doc` over the whole workspace under `-D warnings`,
-        # including the `#[cfg(windows)]` arms.
-        run: make SHELL=bash lint-clippy
-      - name: Install Whitaker
-        uses: >-
-          leynos/shared-actions/.github/actions/install-whitaker@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
-        with:
-          installer-version: '0.2.7'
-          # The Namespace cache volume owns `~/.cargo/bin` and
-          # `~/.local/share/whitaker`, so the action must not mount a second
-          # owner for the same paths.
-          cache-provider: external
-      - name: Lint (Whitaker)
-        # Whitaker/Dylint over the workspace under `-D warnings`, including
-        # the `#[cfg(windows)]` arms. The shared installer supplies a
-        # PowerShell wrapper on Windows, so invoke it from PowerShell rather
-        # than Git Bash. Resolve the Windows known-folder profile, matching
-        # whitaker-installer rather than PowerShell's environment-derived
-        # $HOME. A failure blocks the merge.
-        shell: pwsh
-        run: |
-          $profileHome = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
-          $whitaker = Join-Path $profileHome '.local\bin\whitaker.ps1'
-          $env:RUSTFLAGS = "$env:RUSTFLAGS -D warnings"
-          $env:DYLINT_TOML = Get-Content dylint.toml -Raw
-          & $whitaker --all --no-deps --package netsuke-build '--' --all-targets --all-features
-          if ($LASTEXITCODE -ne 0) {
-            exit $LASTEXITCODE
-          }
-          Push-Location test_support
-          try {
-            $env:DYLINT_TOML = Get-Content dylint.toml -Raw
-            & $whitaker --all --no-deps --package test_support '--' --all-targets --all-features
-            if ($LASTEXITCODE -ne 0) {
-              exit $LASTEXITCODE
-            }
-          } finally {
-            Pop-Location
-          }
-      - name: Test
-        # cargo-nextest plus doctests under `-D warnings`,
-        # compiling and running the `#[cfg(windows)]` test tree. A failure
-        # blocks the merge.
-        run: make SHELL=bash test
-      - name: Show sccache statistics
-        if: always()
-        run: sccache --show-stats --stats-format=json
-
-  windows-native-recipe-smoke:
-    # This deliberately has no Git-Bash shell override. It proves that a
-    # PowerShell-launched Netsuke directs Ninja legacy recipes to the
-    # PowerShell interpreter selected by the Windows contract (#599).
-    needs: build-test-windows
-    runs-on: namespace-profile-netsuke-windows
-    permissions:
-      contents: read
-    env:
-      CARGO_TERM_COLOR: always
-      NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
-      BUILD_JOBS: -j 4
-      CARGO_BUILD_JOBS: '4'
-      RUSTC_WRAPPER: sccache
-      SCCACHE_DIR: ${{ github.workspace }}/.sccache
-    defaults:
-      run:
-        shell: pwsh
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Set up Namespace cache volume
-        id: namespace_cache
-        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547
-        with:
-          path: |
-            .sccache
-            ~/.cargo/bin
-            ~/.cargo/git
-            ~/.cargo/registry
-      - name: Summarize Namespace cache
-        if: always()
-        run: |
-          "### Namespace cache" | Out-File -FilePath $Env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-          "- cache-hit: ${{ steps.namespace_cache.outputs.cache-hit }}" |
-            Out-File -FilePath $Env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-      - name: Install sccache
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
-        with:
-          tool: sccache@0.16.0
-          fallback: none
-      - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
-        with:
-          toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
-          rustflags: -D warnings
-          cache-provider: external
-          use-sccache: 'false'
-      - name: Install Ninja
-        uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
-      - name: Reset sccache statistics
-        run: sccache --zero-stats
-      - name: Build Netsuke
-        run: cargo build --locked --bin netsuke
-      - name: Exercise native Windows recipes
-        run: >-
-          ./scripts/windows-recipe-smoke.ps1
-          -Netsuke ./target/debug/netsuke.exe
-          -Manifest ./tests/data/windows-recipe-smoke.yml
-      - name: Show sccache statistics
-        if: always()
-        run: sccache --show-stats --stats-format=json
+    uses: ./.github/workflows/ci-windows.yml
+    # GitHub does not expose the `env` context to a reusable workflow's
+    # inputs, so these literals repeat the workflow-level pins above.
+    # tests/workflow_contracts/ci_windows_job_test.py holds them equal.
+    with:
+      nextest-version: '0.9.133'
+      mdtablefix-version: '0.5.0'
+      python-baseline: '3.14'
 
   kani-smoke:
     if: github.event_name == 'pull_request'
@@ -546,10 +336,15 @@ jobs:
           export PATH="${frontend_bin}:${PATH}"
           echo "${frontend_bin}" >> "$GITHUB_PATH"
 
+          target='x86_64-unknown-linux-gnu'
+          quickinstall='https://github.com/cargo-bins/cargo-quickinstall'
+          upstream='https://github.com/model-checking/kani'
+
           if [[ ! -x "${frontend_bin}/cargo-kani" || ! -x "${frontend_bin}/kani" ]]; then
-            frontend_archive="${RUNNER_TEMP}/kani-verifier-${kani_version}-x86_64-unknown-linux-gnu.tar.gz"
+            frontend_name="kani-verifier-${kani_version}-${target}.tar.gz"
+            frontend_archive="${RUNNER_TEMP}/${frontend_name}"
             curl --fail --location --proto '=https' --tlsv1.2 \
-              "https://github.com/cargo-bins/cargo-quickinstall/releases/download/kani-verifier-${kani_version}/kani-verifier-${kani_version}-x86_64-unknown-linux-gnu.tar.gz" \
+              "${quickinstall}/releases/download/kani-verifier-${kani_version}/${frontend_name}" \
               --output "${frontend_archive}"
             printf '%s  %s\n' \
               'ed2bafc239b834e14c6b66fc4838e342e3bc0b814e548e72ea30e84f83dc0974' \
@@ -559,9 +354,10 @@ jobs:
           fi
 
           if [[ ! -x "${kani_dir}/bin/kani-driver" ]]; then
-            bundle="${RUNNER_TEMP}/kani-${kani_version}-x86_64-unknown-linux-gnu.tar.gz"
+            bundle_name="kani-${kani_version}-${target}.tar.gz"
+            bundle="${RUNNER_TEMP}/${bundle_name}"
             curl --fail --location --proto '=https' --tlsv1.2 \
-              "https://github.com/model-checking/kani/releases/download/kani-${kani_version}/kani-${kani_version}-x86_64-unknown-linux-gnu.tar.gz" \
+              "${upstream}/releases/download/kani-${kani_version}/${bundle_name}" \
               --output "${bundle}"
             printf '%s  %s\n' \
               '3b5f7afd3b51603ee720db7bc1bc4fe46b5a4f5d36daad9939c4b4c658b51ac0' \

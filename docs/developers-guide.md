@@ -574,14 +574,14 @@ affected workflow passes it through the relevant shared action's
 job-level override would win over the action's exported value and silently drop
 whatever the action set.
 
-Five CI jobs across four workflows carry the contract.
+Five CI jobs across five workflows carry the contract.
 
 Table: CI jobs and their shared Rust setup.
 
 | Workflow                                                              | Job                  | Shared action        | `with.rustflags`            |
 | --------------------------------------------------------------------- | -------------------- | -------------------- | --------------------------- |
 | [`ci.yml`](../.github/workflows/ci.yml)                               | `build-test`         | `setup-rust`         | `-D warnings`               |
-| [`ci.yml`](../.github/workflows/ci.yml)                               | `build-test-windows` | `setup-rust`         | `-D warnings`               |
+| [`ci-windows.yml`](../.github/workflows/ci-windows.yml)               | `build-test-windows` | `setup-rust`         | `-D warnings`               |
 | [`coverage-main.yml`](../.github/workflows/coverage-main.yml)         | `coverage-upload`    | `setup-rust`         | `-D warnings`               |
 | [`netsukefile-test.yml`](../.github/workflows/netsukefile-test.yml)   | `netsukefile`        | `setup-rust`         | *(omitted; action default)* |
 | [`build-and-package.yml`](../.github/workflows/build-and-package.yml) | `build`              | `rust-build-release` | *(omitted; action default)* |
@@ -602,6 +602,24 @@ only emitted an "Unexpected input(s)" warning on every run;
 `tests/workflow_contracts/ci_lint_test.py` holds that.
 
 
+### Where the CI workflow lives
+
+The merge gate spans two files. [`ci.yml`](../.github/workflows/ci.yml) holds
+the Linux gate and the Kani smoke job;
+[`ci-windows.yml`](../.github/workflows/ci-windows.yml) holds
+`build-test-windows` and the pull-request `windows-native-recipe-smoke` job,
+and `ci.yml` invokes it through a single `windows` job. The split exists to
+keep both files inside the 400-line limit that AGENTS.md sets for every file in
+the repository; adding a Windows step therefore goes in `ci-windows.yml`.
+
+GitHub does not expose the `env` context to a reusable workflow's `with` block,
+so `ci.yml` repeats its `NEXTEST_VERSION`, `MDTABLEFIX_VERSION`, and
+`PYTHON_BASELINE` pins as literal inputs, and `ci-windows.yml` re-exports them
+as workflow-level `env`. Each pin is still declared once at workflow scope in
+`ci.yml`, so the `sed` extraction AGENTS.md documents still yields exactly one
+value. `tests/workflow_contracts/ci_windows_job_test.py` holds the caller's
+literals equal to those pins, so the two copies cannot drift.
+
 ### Namespace cache ownership and bounded CI resources
 
 Namespace runner profiles are provisioned remotely with no more than four vCPUs
@@ -615,38 +633,59 @@ and Windows Namespace CI jobs. Immediately after checkout and before any
 package, tool, or toolchain install, those jobs call
 `namespacelabs/nscloud-cache-action` at
 `c5f8dab7560444c4bf8dbc64f1b203431873c547`, mount explicit Cargo download,
-tool, uv, and sccache paths, and write its `cache-hit` output to the job
-summary. Do not use its `rust` mode: that mode mounts Cargo's disposable
-`target` directory, which conflicts with `cargo clean` and duplicates sccache's
-compiler-cache ownership. Do not add `actions/cache` or a setup-action cache to
-those jobs: two writers make cache warmth, eviction, and storage cost
-unknowable. Cache-volume wiring stays after checkout because checkout resets
-the workspace, and before installers so a successful earlier run can pay for
-later setup work. The main Linux gate also enables Namespace's `apt` mode
-before installing its packaged shell dependency.
+tool, uv, workflow-linter, and sccache paths, and write its `cache-hit` output
+to the job summary. Every summary step carries `if: always()`, so a cold run
+reports its miss rather than staying silent. Do not use its `rust` mode: that
+mode mounts Cargo's disposable `target` directory, which conflicts with `cargo
+clean` and duplicates sccache's compiler-cache ownership. Do not add
+`actions/cache` or a setup-action cache to those jobs: two writers make cache
+warmth, eviction, and storage cost unknowable. Cache-volume wiring stays after
+checkout because checkout resets the workspace, and before installers, so a
+successful earlier run can pay for later setup work. The main Linux gate also
+enables Namespace's `apt` mode before installing its packaged shell dependency.
+
+The Linux gate's workflow linters follow the same rule. The volume owns the uv
+download store, tool store, and shim directory under `.uv-cache`, `.uv-tools`,
+and `.uv-bin`, together with the `actionlint` binary at the repository root.
+`setup-uv` therefore runs with `enable-cache: false`, and the actionlint
+download step reuses the cached binary only when it reports the pinned version,
+so bumping that pin cannot be satisfied by a stale executable.
 
 The immutable `leynos/shared-actions/.github/actions/setup-rust` revision
-`5daae0a332441d170d88ca648c9e71f0bbe96cb3` is the merged PR #421 commit. It
-introduces `cache-provider: external`; all direct callers set that value so
-setup-rust does not create a duplicate GitHub cache. Jobs using a local sccache
+`f9a16065e58324b0714e86c1ebeb8eb4500f1b47` introduces `cache-provider:
+external`, and the same revision installs `whitaker-installer` and
+`cargo-nextest` from checksum-verified official releases with no source
+fallback. All direct callers set that value so
+setup-rust does not create a duplicate GitHub cache. `install-whitaker` and
+`generate-coverage` take the same input for the same reason: the volume already
+owns `~/.cargo/bin`, `~/.local/share/whitaker`, and the coverage archives.
+Jobs using a local sccache
 directory also set `use-sccache: false`: the shared action's sccache path is a
 separate GitHub-backed cache service. The compiling Linux jobs instead install
 the checksum-verified prebuilt sccache 0.16.0 binary through the pinned
 `taiki-e/install-action`, set `RUSTC_WRAPPER=sccache`, cache its local storage,
 and reset and emit JSON statistics around the gate. Linux uses
 `~/.cache/sccache`; Windows sets `SCCACHE_DIR` to the workspace-local
-`.sccache` directory so the Namespace action can retain it through a Windows
+`.sccache` directory, so the Namespace action can retain it through a Windows
 junction. Coverage and Kani leave sccache disabled because their
 instrumentation boundaries differ.
 
-CI installs tools from trusted prebuilt releases only. `setup-rust` verifies the
-`cargo-binstall` installer checksum, and formatter and release jobs require
-`cargo binstall`. Kani's Cargo front-end and verifier payload are separate
-artefacts: the Kani job verifies the Cargo QuickInstall front-end archive and
-the upstream 0.67.0 Linux verifier bundle against pinned SHA-256 values. The
-front-end, bundle installation, and Kani-managed Rust toolchain live in the
-job's Namespace cache paths. A missing binary is a CI failure, not permission
-to compile a tool from source.
+CI installs tools from trusted prebuilt releases only. `setup-rust` verifies
+the `cargo-binstall` installer checksum, the formatter jobs install mdtablefix
+through it, and the release job installs `cargo-orthohelp` through it. Every
+such call passes `--disable-strategies compile`, so a missing prebuilt release
+fails the job instead of quietly compiling the tool. The release job installs
+`cargo-orthohelp` after `rust-build-release`, because that action provides
+`cargo binstall` and nothing before the help-generation step needs the tool.
+
+Kani's Cargo front-end and verifier payload are separate artefacts: the Kani
+job verifies the Cargo QuickInstall front-end archive and the upstream 0.67.0
+Linux verifier bundle against pinned SHA-256 values, and each archive's
+verification gates that same archive's use. The front-end, bundle installation,
+and Kani-managed Rust toolchain live in the job's Namespace cache paths under
+version-qualified directories, so raising the pin in `tools/kani/VERSION`
+cannot be satisfied by a binary an earlier run left behind. A missing binary is
+a CI failure, not permission to compile a tool from source.
 
 `NETSUKE_RUST_TOOLCHAIN` follows a separate rule. The CI jobs and Netsukefile
 pin it to the channel in `rust-toolchain.toml` so those jobs provision the
@@ -687,8 +726,9 @@ the remaining harness consequences of that policy.
 ### Windows native recipe smoke workflow
 
 The pull-request `windows-native-recipe-smoke` job in
-[`ci.yml`](../.github/workflows/ci.yml) is the native Windows execution gate.
-It waits for the successful `build-test-windows` job, then runs on
+[`ci-windows.yml`](../.github/workflows/ci-windows.yml) is the native Windows
+execution gate. It waits for the successful `build-test-windows` job, then runs
+on
 `namespace-profile-netsuke-windows` with `pwsh` as the shell for every `run`
 step. It checks out the pull request source, installs the pinned nightly from
 `rust-toolchain.toml` through the shared Rust setup action, installs Ninja, and
@@ -3941,7 +3981,8 @@ fallback — in the `#[cfg(any(windows, test))]` unit tests that every host
 executes, and reserve the Windows-gated suite for behaviour that genuinely
 cannot run elsewhere.
 
-The `build-test-windows` job in `.github/workflows/ci.yml` is a merge gate: it
+The `build-test-windows` job in `.github/workflows/ci-windows.yml` is a merge
+gate: it
 compiles, lints (Clippy and Whitaker), and tests the `#[cfg(windows)]` suite on
 `namespace-profile-netsuke-windows-ci` under `-D warnings`, so a Windows-gated
 test or lint finding blocks a merge. The split still stands: host-independent

@@ -20,17 +20,29 @@ NAMESPACE_CACHE_ACTION = (
 )
 SETUP_RUST_ACTION = "leynos/shared-actions/.github/actions/setup-rust@"
 EXTERNAL_CACHE_PROVIDER = "external"
+# The Kani job redirects CARGO_HOME into the workspace, so its Cargo downloads
+# land under the job-local Cargo home rather than the runner's `~/.cargo`.
+CARGO_DOWNLOAD_PATHS = {("ci.yml", "kani-smoke"): ".kani-cargo"}
+CACHE_SUMMARY_STEPS = {
+    "ci.yml": {
+        "build-test": "Summarize Namespace cache",
+        "kani-smoke": "Summarize Kani cache",
+    },
+    "ci-windows.yml": {
+        "build-test-windows": "Summarize Namespace cache",
+        "windows-native-recipe-smoke": "Summarize Namespace cache",
+    },
+    "coverage-main.yml": {"coverage-upload": "Summarize Namespace cache"},
+    "netsukefile-test.yml": {"netsukefile": "Summarize Namespace cache"},
+    "release.yml": {"windows-native-recipe-smoke": "Summarize Namespace cache"},
+}
 
 
 def test_namespace_cache_volume_has_one_pinned_owner() -> None:
     """Require each Linux Namespace cache user to pin the volume action once."""
     expected_jobs = {
-        "ci.yml": (
-            "build-test",
-            "build-test-windows",
-            "windows-native-recipe-smoke",
-            "kani-smoke",
-        ),
+        "ci.yml": ("build-test", "kani-smoke"),
+        "ci-windows.yml": ("build-test-windows", "windows-native-recipe-smoke"),
         "coverage-main.yml": ("coverage-upload",),
         "netsukefile-test.yml": ("netsukefile",),
         "release.yml": ("windows-native-recipe-smoke",),
@@ -59,8 +71,12 @@ def test_namespace_cache_volume_has_one_pinned_owner() -> None:
                 f"{workflow_name} {job_name} must not mount target via rust mode"
             )
             cached_paths = str(cache_inputs.get("path", ""))
-            assert "~/.cargo/registry" in cached_paths, (
-                f"{workflow_name} {job_name} must retain Cargo downloads"
+            expected_download_path = CARGO_DOWNLOAD_PATHS.get(
+                (workflow_name, job_name), "~/.cargo/registry"
+            )
+            assert expected_download_path in cached_paths, (
+                f"{workflow_name} {job_name} must retain Cargo downloads under "
+                f"{expected_download_path}"
             )
             cache_index = steps.index(cache_steps[0])
             checkout_index = next(
@@ -88,16 +104,45 @@ def test_namespace_cache_volume_has_one_pinned_owner() -> None:
             )
 
 
+def test_every_namespace_cache_reports_its_effectiveness() -> None:
+    """Require each mounted volume to publish its `cache-hit` unconditionally.
+
+    A summary that runs only on success hides the cold-run case that the
+    cache exists to eliminate, so the step must also carry `if: always()`.
+    """
+    workflow_dir = REPO_ROOT / ".github" / "workflows"
+    for workflow_name, summaries in CACHE_SUMMARY_STEPS.items():
+        workflow = load_workflow(workflow_dir / workflow_name)
+        for job_name, summary_name in summaries.items():
+            steps = job_steps(workflow, job_name)
+            summary = named_step(steps, summary_name)
+            assert summary.get("if") == "always()", (
+                f"{workflow_name} {job_name} must summarize the cache on every run"
+            )
+            summary_command = str(summary.get("run", ""))
+            assert "steps.namespace_cache.outputs.cache-hit" in summary_command, (
+                f"{workflow_name} {job_name} must report the volume's cache-hit output"
+            )
+            cache_step = next(
+                step
+                for step in steps
+                if "nscloud-cache-action" in str(step.get("uses", ""))
+            )
+            assert cache_step.get("id") == "namespace_cache", (
+                f"{workflow_name} {job_name} must identify its cache step so the "
+                "summary can read its output"
+            )
+            assert steps.index(cache_step) < steps.index(summary), (
+                f"{workflow_name} {job_name} must mount the volume before summarizing"
+            )
+
+
 def test_setup_rust_delegates_cache_ownership_to_namespace() -> None:
     """Require setup-rust to leave cache ownership to the mounted volume."""
     workflow_dir = REPO_ROOT / ".github" / "workflows"
     expected_jobs = {
-        "ci.yml": (
-            "build-test",
-            "build-test-windows",
-            "windows-native-recipe-smoke",
-            "kani-smoke",
-        ),
+        "ci.yml": ("build-test", "kani-smoke"),
+        "ci-windows.yml": ("build-test-windows", "windows-native-recipe-smoke"),
         "coverage-main.yml": ("coverage-upload",),
         "netsukefile-test.yml": ("netsukefile",),
         "release.yml": ("windows-native-recipe-smoke",),
@@ -170,13 +215,22 @@ def test_kani_uses_cached_prebuilt_frontend_and_release_bundle() -> None:
         "Kani installs its cached front-end directly from a pinned binary archive"
     )
 
-    install_command = str(named_step(steps, "Install prebuilt Kani").get("run"))
+    install_step = named_step(steps, "Install prebuilt Kani")
+    assert steps.index(named_step(steps, "Set up Kani cache volume")) < steps.index(
+        install_step
+    ), "the Kani cache volume must be mounted before Kani is installed"
+
+    install_command = str(install_step.get("run"))
     required_install_fragments = (
-        "cargo-quickinstall/releases/download/kani-verifier-",
+        "quickinstall='https://github.com/cargo-bins/cargo-quickinstall'",
+        '"${quickinstall}/releases/download/kani-verifier-${kani_version}/',
         "ed2bafc239b834e14c6b66fc4838e342",
-        "model-checking/kani/releases/download/kani-",
+        "upstream='https://github.com/model-checking/kani'",
+        '"${upstream}/releases/download/kani-${kani_version}/',
         "3b5f7afd3b51603ee720db7bc1bc4fe4",
-        '[[ ! -x "${cargo_bin}/cargo-kani"',
+        'frontend_bin="${CARGO_HOME}/frontend/kani-${kani_version}"',
+        'kani_dir="${KANI_HOME}/kani-${kani_version}"',
+        '[[ ! -x "${frontend_bin}/cargo-kani"',
         '[[ ! -x "${kani_dir}/bin/kani-driver"',
         'cargo kani setup --use-local-bundle "${bundle}"',
     )
@@ -188,6 +242,31 @@ def test_kani_uses_cached_prebuilt_frontend_and_release_bundle() -> None:
     assert not missing_fragments, (
         f"Kani's binary-only cached installation is missing {missing_fragments!r}"
     )
+    _assert_kani_archives_are_verified_before_use(install_command)
+
+
+def _assert_kani_archives_are_verified_before_use(install_command: str) -> None:
+    """Require each Kani archive's checksum to gate its own unpacking step.
+
+    A bare `sha256sum --check` substring would also pass if the workflow
+    verified an unrelated file, so each assertion names the archive variable
+    and requires the verification to precede that archive's extraction.
+    """
+    frontend_check = '"${frontend_archive}" | sha256sum --check --'
+    frontend_extract = 'tar --extract --gzip --file "${frontend_archive}"'
+    bundle_check = '"${bundle}" | sha256sum --check --'
+    bundle_use = 'cargo kani setup --use-local-bundle "${bundle}"'
+    for check, use, label in (
+        (frontend_check, frontend_extract, "front-end archive"),
+        (bundle_check, bundle_use, "verifier bundle"),
+    ):
+        assert check in install_command, (
+            f"the Kani {label} must be checksum-verified by name"
+        )
+        assert use in install_command, f"the Kani {label} must be unpacked by name"
+        assert install_command.index(check) < install_command.index(use), (
+            f"the Kani {label} must be verified before it is unpacked"
+        )
 
 
 def test_ci_bounds_nextest_workers() -> None:
@@ -259,8 +338,8 @@ def test_compiling_namespace_jobs_report_sccache_json() -> None:
     """Require compiler-cache observability on direct Namespace Rust builds."""
     expected_jobs = {
         ("ci.yml", "build-test"): "~/.cache/sccache",
-        ("ci.yml", "build-test-windows"): ".sccache",
-        ("ci.yml", "windows-native-recipe-smoke"): ".sccache",
+        ("ci-windows.yml", "build-test-windows"): ".sccache",
+        ("ci-windows.yml", "windows-native-recipe-smoke"): ".sccache",
         ("netsukefile-test.yml", "netsukefile"): "~/.cache/sccache",
         ("release.yml", "windows-native-recipe-smoke"): ".sccache",
     }

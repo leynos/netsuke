@@ -160,47 +160,64 @@ def _step_position(steps: list[dict[str, object]], name: str) -> int:
     return steps.index(named_step(steps, name))
 
 
+def _namespace_cache_paths(steps: list[dict[str, object]]) -> str:
+    """Return the Namespace cache volume's mounted paths for the Linux job."""
+    cache_step = named_step(steps, "Set up Namespace cache volume")
+    inputs = cache_step.get("with")
+    assert isinstance(inputs, dict), "the Namespace cache step must declare inputs"
+    return str(inputs.get("path", ""))
+
+
 def _assert_yamllint_ci_contract(steps: list[dict[str, object]]) -> None:
     """Assert that Linux CI provisions the pinned yamllint installation."""
     setup_uv = named_step(steps, "Setup uv")
-    cache_yamllint = named_step(steps, "Cache yamllint")
     install_yamllint = named_step(steps, "Install yamllint")
+    cached_paths = _namespace_cache_paths(steps).splitlines()
 
     assert setup_uv.get("uses") == (
         "astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990"
     ), "the Linux CI job must provision uv before installing yamllint"
-    assert cache_yamllint.get("uses") == (
-        "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9"
-    ), "the Linux CI job must cache the pinned yamllint installation"
+    setup_uv_inputs = setup_uv.get("with")
+    assert isinstance(setup_uv_inputs, dict), "Setup uv must declare inputs"
+    assert setup_uv_inputs.get("enable-cache") == "false", (
+        "setup-uv must not add a second owner beside the Namespace cache volume"
+    )
+    for uv_path in (".uv-bin", ".uv-cache", ".uv-tools"):
+        assert uv_path in cached_paths, (
+            f"the Namespace cache volume must own the uv directory {uv_path}"
+        )
     assert install_yamllint.get("run") == (
         'uv tool install "yamllint==${YAMLLINT_VERSION}"\n'
         'echo "${UV_TOOL_BIN_DIR}" >> "$GITHUB_PATH"\n'
     ), "the Linux CI job must install and expose the pinned yamllint binary"
 
 
+ACTIONLINT_REUSE_GUARD = (
+    'if [[ -x ./actionlint ]] \\\n'
+    '  && [[ "$(./actionlint --version | head --lines=1)"'
+    ' == "${ACTIONLINT_VERSION}" ]]; then'
+)
+
+
 def _assert_actionlint_ci_contract(steps: list[dict[str, object]]) -> None:
     """Assert that Linux CI provisions actionlint and invokes trusted Make."""
-    cache_actionlint = named_step(steps, "Cache actionlint")
     download_actionlint = named_step(steps, "Download actionlint")
     lint = named_step(steps, "Lint")
     download_script = download_actionlint.get("run")
+    cached_paths = _namespace_cache_paths(steps).splitlines()
 
-    assert cache_actionlint.get("id") == "cache_actionlint", (
-        "the actionlint cache step must expose its cache-hit result"
+    assert "actionlint" in cached_paths, (
+        "the Namespace cache volume must own the actionlint binary"
     )
-    assert cache_actionlint.get("uses") == (
-        "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9"
-    ), "the actionlint cache must use the pinned cache action"
-    assert cache_actionlint.get("with") == {
-        "path": "actionlint",
-        "key": "actionlint-${{ runner.os }}-${{ runner.arch }}-1.7.12",
-    }, "the actionlint cache must own the pinned binary at the repository path"
-    assert download_actionlint.get("if") == (
-        "steps.cache_actionlint.outputs.cache-hit != 'true'"
-    ), "the actionlint download must run only after a cache miss"
     assert isinstance(download_script, str), (
         "the actionlint cache-miss step must define its verified installer script"
     )
+    assert ACTIONLINT_REUSE_GUARD in download_script, (
+        "the cached actionlint must be reused only when it reports the pinned version"
+    )
+    assert download_script.index(ACTIONLINT_REUSE_GUARD) < download_script.index(
+        ACTIONLINT_INSTALL_COMMAND
+    ), "the cached-version guard must precede the installer invocation"
     for expected, message in ACTIONLINT_SCRIPT_CONTRACTS:
         assert expected in download_script, message
     assert download_script.index(ACTIONLINT_CHECKSUM_COMMAND) < download_script.index(
@@ -218,10 +235,9 @@ def _assert_workflow_linter_provisioning_order(
     assert all(
         _step_position(steps, earlier) < _step_position(steps, later)
         for earlier, later in [
-            ("Setup uv", "Cache yamllint"),
-            ("Cache yamllint", "Install yamllint"),
-            ("Install yamllint", "Cache actionlint"),
-            ("Cache actionlint", "Download actionlint"),
+            ("Set up Namespace cache volume", "Setup uv"),
+            ("Setup uv", "Install yamllint"),
+            ("Install yamllint", "Download actionlint"),
             ("Download actionlint", "Lint"),
         ]
     ), "the Linux CI job must provision both linters before the trusted lint step"

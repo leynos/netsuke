@@ -154,10 +154,54 @@ fn ensure_kani_cache_contract(steps: &[Value]) -> Result<()> {
         .and_then(|with| mapping_get(with, YamlKey("path")))
         .and_then(Value::as_str);
     ensure!(
-        cache_paths
-            .is_some_and(|paths| { paths.contains(".kani-cargo") && paths.contains(".kani-home") }),
-        "Kani smoke job should cache both job-local Kani homes"
+        cache_paths.is_some_and(|paths| {
+            paths.contains(".kani-cargo")
+                && paths.contains(".kani-home")
+                && paths.contains(".kani-rustup")
+        }),
+        "Kani smoke job should cache the job-local Cargo, Kani, and Rustup homes"
     );
+    let cache_index = step_index(steps, "Set up Kani cache volume")?;
+    let install_index = step_index(steps, "Install prebuilt Kani")?;
+    ensure!(
+        cache_index < install_index,
+        "Kani smoke job should mount its cache volume before installing Kani, or a warm \
+         volume cannot skip the download"
+    );
+    Ok(())
+}
+
+/// Require each Kani archive's checksum to gate that same archive's use.
+///
+/// A bare `sha256sum --check` substring would also be satisfied by verifying
+/// an unrelated file, so each assertion names the archive shell variable and
+/// requires the verification to precede the extraction or setup that consumes
+/// it.
+fn ensure_kani_archives_are_verified_before_use(install_command: &str) -> Result<()> {
+    let checked_uses = [
+        (
+            "\"${frontend_archive}\" | sha256sum --check --",
+            "tar --extract --gzip --file \"${frontend_archive}\"",
+            "front-end archive",
+        ),
+        (
+            "\"${bundle}\" | sha256sum --check --",
+            "cargo kani setup --use-local-bundle \"${bundle}\"",
+            "verifier bundle",
+        ),
+    ];
+    for (check, use_site, label) in checked_uses {
+        let check_index = install_command
+            .find(check)
+            .with_context(|| format!("Kani {label} should be checksum-verified by name"))?;
+        let use_index = install_command
+            .find(use_site)
+            .with_context(|| format!("Kani {label} should be unpacked by name"))?;
+        ensure!(
+            check_index < use_index,
+            "Kani {label} should be verified before it is unpacked"
+        );
+    }
     Ok(())
 }
 
@@ -202,8 +246,16 @@ fn behavioural_ci_workflow_installs_pinned_cargo_nextest() -> Result<()> {
         "NEXTEST_VERSION should pin an exact version, found {version:?}"
     );
 
-    for job_name in ["build-test", "build-test-windows"] {
-        let build_test = job(&workflow, job_name)?;
+    let windows_contents =
+        workflow_contents("ci-windows.yml").expect("Windows CI workflow should be readable");
+    let windows_workflow: Value =
+        serde_yaml::from_str(&windows_contents).context("parse Windows CI workflow YAML")?;
+
+    for (source, job_name) in [
+        (&workflow, "build-test"),
+        (&windows_workflow, "build-test-windows"),
+    ] {
+        let build_test = job(source, job_name)?;
         ensure!(
             job_env(build_test, YamlKey("NEXTEST_VERSION")).is_none(),
             "{job_name} should not duplicate NEXTEST_VERSION at job scope"
@@ -259,8 +311,16 @@ fn behavioural_ci_workflow_uses_shared_tool_installers() -> Result<()> {
     let contents = workflow_contents("ci.yml").expect("CI workflow should be readable");
     let workflow: Value = serde_yaml::from_str(&contents).context("parse CI workflow YAML")?;
 
-    for job_name in ["build-test", "build-test-windows"] {
-        let job = job(&workflow, job_name)?;
+    let windows_contents =
+        workflow_contents("ci-windows.yml").expect("Windows CI workflow should be readable");
+    let windows_workflow: Value =
+        serde_yaml::from_str(&windows_contents).context("parse Windows CI workflow YAML")?;
+
+    for (source, job_name) in [
+        (&workflow, "build-test"),
+        (&windows_workflow, "build-test-windows"),
+    ] {
+        let job = job(source, job_name)?;
         let whitaker = named_step(steps(job)?, "Install Whitaker")?;
         let uses = mapping_get(whitaker, YamlKey("uses"))
             .and_then(Value::as_str)
@@ -280,7 +340,7 @@ fn behavioural_ci_workflow_uses_shared_tool_installers() -> Result<()> {
     }
 
     let windows_whitaker = named_step(
-        steps(job(&workflow, "build-test-windows")?)?,
+        steps(job(&windows_workflow, "build-test-windows")?)?,
         "Lint (Whitaker)",
     )?;
     let windows_whitaker_run = mapping_get(windows_whitaker, YamlKey("run"))
@@ -341,29 +401,15 @@ fn behavioural_ci_workflow_wires_kani_smoke_job() -> Result<()> {
 
     let steps = steps(kani_job)?;
     ensure!(
-        steps.iter().any(|step| step_has(
-            step,
-            StepField::Uses,
-            "astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990"
-        )),
-        "Kani smoke job should install uv with the pinned setup-uv action"
-    );
-
-    let install_uv_step = steps
-        .iter()
-        .find_map(|step| step_name(step, "Install uv"))
-        .context("Kani smoke job should include the Install uv step")?;
-    let uv_cache_enabled = mapping_get(install_uv_step, YamlKey("with"))
-        .and_then(Value::as_mapping)
-        .and_then(|with| mapping_get(with, YamlKey("enable-cache")));
-    ensure!(
-        uv_cache_enabled == Some(&Value::Bool(false)),
-        "Install uv step should disable automatic caching because Kani uses an explicit cache"
+        !steps
+            .iter()
+            .any(|step| step_has(step, StepField::Uses, "astral-sh/setup-uv@")),
+        "Kani smoke job installs prebuilt archives directly and needs no uv runtime"
     );
 
     ensure_kani_cache_contract(steps)?;
 
-    let install_kani_index = step_index(steps, "Install Kani release bundle")?;
+    let install_kani_index = step_index(steps, "Install prebuilt Kani")?;
     let kani_check_index = steps
         .iter()
         .position(|step| step_name(step, "Kani version check").is_some())
@@ -376,14 +422,21 @@ fn behavioural_ci_workflow_wires_kani_smoke_job() -> Result<()> {
         install_kani_index < kani_check_index && kani_check_index < kani_ir_index,
         "Kani smoke job should install Kani, check its version, then run the bounded harnesses"
     );
-    let install_kani = named_step(steps, "Install Kani release bundle")?;
+    let install_kani = named_step(steps, "Install prebuilt Kani")?;
     let install_command = mapping_get(install_kani, YamlKey("run"))
         .and_then(Value::as_str)
         .context("Kani release installation should be a shell command")?;
     ensure!(
-        install_command.contains("sha256sum --check") && !install_command.contains("cargo install"),
-        "Kani smoke job should verify a release bundle without compiling from source"
+        !install_command.contains("cargo install"),
+        "Kani smoke job should never compile the verifier from source"
     );
+    ensure!(
+        install_command.contains("frontend_bin=\"${CARGO_HOME}/frontend/kani-${kani_version}\"")
+            && install_command.contains("kani_dir=\"${KANI_HOME}/kani-${kani_version}\""),
+        "Kani payloads should live under version-qualified directories so a version bump \
+         cannot be satisfied by a stale cached binary"
+    );
+    ensure_kani_archives_are_verified_before_use(install_command)?;
     ensure!(
         mapping_get(kani_job, YamlKey("timeout-minutes")).and_then(Value::as_u64) == Some(20),
         "Kani smoke job should enforce the 20-minute cold-run ceiling"

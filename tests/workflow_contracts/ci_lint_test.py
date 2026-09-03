@@ -29,6 +29,7 @@ import typing as typ
 
 import pytest
 from workflow_loading import (
+    CI_WINDOWS_WORKFLOW_PATH,
     CI_WORKFLOW_PATH,
     MAKEFILE_PATH,
     _WorkflowLoader,
@@ -59,7 +60,10 @@ AWK_STAGING_FRAGMENTS = (
 
 #: Jobs whose `setup-rust` invocations must stay on the shared action's
 #: supported input set.
-SETUP_RUST_JOBS = ("build-test", "build-test-windows")
+SETUP_RUST_JOBS = (
+    (CI_WORKFLOW_PATH, "build-test"),
+    (CI_WINDOWS_WORKFLOW_PATH, "build-test-windows"),
+)
 
 
 def _tool_input(step: dict[str, object]) -> object:
@@ -320,10 +324,10 @@ def test_nextest_version_declared_once_at_workflow_scope() -> None:
         f"got {env.get('NEXTEST_VERSION')!r}"
     )
 
-    for job_name in SETUP_RUST_JOBS:
+    for workflow_path, job_name in SETUP_RUST_JOBS:
         installs = [
             tool
-            for step in job_steps(workflow, job_name)
+            for step in job_steps(load_workflow(workflow_path), job_name)
             if "nextest" in str(tool := _tool_input(step))
         ]
         assert installs == ["nextest@${{ env.NEXTEST_VERSION }}"], (
@@ -342,9 +346,8 @@ def test_setup_rust_does_not_pass_unsupported_components_input() -> None:
     step uses the shared action and passes only supported inputs, so `check-fmt`
     and `lint-clippy` still find the components the action installs.
     """
-    workflow = load_workflow()
-    for job_name in SETUP_RUST_JOBS:
-        steps = job_steps(workflow, job_name)
+    for workflow_path, job_name in SETUP_RUST_JOBS:
+        steps = job_steps(load_workflow(workflow_path), job_name)
         setup_steps = [
             step for step in steps if "setup-rust" in str(step.get("uses", ""))
         ]
@@ -365,10 +368,9 @@ def test_mdtablefix_installers_require_the_pinned_version() -> None:
     expected_match = (
         '[[ "${installed_mdtablefix_version}" != "${expected_mdtablefix_version}" ]]'
     )
-    workflow = load_workflow()
-    for job_name in SETUP_RUST_JOBS:
+    for workflow_path, job_name in SETUP_RUST_JOBS:
         step = named_step(
-            job_steps(workflow, job_name),
+            job_steps(load_workflow(workflow_path), job_name),
             "Install mdtablefix",
         )
         match step.get("run"):

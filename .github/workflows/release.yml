@@ -117,11 +117,11 @@ jobs:
 
   build-linux:
     needs: metadata
+    # build-and-package.yml compiles, packages, and uploads workflow artefacts
+    # through pinned actions. None of them publishes a package or exchanges an
+    # OIDC token, so the called workflow needs no write scope.
     permissions:
-      actions: read
       contents: read
-      id-token: write
-      packages: write
     strategy:
       matrix:
         include:
@@ -147,11 +147,11 @@ jobs:
 
   build-windows:
     needs: metadata
+    # build-and-package.yml compiles, packages, and uploads workflow artefacts
+    # through pinned actions. None of them publishes a package or exchanges an
+    # OIDC token, so the called workflow needs no write scope.
     permissions:
-      actions: read
       contents: read
-      id-token: write
-      packages: write
     strategy:
       matrix:
         include:
@@ -178,11 +178,11 @@ jobs:
 
   build-macos:
     needs: metadata
+    # build-and-package.yml compiles, packages, and uploads workflow artefacts
+    # through pinned actions. None of them publishes a package or exchanges an
+    # OIDC token, so the called workflow needs no write scope.
     permissions:
-      actions: read
       contents: read
-      id-token: write
-      packages: write
     strategy:
       matrix:
         include:

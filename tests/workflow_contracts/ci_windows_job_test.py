@@ -1,6 +1,8 @@
 """Contract tests for the CI workflow's Windows merge gate.
 
-``build-test-windows`` compiles and exercises the ``#[cfg(windows)]`` tree, so
+``build-test-windows`` lives in the ``ci-windows.yml`` reusable workflow so
+``ci.yml`` stays inside the repository's 400-line file limit. It compiles and
+exercises the ``#[cfg(windows)]`` tree, so
 it must run on a Windows runner, drive the Makefile's POSIX recipes under Git
 Bash, keep ``-D warnings`` in force, run the platform-sensitive gates exactly
 once, skip the platform-independent doc and audit gates the Linux job already
@@ -13,6 +15,8 @@ Run via ``make test-workflow-contracts``.
 
 import pytest
 from workflow_loading import (
+    CI_WINDOWS_WORKFLOW_PATH,
+    CI_WORKFLOW_PATH,
     job_steps,
     load_workflow,
     named_step,
@@ -95,13 +99,13 @@ def normalise_run(run: object) -> object:
 @pytest.fixture
 def windows_job() -> dict[str, object]:
     """Return the build-test-windows job mapping."""
-    return workflow_job(load_workflow(), WINDOWS_JOB)
+    return workflow_job(load_workflow(CI_WINDOWS_WORKFLOW_PATH), WINDOWS_JOB)
 
 
 @pytest.fixture
 def windows_steps() -> list[dict[str, object]]:
     """Return the build-test-windows job's steps, in declaration order."""
-    return job_steps(load_workflow(), WINDOWS_JOB)
+    return job_steps(load_workflow(CI_WINDOWS_WORKFLOW_PATH), WINDOWS_JOB)
 
 
 def test_windows_job_runs_on_namespace_windows(windows_job: dict[str, object]) -> None:
@@ -298,3 +302,44 @@ def test_windows_job_is_a_blocking_merge_gate(
     assert not lenient, (
         f"{WINDOWS_JOB} steps {lenient!r} must not set continue-on-error"
     )
+
+
+#: Version pins the caller repeats as reusable-workflow inputs, mapped to the
+#: workflow-level `env` key each one must equal.
+CALLER_INPUT_PINS = {
+    "nextest-version": "NEXTEST_VERSION",
+    "mdtablefix-version": "MDTABLEFIX_VERSION",
+    "python-baseline": "PYTHON_BASELINE",
+}
+
+
+def test_windows_caller_repeats_the_workflow_level_pins() -> None:
+    """The Windows call must pass the same versions the caller pins itself.
+
+    GitHub does not expose the ``env`` context to a reusable workflow's
+    ``with`` block, so the caller has to repeat each literal. Without this
+    check the two copies could drift and the Windows gate would silently test
+    a different toolchain from the Linux one.
+    """
+    caller = load_workflow(CI_WORKFLOW_PATH)
+    caller_env = require_mapping(caller.get("env"), "the CI workflow env")
+    call = workflow_job(caller, "windows")
+    assert call.get("uses") == "./.github/workflows/ci-windows.yml", (
+        "the Windows gate must be invoked as a local reusable workflow, "
+        f"got {call.get('uses')!r}"
+    )
+    inputs = require_mapping(call.get("with"), "the Windows call inputs")
+    for input_name, env_name in CALLER_INPUT_PINS.items():
+        assert inputs.get(input_name) == caller_env.get(env_name), (
+            f"the Windows call must pass {env_name}'s pinned value as "
+            f"{input_name}, got {inputs.get(input_name)!r} against "
+            f"{caller_env.get(env_name)!r}"
+        )
+
+    called = load_workflow(CI_WINDOWS_WORKFLOW_PATH)
+    called_env = require_mapping(called.get("env"), "the Windows workflow env")
+    for input_name, env_name in CALLER_INPUT_PINS.items():
+        assert called_env.get(env_name) == f"${{{{ inputs['{input_name}'] }}}}", (
+            f"the Windows workflow must read {env_name} from its {input_name} "
+            f"input, got {called_env.get(env_name)!r}"
+        )

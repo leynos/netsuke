@@ -19,6 +19,9 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CI_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+#: The Windows halves of the merge gate live in a reusable workflow so
+#: `ci.yml` stays inside the repository's 400-line file limit.
+CI_WINDOWS_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "ci-windows.yml"
 COVERAGE_MAIN_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "coverage-main.yml"
 MUTATION_TESTING_WORKFLOW_PATH = (
     REPO_ROOT / ".github" / "workflows" / "mutation-testing.yml"

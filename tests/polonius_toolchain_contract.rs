@@ -65,7 +65,7 @@ const CI_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
     pins_toolchain_env: true,
 };
 const CI_WINDOWS_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
-    path: ".github/workflows/ci.yml",
+    path: ".github/workflows/ci-windows.yml",
     job: "build-test-windows",
     action: SETUP_RUST_ACTION,
     rustflags: Some(DENY_WARNINGS_RUSTFLAGS),

@@ -65,6 +65,11 @@ jobs:
   build:
     name: Build ${{ inputs.platform }} artefacts
     runs-on: ${{ inputs.runner }}
+    # The pinned action chain compiles, packages, and uploads workflow
+    # artefacts. It neither publishes packages nor exchanges an OIDC token, so
+    # the job token needs no write scope.
+    permissions:
+      contents: read
     env:
       BIN_NAME: ${{ inputs['bin-name'] }}
       VERSION: ${{ inputs.version }}
@@ -84,17 +89,6 @@ jobs:
         with:
           python-version: ${{ inputs['python-version'] }}
 
-      - name: Install cargo-orthohelp
-        # The nested setup-rust action installs checksum-verified cargo-binstall.
-        # Release CI must fail if no trusted prebuilt cargo-orthohelp exists.
-        run: cargo binstall --no-confirm --locked cargo-orthohelp@0.9.0
-
-      - name: Validate cargo-orthohelp version
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo-orthohelp --version | grep -Eq '(^|[[:space:]])0\.9\.0([[:space:]]|$)'
-
       - name: Build release binary
         uses: leynos/shared-actions/.github/actions/rust-build-release@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
         with:
@@ -103,6 +97,25 @@ jobs:
           project-dir: .
           manifest-path: Cargo.toml
           skip-man-page-discovery: 'true'
+
+      - name: Install cargo-orthohelp
+        # Runs after `rust-build-release`, which nests the setup-rust action
+        # that provisions checksum-verified cargo-binstall: `cargo binstall`
+        # does not exist on the runner before that point. `cargo-orthohelp` is
+        # first needed by the help-generation step below, so this ordering
+        # costs nothing. Disabling the compile strategy makes a missing
+        # prebuilt release a hard failure rather than a silent source build.
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo binstall --no-confirm --locked --disable-strategies compile \
+            cargo-orthohelp@0.9.0
+
+      - name: Validate cargo-orthohelp version
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo-orthohelp --version | grep -Eq '(^|[[:space:]])0\.9\.0([[:space:]]|$)'
 
       - name: Generate release help
         shell: bash

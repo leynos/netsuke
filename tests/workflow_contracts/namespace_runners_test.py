@@ -27,8 +27,12 @@ from workflow_loading import (
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
 DIRECT_RUNNER_SOURCES = (
     ("ci.build-test", "ci.yml", "build-test"),
-    ("ci.build-test-windows", "ci.yml", "build-test-windows"),
-    ("ci.windows-native-recipe-smoke", "ci.yml", "windows-native-recipe-smoke"),
+    ("ci-windows.build-test-windows", "ci-windows.yml", "build-test-windows"),
+    (
+        "ci-windows.windows-native-recipe-smoke",
+        "ci-windows.yml",
+        "windows-native-recipe-smoke",
+    ),
     ("ci.kani-smoke", "ci.yml", "kani-smoke"),
     ("coverage-main.coverage-upload", "coverage-main.yml", "coverage-upload"),
     (
@@ -52,12 +56,12 @@ DIRECT_RUNNER_SOURCES = (
     [
         ("ci.yml", "build-test", "namespace-profile-netsuke-ci"),
         (
-            "ci.yml",
+            "ci-windows.yml",
             "build-test-windows",
             "namespace-profile-netsuke-windows-ci",
         ),
         (
-            "ci.yml",
+            "ci-windows.yml",
             "windows-native-recipe-smoke",
             "namespace-profile-netsuke-windows",
         ),

@@ -24,8 +24,8 @@ WINDOWS_PATH_FRAGMENTS = (
 
 REQUIRED_RUNNER_ASSIGNMENTS = {
     "ci.build-test": "namespace-profile-netsuke-ci",
-    "ci.build-test-windows": "namespace-profile-netsuke-windows-ci",
-    "ci.windows-native-recipe-smoke": "namespace-profile-netsuke-windows",
+    "ci-windows.build-test-windows": "namespace-profile-netsuke-windows-ci",
+    "ci-windows.windows-native-recipe-smoke": "namespace-profile-netsuke-windows",
     "ci.kani-smoke": "namespace-profile-netsuke",
     "coverage-main.coverage-upload": "namespace-profile-netsuke",
     "delayed-pr-comment.delay_and_comment": "ubuntu-latest",

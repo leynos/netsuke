@@ -203,19 +203,49 @@ fn behavioural_build_and_package_wiring_matches_shared_actions() {
     );
 }
 
+/// Reject every `cargo install` form that would compile `cargo-orthohelp`.
+///
+/// Matching the bare `cargo install cargo-orthohelp` prefix is not enough:
+/// `cargo install --locked cargo-orthohelp@0.9.0` compiles the tool just the
+/// same, and so does any other flag placed before the crate name. The pattern
+/// therefore allows arbitrary flags and version selectors between the
+/// subcommand and the crate.
+fn assert_orthohelp_comes_from_a_prebuilt_release(contents: &str) {
+    let install_body = workflow_step_body(contents, "Install cargo-orthohelp").join("\n");
+    assert!(
+        install_body.contains("cargo binstall --no-confirm --locked --disable-strategies compile"),
+        "workflow should install cargo-orthohelp from a prebuilt release only"
+    );
+    assert!(
+        install_body.contains("cargo-orthohelp@0.9.0"),
+        "workflow should pin the cargo-orthohelp release version"
+    );
+
+    let source_install = regex::Regex::new(r"cargo\s+install\s+(?:-{1,2}\S+\s+)*cargo-orthohelp")
+        .expect("source-install pattern should compile");
+    assert!(
+        !source_install.is_match(contents),
+        "workflow should never compile cargo-orthohelp from source"
+    );
+
+    let build_index = contents
+        .find("- name: Build release binary")
+        .expect("workflow should build the release binary");
+    let install_index = contents
+        .find("- name: Install cargo-orthohelp")
+        .expect("workflow should install cargo-orthohelp");
+    assert!(
+        build_index < install_index,
+        "cargo-orthohelp must be installed after rust-build-release provisions cargo-binstall"
+    );
+}
+
 #[test]
 fn behavioural_build_and_package_generates_release_help_with_orthohelp() {
     let contents = workflow_contents("build-and-package.yml")
         .expect("build-and-package workflow should be readable");
 
-    assert!(
-        contents.contains("cargo binstall --no-confirm --locked cargo-orthohelp@0.9.0"),
-        "workflow should install the pinned prebuilt cargo-orthohelp release tool"
-    );
-    assert!(
-        !contents.contains("cargo install cargo-orthohelp"),
-        "workflow should never compile cargo-orthohelp from source"
-    );
+    assert_orthohelp_comes_from_a_prebuilt_release(&contents);
     assert!(
         contents.contains("scripts/generate-release-help.sh"),
         "workflow should call the release help script"
