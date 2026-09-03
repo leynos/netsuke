@@ -103,10 +103,9 @@ where
     let mut file = fs_utils::open_file_checked(path, limits)?;
     let mut hasher = H::new();
     let mut buffer = [0_u8; 8192];
-    let mut total: u64 = 0;
+    let mut state = fs_utils::BoundedRead::new(limits.max_bytes);
     loop {
-        let Some(chunk) =
-            fs_utils::read_bounded_chunk(&mut file, &mut buffer, &mut total, limits.max_bytes, path)?
+        let Some(chunk) = fs_utils::read_bounded_chunk(&mut state, &mut file, &mut buffer, path)?
         else {
             break;
         };
@@ -172,7 +171,14 @@ mod tests {
         let payload = patterned(size);
         let (_dir, file) = fixture(&payload)?;
 
-        let streamed = compute_hash(&file, "sha256", &FileReadLimits { max_bytes: u64::MAX, follow_symlinks: false })?;
+        let streamed = compute_hash(
+            &file,
+            "sha256",
+            &FileReadLimits {
+                max_bytes: u64::MAX,
+                follow_symlinks: false,
+            },
+        )?;
         let one_shot = to_lower_hex(&Sha256::digest(&payload));
 
         ensure!(
@@ -191,7 +197,14 @@ mod tests {
             "ba7816bf8f01cfea414140de5dae2223",
             "b00361a396177a9cb410ff61f20015ad",
         );
-        let digest = compute_hash(&file, "sha256", &FileReadLimits { max_bytes: u64::MAX, follow_symlinks: false })?;
+        let digest = compute_hash(
+            &file,
+            "sha256",
+            &FileReadLimits {
+                max_bytes: u64::MAX,
+                follow_symlinks: false,
+            },
+        )?;
         ensure!(
             digest == expected,
             "expected the published digest {expected} but streamed {digest}"
