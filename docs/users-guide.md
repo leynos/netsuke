@@ -1600,6 +1600,38 @@ Avoid placing secrets in URLs. Netsuke logs hosts and cache keys rather than
 complete URLs, but downloaded content and commands still run within the host
 trust boundary.
 
+## Configure file reading limits
+
+The `contents`, `linecount`, `hash`, and `digest` template filters read files
+through a shared byte budget so a checkout entry cannot exhaust Netsuke's
+memory or CPU. The default budget is 8 MiB per read, matching the `fetch()`
+response limit. Hosts embedding Netsuke can raise or lower it with
+`StdlibConfig::with_file_max_read_bytes` before registering the standard
+library.
+
+The reading filters also refuse to follow a symlink as the final path
+component and reject anything that is not a regular file once opened,
+including FIFOs and device nodes. A symlinked directory used *inside* a path
+is unaffected; only the final entry is checked. Templates that deliberately
+read through a final symlink can pass `follow_symlinks=true` to accept the
+link:
+
+```
+{{ 'generated/version.txt' | contents(follow_symlinks=true) }}
+```
+
+A single call may lower the budget with `max_bytes`, but never raise it above
+the configured ceiling:
+
+```
+{{ 'fixtures/big.bin' | hash(max_bytes=1024) }}
+```
+
+Reads that exceed the budget fail with a diagnostic naming the path and the
+limit, never the file contents. Raise the operator budget when legitimate
+builds hash large artefacts; prefer per-call `max_bytes` narrowing when a
+manifest merely wants to bound one input.
+
 ## Interpret failures
 
 Netsuke reports failures at the earliest stage that can identify them:
@@ -1638,6 +1670,10 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   On Unix, scripts use `/bin/sh -e`.
 - `shell`, `grep`, `fetch`, filesystem helpers, and ordinary recipes interact
   with the host.
+- The file-reading filters (`contents`, `linecount`, `hash`, `digest`) read at
+  most the configured byte budget, open the final path entry without following
+  symlinks, and require the opened object to be a regular file. See
+  [Configure file reading limits](#configure-file-reading-limits).
 - `glob` restricts its filesystem metadata access to a capability handle
   scoped to the pattern's literal directory prefix, so it cannot inspect
   anything outside the subtree the pattern can match; the pattern match walk
