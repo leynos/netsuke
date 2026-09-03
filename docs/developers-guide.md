@@ -619,7 +619,6 @@ as workflow-level `env`. Each pin is still declared once at workflow scope in
 value. `tests/workflow_contracts/ci_windows_job_test.py` holds the caller's
 literals equal to those pins, so the two copies cannot drift.
 
-
 ### Cache ownership and bounded CI resources
 
 Ubicloud destroys the runner VM at the end of every job, so warm state reaches
@@ -769,13 +768,15 @@ works once the Ubicloud GitHub App covers this repository; see "GitHub Actions
 runner placement" for that prerequisite.
 
 Every `leynos/shared-actions` reference is pinned to
-`7d46a399558914f5a05074e55a560fec0269fd0d`. That revision introduces
+`f6d4d5f549655c118f86f371b8d55c200d3efa50`. That revision introduces
 `cache-provider: external`; installs `whitaker-installer` and `cargo-nextest`
 from checksum-verified official releases with no source fallback; adds the
 `all-features`, `all-targets`, and `doctests` inputs the single-execution rule
-depends on; and forwards `cache-provider` and `use-sccache` through
-`rust-build-release` to its nested `setup-rust`. One SHA across every
-reference, so a future bump moves them together.
+depends on; forwards `cache-provider` and `use-sccache` through
+`rust-build-release` to its nested `setup-rust`; and hashes the Whitaker
+archive from standard input rather than by name, which is what made the Windows
+installer reject a correct archive whose path contained backslashes. One SHA
+across every reference, so a future bump moves them together.
 
 CI installs tools from trusted prebuilt releases only, with two recorded
 exceptions and no others. `setup-rust` verifies the `cargo-binstall` installer
@@ -889,7 +890,6 @@ installation, binary build, smoke script, and
 source itself; the release publication job separately requires both this smoke
 job and the platform package jobs in its `needs` list. Consequently, release
 publication cannot proceed unless the native Windows smoke test passes.
-
 
 ## GitHub Actions runner placement
 
@@ -2264,7 +2264,6 @@ matrix. Its cache entry owns the job-local Kani Cargo, support-file, and Rust
 toolchain homes separately from ordinary Cargo build artefacts.
 
 ## Test execution
-
 
 ### Which job executes which tests
 
