@@ -126,6 +126,8 @@ MD_FILES_FIND = find . -type f -name '*.md' \
 PROVER_TOOLS_SOURCE ?= git+https://github.com/leynos/rust-prover-tools@b07ef696f8373d54ae68e517d39d47a5d27a5bd5
 PROVER_TOOLS ?= uv tool run --from $(PROVER_TOOLS_SOURCE) prover-tools
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
+unexport RUSTDOC_FLAGS
+export RUSTDOCFLAGS := $(value RUSTDOC_FLAGS)
 VERUS_FLAGS ?=
 VERUS_INSTALL_FLAGS ?=
 WHITAKER ?= whitaker
@@ -171,7 +173,7 @@ lint-python: ## Run Ruff, Pylint, the df12 house lints, and ambrleaks over the P
 	$(AMBRLEAKS) $(PYTHON_SOURCES)
 
 lint-clippy: ## Run rustdoc and Clippy with warnings denied
-	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) doc --workspace --no-deps
+	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) doc --workspace --no-deps
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) clippy $(CLIPPY_FLAGS)
 
 lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
@@ -187,7 +189,7 @@ github-actions-lint: ## Validate GitHub Actions workflows
 doc-coverage: doc-coverage-test ## Verify aggregate Rustdoc doc-comment coverage meets the threshold
 	# Runs under the uv-pinned baseline interpreter, not the system python3:
 	# the scripts target Python 3.14 syntax and semantics.
-	@RUSTDOCFLAGS="$${RUSTDOC_FLAGS}" $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
+	@$(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
 		scripts/doc-coverage.py --toolchain "$$DOC_COVERAGE_TOOLCHAIN" --threshold "$$DOC_COVERAGE_THRESHOLD"
 
 doc-coverage-test: ## Run documentation-coverage pytest modules
