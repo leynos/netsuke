@@ -258,6 +258,7 @@ jobs:
           name: pr-coverage-lcov
           path: lcov.info
           retention-days: 3
+          if-no-files-found: error
       - name: Show sccache statistics
         if: always()
         run: |
