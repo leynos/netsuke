@@ -35,7 +35,7 @@ runs:
         set -euo pipefail
         expected="mdtablefix ${MDTABLEFIX_VERSION}"
         bin_dir="${HOME}/.local/bin"
-        mkdir --parents "${bin_dir}"
+        mkdir -p "${bin_dir}"
         echo "${bin_dir}" >> "$GITHUB_PATH"
         export PATH="${bin_dir}:${PATH}"
 

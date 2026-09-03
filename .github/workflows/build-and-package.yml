@@ -149,8 +149,6 @@ jobs:
         # never shares compiler output with the product, and the cache above
         # keeps it to once per generation. Delete the fallback once #479 lands.
         shell: bash
-        env:
-          ORTHOHELP_BUILD_DIR: ~/.cache/orthohelp-build
         run: |
           set -euo pipefail
           if cargo binstall --no-confirm --locked \
@@ -158,7 +156,11 @@ jobs:
             exit 0
           fi
           echo "::notice title=cargo-orthohelp::no prebuilt release; building from source (leynos/ortho-config#479)"
-          mkdir --parents "${ORTHOHELP_BUILD_DIR}"
+          # Resolved here rather than in `env`: GitHub does not expand `~` in
+          # an env value, and `mkdir -p` rather than `--parents` because macOS
+          # ships BSD coreutils, which reject the long option.
+          ORTHOHELP_BUILD_DIR="${HOME}/.cache/orthohelp-build"
+          mkdir -p "${ORTHOHELP_BUILD_DIR}"
           CARGO_TARGET_DIR="${ORTHOHELP_BUILD_DIR}" \
             cargo install --locked cargo-orthohelp@0.9.0
 
