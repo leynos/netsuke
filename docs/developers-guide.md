@@ -2213,6 +2213,48 @@ toolchain homes separately from ordinary Cargo build artefacts.
 
 ## Test execution
 
+
+### Which job executes which tests
+
+A coverage job and a test-only job are worth running together only when the
+test-only job executes something the coverage job does not. That holds on a
+pull request here and does not hold on the trunk, so the two are separated by
+event rather than merged.
+
+Table: the executed test set of every job that runs tests.
+
+| Job                                      | Platform     | Command                                    | Features | Targets     | Warnings |
+| ---------------------------------------- | ------------ | ------------------------------------------ | -------- | ----------- | -------- |
+| `build-test` "Test"                      | Ubuntu 24.04 | `cargo nextest run` and `cargo test --doc` | all      | all         | denied   |
+| `build-test` "Test and Measure Coverage" | Ubuntu 24.04 | `cargo llvm-cov nextest --workspace`       | default  | default     | allowed  |
+| `coverage-upload`                        | Ubuntu 24.04 | `cargo llvm-cov nextest --workspace`       | default  | default     | allowed  |
+| `netsukefile`                            | Ubuntu 22.04 | builds a manifest and runs Ninja           | default  | binary only | allowed  |
+| `kani-smoke`                             | Ubuntu 24.04 | `make kani-ir`                             | Kani cfg | harnesses   | allowed  |
+| `build-test-windows`                     | Windows      | `cargo nextest run` and `cargo test --doc` | all      | all         | denied   |
+| `windows-native-recipe-smoke`            | Windows      | a PowerShell recipe fixture                | default  | binary only | denied   |
+
+The merge gate's suite is a strict superset of the coverage run, so folding the
+two would lose real coverage rather than duplicated work. `generate-coverage`
+invokes `cargo llvm-cov nextest --workspace` with default features and default
+targets and does not deny warnings, so folding would stop exercising the
+`legacy-digests` feature, which gates tests in `src/stdlib/path/hash_utils.rs`
+and `tests/std_filter_tests/hash_filters.rs`; would stop compiling the two
+bench targets that `--all-targets` reaches; would stop denying warnings in the
+test tree; and would drop doctests, which `cargo llvm-cov nextest` cannot run
+at all.
+
+The duplication that is real is on the trunk. `build-test` measures coverage
+only on a pull request, where the changed-line gate consumes `lcov.info`. On a
+push to `main`, `coverage-upload` measures the same commit, uploads it, and is
+the sole writer of the ratchet baseline; a second instrumented build in
+`build-test` would pay twice and give that baseline two writers.
+
+`netsukefile`, `kani-smoke`, and the Windows jobs differ in platform or in
+purpose, so none of them is a candidate for folding.
+`tests/workflow_contracts/test_execution_coverage_test.py` holds the gate's
+flags and the one-producer-per-event split, so a later edit cannot narrow the
+gate into a duplicate of the coverage run.
+
 `make test` is the canonical entry point and composes two stages:
 
 - `make test-nextest` —

@@ -139,10 +139,9 @@ jobs:
       - name: Show Ninja version
         run: ninja --version
       - name: Install mdtablefix
-        # Required by `make check-fmt`. The gate cache owns `~/.cargo/bin`,
-        # so a warm run finds the pinned binary already present.
-        # `cargo-binstall` is checksum-verified by setup-rust and fetches a
-        # prebuilt release; CI never compiles mdtablefix.
+        # Required by `make check-fmt`. The gate cache owns `~/.cargo/bin`, so
+        # a warm run finds the pinned binary present. `cargo-binstall` is
+        # checksum-verified by setup-rust; CI never compiles mdtablefix.
         run: |
           expected_mdtablefix_version="mdtablefix ${MDTABLEFIX_VERSION}"
           installed_mdtablefix_version=""
@@ -159,17 +158,16 @@ jobs:
             exit 1
           fi
       - name: Setup uv
-        # Installed before the Format step: `make check-fmt` and `make lint`
-        # run the uv-driven Ruff, Pylint, df12, and ambrleaks gates.
+        # Before the Format step: `make check-fmt` and `make lint` run the
+        # uv-driven Ruff, Pylint, df12, and ambrleaks gates.
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
         with:
           python-version: ${{ env.PYTHON_BASELINE }}
           # The gate cache already owns the uv download and tool stores, so a
           # second GitHub-backed cache would duplicate it.
+          # It also owns the shim directory the next step writes into.
           enable-cache: 'false'
       - name: Install yamllint
-        # The gate cache owns the uv download store, tool store, and shim
-        # directory, so a warm run reuses the pinned environment.
         run: |
           uv tool install "yamllint==${YAMLLINT_VERSION}"
           echo "${UV_TOOL_BIN_DIR}" >> "$GITHUB_PATH"
@@ -236,9 +234,8 @@ jobs:
       - name: Typecheck
         run: make typecheck
       - name: Doc coverage
-        # Rustdoc doc-comment coverage across every workspace lib and bin
-        # target, gated on the 80% threshold stated in AGENTS.md. Runs after
-        # `make lint` so it reuses the freshly built doc database.
+        # Rustdoc coverage across every lib and bin target, gated on the 80%
+        # threshold in AGENTS.md. Runs after `make lint` to reuse its docs.
         run: make doc-coverage
       - name: Spelling
         run: make spelling
@@ -259,6 +256,10 @@ jobs:
             printf '```\n'
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Test and Measure Coverage
+        # Pull requests only: on the trunk `coverage-upload` measures the
+        # same commit, so a second instrumented build here would also give the
+        # ratchet baseline a second writer. See the developers guide.
+        if: github.event_name == 'pull_request'
         uses: leynos/shared-actions/.github/actions/generate-coverage@f9a16065e58324b0714e86c1ebeb8eb4500f1b47
         with:
           language: rust
