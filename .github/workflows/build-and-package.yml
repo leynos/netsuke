@@ -83,21 +83,25 @@ jobs:
     env:
       BIN_NAME: ${{ inputs['bin-name'] }}
       VERSION: ${{ inputs.version }}
-      # Compile through the compiler cache everywhere except Windows. There,
-      # sccache re-spawns rustc with this target's `--extern` and `-L` list and
-      # exceeds the operating system's command-line limit, which nothing in
-      # this repository can shorten. Release builds are infrequent, so that
-      # lane runs uncached rather than unreliably; the Windows merge gate keeps
-      # its own local sccache. Cargo treats an empty wrapper as unset.
+      # No compiler cache on any release lane. Two independent reasons, and
+      # each alone is sufficient.
       #
-      # The condition is negated deliberately. GitHub's `&&`/`||` yields the
-      # last truthy operand, and an empty string is falsy, so writing
-      # `platform == 'windows' && '' || 'sccache'` falls through to `sccache`
-      # on the very platform it means to exempt. Put the non-empty value on
-      # the `&&` side and the empty one on the `||` side.
-      RUSTC_WRAPPER: ${{ inputs.platform != 'windows' && 'sccache' || '' }}
-      SCCACHE_GHA_ENABLED: ${{ inputs.platform != 'windows' && 'true' || '' }}
-      SCCACHE_CACHE_SIZE: 4G
+      # On Windows, sccache re-spawns rustc with the aarch64 target's
+      # `--extern` and `-L` list and exceeds the operating system's
+      # command-line limit, which nothing in this repository can shorten.
+      #
+      # Elsewhere, this lane's sccache server would be started inside the
+      # nested `setup-rust`, whose `mozilla-actions/sccache-action` re-exports
+      # `ACTIONS_CACHE_SERVICE_V2` and GitHub's own results URL as its last
+      # act. On a Ubicloud runner that points the server past Ubicloud's cache
+      # proxy at GitHub, where writes are rate-limited and nothing lands in
+      # the store the merge gate reads. Wiring the proxy export in here would
+      # mean reproducing the gate's whole export, install and run-step start
+      # sequence for a lane that runs on tag pushes and the dry run only.
+      #
+      # Release builds are infrequent, so these lanes run uncached rather than
+      # unreliably. The merge gates keep their own caches; see
+      # tests/workflow_contracts/cache_contract_data.py's SCCACHE_EXEMPT_LANE.
       MAN_ARCH: ${{ inputs['package-arch'] != '' && inputs['package-arch'] || 'unknown' }}
       # The pinned `rust-build-release` revision, restated here so the
       # `cargo-orthohelp` cache key can carry it. That action nests the shared
@@ -125,17 +129,6 @@ jobs:
         with:
           python-version: ${{ inputs['python-version'] }}
 
-      - name: Install sccache
-        # Skipped on Windows, where this lane runs without a compiler cache.
-        # Elsewhere it is required: the nested `rust-build-release` action
-        # installs sccache only along its own `use-sccache` path, so without
-        # this the wrapper names a binary that was never present.
-        if: inputs.platform != 'windows'
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
-        with:
-          tool: sccache@0.16.0
-          fallback: none
-
       - name: Build release binary
         uses: leynos/shared-actions/.github/actions/rust-build-release@c6125f19593668cbfefd65a59c08cb7aefe90d93
         with:
@@ -148,8 +141,8 @@ jobs:
           # otherwise archive `target/${BUILD_PROFILE}`. No lane in this
           # repository archives a build tree; sccache owns compiler output.
           cache-provider: external
-          # Off on Windows, where this lane runs without a compiler cache.
-          use-sccache: ${{ inputs.platform == 'windows' && 'false' || 'true' }}
+          # Off on every platform; see the RUSTC_WRAPPER note above.
+          use-sccache: 'false'
 
       - name: Restore cargo-orthohelp
         id: orthohelp_cache

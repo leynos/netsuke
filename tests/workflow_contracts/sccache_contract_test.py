@@ -216,42 +216,41 @@ def test_every_compiling_job_reaches_the_compiler_cache(
     )
 
 
-def test_the_windows_packaging_lane_compiles_without_a_wrapper() -> None:
-    """Require the packaging lane to leave Windows uncached, and only Windows.
+def test_the_packaging_lane_compiles_without_a_wrapper() -> None:
+    """Require the release packaging lane to run with no compiler cache at all.
 
-    sccache re-spawns rustc there with the target's whole `--extern` and `-L`
-    list and exceeds the operating system's command-line limit. Release builds
-    are infrequent, so the lane runs uncached rather than unreliably; the
-    Windows merge gate keeps its own local sccache.
+    Two independent reasons, each sufficient on its own. On Windows sccache
+    re-spawns rustc with the aarch64 target's whole `--extern` and `-L` list
+    and exceeds the operating system's command-line limit, which nothing here
+    can shorten. Elsewhere the lane's server would be started inside the nested
+    setup action, whose `mozilla-actions/sccache-action` re-exports
+    `ACTIONS_CACHE_SERVICE_V2` and GitHub's own results address as its last
+    act; on Ubicloud that sends every write past the cache proxy to GitHub,
+    where it is rate-limited and lands in no store this repository reads.
+
+    An earlier shape exempted Windows alone through a negated expression, and
+    got the negation backwards once, which cost a release build. Requiring the
+    variables to be absent outright removes the expression, and with it that
+    whole class of mistake. Cargo treats an unset wrapper as no wrapper.
     """
     workflow_name, job_name = SCCACHE_EXEMPT_LANE
     job = workflow_job(load_workflow(WORKFLOW_DIR / workflow_name), job_name)
     env = require_mapping(job.get("env"), f"{job_name} env")
-    # Negated deliberately: an empty string is falsy in a GitHub expression,
-    # so putting it on the `&&` side makes the `||` fall through and sets the
-    # wrapper on the platform the condition means to exempt. That mistake
-    # shipped once and cost a release build, so the contract pins the shape.
-    windows_off = "${{ inputs.platform != 'windows' && 'sccache' || '' }}"
-    assert env.get("RUSTC_WRAPPER") == windows_off, (
-        f"{workflow_name} must clear the wrapper on Windows only, got "
-        f"{env.get('RUSTC_WRAPPER')!r}"
-    )
-    assert env.get("SCCACHE_GHA_ENABLED") == (
-        "${{ inputs.platform != 'windows' && 'true' || '' }}"
-    ), (
-        "the backend flag must be negated the same way, for the same reason, "
-        f"got {env.get('SCCACHE_GHA_ENABLED')!r}"
-    )
+    for variable in ("RUSTC_WRAPPER", "SCCACHE_GHA_ENABLED", "SCCACHE_DIR"):
+        assert variable not in env, (
+            f"{workflow_name} {job_name} runs uncached and must not declare "
+            f"{variable}, got {env.get(variable)!r}"
+        )
     steps = job_steps(load_workflow(WORKFLOW_DIR / workflow_name), job_name)
-    installer = named_step(steps, "Install sccache")
-    assert installer.get("if") == "inputs.platform != 'windows'", (
-        "the packaging lane must skip the installer on the uncached platform"
-    )
+    assert not [
+        step for step in steps if str(step.get("name", "")) == "Install sccache"
+    ], "the uncached lane must not install a compiler cache it never uses"
     build = named_step(steps, "Build release binary")
     inputs = require_mapping(build.get("with"), "build inputs")
-    assert inputs.get("use-sccache") == (
-        "${{ inputs.platform == 'windows' && 'false' || 'true' }}"
-    ), "the nested action must not enable sccache on the uncached platform"
+    assert inputs.get("use-sccache") == "false", (
+        "the nested action must not start a compiler cache on this lane, got "
+        f"{inputs.get('use-sccache')!r}"
+    )
     assert not [
         step for step in cache_steps(steps) if ".sccache" in str(declared_paths(step))
     ], "the uncached lane must keep no compiler-cache archive"

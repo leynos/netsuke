@@ -2,10 +2,17 @@
 name: sccache Actions cache credentials
 description: >-
   Point sccache at the cache service its runner actually serves, and publish
-  the credentials for it. The runner hands these to JavaScript actions, not to
-  shell steps, so on Ubicloud a `run` step cannot see them; the shared Rust
-  setup action normally publishes them through `mozilla-actions/sccache-action`,
-  but every job here sets `use-sccache: false` so that action never runs.
+  the credentials for it. The shared Rust setup action normally publishes them
+  through `mozilla-actions/sccache-action`, but that action also re-exports
+  `ACTIONS_CACHE_SERVICE_V2` and GitHub's own results address to `GITHUB_ENV`
+  as its last act, which clobbers this export and sends the server past
+  Ubicloud's proxy. Every job here therefore sets `use-sccache: false`, so that
+  action never runs and this one is the only publisher.
+
+  Composite `run` steps do see the reserved variables; an earlier reading that
+  the runner withholds them from shell steps was wrong, measured on
+  shared-actions runs 33854048777 and 33854213968. The failure this action
+  prevents is the clobber described above, not a visibility problem.
 
   Ubicloud intercepts the cache service with a local proxy and advertises it as
   `ACTIONS_CACHE_URL`, which serves the v1 API. sccache 0.16 prefers GitHub's

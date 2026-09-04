@@ -743,20 +743,30 @@ because one store now holds two build shapes.
 Every lane on the GitHub Actions backend exports `ACTIONS_RESULTS_URL` and
 `ACTIONS_RUNTIME_TOKEN` through
 [`sccache-gha-credentials`](../.github/actions/sccache-gha-credentials)
-immediately after checkout. The runner hands those variables to JavaScript
-actions rather than to shell steps, so a `run` step cannot see them, and
-`use-sccache: false` stops the shared Rust setup action that would otherwise
-publish them. The ordering matters as much as the export: `--zero-stats`,
-`--start-server`, and the first wrapped `rustc` all start the server, and a
-server started without those variables stays in local-disk mode for the whole
-job and reports zero compile requests. That symptom has bitten this repository
-before, so a contract test asserts the export runs immediately after checkout
-and before anything that could start the server.
+immediately after checkout. `use-sccache: false` stops the shared Rust setup
+action that would otherwise publish them: `mozilla-actions/sccache-action`
+re-exports `ACTIONS_CACHE_SERVICE_V2` and GitHub's own results address to
+`GITHUB_ENV` as its last act, clobbering this export and sending the server
+past Ubicloud's proxy to GitHub, where writes are rate-limited. A composite
+`run` step does see the reserved variables; an earlier reading that the runner
+withholds them from shell steps was a misattribution, corrected against
+shared-actions runs 33854048777 and 33854213968. The ordering matters as much
+as the export: `--zero-stats`, `--start-server`, and the first wrapped `rustc`
+all start the server, and a server started without those variables stays in
+local-disk mode for the whole job and reports zero compile requests. That
+symptom has bitten this repository before, so a contract test asserts the
+export runs immediately after checkout and before anything that could start the
+server.
 
-Every job that compiles Rust sets `RUSTC_WRAPPER=sccache`, including the
-coverage job, the Netsukefile compatibility build, and the packaging build. The
-packaging job takes its sccache from the nested shared build action rather than
-installing a second one. Every compiling job resets the counters with
+Every merge-gate job that compiles Rust sets `RUSTC_WRAPPER=sccache`, including
+the coverage job and the Netsukefile compatibility build. The release packaging
+lanes are the exception and run uncached, for two independent reasons: on
+Windows sccache re-spawns rustc with the aarch64 target's `--extern` and `-L`
+list and exceeds the operating system's command-line limit, and elsewhere the
+lane's server would be started inside the nested setup action, which is exactly
+the clobber described above. Reproducing the gate's export, install and
+run-step start sequence for a lane that runs only on tag pushes and the dry run
+would not pay back. Every compiling job resets the counters with
 `sccache --zero-stats` before building and emits both human-readable and JSON
 statistics afterwards under `if: always()`; zero compile requests is a failed
 integration, not a quiet no-op. Kani is the one exception, because its verifier

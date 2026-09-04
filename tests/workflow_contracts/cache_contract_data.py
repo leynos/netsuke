@@ -141,13 +141,17 @@ TARGET_ARCHIVE_OWNERS = (
     ("build-and-package.yml", "build", "Build release binary"),
 )
 
-#: Jobs that compile Rust and must therefore reach the compiler cache. The
-#: packaging job takes its sccache from the nested shared build action, so it
-#: sets the wrapper without installing a second one.
-#: The one lane that compiles Rust without a compiler cache. sccache re-spawns
-#: rustc there with an over-long command line for the aarch64 target, which
-#: nothing here can shorten, so the lane runs uncached rather than unreliably.
+#: The one lane that compiles Rust without a compiler cache, for two
+#: independent reasons. On Windows sccache re-spawns rustc with the aarch64
+#: target's `--extern` and `-L` list and exceeds the operating system's
+#: command-line limit, which nothing here can shorten. Elsewhere the lane's
+#: server would start inside the nested setup action, whose sccache action
+#: re-exports GitHub's results address and so sends writes past Ubicloud's
+#: proxy. Release builds are infrequent, so the lane runs uncached rather than
+#: unreliably.
 SCCACHE_EXEMPT_LANE = ("build-and-package.yml", "build")
+
+#: Jobs that compile Rust and must therefore reach the compiler cache.
 
 SCCACHE_WRAPPER_JOBS = (
     ("ci.yml", "build-test"),
