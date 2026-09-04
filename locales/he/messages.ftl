@@ -340,14 +340,15 @@ stdlib.time.label.nanoseconds = מיליארדיות שנייה
 
 # אבחון העוזר which.
 stdlib.which.not_found = ‏[netsuke::jinja::which::not_found] הפקודה „{ $command }” לא נמצאה לאחר בדיקת { $count } רשומות ב‑PATH. תצוגה מקדימה: { $preview }
-stdlib.which.not_found.hint.cwd_auto = מקטעים ריקים ב‑PATH מתעלמים מהם; השתמשו ב‑cwd_mode="auto" כדי לכלול את ספריית העבודה.
-stdlib.which.not_found.hint.cwd_always = הגדירו cwd_mode="always" כדי לכלול את הספרייה הנוכחית.
+stdlib.which.not_found.hint.cwd_auto = ‏Automatic mode searches only directories explicitly named by PATH.
+stdlib.which.not_found.hint.cwd_always = ‏Always mode searches only the current directory before directories named by PATH.
+stdlib.which.not_found.hint.workspace = ‏To recursively search the workspace tree, use cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = ‏[netsuke::jinja::which::not_found] הפקודה „{ $command }” ב‑„{ $path }” חסרה או אינה ניתנת להרצה.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = ‏<ריק>
 stdlib.which.path_entry.non_utf8 = הרשומה מס׳ { $index } ב‑PATH מכילה תווים שאינם UTF-8; ‏Netsuke מחייב נתיבים בקידוד UTF-8.
 stdlib.which.command.empty = ‏which מחייב מחרוזת שאינה ריקה.
-stdlib.which.cwd_mode.invalid = ‏cwd_mode חייב להיות „auto”, „always” או „never”, אך התקבל „{ $mode }”.
+stdlib.which.cwd_mode.invalid = ‏cwd_mode must be 'auto', 'always', 'never', or 'workspace-recursive', got '{ $mode }'.
 stdlib.which.cwd.resolve_failed = לא ניתן היה לקבוע את הספרייה הנוכחית: { $details }.
 stdlib.which.cwd.non_utf8 = הספרייה הנוכחית מכילה חלקים שאינם UTF-8.
 stdlib.which.canonicalize_failed = לא ניתן היה לבצע קנוניזציה ל‑„{ $path }”: { $details }.

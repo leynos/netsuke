@@ -219,6 +219,7 @@ impl EnvSnapshot {
     /// boundary where the data outlives the snapshot.
     pub(super) fn resolved_dirs(&self, mode: CwdMode) -> Vec<&Utf8Path> {
         let mut dirs = Vec::new();
+        let can_search_path_current_dir = can_search_path_current_dir(mode, self.raw_path.as_ref());
         let mut cwd_added = matches!(mode, CwdMode::Always);
         if cwd_added {
             dirs.push(self.cwd.as_path());
@@ -230,7 +231,7 @@ impl EnvSnapshot {
                 // has already prepended it, and repeated current-directory
                 // PATH entries (for example `::/usr/bin::`) collapse to the
                 // first occurrence.
-                PathEntry::CurrentDir if matches!(mode, CwdMode::Auto) && !cwd_added => {
+                PathEntry::CurrentDir if can_search_path_current_dir && !cwd_added => {
                     cwd_added = true;
                     dirs.push(self.cwd.as_path());
                 }
@@ -266,6 +267,12 @@ impl EnvSnapshot {
     pub(super) const fn workspace_switch(&self) -> &WorkspaceSwitch {
         &self.workspace_switch
     }
+}
+
+/// Decide whether a non-empty PATH can contribute its current-directory entry.
+fn can_search_path_current_dir(mode: CwdMode, raw_path: Option<&OsString>) -> bool {
+    matches!(mode, CwdMode::Auto | CwdMode::WorkspaceRecursive)
+        && raw_path.as_ref().is_some_and(|path| !path.is_empty())
 }
 
 /// Read the working directory, `PATH`, and directory entries shared by all snapshots.

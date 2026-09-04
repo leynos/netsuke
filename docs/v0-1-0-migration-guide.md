@@ -54,6 +54,7 @@ impact
 | Cached CLI configuration API | Breaking for callers of the unstable Rust API: use the opt-in cached discovery flow with `ConfigEnvProvider`; `ConfigStdEnvProvider` supplies process-backed access.                                                                                                                                                                                  | [Users' guide](users-guide.md)                                                                   |
 | Timing output                | Existing `VerboseTimingReporter::new` keeps its stderr sink; Rust callers can opt into an owned `Write + Send` sink with `with_writer`.                                                                                                                                                                                                               | [Users' guide](users-guide.md#capture-verbose-timing-output)                                     |
 | Glob expansion               | Parent-relative patterns such as `glob('../shared/*.h')` now expand. The Jinja helper rejects matched paths that are not portable unquoted shell words. Metadata checks use a capability rooted at the pattern's longest literal directory prefix; missing or non-directory prefixes return no matches, and unresolvable symlink matches are skipped. | [Users' guide](users-guide.md) and [ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md) |
+| Executable discovery         | **Breaking:** default `which` and `command_available` no longer recursively discover workspace executables when `PATH` is empty or unset. Opt in with `cwd_mode='workspace-recursive'` only for trusted workspaces.                                                                                                                                   | [Users' guide](users-guide.md#template-helpers)                                                  |
 | Command recipes              | On Windows, legacy scalar commands, lists, and scripts use Windows PowerShell by default; YAML command lists remain opt-in, ordered, and fail-fast.                                                                                                                                                                                                   | [Windows legacy recipe contract](users-guide.md#windows-legacy-recipe-contract)                  |
 | Ninja text escaping          | Write shell dollars normally. `$ins` and `$outs` are shell variables, whereas `{{ ins }}` and `{{ outs }}` are Netsuke path markers. Spaces in build and default-target paths remain rejected. Paths containing `$`, colons, `\|`, or control characters remain rejected, as are newline, carriage-return, and NUL metadata values.                   | [Users' guide](users-guide.md#review-the-safety-boundary)                                        |
 | Manifest discovery           | Optional target/action `description` values are shown by the new `netsuke help targets` command. Manifests without them and existing build output are unchanged.                                                                                                                                                                                      | [Users' guide](users-guide.md)                                                                   |
@@ -118,6 +119,24 @@ after the workspace base is stripped; absolute patterns remain absolute. The
 manifest parse boundary supplies this base, so glob expansion does not read or
 mutate process-global working-directory state. Callers of the Rust
 `glob_paths(pattern, base)` API can supply the same base explicitly.
+
+## Opt into recursive workspace executable discovery
+
+Published beta3 recursively searched the workspace after a default `which` or
+`command_available` lookup missed with an empty or unset `PATH`. That allowed a
+checkout-controlled executable to become the resolved command without the
+manifest explicitly naming the workspace search.
+
+The default `cwd_mode="auto"` now searches only `PATH` and reports the command
+missing when `PATH` is empty or unset. `cwd_mode="always"` adds only the
+workspace root/current directory, while `cwd_mode="never"` excludes it.
+
+If a trusted manifest deliberately needs recursive discovery, change that call
+to `which('tool', cwd_mode='workspace-recursive')` or
+`command_available('tool', cwd_mode='workspace-recursive')`. Treat this as a
+trust-boundary decision: the recursive mode may resolve an executable supplied
+by the checkout. `NETSUKE_WHICH_WORKSPACE=0` remains a kill-switch for that
+explicit mode.
 
 ## Policy enum parsing
 

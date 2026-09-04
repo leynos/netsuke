@@ -148,6 +148,9 @@ operator, user, and contributor references are easier to find.
 - [ADR-019](adr-019-structured-command-shell-selection.md): Allow-listed
   structured-command shell selection, trusted configuration authority,
   resolution, lowering, diagnostics, and safety boundaries.
+- [ADR-021](adr-021-require-explicit-recursive-workspace-which-search.md):
+  Explicit opt-in for recursive workspace executable discovery, preserving a
+  PATH-only default and its manifest trust boundary.
 
 ## Proposals
 
