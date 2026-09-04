@@ -940,11 +940,22 @@ same evidence rather than waiting to reproduce the failure on `main`. Both jobs
 share one lane size, and a contract holds them equal so a later change cannot
 move one without the other.
 
-Both sample used memory every 15 seconds through
-[`memory-sampler`](../.github/actions/memory-sampler) and print the peak into
-their summaries, so the escalation can actually be reviewed. **Return both jobs
-to `-2` if the peak is well under 6 GB**, and record the measurement either
-way. Every other Linux job stays at `-2`.
+Both sample memory and disk every 15 seconds through
+[`memory-sampler`](../.github/actions/memory-sampler) and print both peaks to
+the log as well as the summary, since the jobs API exposes no summary.
+
+Disk is the binding constraint, not memory. `ubicloud-standard-2` carries a 75
+GB volume with roughly 31 GB free at job start, against 150 GB on
+`ubicloud-standard-4`, and a sibling repository's silent death on the smaller
+shape was disk exhaustion from a second target tree built after the
+instrumented one, with memory peaking at 2.8 GB of 8. Netsuke's gate measured
+3,640 MiB of memory on the larger shape, nowhere near its 16 GB, so **the
+return to `-2` turns on the disk figures, not the memory one**.
+
+Both jobs therefore delete the instrumented tree once the report exists, before
+any cache save, printing `df -h` either side. That tree has no later consumer,
+and leaving it would both inflate the archive and hide the job's real
+high-water mark. Every other Linux job stays at `-2`.
 
 The Ubicloud GitHub App must cover this repository before any Ubicloud job can
 be admitted. The installation is granted across the account, so this is a

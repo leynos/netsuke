@@ -51,7 +51,7 @@ jobs:
         # Before the installer, so before anything can start the server: a
         # server started without these stays on local disk all job.
         uses: ./.github/actions/sccache-gha-credentials
-      - name: Start memory sampler
+      - name: Start resource sampler
         uses: ./.github/actions/memory-sampler
         with:
           mode: start
@@ -148,7 +148,18 @@ jobs:
             cat sccache-stats.txt
             printf '```\n'
           } | tee -a "$GITHUB_STEP_SUMMARY"
-      - name: Report peak memory
+      - name: Discard the instrumented build tree
+        # `llvm-cov`'s target tree has no consumer once the report is written,
+        # and it is the second tree on a volume that a sibling repository
+        # exhausted on the smaller shape. Removed before any cache save, so
+        # the archive never carries it and the sampler's least-free figure
+        # reflects the job's real high-water mark.
+        if: always()
+        run: |
+          df -h .
+          rm --recursive --force target/llvm-cov-target target/llvm-cov
+          df -h .
+      - name: Report peak resource use
         if: always()
         uses: ./.github/actions/memory-sampler
         with:

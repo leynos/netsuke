@@ -57,8 +57,20 @@ def test_both_formatter_jobs_use_the_pinned_installer_action() -> None:
             f"got {step.get('uses')!r}"
         )
         inputs = require_mapping(step.get("with"), f"{job_name} installer inputs")
-        assert inputs.get("build-dir"), (
+        build_dir = str(inputs.get("build-dir", ""))
+        assert build_dir, (
             f"{job_name} must give the source build a dedicated target directory"
+        )
+        # The point of the directory is that it is not the product's own. A
+        # source build sharing `target/` would mix an unrelated tool's compiler
+        # output into the tree under test.
+        assert "/target" not in build_dir, (
+            f"{job_name} must not build the tool beneath the product's target "
+            f"directory, got {build_dir!r}"
+        )
+        assert not build_dir.endswith("target"), (
+            f"{job_name} must not build the tool into the product's target "
+            f"directory, got {build_dir!r}"
         )
 
 

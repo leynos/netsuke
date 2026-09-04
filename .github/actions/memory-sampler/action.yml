@@ -1,11 +1,19 @@
 ---
-name: Memory sampler
+name: Resource sampler
 description: >-
-  Record the peak memory a job actually uses, so a runner-shape decision cites
-  a measurement rather than an inference. Both instrumented-build jobs were
-  escalated from `ubicloud-standard-2` after a runner vanished mid-build with
-  no log, which pointed at memory without proving it. Call with `mode: start`
-  after checkout and `mode: report` last, under `if: always()`.
+  Record the peak memory and disk a job actually uses, so a runner-shape
+  decision cites a measurement rather than an inference.
+
+  Disk matters more than memory here. `ubicloud-standard-2` carries a 75 GB
+  volume with roughly 31 GB free at job start, against 150 GB on
+  `ubicloud-standard-4`, and a sibling repository's silent death on the
+  smaller shape turned out to be disk exhaustion from a second target tree
+  built after the instrumented one, with memory peaking at 2.8 GB of 8. Both
+  peaks therefore go to the log as well as the summary, because the jobs API
+  does not expose a step summary.
+
+  Call with `mode: start` after checkout and `mode: report` last, under
+  `if: always()`.
 
 inputs:
   mode:
@@ -15,23 +23,34 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Start memory sampler
+    - name: Start resource sampler
       if: inputs.mode == 'start'
       shell: bash
       # `cut` rather than `awk`, because an `awk` field reference inside the
       # single-quoted `sh -c` body reads to shellcheck as an unexpanded
-      # expression. Line 2 of `free -m`, squeezed, puts "used" in field 3.
+      # expression. Line 2 of `free -m`, squeezed, puts "used" in field 3;
+      # `df -m .` puts used in field 3 and available in field 4.
       run: |
         nohup sh -c 'while sleep 15; do
-          free -m | tr -s " " | cut -d" " -f3 | sed -n 2p
-        done' > mem.log 2>/dev/null &
-        echo "MEM_SAMPLER_PID=$!" >> "$GITHUB_ENV"
+          mem="$(free -m | tr -s " " | cut -d" " -f3 | sed -n 2p)"
+          disk="$(df -m . | tr -s " " | cut -d" " -f3 | sed -n 2p)"
+          free_disk="$(df -m . | tr -s " " | cut -d" " -f4 | sed -n 2p)"
+          printf "%s %s %s\n" "${mem}" "${disk}" "${free_disk}"
+        done' > resource.log 2>/dev/null &
+        echo "RESOURCE_SAMPLER_PID=$!" >> "$GITHUB_ENV"
 
-    - name: Report peak memory
+    - name: Report peak resource use
       if: always() && inputs.mode == 'report'
       shell: bash
       run: |
-        kill "${MEM_SAMPLER_PID}" 2>/dev/null || true
-        peak="$(sort --numeric-sort mem.log 2>/dev/null | tail --lines=1)"
-        printf '### Peak memory\n\n- %s MiB on %s vCPUs\n' \
-          "${peak:-unknown}" "${LINUX_LANE_VCPUS}" | tee -a "$GITHUB_STEP_SUMMARY"
+        kill "${RESOURCE_SAMPLER_PID}" 2>/dev/null || true
+        peak_mem="$(cut -d' ' -f1 resource.log 2>/dev/null | sort --numeric-sort | tail --lines=1)"
+        peak_disk="$(cut -d' ' -f2 resource.log 2>/dev/null | sort --numeric-sort | tail --lines=1)"
+        min_free="$(cut -d' ' -f3 resource.log 2>/dev/null | sort --numeric-sort | head --lines=1)"
+        {
+          printf '### Peak resource use\n\n'
+          printf -- '- memory: %s MiB on %s vCPUs\n' "${peak_mem:-unknown}" "${LINUX_LANE_VCPUS}"
+          printf -- '- disk used: %s MiB, least free: %s MiB\n' \
+            "${peak_disk:-unknown}" "${min_free:-unknown}"
+        } | tee -a "$GITHUB_STEP_SUMMARY"
+        df -h .

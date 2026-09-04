@@ -82,8 +82,14 @@ jobs:
       # this repository can shorten. Release builds are infrequent, so that
       # lane runs uncached rather than unreliably; the Windows merge gate keeps
       # its own local sccache. Cargo treats an empty wrapper as unset.
-      RUSTC_WRAPPER: ${{ inputs.platform == 'windows' && '' || 'sccache' }}
-      SCCACHE_GHA_ENABLED: ${{ inputs.platform == 'windows' && '' || 'true' }}
+      #
+      # The condition is negated deliberately. GitHub's `&&`/`||` yields the
+      # last truthy operand, and an empty string is falsy, so writing
+      # `platform == 'windows' && '' || 'sccache'` falls through to `sccache`
+      # on the very platform it means to exempt. Put the non-empty value on
+      # the `&&` side and the empty one on the `||` side.
+      RUSTC_WRAPPER: ${{ inputs.platform != 'windows' && 'sccache' || '' }}
+      SCCACHE_GHA_ENABLED: ${{ inputs.platform != 'windows' && 'true' || '' }}
       SCCACHE_CACHE_SIZE: 4G
       MAN_ARCH: ${{ inputs['package-arch'] != '' && inputs['package-arch'] || 'unknown' }}
       # rust-build-release-v1 still nests a Node 20 setup-uv action, and the

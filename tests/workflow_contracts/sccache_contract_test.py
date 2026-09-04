@@ -16,6 +16,7 @@ from cache_contract_data import (
     SCCACHE_EXEMPT_LANE,
     SCCACHE_LOCAL_DIR_JOBS,
     SCCACHE_WRAPPER_JOBS,
+    SETUP_RUST_ACTION,
     WORKFLOW_DIR,
     cache_steps,
     declared_paths,
@@ -192,10 +193,20 @@ def test_the_windows_packaging_lane_compiles_without_a_wrapper() -> None:
     workflow_name, job_name = SCCACHE_EXEMPT_LANE
     job = workflow_job(load_workflow(WORKFLOW_DIR / workflow_name), job_name)
     env = require_mapping(job.get("env"), f"{job_name} env")
-    windows_off = "${{ inputs.platform == 'windows' && '' || 'sccache' }}"
+    # Negated deliberately: an empty string is falsy in a GitHub expression,
+    # so putting it on the `&&` side makes the `||` fall through and sets the
+    # wrapper on the platform the condition means to exempt. That mistake
+    # shipped once and cost a release build, so the contract pins the shape.
+    windows_off = "${{ inputs.platform != 'windows' && 'sccache' || '' }}"
     assert env.get("RUSTC_WRAPPER") == windows_off, (
         f"{workflow_name} must clear the wrapper on Windows only, got "
         f"{env.get('RUSTC_WRAPPER')!r}"
+    )
+    assert env.get("SCCACHE_GHA_ENABLED") == (
+        "${{ inputs.platform != 'windows' && 'true' || '' }}"
+    ), (
+        "the backend flag must be negated the same way, for the same reason, "
+        f"got {env.get('SCCACHE_GHA_ENABLED')!r}"
     )
     steps = job_steps(load_workflow(WORKFLOW_DIR / workflow_name), job_name)
     installer = named_step(steps, "Install sccache")
@@ -281,3 +292,66 @@ def test_orthohelp_probes_before_either_installer() -> None:
     assert "exit 0" in script[probe : script.index("cargo binstall")], (
         "a matching probe must skip both installers rather than fall through"
     )
+
+
+@pytest.mark.parametrize(("workflow_name", "job_name"), SCCACHE_CREDENTIAL_JOBS)
+def test_the_backend_flag_accompanies_the_wrapper(
+    workflow_name: str, job_name: str
+) -> None:
+    """Require the backend flag beside the wrapper on every Ubicloud lane.
+
+    `setup-rust` sets neither, so a job that names the wrapper without the
+    flag gets a compiler cache on local disk that no archive retains and no
+    later run reads.
+    """
+    job = workflow_job(load_workflow(WORKFLOW_DIR / workflow_name), job_name)
+    env = require_mapping(job.get("env"), f"{job_name} env")
+    assert env.get("RUSTC_WRAPPER") == "sccache", (
+        f"{workflow_name} {job_name} must compile through sccache"
+    )
+    flag = str(env.get("SCCACHE_GHA_ENABLED", ""))
+    assert flag, f"{workflow_name} {job_name} must set SCCACHE_GHA_ENABLED"
+    assert "true" in flag, (
+        f"{workflow_name} {job_name} must enable the backend, got {flag!r}"
+    )
+
+
+@pytest.mark.parametrize(("workflow_name", "job_name"), SCCACHE_CREDENTIAL_JOBS)
+def test_the_export_precedes_setup_rust_and_the_server_start(
+    workflow_name: str, job_name: str
+) -> None:
+    """Require the export before setup-rust and before any server start.
+
+    On Ubicloud the runner re-injects the v2 service variables into every
+    action step, so a server started inside `setup-rust` binds GitHub's
+    service whatever the export said. Every job here passes
+    `use-sccache: false` and starts the server from a `run` step after the
+    export instead.
+    """
+    steps = job_steps(load_workflow(WORKFLOW_DIR / workflow_name), job_name)
+    export = next(
+        index
+        for index, step in enumerate(steps)
+        if str(step.get("uses", "")) == SCCACHE_CREDENTIALS_ACTION
+    )
+    setup = next(
+        index
+        for index, step in enumerate(steps)
+        if SETUP_RUST_ACTION in str(step.get("uses", ""))
+    )
+    assert export < setup, (
+        f"{workflow_name} {job_name} must export before the toolchain setup"
+    )
+    inputs = require_mapping(steps[setup].get("with"), "Setup Rust inputs")
+    assert inputs.get("use-sccache") == "false", (
+        f"{workflow_name} {job_name} must not let setup-rust start the server"
+    )
+    starts = [
+        index
+        for index, step in enumerate(steps)
+        if "sccache --zero-stats" in str(step.get("run", ""))
+    ]
+    for start in starts:
+        assert export < start, (
+            f"{workflow_name} {job_name} must export before starting the server"
+        )
