@@ -211,7 +211,8 @@ proptest! {
             .map(|value| MergeLayer::file(Cow::Owned(value), None))
             .collect();
         let (final_layers, json_preference, project_fetch_policy_request) =
-            super::layers::retain_layers_and_resolve_json(ordered, None, &FsPathNormalizer);
+            super::layers::retain_layers_and_resolve_json(ordered, None, &FsPathNormalizer)
+                .expect("generated layers must retain cleanly");
 
         let expected = layers
             .iter()

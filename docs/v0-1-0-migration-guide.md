@@ -264,6 +264,31 @@ without labels. Neither exposes configuration paths. See the users' guide's
 [bounded configuration metrics](users-guide.md#bounded-configuration-metrics)
 and [interpret failures](users-guide.md#interpret-failures) sections.
 
+
+## Review the primary project fetch-policy boundary
+
+The v0.1.0 fetch-policy merge distinguishes operator policy from a project's
+request. System and user configuration, `NETSUKE_` environment variables, and
+explicit CLI options are operator-controlled. The primary project
+`.netsuke.toml` is untrusted by default, so its `fetch_allow_scheme` and
+`fetch_allow_host` entries do not widen the operator's allowlists. A project
+may still tighten the policy by setting `fetch_default_deny = true`; its
+`fetch_default_deny = false` cannot undo an operator default-deny setting.
+Project `fetch_block_host` entries remain cumulative, and a block wins over an
+allow.
+
+To trust a checkout deliberately, set `trust_project_fetch_policy = true` in
+system or user configuration, set `NETSUKE_TRUST_PROJECT_FETCH_POLICY=true`, or
+pass `--trust-project-fetch-policy`. With that operator opt-in, project scheme
+and host grants append to the operator values, and a project
+`fetch_default_deny` value applies directly. A project cannot grant itself this
+opt-in because its `trust_project_fetch_policy` field is ignored.
+
+This boundary currently covers only the primary project `.netsuke.toml`.
+Configuration loaded through that file's `extends` chain retains its existing
+merge semantics; review such chains before relying on the primary-file trust
+boundary.
+
 ## Opting into serial dependency ordering
 
 Set `dependency_order: serial` on an action or target to run its direct `deps`
