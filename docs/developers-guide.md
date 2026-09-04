@@ -795,6 +795,25 @@ symptom has bitten this repository before, so a contract test asserts the
 export runs immediately after checkout and before anything that could start the
 server.
 
+Both instrumented lanes set `RUN_RUST_CARGO_WAIT_TIMEOUT` to `1800`. The shared
+coverage action wraps `cargo llvm-cov nextest` in a watchdog that defaults to
+600 seconds, a budget sized against a lane that restored a `target` archive and
+so never paid for a cold compile. Nothing here archives a build tree, so a cold
+sccache store leaves the whole instrumented build to do inside that budget. The
+first trunk run after the Ubicloud migration failed exactly there: all 2,790
+tests passed, taking about 512 seconds at 19.42% sccache hits, and the watchdog
+killed cargo 88 seconds later during report generation.
+
+The value is roughly three times the observed cold cost and still far inside
+each job's `timeout-minutes` of 60, so a genuine hang is caught long before the
+runner is abandoned. Keep the two lanes equal: `build-test` runs the same
+action on pull requests and meets the same wall whenever its store is cold,
+which is the case a green trunk run hides.
+`tests/workflow_contracts/test_execution_coverage_test.py` holds both to the
+same value, parametrized over `COVERAGE_PRODUCERS`, so a producer added there
+is covered without being listed again. The upstream default is reported as
+[leynos/shared-actions#451](https://github.com/leynos/shared-actions/issues/451).
+
 Every merge-gate job that compiles Rust sets `RUSTC_WRAPPER=sccache`, including
 the coverage job and the Netsukefile compatibility build. The release packaging
 lanes are the exception and run uncached, for two independent reasons: on
