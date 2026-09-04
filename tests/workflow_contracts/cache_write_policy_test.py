@@ -201,21 +201,51 @@ def _accepts_a_dispatch(workflow: dict[str, object]) -> bool:
     return isinstance(triggers, dict) and "workflow_dispatch" in triggers
 
 
-def _composite_writer_flags() -> list[tuple[str, str]]:
-    """Return each cache composite's writer flag, labelled by action name."""
-    flags: list[tuple[str, str]] = []
+def _composite_save_conditions() -> list[tuple[str, str]]:
+    """Return each cache composite's writer flag, labelled by action name.
+
+    Returns
+    -------
+    list[tuple[str, str]]
+        Pairs of action name and the ``IS_TRUNK_PUSH`` expression its key
+        step renders the writer flag from. Every save in a composite gates on
+        that one flag, so it is the single condition worth checking per
+        action.
+
+    Notes
+    -----
+    Discovered from the action directory rather than listed, so an action
+    added with a cache save cannot escape the policy by being absent from an
+    inventory. An action with no save step is skipped: it publishes nothing,
+    so a dispatch cannot make it publish anything either.
+    """
+    conditions: list[tuple[str, str]] = []
     for action in sorted(ACTION_DIR.glob("*/action.yml")):
         steps = lane_steps(action, None)
         if not any("/save@" in str(step.get("uses", "")) for step in steps):
             continue
         key_step = next(step for step in steps if step.get("id") == "keys")
         env = require_mapping(key_step.get("env"), "key step env")
-        flags.append((action.parent.name, str(env["IS_TRUNK_PUSH"])))
-    return flags
+        conditions.append((action.parent.name, str(env["IS_TRUNK_PUSH"])))
+    return conditions
 
 
 def _inline_save_conditions() -> list[tuple[str, str]]:
-    """Return each inline save's condition, labelled by workflow and step."""
+    """Return each inline save's condition, labelled by workflow and step.
+
+    Returns
+    -------
+    list[tuple[str, str]]
+        Pairs of source label and the step's ``if`` expression, for every
+        cache save a designated writer declares inline rather than through a
+        composite action.
+
+    Notes
+    -----
+    Driven by `INLINE_SAVE_WRITERS`, which is itself derived from
+    `KEY_WRITERS`, so a writer added there is covered without being listed
+    again here.
+    """
     conditions: list[tuple[str, str]] = []
     for workflow_name, job_name in INLINE_SAVE_WRITERS:
         steps = job_steps(load_workflow(WORKFLOW_DIR / workflow_name), job_name)
@@ -245,7 +275,7 @@ def test_a_dispatch_can_never_publish_a_cache_generation() -> None:
         "no workflow accepts a dispatch, so the exit gate cannot take warm "
         "measurements; this contract is guarding nothing"
     )
-    conditions = _composite_writer_flags() + _inline_save_conditions()
+    conditions = _composite_save_conditions() + _inline_save_conditions()
     assert conditions, "no cache save was found to check"
     for source, condition in conditions:
         assert "github.event_name == 'push'" in " ".join(condition.split()), (

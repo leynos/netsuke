@@ -626,15 +626,48 @@ the next run only through a cache archive. Ownership is therefore the whole
 design: every mutable path has exactly one cache step, every key has exactly
 one writer, and pull requests restore without publishing.
 
-The Linux merge gate runs on `ubicloud-standard-2-ubuntu-2404`, which supplies
-two vCPUs and 8 GB. The workflows declare that number once as
-`LINUX_LANE_VCPUS` and derive every worker bound from it: `BUILD_JOBS` sets
-Cargo's `-j 2`, `NEXTEST_BUILD_JOBS` sets `--build-jobs 2`, and
-`NEXTEST_TEST_JOBS` sets nextest's distinct `-j 2` process limit. The Windows
-lane declares `WINDOWS_LANE_VCPUS` for the four vCPUs a GitHub-hosted
-`windows-latest` runner supplies. `tests/workflow_contracts/`
-`runner_placement_test.py` holds the flags equal to the declared count, so a
-shape change cannot leave an oversubscribed job behind.
+Lanes do not share one shape. Each declares its vCPU count once and derives
+every worker bound from that single number, and
+`tests/workflow_contracts/runner_placement_test.py` holds the flags equal to
+the declared count, so a shape change cannot leave an oversubscribed job behind.
+
+| Lane                                  | Runner                            | Concurrency configuration                                                        |
+| ------------------------------------- | --------------------------------- | -------------------------------------------------------------------------------- |
+| `ci.yml` `build-test`                 | `ubicloud-standard-4-ubuntu-2404` | `BUILD_JOBS=-j 4`, `CARGO_BUILD_JOBS=4`, `NEXTEST_TEST_THREADS=4`                |
+| `coverage-main.yml` `coverage-upload` | `ubicloud-standard-4-ubuntu-2404` | `CARGO_BUILD_JOBS=4`, `NEXTEST_TEST_THREADS=4`                                   |
+| `ci.yml` `kani-smoke`                 | `ubicloud-standard-2-ubuntu-2404` | no Cargo or nextest worker variables                                             |
+| `netsukefile-test.yml` `netsukefile`  | `ubicloud-standard-2-ubuntu-2204` | `BUILD_JOBS=-j 2`                                                                |
+| `release.yml` `build-linux`           | `ubicloud-standard-2-ubuntu-2404` | caller-selected packaging runner; no sccache                                     |
+| `ci-windows.yml` `build-test-windows` | `windows-latest`                  | `BUILD_JOBS=-j 4`, `NEXTEST_BUILD_JOBS=--build-jobs 4`, `NEXTEST_TEST_JOBS=-j 4` |
+
+`build-test` and `coverage-upload` are the two instrumented lanes and both run
+on `ubicloud-standard-4-ubuntu-2404`, declaring `LINUX_LANE_VCPUS: '4'`. The
+merge gate sets `BUILD_JOBS: -j 4`, `CARGO_BUILD_JOBS: '4'` and
+`NEXTEST_TEST_THREADS: '4'`; the coverage lane sets the latter two, since it
+runs no separate `make` build.
+
+The escalation to four vCPUs rests on measurement, not on the memory inference
+that first prompted it. On the smaller shape the gate lost its runner sixteen
+minutes into the instrumented build with no log. The sampler added to both
+lanes shows disk, not memory, is the constraint: across three runs the peak
+volume usage was 82,523, 82,563 and 82,431 MiB, about 80.6 GiB, which exceeds
+`ubicloud-standard-2`'s entire 72 GB volume, while memory peaked at 2,668 MiB
+of 16 GB. Discarding the instrumented tree before any cache save returns
+roughly 13 GB.
+
+The other Linux lanes stay on two vCPUs, because none of them runs the
+instrumented build: `kani-smoke`, whose payloads are prebuilt and which
+declares no worker variables at all; `netsukefile`, on
+`ubicloud-standard-2-ubuntu-2204` with `BUILD_JOBS: -j 2`, deliberately pinned
+to the older image so the lane exercises the glibc it exists to test; and Linux
+release packaging, whose runner the caller selects.
+
+The Windows lane declares `WINDOWS_LANE_VCPUS` for the four vCPUs a
+GitHub-hosted `windows-latest` runner supplies, and bounds compilation and test
+execution separately: `NEXTEST_BUILD_JOBS=--build-jobs 4` limits the compile
+that precedes the run, and `NEXTEST_TEST_JOBS=-j 4` limits nextest's test
+processes. Two variables rather than one, so a lane can bound each without
+oversubscribing the other.
 
 Table: cache owners, their paths, and the key inputs that invalidate them.
 
@@ -701,7 +734,11 @@ generation would ever be written.
 Every cache-bearing job publishes a `Record cache observations` step under
 `if: always()` that names the rendered key and its hit result, so a cold run
 reports its miss rather than staying silent and an operator can explain every
-miss from the run evidence alone.
+miss from the run evidence alone. The Linux release packaging lane is the one
+intentional exception: its `cargo-orthohelp` entry is content-addressed by the
+tool version and the pinned `rust-build-release` revision, and it is reached
+only by tag pushes and the pull-request dry run, so there is no
+warm-versus-cold trend for an observation step to report.
 
 Do not add `actions/cache` or a setup-action cache to a job that already has an
 owner: two writers make cache warmth, eviction, and storage cost unknowable.
@@ -766,11 +803,14 @@ list and exceeds the operating system's command-line limit, and elsewhere the
 lane's server would be started inside the nested setup action, which is exactly
 the clobber described above. Reproducing the gate's export, install and
 run-step start sequence for a lane that runs only on tag pushes and the dry run
-would not pay back. Every compiling job resets the counters with
-`sccache --zero-stats` before building and emits both human-readable and JSON
-statistics afterwards under `if: always()`; zero compile requests is a failed
-integration, not a quiet no-op. Kani is the one exception, because its verifier
-bundle ships prebuilt.
+would not pay back. That lane must therefore stay free of `RUSTC_WRAPPER`,
+`SCCACHE_GHA_ENABLED` and `SCCACHE_DIR` entirely, and
+`tests/workflow_contracts/sccache_contract_test.py` requires all three to be
+absent rather than merely empty. Every compiling job that does use the compiler
+cache resets the counters with `sccache --zero-stats` before building and emits
+both human-readable and JSON statistics afterwards under `if: always()`; zero
+compile requests is a failed integration, not a quiet no-op. Kani is the one
+exception, because its verifier bundle ships prebuilt.
 
 After the first run on `main`, confirm the generation reached Ubicloud rather
 than GitHub with `ubi gh leynos/netsuke list-cache-entries`. That command only

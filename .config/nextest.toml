@@ -39,6 +39,10 @@ success-output = "immediate"
 # Windows only. On Ubicloud these tests finish in a fraction of the budget, and
 # widening the timeout there would blunt the hang detection this file exists to
 # provide.
+#
+# This is a bound, not an explanation: nobody has measured what these actually
+# cost on `windows-latest`, so 600s is generous rather than justified. Issue
+# leynos/netsuke#673 owns replacing it with a measured budget or a faster test.
 platform = 'cfg(target_os = "windows")'
 filter = 'test(=harness_compiles_under_a_split_build_dir) | test(=packaged_manifest_retains_build_script_sources)'
 slow-timeout = { period = "60s", terminate-after = 10 }

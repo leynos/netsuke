@@ -62,6 +62,35 @@ fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()>
         "test-nextest should preserve inherited flags and deny warnings, found {nextest_recipe:?}"
     );
 
+    // Two separate worker bounds, not one. `NEXTEST_BUILD_JOBS` limits the
+    // compile that precedes the run and `NEXTEST_TEST_JOBS` limits the test
+    // processes, so a lane on a small runner can bound each without
+    // oversubscribing the other. Dropping either silently returns that half to
+    // nextest's default, which is one worker per core and is what exhausted a
+    // two-vCPU runner.
+    ensure!(
+        nextest_recipe.contains("$(NEXTEST_BUILD_JOBS)"),
+        "test-nextest should bound compilation with NEXTEST_BUILD_JOBS, found {nextest_recipe:?}"
+    );
+    ensure!(
+        nextest_recipe.contains("$(NEXTEST_TEST_JOBS)"),
+        "test-nextest should bound test processes with NEXTEST_TEST_JOBS, found {nextest_recipe:?}"
+    );
+
+    // Position, not just presence: the variable has to reach `nextest run`
+    // rather than sit in some other command in the same recipe, where it would
+    // read as configured while bounding nothing.
+    let run_offset = nextest_recipe
+        .find("nextest run")
+        .context("test-nextest should invoke cargo nextest run")?;
+    let test_jobs_offset = nextest_recipe
+        .find("$(NEXTEST_TEST_JOBS)")
+        .context("test-nextest should reference NEXTEST_TEST_JOBS")?;
+    ensure!(
+        test_jobs_offset > run_offset,
+        "NEXTEST_TEST_JOBS should be an argument to nextest run, found {nextest_recipe:?}"
+    );
+
     let doctest_recipe =
         target_recipe(&makefile, "doctest").context("Makefile should declare a doctest target")?;
     ensure!(
