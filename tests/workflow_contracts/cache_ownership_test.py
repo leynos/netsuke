@@ -37,13 +37,13 @@ from cache_contract_data import (
     cache_steps,
     declared_paths,
     is_build_tree,
-    is_source_built,
     lane_steps,
 )
 from runner_placement_invariants import (
     UBICLOUD_LABELS,
     has_single_cache_owner,
 )
+from source_build_data import is_source_built
 from workflow_loading import (
     job_steps,
     load_workflow,

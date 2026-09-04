@@ -189,6 +189,15 @@ jobs:
         # cannot compile at all, so a release that stops publishing assets
         # fails the lane instead of quietly building the tool from source.
         shell: bash
+        env:
+          # Resolving the release asset costs one `api.github.com` call, and
+          # unauthenticated calls are rate-limited per source address. The
+          # macOS runners share addresses widely enough that both lanes hit
+          # `403 Forbidden` on the first attempt of this change, retried for
+          # two minutes, and failed. The job token lifts the limit to a
+          # per-repository budget. `contents: read` is all it carries, which
+          # is what reading a public release needs and nothing more.
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           # Probe first, as every other installer here does. The cache restores

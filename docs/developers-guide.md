@@ -852,13 +852,13 @@ gate work on a GitHub-hosted runner (leynos/shared-actions#446); and restores
 the cache service variables that `mozilla-actions/sccache-action` overwrites.
 One SHA across every reference, so a future bump moves them together.
 
-CI installs tools from trusted prebuilt releases only, with two recorded
-exceptions and no others. `setup-rust` verifies the `cargo-binstall` installer
-checksum, and every `cargo binstall` call passes binary-only strategies so a
-missing prebuilt release fails the job instead of quietly compiling the tool.
+CI installs tools from trusted prebuilt releases only, with one recorded
+exception and no others. `setup-rust` verifies the `cargo-binstall` installer
+checksum, and every `cargo binstall` call refuses to compile, so a missing
+prebuilt release fails the job instead of quietly building the tool.
 
-The first exception is `mdtablefix`. Its published releases are fine, but the
-crate's binstall metadata sets `bin-dir = "."`, so resolution fails with
+The remaining exception is `mdtablefix`. Its published releases are fine, but
+the crate's binstall metadata sets `bin-dir = "."`, so resolution fails with
 "bin-dir configuration provided generates empty source path"
 ([leynos/mdtablefix#458](https://github.com/leynos/mdtablefix/issues/458)). [`install-mdtablefix`](../.github/actions/install-mdtablefix)
 therefore takes the Linux release tarball directly and verifies it against a
@@ -876,18 +876,29 @@ which is why the packaging lane once fell back to a guarded source build.
 0.9.1 ships five checksum-verified archives with working binstall metadata
 ([leynos/ortho-config#480](https://github.com/leynos/ortho-config/issues/480)),
 so the lane now installs a prebuilt binary and cannot compile the tool at all.
-Only 0.9.1 and later carry assets: pinning below that would reintroduce the
-compile. The `~/.cargo/bin` entry remains the owner of the installed binary,
-and this is still the one lane whose save is not restricted to a push on
+Only 0.9.1 and later carry assets: pinning below that would reintroduce
+compilation. The `~/.cargo/bin` entry remains the owner of the installed
+binary, and this is still the one lane whose save is not restricted to a push on
 `main`, because no trunk event reaches the release workflow at all, so the run
 that installs the tool must be the run that publishes it; the key is
 content-addressed by version, so concurrent writers produce identical archives.
 
-Delete each exception when its issue lands. `tests/workflow_contracts/`
-`cache_ownership_test.py` counts `cargo install` occurrences rather than
-pattern-matching them, so a second source build cannot hide behind the first,
-and `tests/workflow_build_and_package.rs` permits the fallback only in its
-exact guarded form.
+Delete the remaining exception when mdtablefix#458 lands, and the rule becomes
+absolute. Two contracts hold the line meanwhile.
+`tests/workflow_contracts/cache_ownership_test.py` counts the permitted
+`cargo install` occurrences rather than pattern-matching them, so a second
+source build cannot hide behind the first, and it separately lists
+`cargo-orthohelp` in `FORBIDDEN_SOURCE_BUILDS`, checked by name, so a retired
+exception cannot return as a newly permitted one.
+`tests/workflow_orthohelp_install.rs` requires the release lane to disable
+binstall's compile strategy and rejects every `cargo install` naming the tool.
+
+The detector behind both parses the command rather than matching its shape. An
+option's value is indistinguishable from a crate name without knowing which
+options take one, so `cargo install --version 0.9.1 cargo-orthohelp` would slip
+past a pattern that skipped tokens beginning with a dash. It compares the crate
+argument exactly, so `cargo-orthohelp-extra` is correctly a different crate;
+`tests/workflow_contracts/source_build_detector_test.py` pins both directions.
 
 Kani's Cargo front-end and verifier payload are separate artefacts: the Kani
 job verifies the Cargo QuickInstall front-end archive and the upstream 0.67.0
@@ -1740,7 +1751,7 @@ assets would now fail the lane rather than quietly building from source, which
 is the behaviour worth having. **Only 0.9.1 and later carry assets**, so
 pinning below that reintroduces the compile.
 
-Three contracts hold this: `workflow_build_and_package.rs` requires the
+Three contracts hold this: `workflow_orthohelp_install.rs` requires the
 disabling flag and rejects any `cargo install` naming the tool,
 `cache_ownership_test.py` lists `cargo-orthohelp` in `FORBIDDEN_SOURCE_BUILDS`
 so a retired exception cannot return as a new one, and

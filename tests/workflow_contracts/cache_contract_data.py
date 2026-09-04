@@ -259,33 +259,6 @@ SMOKE_PROFILE_JOBS = (
 )
 
 
-def is_source_built(tool: str, workflow_text: str) -> bool:
-    """Return whether any workflow compiles ``tool`` with `cargo install`.
-
-    `cargo-orthohelp` was permitted a guarded source build while
-    leynos/ortho-config#479 left the crate publishing no binaries. 0.9.1 ships
-    archives for every platform this estate targets, so any `cargo install`
-    naming it is now a regression.
-
-    Parameters
-    ----------
-    tool
-        The crate name, for example ``"cargo-orthohelp"``.
-    workflow_text
-        Every workflow and composite action concatenated.
-
-    Returns
-    -------
-    bool
-        ``True`` when some workflow installs ``tool`` from source. Flags,
-        ``--version`` and ``--index`` selectors, and quoting all sit between
-        the subcommand and the crate name, so the pattern allows arbitrary
-        tokens that are not themselves the crate.
-    """
-    pattern = rf"cargo\s+install\s+(?:[-\"']\S*\s+)*\"?{re.escape(tool)}"
-    return re.search(pattern, workflow_text) is not None
-
-
 def lane_steps(source: Path, job_name: str | None) -> list[dict[str, object]]:
     """Return the steps of a workflow job or of a composite action.
 

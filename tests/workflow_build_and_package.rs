@@ -1,6 +1,8 @@
 //! Validate build-and-package workflow wiring for shared actions.
 
 mod common;
+#[path = "support/workflow_steps.rs"]
+mod workflow_steps;
 
 use anyhow::{Context, Result, ensure};
 use common::workflow_contents;
@@ -8,6 +10,7 @@ use rstest::rstest;
 use serde_yaml::Value as YamlValue;
 use std::{fs, path::PathBuf};
 use toml::Value;
+use workflow_steps::workflow_step_body;
 
 fn release_staging_contents() -> Result<String> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -141,15 +144,6 @@ fn rust_build_release_step_blocks(contents: &str) -> Vec<String> {
     blocks
 }
 
-fn workflow_step_body<'a>(contents: &'a str, step_name: &str) -> Vec<&'a str> {
-    let step = format!("- name: {step_name}");
-    contents
-        .lines()
-        .skip_while(|line| !line.contains(&step))
-        .take_while(|line| !line.contains("      - name: ") || line.contains(&step))
-        .collect()
-}
-
 fn assert_shared_build_skips_man_page_discovery(contents: &str) {
     let rust_build_steps = rust_build_release_step_blocks(contents);
     assert!(
@@ -169,6 +163,8 @@ fn behavioural_build_and_package_wiring_matches_shared_actions() {
     let contents = workflow_contents("build-and-package.yml")
         .expect("build-and-package workflow should be readable");
 
+    // Wiring of the shared build action, which is this test's subject.
+    assert_shared_build_skips_man_page_discovery(&contents);
     assert!(
         contents.contains("stage-release-artefacts@"),
         "workflow should use shared stage-release-artefacts action"
@@ -203,104 +199,6 @@ fn behavioural_build_and_package_wiring_matches_shared_actions() {
     );
 }
 
-/// Reject every `cargo install` form that would compile `cargo-orthohelp`.
-///
-/// Matching the bare `cargo install cargo-orthohelp` prefix is not enough:
-/// `cargo install --locked cargo-orthohelp@0.9.1` compiles the tool just the
-/// same, and so does any other flag placed before the crate name. The pattern
-/// therefore allows arbitrary flags and version selectors between the
-/// subcommand and the crate.
-///
-/// `ortho-config` published no binaries until 0.9.1
-/// (leynos/ortho-config#479), so this lane once carried a documented exception
-/// permitting a guarded source build. 0.9.1 ships checksum-verified archives
-/// with working binstall metadata (leynos/ortho-config#480), so the exception
-/// is retired and a source build is now forbidden outright.
-fn assert_orthohelp_comes_from_a_prebuilt_release(contents: &str) -> Result<()> {
-    let install_body = workflow_step_body(contents, "Install cargo-orthohelp").join("\n");
-    ensure!(
-        install_body.contains("cargo binstall --no-confirm --locked \\"),
-        "workflow should install cargo-orthohelp with cargo-binstall"
-    );
-    // Structural rather than hopeful. The retired form named the binary-only
-    // strategies it preferred and fell through to a compile when they missed.
-    // Disabling the compile strategy means a release that stops publishing
-    // assets fails the lane instead of quietly building the tool from source.
-    ensure!(
-        install_body.contains("--disable-strategies compile"),
-        "cargo-binstall must be unable to fall back to compiling the tool"
-    );
-    ensure!(
-        !install_body.contains("--strategies crate-meta-data,quick-install"),
-        "the retired strategy list permitted a compile fallback and must not return"
-    );
-    // Only 0.9.1 and later carry release assets, so pinning below that would
-    // reintroduce the compile this contract exists to forbid.
-    ensure!(
-        install_body.contains("cargo-orthohelp@0.9.1"),
-        "workflow should pin a cargo-orthohelp release that publishes assets"
-    );
-
-    // Flags, `--version`/`--index` selectors, and quoting all sit between the
-    // subcommand and the crate name, so the pattern allows arbitrary tokens
-    // that are not themselves the crate. Zero matches: unlike the retired
-    // exception, no source install of this tool is permitted anywhere.
-    let source_install =
-        regex::Regex::new(r#"cargo\s+install\s+(?:[-"'][^\s]*\s+)*"?cargo-orthohelp"#)
-            .context("compile the cargo-orthohelp source-install pattern")?;
-    ensure!(
-        source_install.find_iter(contents).count() == 0,
-        "cargo-orthohelp must never be installed from source; 0.9.1 publishes \
-         prebuilt archives for every platform this lane targets"
-    );
-    // The dedicated build directory existed only to keep that source build's
-    // compiler output away from the product's tree. With no source build it
-    // has no purpose, and leaving it in the cache entry would archive an empty
-    // path on every packaging run.
-    ensure!(
-        !contents.contains("orthohelp-build"),
-        "the source build's dedicated target directory should be gone"
-    );
-
-    let build_index = contents
-        .find("- name: Build release binary")
-        .context("workflow should build the release binary")?;
-    let install_index = contents
-        .find("- name: Install cargo-orthohelp")
-        .context("workflow should install cargo-orthohelp")?;
-    ensure!(
-        build_index < install_index,
-        "cargo-orthohelp must be installed after rust-build-release provisions cargo-binstall"
-    );
-    Ok(())
-}
-
-#[test]
-fn behavioural_build_and_package_generates_release_help_with_orthohelp() {
-    let contents = workflow_contents("build-and-package.yml")
-        .expect("build-and-package workflow should be readable");
-
-    assert_orthohelp_comes_from_a_prebuilt_release(&contents)
-        .expect("cargo-orthohelp should come from a pinned prebuilt release");
-    assert!(
-        contents.contains("scripts/generate-release-help.sh"),
-        "workflow should call the release help script"
-    );
-    assert!(
-        contents.contains("\"target/orthohelp/${{ inputs.target }}/release\""),
-        "workflow should generate help under target/orthohelp"
-    );
-    assert_shared_build_skips_man_page_discovery(&contents);
-    assert!(
-        contents.contains("man-paths: ${{ steps.stage_paths.outputs.man_path }}"),
-        "Linux packaging should consume the staged man_path output"
-    );
-    assert!(
-        !contents.contains("target/generated-man"),
-        "workflow should not rely on build.rs generated man pages"
-    );
-}
-
 #[rstest]
 #[case("config-file: .github/release-staging.toml")]
 #[case("man-paths: ${{ steps.stage_paths.outputs.man_path }}")]
@@ -312,30 +210,6 @@ fn build_and_package_wires_staged_release_outputs(#[case] expected: &str) {
         contents.contains(expected),
         "build-and-package workflow should contain {expected}"
     );
-}
-
-#[test]
-fn behavioural_build_and_package_validates_release_help_tooling() {
-    let contents = workflow_contents("build-and-package.yml")
-        .expect("build-and-package workflow should be readable");
-
-    assert!(
-        contents.contains(
-            "cargo-orthohelp --version | grep -Eq '(^|[[:space:]])0\\.9\\.1([[:space:]]|$)'"
-        ),
-        "workflow should validate the installed cargo-orthohelp version"
-    );
-    assert!(
-        contents.contains("\"${{ inputs.platform == 'windows' && 'Netsuke' || env.BIN_NAME }}\""),
-        "workflow should pass the PowerShell module name explicitly"
-    );
-    for step_name in ["Validate cargo-orthohelp version", "Generate release help"] {
-        let step_body = workflow_step_body(&contents, step_name).join("\n");
-        assert!(
-            step_body.contains("shell: bash"),
-            "{step_name} should use Bash explicitly"
-        );
-    }
 }
 
 #[test]
