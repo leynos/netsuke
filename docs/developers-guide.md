@@ -1464,6 +1464,16 @@ If a workflow's behaviour does not depend on a feature from a particular commit
 onwards, do not assert its SHA — express any advisory note as a comment or a
 changelog entry instead.
 
+### Rust toolchain updates
+
+The `rust-toolchain` ecosystem block updates the checked-in Rust toolchain
+declaration in `rust-toolchain.toml`. It targets the repository root (`/`),
+runs weekly, permits five open pull requests, and applies the `dependencies` and
+`rust-toolchain` labels. The declaration remains pinned to a dated nightly;
+each Dependabot pull request still requires normal human review and the
+repository quality gates. Kani's separately managed toolchain is outside this
+policy.
+
 ## Python tooling and baseline
 
 Every Python source the repository owns — the helper scripts under `scripts/`,
@@ -1874,6 +1884,17 @@ make dev-test           # the nextest pass via Cranelift and mold
 `make dev-build` and `make dev-test` both depend on `make dev-fast-check`, so a
 missing tool reports an installation hint before Cargo is invoked rather than
 surfacing as an opaque codegen-backend or linker error.
+
+`DEV_FAST_CONFIG` defaults to `tools/dev-fast/config.toml` and may be
+overridden for a local experiment, for example
+`make DEV_FAST_CONFIG=tools/dev-fast/config.local.toml dev-build`. The Makefile
+passes the selected path explicitly with Cargo's `--config` option; keep the
+fragment out of `.cargo/config.toml` so it cannot affect ordinary, release,
+coverage, or verification builds.
+
+`CARGO_LOCKED` defaults to empty. Set `CARGO_LOCKED=--locked` to enable
+repository lockfile verification for `dev-build` and `dev-test`, for example
+`make CARGO_LOCKED=--locked dev-test`.
 
 ### Toolchain contract
 
@@ -2506,8 +2527,10 @@ Netsuke uses a mixed strategy:
   `tests/features_unix/`.
 - Behavioural step definitions and fixtures live in `tests/bdd/`.
 - Behavioural test discovery is defined in `tests/bdd_tests.rs`.
-- Dependabot configuration lives in `.github/dependabot.yml`, with coverage
-  tests in `tests/dependabot_config_tests.rs`.
+- Dependabot configuration lives in `.github/dependabot.yml`, with
+  `tests/dependabot_config_tests.rs` validating the Cargo, GitHub Actions, and
+  `rust-toolchain` update policies, including their configured schedules,
+  labels, directories, and open pull request limits where applicable.
 - **Property-based tests** use `proptest` and take two shapes: some live in
   `*_tests.rs` modules adjacent to the code under test, included via
   `#[cfg(test)] #[path = "..."] mod ...;` declarations; others are standalone
@@ -2530,14 +2553,15 @@ integration-test facilities belong in `test_support` instead.
 
 The Dependabot integration tests parse the checked-in configuration and verify
 that repository dependency manifests remain covered as the tree changes. They
-assert the Cargo and GitHub Actions update policies, the configured schedules,
-open pull request limits, and labels. They use `git ls-files` to compare the
-Cargo directories against tracked `Cargo.toml` manifests, so the test runner
-requires the Git command-line client. The comparison skips source trees that
-are not Git checkouts, because tracked-manifest hygiene cannot be determined
-there. The tests require workflow YAML files under `.github/workflows` and
-ensure local composite action manifests under `.github/actions` are covered by
-the configured Dependabot directory patterns.
+validate the Cargo, GitHub Actions, and `rust-toolchain` update policies,
+checking schedules, labels, directories, and open pull request limits where
+each policy defines them. They use `git ls-files` to compare the Cargo
+directories against tracked `Cargo.toml` manifests, so the test runner requires
+the Git command-line client. The comparison skips source trees that are not Git
+checkouts, because tracked-manifest hygiene cannot be determined there. The
+tests require workflow YAML files under `.github/workflows` and ensure local
+composite action manifests under `.github/actions` are covered by the
+configured Dependabot directory patterns.
 
 `tests/packaging_smoke_tests.rs` runs `cargo publish --dry-run` to verify the
 packaged crate builds successfully for release. It then uses
