@@ -250,7 +250,7 @@ jobs:
           profile: smoke
       - name: Install sccache
         uses: >-
-          taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68
+          taiki-e/install-action@37f7c5781271959fb65b6b35224e28652ff2b63d
         # v2.85.3
         with:
           tool: sccache@0.16.0
@@ -320,7 +320,7 @@ jobs:
         # Pins the interpreter the hoist script runs under to the Python 3.14
         # baseline the repository's Python tooling targets, rather than
         # whichever `python3` the runner image happens to ship.
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
         # v8.3.2
         with:
           python-version: '3.14'

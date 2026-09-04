@@ -93,7 +93,7 @@ jobs:
             exit $LASTEXITCODE
           }
       - name: Install sccache
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        uses: taiki-e/install-action@37f7c5781271959fb65b6b35224e28652ff2b63d  # v2.87.0
         with:
           tool: sccache@0.16.0
           fallback: none
@@ -108,7 +108,7 @@ jobs:
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        uses: taiki-e/install-action@37f7c5781271959fb65b6b35224e28652ff2b63d  # v2.87.0
         with:
           tool: nextest@${{ env.NEXTEST_VERSION }}
       - name: Reset sccache statistics
@@ -130,7 +130,7 @@ jobs:
       - name: Setup uv
         # `make check-fmt` runs the uv-driven Ruff format check on every
         # platform, so the Windows job needs uv on the PATH as well.
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
         with:
           python-version: ${{ env.PYTHON_BASELINE }}
           enable-cache: 'false'
@@ -239,7 +239,7 @@ jobs:
           mode: restore
           profile: smoke
       - name: Install sccache
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        uses: taiki-e/install-action@37f7c5781271959fb65b6b35224e28652ff2b63d  # v2.87.0
         with:
           tool: sccache@0.16.0
           fallback: none
