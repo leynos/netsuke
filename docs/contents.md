@@ -44,6 +44,9 @@ operator, user, and contributor references are easier to find.
   Normative amendment adding bounded stdout environment capture, standard-error
   pipelines, environment-selected working directories, and secure temporary
   execution directories to RFC 0001.
+- [rfcs/0011-allow-listed-structured-command-shells.md](rfcs/0011-allow-listed-structured-command-shells.md):
+  Normative amendment adding finite built-in and trusted configured shell names
+  to RFC 0001 structured command blocks.
 - [rfcs/0002-repository-relative-includes.md][rfc-0002]:
   Deterministic repository-relative manifest includes with cycle detection,
   provenance, namespaces, and duplicate rejection.
@@ -137,6 +140,9 @@ operator, user, and contributor references are easier to find.
 - [ADR-017](adr-017-require-utf8-ninja-invocation-paths.md):
   UTF-8 Ninja invocation-path boundary decision record, with early diagnostics
   for unsupported build-file and working-directory encodings.
+- [ADR-019](adr-019-structured-command-shell-selection.md): Allow-listed
+  structured-command shell selection, trusted configuration authority,
+  resolution, lowering, diagnostics, and safety boundaries.
 
 ## Proposals
 

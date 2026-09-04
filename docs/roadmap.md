@@ -36,14 +36,18 @@ Each phase validates a product hypothesis:
 - Phase 10 validates that quantified, property-based observation of generated
   invocations and environments lets Netsukefile tests catch build-script
   generator regressions that fixed fixtures miss.
+- Phase 11 validates that structured commands can select a required shell
+  dialect without granting Netsukefiles arbitrary interpreter authority or
+  weakening Netsuke-managed process boundaries.
 
 Each phase carries one hypothesis, and Phase 6 is the capability track for
 template standard-library work. Phases 3 to 5 predate that separation: each
 mixes capability delivery with verification and consistency work under a single
 hypothesis, and they are not being re-partitioned. New template
 standard-library work belongs in Phase 6, while repository and release
-hardening belong in Phases 8 and 9, rather than being appended to whichever
-phase happens to be open.
+hardening belong in Phases 8 and 9, property-based test work belongs in Phase
+10, and structured-command shell selection belongs in Phase 11, rather than
+being appended to whichever phase happens to be open.
 
 The roadmap keeps user-facing product grammar separate from implementation
 detail. Public tasks name Netsuke capabilities first. Implementation adapters,
@@ -2105,3 +2109,186 @@ and
 **Success criterion:** the worked examples in RFC 0012 §§3-4 run to a green
 result deterministically on a machine with no compiler and no network, and a
 seeded property failure replays identically from the values in its report.
+
+## 11. Allow-listed structured-command shell selection
+
+Hypothesis: a structured command can select a required shell dialect portably
+without giving Netsukefiles arbitrary interpreter authority or moving working
+directories, streams, pipelines, and failure handling back into shell text.
+
+This phase is governed by
+[ADR-019](adr-019-structured-command-shell-selection.md) and
+[RFC 0011](rfcs/0011-allow-listed-structured-command-shells.md). It extends the
+structured-command design in
+[RFC 0001](rfcs/0001-structured-command-blocks.md); primitive work may land
+before that design's AST exists, but command integration depends on RFC 0001
+implementation work tracked by issue `#593`.
+
+### 11.1. Settle the contract before implementation
+
+This step makes the interpreter vocabulary and authority boundary reviewable
+before any schema or runtime code exists.
+
+- [x] 11.1.1. Define named structured-command shell selection.
+  - Accept the governing ADR before implementation and record the built-in
+    names, supported hosts, executable resolution, fixed arguments,
+    configuration ownership, validation, lowering, diagnostics, safety model,
+    and distinct `script` boundary.
+  - Amend RFC 0001 so `shell` is a `Boolean | ShellName`, `false` stays direct,
+    `true` keeps the platform default, and a string selects an allow-listed
+    name.
+  - Record the schema, compatibility, implementation phases, and test strategy
+    in RFC 0011 without changing runtime code.
+  - See [ADR-019](adr-019-structured-command-shell-selection.md),
+    [RFC 0001 §Shell
+    mode](rfcs/0001-structured-command-blocks.md#10-shell-mode), and
+    [RFC 0011](rfcs/0011-allow-listed-structured-command-shells.md).
+  - Success: accepted architecture and proposed schema documents define every
+    required decision, while the production source tree remains unchanged.
+
+### 11.2. Resolve trusted shells without expanding manifest authority
+
+This step builds data and resolution primitives independently of the future
+structured-command AST. Each task keeps configuration and ambient host input
+outside the execution domain.
+
+- [ ] 11.2.1. Add the manifest-facing shell selection vocabulary.
+  - Requires 11.1.1.
+  - Add the finite `BuiltInShell` enum with `sh`, `bash`, `pwsh`, and
+    `powershell`, plus a validated `ShellName` registry-name type capable of
+    retaining configured names such as `dash`. Include host availability,
+    fixed arguments, parsing, and a host-default mapping modelled on
+    `RecipeShell` and `DependencyOrder`.
+  - Add a Boolean-or-name selection type whose three variants preserve direct,
+    platform-default, and named manifest intent; reject every other YAML type.
+  - Keep the types data-only and do not wire them into a structured-command AST
+    that RFC 0001 has not yet implemented.
+  - Success: unit and serialization tests prove the finite built-in names,
+    configured-name retention, host rules, fixed invocations, and exact
+    `false`, `true`, and string mappings without changing command execution.
+- [ ] 11.2.2. Add trusted configured shell definitions.
+  - Requires 11.2.1.
+  - Add append-merged `CliConfig` shell definitions with validated `name`,
+    `executable`, and fixed `args`, reserving built-in names and rejecting
+    duplicate merged names.
+  - Require the trusted operator invariant that `args` is a complete fixed
+    prefix: appending exactly one rendered source argument must invoke the
+    executable's source evaluator. Structural validation cannot infer the
+    executable-specific switch, so a violation is a trusted operator policy
+    error.
+  - Perform field-local checks during deserialization and collision checks in
+    `PostMergeHook`; keep definitions out of Netsukefiles and command-line
+    flags. System and user operator configuration are trusted registry sources.
+    Automatically discovered project `.netsuke.toml` is never trusted for
+    definitions, and `--config` or another explicit config selection alone
+    does not grant that authority. Project configuration may select existing
+    registry names only; project-owned definitions require a separate explicit
+    trust mechanism. Treat configured definitions as host-eligible and let
+    resolution decide their availability.
+  - Add commented sample configuration and document any new OrthoConfig merge
+    behaviour in the configuration guide.
+  - Success: configuration and post-merge tests cover valid entries, invalid
+    names, executable shapes, argument bounds, reserved names, duplicates,
+    untrusted project definitions, and layered composition with actionable
+    configuration-key errors.
+- [ ] 11.2.3. Resolve selections into a complete execution value.
+  - Requires 11.2.1 and 11.2.2.
+  - Build a feature-private registry from `CliConfig` and resolve bare
+    executables from trusted host `PATH` and Windows `PATHEXT` through
+    `mockable::Env`, before applying a command environment overlay.
+  - Before invoking `which`, reject every empty or non-absolute trusted `PATH`
+    component. Never convert a rejected component relative to the current
+    directory or pass it to `which`; reject with a typed trusted-environment
+    misconfiguration naming only a bounded component index. Reuse executable
+    probing where appropriate, but disable current-directory and workspace
+    fallback so repository content cannot replace an allow-listed shell.
+  - On Windows, read `PATHEXT` through `mockable::Env`. An unset value uses the
+    fixed default `.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC`.
+    A present value must be non-empty, valid Unicode, and NUL-free. Split it on
+    `;`, reject empty or whitespace-only entries, and trim ASCII spaces and
+    tabs before requiring the raw grammar `\.?[A-Za-z0-9]+`. Lowercase each
+    entry, add its leading dot, and deduplicate while preserving first order.
+    Reject malformed entries rather than skipping them or using the default.
+  - For a bare executable, try extensions in normalized `PATHEXT` order within
+    each absolute `PATH` directory in `PATH` order, selecting the first regular
+    executable. An already extended executable receives no `PATHEXT` suffix.
+    Reject malformed `PATH` or `PATHEXT` before invoking `which`, with no
+    fallback or skip. Report typed trusted-environment misconfiguration with
+    the variable and only a bounded entry or component index; retain distinct
+    unknown, unsupported, unavailable, and misconfigured outcomes.
+  - Add deterministic `MockEnv` and probe acceptance cases for ordered matching,
+    duplicate and first-order preservation, the fixed unset default, already
+    extended executables, empty and invalid `PATHEXT`, and all existing `PATH`
+    rejection cases on Unix-like and Windows paths. Include a repository-local
+    candidate beneath a relative component and assert it is never probed.
+  - Classify unknown, unsupported, unavailable, and misconfigured outcomes in a
+    crate-internal typed error, convert it to user diagnostics once, and carry
+    only the resolved name, executable, and fixed arguments into the execution
+    value.
+  - Success: injected-environment and probe tests cover each failure class,
+    host-default and named resolution, absolute and bare configured
+    executables, bounded diagnostics, and resistance to command `PATH` and
+    workspace replacement. Deterministic `MockEnv` and probe tests run on
+    Unix-like and Windows paths and include a repository-local candidate below
+    a relative `PATH` component.
+
+- [ ] 11.2.4. Property-test shell selection invariants.
+  - Requires 11.2.1, 11.2.2, and 11.2.3.
+  - Generate valid and invalid registry names and Boolean-or-string YAML
+    values, merged definitions with bounded fixed-argument lists, and injected
+    `PATH` and `PATHEXT` states.
+  - Check that direct, platform-default, and named selections lower to their
+    respective invariants, including rejection of empty and relative trusted
+    `PATH` components without probing repository-local candidates.
+  - Success: bounded property runs reproduce failures from their seeds and
+    prove that configured names remain representable while built-in names stay
+    finite, reserved, and host-aware.
+
+### 11.3. Carry named shells through structured execution boundaries
+
+This step integrates the trusted value only after RFC 0001 supplies the
+structured-command AST and action-runner path. It validates that shell dialect
+selection does not alter Netsuke-managed topology.
+
+- [ ] 11.3.1. Lower named shells through structured commands.
+  - Requires 11.2.3 and the RFC 0001 schema, compiler, execution-IR, and action
+    runner foundations from issue `#593`.
+  - Accept `Boolean | ShellName` in singular blocks, heterogeneous sequence
+    items, and pipeline stages; resolve each stage independently before
+    constructing the IR.
+  - Carry the complete resolved shell through versioned action plans and the
+    Ninja adapter without another configuration or environment lookup; reject
+    unknown persisted variants.
+  - Preserve each block's environment, working directory, standard streams,
+    capture, temporary directory, pipeline topology, and failure semantics, and
+    keep legacy commands, rule references, and shebang-based scripts distinct.
+  - Success: unit and behavioural tests prove identical outer structured
+    semantics for direct and named-shell blocks, while selected shell source
+    receives only the rendered `invoke` text after fixed arguments.
+- [ ] 11.3.2. Exercise the cross-platform shell-selection matrix.
+  - Requires 11.3.1.
+  - Add Unix-like and Windows end-to-end coverage for absent, `false`, `true`,
+    every supported built-in, configured names, unsupported names, unavailable
+    executables, and invalid configuration.
+  - Exercise named shells as singular blocks, sequence items, and first,
+    middle, and final pipeline stages with independent working directories and
+    stream bindings.
+  - Prove that direct mode retains argv-boundary protection while both Boolean
+    and named shell modes continue to treat `invoke` as shell source.
+  - Success: the supported-host matrix passes in CI, every invalid case fails
+    before execution with its typed diagnostic class, and existing `true` and
+    `false` compatibility snapshots remain unchanged.
+- [ ] 11.3.3. Publish configuration, architecture, and security guidance.
+  - Requires 11.3.1 and 11.3.2.
+  - Document shell definitions and selection near the users' guide's legacy
+    recipe and safety-boundary sections, warning that named shells do not gain
+    direct-mode injection guarantees.
+  - Document the registry, `CliConfig` authority, environment port, resolver,
+    typed diagnostic boundary, and selection-to-IR conversion near the
+    developers' guide's command-lowering architecture.
+  - Update the security audit with the interpreter allow-list as partial
+    hardening, but keep the unrestricted MiniJinja `shell()` and `grep()`
+    command-capability finding open until its separate remediation lands.
+  - Success: user, operator, developer, sample-configuration, and security
+    guidance agree with ADR-019 and make the Netsukefile-versus-`CliConfig`
+    authority boundary explicit.
