@@ -39,7 +39,7 @@ def invokes_build_command(line: str) -> bool:
     than an invoked command, and a substring match would misclassify that
     installer as the step that starts compiling. A leading path, such as
     `/usr/bin/make` in `ci.yml`'s `Lint` step, is normalized to its
-    basename so the pinned invocation is still recognised.
+    basename so the pinned invocation is still recognized.
     """
     stripped = line.strip()
     if not stripped:
@@ -54,7 +54,7 @@ def is_compile_step(step: dict[str, object]) -> bool:
     Parameters
     ----------
     step
-        A single normalised workflow step.
+        A single normalized workflow step.
 
     Returns
     -------

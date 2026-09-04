@@ -125,7 +125,7 @@ def is_valid_ninja_sequence(
     Parameters
     ----------
     steps
-        The job's normalised workflow steps, in declaration order.
+        The job's normalized workflow steps, in declaration order.
     first_consumer
         The ``name`` of the first step that requires Ninja on the ``PATH``.
 
@@ -165,7 +165,7 @@ def is_valid_windows_tool_path_sequence(
     Parameters
     ----------
     steps
-        The job's normalised workflow steps, in declaration order.
+        The job's normalized workflow steps, in declaration order.
 
     Returns
     -------
@@ -262,6 +262,24 @@ def is_bounded_worker_count(vcpus: int, flags: dict[str, str]) -> bool:
     )
 
 
+def _contains_unquoted_or(expression: str) -> bool:
+    """Report whether `||` appears anywhere outside a quoted literal."""
+    quote: str | None = None
+    index = 0
+    length = len(expression)
+    while index < length:
+        char = expression[index]
+        if quote is not None:
+            if char == quote:
+                quote = None
+        elif char in "'\"":
+            quote = char
+        elif expression[index : index + 2] == "||":
+            return True
+        index += 1
+    return False
+
+
 def is_trunk_only_save(condition: str) -> bool:
     """Return whether a cache-save condition is restricted to a trunk push.
 
@@ -274,53 +292,35 @@ def is_trunk_only_save(condition: str) -> bool:
     -------
     bool
         ``True`` when the condition names both a ``push`` event and the
-        ``main`` ref, and the two predicates are combined so that neither can
-        authorise a save on its own.
+        ``main`` ref, and contains no disjunction that could authorise a save
+        without both.
 
     Notes
     -----
     A pull request that saved would race the designated writer for the
     reservation and publish a generation no reviewer has seen. Naming both
-    predicates is not enough: a top-level disjunction of the two, such as
+    predicates is not enough: a disjunction of the two, such as
     ``github.event_name == 'push' || github.ref == 'refs/heads/main'``, lets
-    either predicate authorise a save alone, so any top-level ``||`` is
-    rejected outright regardless of what it separates.
+    either authorise a save alone.
+
+    Any ``||`` outside a quoted literal is rejected, at every depth rather
+    than only at the top level. Checking the top level alone was not enough:
+    wrapping the whole disjunction in parentheses, as
+    ``(github.event_name == 'push' || github.ref == 'refs/heads/main')``,
+    leaves no top-level ``||`` to find while meaning exactly the same thing.
+    Rejecting outright rather than analysing the expression's structure is
+    deliberate. Every cache-save condition in this repository is a conjunction
+    of equality tests, so nothing legitimate needs a disjunction, and a
+    predicate that tried to decide which disjunctions are safe would be a
+    second, subtler thing to get wrong.
     """
     normalized = " ".join(condition.split())
-    if len(_split_top_level_or_clauses(normalized)) > 1:
+    if _contains_unquoted_or(normalized):
         return False
     return (
         "github.event_name == 'push'" in normalized
         and "github.ref == 'refs/heads/main'" in normalized
     )
-
-
-def _split_top_level_or_clauses(expression: str) -> list[str]:
-    """Split an expression on `||` that sits outside parens and quotes."""
-    clauses: list[str] = []
-    depth = 0
-    quote: str | None = None
-    start = 0
-    index = 0
-    length = len(expression)
-    while index < length:
-        char = expression[index]
-        if quote is not None:
-            quote = None if char == quote else quote
-        elif char in "'\"":
-            quote = char
-        elif char in "([":
-            depth += 1
-        elif char in ")]":
-            depth -= 1
-        elif depth == 0 and expression[index : index + 2] == "||":
-            clauses.append(expression[start:index])
-            index += 2
-            start = index
-            continue
-        index += 1
-    clauses.append(expression[start:])
-    return clauses
 
 
 def _trailing_count(value: str) -> int | None:

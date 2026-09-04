@@ -8,6 +8,7 @@ cache ownership, and oversubscribed worker counts.
 Run via ``make test-workflow-contracts``.
 """
 
+import pytest
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
 from runner_placement_invariants import (
@@ -42,7 +43,14 @@ RUNNER_MUTATIONS = (
 SEQUENCE_KINDS = ("ninja", "windows")
 CACHE_MUTATIONS = ("valid", "duplicate-path")
 WORKER_MUTATIONS = ("valid", "oversubscribed", "zero", "unbounded")
-SAVE_MUTATIONS = ("valid", "any-push", "any-branch", "unconditional", "disjunctive")
+SAVE_MUTATIONS = (
+    "valid",
+    "any-push",
+    "any-branch",
+    "unconditional",
+    "disjunctive",
+    "parenthesised-disjunctive",
+)
 
 #: Disjoint path sets, one per cache owner, as the workflows declare them.
 CACHE_OWNERS = (
@@ -282,6 +290,7 @@ def test_generated_worker_counts_stay_within_the_lane(
 @example(mutation="any-branch")
 @example(mutation="unconditional")
 @example(mutation="disjunctive")
+@example(mutation="parenthesised-disjunctive")
 @given(mutation=st.sampled_from(SAVE_MUTATIONS))
 def test_generated_save_conditions_require_a_trunk_push(mutation: str) -> None:
     """Accept a save condition only while it names a push on the trunk."""
@@ -291,7 +300,30 @@ def test_generated_save_conditions_require_a_trunk_push(mutation: str) -> None:
     )
 
 
-def test_disjunctive_save_condition_is_rejected() -> None:
-    """Reject a named top-level OR of the push and main predicates."""
-    condition = "github.event_name == 'push' || github.ref == 'refs/heads/main'"
+@pytest.mark.parametrize(
+    "condition",
+    [
+        pytest.param(
+            "github.event_name == 'push' || github.ref == 'refs/heads/main'",
+            id="bare",
+        ),
+        pytest.param(
+            "(github.event_name == 'push' || github.ref == 'refs/heads/main')",
+            id="parenthesised",
+        ),
+        pytest.param(
+            "github.event_name == 'push' && (github.ref == 'refs/heads/main' "
+            "|| github.ref == 'refs/heads/release')",
+            id="nested-in-conjunction",
+        ),
+    ],
+)
+def test_disjunctive_save_conditions_are_rejected(condition: str) -> None:
+    """Reject an OR of the push and main predicates at any nesting depth.
+
+    Each of these authorises a save that neither predicate alone should. The
+    parenthesised form is the reason the check cannot look only at the top
+    level: it means what the bare form means while presenting no top-level
+    `||` at all.
+    """
     assert is_trunk_only_save(condition) is False, f"condition={condition!r}"

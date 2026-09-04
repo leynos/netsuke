@@ -269,7 +269,7 @@ def test_every_kani_cache_caller_supplies_runner_image() -> None:
     boundary while rendering the cache key, rather than at the call site.
     """
     offenders: list[str] = []
-    for path in sorted(WORKFLOW_DIR.glob("*.yml")):
+    for path in sorted({*WORKFLOW_DIR.glob("*.yml"), *WORKFLOW_DIR.glob("*.yaml")}):
         workflow = load_workflow(path)
         for job_name, step in _kani_cache_steps(workflow, path.name):
             inputs = step.get("with")

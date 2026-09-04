@@ -347,7 +347,7 @@ def test_workflows_do_not_reintroduce_source_tool_builds_or_stale_providers() ->
     """Reject source tool builds and the retired Namespace cache action."""
     workflow_text = "\n".join(
         path.read_text(encoding="utf-8")
-        for path in sorted(WORKFLOW_DIR.glob("*.yml"))
+        for path in sorted({*WORKFLOW_DIR.glob("*.yml"), *WORKFLOW_DIR.glob("*.yaml")})
         + sorted(ACTION_DIR.glob("*/action.yml"))
     )
     # One documented exception: `ortho-config` publishes no binaries for any

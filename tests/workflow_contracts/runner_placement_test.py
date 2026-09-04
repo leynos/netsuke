@@ -234,7 +234,8 @@ def _workflow_env(workflow: dict[str, object]) -> dict[str, object]:
 def _all_workflow_text() -> str:
     """Return every workflow file's text, concatenated."""
     return "\n".join(
-        path.read_text(encoding="utf-8") for path in sorted(WORKFLOW_DIR.glob("*.yml"))
+        path.read_text(encoding="utf-8")
+        for path in sorted({*WORKFLOW_DIR.glob("*.yml"), *WORKFLOW_DIR.glob("*.yaml")})
     )
 
 

@@ -86,7 +86,7 @@ def mutate_runner_assignments(mutation: str, selected_key: str) -> dict[str, str
         A copy of
         :data:`~runner_placement_invariants.REQUIRED_RUNNER_ASSIGNMENTS`
         with the named mutation applied, or an unmodified copy when
-        ``mutation`` is ``"valid"`` or unrecognised.
+        ``mutation`` is ``"valid"`` or unrecognized.
     """
     assignments = dict(REQUIRED_RUNNER_ASSIGNMENTS)
     apply_mutation = _RUNNER_ASSIGNMENT_MUTATIONS.get(mutation)
@@ -166,8 +166,8 @@ def mutate_save_condition(mutation: str) -> str:
     ----------
     mutation
         The mutation name: ``"valid"`` for the correctly guarded condition,
-        or one of ``"any-push"``, ``"any-branch"``, ``"unconditional"``, or
-        ``"disjunctive"``.
+        or one of ``"any-push"``, ``"any-branch"``, ``"unconditional"``,
+        ``"disjunctive"``, or ``"parenthesised-disjunctive"``.
 
     Returns
     -------
@@ -183,6 +183,10 @@ def mutate_save_condition(mutation: str) -> str:
             return "always()"
         case "disjunctive":
             return "github.event_name == 'push' || github.ref == 'refs/heads/main'"
+        case "parenthesised-disjunctive":
+            # Means exactly what the bare disjunction means, but leaves no
+            # top-level `||` for a depth-zero scan to find.
+            return "(github.event_name == 'push' || github.ref == 'refs/heads/main')"
         case _:
             return (
                 "github.event_name == 'push' && github.ref == 'refs/heads/main' "
