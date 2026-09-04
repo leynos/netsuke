@@ -340,14 +340,15 @@ stdlib.time.label.nanoseconds = nanosekunder
 
 # Diagnostik for which-hjælperen.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] kommandoen "{ $command }" blev ikke fundet efter gennemgang af { $count } PATH-opslag. Uddrag: { $preview }
-stdlib.which.not_found.hint.cwd_auto = Tomme dele af PATH ignoreres; brug cwd_mode="auto" for at medtage arbejdsmappen.
-stdlib.which.not_found.hint.cwd_always = Sæt cwd_mode="always" for at medtage den aktuelle mappe.
+stdlib.which.not_found.hint.cwd_auto = Automatic mode searches only directories explicitly named by PATH.
+stdlib.which.not_found.hint.cwd_always = Always mode searches only the current directory before directories named by PATH.
+stdlib.which.not_found.hint.workspace = To recursively search the workspace tree, use cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] kommandoen "{ $command }" i "{ $path }" mangler eller kan ikke køres.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <tom>
 stdlib.which.path_entry.non_utf8 = PATH-opslag nr. { $index } indeholder tegn, der ikke er UTF-8; Netsuke kræver UTF-8-stier.
 stdlib.which.command.empty = which kræver en streng, der ikke er tom.
-stdlib.which.cwd_mode.invalid = cwd_mode skal være "auto", "always" eller "never", men gav "{ $mode }".
+stdlib.which.cwd_mode.invalid = cwd_mode must be 'auto', 'always', 'never', or 'workspace-recursive', got '{ $mode }'.
 stdlib.which.cwd.resolve_failed = Den aktuelle mappe kunne ikke bestemmes: { $details }.
 stdlib.which.cwd.non_utf8 = Den aktuelle mappe indeholder dele, der ikke er UTF-8.
 stdlib.which.canonicalize_failed = "{ $path }" kunne ikke kanoniseres: { $details }.

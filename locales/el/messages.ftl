@@ -341,14 +341,15 @@ stdlib.time.label.nanoseconds = δισεκατομμυριοστά του δευ
 
 # Διαγνωστικά του βοηθήματος which.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] η εντολή «{ $command }» δεν βρέθηκε μετά τον έλεγχο { $count } καταχωρίσεων του PATH. Προεπισκόπηση: { $preview }
-stdlib.which.not_found.hint.cwd_auto = Τα κενά τμήματα του PATH αγνοούνται· χρησιμοποιήστε cwd_mode="auto" για να συμπεριληφθεί ο κατάλογος εργασίας.
-stdlib.which.not_found.hint.cwd_always = Ορίστε cwd_mode="always" για να συμπεριληφθεί ο τρέχων κατάλογος.
+stdlib.which.not_found.hint.cwd_auto = Automatic mode searches only directories explicitly named by PATH.
+stdlib.which.not_found.hint.cwd_always = Always mode searches only the current directory before directories named by PATH.
+stdlib.which.not_found.hint.workspace = To recursively search the workspace tree, use cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] η εντολή «{ $command }» στο «{ $path }» λείπει ή δεν είναι εκτελέσιμη.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <κενό>
 stdlib.which.path_entry.non_utf8 = Η καταχώριση αρ. { $index } του PATH περιέχει χαρακτήρες που δεν είναι UTF-8· το Netsuke απαιτεί διαδρομές UTF-8.
 stdlib.which.command.empty = Το which απαιτεί μη κενή συμβολοσειρά.
-stdlib.which.cwd_mode.invalid = Το cwd_mode πρέπει να είναι «auto», «always» ή «never»· ελήφθη «{ $mode }».
+stdlib.which.cwd_mode.invalid = cwd_mode must be 'auto', 'always', 'never', or 'workspace-recursive', got '{ $mode }'.
 stdlib.which.cwd.resolve_failed = Δεν ήταν δυνατός ο προσδιορισμός του τρέχοντος καταλόγου: { $details }.
 stdlib.which.cwd.non_utf8 = Ο τρέχων κατάλογος περιέχει τμήματα που δεν είναι UTF-8.
 stdlib.which.canonicalize_failed = Δεν ήταν δυνατή η κανονικοποίηση του «{ $path }»: { $details }.
