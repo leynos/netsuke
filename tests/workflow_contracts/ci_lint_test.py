@@ -31,6 +31,7 @@ import pytest
 from workflow_loading import (
     CI_WORKFLOW_PATH,
     MAKEFILE_PATH,
+    SETUP_RUST_JOBS,
     _WorkflowLoader,
     job_steps,
     load_workflow,
@@ -56,10 +57,6 @@ AWK_STAGING_FRAGMENTS = (
     'install --mode=0755 "$(command -v gawk)"',
     '"${test_shell_bin}/awk"',
 )
-
-#: Jobs whose `setup-rust` invocations must stay on the shared action's
-#: supported input set.
-SETUP_RUST_JOBS = ("build-test", "build-test-windows")
 
 
 def _tool_input(step: dict[str, object]) -> object:
@@ -320,10 +317,10 @@ def test_nextest_version_declared_once_at_workflow_scope() -> None:
         f"got {env.get('NEXTEST_VERSION')!r}"
     )
 
-    for job_name in SETUP_RUST_JOBS:
+    for workflow_path, job_name in SETUP_RUST_JOBS:
         installs = [
             tool
-            for step in job_steps(workflow, job_name)
+            for step in job_steps(load_workflow(workflow_path), job_name)
             if "nextest" in str(tool := _tool_input(step))
         ]
         assert installs == ["nextest@${{ env.NEXTEST_VERSION }}"], (
@@ -342,9 +339,8 @@ def test_setup_rust_does_not_pass_unsupported_components_input() -> None:
     step uses the shared action and passes only supported inputs, so `check-fmt`
     and `lint-clippy` still find the components the action installs.
     """
-    workflow = load_workflow()
-    for job_name in SETUP_RUST_JOBS:
-        steps = job_steps(workflow, job_name)
+    for workflow_path, job_name in SETUP_RUST_JOBS:
+        steps = job_steps(load_workflow(workflow_path), job_name)
         setup_steps = [
             step for step in steps if "setup-rust" in str(step.get("uses", ""))
         ]
@@ -357,36 +353,6 @@ def test_setup_rust_does_not_pass_unsupported_components_input() -> None:
                 f"{job_name} Setup Rust must not pass the unsupported "
                 f"'components' input, got {sorted(with_.keys())!r}"
             )
-
-
-def test_mdtablefix_installers_require_the_pinned_version() -> None:
-    """Both formatter installers replace stale executables and verify the pin."""
-    expected_guard = 'expected_mdtablefix_version="mdtablefix ${MDTABLEFIX_VERSION}"'
-    expected_match = (
-        '[[ "${installed_mdtablefix_version}" != "${expected_mdtablefix_version}" ]]'
-    )
-    workflow = load_workflow()
-    for job_name in SETUP_RUST_JOBS:
-        step = named_step(
-            job_steps(workflow, job_name),
-            "Install mdtablefix",
-        )
-        match step.get("run"):
-            case str() as run:
-                assert expected_guard in run, (
-                    f"{job_name} must pin the expected version"
-                )
-                assert "mdtablefix --version" in run, (
-                    f"{job_name} must inspect the installed version"
-                )
-                assert "tr -d '\\r'" in run, (
-                    f"{job_name} must normalise Windows version output"
-                )
-                assert expected_match in run, (
-                    f"{job_name} must replace a missing or mismatched formatter"
-                )
-            case _:
-                pytest.fail(f"{job_name} must configure mdtablefix")
 
 
 def test_build_job_runs_markdown_formatter_checker_tests() -> None:

@@ -4,35 +4,66 @@ name: CI
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  # The trunk run is the cold cache writer. Pull requests restore and never
+  # publish, so without this trigger no generation would ever be written.
+  push:
+    branches: [main]
   workflow_dispatch:
 
+# Start every job from an empty token and let each one opt in. Both jobs
+# below, and the reusable Windows workflow's caller, take `contents: read`.
+permissions: {}
+
 env:
-  # Single source of truth for the cargo-nextest pin. `make test` runs the
-  # non-doctest suite through nextest, so every job that installs it reads
-  # this value. Declared once at workflow scope so the documented
-  # AGENTS.md `sed` extraction yields exactly one version.
+  # Single source of truth for the cargo-nextest pin, declared once at
+  # workflow scope so the AGENTS.md `sed` extraction yields one version.
   NEXTEST_VERSION: '0.9.133'
   # Pins for the Python lint and typecheck gates. Make's `?=` assignments
-  # yield to the environment, so these values control the versions the `make`
-  # targets below run under. tests/workflow_contracts/python_toolchain_sync_test.py
-  # holds these equal to the Makefile defaults so CI and local runs cannot
-  # drift apart.
+  # yield to the environment, so these choose the versions.
+  # tests/workflow_contracts/python_toolchain_sync_test.py holds them equal
+  # to the Makefile defaults.
   RUFF_VERSION: '0.16.4'
   TY_VERSION: '0.0.74'
   PYTHON_BASELINE: '3.14'
-  # `make check-fmt` verifies Markdown formatting through
-  # scripts/check-markdown-format.sh, which shells out to mdtablefix. Pin it
-  # once so both formatter jobs produce the same canonical output.
+  # `make check-fmt` shells out to mdtablefix. Pin it once so both formatter
+  # jobs produce the same canonical output.
   MDTABLEFIX_VERSION: '0.5.0'
+  # Ubuntu release, carried in every compiled-tool cache key.
+  NETSUKE_RUNNER_IMAGE: ubuntu2404
 
 jobs:
   build-test:
-    runs-on: namespace-profile-netsuke-ci
+    # Escalated from `-2` on the recipe's memory criterion: on the two-vCPU,
+    # 8 GB shape the runner was lost 16 minutes into the instrumented build
+    # (run 33804092672, every later step null, no log). The sampler below
+    # measures the peak so the next run either confirms the escalation or
+    # returns the job to `-2`.
+    runs-on: ubicloud-standard-4-ubuntu-2404
+    timeout-minutes: 60
     permissions:
       contents: read
     env:
       CARGO_TERM_COLOR: always
       BUILD_PROFILE: debug
+      # vCPU count of this lane's shape. Every worker bound derives from this
+      # one number; tests/workflow_contracts/runner_placement_test.py holds
+      # them equal. The instrumented run reads the cargo and nextest
+      # variables; `make doctest` reads BUILD_JOBS.
+      LINUX_LANE_VCPUS: '4'
+      BUILD_JOBS: -j 4
+      CARGO_BUILD_JOBS: '4'
+      NEXTEST_TEST_THREADS: '4'
+      RUSTC_WRAPPER: sccache
+      # sccache uses the GitHub Actions backend, whose objects land in
+      # Ubicloud's own store on a Ubicloud runner. It needs no archive of its
+      # own. Setting the repository variable NETSUKE_SCCACHE_LOCAL_DIR to
+      # `true` switches the whole gate to the local-directory backend and
+      # enables cache step B; exactly one backend is ever active.
+      SCCACHE_GHA_ENABLED: ${{ vars.NETSUKE_SCCACHE_LOCAL_DIR == 'true' && 'false' || 'true' }}
+      SCCACHE_DIR: ${{ github.workspace }}/.sccache
+      # Sized for two build shapes: the ordinary debug objects and the
+      # `llvm-cov` instrumented ones, which share this store keyed by flags.
+      SCCACHE_CACHE_SIZE: 4G
       # The tree requires the Polonius borrow checker, which nightly enables by
       # default (see docs/adr-006-adopt-polonius-nightly-toolchain.md), so CI
       # builds with the dated nightly pinned in rust-toolchain.toml.
@@ -50,15 +81,26 @@ jobs:
           # Full history so the deferred cs-coverage check step can reach
           # the pull request's merge base once the gate is wired in.
           fetch-depth: 0
+      - name: Export sccache credentials
+        # A server started without these stays on local disk all job.
+        uses: ./.github/actions/sccache-gha-credentials
+      - name: Start resource sampler
+        uses: ./.github/actions/memory-sampler
+        with:
+          mode: start
+      - name: Restore gate caches
+        id: caches
+        uses: ./.github/actions/linux-gate-cache
+        with:
+          mode: restore
+          sccache-local: ${{ vars.NETSUKE_SCCACHE_LOCAL_DIR }}
       - name: Install test shell dependencies
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends gawk
-
           # Ubuntu exposes awk through an alternatives symlink outside
-          # /usr/bin. The capability-backed sandbox probe deliberately cannot
-          # follow a symlink that escapes its containing directory, so expose
-          # the packaged binary as a regular executable on the job PATH.
+          # /usr/bin, which the sandbox probe cannot follow, so expose the
+          # packaged binary as a regular executable on PATH.
           test_shell_bin="${RUNNER_TEMP}/netsuke-test-bin"
           mkdir --parents "${test_shell_bin}"
           install --mode=0755 "$(command -v gawk)" "${test_shell_bin}/awk"
@@ -67,18 +109,27 @@ jobs:
 
           command -v awk
           awk --version
+      - name: Install sccache
+        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        with:
+          tool: sccache@0.16.0
+          fallback: none
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/setup-rust@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           # Preserve warnings-as-errors through toolchain setup.
           rustflags: -D warnings
+          cache-provider: external
+          use-sccache: 'false'
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
       - name: Install cargo-nextest
         uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
         with:
           tool: nextest@${{ env.NEXTEST_VERSION }}
+      - name: Reset sccache statistics
+        run: sccache --zero-stats
       - name: Show rustc version
         run: |
           rustup show
@@ -86,70 +137,36 @@ jobs:
           cargo --version
       - name: Show Ninja version
         run: ninja --version
-      - name: Cache mdtablefix
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
-        with:
-          path: |
-            ~/.cargo/bin/mdtablefix
-            ~/.cargo/bin/mdtablefix.exe
-            ~/.cache/cargo-binstall
-          key: mdtablefix-${{ runner.os }}-${{ runner.arch }}-${{ env.MDTABLEFIX_VERSION }}
       - name: Install mdtablefix
-        # Required by `make check-fmt`. Keep the cached binary at the pinned
-        # version and fall back to Cargo when a prebuilt asset is unavailable.
-        run: |
-          expected_mdtablefix_version="mdtablefix ${MDTABLEFIX_VERSION}"
-          installed_mdtablefix_version=""
-          if command -v mdtablefix >/dev/null 2>&1; then
-            installed_mdtablefix_version="$(mdtablefix --version 2>/dev/null | tr -d '\r')"
-          fi
-          if [[ "${installed_mdtablefix_version}" != "${expected_mdtablefix_version}" ]]; then
-            if cargo binstall --version >/dev/null 2>&1; then
-              cargo binstall --no-confirm --locked "mdtablefix@${MDTABLEFIX_VERSION}"
-            else
-              echo "cargo-binstall unavailable; building mdtablefix from crates.io"
-              cargo install --locked mdtablefix --version "${MDTABLEFIX_VERSION}"
-            fi
-          fi
-          installed_mdtablefix_version="$(mdtablefix --version | tr -d '\r')"
-          if [[ "${installed_mdtablefix_version}" != "${expected_mdtablefix_version}" ]]; then
-            echo "expected ${expected_mdtablefix_version}, got ${installed_mdtablefix_version}" >&2
-            exit 1
-          fi
+        # The gate cache owns `~/.local/bin`, so a warm run finds it present.
+        uses: ./.github/actions/install-mdtablefix
+        with:
+          build-dir: ${{ github.workspace }}/.mdtablefix-build
       - name: Setup uv
-        # Installed before the Format step: `make check-fmt` and `make lint`
-        # run the uv-driven Ruff, Pylint, df12, and ambrleaks gates.
+        # Before Format: the uv-driven Ruff, Pylint, and df12 gates need it.
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
         with:
           python-version: ${{ env.PYTHON_BASELINE }}
-          # This Rust workspace has no Python dependency manifest. Cache the
-          # shared spelling dictionary below rather than a uv cache with no
-          # durable dependency key.
+          # The gate cache already owns the uv download and tool stores, so a
+          # second GitHub-backed cache would duplicate it.
+          # It also owns the shim directory the next step writes into.
           enable-cache: 'false'
-      - name: Cache yamllint
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
-        with:
-          path: |
-            .uv-cache
-            .uv-tools
-            .uv-bin
-          key: yamllint-${{ runner.os }}-${{ runner.arch }}-${{ env.YAMLLINT_VERSION }}
       - name: Install yamllint
         run: |
           uv tool install "yamllint==${YAMLLINT_VERSION}"
           echo "${UV_TOOL_BIN_DIR}" >> "$GITHUB_PATH"
-      - name: Cache actionlint
-        id: cache_actionlint
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
-        with:
-          path: actionlint
-          key: actionlint-${{ runner.os }}-${{ runner.arch }}-1.7.12
       - name: Download actionlint
         id: get_actionlint
-        if: steps.cache_actionlint.outputs.cache-hit != 'true'
+        # The gate cache owns `actionlint`. Reuse it only at the pinned
+        # version, so a bump cannot be satisfied by a stale executable.
         run: |
           set -euo pipefail
           readonly ACTIONLINT_VERSION='1.7.12'
+          if [[ -x ./actionlint ]] \
+            && [[ "$(./actionlint --version | head --lines=1)" == "${ACTIONLINT_VERSION}" ]]; then
+            echo "actionlint ${ACTIONLINT_VERSION} restored from the cache volume"
+            exit 0
+          fi
           readonly ACTIONLINT_SHA256='8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8'
           readonly ACTIONLINT_INSTALLER_COMMIT='914e7df21a07ef503a81201c76d2b11c789d3fca'
           readonly ACTIONLINT_ARCHIVE="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
@@ -180,7 +197,7 @@ jobs:
         shell: bash
       - name: Install Nixie
         uses: >-
-          leynos/shared-actions/.github/actions/install-nixie@32c8ea649ea44d40119f348ad48861212532061f
+          leynos/shared-actions/.github/actions/install-nixie@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
           python-version: '3.14'
       - name: Markdown formatter checker tests
@@ -189,51 +206,63 @@ jobs:
         run: make check-fmt
       - name: Install Whitaker
         uses: >-
-          leynos/shared-actions/.github/actions/install-whitaker@32c8ea649ea44d40119f348ad48861212532061f
+          leynos/shared-actions/.github/actions/install-whitaker@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
           installer-version: '0.2.7'
+          # The gate cache owns `~/.cargo/bin` and `~/.local/share`, so the
+          # action must not create a second owner for the same paths.
+          cache-provider: external
       - name: Lint
         run: /usr/bin/make ACTIONLINT="$GITHUB_WORKSPACE/actionlint" lint
       - name: Typecheck
         run: make typecheck
       - name: Doc coverage
-        # Rustdoc doc-comment coverage across every workspace lib and bin
-        # target, gated on the 80% threshold stated in AGENTS.md. Runs after
-        # `make lint` so it reuses the freshly built doc database.
+        # Gated on the 80% threshold in AGENTS.md; after `make lint`.
         run: make doc-coverage
-      - name: Cache shared spelling dictionary
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
-        with:
-          path: |
-            .typos-oxendict-base.json
-            .typos-oxendict-base.toml
-          key: >-
-            oxendict-${{ runner.os }}-${{ env.NETSUKE_RUST_TOOLCHAIN }}-${{
-            hashFiles('typos.local.toml') }}-${{ github.run_id }}
-          restore-keys: |
-            oxendict-${{ runner.os }}-${{ env.NETSUKE_RUST_TOOLCHAIN }}-${{ hashFiles('typos.local.toml') }}-
       - name: Spelling
         run: make spelling
       - name: Validate Mermaid diagrams
         run: make nixie
       - name: Workflow contract tests
         run: make test-workflow-contracts
-      - name: Test
-        run: make test
       - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@32c8ea649ea44d40119f348ad48861212532061f
+        # The only test execution on this lane: measuring and testing in one
+        # instrumented run costs one compile instead of two. The flags must
+        # therefore match an uninstrumented run, and `-D warnings` arrives
+        # from setup-rust's `rustflags` input. Pull requests only; on the
+        # trunk `coverage-upload` runs the same set over the same commit.
+        if: github.event_name == 'pull_request'
+        uses: leynos/shared-actions/.github/actions/generate-coverage@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
           language: rust
           output-path: lcov.info
           format: lcov
+          cache-provider: external
+          all-features: 'true'
+          all-targets: 'true'
+          # An uninstrumented `cargo test --doc` after the instrumented run,
+          # under the same feature selection. `cargo llvm-cov nextest` cannot
+          # execute doctests, and stating the selection once keeps the two
+          # passes from drifting apart.
+          doctests: 'true'
           # Compare changed-line coverage against the baseline written by
           # coverage-main.yml (caches saved on main are readable by every PR).
           with-ratchet: 'true'
+      - name: Show sccache statistics
+        if: always()
+        run: |
+          sccache --show-stats | tee sccache-stats.txt
+          sccache --show-stats --stats-format=json > sccache-stats.json
+          {
+            printf '### sccache\n\n```text\n'
+            cat sccache-stats.txt
+            printf '```\n'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Check coverage against CodeScene gates
         if: env.CS_ACCESS_TOKEN != '' && github.event_name == 'pull_request'
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
           path: lcov.info
           format: lcov
@@ -241,169 +270,51 @@ jobs:
           project-url: https://api.codescene.io/v2/projects/69281
           access-token: ${{ env.CS_ACCESS_TOKEN }}
           installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
+      - name: Discard the instrumented build tree
+        # No consumer once the report exists, and it is the second tree on a
+        # volume a sibling repository exhausted. Removed before any cache save.
+        if: always()
+        run: |
+          df -h .
+          rm --recursive --force target/llvm-cov-target target/llvm-cov
+          df -h .
+      - name: Report peak resource use
+        if: always()
+        uses: ./.github/actions/memory-sampler
+        with:
+          mode: report
+      - name: Save gate caches
+        # Single writer; the action restricts each save to a push on `main`.
+        uses: ./.github/actions/linux-gate-cache
+        with:
+          mode: save
+          registry-hit: ${{ steps.caches.outputs['registry-hit'] }}
+          tools-hit: ${{ steps.caches.outputs['tools-hit'] }}
+          whitaker-hit: ${{ steps.caches.outputs['whitaker-hit'] }}
+          sccache-hit: ${{ steps.caches.outputs['sccache-hit'] }}
+          sccache-local: ${{ vars.NETSUKE_SCCACHE_LOCAL_DIR }}
 
-  build-test-windows:
-    # Gates merges: the `#[cfg(windows)]` tree is compiled, linted, and tested
-    # under `-D warnings` on this platform (see #518).
-    runs-on: namespace-profile-netsuke-windows-ci
+  windows:
+    # The Windows merge gates live in a reusable workflow so this file stays
+    # inside the repository's 400-line limit. Version pins stay here, so the
+    # documented `sed` extraction still finds exactly one of each.
+    name: Windows
     permissions:
       contents: read
-    env:
-      CARGO_TERM_COLOR: always
-      BUILD_PROFILE: debug
-      # The tree requires the Polonius borrow checker, which nightly enables by
-      # default (see docs/adr-006-adopt-polonius-nightly-toolchain.md), so CI
-      # builds with the dated nightly pinned in rust-toolchain.toml.
-      NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
-    defaults:
-      run:
-        # The Makefile uses POSIX shell constructs throughout; Git Bash is
-        # preinstalled on the Namespace Windows image. GNU Make's default recipe
-        # shell on Windows is cmd.exe, so every make invocation overrides SHELL
-        # to bash.
-        shell: bash
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Install GNU Make
-        run: choco install make --yes --no-progress
-      - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
-        with:
-          toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
-          # Preserve warnings-as-errors through toolchain setup.
-          rustflags: -D warnings
-      - name: Install Ninja
-        uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
-      - name: Install cargo-nextest
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
-        with:
-          tool: nextest@${{ env.NEXTEST_VERSION }}
-      - name: Show rustc version
-        run: |
-          rustup show
-          rustc --version
-          cargo --version
-      - name: Show Ninja version
-        run: ninja --version
-      - name: Cache mdtablefix
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
-        with:
-          path: |
-            ~/.cargo/bin/mdtablefix
-            ~/.cargo/bin/mdtablefix.exe
-            ~/.cache/cargo-binstall
-          key: mdtablefix-${{ runner.os }}-${{ runner.arch }}-${{ env.MDTABLEFIX_VERSION }}
-      - name: Install mdtablefix
-        # Required by `make check-fmt`. Keep the cached binary at the pinned
-        # version and fall back to Cargo when a prebuilt asset is unavailable.
-        run: |
-          expected_mdtablefix_version="mdtablefix ${MDTABLEFIX_VERSION}"
-          installed_mdtablefix_version=""
-          if command -v mdtablefix >/dev/null 2>&1; then
-            installed_mdtablefix_version="$(mdtablefix --version 2>/dev/null | tr -d '\r')"
-          fi
-          if [[ "${installed_mdtablefix_version}" != "${expected_mdtablefix_version}" ]]; then
-            if cargo binstall --version >/dev/null 2>&1; then
-              cargo binstall --no-confirm --locked "mdtablefix@${MDTABLEFIX_VERSION}"
-            else
-              echo "cargo-binstall unavailable; building mdtablefix from crates.io"
-              cargo install --locked mdtablefix --version "${MDTABLEFIX_VERSION}"
-            fi
-          fi
-          installed_mdtablefix_version="$(mdtablefix --version | tr -d '\r')"
-          if [[ "${installed_mdtablefix_version}" != "${expected_mdtablefix_version}" ]]; then
-            echo "expected ${expected_mdtablefix_version}, got ${installed_mdtablefix_version}" >&2
-            exit 1
-          fi
-      - name: Setup uv
-        # `make check-fmt` runs the uv-driven Ruff format check on every
-        # platform, so the Windows job needs uv on the PATH as well.
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
-        with:
-          python-version: ${{ env.PYTHON_BASELINE }}
-          enable-cache: 'false'
-      - name: Format
-        run: make SHELL=bash check-fmt
-      - name: Lint (Clippy)
-        # Clippy and `cargo doc` over the whole workspace under `-D warnings`,
-        # including the `#[cfg(windows)]` arms.
-        run: make SHELL=bash lint-clippy
-      - name: Install Whitaker
-        uses: >-
-          leynos/shared-actions/.github/actions/install-whitaker@32c8ea649ea44d40119f348ad48861212532061f
-        with:
-          installer-version: '0.2.7'
-      - name: Lint (Whitaker)
-        # Whitaker/Dylint over the workspace under `-D warnings`, including
-        # the `#[cfg(windows)]` arms. The shared installer supplies a
-        # PowerShell wrapper on Windows, so invoke it from PowerShell rather
-        # than Git Bash. Resolve the Windows known-folder profile, matching
-        # whitaker-installer rather than PowerShell's environment-derived
-        # $HOME. A failure blocks the merge.
-        shell: pwsh
-        run: |
-          $profileHome = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
-          $whitaker = Join-Path $profileHome '.local\bin\whitaker.ps1'
-          $env:RUSTFLAGS = "$env:RUSTFLAGS -D warnings"
-          $env:DYLINT_TOML = Get-Content dylint.toml -Raw
-          & $whitaker --all --no-deps --package netsuke-build '--' --all-targets --all-features
-          if ($LASTEXITCODE -ne 0) {
-            exit $LASTEXITCODE
-          }
-          Push-Location test_support
-          try {
-            $env:DYLINT_TOML = Get-Content dylint.toml -Raw
-            & $whitaker --all --no-deps --package test_support '--' --all-targets --all-features
-            if ($LASTEXITCODE -ne 0) {
-              exit $LASTEXITCODE
-            }
-          } finally {
-            Pop-Location
-          }
-      - name: Test
-        # cargo-nextest plus doctests under `-D warnings`,
-        # compiling and running the `#[cfg(windows)]` test tree. A failure
-        # blocks the merge.
-        run: make SHELL=bash test
-
-  windows-native-recipe-smoke:
-    # This deliberately has no Git-Bash shell override. It proves that a
-    # PowerShell-launched Netsuke directs Ninja legacy recipes to the
-    # PowerShell interpreter selected by the Windows contract (#599).
-    needs: build-test-windows
-    runs-on: namespace-profile-netsuke-windows
-    permissions:
-      contents: read
-    env:
-      CARGO_TERM_COLOR: always
-      NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
-    defaults:
-      run:
-        shell: pwsh
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
-        with:
-          toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
-          rustflags: -D warnings
-      - name: Install Ninja
-        uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
-      - name: Build Netsuke
-        run: cargo build --locked --bin netsuke
-      - name: Exercise native Windows recipes
-        run: >-
-          ./scripts/windows-recipe-smoke.ps1
-          -Netsuke ./target/debug/netsuke.exe
-          -Manifest ./tests/data/windows-recipe-smoke.yml
+    uses: ./.github/workflows/ci-windows.yml
+    # GitHub does not expose the `env` context to a reusable workflow's
+    # inputs, so these literals repeat the workflow-level pins above.
+    # tests/workflow_contracts/ci_windows_job_test.py holds them equal.
+    with:
+      nextest-version: '0.9.133'
+      mdtablefix-version: '0.5.0'
+      python-baseline: '3.14'
 
   kani-smoke:
-    if: github.event_name == 'pull_request'
-    runs-on: namespace-profile-netsuke
+    # Runs on every trigger, dispatch included. A dispatch cannot publish a
+    # generation, since the save gates on a push to `main`, so all it can do
+    # here is measure a warm restore, which is the one the exit gate needs.
+    runs-on: ubicloud-standard-2-ubuntu-2404
     timeout-minutes: 20
     permissions:
       contents: read
@@ -412,30 +323,78 @@ jobs:
       RUSTUP_TOOLCHAIN: stable
       CARGO_HOME: ${{ github.workspace }}/.kani-cargo
       KANI_HOME: ${{ github.workspace }}/.kani-home
+      RUSTUP_HOME: ${{ github.workspace }}/.kani-rustup
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
+      - name: Restore Kani payloads
+        id: kani_cache
+        # Restored before every installer, so a warm run finds the front-end,
+        # verifier bundle, and Kani-managed toolchain already in place.
+        uses: ./.github/actions/kani-cache
+        with:
+          mode: restore
+          runner-image: ${{ env.NETSUKE_RUNNER_IMAGE }}
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/setup-rust@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
           toolchain: stable
-      - name: Install uv
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990  # v8.3.2
-        with:
-          # The Kani job has no Python dependency manifest; its explicit cache
-          # below owns the Rust toolchain artefacts.
-          enable-cache: false
-      - name: Cache Kani tools
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
-        with:
-          path: |
-            .kani-cargo
-            .kani-home
-          key: ${{ runner.os }}-kani-${{ hashFiles('tools/kani/VERSION', 'Makefile') }}
-      - name: Install Kani
-        run: make install-kani
+          cache-provider: external
+          # Kani's payloads come from pinned release archives, so this job
+          # needs no binary-install helper.
+          install-binstall: 'false'
+          use-sccache: 'false'
+      - name: Install prebuilt Kani
+        # Two payloads, both from pinned checksummed archives under
+        # version-qualified directories, so a bump cannot reuse a stale binary.
+        run: |
+          set -euo pipefail
+          kani_version="$(tr -d '\r\n' < tools/kani/VERSION)"
+          test "${kani_version}" = '0.67.0'
+          frontend_bin="${CARGO_HOME}/frontend/kani-${kani_version}"
+          kani_dir="${KANI_HOME}/kani-${kani_version}"
+          mkdir --parents "${frontend_bin}" "${KANI_HOME}" "${RUSTUP_HOME}"
+          export PATH="${frontend_bin}:${PATH}"
+          echo "${frontend_bin}" >> "$GITHUB_PATH"
+
+          target='x86_64-unknown-linux-gnu'
+          quickinstall='https://github.com/cargo-bins/cargo-quickinstall'
+          upstream='https://github.com/model-checking/kani'
+
+          if [[ ! -x "${frontend_bin}/cargo-kani" || ! -x "${frontend_bin}/kani" ]]; then
+            frontend_name="kani-verifier-${kani_version}-${target}.tar.gz"
+            frontend_archive="${RUNNER_TEMP}/${frontend_name}"
+            curl --fail --location --proto '=https' --tlsv1.2 \
+              "${quickinstall}/releases/download/kani-verifier-${kani_version}/${frontend_name}" \
+              --output "${frontend_archive}"
+            printf '%s  %s\n' \
+              'ed2bafc239b834e14c6b66fc4838e342e3bc0b814e548e72ea30e84f83dc0974' \
+              "${frontend_archive}" | sha256sum --check --
+            tar --extract --gzip --file "${frontend_archive}" \
+              --directory "${frontend_bin}" cargo-kani kani
+          fi
+
+          if [[ ! -x "${kani_dir}/bin/kani-driver" ]]; then
+            bundle_name="kani-${kani_version}-${target}.tar.gz"
+            bundle="${RUNNER_TEMP}/${bundle_name}"
+            curl --fail --location --proto '=https' --tlsv1.2 \
+              "${upstream}/releases/download/kani-${kani_version}/${bundle_name}" \
+              --output "${bundle}"
+            printf '%s  %s\n' \
+              '3b5f7afd3b51603ee720db7bc1bc4fe46b5a4f5d36daad9939c4b4c658b51ac0' \
+              "${bundle}" | sha256sum --check --
+            cargo kani setup --use-local-bundle "${bundle}"
+          fi
       - name: Kani version check
-        run: make kani-check
+        run: cargo kani --version | grep --fixed-strings "0.67.0"
       - name: Run Kani harnesses
         run: make kani-ir
+      - name: Save Kani payloads
+        # This job owns the Kani key and nothing else; the action restricts
+        # the save to a push on `main`.
+        uses: ./.github/actions/kani-cache
+        with:
+          mode: save
+          runner-image: ${{ env.NETSUKE_RUNNER_IMAGE }}
+          kani-hit: ${{ steps.kani_cache.outputs.cache-hit }}

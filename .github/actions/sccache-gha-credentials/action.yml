@@ -1,0 +1,65 @@
+---
+name: sccache Actions cache credentials
+description: >-
+  Point sccache at the cache service its runner actually serves, and publish
+  the credentials for it. The shared Rust setup action normally publishes them
+  through `mozilla-actions/sccache-action`, but that action also re-exports
+  `ACTIONS_CACHE_SERVICE_V2` and GitHub's own results address to `GITHUB_ENV`
+  as its last act, which clobbers this export and sends the server past
+  Ubicloud's proxy. Every job here therefore sets `use-sccache: false`, so that
+  action never runs and this one is the only publisher.
+
+  Composite `run` steps do see the reserved variables; an earlier reading that
+  the runner withholds them from shell steps was wrong, measured on
+  shared-actions runs 33854048777 and 33854213968. The failure this action
+  prevents is the clobber described above, not a visibility problem.
+
+  Ubicloud intercepts the cache service with a local proxy and advertises it as
+  `ACTIONS_CACHE_URL`, which serves the v1 API. sccache 0.16 prefers GitHub's
+  v2 results service whenever `ACTIONS_CACHE_SERVICE_V2` is set, and that
+  address resolves past the proxy to GitHub, where the objects then land and
+  are rate-limited. Exporting `ACTIONS_RESULTS_URL` had exactly that effect:
+  5310 requests, zero hits, and one write error per miss. This action therefore
+  exports the proxy address and clears the v2 switch, so sccache uses the
+  endpoint the proxy serves.
+
+  Call it immediately after checkout and before anything starts the sccache
+  server. `sccache --zero-stats`, `--start-server`, and the first wrapped
+  `rustc` all start it, and a server that starts without these stays in
+  local-disk mode for the whole job, reporting zero compile requests.
+
+runs:
+  using: composite
+  steps:
+    - name: Export Actions cache credentials for sccache
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
+      with:
+        script: |
+          core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+          core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+          // Cleared, not unset: sccache treats any value as "use v2".
+          core.exportVariable('ACTIONS_CACHE_SERVICE_V2', '');
+
+    - name: Verify the Actions cache credentials
+      # Only the GitHub Actions backend needs these. On the local-directory
+      # arm sccache never contacts a cache service, so an empty value there is
+      # correct rather than a fault. On the GHA arm an empty value is silent:
+      # the server falls back to local disk, every object is written to a
+      # directory nothing archives, and the job still passes with a plausible
+      # hit rate on the second half of its own compilation. Fail here instead.
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ "${SCCACHE_GHA_ENABLED:-}" != 'true' ]; then
+          echo "sccache is not using the Actions cache backend; nothing to verify"
+          exit 0
+        fi
+        missing=
+        [ -n "${ACTIONS_CACHE_URL:-}" ] || missing="${missing} ACTIONS_CACHE_URL"
+        [ -n "${ACTIONS_RUNTIME_TOKEN:-}" ] ||
+          missing="${missing} ACTIONS_RUNTIME_TOKEN"
+        if [ -n "${missing}" ]; then
+          echo "::error title=sccache credentials missing::SCCACHE_GHA_ENABLED is true but${missing} is empty, so the server would fall back to local disk" >&2
+          exit 1
+        fi
+        echo "Actions cache credentials present for the sccache GHA backend"

@@ -1,0 +1,93 @@
+---
+name: Kani cache
+description: >-
+  Own the Kani smoke job's three workspace-local directories under one key.
+  Kani is a multi-part tool: the Cargo front-end, the verifier bundle, and the
+  Kani-managed Rust toolchain are separate downloads that must be warm or cold
+  together, so they share one cache entry keyed by the pinned version. Kani's
+  own target directory under `KANI_HOME` is part of that tool payload, not a
+  build tree, which is why it is cached when no other `target` tree is.
+
+inputs:
+  mode:
+    description: '`restore` reads the trusted generation; `save` publishes it.'
+    required: true
+  runner-image:
+    description: >-
+      Runner image identifier carried in the cache key, for example
+      `ubuntu2404`. Declared as an input rather than read from the caller's
+      `NETSUKE_RUNNER_IMAGE` environment variable: the key renderer runs under
+      `set -u`, so an undeclared dependency aborts the job while rendering the
+      key rather than reporting a missing input.
+    required: true
+  kani-hit:
+    description: >-
+      Restore result for the `kani` key, so a save cannot overwrite an exact
+      hit. Named for the key it gates rather than generically, so the
+      write-policy contract can derive the expected input from the save
+      step's own key and a mis-gated save cannot pass.
+    required: false
+    default: ''
+
+outputs:
+  cache-hit:
+    description: Whether the Kani payloads restored exactly.
+    value: ${{ steps.kani.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    - name: Render Kani cache key
+      id: keys
+      shell: bash
+      env:
+        IS_TRUNK_PUSH: >-
+          ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        NETSUKE_RUNNER_IMAGE: ${{ inputs['runner-image'] }}
+      # The key carries the pinned version, so raising tools/kani/VERSION
+      # cannot be satisfied by payloads an earlier run left behind, and the
+      # runner image, because the verifier bundle is a compiled artefact.
+      run: |
+        set -euo pipefail
+        kani_version="$(tr -d '\r\n' < tools/kani/VERSION)"
+        lane="${RUNNER_OS}-${RUNNER_ARCH}-${RUNNER_ENVIRONMENT}-${NETSUKE_RUNNER_IMAGE}"
+        {
+          printf 'writer=%s\n' "${IS_TRUNK_PUSH}"
+          printf 'kani=netsuke-kani-v1-%s-%s\n' "${lane}" "${kani_version}"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Restore Kani payloads
+      id: kani
+      if: inputs.mode == 'restore'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+      with:
+        path: |
+          .kani-cargo
+          .kani-home
+          .kani-rustup
+        key: ${{ steps.keys.outputs.kani }}
+
+    - name: Record cache observations
+      if: always() && inputs.mode == 'restore'
+      shell: bash
+      env:
+        KANI_KEY: ${{ steps.keys.outputs.kani }}
+        KANI_HIT: ${{ steps.kani.outputs.cache-hit }}
+      run: |
+        {
+          printf '### Cache observations\n\n'
+          printf -- '- kani key: `%s` hit: `%s`\n' "${KANI_KEY}" "${KANI_HIT:-false}"
+        } | tee -a "$GITHUB_STEP_SUMMARY"
+
+    - name: Save Kani payloads
+      # This job is the only writer of this key, and only on the trunk.
+      if: >-
+        inputs.mode == 'save' && steps.keys.outputs.writer == 'true' &&
+        inputs['kani-hit'] != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+      with:
+        path: |
+          .kani-cargo
+          .kani-home
+          .kani-rustup
+        key: ${{ steps.keys.outputs.kani }}

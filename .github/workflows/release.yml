@@ -57,7 +57,11 @@ concurrency:
 
 jobs:
   metadata:
-    runs-on: namespace-profile-netsuke
+    # API-bound administrative work: it reads Cargo metadata and resolves
+    # release modes. There is nothing for a build runner to accelerate, so it
+    # stays on a GitHub-hosted runner.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     outputs:
@@ -78,11 +82,11 @@ jobs:
       - id: release_modes
         name: Determine release modes
         uses: >-
-          leynos/shared-actions/.github/actions/determine-release-modes@32c8ea649ea44d40119f348ad48861212532061f
+          leynos/shared-actions/.github/actions/determine-release-modes@e041cb75c35c3524201a32d5e57c87408fbd5874
       - id: ensure_version
         name: Read package version from Cargo.toml
         uses: >-
-          leynos/shared-actions/.github/actions/ensure-cargo-version@32c8ea649ea44d40119f348ad48861212532061f
+          leynos/shared-actions/.github/actions/ensure-cargo-version@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
           check-tag: ${{ fromJSON(steps.release_modes.outputs['should-publish']) }}
       - id: wix_extension_version
@@ -109,7 +113,7 @@ jobs:
       - id: bin_name
         name: Extract binary name from Cargo.toml
         uses: >-
-          leynos/shared-actions/.github/actions/export-cargo-metadata@32c8ea649ea44d40119f348ad48861212532061f
+          leynos/shared-actions/.github/actions/export-cargo-metadata@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
           manifest-path: ${{ steps.manifest_path.outputs.value }}
           fields: bin-name
@@ -117,11 +121,11 @@ jobs:
 
   build-linux:
     needs: metadata
+    # build-and-package.yml compiles, packages, and uploads workflow artefacts
+    # through pinned actions. None of them publishes a package or exchanges an
+    # OIDC token, so the called workflow needs no write scope.
     permissions:
-      actions: read
       contents: read
-      id-token: write
-      packages: write
     strategy:
       matrix:
         include:
@@ -136,7 +140,10 @@ jobs:
     uses: ./.github/workflows/build-and-package.yml
     with:
       platform: linux
-      runner: namespace-profile-netsuke
+      # Both Linux targets cross-compile from the x64 shape, as they did
+      # before. Start at the recipe's default and escalate only with
+      # measurements from three warm runs.
+      runner: ubicloud-standard-2-ubuntu-2404
       target: ${{ matrix.target }}
       bin-name: ${{ needs.metadata.outputs.bin_name }}
       version: ${{ needs.metadata.outputs.version }}
@@ -147,11 +154,11 @@ jobs:
 
   build-windows:
     needs: metadata
+    # build-and-package.yml compiles, packages, and uploads workflow artefacts
+    # through pinned actions. None of them publishes a package or exchanges an
+    # OIDC token, so the called workflow needs no write scope.
     permissions:
-      actions: read
       contents: read
-      id-token: write
-      packages: write
     strategy:
       matrix:
         include:
@@ -166,7 +173,8 @@ jobs:
     uses: ./.github/workflows/build-and-package.yml
     with:
       platform: windows
-      runner: namespace-profile-netsuke-windows
+      # Ubicloud offers Linux runners only.
+      runner: windows-latest
       target: ${{ matrix.target }}
       bin-name: ${{ needs.metadata.outputs.bin_name }}
       version: ${{ needs.metadata.outputs.version }}
@@ -178,11 +186,11 @@ jobs:
 
   build-macos:
     needs: metadata
+    # build-and-package.yml compiles, packages, and uploads workflow artefacts
+    # through pinned actions. None of them publishes a package or exchanges an
+    # OIDC token, so the called workflow needs no write scope.
     permissions:
-      actions: read
       contents: read
-      id-token: write
-      packages: write
     strategy:
       matrix:
         include:
@@ -191,7 +199,7 @@ jobs:
             artefact_suffix: macos-x86_64
             target_key: macos-x86_64
           - target: aarch64-apple-darwin
-            runner: namespace-profile-netsuke-macos-arm64
+            runner: macos-15
             artefact_suffix: macos-arm64
             target_key: macos-aarch64
     uses: ./.github/workflows/build-and-package.yml
@@ -208,7 +216,8 @@ jobs:
 
   windows-native-recipe-smoke:
     needs: metadata
-    runs-on: namespace-profile-netsuke-windows
+    runs-on: windows-latest
+    timeout-minutes: 45
     permissions:
       contents: read
     defaults:
@@ -216,22 +225,50 @@ jobs:
         shell: pwsh
     env:
       NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
+      # The GitHub-hosted `windows-latest` standard runner has four vCPUs.
+      WINDOWS_LANE_VCPUS: '4'
+      CARGO_BUILD_JOBS: '4'
+      RUSTC_WRAPPER: sccache
+      # Local directory, matching the Windows gate: the GitHub Actions backend
+      # rate-limited every write on this platform.
+      SCCACHE_DIR: ${{ github.workspace }}/.sccache
+      SCCACHE_CACHE_SIZE: 4G
     steps:
       - uses: >-
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         # v7.0.1
         with:
           persist-credentials: false
+      - name: Restore gate caches
+        # Restore only. `build-test-windows` in ci-windows.yml is the single
+        # writer for both Windows key families; a tag run reads the trunk
+        # generation by prefix and publishes nothing.
+        uses: ./.github/actions/windows-gate-cache
+        with:
+          toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
+          mode: restore
+          profile: smoke
+      - name: Install sccache
+        uses: >-
+          taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68
+        # v2.85.3
+        with:
+          tool: sccache@0.16.0
+          fallback: none
       - name: Setup Rust
         uses: >-
-          leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
+          leynos/shared-actions/.github/actions/setup-rust@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           rustflags: -D warnings
+          cache-provider: external
+          use-sccache: 'false'
       - name: Install Ninja
         uses: >-
           seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67
         # v6
+      - name: Reset sccache statistics
+        run: sccache --zero-stats
       - name: Build Netsuke
         run: cargo build --locked --bin netsuke
       - name: Exercise native Windows recipes
@@ -239,6 +276,9 @@ jobs:
           ./scripts/windows-recipe-smoke.ps1
           -Netsuke ./target/debug/netsuke.exe
           -Manifest ./tests/data/windows-recipe-smoke.yml
+      - name: Show sccache statistics
+        if: always()
+        run: sccache --show-stats --stats-format=json
 
   release:
     if: needs.metadata.outputs.should_publish == 'true'
@@ -250,7 +290,10 @@ jobs:
       - build-windows
       - build-macos
       - windows-native-recipe-smoke
-    runs-on: namespace-profile-netsuke
+    # Publication is API-bound: it downloads artefacts and calls the releases
+    # API, so a GitHub-hosted runner is the right placement.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: >-
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -299,7 +342,7 @@ jobs:
       - id: upload_assets
         name: Upload artefacts to release
         uses: >-
-          leynos/shared-actions/.github/actions/upload-release-assets@32c8ea649ea44d40119f348ad48861212532061f
+          leynos/shared-actions/.github/actions/upload-release-assets@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
           release-tag: ${{ github.ref_name }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}

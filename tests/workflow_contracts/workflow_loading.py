@@ -19,6 +19,9 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CI_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+#: The Windows halves of the merge gate live in a reusable workflow so
+#: `ci.yml` stays inside the repository's 400-line file limit.
+CI_WINDOWS_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "ci-windows.yml"
 COVERAGE_MAIN_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "coverage-main.yml"
 MUTATION_TESTING_WORKFLOW_PATH = (
     REPO_ROOT / ".github" / "workflows" / "mutation-testing.yml"
@@ -26,6 +29,14 @@ MUTATION_TESTING_WORKFLOW_PATH = (
 PACKAGE_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "build-and-package.yml"
 RELEASE_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "release.yml"
 MAKEFILE_PATH = REPO_ROOT / "Makefile"
+
+#: The two jobs that call the shared `setup-rust` action directly, paired with
+#: the workflow that declares each. Several suites assert against both, and the
+#: Windows job moved out of `ci.yml` when that file reached its size limit.
+SETUP_RUST_JOBS = (
+    (CI_WORKFLOW_PATH, "build-test"),
+    (CI_WINDOWS_WORKFLOW_PATH, "build-test-windows"),
+)
 
 
 class _WorkflowLoader(yaml.SafeLoader):
@@ -60,6 +71,15 @@ def require_mapping(value: object, description: str) -> dict[str, object]:
             return mapping
         case other:
             pytest.fail(f"{description} must be a mapping, got {type(other).__name__}")
+
+
+def require_list(value: object, description: str) -> list[object]:
+    """Return ``value`` as a list, failing the test when it is not one."""
+    match value:
+        case list() as items:
+            return items
+        case other:
+            pytest.fail(f"{description} must be a list, got {type(other).__name__}")
 
 
 def _require_string_keys(mapping: dict[str, object], description: str) -> None:

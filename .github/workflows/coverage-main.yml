@@ -11,15 +11,47 @@ name: Coverage (main)
 on:
   push:
     branches: [main]
+  # Warm-run dispatches for the runner-migration exit gate. A dispatch reads
+  # every cache and writes none: this job is a reader by design, and the one
+  # save in this repository's Linux gate requires a push to `main`. Without
+  # this trigger the coverage lane's warm behaviour could only be observed by
+  # merging something.
+  workflow_dispatch:
 
 jobs:
   coverage-upload:
-    runs-on: namespace-profile-netsuke
+    # Escalated alongside `build-test` on the same evidence: this job runs the
+    # identical instrumented workload, and it is the trunk cache writer, so a
+    # runner lost here would leave every warm run cold. The sampler below
+    # measures the peak; see the developers guide for the return-to-`-2`
+    # condition.
+    runs-on: ubicloud-standard-4-ubuntu-2404
+    timeout-minutes: 60
     permissions:
       contents: read
     env:
       CARGO_TERM_COLOR: always
       BUILD_PROFILE: debug
+      # vCPU count of this lane's shape, held equal to the merge gate's by
+      # tests/workflow_contracts/runner_placement_test.py so the two
+      # instrumented jobs cannot drift apart.
+      LINUX_LANE_VCPUS: '4'
+      CARGO_BUILD_JOBS: '4'
+      NEXTEST_TEST_THREADS: '4'
+      NETSUKE_RUNNER_IMAGE: ubuntu2404
+      # The instrumented coverage build compiles through the same sccache
+      # store as the ordinary debug build: the two shapes differ only by
+      # flags, which sccache hashes, so they coexist without a `target`
+      # archive and neither shape is left uncached.
+      RUSTC_WRAPPER: sccache
+      # Derived from the same repository variable the merge gate reads, so one
+      # operator switch moves both lanes together. Pinning `true` here would
+      # leave this job writing a GitHub Actions store that no other lane reads
+      # the moment the gate moved to the local directory, and nothing would
+      # fail: the trunk baseline would simply compile cold on every run.
+      SCCACHE_GHA_ENABLED: ${{ vars.NETSUKE_SCCACHE_LOCAL_DIR == 'true' && 'false' || 'true' }}
+      SCCACHE_DIR: ${{ github.workspace }}/.sccache
+      SCCACHE_CACHE_SIZE: 4G
       # Keep the main baseline aligned with pull-request coverage instead of
       # silently skipping real-Ninja integration tests.
       NETSUKE_REQUIRE_NINJA: '1'
@@ -27,8 +59,113 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
+      - name: Export sccache credentials
+        # Before the installer, so before anything can start the server: a
+        # server started without these stays on local disk all job.
+        uses: ./.github/actions/sccache-gha-credentials
+      - name: Start resource sampler
+        uses: ./.github/actions/memory-sampler
+        with:
+          mode: start
+      - name: Resolve the pinned toolchain
+        # Read from `rust-toolchain.toml` rather than restated. The `Setup
+        # Rust` step below must spell the toolchain as a literal, because
+        # tests/polonius_toolchain_contract.rs reads that literal and holds it
+        # equal to this file, and the same test forbids this job from
+        # declaring NETSUKE_RUST_TOOLCHAIN at job scope. Deriving the
+        # cache-key component from the same file anchors both to one source,
+        # so a toolchain bump cannot silently leave this job restoring a
+        # different Cargo generation from the merge gate's. A cold download
+        # store on the trunk is not visible as a failure, which is why this is
+        # checked rather than trusted.
+        run: |
+          set -euo pipefail
+          toolchain="$(
+            sed -n 's/^[[:space:]]*channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
+              rust-toolchain.toml | head -n 1
+          )"
+          test -n "${toolchain}"
+          printf 'COVERAGE_TOOLCHAIN=%s\n' "${toolchain}" >> "$GITHUB_ENV"
+      - name: Render cache key
+        # Renders the same Cargo download-store key that
+        # `.github/actions/linux-gate-cache` renders for the merge gate: this
+        # job runs on the same shape and image, so it reads the generation the
+        # gate publishes on the trunk. It is a reader only.
+        # tests/workflow_contracts/cache_ownership_test.py holds the shapes
+        # equal. The toolchain arrives in COVERAGE_TOOLCHAIN from the step
+        # above rather than from NETSUKE_RUST_TOOLCHAIN, which
+        # tests/polonius_toolchain_contract.rs holds absent from this job.
+        run: |
+          set -euo pipefail
+          lane="${RUNNER_OS}-${RUNNER_ARCH}-${RUNNER_ENVIRONMENT}-${NETSUKE_RUNNER_IMAGE}"
+          sources="$(sha256sum Cargo.lock rust-toolchain.toml | sha256sum | cut -c1-16)"
+          {
+            printf 'CARGO_CACHE_PREFIX=netsuke-cargo-v1-%s-%s-\n' \
+              "${lane}" "${COVERAGE_TOOLCHAIN}"
+            printf 'CARGO_CACHE_KEY=netsuke-cargo-v1-%s-%s-%s\n' \
+              "${lane}" "${COVERAGE_TOOLCHAIN}" "${sources}"
+            printf 'SCCACHE_CACHE_PREFIX=netsuke-sccache-v1-%s-%s-%s-\n' \
+              "${lane}" "${COVERAGE_TOOLCHAIN}" "${BUILD_PROFILE}"
+          } >> "$GITHUB_ENV"
+      - name: Restore Cargo download store
+        id: cargo_registry
+        # Restore only. `build-test` on the trunk is the single writer of this
+        # key, so this job never races it for a reservation. The uv download
+        # and tool stores are deliberately uncached here: they live under
+        # `~/.local/share`, which the merge gate's Whitaker cache owns, and a
+        # second owner would make warmth and eviction unknowable.
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ env.CARGO_CACHE_KEY }}
+          restore-keys: ${{ env.CARGO_CACHE_PREFIX }}
+      - name: Restore compiler cache
+        id: sccache_store
+        # Only in local-directory mode, and only ever as a reader: `build-test`
+        # on the trunk is the single writer of this key family. On the GitHub
+        # Actions backend the compiler cache needs no archive at all, so
+        # restoring one there would give it a second owner.
+        if: vars.NETSUKE_SCCACHE_LOCAL_DIR == 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          # Prefix only: this job never shares the gate's commit, so it takes
+          # the newest generation the gate published for this shape.
+          key: ${{ env.SCCACHE_CACHE_PREFIX }}
+          restore-keys: ${{ env.SCCACHE_CACHE_PREFIX }}
+      - name: Record cache observations
+        if: always()
+        env:
+          REGISTRY_HIT: ${{ steps.cargo_registry.outputs.cache-hit }}
+          SCCACHE_LOCAL: ${{ vars.NETSUKE_SCCACHE_LOCAL_DIR }}
+          SCCACHE_STORE_HIT: ${{ steps.sccache_store.outputs.cache-hit }}
+        run: |
+          {
+            printf '### Cache observations\n\n'
+            # Backticks are literal Markdown code spans in the summary, not
+            # command substitution.
+            # shellcheck disable=SC2016
+            printf -- '- registry key: `%s` hit: `%s`\n' \
+              "${CARGO_CACHE_KEY}" "${REGISTRY_HIT:-false}"
+            if [ "${SCCACHE_LOCAL}" = 'true' ]; then
+              # shellcheck disable=SC2016
+              printf -- '- sccache key: `%s` hit: `%s`\n' \
+                "${SCCACHE_CACHE_PREFIX}" "${SCCACHE_STORE_HIT:-false}"
+            else
+              # shellcheck disable=SC2016
+              printf -- '- sccache backend: `gha` (no archive)\n'
+            fi
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Install sccache
+        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        with:
+          tool: sccache@0.16.0
+          fallback: none
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
+        # Pinned to the shared-actions revision that adds `cache-provider`.
+        uses: leynos/shared-actions/.github/actions/setup-rust@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
           # Match rust-toolchain.toml: the tree needs the nightly-default
           # Polonius borrow checker (see
@@ -37,20 +174,59 @@ jobs:
           # Preserve warnings-as-errors through toolchain setup;
           # cargo-llvm-cov appends its instrumentation flags to this value.
           rustflags: -D warnings
+          cache-provider: external
+          use-sccache: 'false'
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
+      - name: Reset sccache statistics
+        run: sccache --zero-stats
       - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/generate-coverage@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
           language: rust
           output-path: lcov.info
           format: lcov
+          cache-provider: external
+          # The same set the pull-request gate measures, so the baseline this
+          # job writes is comparable with what the ratchet checks against.
+          all-features: 'true'
+          all-targets: 'true'
+          doctests: 'true'
           with-ratchet: 'true'
+      - name: Show sccache statistics
+        # Zero compile requests here would mean the instrumented build never
+        # reached the compiler cache, which is a failed integration rather
+        # than a quiet no-op.
+        if: always()
+        run: |
+          sccache --show-stats | tee sccache-stats.txt
+          sccache --show-stats --stats-format=json > sccache-stats.json
+          {
+            printf '### sccache\n\n```text\n'
+            cat sccache-stats.txt
+            printf '```\n'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Discard the instrumented build tree
+        # `llvm-cov`'s target tree has no consumer once the report is written,
+        # and it is the second tree on a volume that a sibling repository
+        # exhausted on the smaller shape. Removed before any cache save, so
+        # the archive never carries it and the sampler's least-free figure
+        # reflects the job's real high-water mark.
+        if: always()
+        run: |
+          df -h .
+          rm --recursive --force target/llvm-cov-target target/llvm-cov
+          df -h .
+      - name: Report peak resource use
+        if: always()
+        uses: ./.github/actions/memory-sampler
+        with:
+          mode: report
       - name: Upload coverage data to CodeScene
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
         if: env.CS_ACCESS_TOKEN != ''
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
           path: lcov.info
           format: lcov

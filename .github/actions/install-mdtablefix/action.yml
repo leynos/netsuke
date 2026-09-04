@@ -1,0 +1,74 @@
+---
+name: Install mdtablefix
+description: >-
+  Provide the pinned mdtablefix that `make check-fmt` shells out to, without
+  going through `cargo binstall`. The crate's binstall metadata sets
+  `bin-dir = "."`, so resolution fails with "bin-dir configuration provided
+  generates empty source path" and, with the compile strategy correctly
+  disabled, the install fails outright (leynos/mdtablefix#458).
+
+  Linux takes the published release tarball, verified against a pinned
+  SHA-256. Windows has no published binary at all, so it falls back to a
+  source build under an explicit, documented exception; that build lands in a
+  dedicated target directory the caller caches, so it happens once per
+  generation rather than once per run. Delete the fallback, and then this
+  action, once #458 lands and every platform has a usable prebuilt release.
+
+inputs:
+  build-dir:
+    description: >-
+      Target directory for the Windows source build, kept apart from the
+      product's own `target/` so the two never share compiler output. The
+      caller is responsible for caching it.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Install mdtablefix
+      shell: bash
+      env:
+        # Cross-checked against the release's `.sha256` sidecar on 2026-09-03.
+        MDTABLEFIX_SHA256: 184106f03686656be15bf06121c12b9182fd6a89ca8ee72b78034adc0714d2cb
+        MDTABLEFIX_BUILD_DIR: ${{ inputs['build-dir'] }}
+      run: |
+        set -euo pipefail
+        expected="mdtablefix ${MDTABLEFIX_VERSION}"
+        bin_dir="${HOME}/.local/bin"
+        mkdir -p "${bin_dir}"
+        echo "${bin_dir}" >> "$GITHUB_PATH"
+        export PATH="${bin_dir}:${PATH}"
+
+        installed=''
+        if command -v mdtablefix >/dev/null 2>&1; then
+          installed="$(mdtablefix --version 2>/dev/null | tr -d '\r')"
+        fi
+        if [[ "${installed}" == "${expected}" ]]; then
+          echo "mdtablefix ${MDTABLEFIX_VERSION} restored from the cache"
+          exit 0
+        fi
+
+        if [[ "${RUNNER_OS}" == 'Linux' ]]; then
+          release='https://github.com/leynos/mdtablefix/releases/download'
+          archive="mdtablefix-${MDTABLEFIX_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          tarball="$(mktemp)"
+          trap 'rm -f "${tarball}"' EXIT
+          curl --fail --location --proto '=https' --tlsv1.2 --show-error \
+            "${release}/v${MDTABLEFIX_VERSION}/${archive}" --output "${tarball}"
+          printf '%s  %s\n' "${MDTABLEFIX_SHA256}" "${tarball}" | sha256sum --check --
+          tar --extract --gzip --file "${tarball}" --directory "${bin_dir}" mdtablefix
+          chmod +x "${bin_dir}/mdtablefix"
+        else
+          # Documented exception: no prebuilt release exists for this platform,
+          # so the tool is compiled once per cache generation into a directory
+          # that is never shared with the product's build output.
+          echo "::notice title=mdtablefix::no prebuilt release for ${RUNNER_OS}; building from source (leynos/mdtablefix#458)"
+          CARGO_TARGET_DIR="${MDTABLEFIX_BUILD_DIR}" \
+            cargo install --locked "mdtablefix@${MDTABLEFIX_VERSION}"
+        fi
+
+        installed="$(mdtablefix --version | tr -d '\r')"
+        if [[ "${installed}" != "${expected}" ]]; then
+          echo "expected ${expected}, got ${installed}" >&2
+          exit 1
+        fi

@@ -142,6 +142,77 @@ fn is_exact_version(version: &str) -> bool {
         && parts.next().is_none()
 }
 
+/// Path of the composite action that owns the Kani job's cache entry.
+///
+/// The cache steps live in an action rather than inline so `ci.yml` stays
+/// inside the repository's 400-line file limit; see "Cache ownership and
+/// bounded CI resources" in `docs/developers-guide.md`.
+const KANI_CACHE_ACTION: &str = "./.github/actions/kani-cache";
+
+fn ensure_kani_cache_contract(steps: &[Value]) -> Result<()> {
+    let restore_index = step_index(steps, "Restore Kani payloads")?;
+    let install_index = step_index(steps, "Install prebuilt Kani")?;
+    let save_index = step_index(steps, "Save Kani payloads")?;
+    for (index, mode) in [(restore_index, "restore"), (save_index, "save")] {
+        let step = steps
+            .get(index)
+            .and_then(Value::as_mapping)
+            .with_context(|| format!("the {mode} step should be a mapping"))?;
+        ensure!(
+            mapping_get(step, YamlKey("uses")).and_then(Value::as_str) == Some(KANI_CACHE_ACTION),
+            "Kani smoke job should {mode} through the repository's Kani cache action"
+        );
+        ensure!(
+            step_input(step, YamlKey("mode")) == Some(mode),
+            "Kani smoke job's {mode} step should ask for the {mode} mode"
+        );
+    }
+    ensure!(
+        restore_index < install_index,
+        "Kani smoke job should restore its cache before installing Kani, or a warm \
+         entry cannot skip the download"
+    );
+    ensure!(
+        install_index < save_index,
+        "Kani smoke job should publish its cache only after the payloads exist"
+    );
+    Ok(())
+}
+
+/// Require each Kani archive's checksum to gate that same archive's use.
+///
+/// A bare `sha256sum --check` substring would also be satisfied by verifying
+/// an unrelated file, so each assertion names the archive shell variable and
+/// requires the verification to precede the extraction or setup that consumes
+/// it.
+fn ensure_kani_archives_are_verified_before_use(install_command: &str) -> Result<()> {
+    let checked_uses = [
+        (
+            "\"${frontend_archive}\" | sha256sum --check --",
+            "tar --extract --gzip --file \"${frontend_archive}\"",
+            "front-end archive",
+        ),
+        (
+            "\"${bundle}\" | sha256sum --check --",
+            "cargo kani setup --use-local-bundle \"${bundle}\"",
+            "verifier bundle",
+        ),
+    ];
+    for (check, use_site, label) in checked_uses {
+        let check_index = install_command
+            .find(check)
+            .with_context(|| format!("Kani {label} should be checksum-verified by name"))?;
+        let use_index = install_command
+            .find(use_site)
+            .with_context(|| format!("Kani {label} should be unpacked by name"))?;
+        ensure!(
+            check_index < use_index,
+            "Kani {label} should be verified before it is unpacked"
+        );
+    }
+    Ok(())
+}
+
 #[test]
 fn unit_recognizes_pinned_action_refs() {
     assert!(is_pinned_action_ref(
@@ -183,8 +254,16 @@ fn behavioural_ci_workflow_installs_pinned_cargo_nextest() -> Result<()> {
         "NEXTEST_VERSION should pin an exact version, found {version:?}"
     );
 
-    for job_name in ["build-test", "build-test-windows"] {
-        let build_test = job(&workflow, job_name)?;
+    let windows_contents =
+        workflow_contents("ci-windows.yml").expect("Windows CI workflow should be readable");
+    let windows_workflow: Value =
+        serde_yaml::from_str(&windows_contents).context("parse Windows CI workflow YAML")?;
+
+    for (source, job_name) in [
+        (&workflow, "build-test"),
+        (&windows_workflow, "build-test-windows"),
+    ] {
+        let build_test = job(source, job_name)?;
         ensure!(
             job_env(build_test, YamlKey("NEXTEST_VERSION")).is_none(),
             "{job_name} should not duplicate NEXTEST_VERSION at job scope"
@@ -218,14 +297,28 @@ fn behavioural_ci_workflow_runs_tests_through_the_make_target() -> Result<()> {
     let build_test = job(&workflow, "build-test")?;
     let steps = steps(build_test)?;
 
-    let test_step = named_step(steps, "Test")?;
+    // The instrumented coverage run is the lane's only test execution, and it
+    // runs the doctests it cannot instrument through its own `doctests` input.
+    let coverage_step = named_step(steps, "Test and Measure Coverage")?;
+    for (input, expected) in [
+        ("all-features", "true"),
+        ("all-targets", "true"),
+        ("doctests", "true"),
+    ] {
+        ensure!(
+            step_input(coverage_step, YamlKey(input)) == Some(expected),
+            "the coverage run should pass {input}={expected} so it is as broad as the \
+             uninstrumented pass it replaced"
+        );
+    }
     ensure!(
-        mapping_get(test_step, YamlKey("run")).and_then(Value::as_str) == Some("make test"),
-        "the Test step should run the canonical make target"
+        !steps.iter().any(|step| step_name(step, "Test").is_some()),
+        "the uninstrumented test execution should be folded into the coverage run"
     );
     ensure!(
-        step_index(steps, "Install cargo-nextest")? < step_index(steps, "Test")?,
-        "cargo-nextest should be installed before make test runs"
+        step_index(steps, "Install cargo-nextest")?
+            < step_index(steps, "Test and Measure Coverage")?,
+        "cargo-nextest should be installed before the instrumented run"
     );
     let setup_uv = named_step(steps, "Setup uv")?;
     ensure!(
@@ -235,47 +328,60 @@ fn behavioural_ci_workflow_runs_tests_through_the_make_target() -> Result<()> {
     Ok(())
 }
 
+/// Assert that a job installs Whitaker through the pinned shared action.
+fn ensure_shared_whitaker_installer(workflow: &Value, job_name: &'static str) -> Result<()> {
+    let whitaker = named_step(steps(job(workflow, job_name)?)?, "Install Whitaker")?;
+    let uses = mapping_get(whitaker, YamlKey("uses"))
+        .and_then(Value::as_str)
+        .context("Install Whitaker should reference the shared installer action")?;
+    ensure!(
+        is_pinned_action_ref(uses, INSTALL_WHITAKER_ACTION),
+        "{job_name} Install Whitaker should use a commit-pinned shared installer, found {uses:?}"
+    );
+    ensure!(
+        step_input(whitaker, YamlKey("installer-version")) == Some(WHITAKER_INSTALLER_VERSION),
+        "{job_name} Install Whitaker should retain installer version {WHITAKER_INSTALLER_VERSION}"
+    );
+    ensure!(
+        mapping_get(whitaker, YamlKey("run")).is_none(),
+        "{job_name} Install Whitaker should not retain an ad hoc installation script"
+    );
+    Ok(())
+}
+
+/// Assert that Windows lints both packages through the PowerShell wrapper.
+fn ensure_windows_whitaker_wrapper(windows_workflow: &Value) -> Result<()> {
+    let lint = named_step(
+        steps(job(windows_workflow, "build-test-windows")?)?,
+        "Lint (Whitaker)",
+    )?;
+    let script = mapping_get(lint, YamlKey("run"))
+        .and_then(Value::as_str)
+        .context("Windows Whitaker lint should define a PowerShell script")?;
+    ensure!(
+        mapping_get(lint, YamlKey("shell")).and_then(Value::as_str) == Some("pwsh"),
+        "Windows Whitaker lint should run from PowerShell"
+    );
+    ensure!(
+        script.contains("whitaker.ps1") && script.contains("Push-Location test_support"),
+        "Windows Whitaker lint should run both packages through the installed PowerShell wrapper"
+    );
+    Ok(())
+}
+
 #[test]
 fn behavioural_ci_workflow_uses_shared_tool_installers() -> Result<()> {
     let contents = workflow_contents("ci.yml").expect("CI workflow should be readable");
     let workflow: Value = serde_yaml::from_str(&contents).context("parse CI workflow YAML")?;
 
-    for job_name in ["build-test", "build-test-windows"] {
-        let job = job(&workflow, job_name)?;
-        let whitaker = named_step(steps(job)?, "Install Whitaker")?;
-        let uses = mapping_get(whitaker, YamlKey("uses"))
-            .and_then(Value::as_str)
-            .context("Install Whitaker should reference the shared installer action")?;
-        ensure!(
-            is_pinned_action_ref(uses, INSTALL_WHITAKER_ACTION),
-            "{job_name} Install Whitaker should use a commit-pinned shared installer, found {uses:?}"
-        );
-        ensure!(
-            step_input(whitaker, YamlKey("installer-version")) == Some(WHITAKER_INSTALLER_VERSION),
-            "{job_name} Install Whitaker should retain installer version {WHITAKER_INSTALLER_VERSION}"
-        );
-        ensure!(
-            mapping_get(whitaker, YamlKey("run")).is_none(),
-            "{job_name} Install Whitaker should not retain an ad hoc installation script"
-        );
-    }
+    let windows_contents =
+        workflow_contents("ci-windows.yml").expect("Windows CI workflow should be readable");
+    let windows_workflow: Value =
+        serde_yaml::from_str(&windows_contents).context("parse Windows CI workflow YAML")?;
 
-    let windows_whitaker = named_step(
-        steps(job(&workflow, "build-test-windows")?)?,
-        "Lint (Whitaker)",
-    )?;
-    let windows_whitaker_run = mapping_get(windows_whitaker, YamlKey("run"))
-        .and_then(Value::as_str)
-        .context("Windows Whitaker lint should define a PowerShell script")?;
-    ensure!(
-        mapping_get(windows_whitaker, YamlKey("shell")).and_then(Value::as_str) == Some("pwsh"),
-        "Windows Whitaker lint should run from PowerShell"
-    );
-    ensure!(
-        windows_whitaker_run.contains("whitaker.ps1")
-            && windows_whitaker_run.contains("Push-Location test_support"),
-        "Windows Whitaker lint should run both packages through the installed PowerShell wrapper"
-    );
+    ensure_shared_whitaker_installer(&workflow, "build-test")?;
+    ensure_shared_whitaker_installer(&windows_workflow, "build-test-windows")?;
+    ensure_windows_whitaker_wrapper(&windows_workflow)?;
 
     let linux_steps = steps(job(&workflow, "build-test")?)?;
     let nixie = named_step(linux_steps, "Install Nixie")?;
@@ -314,56 +420,33 @@ fn behavioural_ci_workflow_wires_kani_smoke_job() -> Result<()> {
     let workflow: Value = serde_yaml::from_str(&contents).context("parse CI workflow YAML")?;
     let kani_job = job(&workflow, "kani-smoke")?;
 
+    // No `if` at all: the job runs on every trigger this workflow has, manual
+    // dispatch included. It once excluded dispatches on the grounds that there
+    // was no verification work to gate, but that also denied the migration's
+    // exit gate any warm measurement of the Kani cache, which only this job
+    // touches. A dispatch cannot publish a generation, because every save
+    // gates on a push to `main`; `cache_write_policy_test.py` holds that so.
     ensure!(
-        mapping_get(kani_job, YamlKey("if")).and_then(Value::as_str)
-            == Some("github.event_name == 'pull_request'"),
-        "Kani smoke job should run for pull requests"
+        mapping_get(kani_job, YamlKey("if")).is_none(),
+        "Kani smoke job should run on every trigger, so a warm-run dispatch \
+         can measure the one cache only this job reads"
     );
 
     let steps = steps(kani_job)?;
     ensure!(
-        steps.iter().any(|step| step_has(
-            step,
-            StepField::Uses,
-            "astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990"
-        )),
-        "Kani smoke job should install uv with the pinned setup-uv action"
+        !steps
+            .iter()
+            .any(|step| step_has(step, StepField::Uses, "astral-sh/setup-uv@")),
+        "Kani smoke job installs prebuilt archives directly and needs no uv runtime"
     );
 
-    let install_uv_step = steps
-        .iter()
-        .find_map(|step| step_name(step, "Install uv"))
-        .context("Kani smoke job should include the Install uv step")?;
-    let uv_cache_enabled = mapping_get(install_uv_step, YamlKey("with"))
-        .and_then(Value::as_mapping)
-        .and_then(|with| mapping_get(with, YamlKey("enable-cache")));
-    ensure!(
-        uv_cache_enabled == Some(&Value::Bool(false)),
-        "Install uv step should disable automatic caching because Kani uses an explicit cache"
-    );
+    ensure_kani_cache_contract(steps)?;
 
-    let cache_step = steps
-        .iter()
-        .find_map(|step| step_name(step, "Cache Kani tools"))
-        .context("Kani smoke job should include the Cache Kani tools step")?;
-    let cache_key = mapping_get(cache_step, YamlKey("with"))
-        .and_then(Value::as_mapping)
-        .and_then(|with| mapping_get(with, YamlKey("key")))
-        .and_then(Value::as_str);
-    ensure!(
-        cache_key
-            == Some("${{ runner.os }}-kani-${{ hashFiles('tools/kani/VERSION', 'Makefile') }}"),
-        "Kani smoke job should cache tools using the Kani version and Makefile"
-    );
-
-    let install_kani_index = steps
-        .iter()
-        .position(|step| step_has(step, StepField::Runs, "make install-kani"))
-        .context("Kani smoke job should install Kani through the Make target")?;
+    let install_kani_index = step_index(steps, "Install prebuilt Kani")?;
     let kani_check_index = steps
         .iter()
-        .position(|step| step_has(step, StepField::Runs, "make kani-check"))
-        .context("Kani smoke job should check Kani through the Make target")?;
+        .position(|step| step_name(step, "Kani version check").is_some())
+        .context("Kani smoke job should check the installed Kani version")?;
     let kani_ir_index = steps
         .iter()
         .position(|step| step_has(step, StepField::Runs, "make kani-ir"))
@@ -372,6 +455,21 @@ fn behavioural_ci_workflow_wires_kani_smoke_job() -> Result<()> {
         install_kani_index < kani_check_index && kani_check_index < kani_ir_index,
         "Kani smoke job should install Kani, check its version, then run the bounded harnesses"
     );
+    let install_kani = named_step(steps, "Install prebuilt Kani")?;
+    let install_command = mapping_get(install_kani, YamlKey("run"))
+        .and_then(Value::as_str)
+        .context("Kani release installation should be a shell command")?;
+    ensure!(
+        !install_command.contains("cargo install"),
+        "Kani smoke job should never compile the verifier from source"
+    );
+    ensure!(
+        install_command.contains("frontend_bin=\"${CARGO_HOME}/frontend/kani-${kani_version}\"")
+            && install_command.contains("kani_dir=\"${KANI_HOME}/kani-${kani_version}\""),
+        "Kani payloads should live under version-qualified directories so a version bump \
+         cannot be satisfied by a stale cached binary"
+    );
+    ensure_kani_archives_are_verified_before_use(install_command)?;
     ensure!(
         mapping_get(kani_job, YamlKey("timeout-minutes")).and_then(Value::as_u64) == Some(20),
         "Kani smoke job should enforce the 20-minute cold-run ceiling"

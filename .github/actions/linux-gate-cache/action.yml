@@ -1,0 +1,233 @@
+---
+name: Linux gate cache
+description: >-
+  Own every cache path the Linux merge gate depends on. Ubicloud destroys the
+  runner VM after each job, so warm state arrives only through archives. This
+  action is the single owner of the Cargo download store, the installed-tool
+  directories, the Whitaker suite, and the optional local sccache directory;
+  no other step in the gate may cache those paths.
+
+  Cargo's `target` tree is deliberately absent, here and everywhere else in
+  this repository: sccache is the single owner of compiler output for every
+  build shape the gate produces.
+
+inputs:
+  mode:
+    description: >-
+      `restore` reads the trusted generation and records the rendered keys;
+      `save` publishes it. Callers restrict `save` to pushes on the trunk.
+    required: true
+  registry-hit:
+    description: Restore result for the Cargo download store, gating its save.
+    required: false
+    default: ''
+  tools-hit:
+    description: Restore result for the tool directories, gating their save.
+    required: false
+    default: ''
+  whitaker-hit:
+    description: Restore result for the Whitaker suite, gating its save.
+    required: false
+    default: ''
+  sccache-hit:
+    description: Restore result for the local sccache directory.
+    required: false
+    default: ''
+  sccache-local:
+    description: >-
+      `true` selects the local-directory sccache backend and its cache step.
+      Anything else leaves the GitHub Actions backend in charge and skips the
+      step, so exactly one compiler-cache backend is ever active.
+    required: false
+    default: 'false'
+
+outputs:
+  registry-hit:
+    description: Whether the Cargo download store restored exactly.
+    value: ${{ steps.registry.outputs.cache-hit }}
+  tools-hit:
+    description: Whether the tool directories restored exactly.
+    value: ${{ steps.tools.outputs.cache-hit }}
+  whitaker-hit:
+    description: Whether the Whitaker suite restored exactly.
+    value: ${{ steps.whitaker.outputs.cache-hit }}
+  sccache-hit:
+    description: Whether the local sccache directory restored exactly.
+    value: ${{ steps.sccache.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    - name: Render cache keys
+      id: keys
+      shell: bash
+      # Both modes render the same keys from the same inputs, so a save always
+      # publishes under the key the restore looked for. Compiled tools are
+      # keyed by runner environment and image as well as OS and architecture:
+      # an Ubuntu 24.04 archive must never restore onto the 22.04 lane.
+      env:
+        # Only the trunk run may publish a generation. A pull request that
+        # saved would race the writer for the reservation and publish state
+        # no reviewer has seen.
+        IS_TRUNK_PUSH: >-
+          ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      run: |
+        set -euo pipefail
+        lane="${RUNNER_OS}-${RUNNER_ARCH}-${RUNNER_ENVIRONMENT}-${NETSUKE_RUNNER_IMAGE}"
+        sources_hash="$(sha256sum Cargo.lock rust-toolchain.toml | sha256sum | cut -c1-16)"
+        # Every tool pin the gate installs lives in the workflow file or in
+        # this action, so hashing both covers the pins that have no separate
+        # environment variable, and each installer still probes its own
+        # version before reusing a restored binary.
+        pins_hash="$(
+          sha256sum .github/workflows/ci.yml \
+            .github/actions/linux-gate-cache/action.yml | sha256sum | cut -c1-16
+        )"
+        dylint_hash="$(sha256sum dylint.toml | sha256sum | cut -c1-16)"
+        {
+          printf 'writer=%s\n' "${IS_TRUNK_PUSH}"
+          printf 'registry=netsuke-cargo-v1-%s-%s-%s\n' \
+            "${lane}" "${NETSUKE_RUST_TOOLCHAIN}" "${sources_hash}"
+          printf 'registry-prefix=netsuke-cargo-v1-%s-%s-\n' \
+            "${lane}" "${NETSUKE_RUST_TOOLCHAIN}"
+          printf 'tools=netsuke-tools-v1-%s-%s\n' "${lane}" "${pins_hash}"
+          printf 'whitaker=netsuke-whitaker-v1-%s-%s-%s\n' \
+            "${lane}" "${pins_hash}" "${dylint_hash}"
+          printf 'sccache=netsuke-sccache-v1-%s-%s-%s-%s\n' \
+            "${lane}" "${NETSUKE_RUST_TOOLCHAIN}" "${BUILD_PROFILE}" "${GITHUB_SHA}"
+          printf 'sccache-prefix=netsuke-sccache-v1-%s-%s-%s-\n' \
+            "${lane}" "${NETSUKE_RUST_TOOLCHAIN}" "${BUILD_PROFILE}"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Restore Cargo download store
+      id: registry
+      if: inputs.mode == 'restore'
+      # Step A. `target` is deliberately absent: sccache owns compiler output
+      # and a `target` archive is invalidated far more often than this one.
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+        key: ${{ steps.keys.outputs.registry }}
+        restore-keys: ${{ steps.keys.outputs['registry-prefix'] }}
+
+    - name: Restore tool directories
+      id: tools
+      if: inputs.mode == 'restore'
+      # Steps C and D merged: `~/.local/bin` is both an installed-tool
+      # directory and uv's shim directory, so the two steps would otherwise
+      # own the same path. uv's download store, tool environments, and shims
+      # travel together; restoring only the environments leaves `uv tool
+      # install` reporting success while the command is absent.
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+      with:
+        path: |
+          ~/.cargo/bin
+          ~/.local/bin
+          .uv-bin
+          .uv-cache
+          .uv-tools
+          actionlint
+          .typos-oxendict-base.json
+          .typos-oxendict-base.toml
+        key: ${{ steps.keys.outputs.tools }}
+
+    - name: Restore Whitaker suite
+      id: whitaker
+      if: inputs.mode == 'restore'
+      # Step E. The parent directory is the cached path, never
+      # `~/.local/share/whitaker` itself: whitaker-installer 0.2.7 decides
+      # between cloning and pulling on directory existence alone, so a cold
+      # run must leave no empty suite directory behind. The installer
+      # executable lives in `~/.cargo/bin` and belongs to the tool step above.
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+      with:
+        path: ~/.local/share
+        key: ${{ steps.keys.outputs.whitaker }}
+
+    - name: Restore compiler cache
+      id: sccache
+      if: inputs.mode == 'restore' && inputs['sccache-local'] == 'true'
+      # Step B, and only in local-directory mode. The GitHub Actions backend
+      # needs no archive, so enabling both would give the compiler cache two
+      # owners.
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+      with:
+        path: ${{ env.SCCACHE_DIR }}
+        key: ${{ steps.keys.outputs.sccache }}
+        restore-keys: ${{ steps.keys.outputs['sccache-prefix'] }}
+
+    - name: Record cache observations
+      if: always() && inputs.mode == 'restore'
+      shell: bash
+      # An operator must be able to explain every miss from the run evidence
+      # alone, so the rendered key travels with its result.
+      env:
+        REGISTRY_KEY: ${{ steps.keys.outputs.registry }}
+        REGISTRY_HIT: ${{ steps.registry.outputs.cache-hit }}
+        TOOLS_KEY: ${{ steps.keys.outputs.tools }}
+        TOOLS_HIT: ${{ steps.tools.outputs.cache-hit }}
+        WHITAKER_KEY: ${{ steps.keys.outputs.whitaker }}
+        WHITAKER_HIT: ${{ steps.whitaker.outputs.cache-hit }}
+        SCCACHE_KEY: ${{ steps.keys.outputs.sccache }}
+        SCCACHE_HIT: ${{ steps.sccache.outputs.cache-hit }}
+        SCCACHE_LOCAL: ${{ inputs['sccache-local'] }}
+      run: |
+        {
+          printf '### Cache observations\n\n'
+          printf -- '- registry key: `%s` hit: `%s`\n' "${REGISTRY_KEY}" "${REGISTRY_HIT:-false}"
+          printf -- '- tools key: `%s` hit: `%s`\n' "${TOOLS_KEY}" "${TOOLS_HIT:-false}"
+          printf -- '- whitaker key: `%s` hit: `%s`\n' "${WHITAKER_KEY}" "${WHITAKER_HIT:-false}"
+          printf -- '- sccache backend: `%s`\n' \
+            "$([ "${SCCACHE_LOCAL}" = 'true' ] && printf 'local-dir' || printf 'gha')"
+          if [ "${SCCACHE_LOCAL}" = 'true' ]; then
+            printf -- '- sccache key: `%s` hit: `%s`\n' "${SCCACHE_KEY}" "${SCCACHE_HIT:-false}"
+          fi
+        } | tee -a "$GITHUB_STEP_SUMMARY"
+
+    - name: Save Cargo download store
+      if: >-
+        inputs.mode == 'save' && steps.keys.outputs.writer == 'true' &&
+        inputs['registry-hit'] != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+        key: ${{ steps.keys.outputs.registry }}
+
+    - name: Save tool directories
+      if: >-
+        inputs.mode == 'save' && steps.keys.outputs.writer == 'true' &&
+        inputs['tools-hit'] != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+      with:
+        path: |
+          ~/.cargo/bin
+          ~/.local/bin
+          .uv-bin
+          .uv-cache
+          .uv-tools
+          actionlint
+          .typos-oxendict-base.json
+          .typos-oxendict-base.toml
+        key: ${{ steps.keys.outputs.tools }}
+
+    - name: Save Whitaker suite
+      if: >-
+        inputs.mode == 'save' && steps.keys.outputs.writer == 'true' &&
+        inputs['whitaker-hit'] != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+      with:
+        path: ~/.local/share
+        key: ${{ steps.keys.outputs.whitaker }}
+
+    - name: Save compiler cache
+      if: >-
+        inputs.mode == 'save' && steps.keys.outputs.writer == 'true' &&
+        inputs['sccache-local'] == 'true' && inputs['sccache-hit'] != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+      with:
+        path: ${{ env.SCCACHE_DIR }}
+        key: ${{ steps.keys.outputs.sccache }}

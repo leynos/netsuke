@@ -9,7 +9,10 @@ name: Build and Package
         required: true
         type: string
       runner:
-        description: Runner label that should execute the job
+        description: >-
+          Runner label that should execute the job. Linux callers pass a
+          Ubicloud label; Windows and macOS callers pass a GitHub-hosted one,
+          because Ubicloud offers Linux runners only.
         required: true
         type: string
       target:
@@ -65,13 +68,55 @@ jobs:
   build:
     name: Build ${{ inputs.platform }} artefacts
     runs-on: ${{ inputs.runner }}
+    # Bounds every caller-selected shape, including the Ubicloud label
+    # `release.build-linux` passes. This lane compiles a release binary
+    # uncached on Windows and cross-packages elsewhere, so it is allowed the
+    # same ceiling as the Windows merge gate rather than the merge gate's
+    # 60 minutes. tests/workflow_contracts/runner_shape_test.py holds it
+    # present, so deleting it cannot pass in silence.
+    timeout-minutes: 90
+    # The pinned action chain compiles, packages, and uploads workflow
+    # artefacts. It neither publishes packages nor exchanges an OIDC token, so
+    # the job token needs no write scope.
+    permissions:
+      contents: read
     env:
       BIN_NAME: ${{ inputs['bin-name'] }}
       VERSION: ${{ inputs.version }}
+      # No compiler cache on any release lane. Two independent reasons, and
+      # each alone is sufficient.
+      #
+      # On Windows, sccache re-spawns rustc with the aarch64 target's
+      # `--extern` and `-L` list and exceeds the operating system's
+      # command-line limit, which nothing in this repository can shorten.
+      #
+      # Elsewhere, this lane's sccache server would be started inside the
+      # nested `setup-rust`, whose `mozilla-actions/sccache-action` re-exports
+      # `ACTIONS_CACHE_SERVICE_V2` and GitHub's own results URL as its last
+      # act. On a Ubicloud runner that points the server past Ubicloud's cache
+      # proxy at GitHub, where writes are rate-limited and nothing lands in
+      # the store the merge gate reads. Wiring the proxy export in here would
+      # mean reproducing the gate's whole export, install and run-step start
+      # sequence for a lane that runs on tag pushes and the dry run only.
+      #
+      # Release builds are infrequent, so these lanes run uncached rather than
+      # unreliably. The merge gates keep their own caches; see
+      # tests/workflow_contracts/cache_contract_data.py's SCCACHE_EXEMPT_LANE.
       MAN_ARCH: ${{ inputs['package-arch'] != '' && inputs['package-arch'] || 'unknown' }}
-      # rust-build-release-v1 still nests a Node 20 setup-uv action. Namespace
-      # otherwise promotes it to Node 24, which aborts inside libuv on Windows.
-      # Keep the compatibility escape hatch empty on every other platform.
+      # The pinned `rust-build-release` revision, restated here so the
+      # `cargo-orthohelp` cache key can carry it. That action nests the shared
+      # `setup-rust`, which provisions the checksum-verified `cargo-binstall`
+      # into the same `~/.cargo/bin` the cache owns, so the entry must turn
+      # over when this revision does.
+      # tests/workflow_contracts/cache_ownership_test.py holds this value
+      # equal to the `uses:` pin below.
+      RUST_BUILD_RELEASE_PIN: e041cb75c35c3524201a32d5e57c87408fbd5874
+      # rust-build-release-v1 still nests a Node 20 setup-uv action, and the
+      # promoted Node 24 runtime aborts inside libuv on Windows. The escape
+      # hatch predates the move to GitHub-hosted Windows runners and is
+      # retained unchanged so the packaging lane's behaviour is attributable
+      # to the runner move alone; drop it once a Windows release run without
+      # it succeeds. It stays empty on every other platform.
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: >-
         ${{ inputs.platform == 'windows' && 'true' || '' }}
     steps:
@@ -84,8 +129,82 @@ jobs:
         with:
           python-version: ${{ inputs['python-version'] }}
 
+      - name: Build release binary
+        uses: leynos/shared-actions/.github/actions/rust-build-release@e041cb75c35c3524201a32d5e57c87408fbd5874
+        with:
+          target: ${{ inputs.target }}
+          bin-name: ${{ env.BIN_NAME }}
+          project-dir: .
+          manifest-path: Cargo.toml
+          skip-man-page-discovery: 'true'
+          # Forwarded to the nested `setup-rust`, whose own cache would
+          # otherwise archive `target/${BUILD_PROFILE}`. No lane in this
+          # repository archives a build tree; sccache owns compiler output.
+          cache-provider: external
+          # Off on every platform; see the RUSTC_WRAPPER note above.
+          use-sccache: 'false'
+
+      - name: Restore cargo-orthohelp
+        id: orthohelp_cache
+        # Owns the tool binary and the dedicated target directory its source
+        # build uses. Keyed by the tool version, so the build below happens
+        # once per generation rather than once per run. This lane is reached
+        # only by tag pushes and the pull-request dry run, never by a push to
+        # `main`, so unlike every other cache here it must publish from
+        # whichever run had to build the tool; the key is content-addressed by
+        # version, so concurrent writers produce identical archives.
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            ~/.cargo/bin
+            ~/.cache/orthohelp-build
+          # The `cargo-binstall` pin is part of the key, spelled as the
+          # `rust-build-release` revision that provisions it. The entry
+          # owns `~/.cargo/bin` as a directory, which is the repository's
+          # rule for tool directories, and that directory holds
+          # `cargo-binstall` as well as `cargo-orthohelp`. Keyed on the
+          # tool version alone, a bump to the shared action's binstall
+          # version would not turn the entry over, and the restore would
+          # put the older `cargo-binstall` back over the one the action
+          # had just provisioned.
+          key: >-
+            netsuke-orthohelp-v1-${{ runner.os }}-${{ runner.arch }}-0.9.0-${{ env.RUST_BUILD_RELEASE_PIN }}
+
       - name: Install cargo-orthohelp
-        run: cargo install cargo-orthohelp --version 0.9.0 --locked
+        # Runs after `rust-build-release`, which nests the setup-rust action
+        # that provisions checksum-verified cargo-binstall: `cargo binstall`
+        # does not exist on the runner before that point. `cargo-orthohelp` is
+        # first needed by the help-generation step below, so this ordering
+        # costs nothing.
+        #
+        # Documented exception to the no-source-build rule. `ortho-config`
+        # publishes no binaries for any platform (leynos/ortho-config#479), so
+        # binary-only strategies are tried first and a genuine miss falls back
+        # to a source build. That build uses a dedicated CARGO_TARGET_DIR so it
+        # never shares compiler output with the product, and the cache above
+        # keeps it to once per generation. Delete the fallback once #479 lands.
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Probe first, as every other installer here does. The cache restores
+          # `~/.cargo/bin`, and `cargo install` refuses to overwrite a binary
+          # that is already there, so a warm run must not reach either branch.
+          if cargo-orthohelp --version 2>/dev/null | grep -Eq '(^|[[:space:]])0\.9\.0([[:space:]]|$)'; then
+            echo "cargo-orthohelp 0.9.0 restored from the cache"
+            exit 0
+          fi
+          if cargo binstall --no-confirm --locked \
+            --strategies crate-meta-data,quick-install cargo-orthohelp@0.9.0; then
+            exit 0
+          fi
+          echo "::notice title=cargo-orthohelp::no prebuilt release; building from source (leynos/ortho-config#479)"
+          # Resolved here rather than in `env`: GitHub does not expand `~` in
+          # an env value, and `mkdir -p` rather than `--parents` because macOS
+          # ships BSD coreutils, which reject the long option.
+          ORTHOHELP_BUILD_DIR="${HOME}/.cache/orthohelp-build"
+          mkdir -p "${ORTHOHELP_BUILD_DIR}"
+          CARGO_TARGET_DIR="${ORTHOHELP_BUILD_DIR}" \
+            cargo install --locked cargo-orthohelp@0.9.0
 
       - name: Validate cargo-orthohelp version
         shell: bash
@@ -93,14 +212,24 @@ jobs:
           set -euo pipefail
           cargo-orthohelp --version | grep -Eq '(^|[[:space:]])0\.9\.0([[:space:]]|$)'
 
-      - name: Build release binary
-        uses: leynos/shared-actions/.github/actions/rust-build-release@32c8ea649ea44d40119f348ad48861212532061f
+      - name: Save cargo-orthohelp
+        if: steps.orthohelp_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
-          target: ${{ inputs.target }}
-          bin-name: ${{ env.BIN_NAME }}
-          project-dir: .
-          manifest-path: Cargo.toml
-          skip-man-page-discovery: 'true'
+          path: |
+            ~/.cargo/bin
+            ~/.cache/orthohelp-build
+          # The `cargo-binstall` pin is part of the key, spelled as the
+          # `rust-build-release` revision that provisions it. The entry
+          # owns `~/.cargo/bin` as a directory, which is the repository's
+          # rule for tool directories, and that directory holds
+          # `cargo-binstall` as well as `cargo-orthohelp`. Keyed on the
+          # tool version alone, a bump to the shared action's binstall
+          # version would not turn the entry over, and the restore would
+          # put the older `cargo-binstall` back over the one the action
+          # had just provisioned.
+          key: >-
+            netsuke-orthohelp-v1-${{ runner.os }}-${{ runner.arch }}-0.9.0-${{ env.RUST_BUILD_RELEASE_PIN }}
 
       - name: Generate release help
         shell: bash
@@ -114,7 +243,7 @@ jobs:
 
       - name: Stage artefacts
         id: stage
-        uses: leynos/shared-actions/.github/actions/stage-release-artefacts@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/stage-release-artefacts@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
           config-file: .github/release-staging.toml
           target: ${{ inputs['stage-target'] }}
@@ -144,7 +273,7 @@ jobs:
 
       - name: Package Linux artefacts with dependencies
         if: inputs.platform == 'linux'
-        uses: leynos/shared-actions/.github/actions/linux-packages@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/linux-packages@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
           project-dir: .
           package-name: ${{ inputs['bin-name'] }}
@@ -165,7 +294,7 @@ jobs:
       - name: Build Windows installer package
         if: inputs.platform == 'windows'
         id: package_windows
-        uses: leynos/shared-actions/.github/actions/windows-package@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/windows-package@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
           product-name: ${{ inputs['bin-name'] }}
           manufacturer: Leynos
@@ -183,7 +312,7 @@ jobs:
       - name: Build macOS installer package
         if: inputs.platform == 'macos'
         id: package_macos
-        uses: leynos/shared-actions/.github/actions/macos-package@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/macos-package@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
           name: ${{ inputs['bin-name'] }}
           identifier: com.leynos.${{ inputs['bin-name'] }}

@@ -9,40 +9,109 @@ on:
 
 jobs:
   netsukefile:
-    runs-on: namespace-profile-netsuke-ubuntu-22-04
+    # The deliberate Ubuntu 22.04 compatibility lane. Ubicloud's default image
+    # is 24.04, so the `-ubuntu-2204` label pins the older glibc this job
+    # exists to exercise, and every cache key below carries that image.
+    runs-on: ubicloud-standard-2-ubuntu-2204
+    timeout-minutes: 45
     permissions:
       contents: read
     env:
       # Match rust-toolchain.toml: the tree needs the nightly-default Polonius
       # borrow checker (see docs/adr-006-adopt-polonius-nightly-toolchain.md).
       NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
+      # `ubicloud-standard-2-ubuntu-2204` supplies two vCPUs; BUILD_JOBS is
+      # derived from that one number.
+      LINUX_LANE_VCPUS: '2'
+      BUILD_JOBS: -j 2
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: 'true'
+      # Sized for two build shapes, matching the merge gate.
+      SCCACHE_CACHE_SIZE: 4G
+      NETSUKE_RUNNER_IMAGE: ubuntu2204
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
+      - name: Export sccache credentials
+        # Before the installer, so before anything can start the server: a
+        # server started without these stays on local disk all job.
+        uses: ./.github/actions/sccache-gha-credentials
+      - name: Render cache keys
+        # This lane owns its own key family: nothing else in the repository
+        # runs on Ubuntu 22.04, so a 24.04 archive must never reach it. The
+        # shape matches the one `.github/actions/linux-gate-cache` renders,
+        # and tests/workflow_contracts/cache_ownership_test.py holds them so.
+        run: |
+          set -euo pipefail
+          lane="${RUNNER_OS}-${RUNNER_ARCH}-${RUNNER_ENVIRONMENT}-${NETSUKE_RUNNER_IMAGE}"
+          sources="$(sha256sum Cargo.lock rust-toolchain.toml | sha256sum | cut -c1-16)"
+          pins="$(sha256sum .github/workflows/netsukefile-test.yml | cut -c1-16)"
+          {
+            printf 'CARGO_CACHE_PREFIX=netsuke-cargo-v1-%s-%s-\n' \
+              "${lane}" "${NETSUKE_RUST_TOOLCHAIN}"
+            printf 'CARGO_CACHE_KEY=netsuke-cargo-v1-%s-%s-%s\n' \
+              "${lane}" "${NETSUKE_RUST_TOOLCHAIN}" "${sources}"
+            printf 'TOOLS_CACHE_KEY=netsuke-tools-v1-%s-%s\n' "${lane}" "${pins}"
+          } >> "$GITHUB_ENV"
+      - name: Restore Cargo download store
+        id: cargo_registry
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ env.CARGO_CACHE_KEY }}
+          restore-keys: ${{ env.CARGO_CACHE_PREFIX }}
+      - name: Restore tool directories
+        id: tool_dirs
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ~/.cargo/bin
+          key: ${{ env.TOOLS_CACHE_KEY }}
+      - name: Record cache observations
+        # The rendered key travels with its result, so an operator can explain
+        # every miss from the run evidence alone.
+        if: always()
+        env:
+          REGISTRY_HIT: ${{ steps.cargo_registry.outputs.cache-hit }}
+          TOOLS_HIT: ${{ steps.tool_dirs.outputs.cache-hit }}
+        run: |
+          {
+            printf '### Cache observations\n\n'
+            # Backticks are literal Markdown code spans in the summary, not
+            # command substitution.
+            # shellcheck disable=SC2016
+            printf -- '- registry key: `%s` hit: `%s`\n' \
+              "${CARGO_CACHE_KEY}" "${REGISTRY_HIT:-false}"
+            # Backticks are literal Markdown code spans in the summary, not
+            # command substitution.
+            # shellcheck disable=SC2016
+            printf -- '- tools key: `%s` hit: `%s`\n' \
+              "${TOOLS_CACHE_KEY}" "${TOOLS_HIT:-false}"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Install sccache
+        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        with:
+          tool: sccache@0.16.0
+          fallback: none
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
+        # Pinned to the shared-actions revision that adds `cache-provider`.
+        uses: leynos/shared-actions/.github/actions/setup-rust@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
+          cache-provider: external
+          use-sccache: 'false'
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
+      - name: Reset sccache statistics
+        run: sccache --zero-stats
       - name: Show rustc version
         run: |
           rustup show
           rustc --version
           cargo --version
-      - name: Cache Cargo
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v4
-        with:
-          # Do not cache build outputs when running make clean
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-cargo-${{ env.NETSUKE_RUST_TOOLCHAIN }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-${{ env.NETSUKE_RUST_TOOLCHAIN }}-
-            ${{ runner.os }}-cargo-
       - name: Clean build artefacts
         run: make clean
       - name: Build Netsuke
@@ -116,3 +185,33 @@ jobs:
         env:
           NINJA_MANIFEST: action.ninja
         run: scripts/assert-file-absent.sh unused.txt
+      - name: Show sccache statistics
+        if: always()
+        run: |
+          sccache --show-stats | tee sccache-stats.txt
+          sccache --show-stats --stats-format=json > sccache-stats.json
+          {
+            printf '### sccache\n\n```text\n'
+            cat sccache-stats.txt
+            printf '```\n'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+      # This job is the only writer of the Ubuntu 22.04 key family, and only
+      # on the trunk, so a pull request never publishes a competing archive.
+      - name: Save Cargo download store
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+          steps.cargo_registry.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ env.CARGO_CACHE_KEY }}
+      - name: Save tool directories
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+          steps.tool_dirs.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ~/.cargo/bin
+          key: ${{ env.TOOLS_CACHE_KEY }}

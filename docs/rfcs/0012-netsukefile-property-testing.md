@@ -86,7 +86,7 @@ adopts:
   than raw text, and uses a completeness check so new recipes opt into the
   contract deliberately.
 - `tests/workflow_contracts/ci_transition_property_test.py` and
-  `namespace_runner_properties_test.py` layer bounded, derandomized Hypothesis
+  `runner_placement_properties_test.py` layer bounded, derandomized Hypothesis
   properties over pure validators, generating valid sequences plus `missing`,
   `duplicate`, and `misordered` mutations.
 - `proptest-regressions/` persists failing seeds so regressions replay

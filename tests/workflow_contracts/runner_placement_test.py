@@ -1,18 +1,26 @@
-"""Hold Netsuke's Namespace runner-profile assignments.
+"""Hold Netsuke's Ubicloud and GitHub-hosted runner placement.
 
-The repository owns direct Linux, Windows, and ARM64 macOS job placement,
-while Intel macOS jobs and externally defined reusable workflows retain their
-existing runner ownership. These contracts prevent an unrelated workflow edit
-from silently moving repository-owned work back to GitHub-hosted runners.
+Ubicloud offers Linux runners only, so the repository splits its estate: the
+Linux jobs that block a developer run on `ubicloud-standard-2-ubuntu-2404`
+(and the `-2204` variant for the deliberate compatibility lane), while Windows,
+macOS, scheduled, and administrative jobs stay on GitHub-hosted runners. These
+contracts prevent an unrelated workflow edit from silently changing that
+ownership, oversubscribing a two-vCPU shape, or leaving a Ubicloud job without
+a timeout.
 
 Run via ``make test-workflow-contracts``.
 """
 
 import pytest
-from namespace_runner_invariants import (
+from runner_placement_invariants import (
     CALLEE_SELECTED_RUNNER,
+    GITHUB_HOSTED_ONLY_KEYS,
     REQUIRED_RUNNER_ASSIGNMENTS,
+    UBICLOUD_COMPAT_LABEL,
+    UBICLOUD_DEFAULT_LABEL,
+    UBICLOUD_LARGE_LABEL,
     has_required_runner_assignments,
+    is_ubicloud_label,
     is_valid_ninja_sequence,
     is_valid_windows_tool_path_sequence,
 )
@@ -27,8 +35,12 @@ from workflow_loading import (
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
 DIRECT_RUNNER_SOURCES = (
     ("ci.build-test", "ci.yml", "build-test"),
-    ("ci.build-test-windows", "ci.yml", "build-test-windows"),
-    ("ci.windows-native-recipe-smoke", "ci.yml", "windows-native-recipe-smoke"),
+    ("ci-windows.build-test-windows", "ci-windows.yml", "build-test-windows"),
+    (
+        "ci-windows.windows-native-recipe-smoke",
+        "ci-windows.yml",
+        "windows-native-recipe-smoke",
+    ),
     ("ci.kani-smoke", "ci.yml", "kani-smoke"),
     ("coverage-main.coverage-upload", "coverage-main.yml", "coverage-upload"),
     (
@@ -47,52 +59,50 @@ DIRECT_RUNNER_SOURCES = (
 )
 
 
+#: Jobs placed directly on a Ubicloud label, with the worker-count variables
+#: each one must keep within the shape's vCPU count.
 @pytest.mark.parametrize(
     ("workflow_name", "job_name", "expected_runner"),
     [
-        ("ci.yml", "build-test", "namespace-profile-netsuke-ci"),
-        (
-            "ci.yml",
-            "build-test-windows",
-            "namespace-profile-netsuke-windows-ci",
-        ),
-        (
-            "ci.yml",
-            "windows-native-recipe-smoke",
-            "namespace-profile-netsuke-windows",
-        ),
-        ("ci.yml", "kani-smoke", "namespace-profile-netsuke"),
-        ("coverage-main.yml", "coverage-upload", "namespace-profile-netsuke"),
-        (
-            "delayed-pr-comment.yml",
-            "delay_and_comment",
-            "namespace-profile-netsuke",
-        ),
-        (
-            "netsukefile-test.yml",
-            "netsukefile",
-            "namespace-profile-netsuke-ubuntu-22-04",
-        ),
-        ("release.yml", "metadata", "namespace-profile-netsuke"),
-        (
-            "release.yml",
-            "windows-native-recipe-smoke",
-            "namespace-profile-netsuke-windows",
-        ),
-        ("release.yml", "release", "namespace-profile-netsuke"),
+        ("ci.yml", "build-test", UBICLOUD_LARGE_LABEL),
+        ("ci-windows.yml", "build-test-windows", "windows-latest"),
+        ("ci-windows.yml", "windows-native-recipe-smoke", "windows-latest"),
+        ("ci.yml", "kani-smoke", UBICLOUD_DEFAULT_LABEL),
+        ("coverage-main.yml", "coverage-upload", UBICLOUD_LARGE_LABEL),
+        ("delayed-pr-comment.yml", "delay_and_comment", "ubuntu-latest"),
+        ("netsukefile-test.yml", "netsukefile", UBICLOUD_COMPAT_LABEL),
+        ("release.yml", "metadata", "ubuntu-latest"),
+        ("release.yml", "windows-native-recipe-smoke", "windows-latest"),
+        ("release.yml", "release", "ubuntu-latest"),
     ],
 )
-def test_repository_owned_jobs_use_namespace_profiles(
+def test_repository_owned_jobs_use_required_runners(
     workflow_name: str,
     job_name: str,
     expected_runner: str,
 ) -> None:
-    """Require each repository-owned job to use its Namespace profile."""
+    """Require each repository-owned job to use its intended runner."""
     workflow = load_workflow(WORKFLOW_DIR / workflow_name)
     actual_runner = workflow_job(workflow, job_name).get("runs-on")
     assert actual_runner == expected_runner, (
         f"{workflow_name} job {job_name} must run on {expected_runner}, "
         f"got {actual_runner!r}"
+    )
+
+
+@pytest.mark.parametrize("assignment_key", GITHUB_HOSTED_ONLY_KEYS)
+def test_windows_macos_and_administrative_jobs_stay_github_hosted(
+    assignment_key: str,
+) -> None:
+    """Keep every job without a Ubicloud option on a GitHub-hosted runner.
+
+    Ubicloud publishes Ubuntu images only, so a Windows or macOS job has no
+    Ubicloud placement at all. The remaining jobs here are API-bound or not
+    developer-blocking, so a build shape would buy nothing.
+    """
+    runner = REQUIRED_RUNNER_ASSIGNMENTS[assignment_key]
+    assert not is_ubicloud_label(runner), (
+        f"{assignment_key} must stay on a GitHub-hosted runner, got {runner!r}"
     )
 
 
@@ -108,12 +118,12 @@ def test_repository_owned_jobs_use_namespace_profiles(
         ),
     ],
 )
-def test_namespace_linux_jobs_install_ninja_before_use(
+def test_linux_jobs_install_ninja_before_use(
     workflow_name: str,
     job_name: str,
     first_consumer: str,
 ) -> None:
-    """Provision pinned Ninja before a Namespace Linux job invokes it."""
+    """Provision pinned Ninja before a Ubicloud Linux job invokes it."""
     workflow = load_workflow(WORKFLOW_DIR / workflow_name)
     steps = job_steps(workflow, job_name)
     assert is_valid_ninja_sequence(steps, first_consumer), (
@@ -135,15 +145,15 @@ def test_main_coverage_requires_real_ninja() -> None:
 @pytest.mark.parametrize(
     ("job_name", "expected_runner"),
     [
-        ("build-linux", "namespace-profile-netsuke"),
-        ("build-windows", "namespace-profile-netsuke-windows"),
+        ("build-linux", UBICLOUD_DEFAULT_LABEL),
+        ("build-windows", "windows-latest"),
     ],
 )
-def test_release_build_uses_the_general_namespace_profile(
+def test_release_build_passes_its_platform_runner(
     job_name: str,
     expected_runner: str,
 ) -> None:
-    """Require packaging to pass its platform's general Namespace profile."""
+    """Require packaging to pass its platform's intended runner label."""
     workflow = load_workflow(WORKFLOW_DIR / "release.yml")
     build_job = workflow_job(workflow, job_name)
     inputs = require_mapping(build_job.get("with"), f"jobs.{job_name}.with")
@@ -155,7 +165,7 @@ def test_release_build_uses_the_general_namespace_profile(
 
 
 def test_macos_release_matrix_preserves_native_architectures() -> None:
-    """Use Namespace for ARM64 macOS while retaining GitHub's Intel runner."""
+    """Keep both macOS architectures on their GitHub-hosted runners."""
     workflow = load_workflow(WORKFLOW_DIR / "release.yml")
     build_macos = workflow_job(workflow, "build-macos")
     strategy = require_mapping(build_macos.get("strategy"), "jobs.build-macos.strategy")
@@ -170,11 +180,11 @@ def test_macos_release_matrix_preserves_native_architectures() -> None:
     }
     assert runners_by_target == {
         "x86_64-apple-darwin": "macos-15-intel",
-        "aarch64-apple-darwin": "namespace-profile-netsuke-macos-arm64",
+        "aarch64-apple-darwin": "macos-15",
     }, f"unexpected macOS runner matrix: {runners_by_target!r}"
 
 
-def test_package_workflow_runs_on_its_caller_selected_profile() -> None:
+def test_package_workflow_runs_on_its_caller_selected_runner() -> None:
     """Keep runner selection at the release caller's platform boundary."""
     workflow = load_workflow(WORKFLOW_DIR / "build-and-package.yml")
     actual_runner = workflow_job(workflow, "build").get("runs-on")
@@ -185,7 +195,7 @@ def test_package_workflow_runs_on_its_caller_selected_profile() -> None:
 
 
 def test_package_workflow_limits_legacy_node_to_windows() -> None:
-    """Permit the nested Node 20 action only for Namespace Windows builds."""
+    """Permit the nested Node 20 action only for Windows packaging."""
     workflow = load_workflow(WORKFLOW_DIR / "build-and-package.yml")
     build = workflow_job(workflow, "build")
     env = require_mapping(build.get("env"), "jobs.build.env")
@@ -213,6 +223,19 @@ def test_checked_in_workflows_satisfy_runner_assignment_contract() -> None:
     assert has_required_runner_assignments(assignments), (
         "checked-in runner assignments must match the platform contract; "
         f"expected {REQUIRED_RUNNER_ASSIGNMENTS!r}, got {assignments!r}"
+    )
+
+
+def _workflow_env(workflow: dict[str, object]) -> dict[str, object]:
+    """Return a workflow's top-level environment mapping."""
+    return require_mapping(workflow.get("env", {}), "the workflow env")
+
+
+def _all_workflow_text() -> str:
+    """Return every workflow file's text, concatenated."""
+    return "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sorted({*WORKFLOW_DIR.glob("*.yml"), *WORKFLOW_DIR.glob("*.yaml")})
     )
 
 

@@ -14,6 +14,13 @@ Run via ``make test-workflow-contracts``.
 import subprocess
 import typing as typ
 
+import yaml
+from actionlint_installer_contract import (
+    ACTIONLINT_CHECKSUM_COMMAND,
+    ACTIONLINT_INSTALL_COMMAND,
+    ACTIONLINT_SCRIPT_CONTRACTS,
+    shell_variable,
+)
 from cmd_mox import CmdMox
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -23,6 +30,7 @@ from workflow_loading import (
     job_steps,
     load_workflow,
     named_step,
+    require_mapping,
 )
 
 if typ.TYPE_CHECKING:
@@ -34,106 +42,6 @@ pytest_plugins = ("cmd_mox.pytest_plugin",)
 MAKEFILE_PATH = REPO_ROOT / "Makefile"
 YAMLLINT_POLICY_PATH = REPO_ROOT / ".yamllint.yml"
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
-
-
-def _shell_variable(name: str) -> str:
-    """Return a shell variable expansion for script contract expectations."""
-    return f"${{{name}}}"
-
-
-ACTIONLINT_VERSION = "1.7.12"
-ACTIONLINT_SHA256 = "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
-ACTIONLINT_INSTALLER_COMMIT = "914e7df21a07ef503a81201c76d2b11c789d3fca"
-ACTIONLINT_ARCHIVE = (
-    f"actionlint_{_shell_variable('ACTIONLINT_VERSION')}_linux_amd64.tar.gz"
-)
-ACTIONLINT_RAW_BASE = "https://raw.githubusercontent.com/rhysd/actionlint"
-ACTIONLINT_SCRIPT = "scripts/download-actionlint.bash"
-ACTIONLINT_RELEASE_ROOT = "https://github.com/rhysd/actionlint/releases/download"
-
-ACTIONLINT_INSTALL_COMMAND = (
-    f'bash "{_shell_variable("ACTIONLINT_INSTALLER_PATH")}" '
-    f'"{_shell_variable("ACTIONLINT_VERSION")}"'
-)
-ACTIONLINT_CHECKSUM_COMMAND = (
-    f"printf '%s  %s\\n' \"{_shell_variable('ACTIONLINT_SHA256')}\" "
-    f'"{_shell_variable("ACTIONLINT_ARCHIVE_PATH")}" | sha256sum --check --'
-)
-ACTIONLINT_SCRIPT_CONTRACTS = (
-    (
-        f"readonly ACTIONLINT_VERSION='{ACTIONLINT_VERSION}'",
-        "the actionlint installer must pin the expected release version",
-    ),
-    (
-        f"readonly ACTIONLINT_SHA256='{ACTIONLINT_SHA256}'",
-        "the actionlint installer must pin the expected release archive checksum",
-    ),
-    (
-        f"readonly ACTIONLINT_INSTALLER_COMMIT='{ACTIONLINT_INSTALLER_COMMIT}'",
-        "the actionlint installer must pin its reviewed installer revision",
-    ),
-    (
-        f'readonly ACTIONLINT_ARCHIVE="{ACTIONLINT_ARCHIVE}"',
-        "the actionlint installer must request the published Linux amd64 archive",
-    ),
-    (
-        f"readonly ACTIONLINT_RAW_BASE='{ACTIONLINT_RAW_BASE}'",
-        "the actionlint installer must own its immutable raw-content endpoint",
-    ),
-    (
-        f"readonly ACTIONLINT_SCRIPT='{ACTIONLINT_SCRIPT}'",
-        "the actionlint installer must pin its downloader script path",
-    ),
-    (
-        (
-            'readonly ACTIONLINT_INSTALLER_URL="'
-            f"{_shell_variable('ACTIONLINT_RAW_BASE')}/"
-            f"{_shell_variable('ACTIONLINT_INSTALLER_COMMIT')}/"
-            f'{_shell_variable("ACTIONLINT_SCRIPT")}"'
-        ),
-        "the actionlint installer URL must be constructed from its pinned inputs",
-    ),
-    (
-        f"readonly ACTIONLINT_RELEASE_ROOT='{ACTIONLINT_RELEASE_ROOT}'",
-        "the actionlint installer must own its release endpoint",
-    ),
-    (
-        (
-            'readonly ACTIONLINT_RELEASE_BASE="'
-            f"{_shell_variable('ACTIONLINT_RELEASE_ROOT')}/"
-            f'v{_shell_variable("ACTIONLINT_VERSION")}"'
-        ),
-        "the actionlint release base must select the pinned version",
-    ),
-    (
-        (
-            'readonly ACTIONLINT_RELEASE_URL="'
-            f"{_shell_variable('ACTIONLINT_RELEASE_BASE')}/"
-            f'{_shell_variable("ACTIONLINT_ARCHIVE")}"'
-        ),
-        ("the actionlint release URL must be constructed from the pinned archive"),
-    ),
-    (
-        (
-            "command curl --fail --location --show-error --output "
-            f'"{_shell_variable("ACTIONLINT_INSTALLER_PATH")}" \\\n'
-            f'  "{_shell_variable("ACTIONLINT_INSTALLER_URL")}"'
-        ),
-        "the actionlint installer download must use the installer endpoint",
-    ),
-    (
-        (
-            "command curl --fail --location --show-error --output "
-            f'"{_shell_variable("ACTIONLINT_ARCHIVE_PATH")}" \\\n'
-            f'  "{_shell_variable("ACTIONLINT_RELEASE_URL")}"'
-        ),
-        "the actionlint archive download must use the release endpoint",
-    ),
-    (
-        ACTIONLINT_CHECKSUM_COMMAND,
-        "the actionlint archive checksum must verify the downloaded archive",
-    ),
-)
 
 
 def _makefile_recipe(target: str) -> list[str]:
@@ -160,47 +68,77 @@ def _step_position(steps: list[dict[str, object]], name: str) -> int:
     return steps.index(named_step(steps, name))
 
 
+#: The Linux gate's cache steps live in a composite action so `ci.yml` stays
+#: inside the repository's 400-line file limit; the tool directories this
+#: module cares about are declared there.
+GATE_CACHE_ACTION = (
+    REPO_ROOT / ".github" / "actions" / "linux-gate-cache" / "action.yml"
+)
+
+
+def _gate_cache_paths() -> str:
+    """Return every path the Linux gate's cache action claims."""
+    document = yaml.safe_load(GATE_CACHE_ACTION.read_text(encoding="utf-8"))
+    runs = require_mapping(
+        require_mapping(document, "linux-gate-cache").get("runs"), "runs"
+    )
+    steps = runs.get("steps")
+    assert isinstance(steps, list), "the gate cache action must declare steps"
+    return "\n".join(
+        str(require_mapping(step.get("with"), "cache inputs").get("path", ""))
+        for step in steps
+        if "/cache/" in str(step.get("uses", ""))
+    )
+
+
 def _assert_yamllint_ci_contract(steps: list[dict[str, object]]) -> None:
     """Assert that Linux CI provisions the pinned yamllint installation."""
     setup_uv = named_step(steps, "Setup uv")
-    cache_yamllint = named_step(steps, "Cache yamllint")
     install_yamllint = named_step(steps, "Install yamllint")
+    cached_paths = [line.strip() for line in _gate_cache_paths().splitlines()]
 
     assert setup_uv.get("uses") == (
         "astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990"
     ), "the Linux CI job must provision uv before installing yamllint"
-    assert cache_yamllint.get("uses") == (
-        "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9"
-    ), "the Linux CI job must cache the pinned yamllint installation"
+    setup_uv_inputs = setup_uv.get("with")
+    assert isinstance(setup_uv_inputs, dict), "Setup uv must declare inputs"
+    assert setup_uv_inputs.get("enable-cache") == "false", (
+        "setup-uv must not add a second owner beside the gate cache"
+    )
+    for uv_path in (".uv-bin", ".uv-cache", ".uv-tools"):
+        assert uv_path in cached_paths, (
+            f"the gate cache must own the uv directory {uv_path}"
+        )
     assert install_yamllint.get("run") == (
         'uv tool install "yamllint==${YAMLLINT_VERSION}"\n'
         'echo "${UV_TOOL_BIN_DIR}" >> "$GITHUB_PATH"\n'
     ), "the Linux CI job must install and expose the pinned yamllint binary"
 
 
+ACTIONLINT_REUSE_GUARD = (
+    "if [[ -x ./actionlint ]] \\\n"
+    '  && [[ "$(./actionlint --version | head --lines=1)" == '
+    f'"{shell_variable("ACTIONLINT_VERSION")}" ]]; then'
+)
+
+
 def _assert_actionlint_ci_contract(steps: list[dict[str, object]]) -> None:
     """Assert that Linux CI provisions actionlint and invokes trusted Make."""
-    cache_actionlint = named_step(steps, "Cache actionlint")
     download_actionlint = named_step(steps, "Download actionlint")
     lint = named_step(steps, "Lint")
     download_script = download_actionlint.get("run")
+    cached_paths = [line.strip() for line in _gate_cache_paths().splitlines()]
 
-    assert cache_actionlint.get("id") == "cache_actionlint", (
-        "the actionlint cache step must expose its cache-hit result"
-    )
-    assert cache_actionlint.get("uses") == (
-        "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9"
-    ), "the actionlint cache must use the pinned cache action"
-    assert cache_actionlint.get("with") == {
-        "path": "actionlint",
-        "key": "actionlint-${{ runner.os }}-${{ runner.arch }}-1.7.12",
-    }, "the actionlint cache must own the pinned binary at the repository path"
-    assert download_actionlint.get("if") == (
-        "steps.cache_actionlint.outputs.cache-hit != 'true'"
-    ), "the actionlint download must run only after a cache miss"
+    assert "actionlint" in cached_paths, "the gate cache must own the actionlint binary"
     assert isinstance(download_script, str), (
         "the actionlint cache-miss step must define its verified installer script"
     )
+    assert ACTIONLINT_REUSE_GUARD in download_script, (
+        "the cached actionlint must be reused only when it reports the pinned version"
+    )
+    assert download_script.index(ACTIONLINT_REUSE_GUARD) < download_script.index(
+        ACTIONLINT_INSTALL_COMMAND
+    ), "the cached-version guard must precede the installer invocation"
     for expected, message in ACTIONLINT_SCRIPT_CONTRACTS:
         assert expected in download_script, message
     assert download_script.index(ACTIONLINT_CHECKSUM_COMMAND) < download_script.index(
@@ -218,10 +156,9 @@ def _assert_workflow_linter_provisioning_order(
     assert all(
         _step_position(steps, earlier) < _step_position(steps, later)
         for earlier, later in [
-            ("Setup uv", "Cache yamllint"),
-            ("Cache yamllint", "Install yamllint"),
-            ("Install yamllint", "Cache actionlint"),
-            ("Cache actionlint", "Download actionlint"),
+            ("Restore gate caches", "Setup uv"),
+            ("Setup uv", "Install yamllint"),
+            ("Install yamllint", "Download actionlint"),
             ("Download actionlint", "Lint"),
         ]
     ), "the Linux CI job must provision both linters before the trusted lint step"

@@ -150,6 +150,20 @@ fn workflow_step_body<'a>(contents: &'a str, step_name: &str) -> Vec<&'a str> {
         .collect()
 }
 
+fn assert_shared_build_skips_man_page_discovery(contents: &str) {
+    let rust_build_steps = rust_build_release_step_blocks(contents);
+    assert!(
+        !rust_build_steps.is_empty(),
+        "workflow should call rust-build-release"
+    );
+    for step in rust_build_steps {
+        assert!(
+            step.contains("skip-man-page-discovery: 'true'"),
+            "rust-build-release call should skip embedded man-page discovery"
+        );
+    }
+}
+
 #[test]
 fn behavioural_build_and_package_wiring_matches_shared_actions() {
     let contents = workflow_contents("build-and-package.yml")
@@ -189,15 +203,71 @@ fn behavioural_build_and_package_wiring_matches_shared_actions() {
     );
 }
 
+/// Reject every `cargo install` form that would compile `cargo-orthohelp`.
+///
+/// Matching the bare `cargo install cargo-orthohelp` prefix is not enough:
+/// `cargo install --locked cargo-orthohelp@0.9.0` compiles the tool just the
+/// same, and so does any other flag placed before the crate name. The pattern
+/// therefore allows arbitrary flags and version selectors between the
+/// subcommand and the crate.
+fn assert_orthohelp_comes_from_a_prebuilt_release(contents: &str) -> Result<()> {
+    let install_body = workflow_step_body(contents, "Install cargo-orthohelp").join("\n");
+    ensure!(
+        install_body.contains("cargo binstall --no-confirm --locked \\")
+            && install_body.contains("--strategies crate-meta-data,quick-install"),
+        "workflow should try binary-only cargo-binstall strategies first"
+    );
+    ensure!(
+        install_body.contains("cargo-orthohelp@0.9.0"),
+        "workflow should pin the cargo-orthohelp release version"
+    );
+
+    // `ortho-config` publishes no binaries for any platform
+    // (leynos/ortho-config#479), so a source build is permitted, but only in
+    // this exact guarded form: after the binary-only attempt has genuinely
+    // failed, and into a dedicated target directory that never shares
+    // compiler output with the product. Any other `cargo install` naming the
+    // tool, in this step or elsewhere, is still rejected.
+    let guarded_fallback = "CARGO_TARGET_DIR=\"${ORTHOHELP_BUILD_DIR}\" \\\n            \
+        cargo install --locked cargo-orthohelp@0.9.0";
+    ensure!(
+        install_body.contains("if cargo binstall") && install_body.contains(guarded_fallback),
+        "a cargo-orthohelp source build is permitted only as the guarded \
+         fallback into a dedicated CARGO_TARGET_DIR"
+    );
+    // Flags, `--version`/`--index` selectors, and quoting all sit between the
+    // subcommand and the crate name, so the pattern allows arbitrary tokens
+    // that are not themselves the crate. Counting matches means a second
+    // source install cannot hide behind the documented one.
+    let source_install =
+        regex::Regex::new(r#"cargo\s+install\s+(?:[-"'][^\s]*\s+)*"?cargo-orthohelp"#)
+            .context("compile the cargo-orthohelp source-install pattern")?;
+    ensure!(
+        source_install.find_iter(contents).count() == 1,
+        "the guarded fallback should be the only cargo-orthohelp source install \
+         anywhere in the workflow"
+    );
+
+    let build_index = contents
+        .find("- name: Build release binary")
+        .context("workflow should build the release binary")?;
+    let install_index = contents
+        .find("- name: Install cargo-orthohelp")
+        .context("workflow should install cargo-orthohelp")?;
+    ensure!(
+        build_index < install_index,
+        "cargo-orthohelp must be installed after rust-build-release provisions cargo-binstall"
+    );
+    Ok(())
+}
+
 #[test]
 fn behavioural_build_and_package_generates_release_help_with_orthohelp() {
     let contents = workflow_contents("build-and-package.yml")
         .expect("build-and-package workflow should be readable");
 
-    assert!(
-        contents.contains("cargo install cargo-orthohelp --version 0.9.0 --locked"),
-        "workflow should install the pinned cargo-orthohelp release tool"
-    );
+    assert_orthohelp_comes_from_a_prebuilt_release(&contents)
+        .expect("cargo-orthohelp should come from a pinned prebuilt release");
     assert!(
         contents.contains("scripts/generate-release-help.sh"),
         "workflow should call the release help script"
@@ -206,17 +276,7 @@ fn behavioural_build_and_package_generates_release_help_with_orthohelp() {
         contents.contains("\"target/orthohelp/${{ inputs.target }}/release\""),
         "workflow should generate help under target/orthohelp"
     );
-    let rust_build_steps = rust_build_release_step_blocks(&contents);
-    assert!(
-        !rust_build_steps.is_empty(),
-        "workflow should call rust-build-release"
-    );
-    for step in rust_build_steps {
-        assert!(
-            step.contains("skip-man-page-discovery: 'true'"),
-            "rust-build-release call should skip embedded man-page discovery"
-        );
-    }
+    assert_shared_build_skips_man_page_discovery(&contents);
     assert!(
         contents.contains("man-paths: ${{ steps.stage_paths.outputs.man_path }}"),
         "Linux packaging should consume the staged man_path output"
