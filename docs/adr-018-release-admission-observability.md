@@ -23,6 +23,11 @@ endpoint. Its observability therefore needs a durable hand-off to the workflow
 run, with a small and reviewable contract that tests can validate independently
 of a metrics backend.
 
+The scaffold has no RFC 0005 evidence producer yet. It therefore runs in
+observation mode, which reports fail-closed admission results without failing
+the workflow. Enforcement is a separate mode that is enabled only after a real
+evidence producer and its validation are available.
+
 ## Decision
 
 The release-admission script emits exactly three metrics as JSON Lines (JSONL):
@@ -50,6 +55,15 @@ successful operation or gate. A failed operation is classified as one of
 `timeout`; an unclassified failure fails closed as `outcome=unknown` and
 `error_category=unknown`. Missing or stale admission evidence remains a gate
 failure and cannot be converted into a successful result by telemetry.
+
+`NETSUKE_RELEASE_ADMISSION_ENFORCE` is a validated mode selector with the
+closed values `false` (observation) and `true` (enforcement); an unset value
+defaults to `false`. The release workflow explicitly selects `false`. In
+observation mode, missing, stale, malformed, unknown, or mismatched evidence is
+still recorded with its fail-closed outcome and category, the gate outputs and
+summary are written, and the script exits successfully. In enforcement mode,
+those same results exit non-zero. Setting an evidence-state value such as
+`fresh` does not substitute for a real evidence producer or enable enforcement.
 
 Operation counters and duration observations are emitted at the end of each
 fixed operation boundary. The gate counter is emitted at the gate's final

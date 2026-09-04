@@ -1198,27 +1198,15 @@ Published beta2 `help targets` does not provide those semantics.
 ## Release-admission canary
 
 The release workflow currently runs a non-blocking RFC 0005 release-admission
-canary scaffold. It performs read-only checks, writes bounded JSON Lines
-(JSONL) metrics, and publishes a short outcome line in the job summary.
-Download the `release-admission-metrics` workflow artefact to inspect the
-per-operation records. Publication will become conditional on this admission
-result only after a real RFC 0005 evidence producer is connected.
+canary scaffold. It performs read-only checks and reports whether the release
+checks succeeded, failed, or were unknown in the workflow summary. Missing,
+stale, mismatched, or unclassified evidence is reported as an unsuccessful
+canary result, but does not currently prevent publication. Publication will
+become conditional on this admission result only after a real RFC 0005 evidence
+producer is connected and enforcement mode is enabled.
 
-The scaffold's metric labels use fixed values only:
-
-- `outcome=success|failure|unknown`;
-- `error_category=none|api_error|fetch_error|stale_evidence|missing_evidence|`
-  `mismatch|timeout|unknown`; and
-- the fixed `canary` and `operation` values documented in the
-  [developer guide](developers-guide.md#release-admission-observability).
-
-Missing, stale, mismatched, or unclassified results remain fail-closed in the
-metric classification. Each operation has a 30-second timeout by default.
-`NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS` may override it with an
-integer from 1 through 300 seconds, inclusive. A timed-out operation is
-reported as `outcome=failure` with `error_category=timeout`; invalid timeout
-configuration is reported as `outcome=failure` with `error_category=unknown`.
-Revisions, run IDs, paths, URLs, and workflow content are not metric labels.
+Maintainers can find the operational observability contract in the
+[developer guide](developers-guide.md#release-admission-observability).
 
 ## Configure Netsuke
 

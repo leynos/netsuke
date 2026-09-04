@@ -17,6 +17,7 @@ METRICS_FILE_ENV = {
 }
 ADMISSION_ENVIRONMENT = {
     "GH_TOKEN": "${{ secrets.GITHUB_TOKEN }}",
+    "NETSUKE_RELEASE_ADMISSION_ENFORCE": "false",
     **METRICS_FILE_ENV,
 }
 METRICS_ARTIFACT = {
@@ -82,8 +83,8 @@ def _assert_admission_job_contract(
     assert permissions == ADMISSION_PERMISSIONS, (
         "admission must retain read-only permissions"
     )
-    assert admission.get("continue-on-error") is True, (
-        "the scaffold must not block releases before evidence production exists"
+    assert "continue-on-error" not in admission, (
+        "observation mode must succeed without suppressing other admission failures"
     )
     assert (
         require_mapping(admission_step.get("env"), "release admission step environment")

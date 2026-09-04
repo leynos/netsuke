@@ -2,7 +2,9 @@
 
 This guide describes the day-to-day engineering workflow for Netsuke, with a
 focus on writing and maintaining tests. It is the source of truth for how the
-test suite is expected to be used by contributors.
+test suite is expected to be used by contributors. The normative architecture
+reference for bounded release-admission observability is
+[ADR-018](adr-018-release-admission-observability.md).
 
 ## Command-line interface architecture
 
@@ -991,7 +993,23 @@ JSONL file as a workflow artefact and writes one concise outcome line to
 `GITHUB_STEP_SUMMARY`. In the release workflow,
 `NETSUKE_RELEASE_ADMISSION_METRICS_FILE` points to
 `${runner.temp}/release-admission-metrics.jsonl`, and the file is uploaded
-under the `release-admission-metrics` artefact name.
+under the `release-admission-metrics` artefact name. The summary and upload
+steps retain the result on failure; dry-run policy still controls whether an
+artefact is uploaded.
+
+The admission mode is a closed configuration vocabulary. The
+`NETSUKE_RELEASE_ADMISSION_ENFORCE` value is either `false` (observation) or
+`true` (enforcement), and an unset value defaults to `false`. The current
+release workflow explicitly selects `false` because no RFC 0005 evidence
+producer is connected. Observation mode records the fail-closed admission
+result, including `outcome=failure` and `error_category=missing_evidence` when
+the producer has not supplied evidence, writes the gate outputs and summary,
+and then exits successfully so the canary does not block publication.
+Enforcement mode preserves fail-closed behaviour: missing, stale, malformed,
+unknown, or mismatched evidence exits non-zero after recording its bounded
+result. An environment value such as `fresh` is not evidence and must never
+substitute for a real evidence producer. Any other mode value is an invalid
+configuration and fails closed as an unknown gate result.
 
 The metric contract is deliberately closed. The only label names are `canary`,
 `operation`, `outcome`, and `error_category`, and the only values are:
@@ -1012,9 +1030,11 @@ and metric classification remains fail-closed.
 
 Each operation has a 30-second timeout by default. Set
 `NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS` only to an integer from 1
-through 300 seconds, inclusive. A timed-out operation emits `outcome=failure`
-with `error_category=timeout`; invalid timeout configuration fails closed as
-`outcome=failure` with `error_category=unknown`.
+through 300 seconds, inclusive. The timeout terminates the command and gives
+descendants a one-second termination grace period. A timed-out operation emits
+`outcome=failure` with `error_category=timeout`; invalid timeout configuration
+fails closed as `outcome=failure` with `error_category=unknown` before any
+admission operation runs.
 
 Instruments emitted by the gate are:
 

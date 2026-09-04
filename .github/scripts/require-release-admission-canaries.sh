@@ -33,8 +33,11 @@ readonly ERROR_UNKNOWN='unknown'
 
 readonly DEFAULT_OPERATION_TIMEOUT_SECONDS=30
 readonly MAX_OPERATION_TIMEOUT_SECONDS=300
+readonly ADMISSION_OBSERVATION_MODE='false'
+readonly ADMISSION_ENFORCEMENT_MODE='true'
 readonly metrics_file="${NETSUKE_RELEASE_ADMISSION_METRICS_FILE:-${RUNNER_TEMP:-/tmp}/netsuke-release-admission-metrics.jsonl}"
 readonly operation_timeout_seconds="${NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS:-$DEFAULT_OPERATION_TIMEOUT_SECONDS}"
+readonly admission_enforcement="${NETSUKE_RELEASE_ADMISSION_ENFORCE:-$ADMISSION_OBSERVATION_MODE}"
 gate_outcome="$OUTCOME_UNKNOWN"
 gate_error_category="$ERROR_UNKNOWN"
 workflow_run_id=''
@@ -79,8 +82,16 @@ is_operation_timeout() {
     (( 10#$1 <= MAX_OPERATION_TIMEOUT_SECONDS ))
 }
 
+is_admission_enforcement() {
+  [[ "$1" == "$ADMISSION_OBSERVATION_MODE" || "$1" == "$ADMISSION_ENFORCEMENT_MODE" ]]
+}
+
+is_timeout_status() {
+  [[ "$1" -eq 124 || "$1" -eq 137 ]]
+}
+
 run_bounded_command() {
-  timeout --foreground "${operation_timeout_seconds}s" "$@"
+  timeout --kill-after=1s "${operation_timeout_seconds}s" "$@"
 }
 
 write_unknown_metric() {
@@ -207,7 +218,7 @@ resolve_tag_commit() {
     :
   else
     command_status=$?
-    if [[ "$command_status" -eq 124 ]]; then
+    if is_timeout_status "$command_status"; then
       operation_error_category="$ERROR_TIMEOUT"
     else
       operation_error_category="$ERROR_API"
@@ -226,7 +237,7 @@ fetch_candidate_revision() {
     :
   else
     command_status=$?
-    if [[ "$command_status" -eq 124 ]]; then
+    if is_timeout_status "$command_status"; then
       operation_error_category="$ERROR_TIMEOUT"
     else
       operation_error_category="$ERROR_FETCH"
@@ -241,7 +252,7 @@ fetch_workflow_run() {
     :
   else
     command_status=$?
-    if [[ "$command_status" -eq 124 ]]; then
+    if is_timeout_status "$command_status"; then
       operation_error_category="$ERROR_TIMEOUT"
     else
       operation_error_category="$ERROR_API"
@@ -252,7 +263,13 @@ fetch_workflow_run() {
 
 check_scan_freshness() {
   case "${NETSUKE_RELEASE_ADMISSION_EVIDENCE_STATE:-missing}" in
-    fresh) ;;
+    fresh)
+      if [[ "$admission_enforcement" == "$ADMISSION_ENFORCEMENT_MODE" ]]; then
+        printf '%s\n' 'release-admission enforcement requires producer-backed evidence' >&2
+        operation_error_category="$ERROR_MISSING"
+        return 1
+      fi
+      ;;
     stale)
       operation_error_category="$ERROR_STALE"
       return 1
@@ -275,6 +292,16 @@ verify_evidence() {
   fi
 }
 
+run_admission_operations() {
+  run_operation "$CANARY_NONE" "$OPERATION_RESOLVE_TAG_COMMIT" resolve_tag_commit || return 1
+  run_operation "$CANARY_RELEASE_CANDIDATE" "$OPERATION_FETCH_CANDIDATE_REVISION" \
+    fetch_candidate_revision || return 1
+  run_operation "$CANARY_HISTORY_SCAN" "$OPERATION_FETCH_WORKFLOW_RUN" fetch_workflow_run || return 1
+  run_operation "$CANARY_HISTORY_SCAN" "$OPERATION_CHECK_SCAN_FRESHNESS" \
+    check_scan_freshness || return 1
+  run_operation "$CANARY_HISTORY_SCAN" "$OPERATION_VERIFY_EVIDENCE" verify_evidence
+}
+
 mkdir -p "$(dirname "$metrics_file")"
 : >"$metrics_file"
 : "${GITHUB_OUTPUT:?GITHUB_OUTPUT must identify the workflow output file}"
@@ -289,15 +316,19 @@ if ! is_operation_timeout "$operation_timeout_seconds"; then
   exit 1
 fi
 
-# This is intentionally limited RFC 0005 admission scaffolding. It supplies
-# fixed operation boundaries and fails closed until the evidence producer sets
-# NETSUKE_RELEASE_ADMISSION_EVIDENCE_STATE=fresh.
-run_operation "$CANARY_NONE" "$OPERATION_RESOLVE_TAG_COMMIT" resolve_tag_commit
-run_operation "$CANARY_RELEASE_CANDIDATE" "$OPERATION_FETCH_CANDIDATE_REVISION" \
-  fetch_candidate_revision
-run_operation "$CANARY_HISTORY_SCAN" "$OPERATION_FETCH_WORKFLOW_RUN" fetch_workflow_run
-run_operation "$CANARY_HISTORY_SCAN" "$OPERATION_CHECK_SCAN_FRESHNESS" check_scan_freshness
-run_operation "$CANARY_HISTORY_SCAN" "$OPERATION_VERIFY_EVIDENCE" verify_evidence
+if ! is_admission_enforcement "$admission_enforcement"; then
+  printf '%s\n' 'release-admission enforcement must be true or false' >&2
+  gate_outcome="$OUTCOME_FAILURE"
+  gate_error_category="$ERROR_UNKNOWN"
+  exit 1
+fi
+
+if ! run_admission_operations; then
+  if [[ "$admission_enforcement" == "$ADMISSION_ENFORCEMENT_MODE" ]]; then
+    exit 1
+  fi
+  exit 0
+fi
 
 gate_outcome="$OUTCOME_SUCCESS"
 gate_error_category="$ERROR_NONE"
