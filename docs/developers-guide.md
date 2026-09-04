@@ -1008,7 +1008,6 @@ source itself; the release publication job separately requires both this smoke
 job and the platform package jobs in its `needs` list. Consequently, release
 publication cannot proceed unless the native Windows smoke test passes.
 
-
 ## Release-admission observability
 
 The release workflow runs a read-only release-admission canary scaffold before
