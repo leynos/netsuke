@@ -10,6 +10,7 @@ from workflow_loading import (
 )
 
 ADMISSION_PERMISSIONS = {"actions": "read", "contents": "read"}
+ADMISSION_PYTHON_SETUP = "astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990"
 METRICS_FILE_ENV = {
     "NETSUKE_RELEASE_ADMISSION_METRICS_FILE": (
         "${{ runner.temp }}/release-admission-metrics.jsonl"
@@ -44,8 +45,10 @@ def test_release_admission_metrics_retain_read_only_delivery() -> None:
     producer exists. Its summary always runs, and its artifact upload preserves
     failure diagnostics while respecting the reusable dry-run contract.
     """
-    admission, release, admission_step, summary_step, upload_step = _workflow_parts()
-    _assert_admission_job_contract(admission, admission_step)
+    admission, release, python_step, admission_step, summary_step, upload_step = (
+        _workflow_parts()
+    )
+    _assert_admission_job_contract(admission, python_step, admission_step)
     _assert_metrics_delivery_contract(summary_step, upload_step)
     _assert_release_scaffold_boundary(release)
 
@@ -59,9 +62,15 @@ def _workflow_parts() -> tuple[dict[str, object], ...]:
     ) < step_index_by_key(steps, "name", "Upload release-admission metrics"), (
         "the gate must write metrics before their artifact upload"
     )
+    assert step_index_by_key(
+        steps, "name", "Install Python for admission timings"
+    ) < step_index_by_key(steps, "name", "Require release-admission evidence"), (
+        "the admission job must install Python before collecting durations"
+    )
     return (
         workflow_job(workflow, "release-admission-canaries"),
         workflow_job(workflow, "release"),
+        _step_named(steps, "Install Python for admission timings"),
         _step_named(steps, "Require release-admission evidence"),
         _step_named(steps, "Summarise release-admission metrics"),
         _step_named(steps, "Upload release-admission metrics"),
@@ -74,7 +83,9 @@ def _step_named(steps: list[dict[str, object]], name: str) -> dict[str, object]:
 
 
 def _assert_admission_job_contract(
-    admission: dict[str, object], admission_step: dict[str, object]
+    admission: dict[str, object],
+    python_step: dict[str, object],
+    admission_step: dict[str, object],
 ) -> None:
     """Assert the admission job retains its read-only non-blocking boundary."""
     permissions = require_mapping(
@@ -86,6 +97,13 @@ def _assert_admission_job_contract(
     assert "continue-on-error" not in admission, (
         "observation mode must succeed without suppressing other admission failures"
     )
+    assert python_step.get("uses") == ADMISSION_PYTHON_SETUP, (
+        "the admission job must provision Python for monotonic duration collection"
+    )
+    assert python_step.get("with") == {
+        "python-version": "3.14",
+        "enable-cache": False,
+    }, "the admission Python installation must use the pinned baseline without a cache"
     assert (
         require_mapping(admission_step.get("env"), "release admission step environment")
         == ADMISSION_ENVIRONMENT

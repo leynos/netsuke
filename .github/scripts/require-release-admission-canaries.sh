@@ -37,7 +37,7 @@ readonly ADMISSION_OBSERVATION_MODE='false'
 readonly ADMISSION_ENFORCEMENT_MODE='true'
 readonly metrics_file="${NETSUKE_RELEASE_ADMISSION_METRICS_FILE:-${RUNNER_TEMP:-/tmp}/netsuke-release-admission-metrics.jsonl}"
 readonly operation_timeout_seconds="${NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS:-$DEFAULT_OPERATION_TIMEOUT_SECONDS}"
-readonly admission_enforcement="${NETSUKE_RELEASE_ADMISSION_ENFORCE:-$ADMISSION_OBSERVATION_MODE}"
+readonly admission_enforcement="${NETSUKE_RELEASE_ADMISSION_ENFORCE-$ADMISSION_OBSERVATION_MODE}"
 gate_outcome="$OUTCOME_UNKNOWN"
 gate_error_category="$ERROR_UNKNOWN"
 workflow_run_id=''
@@ -263,13 +263,7 @@ fetch_workflow_run() {
 
 check_scan_freshness() {
   case "${NETSUKE_RELEASE_ADMISSION_EVIDENCE_STATE:-missing}" in
-    fresh)
-      if [[ "$admission_enforcement" == "$ADMISSION_ENFORCEMENT_MODE" ]]; then
-        printf '%s\n' 'release-admission enforcement requires producer-backed evidence' >&2
-        operation_error_category="$ERROR_MISSING"
-        return 1
-      fi
-      ;;
+    fresh) ;;
     stale)
       operation_error_category="$ERROR_STALE"
       return 1
@@ -286,6 +280,11 @@ check_scan_freshness() {
 }
 
 verify_evidence() {
+  # Freshness is not evidence: RFC 0005 still requires a producer-backed record.
+  if [[ "${NETSUKE_RELEASE_ADMISSION_EVIDENCE_STATE:-missing}" == 'fresh' ]]; then
+    operation_error_category="$ERROR_MISSING"
+    return 1
+  fi
   if [[ -z "$workflow_run_id" ]]; then
     operation_error_category="$ERROR_MISSING"
     return 1

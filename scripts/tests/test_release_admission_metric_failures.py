@@ -10,13 +10,14 @@ from test_release_admission_metrics import (
     _run_gate,
     expected_gate_labels,
     expected_operation_labels,
+    operation_duration,
     operation_records,
 )
 
 if typ.TYPE_CHECKING:
     from pathlib import Path
 
-INVALID_TIMEOUT_METRICS = [
+INVALID_CONFIGURATION_METRICS = [
     {
         "name": "netsuke_release_admission_gate_total",
         "labels": {"outcome": "failure", "error_category": "unknown"},
@@ -71,7 +72,7 @@ INVALID_TIMEOUT_METRICS = [
             FailureCase(
                 "fresh",
                 {},
-                "check_scan_freshness",
+                "verify_evidence",
                 "missing_evidence",
             ),
             id="enforcement-rejects-environment-freshness",
@@ -109,6 +110,50 @@ INVALID_TIMEOUT_METRICS = [
                 enforce=False,
             ),
             id="missing-workflow-run-observation",
+        ),
+        pytest.param(
+            FailureCase(
+                "fresh",
+                {"NETSUKE_FAKE_GH_WORKFLOW_FAILURE": "true"},
+                "fetch_workflow_run",
+                "api_error",
+            ),
+            id="workflow-run-api-error-enforcement",
+        ),
+        pytest.param(
+            FailureCase(
+                "fresh",
+                {"NETSUKE_FAKE_GH_WORKFLOW_FAILURE": "true"},
+                "fetch_workflow_run",
+                "api_error",
+                enforce=False,
+            ),
+            id="workflow-run-api-error-observation",
+        ),
+        pytest.param(
+            FailureCase(
+                "fresh",
+                {
+                    "NETSUKE_FAKE_GH_WORKFLOW_DELAY_SECONDS": "2",
+                    "NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS": "1",
+                },
+                "fetch_workflow_run",
+                "timeout",
+            ),
+            id="workflow-run-timeout-enforcement",
+        ),
+        pytest.param(
+            FailureCase(
+                "fresh",
+                {
+                    "NETSUKE_FAKE_GH_WORKFLOW_DELAY_SECONDS": "2",
+                    "NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS": "1",
+                },
+                "fetch_workflow_run",
+                "timeout",
+                enforce=False,
+            ),
+            id="workflow-run-timeout-observation",
         ),
     ],
 )
@@ -208,6 +253,35 @@ def test_default_observation_retains_missing_evidence_metrics(tmp_path: Path) ->
     )
 
 
+def test_operation_durations_measure_controlled_delay(tmp_path: Path) -> None:
+    """Verify operation durations remain finite and measure command latency.
+
+    Parameters
+    ----------
+    tmp_path
+        Isolated fake-command and output directory.
+
+    Notes
+    -----
+    A fixed workflow-run delay must lengthen only that operation's measurement.
+    """
+    _, metrics, _, _ = _run_gate(tmp_path, evidence_state="fresh")
+    assert all(
+        operation_duration(metrics, operation) > 0 for operation in CANARY_BY_OPERATION
+    ), "every executed operation must record a finite positive duration"
+
+    _, delayed_metrics, _, _ = _run_gate(
+        tmp_path / "delayed",
+        evidence_state="fresh",
+        extra_environment={"NETSUKE_FAKE_GH_WORKFLOW_DELAY_SECONDS": "1"},
+    )
+    assert operation_duration(
+        delayed_metrics, "fetch_workflow_run"
+    ) > operation_duration(metrics, "fetch_workflow_run"), (
+        "operation duration must increase when its bounded command is delayed"
+    )
+
+
 @pytest.mark.parametrize("timeout_value", ["0", "301", "not-a-number"])
 def test_invalid_timeout_fails_before_running_admission_operations(
     tmp_path: Path,
@@ -237,7 +311,7 @@ def test_invalid_timeout_fails_before_running_admission_operations(
     assert result.returncode != 0, "invalid timeout configuration must fail closed"
     assert calls == [], "invalid timeout configuration must prevent API and Git calls"
     METRICS_VALIDATOR.validate_metrics(metrics)
-    assert metrics == INVALID_TIMEOUT_METRICS, (
+    assert metrics == INVALID_CONFIGURATION_METRICS, (
         "invalid timeout configuration must emit only the fixed failure gate metric"
     )
     assert outputs["gate-outcome"] == "failure", (
@@ -245,4 +319,44 @@ def test_invalid_timeout_fails_before_running_admission_operations(
     )
     assert outputs["gate-error-category"] == "unknown", (
         "invalid timeout configuration must publish the fixed unknown category"
+    )
+
+
+@pytest.mark.parametrize("enforcement_value", ["", "False", "observe"])
+def test_invalid_enforcement_fails_before_running_admission_operations(
+    tmp_path: Path,
+    enforcement_value: str,
+) -> None:
+    """Verify invalid enforcement settings fail before any external command runs.
+
+    Parameters
+    ----------
+    tmp_path
+        Isolated fake-command and output directory.
+    enforcement_value
+        Out-of-contract enforcement mode supplied to the shell boundary.
+
+    Notes
+    -----
+    Configuration validation must publish the same bounded failure contract as
+    invalid timeout validation before an admission operation runs.
+    """
+    result, metrics, calls, outputs = _run_gate(
+        tmp_path,
+        extra_environment={"NETSUKE_RELEASE_ADMISSION_ENFORCE": enforcement_value},
+    )
+
+    assert result.returncode != 0, "invalid enforcement configuration must fail closed"
+    assert calls == [], (
+        "invalid enforcement configuration must prevent API and Git calls"
+    )
+    METRICS_VALIDATOR.validate_metrics(metrics)
+    assert metrics == INVALID_CONFIGURATION_METRICS, (
+        "invalid enforcement configuration must emit only the fixed failure gate metric"
+    )
+    assert outputs["gate-outcome"] == "failure", (
+        "invalid enforcement configuration must publish failure"
+    )
+    assert outputs["gate-error-category"] == "unknown", (
+        "invalid enforcement configuration must publish the fixed unknown category"
     )

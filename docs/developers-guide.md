@@ -995,7 +995,8 @@ JSONL file as a workflow artefact and writes one concise outcome line to
 `${runner.temp}/release-admission-metrics.jsonl`, and the file is uploaded
 under the `release-admission-metrics` artefact name. The summary and upload
 steps retain the result on failure; dry-run policy still controls whether an
-artefact is uploaded.
+artefact is uploaded. The workflow provisions Python before running the gate's
+monotonic duration timing helpers.
 
 The admission mode is a closed configuration vocabulary. The
 `NETSUKE_RELEASE_ADMISSION_ENFORCE` value is either `false` (observation) or
