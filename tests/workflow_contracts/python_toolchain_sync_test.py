@@ -1,11 +1,12 @@
 """Contract tests keeping the Python toolchain pins in sync.
 
-The Makefile pins the Ruff and ty releases its gates run under, and
-``.github/workflows/ci.yml`` re-declares the same pins as workflow ``env``
-values (Make's ``?=`` assignments yield to the environment, so the workflow
-values control CI). A drifted pair silently runs different rule sets locally
-and in CI, which surfaces as version-skew lint failures far from the edit
-that caused them.
+The Makefile pins the Ruff, Interrogate, and ty releases its gates run under.
+``.github/workflows/ci.yml`` re-declares the Ruff and ty pins as workflow
+``env`` values (Make's ``?=`` assignments yield to the environment, so the
+workflow values control CI). Interrogate runs through the same Makefile target
+in both environments. A drifted pair silently runs different rule sets locally
+and in CI, which surfaces as version-skew lint failures far from the edit that
+caused them.
 
 These tests parse both files and assert the pins agree, without asserting
 any specific version: bumping a pin is routine, and must simply happen in
@@ -77,9 +78,9 @@ def test_ci_env_pin_matches_makefile_default(name: str) -> None:
     )
 
 
-@pytest.mark.parametrize("name", ["RUFF_VERSION", "TY_VERSION"])
+@pytest.mark.parametrize("name", ["RUFF_VERSION", "INTERROGATE_VERSION", "TY_VERSION"])
 def test_tool_pins_are_exact_versions(name: str) -> None:
-    """The Ruff and ty pins are exact dotted versions, not ranges or 'latest'."""
+    """The Ruff, Interrogate, and ty pins are exact dotted versions."""
     value = _makefile_variable(name)
     assert re.fullmatch(r"\d+\.\d+\.\d+", value), (
         f"{name} must pin an exact X.Y.Z release so local runs and CI "
@@ -211,6 +212,7 @@ def test_python_quality_targets_run_the_pinned_local_commands() -> None:
             "$(PYLINT) $(PYLINT_TARGETS)",
             "$(DF12_PYLINT) $(PYLINT_TARGETS)",
             "$(AMBRLEAKS) $(PYTHON_SOURCES)",
+            "$(INTERROGATE) $(INTERROGATE_EXCLUDES) $(PYTHON_SOURCES)",
         ),
         "typecheck-python": (
             "ty check --python-version $(PYTHON_BASELINE)",
@@ -226,3 +228,10 @@ def test_python_quality_targets_run_the_pinned_local_commands() -> None:
             f"{target} must preserve its pinned Python command wiring; "
             f"missing {missing!r} from {recipe!r}"
         )
+
+
+def test_interrogate_pin_is_the_selected_release() -> None:
+    """Interrogate remains pinned to the issue-selected 1.7.0 release."""
+    assert _makefile_variable("INTERROGATE_VERSION") == "1.7.0", (
+        "INTERROGATE_VERSION must remain pinned to interrogate 1.7.0"
+    )

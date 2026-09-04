@@ -186,6 +186,7 @@ def _walk_files(root: Path) -> list[Path]:
     """
 
     def _raise(error: OSError) -> None:
+        """Propagate a directory traversal error from ``os.walk``."""
         raise error
 
     files: list[Path] = []
