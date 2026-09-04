@@ -869,18 +869,19 @@ tool cache owns and which never shares compiler output with the product. Both
 paths end in an executable-and-version probe, so a stale binary cannot satisfy
 a version bump.
 
-The second is `cargo-orthohelp`. `ortho-config` publishes no binaries for any
-platform
+`cargo-orthohelp` was the second such exception and is no longer one.
+`ortho-config` published no binaries until 0.9.1
 ([leynos/ortho-config#479](https://github.com/leynos/ortho-config/issues/479)),
-so the packaging lane tries binary-only strategies first and, on a genuine
-miss, falls back to `cargo install --locked` with a dedicated
-`CARGO_TARGET_DIR` under `~/.cache/orthohelp-build`. That directory and
-`~/.cargo/bin` are cached under a key carrying the tool version, so the source
-build happens once per generation. This is the one lane whose save is not
-restricted to a push on `main`: no trunk event reaches the release workflow at
-all, so the run that builds the tool must be the run that publishes it, and the
-key is content-addressed by version so concurrent writers produce identical
-archives.
+which is why the packaging lane once fell back to a guarded source build.
+0.9.1 ships five checksum-verified archives with working binstall metadata
+([leynos/ortho-config#480](https://github.com/leynos/ortho-config/issues/480)),
+so the lane now installs a prebuilt binary and cannot compile the tool at all.
+Only 0.9.1 and later carry assets: pinning below that would reintroduce the
+compile. The `~/.cargo/bin` entry remains the owner of the installed binary,
+and this is still the one lane whose save is not restricted to a push on
+`main`, because no trunk event reaches the release workflow at all, so the run
+that installs the tool must be the run that publishes it; the key is
+content-addressed by version, so concurrent writers produce identical archives.
 
 Delete each exception when its issue lands. `tests/workflow_contracts/`
 `cache_ownership_test.py` counts `cargo install` occurrences rather than
@@ -1708,49 +1709,52 @@ environment or file source. It omits the structural `cmds` container. Keep
 project-discovery rooting and manifest lookup in that discovery boundary, as
 required by [ADR 014]. During ordinary Cargo builds, `build.rs` generates the
 local manual page and shell completions, and audits the localization keys.
-Release automation installs the pinned tool in three guarded stages, because
-`ortho-config` publishes no binary release for any platform (
-[leynos/ortho-config#479][ortho-config-479]). A single `cargo binstall` line
-does not describe what the lane actually does.
+Release automation installs the pinned tool in two stages, neither of which can
+compile it.
 
 The lane first probes for an already-installed tool at the pinned version,
 which is the warm path: the `cargo-orthohelp` cache entry owns `~/.cargo/bin`,
-and `cargo install` refuses to overwrite a binary that is already present, so a
-warm run must reach neither of the later stages.
+and an install refuses to overwrite a binary that is already present, so a warm
+run must not reach the installer.
 
 ```bash
-cargo-orthohelp --version | grep -Eq '(^|[[:space:]])0\.9\.0([[:space:]]|$)'
+cargo-orthohelp --version | grep -Eq '(^|[[:space:]])0\.9\.1([[:space:]]|$)'
 ```
 
-On a miss it tries binary-only strategies, which will become the whole story
-once #479 lands:
+On a miss it installs the published archive:
 
 ```bash
 cargo binstall --no-confirm --locked \
-  --strategies crate-meta-data,quick-install cargo-orthohelp@0.9.0
+  --disable-strategies compile cargo-orthohelp@0.9.1
 ```
 
-Only when both fail does it fall back to a source build. This is one of the two
-documented exceptions to the repository's no-source-build rule, and it is
-permitted only in this exact form. `CARGO_TARGET_DIR` points at a dedicated
-directory so the build never shares compiler output with the product, and the
-cache entry keeps it to once per generation rather than once per run:
+`--disable-strategies compile` is what makes the no-source-build rule
+structural here rather than hopeful. This lane once carried a documented
+exception: `ortho-config` published no binaries until 0.9.1 (
+[leynos/ortho-config#479][ortho-config-479]), so the step listed the
+binary-only strategies it preferred and fell through to `cargo install` when
+they missed. 0.9.1 ships five checksum-verified archives with working binstall
+metadata ([leynos/ortho-config#480][ortho-config-480]), so the fallback is gone
+and the tool cannot be compiled at all. A release that stopped publishing
+assets would now fail the lane rather than quietly building from source, which
+is the behaviour worth having. **Only 0.9.1 and later carry assets**, so
+pinning below that reintroduces the compile.
 
-```bash
-ORTHOHELP_BUILD_DIR="${HOME}/.cache/orthohelp-build"
-mkdir -p "${ORTHOHELP_BUILD_DIR}"
-CARGO_TARGET_DIR="${ORTHOHELP_BUILD_DIR}" \
-  cargo install --locked cargo-orthohelp@0.9.0
-```
+Three contracts hold this: `workflow_build_and_package.rs` requires the
+disabling flag and rejects any `cargo install` naming the tool,
+`cache_ownership_test.py` lists `cargo-orthohelp` in `FORBIDDEN_SOURCE_BUILDS`
+so a retired exception cannot return as a new one, and
+`sccache_contract_test.py` holds the probe before the installer.
 
 The version is then validated unconditionally, so a stale binary restored from
 the cache cannot pass as the pinned one. The cache key carries both the tool
 version and the pinned `rust-build-release` revision: that action provisions
 `cargo-binstall` into the same `~/.cargo/bin` the entry owns, so a bump to
-either must turn the entry over. Delete the source-build fallback, and the
-exception recorded in the cache contracts, once #479 lands.
+either must turn the entry over. The key's generation moved to `v2` when the
+source build's dedicated target directory left the entry.
 
 [ortho-config-479]: https://github.com/leynos/ortho-config/issues/479
+[ortho-config-480]: https://github.com/leynos/ortho-config/issues/480
 
 The workflow then calls:
 
@@ -1758,9 +1762,10 @@ The workflow then calls:
 scripts/generate-release-help.sh <target> <bin-name> <out-dir> <ps-module-name>
 ```
 
-The script invokes `cargo-orthohelp orthohelp`; v0.9.0 reserves direct
-generator options for that subcommand. Keep its `rstest` script contract and
-the real Unix and Windows generation smoke aligned with this invocation.
+The script invokes `cargo-orthohelp orthohelp`; from v0.9.0 onwards, 0.9.1
+included, direct generator options are reserved for that subcommand. Keep its
+`rstest` script contract and the real Unix and Windows generation smoke aligned
+with this invocation.
 
 The script writes manual pages under
 `target/orthohelp/<target>/release/man/man1/` and, for Windows targets,

@@ -206,46 +206,60 @@ fn behavioural_build_and_package_wiring_matches_shared_actions() {
 /// Reject every `cargo install` form that would compile `cargo-orthohelp`.
 ///
 /// Matching the bare `cargo install cargo-orthohelp` prefix is not enough:
-/// `cargo install --locked cargo-orthohelp@0.9.0` compiles the tool just the
+/// `cargo install --locked cargo-orthohelp@0.9.1` compiles the tool just the
 /// same, and so does any other flag placed before the crate name. The pattern
 /// therefore allows arbitrary flags and version selectors between the
 /// subcommand and the crate.
+///
+/// `ortho-config` published no binaries until 0.9.1
+/// (leynos/ortho-config#479), so this lane once carried a documented exception
+/// permitting a guarded source build. 0.9.1 ships checksum-verified archives
+/// with working binstall metadata (leynos/ortho-config#480), so the exception
+/// is retired and a source build is now forbidden outright.
 fn assert_orthohelp_comes_from_a_prebuilt_release(contents: &str) -> Result<()> {
     let install_body = workflow_step_body(contents, "Install cargo-orthohelp").join("\n");
     ensure!(
-        install_body.contains("cargo binstall --no-confirm --locked \\")
-            && install_body.contains("--strategies crate-meta-data,quick-install"),
-        "workflow should try binary-only cargo-binstall strategies first"
+        install_body.contains("cargo binstall --no-confirm --locked \\"),
+        "workflow should install cargo-orthohelp with cargo-binstall"
+    );
+    // Structural rather than hopeful. The retired form named the binary-only
+    // strategies it preferred and fell through to a compile when they missed.
+    // Disabling the compile strategy means a release that stops publishing
+    // assets fails the lane instead of quietly building the tool from source.
+    ensure!(
+        install_body.contains("--disable-strategies compile"),
+        "cargo-binstall must be unable to fall back to compiling the tool"
     );
     ensure!(
-        install_body.contains("cargo-orthohelp@0.9.0"),
-        "workflow should pin the cargo-orthohelp release version"
+        !install_body.contains("--strategies crate-meta-data,quick-install"),
+        "the retired strategy list permitted a compile fallback and must not return"
+    );
+    // Only 0.9.1 and later carry release assets, so pinning below that would
+    // reintroduce the compile this contract exists to forbid.
+    ensure!(
+        install_body.contains("cargo-orthohelp@0.9.1"),
+        "workflow should pin a cargo-orthohelp release that publishes assets"
     );
 
-    // `ortho-config` publishes no binaries for any platform
-    // (leynos/ortho-config#479), so a source build is permitted, but only in
-    // this exact guarded form: after the binary-only attempt has genuinely
-    // failed, and into a dedicated target directory that never shares
-    // compiler output with the product. Any other `cargo install` naming the
-    // tool, in this step or elsewhere, is still rejected.
-    let guarded_fallback = "CARGO_TARGET_DIR=\"${ORTHOHELP_BUILD_DIR}\" \\\n            \
-        cargo install --locked cargo-orthohelp@0.9.0";
-    ensure!(
-        install_body.contains("if cargo binstall") && install_body.contains(guarded_fallback),
-        "a cargo-orthohelp source build is permitted only as the guarded \
-         fallback into a dedicated CARGO_TARGET_DIR"
-    );
     // Flags, `--version`/`--index` selectors, and quoting all sit between the
     // subcommand and the crate name, so the pattern allows arbitrary tokens
-    // that are not themselves the crate. Counting matches means a second
-    // source install cannot hide behind the documented one.
+    // that are not themselves the crate. Zero matches: unlike the retired
+    // exception, no source install of this tool is permitted anywhere.
     let source_install =
         regex::Regex::new(r#"cargo\s+install\s+(?:[-"'][^\s]*\s+)*"?cargo-orthohelp"#)
             .context("compile the cargo-orthohelp source-install pattern")?;
     ensure!(
-        source_install.find_iter(contents).count() == 1,
-        "the guarded fallback should be the only cargo-orthohelp source install \
-         anywhere in the workflow"
+        source_install.find_iter(contents).count() == 0,
+        "cargo-orthohelp must never be installed from source; 0.9.1 publishes \
+         prebuilt archives for every platform this lane targets"
+    );
+    // The dedicated build directory existed only to keep that source build's
+    // compiler output away from the product's tree. With no source build it
+    // has no purpose, and leaving it in the cache entry would archive an empty
+    // path on every packaging run.
+    ensure!(
+        !contents.contains("orthohelp-build"),
+        "the source build's dedicated target directory should be gone"
     );
 
     let build_index = contents
@@ -307,7 +321,7 @@ fn behavioural_build_and_package_validates_release_help_tooling() {
 
     assert!(
         contents.contains(
-            "cargo-orthohelp --version | grep -Eq '(^|[[:space:]])0\\.9\\.0([[:space:]]|$)'"
+            "cargo-orthohelp --version | grep -Eq '(^|[[:space:]])0\\.9\\.1([[:space:]]|$)'"
         ),
         "workflow should validate the installed cargo-orthohelp version"
     );
