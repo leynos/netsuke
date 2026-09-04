@@ -1,17 +1,25 @@
 ---
-name: sccache GitHub Actions credentials
+name: sccache Actions cache credentials
 description: >-
-  Publish `ACTIONS_RESULTS_URL` and `ACTIONS_RUNTIME_TOKEN` to `GITHUB_ENV` so
-  sccache's GitHub Actions backend can reach the cache service from a plain
-  `run` step. The runner hands these to JavaScript actions, not to shell
-  steps, so on Ubicloud a `run` step cannot see them; the shared Rust setup
-  action normally publishes them through `mozilla-actions/sccache-action`, but
-  every job here sets `use-sccache: false` so that action never runs.
+  Point sccache at the cache service its runner actually serves, and publish
+  the credentials for it. The runner hands these to JavaScript actions, not to
+  shell steps, so on Ubicloud a `run` step cannot see them; the shared Rust
+  setup action normally publishes them through `mozilla-actions/sccache-action`,
+  but every job here sets `use-sccache: false` so that action never runs.
 
-  Call this immediately after checkout and before anything starts the sccache
+  Ubicloud intercepts the cache service with a local proxy and advertises it as
+  `ACTIONS_CACHE_URL`, which serves the v1 API. sccache 0.16 prefers GitHub's
+  v2 results service whenever `ACTIONS_CACHE_SERVICE_V2` is set, and that
+  address resolves past the proxy to GitHub, where the objects then land and
+  are rate-limited. Exporting `ACTIONS_RESULTS_URL` had exactly that effect:
+  5310 requests, zero hits, and one write error per miss. This action therefore
+  exports the proxy address and clears the v2 switch, so sccache uses the
+  endpoint the proxy serves.
+
+  Call it immediately after checkout and before anything starts the sccache
   server. `sccache --zero-stats`, `--start-server`, and the first wrapped
-  `rustc` all start it, and a server that starts without these variables stays
-  in local-disk mode for the whole job, reporting zero compile requests.
+  `rustc` all start it, and a server that starts without these stays in
+  local-disk mode for the whole job, reporting zero compile requests.
 
 runs:
   using: composite
@@ -20,5 +28,7 @@ runs:
       uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
       with:
         script: |
-          core.exportVariable('ACTIONS_RESULTS_URL', process.env.ACTIONS_RESULTS_URL || '');
+          core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
           core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+          // Cleared, not unset: sccache treats any value as "use v2".
+          core.exportVariable('ACTIONS_CACHE_SERVICE_V2', '');

@@ -38,7 +38,8 @@ def _workflow_env(workflow: dict[str, object]) -> dict[str, object]:
 def _all_workflow_text() -> str:
     """Return every workflow file's text, concatenated."""
     return "\n".join(
-        path.read_text(encoding="utf-8") for path in sorted(WORKFLOW_DIR.glob("*.yml"))
+        path.read_text(encoding="utf-8")
+        for path in sorted([*WORKFLOW_DIR.glob("*.yml"), *WORKFLOW_DIR.glob("*.yaml")])
     )
 
 
@@ -92,8 +93,17 @@ def test_worker_counts_match_the_lane_vcpu_count(
     workflow = load_workflow(WORKFLOW_DIR / workflow_name)
     job = workflow_job(workflow, job_name)
     runner = str(job.get("runs-on"))
+    assert runner in LANE_VCPUS, (
+        f"{workflow_name} job {job_name} runs on {runner!r}, whose vCPU count "
+        "this suite does not know; add it to LANE_VCPUS"
+    )
     vcpus = LANE_VCPUS[runner]
     env = require_mapping(job.get("env"), f"jobs.{job_name}.env")
+    missing = [name for name in flag_names if name not in env]
+    assert not missing, (
+        f"{workflow_name} job {job_name} must declare {missing!r}; a missing "
+        "bound is a contract failure, not a KeyError"
+    )
     flags = {name: str(env[name]) for name in flag_names}
     assert is_bounded_worker_count(vcpus, flags), (
         f"{workflow_name} job {job_name} runs on {runner} with {vcpus} vCPUs "

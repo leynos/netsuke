@@ -245,6 +245,7 @@ jobs:
         # generation by prefix and publishes nothing.
         uses: ./.github/actions/windows-gate-cache
         with:
+          toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           mode: restore
           profile: smoke
       - name: Install sccache

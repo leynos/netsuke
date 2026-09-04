@@ -235,8 +235,13 @@ fn assert_orthohelp_comes_from_a_prebuilt_release(contents: &str) -> Result<()> 
         "a cargo-orthohelp source build is permitted only as the guarded \
          fallback into a dedicated CARGO_TARGET_DIR"
     );
-    let source_install = regex::Regex::new(r"cargo\s+install\s+(?:-{1,2}\S+\s+)*cargo-orthohelp")
-        .context("compile the cargo-orthohelp source-install pattern")?;
+    // Flags, `--version`/`--index` selectors, and quoting all sit between the
+    // subcommand and the crate name, so the pattern allows arbitrary tokens
+    // that are not themselves the crate. Counting matches means a second
+    // source install cannot hide behind the documented one.
+    let source_install =
+        regex::Regex::new(r#"cargo\s+install\s+(?:[-"'][^\s]*\s+)*"?cargo-orthohelp"#)
+            .context("compile the cargo-orthohelp source-install pattern")?;
     ensure!(
         source_install.find_iter(contents).count() == 1,
         "the guarded fallback should be the only cargo-orthohelp source install \

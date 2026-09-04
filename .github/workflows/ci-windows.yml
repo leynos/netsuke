@@ -81,6 +81,7 @@ jobs:
         # and the single writer of every Windows key.
         uses: ./.github/actions/windows-gate-cache
         with:
+          toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           mode: restore
           profile: gate
       - name: Install GNU Make
@@ -195,6 +196,7 @@ jobs:
         # key, so a pull request never publishes a competing generation.
         uses: ./.github/actions/windows-gate-cache
         with:
+          toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           mode: save
           profile: gate
           registry-hit: ${{ steps.caches.outputs['registry-hit'] }}
@@ -233,6 +235,7 @@ jobs:
         # never competes for a reservation.
         uses: ./.github/actions/windows-gate-cache
         with:
+          toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           mode: restore
           profile: smoke
       - name: Install sccache

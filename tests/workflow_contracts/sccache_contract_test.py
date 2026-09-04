@@ -13,9 +13,12 @@ from cache_contract_data import (
     ACTION_DIR,
     SCCACHE_CREDENTIAL_JOBS,
     SCCACHE_CREDENTIALS_ACTION,
+    SCCACHE_EXEMPT_LANE,
     SCCACHE_LOCAL_DIR_JOBS,
     SCCACHE_WRAPPER_JOBS,
     WORKFLOW_DIR,
+    cache_steps,
+    declared_paths,
     lane_steps,
 )
 from workflow_loading import (
@@ -178,29 +181,35 @@ def test_every_compiling_job_reaches_the_compiler_cache(
     )
 
 
-def test_packaging_installs_the_sccache_it_wraps() -> None:
-    """Require the packaging lane to install the binary its wrapper names.
+def test_the_windows_packaging_lane_compiles_without_a_wrapper() -> None:
+    """Require the packaging lane to leave Windows uncached, and only Windows.
 
-    `RUSTC_WRAPPER` without an installer is what produced "sccache: error:
-    failed to spawn Command" on the Windows packaging build: the nested shared
-    action installs sccache only along a path this caller does not take.
+    sccache re-spawns rustc there with the target's whole `--extern` and `-L`
+    list and exceeds the operating system's command-line limit. Release builds
+    are infrequent, so the lane runs uncached rather than unreliably; the
+    Windows merge gate keeps its own local sccache.
     """
-    steps = job_steps(load_workflow(WORKFLOW_DIR / "build-and-package.yml"), "build")
+    workflow_name, job_name = SCCACHE_EXEMPT_LANE
+    job = workflow_job(load_workflow(WORKFLOW_DIR / workflow_name), job_name)
+    env = require_mapping(job.get("env"), f"{job_name} env")
+    windows_off = "${{ inputs.platform == 'windows' && '' || 'sccache' }}"
+    assert env.get("RUSTC_WRAPPER") == windows_off, (
+        f"{workflow_name} must clear the wrapper on Windows only, got "
+        f"{env.get('RUSTC_WRAPPER')!r}"
+    )
+    steps = job_steps(load_workflow(WORKFLOW_DIR / workflow_name), job_name)
     installer = named_step(steps, "Install sccache")
-    assert installer.get("uses") == (
-        "taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68"
-    ), "the packaging lane must use the pinned sccache installer"
-    inputs = require_mapping(installer.get("with"), "sccache installer inputs")
-    assert inputs.get("tool") == "sccache@0.16.0", (
-        "the packaging lane must install the exact tested release"
+    assert installer.get("if") == "inputs.platform != 'windows'", (
+        "the packaging lane must skip the installer on the uncached platform"
     )
-    assert inputs.get("fallback") == "none", (
-        "the packaging lane must not fall back to a source build"
-    )
-    build_index = steps.index(named_step(steps, "Build release binary"))
-    assert steps.index(installer) < build_index, (
-        "sccache must exist before the build that wraps it"
-    )
+    build = named_step(steps, "Build release binary")
+    inputs = require_mapping(build.get("with"), "build inputs")
+    assert inputs.get("use-sccache") == (
+        "${{ inputs.platform == 'windows' && 'false' || 'true' }}"
+    ), "the nested action must not enable sccache on the uncached platform"
+    assert not [
+        step for step in cache_steps(steps) if ".sccache" in str(declared_paths(step))
+    ], "the uncached lane must keep no compiler-cache archive"
 
 
 @pytest.mark.parametrize(("workflow_name", "job_name"), SCCACHE_LOCAL_DIR_JOBS)
@@ -221,4 +230,54 @@ def test_windows_lanes_use_a_workspace_compiler_cache(
     )
     assert "SCCACHE_GHA_ENABLED" not in env, (
         f"{workflow_name} {job_name} must not re-enable the rate-limited backend"
+    )
+
+
+def test_the_export_names_the_proxy_endpoint_not_the_results_service() -> None:
+    """Require the export to point sccache at the endpoint Ubicloud serves.
+
+    Ubicloud intercepts the cache service with a local proxy advertised as
+    `ACTIONS_CACHE_URL`, which serves the v1 API. sccache 0.16 prefers
+    GitHub's v2 results service whenever `ACTIONS_CACHE_SERVICE_V2` is set,
+    and that address resolves past the proxy to GitHub. Exporting
+    `ACTIONS_RESULTS_URL` did exactly that: 5310 requests, zero hits, and one
+    write error per miss, with every object landing in GitHub's store.
+    """
+    steps = lane_steps(ACTION_DIR / "sccache-gha-credentials" / "action.yml", None)
+    script = str(
+        require_mapping(steps[0].get("with"), "export inputs").get("script", "")
+    )
+    required = {
+        "ACTIONS_CACHE_URL": "publish the proxy address sccache should use",
+        "ACTIONS_RUNTIME_TOKEN": "publish the token that address requires",
+        "ACTIONS_CACHE_SERVICE_V2', ''": (
+            "clear the v2 switch, which routes past the proxy"
+        ),
+    }
+    missing = [reason for token, reason in required.items() if token not in script]
+    assert not missing, f"the export must {'; '.join(missing)}"
+    assert "ACTIONS_RESULTS_URL" not in script, (
+        "the export must not publish the v2 results service address, which is "
+        "what sent 92 sccache objects to GitHub instead of Ubicloud"
+    )
+
+
+def test_orthohelp_probes_before_either_installer() -> None:
+    """Require the version probe to precede both installation paths.
+
+    The cache restores `~/.cargo/bin`, and `cargo install` refuses to
+    overwrite a binary already there, so a warm run that reached either
+    installer failed on a cache hit.
+    """
+    steps = job_steps(load_workflow(WORKFLOW_DIR / "build-and-package.yml"), "build")
+    script = str(named_step(steps, "Install cargo-orthohelp").get("run", ""))
+    probe = script.index("cargo-orthohelp --version")
+    assert probe < script.index("cargo binstall"), (
+        "the probe must precede the binary installer"
+    )
+    assert probe < script.index("cargo install --locked"), (
+        "the probe must precede the source fallback"
+    )
+    assert "exit 0" in script[probe : script.index("cargo binstall")], (
+        "a matching probe must skip both installers rather than fall through"
     )

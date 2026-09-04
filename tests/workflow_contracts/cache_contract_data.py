@@ -11,6 +11,7 @@ of its own.
 Run via ``make test-workflow-contracts``.
 """
 
+import re
 import typing as typ
 
 import yaml
@@ -51,7 +52,36 @@ NON_CACHE_ACTIONS = (
 #: shape, so a `target` archive would be a second owner of the same bytes and
 #: would be invalidated far more often than it helped. Kani's directories are
 #: a tool payload rather than a build tree, so they are not matched here.
-FORBIDDEN_CACHE_PATHS = ("target", "target/")
+#: Matched as a path prefix rather than exactly: `target`, `target/`, and
+#: `target/debug` are all build-tree archives, and an exact-match list would
+#: have admitted every one but the first two.
+FORBIDDEN_CACHE_PATHS = ("target",)
+
+#: Any reference to the cache action, combined or split. Matching only
+#: `/cache/` missed the combined `actions/cache@...` form, which would have
+#: made every ownership contract pass over a real second owner in silence.
+CACHE_ACTION_PATTERN = re.compile(r"/cache(?:/(?:restore|save))?@")
+
+
+def is_build_tree(path: str) -> bool:
+    """Return whether a cached path names Cargo's build directory.
+
+    Parameters
+    ----------
+    path
+        A single path as written in a cache step's ``path`` input.
+
+    Returns
+    -------
+    bool
+        ``True`` when the path is `target` or anything beneath it.
+    """
+    cleaned = path.strip().rstrip("/")
+    return any(
+        cleaned == root or cleaned.startswith(f"{root}/")
+        for root in FORBIDDEN_CACHE_PATHS
+    )
+
 
 #: Every source of cache steps. Ubicloud lanes and GitHub-hosted lanes are
 #: listed separately because their keys differ, not their provider.
@@ -86,7 +116,17 @@ SCCACHE_LOCAL_DIR_JOBS = (
 #: The packaging lane's guarded `cargo-orthohelp` source build, permitted by
 #: an explicit exception while leynos/ortho-config#479 is open. It is the one
 #: `cargo install` the estate allows, and only in this form.
-ORTHOHELP_EXCEPTION = "cargo install --locked cargo-orthohelp@0.9.0"
+#: Both documented source-build exceptions, each keyed by the issue that
+#: retires it. Counting them by name means a third cannot arrive disguised as
+#: a second occurrence of either.
+SOURCE_BUILD_EXCEPTIONS = {
+    "cargo-orthohelp (ortho-config#479)": (
+        "cargo install --locked cargo-orthohelp@0.9.0"
+    ),
+    "mdtablefix on Windows (mdtablefix#458)": (
+        'cargo install --locked "mdtablefix@${MDTABLEFIX_VERSION}"'
+    ),
+}
 
 #: Shared-action steps whose own cache would archive a `target` tree unless
 #: the caller owns it. `rust-build-release` forwards the input to its nested
@@ -104,6 +144,11 @@ TARGET_ARCHIVE_OWNERS = (
 #: Jobs that compile Rust and must therefore reach the compiler cache. The
 #: packaging job takes its sccache from the nested shared build action, so it
 #: sets the wrapper without installing a second one.
+#: The one lane that compiles Rust without a compiler cache. sccache re-spawns
+#: rustc there with an over-long command line for the aarch64 target, which
+#: nothing here can shorten, so the lane runs uncached rather than unreliably.
+SCCACHE_EXEMPT_LANE = ("build-and-package.yml", "build")
+
 SCCACHE_WRAPPER_JOBS = (
     ("ci.yml", "build-test"),
     ("ci-windows.yml", "build-test-windows"),
@@ -111,7 +156,6 @@ SCCACHE_WRAPPER_JOBS = (
     ("netsukefile-test.yml", "netsukefile"),
     ("coverage-main.yml", "coverage-upload"),
     ("release.yml", "windows-native-recipe-smoke"),
-    ("build-and-package.yml", "build"),
 )
 
 #: Jobs that call a cache action rather than declaring cache steps inline.
@@ -174,10 +218,7 @@ def lane_steps(source: Path, job_name: str | None) -> list[dict[str, object]]:
 def cache_steps(steps: list[dict[str, object]]) -> list[dict[str, object]]:
     """Return every step that reserves, reads, or writes a cache archive."""
     return [
-        step
-        for step in steps
-        if "/cache/" in str(step.get("uses", ""))
-        or str(step.get("uses", "")).endswith("/cache")
+        step for step in steps if CACHE_ACTION_PATTERN.search(str(step.get("uses", "")))
     ]
 
 

@@ -12,6 +12,13 @@ description: >-
   sccache owns compiler output everywhere.
 
 inputs:
+  toolchain:
+    description: >-
+      Rust toolchain the Cargo and compiler-cache keys are scoped to. Declared
+      rather than read from the environment: an action that depends on a
+      variable its caller happens to set breaks silently when a new caller
+      forgets it, and the key would then be shared across toolchains.
+    required: true
   mode:
     description: '`restore` reads the trusted generation; `save` publishes it.'
     required: true
@@ -59,6 +66,7 @@ runs:
       shell: bash
       env:
         PROFILE: ${{ inputs.profile }}
+        NETSUKE_RUST_TOOLCHAIN: ${{ inputs.toolchain }}
         IS_TRUNK_PUSH: >-
           ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       # Rendered after checkout because the source hashes need the workspace,

@@ -19,18 +19,18 @@ from cache_contract_data import (
     CACHE_RESTORE,
     CACHE_SAVE,
     EXTERNAL_CACHE_PROVIDER,
-    FORBIDDEN_CACHE_PATHS,
     GITHUB_CACHE_SOURCES,
     NON_CACHE_ACTIONS,
     OBSERVATION_SOURCES,
-    ORTHOHELP_EXCEPTION,
     SETUP_RUST_ACTION,
+    SOURCE_BUILD_EXCEPTIONS,
     TARGET_ARCHIVE_OWNERS,
     TRUNK_TRIGGERED_WORKFLOWS,
     UBICLOUD_CACHE_SOURCES,
     WORKFLOW_DIR,
     cache_steps,
     declared_paths,
+    is_build_tree,
     lane_steps,
 )
 from runner_placement_invariants import (
@@ -48,6 +48,33 @@ if typ.TYPE_CHECKING:
     from pathlib import Path
 
 
+def _require_cache_steps(source: Path, job_name: str | None) -> list[dict[str, object]]:
+    """Return a lane's cache steps, failing when it declares none.
+
+    Every contract below quantifies over those steps, so a lane that lost them
+    entirely would satisfy all of them vacuously. That is the failure mode
+    these contracts exist to catch, so absence is an error rather than a pass.
+
+    Parameters
+    ----------
+    source
+        Workflow or composite action file to read.
+    job_name
+        Job to inspect, or ``None`` for a composite action.
+
+    Returns
+    -------
+    list[dict[str, object]]
+        The lane's cache steps, in declaration order.
+    """
+    steps = cache_steps(lane_steps(source, job_name))
+    assert steps, (
+        f"{source.name} {job_name or 'composite'} declares no cache steps, so "
+        "every ownership contract would pass over it in silence"
+    )
+    return steps
+
+
 @pytest.mark.parametrize(
     ("source", "job_name"), UBICLOUD_CACHE_SOURCES + GITHUB_CACHE_SOURCES
 )
@@ -61,7 +88,7 @@ def test_every_lane_uses_the_single_pinned_cache_action(
     deprecated `ubicloud/cache` fork buys nothing and a second action would be
     a second thing to audit.
     """
-    for step in cache_steps(lane_steps(source, job_name)):
+    for step in _require_cache_steps(source, job_name):
         uses = str(step.get("uses"))
         assert uses in {CACHE_RESTORE, CACHE_SAVE}, (
             f"{source.name} step {step.get('name')!r} must use the pinned "
@@ -82,10 +109,8 @@ def test_no_lane_archives_a_cargo_build_tree(
     it helped. This holds on Windows as well as on Ubicloud. Kani's
     directories are a tool payload rather than a build tree.
     """
-    for step in cache_steps(lane_steps(source, job_name)):
-        offenders = [
-            path for path in declared_paths(step) if path in FORBIDDEN_CACHE_PATHS
-        ]
+    for step in _require_cache_steps(source, job_name):
+        offenders = [path for path in declared_paths(step) if is_build_tree(path)]
         assert not offenders, (
             f"{source.name} step {step.get('name')!r} archives a build tree: "
             f"{offenders!r}"
@@ -118,7 +143,7 @@ def test_each_cached_path_has_exactly_one_owner(
     for mode, matcher in (("restore", "/restore@"), ("save", "/save@")):
         owners = [
             (str(step.get("name")), path)
-            for step in cache_steps(lane_steps(source, job_name))
+            for step in _require_cache_steps(source, job_name)
             if matcher in str(step.get("uses", ""))
             for path in declared_paths(step)
         ]
@@ -179,8 +204,14 @@ def test_every_cache_bearing_job_records_its_observations(
     assert "GITHUB_STEP_SUMMARY" in script, (
         f"{source.name} {job_name} must publish its observations to the summary"
     )
-    assert "key" in script or "prefix" in script, (
-        f"{source.name} {job_name} must record the rendered cache key"
+    env = require_mapping(observation.get("env", {}), "observation env")
+    referenced = " ".join([script, *(str(value) for value in env.values())])
+    assert "steps.keys.outputs" in referenced or "CACHE_KEY" in referenced, (
+        f"{source.name} {job_name} must record the rendered key itself, not "
+        "merely the word 'key'"
+    )
+    assert "cache-hit" in referenced or "cache-matched-key" in referenced, (
+        f"{source.name} {job_name} must record the restore result beside its key"
     )
 
 
@@ -274,14 +305,22 @@ def test_workflows_do_not_reintroduce_source_tool_builds_or_stale_providers() ->
     # once per cache generation into a dedicated target directory. Every other
     # source build stays forbidden, and the exception is counted rather than
     # pattern-matched so a second one cannot hide behind it.
-    source_builds = workflow_text.count("cargo install ")
-    permitted = workflow_text.count(ORTHOHELP_EXCEPTION)
-    assert permitted == 1, (
-        f"the guarded cargo-orthohelp build must appear exactly once, got {permitted}"
+    permitted = {
+        name: workflow_text.count(text)
+        for name, text in SOURCE_BUILD_EXCEPTIONS.items()
+    }
+    unexpected = {name: count for name, count in permitted.items() if count != 1}
+    assert not unexpected, (
+        "each documented source-build exception must appear exactly once, "
+        f"got {unexpected!r}"
     )
-    assert source_builds == permitted + 1, (
+    source_builds = workflow_text.count("cargo install ")
+    # One extra occurrence is the mdtablefix action's own comment naming the
+    # command it guards; the exceptions themselves account for the rest.
+    assert source_builds <= sum(permitted.values()) + 1, (
         "CI tools must use trusted prebuilt binaries rather than source "
-        f"builds; found {source_builds} `cargo install` calls"
+        f"builds; found {source_builds} `cargo install` calls against "
+        f"{sum(permitted.values())} documented exceptions"
     )
     assert "nscloud-cache-action" not in workflow_text, (
         "the Namespace cache volume action must not return"
