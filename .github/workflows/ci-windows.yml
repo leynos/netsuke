@@ -98,7 +98,7 @@ jobs:
           tool: sccache@0.16.0
           fallback: none
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@c6125f19593668cbfefd65a59c08cb7aefe90d93
+        uses: leynos/shared-actions/.github/actions/setup-rust@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           # Preserve warnings-as-errors through toolchain setup.
@@ -142,7 +142,7 @@ jobs:
         run: make SHELL=bash lint-clippy
       - name: Install Whitaker
         uses: >-
-          leynos/shared-actions/.github/actions/install-whitaker@c6125f19593668cbfefd65a59c08cb7aefe90d93
+          leynos/shared-actions/.github/actions/install-whitaker@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
           installer-version: '0.2.7'
           # The tool and Whitaker cache steps own `~/.cargo/bin` and the
@@ -244,7 +244,7 @@ jobs:
           tool: sccache@0.16.0
           fallback: none
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@c6125f19593668cbfefd65a59c08cb7aefe90d93
+        uses: leynos/shared-actions/.github/actions/setup-rust@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           rustflags: -D warnings

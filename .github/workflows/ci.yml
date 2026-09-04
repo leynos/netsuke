@@ -115,7 +115,7 @@ jobs:
           tool: sccache@0.16.0
           fallback: none
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@c6125f19593668cbfefd65a59c08cb7aefe90d93
+        uses: leynos/shared-actions/.github/actions/setup-rust@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           # Preserve warnings-as-errors through toolchain setup.
@@ -197,7 +197,7 @@ jobs:
         shell: bash
       - name: Install Nixie
         uses: >-
-          leynos/shared-actions/.github/actions/install-nixie@c6125f19593668cbfefd65a59c08cb7aefe90d93
+          leynos/shared-actions/.github/actions/install-nixie@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
           python-version: '3.14'
       - name: Markdown formatter checker tests
@@ -206,7 +206,7 @@ jobs:
         run: make check-fmt
       - name: Install Whitaker
         uses: >-
-          leynos/shared-actions/.github/actions/install-whitaker@c6125f19593668cbfefd65a59c08cb7aefe90d93
+          leynos/shared-actions/.github/actions/install-whitaker@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
           installer-version: '0.2.7'
           # The gate cache owns `~/.cargo/bin` and `~/.local/share`, so the
@@ -232,7 +232,7 @@ jobs:
         # from setup-rust's `rustflags` input. Pull requests only; on the
         # trunk `coverage-upload` runs the same set over the same commit.
         if: github.event_name == 'pull_request'
-        uses: leynos/shared-actions/.github/actions/generate-coverage@c6125f19593668cbfefd65a59c08cb7aefe90d93
+        uses: leynos/shared-actions/.github/actions/generate-coverage@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
           language: rust
           output-path: lcov.info
@@ -262,7 +262,7 @@ jobs:
         if: env.CS_ACCESS_TOKEN != '' && github.event_name == 'pull_request'
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@c6125f19593668cbfefd65a59c08cb7aefe90d93
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
           path: lcov.info
           format: lcov
@@ -337,7 +337,7 @@ jobs:
           mode: restore
           runner-image: ${{ env.NETSUKE_RUNNER_IMAGE }}
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@c6125f19593668cbfefd65a59c08cb7aefe90d93
+        uses: leynos/shared-actions/.github/actions/setup-rust@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
           toolchain: stable
           cache-provider: external

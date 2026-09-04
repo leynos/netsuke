@@ -778,17 +778,20 @@ works once the Ubicloud GitHub App covers this repository; see "GitHub Actions
 runner placement" for that prerequisite.
 
 Every `leynos/shared-actions` reference is pinned to
-`c6125f19593668cbfefd65a59c08cb7aefe90d93`. That revision introduces
+`e041cb75c35c3524201a32d5e57c87408fbd5874`. That revision introduces
 `cache-provider: external`; installs `whitaker-installer` and `cargo-nextest`
 from checksum-verified official releases with no source fallback; adds the
 `all-features`, `all-targets`, and `doctests` inputs the single-execution rule
 depends on; forwards `cache-provider` and `use-sccache` through
 `rust-build-release` to its nested `setup-rust`; hashes the Whitaker archive
 from standard input rather than by name, so a path containing backslashes no
-longer makes a correct archive fail its digest; and converts the staging
-directory with `cygpath`, so GNU tar in Git Bash stops reading the drive-letter
-colon as a remote host. One SHA across every reference, so a future bump moves
-them together.
+longer makes a correct archive fail its digest; converts the staging directory
+with `cygpath`, so GNU tar in Git Bash stops reading the drive-letter colon as
+a remote host; chooses the Whitaker archive's extractor by the asset's
+extension rather than by probing what `tar` is, which is what makes the Windows
+gate work on a GitHub-hosted runner (leynos/shared-actions#446); and restores
+the cache service variables that `mozilla-actions/sccache-action` overwrites.
+One SHA across every reference, so a future bump moves them together.
 
 CI installs tools from trusted prebuilt releases only, with two recorded
 exceptions and no others. `setup-rust` verifies the `cargo-binstall` installer
