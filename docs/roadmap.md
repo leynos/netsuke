@@ -1984,9 +1984,13 @@ runs prove the failure boundary before any job receives release permissions.
     `cargo-binstall` resolution, action SHA pins, and release staging policy.
   - Instrument the non-blocking RFC 0005 scaffold with bounded gate and
     operation metrics, retain the JSONL metrics file as a workflow artefact,
-    and expose the final outcome in the job summary. Connect publication to
-    the admission result only once a real evidence producer is available. See
-    [ADR-018](adr-018-release-admission-observability.md) and the
+    and expose the final outcome in the job summary. The current workflow
+    explicitly selects observation mode: it records fail-closed results,
+    including missing evidence, but does not fail the workflow or make
+    publication depend on the scaffold. Connect publication to the admission
+    result only once a real evidence producer is available and enforcement
+    mode is enabled. See [ADR-018](adr-018-release-admission-observability.md)
+    and the
     [release-admission observability
     guidance](developers-guide.md#release-admission-observability).
   - See [RFC 0005 §Phase 4: Turn on

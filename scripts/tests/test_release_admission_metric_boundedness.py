@@ -45,7 +45,7 @@ def test_identifiers_never_become_metric_labels(
         f"url-{url}",
     }
     with tempfile.TemporaryDirectory() as directory_name:
-        result, metrics, _, _ = _run_gate(
+        result, metrics, calls, _ = _run_gate(
             Path(directory_name),
             extra_environment={
                 "GITHUB_SHA": f"revision-{revision}",
@@ -57,6 +57,14 @@ def test_identifiers_never_become_metric_labels(
 
     assert result.returncode == 0, result.stderr
     METRICS_VALIDATOR.validate_metrics(metrics)
+    expected_diagnostics = {
+        "path": f"path-{path}",
+        "url": f"url-{url}",
+    }
+    assert calls, "the fake command adapters must be invoked"
+    assert all(call["diagnostics"] == expected_diagnostics for call in calls), (
+        "generated paths and URLs must cross each fake command boundary"
+    )
     for record in metrics:
         labels = record["labels"]
         assert isinstance(labels, dict), "every emitted metric must retain labels"

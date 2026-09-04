@@ -30,6 +30,48 @@ SUCCESS_GATE_OUTPUTS = {
     "gate-outcome": "success",
     "gate-error-category": "none",
 }
+FAKE_ADAPTER_PREAMBLE = """#!/usr/bin/env bash
+set -euo pipefail
+python3 - "$NETSUKE_ADMISSION_CALL_LOG" ADAPTER_NAME "$@" <<'PY'
+import json
+import os
+import sys
+
+with open(sys.argv[1], "a", encoding="utf-8") as call_log:
+    json.dump(
+        {
+            "command": sys.argv[2],
+            "arguments": sys.argv[3:],
+            "diagnostics": {
+                "path": os.environ.get("NETSUKE_FAKE_PATH", ""),
+                "url": os.environ.get("NETSUKE_FAKE_URL", ""),
+            },
+        },
+        call_log,
+    )
+    call_log.write("\\n")
+PY
+"""
+FAKE_GH_BEHAVIOUR = """if [[ "${NETSUKE_FAKE_GH_FAILURE:-}" == "true" ]]; then
+  exit 1
+fi
+if [[ "${NETSUKE_FAKE_GH_IGNORE_TERM:-}" == "true" ]]; then
+  trap '' TERM
+  while :; do sleep 1; done
+fi
+if [[ -n "${NETSUKE_FAKE_GH_DELAY_SECONDS:-}" ]]; then
+  sleep "$NETSUKE_FAKE_GH_DELAY_SECONDS"
+fi
+if [[ "$*" == *"/commits/"* ]]; then
+  printf '%s\\n' "${NETSUKE_FAKE_RESOLVED_REVISION:-$GITHUB_SHA}"
+else
+  printf '%s\\n' "${NETSUKE_FAKE_WORKFLOW_RUN_ID-1001}"
+fi
+"""
+FAKE_GIT_BEHAVIOUR = """if [[ "${NETSUKE_FAKE_GIT_FAILURE:-}" == "true" ]]; then
+  exit 1
+fi
+"""
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -46,12 +88,15 @@ class FailureCase:
         Fixed admission operation expected to emit the failed counter.
     error_category
         Documented bounded category expected from that operation.
+    enforce
+        Whether the case exercises fail-closed enforcement mode.
     """
 
     evidence_state: str
     extra_environment: dict[str, str]
     operation: str
     error_category: str
+    enforce: bool = True
 
 
 class MetricsValidator(typ.Protocol):
@@ -136,57 +181,25 @@ def _write_fake_commands(directory: Path) -> Path:
     call_log.touch()
     gh = directory / "gh"
     git = directory / "git"
-    gh.write_text(
-        """#!/usr/bin/env bash
-set -euo pipefail
-python3 - "$NETSUKE_ADMISSION_CALL_LOG" gh "$@" <<'PY'
-import json
-import sys
-
-with open(sys.argv[1], "a", encoding="utf-8") as call_log:
-    json.dump({"command": sys.argv[2], "arguments": sys.argv[3:]}, call_log)
-    call_log.write("\\n")
-PY
-if [[ "${NETSUKE_FAKE_GH_FAILURE:-}" == "true" ]]; then
-  exit 1
-fi
-if [[ -n "${NETSUKE_FAKE_GH_DELAY_SECONDS:-}" ]]; then
-  sleep "$NETSUKE_FAKE_GH_DELAY_SECONDS"
-fi
-if [[ "$*" == *"/commits/"* ]]; then
-  printf '%s\\n' "${NETSUKE_FAKE_RESOLVED_REVISION:-$GITHUB_SHA}"
-else
-  printf '%s\\n' "${NETSUKE_FAKE_WORKFLOW_RUN_ID-1001}"
-fi
-""",
-        encoding="utf-8",
-    )
-    git.write_text(
-        """#!/usr/bin/env bash
-set -euo pipefail
-python3 - "$NETSUKE_ADMISSION_CALL_LOG" git "$@" <<'PY'
-import json
-import sys
-
-with open(sys.argv[1], "a", encoding="utf-8") as call_log:
-    json.dump({"command": sys.argv[2], "arguments": sys.argv[3:]}, call_log)
-    call_log.write("\\n")
-PY
-if [[ "${NETSUKE_FAKE_GIT_FAILURE:-}" == "true" ]]; then
-  exit 1
-fi
-""",
-        encoding="utf-8",
-    )
+    _write_fake_adapter(gh, "gh", FAKE_GH_BEHAVIOUR)
+    _write_fake_adapter(git, "git", FAKE_GIT_BEHAVIOUR)
     gh.chmod(0o755)
     git.chmod(0o755)
     return call_log
 
 
+def _write_fake_adapter(adapter: Path, name: str, behaviour: str) -> None:
+    """Write one fake command adapter with bounded diagnostic output."""
+    adapter.write_text(
+        FAKE_ADAPTER_PREAMBLE.replace("ADAPTER_NAME", name) + behaviour,
+        encoding="utf-8",
+    )
+
+
 def _run_gate(
     tmp_path: Path,
     *,
-    evidence_state: str = "fresh",
+    evidence_state: str = "missing",
     extra_environment: dict[str, str] | None = None,
 ) -> tuple[
     subprocess.CompletedProcess[str],
@@ -276,7 +289,7 @@ def test_gate_emits_each_fixed_operation_and_a_successful_gate(tmp_path: Path) -
     -----
     Every fixed operation, duration, gate metric, and summary output is required.
     """
-    result, metrics, calls, outputs = _run_gate(tmp_path)
+    result, metrics, calls, outputs = _run_gate(tmp_path, evidence_state="fresh")
 
     assert result.returncode == 0, result.stderr
     METRICS_VALIDATOR.validate_metrics(metrics)
@@ -324,5 +337,5 @@ def test_validator_rejects_non_finite_metric_values() -> None:
     -----
     Portable metric JSON excludes Python-specific `Infinity`.
     """
-    with pytest.raises(ValueError, match="non-finite JSON metric value: Infinity"):
+    with pytest.raises(ValueError, match="release-admission metric records"):
         METRICS_VALIDATOR.parse_metrics(['{"value": Infinity}'])
