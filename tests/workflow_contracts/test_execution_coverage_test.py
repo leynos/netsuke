@@ -215,6 +215,39 @@ def _step_scan_texts(step: dict[str, object]) -> list[tuple[str, str]]:
     return texts
 
 
+def _step_offenders(step: dict[str, object]) -> list[str]:
+    """Return one label per forbidden pattern this step's texts match."""
+    return [
+        f"{step.get('name')!r} ({source}): {pattern.pattern}"
+        for source, text in _step_scan_texts(step)
+        for pattern in FORBIDDEN_TEST_COMMANDS
+        if pattern.search(text)
+    ]
+
+
+def _is_scannable_job(workflow_name: str, job_name: str, declaration: object) -> bool:
+    """Return whether a job declares steps this contract should scan."""
+    if (workflow_name, job_name) in LINUX_TEST_EXEMPTIONS:
+        return False
+    # A job that calls a reusable workflow declares no steps of its own; the
+    # callee's own contracts cover it.
+    return isinstance(declaration, dict) and "steps" in declaration
+
+
+def _workflow_offenders(workflow_name: str) -> list[str]:
+    """Return every forbidden-command match in one workflow's Linux jobs."""
+    workflow = load_workflow(WORKFLOW_DIR / workflow_name)
+    jobs = workflow.get("jobs")
+    assert isinstance(jobs, dict), f"{workflow_name} must declare jobs"
+    return [
+        f"{workflow_name} {job_name} {offender}"
+        for job_name, declaration in jobs.items()
+        if _is_scannable_job(workflow_name, job_name, declaration)
+        for step in job_steps(workflow, job_name)
+        for offender in _step_offenders(step)
+    ]
+
+
 def test_no_other_linux_job_executes_the_rust_suite() -> None:
     """Reject a second Linux job running the workspace suite.
 
@@ -224,24 +257,9 @@ def test_no_other_linux_job_executes_the_rust_suite() -> None:
     composite or shared action wrapping `cargo nextest` cannot reintroduce
     the suite either.
     """
-    offenders: list[str] = []
-    for workflow_name in LINUX_WORKFLOWS:
-        workflow = load_workflow(WORKFLOW_DIR / workflow_name)
-        jobs = workflow.get("jobs")
-        assert isinstance(jobs, dict), f"{workflow_name} must declare jobs"
-        for job_name, declaration in jobs.items():
-            if (workflow_name, job_name) in LINUX_TEST_EXEMPTIONS:
-                continue
-            if not isinstance(declaration, dict) or "steps" not in declaration:
-                # A job that calls a reusable workflow declares no steps; the
-                # callee's own contracts cover it.
-                continue
-            for step in job_steps(workflow, job_name):
-                for source, text in _step_scan_texts(step):
-                    offenders += [
-                        f"{workflow_name} {job_name} {step.get('name')!r} "
-                        f"({source}): {pattern.pattern}"
-                        for pattern in FORBIDDEN_TEST_COMMANDS
-                        if pattern.search(text)
-                    ]
+    offenders = [
+        offender
+        for workflow_name in LINUX_WORKFLOWS
+        for offender in _workflow_offenders(workflow_name)
+    ]
     assert not offenders, f"a second Linux test execution reappeared: {offenders!r}"
