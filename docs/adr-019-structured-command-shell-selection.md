@@ -28,8 +28,7 @@ safety guarantee and from the existing shebang-based `script` contract.
 
 ### Selection contract and scope
 
-The structured command `shell` field is a `Boolean | ShellName` union, where
-`ShellName` is a validated registry-name newtype:
+The structured command `shell` field is a `Boolean | ShellName` union:
 
 - an absent field or `false` selects direct argv execution;
 - `true` selects the platform default shell; and
@@ -48,9 +47,9 @@ neighbouring structured stage.
 
 ### Built-in registry
 
-The initial `BuiltInShell` set is the following finite enumeration. Netsuke
-appends the rendered `invoke` source as the final process argument after the
-fixed arguments shown in the table.
+The initial built-in set is the following finite enumeration. Netsuke appends
+the rendered `invoke` source as the final process argument after the fixed
+arguments shown in the table.
 
 | Name         | Supported hosts       | Executable       | Resolution                                        | Fixed arguments                                        |
 | ------------ | --------------------- | ---------------- | ------------------------------------------------- | ------------------------------------------------------ |
@@ -66,19 +65,36 @@ Windows. This preserves RFC 0001 section 10.1 even when a similarly named
 configured entry exists. Built-in names are reserved and cannot be overridden.
 
 Shell resolution captures the host `PATH` and, on Windows, `PATHEXT` through the
-[`mockable::Env` seam](adr-008-environment-seam-taxonomy.md). Before invoking
-`which`, it rejects every empty or non-absolute `PATH` component. No rejected
-component is converted relative to the current directory or passed to
-executable lookup. A trusted-environment misconfiguration is reported with a
-bounded component index, never a complete `PATH` value. Deterministic tests
-must inject `MockEnv` and a probe on both Unix-like and Windows paths,
-including a repository-local candidate beneath a relative component.
+[`mockable::Env` seam](adr-008-environment-seam-taxonomy.md). It may reuse the
+executable lookup machinery under `src/stdlib/which/`, but it disables
+current-directory and workspace fallback. It also resolves before applying a
+structured command's `env` overlay. These rules keep executable authority with
+the Netsuke operator: manifest-controlled `PATH` values and repository-local
+files cannot replace an allow-listed shell.
 
-The resolver may reuse the executable lookup machinery under
-`src/stdlib/which/`, but it disables current-directory and workspace fallback.
-It also resolves before applying a structured command's `env` overlay. These
-rules keep executable authority with the Netsuke operator: manifest-controlled
-`PATH` values and repository-local files cannot replace an allow-listed shell.
+The shell resolver applies one fail-closed Windows `PATHEXT` contract. An unset
+variable uses the fixed default sequence `.COM`, `.EXE`, `.BAT`, `.CMD`, `.VBS`,
+`.VBE`, `.JS`, `.JSE`, `.WSF`, `.WSH`, `.MSC`. A present value must be
+non-empty. It is split on `;`; every entry must be non-empty after trimming
+ASCII spaces and tabs and must match the raw extension grammar
+`\.?[A-Za-z0-9]+`. The resolver lowercases entries, adds a leading dot, and
+deduplicates them while retaining first-seen order. Empty, whitespace-only,
+malformed, or NUL-containing entries are rejected; they are never skipped or
+replaced with the default. A bare executable name is probed with extensions in
+`PATHEXT` order within each absolute `PATH` directory in `PATH` order,
+selecting the first regular executable. An executable whose final component
+already has an extension is probed without appending `PATHEXT`.
+
+The resolver rejects empty or non-absolute `PATH` components and malformed
+`PATHEXT` before invoking `which`; it never converts, skips, or falls back from
+a rejected component. A typed trusted-environment-misconfiguration outcome names
+`PATH` or `PATHEXT` and includes only a bounded component or entry index,
+never the complete value. Unknown name, unsupported shell, unavailable shell,
+and misconfigured shell remain distinct outcomes. Deterministic `MockEnv` and
+probe tests cover ordered matching, duplicate extensions, the fixed unset
+default, already extended names, invalid `PATHEXT`, and the existing `PATH`
+cases on Unix-like and Windows paths, including a repository-local candidate
+beneath a relative component.
 
 ### Configured shell registry
 
@@ -103,31 +119,23 @@ Each `ShellDefinition` contains exactly `name`, `executable`, and `args`:
 - `args` must contain between one and sixteen fixed arguments;
 - every fixed argument must contain no NUL, and their combined encoded size
   must not exceed 4 KiB; and
-- Netsuke always appends exactly one rendered shell-source argument after
-  `args`. The trusted operator invariant is that `args` is a complete fixed
-  prefix such that this append invokes the executable's source evaluator.
-  Structural validation cannot infer the executable-specific switch; violating
-  this invariant is a trusted operator policy error.
+- Netsuke always appends the rendered shell source after `args`; configuration
+  must therefore include the shell's source-evaluation switch.
 
 Field-local rules run while each entry is deserialized. `PostMergeHook` checks
-reserved-name collisions and duplicate configured names after all configuration
-layers have composed. An invalid definition fails configuration loading before
-a manifest is compiled.
+reserved-name collisions, duplicate configured names, and aggregate limits
+after all configuration layers have composed. An invalid definition fails
+configuration loading before a manifest is compiled.
 
-Configured definitions have no platform declaration. Each is eligible on every
-host where the merged configuration is active, and executable resolution
-determines its availability on that host. A missing configured executable is
-therefore unavailable, not an unsupported built-in.
+The configuration file is the authority boundary. A configured executable may
+be an absolute host path because the operator who controls `CliConfig` already
+controls Netsuke's execution policy. A Netsukefile may only select the
+validated name; it cannot provide or alter the executable or fixed arguments.
 
-System and user operator configuration are trusted registry sources. An
-automatically discovered project `.netsuke.toml` is never trusted for shell
-definitions, and selecting a file with `--config` does not grant it shell
-definition authority. A separate explicit trust mechanism is required for any
-project-owned definitions. Project configuration may select existing registry
-names only. A configured executable may be an absolute host path because the
-operator who controls trusted `CliConfig` already controls Netsuke's execution
-policy. A Netsukefile may only select the validated name; it cannot provide or
-alter the executable or fixed arguments.
+The later correction in the addendum narrows this authority to trusted system
+and user operator configuration. Automatically discovered project
+`.netsuke.toml` definitions remain untrusted, and selecting a file with
+`--config` does not grant shell-definition authority.
 
 The shell registry is feature-private. The composition root constructs it from
 `CliConfig`, and structured-command validation and lowering consume it. It is
@@ -138,12 +146,10 @@ handling, or arbitrary executable discovery.
 ### Lowering and execution intermediate representation
 
 The Abstract Syntax Tree (AST) preserves the three user choices as `Direct`,
-`PlatformDefault`, and `Named(ShellName)`. Resolution resolves a `ShellName`
-against the finite `BuiltInShell` set first and then trusted configured
-entries. It converts either shell choice into a `ResolvedShell` containing a
-registry name, a resolved executable path, and fixed arguments. The execution
-intermediate representation (IR) contains no Boolean selector and no unresolved
-configuration lookup:
+`PlatformDefault`, and `Named(ShellName)`. Resolution converts either shell
+choice into a `ResolvedShell` containing a registry name, a resolved executable
+path, and fixed arguments. The execution intermediate representation (IR)
+contains no Boolean selector and no unresolved configuration lookup:
 
 ```rust,no_run
 pub enum ProcessKind {
@@ -173,12 +179,14 @@ Resolution uses a crate-internal typed error with at least these categories:
   current platform;
 - **unavailable shell:** the definition supports the platform, but its
   executable is absent, not executable, or cannot be resolved safely; and
-- **trusted-environment misconfiguration:** a host `PATH` or `PATHEXT` value
-  violates the safe-resolution contract, such as an empty or relative `PATH`
-  component; and
-- **misconfigured shell:** a configured definition violates its field or
-  collision rules, or a persisted action plan contains an invalid shell
-  definition.
+- **misconfigured shell:** a configured definition violates its field,
+  collision, or aggregate rules, or a persisted action plan contains an invalid
+  shell definition.
+
+The resolver also reports trusted-environment misconfiguration for a malformed
+host `PATH` or `PATHEXT` under the contract above. This is distinct from an
+unknown, unsupported, unavailable, or misconfigured shell and is converted to a
+user-facing diagnostic at the same boundary.
 
 Configuration errors identify the configuration key and definition name.
 Manifest diagnostics identify the action, target, or rule, command-list item,
@@ -278,3 +286,40 @@ shebang nor changes a script item's interpreter.
 - Executable lookup: [`src/stdlib/which/`](../src/stdlib/which/)
 - Structured command contract:
   [RFC 0001](rfcs/0001-structured-command-blocks.md)
+
+## Addendum
+
+The following same-day corrections amend the accepted decision above. The
+original decision text is retained so that its acceptance history remains
+auditable; the addenda define the currently adopted behaviour where they are
+more specific.
+
+### 2026-09-02: Host eligibility and validation correction
+
+Commit `1b0ba4b6` corrected configured-shell eligibility: configured entries
+declare no platform and are eligible on each host where the merged trusted
+configuration is active; executable resolution determines whether an entry is
+available. A missing configured executable is therefore unavailable, rather
+than an unsupported built-in. The same correction removed aggregate-limit
+wording from the post-merge validation summary and narrowed the corresponding
+misconfigured-shell diagnostic to field and collision rules.
+
+### 2026-09-02: Trusted resolution and registry-model correction
+
+Commit `73c0c0bf` separated the finite `BuiltInShell` enumeration from the
+validated `ShellName` registry-name type, and made resolution try built-ins
+before trusted configured entries. It recorded the trusted-operator invariant
+that fixed arguments must form a complete prefix whose final appended source
+argument invokes the executable's source evaluator. It restricted shell
+definition authority to trusted system and user operator configuration;
+automatically discovered project `.netsuke.toml` definitions are excluded, and
+`--config` alone does not establish trust.
+
+The commit also established the fail-closed `PATH` and `PATHEXT` resolver
+contract above: reject malformed ambient inputs before `which`, report a typed
+trusted-environment misconfiguration with bounded variable and entry/component
+indices, and retain distinct unknown, unsupported, unavailable, and
+misconfigured outcomes. Finally, it revised lowering to resolve built-in or
+configured names into the execution IR and added the corresponding diagnostic
+outcome without changing the direct, platform-default, or named selection
+intent.

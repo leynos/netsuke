@@ -198,6 +198,30 @@ beneath a relative component. The resolver also disables current-directory and
 workspace fallback. A manifest-controlled `PATH` and a repository-local
 executable therefore cannot replace an allow-listed shell.
 
+On Windows, the shell resolver reads `PATHEXT` through the same `mockable::Env`
+seam. An unset value uses the fixed default sequence `.COM`, `.EXE`, `.BAT`,
+`.CMD`, `.VBS`, `.VBE`, `.JS`, `.JSE`, `.WSF`, `.WSH`, `.MSC`. A present value
+must be valid Unicode, contain no NUL, and be non-empty. Splitting on `;`
+rejects empty and whitespace-only entries. Each entry is trimmed of ASCII
+spaces and tabs, must match the raw extension grammar `\.?[A-Za-z0-9]+`, and is
+then lowercased and given a leading dot. Normalized duplicates are removed
+while the first occurrence's order is retained. Malformed entries, including
+non-Unicode or NUL-containing values, are rejected rather than skipped or
+replaced by the default.
+
+For a bare executable, the resolver tries the normalized extensions in
+`PATHEXT` order inside each absolute `PATH` directory in `PATH` order and
+selects the first regular executable. An executable whose final component
+already has an extension is tried without appending `PATHEXT`. Malformed `PATH`
+or `PATHEXT` is rejected before `which`, with no fallback or skip. The typed
+trusted-environment-misconfiguration outcome names the variable and includes
+only a bounded entry or component index, never the complete value. Unknown
+name, unsupported shell, unavailable shell, and misconfigured shell remain
+distinct outcomes. Deterministic `MockEnv` and probe tests cover valid ordered
+matching, duplicate ordering, the fixed unset default, already extended
+executables, empty and invalid `PATHEXT`, and the existing `PATH` cases on both
+Unix-like and Windows paths.
+
 The registry is private to structured-command shell selection. MiniJinja
 helpers, legacy recipes, and script interpreters do not consume it.
 
@@ -271,7 +295,7 @@ Shell resolution classifies failures internally as:
   safely; and
 - **trusted-environment misconfiguration** when `PATH` or `PATHEXT` violates
   the safe-resolution contract, such as through an empty or relative `PATH`
-  component; and
+  component, an empty `PATHEXT` value, or a malformed extension entry; and
 - **misconfigured shell** when a configured definition or persisted action
   plan violates its contract.
 
