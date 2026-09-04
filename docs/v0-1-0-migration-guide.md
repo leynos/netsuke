@@ -264,7 +264,6 @@ without labels. Neither exposes configuration paths. See the users' guide's
 [bounded configuration metrics](users-guide.md#bounded-configuration-metrics)
 and [interpret failures](users-guide.md#interpret-failures) sections.
 
-
 ## Review the primary project fetch-policy boundary
 
 The v0.1.0 fetch-policy merge distinguishes operator policy from a project's

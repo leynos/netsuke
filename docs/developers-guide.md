@@ -4078,7 +4078,6 @@ errors remain owned by `DiscoveredLayers` and are handled by the diagnostic
 JSON resolver and the full-merge caller according to their respective error
 policies.
 
-
 ### Fetch-policy trust boundary
 
 Network-policy grants do not use the ordinary file-layer precedence contract.
