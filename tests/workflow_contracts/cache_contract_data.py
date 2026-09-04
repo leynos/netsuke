@@ -158,6 +158,42 @@ SCCACHE_WRAPPER_JOBS = (
     ("release.yml", "windows-native-recipe-smoke"),
 )
 
+#: Every job whose `Setup Rust` step must delegate cache ownership to the
+#: workflow. `setup-rust` archives `target/${BUILD_PROFILE}` and enables a
+#: second sccache owner unless the caller says otherwise, so this inventory
+#: lives beside the other tables rather than inline in one test: a lane added
+#: to the placement tables but missed here would go unchecked in silence.
+SETUP_RUST_DELEGATING_JOBS = (
+    ("ci.yml", "build-test"),
+    ("ci.yml", "kani-smoke"),
+    ("ci-windows.yml", "build-test-windows"),
+    ("ci-windows.yml", "windows-native-recipe-smoke"),
+    ("coverage-main.yml", "coverage-upload"),
+    ("netsukefile-test.yml", "netsukefile"),
+    ("release.yml", "windows-native-recipe-smoke"),
+)
+
+#: Steps of shared actions that carry their own cache and must be told to
+#: delegate it. Distinct from `TARGET_ARCHIVE_OWNERS`, which covers the same
+#: input on the actions that would archive a build tree; these are the
+#: coverage and Whitaker payload archives.
+DELEGATING_ACTION_STEPS = (
+    ("ci.yml", "build-test", "Test and Measure Coverage"),
+    ("coverage-main.yml", "coverage-upload", "Test and Measure Coverage"),
+    ("ci.yml", "build-test", "Install Whitaker"),
+    ("ci-windows.yml", "build-test-windows", "Install Whitaker"),
+)
+
+#: The pinned `rust-build-release` revision, and the workflow that both names
+#: it in a `uses:` reference and restates it in an environment variable so a
+#: cache key can carry it. Held equal by the write-policy suite: the
+#: `cargo-orthohelp` entry owns `~/.cargo/bin`, which also holds the
+#: `cargo-binstall` that action provisions, so the entry must turn over when
+#: the action's revision does.
+RUST_BUILD_RELEASE_PIN_WORKFLOW = "build-and-package.yml"
+RUST_BUILD_RELEASE_PIN_VARIABLE = "RUST_BUILD_RELEASE_PIN"
+RUST_BUILD_RELEASE_ACTION = "leynos/shared-actions/.github/actions/rust-build-release@"
+
 #: Jobs that call a cache action rather than declaring cache steps inline.
 #: They must reference the composite for their platform and no other.
 CACHE_ACTION_CALLERS = {
@@ -196,6 +232,15 @@ KEY_WRITERS = {
 }
 READ_ONLY_CACHE_JOBS = (("coverage-main.yml", "coverage-upload"),)
 
+#: The designated writers that declare their cache steps inline in a workflow
+#: rather than delegating to a composite cache action. Derived from
+#: `KEY_WRITERS` so a writer added there cannot escape the inline-save policy
+#: check, and filtered by `CACHE_ACTION_CALLERS` so a delegating writer is not
+#: searched for steps it does not declare.
+INLINE_SAVE_WRITERS = tuple(
+    writer for writer in KEY_WRITERS.values() if writer not in CACHE_ACTION_CALLERS
+)
+
 #: Jobs that call a cache composite with the read-only profile.
 SMOKE_PROFILE_JOBS = (
     ("ci-windows.yml", "windows-native-recipe-smoke"),
@@ -204,7 +249,33 @@ SMOKE_PROFILE_JOBS = (
 
 
 def lane_steps(source: Path, job_name: str | None) -> list[dict[str, object]]:
-    """Return the steps of a workflow job or of a composite action."""
+    """Return the steps of a workflow job or of a composite action.
+
+    Parameters
+    ----------
+    source
+        Path to a workflow file or to a composite action's ``action.yml``.
+    job_name
+        Name of the job to read. Pass ``None`` to read a composite action
+        instead, whose steps live under ``runs.steps`` rather than under a
+        job. The two forms are one function because every caller quantifies
+        over both kinds of lane with the same contract.
+
+    Returns
+    -------
+    list[dict[str, object]]
+        The lane's steps in declaration order. Order is part of the contract:
+        several callers assert that a restore precedes an install, or that a
+        statistics reset precedes the first compile.
+
+    Notes
+    -----
+    A malformed document fails inside the ``require_*`` helpers rather than
+    raising a typed error: ``job_name=None`` reads a composite action, whose
+    steps live under ``runs.steps``, and a document that is not a mapping, or
+    that is missing ``runs`` or ``steps``, or that holds a step that is not a
+    mapping, is a contract failure rather than a harness error.
+    """
     if job_name is not None:
         return job_steps(load_workflow(source), job_name)
     document = yaml.safe_load(source.read_text(encoding="utf-8"))
@@ -216,14 +287,47 @@ def lane_steps(source: Path, job_name: str | None) -> list[dict[str, object]]:
 
 
 def cache_steps(steps: list[dict[str, object]]) -> list[dict[str, object]]:
-    """Return every step that reserves, reads, or writes a cache archive."""
+    """Return every step that reserves, reads, or writes a cache archive.
+
+    Parameters
+    ----------
+    steps
+        A lane's steps, as returned by :func:`lane_steps`.
+
+    Returns
+    -------
+    list[dict[str, object]]
+        The subset whose ``uses`` names the cache action in any of its three
+        spellings: combined, ``/restore``, or ``/save``. Matching the combined
+        form matters, because a list built only from the split spellings would
+        let every ownership contract pass over a real second owner in silence.
+        Steps with no ``uses`` key, such as ``run`` steps, are excluded.
+    """
     return [
         step for step in steps if CACHE_ACTION_PATTERN.search(str(step.get("uses", "")))
     ]
 
 
 def declared_paths(step: dict[str, object]) -> list[str]:
-    """Return the cached paths a cache step claims, one per line."""
+    """Return the cached paths a cache step claims, one per line.
+
+    Parameters
+    ----------
+    step
+        A single cache step, as returned by :func:`cache_steps`.
+
+    Returns
+    -------
+    list[str]
+        The step's ``path`` input split on newlines, stripped, with blank
+        lines dropped. A step declaring no ``path`` yields an empty list.
+
+    Notes
+    -----
+    A step with no ``with`` mapping fails inside ``require_mapping``: a cache
+    step claiming nothing would satisfy every ownership contract vacuously,
+    which is the failure these contracts exist to catch.
+    """
     inputs = require_mapping(step.get("with"), "cache step inputs")
     return [
         line.strip()

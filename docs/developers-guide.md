@@ -768,7 +768,7 @@ works once the Ubicloud GitHub App covers this repository; see "GitHub Actions
 runner placement" for that prerequisite.
 
 Every `leynos/shared-actions` reference is pinned to
-`1f303985c67e7da212c906c0051343ce0e46c59e`. That revision introduces
+`c6125f19593668cbfefd65a59c08cb7aefe90d93`. That revision introduces
 `cache-provider: external`; installs `whitaker-installer` and `cargo-nextest`
 from checksum-verified official releases with no source fallback; adds the
 `all-features`, `all-targets`, and `doctests` inputs the single-execution rule
@@ -1636,11 +1636,49 @@ environment or file source. It omits the structural `cmds` container. Keep
 project-discovery rooting and manifest lookup in that discovery boundary, as
 required by [ADR 014]. During ordinary Cargo builds, `build.rs` generates the
 local manual page and shell completions, and audits the localization keys.
-Release automation installs the pinned tool with:
+Release automation installs the pinned tool in three guarded stages, because
+`ortho-config` publishes no binary release for any platform (
+[leynos/ortho-config#479][ortho-config-479]). A single `cargo binstall` line
+does not describe what the lane actually does.
+
+The lane first probes for an already-installed tool at the pinned version,
+which is the warm path: the `cargo-orthohelp` cache entry owns `~/.cargo/bin`,
+and `cargo install` refuses to overwrite a binary that is already present, so a
+warm run must reach neither of the later stages.
 
 ```bash
-cargo binstall --no-confirm --locked cargo-orthohelp@0.9.0
+cargo-orthohelp --version | grep -Eq '(^|[[:space:]])0\.9\.0([[:space:]]|$)'
 ```
+
+On a miss it tries binary-only strategies, which will become the whole story
+once #479 lands:
+
+```bash
+cargo binstall --no-confirm --locked \
+  --strategies crate-meta-data,quick-install cargo-orthohelp@0.9.0
+```
+
+Only when both fail does it fall back to a source build. This is one of the two
+documented exceptions to the repository's no-source-build rule, and it is
+permitted only in this exact form. `CARGO_TARGET_DIR` points at a dedicated
+directory so the build never shares compiler output with the product, and the
+cache entry keeps it to once per generation rather than once per run:
+
+```bash
+ORTHOHELP_BUILD_DIR="${HOME}/.cache/orthohelp-build"
+mkdir -p "${ORTHOHELP_BUILD_DIR}"
+CARGO_TARGET_DIR="${ORTHOHELP_BUILD_DIR}" \
+  cargo install --locked cargo-orthohelp@0.9.0
+```
+
+The version is then validated unconditionally, so a stale binary restored from
+the cache cannot pass as the pinned one. The cache key carries both the tool
+version and the pinned `rust-build-release` revision: that action provisions
+`cargo-binstall` into the same `~/.cargo/bin` the entry owns, so a bump to
+either must turn the entry over. Delete the source-build fallback, and the
+exception recorded in the cache contracts, once #479 lands.
+
+[ortho-config-479]: https://github.com/leynos/ortho-config/issues/479
 
 The workflow then calls:
 

@@ -32,3 +32,27 @@ runs:
           core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
           // Cleared, not unset: sccache treats any value as "use v2".
           core.exportVariable('ACTIONS_CACHE_SERVICE_V2', '');
+
+    - name: Verify the Actions cache credentials
+      # Only the GitHub Actions backend needs these. On the local-directory
+      # arm sccache never contacts a cache service, so an empty value there is
+      # correct rather than a fault. On the GHA arm an empty value is silent:
+      # the server falls back to local disk, every object is written to a
+      # directory nothing archives, and the job still passes with a plausible
+      # hit rate on the second half of its own compilation. Fail here instead.
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ "${SCCACHE_GHA_ENABLED:-}" != 'true' ]; then
+          echo "sccache is not using the Actions cache backend; nothing to verify"
+          exit 0
+        fi
+        missing=
+        [ -n "${ACTIONS_CACHE_URL:-}" ] || missing="${missing} ACTIONS_CACHE_URL"
+        [ -n "${ACTIONS_RUNTIME_TOKEN:-}" ] ||
+          missing="${missing} ACTIONS_RUNTIME_TOKEN"
+        if [ -n "${missing}" ]; then
+          echo "::error title=sccache credentials missing::SCCACHE_GHA_ENABLED is true but${missing} is empty, so the server would fall back to local disk" >&2
+          exit 1
+        fi
+        echo "Actions cache credentials present for the sccache GHA backend"

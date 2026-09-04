@@ -150,24 +150,23 @@ fn is_exact_version(version: &str) -> bool {
 const KANI_CACHE_ACTION: &str = "./.github/actions/kani-cache";
 
 fn ensure_kani_cache_contract(steps: &[Value]) -> Result<()> {
-    let restore_step = named_step(steps, "Restore Kani payloads")?;
-    let save_step = named_step(steps, "Save Kani payloads")?;
-    for (step, mode, label) in [
-        (restore_step, "restore", "restore"),
-        (save_step, "save", "save"),
-    ] {
-        ensure!(
-            mapping_get(step, YamlKey("uses")).and_then(Value::as_str) == Some(KANI_CACHE_ACTION),
-            "Kani smoke job should {label} through the repository's Kani cache action"
-        );
-        ensure!(
-            step_input(step, YamlKey("mode")) == Some(mode),
-            "Kani smoke job's {label} step should ask for the {mode} mode"
-        );
-    }
     let restore_index = step_index(steps, "Restore Kani payloads")?;
     let install_index = step_index(steps, "Install prebuilt Kani")?;
     let save_index = step_index(steps, "Save Kani payloads")?;
+    for (index, mode) in [(restore_index, "restore"), (save_index, "save")] {
+        let step = steps
+            .get(index)
+            .and_then(Value::as_mapping)
+            .with_context(|| format!("the {mode} step should be a mapping"))?;
+        ensure!(
+            mapping_get(step, YamlKey("uses")).and_then(Value::as_str) == Some(KANI_CACHE_ACTION),
+            "Kani smoke job should {mode} through the repository's Kani cache action"
+        );
+        ensure!(
+            step_input(step, YamlKey("mode")) == Some(mode),
+            "Kani smoke job's {mode} step should ask for the {mode} mode"
+        );
+    }
     ensure!(
         restore_index < install_index,
         "Kani smoke job should restore its cache before installing Kani, or a warm \

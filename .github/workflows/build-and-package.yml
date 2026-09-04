@@ -68,6 +68,13 @@ jobs:
   build:
     name: Build ${{ inputs.platform }} artefacts
     runs-on: ${{ inputs.runner }}
+    # Bounds every caller-selected shape, including the Ubicloud label
+    # `release.build-linux` passes. This lane compiles a release binary
+    # uncached on Windows and cross-packages elsewhere, so it is allowed the
+    # same ceiling as the Windows merge gate rather than the merge gate's
+    # 60 minutes. tests/workflow_contracts/runner_shape_test.py holds it
+    # present, so deleting it cannot pass in silence.
+    timeout-minutes: 90
     # The pinned action chain compiles, packages, and uploads workflow
     # artefacts. It neither publishes packages nor exchanges an OIDC token, so
     # the job token needs no write scope.
@@ -92,6 +99,14 @@ jobs:
       SCCACHE_GHA_ENABLED: ${{ inputs.platform != 'windows' && 'true' || '' }}
       SCCACHE_CACHE_SIZE: 4G
       MAN_ARCH: ${{ inputs['package-arch'] != '' && inputs['package-arch'] || 'unknown' }}
+      # The pinned `rust-build-release` revision, restated here so the
+      # `cargo-orthohelp` cache key can carry it. That action nests the shared
+      # `setup-rust`, which provisions the checksum-verified `cargo-binstall`
+      # into the same `~/.cargo/bin` the cache owns, so the entry must turn
+      # over when this revision does.
+      # tests/workflow_contracts/cache_ownership_test.py holds this value
+      # equal to the `uses:` pin below.
+      RUST_BUILD_RELEASE_PIN: c6125f19593668cbfefd65a59c08cb7aefe90d93
       # rust-build-release-v1 still nests a Node 20 setup-uv action, and the
       # promoted Node 24 runtime aborts inside libuv on Windows. The escape
       # hatch predates the move to GitHub-hosted Windows runners and is
@@ -122,7 +137,7 @@ jobs:
           fallback: none
 
       - name: Build release binary
-        uses: leynos/shared-actions/.github/actions/rust-build-release@1f303985c67e7da212c906c0051343ce0e46c59e
+        uses: leynos/shared-actions/.github/actions/rust-build-release@c6125f19593668cbfefd65a59c08cb7aefe90d93
         with:
           target: ${{ inputs.target }}
           bin-name: ${{ env.BIN_NAME }}
@@ -150,7 +165,17 @@ jobs:
           path: |
             ~/.cargo/bin
             ~/.cache/orthohelp-build
-          key: netsuke-orthohelp-v1-${{ runner.os }}-${{ runner.arch }}-0.9.0
+          # The `cargo-binstall` pin is part of the key, spelled as the
+          # `rust-build-release` revision that provisions it. The entry
+          # owns `~/.cargo/bin` as a directory, which is the repository's
+          # rule for tool directories, and that directory holds
+          # `cargo-binstall` as well as `cargo-orthohelp`. Keyed on the
+          # tool version alone, a bump to the shared action's binstall
+          # version would not turn the entry over, and the restore would
+          # put the older `cargo-binstall` back over the one the action
+          # had just provisioned.
+          key: >-
+            netsuke-orthohelp-v1-${{ runner.os }}-${{ runner.arch }}-0.9.0-${{ env.RUST_BUILD_RELEASE_PIN }}
 
       - name: Install cargo-orthohelp
         # Runs after `rust-build-release`, which nests the setup-rust action
@@ -201,7 +226,17 @@ jobs:
           path: |
             ~/.cargo/bin
             ~/.cache/orthohelp-build
-          key: netsuke-orthohelp-v1-${{ runner.os }}-${{ runner.arch }}-0.9.0
+          # The `cargo-binstall` pin is part of the key, spelled as the
+          # `rust-build-release` revision that provisions it. The entry
+          # owns `~/.cargo/bin` as a directory, which is the repository's
+          # rule for tool directories, and that directory holds
+          # `cargo-binstall` as well as `cargo-orthohelp`. Keyed on the
+          # tool version alone, a bump to the shared action's binstall
+          # version would not turn the entry over, and the restore would
+          # put the older `cargo-binstall` back over the one the action
+          # had just provisioned.
+          key: >-
+            netsuke-orthohelp-v1-${{ runner.os }}-${{ runner.arch }}-0.9.0-${{ env.RUST_BUILD_RELEASE_PIN }}
 
       - name: Generate release help
         shell: bash
@@ -215,7 +250,7 @@ jobs:
 
       - name: Stage artefacts
         id: stage
-        uses: leynos/shared-actions/.github/actions/stage-release-artefacts@1f303985c67e7da212c906c0051343ce0e46c59e
+        uses: leynos/shared-actions/.github/actions/stage-release-artefacts@c6125f19593668cbfefd65a59c08cb7aefe90d93
         with:
           config-file: .github/release-staging.toml
           target: ${{ inputs['stage-target'] }}
@@ -245,7 +280,7 @@ jobs:
 
       - name: Package Linux artefacts with dependencies
         if: inputs.platform == 'linux'
-        uses: leynos/shared-actions/.github/actions/linux-packages@1f303985c67e7da212c906c0051343ce0e46c59e
+        uses: leynos/shared-actions/.github/actions/linux-packages@c6125f19593668cbfefd65a59c08cb7aefe90d93
         with:
           project-dir: .
           package-name: ${{ inputs['bin-name'] }}
@@ -266,7 +301,7 @@ jobs:
       - name: Build Windows installer package
         if: inputs.platform == 'windows'
         id: package_windows
-        uses: leynos/shared-actions/.github/actions/windows-package@1f303985c67e7da212c906c0051343ce0e46c59e
+        uses: leynos/shared-actions/.github/actions/windows-package@c6125f19593668cbfefd65a59c08cb7aefe90d93
         with:
           product-name: ${{ inputs['bin-name'] }}
           manufacturer: Leynos
@@ -284,7 +319,7 @@ jobs:
       - name: Build macOS installer package
         if: inputs.platform == 'macos'
         id: package_macos
-        uses: leynos/shared-actions/.github/actions/macos-package@1f303985c67e7da212c906c0051343ce0e46c59e
+        uses: leynos/shared-actions/.github/actions/macos-package@c6125f19593668cbfefd65a59c08cb7aefe90d93
         with:
           name: ${{ inputs['bin-name'] }}
           identifier: com.leynos.${{ inputs['bin-name'] }}

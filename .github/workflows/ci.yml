@@ -115,7 +115,7 @@ jobs:
           tool: sccache@0.16.0
           fallback: none
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@1f303985c67e7da212c906c0051343ce0e46c59e
+        uses: leynos/shared-actions/.github/actions/setup-rust@c6125f19593668cbfefd65a59c08cb7aefe90d93
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           # Preserve warnings-as-errors through toolchain setup.
@@ -197,7 +197,7 @@ jobs:
         shell: bash
       - name: Install Nixie
         uses: >-
-          leynos/shared-actions/.github/actions/install-nixie@1f303985c67e7da212c906c0051343ce0e46c59e
+          leynos/shared-actions/.github/actions/install-nixie@c6125f19593668cbfefd65a59c08cb7aefe90d93
         with:
           python-version: '3.14'
       - name: Markdown formatter checker tests
@@ -206,7 +206,7 @@ jobs:
         run: make check-fmt
       - name: Install Whitaker
         uses: >-
-          leynos/shared-actions/.github/actions/install-whitaker@1f303985c67e7da212c906c0051343ce0e46c59e
+          leynos/shared-actions/.github/actions/install-whitaker@c6125f19593668cbfefd65a59c08cb7aefe90d93
         with:
           installer-version: '0.2.7'
           # The gate cache owns `~/.cargo/bin` and `~/.local/share`, so the
@@ -232,7 +232,7 @@ jobs:
         # from setup-rust's `rustflags` input. Pull requests only; on the
         # trunk `coverage-upload` runs the same set over the same commit.
         if: github.event_name == 'pull_request'
-        uses: leynos/shared-actions/.github/actions/generate-coverage@1f303985c67e7da212c906c0051343ce0e46c59e
+        uses: leynos/shared-actions/.github/actions/generate-coverage@c6125f19593668cbfefd65a59c08cb7aefe90d93
         with:
           language: rust
           output-path: lcov.info
@@ -262,7 +262,7 @@ jobs:
         if: env.CS_ACCESS_TOKEN != '' && github.event_name == 'pull_request'
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@1f303985c67e7da212c906c0051343ce0e46c59e
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@c6125f19593668cbfefd65a59c08cb7aefe90d93
         with:
           path: lcov.info
           format: lcov
@@ -271,9 +271,8 @@ jobs:
           access-token: ${{ env.CS_ACCESS_TOKEN }}
           installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
       - name: Discard the instrumented build tree
-        # The instrumented tree has no consumer once the report exists, and
-        # it is the second tree on a volume a sibling repository exhausted.
-        # Removed before any cache save.
+        # No consumer once the report exists, and it is the second tree on a
+        # volume a sibling repository exhausted. Removed before any cache save.
         if: always()
         run: |
           df -h .
@@ -336,8 +335,9 @@ jobs:
         uses: ./.github/actions/kani-cache
         with:
           mode: restore
+          runner-image: ${{ env.NETSUKE_RUNNER_IMAGE }}
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@1f303985c67e7da212c906c0051343ce0e46c59e
+        uses: leynos/shared-actions/.github/actions/setup-rust@c6125f19593668cbfefd65a59c08cb7aefe90d93
         with:
           toolchain: stable
           cache-provider: external
@@ -347,8 +347,7 @@ jobs:
           use-sccache: 'false'
       - name: Install prebuilt Kani
         # Two payloads, both from pinned checksummed archives under
-        # version-qualified directories, so a bump in tools/kani/VERSION
-        # cannot be satisfied by a stale binary.
+        # version-qualified directories, so a bump cannot reuse a stale binary.
         run: |
           set -euo pipefail
           kani_version="$(tr -d '\r\n' < tools/kani/VERSION)"
@@ -397,4 +396,5 @@ jobs:
         uses: ./.github/actions/kani-cache
         with:
           mode: save
-          cache-hit: ${{ steps.kani_cache.outputs.cache-hit }}
+          runner-image: ${{ env.NETSUKE_RUNNER_IMAGE }}
+          kani-hit: ${{ steps.kani_cache.outputs.cache-hit }}

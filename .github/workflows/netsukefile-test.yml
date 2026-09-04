@@ -98,7 +98,7 @@ jobs:
           fallback: none
       - name: Setup Rust
         # Pinned to the shared-actions revision that adds `cache-provider`.
-        uses: leynos/shared-actions/.github/actions/setup-rust@1f303985c67e7da212c906c0051343ce0e46c59e
+        uses: leynos/shared-actions/.github/actions/setup-rust@c6125f19593668cbfefd65a59c08cb7aefe90d93
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           cache-provider: external

@@ -8,9 +8,12 @@ cannot let a pull request race the designated writer.
 Run via ``make test-workflow-contracts``.
 """
 
+import re
+
 import pytest
 from cache_contract_data import (
     ACTION_DIR,
+    INLINE_SAVE_WRITERS,
     KEY_WRITERS,
     READ_ONLY_CACHE_JOBS,
     SMOKE_PROFILE_JOBS,
@@ -25,28 +28,69 @@ from workflow_loading import (
     require_mapping,
 )
 
+KEY_OUTPUT = re.compile(r"steps\.keys\.outputs(?:\.(\w+)|\['([^']+)'\])")
 
-@pytest.mark.parametrize(
-    ("workflow_name", "job_name"), [("netsukefile-test.yml", "netsukefile")]
-)
+
+def _save_key_name(step: dict[str, object]) -> str:
+    """Return the `keys` output name a composite save step publishes."""
+    key = str(require_mapping(step.get("with"), "cache step inputs").get("key", ""))
+    match = KEY_OUTPUT.search(key)
+    assert match, f"save step {step.get('name')!r} must key on a rendered output"
+    return match.group(1) or match.group(2)
+
+
+def _restore_ids_by_key(steps: list[dict[str, object]]) -> dict[str, str]:
+    """Map each restore step's rendered key to that step's id."""
+    ids: dict[str, str] = {}
+    for step in steps:
+        if "/restore@" not in str(step.get("uses", "")):
+            continue
+        inputs = require_mapping(step.get("with"), "cache step inputs")
+        step_id = str(step.get("id", ""))
+        assert step_id, (
+            f"restore step {step.get('name')!r} must declare an id, or no save "
+            "can gate on its result"
+        )
+        ids[str(inputs.get("key", "")).strip()] = step_id
+    return ids
+
+
+@pytest.mark.parametrize(("workflow_name", "job_name"), INLINE_SAVE_WRITERS)
 def test_workflow_saves_name_the_trunk_push_directly(
     workflow_name: str, job_name: str
 ) -> None:
-    """Require every inline cache save to name a push on the trunk."""
+    """Require every inline cache save to name a push on the trunk.
+
+    The parametrization is derived from `KEY_WRITERS` rather than listed here,
+    so a writer added to that table cannot gain a save step this policy never
+    reads. The hit gate is bound to the save's own key: a save that skipped on
+    a *different* key's restore result would either overwrite a warm archive
+    or never publish one, which is exactly what this policy exists to prevent.
+    """
     steps = job_steps(load_workflow(WORKFLOW_DIR / workflow_name), job_name)
+    restore_ids = _restore_ids_by_key(cache_steps(steps))
     saves = [
         step for step in cache_steps(steps) if "/save@" in str(step.get("uses", ""))
     ]
     assert saves, f"{workflow_name} {job_name} is a writer and must save"
     for step in saves:
-        condition = str(step.get("if", ""))
+        condition = " ".join(str(step.get("if", "")).split())
         assert is_trunk_only_save(condition), (
             f"{workflow_name} step {step.get('name')!r} must save only on a "
             f"push to main, got {condition!r}"
         )
-        assert "cache-hit != 'true'" in " ".join(condition.split()), (
-            f"{workflow_name} step {step.get('name')!r} must skip a save when "
-            "the restore already hit that exact key"
+        key = str(
+            require_mapping(step.get("with"), "cache step inputs").get("key", "")
+        ).strip()
+        step_id = restore_ids.get(key)
+        assert step_id, (
+            f"{workflow_name} step {step.get('name')!r} saves key {key!r}, "
+            f"which no restore step in this job reads: {sorted(restore_ids)!r}"
+        )
+        expected = f"steps.{step_id}.outputs.cache-hit != 'true'"
+        assert expected in condition, (
+            f"{workflow_name} step {step.get('name')!r} must gate on its own "
+            f"key's restore result ({expected}), got {condition!r}"
         )
 
 
@@ -81,9 +125,12 @@ def test_composite_saves_derive_their_gate_from_the_trunk_push(
             f"{action_name} step {step.get('name')!r} must gate on the writer "
             f"flag, got {condition!r}"
         )
-        assert "-hit'] != 'true'" in condition, (
-            f"{action_name} step {step.get('name')!r} must skip a save when "
-            "the restore already hit that exact key"
+        expected = f"inputs['{_save_key_name(step)}-hit'] != 'true'"
+        assert expected in condition, (
+            f"{action_name} step {step.get('name')!r} must gate on the hit "
+            f"input for the key it publishes ({expected}); a save gated on a "
+            f"sibling key's result would either overwrite a warm archive or "
+            f"never publish one. Got {condition!r}"
         )
 
 

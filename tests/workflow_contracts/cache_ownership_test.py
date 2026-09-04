@@ -18,11 +18,16 @@ from cache_contract_data import (
     CACHE_ACTION_CALLERS,
     CACHE_RESTORE,
     CACHE_SAVE,
+    DELEGATING_ACTION_STEPS,
     EXTERNAL_CACHE_PROVIDER,
     GITHUB_CACHE_SOURCES,
     NON_CACHE_ACTIONS,
     OBSERVATION_SOURCES,
+    RUST_BUILD_RELEASE_ACTION,
+    RUST_BUILD_RELEASE_PIN_VARIABLE,
+    RUST_BUILD_RELEASE_PIN_WORKFLOW,
     SETUP_RUST_ACTION,
+    SETUP_RUST_DELEGATING_JOBS,
     SOURCE_BUILD_EXCEPTIONS,
     TARGET_ARCHIVE_OWNERS,
     TRUNK_TRIGGERED_WORKFLOWS,
@@ -168,8 +173,11 @@ def test_restores_precede_every_install(source: Path, job_name: str | None) -> N
         for index, step in enumerate(steps)
         if "/restore@" in str(step.get("uses", ""))
     ]
-    if not restore_indices:
-        pytest.skip(f"{source.name} {job_name} declares no restore step")
+    assert restore_indices, (
+        f"{source.name} {job_name or 'composite'} must declare a restore step; "
+        "skipping the absent case would let deleting the only restore satisfy "
+        "this ordering contract"
+    )
     install_indices = [
         index
         for index, step in enumerate(steps)
@@ -245,7 +253,10 @@ def test_no_shared_action_enables_its_own_target_archive() -> None:
         )
 
 
-def test_shared_actions_delegate_cache_ownership_to_the_caller() -> None:
+@pytest.mark.parametrize(("workflow_name", "job_name"), SETUP_RUST_DELEGATING_JOBS)
+def test_shared_actions_delegate_cache_ownership_to_the_caller(
+    workflow_name: str, job_name: str
+) -> None:
     """Require every shared action to leave cache ownership to the workflow.
 
     `setup-rust` caches `target/${BUILD_PROFILE}` and `generate-coverage`
@@ -253,43 +264,82 @@ def test_shared_actions_delegate_cache_ownership_to_the_caller() -> None:
     `github`, so passing `external` is what keeps a build tree out of every
     lane this repository owns.
     """
-    jobs = (
-        ("ci.yml", "build-test"),
-        ("ci.yml", "kani-smoke"),
-        ("ci-windows.yml", "build-test-windows"),
-        ("ci-windows.yml", "windows-native-recipe-smoke"),
-        ("coverage-main.yml", "coverage-upload"),
-        ("netsukefile-test.yml", "netsukefile"),
-        ("release.yml", "windows-native-recipe-smoke"),
+    workflow = load_workflow(WORKFLOW_DIR / workflow_name)
+    setup = named_step(job_steps(workflow, job_name), "Setup Rust")
+    assert str(setup.get("uses", "")).startswith(SETUP_RUST_ACTION), (
+        f"{workflow_name} {job_name} must use shared setup-rust"
     )
-    for workflow_name, job_name in jobs:
-        workflow = load_workflow(WORKFLOW_DIR / workflow_name)
-        setup = named_step(job_steps(workflow, job_name), "Setup Rust")
-        assert str(setup.get("uses", "")).startswith(SETUP_RUST_ACTION), (
-            f"{workflow_name} {job_name} must use shared setup-rust"
-        )
-        inputs = require_mapping(setup.get("with"), "Setup Rust inputs")
-        assert inputs.get("cache-provider") == EXTERNAL_CACHE_PROVIDER, (
-            f"{workflow_name} {job_name} must disable setup-rust's GitHub cache"
-        )
-        assert inputs.get("use-sccache") == "false", (
-            f"{workflow_name} {job_name} must not enable a second sccache owner"
-        )
+    inputs = require_mapping(setup.get("with"), "Setup Rust inputs")
+    assert inputs.get("cache-provider") == EXTERNAL_CACHE_PROVIDER, (
+        f"{workflow_name} {job_name} must disable setup-rust's GitHub cache"
+    )
+    assert inputs.get("use-sccache") == "false", (
+        f"{workflow_name} {job_name} must not enable a second sccache owner"
+    )
 
 
-def test_coverage_and_whitaker_actions_delegate_their_archives() -> None:
+@pytest.mark.parametrize(
+    ("workflow_name", "job_name", "step_name"), DELEGATING_ACTION_STEPS
+)
+def test_coverage_and_whitaker_actions_delegate_their_archives(
+    workflow_name: str, job_name: str, step_name: str
+) -> None:
     """Require the coverage and Whitaker actions to own no cache of their own."""
-    for workflow_name, job_name, step_name in (
-        ("ci.yml", "build-test", "Test and Measure Coverage"),
-        ("coverage-main.yml", "coverage-upload", "Test and Measure Coverage"),
-        ("ci.yml", "build-test", "Install Whitaker"),
-        ("ci-windows.yml", "build-test-windows", "Install Whitaker"),
-    ):
-        workflow = load_workflow(WORKFLOW_DIR / workflow_name)
-        step = named_step(job_steps(workflow, job_name), step_name)
-        inputs = require_mapping(step.get("with"), f"{step_name} inputs")
-        assert inputs.get("cache-provider") == EXTERNAL_CACHE_PROVIDER, (
-            f"{workflow_name} {job_name} {step_name} must delegate its cache"
+    workflow = load_workflow(WORKFLOW_DIR / workflow_name)
+    step = named_step(job_steps(workflow, job_name), step_name)
+    inputs = require_mapping(step.get("with"), f"{step_name} inputs")
+    assert inputs.get("cache-provider") == EXTERNAL_CACHE_PROVIDER, (
+        f"{workflow_name} {job_name} {step_name} must delegate its cache"
+    )
+
+
+def test_the_orthohelp_key_carries_the_binstall_provisioning_pin() -> None:
+    """Hold the `cargo-orthohelp` key's action pin equal to the `uses:` pin.
+
+    The entry owns `~/.cargo/bin` as a directory, which is this repository's
+    rule for tool directories. That directory also holds the `cargo-binstall`
+    the pinned `rust-build-release` action provisions, so an entry keyed on the
+    tool version alone would not turn over when the action's binstall version
+    moved, and a restore would put the older binary back over the one the
+    action had just installed. Restating the revision in an environment
+    variable is what lets the key carry it, and restating it is exactly what
+    can drift, so the two are held equal here.
+    """
+    path = WORKFLOW_DIR / RUST_BUILD_RELEASE_PIN_WORKFLOW
+    workflow = load_workflow(path)
+    job = require_mapping(
+        require_mapping(workflow.get("jobs"), "jobs").get("build"), "build job"
+    )
+    env = require_mapping(job.get("env"), "build job env")
+    declared = str(env.get(RUST_BUILD_RELEASE_PIN_VARIABLE, ""))
+    assert declared, (
+        f"{RUST_BUILD_RELEASE_PIN_WORKFLOW} must declare "
+        f"{RUST_BUILD_RELEASE_PIN_VARIABLE} so the orthohelp key can carry it"
+    )
+    references = [
+        str(step.get("uses"))
+        for step in job_steps(workflow, "build")
+        if str(step.get("uses", "")).startswith(RUST_BUILD_RELEASE_ACTION)
+    ]
+    assert references, (
+        f"{RUST_BUILD_RELEASE_PIN_WORKFLOW} must call {RUST_BUILD_RELEASE_ACTION}"
+    )
+    pins = {reference.rsplit("@", 1)[1] for reference in references}
+    assert pins == {declared}, (
+        f"{RUST_BUILD_RELEASE_PIN_VARIABLE} is {declared!r} but the action is "
+        f"pinned at {pins!r}; the orthohelp cache key would carry a revision "
+        "the lane does not run"
+    )
+    keys = [
+        str(require_mapping(step.get("with"), "cache step inputs").get("key", ""))
+        for step in cache_steps(job_steps(workflow, "build"))
+    ]
+    orthohelp_keys = [key for key in keys if "netsuke-orthohelp-" in key]
+    assert orthohelp_keys, "the packaging lane must declare an orthohelp cache key"
+    for key in orthohelp_keys:
+        assert RUST_BUILD_RELEASE_PIN_VARIABLE in key, (
+            f"the orthohelp key must carry {RUST_BUILD_RELEASE_PIN_VARIABLE}, "
+            f"got {key!r}"
         )
 
 

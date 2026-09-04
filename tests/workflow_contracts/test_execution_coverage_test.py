@@ -73,10 +73,15 @@ def _makefile_recipe(target: str) -> str:
     """
     lines = MAKEFILE_PATH.read_text(encoding="utf-8").splitlines()
     start = next(
-        index
-        for index, line in enumerate(lines)
-        if line.startswith(f"{target}:") or line.startswith(f"{target} ")
+        (
+            index
+            for index, line in enumerate(lines)
+            if line.startswith(f"{target}:") or line.startswith(f"{target} ")
+        ),
+        None,
     )
+    if start is None:
+        pytest.fail(f"the Makefile must declare a {target!r} target")
     recipe: list[str] = []
     for line in lines[start + 1 :]:
         if line.startswith("\t"):
@@ -109,21 +114,25 @@ def test_the_instrumented_run_is_as_broad_as_an_uninstrumented_one(
         )
 
 
-def test_warnings_are_denied_through_the_toolchain_setup() -> None:
+@pytest.mark.parametrize(
+    ("workflow_name", "job_name"), sorted(COVERAGE_PRODUCERS, key=str)
+)
+def test_warnings_are_denied_through_the_toolchain_setup(
+    workflow_name: str, job_name: str
+) -> None:
     """Require `-D warnings` to reach the instrumented run.
 
     The job declares no `env.RUSTFLAGS`; `tests/polonius_toolchain_contract.rs`
     holds that. `setup-rust` exports the flag instead, and `cargo llvm-cov`
     appends its instrumentation to whatever it finds, so the setting survives.
     """
-    for workflow_name, job_name in COVERAGE_PRODUCERS:
-        workflow = load_workflow(WORKFLOW_DIR / workflow_name)
-        setup = named_step(job_steps(workflow, job_name), "Setup Rust")
-        inputs = setup.get("with")
-        assert isinstance(inputs, dict), "Setup Rust must declare inputs"
-        assert inputs.get("rustflags") == "-D warnings", (
-            f"{workflow_name} {job_name} must deny warnings through setup-rust"
-        )
+    workflow = load_workflow(WORKFLOW_DIR / workflow_name)
+    setup = named_step(job_steps(workflow, job_name), "Setup Rust")
+    inputs = setup.get("with")
+    assert isinstance(inputs, dict), "Setup Rust must declare inputs"
+    assert inputs.get("rustflags") == "-D warnings", (
+        f"{workflow_name} {job_name} must deny warnings through setup-rust"
+    )
 
 
 def test_no_bespoke_doctest_step_shadows_the_action() -> None:
@@ -179,11 +188,41 @@ def test_one_coverage_producer_per_event(
     )
 
 
+def _step_scan_texts(step: dict[str, object]) -> list[tuple[str, str]]:
+    """Return every scannable command text on a step, paired with its source.
+
+    A Linux job can reintroduce a suite execution through a bare `run`
+    script, or through a composite action input such as `with.args`, so
+    both the `run` script and every `with` value are scanned with the same
+    forbidden-command patterns.
+
+    Parameters
+    ----------
+    step
+        A single workflow step.
+
+    Returns
+    -------
+    list[tuple[str, str]]
+        Pairs of source label and text. The label is ``"run"`` for the step's
+        script and ``"with.<key>"`` for each of its inputs, so a failure names
+        where the forbidden command was found.
+    """
+    texts = [("run", str(step.get("run", "")))]
+    with_inputs = step.get("with")
+    if isinstance(with_inputs, dict):
+        texts += [(f"with.{key}", str(value)) for key, value in with_inputs.items()]
+    return texts
+
+
 def test_no_other_linux_job_executes_the_rust_suite() -> None:
     """Reject a second Linux job running the workspace suite.
 
     A duplicate execution is exactly what folding the gate into the coverage
-    run removed, so it must not reappear under another step name.
+    run removed, so it must not reappear under another step name. The scan
+    covers both a step's `run` script and its `with` input values, so a
+    composite or shared action wrapping `cargo nextest` cannot reintroduce
+    the suite either.
     """
     offenders: list[str] = []
     for workflow_name in LINUX_WORKFLOWS:
@@ -198,11 +237,11 @@ def test_no_other_linux_job_executes_the_rust_suite() -> None:
                 # callee's own contracts cover it.
                 continue
             for step in job_steps(workflow, job_name):
-                script = str(step.get("run", ""))
-                offenders += [
-                    f"{workflow_name} {job_name} {step.get('name')!r}: "
-                    f"{pattern.pattern}"
-                    for pattern in FORBIDDEN_TEST_COMMANDS
-                    if pattern.search(script)
-                ]
+                for source, text in _step_scan_texts(step):
+                    offenders += [
+                        f"{workflow_name} {job_name} {step.get('name')!r} "
+                        f"({source}): {pattern.pattern}"
+                        for pattern in FORBIDDEN_TEST_COMMANDS
+                        if pattern.search(text)
+                    ]
     assert not offenders, f"a second Linux test execution reappeared: {offenders!r}"

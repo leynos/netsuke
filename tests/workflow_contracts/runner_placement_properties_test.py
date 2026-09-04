@@ -12,10 +12,7 @@ from hypothesis import example, given, settings
 from hypothesis import strategies as st
 from runner_placement_invariants import (
     NINJA_ACTION,
-    REQUIRED_RUNNER_ASSIGNMENTS,
     UBICLOUD_ASSIGNMENT_KEYS,
-    UBICLOUD_COMPAT_LABEL,
-    UBICLOUD_DEFAULT_LABEL,
     WINDOWS_PACKAGE_ACTION,
     WINDOWS_PATH_FRAGMENTS,
     WINDOWS_PATH_STEP_NAME,
@@ -25,6 +22,11 @@ from runner_placement_invariants import (
     is_trunk_only_save,
     is_valid_ninja_sequence,
     is_valid_windows_tool_path_sequence,
+)
+from runner_placement_mutations import (
+    mutate_runner_assignments,
+    mutate_save_condition,
+    mutate_worker_flags,
 )
 
 NINJA_CONSUMER = "Consume Ninja"
@@ -40,7 +42,7 @@ RUNNER_MUTATIONS = (
 SEQUENCE_KINDS = ("ninja", "windows")
 CACHE_MUTATIONS = ("valid", "duplicate-path")
 WORKER_MUTATIONS = ("valid", "oversubscribed", "zero", "unbounded")
-SAVE_MUTATIONS = ("valid", "any-push", "any-branch", "unconditional")
+SAVE_MUTATIONS = ("valid", "any-push", "any-branch", "unconditional", "disjunctive")
 
 #: Disjoint path sets, one per cache owner, as the workflows declare them.
 CACHE_OWNERS = (
@@ -153,80 +155,12 @@ def _mutate_windows_sequence(
     return steps
 
 
-def _mutate_runner_assignments(mutation: str, selected_key: str) -> dict[str, str]:
-    """Apply one bounded runner-assignment mutation to the valid mapping."""
-    assignments = dict(REQUIRED_RUNNER_ASSIGNMENTS)
-    expected = assignments[selected_key]
-    match mutation:
-        case "github-hosted":
-            assignments[selected_key] = _github_hosted_runner_for(selected_key)
-        case "wrong-ubicloud-image":
-            assignments[selected_key] = (
-                UBICLOUD_COMPAT_LABEL
-                if expected == UBICLOUD_DEFAULT_LABEL
-                else UBICLOUD_DEFAULT_LABEL
-            )
-        case "swapped-platforms":
-            linux_key = "release.build-linux"
-            windows_key = "release.build-windows"
-            assignments[linux_key], assignments[windows_key] = (
-                assignments[windows_key],
-                assignments[linux_key],
-            )
-        case "intel-macos-replaced":
-            assignments["release.macos.x86_64-apple-darwin"] = "macos-15"
-    return assignments
-
-
-def _github_hosted_runner_for(selected_key: str) -> str:
-    """Choose a bounded hosted-runner mutation for the selected platform."""
-    if "windows" in selected_key:
-        return "windows-latest"
-    if "macos" in selected_key:
-        return "macos-15"
-    return "ubuntu-latest"
-
-
 def _mutate_cache_owners(mutation: str, selected: int) -> list[tuple[str, str]]:
     """Apply one bounded cache-ownership mutation to the valid layout."""
     owners = list(CACHE_OWNERS)
     if mutation == "duplicate-path":
         owners.append(("sccache", owners[selected][1]))
     return owners
-
-
-def _mutate_worker_flags(mutation: str, vcpus: int) -> dict[str, str]:
-    """Apply one bounded worker-count mutation to the valid flag set."""
-    match mutation:
-        case "oversubscribed":
-            count = str(vcpus + 1)
-        case "zero":
-            count = "0"
-        case "unbounded":
-            return {"BUILD_JOBS": "-j auto", "NEXTEST_TEST_JOBS": "-j auto"}
-        case _:
-            count = str(vcpus)
-    return {
-        "BUILD_JOBS": f"-j {count}",
-        "NEXTEST_BUILD_JOBS": f"--build-jobs {count}",
-        "NEXTEST_TEST_JOBS": f"-j {count}",
-    }
-
-
-def _mutate_save_condition(mutation: str) -> str:
-    """Apply one bounded mutation to the trunk-only cache-save condition."""
-    match mutation:
-        case "any-push":
-            return "github.event_name == 'push'"
-        case "any-branch":
-            return "github.ref == 'refs/heads/main'"
-        case "unconditional":
-            return "always()"
-        case _:
-            return (
-                "github.event_name == 'push' && github.ref == 'refs/heads/main' "
-                "&& steps.caches.outputs.registry-hit != 'true'"
-            )
 
 
 def _generated_sequence_is_valid(
@@ -301,7 +235,7 @@ def test_generated_runner_assignments_accept_only_platform_contract(
     mutation: str, selected_key: str
 ) -> None:
     """Accept only the required Ubicloud and GitHub-hosted assignments."""
-    assignments = _mutate_runner_assignments(mutation, selected_key)
+    assignments = mutate_runner_assignments(mutation, selected_key)
     assert has_required_runner_assignments(assignments) is (mutation == "valid"), (
         f"mutation={mutation!r}, selected_key={selected_key!r}, "
         f"assignments={assignments!r}"
@@ -337,7 +271,7 @@ def test_generated_worker_counts_stay_within_the_lane(
     mutation: str, vcpus: int
 ) -> None:
     """Accept worker counts only while they fit the placed shape."""
-    flags = _mutate_worker_flags(mutation, vcpus)
+    flags = mutate_worker_flags(mutation, vcpus)
     assert is_bounded_worker_count(vcpus, flags) is (mutation == "valid"), (
         f"mutation={mutation!r}, vcpus={vcpus!r}, flags={flags!r}"
     )
@@ -347,10 +281,17 @@ def test_generated_worker_counts_stay_within_the_lane(
 @example(mutation="any-push")
 @example(mutation="any-branch")
 @example(mutation="unconditional")
+@example(mutation="disjunctive")
 @given(mutation=st.sampled_from(SAVE_MUTATIONS))
 def test_generated_save_conditions_require_a_trunk_push(mutation: str) -> None:
     """Accept a save condition only while it names a push on the trunk."""
-    condition = _mutate_save_condition(mutation)
+    condition = mutate_save_condition(mutation)
     assert is_trunk_only_save(condition) is (mutation == "valid"), (
         f"mutation={mutation!r}, condition={condition!r}"
     )
+
+
+def test_disjunctive_save_condition_is_rejected() -> None:
+    """Reject a named top-level OR of the push and main predicates."""
+    condition = "github.event_name == 'push' || github.ref == 'refs/heads/main'"
+    assert is_trunk_only_save(condition) is False, f"condition={condition!r}"

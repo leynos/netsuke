@@ -9,6 +9,8 @@ a workflow edit cannot quietly reintroduce a source build or a stale binary.
 Run via ``make test-workflow-contracts``.
 """
 
+import typing as typ
+
 import yaml
 from workflow_loading import (
     REPO_ROOT,
@@ -19,6 +21,9 @@ from workflow_loading import (
     require_mapping,
     workflow_job,
 )
+
+KANI_CACHE_ACTION = REPO_ROOT / ".github" / "actions" / "kani-cache" / "action.yml"
+WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
 
 
 def _action_steps() -> list[dict[str, object]]:
@@ -32,8 +37,6 @@ def _action_steps() -> list[dict[str, object]]:
         for step in require_list(runs.get("steps"), "kani-cache steps")
     ]
 
-
-KANI_CACHE_ACTION = REPO_ROOT / ".github" / "actions" / "kani-cache" / "action.yml"
 
 #: Job-local homes Kani redirects into the workspace, and the reason for each.
 KANI_HOMES = {
@@ -103,6 +106,66 @@ def test_kani_payloads_share_one_versioned_cache_entry() -> None:
     assert len(paths) == 1, f"restore and save must claim the same paths: {paths!r}"
 
 
+class _InstallFragment(typ.NamedTuple):
+    """A required substring of the install script, and the concern it protects."""
+
+    concern: str
+    text: str
+
+
+#: Required substrings of the install script, one row per concern so a
+#: regression names the property it broke rather than a bare fragment. Each
+#: concern groups the URLs, checksum prefixes, directory layout, or
+#: executable probes that together protect one part of the binary-only,
+#: cache-aware contract.
+REQUIRED_INSTALL_FRAGMENTS = (
+    _InstallFragment(
+        "quickinstall front-end download host",
+        "quickinstall='https://github.com/cargo-bins/cargo-quickinstall'",
+    ),
+    _InstallFragment(
+        "quickinstall front-end archive URL",
+        '"${quickinstall}/releases/download/kani-verifier-${kani_version}/',
+    ),
+    _InstallFragment(
+        "quickinstall front-end archive checksum prefix",
+        "ed2bafc239b834e14c6b66fc4838e342",
+    ),
+    _InstallFragment(
+        "upstream verifier download host",
+        "upstream='https://github.com/model-checking/kani'",
+    ),
+    _InstallFragment(
+        "upstream verifier bundle URL",
+        '"${upstream}/releases/download/kani-${kani_version}/',
+    ),
+    _InstallFragment(
+        "upstream verifier bundle checksum prefix",
+        "3b5f7afd3b51603ee720db7bc1bc4fe4",
+    ),
+    _InstallFragment(
+        "front-end directory layout",
+        'frontend_bin="${CARGO_HOME}/frontend/kani-${kani_version}"',
+    ),
+    _InstallFragment(
+        "verifier directory layout",
+        'kani_dir="${KANI_HOME}/kani-${kani_version}"',
+    ),
+    _InstallFragment(
+        "front-end executable probe",
+        '[[ ! -x "${frontend_bin}/cargo-kani"',
+    ),
+    _InstallFragment(
+        "verifier executable probe",
+        '[[ ! -x "${kani_dir}/bin/kani-driver"',
+    ),
+    _InstallFragment(
+        "local bundle setup invocation",
+        'cargo kani setup --use-local-bundle "${bundle}"',
+    ),
+)
+
+
 def test_kani_uses_cached_prebuilt_frontend_and_release_bundle() -> None:
     """Require Kani's separate front-end and verifier payloads to be cacheable."""
     workflow = load_workflow()
@@ -122,26 +185,16 @@ def test_kani_uses_cached_prebuilt_frontend_and_release_bundle() -> None:
     ), "the Kani cache must be restored before Kani is installed"
 
     install_command = str(install_step.get("run"))
-    required_install_fragments = (
-        "quickinstall='https://github.com/cargo-bins/cargo-quickinstall'",
-        '"${quickinstall}/releases/download/kani-verifier-${kani_version}/',
-        "ed2bafc239b834e14c6b66fc4838e342",
-        "upstream='https://github.com/model-checking/kani'",
-        '"${upstream}/releases/download/kani-${kani_version}/',
-        "3b5f7afd3b51603ee720db7bc1bc4fe4",
-        'frontend_bin="${CARGO_HOME}/frontend/kani-${kani_version}"',
-        'kani_dir="${KANI_HOME}/kani-${kani_version}"',
-        '[[ ! -x "${frontend_bin}/cargo-kani"',
-        '[[ ! -x "${kani_dir}/bin/kani-driver"',
-        'cargo kani setup --use-local-bundle "${bundle}"',
-    )
-    missing_fragments = tuple(
+    missing_fragments = [
         fragment
-        for fragment in required_install_fragments
-        if fragment not in install_command
-    )
+        for fragment in REQUIRED_INSTALL_FRAGMENTS
+        if fragment.text not in install_command
+    ]
     assert not missing_fragments, (
-        f"Kani's binary-only cached installation is missing {missing_fragments!r}"
+        "Kani's binary-only cached installation is missing: "
+        + ", ".join(
+            f"{fragment.concern} ({fragment.text!r})" for fragment in missing_fragments
+        )
     )
     _assert_kani_archives_are_verified_before_use(install_command)
 
@@ -168,3 +221,63 @@ def _assert_kani_archives_are_verified_before_use(install_command: str) -> None:
         assert install_command.index(check) < install_command.index(use), (
             f"the Kani {label} must be verified before it is unpacked"
         )
+
+
+def test_kani_cache_action_requires_runner_image() -> None:
+    """Require the kani-cache action to declare `runner-image` as required.
+
+    The key renderer reads `NETSUKE_RUNNER_IMAGE` under `set -u`; an
+    undeclared input would let a future caller omit it and abort the job
+    while rendering the cache key, instead of failing with a clear
+    missing-input error before the job runs.
+    """
+    document = require_mapping(
+        yaml.safe_load(KANI_CACHE_ACTION.read_text(encoding="utf-8")), "kani-cache"
+    )
+    inputs = require_mapping(document.get("inputs"), "kani-cache inputs")
+    runner_image = require_mapping(inputs.get("runner-image"), "runner-image input")
+    assert runner_image.get("required") is True, (
+        "the kani-cache action must declare runner-image as a required input"
+    )
+
+
+def _kani_cache_steps(
+    workflow: dict[str, object], workflow_name: str
+) -> list[tuple[str, dict[str, object]]]:
+    """Return every (job name, step) pair that calls the kani-cache action."""
+    jobs = require_mapping(workflow.get("jobs"), f"{workflow_name} jobs")
+    pairs: list[tuple[str, dict[str, object]]] = []
+    for job_name, declaration in jobs.items():
+        job = require_mapping(declaration, f"{workflow_name} {job_name}")
+        if "steps" not in job:
+            # A job calling a reusable workflow declares no steps of its own,
+            # so it cannot call the local kani-cache action directly.
+            continue
+        pairs.extend(
+            (job_name, step)
+            for step in job_steps(workflow, job_name)
+            if step.get("uses") == "./.github/actions/kani-cache"
+        )
+    return pairs
+
+
+def test_every_kani_cache_caller_supplies_runner_image() -> None:
+    """Require every kani-cache step to pass a non-empty `runner-image`.
+
+    A caller that stops forwarding the workflow-level runner image would
+    otherwise only fail deep inside the composite action's own `set -u`
+    boundary while rendering the cache key, rather than at the call site.
+    """
+    offenders: list[str] = []
+    for path in sorted(WORKFLOW_DIR.glob("*.yml")):
+        workflow = load_workflow(path)
+        for job_name, step in _kani_cache_steps(workflow, path.name):
+            inputs = step.get("with")
+            runner_image = (
+                inputs.get("runner-image") if isinstance(inputs, dict) else None
+            )
+            if not isinstance(runner_image, str) or not runner_image.strip():
+                offenders.append(f"{path.name} {job_name} {step.get('name')!r}")
+    assert not offenders, (
+        f"every kani-cache step must supply a non-empty runner-image: {offenders!r}"
+    )

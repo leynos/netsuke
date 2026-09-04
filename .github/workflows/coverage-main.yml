@@ -38,7 +38,13 @@ jobs:
       # flags, which sccache hashes, so they coexist without a `target`
       # archive and neither shape is left uncached.
       RUSTC_WRAPPER: sccache
-      SCCACHE_GHA_ENABLED: 'true'
+      # Derived from the same repository variable the merge gate reads, so one
+      # operator switch moves both lanes together. Pinning `true` here would
+      # leave this job writing a GitHub Actions store that no other lane reads
+      # the moment the gate moved to the local directory, and nothing would
+      # fail: the trunk baseline would simply compile cold on every run.
+      SCCACHE_GHA_ENABLED: ${{ vars.NETSUKE_SCCACHE_LOCAL_DIR == 'true' && 'false' || 'true' }}
+      SCCACHE_DIR: ${{ github.workspace }}/.sccache
       SCCACHE_CACHE_SIZE: 4G
       # Keep the main baseline aligned with pull-request coverage instead of
       # silently skipping real-Ninja integration tests.
@@ -55,23 +61,45 @@ jobs:
         uses: ./.github/actions/memory-sampler
         with:
           mode: start
+      - name: Resolve the pinned toolchain
+        # Read from `rust-toolchain.toml` rather than restated. The `Setup
+        # Rust` step below must spell the toolchain as a literal, because
+        # tests/polonius_toolchain_contract.rs reads that literal and holds it
+        # equal to this file, and the same test forbids this job from
+        # declaring NETSUKE_RUST_TOOLCHAIN at job scope. Deriving the
+        # cache-key component from the same file anchors both to one source,
+        # so a toolchain bump cannot silently leave this job restoring a
+        # different Cargo generation from the merge gate's. A cold download
+        # store on the trunk is not visible as a failure, which is why this is
+        # checked rather than trusted.
+        run: |
+          set -euo pipefail
+          toolchain="$(
+            sed -n 's/^[[:space:]]*channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
+              rust-toolchain.toml | head -n 1
+          )"
+          test -n "${toolchain}"
+          printf 'COVERAGE_TOOLCHAIN=%s\n' "${toolchain}" >> "$GITHUB_ENV"
       - name: Render cache key
         # Renders the same Cargo download-store key that
         # `.github/actions/linux-gate-cache` renders for the merge gate: this
         # job runs on the same shape and image, so it reads the generation the
         # gate publishes on the trunk. It is a reader only.
         # tests/workflow_contracts/cache_ownership_test.py holds the shapes
-        # equal. The toolchain is spelled here rather than taken from
-        # NETSUKE_RUST_TOOLCHAIN because coverage must not declare that
-        # variable; tests/polonius_toolchain_contract.rs holds it absent.
+        # equal. The toolchain arrives in COVERAGE_TOOLCHAIN from the step
+        # above rather than from NETSUKE_RUST_TOOLCHAIN, which
+        # tests/polonius_toolchain_contract.rs holds absent from this job.
         run: |
           set -euo pipefail
           lane="${RUNNER_OS}-${RUNNER_ARCH}-${RUNNER_ENVIRONMENT}-${NETSUKE_RUNNER_IMAGE}"
           sources="$(sha256sum Cargo.lock rust-toolchain.toml | sha256sum | cut -c1-16)"
           {
-            printf 'CARGO_CACHE_PREFIX=netsuke-cargo-v1-%s-nightly-2026-08-23-\n' "${lane}"
-            printf 'CARGO_CACHE_KEY=netsuke-cargo-v1-%s-nightly-2026-08-23-%s\n' \
-              "${lane}" "${sources}"
+            printf 'CARGO_CACHE_PREFIX=netsuke-cargo-v1-%s-%s-\n' \
+              "${lane}" "${COVERAGE_TOOLCHAIN}"
+            printf 'CARGO_CACHE_KEY=netsuke-cargo-v1-%s-%s-%s\n' \
+              "${lane}" "${COVERAGE_TOOLCHAIN}" "${sources}"
+            printf 'SCCACHE_CACHE_PREFIX=netsuke-sccache-v1-%s-%s-%s-\n' \
+              "${lane}" "${COVERAGE_TOOLCHAIN}" "${BUILD_PROFILE}"
           } >> "$GITHUB_ENV"
       - name: Restore Cargo download store
         id: cargo_registry
@@ -87,10 +115,26 @@ jobs:
             ~/.cargo/git
           key: ${{ env.CARGO_CACHE_KEY }}
           restore-keys: ${{ env.CARGO_CACHE_PREFIX }}
+      - name: Restore compiler cache
+        id: sccache_store
+        # Only in local-directory mode, and only ever as a reader: `build-test`
+        # on the trunk is the single writer of this key family. On the GitHub
+        # Actions backend the compiler cache needs no archive at all, so
+        # restoring one there would give it a second owner.
+        if: vars.NETSUKE_SCCACHE_LOCAL_DIR == 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          # Prefix only: this job never shares the gate's commit, so it takes
+          # the newest generation the gate published for this shape.
+          key: ${{ env.SCCACHE_CACHE_PREFIX }}
+          restore-keys: ${{ env.SCCACHE_CACHE_PREFIX }}
       - name: Record cache observations
         if: always()
         env:
           REGISTRY_HIT: ${{ steps.cargo_registry.outputs.cache-hit }}
+          SCCACHE_LOCAL: ${{ vars.NETSUKE_SCCACHE_LOCAL_DIR }}
+          SCCACHE_STORE_HIT: ${{ steps.sccache_store.outputs.cache-hit }}
         run: |
           {
             printf '### Cache observations\n\n'
@@ -99,6 +143,14 @@ jobs:
             # shellcheck disable=SC2016
             printf -- '- registry key: `%s` hit: `%s`\n' \
               "${CARGO_CACHE_KEY}" "${REGISTRY_HIT:-false}"
+            if [ "${SCCACHE_LOCAL}" = 'true' ]; then
+              # shellcheck disable=SC2016
+              printf -- '- sccache key: `%s` hit: `%s`\n' \
+                "${SCCACHE_CACHE_PREFIX}" "${SCCACHE_STORE_HIT:-false}"
+            else
+              # shellcheck disable=SC2016
+              printf -- '- sccache backend: `gha` (no archive)\n'
+            fi
           } | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Install sccache
         uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
@@ -107,7 +159,7 @@ jobs:
           fallback: none
       - name: Setup Rust
         # Pinned to the shared-actions revision that adds `cache-provider`.
-        uses: leynos/shared-actions/.github/actions/setup-rust@1f303985c67e7da212c906c0051343ce0e46c59e
+        uses: leynos/shared-actions/.github/actions/setup-rust@c6125f19593668cbfefd65a59c08cb7aefe90d93
         with:
           # Match rust-toolchain.toml: the tree needs the nightly-default
           # Polonius borrow checker (see
@@ -123,7 +175,7 @@ jobs:
       - name: Reset sccache statistics
         run: sccache --zero-stats
       - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@1f303985c67e7da212c906c0051343ce0e46c59e
+        uses: leynos/shared-actions/.github/actions/generate-coverage@c6125f19593668cbfefd65a59c08cb7aefe90d93
         with:
           language: rust
           output-path: lcov.info
@@ -168,7 +220,7 @@ jobs:
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
         if: env.CS_ACCESS_TOKEN != ''
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@1f303985c67e7da212c906c0051343ce0e46c59e
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@c6125f19593668cbfefd65a59c08cb7aefe90d93
         with:
           path: lcov.info
           format: lcov

@@ -22,6 +22,7 @@ from cache_contract_data import (
     declared_paths,
     lane_steps,
 )
+from sccache_compile_step_data import is_compile_step
 from workflow_loading import (
     job_steps,
     load_workflow,
@@ -87,6 +88,39 @@ def test_compiling_jobs_report_sccache_statistics(
 ) -> None:
     """Require compiler-cache observability on every direct Rust build."""
     _assert_sccache_contract(workflow_name, job_name)
+
+
+@pytest.mark.parametrize(("workflow_name", "job_name"), SCCACHE_WRAPPER_JOBS)
+def test_statistics_bracket_every_compile_step(
+    workflow_name: str, job_name: str
+) -> None:
+    """Require the reset and report steps to bracket every compile step.
+
+    `test_compiling_jobs_report_sccache_statistics` only orders the two
+    statistic steps relative to each other; it never checks either one
+    against the compile step that sits between them. A reset moved after
+    the build, or a report moved before it, would still pass that ordering
+    check while reporting zero or partial compile-request counts, which is
+    the exact regression this test exists to catch.
+    """
+    steps = job_steps(load_workflow(WORKFLOW_DIR / workflow_name), job_name)
+    reset_index = steps.index(named_step(steps, "Reset sccache statistics"))
+    show_index = steps.index(named_step(steps, "Show sccache statistics"))
+    compile_indices = [
+        index for index, step in enumerate(steps) if is_compile_step(step)
+    ]
+    assert compile_indices, (
+        f"{workflow_name} {job_name} must compile at least one step between "
+        "resetting and reporting sccache statistics"
+    )
+    assert reset_index < min(compile_indices), (
+        f"{workflow_name} {job_name} must reset sccache statistics before "
+        "the first compile step"
+    )
+    assert max(compile_indices) < show_index, (
+        f"{workflow_name} {job_name} must report sccache statistics after "
+        "the last compile step"
+    )
 
 
 def test_linux_gate_selects_exactly_one_sccache_backend() -> None:

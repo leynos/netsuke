@@ -101,14 +101,46 @@ GITHUB_HOSTED_ONLY_KEYS = (
 
 
 def is_ubicloud_label(runner: str) -> bool:
-    """Return whether a runner label selects a Ubicloud VM."""
+    """Return whether a runner label selects a Ubicloud VM.
+
+    Parameters
+    ----------
+    runner
+        The runner label a job or action assigns, such as
+        ``"ubicloud-standard-2-ubuntu-2404"`` or ``"windows-latest"``.
+
+    Returns
+    -------
+    bool
+        ``True`` when the label names a Ubicloud-hosted shape.
+    """
     return runner.startswith("ubicloud-")
 
 
 def is_valid_ninja_sequence(
     steps: list[dict[str, object]], first_consumer: str
 ) -> bool:
-    """Return whether one pinned Ninja setup precedes the first consumer."""
+    """Return whether one pinned Ninja setup precedes the first consumer.
+
+    Parameters
+    ----------
+    steps
+        The job's normalised workflow steps, in declaration order.
+    first_consumer
+        The ``name`` of the first step that requires Ninja on the ``PATH``.
+
+    Returns
+    -------
+    bool
+        ``True`` when exactly one step installs the pinned Ninja action and
+        that step precedes every step named ``first_consumer``.
+
+    Notes
+    -----
+    A missing, duplicated, or late setup step leaves a consumer running
+    against an unpinned or absent Ninja binary, so the sequence is checked
+    structurally rather than merely for presence.
+    """
     setup_indices = [
         index
         for index, step in enumerate(steps)
@@ -128,7 +160,26 @@ def is_valid_ninja_sequence(
 def is_valid_windows_tool_path_sequence(
     steps: list[dict[str, object]],
 ) -> bool:
-    """Return whether one guarded PowerShell path setup precedes packaging."""
+    """Return whether one guarded PowerShell path setup precedes packaging.
+
+    Parameters
+    ----------
+    steps
+        The job's normalised workflow steps, in declaration order.
+
+    Returns
+    -------
+    bool
+        ``True`` when exactly one step configures the Windows tool path, that
+        step matches the required guard, shell, and script fragments, and it
+        precedes the Windows packaging step.
+
+    Notes
+    -----
+    Packaging before the tool path is exposed leaves the installer built
+    against a `PATH` that omits the `.NET` global tool directory, so the
+    ordering is enforced structurally alongside the step's own shape.
+    """
     path_indices = [
         index for index, step in enumerate(steps) if _is_windows_path_candidate(step)
     ]
@@ -147,7 +198,21 @@ def is_valid_windows_tool_path_sequence(
 
 
 def has_required_runner_assignments(assignments: dict[str, str]) -> bool:
-    """Return whether every owned and delegated runner keeps its assignment."""
+    """Return whether every owned and delegated runner keeps its assignment.
+
+    Parameters
+    ----------
+    assignments
+        A ``job.step`` (or ``workflow.job``) key mapped to the runner label
+        it was placed on, gathered from the checked-in workflows.
+
+    Returns
+    -------
+    bool
+        ``True`` when ``assignments`` is exactly equal to
+        :data:`REQUIRED_RUNNER_ASSIGNMENTS`: every required key is present
+        with its required runner, and no extra or missing key remains.
+    """
     return dict(assignments) == REQUIRED_RUNNER_ASSIGNMENTS
 
 
@@ -209,18 +274,53 @@ def is_trunk_only_save(condition: str) -> bool:
     -------
     bool
         ``True`` when the condition names both a ``push`` event and the
-        ``main`` ref.
+        ``main`` ref, and the two predicates are combined so that neither can
+        authorise a save on its own.
 
     Notes
     -----
     A pull request that saved would race the designated writer for the
-    reservation and publish a generation no reviewer has seen.
+    reservation and publish a generation no reviewer has seen. Naming both
+    predicates is not enough: a top-level disjunction of the two, such as
+    ``github.event_name == 'push' || github.ref == 'refs/heads/main'``, lets
+    either predicate authorise a save alone, so any top-level ``||`` is
+    rejected outright regardless of what it separates.
     """
     normalized = " ".join(condition.split())
+    if len(_split_top_level_or_clauses(normalized)) > 1:
+        return False
     return (
         "github.event_name == 'push'" in normalized
         and "github.ref == 'refs/heads/main'" in normalized
     )
+
+
+def _split_top_level_or_clauses(expression: str) -> list[str]:
+    """Split an expression on `||` that sits outside parens and quotes."""
+    clauses: list[str] = []
+    depth = 0
+    quote: str | None = None
+    start = 0
+    index = 0
+    length = len(expression)
+    while index < length:
+        char = expression[index]
+        if quote is not None:
+            quote = None if char == quote else quote
+        elif char in "'\"":
+            quote = char
+        elif char in "([":
+            depth += 1
+        elif char in ")]":
+            depth -= 1
+        elif depth == 0 and expression[index : index + 2] == "||":
+            clauses.append(expression[start:index])
+            index += 2
+            start = index
+            continue
+        index += 1
+    clauses.append(expression[start:])
+    return clauses
 
 
 def _trailing_count(value: str) -> int | None:
