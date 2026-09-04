@@ -292,6 +292,12 @@ jobs:
         # v7.0.1
         with:
           persist-credentials: false
+      - name: Install Python for admission timings
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        # v8.3.2
+        with:
+          python-version: '3.14'
+          enable-cache: false
       - id: release_admission
         name: Require release-admission evidence
         shell: bash

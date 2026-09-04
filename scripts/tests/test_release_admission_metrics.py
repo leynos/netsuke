@@ -3,6 +3,7 @@
 import dataclasses
 import importlib.util
 import json
+import math
 import os
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the script boundary is under test.
 import typing as typ
@@ -26,9 +27,9 @@ CANARY_BY_OPERATION = {
     "check_scan_freshness": "history_scan",
     "verify_evidence": "history_scan",
 }
-SUCCESS_GATE_OUTPUTS = {
-    "gate-outcome": "success",
-    "gate-error-category": "none",
+FRESH_OBSERVATION_GATE_OUTPUTS = {
+    "gate-outcome": "failure",
+    "gate-error-category": "missing_evidence",
 }
 FAKE_ADAPTER_PREAMBLE = """#!/usr/bin/env bash
 set -euo pipefail
@@ -52,15 +53,24 @@ with open(sys.argv[1], "a", encoding="utf-8") as call_log:
     call_log.write("\\n")
 PY
 """
-FAKE_GH_BEHAVIOUR = """if [[ "${NETSUKE_FAKE_GH_FAILURE:-}" == "true" ]]; then
+FAKE_GH_BEHAVIOUR = """if [[ "$*" == *"/actions/runs?"* ]]; then
+  gh_failure="${NETSUKE_FAKE_GH_WORKFLOW_FAILURE:-}"
+  gh_delay_seconds="${NETSUKE_FAKE_GH_WORKFLOW_DELAY_SECONDS:-}"
+  gh_ignores_term="${NETSUKE_FAKE_GH_WORKFLOW_IGNORE_TERM:-}"
+else
+  gh_failure="${NETSUKE_FAKE_GH_FAILURE:-}"
+  gh_delay_seconds="${NETSUKE_FAKE_GH_DELAY_SECONDS:-}"
+  gh_ignores_term="${NETSUKE_FAKE_GH_IGNORE_TERM:-}"
+fi
+if [[ "$gh_failure" == "true" ]]; then
   exit 1
 fi
-if [[ "${NETSUKE_FAKE_GH_IGNORE_TERM:-}" == "true" ]]; then
+if [[ "$gh_ignores_term" == "true" ]]; then
   trap '' TERM
   while :; do sleep 1; done
 fi
-if [[ -n "${NETSUKE_FAKE_GH_DELAY_SECONDS:-}" ]]; then
-  sleep "$NETSUKE_FAKE_GH_DELAY_SECONDS"
+if [[ -n "$gh_delay_seconds" ]]; then
+  sleep "$gh_delay_seconds"
 fi
 if [[ "$*" == *"/commits/"* ]]; then
   printf '%s\\n' "${NETSUKE_FAKE_RESOLVED_REVISION:-$GITHUB_SHA}"
@@ -209,7 +219,7 @@ def _run_gate(
 ]:
     """Run the production gate with fakes and return its records and call log."""
     fake_bin = tmp_path / "fake-bin"
-    fake_bin.mkdir()
+    fake_bin.mkdir(parents=True)
     call_log = _write_fake_commands(fake_bin)
     metrics_file = tmp_path / "release-admission-metrics.jsonl"
     output_file = tmp_path / "github-output"
@@ -277,8 +287,39 @@ def operation_records(
     ]
 
 
-def test_gate_emits_each_fixed_operation_and_a_successful_gate(tmp_path: Path) -> None:
-    """Verify the successful scaffold emits all required metric records.
+def operation_duration(metrics: list[dict[str, object]], operation: str) -> float:
+    """Return one finite duration observation for a fixed operation.
+
+    Parameters
+    ----------
+    metrics
+        Parsed release-admission metric records.
+    operation
+        One fixed operation from ``CANARY_BY_OPERATION``.
+
+    Returns
+    -------
+    float
+        The operation duration in seconds.
+
+    """
+    value = next(
+        record["value"]
+        for record in metrics
+        if record["name"] == "netsuke_release_admission_operation_duration_seconds"
+        and record["labels"] == {"operation": operation}
+    )
+    assert isinstance(value, int | float), (
+        "duration records must contain finite numeric values"
+    )
+    assert math.isfinite(value), "duration records must contain finite numeric values"
+    return float(value)
+
+
+def test_gate_observes_synthetic_fresh_evidence_without_blocking(
+    tmp_path: Path,
+) -> None:
+    """Verify synthetic fresh evidence remains an observed gate failure.
 
     Parameters
     ----------
@@ -287,7 +328,8 @@ def test_gate_emits_each_fixed_operation_and_a_successful_gate(tmp_path: Path) -
 
     Notes
     -----
-    Every fixed operation, duration, gate metric, and summary output is required.
+    Freshness without producer-backed evidence is non-blocking observation, not
+    successful admission.
     """
     result, metrics, calls, outputs = _run_gate(tmp_path, evidence_state="fresh")
 
@@ -311,23 +353,27 @@ def test_gate_emits_each_fixed_operation_and_a_successful_gate(tmp_path: Path) -
     for operation, canary in CANARY_BY_OPERATION.items():
         records = operation_records(metrics, operation)
         assert len(records) == 1, f"{operation} must emit one operation counter"
+        outcome = "failure" if operation == "verify_evidence" else "success"
+        error_category = "missing_evidence" if outcome == "failure" else "none"
         assert records[0]["labels"] == expected_operation_labels(
-            canary, operation, "success", "none"
-        ), f"{operation} must report a successful bounded operation counter"
+            canary, operation, outcome, error_category
+        ), f"{operation} must report its bounded observation"
     expected_gate_metric = {
         "name": "netsuke_release_admission_gate_total",
-        "labels": expected_gate_labels("success", "none"),
+        "labels": expected_gate_labels("failure", "missing_evidence"),
         "value": 1,
     }
     assert metrics[-1] == expected_gate_metric, (
-        "the gate must report its successful outcome"
+        "synthetic freshness must not report successful admission"
     )
     assert {
-        name: outputs[name] for name in SUCCESS_GATE_OUTPUTS
-    } == SUCCESS_GATE_OUTPUTS, "the successful gate must publish its summary outcome"
+        name: outputs[name] for name in FRESH_OBSERVATION_GATE_OUTPUTS
+    } == FRESH_OBSERVATION_GATE_OUTPUTS, (
+        "observation must publish the producer-backed evidence failure"
+    )
     assert outputs["metrics-file"] == str(
         tmp_path / "release-admission-metrics.jsonl"
-    ), "the successful gate must publish its metrics-file output"
+    ), "observation must publish its metrics-file output"
 
 
 def test_validator_rejects_non_finite_metric_values() -> None:
