@@ -124,3 +124,11 @@ must select the repository's pinned nightly explicitly, for example:
 ```sh
 cargo +nightly-2026-08-23 install netsuke-build
 ```
+
+## Addendum — 2026-09-04: Dependabot-owned toolchain updates
+
+Dependabot now owns routine updates to the checked-in `rust-toolchain.toml`
+declaration through the `rust-toolchain` ecosystem block. The repository
+remains pinned to a dated nightly, and each Dependabot pull request still
+requires normal human review and the repository quality gates before the pin
+changes. Kani's separately managed toolchain remains outside this policy.

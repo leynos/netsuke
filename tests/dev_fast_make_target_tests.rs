@@ -1,18 +1,6 @@
-//! Behavioural tests for the `dev-fast` Make targets' success paths.
+//! Behavioural tests for hermetic `dev-fast` Make target contracts.
 //!
-//! The scripts are covered directly elsewhere; what these tests pin down is the
-//! contract the recipes themselves establish — which toolchain is selected,
-//! which configuration fragment is passed, which Cargo subcommand runs, and that
-//! the install prefix leads `PATH` so `-fuse-ld=mold` resolves the pinned
-//! linker. A fake `cargo` records each invocation so those become checked facts
-//! rather than assumptions.
-//!
-//! Every case is hermetic: no network, and no real mold or rustup. The
-//! exception is `cargo_resolves_the_fragment_to_the_intended_settings`,
-//! which runs the real Cargo via `env!("CARGO")` because only the real
-//! Cargo can confirm how it resolves the `tools/dev-fast/config.toml`
-//! fragment. Every other case exercises the recording fake `cargo`.
-
+//! A fake Cargo verifies recipes; real Cargo resolves the fragment in its test.
 #![cfg(all(unix, target_os = "linux"))]
 
 use anyhow::{Context, Result, ensure};
@@ -25,7 +13,6 @@ use test_support::dev_fast::{
 
 /// The version the fake release is published as; see the installer tests.
 const TEST_MOLD_VERSION: &str = "9.9.9";
-
 /// What a given build target must ask Cargo to do.
 #[derive(Copy, Clone, Debug)]
 struct BuildTarget {
@@ -37,7 +24,6 @@ struct BuildTarget {
 fn prepared_build_scenario() -> Result<BuildScenario> {
     BuildScenario::prepare()
 }
-
 #[rstest]
 #[case::dev_build(BuildTarget {
     name: "dev-build",
@@ -174,13 +160,27 @@ fn build_targets_propagate_cargo_failure(
     #[from(prepared_build_scenario)] scenario_res: Result<BuildScenario>,
 ) -> Result<()> {
     let scenario = scenario_res?;
-    let cargo =
-        scenario
-            .sandbox()
-            .write_fake(&scenario.sandbox().bin(), "failing-cargo", "exit 17")?;
+    let marker = scenario
+        .sandbox()
+        .home()
+        .join(format!("failing-cargo-{target}.marker"));
+    let cargo = scenario.sandbox().write_fake(
+        &scenario.sandbox().bin(),
+        "failing-cargo",
+        &format!(": > \"{marker}\"\nexit 17"),
+    )?;
     let invocation = MakeInvocation::new(target).variable("CARGO", cargo);
     let output = scenario.sandbox().run_make(&invocation)?;
 
+    ensure!(
+        marker.as_std_path().exists(),
+        "fake Cargo must run before make {target} propagates its failure"
+    );
+    ensure!(
+        output.status.code() == Some(2),
+        "make {target} should report Cargo exit status 17 as Make failure 2, got `{:?}`",
+        output.status.code()
+    );
     ensure!(
         !output.status.success(),
         "make {target} must fail when Cargo exits unsuccessfully"
