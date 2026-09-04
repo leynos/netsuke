@@ -116,7 +116,7 @@ jobs:
           fallback: none
 
       - name: Build release binary
-        uses: leynos/shared-actions/.github/actions/rust-build-release@f6d4d5f549655c118f86f371b8d55c200d3efa50
+        uses: leynos/shared-actions/.github/actions/rust-build-release@1f303985c67e7da212c906c0051343ce0e46c59e
         with:
           target: ${{ inputs.target }}
           bin-name: ${{ env.BIN_NAME }}
@@ -209,7 +209,7 @@ jobs:
 
       - name: Stage artefacts
         id: stage
-        uses: leynos/shared-actions/.github/actions/stage-release-artefacts@f6d4d5f549655c118f86f371b8d55c200d3efa50
+        uses: leynos/shared-actions/.github/actions/stage-release-artefacts@1f303985c67e7da212c906c0051343ce0e46c59e
         with:
           config-file: .github/release-staging.toml
           target: ${{ inputs['stage-target'] }}
@@ -239,7 +239,7 @@ jobs:
 
       - name: Package Linux artefacts with dependencies
         if: inputs.platform == 'linux'
-        uses: leynos/shared-actions/.github/actions/linux-packages@f6d4d5f549655c118f86f371b8d55c200d3efa50
+        uses: leynos/shared-actions/.github/actions/linux-packages@1f303985c67e7da212c906c0051343ce0e46c59e
         with:
           project-dir: .
           package-name: ${{ inputs['bin-name'] }}
@@ -260,7 +260,7 @@ jobs:
       - name: Build Windows installer package
         if: inputs.platform == 'windows'
         id: package_windows
-        uses: leynos/shared-actions/.github/actions/windows-package@f6d4d5f549655c118f86f371b8d55c200d3efa50
+        uses: leynos/shared-actions/.github/actions/windows-package@1f303985c67e7da212c906c0051343ce0e46c59e
         with:
           product-name: ${{ inputs['bin-name'] }}
           manufacturer: Leynos
@@ -278,7 +278,7 @@ jobs:
       - name: Build macOS installer package
         if: inputs.platform == 'macos'
         id: package_macos
-        uses: leynos/shared-actions/.github/actions/macos-package@f6d4d5f549655c118f86f371b8d55c200d3efa50
+        uses: leynos/shared-actions/.github/actions/macos-package@1f303985c67e7da212c906c0051343ce0e46c59e
         with:
           name: ${{ inputs['bin-name'] }}
           identifier: com.leynos.${{ inputs['bin-name'] }}

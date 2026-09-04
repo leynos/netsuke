@@ -768,15 +768,17 @@ works once the Ubicloud GitHub App covers this repository; see "GitHub Actions
 runner placement" for that prerequisite.
 
 Every `leynos/shared-actions` reference is pinned to
-`f6d4d5f549655c118f86f371b8d55c200d3efa50`. That revision introduces
+`1f303985c67e7da212c906c0051343ce0e46c59e`. That revision introduces
 `cache-provider: external`; installs `whitaker-installer` and `cargo-nextest`
 from checksum-verified official releases with no source fallback; adds the
 `all-features`, `all-targets`, and `doctests` inputs the single-execution rule
 depends on; forwards `cache-provider` and `use-sccache` through
-`rust-build-release` to its nested `setup-rust`; and hashes the Whitaker
-archive from standard input rather than by name, which is what made the Windows
-installer reject a correct archive whose path contained backslashes. One SHA
-across every reference, so a future bump moves them together.
+`rust-build-release` to its nested `setup-rust`; hashes the Whitaker archive
+from standard input rather than by name, so a path containing backslashes no
+longer makes a correct archive fail its digest; and converts the staging
+directory with `cygpath`, so GNU tar in Git Bash stops reading the drive-letter
+colon as a remote host. One SHA across every reference, so a future bump moves
+them together.
 
 CI installs tools from trusted prebuilt releases only, with two recorded
 exceptions and no others. `setup-rust` verifies the `cargo-binstall` installer
