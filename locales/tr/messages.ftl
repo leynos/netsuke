@@ -16,6 +16,7 @@ cli.flag.fetch_allow_scheme.help = fetch yardımcısının kullanabileceği ek U
 cli.flag.fetch_allow_host.help = Varsayılan reddetme açıkken izin verilen makine adları.
 cli.flag.fetch_block_host.help = Başka yerde izin verilse bile her zaman engellenen makine adları.
 cli.flag.fetch_default_deny.help = Varsayılan olarak tüm makineleri reddet; yalnızca bildirilen listeye izin ver.
+cli.flag.trust_project_fetch_policy.help = Allow project configuration to widen fetch-policy grants.
 cli.flag.json.help = Makinece okunabilir JSON çıktısı üret.
 cli.flag.no_input.help = Etkileşimli girdi hiçbir zaman okunmasın.
 cli.flag.color.help = Renkli çıktı ilkesi (auto, always, never).

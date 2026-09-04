@@ -90,6 +90,16 @@ fields:
     environment: NETSUKE_FETCH_DEFAULT_DENY
     file: fetch_default_deny
     merge_strategy: replace
+  - name: trust_project_fetch_policy
+    help_id: cli.flag.trust_project_fetch_policy.help
+    cli:
+      long: trust-project-fetch-policy
+      short: T
+      multiple: false
+      possible_values: []
+    environment: NETSUKE_TRUST_PROJECT_FETCH_POLICY
+    file: trust_project_fetch_policy
+    merge_strategy: replace
   - name: json
     help_id: cli.flag.json.help
     cli:

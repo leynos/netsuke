@@ -210,7 +210,9 @@ proptest! {
             .into_iter()
             .map(|value| MergeLayer::file(Cow::Owned(value), None))
             .collect();
-        let (final_layers, json_preference) = super::layers::retain_layers_and_resolve_json(ordered);
+        let (final_layers, json_preference, project_fetch_policy_request) =
+            super::layers::retain_layers_and_resolve_json(ordered, None, &FsPathNormalizer)
+                .expect("generated layers must retain cleanly");
 
         let expected = layers
             .iter()
@@ -219,6 +221,9 @@ proptest! {
             .unwrap_or_else(|| crate::cli::Cli::default().json);
         prop_assert_eq!(json_preference, expected);
         prop_assert_eq!(final_layers.len(), source_len);
+        prop_assert!(project_fetch_policy_request.default_deny.is_none());
+        prop_assert!(project_fetch_policy_request.allow_scheme.is_empty());
+        prop_assert!(project_fetch_policy_request.allow_host.is_empty());
     }
 }
 

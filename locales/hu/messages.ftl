@@ -16,6 +16,7 @@ cli.flag.fetch_allow_scheme.help = A fetch segédfüggvény által használható
 cli.flag.fetch_allow_host.help = Engedélyezett gépnevek, ha az alapértelmezett tiltás be van kapcsolva.
 cli.flag.fetch_block_host.help = Mindig letiltott gépnevek, akkor is, ha máshol engedélyezettek.
 cli.flag.fetch_default_deny.help = Alapértelmezés szerint minden gép tiltása; csak a megadott lista engedélyezése.
+cli.flag.trust_project_fetch_policy.help = Allow project configuration to widen fetch-policy grants.
 cli.flag.json.help = Géppel olvasható JSON kimenet előállítása.
 cli.flag.no_input.help = Soha ne olvasson interaktív bemenetet.
 cli.flag.color.help = A színes kimenet szabálya (auto, always, never).

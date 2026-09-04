@@ -4078,13 +4078,43 @@ errors remain owned by `DiscoveredLayers` and are handled by the diagnostic
 JSON resolver and the full-merge caller according to their respective error
 policies.
 
+### Fetch-policy trust boundary
+
+Network-policy grants do not use the ordinary file-layer precedence contract.
+Discovery identifies the primary project `.netsuke.toml` by its normalized path
+and extracts its `fetch_default_deny`, `fetch_allow_scheme`,
+`fetch_allow_host`, and `trust_project_fetch_policy` fields into a
+crate-internal `ProjectFetchPolicyRequest`. Those fields are removed from the
+project layer before the generic merge; `fetch_block_host` remains in the layer
+so blocklists continue to accumulate.
+
+`retain_layers_and_resolve_json` returns the retained layers, the JSON
+preference, and the project request together. `DiscoveredLayers` owns that
+request until `into_parts` transfers it with the layers and discovery errors.
+`push_discovered_file_layers` places the layers into `MergeComposition` and
+returns the request for the same composition. This keeps the request's
+provenance at the discovery seam without a second discovery or merge pass.
+
+After the generic merge produces `CliConfig`, `reconcile_fetch_policy` applies
+the request before `apply_config` copies values onto `Cli`. Without the
+operator opt-in, project grants are discarded, `fetch_default_deny = true`
+tightens the result, and `fetch_default_deny = false` cannot weaken it. With
+the opt-in from a trusted system, user, environment, or CLI layer, project
+grants append and a present project default-deny value applies directly. The
+project layer cannot self-authorize because its opt-in field was removed before
+generic merging.
+
+Only the primary project file is currently classified at this seam. Files
+loaded through its `extends` chain retain their existing merge semantics until
+a separate trust decision extends the boundary.
+
 ### Layer precedence
 
 The final merge order is:
 
 1. **Defaults** — `Cli::default()` serialized as a base layer.
 2. **File layers** — discovered config files in discovery order, with project
-   scope taking precedence over user and system scope.
+   scope taking precedence over user and system scope for ordinary fields.
 3. **Environment** — `NETSUKE_*` environment variables via the Figment Env
    provider.
 4. **CLI flags** — values explicitly passed on the command line.
@@ -4111,9 +4141,10 @@ Configuration merge helpers:
 - `discover_file_layers(cli, env) -> DiscoveryOutcome` performs one discovery
   pass and retains the discovered layers, discovery errors and bounded deferred
   diagnostics for the diagnostic and merge callers.
-- `push_discovered_file_layers(composer, errors, discovered, events) -> ()`
+- `push_discovered_file_layers(composer, errors, discovered, events) -> ProjectFetchPolicyRequest`
   transfers the retained layers and discovery errors into the full merge
-  composition while collecting bounded file-layer events for replay.
+  composition while collecting bounded file-layer events for replay and
+  returning the quarantined project request.
 - `collect_file_layers_with_normalizer_and_trace(directory, normalizer, env_source)`
   runs the one discovery pass with the injected path normalizer and environment
   source, and retains bounded project-scope trace metadata for deferred
@@ -4133,9 +4164,12 @@ Configuration merge helpers:
   application-side replay.
 - `is_empty_value(value: &serde_json::Value) -> bool` detects an empty CLI
   override object.
-- `retain_layers_and_resolve_json(layers)` transfers each owned file-layer
-  value into the cached layer while recording the last valid `json` value,
-  avoiding complete layer or JSON-value copies before the full merge.
+- `retain_layers_and_resolve_json(layers, directory, normalizer)` returns
+  `OrthoResult<(Vec<MergeLayer<'static>>, bool, ProjectFetchPolicyRequest)>`
+  and transfers each owned file-layer value into the cached layer while
+  recording the last valid `json` value and extracting the primary project's
+  fetch request, avoiding complete layer or JSON-value copies before the full
+  merge.
 - `cli_overrides_from_matches(matches: &ArgMatches) -> OrthoValue` extracts
   CLI-supplied fields, stripping defaults and non-CLI sources.
 - `EnvironmentLayer` converts an injected snapshot of `NETSUKE_*` values into

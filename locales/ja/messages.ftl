@@ -16,6 +16,7 @@ cli.flag.fetch_allow_scheme.help = fetch ヘルパーで追加的に許可する
 cli.flag.fetch_allow_host.help = 既定の拒否が有効なときに許可するホスト名。
 cli.flag.fetch_block_host.help = 他で許可されていても常に遮断するホスト名。
 cli.flag.fetch_default_deny.help = 既定ですべてのホストを拒否し、宣言した許可リストのみを通します。
+cli.flag.trust_project_fetch_policy.help = Allow project configuration to widen fetch-policy grants.
 cli.flag.json.help = 機械可読な JSON を出力します。
 cli.flag.no_input.help = 対話的な入力を一切読み取りません。
 cli.flag.color.help = 色付き出力の方針（auto、always、never）。

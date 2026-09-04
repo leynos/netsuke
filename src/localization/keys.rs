@@ -23,6 +23,7 @@ define_keys! {
     CLI_FLAG_FETCH_ALLOW_HOST_HELP => "cli.flag.fetch_allow_host.help",
     CLI_FLAG_FETCH_BLOCK_HOST_HELP => "cli.flag.fetch_block_host.help",
     CLI_FLAG_FETCH_DEFAULT_DENY_HELP => "cli.flag.fetch_default_deny.help",
+    CLI_FLAG_TRUST_PROJECT_FETCH_POLICY_HELP => "cli.flag.trust_project_fetch_policy.help",
     CLI_FLAG_JSON_HELP => "cli.flag.json.help",
     CLI_FLAG_NO_INPUT_HELP => "cli.flag.no_input.help",
     CLI_FLAG_COLOR_HELP => "cli.flag.color.help",

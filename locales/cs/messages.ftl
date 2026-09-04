@@ -16,6 +16,7 @@ cli.flag.fetch_allow_scheme.help = Další schémata URL povolená pro pomocník
 cli.flag.fetch_allow_host.help = Názvy hostitelů povolené, když je zapnuto výchozí odmítání.
 cli.flag.fetch_block_host.help = Názvy hostitelů, které se vždy blokují, i když jsou povoleny jinde.
 cli.flag.fetch_default_deny.help = Ve výchozím stavu odmítat všechny hostitele; povolit jen uvedený seznam.
+cli.flag.trust_project_fetch_policy.help = Umožnit konfiguraci projektu rozšířit oprávnění zásady fetch.
 cli.flag.json.help = Vypisovat strojově čitelný výstup JSON.
 cli.flag.no_input.help = Nikdy nečíst interaktivní vstup.
 cli.flag.color.help = Zásada barevného výstupu (auto, always, never).

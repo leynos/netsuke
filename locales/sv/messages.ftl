@@ -16,6 +16,7 @@ cli.flag.fetch_allow_scheme.help = Ytterligare URL-scheman som hjälpfunktionen 
 cli.flag.fetch_allow_host.help = Värdnamn som tillåts när standardnekandet är aktivt.
 cli.flag.fetch_block_host.help = Värdnamn som alltid blockeras, även om de tillåts på annat håll.
 cli.flag.fetch_default_deny.help = Neka alla värdar som standard; tillåt endast den angivna listan.
+cli.flag.trust_project_fetch_policy.help = Allow project configuration to widen fetch-policy grants.
 cli.flag.json.help = Skriv ut maskinläsbar JSON.
 cli.flag.no_input.help = Läs aldrig interaktiv indata.
 cli.flag.color.help = Policy för färgad utdata (auto, always, never).
