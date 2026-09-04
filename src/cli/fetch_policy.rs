@@ -37,6 +37,7 @@ mod tests {
 
     use super::*;
     use crate::host_pattern::HostPattern;
+    use proptest::prelude::*;
 
     /// Build a project request from compact test inputs.
     fn project_request(
@@ -141,5 +142,79 @@ mod tests {
         );
 
         assert_eq!(reconciled.fetch_block_host, [block]);
+    }
+
+    proptest! {
+        /// Reconcile every generated request according to the trust contract.
+        #[test]
+        fn reconciliation_preserves_trust_boundary_for_generated_policies(
+            operator_default_deny in any::<bool>(),
+            project_default_deny in prop::option::of(any::<bool>()),
+            trust_project_policy in any::<bool>(),
+            operator_schemes in prop::collection::vec("[a-z]{1,8}", 0..5),
+            project_schemes in prop::collection::vec("[a-z]{1,8}", 0..5),
+            operator_host_indices in prop::collection::vec(0u8..16, 0..5),
+            project_host_indices in prop::collection::vec(16u8..32, 0..5),
+            block_host_indices in prop::collection::vec(32u8..48, 0..5),
+        ) {
+            let operator_hosts = operator_host_indices
+                .iter()
+                .map(|index| HostPattern::parse(&format!("operator{index}.example.org"))
+                    .expect("strategy constructs valid operator host patterns"))
+                .collect::<Vec<_>>();
+            let project_hosts = project_host_indices
+                .iter()
+                .map(|index| HostPattern::parse(&format!("project{index}.example.org"))
+                    .expect("strategy constructs valid project host patterns"))
+                .collect::<Vec<_>>();
+            let blocked_hosts = block_host_indices
+                .iter()
+                .map(|index| HostPattern::parse(&format!("blocked{index}.example.org"))
+                    .expect("strategy constructs valid blocked host patterns"))
+                .collect::<Vec<_>>();
+            let expected_default_deny = if trust_project_policy {
+                project_default_deny.unwrap_or(operator_default_deny)
+            } else {
+                operator_default_deny || project_default_deny == Some(true)
+            };
+            let expected_schemes = if trust_project_policy {
+                operator_schemes
+                    .iter()
+                    .chain(project_schemes.iter())
+                    .cloned()
+                    .collect()
+            } else {
+                operator_schemes.clone()
+            };
+            let expected_hosts = if trust_project_policy {
+                operator_hosts
+                    .iter()
+                    .chain(project_hosts.iter())
+                    .cloned()
+                    .collect()
+            } else {
+                operator_hosts.clone()
+            };
+            let reconciled = reconcile_fetch_policy(
+                CliConfig {
+                    fetch_default_deny: operator_default_deny,
+                    trust_project_fetch_policy: trust_project_policy,
+                    fetch_allow_scheme: operator_schemes,
+                    fetch_allow_host: operator_hosts,
+                    fetch_block_host: blocked_hosts.clone(),
+                    ..CliConfig::default()
+                },
+                ProjectFetchPolicyRequest {
+                    default_deny: project_default_deny,
+                    allow_scheme: project_schemes,
+                    allow_host: project_hosts,
+                },
+            );
+
+            prop_assert_eq!(reconciled.fetch_default_deny, expected_default_deny);
+            prop_assert_eq!(reconciled.fetch_allow_scheme, expected_schemes);
+            prop_assert_eq!(reconciled.fetch_allow_host, expected_hosts);
+            prop_assert_eq!(reconciled.fetch_block_host, blocked_hosts);
+        }
     }
 }

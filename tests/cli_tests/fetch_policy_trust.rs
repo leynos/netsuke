@@ -104,6 +104,8 @@ fetch_allow_scheme = ["http"]
 fetch_allow_host = ["169.254.169.254"]
 "#;
 
+const PROJECT_TIGHTENING: &str = "fetch_default_deny = true";
+
 #[rstest]
 fn defaults_keep_project_fetch_grants_outside_operator_policy() -> Result<()> {
     let merged = merge_fetch_policy(
@@ -120,6 +122,24 @@ fn defaults_keep_project_fetch_grants_outside_operator_policy() -> Result<()> {
         "a project false request should not alter the default operator policy"
     );
     assert_scheme_not_allowed(&merged, "http://169.254.169.254")
+}
+
+#[rstest]
+fn project_can_tighten_default_deny_without_operator_policy() -> Result<()> {
+    let merged = merge_fetch_policy(
+        &FetchPolicyFileLayers {
+            project: Some(PROJECT_TIGHTENING),
+            ..FetchPolicyFileLayers::default()
+        },
+        &[],
+        &["netsuke"],
+    )?;
+
+    ensure!(
+        merged.fetch_default_deny,
+        "a project true request should tighten the default operator policy"
+    );
+    assert_host_not_allowlisted(&merged, "https://downloads.example.org")
 }
 
 #[rstest]
@@ -228,6 +248,12 @@ fetch_block_host = ["downloads.example.org"]
 }
 
 #[rstest]
+#[case::system(
+    Some("trust_project_fetch_policy = true"),
+    None,
+    &[],
+    &["netsuke"]
+)]
 #[case::user(
     None,
     Some("trust_project_fetch_policy = true"),

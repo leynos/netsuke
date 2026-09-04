@@ -24,6 +24,7 @@ use super::diagnostics::{
 };
 use super::json::json_from_value;
 use super::paths::{PathNormalizer, normalized_path_key};
+use super::project_policy::take_project_fetch_policy_request;
 
 /// Preserve discovered layers while extracting their final JSON preference.
 ///
@@ -34,7 +35,7 @@ pub(super) fn retain_layers_and_resolve_json(
     layers: Vec<MergeLayer<'static>>,
     directory: Option<&Path>,
     normalizer: &impl PathNormalizer,
-) -> (Vec<MergeLayer<'static>>, bool, ProjectFetchPolicyRequest) {
+) -> OrthoResult<(Vec<MergeLayer<'static>>, bool, ProjectFetchPolicyRequest)> {
     let mut json = Cli::default().json;
     let mut retained = Vec::with_capacity(layers.len());
     let mut project_fetch_policy_request = ProjectFetchPolicyRequest::default();
@@ -51,14 +52,14 @@ pub(super) fn retain_layers_and_resolve_json(
         let path = layer.path().map(ToOwned::to_owned);
         let mut value = layer.into_value();
         if is_project_scope_layer(path.as_deref(), project_key.as_deref()) {
-            project_fetch_policy_request = take_project_fetch_policy_request(&mut value);
+            project_fetch_policy_request = take_project_fetch_policy_request(&mut value)?;
         }
         if let Some(layer_json) = json_from_value(&value) {
             json = layer_json;
         }
         retained.push(MergeLayer::file(Cow::Owned(value), path));
     }
-    (retained, json, project_fetch_policy_request)
+    Ok((retained, json, project_fetch_policy_request))
 }
 
 /// Return whether a discovered layer is the primary project configuration file.
@@ -79,33 +80,6 @@ fn is_project_scope_layer(
         || expected_project_path
             .to_str()
             .is_some_and(|project_path| project_path == discovered_path.as_str())
-}
-
-/// Capture and remove project fetch-policy grants from one JSON layer.
-///
-/// Project configuration may request a narrower policy, but generic precedence
-/// and append merging must not grant it authority to widen operator policy.
-fn take_project_fetch_policy_request(value: &mut serde_json::Value) -> ProjectFetchPolicyRequest {
-    let Some(fields) = value.as_object_mut() else {
-        return ProjectFetchPolicyRequest::default();
-    };
-    let default_deny = fields
-        .remove("fetch_default_deny")
-        .and_then(|field_value| serde_json::from_value(field_value).ok());
-    let allow_scheme = fields
-        .remove("fetch_allow_scheme")
-        .and_then(|field_value| serde_json::from_value(field_value).ok())
-        .unwrap_or_default();
-    let allow_host = fields
-        .remove("fetch_allow_host")
-        .and_then(|field_value| serde_json::from_value(field_value).ok())
-        .unwrap_or_default();
-    fields.remove("trust_project_fetch_policy");
-    ProjectFetchPolicyRequest {
-        default_deny,
-        allow_scheme,
-        allow_host,
-    }
 }
 
 /// Project-scope outcome retained for a later trace replay.

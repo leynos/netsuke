@@ -24,6 +24,8 @@ mod json;
 mod layers;
 #[path = "discovery_paths.rs"]
 mod paths;
+#[path = "discovery_project_policy.rs"]
+mod project_policy;
 
 #[path = "discovery_selector.rs"]
 mod selector;
@@ -178,21 +180,26 @@ fn discover_file_layers_with_normalizer(
     let (trace, load_warning, outcome) = collect_file_layers_with_env(cli, env, normalizer);
     let diagnostics = DiscoveryDiagnostics::new(trace, load_warning);
     let layers = match outcome {
-        Ok(discovered_layers) => {
-            let (layers, json_preference, project_fetch_policy_request) =
-                layers::retain_layers_and_resolve_json(
-                    discovered_layers,
-                    cli.directory.as_deref().map(camino::Utf8Path::as_std_path),
-                    normalizer,
-                );
-            DiscoveredLayers {
+        Ok(discovered_layers) => match layers::retain_layers_and_resolve_json(
+            discovered_layers,
+            cli.directory.as_deref().map(camino::Utf8Path::as_std_path),
+            normalizer,
+        ) {
+            Ok((layers, json_preference, project_fetch_policy_request)) => DiscoveredLayers {
                 layers,
                 json_preference,
                 project_fetch_policy_request,
                 errors: Vec::new(),
                 diagnostics,
-            }
-        }
+            },
+            Err(error) => DiscoveredLayers {
+                layers: Vec::new(),
+                json_preference: Cli::default().json,
+                project_fetch_policy_request: ProjectFetchPolicyRequest::default(),
+                errors: vec![error],
+                diagnostics,
+            },
+        },
         Err(error) => DiscoveredLayers {
             layers: Vec::new(),
             json_preference: Cli::default().json,
