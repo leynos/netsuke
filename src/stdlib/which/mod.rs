@@ -80,19 +80,13 @@ pub(crate) fn register(env: &mut Environment<'_>, config: WhichConfig) {
     {
         let filter_resolver = Arc::clone(&resolver);
         env.add_filter("which", move |value: Value, kwargs: Kwargs| {
-            resolve_with(&filter_resolver, &value, &kwargs).and_then(|output| {
-                kwargs.assert_all_used()?;
-                Ok(output)
-            })
+            resolve_with(&filter_resolver, &value, &kwargs)
         });
     }
     {
         let function_resolver = Arc::clone(&resolver);
         env.add_function("which", move |value: Value, kwargs: Kwargs| {
-            resolve_with(&function_resolver, &value, &kwargs).and_then(|output| {
-                kwargs.assert_all_used()?;
-                Ok(output)
-            })
+            resolve_with(&function_resolver, &value, &kwargs)
         });
     }
     {
@@ -131,6 +125,7 @@ fn resolve_with(
     kwargs: &Kwargs,
 ) -> Result<Value, Error> {
     let (name, options) = resolve_command_name_and_options(command, kwargs)?;
+    kwargs.assert_all_used()?;
     let matches = resolver.resolve(name, &options).map_err(Error::from)?;
     Ok(render_value(&matches, &options))
 }
@@ -318,19 +313,19 @@ const fn hint_for_mode(mode: options::CwdMode) -> Option<LocalizedMessage> {
     #[cfg(windows)]
     {
         match mode {
-            options::CwdMode::Always => None,
-            _ => Some(localization::message(
-                keys::STDLIB_WHICH_NOT_FOUND_HINT_CWD_ALWAYS,
+            options::CwdMode::Auto | options::CwdMode::Never => Some(localization::message(
+                keys::STDLIB_WHICH_NOT_FOUND_HINT_WORKSPACE,
             )),
+            options::CwdMode::Always | options::CwdMode::WorkspaceRecursive => None,
         }
     }
     #[cfg(not(windows))]
     {
         match mode {
-            options::CwdMode::Never => Some(localization::message(
-                keys::STDLIB_WHICH_NOT_FOUND_HINT_CWD_AUTO,
+            options::CwdMode::Auto | options::CwdMode::Never => Some(localization::message(
+                keys::STDLIB_WHICH_NOT_FOUND_HINT_WORKSPACE,
             )),
-            _ => None,
+            options::CwdMode::Always | options::CwdMode::WorkspaceRecursive => None,
         }
     }
 }
