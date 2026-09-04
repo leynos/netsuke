@@ -28,6 +28,7 @@ REQUIRED_RUNNER_ASSIGNMENTS = {
     "ci.windows-native-recipe-smoke": "namespace-profile-netsuke-windows",
     "ci.kani-smoke": "namespace-profile-netsuke",
     "coverage-main.coverage-upload": "namespace-profile-netsuke",
+    "coverage-pr-submit.submit-coverage": "namespace-profile-netsuke",
     "delayed-pr-comment.delay_and_comment": "namespace-profile-netsuke",
     "netsukefile-test.netsukefile": "namespace-profile-netsuke-ubuntu-22-04",
     "release.metadata": "namespace-profile-netsuke",

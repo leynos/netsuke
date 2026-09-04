@@ -47,8 +47,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          # Full history so the deferred cs-coverage check step can reach
-          # the pull request's merge base once the gate is wired in.
+          # Full history lets the coverage action compare the changed lines
+          # against the main-branch ratchet baseline.
           fetch-depth: 0
       - name: Install test shell dependencies
         run: |
@@ -218,6 +218,8 @@ jobs:
         run: make nixie
       - name: Workflow contract tests
         run: make test-workflow-contracts
+      - name: Coverage artefact validator tests
+        run: make test-coverage-artifact
       - name: Test
         run: make test
       - name: Test and Measure Coverage
@@ -229,18 +231,14 @@ jobs:
           # Compare changed-line coverage against the baseline written by
           # coverage-main.yml (caches saved on main are readable by every PR).
           with-ratchet: 'true'
-      - name: Check coverage against CodeScene gates
-        if: env.CS_ACCESS_TOKEN != '' && github.event_name == 'pull_request'
-        env:
-          CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@32c8ea649ea44d40119f348ad48861212532061f
+      - name: Upload PR coverage artefact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        # v7.0.1
         with:
+          name: pr-coverage-lcov
           path: lcov.info
-          format: lcov
-          mode: check
-          project-url: https://api.codescene.io/v2/projects/69281
-          access-token: ${{ env.CS_ACCESS_TOKEN }}
-          installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
+          retention-days: 3
+          if-no-files-found: error
 
   build-test-windows:
     # Gates merges: the `#[cfg(windows)]` tree is compiled, linted, and tested

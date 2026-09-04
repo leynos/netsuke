@@ -1,0 +1,98 @@
+---
+name: Coverage (PR submission)
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+# The unprivileged CI workflow controls the uploaded coverage data, not this
+# definition. This trusted default-branch workflow never checks out or executes
+# PR content or artefact members, and treats the downloaded report as hostile.
+permissions: {}
+
+jobs:
+  submit-coverage:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: namespace-profile-netsuke
+    permissions:
+      actions: read
+      checks: write
+      contents: read
+    steps:
+      - name: Check out trusted validation tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Setup uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        # v8.3.2
+        with:
+          python-version: '3.14'
+          enable-cache: 'false'
+      - name: Download PR coverage artefact
+        id: download_coverage
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        # v8.0.1
+        with:
+          name: pr-coverage-lcov
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: coverage-artifact
+          skip-decompress: true
+      - name: Validate hostile coverage artefact
+        id: validate_coverage
+        run: make validate-coverage-artifact COVERAGE_ARTIFACT_DIR=coverage-artifact
+      - name: Check coverage against CodeScene gates
+        id: submit_coverage
+        if: env.CS_ACCESS_TOKEN != ''
+        env:
+          CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@32c8ea649ea44d40119f348ad48861212532061f
+        with:
+          path: coverage-artifact/lcov.info
+          format: lcov
+          mode: check
+          project-url: https://api.codescene.io/v2/projects/69281
+          access-token: ${{ env.CS_ACCESS_TOKEN }}
+          installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
+      - name: Report CodeScene coverage gate
+        if: always()
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        # v8.0.0
+        env:
+          SUBMISSION_OUTCOME: ${{ steps.submit_coverage.outcome }}
+          ARTIFACT_DOWNLOAD_OUTCOME: ${{ steps.download_coverage.outcome }}
+          ARTEFACT_VALIDATION_OUTCOME: ${{ steps.validate_coverage.outcome }}
+        with:
+          script: |
+            const outcome = process.env.SUBMISSION_OUTCOME;
+            const prerequisitesSucceeded =
+              process.env.ARTIFACT_DOWNLOAD_OUTCOME === 'success' &&
+              process.env.ARTEFACT_VALIDATION_OUTCOME === 'success';
+            // A skipped submission is neutral only when both prerequisites
+            // succeeded and the step skipped solely on the absent token; any
+            // failed or skipped prerequisite means the artefact gate failed
+            // open, so branch protection must see a failing check.
+            const conclusion = outcome === 'success'
+              ? 'success'
+              : outcome === 'skipped' && prerequisitesSucceeded
+                ? 'neutral'
+                : 'failure';
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'CodeScene coverage',
+              head_sha: context.payload.workflow_run.head_sha,
+              status: 'completed',
+              conclusion,
+              output: {
+                title: 'CodeScene coverage',
+                summary: `Coverage submission ${conclusion}.`,
+              },
+            });

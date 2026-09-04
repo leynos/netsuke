@@ -20,6 +20,9 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CI_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 COVERAGE_MAIN_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "coverage-main.yml"
+COVERAGE_PR_WORKFLOW_PATH = (
+    REPO_ROOT / ".github" / "workflows" / "coverage-pr-submit.yml"
+)
 MUTATION_TESTING_WORKFLOW_PATH = (
     REPO_ROOT / ".github" / "workflows" / "mutation-testing.yml"
 )

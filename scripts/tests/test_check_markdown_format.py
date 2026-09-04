@@ -202,6 +202,22 @@ def test_reports_each_noncanonical_source_without_modifying_it(
     )
 
 
+def test_rejects_large_noncanonical_source_without_a_sed_broken_pipe(
+    formatter: tuple[Path, Path],
+    tmp_path: Path,
+) -> None:
+    """Report format drift without leaking a SIGPIPE diagnostic from `sed`."""
+    executable, call_log = formatter
+    source = tmp_path / "large-unformatted.md"
+    source.write_bytes(b"unformatted\n" + b"formatted\n" * 100_000)
+
+    result = _run_checker(executable, call_log, source)
+
+    assert result.returncode == 1, result.stderr
+    assert "Broken pipe" not in result.stderr, result.stderr
+    assert str(source) in result.stderr, result.stderr
+
+
 @given(
     lines=st.lists(st.text(alphabet=LINE_ALPHABET, max_size=40), min_size=2, max_size=5)
 )
