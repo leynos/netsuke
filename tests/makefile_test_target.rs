@@ -27,6 +27,34 @@ use camino::Utf8Path;
 use makefile::{phony_targets, read_repo_file, target_prerequisites, target_recipe};
 use toml::Value;
 
+/// Verify both nextest worker bounds are arguments to the `nextest run` call.
+///
+/// Two separate bounds, not one. `NEXTEST_BUILD_JOBS` limits the compile that
+/// precedes the run and `NEXTEST_TEST_JOBS` limits the test processes, so a
+/// lane on a small runner can bound each without oversubscribing the other.
+/// Dropping either silently returns that half to nextest's default of one
+/// worker per core, which is what exhausted a two-vCPU runner.
+///
+/// Asserted against the invoking line rather than the whole recipe.
+/// [`target_recipe`] returns the recipe's lines joined together, so a check
+/// over that string would accept a bound sitting in an unrelated later
+/// command, reading as configured while bounding nothing.
+fn ensure_worker_bounds_reach_nextest(recipe: &str) -> Result<()> {
+    let run_command = recipe
+        .lines()
+        .find(|line| line.contains("nextest run"))
+        .context("test-nextest should invoke cargo nextest run")?;
+    ensure!(
+        run_command.contains("$(NEXTEST_BUILD_JOBS)"),
+        "NEXTEST_BUILD_JOBS should be an argument to nextest run, found {run_command:?}"
+    );
+    ensure!(
+        run_command.contains("$(NEXTEST_TEST_JOBS)"),
+        "NEXTEST_TEST_JOBS should be an argument to nextest run, found {run_command:?}"
+    );
+    Ok(())
+}
+
 /// Verify that `make test` orders the nextest pass before the doctest pass.
 #[test]
 fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()> {
@@ -62,38 +90,7 @@ fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()>
         "test-nextest should preserve inherited flags and deny warnings, found {nextest_recipe:?}"
     );
 
-    // Two separate worker bounds, not one. `NEXTEST_BUILD_JOBS` limits the
-    // compile that precedes the run and `NEXTEST_TEST_JOBS` limits the test
-    // processes, so a lane on a small runner can bound each without
-    // oversubscribing the other. Dropping either silently returns that half to
-    // nextest's default, which is one worker per core and is what exhausted a
-    // two-vCPU runner.
-    ensure!(
-        nextest_recipe.contains("$(NEXTEST_BUILD_JOBS)"),
-        "test-nextest should bound compilation with NEXTEST_BUILD_JOBS, found {nextest_recipe:?}"
-    );
-    ensure!(
-        nextest_recipe.contains("$(NEXTEST_TEST_JOBS)"),
-        "test-nextest should bound test processes with NEXTEST_TEST_JOBS, found {nextest_recipe:?}"
-    );
-
-    // The bounds have to be arguments to `nextest run`, not merely present
-    // somewhere in the recipe. `target_recipe` returns every line of the
-    // recipe joined together, so checking the whole string would accept a
-    // bound that sits in an unrelated command and reads as configured while
-    // bounding nothing. Isolate the invoking line and assert against that.
-    let run_command = nextest_recipe
-        .lines()
-        .find(|line| line.contains("nextest run"))
-        .context("test-nextest should invoke cargo nextest run")?;
-    ensure!(
-        run_command.contains("$(NEXTEST_BUILD_JOBS)"),
-        "NEXTEST_BUILD_JOBS should be an argument to nextest run, found {run_command:?}"
-    );
-    ensure!(
-        run_command.contains("$(NEXTEST_TEST_JOBS)"),
-        "NEXTEST_TEST_JOBS should be an argument to nextest run, found {run_command:?}"
-    );
+    ensure_worker_bounds_reach_nextest(&nextest_recipe)?;
 
     let doctest_recipe =
         target_recipe(&makefile, "doctest").context("Makefile should declare a doctest target")?;
