@@ -1,18 +1,16 @@
 //! Tests for the which lookup helpers, covering PATH search, workspace
 //! fallback, canonicalization, and platform-specific PATHEXT behaviour.
-
 use super::*;
 use anyhow::{Context, Result, anyhow, ensure};
+use mockable::MockEnv;
 use rstest::{fixture, rstest};
 use tempfile::TempDir;
 use test_support::exec::write_exec;
 use test_support::fs as test_fs;
-
 struct TempWorkspace {
     root: Utf8PathBuf,
     _tempdir: TempDir,
 }
-
 impl TempWorkspace {
     fn new() -> Result<Self> {
         let tempdir = TempDir::new().context("create tempdir")?;
@@ -23,17 +21,14 @@ impl TempWorkspace {
             _tempdir: tempdir,
         })
     }
-
     fn root(&self) -> &Utf8Path {
         self.root.as_path()
     }
 }
-
 #[fixture]
 fn workspace() -> Result<TempWorkspace> {
     TempWorkspace::new().context("create utf8 temp workspace")
 }
-
 #[rstest]
 fn search_workspace_returns_executable_and_skips_non_exec(
     #[from(workspace)] workspace_res: Result<TempWorkspace>,
@@ -43,7 +38,6 @@ fn search_workspace_returns_executable_and_skips_non_exec(
         .context("executable path should be UTF-8")?;
     let non_exec = workspace.root().join("tool2");
     test_fs::write(non_exec.as_std_path(), b"not exec").context("write non exec")?;
-
     let path_value = std::ffi::OsString::from(workspace.root().as_str());
     let snapshot = EnvSnapshot::capture(Some(workspace.root()), Some(path_value.as_os_str()))
         .expect("capture env for workspace search");
@@ -54,7 +48,6 @@ fn search_workspace_returns_executable_and_skips_non_exec(
     );
     Ok(())
 }
-
 #[rstest]
 fn search_workspace_collects_all_matches(
     #[from(workspace)] workspace_res: Result<TempWorkspace>,
@@ -66,7 +59,6 @@ fn search_workspace_collects_all_matches(
     test_fs::create_dir_all(subdir.as_std_path()).context("mkdir bin")?;
     let second = Utf8PathBuf::try_from(write_exec(subdir.as_std_path(), "tool")?)
         .context("second executable path should be UTF-8")?;
-
     let path_value = std::ffi::OsString::from(workspace.root().as_str());
     let snapshot = EnvSnapshot::capture(Some(workspace.root()), Some(path_value.as_os_str()))
         .expect("capture env for workspace search");
@@ -80,7 +72,6 @@ fn search_workspace_collects_all_matches(
     );
     Ok(())
 }
-
 #[rstest]
 fn search_workspace_skips_heavy_directories(
     #[from(workspace)] workspace_res: Result<TempWorkspace>,
@@ -89,7 +80,6 @@ fn search_workspace_skips_heavy_directories(
     let heavy = workspace.root().join("target");
     test_fs::create_dir_all(heavy.as_std_path()).context("mkdir target")?;
     write_exec(heavy.as_std_path(), "tool")?;
-
     let path_value = std::ffi::OsString::from(workspace.root().as_str());
     let snapshot = EnvSnapshot::capture(Some(workspace.root()), Some(path_value.as_os_str()))
         .expect("capture env for workspace search");
@@ -97,7 +87,6 @@ fn search_workspace_skips_heavy_directories(
     ensure!(results.is_empty(), "expected target/ to be skipped");
     Ok(())
 }
-
 #[cfg(unix)]
 #[rstest]
 fn search_workspace_surfaces_unreadable_entries(
@@ -107,17 +96,14 @@ fn search_workspace_surfaces_unreadable_entries(
     let blocked = workspace.root().join("blocked");
     test_fs::create_dir_all(blocked.as_std_path()).context("mkdir blocked")?;
     test_fs::set_mode(blocked.as_std_path(), 0o000).context("chmod blocked")?;
-
     let path_value = std::ffi::OsString::from(workspace.root().as_str());
     let snapshot = EnvSnapshot::capture(Some(workspace.root()), Some(path_value.as_os_str()))
         .expect("capture env for workspace search");
     let result = search_workspace(&snapshot, "tool", false, &WorkspaceSkipList::default());
-
     // Restore permissions before asserting so the tempdir can always be cleaned
     // up, even if `search_workspace` unexpectedly succeeds and the assertion
     // below panics.
     test_fs::set_mode(blocked.as_std_path(), 0o700).context("restore blocked")?;
-
     let err = result.expect_err("unreadable workspace entries should fail");
     ensure!(
         matches!(err, ResolveError::WalkDir { .. }),
@@ -125,25 +111,20 @@ fn search_workspace_surfaces_unreadable_entries(
     );
     Ok(())
 }
-
 #[cfg(unix)]
 #[rstest]
 fn path_with_invalid_utf8_triggers_args_error(
     #[from(workspace)] workspace_res: Result<TempWorkspace>,
 ) -> Result<()> {
-    use std::os::unix::ffi::OsStrExt;
-
     use crate::localization::{self, keys};
-
+    use std::os::unix::ffi::OsStrExt;
     let workspace = workspace_res?;
     let invalid_path = std::ffi::OsStr::from_bytes(b"/bin:\xFF");
     let err = EnvSnapshot::capture(Some(workspace.root()), Some(invalid_path))
         .expect_err("invalid PATH should fail EnvSnapshot::capture");
-
     let details = localization::message(keys::STDLIB_WHICH_PATH_ENTRY_NON_UTF8)
         .with_arg("index", 1)
         .to_string();
-
     match err {
         ResolveError::Args { detail } => ensure!(
             detail == details,
@@ -151,10 +132,8 @@ fn path_with_invalid_utf8_triggers_args_error(
         ),
         other => return Err(anyhow!("expected argument error, got: {other:?}")),
     }
-
     Ok(())
 }
-
 #[rstest]
 fn relative_path_entries_resolve_against_cwd(
     #[from(workspace)] workspace_res: Result<TempWorkspace>,
@@ -164,18 +143,15 @@ fn relative_path_entries_resolve_against_cwd(
     let tools = workspace.root().join("tools");
     test_fs::create_dir_all(bin.as_std_path()).context("mkdir bin")?;
     test_fs::create_dir_all(tools.as_std_path()).context("mkdir tools")?;
-
     let path_value = std::env::join_paths([
         workspace.root().as_std_path(),
         std::path::Path::new("bin"),
         std::path::Path::new("tools"),
     ])
     .context("join PATH entries")?;
-
     let snapshot = EnvSnapshot::capture(Some(workspace.root()), Some(path_value.as_os_str()))
         .context("capture env with relative PATH entries")?;
     let resolved_dirs = snapshot.resolved_dirs(CwdMode::Never);
-
     ensure!(
         resolved_dirs.contains(&bin.as_path()),
         "resolved_dirs missing bin: {resolved_dirs:?}"
@@ -184,10 +160,8 @@ fn relative_path_entries_resolve_against_cwd(
         resolved_dirs.contains(&tools.as_path()),
         "resolved_dirs missing tools: {resolved_dirs:?}"
     );
-
     Ok(())
 }
-
 #[cfg(windows)]
 #[rstest]
 fn pathext_empty_uses_default_fallback(
@@ -195,7 +169,6 @@ fn pathext_empty_uses_default_fallback(
 ) -> Result<()> {
     let workspace = workspace_res?;
     let path_value = std::ffi::OsString::from(workspace.root().as_str());
-
     let snapshot = EnvSnapshot::capture_with_pathext(
         Some(workspace.root()),
         Some(path_value.as_os_str()),
@@ -203,7 +176,6 @@ fn pathext_empty_uses_default_fallback(
     )
     .context("capture env for empty PATHEXT")?;
     let pathexts = snapshot.pathext();
-
     ensure!(
         pathexts.iter().any(|ext| ext.eq_ignore_ascii_case(".com")),
         "default PATHEXT should include .COM",
@@ -212,10 +184,8 @@ fn pathext_empty_uses_default_fallback(
         pathexts.iter().any(|ext| ext.eq_ignore_ascii_case(".exe")),
         "default PATHEXT should include .EXE",
     );
-
     Ok(())
 }
-
 #[cfg(windows)]
 #[rstest]
 fn pathext_without_leading_dots_is_normalised_and_deduplicated(
@@ -223,7 +193,6 @@ fn pathext_without_leading_dots_is_normalised_and_deduplicated(
 ) -> Result<()> {
     let workspace = workspace_res?;
     let path_value = std::ffi::OsString::from(workspace.root().as_str());
-
     let snapshot = EnvSnapshot::capture_with_pathext(
         Some(workspace.root()),
         Some(path_value.as_os_str()),
@@ -231,13 +200,10 @@ fn pathext_without_leading_dots_is_normalised_and_deduplicated(
     )?;
     let mut pathexts = snapshot.pathext().to_vec();
     pathexts.sort_unstable_by_key(|ext| ext.to_lowercase());
-
     let contains_ci = |needle: &str| pathexts.iter().any(|ext| ext.eq_ignore_ascii_case(needle));
-
     ensure!(contains_ci(".COM"), "PATHEXT should include .COM");
     ensure!(contains_ci(".EXE"), "PATHEXT should include .EXE");
     ensure!(contains_ci(".BAT"), "PATHEXT should include .BAT");
-
     let mut lower: Vec<String> = pathexts
         .iter()
         .map(|ext| ext.to_ascii_lowercase())
@@ -248,10 +214,8 @@ fn pathext_without_leading_dots_is_normalised_and_deduplicated(
         lower.len() == pathexts.len(),
         "PATHEXT entries should be deduplicated: {pathexts:?}"
     );
-
     Ok(())
 }
-
 #[cfg(unix)]
 #[rstest]
 fn direct_path_not_executable_raises_direct_not_found(
@@ -261,14 +225,11 @@ fn direct_path_not_executable_raises_direct_not_found(
     let script = workspace.root().join("script.sh");
     test_fs::write(script.as_std_path(), "#!/bin/sh\necho test\n").context("write script")?;
     test_fs::set_mode(script.as_std_path(), 0o644).context("chmod script")?;
-
     let path_value = std::ffi::OsString::from(workspace.root().as_str());
     let snapshot = EnvSnapshot::capture(Some(workspace.root()), Some(path_value.as_os_str()))
         .context("capture env for direct path")?;
-
     let err = resolve_direct(script.as_str(), &snapshot, &WhichOptions::default())
         .expect_err("non-executable direct path should fail");
-
     match err {
         ResolveError::DirectNotFound { command, path } => {
             ensure!(
@@ -279,15 +240,12 @@ fn direct_path_not_executable_raises_direct_not_found(
         }
         other => return Err(anyhow!("expected direct not found error, got: {other:?}")),
     }
-
     Ok(())
 }
-
 #[cfg(windows)]
 #[rstest]
 fn resolve_direct_appends_pathext(workspace: Result<TempWorkspace>) -> Result<()> {
     use test_support::exec::make_executable;
-
     let env = workspace?;
     let base = env.root().join("tools").join("gradlew");
     let tools_dir = base
@@ -297,23 +255,19 @@ fn resolve_direct_appends_pathext(workspace: Result<TempWorkspace>) -> Result<()
     let exe = base.with_extension("bat");
     test_fs::write(exe.as_std_path(), b"@echo off\r\n").context("write stub")?;
     make_executable(exe.as_std_path())?;
-
     let snapshot = EnvSnapshot::capture_with_pathext(
         Some(env.root()),
         None,
         Some(std::ffi::OsStr::new(".bat")),
     )
     .context("capture env for direct PATHEXT resolution")?;
-
     let matches = resolve_direct(".\\tools\\gradlew", &snapshot, &WhichOptions::default())?;
-
     ensure!(
         matches == vec![exe],
         "expected PATHEXT to expand direct path; got {matches:?}"
     );
     Ok(())
 }
-
 #[rstest]
 fn cwd_always_lists_current_directory_once(
     #[from(workspace)] workspace_res: Result<TempWorkspace>,
@@ -321,7 +275,6 @@ fn cwd_always_lists_current_directory_once(
     let workspace = workspace_res?;
     let bin = workspace.root().join("bin");
     test_fs::create_dir_all(bin.as_std_path()).context("mkdir bin")?;
-
     // Empty components parse as current-directory PATH entries; the
     // repeated blanks mirror a `::/usr/bin::`-style value and must collapse
     // to a single working-directory search.
@@ -334,7 +287,6 @@ fn cwd_always_lists_current_directory_once(
     .context("join PATH entries")?;
     let snapshot = EnvSnapshot::capture(Some(workspace.root()), Some(path_value.as_os_str()))
         .context("capture env with repeated current-directory PATH entries")?;
-
     let always_dirs = snapshot.resolved_dirs(CwdMode::Always);
     let always_cwd_count = always_dirs
         .iter()
@@ -348,13 +300,63 @@ fn cwd_always_lists_current_directory_once(
         always_dirs.first() == Some(&snapshot.cwd.as_path()),
         "Always should search the working directory first: {always_dirs:?}"
     );
-
     let auto_dirs = snapshot.resolved_dirs(CwdMode::Auto);
     let auto_cwd_count = auto_dirs.iter().filter(|dir| **dir == snapshot.cwd).count();
     ensure!(
         auto_cwd_count == 1,
         "Auto should honour the PATH-listed working directory once: {auto_dirs:?}"
     );
-
+    Ok(())
+}
+/// Capture a workspace-rooted snapshot with `PATH` absent.
+fn snapshot_without_path(workspace: &TempWorkspace) -> Result<EnvSnapshot> {
+    let mut env = MockEnv::new();
+    env.expect_os_string()
+        .withf(|key| key == "PATH")
+        .once()
+        .return_const(None);
+    env.expect_raw()
+        .withf(|key| key == "NETSUKE_WHICH_WORKSPACE")
+        .once()
+        .return_const(Err(std::env::VarError::NotPresent));
+    EnvSnapshot::capture_with_env(Some(workspace.root()), None, &env)
+        .context("capture workspace snapshot without PATH")
+}
+/// Assert that only the recursive workspace mode reaches a nested executable.
+#[rstest]
+#[case::empty_path(CwdMode::Auto, Some(std::ffi::OsStr::new("")), false)]
+#[case::unset_path(CwdMode::Auto, None, false)]
+#[case::always(CwdMode::Always, Some(std::ffi::OsStr::new("")), false)]
+#[case::workspace_recursive(CwdMode::WorkspaceRecursive, Some(std::ffi::OsStr::new("")), true)]
+fn workspace_only_executable_requires_recursive_mode(
+    #[case] cwd_mode: CwdMode,
+    #[case] path_override: Option<&std::ffi::OsStr>,
+    #[case] should_resolve: bool,
+    #[from(workspace)] workspace_res: Result<TempWorkspace>,
+) -> Result<()> {
+    let workspace = workspace_res?;
+    let nested = workspace.root().join("nested");
+    test_fs::create_dir_all(nested.as_std_path()).context("create nested directory")?;
+    write_exec(nested.as_std_path(), "workspace-only-tool")?;
+    let snapshot = if path_override.is_some() {
+        EnvSnapshot::capture(Some(workspace.root()), path_override)
+            .context("capture workspace snapshot with empty PATH")?
+    } else {
+        snapshot_without_path(&workspace)?
+    };
+    let options = WhichOptions {
+        cwd_mode,
+        ..WhichOptions::default()
+    };
+    let result = lookup(
+        "workspace-only-tool",
+        &snapshot,
+        &options,
+        &WorkspaceSkipList::default(),
+    );
+    ensure!(
+        result.is_ok() == should_resolve,
+        "mode {cwd_mode:?} should resolve nested executable: {should_resolve}, got {result:?}"
+    );
     Ok(())
 }

@@ -91,8 +91,18 @@ Feature: Template stdlib filters
   Scenario: which function honours cwd_mode
     Given the stdlib executable "local/tool" exists
     And the stdlib PATH entries are ""
-    When I render the stdlib template "{{ which('tool', cwd_mode='always') }}" without context
+    When I render the stdlib template "{{ which('tool', cwd_mode='workspace-recursive') }}" without context
     Then the stdlib output is the workspace executable "local/tool"
+
+  Scenario: which automatic mode does not recursively search the workspace
+    Given the stdlib executable "local/tool" exists
+    And the stdlib PATH entries are ""
+    When I render the stdlib template "{{ which('tool', cwd_mode='auto') }}" without context
+    Then the stdlib error contains "netsuke::jinja::which::not_found"
+
+  Scenario: which rejects an invalid cwd_mode
+    When I render the stdlib template "{{ which('tool', cwd_mode='recursive') }}" without context
+    Then the stdlib error contains "netsuke::jinja::which::args"
 
   Scenario: which filter reports missing executables
     Given the stdlib PATH entries are ""

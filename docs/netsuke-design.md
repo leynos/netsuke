@@ -1477,20 +1477,29 @@ The filter accepts four keyword arguments:
   on canonical paths while preserving discovery order.
 - `fresh` *(bool, default `false`)* — bypass the per-process cache for this
   lookup without flushing previous entries.
-- `cwd_mode` *("auto" | "never" | "always", default `"auto"`)* — control how
-  the current working directory is injected into the search path.
+- `cwd_mode` *("auto" | "always" | "never" | "workspace-recursive", default
+  `"auto"`)* — select the flat and recursive executable search domains.
 
 Semantics honour platform conventions while enforcing predictable behaviour:
 
+- `auto` searches only directories named by a non-empty `PATH`, including empty
+  components within it; an empty or unset `PATH` produces no flat directories.
+  `always` prepends only the workspace root/current directory, and `never`
+  excludes it. Neither mode recursively walks the workspace.
+- `workspace-recursive` performs the same flat pass as `auto` and, only after
+  a miss, recursively discovers a matching executable below the workspace root.
+  This crosses from trusted manifest text into checkout-controlled files, so
+  manifests must opt in deliberately.
 - On POSIX, names containing `/` skip `PATH` traversal and are validated
   directly. Executability requires a regular file with at least one execute
   bit. Empty `PATH` segments (leading, trailing, or `::`) map to the working
-  directory when `cwd_mode` is `"auto"` or `"always"`.
+  directory when `cwd_mode` is `"auto"` or `"workspace-recursive"` and PATH
+  itself is non-empty.
 - On Windows, the lookup respects `PATHEXT` when the command lacks an
   extension. Comparisons are case-insensitive, results normalize both slash
-  styles, and `cwd_mode` defaults to skipping the working directory to avoid
-  the platform’s surprise "search CWD first" rule. Opting in via `"always"`
-  restores that behaviour.
+  styles, and `cwd_mode="auto"` defaults to skipping the working directory to
+  avoid the platform’s surprise "search CWD first" rule. Opting in via
+  `"always"` restores only the flat current-directory search.
 - Canonicalization happens after discovery and only when requested so that
   manifests can balance reproducibility against host-specific absolute paths.
 
@@ -1533,9 +1542,9 @@ tiny search paths. Zero is rejected to keep the cache usable.
 
 Errors follow the design’s actionable diagnostic model. Missing executables
 raise `netsuke::jinja::which::not_found` with context on how many `PATH`
-entries were inspected, a shortened preview of the path list, and platform
-appropriate hints (for example suggesting `cwd_mode="always"` on Windows).
-Invalid arguments surface as `netsuke::jinja::which::args`.
+entries were inspected, a shortened preview of the path list, and a hint to use
+`cwd_mode="workspace-recursive"` when an explicit workspace-tree search is
+appropriate. Invalid arguments surface as `netsuke::jinja::which::args`.
 
 #### Executable Availability Predicate
 
@@ -1569,11 +1578,11 @@ or CLI layers from matching user-visible diagnostic text.
 | `all`       | `false` | Collects every match for `which`; accepted by the predicate but the bool only records whether any match exists. |
 | `canonical` | `false` | Canonicalizes and de-duplicates matches before returning them.                                                  |
 | `fresh`     | `false` | Bypasses the cache for this lookup and stores the refreshed result.                                             |
-| `cwd_mode`  | `auto`  | Controls current-directory search with `auto`, `always`, or `never`.                                            |
+| `cwd_mode`  | `auto`  | Selects `auto`, `always`, `never`, or explicitly opt-in `workspace-recursive` search.                           |
 
-When `PATH` is empty and `cwd_mode` is not `never`, the resolver may use the
-bounded workspace fallback described below. If that fallback cannot find a
-match, the predicate returns `false`; the analogous `which` call raises
+Only `cwd_mode="workspace-recursive"` may use the bounded workspace search
+described below, after its flat `PATH` pass misses. If that search cannot find
+a match, the predicate returns `false`; the analogous `which` call raises
 `netsuke::jinja::which::not_found`. The no-place-to-search case is
 intentionally treated as absence for the predicate, matching the `-NOTFOUND`/
 `.found()` contracts used by comparable build systems. ADR-005 records this
@@ -1584,10 +1593,10 @@ reuse, and list-all semantics. Behavioural MiniJinja fixtures exercise the
 filter in Stage 3/4 renders to prove determinism across repeated invocations
 with identical environments.
 
-Workspace fallback traversals are bounded to a depth of six, skip heavy
-directories such as `.git`, `target`, `node_modules`, `dist`, and `build`, and
-honour the `NETSUKE_WHICH_WORKSPACE` environment variable (set to `0`/`false`/
-`off` to disable) to avoid surprising latency on large trees.
+Explicit workspace-recursive traversals are bounded to a depth of six, skip
+heavy directories such as `.git`, `target`, `node_modules`, `dist`, and
+`build`, and honour the `NETSUKE_WHICH_WORKSPACE` environment variable (set to
+`0`/`false`/ `off` to disable) to avoid surprising latency on large trees.
 
 Sequence of the resolver when falling back to the workspace:
 
@@ -1610,8 +1619,7 @@ sequenceDiagram
         "WhichResolver"-->>"Caller": "Ok(matches)"
     else "no matches in PATH"
         "Lookup"->>"HandleMiss": "handle_miss(env, command, options, dirs)"
-            "HandleMiss"->>"HandleMiss": "check if 'raw_path' is empty"
-        alt "PATH empty and 'cwd_mode' != 'Never'"
+        alt "cwd_mode == 'WorkspaceRecursive'"
             "HandleMiss"->>"SearchWorkspace": "search_workspace(env.cwd, command, options.all, skip_dirs)"
             "SearchWorkspace"->>"SearchWorkspace": "walk workspace with 'WalkDir' and filter executables"
             "SearchWorkspace"-->>"HandleMiss": "discovered paths (possibly empty)"
@@ -1629,7 +1637,7 @@ sequenceDiagram
                 "Lookup"-->>"WhichResolver": "Error"
                 "WhichResolver"-->>"Caller": "Err(not_found)"
             end
-        else "PATH not empty or 'cwd_mode' is 'Never'"
+        else "other cwd_mode"
             "HandleMiss"-->>"Lookup": "Error(not_found_error)"
             "Lookup"-->>"WhichResolver": "Error"
             "WhichResolver"-->>"Caller": "Err(not_found)"
@@ -1714,8 +1722,10 @@ classDiagram
 
     class CwdMode {
         <<enumeration>>
+        +Auto
+        +Always
         +Never
-        +OtherModes
+        +WorkspaceRecursive
     }
 
     Environment --> StdlibConfig : uses

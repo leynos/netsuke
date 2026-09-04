@@ -768,8 +768,14 @@ Both helpers accept:
   from `command_available`.
 - `canonical=true`: canonicalize matching paths.
 - `fresh=true`: bypass the resolver cache for this lookup.
-- `cwd_mode="auto"|"always"|"never"`: control bounded project-directory
-  fallback searching.
+- `cwd_mode="auto"|"always"|"never"|"workspace-recursive"`: choose the
+  executable search domain. `auto` searches only `PATH` entries, including
+  empty components in a non-empty `PATH`; it reports the command missing when
+  `PATH` is empty or unset. `always` prepends the workspace root/current
+  directory, `never` excludes it, and `workspace-recursive` explicitly scans
+  the workspace tree after the normal `PATH` pass. Recursive search can resolve
+  a checkout-controlled executable, so use it only when that trust boundary is
+  intended.
 
 The `env(name)` function reads one required environment variable. Beta3 does
 not accept a default argument; an absent or non-Unicode value is an error.
@@ -1412,11 +1418,11 @@ Ninja executable resolution also emits a debug event with `ninja_program` and
 when the variable is unset, empty, or non-UTF-8. JSON mode suppresses these
 tracing events so stderr remains parseable.
 
-`NETSUKE_WHICH_WORKSPACE` switches off the `which()` workspace-tree fallback
-search that runs when a command is not found on `PATH`. Set it to `0`, `false`,
-or `off` (case-insensitively) to disable the fallback; any other value, or
-leaving it unset, keeps the fallback enabled. A non-Unicode value also disables
-the fallback and is treated as an explicit opt-out, emitting a warning.
+`NETSUKE_WHICH_WORKSPACE` switches off the explicitly requested
+`cwd_mode="workspace-recursive"` workspace-tree search. Set it to `0`, `false`,
+or `off` (case-insensitively) to disable that search; any other value, or
+leaving it unset, keeps the recursive mode available. A non-Unicode value also
+disables it and is treated as an explicit opt-out, emitting a warning.
 
 ### Policy values and parsing
 
