@@ -420,11 +420,16 @@ fn behavioural_ci_workflow_wires_kani_smoke_job() -> Result<()> {
     let workflow: Value = serde_yaml::from_str(&contents).context("parse CI workflow YAML")?;
     let kani_job = job(&workflow, "kani-smoke")?;
 
+    // No `if` at all: the job runs on every trigger this workflow has, manual
+    // dispatch included. It once excluded dispatches on the grounds that there
+    // was no verification work to gate, but that also denied the migration's
+    // exit gate any warm measurement of the Kani cache, which only this job
+    // touches. A dispatch cannot publish a generation, because every save
+    // gates on a push to `main`; `cache_write_policy_test.py` holds that so.
     ensure!(
-        mapping_get(kani_job, YamlKey("if")).and_then(Value::as_str)
-            == Some("github.event_name != 'workflow_dispatch'"),
-        "Kani smoke job should run for pull requests and for the trunk push that \
-         writes its cache"
+        mapping_get(kani_job, YamlKey("if")).is_none(),
+        "Kani smoke job should run on every trigger, so a warm-run dispatch \
+         can measure the one cache only this job reads"
     );
 
     let steps = steps(kani_job)?;

@@ -11,6 +11,12 @@ name: Coverage (main)
 on:
   push:
     branches: [main]
+  # Warm-run dispatches for the runner-migration exit gate. A dispatch reads
+  # every cache and writes none: this job is a reader by design, and the one
+  # save in this repository's Linux gate requires a push to `main`. Without
+  # this trigger the coverage lane's warm behaviour could only be observed by
+  # merging something.
+  workflow_dispatch:
 
 jobs:
   coverage-upload:

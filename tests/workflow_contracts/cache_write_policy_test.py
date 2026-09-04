@@ -184,3 +184,59 @@ def test_native_smoke_jobs_use_the_read_only_cache_profile(
     assert inputs.get("profile") == "smoke", (
         f"{workflow_name} {job_name} must use the read-only cache profile"
     )
+
+
+def _workflows_accepting_a_dispatch() -> list[str]:
+    """Return every workflow this repository can start by hand."""
+    names = []
+    for path in sorted({*WORKFLOW_DIR.glob("*.yml"), *WORKFLOW_DIR.glob("*.yaml")}):
+        triggers = load_workflow(path).get("on")
+        if isinstance(triggers, dict) and "workflow_dispatch" in triggers:
+            names.append(path.name)
+    return names
+
+
+def test_a_dispatch_can_never_publish_a_cache_generation() -> None:
+    """Require every save to name a push, so a warm-run dispatch only reads.
+
+    The exit gate for the runner migration measures warm behaviour by
+    dispatching the gate workflows on `main`. That is safe only while no save
+    can fire on a `workflow_dispatch` event: a dispatch that published would
+    write a generation from a tree nobody reviewed, and would do it while
+    racing the designated writer.
+
+    Every save is therefore required to name the push event explicitly, in the
+    composite actions' writer flag and in the inline saves alike. Naming the
+    ref alone would not do: `github.ref` is `refs/heads/main` on a dispatch
+    against the trunk too.
+    """
+    dispatchable = _workflows_accepting_a_dispatch()
+    assert dispatchable, (
+        "no workflow accepts a dispatch, so the exit gate cannot take warm "
+        "measurements; this contract is guarding nothing"
+    )
+    conditions: list[tuple[str, str]] = []
+    for action_name in sorted(path.name for path in ACTION_DIR.iterdir()):
+        action = ACTION_DIR / action_name / "action.yml"
+        if not action.is_file():
+            continue
+        steps = lane_steps(action, None)
+        if not any("/save@" in str(step.get("uses", "")) for step in steps):
+            continue
+        key_step = next(step for step in steps if step.get("id") == "keys")
+        env = require_mapping(key_step.get("env"), "key step env")
+        conditions.append((action_name, str(env["IS_TRUNK_PUSH"])))
+    for workflow_name, job_name in INLINE_SAVE_WRITERS:
+        steps = job_steps(load_workflow(WORKFLOW_DIR / workflow_name), job_name)
+        conditions.extend(
+            (f"{workflow_name} {step.get('name')!r}", str(step.get("if", "")))
+            for step in cache_steps(steps)
+            if "/save@" in str(step.get("uses", ""))
+        )
+    assert conditions, "no cache save was found to check"
+    for source, condition in conditions:
+        normalized = " ".join(condition.split())
+        assert "github.event_name == 'push'" in normalized, (
+            f"{source} must name the push event, or a dispatch on main would "
+            f"publish a generation. Got {condition!r}"
+        )

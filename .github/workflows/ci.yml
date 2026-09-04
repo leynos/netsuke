@@ -311,9 +311,9 @@ jobs:
       python-baseline: '3.14'
 
   kani-smoke:
-    # Runs on pull requests and on the trunk push that writes its cache;
-    # a manual dispatch has no verification work to gate.
-    if: github.event_name != 'workflow_dispatch'
+    # Runs on every trigger, dispatch included. A dispatch cannot publish a
+    # generation, since the save gates on a push to `main`, so all it can do
+    # here is measure a warm restore, which is the one the exit gate needs.
     runs-on: ubicloud-standard-2-ubuntu-2404
     timeout-minutes: 20
     permissions:
