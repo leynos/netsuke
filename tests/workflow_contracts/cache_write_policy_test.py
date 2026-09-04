@@ -188,12 +188,43 @@ def test_native_smoke_jobs_use_the_read_only_cache_profile(
 
 def _workflows_accepting_a_dispatch() -> list[str]:
     """Return every workflow this repository can start by hand."""
-    names = []
-    for path in sorted({*WORKFLOW_DIR.glob("*.yml"), *WORKFLOW_DIR.glob("*.yaml")}):
-        triggers = load_workflow(path).get("on")
-        if isinstance(triggers, dict) and "workflow_dispatch" in triggers:
-            names.append(path.name)
-    return names
+    return [
+        path.name
+        for path in sorted({*WORKFLOW_DIR.glob("*.yml"), *WORKFLOW_DIR.glob("*.yaml")})
+        if _accepts_a_dispatch(load_workflow(path))
+    ]
+
+
+def _accepts_a_dispatch(workflow: dict[str, object]) -> bool:
+    """Return whether a workflow declares the manual-dispatch trigger."""
+    triggers = workflow.get("on")
+    return isinstance(triggers, dict) and "workflow_dispatch" in triggers
+
+
+def _composite_writer_flags() -> list[tuple[str, str]]:
+    """Return each cache composite's writer flag, labelled by action name."""
+    flags: list[tuple[str, str]] = []
+    for action in sorted(ACTION_DIR.glob("*/action.yml")):
+        steps = lane_steps(action, None)
+        if not any("/save@" in str(step.get("uses", "")) for step in steps):
+            continue
+        key_step = next(step for step in steps if step.get("id") == "keys")
+        env = require_mapping(key_step.get("env"), "key step env")
+        flags.append((action.parent.name, str(env["IS_TRUNK_PUSH"])))
+    return flags
+
+
+def _inline_save_conditions() -> list[tuple[str, str]]:
+    """Return each inline save's condition, labelled by workflow and step."""
+    conditions: list[tuple[str, str]] = []
+    for workflow_name, job_name in INLINE_SAVE_WRITERS:
+        steps = job_steps(load_workflow(WORKFLOW_DIR / workflow_name), job_name)
+        conditions.extend(
+            (f"{workflow_name} {step.get('name')!r}", str(step.get("if", "")))
+            for step in cache_steps(steps)
+            if "/save@" in str(step.get("uses", ""))
+        )
+    return conditions
 
 
 def test_a_dispatch_can_never_publish_a_cache_generation() -> None:
@@ -210,33 +241,14 @@ def test_a_dispatch_can_never_publish_a_cache_generation() -> None:
     ref alone would not do: `github.ref` is `refs/heads/main` on a dispatch
     against the trunk too.
     """
-    dispatchable = _workflows_accepting_a_dispatch()
-    assert dispatchable, (
+    assert _workflows_accepting_a_dispatch(), (
         "no workflow accepts a dispatch, so the exit gate cannot take warm "
         "measurements; this contract is guarding nothing"
     )
-    conditions: list[tuple[str, str]] = []
-    for action_name in sorted(path.name for path in ACTION_DIR.iterdir()):
-        action = ACTION_DIR / action_name / "action.yml"
-        if not action.is_file():
-            continue
-        steps = lane_steps(action, None)
-        if not any("/save@" in str(step.get("uses", "")) for step in steps):
-            continue
-        key_step = next(step for step in steps if step.get("id") == "keys")
-        env = require_mapping(key_step.get("env"), "key step env")
-        conditions.append((action_name, str(env["IS_TRUNK_PUSH"])))
-    for workflow_name, job_name in INLINE_SAVE_WRITERS:
-        steps = job_steps(load_workflow(WORKFLOW_DIR / workflow_name), job_name)
-        conditions.extend(
-            (f"{workflow_name} {step.get('name')!r}", str(step.get("if", "")))
-            for step in cache_steps(steps)
-            if "/save@" in str(step.get("uses", ""))
-        )
+    conditions = _composite_writer_flags() + _inline_save_conditions()
     assert conditions, "no cache save was found to check"
     for source, condition in conditions:
-        normalized = " ".join(condition.split())
-        assert "github.event_name == 'push'" in normalized, (
+        assert "github.event_name == 'push'" in " ".join(condition.split()), (
             f"{source} must name the push event, or a dispatch on main would "
             f"publish a generation. Got {condition!r}"
         )
