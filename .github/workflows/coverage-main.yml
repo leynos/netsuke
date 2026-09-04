@@ -52,6 +52,20 @@ jobs:
       SCCACHE_GHA_ENABLED: ${{ vars.NETSUKE_SCCACHE_LOCAL_DIR == 'true' && 'false' || 'true' }}
       SCCACHE_DIR: ${{ github.workspace }}/.sccache
       SCCACHE_CACHE_SIZE: 4G
+      # The shared coverage action wraps `cargo llvm-cov nextest` in a
+      # watchdog that defaults to 600s, which was sized against a lane that
+      # restored a `target` archive and so never paid for a cold compile.
+      # This estate archives no build tree; sccache owns compiler output, and
+      # a store with nothing in it yet leaves the whole instrumented build to
+      # do. The first trunk run after the migration proved the point: every
+      # one of the 2,790 tests passed, taking about 512s at 19.42% sccache
+      # hits, and the watchdog killed cargo 88s later during report
+      # generation (run 33890685387).
+      #
+      # Three times the observed cold cost, and still well inside the job's
+      # own `timeout-minutes`, so a genuine hang is still caught long before
+      # the runner is abandoned.
+      RUN_RUST_CARGO_WAIT_TIMEOUT: '1800'
       # Keep the main baseline aligned with pull-request coverage instead of
       # silently skipping real-Ninja integration tests.
       NETSUKE_REQUIRE_NINJA: '1'

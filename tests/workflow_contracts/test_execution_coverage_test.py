@@ -19,6 +19,8 @@ from workflow_loading import (
     job_steps,
     load_workflow,
     named_step,
+    require_mapping,
+    workflow_job,
 )
 
 #: Inputs that make the coverage run as broad as `make test` was. Without
@@ -267,3 +269,39 @@ def test_no_other_linux_job_executes_the_rust_suite() -> None:
         for offender in _workflow_offenders(workflow_name)
     ]
     assert not offenders, f"a second Linux test execution reappeared: {offenders!r}"
+
+
+#: The instrumented lanes' budget for one `cargo llvm-cov nextest` invocation,
+#: in seconds. The shared coverage action defaults to 600, which was sized
+#: against a lane that restored a `target` archive and so never paid for a cold
+#: compile.
+CARGO_WAIT_TIMEOUT = "1800"
+
+
+@pytest.mark.parametrize(
+    ("workflow_name", "job_name"), sorted(COVERAGE_PRODUCERS, key=str)
+)
+def test_instrumented_lanes_budget_for_a_cold_build(
+    workflow_name: str, job_name: str
+) -> None:
+    """Require both instrumented lanes to raise the cargo watchdog.
+
+    The shared coverage action wraps `cargo llvm-cov nextest` in a watchdog
+    that defaults to 600 seconds. That budget assumed a restored `target`
+    archive; this repository archives no build tree, so a cold sccache store
+    leaves the whole instrumented build to do inside it. The first trunk run
+    after the runner migration failed exactly there: all 2,790 tests passed,
+    taking about 512 seconds at 19.42% sccache hits, and the watchdog killed
+    cargo 88 seconds later during report generation.
+
+    Held for both producers, not only the lane that failed. The merge gate
+    runs the same action on pull requests and meets the same wall whenever its
+    store is cold, which is the case a green trunk run would otherwise hide.
+    """
+    job = workflow_job(load_workflow(WORKFLOW_DIR / workflow_name), job_name)
+    env = require_mapping(job.get("env"), f"{job_name} env")
+    assert env.get("RUN_RUST_CARGO_WAIT_TIMEOUT") == CARGO_WAIT_TIMEOUT, (
+        f"{workflow_name} {job_name} must budget "
+        f"{CARGO_WAIT_TIMEOUT}s for one instrumented cargo run, got "
+        f"{env.get('RUN_RUST_CARGO_WAIT_TIMEOUT')!r}"
+    )
