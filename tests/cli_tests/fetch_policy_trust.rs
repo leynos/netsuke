@@ -303,6 +303,36 @@ fn trusted_operator_layers_can_opt_in_to_project_grants(
 }
 
 #[rstest]
+fn trusted_project_default_deny_request_can_override_operator_value() -> Result<()> {
+    let system_config = r"
+fetch_default_deny = true
+trust_project_fetch_policy = true
+";
+    let merged = merge_fetch_policy(
+        &FetchPolicyFileLayers {
+            system: Some(system_config),
+            project: Some(PROJECT_GRANTS),
+            ..FetchPolicyFileLayers::default()
+        },
+        &[],
+        &["netsuke"],
+    )?;
+
+    ensure!(
+        !merged.fetch_default_deny,
+        "trusted project false request should override operator default-deny"
+    );
+    ensure!(
+        merged
+            .network_policy()?
+            .evaluate(&url("http://otherwise-unlisted.example.org")?)
+            .is_ok(),
+        "trusted project request should permit the selected policy"
+    );
+    Ok(())
+}
+
+#[rstest]
 fn project_cannot_self_authorize_fetch_policy_widening() -> Result<()> {
     let project_config = format!("trust_project_fetch_policy = true\n{PROJECT_GRANTS}");
     let merged = merge_fetch_policy(
