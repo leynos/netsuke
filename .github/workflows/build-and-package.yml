@@ -146,29 +146,27 @@ jobs:
 
       - name: Restore cargo-orthohelp
         id: orthohelp_cache
-        # Owns the tool binary and the dedicated target directory its source
-        # build uses. Keyed by the tool version, so the build below happens
-        # once per generation rather than once per run. This lane is reached
-        # only by tag pushes and the pull-request dry run, never by a push to
-        # `main`, so unlike every other cache here it must publish from
-        # whichever run had to build the tool; the key is content-addressed by
-        # version, so concurrent writers produce identical archives.
+        # Owns the installed tool binary. This lane is reached only by tag
+        # pushes and the pull-request dry run, never by a push to `main`, so
+        # unlike every other cache here it must publish from whichever run
+        # installed the tool; the key is content-addressed by version, so
+        # concurrent writers produce identical archives.
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
-          path: |
-            ~/.cargo/bin
-            ~/.cache/orthohelp-build
+          path: ~/.cargo/bin
           # The `cargo-binstall` pin is part of the key, spelled as the
-          # `rust-build-release` revision that provisions it. The entry
-          # owns `~/.cargo/bin` as a directory, which is the repository's
-          # rule for tool directories, and that directory holds
-          # `cargo-binstall` as well as `cargo-orthohelp`. Keyed on the
-          # tool version alone, a bump to the shared action's binstall
-          # version would not turn the entry over, and the restore would
-          # put the older `cargo-binstall` back over the one the action
-          # had just provisioned.
+          # `rust-build-release` revision that provisions it. The entry owns
+          # `~/.cargo/bin` as a directory, which is the repository's rule for
+          # tool directories, and that directory holds `cargo-binstall` as
+          # well as `cargo-orthohelp`. Keyed on the tool version alone, a bump
+          # to the shared action's binstall version would not turn the entry
+          # over, and the restore would put the older `cargo-binstall` back
+          # over the one the action had just provisioned.
+          #
+          # Generation `v2`: the entry no longer carries a source-build target
+          # directory, so its shape changed as well as its version.
           key: >-
-            netsuke-orthohelp-v1-${{ runner.os }}-${{ runner.arch }}-0.9.0-${{ env.RUST_BUILD_RELEASE_PIN }}
+            netsuke-orthohelp-v2-${{ runner.os }}-${{ runner.arch }}-0.9.1-${{ env.RUST_BUILD_RELEASE_PIN }}
 
       - name: Install cargo-orthohelp
         # Runs after `rust-build-release`, which nests the setup-rust action
@@ -177,59 +175,65 @@ jobs:
         # first needed by the help-generation step below, so this ordering
         # costs nothing.
         #
-        # Documented exception to the no-source-build rule. `ortho-config`
-        # publishes no binaries for any platform (leynos/ortho-config#479), so
-        # binary-only strategies are tried first and a genuine miss falls back
-        # to a source build. That build uses a dedicated CARGO_TARGET_DIR so it
-        # never shares compiler output with the product, and the cache above
-        # keeps it to once per generation. Delete the fallback once #479 lands.
+        # No source build. `ortho-config` published no binaries until 0.9.1
+        # (leynos/ortho-config#479), which is why this lane once carried a
+        # documented exception to the no-source-build rule. 0.9.1 ships five
+        # checksum-verified archives with working binstall metadata
+        # (leynos/ortho-config#480), so the exception is retired: only 0.9.1
+        # and later carry assets, and pinning below that would reintroduce a
+        # compile.
+        #
+        # `--disable-strategies compile` is what makes that structural rather
+        # than hopeful. The previous form listed the binary-only strategies it
+        # preferred and fell through to a compile when they missed; this one
+        # cannot compile at all, so a release that stops publishing assets
+        # fails the lane instead of quietly building the tool from source.
         shell: bash
+        env:
+          # Resolving the release asset costs one `api.github.com` call, and
+          # unauthenticated calls are rate-limited per source address. The
+          # macOS runners share addresses widely enough that both lanes hit
+          # `403 Forbidden` on the first attempt of this change, retried for
+          # two minutes, and failed. The job token lifts the limit to a
+          # per-repository budget. `contents: read` is all it carries, which
+          # is what reading a public release needs and nothing more.
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           # Probe first, as every other installer here does. The cache restores
-          # `~/.cargo/bin`, and `cargo install` refuses to overwrite a binary
-          # that is already there, so a warm run must not reach either branch.
-          if cargo-orthohelp --version 2>/dev/null | grep -Eq '(^|[[:space:]])0\.9\.0([[:space:]]|$)'; then
-            echo "cargo-orthohelp 0.9.0 restored from the cache"
+          # `~/.cargo/bin`, and an install refuses to overwrite a binary that
+          # is already there, so a warm run must not reach the install at all.
+          if cargo-orthohelp --version 2>/dev/null | grep -Eq '(^|[[:space:]])0\.9\.1([[:space:]]|$)'; then
+            echo "cargo-orthohelp 0.9.1 restored from the cache"
             exit 0
           fi
-          if cargo binstall --no-confirm --locked \
-            --strategies crate-meta-data,quick-install cargo-orthohelp@0.9.0; then
-            exit 0
-          fi
-          echo "::notice title=cargo-orthohelp::no prebuilt release; building from source (leynos/ortho-config#479)"
-          # Resolved here rather than in `env`: GitHub does not expand `~` in
-          # an env value, and `mkdir -p` rather than `--parents` because macOS
-          # ships BSD coreutils, which reject the long option.
-          ORTHOHELP_BUILD_DIR="${HOME}/.cache/orthohelp-build"
-          mkdir -p "${ORTHOHELP_BUILD_DIR}"
-          CARGO_TARGET_DIR="${ORTHOHELP_BUILD_DIR}" \
-            cargo install --locked cargo-orthohelp@0.9.0
+          cargo binstall --no-confirm --locked \
+            --disable-strategies compile cargo-orthohelp@0.9.1
 
       - name: Validate cargo-orthohelp version
         shell: bash
         run: |
           set -euo pipefail
-          cargo-orthohelp --version | grep -Eq '(^|[[:space:]])0\.9\.0([[:space:]]|$)'
+          cargo-orthohelp --version | grep -Eq '(^|[[:space:]])0\.9\.1([[:space:]]|$)'
 
       - name: Save cargo-orthohelp
         if: steps.orthohelp_cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
-          path: |
-            ~/.cargo/bin
-            ~/.cache/orthohelp-build
+          path: ~/.cargo/bin
           # The `cargo-binstall` pin is part of the key, spelled as the
-          # `rust-build-release` revision that provisions it. The entry
-          # owns `~/.cargo/bin` as a directory, which is the repository's
-          # rule for tool directories, and that directory holds
-          # `cargo-binstall` as well as `cargo-orthohelp`. Keyed on the
-          # tool version alone, a bump to the shared action's binstall
-          # version would not turn the entry over, and the restore would
-          # put the older `cargo-binstall` back over the one the action
-          # had just provisioned.
+          # `rust-build-release` revision that provisions it. The entry owns
+          # `~/.cargo/bin` as a directory, which is the repository's rule for
+          # tool directories, and that directory holds `cargo-binstall` as
+          # well as `cargo-orthohelp`. Keyed on the tool version alone, a bump
+          # to the shared action's binstall version would not turn the entry
+          # over, and the restore would put the older `cargo-binstall` back
+          # over the one the action had just provisioned.
+          #
+          # Generation `v2`: the entry no longer carries a source-build target
+          # directory, so its shape changed as well as its version.
           key: >-
-            netsuke-orthohelp-v1-${{ runner.os }}-${{ runner.arch }}-0.9.0-${{ env.RUST_BUILD_RELEASE_PIN }}
+            netsuke-orthohelp-v2-${{ runner.os }}-${{ runner.arch }}-0.9.1-${{ env.RUST_BUILD_RELEASE_PIN }}
 
       - name: Generate release help
         shell: bash

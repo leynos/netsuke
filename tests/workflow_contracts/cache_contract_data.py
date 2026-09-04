@@ -113,20 +113,27 @@ SCCACHE_LOCAL_DIR_JOBS = (
     ("release.yml", "windows-native-recipe-smoke"),
 )
 
-#: The packaging lane's guarded `cargo-orthohelp` source build, permitted by
-#: an explicit exception while leynos/ortho-config#479 is open. It is the one
-#: `cargo install` the estate allows, and only in this form.
-#: Both documented source-build exceptions, each keyed by the issue that
-#: retires it. Counting them by name means a third cannot arrive disguised as
-#: a second occurrence of either.
+#: The remaining documented source-build exception, keyed by the issue that
+#: retires it. Counting it by name means a second cannot arrive disguised as
+#: another occurrence of this one.
+#:
+#: `cargo-orthohelp` used to be the other entry, permitted while
+#: leynos/ortho-config#479 left the crate with no published binaries. 0.9.1
+#: ships checksum-verified archives for every platform this estate targets
+#: (leynos/ortho-config#480), so that exception is retired rather than
+#: relaxed: the packaging lane now passes `--disable-strategies compile`, and
+#: `FORBIDDEN_SOURCE_BUILDS` holds the tool to it.
 SOURCE_BUILD_EXCEPTIONS = {
-    "cargo-orthohelp (ortho-config#479)": (
-        "cargo install --locked cargo-orthohelp@0.9.0"
-    ),
     "mdtablefix on Windows (mdtablefix#458)": (
         'cargo install --locked "mdtablefix@${MDTABLEFIX_VERSION}"'
     ),
 }
+
+#: Tools that once had a source-build exception and must never regain one.
+#: Retiring an exception is only durable if something rejects its return; a
+#: shrinking count of permitted builds would not, since a reader could add the
+#: tool back as a third entry above.
+FORBIDDEN_SOURCE_BUILDS = ("cargo-orthohelp",)
 
 #: Shared-action steps whose own cache would archive a `target` tree unless
 #: the caller owns it. `rust-build-release` forwards the input to its nested

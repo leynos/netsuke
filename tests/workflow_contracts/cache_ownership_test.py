@@ -20,6 +20,7 @@ from cache_contract_data import (
     CACHE_SAVE,
     DELEGATING_ACTION_STEPS,
     EXTERNAL_CACHE_PROVIDER,
+    FORBIDDEN_SOURCE_BUILDS,
     GITHUB_CACHE_SOURCES,
     NON_CACHE_ACTIONS,
     OBSERVATION_SOURCES,
@@ -42,6 +43,7 @@ from runner_placement_invariants import (
     UBICLOUD_LABELS,
     has_single_cache_owner,
 )
+from source_build_data import is_source_built
 from workflow_loading import (
     job_steps,
     load_workflow,
@@ -350,11 +352,8 @@ def test_workflows_do_not_reintroduce_source_tool_builds_or_stale_providers() ->
         for path in sorted({*WORKFLOW_DIR.glob("*.yml"), *WORKFLOW_DIR.glob("*.yaml")})
         + sorted(ACTION_DIR.rglob("action.yml"))
     )
-    # One documented exception: `ortho-config` publishes no binaries for any
-    # platform (leynos/ortho-config#479), so the packaging lane may compile it
-    # once per cache generation into a dedicated target directory. Every other
-    # source build stays forbidden, and the exception is counted rather than
-    # pattern-matched so a second one cannot hide behind it.
+    # One documented exception remains, and it is counted rather than
+    # pattern-matched so a second cannot hide behind it.
     permitted = {
         name: workflow_text.count(text)
         for name, text in SOURCE_BUILD_EXCEPTIONS.items()
@@ -363,6 +362,16 @@ def test_workflows_do_not_reintroduce_source_tool_builds_or_stale_providers() ->
     assert not unexpected, (
         "each documented source-build exception must appear exactly once, "
         f"got {unexpected!r}"
+    )
+    # A retired exception has to stay retired, checked by name rather than by
+    # a shrinking count: a count would be satisfied by adding the tool back as
+    # another permitted entry above.
+    returned = [
+        tool for tool in FORBIDDEN_SOURCE_BUILDS if is_source_built(tool, workflow_text)
+    ]
+    assert not returned, (
+        f"{returned!r} had a source-build exception that was retired; these "
+        "tools publish prebuilt archives and must not be compiled in CI"
     )
     source_builds = workflow_text.count("cargo install ")
     # One extra occurrence is the mdtablefix action's own comment naming the

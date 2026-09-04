@@ -50,6 +50,7 @@ excluded_paths = [
     # The shared workflow-reading helper (`tests/common/mod.rs`), included by
     # each workflow contract crate. The crates themselves stay under policy.
     "workflow_ci::common",
+    "workflow_orthohelp_install::common",
     "workflow_release::common",
 
     # The build script's parsers, included by path so `cargo test` can reach
