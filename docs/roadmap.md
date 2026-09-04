@@ -2012,6 +2012,7 @@ runs prove the failure boundary before any job receives release permissions.
     criteria](rfcs/0005-release-hardening.md#measurable-acceptance-criteria).
   - Success: every invalid matrix case blocks before upload, while clean
     evidence preserves the established archive and sidecar contract.
+
 - [ ] 9.4.4. Enable publication admission and document rollback.
   - Requires 9.4.3.
   - Enable the dependency only after all supported-target dry runs pass, retain
@@ -2024,6 +2025,7 @@ runs prove the failure boundary before any job receives release permissions.
     migration](rfcs/0005-release-hardening.md#compatibility-and-migration).
   - Success: a real release is publishable only from the admitted exact tag
     commit, and its retained evidence reproduces the admission decision.
+
 ## 10. Property-based testing of generated build scripts
 
 Hypothesis: Netsukefile authors trust the generated build script when the test
