@@ -1194,6 +1194,19 @@ exception for `netsuke help targets`.
 Recipe-body skipping and conditional catalogue entries are beta3 behaviour.
 Published beta2 `help targets` does not provide those semantics.
 
+## Release-admission canary
+
+The release workflow currently runs a non-blocking RFC 0005 release-admission
+canary scaffold. It performs read-only checks and reports whether the release
+checks succeeded, failed, or were unknown in the workflow summary. Missing,
+stale, mismatched, or unclassified evidence is reported as an unsuccessful
+canary result, but does not currently prevent publication. Publication will
+become conditional on this admission result only after a real RFC 0005 evidence
+producer is connected and enforcement mode is enabled.
+
+Maintainers can find the operational observability contract in the
+[developer guide](developers-guide.md#release-admission-observability).
+
 ## Configure Netsuke
 
 Configuration precedence, from lowest to highest, is:

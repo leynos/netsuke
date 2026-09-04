@@ -2,7 +2,9 @@
 
 This guide describes the day-to-day engineering workflow for Netsuke, with a
 focus on writing and maintaining tests. It is the source of truth for how the
-test suite is expected to be used by contributors.
+test suite is expected to be used by contributors. The normative architecture
+reference for bounded release-admission observability is
+[ADR-018](adr-018-release-admission-observability.md).
 
 ## Command-line interface architecture
 
@@ -976,6 +978,88 @@ installation, binary build, smoke script, and
 source itself; the release publication job separately requires both this smoke
 job and the platform package jobs in its `needs` list. Consequently, release
 publication cannot proceed unless the native Windows smoke test passes.
+
+## Release-admission observability
+
+The release workflow runs a read-only release-admission canary scaffold before
+publication. The gate's GitHub API requests and Git fetches emit bounded JSON
+Lines (JSONL) metrics to a runner-local file. Each fixed operation emits its
+counter and duration at the operation boundary; the final gate boundary emits
+the overall counter, including early failures. The scaffold is currently
+non-blocking for publication; the publication dependency is enabled once a real
+RFC 0005 evidence producer is connected. The workflow uploads the completed
+JSONL file as a workflow artefact and writes one concise outcome line to
+`GITHUB_STEP_SUMMARY`. In the release workflow,
+`NETSUKE_RELEASE_ADMISSION_METRICS_FILE` points to
+`${runner.temp}/release-admission-metrics.jsonl`, and the file is uploaded
+under the `release-admission-metrics` artefact name. The summary and upload
+steps retain the result on failure; dry-run policy still controls whether an
+artefact is uploaded. The workflow provisions Python before running the gate's
+monotonic duration timing helpers.
+
+The admission mode is a closed configuration vocabulary. The
+`NETSUKE_RELEASE_ADMISSION_ENFORCE` value is either `false` (observation) or
+`true` (enforcement), and an unset value defaults to `false`. The current
+release workflow explicitly selects `false` because no RFC 0005 evidence
+producer is connected. Observation mode records the fail-closed admission
+result, including `outcome=failure` and `error_category=missing_evidence` when
+the producer has not supplied evidence, writes the gate outputs and summary,
+and then exits successfully so the canary does not block publication.
+Enforcement mode preserves fail-closed behaviour: missing, stale, malformed,
+unknown, or mismatched evidence exits non-zero after recording its bounded
+result. An environment value such as `fresh` is not evidence and must never
+substitute for a real evidence producer. Any other mode value is an invalid
+configuration and fails closed as an unknown gate result.
+
+The metric contract is deliberately closed. The only label names are `canary`,
+`operation`, `outcome`, and `error_category`, and the only values are:
+
+- `canary=history_scan|release_candidate|none`;
+- `operation=resolve_tag_commit|fetch_candidate_revision|fetch_workflow_run|`
+  `check_scan_freshness|verify_evidence`;
+- `outcome=success|failure|unknown`; and
+- `error_category=none|api_error|fetch_error|stale_evidence|missing_evidence|`
+  `mismatch|timeout|unknown`.
+
+The duration instrument carries only the fixed `operation` label. Never add a
+revision, run ID, path, URL, workflow content, or other identifier-derived
+value to a metric label. A successful operation or gate uses
+`error_category=none`. An operation failure maps to its fixed category; an
+unclassified failure maps to `outcome=unknown` and `error_category=unknown`,
+and metric classification remains fail-closed.
+
+Each operation has a 30-second timeout by default. Set
+`NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS` only to an integer from 1
+through 300 seconds, inclusive. The timeout terminates the command and gives
+descendants a one-second termination grace period. A timed-out operation emits
+`outcome=failure` with `error_category=timeout`; invalid timeout configuration
+fails closed as `outcome=failure` with `error_category=unknown` before any
+admission operation runs.
+
+Instruments emitted by the gate are:
+
+- `netsuke_release_admission_gate_total` — counter. Records the final canary
+  outcome with `outcome` and `error_category` labels. Operators use it to
+  identify a successful, failed, or unknown canary result. It does not gate
+  publication until a real evidence producer is connected.
+- `netsuke_release_admission_operation_total` — counter. Records one result
+  for each fixed GitHub API request or Git fetch, with `canary`, `operation`,
+  `outcome`, and `error_category` labels. Operators use it to locate the
+  failing admission boundary and its classified cause.
+- `netsuke_release_admission_operation_duration_seconds` — histogram. Records
+  the elapsed seconds for each fixed operation with only the `operation` label.
+  Operators use it to compare operation latency across runs without exposing
+  request or repository identifiers.
+
+To investigate a failed canary, read the job-summary outcome first, then
+download the release-admission JSONL artefact and inspect the operation counter
+records alongside their duration observations. A missing artefact is not
+evidence of a successful canary. GitHub Actions applies the repository or
+workflow's configured artefact-retention period. This export is intentionally
+not a Prometheus, OpenTelemetry Protocol (OTLP), or statsd endpoint; no scrape
+or push service is implied. Metric or label renames are breaking contract
+changes and require an ADR and updated workflow-contract tests. See
+[ADR-018](adr-018-release-admission-observability.md) for the durable decision.
 
 ## GitHub Actions runner placement
 
