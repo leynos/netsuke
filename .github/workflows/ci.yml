@@ -28,8 +28,7 @@ env:
   # `make check-fmt` shells out to mdtablefix. Pin it once so both formatter
   # jobs produce the same canonical output.
   MDTABLEFIX_VERSION: '0.5.0'
-  # Ubuntu release, carried in every compiled-tool cache key.
-  NETSUKE_RUNNER_IMAGE: ubuntu2404
+  NETSUKE_RUNNER_IMAGE: ubuntu2404  # carried in every compiled-tool cache key
 
 jobs:
   build-test:
@@ -45,41 +44,44 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       BUILD_PROFILE: debug
-      # vCPU count of this lane's shape. Every worker bound derives from this
-      # one number; tests/workflow_contracts/runner_placement_test.py holds
-      # them equal. The instrumented run reads the cargo and nextest
-      # variables; `make doctest` reads BUILD_JOBS.
+      # vCPU count of this lane's shape; every worker bound derives from it,
+      # held equal by tests/workflow_contracts/runner_placement_test.py. The
+      # instrumented run reads the cargo and nextest variables; `make doctest`
+      # reads BUILD_JOBS.
       LINUX_LANE_VCPUS: '4'
       BUILD_JOBS: -j 4
       CARGO_BUILD_JOBS: '4'
       NEXTEST_TEST_THREADS: '4'
       RUSTC_WRAPPER: sccache
       # sccache uses the GitHub Actions backend, whose objects land in
-      # Ubicloud's own store on a Ubicloud runner. It needs no archive of its
-      # own. Setting the repository variable NETSUKE_SCCACHE_LOCAL_DIR to
-      # `true` switches the whole gate to the local-directory backend and
-      # enables cache step B; exactly one backend is ever active.
+      # Ubicloud's own store, so it needs no archive. Setting the repository
+      # variable NETSUKE_SCCACHE_LOCAL_DIR to `true` switches the gate to the
+      # local-directory backend and enables cache step B; one is ever active.
       SCCACHE_GHA_ENABLED: ${{ vars.NETSUKE_SCCACHE_LOCAL_DIR == 'true' && 'false' || 'true' }}
       SCCACHE_DIR: ${{ github.workspace }}/.sccache
-      # Sized for two build shapes: the ordinary debug objects and the
-      # `llvm-cov` instrumented ones, which share this store keyed by flags.
+      # Sized for two build shapes: ordinary debug objects and the `llvm-cov`
+      # instrumented ones, sharing this store keyed by flags.
       SCCACHE_CACHE_SIZE: 4G
-      # The tree requires the Polonius borrow checker, which nightly enables by
-      # default (see docs/adr-006-adopt-polonius-nightly-toolchain.md), so CI
-      # builds with the dated nightly pinned in rust-toolchain.toml.
+      # Polonius is nightly-only (docs/adr-006-adopt-polonius-nightly-toolchain.md),
+      # so CI builds with the dated nightly pinned in rust-toolchain.toml.
       NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
       YAMLLINT_VERSION: '1.38.0'
       UV_CACHE_DIR: ${{ github.workspace }}/.uv-cache
       UV_TOOL_DIR: ${{ github.workspace }}/.uv-tools
       UV_TOOL_BIN_DIR: ${{ github.workspace }}/.uv-bin
+      # The shared coverage action's cargo watchdog, raised from its 600s
+      # default because a cold sccache store leaves the whole instrumented
+      # build to do. See the same variable in coverage-main.yml for the
+      # measurement behind the value.
+      RUN_RUST_CARGO_WAIT_TIMEOUT: '1800'
       # Real-Ninja integration coverage must not silently skip when a runner
       # image lacks the backend executable.
       NETSUKE_REQUIRE_NINJA: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          # Full history so the deferred cs-coverage check step can reach
-          # the pull request's merge base once the gate is wired in.
+          # Full history so the deferred cs-coverage check can reach the pull
+          # request's merge base once the gate is wired in.
           fetch-depth: 0
       - name: Export sccache credentials
         # A server started without these stays on local disk all job.
@@ -98,9 +100,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends gawk
-          # Ubuntu exposes awk through an alternatives symlink outside
-          # /usr/bin, which the sandbox probe cannot follow, so expose the
-          # packaged binary as a regular executable on PATH.
+          # Ubuntu exposes awk through an alternatives symlink the sandbox
+          # probe cannot follow, so expose the packaged binary on PATH.
           test_shell_bin="${RUNNER_TEMP}/netsuke-test-bin"
           mkdir --parents "${test_shell_bin}"
           install --mode=0755 "$(command -v gawk)" "${test_shell_bin}/awk"
@@ -147,9 +148,8 @@ jobs:
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
         with:
           python-version: ${{ env.PYTHON_BASELINE }}
-          # The gate cache already owns the uv download and tool stores, so a
-          # second GitHub-backed cache would duplicate it.
-          # It also owns the shim directory the next step writes into.
+          # The gate cache already owns the uv download and tool stores, and
+          # the shim directory the next step writes into.
           enable-cache: 'false'
       - name: Install yamllint
         run: |
@@ -157,8 +157,8 @@ jobs:
           echo "${UV_TOOL_BIN_DIR}" >> "$GITHUB_PATH"
       - name: Download actionlint
         id: get_actionlint
-        # The gate cache owns `actionlint`. Reuse it only at the pinned
-        # version, so a bump cannot be satisfied by a stale executable.
+        # The gate cache owns `actionlint`; reuse it only at the pinned
+        # version, so a bump cannot reuse a stale executable.
         run: |
           set -euo pipefail
           readonly ACTIONLINT_VERSION='1.7.12'
@@ -227,10 +227,10 @@ jobs:
         run: make test-workflow-contracts
       - name: Test and Measure Coverage
         # The only test execution on this lane: measuring and testing in one
-        # instrumented run costs one compile instead of two. The flags must
-        # therefore match an uninstrumented run, and `-D warnings` arrives
-        # from setup-rust's `rustflags` input. Pull requests only; on the
-        # trunk `coverage-upload` runs the same set over the same commit.
+        # instrumented run costs one compile instead of two, so the flags must
+        # match an uninstrumented run. `-D warnings` arrives from setup-rust's
+        # `rustflags` input. Pull requests only; on the trunk
+        # `coverage-upload` runs the same set over the same commit.
         if: github.event_name == 'pull_request'
         uses: leynos/shared-actions/.github/actions/generate-coverage@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
@@ -271,8 +271,8 @@ jobs:
           access-token: ${{ env.CS_ACCESS_TOKEN }}
           installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
       - name: Discard the instrumented build tree
-        # No consumer once the report exists, and it is the second tree on a
-        # volume a sibling repository exhausted. Removed before any cache save.
+        # No consumer once the report exists, and the second tree on a volume
+        # a sibling repository exhausted. Removed before any cache save.
         if: always()
         run: |
           df -h .
@@ -284,7 +284,7 @@ jobs:
         with:
           mode: report
       - name: Save gate caches
-        # Single writer; the action restricts each save to a push on `main`.
+        # Single writer; the action restricts saves to a push on `main`.
         uses: ./.github/actions/linux-gate-cache
         with:
           mode: save
@@ -331,7 +331,7 @@ jobs:
       - name: Restore Kani payloads
         id: kani_cache
         # Restored before every installer, so a warm run finds the front-end,
-        # verifier bundle, and Kani-managed toolchain already in place.
+        # bundle and Kani toolchain in place.
         uses: ./.github/actions/kani-cache
         with:
           mode: restore
@@ -346,8 +346,8 @@ jobs:
           install-binstall: 'false'
           use-sccache: 'false'
       - name: Install prebuilt Kani
-        # Two payloads, both from pinned checksummed archives under
-        # version-qualified directories, so a bump cannot reuse a stale binary.
+        # Two payloads from pinned checksummed archives under
+        # version-qualified directories, so a bump cannot reuse a stale one.
         run: |
           set -euo pipefail
           kani_version="$(tr -d '\r\n' < tools/kani/VERSION)"
