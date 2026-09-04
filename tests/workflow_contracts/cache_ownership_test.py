@@ -348,7 +348,7 @@ def test_workflows_do_not_reintroduce_source_tool_builds_or_stale_providers() ->
     workflow_text = "\n".join(
         path.read_text(encoding="utf-8")
         for path in sorted({*WORKFLOW_DIR.glob("*.yml"), *WORKFLOW_DIR.glob("*.yaml")})
-        + sorted(ACTION_DIR.glob("*/action.yml"))
+        + sorted(ACTION_DIR.rglob("action.yml"))
     )
     # One documented exception: `ortho-config` publishes no binaries for any
     # platform (leynos/ortho-config#479), so the packaging lane may compile it

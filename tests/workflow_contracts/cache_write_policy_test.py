@@ -196,9 +196,26 @@ def _workflows_accepting_a_dispatch() -> list[str]:
 
 
 def _accepts_a_dispatch(workflow: dict[str, object]) -> bool:
-    """Return whether a workflow declares the manual-dispatch trigger."""
-    triggers = workflow.get("on")
-    return isinstance(triggers, dict) and "workflow_dispatch" in triggers
+    """Return whether a workflow declares the manual-dispatch trigger.
+
+    Parameters
+    ----------
+    workflow
+        A parsed workflow document.
+
+    Returns
+    -------
+    bool
+        ``True`` only when the ``on`` key is a mapping containing
+        ``workflow_dispatch``. A workflow may spell ``on`` as a scalar or a
+        list, and neither form can carry the trigger's optional inputs, so
+        neither is the shape a dispatchable workflow here uses.
+    """
+    match workflow.get("on"):
+        case {"workflow_dispatch": _}:
+            return True
+        case _:
+            return False
 
 
 def _composite_save_conditions() -> list[tuple[str, str]]:
@@ -220,7 +237,9 @@ def _composite_save_conditions() -> list[tuple[str, str]]:
     so a dispatch cannot make it publish anything either.
     """
     conditions: list[tuple[str, str]] = []
-    for action in sorted(ACTION_DIR.glob("*/action.yml")):
+    # `rglob`, because a composite action may live below a nested directory
+    # and a single-level glob would let it bypass this policy in silence.
+    for action in sorted(ACTION_DIR.rglob("action.yml")):
         steps = lane_steps(action, None)
         if not any("/save@" in str(step.get("uses", "")) for step in steps):
             continue

@@ -77,18 +77,22 @@ fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()>
         "test-nextest should bound test processes with NEXTEST_TEST_JOBS, found {nextest_recipe:?}"
     );
 
-    // Position, not just presence: the variable has to reach `nextest run`
-    // rather than sit in some other command in the same recipe, where it would
-    // read as configured while bounding nothing.
-    let run_offset = nextest_recipe
-        .find("nextest run")
+    // The bounds have to be arguments to `nextest run`, not merely present
+    // somewhere in the recipe. `target_recipe` returns every line of the
+    // recipe joined together, so checking the whole string would accept a
+    // bound that sits in an unrelated command and reads as configured while
+    // bounding nothing. Isolate the invoking line and assert against that.
+    let run_command = nextest_recipe
+        .lines()
+        .find(|line| line.contains("nextest run"))
         .context("test-nextest should invoke cargo nextest run")?;
-    let test_jobs_offset = nextest_recipe
-        .find("$(NEXTEST_TEST_JOBS)")
-        .context("test-nextest should reference NEXTEST_TEST_JOBS")?;
     ensure!(
-        test_jobs_offset > run_offset,
-        "NEXTEST_TEST_JOBS should be an argument to nextest run, found {nextest_recipe:?}"
+        run_command.contains("$(NEXTEST_BUILD_JOBS)"),
+        "NEXTEST_BUILD_JOBS should be an argument to nextest run, found {run_command:?}"
+    );
+    ensure!(
+        run_command.contains("$(NEXTEST_TEST_JOBS)"),
+        "NEXTEST_TEST_JOBS should be an argument to nextest run, found {run_command:?}"
     );
 
     let doctest_recipe =

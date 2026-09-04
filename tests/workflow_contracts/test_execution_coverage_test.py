@@ -231,7 +231,11 @@ def _is_scannable_job(workflow_name: str, job_name: str, declaration: object) ->
         return False
     # A job that calls a reusable workflow declares no steps of its own; the
     # callee's own contracts cover it.
-    return isinstance(declaration, dict) and "steps" in declaration
+    match declaration:
+        case {"steps": _}:
+            return True
+        case _:
+            return False
 
 
 def _workflow_offenders(workflow_name: str) -> list[str]:
