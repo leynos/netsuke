@@ -282,7 +282,7 @@ jobs:
 
   release-admission-canaries:
     needs: metadata
-    runs-on: namespace-profile-netsuke
+    runs-on: ubuntu-latest
     permissions:
       actions: read
       contents: read
