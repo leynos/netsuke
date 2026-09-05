@@ -118,7 +118,7 @@ fn command_limits_propagate_into_components(base_config: Result<StdlibConfig>) -
         .context("set capture limit")?
         .with_command_max_stream_bytes(131_072)
         .context("set streaming limit")?;
-    let (_network, command) = config.into_components();
+    let (_network, _files, command) = config.into_components();
     ensure!(
         command.max_capture_bytes == 4_096,
         "capture limit {} did not match 4096",

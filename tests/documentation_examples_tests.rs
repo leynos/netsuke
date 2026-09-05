@@ -27,6 +27,8 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-crates-io-install",
     "guide-direct-command-list",
     "guide-env-reader-snippet",
+    "guide-file-follow-symlinks-expression",
+    "guide-file-max-bytes-expression",
     "guide-first-build-commands",
     "guide-first-build-manifest",
     "guide-foreach-manifest",

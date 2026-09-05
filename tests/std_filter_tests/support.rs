@@ -41,6 +41,22 @@ pub(crate) mod fallible {
         Ok((env, state))
     }
 
+    /// Builds a stdlib environment rooted at `root` whose file-read budget is
+    /// `limit` bytes.
+    pub(crate) fn stdlib_env_with_root_and_file_read_limit(
+        root: &camino::Utf8Path,
+        limit: u64,
+    ) -> Result<Environment<'static>> {
+        let dir = Dir::open_ambient_dir(root, ambient_authority())
+            .context("open policy workspace root")?;
+        let (env, _) = stdlib_env_with_config(
+            StdlibConfig::new(dir)?
+                .with_workspace_root_path(root)?
+                .with_file_max_read_bytes(limit)?,
+        )?;
+        Ok(env)
+    }
+
     pub(crate) fn stdlib_env_with_state() -> Result<(Environment<'static>, StdlibState)> {
         stdlib_env_with_config(StdlibConfig::from_current_dir()?)
     }
