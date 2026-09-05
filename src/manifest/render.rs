@@ -5,8 +5,8 @@
 //! `ins`/`outs` context keys are always present, inserting
 //! `__NETSUKE_INS_PLACEHOLDER__`/`__NETSUKE_OUTS_PLACEHOLDER__` when absent
 //! so that [`crate::ir::cmd_interpolate`] can substitute them later.
-use super::ManifestValue;
-use super::jinja_macros::render_template;
+use super::jinja_macros::render_template_with_budget;
+use super::{ManifestValue, budget::ManifestBudget};
 use crate::ast::{NetsukeManifest, Recipe, StringOrList, Target, Vars};
 use crate::ir::{INS_TOKEN, OUTS_TOKEN};
 use anyhow::{Context, Result};
@@ -22,7 +22,17 @@ use std::cell::Cell;
 /// Returns an error when a template evaluation fails or when rendered
 /// values cannot be serialized back into the manifest structure.
 pub fn render_manifest(manifest: NetsukeManifest, env: &Environment) -> Result<NetsukeManifest> {
-    render_manifest_with_mode(manifest, env, RenderMode::Full)
+    let budget = ManifestBudget::default();
+    render_manifest_with_budget(manifest, env, &budget)
+}
+
+/// Render a manifest with the caller's shared resource accounting.
+pub(crate) fn render_manifest_with_budget(
+    manifest: NetsukeManifest,
+    env: &Environment,
+    budget: &ManifestBudget,
+) -> Result<NetsukeManifest> {
+    render_manifest_with_mode(manifest, env, budget, RenderMode::Full)
 }
 
 /// Render discovery metadata without evaluating command or script recipes.
@@ -36,11 +46,22 @@ pub fn render_manifest(manifest: NetsukeManifest, env: &Environment) -> Result<N
 /// Returns an error when a discovery field or rule selector template cannot
 /// be evaluated or when rendered values cannot be serialized back into the
 /// manifest structure.
+#[cfg(test)]
 pub(crate) fn render_manifest_for_manifest_query(
     manifest: NetsukeManifest,
     env: &Environment,
 ) -> Result<NetsukeManifest> {
-    render_manifest_with_mode(manifest, env, RenderMode::ManifestQuery)
+    let budget = ManifestBudget::default();
+    render_manifest_for_manifest_query_with_budget(manifest, env, &budget)
+}
+
+/// Render manifest-query fields with the caller's shared resource accounting.
+pub(crate) fn render_manifest_for_manifest_query_with_budget(
+    manifest: NetsukeManifest,
+    env: &Environment,
+    budget: &ManifestBudget,
+) -> Result<NetsukeManifest> {
+    render_manifest_with_mode(manifest, env, budget, RenderMode::ManifestQuery)
 }
 
 /// Render a manifest with the caller's field-rendering policy.
@@ -52,17 +73,29 @@ pub(crate) fn render_manifest_for_manifest_query(
 fn render_manifest_with_mode(
     mut manifest: NetsukeManifest,
     env: &Environment,
+    budget: &ManifestBudget,
     mode: RenderMode,
 ) -> Result<NetsukeManifest> {
     for action in &mut manifest.actions {
-        render_target(action, env, mode)?;
+        render_target(action, env, budget, mode)?;
     }
     for target in &mut manifest.targets {
-        render_target(target, env, mode)?;
+        render_target(target, env, budget, mode)?;
     }
     let rule_vars = manifest.vars.clone();
     for rule in &mut manifest.rules {
-        render_rule(rule, env, &rule_vars, mode)?;
+        render_rule(
+            rule,
+            &RecipeRenderContext {
+                fields: FieldRenderContext {
+                    env,
+                    budget,
+                    vars: &rule_vars,
+                },
+                subject: "rule",
+                mode,
+            },
+        )?;
     }
     Ok(manifest)
 }
@@ -82,22 +115,9 @@ enum RenderMode {
 ///
 /// Returns an error when a description or recipe template fails to render;
 /// the propagated error names the offending rule stage.
-fn render_rule(
-    rule: &mut crate::ast::Rule,
-    env: &Environment,
-    vars: &Vars,
-    mode: RenderMode,
-) -> Result<()> {
-    render_description(&mut rule.description, env, vars, "rule")?;
-    render_recipe(
-        &mut rule.recipe,
-        &RecipeRenderContext {
-            env,
-            vars,
-            subject: "rule",
-            mode,
-        },
-    )?;
+fn render_rule(rule: &mut crate::ast::Rule, context: &RecipeRenderContext<'_, '_>) -> Result<()> {
+    render_description(&mut rule.description, &context.fields, "rule")?;
+    render_recipe(&mut rule.recipe, context)?;
     Ok(())
 }
 
@@ -107,18 +127,27 @@ fn render_rule(
 ///
 /// Returns an error when any of the target's vars, name, sources, deps,
 /// order-only deps, description, or recipe templates fail to render.
-fn render_target(target: &mut Target, env: &Environment, mode: RenderMode) -> Result<()> {
-    render_vars(&mut target.vars, env)?;
-    render_description(&mut target.description, env, &target.vars, "target")?;
-    render_string_or_list(&mut target.name, env, &target.vars)?;
-    render_string_or_list(&mut target.sources, env, &target.vars)?;
-    render_string_or_list(&mut target.deps, env, &target.vars)?;
-    render_string_or_list(&mut target.order_only_deps, env, &target.vars)?;
+fn render_target(
+    target: &mut Target,
+    env: &Environment,
+    budget: &ManifestBudget,
+    mode: RenderMode,
+) -> Result<()> {
+    render_vars(&mut target.vars, env, budget)?;
+    let fields = FieldRenderContext {
+        env,
+        budget,
+        vars: &target.vars,
+    };
+    render_description(&mut target.description, &fields, "target")?;
+    render_string_or_list(&mut target.name, env, budget, &target.vars)?;
+    render_string_or_list(&mut target.sources, env, budget, &target.vars)?;
+    render_string_or_list(&mut target.deps, env, budget, &target.vars)?;
+    render_string_or_list(&mut target.order_only_deps, env, budget, &target.vars)?;
     render_recipe(
         &mut target.recipe,
         &RecipeRenderContext {
-            env,
-            vars: &target.vars,
+            fields,
             subject: "target",
             mode,
         },
@@ -137,34 +166,31 @@ fn render_target(target: &mut Target, env: &Environment, mode: RenderMode) -> Re
 /// propagated error names the subject (`"rule"` or `"target"`) description.
 fn render_description(
     description: &mut Option<String>,
-    env: &Environment,
-    vars: &Vars,
+    context: &FieldRenderContext<'_, '_>,
     subject: &str,
 ) -> Result<()> {
     if let Some(desc) = description {
-        *desc = render_str_with(env, desc, vars, || format!("render {subject} description"))?;
+        *desc = render_str_with(context, desc, context.vars, || {
+            format!("render {subject} description")
+        })?;
     }
     Ok(())
 }
 
-/// Render a target or rule recipe against its context.
-///
-/// The `subject` selects the error-context wording ("rule" or "target") so
-/// that diagnostics keep naming the manifest entry being rendered. A command
-/// recipe is rendered through [`render_recipe_string_or_list`] so the `ins`/`outs`
-/// placeholders stay available; a rule-reference recipe reuses
-/// [`render_string_or_list`].
-///
-/// # Errors
-///
-/// Returns an error when the recipe's script or command text fails to render;
-/// the propagated error names the subject (`"rule"` or `"target"`) and the
-/// failing stage.
-struct RecipeRenderContext<'a> {
+/// Hold the dependencies shared by an entry's ordinary rendered fields.
+struct FieldRenderContext<'env, 'a> {
     /// Supplies templates with registered helpers and globals.
-    env: &'a Environment<'a>,
+    env: &'a Environment<'env>,
+    /// Shares evaluation limits across every target field.
+    budget: &'a ManifestBudget,
     /// Supplies entry-local variables to rendered fields.
     vars: &'a Vars,
+}
+
+/// Retain recipe-specific rendering policy beside shared field state.
+struct RecipeRenderContext<'env, 'a> {
+    /// Supplies the common environment, budget, and variables.
+    fields: FieldRenderContext<'env, 'a>,
     /// Names the manifest entry in rendering diagnostics.
     subject: &'a str,
     /// Selects whether command and script bodies are safe to evaluate.
@@ -177,11 +203,16 @@ struct RecipeRenderContext<'a> {
 ///
 /// Returns an error when a rendered rule selector or full-mode command or
 /// script cannot be evaluated.
-fn render_recipe(recipe: &mut Recipe, context: &RecipeRenderContext<'_>) -> Result<()> {
+fn render_recipe(recipe: &mut Recipe, context: &RecipeRenderContext<'_, '_>) -> Result<()> {
     match recipe {
         Recipe::Command { command } => render_command_recipe(command, context),
         Recipe::Script { script } => render_script_recipe(script, context),
-        Recipe::Rule { rule } => render_string_or_list(rule, context.env, context.vars),
+        Recipe::Rule { rule } => render_string_or_list(
+            rule,
+            context.fields.env,
+            context.fields.budget,
+            context.fields.vars,
+        ),
     }
 }
 
@@ -192,12 +223,12 @@ fn render_recipe(recipe: &mut Recipe, context: &RecipeRenderContext<'_>) -> Resu
 /// Returns an error when a full-mode command template cannot be evaluated.
 fn render_command_recipe(
     command: &mut StringOrList,
-    context: &RecipeRenderContext<'_>,
+    context: &RecipeRenderContext<'_, '_>,
 ) -> Result<()> {
     if context.mode == RenderMode::ManifestQuery || command.is_empty_marker() {
         return Ok(());
     }
-    render_recipe_string_or_list(command, context.env, context.vars, || {
+    render_recipe_string_or_list(command, &context.fields, || {
         format!("render {} command", context.subject)
     })
 }
@@ -207,12 +238,12 @@ fn render_command_recipe(
 /// # Errors
 ///
 /// Returns an error when a full-mode script template cannot be evaluated.
-fn render_script_recipe(script: &mut String, context: &RecipeRenderContext<'_>) -> Result<()> {
+fn render_script_recipe(script: &mut String, context: &RecipeRenderContext<'_, '_>) -> Result<()> {
     if context.mode == RenderMode::ManifestQuery {
         return Ok(());
     }
-    let recipe_context = recipe_render_context(context.vars);
-    *script = render_str_with(context.env, script, &recipe_context, || {
+    let recipe_context = recipe_render_context(context.fields.vars);
+    *script = render_str_with(&context.fields, script, &recipe_context, || {
         format!("render {} script", context.subject)
     })?;
     Ok(())
@@ -224,11 +255,16 @@ fn render_script_recipe(script: &mut String, context: &RecipeRenderContext<'_>) 
 ///
 /// Returns an error when any string variable fails to render; the propagated
 /// error names the offending variable key.
-fn render_vars(vars: &mut Vars, env: &Environment) -> Result<()> {
+fn render_vars(vars: &mut Vars, env: &Environment, budget: &ManifestBudget) -> Result<()> {
     let snapshot = vars.clone();
+    let context = FieldRenderContext {
+        env,
+        budget,
+        vars: &snapshot,
+    };
     for (key, value) in vars.iter_mut() {
         if let ManifestValue::String(s) = value {
-            *s = render_str_with(env, s, &snapshot, || format!("render var '{key}'"))?;
+            *s = render_str_with(&context, s, &snapshot, || format!("render var '{key}'"))?;
         }
     }
     Ok(())
@@ -239,14 +275,24 @@ fn render_vars(vars: &mut Vars, env: &Environment) -> Result<()> {
 /// # Errors
 ///
 /// Returns an error when a scalar or list-entry template fails to render.
-fn render_string_or_list(value: &mut StringOrList, env: &Environment, ctx: &Vars) -> Result<()> {
+fn render_string_or_list(
+    value: &mut StringOrList,
+    env: &Environment,
+    budget: &ManifestBudget,
+    ctx: &Vars,
+) -> Result<()> {
+    let context = FieldRenderContext {
+        env,
+        budget,
+        vars: ctx,
+    };
     match value {
         StringOrList::String(s) => {
-            *s = render_str_with(env, s, ctx, || "render string value".into())?;
+            *s = render_str_with(&context, s, ctx, || "render string value".into())?;
         }
         StringOrList::List(list) => {
             for item in list {
-                *item = render_str_with(env, item, ctx, || "render list value".into())?;
+                *item = render_str_with(&context, item, ctx, || "render list value".into())?;
             }
         }
         StringOrList::Empty => {}
@@ -270,14 +316,13 @@ fn render_string_or_list(value: &mut StringOrList, env: &Environment, ctx: &Vars
 /// entry position for list commands.
 fn render_recipe_string_or_list(
     value: &mut StringOrList,
-    env: &Environment,
-    ctx: &Vars,
+    context: &FieldRenderContext<'_, '_>,
     what: impl FnOnce() -> String,
 ) -> Result<()> {
     let label = what();
-    let recipe_ctx = recipe_render_context(ctx);
+    let recipe_ctx = recipe_render_context(context.vars);
     let render_entry = |entry: &mut String, position: Option<usize>| -> Result<()> {
-        *entry = render_str_with(env, entry, &recipe_ctx, || {
+        *entry = render_str_with(context, entry, &recipe_ctx, || {
             position.map_or_else(|| label.clone(), |index| format!("{label} entry {index}"))
         })?;
         Ok(())
@@ -334,12 +379,12 @@ pub(super) fn recipe_context_preparations() -> usize {
 
 /// Render one template string, attaching `what` to any error context.
 fn render_str_with(
-    env: &Environment,
+    context: &FieldRenderContext<'_, '_>,
     tpl: &str,
     ctx: &impl serde::Serialize,
     what: impl FnOnce() -> String,
 ) -> Result<String> {
-    render_template(env, tpl, ctx).with_context(what)
+    render_template_with_budget(context.env, tpl, ctx, context.budget).with_context(what)
 }
 
 #[cfg(test)]

@@ -21,14 +21,6 @@
 //! Diagnostic JSON resolution lives in [`super::diag`] so it can run before
 //! the full merge.
 
-use clap::ArgMatches;
-use clap::parser::ValueSource;
-use ortho_config::figment::Figment;
-use ortho_config::{OrthoError, OrthoMergeExt, OrthoResult, sanitize_value};
-use serde::Serialize;
-
-use serde_json::{Map, Value, json};
-
 use super::MergeEvent;
 use super::command::{BuildArgs, Cli, Commands};
 use super::config::{BuildConfig, CliConfig};
@@ -37,11 +29,16 @@ use super::discovery::{
     push_discovered_file_layers,
 };
 use super::environment::EnvironmentLayer;
+use super::manifest_budget_policy::reconcile_manifest_budget;
 use super::merge_input::{CachedMergeInput, MergeComposition};
 use super::merge_observability::{
     collect_override_leaf_paths, is_empty_configuration_value, validation_rejection_reason,
 };
 use super::validation::validation_error;
+use clap::{ArgMatches, parser::ValueSource};
+use ortho_config::{OrthoError, OrthoMergeExt, OrthoResult, figment::Figment, sanitize_value};
+use serde::Serialize;
+use serde_json::{Map, Value, json};
 
 /// Merge discovered configuration layers over parsed CLI input.
 ///
@@ -117,7 +114,7 @@ where
     let mut events = Vec::new();
 
     push_defaults_layer(&mut composition, &mut events);
-    push_discovered_file_layers(
+    composition.project_manifest_budget_request = push_discovered_file_layers(
         &mut composition.composer,
         &mut composition.errors,
         discovered,
@@ -126,8 +123,13 @@ where
     push_environment_layer(env, &mut composition, &mut events);
     push_cli_layer(cli, matches, &mut composition, &mut events);
 
+    let project_manifest_budget_request =
+        std::mem::take(&mut composition.project_manifest_budget_request);
     let merged = match composition.into_merge_result() {
-        Ok(config) => Ok(apply_config(cli, config)),
+        Ok(config) => Ok(apply_config(
+            cli,
+            reconcile_manifest_budget(config, &project_manifest_budget_request),
+        )),
         Err(error) => {
             collect_validation_rejection(&mut events, error.as_ref());
             Err(error)
@@ -346,6 +348,13 @@ fn apply_config(parsed: &Cli, config: CliConfig) -> Cli {
         fetch_allow_host: config.fetch_allow_host,
         fetch_block_host: config.fetch_block_host,
         fetch_default_deny: config.fetch_default_deny,
+        manifest_evaluation_fuel: config.manifest_evaluation_fuel,
+        manifest_fuel: config.manifest_fuel,
+        manifest_rendered_value_bytes: config.manifest_rendered_value_bytes,
+        manifest_rendered_manifest_bytes: config.manifest_rendered_manifest_bytes,
+        manifest_source_bytes: config.manifest_source_bytes,
+        manifest_foreach_cardinality: config.manifest_foreach_cardinality,
+        manifest_expanded_entries: config.manifest_expanded_entries,
         json: config.json,
         interaction: super::command::InteractionArgs {
             no_input: config.no_input.is_enabled(),

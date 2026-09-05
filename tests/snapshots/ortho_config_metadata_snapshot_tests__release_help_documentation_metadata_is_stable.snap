@@ -90,6 +90,76 @@ fields:
     environment: NETSUKE_FETCH_DEFAULT_DENY
     file: fetch_default_deny
     merge_strategy: replace
+  - name: manifest_evaluation_fuel
+    help_id: cli.flag.manifest_evaluation_fuel.help
+    cli:
+      long: manifest-evaluation-fuel
+      short: m
+      multiple: false
+      possible_values: []
+    environment: NETSUKE_MANIFEST_EVALUATION_FUEL
+    file: manifest_evaluation_fuel
+    merge_strategy: replace
+  - name: manifest_fuel
+    help_id: cli.flag.manifest_fuel.help
+    cli:
+      long: manifest-fuel
+      short: M
+      multiple: false
+      possible_values: []
+    environment: NETSUKE_MANIFEST_FUEL
+    file: manifest_fuel
+    merge_strategy: replace
+  - name: manifest_rendered_value_bytes
+    help_id: cli.flag.manifest_rendered_value_bytes.help
+    cli:
+      long: manifest-rendered-value-bytes
+      short: a
+      multiple: false
+      possible_values: []
+    environment: NETSUKE_MANIFEST_RENDERED_VALUE_BYTES
+    file: manifest_rendered_value_bytes
+    merge_strategy: replace
+  - name: manifest_rendered_manifest_bytes
+    help_id: cli.flag.manifest_rendered_manifest_bytes.help
+    cli:
+      long: manifest-rendered-manifest-bytes
+      short: A
+      multiple: false
+      possible_values: []
+    environment: NETSUKE_MANIFEST_RENDERED_MANIFEST_BYTES
+    file: manifest_rendered_manifest_bytes
+    merge_strategy: replace
+  - name: manifest_source_bytes
+    help_id: cli.flag.manifest_source_bytes.help
+    cli:
+      long: manifest-source-bytes
+      short: n
+      multiple: false
+      possible_values: []
+    environment: NETSUKE_MANIFEST_SOURCE_BYTES
+    file: manifest_source_bytes
+    merge_strategy: replace
+  - name: manifest_foreach_cardinality
+    help_id: cli.flag.manifest_foreach_cardinality.help
+    cli:
+      long: manifest-foreach-cardinality
+      short: N
+      multiple: false
+      possible_values: []
+    environment: NETSUKE_MANIFEST_FOREACH_CARDINALITY
+    file: manifest_foreach_cardinality
+    merge_strategy: replace
+  - name: manifest_expanded_entries
+    help_id: cli.flag.manifest_expanded_entries.help
+    cli:
+      long: manifest-expanded-entries
+      short: i
+      multiple: false
+      possible_values: []
+    environment: NETSUKE_MANIFEST_EXPANDED_ENTRIES
+    file: manifest_expanded_entries
+    merge_strategy: replace
   - name: json
     help_id: cli.flag.json.help
     cli:

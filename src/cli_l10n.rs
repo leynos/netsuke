@@ -3,11 +3,10 @@
 //! This module keeps clap localization logic separate from the core CLI
 //! definitions.
 
+use crate::localization::keys;
 use clap::Command;
 use ortho_config::{LocalizationArgs, Localizer};
 use std::ffi::OsString;
-
-use crate::localization::keys;
 
 /// Strip the leading `Usage: ` prefix from a rendered usage string.
 fn usage_body(usage: &str) -> &str {
@@ -234,6 +233,15 @@ pub(crate) fn top_level_flag_help_key(arg_id: &str) -> Option<&'static str> {
         "fetch_allow_host" => Some(keys::CLI_FLAG_FETCH_ALLOW_HOST_HELP),
         "fetch_block_host" => Some(keys::CLI_FLAG_FETCH_BLOCK_HOST_HELP),
         "fetch_default_deny" => Some(keys::CLI_FLAG_FETCH_DEFAULT_DENY_HELP),
+        "manifest_evaluation_fuel" => Some(keys::CLI_FLAG_MANIFEST_EVALUATION_FUEL_HELP),
+        "manifest_fuel" => Some(keys::CLI_FLAG_MANIFEST_FUEL_HELP),
+        "manifest_rendered_value_bytes" => Some(keys::CLI_FLAG_MANIFEST_RENDERED_VALUE_BYTES_HELP),
+        "manifest_rendered_manifest_bytes" => {
+            Some(keys::CLI_FLAG_MANIFEST_RENDERED_MANIFEST_BYTES_HELP)
+        }
+        "manifest_source_bytes" => Some(keys::CLI_FLAG_MANIFEST_SOURCE_BYTES_HELP),
+        "manifest_foreach_cardinality" => Some(keys::CLI_FLAG_MANIFEST_FOREACH_CARDINALITY_HELP),
+        "manifest_expanded_entries" => Some(keys::CLI_FLAG_MANIFEST_EXPANDED_ENTRIES_HELP),
         "json" => Some(keys::CLI_FLAG_JSON_HELP),
         "no_input" => Some(keys::CLI_FLAG_NO_INPUT_HELP),
         "color" => Some(keys::CLI_FLAG_COLOR_HELP),

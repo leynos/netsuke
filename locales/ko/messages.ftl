@@ -16,6 +16,13 @@ cli.flag.fetch_allow_scheme.help = fetch 도우미에 추가로 허용할 URL �
 cli.flag.fetch_allow_host.help = 기본 거부가 켜져 있을 때 허용할 호스트 이름입니다.
 cli.flag.fetch_block_host.help = 다른 곳에서 허용되더라도 항상 차단할 호스트 이름입니다.
 cli.flag.fetch_default_deny.help = 기본적으로 모든 호스트를 거부하고 선언한 허용 목록만 통과시킵니다.
+cli.flag.manifest_evaluation_fuel.help = Limit MiniJinja instructions for each manifest evaluation.
+cli.flag.manifest_fuel.help = Limit MiniJinja instructions across one manifest.
+cli.flag.manifest_rendered_value_bytes.help = Limit bytes rendered into one manifest value.
+cli.flag.manifest_rendered_manifest_bytes.help = Limit total bytes rendered across one manifest.
+cli.flag.manifest_source_bytes.help = Limit template and macro source bytes consumed per manifest.
+cli.flag.manifest_foreach_cardinality.help = Limit values processed by one foreach expansion.
+cli.flag.manifest_expanded_entries.help = Limit targets and actions expanded from one manifest.
 cli.flag.json.help = 기계가 읽을 수 있는 JSON을 출력합니다.
 cli.flag.no_input.help = 대화형 입력을 절대 읽지 않습니다.
 cli.flag.color.help = 색상 출력 정책(auto, always, never).
@@ -417,3 +424,4 @@ example.errors_found = { $count ->
     [0] 오류를 찾지 못했습니다.
    *[other] 오류 { $count }개를 찾았습니다.
 }
+manifest.budget.exceeded = Manifest resource budget exhausted during { $stage } after reaching { $limit }.

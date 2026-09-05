@@ -7,8 +7,8 @@
 //! environment.
 
 use super::{
-    EnvReader, ManifestName, ManifestParse, StdlibRegistration, from_str_named,
-    trace_expansion_report,
+    EnvReader, ManifestBudgetLimits, ManifestName, ManifestParse, StdlibRegistration,
+    from_str_named, trace_expansion_report,
 };
 use crate::{ast::NetsukeManifest, stdlib::StdlibConfig};
 use anyhow::Result;
@@ -72,6 +72,7 @@ pub fn from_str_with_env_and_config(
             env_reader,
             manifest_root: None,
             expansion_report_observer: Some(trace_expansion_report),
+            budget_limits: ManifestBudgetLimits::default(),
         },
         &mut None,
     )
