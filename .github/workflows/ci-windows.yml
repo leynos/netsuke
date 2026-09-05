@@ -121,12 +121,14 @@ jobs:
       - name: Show Ninja version
         run: ninja --version
       - name: Install mdtablefix
-        # Required by `make check-fmt`. No prebuilt release exists for this
-        # platform, so the action compiles it once per cache generation into
-        # `.mdtablefix-build`, which the tool cache owns.
-        uses: ./.github/actions/install-mdtablefix
+        # Required by `make check-fmt`. mdtablefix 0.5.1 publishes a Windows
+        # x86_64 archive, so this lane installs a prebuilt binary like every
+        # other. It compiled the tool from source until then, which was this
+        # repository's last source-build exception.
+        uses: >-
+          leynos/shared-actions/.github/actions/install-mdtablefix@c5a54701c8603a0fa756a6b34c49bc2af75a6c11
         with:
-          build-dir: ${{ github.workspace }}/.mdtablefix-build
+          version: ${{ env.MDTABLEFIX_VERSION }}
       - name: Setup uv
         # `make check-fmt` runs the uv-driven Ruff format check on every
         # platform, so the Windows job needs uv on the PATH as well.

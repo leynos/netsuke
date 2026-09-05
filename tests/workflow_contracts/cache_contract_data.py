@@ -113,27 +113,28 @@ SCCACHE_LOCAL_DIR_JOBS = (
     ("release.yml", "windows-native-recipe-smoke"),
 )
 
-#: The remaining documented source-build exception, keyed by the issue that
-#: retires it. Counting it by name means a second cannot arrive disguised as
-#: another occurrence of this one.
+#: No source build is permitted anywhere. The rule used to carry documented
+#: exceptions, counted by name so a third could not arrive disguised as a
+#: second occurrence of either; both have now been retired because their
+#: crates began publishing binaries.
 #:
-#: `cargo-orthohelp` used to be the other entry, permitted while
-#: leynos/ortho-config#479 left the crate with no published binaries. 0.9.1
-#: ships checksum-verified archives for every platform this estate targets
-#: (leynos/ortho-config#480), so that exception is retired rather than
-#: relaxed: the packaging lane now passes `--disable-strategies compile`, and
-#: `FORBIDDEN_SOURCE_BUILDS` holds the tool to it.
-SOURCE_BUILD_EXCEPTIONS = {
-    "mdtablefix on Windows (mdtablefix#458)": (
-        'cargo install --locked "mdtablefix@${MDTABLEFIX_VERSION}"'
-    ),
-}
+#: `cargo-orthohelp` was permitted while leynos/ortho-config#479 left the crate
+#: with no published binaries, and `mdtablefix` on Windows while
+#: leynos/mdtablefix#458 left its binstall metadata broken and #459 left the
+#: platform without an archive at all. ortho-config 0.9.1 and mdtablefix 0.5.1
+#: publish checksum-verified archives for every platform this estate targets,
+#: so both lanes now install prebuilt binaries.
+#:
+#: Kept as an empty mapping rather than deleted: it is the seam a future
+#: exception would come back through, and an empty one states that the count
+#: is zero rather than leaving the question unasked.
+SOURCE_BUILD_EXCEPTIONS: dict[str, str] = {}
 
 #: Tools that once had a source-build exception and must never regain one.
-#: Retiring an exception is only durable if something rejects its return; a
-#: shrinking count of permitted builds would not, since a reader could add the
-#: tool back as a third entry above.
-FORBIDDEN_SOURCE_BUILDS = ("cargo-orthohelp",)
+#: Checked by name rather than by a count of permitted builds, because a count
+#: is satisfied by adding the tool back as a newly permitted entry, which is
+#: precisely the regression worth catching.
+FORBIDDEN_SOURCE_BUILDS = ("cargo-orthohelp", "mdtablefix")
 
 #: Shared-action steps whose own cache would archive a `target` tree unless
 #: the caller owns it. `rust-build-release` forwards the input to its nested

@@ -27,7 +27,7 @@ env:
   PYTHON_BASELINE: '3.14'
   # `make check-fmt` shells out to mdtablefix. Pin it once so both formatter
   # jobs produce the same canonical output.
-  MDTABLEFIX_VERSION: '0.5.0'
+  MDTABLEFIX_VERSION: '0.5.1'
   NETSUKE_RUNNER_IMAGE: ubuntu2404  # carried in every compiled-tool cache key
 
 jobs:
@@ -140,9 +140,10 @@ jobs:
         run: ninja --version
       - name: Install mdtablefix
         # The gate cache owns `~/.local/bin`, so a warm run finds it present.
-        uses: ./.github/actions/install-mdtablefix
+        uses: >-
+          leynos/shared-actions/.github/actions/install-mdtablefix@c5a54701c8603a0fa756a6b34c49bc2af75a6c11
         with:
-          build-dir: ${{ github.workspace }}/.mdtablefix-build
+          version: ${{ env.MDTABLEFIX_VERSION }}
       - name: Setup uv
         # Before Format: the uv-driven Ruff, Pylint, and df12 gates need it.
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
@@ -307,7 +308,7 @@ jobs:
     # tests/workflow_contracts/ci_windows_job_test.py holds them equal.
     with:
       nextest-version: '0.9.133'
-      mdtablefix-version: '0.5.0'
+      mdtablefix-version: '0.5.1'
       python-baseline: '3.14'
 
   kani-smoke:
