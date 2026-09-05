@@ -93,12 +93,12 @@ jobs:
             exit $LASTEXITCODE
           }
       - name: Install sccache
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        uses: taiki-e/install-action@742a3317eac7bd62f91cd888b4eead5e784ba833  # v2.87.1
         with:
           tool: sccache@0.16.0
           fallback: none
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@e041cb75c35c3524201a32d5e57c87408fbd5874
+        uses: leynos/shared-actions/.github/actions/setup-rust@c5a54701c8603a0fa756a6b34c49bc2af75a6c11
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           # Preserve warnings-as-errors through toolchain setup.
@@ -108,7 +108,7 @@ jobs:
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        uses: taiki-e/install-action@742a3317eac7bd62f91cd888b4eead5e784ba833  # v2.87.1
         with:
           tool: nextest@${{ env.NEXTEST_VERSION }}
       - name: Reset sccache statistics
@@ -130,7 +130,7 @@ jobs:
       - name: Setup uv
         # `make check-fmt` runs the uv-driven Ruff format check on every
         # platform, so the Windows job needs uv on the PATH as well.
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
         with:
           python-version: ${{ env.PYTHON_BASELINE }}
           enable-cache: 'false'
@@ -142,7 +142,7 @@ jobs:
         run: make SHELL=bash lint-clippy
       - name: Install Whitaker
         uses: >-
-          leynos/shared-actions/.github/actions/install-whitaker@e041cb75c35c3524201a32d5e57c87408fbd5874
+          leynos/shared-actions/.github/actions/install-whitaker@c5a54701c8603a0fa756a6b34c49bc2af75a6c11
         with:
           installer-version: '0.2.7'
           # The tool and Whitaker cache steps own `~/.cargo/bin` and the
@@ -239,12 +239,12 @@ jobs:
           mode: restore
           profile: smoke
       - name: Install sccache
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        uses: taiki-e/install-action@742a3317eac7bd62f91cd888b4eead5e784ba833  # v2.87.1
         with:
           tool: sccache@0.16.0
           fallback: none
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@e041cb75c35c3524201a32d5e57c87408fbd5874
+        uses: leynos/shared-actions/.github/actions/setup-rust@c5a54701c8603a0fa756a6b34c49bc2af75a6c11
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           rustflags: -D warnings

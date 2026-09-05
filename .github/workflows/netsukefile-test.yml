@@ -92,13 +92,13 @@ jobs:
               "${TOOLS_CACHE_KEY}" "${TOOLS_HIT:-false}"
           } | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Install sccache
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        uses: taiki-e/install-action@742a3317eac7bd62f91cd888b4eead5e784ba833  # v2.87.1
         with:
           tool: sccache@0.16.0
           fallback: none
       - name: Setup Rust
         # Pinned to the shared-actions revision that adds `cache-provider`.
-        uses: leynos/shared-actions/.github/actions/setup-rust@e041cb75c35c3524201a32d5e57c87408fbd5874
+        uses: leynos/shared-actions/.github/actions/setup-rust@c5a54701c8603a0fa756a6b34c49bc2af75a6c11
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           cache-provider: external
