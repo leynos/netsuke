@@ -3,6 +3,22 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
+/// Return the expected project file, or `None` without a working directory.
+pub(super) fn project_scope_file(directory: Option<&Path>) -> Option<PathBuf> {
+    let root = directory
+        .map(PathBuf::from)
+        .or_else(|| std::env::current_dir().ok())?;
+    Some(root.join(".netsuke.toml"))
+}
+
+/// Compare a canonical project path, falling back literally if resolution fails.
+///
+/// Missing optional files must not fail discovery. The project loading pass
+/// can still compare canonical chain roots if normalization is unavailable.
+pub(super) fn comparison_key(normalizer: &impl PathNormalizer, path: &str) -> PathBuf {
+    normalized_path_key(normalizer, path).unwrap_or_else(|_| PathBuf::from(path))
+}
+
 /// Resolves a path to the canonical form used for layer comparison.
 ///
 /// This is the seam through which discovery reaches the filesystem, so tests can

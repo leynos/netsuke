@@ -131,10 +131,12 @@ where
     let project_fetch_policy_request =
         std::mem::take(&mut composition.project_fetch_policy_request);
     let merged = match composition.into_merge_result() {
-        Ok(config) => Ok(apply_config(
-            cli,
-            reconcile_fetch_policy(config, project_fetch_policy_request),
-        )),
+        Ok(config) => {
+            let (reconciled_config, outcome) =
+                reconcile_fetch_policy(config, project_fetch_policy_request);
+            events.push(MergeEvent::FetchPolicyReconciled { outcome });
+            Ok(apply_config(cli, reconciled_config))
+        }
         Err(error) => {
             collect_validation_rejection(&mut events, error.as_ref());
             Err(error)

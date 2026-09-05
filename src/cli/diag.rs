@@ -78,20 +78,42 @@ pub fn resolve_json_and_layers_outcome_with_env(
 /// # Errors
 ///
 /// Returns an [`ortho_config::OrthoError`] when discovery recorded a config
-/// file error or when `NETSUKE_JSON` contains an invalid boolean.
+/// file error other than quarantined-policy validation, or when `NETSUKE_JSON`
+/// contains an invalid boolean. Quarantined-policy errors remain in the outcome
+/// for the cached merge to report using the resolved diagnostic mode.
 fn resolve_json_preference(
     cli: &Cli,
     env: &impl EnvProvider,
     outcome: &DiscoveryOutcome,
     has_cli_override: bool,
 ) -> OrthoResult<bool> {
-    if let Some(error) = outcome.first_error() {
+    if let Some(error) = outcome
+        .first_error()
+        .filter(|error| !is_quarantined_policy_validation(error))
+    {
         return Err(Arc::clone(error));
     }
     if has_cli_override {
         return Ok(cli.json);
     }
     json_from_env(env)?.map_or_else(|| Ok(json_from_layers(outcome)), Ok)
+}
+
+/// Defer quarantined-policy errors until the resolved diagnostic mode is installed.
+///
+/// Discovery retains these errors beside the file layers, so the cached merge
+/// still rejects the malformed input. Unlike a file-loading error, they do not
+/// prevent discovery from reading the effective file JSON preference.
+fn is_quarantined_policy_validation(error: &OrthoError) -> bool {
+    matches!(
+        error,
+        OrthoError::Validation { key, .. }
+            if matches!(key.as_str(),
+                "fetch_default_deny"
+                    | "fetch_allow_scheme"
+                    | "fetch_allow_host"
+                    | "trust_project_fetch_policy")
+    )
 }
 
 /// Determine whether `--json` was supplied on the command line.
@@ -130,6 +152,10 @@ fn json_from_env(env: &impl EnvProvider) -> OrthoResult<Option<bool>> {
         })),
     }
 }
+
+#[cfg(test)]
+#[path = "diag_quarantined_policy_tests.rs"]
+mod quarantined_policy_tests;
 
 #[cfg(test)]
 mod tests {

@@ -91,8 +91,8 @@ pub struct DiscoveredLayers {
     layers: Vec<MergeLayer<'static>>,
     /// Whether any discovered layer requested JSON output.
     json_preference: bool,
-    /// Fetch-policy restrictions requested by the primary project file.
-    project_fetch_policy_request: ProjectFetchPolicyRequest,
+    /// Ordered restrictions from the primary project and its complete chain.
+    project_fetch_policy_request: Vec<ProjectFetchPolicyRequest>,
     /// Loading errors deferred beside the layers that may still be usable.
     errors: Vec<Arc<ortho_config::OrthoError>>,
     /// Bounded trace for composition boundaries to emit after the merge.
@@ -122,7 +122,7 @@ impl DiscoveredLayers {
     ) -> (
         Vec<MergeLayer<'static>>,
         Vec<Arc<ortho_config::OrthoError>>,
-        ProjectFetchPolicyRequest,
+        Vec<ProjectFetchPolicyRequest>,
     ) {
         (self.layers, self.errors, self.project_fetch_policy_request)
     }
@@ -180,30 +180,20 @@ fn discover_file_layers_with_normalizer(
     let (trace, load_warning, outcome) = collect_file_layers_with_env(cli, env, normalizer);
     let diagnostics = DiscoveryDiagnostics::new(trace, load_warning);
     let layers = match outcome {
-        Ok(discovered_layers) => match layers::retain_layers_and_resolve_json(
-            discovered_layers,
-            cli.directory.as_deref().map(camino::Utf8Path::as_std_path),
-            normalizer,
-        ) {
-            Ok((layers, json_preference, project_fetch_policy_request)) => DiscoveredLayers {
-                layers,
-                json_preference,
-                project_fetch_policy_request,
-                errors: Vec::new(),
+        Ok(discovered_layers) => {
+            let resolved = layers::retain_layers_and_resolve_json(discovered_layers);
+            DiscoveredLayers {
+                layers: resolved.layers,
+                json_preference: resolved.json_preference,
+                project_fetch_policy_request: resolved.project_requests,
+                errors: resolved.errors,
                 diagnostics,
-            },
-            Err(error) => DiscoveredLayers {
-                layers: Vec::new(),
-                json_preference: Cli::default().json,
-                project_fetch_policy_request: ProjectFetchPolicyRequest::default(),
-                errors: vec![error],
-                diagnostics,
-            },
-        },
+            }
+        }
         Err(error) => DiscoveredLayers {
             layers: Vec::new(),
             json_preference: Cli::default().json,
-            project_fetch_policy_request: ProjectFetchPolicyRequest::default(),
+            project_fetch_policy_request: Vec::new(),
             errors: vec![error],
             diagnostics,
         },
@@ -220,7 +210,7 @@ fn collect_file_layers_with_env(
 ) -> (
     DiscoveryTrace,
     Option<ConfigLoadWarning>,
-    OrthoResult<Vec<MergeLayer<'static>>>,
+    OrthoResult<Vec<layers::ScopedFileLayer>>,
 ) {
     let resolution = selector::resolve_config_selector(cli.config.clone(), env);
     let (file_layers, load_warning, outcome) = resolution.path.as_deref().map_or_else(
@@ -243,7 +233,13 @@ fn collect_file_layers_with_env(
                     path: BoundedConfigPath::from_path(Some(path)),
                 },
                 load_warning,
-                outcome,
+                outcome.map(|chain| {
+                    layers::scope_selected_chain(
+                        chain,
+                        cli.directory.as_deref().map(camino::Utf8Path::as_std_path),
+                        normalizer,
+                    )
+                }),
             )
         },
     );

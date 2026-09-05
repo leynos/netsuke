@@ -4041,7 +4041,8 @@ function returns the merge result alongside bounded events; replay those events
 through `MergeObserver`, such as `TracingMergeObserver`. Another caller can
 provide its own `MergeObserver` implementation. Observers receive bounded
 `MergeEvent` values: layer application and failure states, file `path_hash` and
-layer counts, CLI override leaf keys, and validation `key`/`reason` fields.
+layer counts, CLI override leaf keys, validation `key`/`reason` fields, and one
+bounded fetch-policy reconciliation outcome after a successful merge.
 Configuration values and raw paths are never included. Ordinary
 `merge_with_config*` and `merge_with_cached_file_layers` calls use no-op
 observation and do not emit merge tracing.
@@ -4081,32 +4082,52 @@ policies.
 ### Fetch-policy trust boundary
 
 Network-policy grants do not use the ordinary file-layer precedence contract.
-Discovery identifies the primary project `.netsuke.toml` by its normalized path
-and extracts its `fetch_default_deny`, `fetch_allow_scheme`,
-`fetch_allow_host`, and `trust_project_fetch_policy` fields into a
-crate-internal `ProjectFetchPolicyRequest`. Those fields are removed from the
-project layer before the generic merge; `fetch_block_host` remains in the layer
-so blocklists continue to accumulate.
+Discovery preserves provenance for the primary project `.netsuke.toml` and
+every file loaded through its `extends` chain. `FileScope::Operator` marks
+layers loaded through an operator root; `FileScope::Project` marks the primary
+project file; and `FileScope::ProjectExtends` marks its dependencies. It
+extracts each project-scoped layer's `fetch_default_deny`, `fetch_allow_scheme`,
+`fetch_allow_host`, and `trust_project_fetch_policy` fields into project
+requests before the generic merge. Those fields are removed from every
+project-scoped layer; `fetch_block_host` remains in the layers so blocklists
+continue to accumulate.
 
 `retain_layers_and_resolve_json` returns the retained layers, the JSON
-preference, and the project request together. `DiscoveredLayers` owns that
-request until `into_parts` transfers it with the layers and discovery errors.
-`push_discovered_file_layers` places the layers into `MergeComposition` and
-returns the request for the same composition. This keeps the request's
-provenance at the discovery seam without a second discovery or merge pass.
+preference, and the ordered project requests together. `DiscoveredLayers` owns
+the requests until `into_parts` transfers them with the layers and discovery
+errors. `push_discovered_file_layers` places the layers into `MergeComposition`
+and transfers the requests for the same composition. The requests retain
+dependency-first order, with the primary file last. This preserves provenance
+at the discovery seam without a second discovery or merge pass, and a
+project-scoped layer cannot self-authorize the opt-in. If the same file is
+reached through operator and project roots, both occurrences retain their root
+authority: the operator occurrence remains an operator layer, while the project
+occurrence is quarantined. The loader accepts one scalar `extends` parent per
+file. When an operator-selected child extends the primary project, the layers
+before that project file are still `ProjectExtends`, the primary file is
+`Project`, and any layers after it remain `Operator`; this preserves the
+project boundary across that inherited chain.
 
-After the generic merge produces `CliConfig`, `reconcile_fetch_policy` applies
-the request before `apply_config` copies values onto `Cli`. Without the
-operator opt-in, project grants are discarded, `fetch_default_deny = true`
-tightens the result, and `fetch_default_deny = false` cannot weaken it. With
-the opt-in from a trusted system, user, environment, or CLI layer, project
-grants append and a present project default-deny value applies directly. The
-project layer cannot self-authorize because its opt-in field was removed before
-generic merging.
+The network-policy domain module
+[`src/stdlib/network/policy/reconciliation.rs`](../src/stdlib/network/policy/reconciliation.rs)
+owns reconciliation. It accepts domain-shaped operator inputs and ordered
+project requests, returns the reconciled policy and a bounded outcome, and has
+no tracing or metrics side effects. The CLI adapter extracts fetch-policy
+fields from `CliConfig`, calls the domain operation, writes those fields back,
+and leaves unrelated configuration unchanged.
 
-Only the primary project file is currently classified at this seam. Files
-loaded through its `extends` chain retain their existing merge semantics until
-a separate trust decision extends the boundary.
+After the generic merge produces `CliConfig`, reconciliation runs before
+`apply_config` copies values onto `Cli`. Without the operator opt-in, project
+grants are discarded, any project `fetch_default_deny = true` tightens the
+result, and `false` never weakens an operator or project restriction. With the
+opt-in from a trusted system, user, environment, or CLI layer, project grants
+append in dependency-first order, with the primary file last; the last present
+project default-deny value applies directly. The merge composition boundary
+then emits exactly one `FetchPolicyReconciled` observer event for a successful
+reconciliation. Its fields are limited to the trust state, request presence, a
+fixed default-deny decision, and requested, accepted, and ignored scheme and
+host grant counts. It contains no schemes, hosts, configuration values, or
+paths, and no event is emitted when generic merging fails first.
 
 ### Layer precedence
 
@@ -4118,6 +4139,11 @@ The final merge order is:
 3. **Environment** — `NETSUKE_*` environment variables via the Figment Env
    provider.
 4. **CLI flags** — values explicitly passed on the command line.
+
+This order describes ordinary configuration fields. Fetch-policy grants use the
+trust-aware reconciliation described above: all files in the primary project's
+`extends` chain are project-scoped, while system, user, environment, and CLI
+values remain operator-controlled.
 
 ### Configuration merge helper functions
 
@@ -4131,7 +4157,8 @@ Configuration merge helpers:
 - `project_scope_file(directory: Option<&Path>) -> Option<PathBuf>` resolves
   the expected project `.netsuke.toml` path for project-layer detection.
 - `project_scope_layers(project_file: Option<&Path>)` loads the project-scope
-  config directly, bypassing automatic discovery, and returns
+  config directly, bypassing automatic discovery, and returns the primary
+  project layer plus its complete `extends` chain as
   `OrthoResult<Vec<MergeLayer<'static>>>`.
 - `env_config_path(env, var_name) -> Option<PathBuf>` reads one config
   environment variable, ignores empty values, and converts the value into a
@@ -4141,10 +4168,10 @@ Configuration merge helpers:
 - `discover_file_layers(cli, env) -> DiscoveryOutcome` performs one discovery
   pass and retains the discovered layers, discovery errors and bounded deferred
   diagnostics for the diagnostic and merge callers.
-- `push_discovered_file_layers(composer, errors, discovered, events) -> ProjectFetchPolicyRequest`
-  transfers the retained layers and discovery errors into the full merge
-  composition while collecting bounded file-layer events for replay and
-  returning the quarantined project request.
+- `push_discovered_file_layers(composer, errors, discovered, events)` transfers
+  the retained layers, discovery errors, and ordered quarantined project
+  requests into the full merge composition while collecting bounded file-layer
+  events for replay.
 - `collect_file_layers_with_normalizer_and_trace(directory, normalizer, env_source)`
   runs the one discovery pass with the injected path normalizer and environment
   source, and retains bounded project-scope trace metadata for deferred
@@ -4164,12 +4191,14 @@ Configuration merge helpers:
   application-side replay.
 - `is_empty_value(value: &serde_json::Value) -> bool` detects an empty CLI
   override object.
-- `retain_layers_and_resolve_json(layers, directory, normalizer)` returns
-  `OrthoResult<(Vec<MergeLayer<'static>>, bool, ProjectFetchPolicyRequest)>`
-  and transfers each owned file-layer value into the cached layer while
-  recording the last valid `json` value and extracting the primary project's
-  fetch request, avoiding complete layer or JSON-value copies before the full
-  merge.
+- `retain_layers_and_resolve_json(layers)` returns a `ResolvedFileLayers` value
+  containing the retained layers, JSON preference, ordered project requests,
+  and typed loading errors. It scans every layer, including layers after a
+  malformed request, and keeps the original invalid JSON beside the error so
+  diagnostic JSON preference is preserved. It extracts and validates all
+  quarantined fetch-policy fields from the primary project file and every
+  `extends` layer before generic merging, avoiding complete layer or JSON-value
+  copies before the full merge.
 - `cli_overrides_from_matches(matches: &ArgMatches) -> OrthoValue` extracts
   CLI-supplied fields, stripping defaults and non-CLI sources.
 - `EnvironmentLayer` converts an injected snapshot of `NETSUKE_*` values into
@@ -5591,6 +5620,15 @@ callers of the ordinary merge queries discard their collected events and emit
 no tracing. Custom observers may consume the bounded events, which exclude raw
 configuration values and paths. Keep observer ownership at the application
 boundary rather than installing a subscriber in a query.
+
+Fetch-policy reconciliation contributes exactly one `FetchPolicyReconciled`
+event after generic merging and reconciliation succeed. The event records
+whether trusted project policy was enabled, whether a project request was
+present, a fixed default-deny decision, and requested, accepted, and ignored
+scheme and host grant counts. It carries no scheme names, host patterns,
+configuration values, or paths. The domain reconciliation operation remains a
+pure query with no tracing or metrics side effects, and a generic merge failure
+produces no reconciliation event.
 
 The phase-level metric contract is:
 

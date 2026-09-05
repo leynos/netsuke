@@ -38,22 +38,22 @@ introduces, and concrete remediation tasks that would harden the helpers.
     surface as `InvalidOperation` errors without opening a network connection.
 - [x] **Project configuration could downgrade operator default-deny policy.**
   *(Status: remediated for issue #644.)* Generic configuration precedence
-  previously allowed the primary project `.netsuke.toml` to override a
-  user-supplied `fetch_default_deny = true` with `false`. The fetch-policy
-  merge now captures project fields before generic merging: project
-  `fetch_default_deny = true` may tighten the operator policy, while project
-  `false` cannot widen it.
+  previously allowed a project `.netsuke.toml` to override a user-supplied
+  `fetch_default_deny = true` with `false`. The fetch-policy merge now captures
+  fields from the primary project file and every file in its `extends` chain
+  before generic merging: project `fetch_default_deny = true` may tighten the
+  operator policy, while project `false` cannot widen it.
 - [x] **Project configuration could widen explicit fetch
   allowlists.** *(Status: remediated for issue #644.)* Append semantics
   previously let project `fetch_allow_scheme` and `fetch_allow_host` entries
-  survive a more-trusted environment or CLI policy. The primary project layer's
-  grants are now ignored unless an operator enables
+  survive a more-trusted environment or CLI policy. Every project-scoped layer,
+  including files in the `extends` chain, now has its grants quarantined before
+  generic merging. Grants are ignored unless an operator enables
   `trust_project_fetch_policy` from system or user configuration, the
   environment, or the CLI. With that explicit opt-in, project grants append
-  deliberately; a project cannot set the opt-in for itself. Project
-  `fetch_block_host` remains cumulative and continues to override allows. Files
-  loaded through a project's `extends` chain are outside this first
-  trust-boundary remediation.
+  deliberately in dependency-first order, with the primary file last; a project
+  cannot set the opt-in for itself. Project `fetch_block_host` remains
+  cumulative and continues to override allows.
 - [x] **Response bodies are read without a size limit.** `fetch_remote` reads
   the entire HTTP response into memory before returning or caching it. An
   attacker controlling the endpoint can stream unbounded data and exhaust

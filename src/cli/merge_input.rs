@@ -52,7 +52,7 @@ pub(super) struct MergeComposition {
     /// Deferred layer-construction failures collected before schema validation.
     pub(super) errors: Vec<Arc<OrthoError>>,
     /// Project fetch-policy restrictions awaiting trust-aware reconciliation.
-    pub(super) project_fetch_policy_request: ProjectFetchPolicyRequest,
+    pub(super) project_fetch_policy_request: Vec<ProjectFetchPolicyRequest>,
 }
 
 impl MergeComposition {
@@ -61,7 +61,7 @@ impl MergeComposition {
         Self {
             composer: MergeComposer::with_capacity(4),
             errors: Vec::new(),
-            project_fetch_policy_request: ProjectFetchPolicyRequest::default(),
+            project_fetch_policy_request: Vec::new(),
         }
     }
 
