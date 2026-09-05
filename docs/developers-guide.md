@@ -836,7 +836,7 @@ than GitHub with `ubi gh leynos/netsuke list-cache-entries`. That command only
 works once the Ubicloud GitHub App covers this repository; see "GitHub Actions
 runner placement" for that prerequisite.
 
-Every `leynos/shared-actions` reference is pinned to
+Most `leynos/shared-actions` references are pinned to
 `e041cb75c35c3524201a32d5e57c87408fbd5874`. That revision introduces
 `cache-provider: external`; installs `whitaker-installer` and `cargo-nextest`
 from checksum-verified official releases with no source fallback; adds the
@@ -850,7 +850,19 @@ a remote host; chooses the Whitaker archive's extractor by the asset's
 extension rather than by probing what `tar` is, which is what makes the Windows
 gate work on a GitHub-hosted runner (leynos/shared-actions#446); and restores
 the cache service variables that `mozilla-actions/sccache-action` overwrites.
-One SHA across every reference, so a future bump moves them together.
+
+`generate-coverage` is deliberately ahead, at
+`77ea10341249024e22ec5d9069e3caa7596e0d4f`. From that revision the ratchet
+baseline is published only on a push to `refs/heads/main`; before it every run
+that reached the save step published, so each pull request advanced the
+baseline it was then measured against, and a warm-run dispatch of
+`coverage-main.yml` replaced the generation it was measuring. A contract in
+`tests/workflow_contracts/ratchet_publication_test.py` asserts that pin by
+value, so a bump that moved it backwards would fail rather than quietly
+returning the old behaviour.
+
+One SHA across the rest, so a future bump moves them together, and it should
+bring them up to meet `generate-coverage` rather than pulling it back.
 
 CI installs tools from trusted prebuilt releases only, with **no exceptions**.
 `setup-rust` verifies the `cargo-binstall` installer checksum, and every

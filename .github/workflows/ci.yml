@@ -232,7 +232,7 @@ jobs:
         # `rustflags` input. Pull requests only; on the trunk
         # `coverage-upload` runs the same set over the same commit.
         if: github.event_name == 'pull_request'
-        uses: leynos/shared-actions/.github/actions/generate-coverage@e041cb75c35c3524201a32d5e57c87408fbd5874
+        uses: leynos/shared-actions/.github/actions/generate-coverage@77ea10341249024e22ec5d9069e3caa7596e0d4f
         with:
           language: rust
           output-path: lcov.info
