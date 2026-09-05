@@ -55,7 +55,7 @@ Options:
           Denegar todos los hosts por defecto; solo permitir la lista de permitidos.
 
       --trust-project-fetch-policy
-          Allow project configuration to widen fetch-policy grants.
+          Permitir que la configuración del proyecto amplíe los permisos de la política de fetch.
 
       --json
           Emitir salida JSON legible por máquinas.
