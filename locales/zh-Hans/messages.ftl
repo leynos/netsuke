@@ -87,7 +87,6 @@ runner.manifest.current_directory_label = 当前目录
 runner.manifest.default_not_declared = 清单默认值“{ $default }”未指定已声明的动作或目标。
 runner.context.network_policy = 无法构建网络策略。
 runner.context.load_manifest = 无法加载 { $path } 处的清单。
-runner.context.serialise_manifest = 无法序列化清单。
 runner.context.build_graph = 无法根据清单构建图。
 runner.context.generate_ninja = 无法生成 Ninja 清单。
 runner.context.render_graph = 无法渲染图产物。

@@ -127,7 +127,6 @@ impl BuildGraph {
             let inputs = to_paths(&target.sources);
             let implicit_deps = to_paths(&target.deps);
             tracing::debug!(
-                target = ?target.name,
                 implicit_deps_count = implicit_deps.len(),
                 "populating implicit dependencies for target",
             );
@@ -189,7 +188,7 @@ impl BuildGraph {
 
     /// Detect dependency cycles and unresolved dependencies in the built graph.
     ///
-    /// Unresolved dependencies are logged and treated as external files; a
+    /// Unresolved dependencies are counted and treated as external files; a
     /// detected cycle fails the whole lowering.
     ///
     /// # Errors
@@ -201,14 +200,6 @@ impl BuildGraph {
             cycle,
             missing_dependencies,
         } = cycle::analyse(&self.targets);
-
-        for (dependent, missing) in &missing_dependencies {
-            tracing::info!(
-                dependent = %dependent,
-                missing = %missing,
-                "unresolved dependency: not a build target; assuming it is an external file",
-            );
-        }
 
         if let Some(detected_cycle) = cycle {
             let message = localization::message(keys::IR_CIRCULAR_DEPENDENCY)

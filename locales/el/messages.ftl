@@ -89,7 +89,6 @@ runner.manifest.current_directory_label = ο τρέχων κατάλογος
 runner.manifest.default_not_declared = Η προεπιλογή του δηλωτικού '{ $default }' δεν ονομάζει δηλωμένη ενέργεια ή στόχο.
 runner.context.network_policy = Δεν ήταν δυνατή η κατασκευή της πολιτικής δικτύου.
 runner.context.load_manifest = Δεν ήταν δυνατή η φόρτωση του δηλωτικού από { $path }.
-runner.context.serialise_manifest = Δεν ήταν δυνατή η σειριοποίηση του δηλωτικού.
 runner.context.build_graph = Δεν ήταν δυνατή η κατασκευή γραφήματος από το δηλωτικό.
 runner.context.generate_ninja = Δεν ήταν δυνατή η δημιουργία του δηλωτικού Ninja.
 runner.context.render_graph = Δεν ήταν δυνατή η απόδοση του τεχνουργήματος γραφήματος.

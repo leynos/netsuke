@@ -88,7 +88,6 @@ runner.manifest.current_directory_label = aktuální adresář
 runner.manifest.default_not_declared = Výchozí položka manifestu „{ $default }“ neoznačuje deklarovanou akci ani cíl.
 runner.context.network_policy = Síťovou zásadu se nepodařilo sestavit.
 runner.context.load_manifest = Manifest v { $path } se nepodařilo načíst.
-runner.context.serialise_manifest = Manifest se nepodařilo serializovat.
 runner.context.build_graph = Z manifestu se nepodařilo sestavit graf.
 runner.context.generate_ninja = Manifest Ninja se nepodařilo vytvořit.
 runner.context.render_graph = Artefakt grafu se nepodařilo vykreslit.

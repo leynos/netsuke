@@ -89,7 +89,6 @@ runner.manifest.current_directory_label = the current directory
 runner.manifest.default_not_declared = manifest default '{ $default }' does not name a declared action or target.
 runner.context.network_policy = Failed to build the network policy.
 runner.context.load_manifest = Failed to load manifest at { $path }.
-runner.context.serialise_manifest = Failed to serialise manifest.
 runner.context.build_graph = Failed to build graph from the manifest.
 runner.context.generate_ninja = Failed to generate the Ninja manifest.
 runner.context.render_graph = Failed to render the graph artefact.
