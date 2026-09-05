@@ -1,7 +1,6 @@
 ---
 source: src/cli/parser_tests.rs
-assertion_line: 48
-expression: normalized_help
+expression: rendered_help
 ---
 Netsuke transforma manifiestos YAML + Jinja en grafos Ninja reproducibles y ejecuta Ninja con valores seguros.
 
@@ -54,6 +53,9 @@ Options:
 
       --fetch-default-deny
           Denegar todos los hosts por defecto; solo permitir la lista de permitidos.
+
+      --trust-project-fetch-policy
+          Permitir que la configuración del proyecto amplíe los permisos de la política de fetch.
 
       --json
           Emitir salida JSON legible por máquinas.

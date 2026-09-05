@@ -6,7 +6,7 @@
 use ortho_config::MergeComposer;
 use std::sync::Arc;
 
-use super::{DiscoveredLayers, diagnostics::short_hash};
+use super::{DiscoveredLayers, ProjectFetchPolicyRequest, diagnostics::short_hash};
 use crate::cli::MergeEvent;
 
 /// Add discovered file layers to the supplied merge composition.
@@ -19,8 +19,8 @@ pub(crate) fn push_discovered_file_layers(
     errors: &mut Vec<Arc<ortho_config::OrthoError>>,
     discovered: DiscoveredLayers,
     events: &mut Vec<MergeEvent>,
-) {
-    let (layers, discovery_errors) = discovered.into_parts();
+) -> Vec<ProjectFetchPolicyRequest> {
+    let (layers, discovery_errors, project_fetch_policy_request) = discovered.into_parts();
     if discovery_errors.is_empty() {
         events.push(MergeEvent::FileLayersCollected {
             layer_count: layers.len(),
@@ -29,8 +29,11 @@ pub(crate) fn push_discovered_file_layers(
         events.push(MergeEvent::FileLayerCollectionFailed {
             error_count: discovery_errors.len(),
         });
+        // Keep the original validation error instead of asking the generic
+        // schema to deserialize the same malformed field a second time.
+        errors.extend(discovery_errors);
+        return project_fetch_policy_request;
     }
-    errors.extend(discovery_errors);
     for layer in layers {
         events.push(MergeEvent::FileLayerApplied {
             path_hash: layer
@@ -39,4 +42,5 @@ pub(crate) fn push_discovered_file_layers(
         });
         composer.push_layer(layer);
     }
+    project_fetch_policy_request
 }

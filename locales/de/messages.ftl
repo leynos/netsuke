@@ -16,6 +16,7 @@ cli.flag.fetch_allow_scheme.help = Zusätzliche URL-Schemata, die der fetch-Helf
 cli.flag.fetch_allow_host.help = Hostnamen, die bei aktivierter Standardsperre zugelassen sind.
 cli.flag.fetch_block_host.help = Hostnamen, die immer blockiert werden, auch wenn sie anderweitig erlaubt sind.
 cli.flag.fetch_default_deny.help = Alle Hosts standardmäßig sperren; nur die deklarierte Positivliste zulassen.
+cli.flag.trust_project_fetch_policy.help = Der Projektkonfiguration erlauben, die Berechtigungen der fetch-Richtlinie zu erweitern.
 cli.flag.json.help = Maschinenlesbare JSON-Ausgabe erzeugen.
 cli.flag.no_input.help = Niemals interaktive Eingaben lesen.
 cli.flag.color.help = Richtlinie für Farbausgabe (auto, always, never).

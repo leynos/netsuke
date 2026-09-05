@@ -179,6 +179,10 @@ pub struct CommandConfigs {
 
 /// Authoritative schema for layered CLI configuration.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, OrthoConfig)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each Boolean maps to an independent layered configuration key"
+)]
 #[ortho_config(prefix = "NETSUKE", post_merge_hook)]
 pub struct CliConfig {
     /// Path to the Netsuke manifest file to use.
@@ -213,6 +217,10 @@ pub struct CliConfig {
     /// Deny all hosts by default; only allow the declared allowlist.
     #[ortho_config(default = false)]
     pub fetch_default_deny: bool,
+
+    /// Allow project configuration to widen fetch-policy grants.
+    #[ortho_config(default = false)]
+    pub trust_project_fetch_policy: bool,
 
     /// Emit machine-readable JSON output.
     #[ortho_config(default = false)]
@@ -260,6 +268,7 @@ impl Default for CliConfig {
             fetch_allow_host: Vec::new(),
             fetch_block_host: Vec::new(),
             fetch_default_deny: false,
+            trust_project_fetch_policy: false,
             json: false,
             no_input: NoInput::default(),
             color: ColourPolicy::Auto,

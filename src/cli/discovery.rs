@@ -10,6 +10,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use super::command::Cli;
+use crate::host_pattern::HostPattern;
 
 #[path = "discovery_environment.rs"]
 mod environment;
@@ -23,6 +24,8 @@ mod json;
 mod layers;
 #[path = "discovery_paths.rs"]
 mod paths;
+#[path = "discovery_project_policy.rs"]
+mod project_policy;
 
 #[path = "discovery_selector.rs"]
 mod selector;
@@ -63,6 +66,21 @@ const DISCOVERY_ENV_KEYS: [&str; 7] = [
     "LOCALAPPDATA",
 ];
 
+/// Project-scoped fetch-policy restrictions captured before generic merging.
+///
+/// Project configuration is untrusted relative to operator configuration. The
+/// merge boundary uses this request to preserve restrictions without allowing
+/// the project layer to widen operator grants.
+#[derive(Debug, Default)]
+pub(crate) struct ProjectFetchPolicyRequest {
+    /// Optional request to deny every host by default.
+    pub(crate) default_deny: Option<bool>,
+    /// Additional schemes requested by the project configuration.
+    pub(crate) allow_scheme: Vec<String>,
+    /// Additional hosts requested by the project configuration.
+    pub(crate) allow_host: Vec<HostPattern>,
+}
+
 /// File layers and loading errors produced by one discovery pass.
 ///
 /// The diagnostic pre-pass borrows the layers to resolve JSON output, then the
@@ -73,6 +91,8 @@ pub struct DiscoveredLayers {
     layers: Vec<MergeLayer<'static>>,
     /// Whether any discovered layer requested JSON output.
     json_preference: bool,
+    /// Ordered restrictions from the primary project and its complete chain.
+    project_fetch_policy_request: Vec<ProjectFetchPolicyRequest>,
     /// Loading errors deferred beside the layers that may still be usable.
     errors: Vec<Arc<ortho_config::OrthoError>>,
     /// Bounded trace for composition boundaries to emit after the merge.
@@ -99,8 +119,12 @@ impl DiscoveredLayers {
     /// Consume into the raw layers and deferred discovery errors.
     pub(crate) fn into_parts(
         self,
-    ) -> (Vec<MergeLayer<'static>>, Vec<Arc<ortho_config::OrthoError>>) {
-        (self.layers, self.errors)
+    ) -> (
+        Vec<MergeLayer<'static>>,
+        Vec<Arc<ortho_config::OrthoError>>,
+        Vec<ProjectFetchPolicyRequest>,
+    ) {
+        (self.layers, self.errors, self.project_fetch_policy_request)
     }
 }
 
@@ -157,18 +181,19 @@ fn discover_file_layers_with_normalizer(
     let diagnostics = DiscoveryDiagnostics::new(trace, load_warning);
     let layers = match outcome {
         Ok(discovered_layers) => {
-            let (layers, json_preference) =
-                layers::retain_layers_and_resolve_json(discovered_layers);
+            let resolved = layers::retain_layers_and_resolve_json(discovered_layers);
             DiscoveredLayers {
-                layers,
-                json_preference,
-                errors: Vec::new(),
+                layers: resolved.layers,
+                json_preference: resolved.json_preference,
+                project_fetch_policy_request: resolved.project_requests,
+                errors: resolved.errors,
                 diagnostics,
             }
         }
         Err(error) => DiscoveredLayers {
             layers: Vec::new(),
             json_preference: Cli::default().json,
+            project_fetch_policy_request: Vec::new(),
             errors: vec![error],
             diagnostics,
         },
@@ -185,7 +210,7 @@ fn collect_file_layers_with_env(
 ) -> (
     DiscoveryTrace,
     Option<ConfigLoadWarning>,
-    OrthoResult<Vec<MergeLayer<'static>>>,
+    OrthoResult<Vec<layers::ScopedFileLayer>>,
 ) {
     let resolution = selector::resolve_config_selector(cli.config.clone(), env);
     let (file_layers, load_warning, outcome) = resolution.path.as_deref().map_or_else(
@@ -208,7 +233,13 @@ fn collect_file_layers_with_env(
                     path: BoundedConfigPath::from_path(Some(path)),
                 },
                 load_warning,
-                outcome,
+                outcome.map(|chain| {
+                    layers::scope_selected_chain(
+                        chain,
+                        cli.directory.as_deref().map(camino::Utf8Path::as_std_path),
+                        normalizer,
+                    )
+                }),
             )
         },
     );

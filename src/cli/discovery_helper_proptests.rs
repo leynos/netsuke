@@ -208,17 +208,20 @@ proptest! {
         let source_len = source.len();
         let ordered = source
             .into_iter()
-            .map(|value| MergeLayer::file(Cow::Owned(value), None))
+            .map(|value| super::layers::ScopedFileLayer::operator(
+                MergeLayer::file(Cow::Owned(value), None)))
             .collect();
-        let (final_layers, json_preference) = super::layers::retain_layers_and_resolve_json(ordered);
+        let resolved = super::layers::retain_layers_and_resolve_json(ordered);
 
         let expected = layers
             .iter()
             .filter_map(json_from_value)
             .next_back()
             .unwrap_or_else(|| crate::cli::Cli::default().json);
-        prop_assert_eq!(json_preference, expected);
-        prop_assert_eq!(final_layers.len(), source_len);
+        prop_assert_eq!(resolved.json_preference, expected);
+        prop_assert_eq!(resolved.layers.len(), source_len);
+        prop_assert!(resolved.project_requests.is_empty());
+        prop_assert!(resolved.errors.is_empty());
     }
 }
 

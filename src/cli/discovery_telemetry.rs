@@ -189,6 +189,7 @@ mod tests {
             layers: DiscoveredLayers {
                 layers,
                 json_preference: false,
+                project_fetch_policy_request: Vec::new(),
                 errors,
                 diagnostics,
             },
@@ -209,6 +210,7 @@ mod tests {
             layers: DiscoveredLayers {
                 layers,
                 json_preference: false,
+                project_fetch_policy_request: Vec::new(),
                 errors: vec![error],
                 diagnostics,
             },

@@ -139,6 +139,7 @@ fn observer_reports_exact_empty_input_events() -> Result<()> {
                 MergeEvent::FileLayersCollected { layer_count: 0 },
                 MergeEvent::EnvironmentApplied { is_empty: true },
                 MergeEvent::CliOverridesAbsent,
+                MergeEvent::FetchPolicyReconciled { .. },
             ]
         ),
         "empty inputs should produce the bounded event sequence: {events:#?}"

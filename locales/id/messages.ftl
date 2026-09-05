@@ -16,6 +16,7 @@ cli.flag.fetch_allow_scheme.help = Skema URL tambahan yang diizinkan bagi pemban
 cli.flag.fetch_allow_host.help = Nama host yang diizinkan ketika penolakan bawaan aktif.
 cli.flag.fetch_block_host.help = Nama host yang selalu diblokir, meski diizinkan di tempat lain.
 cli.flag.fetch_default_deny.help = Tolak semua host secara bawaan; izinkan hanya daftar yang dinyatakan.
+cli.flag.trust_project_fetch_policy.help = Izinkan konfigurasi proyek memperluas izin kebijakan fetch.
 cli.flag.json.help = Hasilkan keluaran JSON yang terbaca mesin.
 cli.flag.no_input.help = Jangan pernah membaca masukan interaktif.
 cli.flag.color.help = Kebijakan keluaran berwarna (auto, always, never).
