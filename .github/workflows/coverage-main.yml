@@ -16,6 +16,12 @@ on:
   # save in this repository's Linux gate requires a push to `main`. Without
   # this trigger the coverage lane's warm behaviour could only be observed by
   # merging something.
+  #
+  # The ratchet baseline is part of "writes none" from the pinned coverage
+  # action onwards, and was not before it: the save had no event guard, so a
+  # warm-run dispatch replaced the very generation it was measuring. The action
+  # now publishes only on a push to `refs/heads/main`, which is what this
+  # workflow already relies on, so it needs no opt-in.
   workflow_dispatch:
 
 jobs:
@@ -195,7 +201,7 @@ jobs:
       - name: Reset sccache statistics
         run: sccache --zero-stats
       - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@e041cb75c35c3524201a32d5e57c87408fbd5874
+        uses: leynos/shared-actions/.github/actions/generate-coverage@77ea10341249024e22ec5d9069e3caa7596e0d4f
         with:
           language: rust
           output-path: lcov.info
