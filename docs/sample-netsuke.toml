@@ -46,9 +46,11 @@
 # default_targets = ["fmt", "lint", "test"]
 
 # Additional URL schemes allowed for the `fetch` helper. When this file is the
-# primary project `.netsuke.toml`, allow entries are project requests and are
-# ignored unless an operator enables `trust_project_fetch_policy` in a trusted
-# layer. A project cannot enable that opt-in for itself.
+# primary project `.netsuke.toml` or a file loaded through its `extends` chain,
+# allow entries are project requests and are ignored unless an operator enables
+# `trust_project_fetch_policy` in a trusted layer. A project cannot enable that
+# opt-in for itself. Requests are evaluated in dependency-first order, with the
+# primary file last.
 # fetch_allow_scheme = ["https"]
 
 # Hostnames allowed when `fetch_default_deny = true`. The same project-request
@@ -63,10 +65,12 @@
 
 # Deny all fetch hosts by default and allow only the declared allowlist. Without
 # the opt-in, a project may set this to true to tighten the operator policy; a
-# project false cannot weaken an operator's default-deny setting.
+# project false cannot weaken an operator's default-deny setting. Across an
+# `extends` chain, a false request never undoes a true restriction.
 # fetch_default_deny = false
 
-# Allow the primary project file's fetch grants to append to operator values.
+# Allow project fetch grants from the primary file and its `extends` chain to
+# append to operator values.
 # Set this only in system or user configuration, through
 # NETSUKE_TRUST_PROJECT_FETCH_POLICY, or with --trust-project-fetch-policy;
 # a project file cannot self-authorize.

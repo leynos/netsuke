@@ -32,6 +32,7 @@ fn observer_reports_non_empty_file_layer_with_bounded_path() -> Result<()> {
         },
         MergeEvent::EnvironmentApplied { is_empty: true },
         MergeEvent::CliOverridesAbsent,
+        MergeEvent::FetchPolicyReconciled { .. },
     ] = events.as_slice()
     else {
         anyhow::bail!("expected one bounded file-layer event: {events:#?}");
@@ -65,6 +66,7 @@ fn observer_reports_non_empty_environment_without_value() -> Result<()> {
                 MergeEvent::FileLayersCollected { layer_count: 0 },
                 MergeEvent::EnvironmentApplied { is_empty: false },
                 MergeEvent::CliOverridesAbsent,
+                MergeEvent::FetchPolicyReconciled { .. },
             ]
         ),
         "environment events must retain only their empty-state flag: {events:#?}"
@@ -86,6 +88,7 @@ fn observer_reports_precise_cli_override_leaf_keys() -> Result<()> {
         MergeEvent::FileLayersCollected { layer_count: 0 },
         MergeEvent::EnvironmentApplied { is_empty: true },
         MergeEvent::CliOverridesApplied { override_keys },
+        MergeEvent::FetchPolicyReconciled { .. },
     ] = events.as_slice()
     else {
         anyhow::bail!("expected bounded CLI override event: {events:#?}");

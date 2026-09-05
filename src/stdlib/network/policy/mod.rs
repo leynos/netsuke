@@ -5,6 +5,8 @@
 
 use std::collections::BTreeSet;
 
+pub(crate) mod reconciliation;
+
 use crate::localization::{self, LocalizedMessage, keys};
 use thiserror::Error;
 use url::Url;

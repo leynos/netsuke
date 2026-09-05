@@ -23,8 +23,10 @@ pub use config::{
     DEFAULT_FETCH_CACHE_DIR, DEFAULT_FETCH_MAX_RESPONSE_BYTES, DEFAULT_WHICH_CACHE_CAPACITY,
     NetworkConfig, StdlibConfig,
 };
+pub(crate) use network::reconciliation;
 pub use network::{
-    HostPatternError, NetworkPolicy, NetworkPolicyConfigError, NetworkPolicyViolation,
+    DefaultDenyDecision, FetchPolicyReconciliationOutcome, HostPatternError, NetworkPolicy,
+    NetworkPolicyConfigError, NetworkPolicyViolation,
 };
 pub(crate) use register::{is_manifest_query_disabled_error, register_manifest_query};
 pub use register::{register, register_with_config, value_from_bytes};

@@ -6,6 +6,8 @@
 
 use serde_json::Value;
 
+use crate::stdlib::FetchPolicyReconciliationOutcome;
+
 use super::config::NO_INPUT_VALIDATION_REASON;
 
 /// Fixed reason reported when a merged parallel job count is out of range.
@@ -67,6 +69,11 @@ pub enum MergeEvent {
     CliOverridesAbsent,
     /// Serializing CLI overrides failed.
     CliOverridesFailed,
+    /// Fetch-policy reconciliation completed after a successful generic merge.
+    FetchPolicyReconciled {
+        /// Bounded decisions and grant counts, excluding policy values.
+        outcome: FetchPolicyReconciliationOutcome,
+    },
     /// Post-merge validation rejected a known configuration setting.
     ValidationRejected {
         /// Name of the rejected setting.
@@ -94,6 +101,25 @@ impl MergeObserver for TracingMergeObserver {
         record_environment_event(&event);
         record_cli_event(&event);
         record_validation_event(&event);
+        record_fetch_policy_event(&event);
+    }
+}
+
+/// Record only fixed decisions and counts from a completed reconciliation.
+fn record_fetch_policy_event(event: &MergeEvent) {
+    if let MergeEvent::FetchPolicyReconciled { outcome } = event {
+        tracing::debug!(
+            trust_enabled = outcome.trust_enabled,
+            project_request_present = outcome.project_request_present,
+            default_deny_decision = outcome.default_deny_decision.as_str(),
+            requested_scheme_grant_count = outcome.requested_scheme_grant_count,
+            accepted_scheme_grant_count = outcome.accepted_scheme_grant_count,
+            ignored_scheme_grant_count = outcome.ignored_scheme_grant_count,
+            requested_host_grant_count = outcome.requested_host_grant_count,
+            accepted_host_grant_count = outcome.accepted_host_grant_count,
+            ignored_host_grant_count = outcome.ignored_host_grant_count,
+            "reconciled fetch policy"
+        );
     }
 }
 
