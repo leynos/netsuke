@@ -43,7 +43,7 @@ from runner_placement_invariants import (
     UBICLOUD_LABELS,
     has_single_cache_owner,
 )
-from source_build_data import is_source_built
+from source_build_data import is_source_built, source_build_commands
 from workflow_loading import (
     job_steps,
     load_workflow,
@@ -369,10 +369,14 @@ def test_workflows_do_not_reintroduce_source_tool_builds_or_stale_providers() ->
         "tools publish prebuilt archives and must not be compiled in CI"
     )
     # And nothing else compiles a tool either, which is the general rule the
-    # two named tools were the last exceptions to.
-    assert "cargo install " not in workflow_text, (
+    # two named tools were the last exceptions to. Parsed rather than searched
+    # for as a substring: `cargo  install`, a tab, `cargo +nightly install`
+    # and a line continuation all run the same command, and a literal search
+    # for "cargo install " misses every one of them.
+    compiled = source_build_commands(workflow_text)
+    assert not compiled, (
         "CI tools must come from trusted prebuilt binaries; no workflow or "
-        "composite action may run `cargo install`"
+        f"composite action may run `cargo install`, found {compiled!r}"
     )
     assert "nscloud-cache-action" not in workflow_text, (
         "the Namespace cache volume action must not return"

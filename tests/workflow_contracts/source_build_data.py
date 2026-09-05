@@ -15,7 +15,50 @@ import re
 #: The `cargo install` invocation, and everything up to the end of its line.
 #: Continuations are joined before matching, so a command split across lines
 #: is one candidate rather than several fragments.
-_CARGO_INSTALL = re.compile(r"cargo\s+install\s+(?P<rest>.*)")
+#:
+#: `\s+` rather than a single space, because `cargo  install` and a tab both
+#: run the same command; and an optional `+toolchain` selector, because
+#: `cargo +nightly install` does too. A literal-substring search for
+#: "cargo install " misses all three.
+_CARGO_INSTALL = re.compile(r"cargo\s+(?:\+\S+\s+)?install\s+(?P<rest>.*)")
+
+
+def joined_commands(workflow_text: str) -> str:
+    """Return ``workflow_text`` with shell line continuations folded away.
+
+    Parameters
+    ----------
+    workflow_text
+        Every workflow and composite action concatenated.
+
+    Returns
+    -------
+    str
+        The same text with backslash line continuations joined, so a command
+        split across lines is one candidate rather than several fragments.
+    """
+    return workflow_text.replace("\\\n", " ")
+
+
+def source_build_commands(workflow_text: str) -> list[str]:
+    """Return every `cargo install` command found, as written.
+
+    Parameters
+    ----------
+    workflow_text
+        Every workflow and composite action concatenated.
+
+    Returns
+    -------
+    list[str]
+        One entry per invocation, each being the arguments following the
+        subcommand. Empty when nothing compiles a tool, which is the state
+        this repository holds itself to.
+    """
+    return [
+        match["rest"]
+        for match in _CARGO_INSTALL.finditer(joined_commands(workflow_text))
+    ]
 
 
 def _installed_crates(command: str) -> list[str]:
@@ -78,8 +121,7 @@ def is_source_built(tool: str, workflow_text: str) -> bool:
     is found among all of the command's non-option arguments, so an option
     value standing between the subcommand and the crate cannot conceal it.
     """
-    joined = workflow_text.replace("\\\n", " ")
     return any(
-        tool in _installed_crates(match["rest"])
-        for match in _CARGO_INSTALL.finditer(joined)
+        tool in _installed_crates(command)
+        for command in source_build_commands(workflow_text)
     )

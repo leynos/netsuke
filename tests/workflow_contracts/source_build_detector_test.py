@@ -12,7 +12,7 @@ Run via ``make test-workflow-contracts``.
 """
 
 import pytest
-from source_build_data import is_source_built
+from source_build_data import is_source_built, source_build_commands
 
 TOOL = "cargo-orthohelp"
 
@@ -102,3 +102,41 @@ def test_the_detector_finds_a_build_among_other_commands() -> None:
     assert is_source_built(TOOL, script), (
         "the detector must find an offending command among unrelated lines"
     )
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        pytest.param("cargo install some-tool", id="single-space"),
+        pytest.param("cargo  install some-tool", id="double-space"),
+        pytest.param("cargo\tinstall some-tool", id="tab"),
+        pytest.param("cargo +nightly install some-tool", id="toolchain-selector"),
+        pytest.param("cargo \\\n            install some-tool", id="line-continuation"),
+    ],
+)
+def test_every_cargo_install_spelling_is_found(command: str) -> None:
+    """Catch the shell spellings a literal substring search would miss.
+
+    `cargo  install`, a tab, a `+toolchain` selector and a line continuation
+    all run the same command. The general no-source-build rule is enforced by
+    searching for these, so a spelling it cannot see is a hole in the policy
+    rather than in one tool's guard.
+    """
+    assert source_build_commands(command), f"missed a source build: {command!r}"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        pytest.param("cargo binstall some-tool", id="binstall"),
+        pytest.param("cargo install-update some-tool", id="different-subcommand"),
+        pytest.param("# cargo installs are forbidden", id="prose"),
+    ],
+)
+def test_a_non_install_command_is_not_flagged(command: str) -> None:
+    """Leave alone what is not a `cargo install`.
+
+    `cargo binstall` is the form this repository adopts, so flagging it would
+    make the policy unsatisfiable.
+    """
+    assert not source_build_commands(command), f"false positive: {command!r}"

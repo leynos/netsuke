@@ -857,8 +857,8 @@ CI installs tools from trusted prebuilt releases only, with **no exceptions**.
 `cargo binstall` call refuses to compile, so a missing prebuilt release fails
 the job instead of quietly building the tool.
 
-That rule was absolute only from mdtablefix 0.5.1. Until then this repository
-carried its own `install-mdtablefix` action, because the crate's binstall
+That rule became absolute with mdtablefix 0.5.1. Until then, this repository
+carried its own `install-mdtablefix` action because the crate's binstall
 metadata set `bin-dir = "."`, which cargo-binstall rejects
 ([leynos/mdtablefix#458](https://github.com/leynos/mdtablefix/issues/458)),
 and because no Windows archive was published at all
@@ -873,7 +873,7 @@ shared
 [`install-mdtablefix`](https://github.com/leynos/shared-actions/tree/main/.github/actions/install-mdtablefix)
 action and the local one is gone along with its build directory. The shared
 action refuses anything earlier than 0.5.1, so an accidental downgrade fails
-with a message naming the reason rather than reintroducing a compile.
+with a message naming the reason rather than reintroducing source compilation.
 
 `cargo-orthohelp` was the second such exception and is no longer one.
 `ortho-config` published no binaries until 0.9.1
@@ -889,11 +889,11 @@ binary, and this is still the one lane whose save is not restricted to a push on
 that installs the tool must be the run that publishes it; the key is
 content-addressed by version, so concurrent writers produce identical archives.
 
-With both exceptions retired the rule is absolute, and three contracts hold it
-there. `tests/workflow_contracts/cache_ownership_test.py` asserts the permitted
+With both exceptions retired, the rule is absolute, and three contracts enforce
+it. `tests/workflow_contracts/cache_ownership_test.py` asserts the permitted
 set is empty, so reinstating an exception is a deliberate policy change rather
 than an edit; it lists both retired tools in `FORBIDDEN_SOURCE_BUILDS`, checked
-by name, because a count of permitted builds is satisfied by adding a tool back
+by name because a count of permitted builds is satisfied by adding a tool back
 as a newly permitted entry; and it rejects `cargo install` anywhere in any
 workflow or composite action. `tests/workflow_orthohelp_install.rs` requires
 the release lane to disable binstall's compile strategy, and

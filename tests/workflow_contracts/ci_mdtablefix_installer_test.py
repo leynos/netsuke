@@ -95,12 +95,24 @@ def _resolve_literal(version: str, workflow_path: pl.Path) -> str:
     """
     if not version.startswith("${{"):
         return version
+    # Each hop is checked before it is followed. Resolving any expression
+    # through `MDTABLEFIX_VERSION` would let the step switch to an unrelated
+    # variable while this contract kept reading the old, still-correct pin and
+    # reporting success for a lane receiving something else.
+    assert "env.MDTABLEFIX_VERSION" in version, (
+        f"the installer step should take its version from MDTABLEFIX_VERSION, "
+        f"got {version!r}"
+    )
     workflow = load_workflow(workflow_path)
     env = require_mapping(workflow.get("env"), f"{workflow_path.name} env")
     resolved = str(env.get("MDTABLEFIX_VERSION", ""))
     assert resolved, f"{workflow_path.name} must declare MDTABLEFIX_VERSION"
     if not resolved.startswith("${{"):
         return resolved
+    assert "mdtablefix-version" in resolved, (
+        f"{workflow_path.name} should take MDTABLEFIX_VERSION from its own "
+        f"mdtablefix-version input, got {resolved!r}"
+    )
     # A reusable workflow's env takes the value from its caller's `with:`.
     jobs = require_mapping(
         load_workflow(WORKFLOW_DIR / "ci.yml").get("jobs"), "ci.yml jobs"
