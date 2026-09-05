@@ -19,9 +19,9 @@ or exfiltrate the credential.
 
 Pinning the CodeScene action does not isolate it from state created by earlier
 steps. Moving the action to a second job in the same pull-request workflow is
-also insufficient because a pull request controls that workflow definition.
-The design therefore needs both a runner boundary and a workflow-definition
-trust boundary.
+also insufficient because a pull request controls that workflow definition. The
+design therefore needs both a runner boundary and a workflow-definition trust
+boundary.
 
 ## Decision Drivers
 
@@ -52,8 +52,8 @@ trust boundary.
   originating `workflow_run.head_sha`, not the trusted workflow commit.
 - Fork pull requests continue through unprivileged CI. Their trusted
   submission is excluded by the same-repository guard and, independently, an
-  absent token skips submission without turning successful prerequisites into
-  a failure.
+  absent token skips submission without turning successful prerequisites into a
+  failure.
 
 ### Technical requirements
 
@@ -61,14 +61,14 @@ trust boundary.
   must not execute uploaded artefact contents.
 - Validation must accept exactly one member named `lcov.info`, reject links and
   non-regular files, resolve and contain the member within the artefact
-  directory, enforce a bounded size, decode UTF-8, and accept only recognised
+  directory, enforce a bounded size, decode UTF-8, and accept only recognized
   LCOV records with the required record types and terminator.
 - `CS_ACCESS_TOKEN` must be available only through the CodeScene submission
   step's local environment. It must not be placed in job-wide state or
   persisted environment files.
 - Correlation output is bounded to the originating workflow-run ID, originating
-  commit SHA, fixed artefact name, download/validation/submission outcomes,
-  and final conclusion. It must not include token values, secret names, LCOV
+  commit SHA, fixed artefact name, download/validation/submission outcomes, and
+  final conclusion. It must not include token values, secret names, LCOV
   content, artefact-derived paths, PR titles, or branch names.
 
 ## Options considered
@@ -78,8 +78,7 @@ trust boundary.
 The pull-request workflow produces only `pr-coverage-lcov`. A default-branch
 `workflow_run` consumer downloads it, validates it as hostile data, and invokes
 CodeScene on a fresh runner with a step-scoped token. This creates independent
-execution and workflow-definition boundaries while retaining the coverage
-gate.
+execution and workflow-definition boundaries while retaining the coverage gate.
 
 ### Option B: A second job in the pull-request workflow
 
@@ -113,8 +112,8 @@ The trusted runner checks out only validation tooling from the trusted default
 branch. It downloads the fixed artefact into a dedicated directory, validates
 the exact member and LCOV format, and then supplies the resulting data path to
 the CodeScene action. The action receives `CS_ACCESS_TOKEN` only through its
-step-local environment. The final Check Run uses `head_sha` from the source
-run and stores that run's ID as its external correlation ID.
+step-local environment. The final Check Run uses `head_sha` from the source run
+and stores that run's ID as its external correlation ID.
 
 The Check Run is `success` after a successful submission. It is `neutral` only
 when download and validation succeed and submission is skipped solely because

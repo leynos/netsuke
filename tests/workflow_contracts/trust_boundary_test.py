@@ -12,6 +12,7 @@ import typing as typ
 from trust_boundary_invariants import (
     CREDENTIAL_ENVIRONMENT_KEY,
     REQUIRED_SECRET_JOB_PERMISSIONS,
+    SECRET_EXPRESSION,
     TOKEN_PRESENCE_GUARD,
     TRUSTED_CHECKOUT_REF,
     contains_text,
@@ -23,6 +24,7 @@ from workflow_loading import (
     REPO_ROOT,
     job_steps,
     load_workflow,
+    named_step,
     require_mapping,
     workflow_job,
 )
@@ -34,6 +36,7 @@ UNTRUSTED_CI_PATH = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 ARTEFACT_NAME = "pr-coverage-lcov"
 ARTEFACT_PATH = "lcov.info"
 SUBMISSION_STEP = "Check coverage against CodeScene gates"
+REPORT_STEP = "Report CodeScene coverage gate"
 EXPECTED_SUBMISSION_CONDITION = (
     "github.event.workflow_run.conclusion == 'success' && "
     "github.event.workflow_run.event == 'pull_request' && "
@@ -41,6 +44,7 @@ EXPECTED_SUBMISSION_CONDITION = (
 )
 EXPECTED_PR_ARTEFACT_STEP = {
     "name": "Upload PR coverage artefact",
+    "if": "github.event_name == 'pull_request'",
     "uses": "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
     "with": {
         "name": ARTEFACT_NAME,
@@ -157,6 +161,28 @@ def test_poisoned_untrusted_environment_cannot_cross_to_submission_runner() -> N
     assert "workflow_run" in trusted_text, "submission must start in a fresh workflow"
 
 
+def test_submission_report_uses_the_checked_in_outcome_seam() -> None:
+    """Require the Check Run to use the local, testable outcome decision."""
+    workflow = load_workflow(COVERAGE_PR_WORKFLOW_PATH)
+    report = named_step(job_steps(workflow, "submit-coverage"), REPORT_STEP)
+    script = str(require_mapping(report.get("with"), "report inputs")["script"])
+
+    outcome_module = REPO_ROOT / ".github" / "scripts" / "codescene-coverage-outcome.js"
+    assert outcome_module.is_file(), "the Check Run outcome seam must be checked in"
+    assert "coverageConclusion" in outcome_module.read_text(encoding="utf-8"), (
+        "the checked-in outcome seam must export the conclusion function"
+    )
+    for required_fragment in (
+        "coverageConclusion(",
+        "head_sha: context.payload.workflow_run.head_sha",
+        "external_id: workflowRunId",
+    ):
+        assert required_fragment in script, (
+            "the final Check Run must retain "
+            f"{required_fragment!r} in its trusted reporting path"
+        )
+
+
 def test_isolated_secret_job_detects_non_env_secret_references() -> None:
     """Reject secret references placed outside a step's environment mapping."""
     isolated: dict[str, object] = {"permissions": REQUIRED_SECRET_JOB_PERMISSIONS}
@@ -183,6 +209,57 @@ def test_isolated_secret_job_detects_non_env_secret_references() -> None:
         },
     ]
     for mutation in mutations:
-        assert not is_isolated_secret_job(isolated, [mutation]), (
+        assert not is_isolated_secret_job(isolated, [guarded_secret_step, mutation]), (
             f"secret reference in {sorted(mutation)} must break isolation"
         )
+
+
+def _guarded_secret_step() -> dict[str, object]:
+    """Return one minimal step that carries the guarded exact credential."""
+    return {
+        "name": "Submit",
+        "if": TOKEN_PRESENCE_GUARD,
+        "env": {CREDENTIAL_ENVIRONMENT_KEY: SECRET_EXPRESSION},
+    }
+
+
+def test_isolated_secret_job_rejects_missing_credential_carrier() -> None:
+    """Reject a secret job that has no credential-carrying step."""
+    job: dict[str, object] = {"permissions": REQUIRED_SECRET_JOB_PERMISSIONS}
+
+    assert not is_isolated_secret_job(job, [{"name": "Submit"}]), (
+        "a secret job without a credential carrier must be rejected"
+    )
+
+
+def test_isolated_secret_job_rejects_multiple_credential_carriers() -> None:
+    """Reject credential placement in more than one step environment."""
+    job: dict[str, object] = {"permissions": REQUIRED_SECRET_JOB_PERMISSIONS}
+    first = _guarded_secret_step()
+    second = _guarded_secret_step() | {"name": "Duplicate submit"}
+
+    assert not is_isolated_secret_job(job, [first, second]), (
+        "multiple credential carriers must be rejected"
+    )
+
+
+def test_isolated_secret_job_rejects_unguarded_credential_carrier() -> None:
+    """Reject a credential carrier that lacks the token-presence guard."""
+    job: dict[str, object] = {"permissions": REQUIRED_SECRET_JOB_PERMISSIONS}
+    unguarded = _guarded_secret_step() | {"if": "always()"}
+
+    assert not is_isolated_secret_job(job, [unguarded]), (
+        "a carrier without the token-presence guard must be rejected"
+    )
+
+
+def test_isolated_secret_job_rejects_different_credential_expression() -> None:
+    """Reject a credential carrier whose value differs from the secret expression."""
+    job: dict[str, object] = {"permissions": REQUIRED_SECRET_JOB_PERMISSIONS}
+    mismatched = _guarded_secret_step() | {
+        "env": {CREDENTIAL_ENVIRONMENT_KEY: "${{ secrets.OTHER_TOKEN }}"}
+    }
+
+    assert not is_isolated_secret_job(job, [mismatched]), (
+        "a carrier with another secret expression must be rejected"
+    )
