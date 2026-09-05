@@ -26,10 +26,11 @@ VALID_LCOV = "TN:\nSF:src/lib.rs\nDA:1,1\nLF:1\nLH:1\nend_of_record\n"
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class ArtefactCase:
-    """Define one artefact shape and its expected validator exit code."""
+    """Define one artefact shape and its expected validation issue."""
 
     name: str
     expected_code: int
+    expected_issue: str | None
 
 
 def _load_script() -> types.ModuleType:
@@ -126,6 +127,42 @@ def _write_case(directory: pathlib.Path, case: ArtefactCase) -> None:
     writer(directory, case)
 
 
+def _expected_detail(
+    script: types.ModuleType, directory: pathlib.Path, case: ArtefactCase
+) -> object | None:
+    """Return the exact controlled diagnostic detail for one fixture."""
+    match case.name:
+        case "missing-member":
+            return []
+        case "non-directory":
+            return directory
+        case "oversized":
+            return (script.MAXIMUM_COVERAGE_BYTES + 1, script.MAXIMUM_COVERAGE_BYTES)
+        case "malformed":
+            return 1
+        case _:
+            return None
+
+
+def _validate_case(
+    script: types.ModuleType, directory: pathlib.Path, case: ArtefactCase
+) -> object | None:
+    """Validate one fixture and return its captured error when rejected."""
+    if case.expected_issue is None:
+        script.validate(directory)
+        return None
+    with pytest.raises(script.ValidationError) as captured:
+        script.validate(directory)
+    error = captured.value
+    assert error.issue is getattr(script.ValidationIssue, case.expected_issue), (
+        f"{case.name} must raise {case.expected_issue}, got {error.issue!r}"
+    )
+    assert error.detail == _expected_detail(script, directory, case), (
+        f"{case.name} must preserve its diagnostic detail"
+    )
+    return error
+
+
 @pytest.mark.parametrize(
     ("text", "expected_issue", "expected_detail"),
     [
@@ -192,49 +229,146 @@ def test_validate_lcov_text_preserves_diagnostic_order(
 @pytest.mark.parametrize(
     "case",
     [
-        pytest.param(ArtefactCase("valid", 0), id="valid"),
-        pytest.param(ArtefactCase("missing-member", 1), id="missing-member"),
-        pytest.param(ArtefactCase("extra-member", 1), id="extra-member"),
-        pytest.param(ArtefactCase("symlink-member", 1), id="symlink-member"),
+        pytest.param(ArtefactCase("valid", 0, None), id="valid"),
         pytest.param(
-            ArtefactCase("symlink-to-valid-external-file", 1),
+            ArtefactCase("missing-member", 1, "UNEXPECTED_MEMBERS"),
+            id="missing-member",
+        ),
+        pytest.param(
+            ArtefactCase("extra-member", 1, "UNEXPECTED_MEMBERS"),
+            id="extra-member",
+        ),
+        pytest.param(
+            ArtefactCase("symlink-member", 1, "SYMLINK_MEMBER"),
+            id="symlink-member",
+        ),
+        pytest.param(
+            ArtefactCase("symlink-to-valid-external-file", 1, "SYMLINK_MEMBER"),
             id="symlink-to-valid-external-file",
         ),
-        pytest.param(ArtefactCase("directory-member", 1), id="directory-member"),
-        pytest.param(ArtefactCase("symlinked-directory", 1), id="symlinked-directory"),
-        pytest.param(ArtefactCase("non-directory", 1), id="non-directory"),
-        pytest.param(ArtefactCase("oversized", 1), id="oversized"),
-        pytest.param(ArtefactCase("non-utf8", 1), id="non-utf8"),
-        pytest.param(ArtefactCase("malformed", 1), id="malformed"),
+        pytest.param(
+            ArtefactCase("directory-member", 1, "NON_REGULAR_MEMBER"),
+            id="directory-member",
+        ),
+        pytest.param(
+            ArtefactCase("symlinked-directory", 1, "SYMLINK_DIRECTORY"),
+            id="symlinked-directory",
+        ),
+        pytest.param(
+            ArtefactCase("non-directory", 1, "NON_DIRECTORY"),
+            id="non-directory",
+        ),
+        pytest.param(ArtefactCase("oversized", 1, "OVERSIZED_REPORT"), id="oversized"),
+        pytest.param(ArtefactCase("non-utf8", 1, "NON_UTF8_REPORT"), id="non-utf8"),
+        pytest.param(ArtefactCase("malformed", 1, "INVALID_RECORD"), id="malformed"),
     ],
 )
-def test_validate_exit_codes_in_process(
-    tmp_path: pathlib.Path, case: ArtefactCase
+def test_validate_filesystem_boundaries_in_process(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str], case: ArtefactCase
 ) -> None:
-    """Return the documented status for every supported artefact shape."""
+    """Preserve issue, detail, status, and streams for every artefact shape."""
     _write_case(tmp_path, case)
     script = _load_script()
+    error = _validate_case(script, tmp_path, case)
 
     assert script.main(["--artifact-dir", str(tmp_path)]) == case.expected_code, (
-        f"{case.name} must return {case.expected_code}"
+        f"{case.name} must preserve the documented in-process exit code"
     )
+    captured = capsys.readouterr()
+    if error is None:
+        assert captured.out == "ok: validated hostile LCOV artefact\n", (
+            "a valid artefact must retain its success message"
+        )
+        assert not captured.err, "a valid artefact must not write stderr"
+    else:
+        assert not captured.out, "a rejected artefact must not write stdout"
+        assert captured.err == f"error: {error}\n", (
+            "a rejected artefact must retain its formatted diagnostic"
+        )
 
 
 @pytest.mark.parametrize(
     "case",
     [
-        pytest.param(ArtefactCase("valid", 0), id="valid"),
-        pytest.param(ArtefactCase("malformed", 1), id="malformed"),
-        pytest.param(ArtefactCase("symlink-member", 1), id="symlink-member"),
+        pytest.param(ArtefactCase("valid", 0, None), id="valid"),
+        pytest.param(
+            ArtefactCase("missing-member", 1, "UNEXPECTED_MEMBERS"),
+            id="missing-member",
+        ),
+        pytest.param(
+            ArtefactCase("extra-member", 1, "UNEXPECTED_MEMBERS"),
+            id="extra-member",
+        ),
+        pytest.param(
+            ArtefactCase("symlink-member", 1, "SYMLINK_MEMBER"),
+            id="symlink-member",
+        ),
+        pytest.param(
+            ArtefactCase("symlink-to-valid-external-file", 1, "SYMLINK_MEMBER"),
+            id="symlink-to-valid-external-file",
+        ),
+        pytest.param(
+            ArtefactCase("directory-member", 1, "NON_REGULAR_MEMBER"),
+            id="directory-member",
+        ),
+        pytest.param(
+            ArtefactCase("symlinked-directory", 1, "SYMLINK_DIRECTORY"),
+            id="symlinked-directory",
+        ),
+        pytest.param(
+            ArtefactCase("non-directory", 1, "NON_DIRECTORY"),
+            id="non-directory",
+        ),
+        pytest.param(ArtefactCase("oversized", 1, "OVERSIZED_REPORT"), id="oversized"),
+        pytest.param(ArtefactCase("non-utf8", 1, "NON_UTF8_REPORT"), id="non-utf8"),
+        pytest.param(ArtefactCase("malformed", 1, "INVALID_RECORD"), id="malformed"),
     ],
 )
-def test_validator_cli_never_executes_artefact_content(
+def test_validator_cli_preserves_filesystem_boundaries(
     tmp_path: pathlib.Path, case: ArtefactCase
 ) -> None:
-    """Preserve the same boundary when the validator runs as a child process."""
+    """Preserve every filesystem boundary through the real command line."""
     _write_case(tmp_path, case)
-    marker = tmp_path / "executed"
-    environment = os.environ | {"BASH_ENV": str(marker)}
+    script = _load_script()
+    error = _validate_case(script, tmp_path, case)
+    result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - shell is False.
+        [
+            sys.executable,
+            str(SCRIPT_DIRECTORY / "validate-coverage-artifact.py"),
+            "--artifact-dir",
+            str(tmp_path),
+        ],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+    assert result.returncode == case.expected_code, result.stderr
+    if error is None:
+        assert result.stdout == "ok: validated hostile LCOV artefact\n", (
+            "the CLI must retain its success message"
+        )
+        assert not result.stderr, "the successful CLI must not write stderr"
+    else:
+        assert not result.stdout, "the rejected CLI must not write stdout"
+        assert result.stderr == f"error: {error}\n", (
+            "the rejected CLI must retain its formatted diagnostic"
+        )
+
+
+def test_validator_cli_never_executes_artefact_content(tmp_path: pathlib.Path) -> None:
+    """Reject hostile shell and report text without executing either payload."""
+    case = ArtefactCase("malformed", 1, "INVALID_RECORD")
+    _write_case(tmp_path, case)
+    shell_marker = tmp_path / "shell-executed"
+    artefact_marker = tmp_path / "artefact-executed"
+    hostile_shell = tmp_path.parent / "hostile-bash-env"
+    hostile_shell.write_text(f"touch {shell_marker}\n", encoding="utf-8")
+    (tmp_path / "lcov.info").write_text(
+        f"$(touch {artefact_marker})\n", encoding="utf-8"
+    )
+    environment = os.environ | {"BASH_ENV": str(hostile_shell)}
+
     result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - shell is False.
         [
             sys.executable,
@@ -248,5 +382,10 @@ def test_validator_cli_never_executes_artefact_content(
         text=True,
     )
 
-    assert result.returncode == case.expected_code, result.stderr
-    assert not marker.exists(), "the validator must not source hostile shell state"
+    assert result.returncode == 1, "hostile content must remain a validation failure"
+    assert not result.stdout, "a rejected hostile report must not write stdout"
+    assert result.stderr.startswith("error: invalid LCOV record at line 1\n"), (
+        "hostile content must be reported as an invalid record"
+    )
+    assert not shell_marker.exists(), "the validator must not source BASH_ENV"
+    assert not artefact_marker.exists(), "the validator must not execute artefact text"

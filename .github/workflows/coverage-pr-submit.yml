@@ -1,3 +1,4 @@
+---
 name: Coverage (PR submission)
 
 on:
@@ -43,7 +44,6 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ github.token }}
           path: coverage-artifact
-          skip-decompress: true
       - name: Validate hostile coverage artefact
         id: validate_coverage
         run: make validate-coverage-artifact COVERAGE_ARTIFACT_DIR=coverage-artifact
@@ -61,39 +61,74 @@ jobs:
           access-token: ${{ env.CS_ACCESS_TOKEN }}
           installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
       - name: Report CodeScene coverage gate
+        id: report_coverage
         if: always()
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
         # v8.0.0
         env:
           SUBMISSION_OUTCOME: ${{ steps.submit_coverage.outcome }}
           ARTIFACT_DOWNLOAD_OUTCOME: ${{ steps.download_coverage.outcome }}
-          ARTEFACT_VALIDATION_OUTCOME: ${{ steps.validate_coverage.outcome }}
+          ARTIFACT_VALIDATION_OUTCOME: ${{ steps.validate_coverage.outcome }}
+          ORIGINATING_WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
+          ORIGINATING_COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
+          ARTIFACT_NAME: pr-coverage-lcov
         with:
           script: |
-            const outcome = process.env.SUBMISSION_OUTCOME;
-            const prerequisitesSucceeded =
-              process.env.ARTIFACT_DOWNLOAD_OUTCOME === 'success' &&
-              process.env.ARTEFACT_VALIDATION_OUTCOME === 'success';
-            // A skipped submission is neutral only when both prerequisites
-            // succeeded and the step skipped solely on the absent token; any
-            // failed or skipped prerequisite means the artefact gate failed
-            // open, so branch protection must see a failing check.
-            const conclusion = outcome === 'success'
-              ? 'success'
-              : outcome === 'skipped' && prerequisitesSucceeded
-                ? 'neutral'
-                : 'failure';
+            const { coverageConclusion } = require(
+              `${process.env.GITHUB_WORKSPACE}/.github/scripts/codescene-coverage-outcome.js`,
+            );
+            const workflowRunId = process.env.ORIGINATING_WORKFLOW_RUN_ID;
+            const commitSha = process.env.ORIGINATING_COMMIT_SHA;
+            const artifactName = process.env.ARTIFACT_NAME;
+            const downloadOutcome = process.env.ARTIFACT_DOWNLOAD_OUTCOME;
+            const validationOutcome = process.env.ARTIFACT_VALIDATION_OUTCOME;
+            const submissionOutcome = process.env.SUBMISSION_OUTCOME;
+            const conclusion = coverageConclusion(
+              downloadOutcome,
+              validationOutcome,
+              submissionOutcome,
+            );
+            const summary = [
+              `Originating workflow run ID: ${workflowRunId}`,
+              `Originating commit SHA: ${commitSha}`,
+              `Artifact name: ${artifactName}`,
+              `Download outcome: ${downloadOutcome}`,
+              `Validation outcome: ${validationOutcome}`,
+              `Submission outcome: ${submissionOutcome}`,
+              `Conclusion: ${conclusion}`,
+            ].join('\n');
+            core.setOutput('conclusion', conclusion);
             await github.rest.checks.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
               name: 'CodeScene coverage',
               head_sha: context.payload.workflow_run.head_sha,
+              external_id: workflowRunId,
               status: 'completed',
               conclusion,
               output: {
                 title: 'CodeScene coverage',
-                summary: `Coverage submission ${conclusion}.`,
+                summary,
               },
             });
-
----
+      - name: Summarize CodeScene coverage gate
+        if: always()
+        env:
+          ORIGINATING_WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
+          ORIGINATING_COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
+          ARTIFACT_NAME: pr-coverage-lcov
+          ARTIFACT_DOWNLOAD_OUTCOME: ${{ steps.download_coverage.outcome }}
+          ARTIFACT_VALIDATION_OUTCOME: ${{ steps.validate_coverage.outcome }}
+          SUBMISSION_OUTCOME: ${{ steps.submit_coverage.outcome }}
+          CONCLUSION: ${{ steps.report_coverage.outputs.conclusion }}
+        run: |
+          {
+            printf '### CodeScene coverage\n\n'
+            printf '%s\n' "- Originating workflow run ID: $ORIGINATING_WORKFLOW_RUN_ID"
+            printf '%s\n' "- Originating commit SHA: $ORIGINATING_COMMIT_SHA"
+            printf '%s\n' "- Artifact name: $ARTIFACT_NAME"
+            printf '%s\n' "- Download outcome: $ARTIFACT_DOWNLOAD_OUTCOME"
+            printf '%s\n' "- Validation outcome: $ARTIFACT_VALIDATION_OUTCOME"
+            printf '%s\n' "- Submission outcome: $SUBMISSION_OUTCOME"
+            printf '%s\n' "- Conclusion: $CONCLUSION"
+          } >> "$GITHUB_STEP_SUMMARY"

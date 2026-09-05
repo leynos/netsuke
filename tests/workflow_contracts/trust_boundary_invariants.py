@@ -101,23 +101,35 @@ def is_isolated_secret_job(
     bool
         Whether the job satisfies every trust-boundary invariant.
     """
-    if job.get("env") or job.get("permissions") != REQUIRED_SECRET_JOB_PERMISSIONS:
+    if job.get("env"):
         return False
-    secret_steps = [
+    if job.get("permissions") != REQUIRED_SECRET_JOB_PERMISSIONS:
+        return False
+    if _isolated_secret_step(steps) is None:
+        return False
+    if any(_references_secret_in_executable(step) for step in steps):
+        return False
+    has_untrusted_checkout = any(_checks_out_untrusted_ref(step) for step in steps)
+    return not has_untrusted_checkout
+
+
+def _isolated_secret_step(
+    steps: list[dict[str, object]],
+) -> dict[str, object] | None:
+    """Return the sole guarded step that carries the exact credential value."""
+    credential_steps = [
         step
         for step in steps
         if contains_text(step.get("env", {}), CREDENTIAL_ENVIRONMENT_KEY)
     ]
-    if len(secret_steps) != 1:
-        return False
-    secret_step = secret_steps[0]
-    if secret_step.get("if") != TOKEN_PRESENCE_GUARD:
-        return False
-    if not _carries_step_local_secret_expression(secret_step):
-        return False
-    if any(_references_secret_in_executable(step) for step in steps):
-        return False
-    return not any(_checks_out_untrusted_ref(step) for step in steps)
+    if len(credential_steps) != 1:
+        return None
+    credential_step = credential_steps[0]
+    if credential_step.get("if") != TOKEN_PRESENCE_GUARD:
+        return None
+    if not _carries_step_local_secret_expression(credential_step):
+        return None
+    return credential_step
 
 
 def _carries_step_local_secret_expression(step: dict[str, object]) -> bool:
