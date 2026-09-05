@@ -110,12 +110,12 @@ jobs:
           command -v awk
           awk --version
       - name: Install sccache
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        uses: taiki-e/install-action@742a3317eac7bd62f91cd888b4eead5e784ba833  # v2.87.1
         with:
           tool: sccache@0.16.0
           fallback: none
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@e041cb75c35c3524201a32d5e57c87408fbd5874
+        uses: leynos/shared-actions/.github/actions/setup-rust@77ea10341249024e22ec5d9069e3caa7596e0d4f
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           # Preserve warnings-as-errors through toolchain setup.
@@ -125,7 +125,7 @@ jobs:
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        uses: taiki-e/install-action@742a3317eac7bd62f91cd888b4eead5e784ba833  # v2.87.1
         with:
           tool: nextest@${{ env.NEXTEST_VERSION }}
       - name: Reset sccache statistics
@@ -139,13 +139,13 @@ jobs:
         run: ninja --version
       - name: Install mdtablefix
         uses: >-
-          leynos/shared-actions/.github/actions/install-mdtablefix@c5a54701c8603a0fa756a6b34c49bc2af75a6c11
+          leynos/shared-actions/.github/actions/install-mdtablefix@77ea10341249024e22ec5d9069e3caa7596e0d4f
         # The gate cache owns `~/.local/bin`, so a warm run finds it present.
         with:
           version: ${{ env.MDTABLEFIX_VERSION }}
       - name: Setup uv
         # Before Format: the uv-driven Ruff, Pylint, and df12 gates need it.
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
         with:
           python-version: ${{ env.PYTHON_BASELINE }}
           # The gate cache already owns the uv download and tool stores, and
@@ -197,7 +197,7 @@ jobs:
         shell: bash
       - name: Install Nixie
         uses: >-
-          leynos/shared-actions/.github/actions/install-nixie@e041cb75c35c3524201a32d5e57c87408fbd5874
+          leynos/shared-actions/.github/actions/install-nixie@77ea10341249024e22ec5d9069e3caa7596e0d4f
         with:
           python-version: '3.14'
       - name: Markdown formatter checker tests
@@ -206,7 +206,7 @@ jobs:
         run: make check-fmt
       - name: Install Whitaker
         uses: >-
-          leynos/shared-actions/.github/actions/install-whitaker@e041cb75c35c3524201a32d5e57c87408fbd5874
+          leynos/shared-actions/.github/actions/install-whitaker@77ea10341249024e22ec5d9069e3caa7596e0d4f
         with:
           installer-version: '0.2.7'
           # The gate cache owns `~/.cargo/bin` and `~/.local/share`, so the
@@ -262,7 +262,7 @@ jobs:
         if: env.CS_ACCESS_TOKEN != '' && github.event_name == 'pull_request'
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@e041cb75c35c3524201a32d5e57c87408fbd5874
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@77ea10341249024e22ec5d9069e3caa7596e0d4f
         with:
           path: lcov.info
           format: lcov
@@ -337,7 +337,7 @@ jobs:
           mode: restore
           runner-image: ${{ env.NETSUKE_RUNNER_IMAGE }}
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@e041cb75c35c3524201a32d5e57c87408fbd5874
+        uses: leynos/shared-actions/.github/actions/setup-rust@77ea10341249024e22ec5d9069e3caa7596e0d4f
         with:
           toolchain: stable
           cache-provider: external
