@@ -43,6 +43,31 @@ def _is_option_value(tokens: list[str], index: int) -> bool:
     return word != "install" and not word.startswith(("-", "+"))
 
 
+def _skip_prefix(tokens: list[str]) -> int:
+    """Return the index of the subcommand, skipping selectors and options.
+
+    Parameters
+    ----------
+    tokens
+        The command's tokens, excluding the leading ``cargo``.
+
+    Returns
+    -------
+    int
+        Index of the first ordinary word, or ``len(tokens)`` when the command
+        is nothing but a prefix.
+    """
+    index = 0
+    while index < len(tokens) and tokens[index].startswith(("+", "-")):
+        word = tokens[index]
+        index += 1
+        if not word.startswith("-") or "=" in word:
+            continue
+        if _is_option_value(tokens, index):
+            index += 1
+    return index
+
+
 def _install_arguments(command: str) -> list[str] | None:
     """Return the arguments after `install`, or ``None`` if this is not one.
 
@@ -67,33 +92,19 @@ def _install_arguments(command: str) -> list[str] | None:
     a way nobody would notice, which is how ``cargo  install`` got past its
     predecessor.
 
-    Ambiguity resolves toward detection. Whether ``--flag install`` means a
+    An option spelled ``--name=value`` carries its own value; one spelled
+    ``--name value`` consumes the word after it. Ambiguity resolves toward
+    detection. Whether ``--flag install`` means a
     flag followed by the subcommand or an option whose value is ``install``
     cannot be settled without cargo's own option table, so the subcommand
     reading wins: this guards a prohibition, where a false positive is
     arguable and a false negative is a hole.
     """
     tokens = command.split()
-    index = 0
-    while index < len(tokens):
-        word = tokens[index]
-        if word.startswith("+"):
-            index += 1
-            continue
-        if word.startswith("-"):
-            index += 1
-            # An option spelled `--name=value` carries its own value. One
-            # spelled `--name value` consumes the word after it, unless that
-            # word is the subcommand: a flag takes no value, and treating
-            # `install` as one would hide the very command being looked for.
-            # Erring toward detection is deliberate; this guards a
-            # prohibition, so a false positive is arguable and a false
-            # negative is a hole.
-            if "=" not in word and _is_option_value(tokens, index):
-                index += 1
-            continue
-        return tokens[index + 1 :] if word == "install" else None
-    return None
+    index = _skip_prefix(tokens)
+    if index >= len(tokens) or tokens[index] != "install":
+        return None
+    return tokens[index + 1 :]
 
 
 def joined_commands(workflow_text: str) -> str:
