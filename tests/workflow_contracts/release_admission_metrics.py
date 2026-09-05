@@ -41,6 +41,20 @@ METRIC_LABELS: dict[str, MetricLabels] = {
     ),
 }
 
+TRACE_EVENTS = frozenset({
+    "operation_complete",
+    "gate_complete",
+    "workflow_output_delivery",
+    "trace_delivery",
+})
+TRACE_FIELDS = (
+    "event",
+    "operation",
+    "outcome",
+    "error_category",
+    "duration_seconds",
+)
+
 
 def parse_metrics(lines: list[str]) -> list[dict[str, object]]:
     """Parse non-empty JSON Lines metric records.
@@ -197,9 +211,90 @@ def validate_metrics(records: list[dict[str, object]]) -> None:
         _validate_metric_value(record)
 
 
+def parse_traces(lines: list[str]) -> list[dict[str, object]]:
+    """Parse finite JSON Lines release-admission trace records.
+
+    Parameters
+    ----------
+    lines
+        JSON Lines records emitted by the bounded trace sink.
+
+    Returns
+    -------
+    list[dict[str, object]]
+        Decoded trace mappings in input order.
+
+    """
+    return _parse_json_lines(lines, "trace")
+
+
+def validate_traces(records: list[dict[str, object]]) -> None:
+    """Validate the fixed field and value contract for trace records.
+
+    Parameters
+    ----------
+    records
+        Decoded trace records from :func:`parse_traces`.
+
+    Raises
+    ------
+    AssertionError
+        If fields, vocabulary, or duration leave the fixed trace contract.
+
+    Notes
+    -----
+    The exact schema prevents identifiers or raw diagnostic data from entering
+    the trace export.
+    """
+    for record in records:
+        if tuple(record) != TRACE_FIELDS:
+            message = f"trace fields must be exactly {TRACE_FIELDS!r}"
+            raise AssertionError(message)
+        _validate_trace_value(record, "event", TRACE_EVENTS)
+        _validate_trace_value(record, "operation", OPERATIONS)
+        _validate_trace_value(record, "outcome", OUTCOMES)
+        _validate_trace_value(record, "error_category", ERROR_CATEGORIES)
+        if not is_non_negative_metric_value(record["duration_seconds"]):
+            message = "trace duration_seconds must be a finite non-negative number"
+            raise AssertionError(message)
+
+
 def _validate_metric_value(record: dict[str, object]) -> None:
     """Reject a metric observation that is not a finite non-negative number."""
     value = record.get("value")
     if not is_non_negative_metric_value(value):
         message = "metric values must be non-negative JSON numbers"
+        raise AssertionError(message)
+
+
+def _parse_json_lines(lines: list[str], record_kind: str) -> list[dict[str, object]]:
+    """Decode finite JSON Lines mappings for one bounded export kind."""
+    records: list[dict[str, object]] = []
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            value = json.loads(line, parse_constant=_reject_non_finite_json_number)
+        except (json.JSONDecodeError, ValueError) as error:
+            message = (
+                f"release-admission {record_kind} records must contain finite JSON"
+            )
+            raise ValueError(message) from error
+        if not isinstance(value, dict):
+            message = f"each {record_kind} record must be a JSON object"
+            raise TypeError(message)
+        records.append(value)
+    return records
+
+
+def _validate_trace_value(
+    record: dict[str, object], field: str, allowed_values: frozenset[str]
+) -> None:
+    """Reject one trace field outside its bounded string vocabulary."""
+    value = record[field]
+    if not isinstance(value, str):
+        message = f"trace field {field!r} must be a string"
+        raise TypeError(message)
+    if value not in allowed_values:
+        message = f"trace field {field!r} falls outside the fixed vocabulary"
         raise AssertionError(message)

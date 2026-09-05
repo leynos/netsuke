@@ -45,7 +45,7 @@ def test_identifiers_never_become_metric_labels(
         f"url-{url}",
     }
     with tempfile.TemporaryDirectory() as directory_name:
-        result, metrics, calls, _ = _run_gate(
+        result, metrics, traces, calls, _ = _run_gate(
             Path(directory_name),
             extra_environment={
                 "GITHUB_SHA": f"revision-{revision}",
@@ -57,6 +57,7 @@ def test_identifiers_never_become_metric_labels(
 
     assert result.returncode == 0, result.stderr
     METRICS_VALIDATOR.validate_metrics(metrics)
+    METRICS_VALIDATOR.validate_traces(traces)
     expected_diagnostics = {
         "path": f"path-{path}",
         "url": f"url-{url}",
@@ -70,4 +71,8 @@ def test_identifiers_never_become_metric_labels(
         assert isinstance(labels, dict), "every emitted metric must retain labels"
         assert identifiers.isdisjoint(labels.values()), (
             "generated identifiers must never become metric label values"
+        )
+    for trace in traces:
+        assert identifiers.isdisjoint(trace.values()), (
+            "generated identifiers must never become trace field values"
         )

@@ -73,6 +73,31 @@ or repository artefact-retention policy governs how long the JSONL artefact is
 available. This contract does not define or imply a Prometheus, OTLP, or statsd
 endpoint.
 
+The script keeps its fallible boundaries behind explicit Bash adapters:
+`NETSUKE_RELEASE_ADMISSION_GH_ADAPTER` for GitHub API requests,
+`NETSUKE_RELEASE_ADMISSION_GIT_ADAPTER` for Git fetches,
+`NETSUKE_RELEASE_ADMISSION_CLOCK_ADAPTER` for monotonic clock readings,
+`NETSUKE_RELEASE_ADMISSION_METRICS_SINK` for metric records,
+`NETSUKE_RELEASE_ADMISSION_OUTPUT_SINK` for `GITHUB_OUTPUT`, and
+`NETSUKE_RELEASE_ADMISSION_TRACE_SINK` for trace records. The defaults are `gh`,
+`git`, `python3`, and direct file or output appends; injected adapters retain
+the same bounded record contracts.
+
+Metrics are not tracing. The gate separately writes runner-local trace JSONL
+records with the ordered fields `event`, `operation`, `outcome`,
+`error_category`, and `duration_seconds`. `event` is limited to
+`operation_complete|gate_complete|workflow_output_delivery|trace_delivery`; the
+other categorical fields use the fixed vocabularies above. Trace records
+contain no revisions, run IDs, paths, URLs, workflow content, raw errors, or
+other identifiers. The workflow uploads them as the separate
+`release-admission-traces` artefact under the same retention condition as the
+metrics artefact. Trace delivery is fail-open: a sink failure preserves the
+admission metrics and gate outcome and emits a bounded `trace_delivery` failure
+with `error_category=unknown` when the sink permits a final record. The job
+summary reports the gate outcome independently of trace delivery, and
+observation versus enforcement controls publication gating rather than trace
+collection.
+
 Metric names and label names are published interfaces. Renaming a metric or a
 label is a breaking change and requires an updated ADR, workflow consumers, and
 contract tests. Adding a label or vocabulary value also requires an explicit

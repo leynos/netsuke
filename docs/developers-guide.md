@@ -1024,7 +1024,8 @@ JSONL file as a workflow artefact and writes one concise outcome line to
 under the `release-admission-metrics` artefact name. The summary and upload
 steps retain the result on failure; dry-run policy still controls whether an
 artefact is uploaded. The workflow provisions Python before running the gate's
-monotonic duration timing helpers.
+monotonic duration timing helpers, using Python 3.14 through the SHA-pinned
+`astral-sh/setup-uv` action.
 
 The admission mode is a closed configuration vocabulary. The
 `NETSUKE_RELEASE_ADMISSION_ENFORCE` value is either `false` (observation) or
@@ -1039,6 +1040,16 @@ unknown, or mismatched evidence exits non-zero after recording its bounded
 result. An environment value such as `fresh` is not evidence and must never
 substitute for a real evidence producer. Any other mode value is an invalid
 configuration and fails closed as an unknown gate result.
+
+The script keeps fallible boundaries behind explicit Bash adapters. Set
+`NETSUKE_RELEASE_ADMISSION_GH_ADAPTER` for GitHub API requests,
+`NETSUKE_RELEASE_ADMISSION_GIT_ADAPTER` for Git fetches,
+`NETSUKE_RELEASE_ADMISSION_CLOCK_ADAPTER` for monotonic clock readings,
+`NETSUKE_RELEASE_ADMISSION_METRICS_SINK` for metric records,
+`NETSUKE_RELEASE_ADMISSION_OUTPUT_SINK` for `GITHUB_OUTPUT`, or
+`NETSUKE_RELEASE_ADMISSION_TRACE_SINK` for trace records. The defaults are `gh`,
+`git`, `python3`, and direct file or output appends. Adapters must retain the
+fixed, bounded contracts; they must not add identifiers or raw data.
 
 The metric contract is deliberately closed. The only label names are `canary`,
 `operation`, `outcome`, and `error_category`, and the only values are:
@@ -1080,14 +1091,31 @@ Instruments emitted by the gate are:
   Operators use it to compare operation latency across runs without exposing
   request or repository identifiers.
 
+Metrics are not tracing. The gate separately emits runner-local trace JSONL
+records with the ordered fields `event`, `operation`, `outcome`,
+`error_category`, and `duration_seconds`. Events are limited to
+`operation_complete|gate_complete|workflow_output_delivery|trace_delivery`; the
+operation, outcome, and error-category values use the same fixed vocabularies
+as the metrics. Traces contain no revisions, run IDs, paths, URLs, workflow
+content, raw errors, or other identifiers. The workflow uploads the trace file
+under the separate `release-admission-traces` artefact name, using the same
+failure-retention and dry-run condition as the metrics artefact. Trace delivery
+is fail-open: a trace-sink failure preserves the admission metrics and gate
+outcome and reports a bounded `trace_delivery` failure with
+`error_category=unknown` when a final trace record can still be written. The
+job summary remains the gate outcome, independent of trace delivery; the
+observation/enforcement mode controls publication gating, not collection.
+
 To investigate a failed canary, read the job-summary outcome first, then
-download the release-admission JSONL artefact and inspect the operation counter
-records alongside their duration observations. A missing artefact is not
-evidence of a successful canary. GitHub Actions applies the repository or
-workflow's configured artefact-retention period. This export is intentionally
-not a Prometheus, OpenTelemetry Protocol (OTLP), or statsd endpoint; no scrape
-or push service is implied. Metric or label renames are breaking contract
-changes and require an ADR and updated workflow-contract tests. See
+download the `release-admission-metrics` and `release-admission-traces`
+artefacts. Inspect operation counter records alongside duration observations,
+then use the trace records to distinguish operation, gate, output, and trace
+delivery boundaries. A missing artefact is not evidence of a successful canary.
+GitHub Actions applies the repository or workflow's configured
+artefact-retention period. These exports are intentionally not a Prometheus,
+OpenTelemetry Protocol (OTLP), or statsd endpoint; no scrape or push service is
+implied. Metric or label renames are breaking contract changes and require an
+ADR and updated workflow-contract tests. See
 [ADR-018](adr-018-release-admission-observability.md) for the durable decision.
 
 ## GitHub Actions runner placement

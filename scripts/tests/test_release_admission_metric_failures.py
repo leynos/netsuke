@@ -3,10 +3,10 @@
 import typing as typ
 
 import pytest
+from release_admission_test_support import FailureCase
 from test_release_admission_metrics import (
     CANARY_BY_OPERATION,
     METRICS_VALIDATOR,
-    FailureCase,
     _run_gate,
     expected_gate_labels,
     expected_operation_labels,
@@ -175,7 +175,7 @@ def test_gate_emits_fixed_categories_for_failure_paths(
     Every failure must emit operation, gate, and workflow-output results before
     the admission script exits unsuccessfully.
     """
-    result, metrics, _, outputs = _run_gate(
+    result, metrics, traces, _, outputs = _run_gate(
         tmp_path,
         evidence_state=case.evidence_state,
         extra_environment={
@@ -188,6 +188,7 @@ def test_gate_emits_fixed_categories_for_failure_paths(
         "enforcement must fail closed while observation must retain diagnostics"
     )
     METRICS_VALIDATOR.validate_metrics(metrics)
+    METRICS_VALIDATOR.validate_traces(traces)
     record = operation_records(metrics, case.operation)[-1]
     assert record["labels"] == expected_operation_labels(
         CANARY_BY_OPERATION[case.operation],
@@ -231,10 +232,11 @@ def test_default_observation_retains_missing_evidence_metrics(tmp_path: Path) ->
     -----
     The default must mirror the current workflow's lack of an evidence producer.
     """
-    result, metrics, _, outputs = _run_gate(tmp_path)
+    result, metrics, traces, _, outputs = _run_gate(tmp_path)
 
     assert result.returncode == 0, result.stderr
     METRICS_VALIDATOR.validate_metrics(metrics)
+    METRICS_VALIDATOR.validate_traces(traces)
     record = operation_records(metrics, "check_scan_freshness")[-1]
     assert record["labels"] == expected_operation_labels(
         CANARY_BY_OPERATION["check_scan_freshness"],
@@ -265,12 +267,12 @@ def test_operation_durations_measure_controlled_delay(tmp_path: Path) -> None:
     -----
     A fixed workflow-run delay must lengthen only that operation's measurement.
     """
-    _, metrics, _, _ = _run_gate(tmp_path, evidence_state="fresh")
+    _, metrics, _, _, _ = _run_gate(tmp_path, evidence_state="fresh")
     assert all(
         operation_duration(metrics, operation) > 0 for operation in CANARY_BY_OPERATION
     ), "every executed operation must record a finite positive duration"
 
-    _, delayed_metrics, _, _ = _run_gate(
+    _, delayed_metrics, _, _, _ = _run_gate(
         tmp_path / "delayed",
         evidence_state="fresh",
         extra_environment={"NETSUKE_FAKE_GH_WORKFLOW_DELAY_SECONDS": "1"},
@@ -300,7 +302,7 @@ def test_invalid_timeout_fails_before_running_admission_operations(
     -----
     Early validation must still emit valid gate metrics and workflow outputs.
     """
-    result, metrics, calls, outputs = _run_gate(
+    result, metrics, traces, calls, outputs = _run_gate(
         tmp_path,
         evidence_state="fresh",
         extra_environment={
@@ -311,6 +313,7 @@ def test_invalid_timeout_fails_before_running_admission_operations(
     assert result.returncode != 0, "invalid timeout configuration must fail closed"
     assert calls == [], "invalid timeout configuration must prevent API and Git calls"
     METRICS_VALIDATOR.validate_metrics(metrics)
+    METRICS_VALIDATOR.validate_traces(traces)
     assert metrics == INVALID_CONFIGURATION_METRICS, (
         "invalid timeout configuration must emit only the fixed failure gate metric"
     )
@@ -341,7 +344,7 @@ def test_invalid_enforcement_fails_before_running_admission_operations(
     Configuration validation must publish the same bounded failure contract as
     invalid timeout validation before an admission operation runs.
     """
-    result, metrics, calls, outputs = _run_gate(
+    result, metrics, traces, calls, outputs = _run_gate(
         tmp_path,
         extra_environment={"NETSUKE_RELEASE_ADMISSION_ENFORCE": enforcement_value},
     )
@@ -351,6 +354,7 @@ def test_invalid_enforcement_fails_before_running_admission_operations(
         "invalid enforcement configuration must prevent API and Git calls"
     )
     METRICS_VALIDATOR.validate_metrics(metrics)
+    METRICS_VALIDATOR.validate_traces(traces)
     assert metrics == INVALID_CONFIGURATION_METRICS, (
         "invalid enforcement configuration must emit only the fixed failure gate metric"
     )

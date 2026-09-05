@@ -16,14 +16,25 @@ METRICS_FILE_ENV = {
         "${{ runner.temp }}/release-admission-metrics.jsonl"
     ),
 }
+TRACE_FILE_ENV = {
+    "NETSUKE_RELEASE_ADMISSION_TRACE_FILE": (
+        "${{ runner.temp }}/release-admission-traces.jsonl"
+    ),
+}
 ADMISSION_ENVIRONMENT = {
     "GH_TOKEN": "${{ secrets.GITHUB_TOKEN }}",
     "NETSUKE_RELEASE_ADMISSION_ENFORCE": "false",
     **METRICS_FILE_ENV,
+    **TRACE_FILE_ENV,
 }
 METRICS_ARTIFACT = {
     "name": "release-admission-metrics",
     "path": "${{ env.NETSUKE_RELEASE_ADMISSION_METRICS_FILE }}",
+    "if-no-files-found": "error",
+}
+TRACE_ARTIFACT = {
+    "name": "release-admission-traces",
+    "path": "${{ env.NETSUKE_RELEASE_ADMISSION_TRACE_FILE }}",
     "if-no-files-found": "error",
 }
 UPLOAD_CONDITION = (
@@ -45,11 +56,17 @@ def test_release_admission_metrics_retain_read_only_delivery() -> None:
     producer exists. Its summary always runs, and its artifact upload preserves
     failure diagnostics while respecting the reusable dry-run contract.
     """
-    admission, release, python_step, admission_step, summary_step, upload_step = (
-        _workflow_parts()
-    )
+    (
+        admission,
+        release,
+        python_step,
+        admission_step,
+        summary_step,
+        upload_step,
+        trace_upload,
+    ) = _workflow_parts()
     _assert_admission_job_contract(admission, python_step, admission_step)
-    _assert_metrics_delivery_contract(summary_step, upload_step)
+    _assert_metrics_delivery_contract(summary_step, upload_step, trace_upload)
     _assert_release_scaffold_boundary(release)
 
 
@@ -63,6 +80,11 @@ def _workflow_parts() -> tuple[dict[str, object], ...]:
         "the gate must write metrics before their artifact upload"
     )
     assert step_index_by_key(
+        steps, "name", "Upload release-admission metrics"
+    ) < step_index_by_key(steps, "name", "Upload release-admission traces"), (
+        "the trace delivery must follow trace production and metric delivery"
+    )
+    assert step_index_by_key(
         steps, "name", "Install Python for admission timings"
     ) < step_index_by_key(steps, "name", "Require release-admission evidence"), (
         "the admission job must install Python before collecting durations"
@@ -74,6 +96,7 @@ def _workflow_parts() -> tuple[dict[str, object], ...]:
         _step_named(steps, "Require release-admission evidence"),
         _step_named(steps, "Summarise release-admission metrics"),
         _step_named(steps, "Upload release-admission metrics"),
+        _step_named(steps, "Upload release-admission traces"),
     )
 
 
@@ -114,7 +137,9 @@ def _assert_admission_job_contract(
 
 
 def _assert_metrics_delivery_contract(
-    summary_step: dict[str, object], upload_step: dict[str, object]
+    summary_step: dict[str, object],
+    upload_step: dict[str, object],
+    trace_upload: dict[str, object],
 ) -> None:
     """Assert the summary and artefact preserve failure-path diagnostics."""
     assert summary_step.get("if") == "always()", (
@@ -135,6 +160,15 @@ def _assert_metrics_delivery_contract(
     )
     assert upload_step.get("if") == UPLOAD_CONDITION, (
         "the upload must retain failures while respecting the dry-run contract"
+    )
+    assert trace_upload.get("if") == UPLOAD_CONDITION, (
+        "the trace upload must retain the metrics outcome-retention policy"
+    )
+    assert trace_upload.get("with") == TRACE_ARTIFACT, (
+        "the trace artifact must retain the bounded trace file"
+    )
+    assert trace_upload.get("env") == TRACE_FILE_ENV, (
+        "the trace upload must resolve the same runner-local trace file"
     )
 
 

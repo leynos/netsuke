@@ -306,6 +306,8 @@ jobs:
           NETSUKE_RELEASE_ADMISSION_ENFORCE: 'false'
           NETSUKE_RELEASE_ADMISSION_METRICS_FILE: >-
             ${{ runner.temp }}/release-admission-metrics.jsonl
+          NETSUKE_RELEASE_ADMISSION_TRACE_FILE: >-
+            ${{ runner.temp }}/release-admission-traces.jsonl
         run: bash .github/scripts/require-release-admission-canaries.sh
       - name: Summarise release-admission metrics
         if: always()
@@ -329,6 +331,19 @@ jobs:
         with:
           name: release-admission-metrics
           path: ${{ env.NETSUKE_RELEASE_ADMISSION_METRICS_FILE }}
+          if-no-files-found: error
+      - name: Upload release-admission traces
+        if: >-
+          always() && needs.metadata.outputs.should_upload_workflow_artifacts == 'true'
+        uses: >-
+          actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        # v7.0.1
+        env:
+          NETSUKE_RELEASE_ADMISSION_TRACE_FILE: >-
+            ${{ runner.temp }}/release-admission-traces.jsonl
+        with:
+          name: release-admission-traces
+          path: ${{ env.NETSUKE_RELEASE_ADMISSION_TRACE_FILE }}
           if-no-files-found: error
 
   release:
