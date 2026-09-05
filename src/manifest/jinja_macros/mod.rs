@@ -288,15 +288,7 @@ pub(crate) fn render_template(
     context: &impl Serialize,
 ) -> Result<String, Error> {
     let budget = ManifestBudget::default();
-    render_template_at(
-        env,
-        &budget,
-        &TemplateRenderRequest {
-            template,
-            context,
-            stage: ManifestBudgetStage::Render,
-        },
-    )
+    render_template_with_budget(env, template, context, &budget)
 }
 
 /// Render a template with the caller's shared manifest resource budget.
