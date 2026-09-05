@@ -39,13 +39,13 @@ if typ.TYPE_CHECKING:
     from pathlib import Path
 
 #: The revision that guards the baseline save on a push to refs/heads/main.
-GENERATE_COVERAGE = (
+GENERATE_COVERAGE: typ.Final[str] = (
     "leynos/shared-actions/.github/actions/generate-coverage@"
     "77ea10341249024e22ec5d9069e3caa7596e0d4f"
 )
 
 #: Every job invoking the shared coverage action, and the workflow declaring it.
-COVERAGE_JOBS = (
+COVERAGE_JOBS: typ.Final[tuple[tuple[Path, str], ...]] = (
     (CI_WORKFLOW_PATH, "build-test"),
     (COVERAGE_MAIN_WORKFLOW_PATH, "coverage-upload"),
 )
