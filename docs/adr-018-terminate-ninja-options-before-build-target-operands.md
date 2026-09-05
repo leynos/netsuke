@@ -1,9 +1,8 @@
-# Architecture decision record (ADR): Terminate Ninja options before build targets
+# Architectural decision record (ADR) 018: Terminate Ninja options before build targets
 
 ## Status
 
-Accepted. Netsuke terminates Ninja option parsing before forwarding
-build-target operands.
+Accepted.
 
 ## Date
 

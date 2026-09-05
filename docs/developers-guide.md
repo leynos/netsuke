@@ -89,6 +89,14 @@ The public runner signatures preserve that path vocabulary:
 The process boundary is parser-independent; callers without CLI state construct
 `NinjaProcessOptions` directly.
 
+Build command shaping places a literal Ninja `--` after all Netsuke-owned
+options and before the selected targets whenever the target list is non-empty.
+The same boundary applies to explicit CLI targets and configured
+`default_targets`, because both use `BuildTargets`. Thus option-like values
+such as `-f` and `-C` remain target operands. An empty target list preserves
+the no-terminator shape, and Ninja tool invocations are unchanged because their
+operands are fixed by Netsuke.
+
 The `run_ninja` and `run_ninja_tool` helpers inherit the parent environment;
 their program and build-file parameters use `&Utf8Path`. Callers that need an
 isolated child use `run_ninja_with` or `run_ninja_tool_with` with one of the
