@@ -72,6 +72,28 @@ def test_both_formatter_jobs_use_the_shared_installer_action(
     )
 
 
+def _normalised(expression: str) -> str:
+    """Return an expression with its internal spacing collapsed.
+
+    Compared whole rather than by substring. A composite such as
+    ``${{ env.MDTABLEFIX_VERSION }}${{ vars.UNRELATED }}`` contains the
+    reference while resolving to something else entirely, so a containment
+    check would follow a hop the lane does not take.
+
+    Parameters
+    ----------
+    expression
+        The value as written in the workflow.
+
+    Returns
+    -------
+    str
+        The same expression with runs of whitespace collapsed to one space,
+        so spacing inside ``${{ ... }}`` cannot defeat an exact comparison.
+    """
+    return " ".join(expression.split())
+
+
 def _resolve_literal(version: str, workflow_path: pl.Path) -> str:
     """Return the literal version a lane pins, following any indirection.
 
@@ -99,9 +121,9 @@ def _resolve_literal(version: str, workflow_path: pl.Path) -> str:
     # through `MDTABLEFIX_VERSION` would let the step switch to an unrelated
     # variable while this contract kept reading the old, still-correct pin and
     # reporting success for a lane receiving something else.
-    assert "env.MDTABLEFIX_VERSION" in version, (
-        f"the installer step should take its version from MDTABLEFIX_VERSION, "
-        f"got {version!r}"
+    assert _normalised(version) == "${{ env.MDTABLEFIX_VERSION }}", (
+        f"the installer step should take its version from MDTABLEFIX_VERSION "
+        f"and nothing else, got {version!r}"
     )
     workflow = load_workflow(workflow_path)
     env = require_mapping(workflow.get("env"), f"{workflow_path.name} env")
@@ -109,9 +131,13 @@ def _resolve_literal(version: str, workflow_path: pl.Path) -> str:
     assert resolved, f"{workflow_path.name} must declare MDTABLEFIX_VERSION"
     if not resolved.startswith("${{"):
         return resolved
-    assert "mdtablefix-version" in resolved, (
+    assert _normalised(resolved) in {
+        "${{ inputs['mdtablefix-version'] }}",
+        '${{ inputs["mdtablefix-version"] }}',
+        "${{ inputs.mdtablefix-version }}",
+    }, (
         f"{workflow_path.name} should take MDTABLEFIX_VERSION from its own "
-        f"mdtablefix-version input, got {resolved!r}"
+        f"mdtablefix-version input and nothing else, got {resolved!r}"
     )
     # A reusable workflow's env takes the value from its caller's `with:`.
     jobs = require_mapping(

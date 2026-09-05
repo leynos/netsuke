@@ -12,15 +12,88 @@ Run via ``make test-workflow-contracts``.
 
 import re
 
-#: The `cargo install` invocation, and everything up to the end of its line.
-#: Continuations are joined before matching, so a command split across lines
-#: is one candidate rather than several fragments.
-#:
-#: `\s+` rather than a single space, because `cargo  install` and a tab both
-#: run the same command; and an optional `+toolchain` selector, because
-#: `cargo +nightly install` does too. A literal-substring search for
-#: "cargo install " misses all three.
-_CARGO_INSTALL = re.compile(r"cargo\s+(?:\+\S+\s+)?install\s+(?P<rest>.*)")
+#: Everything on a line from `cargo` onwards. Which of those lines is actually
+#: an install is decided by tokenizing, not by this pattern: cargo accepts a
+#: `+toolchain` selector and any number of global options before its
+#: subcommand, and an option may take a separate value, so no fixed pattern
+#: recognises the set.
+_CARGO_COMMAND = re.compile(r"cargo\s+(?P<rest>.*)")
+
+
+def _is_option_value(tokens: list[str], index: int) -> bool:
+    """Return whether the word at ``index`` is a preceding option's value.
+
+    Parameters
+    ----------
+    tokens
+        The command's tokens.
+    index
+        Position of the token following an option that carried no ``=``.
+
+    Returns
+    -------
+    bool
+        ``True`` when the token exists, is not another option, and is not the
+        ``install`` subcommand. A flag takes no value, and reading ``install``
+        as one would hide the command being looked for.
+    """
+    if index >= len(tokens):
+        return False
+    word = tokens[index]
+    return word != "install" and not word.startswith(("-", "+"))
+
+
+def _install_arguments(command: str) -> list[str] | None:
+    """Return the arguments after `install`, or ``None`` if this is not one.
+
+    Parameters
+    ----------
+    command
+        Everything following the word ``cargo`` on the joined line.
+
+    Returns
+    -------
+    list[str] or None
+        The remaining tokens when the subcommand is ``install``, otherwise
+        ``None``.
+
+    Notes
+    -----
+    Tokens before the subcommand are skipped rather than matched. A
+    ``+toolchain`` selector, a global flag, and a global option with a
+    separate value such as ``--config net.retry=1`` may all precede
+    ``install``, while an option carrying its value inline with ``=`` takes no
+    following token. A pattern that tried to spell that set would be wrong in
+    a way nobody would notice, which is how ``cargo  install`` got past its
+    predecessor.
+
+    Ambiguity resolves toward detection. Whether ``--flag install`` means a
+    flag followed by the subcommand or an option whose value is ``install``
+    cannot be settled without cargo's own option table, so the subcommand
+    reading wins: this guards a prohibition, where a false positive is
+    arguable and a false negative is a hole.
+    """
+    tokens = command.split()
+    index = 0
+    while index < len(tokens):
+        word = tokens[index]
+        if word.startswith("+"):
+            index += 1
+            continue
+        if word.startswith("-"):
+            index += 1
+            # An option spelled `--name=value` carries its own value. One
+            # spelled `--name value` consumes the word after it, unless that
+            # word is the subcommand: a flag takes no value, and treating
+            # `install` as one would hide the very command being looked for.
+            # Erring toward detection is deliberate; this guards a
+            # prohibition, so a false positive is arguable and a false
+            # negative is a hole.
+            if "=" not in word and _is_option_value(tokens, index):
+                index += 1
+            continue
+        return tokens[index + 1 :] if word == "install" else None
+    return None
 
 
 def joined_commands(workflow_text: str) -> str:
@@ -55,10 +128,12 @@ def source_build_commands(workflow_text: str) -> list[str]:
         subcommand. Empty when nothing compiles a tool, which is the state
         this repository holds itself to.
     """
-    return [
-        match["rest"]
-        for match in _CARGO_INSTALL.finditer(joined_commands(workflow_text))
-    ]
+    found = []
+    for match in _CARGO_COMMAND.finditer(joined_commands(workflow_text)):
+        arguments = _install_arguments(match["rest"])
+        if arguments is not None:
+            found.append(" ".join(arguments))
+    return found
 
 
 def _installed_crates(command: str) -> list[str]:
@@ -77,7 +152,7 @@ def _installed_crates(command: str) -> list[str]:
 
     Notes
     -----
-    Every non-option token is returned rather than only the first, because an
+    Every non-option word is returned rather than only the first, because an
     option's value is indistinguishable from a crate name without knowing
     which options take one. `cargo install --version 0.9.1 cargo-orthohelp`
     therefore yields both ``0.9.1`` and ``cargo-orthohelp``. That is
@@ -87,10 +162,10 @@ def _installed_crates(command: str) -> list[str]:
     """
     crates: list[str] = []
     for raw in command.split():
-        token = raw.strip("\"'")
-        if not token or token.startswith("-"):
+        word = raw.strip("\"'")
+        if not word or word.startswith("-"):
             continue
-        crates.append(token.split("@", 1)[0])
+        crates.append(word.split("@", 1)[0])
     return crates
 
 
