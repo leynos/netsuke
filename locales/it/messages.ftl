@@ -89,7 +89,6 @@ runner.manifest.current_directory_label = la directory corrente
 runner.manifest.default_not_declared = Il valore predefinito del manifest '{ $default }' non indica un'azione o un target dichiarato.
 runner.context.network_policy = Impossibile costruire il criterio di rete.
 runner.context.load_manifest = Impossibile caricare il manifest in { $path }.
-runner.context.serialise_manifest = Impossibile serializzare il manifest.
 runner.context.build_graph = Impossibile costruire il grafo a partire dal manifest.
 runner.context.generate_ninja = Impossibile generare il manifest Ninja.
 runner.context.render_graph = Impossibile generare l'artefatto del grafo.

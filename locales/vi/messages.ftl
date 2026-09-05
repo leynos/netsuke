@@ -88,7 +88,6 @@ runner.manifest.current_directory_label = thư mục hiện tại
 runner.manifest.default_not_declared = Giá trị mặc định của tệp kê khai '{ $default }' không nêu hành động hoặc mục tiêu đã khai báo.
 runner.context.network_policy = Không dựng được chính sách mạng.
 runner.context.load_manifest = Không nạp được tệp kê khai tại { $path }.
-runner.context.serialise_manifest = Không tuần tự hoá được tệp kê khai.
 runner.context.build_graph = Không dựng được đồ thị từ tệp kê khai.
 runner.context.generate_ninja = Không tạo được tệp kê khai Ninja.
 runner.context.render_graph = Không kết xuất được sản phẩm đồ thị.

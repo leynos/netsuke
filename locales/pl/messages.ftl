@@ -88,7 +88,6 @@ runner.manifest.current_directory_label = bieżący katalog
 runner.manifest.default_not_declared = Domyślna wartość manifestu '{ $default }' nie wskazuje zadeklarowanej akcji ani celu.
 runner.context.network_policy = Nie udało się zbudować zasad sieciowych.
 runner.context.load_manifest = Nie udało się wczytać manifestu z { $path }.
-runner.context.serialise_manifest = Nie udało się zserializować manifestu.
 runner.context.build_graph = Nie udało się zbudować grafu na podstawie manifestu.
 runner.context.generate_ninja = Nie udało się wygenerować manifestu Ninja.
 runner.context.render_graph = Nie udało się wyrenderować artefaktu grafu.

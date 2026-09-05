@@ -88,7 +88,6 @@ runner.manifest.current_directory_label = direktori saat ini
 runner.manifest.default_not_declared = Nilai bawaan manifes '{ $default }' tidak menamai tindakan atau target yang dinyatakan.
 runner.context.network_policy = Kebijakan jaringan tidak dapat dibangun.
 runner.context.load_manifest = Manifes di { $path } tidak dapat dimuat.
-runner.context.serialise_manifest = Manifes tidak dapat diserialkan.
 runner.context.build_graph = Graf tidak dapat dibangun dari manifes.
 runner.context.generate_ninja = Manifes Ninja tidak dapat dihasilkan.
 runner.context.render_graph = Artefak graf tidak dapat dirender.

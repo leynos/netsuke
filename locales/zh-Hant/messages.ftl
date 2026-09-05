@@ -87,7 +87,6 @@ runner.manifest.current_directory_label = 目前的目錄
 runner.manifest.default_not_declared = 資訊清單預設值「{ $default }」未指定已宣告的動作或目標。
 runner.context.network_policy = 無法建立網路原則。
 runner.context.load_manifest = 無法載入 { $path } 的資訊清單。
-runner.context.serialise_manifest = 無法序列化資訊清單。
 runner.context.build_graph = 無法依資訊清單建立圖。
 runner.context.generate_ninja = 無法產生 Ninja 資訊清單。
 runner.context.render_graph = 無法算繪圖產物。

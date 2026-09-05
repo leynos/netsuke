@@ -88,7 +88,6 @@ runner.manifest.current_directory_label = geçerli dizin
 runner.manifest.default_not_declared = '{ $default }' bildirim varsayılanı, bildirilmiş bir eylem veya hedefi adlandırmıyor.
 runner.context.network_policy = Ağ ilkesi oluşturulamadı.
 runner.context.load_manifest = { $path } konumundaki bildirim yüklenemedi.
-runner.context.serialise_manifest = Bildirim serileştirilemedi.
 runner.context.build_graph = Bildirimden çizge oluşturulamadı.
 runner.context.generate_ninja = Ninja bildirimi üretilemedi.
 runner.context.render_graph = Çizge ürünü işlenemedi.

@@ -88,7 +88,6 @@ runner.manifest.current_directory_label = das aktuelle Verzeichnis
 runner.manifest.default_not_declared = Der Manifest-Standardwert '{ $default }' bezeichnet keine deklarierte Aktion oder kein Ziel.
 runner.context.network_policy = Die Netzwerkrichtlinie konnte nicht erstellt werden.
 runner.context.load_manifest = Das Manifest unter { $path } konnte nicht geladen werden.
-runner.context.serialise_manifest = Das Manifest konnte nicht serialisiert werden.
 runner.context.build_graph = Aus dem Manifest konnte kein Graph erstellt werden.
 runner.context.generate_ninja = Das Ninja-Manifest konnte nicht erzeugt werden.
 runner.context.render_graph = Das Graph-Artefakt konnte nicht gerendert werden.
