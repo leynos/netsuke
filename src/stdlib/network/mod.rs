@@ -7,6 +7,7 @@
 
 mod cache;
 mod policy;
+mod redirect;
 /// Network policy that controls which schemes and hosts the fetch helper may reach.
 pub use self::policy::NetworkPolicy;
 /// Error returned when constructing an invalid network policy configuration.
@@ -23,12 +24,12 @@ use std::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
-    time::Duration,
 };
 
 #[cfg(test)]
 use self::cache::open_cache_dir;
 use self::cache::{CacheEntry, FetchCache, cache_key, discard_partial_cache, read_cached};
+use self::redirect::dispatch_request;
 use super::{NetworkConfig, StdlibConfig, value_from_bytes};
 use crate::localization::{self, keys};
 use crate::stdlib::io_helpers::io_action_error;
@@ -127,10 +128,10 @@ fn fetch(
         } else {
             tracing::debug!(host, key = %key, "fetch cache miss");
             let cache = CacheEntry::new(&dir, &key);
-            fetch_remote_with_cache(&parsed, impure, limit, &cache)?
+            fetch_remote_with_cache(&parsed, context, impure, &cache)?
         }
     } else {
-        fetch_remote(&parsed, impure, limit)?
+        fetch_remote(&parsed, context, impure)?
     };
 
     Ok(value_from_bytes(bytes))
@@ -153,9 +154,18 @@ const fn network_policy_rejection_reason(violation: &NetworkPolicyViolation) -> 
 /// Returns an error when the request cannot be dispatched, the response body
 /// cannot be read, its buffer cannot be sliced, or the body exceeds `limit`
 /// bytes.
-fn fetch_remote(url: &Url, impure: &Arc<AtomicBool>, limit: u64) -> Result<Vec<u8>, Error> {
-    let response = dispatch_request(url, impure)?;
-    read_response(url, response.into_reader(), limit, None)
+fn fetch_remote(
+    url: &Url,
+    context: &FetchContext,
+    impure: &Arc<AtomicBool>,
+) -> Result<Vec<u8>, Error> {
+    let response = dispatch_request(url, context.policy(), impure)?;
+    read_response(
+        url,
+        response.into_reader(),
+        context.max_response_bytes(),
+        None,
+    )
 }
 
 /// Fetch a URL, streaming the response into the cache entry.
@@ -168,11 +178,12 @@ fn fetch_remote(url: &Url, impure: &Arc<AtomicBool>, limit: u64) -> Result<Vec<u
 /// removed when response processing fails.
 fn fetch_remote_with_cache(
     url: &Url,
+    context: &FetchContext,
     impure: &Arc<AtomicBool>,
-    limit: u64,
     cache: &CacheEntry<'_>,
 ) -> Result<Vec<u8>, Error> {
-    let response = dispatch_request(url, impure)?;
+    let response = dispatch_request(url, context.policy(), impure)?;
+    let limit = context.max_response_bytes();
     let mut file = cache.open_writer()?;
     match read_response(url, response.into_reader(), limit, Some(&mut file)) {
         Ok(bytes) => {
@@ -186,34 +197,6 @@ fn fetch_remote_with_cache(
             Err(err)
         }
     }
-}
-
-/// Dispatch a GET request with bounded timeouts, marking the template impure.
-///
-/// # Errors
-///
-/// Returns an error when `ureq` cannot connect to the server, send the request,
-/// receive the response, or complete within one of the configured timeouts,
-/// including unsuccessful HTTP responses.
-fn dispatch_request(url: &Url, impure: &Arc<AtomicBool>) -> Result<ureq::Response, Error> {
-    impure.store(true, Ordering::Relaxed);
-    let agent = ureq::AgentBuilder::new()
-        .timeout_connect(Duration::from_secs(10))
-        .timeout_read(Duration::from_secs(30))
-        .timeout_write(Duration::from_secs(30))
-        .timeout(Duration::from_secs(60))
-        .build();
-    agent.get(url.as_str()).call().map_err(|err| {
-        // Log the host, not the full URL, which may carry userinfo.
-        tracing::warn!(host = url.host_str().unwrap_or(""), error = %err, "fetch request failed");
-        Error::new(
-            ErrorKind::InvalidOperation,
-            localization::message(keys::STDLIB_FETCH_FAILED)
-                .with_arg("url", url.as_str())
-                .with_arg("details", err.to_string())
-                .to_string(),
-        )
-    })
 }
 
 /// Read a response body up to the size limit, mirroring bytes to an optional cache sink.
@@ -365,6 +348,8 @@ impl FetchContext {
 
 #[cfg(test)]
 mod observability_tests;
+#[cfg(test)]
+mod redirect_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
