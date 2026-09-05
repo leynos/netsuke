@@ -9,7 +9,7 @@ the secret-bearing CodeScene action starts.
 import dataclasses
 import importlib.util
 import os
-import subprocess  # ruff: ignore[suspicious-subprocess-import] - the CLI boundary is under test.
+import subprocess  # ruff: ignore[suspicious-subprocess-import] - the CLI boundary deliberately launches the validator.
 import sys
 import typing as typ
 
@@ -331,7 +331,7 @@ def test_validator_cli_preserves_filesystem_boundaries(
     _write_case(tmp_path, case)
     script = _load_script()
     error = _validate_case(script, tmp_path, case)
-    result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - shell is False.
+    result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - fixed interpreter and validator path.
         [
             sys.executable,
             str(SCRIPT_DIRECTORY / "validate-coverage-artifact.py"),
@@ -369,7 +369,7 @@ def test_validator_cli_never_executes_artefact_content(tmp_path: pathlib.Path) -
     )
     environment = os.environ | {"BASH_ENV": str(hostile_shell)}
 
-    result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - shell is False.
+    result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - fixed interpreter and validator path.
         [
             sys.executable,
             str(SCRIPT_DIRECTORY / "validate-coverage-artifact.py"),

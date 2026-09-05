@@ -143,17 +143,19 @@ STATIC_ERROR_MESSAGES = {
 
 def _format_validation_error(issue: ValidationIssue, detail: object | None) -> str:
     """Format a static or detail-carrying hostile-data failure."""
-    if issue is ValidationIssue.NON_DIRECTORY:
-        return f"artefact directory is not a directory: {detail}"
-    if issue is ValidationIssue.UNEXPECTED_MEMBERS:
-        return f"artefact must contain only {EXPECTED_MEMBER!r}, got {detail!r}"
-    if issue is ValidationIssue.INVALID_RECORD:
-        return f"invalid LCOV record at line {detail}"
-    if issue is ValidationIssue.MISSING_RECORD:
-        return f"coverage report is missing required {detail} record"
-    if issue is ValidationIssue.OVERSIZED_REPORT:
-        return _oversized_report_message(detail)
-    return STATIC_ERROR_MESSAGES[issue]
+    match issue:
+        case ValidationIssue.NON_DIRECTORY:
+            return f"artefact directory is not a directory: {detail}"
+        case ValidationIssue.UNEXPECTED_MEMBERS:
+            return f"artefact must contain only {EXPECTED_MEMBER!r}, got {detail!r}"
+        case ValidationIssue.INVALID_RECORD:
+            return f"invalid LCOV record at line {detail}"
+        case ValidationIssue.MISSING_RECORD:
+            return f"coverage report is missing required {detail} record"
+        case ValidationIssue.OVERSIZED_REPORT:
+            return _oversized_report_message(detail)
+        case _:
+            return STATIC_ERROR_MESSAGES[issue]
 
 
 def _oversized_report_message(detail: object | None) -> str:
