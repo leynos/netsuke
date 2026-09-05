@@ -852,22 +852,28 @@ gate work on a GitHub-hosted runner (leynos/shared-actions#446); and restores
 the cache service variables that `mozilla-actions/sccache-action` overwrites.
 One SHA across every reference, so a future bump moves them together.
 
-CI installs tools from trusted prebuilt releases only, with one recorded
-exception and no others. `setup-rust` verifies the `cargo-binstall` installer
-checksum, and every `cargo binstall` call refuses to compile, so a missing
-prebuilt release fails the job instead of quietly building the tool.
+CI installs tools from trusted prebuilt releases only, with **no exceptions**.
+`setup-rust` verifies the `cargo-binstall` installer checksum, and every
+`cargo binstall` call refuses to compile, so a missing prebuilt release fails
+the job instead of quietly building the tool.
 
-The remaining exception is `mdtablefix`. Its published releases are fine, but
-the crate's binstall metadata sets `bin-dir = "."`, so resolution fails with
-"bin-dir configuration provided generates empty source path"
-([leynos/mdtablefix#458](https://github.com/leynos/mdtablefix/issues/458)). [`install-mdtablefix`](../.github/actions/install-mdtablefix)
-therefore takes the Linux release tarball directly and verifies it against a
-SHA-256 pinned in the action and cross-checked against the release's own
-`.sha256` sidecar. No Windows binary is published at all, so that lane compiles
-the tool once per cache generation into `.mdtablefix-build`, which the Windows
-tool cache owns and which never shares compiler output with the product. Both
-paths end in an executable-and-version probe, so a stale binary cannot satisfy
-a version bump.
+That rule became absolute with mdtablefix 0.5.1. Until then, this repository
+carried its own `install-mdtablefix` action because the crate's binstall
+metadata set `bin-dir = "."`, which cargo-binstall rejects
+([leynos/mdtablefix#458](https://github.com/leynos/mdtablefix/issues/458)),
+and because no Windows archive was published at all
+([leynos/mdtablefix#459](https://github.com/leynos/mdtablefix/issues/459)).
+The Linux lane took the release tarball against a pinned SHA-256 and the
+Windows lane compiled the tool once per cache generation into
+`.mdtablefix-build`.
+
+0.5.1 publishes archives for Linux and macOS on both architectures and for
+Windows on `x86_64`, with correct metadata, so both formatter lanes now use the
+shared
+[`install-mdtablefix`](https://github.com/leynos/shared-actions/tree/main/.github/actions/install-mdtablefix)
+action and the local one is gone along with its build directory. The shared
+action refuses anything earlier than 0.5.1, so an accidental downgrade fails
+with a message naming the reason rather than reintroducing source compilation.
 
 `cargo-orthohelp` was the second such exception and is no longer one.
 `ortho-config` published no binaries until 0.9.1
@@ -883,15 +889,18 @@ binary, and this is still the one lane whose save is not restricted to a push on
 that installs the tool must be the run that publishes it; the key is
 content-addressed by version, so concurrent writers produce identical archives.
 
-Delete the remaining exception when mdtablefix#458 lands, and the rule becomes
-absolute. Two contracts hold the line meanwhile.
-`tests/workflow_contracts/cache_ownership_test.py` counts the permitted
-`cargo install` occurrences rather than pattern-matching them, so a second
-source build cannot hide behind the first, and it separately lists
-`cargo-orthohelp` in `FORBIDDEN_SOURCE_BUILDS`, checked by name, so a retired
-exception cannot return as a newly permitted one.
-`tests/workflow_orthohelp_install.rs` requires the release lane to disable
-binstall's compile strategy and rejects every `cargo install` naming the tool.
+With both exceptions retired, the rule is absolute, and three contracts enforce
+it. `tests/workflow_contracts/cache_ownership_test.py` asserts the permitted
+set is empty, so reinstating an exception is a deliberate policy change rather
+than an edit; it lists both retired tools in `FORBIDDEN_SOURCE_BUILDS`, checked
+by name because a count of permitted builds is satisfied by adding a tool back
+as a newly permitted entry; and it rejects `cargo install` anywhere in any
+workflow or composite action. `tests/workflow_orthohelp_install.rs` requires
+the release lane to disable binstall's compile strategy, and
+`tests/workflow_contracts/ci_mdtablefix_installer_test.py` requires both
+formatter lanes to use the shared action at a version no earlier than 0.5.1,
+and the retired local action and its build directory to be absent rather than
+merely unused.
 
 The detector behind both parses the command rather than matching its shape. An
 option's value is indistinguishable from a crate name without knowing which
@@ -1168,7 +1177,7 @@ two cannot drift:
 ```bash
 MDTABLEFIX_VERSION="$(sed -n "s/.*MDTABLEFIX_VERSION: '\(.*\)'.*/\1/p" \
   .github/workflows/ci.yml)"
-cargo binstall --no-confirm --locked \
+cargo binstall --no-confirm --locked --disable-strategies compile \
   "mdtablefix@$MDTABLEFIX_VERSION"
 ```
 
@@ -1621,7 +1630,7 @@ wrapping; `make markdownlint` then verifies the result.
 `make check-fmt` runs the Rust and Python formatter checks, then passes tracked
 Markdown files to `scripts/check-markdown-format.sh`. The wrapper skips the
 Markdown check when the file list is empty, so the command remains portable
-across hosts. The checker requires `mdtablefix` version `0.5.0`, the version
+across hosts. The checker requires `mdtablefix` version `0.5.1`, the version
 pinned by `MDTABLEFIX_VERSION` in the CI workflow; verify an installation with
 `mdtablefix --version`. Run `make test-markdown-format` to exercise the
 checker, including its empty-input behaviour, before changing the wrapper.

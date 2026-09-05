@@ -43,7 +43,7 @@ from runner_placement_invariants import (
     UBICLOUD_LABELS,
     has_single_cache_owner,
 )
-from source_build_data import is_source_built
+from source_build_data import is_source_built, source_build_commands
 from workflow_loading import (
     job_steps,
     load_workflow,
@@ -352,20 +352,15 @@ def test_workflows_do_not_reintroduce_source_tool_builds_or_stale_providers() ->
         for path in sorted({*WORKFLOW_DIR.glob("*.yml"), *WORKFLOW_DIR.glob("*.yaml")})
         + sorted(ACTION_DIR.rglob("action.yml"))
     )
-    # One documented exception remains, and it is counted rather than
-    # pattern-matched so a second cannot hide behind it.
-    permitted = {
-        name: workflow_text.count(text)
-        for name, text in SOURCE_BUILD_EXCEPTIONS.items()
-    }
-    unexpected = {name: count for name, count in permitted.items() if count != 1}
-    assert not unexpected, (
-        "each documented source-build exception must appear exactly once, "
-        f"got {unexpected!r}"
+    # No exception remains. The count is asserted rather than assumed, so
+    # adding one back is a deliberate act that fails here first.
+    assert not SOURCE_BUILD_EXCEPTIONS, (
+        "every source-build exception has been retired; reinstating one is a "
+        f"policy change, not an edit, got {SOURCE_BUILD_EXCEPTIONS!r}"
     )
-    # A retired exception has to stay retired, checked by name rather than by
-    # a shrinking count: a count would be satisfied by adding the tool back as
-    # another permitted entry above.
+    # Both retired tools are checked by name. A count of permitted builds
+    # would not do: it is satisfied by adding a tool back as a newly permitted
+    # entry, which is precisely the regression worth catching.
     returned = [
         tool for tool in FORBIDDEN_SOURCE_BUILDS if is_source_built(tool, workflow_text)
     ]
@@ -373,13 +368,15 @@ def test_workflows_do_not_reintroduce_source_tool_builds_or_stale_providers() ->
         f"{returned!r} had a source-build exception that was retired; these "
         "tools publish prebuilt archives and must not be compiled in CI"
     )
-    source_builds = workflow_text.count("cargo install ")
-    # One extra occurrence is the mdtablefix action's own comment naming the
-    # command it guards; the exceptions themselves account for the rest.
-    assert source_builds <= sum(permitted.values()) + 1, (
-        "CI tools must use trusted prebuilt binaries rather than source "
-        f"builds; found {source_builds} `cargo install` calls against "
-        f"{sum(permitted.values())} documented exceptions"
+    # And nothing else compiles a tool either, which is the general rule the
+    # two named tools were the last exceptions to. Parsed rather than searched
+    # for as a substring: `cargo  install`, a tab, `cargo +nightly install`
+    # and a line continuation all run the same command, and a literal search
+    # for "cargo install " misses every one of them.
+    compiled = source_build_commands(workflow_text)
+    assert not compiled, (
+        "CI tools must come from trusted prebuilt binaries; no workflow or "
+        f"composite action may run `cargo install`, found {compiled!r}"
     )
     assert "nscloud-cache-action" not in workflow_text, (
         "the Namespace cache volume action must not return"

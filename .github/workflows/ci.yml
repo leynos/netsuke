@@ -18,16 +18,15 @@ env:
   # Single source of truth for the cargo-nextest pin, declared once at
   # workflow scope so the AGENTS.md `sed` extraction yields one version.
   NEXTEST_VERSION: '0.9.133'
-  # Pins for the Python lint and typecheck gates. Make's `?=` assignments
-  # yield to the environment, so these choose the versions.
-  # tests/workflow_contracts/python_toolchain_sync_test.py holds them equal
-  # to the Makefile defaults.
+  # Pins for the Python lint and typecheck gates. Make's `?=` assignments yield
+  # to the environment, so these choose the versions, and
+  # tests/workflow_contracts/python_toolchain_sync_test.py holds them equal to
+  # the Makefile defaults.
   RUFF_VERSION: '0.16.4'
   TY_VERSION: '0.0.74'
   PYTHON_BASELINE: '3.14'
-  # `make check-fmt` shells out to mdtablefix. Pin it once so both formatter
-  # jobs produce the same canonical output.
-  MDTABLEFIX_VERSION: '0.5.0'
+  # `make check-fmt` shells out to mdtablefix; pinned once so both lanes agree.
+  MDTABLEFIX_VERSION: '0.5.1'
   NETSUKE_RUNNER_IMAGE: ubuntu2404  # carried in every compiled-tool cache key
 
 jobs:
@@ -139,10 +138,11 @@ jobs:
       - name: Show Ninja version
         run: ninja --version
       - name: Install mdtablefix
+        uses: >-
+          leynos/shared-actions/.github/actions/install-mdtablefix@c5a54701c8603a0fa756a6b34c49bc2af75a6c11
         # The gate cache owns `~/.local/bin`, so a warm run finds it present.
-        uses: ./.github/actions/install-mdtablefix
         with:
-          build-dir: ${{ github.workspace }}/.mdtablefix-build
+          version: ${{ env.MDTABLEFIX_VERSION }}
       - name: Setup uv
         # Before Format: the uv-driven Ruff, Pylint, and df12 gates need it.
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
@@ -307,7 +307,7 @@ jobs:
     # tests/workflow_contracts/ci_windows_job_test.py holds them equal.
     with:
       nextest-version: '0.9.133'
-      mdtablefix-version: '0.5.0'
+      mdtablefix-version: '0.5.1'
       python-baseline: '3.14'
 
   kani-smoke:

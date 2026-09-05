@@ -1,20 +1,23 @@
-"""Hold the Markdown formatter installer's version and source-build contract.
+"""Hold the Markdown formatter installer to the shared prebuilt-only action.
 
 `make check-fmt` shells out to `mdtablefix`, so both formatter jobs install a
-pinned release before running it. The crate's binstall metadata is broken
-(`bin-dir = "."`, leynos/mdtablefix#458), so the installer no longer goes
-through `cargo binstall`: Linux takes the published tarball against a pinned
-SHA-256, and Windows, for which no binary is published at all, compiles once
-per cache generation into a directory that never shares compiler output with
-the product.
+pinned release before running it. Both now use the shared `install-mdtablefix`
+action, which installs from a published archive and never compiles.
+
+This repository carried its own action until mdtablefix 0.5.1. Its binstall
+metadata was broken (`bin-dir = "."`, leynos/mdtablefix#458) and no Windows
+archive existed at all (leynos/mdtablefix#459), so the local action took the
+Linux tarball against a pinned SHA-256 and compiled the tool on Windows under a
+documented exception. 0.5.1 publishes archives for both platforms, so the
+exception, the local action and its Windows build directory are all gone.
 
 Run via ``make test-workflow-contracts``.
 """
 
-import pathlib as pl
+import typing as typ
 
 import pytest
-import yaml
+from cache_contract_data import WORKFLOW_DIR
 from workflow_loading import (
     REPO_ROOT,
     SETUP_RUST_JOBS,
@@ -24,149 +27,191 @@ from workflow_loading import (
     require_mapping,
 )
 
-INSTALL_ACTION = "./.github/actions/install-mdtablefix"
-ACTION_PATH = REPO_ROOT / ".github" / "actions" / "install-mdtablefix" / "action.yml"
+if typ.TYPE_CHECKING:  # pragma: no cover - imported for annotations only
+    import pathlib as pl
 
-#: Fragments the installer script must contain, with the reason for each.
-REQUIRED_FRAGMENTS = (
-    ('expected="mdtablefix ${MDTABLEFIX_VERSION}"', "pin the expected version"),
-    ("mdtablefix --version", "inspect the installed version"),
-    ("tr -d '\\r'", "normalize Windows version output"),
-    ('if [[ "${installed}" == "${expected}" ]]', "reuse a cached executable"),
-    (
-        '"${MDTABLEFIX_SHA256}" "${tarball}" | sha256sum --check --',
-        "verify the downloaded tarball against the pinned digest by name",
-    ),
-    (
-        'tar --extract --gzip --file "${tarball}"',
-        "extract only the executable from the verified tarball",
-    ),
-    (
-        'CARGO_TARGET_DIR="${MDTABLEFIX_BUILD_DIR}"',
-        "keep the Windows source build out of the product's target directory",
-    ),
-    ("leynos/mdtablefix#458", "cite the removal condition for the workaround"),
-)
+#: The shared action, which is the only installer either lane may use.
+SHARED_ACTION = "leynos/shared-actions/.github/actions/install-mdtablefix@"
+
+#: The earliest release that publishes an archive for every platform this
+#: repository formats on. Pinning below it would reintroduce a compile on
+#: Windows, which is the thing this contract exists to prevent.
+MINIMUM_VERSION = (0, 5, 1)
+
+#: The local action this replaced. Its absence is asserted rather than assumed,
+#: because a half-finished revert would leave both installers present and the
+#: lanes would keep working while the exception quietly returned.
+RETIRED_ACTION_DIR = REPO_ROOT / ".github" / "actions" / "install-mdtablefix"
 
 
-def is_dedicated_build_dir(build_dir: str) -> bool:
-    """Return whether a build directory is separate from the product's tree.
+def _version_tuple(value: str) -> tuple[int, ...]:
+    """Return a dotted version as integers for comparison."""
+    return tuple(int(part) for part in value.split("."))
+
+
+@pytest.mark.parametrize(("workflow_path", "job_name"), SETUP_RUST_JOBS)
+def test_both_formatter_jobs_use_the_shared_installer_action(
+    workflow_path: pl.Path, job_name: str
+) -> None:
+    """Require every formatter lane to install through the shared action.
+
+    Both lanes, not just Linux. Windows is the one that used to compile, so a
+    contract that checked only the lane which already installed a binary would
+    have passed throughout the period this change exists to end.
+    """
+    step = named_step(
+        job_steps(load_workflow(workflow_path), job_name), "Install mdtablefix"
+    )
+    uses = str(step.get("uses", ""))
+
+    assert uses.startswith(SHARED_ACTION), (
+        f"{job_name} must install mdtablefix through the shared action, got {uses!r}"
+    )
+    assert len(uses.rsplit("@", 1)[1]) == 40, (
+        f"{job_name} must pin the shared action to a full commit SHA, got {uses!r}"
+    )
+
+
+def _normalised(expression: str) -> str:
+    """Return an expression with its internal spacing collapsed.
+
+    Compared whole rather than by substring. A composite such as
+    ``${{ env.MDTABLEFIX_VERSION }}${{ vars.UNRELATED }}`` contains the
+    reference while resolving to something else entirely, so a containment
+    check would follow a hop the lane does not take.
 
     Parameters
     ----------
-    build_dir
-        The `build-dir` input as written in the workflow, in POSIX or Windows
-        form and possibly containing unexpanded GitHub expressions.
+    expression
+        The value as written in the workflow.
 
     Returns
     -------
-    bool
-        ``True`` when no path component is exactly ``target`` and the value
-        names something below the workspace root.
-
-    Notes
-    -----
-    Compared by component rather than by substring. A substring test on
-    ``"/target"`` was both too weak and too strong: it accepted the relative
-    ``target/tool-build``, and the same path written with Windows separators,
-    which are exactly the product's tree, while rejecting ``build/target-cache``,
-    which merely starts a component with the same letters. It also accepted
-    ``.``, the workspace root itself, which is not a dedicated directory at all.
-
-    The point of the contract is that a source build for an unrelated tool must
-    not mix its compiler output into the tree under test.
+    str
+        The same expression with runs of whitespace collapsed to one space,
+        so spacing inside ``${{ ... }}`` cannot defeat an exact comparison.
     """
-    cleaned = build_dir.strip()
-    if not cleaned:
-        return False
-    # Both flavours, because the same input serves the Linux and Windows jobs
-    # and a Windows value uses backslashes that PurePosixPath would read as
-    # part of a single component.
-    parts = {
-        part
-        for flavour in (pl.PurePosixPath, pl.PureWindowsPath)
-        for part in flavour(cleaned).parts
-    }
-    if "target" in parts:
-        return False
-    meaningful = [
-        part for part in pl.PurePosixPath(cleaned).parts if part not in {".", "/"}
-    ]
-    return bool(meaningful)
+    return " ".join(expression.split())
 
 
-def test_both_formatter_jobs_use_the_pinned_installer_action() -> None:
-    """Both formatter jobs install mdtablefix through the shared action."""
-    for workflow_path, job_name in SETUP_RUST_JOBS:
-        step = named_step(
-            job_steps(load_workflow(workflow_path), job_name), "Install mdtablefix"
-        )
-        assert step.get("uses") == INSTALL_ACTION, (
-            f"{job_name} must install mdtablefix through {INSTALL_ACTION}, "
-            f"got {step.get('uses')!r}"
-        )
-        inputs = require_mapping(step.get("with"), f"{job_name} installer inputs")
-        build_dir = str(inputs.get("build-dir", ""))
-        assert build_dir, (
-            f"{job_name} must give the source build a dedicated target directory"
-        )
-        assert is_dedicated_build_dir(build_dir), (
-            f"{job_name} must build the tool into a dedicated directory rather "
-            f"than the product's target tree, got {build_dir!r}"
-        )
+def _resolve_literal(version: str, workflow_path: pl.Path) -> str:
+    """Return the literal version a lane pins, following any indirection.
 
+    Both lanes pass the version through `${{ env.MDTABLEFIX_VERSION }}`, and
+    the Windows lane lives in a reusable workflow whose own `env` takes the
+    value from a workflow input. The literal therefore sits in `ci.yml`, one
+    or two hops away, and a contract that stopped at the first expression
+    would assert nothing about either lane.
 
-def test_the_installer_verifies_its_download_and_bounds_its_fallback() -> None:
-    """The installer pins a digest and never builds into the product's target."""
-    document = require_mapping(
-        yaml.safe_load(ACTION_PATH.read_text(encoding="utf-8")), "install-mdtablefix"
+    Parameters
+    ----------
+    version
+        The value the installer step passes, literal or expression.
+    workflow_path
+        The workflow the step belongs to.
+
+    Returns
+    -------
+    str
+        The dotted version literal.
+    """
+    if not version.startswith("${{"):
+        return version
+    # Each hop is checked before it is followed. Resolving any expression
+    # through `MDTABLEFIX_VERSION` would let the step switch to an unrelated
+    # variable while this contract kept reading the old, still-correct pin and
+    # reporting success for a lane receiving something else.
+    assert _normalised(version) == "${{ env.MDTABLEFIX_VERSION }}", (
+        f"the installer step should take its version from MDTABLEFIX_VERSION "
+        f"and nothing else, got {version!r}"
     )
-    runs = require_mapping(document.get("runs"), "runs")
-    steps = runs.get("steps")
-    assert isinstance(steps, list), "the action must declare a step list"
-    assert steps, "the action must declare at least one step"
-    step = require_mapping(steps[0], "the installer step")
-    script = str(step.get("run", ""))
-    missing = [
-        reason for fragment, reason in REQUIRED_FRAGMENTS if fragment not in script
-    ]
-    assert not missing, f"the installer must {'; '.join(missing)}"
-    env = require_mapping(step.get("env"), "the installer env")
-    digest = str(env.get("MDTABLEFIX_SHA256", ""))
-    assert len(digest) == 64, (
-        f"the installer must pin a full SHA-256 digest, got {digest!r}"
+    workflow = load_workflow(workflow_path)
+    env = require_mapping(workflow.get("env"), f"{workflow_path.name} env")
+    resolved = str(env.get("MDTABLEFIX_VERSION", ""))
+    assert resolved, f"{workflow_path.name} must declare MDTABLEFIX_VERSION"
+    if not resolved.startswith("${{"):
+        return resolved
+    assert _normalised(resolved) in {
+        "${{ inputs['mdtablefix-version'] }}",
+        '${{ inputs["mdtablefix-version"] }}',
+        "${{ inputs.mdtablefix-version }}",
+    }, (
+        f"{workflow_path.name} should take MDTABLEFIX_VERSION from its own "
+        f"mdtablefix-version input and nothing else, got {resolved!r}"
     )
-    assert all(character in "0123456789abcdef" for character in digest), (
-        f"the pinned digest must be lowercase hexadecimal, got {digest!r}"
+    # A reusable workflow's env takes the value from its caller's `with:`.
+    jobs = require_mapping(
+        load_workflow(WORKFLOW_DIR / "ci.yml").get("jobs"), "ci.yml jobs"
     )
-    assert "target/" not in script, (
-        "the source build must not write into the product's target directory"
+    callers = []
+    for name, declaration in jobs.items():
+        job = require_mapping(declaration, f"ci.yml {name}")
+        if not str(job.get("uses", "")).endswith(workflow_path.name):
+            continue
+        supplied = require_mapping(job.get("with"), f"{name} with")
+        callers.append(str(supplied["mdtablefix-version"]))
+    assert len(callers) == 1, (
+        f"{workflow_path.name} should have exactly one caller supplying "
+        f"mdtablefix-version, found {callers!r}"
     )
+    return callers[0]
 
 
-@pytest.mark.parametrize(
-    ("build_dir", "expected"),
-    [
-        pytest.param("${{ github.workspace }}/.mdtablefix-build", True, id="workspace"),
-        pytest.param("build/target-cache", True, id="component-shares-a-prefix"),
-        pytest.param("tool-build/target-dir-notes", True, id="prefix-only-again"),
-        pytest.param("target", False, id="bare-target"),
-        pytest.param("target/tool-build", False, id="relative-under-target"),
-        pytest.param("./target/tool-build", False, id="dot-relative-under-target"),
-        pytest.param("C:\\repo\\target\\tool-build", False, id="windows-under-target"),
-        pytest.param("/repo/target", False, id="absolute-target"),
-        pytest.param(".", False, id="workspace-root"),
-        pytest.param("", False, id="empty"),
-        pytest.param("   ", False, id="blank"),
-    ],
-)
-def test_dedicated_build_dir_recognizes_the_products_tree(
-    build_dir: str, *, expected: bool
+@pytest.mark.parametrize(("workflow_path", "job_name"), SETUP_RUST_JOBS)
+def test_both_formatter_jobs_pin_a_version_that_publishes_archives(
+    workflow_path: pl.Path, job_name: str
 ) -> None:
-    """Accept a separate directory and reject the product's target tree.
+    """Require a pinned version no earlier than the first with full coverage.
 
-    The rejected cases are the ones the previous substring test got wrong in
-    both directions, so they are pinned by name rather than left to the
-    workflow's current value happening to be safe.
+    The shared action refuses anything earlier, so this would surface at run
+    time anyway. Holding it here names the reason instead, and fails in the
+    contract suite rather than a quarter of an hour into a Windows job.
     """
-    assert is_dedicated_build_dir(build_dir) is expected, f"build_dir={build_dir!r}"
+    step = named_step(
+        job_steps(load_workflow(workflow_path), job_name), "Install mdtablefix"
+    )
+    inputs = require_mapping(step.get("with"), f"{job_name} installer inputs")
+    version = str(inputs.get("version", ""))
+
+    assert version, f"{job_name} must pin an mdtablefix version, got {inputs!r}"
+    version = _resolve_literal(version, workflow_path)
+    assert _version_tuple(version) >= MINIMUM_VERSION, (
+        f"{job_name} pins mdtablefix {version}, which predates the first "
+        "release publishing an archive for every platform this repository "
+        "formats on; an earlier pin reintroduces a Windows source build"
+    )
+
+
+def test_the_local_installer_action_is_gone() -> None:
+    """Require the retired local action to be absent, not merely unused.
+
+    Leaving it in place would keep a working source build one `uses:` edit
+    away, and its Windows branch would still be the only documented way this
+    repository compiles a tool.
+    """
+    assert not RETIRED_ACTION_DIR.exists(), (
+        f"{RETIRED_ACTION_DIR} should have been removed with the exception it "
+        "existed to implement"
+    )
+
+
+def test_no_workflow_keeps_the_windows_build_directory() -> None:
+    """Require the Windows source build's target directory to be gone.
+
+    It existed only to keep that compile's output away from the product's
+    tree. With no compile it has no purpose, and a cache entry still listing
+    it would archive an empty path on every Windows run.
+    """
+    searched = sorted({
+        *(REPO_ROOT / ".github" / "workflows").glob("*.yml"),
+        *(REPO_ROOT / ".github" / "actions").rglob("action.yml"),
+    })
+    offenders = [
+        path.relative_to(REPO_ROOT).as_posix()
+        for path in searched
+        if "mdtablefix-build" in path.read_text(encoding="utf-8")
+    ]
+
+    assert not offenders, (
+        f"{offenders!r} still reference the retired Windows build directory"
+    )

@@ -12,7 +12,9 @@ Run via ``make test-workflow-contracts``.
 """
 
 import pytest
-from source_build_data import is_source_built
+from hypothesis import given, settings
+from hypothesis import strategies as st
+from source_build_data import is_source_built, source_build_commands
 
 TOOL = "cargo-orthohelp"
 
@@ -101,4 +103,94 @@ def test_the_detector_finds_a_build_among_other_commands() -> None:
 
     assert is_source_built(TOOL, script), (
         "the detector must find an offending command among unrelated lines"
+    )
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        pytest.param("cargo install some-tool", id="single-space"),
+        pytest.param("cargo  install some-tool", id="double-space"),
+        pytest.param("cargo\tinstall some-tool", id="tab"),
+        pytest.param("cargo +nightly install some-tool", id="toolchain-selector"),
+        pytest.param("cargo \\\n            install some-tool", id="line-continuation"),
+    ],
+)
+def test_every_cargo_install_spelling_is_found(command: str) -> None:
+    """Catch the shell spellings a literal substring search would miss.
+
+    `cargo  install`, a tab, a `+toolchain` selector and a line continuation
+    all run the same command. The general no-source-build rule is enforced by
+    searching for these, so a spelling it cannot see is a hole in the policy
+    rather than in one tool's guard.
+    """
+    assert source_build_commands(command), f"missed a source build: {command!r}"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        pytest.param("cargo binstall some-tool", id="binstall"),
+        pytest.param("cargo install-update some-tool", id="different-subcommand"),
+        pytest.param("# cargo installs are forbidden", id="prose"),
+    ],
+)
+def test_a_non_install_command_is_not_flagged(command: str) -> None:
+    """Leave alone what is not a `cargo install`.
+
+    `cargo binstall` is the form this repository adopts, so flagging it would
+    make the policy unsatisfiable.
+    """
+    assert not source_build_commands(command), f"false positive: {command!r}"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        pytest.param(
+            "cargo --config net.retry=1 install some-tool", id="global-option"
+        ),
+        pytest.param(
+            "cargo --config=net.retry=1 install some-tool", id="inline-option-value"
+        ),
+        pytest.param(
+            "cargo +nightly --config net.retry=1 install some-tool",
+            id="toolchain-and-option",
+        ),
+        pytest.param("cargo --locked install some-tool", id="global-flag"),
+        pytest.param("cargo -q install some-tool", id="short-flag"),
+    ],
+)
+def test_options_before_the_subcommand_do_not_hide_it(command: str) -> None:
+    """Catch an install behind cargo's pre-subcommand options.
+
+    Cargo takes global options before its subcommand, and an option may carry
+    its value separately, so `cargo --config net.retry=1 install` is a source
+    build that no fixed pattern anchored on `cargo install` can see.
+    """
+    assert source_build_commands(command), f"missed a source build: {command!r}"
+
+
+@given(
+    selector=st.sampled_from(["", "+nightly ", "+stable "]),
+    options=st.lists(
+        st.sampled_from(["--locked ", "--offline ", "--config net.retry=1 ", "-q "]),
+        max_size=3,
+    ),
+    gap=st.sampled_from([" ", "  ", "\t"]),
+)
+@settings(max_examples=60, derandomize=True, deadline=None)
+def test_any_prefix_of_selectors_and_options_still_reveals_the_install(
+    selector: str, options: list[str], gap: str
+) -> None:
+    """Find the install however the command is spelled before it.
+
+    The prefix is where the variation lives: a toolchain selector, any number
+    of global options with or without separate values, and arbitrary
+    whitespace. The property is that none of it conceals the subcommand.
+    """
+    command = f"cargo{gap}{selector}{''.join(options)}install some-tool"
+
+    assert source_build_commands(command) == ["some-tool"], (
+        f"the prefix concealed the install: {command!r}"
     )
