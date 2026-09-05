@@ -1306,6 +1306,10 @@ validation remain consistent across the workflows under test.
 
 ### PR coverage trust boundary
 
+The accepted architecture for this boundary is recorded in
+[ADR-020](adr-020-pr-coverage-trust-boundary.md). The workflow details below
+are the implementation guidance for that decision.
+
 The pull-request CI job is deliberately unprivileged. It builds, tests, and
 generates `lcov.info`, then uploads only that file as the short-lived
 `pr-coverage-lcov` artefact. It does not receive `CS_ACCESS_TOKEN`. This

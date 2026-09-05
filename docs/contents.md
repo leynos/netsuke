@@ -148,6 +148,9 @@ operator, user, and contributor references are easier to find.
 - [ADR-019](adr-019-structured-command-shell-selection.md): Allow-listed
   structured-command shell selection, trusted configuration authority,
   resolution, lowering, diagnostics, and safety boundaries.
+- [ADR-020](adr-020-pr-coverage-trust-boundary.md): Isolated pull-request
+  coverage generation, hostile-artefact validation, and trusted CodeScene
+  submission with bounded correlation observability.
 
 ## Proposals
 
