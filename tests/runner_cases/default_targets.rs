@@ -14,7 +14,7 @@ use netsuke::runner::{
     run_with_ninja_program,
 };
 use rstest::{fixture, rstest};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use test_support::ninja_gen;
 
 use crate::fixtures::create_test_manifest;
@@ -203,18 +203,13 @@ fn explicit_targets_cannot_change_ninjas_working_directory(
 }
 
 #[cfg(unix)]
-#[rstest]
-fn real_ninja_treats_option_like_targets_as_operands() -> Result<()> {
+/// Create trusted and attacker-controlled Ninja build files for integration tests.
+fn create_real_ninja_build_files(trusted_dir: &Path, evil_dir: &Path) -> Result<PathBuf> {
     use std::fs;
 
-    let Some(workspace) = ninja_gen::ninja_integration_setup() else {
-        return Ok(());
-    };
-    let trusted_dir = workspace.path().join("trusted");
-    let evil_dir = workspace.path().join("evil");
-    fs::create_dir(&trusted_dir)
+    fs::create_dir(trusted_dir)
         .with_context(|| format!("create trusted directory {}", trusted_dir.display()))?;
-    fs::create_dir(&evil_dir)
+    fs::create_dir(evil_dir)
         .with_context(|| format!("create attacker directory {}", evil_dir.display()))?;
     let trusted_build_file = trusted_dir.join("build.ninja");
     fs::write(
@@ -240,6 +235,18 @@ fn real_ninja_treats_option_like_targets_as_operands() -> Result<()> {
         ),
     )
     .context("write attacker-controlled build file")?;
+    Ok(trusted_build_file)
+}
+
+#[cfg(unix)]
+#[rstest]
+fn real_ninja_treats_option_like_targets_as_operands() -> Result<()> {
+    let Some(workspace) = ninja_gen::ninja_integration_setup() else {
+        return Ok(());
+    };
+    let trusted_dir = workspace.path().join("trusted");
+    let evil_dir = workspace.path().join("evil");
+    let trusted_build_file = create_real_ninja_build_files(&trusted_dir, &evil_dir)?;
     let targets = vec![
         String::from("safe"),
         String::from("-C"),
