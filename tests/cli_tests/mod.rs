@@ -8,8 +8,6 @@ mod config_discovery;
 mod config_precedence_ladder;
 mod config_selection;
 mod display_policy_domain;
-#[cfg(unix)]
-mod fetch_policy_extends;
 mod fetch_policy_observability;
 #[cfg(unix)]
 mod fetch_policy_trust;

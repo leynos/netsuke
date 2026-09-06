@@ -19,7 +19,7 @@ pub(crate) fn push_discovered_file_layers(
     errors: &mut Vec<Arc<ortho_config::OrthoError>>,
     discovered: DiscoveredLayers,
     events: &mut Vec<MergeEvent>,
-) -> Vec<ProjectFetchPolicyRequest> {
+) -> Option<ProjectFetchPolicyRequest> {
     let (layers, discovery_errors, project_fetch_policy_request) = discovered.into_parts();
     if discovery_errors.is_empty() {
         events.push(MergeEvent::FileLayersCollected {

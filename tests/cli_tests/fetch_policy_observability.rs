@@ -66,15 +66,15 @@ fn merge_returns_one_bounded_reconciliation_outcome(
     let (events, _) = reconcile_project(trusted, project_default, operator_default)?;
     let outcome = sole_outcome(&events)?;
     let expected = FetchPolicyReconciliationOutcome {
-        trust_enabled: trusted,
+        trusted_project_policy: trusted,
         project_request_present: true,
         default_deny_decision: decision,
-        requested_scheme_grant_count: 2,
-        requested_host_grant_count: 1,
-        accepted_scheme_grant_count: if trusted { 2 } else { 0 },
-        ignored_scheme_grant_count: if trusted { 0 } else { 2 },
-        accepted_host_grant_count: usize::from(trusted),
-        ignored_host_grant_count: usize::from(!trusted),
+        requested_scheme_grants: 2,
+        requested_host_grants: 1,
+        accepted_scheme_grants: if trusted { 2 } else { 0 },
+        ignored_scheme_grants: if trusted { 0 } else { 2 },
+        accepted_host_grants: usize::from(trusted),
+        ignored_host_grants: usize::from(!trusted),
     };
     ensure!(
         outcome == &expected,
@@ -86,6 +86,39 @@ fn merge_returns_one_bounded_reconciliation_outcome(
             Some(MergeEvent::FetchPolicyReconciled { .. })
         ),
         "reconciliation must follow the generic merge events"
+    );
+    Ok(())
+}
+
+#[test]
+fn merge_reports_an_empty_primary_project_request() -> Result<()> {
+    let project = tempfile::tempdir().context("create project for empty request")?;
+    test_support::fs::write(
+        project.path().join(".netsuke.toml"),
+        "file = \"private-manifest.yml\"\n",
+    )
+    .context("write empty project request")?;
+    let directory = project.path().to_string_lossy().into_owned();
+    let (events, merge_ok) =
+        merge_and_observe(&["netsuke", "--directory", &directory], &TestEnv::default())?;
+    ensure!(merge_ok, "an empty project request must merge");
+    let outcome = sole_outcome(&events)?;
+    ensure!(
+        outcome.project_request_present,
+        "primary request is present"
+    );
+    ensure!(
+        outcome.default_deny_decision == DefaultDenyDecision::OperatorRetained,
+        "an empty request retains the operator default"
+    );
+    ensure!(
+        outcome.requested_scheme_grants == 0
+            && outcome.accepted_scheme_grants == 0
+            && outcome.ignored_scheme_grants == 0
+            && outcome.requested_host_grants == 0
+            && outcome.accepted_host_grants == 0
+            && outcome.ignored_host_grants == 0,
+        "an empty request has no grant counts"
     );
     Ok(())
 }
@@ -122,11 +155,11 @@ fn tracing_records_only_bounded_reconciliation_fields(
         .context("missing reconciliation trace")?;
     let expected = format!(
         concat!(
-            "message=reconciled fetch policy trust_enabled={} ",
+            "message=reconciled fetch policy trusted_project_policy={} ",
             "project_request_present=true default_deny_decision={:?} ",
-            "requested_scheme_grant_count=2 accepted_scheme_grant_count={} ",
-            "ignored_scheme_grant_count={} requested_host_grant_count=1 ",
-            "accepted_host_grant_count={} ignored_host_grant_count={}"
+            "requested_scheme_grants=2 accepted_scheme_grants={} ",
+            "ignored_scheme_grants={} requested_host_grants=1 ",
+            "accepted_host_grants={} ignored_host_grants={}"
         ),
         trusted, decision, accepted_schemes, ignored_schemes, accepted_hosts, ignored_hosts
     );

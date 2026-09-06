@@ -269,22 +269,21 @@ and [interpret failures](users-guide.md#interpret-failures) sections.
 The v0.1.0 fetch-policy merge distinguishes operator policy from a project's
 request. System and user configuration, `NETSUKE_` environment variables, and
 explicit CLI options are operator-controlled. The primary project
-`.netsuke.toml` and every file loaded through its `extends` chain are untrusted
-by default, so their `fetch_allow_scheme` and `fetch_allow_host` entries do not
-widen the operator's allowlists. A project chain may still tighten the policy
-by setting `fetch_default_deny = true`; a `false` request cannot undo an
-operator or project restriction. Project requests are evaluated in
-dependency-first order, with the primary file last. Project `fetch_block_host`
-entries remain cumulative, and a block wins over an allow.
+`.netsuke.toml` is untrusted by default, so its `fetch_allow_scheme` and
+`fetch_allow_host` entries do not widen the operator's allowlists. The primary
+project file may still tighten the policy by setting
+`fetch_default_deny = true`; a `false` request cannot undo an operator
+restriction. Files loaded through `extends` retain ordinary file-layer
+semantics. Project `fetch_block_host` entries remain cumulative, and a block
+wins over an allow.
 
 To trust a checkout deliberately, set `trust_project_fetch_policy = true` in
 system or user configuration, set `NETSUKE_TRUST_PROJECT_FETCH_POLICY=true`, or
 pass `--trust-project-fetch-policy`. With that operator opt-in, project scheme
-and host grants from the complete chain append to the operator values in
-dependency-first order, with the primary file last. The last present project
-`fetch_default_deny` value applies directly. A project cannot grant itself this
-opt-in because its `trust_project_fetch_policy` field is ignored in every
-project-scoped file.
+and host grants from the primary project file append to the operator values. A
+present project `fetch_default_deny` value applies directly. A project cannot
+grant itself this opt-in because its `trust_project_fetch_policy` field is
+ignored in the primary project file.
 
 ## Opting into serial dependency ordering
 

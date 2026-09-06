@@ -109,15 +109,15 @@ impl MergeObserver for TracingMergeObserver {
 fn record_fetch_policy_event(event: &MergeEvent) {
     if let MergeEvent::FetchPolicyReconciled { outcome } = event {
         tracing::debug!(
-            trust_enabled = outcome.trust_enabled,
+            trusted_project_policy = outcome.trusted_project_policy,
             project_request_present = outcome.project_request_present,
             default_deny_decision = outcome.default_deny_decision.as_str(),
-            requested_scheme_grant_count = outcome.requested_scheme_grant_count,
-            accepted_scheme_grant_count = outcome.accepted_scheme_grant_count,
-            ignored_scheme_grant_count = outcome.ignored_scheme_grant_count,
-            requested_host_grant_count = outcome.requested_host_grant_count,
-            accepted_host_grant_count = outcome.accepted_host_grant_count,
-            ignored_host_grant_count = outcome.ignored_host_grant_count,
+            requested_scheme_grants = outcome.requested_scheme_grants,
+            accepted_scheme_grants = outcome.accepted_scheme_grants,
+            ignored_scheme_grants = outcome.ignored_scheme_grants,
+            requested_host_grants = outcome.requested_host_grants,
+            accepted_host_grants = outcome.accepted_host_grants,
+            ignored_host_grants = outcome.ignored_host_grants,
             "reconciled fetch policy"
         );
     }

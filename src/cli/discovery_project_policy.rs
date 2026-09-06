@@ -1,4 +1,4 @@
-//! Preserve chain provenance and quarantine project fetch-policy fields.
+//! Preserve primary-project provenance and quarantine fetch-policy fields.
 //!
 //! Validates each untrusted request before the generic merge removes it from
 //! the project layer, preserving configuration errors rather than treating
@@ -15,15 +15,13 @@ use super::ProjectFetchPolicyRequest;
 use super::json::json_from_value;
 use super::paths::{PathNormalizer, comparison_key, project_scope_file};
 
-/// Identify the authority of an occurrence in a loaded file chain.
+/// Identify whether a loaded file is the primary project configuration.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum FileScope {
-    /// A file reached through a selected system, user, or explicit operator root.
+    /// A layer governed by ordinary configuration precedence.
     Operator,
     /// The primary project configuration file.
     Project,
-    /// A dependency reached through the primary project's extends chain.
-    ProjectExtends,
 }
 
 /// Keep a loaded file's authority until quarantine has completed.
@@ -44,37 +42,27 @@ impl ScopedFileLayer {
     }
 }
 
-/// Assign project provenance to a complete ancestor-first chain.
-pub(super) fn scope_project_chain(layers: Vec<MergeLayer<'static>>) -> Vec<ScopedFileLayer> {
-    let root_index = layers.len().saturating_sub(1);
-    scope_chain_through_project(layers, root_index)
-}
-
-/// Quarantine the primary project and its ancestors, retaining operator descendants.
-///
-/// The loader accepts one `extends` parent per file, so every layer before the
-/// primary project belongs to its dependency chain, even when an operator file
-/// explicitly extends that primary file.
-pub(super) fn scope_chain_through_project(
+/// Mark only the selected primary configuration layer as project-scoped.
+pub(super) fn scope_primary_project_layer(
     layers: Vec<MergeLayer<'static>>,
-    root_index: usize,
+    project_index: usize,
 ) -> Vec<ScopedFileLayer> {
     layers
         .into_iter()
         .enumerate()
         .map(|(index, layer)| ScopedFileLayer {
             layer,
-            scope: match index.cmp(&root_index) {
-                std::cmp::Ordering::Equal => FileScope::Project,
-                std::cmp::Ordering::Less => FileScope::ProjectExtends,
-                std::cmp::Ordering::Greater => FileScope::Operator,
+            scope: if index == project_index {
+                FileScope::Project
+            } else {
+                FileScope::Operator
             },
         })
         .collect()
 }
 
-/// Identify a selected primary project root before discarding chain boundaries.
-pub(super) fn scope_selected_chain(
+/// Identify the primary project file before discarding chain boundaries.
+pub(super) fn scope_selected_primary_layer(
     layers: Vec<MergeLayer<'static>>,
     directory: Option<&Path>,
     normalizer: &impl PathNormalizer,
@@ -88,7 +76,7 @@ pub(super) fn scope_selected_chain(
             .is_some_and(|(path, expected)| path.as_str() == expected.to_string_lossy())
     });
     if let Some(index) = project_index {
-        scope_chain_through_project(layers, index)
+        scope_primary_project_layer(layers, index)
     } else {
         layers.into_iter().map(ScopedFileLayer::operator).collect()
     }
@@ -101,8 +89,8 @@ pub(super) struct ResolvedFileLayers {
     pub(super) layers: Vec<MergeLayer<'static>>,
     /// Last valid file preference, including layers after an invalid request.
     pub(super) json_preference: bool,
-    /// Valid quarantined requests in dependency-before-includer order.
-    pub(super) project_requests: Vec<ProjectFetchPolicyRequest>,
+    /// Quarantined request from the primary project layer, when present.
+    pub(super) project_request: Option<ProjectFetchPolicyRequest>,
     /// Original typed errors that prevent the generic merge from succeeding.
     pub(super) errors: Vec<Arc<OrthoError>>,
 }
@@ -122,9 +110,9 @@ pub(super) fn retain_layers_and_resolve_json(layers: Vec<ScopedFileLayer>) -> Re
         if let Some(json) = json_from_value(&value) {
             resolved.json_preference = json;
         }
-        if scope != FileScope::Operator {
+        if scope == FileScope::Project {
             match take_project_fetch_policy_request(&mut value) {
-                Ok(request) => resolved.project_requests.push(request),
+                Ok(request) => resolved.project_request = Some(request),
                 Err(error) => resolved.errors.push(error),
             }
         }

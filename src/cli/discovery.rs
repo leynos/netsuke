@@ -91,8 +91,8 @@ pub struct DiscoveredLayers {
     layers: Vec<MergeLayer<'static>>,
     /// Whether any discovered layer requested JSON output.
     json_preference: bool,
-    /// Ordered restrictions from the primary project and its complete chain.
-    project_fetch_policy_request: Vec<ProjectFetchPolicyRequest>,
+    /// Restriction request quarantined from the primary project layer.
+    project_fetch_policy_request: Option<ProjectFetchPolicyRequest>,
     /// Loading errors deferred beside the layers that may still be usable.
     errors: Vec<Arc<ortho_config::OrthoError>>,
     /// Bounded trace for composition boundaries to emit after the merge.
@@ -122,7 +122,7 @@ impl DiscoveredLayers {
     ) -> (
         Vec<MergeLayer<'static>>,
         Vec<Arc<ortho_config::OrthoError>>,
-        Vec<ProjectFetchPolicyRequest>,
+        Option<ProjectFetchPolicyRequest>,
     ) {
         (self.layers, self.errors, self.project_fetch_policy_request)
     }
@@ -185,7 +185,7 @@ fn discover_file_layers_with_normalizer(
             DiscoveredLayers {
                 layers: resolved.layers,
                 json_preference: resolved.json_preference,
-                project_fetch_policy_request: resolved.project_requests,
+                project_fetch_policy_request: resolved.project_request,
                 errors: resolved.errors,
                 diagnostics,
             }
@@ -193,7 +193,7 @@ fn discover_file_layers_with_normalizer(
         Err(error) => DiscoveredLayers {
             layers: Vec::new(),
             json_preference: Cli::default().json,
-            project_fetch_policy_request: Vec::new(),
+            project_fetch_policy_request: None,
             errors: vec![error],
             diagnostics,
         },
@@ -234,7 +234,7 @@ fn collect_file_layers_with_env(
                 },
                 load_warning,
                 outcome.map(|chain| {
-                    layers::scope_selected_chain(
+                    layers::scope_selected_primary_layer(
                         chain,
                         cli.directory.as_deref().map(camino::Utf8Path::as_std_path),
                         normalizer,
