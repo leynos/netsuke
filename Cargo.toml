@@ -118,6 +118,7 @@ digest = "0.11"
 sha2 = "0.11"
 sha1 = { version = "0.11", optional = true }
 md5 = { package = "md-5", version = "0.11", optional = true }
+rustix = { version = "1.0.8", features = ["fs"] }
 itoa = "1"
 itertools = "0.12"
 indexmap = { version = "2.5", features = ["serde"] }
@@ -182,11 +183,6 @@ regex = "1.12.2"
 # the value type, so the tests need `fluent-bundle` directly. Constrained to
 # the version `ortho_config` resolves, or the `FluentValue` types would differ.
 fluent-bundle = "0.16.0"
-
-# Target-specific dev-deps
-[target.'cfg(unix)'.dev-dependencies]
-# Used only to construct FIFOs and device nodes in tests.
-rustix = { version = "1.0.8", features = ["fs"] }
 
 [workspace]
 members = ["test_support"]

@@ -1,12 +1,11 @@
 //! Exercises standard library I/O filters to ensure they render file contents,
 //! line counts, and error paths correctly in end-to-end scenarios.
+use super::support::fallible;
 use anyhow::{Context, Result, bail, ensure};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{ErrorKind, context};
 use rstest::rstest;
 use test_support::fluent::normalize_fluent_isolates;
-
-use super::support::fallible;
 
 #[rstest]
 fn contents_and_linecount_filters() -> Result<()> {

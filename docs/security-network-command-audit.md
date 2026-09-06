@@ -79,6 +79,30 @@ introduces, and concrete remediation tasks that would harden the helpers.
     budgets incrementally so long-running commands fail fast once the
     configured allowance is exceeded.
 
+## File helper findings
+
+- [x] **File-reading filters read unbounded, untrusted entries.** *(Status:
+  remediated in the bounded file-read policy.)* The `contents`, `linecount`,
+  `hash`, and `digest` filters opened caller-supplied paths and read them to
+  EOF without a byte budget or a file-type check. A contributor who replaced a
+  trusted manifest's input path with a huge regular file, a symlink to
+  `/dev/zero`, or a FIFO could exhaust Netsuke's memory, consume unbounded CPU
+  and I/O, or block a build worker indefinitely. *Remediation tasks:*
+  - Enforce a configurable byte budget while streaming, not only from metadata
+    observed before the read.
+  - Open the final entry without following symlinks and verify the opened
+    object is a regular file.
+  - Count lines incrementally instead of loading the entire file.
+  - **Remediation:** the reading filters now share one policy. The final path
+    component is opened with `O_NOFOLLOW` (a pre-open symlink check on
+    Windows), the opened handle must be a regular file, and `contents`,
+    `linecount`, `hash`, and `digest` stream against a running byte total
+    anchored to `StdlibConfig::with_file_max_read_bytes` (default 8 MiB).
+    `linecount` counts terminators incrementally instead of materializing the
+    file. Per-call `max_bytes` may narrow the ceiling and a named
+    `follow_symlinks=true` opt-in permits link following; rejections surface
+    localized diagnostics naming the path and limit without file contents.
+
 ## Next steps
 
 The tasks above can be implemented incrementally. A good first milestone is to

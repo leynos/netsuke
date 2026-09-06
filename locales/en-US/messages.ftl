@@ -210,6 +210,7 @@ stdlib.config.default_fetch_cache_invalid = Default fetch cache path must be rel
 stdlib.config.default_which_cache_invalid = Default which cache capacity must be positive.
 stdlib.config.workspace_root_absolute = Workspace root path must be absolute.
 stdlib.config.fetch_response_limit_positive = Fetch response limit must be positive.
+stdlib.config.file_read_limit_positive = File read limit must be positive.
 stdlib.config.command_output_limit_positive = Command output capture limit must be positive.
 stdlib.config.command_stream_limit_positive = Command stream limit must be positive.
 stdlib.config.which_cache_capacity_positive = Which cache capacity must be positive.
@@ -318,6 +319,8 @@ stdlib.path.relative_to.mismatch = { $path } is not relative to { $root }.
 stdlib.path.expanduser.unsupported = User-specific ~ expansion is unsupported.
 stdlib.path.expanduser.no_home = Cannot expand ~: no home directory environment variables are set.
 stdlib.path.contents.unsupported_encoding = Unsupported encoding '{ $encoding }'.
+stdlib.path.contents.file_too_large = File '{ $path }' exceeded the read limit of { $limit } bytes.
+stdlib.path.contents.not_regular_file = File '{ $path }' is not a regular file.
 stdlib.path.hash.unsupported_algorithm = Unsupported hash algorithm '{ $algorithm }'.
 stdlib.path.hash.unsupported_algorithm_legacy = Unsupported hash algorithm '{ $algorithm }' (enable feature '{ $feature }').
 
