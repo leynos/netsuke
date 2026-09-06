@@ -120,6 +120,9 @@ jobs:
           telemetry+=" workflow_run_id=$ORIGINATING_WORKFLOW_RUN_ID"
           telemetry+=" commit_sha=$ORIGINATING_COMMIT_SHA outcome=$OUTCOME"
           printf '%s\n' "$telemetry"
+      - name: Start CodeScene Check Run publication telemetry
+        id: start_report_coverage
+        run: printf 'started_at_ms=%s\n' "$(date --utc +%s%3N)" >> "$GITHUB_OUTPUT"
       - name: Report CodeScene coverage gate
         id: report_coverage
         if: always()
@@ -177,6 +180,23 @@ jobs:
                 summary,
               },
             });
+      - name: Record CodeScene Check Run publication telemetry
+        id: observe_report_coverage
+        if: always()
+        env:
+          STARTED_AT_MS: ${{ steps.start_report_coverage.outputs.started_at_ms }}
+          OUTCOME: ${{ steps.report_coverage.outcome }}
+          ORIGINATING_WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
+          ORIGINATING_COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          ended_at_ms="$(date --utc +%s%3N)"
+          started_at_ms="${STARTED_AT_MS:-$ended_at_ms}"
+          duration_ms="$((ended_at_ms - started_at_ms))"
+          printf 'duration_ms=%s\n' "$duration_ms" >> "$GITHUB_OUTPUT"
+          telemetry="coverage-pr-submission operation=codescene-check-run-publication duration_ms=$duration_ms"
+          telemetry+=" workflow_run_id=$ORIGINATING_WORKFLOW_RUN_ID"
+          telemetry+=" commit_sha=$ORIGINATING_COMMIT_SHA outcome=$OUTCOME"
+          printf '%s\n' "$telemetry"
       - name: Summarize CodeScene coverage gate
         if: always()
         env:
@@ -189,6 +209,8 @@ jobs:
           ARTIFACT_VALIDATION_DURATION_MS: ${{ steps.observe_validate_coverage.outputs.duration_ms }}
           SUBMISSION_OUTCOME: ${{ steps.submit_coverage.outcome }}
           SUBMISSION_DURATION_MS: ${{ steps.observe_submit_coverage.outputs.duration_ms }}
+          CHECK_RUN_PUBLICATION_OUTCOME: ${{ steps.report_coverage.outcome }}
+          CHECK_RUN_PUBLICATION_DURATION_MS: ${{ steps.observe_report_coverage.outputs.duration_ms }}
           CONCLUSION: ${{ steps.report_coverage.outputs.conclusion }}
         run: |
           {
@@ -202,6 +224,8 @@ jobs:
             printf '%s\n' "- Validation duration (ms): $ARTIFACT_VALIDATION_DURATION_MS"
             printf '%s\n' "- Submission outcome: $SUBMISSION_OUTCOME"
             printf '%s\n' "- Submission duration (ms): $SUBMISSION_DURATION_MS"
+            printf '%s\n' "- Check Run publication outcome: $CHECK_RUN_PUBLICATION_OUTCOME"
+            printf '%s\n' "- Check Run publication duration (ms): $CHECK_RUN_PUBLICATION_DURATION_MS"
             printf '%s\n' "- Conclusion: $CONCLUSION"
           } >> "$GITHUB_STEP_SUMMARY"
   report-excluded-fork:
