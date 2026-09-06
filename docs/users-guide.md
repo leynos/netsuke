@@ -845,6 +845,13 @@ and explains the path-type change. The `program` and `build_file` fields are
 borrowed `&Utf8Path`; `NinjaProcessOptions::working_dir` is an
 `Option<Utf8PathBuf>`.
 
+For a build request, Netsuke places a literal Ninja `--` after its own options
+and before every selected target when the target list is non-empty. This
+applies to explicit targets and configured `default_targets`, so option-like
+values such as `-f` and `-C` remain target operands rather than changing
+Ninja's control options. With no selected targets, the terminator is omitted.
+Ninja tool requests are unaffected because they use fixed tool operands.
+
 The `options: &options` field and associated `NinjaProcessOptions` shape shown
 here are beta3 additions. Published beta2 request types use `cli: &cli`
 instead, so beta2 callers must not assume this API shape is available in that

@@ -56,6 +56,9 @@ pub(super) fn configure_ninja_build_command(
 ) -> io::Result<()> {
     configure_ninja_base(cmd, request.options, request.build_file, request.env)?;
     let targets = request.targets;
+    if !targets.as_slice().is_empty() {
+        cmd.arg("--");
+    }
     cmd.args(targets.as_slice());
     Ok(())
 }
@@ -146,11 +149,50 @@ mod tests {
         configure_ninja_build_command(&mut cmd, &request)?;
 
         let mut expected = expected_base_arguments(&utf8_build_file)?;
-        expected.push(OsString::from("default"));
+        expected.extend([OsString::from("--"), OsString::from("default")]);
         let actual = command_arguments(&cmd);
         ensure!(
             actual == expected,
             "build command argument order changed: {actual:?}"
+        );
+        Ok(())
+    }
+
+    #[rstest]
+    fn build_configuration_terminates_multi_target_operands(
+        temp_file: Result<NamedTempFile>,
+        options: io::Result<NinjaProcessOptions>,
+        env: CommandEnv,
+    ) -> Result<()> {
+        let build_file = temp_file?;
+        let temp_build_file = build_file.into_temp_path();
+        let utf8_build_file = Utf8PathBuf::from_path_buf(temp_build_file.to_path_buf())
+            .map_err(|path| anyhow::anyhow!("tempfile path is not UTF-8: {}", path.display()))?;
+        let resolved_options = options?;
+        let target_names = vec![String::from("first"), String::from("second")];
+        let targets = super::super::BuildTargets::new(&target_names);
+        let request = NinjaBuildRequest {
+            program: Utf8Path::new("ninja"),
+            options: &resolved_options,
+            build_file: &utf8_build_file,
+            targets: &targets,
+            env: &env,
+            stderr_mode: StderrMode::Forward,
+        };
+        let mut cmd = Command::new("ninja");
+
+        configure_ninja_build_command(&mut cmd, &request)?;
+
+        let mut expected = expected_base_arguments(&utf8_build_file)?;
+        expected.extend([
+            OsString::from("--"),
+            OsString::from("first"),
+            OsString::from("second"),
+        ]);
+        let actual = command_arguments(&cmd);
+        ensure!(
+            actual == expected,
+            "multi-target build command argument order changed: {actual:?}"
         );
         Ok(())
     }
@@ -191,6 +233,10 @@ mod tests {
         ensure!(
             actual == expected,
             "missing build file should be passed unchanged after -f: {actual:?}"
+        );
+        ensure!(
+            !actual.iter().any(|argument| argument == "--"),
+            "no-target build command must not append an option terminator: {actual:?}"
         );
         Ok(())
     }
