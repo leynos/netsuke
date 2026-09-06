@@ -185,7 +185,7 @@ pull-request-controlled text and artefact content from these outputs.
 - Trusted submission workflow:
   [`coverage-pr-submit.yml`](../.github/workflows/coverage-pr-submit.yml)
 - Hostile artefact validator:
-  [`validate-coverage-artifact.py`](../scripts/validate-coverage-artifact.py)
+  [`validate_coverage_artifact.py`](../scripts/validate_coverage_artifact.py)
 - Workflow contracts:
   [`trust_boundary_test.py`](../tests/workflow_contracts/trust_boundary_test.py)
   and
