@@ -11,6 +11,7 @@
 //! construction, so manifest-controlled data — template text, macro names,
 //! context values, environment variable names — cannot reach a subscriber.
 
+use crate::manifest::budget::ManifestBudgetStage;
 use metrics::{counter, describe_counter, describe_histogram, histogram};
 use minijinja::Error;
 use std::{sync::Once, time::Instant};
@@ -24,6 +25,8 @@ const MACRO_INVOCATION_DURATION: &str = "netsuke_manifest_macro_invocation_durat
 const TEMPLATE_RENDERS_TOTAL: &str = "netsuke_manifest_template_renders_total";
 /// Metric name for template-render duration histograms.
 const TEMPLATE_RENDER_DURATION: &str = "netsuke_manifest_template_render_duration_seconds";
+/// Metric name counting deterministic manifest-budget exhaustion events.
+const BUDGET_EXHAUSTED_TOTAL: &str = "netsuke_manifest_budget_exhausted_total";
 
 /// Register the macro-invocation metric descriptions exactly once.
 ///
@@ -60,7 +63,23 @@ fn describe_render_metrics() {
             TEMPLATE_RENDER_DURATION,
             "Measures manifest template rendering duration in seconds."
         );
+        describe_counter!(
+            BUDGET_EXHAUSTED_TOTAL,
+            "Counts manifest resource budget exhaustion by closed-vocabulary stage and budget."
+        );
     });
+}
+
+/// Record one resource budget exhaustion without manifest-controlled labels.
+pub(crate) fn record_budget_exhaustion(stage: &'static str, budget: &'static str) {
+    describe_render_metrics();
+    debug_assert!(
+        ManifestBudgetStage::all()
+            .iter()
+            .any(|known_stage| known_stage.as_str() == stage),
+        "budget telemetry must use a closed stage vocabulary"
+    );
+    counter!(BUDGET_EXHAUSTED_TOTAL, "stage" => stage, "budget" => budget).increment(1);
 }
 
 /// Evaluate `invoke` inside a macro-invocation span, recording its outcome.
@@ -83,6 +102,9 @@ pub(super) fn instrument_macro_invocation<T>(
     if let Err(error) = &result {
         span.record("error_category", format_args!("{:?}", error.kind()));
         tracing::debug!(error_category = ?error.kind(), "manifest macro invocation failed");
+        if error.kind() == minijinja::ErrorKind::OutOfFuel {
+            record_budget_exhaustion("macro", "fuel");
+        }
     }
     counter!(MACRO_INVOCATIONS_TOTAL, "outcome" => outcome).increment(1);
     histogram!(MACRO_INVOCATION_DURATION).record(started.elapsed());

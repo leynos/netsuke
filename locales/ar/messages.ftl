@@ -16,6 +16,13 @@ cli.flag.fetch_allow_scheme.help = مخطّطات URL إضافية مسموح ب
 cli.flag.fetch_allow_host.help = أسماء المضيفين المسموح بها عند تفعيل الرفض الافتراضي.
 cli.flag.fetch_block_host.help = أسماء المضيفين المحجوبة دائمًا، حتى إن سُمح بها في موضع آخر.
 cli.flag.fetch_default_deny.help = رفض جميع المضيفين افتراضيًا؛ والسماح بالقائمة المعلنة فقط.
+cli.flag.manifest_evaluation_fuel.help = ‏Limit MiniJinja instructions for each manifest evaluation.
+cli.flag.manifest_fuel.help = ‏Limit MiniJinja instructions across one manifest.
+cli.flag.manifest_rendered_value_bytes.help = ‏Limit bytes rendered into one manifest value.
+cli.flag.manifest_rendered_manifest_bytes.help = ‏Limit total bytes rendered across one manifest.
+cli.flag.manifest_source_bytes.help = ‏Limit template and macro source bytes consumed per manifest.
+cli.flag.manifest_foreach_cardinality.help = ‏Limit values processed by one foreach expansion.
+cli.flag.manifest_expanded_entries.help = ‏Limit targets and actions expanded from one manifest.
 cli.flag.json.help = إخراج JSON قابل للقراءة آليًا.
 cli.flag.no_input.help = عدم قراءة أي مدخلات تفاعلية أبدًا.
 cli.flag.color.help = سياسة الإخراج الملوّن (auto أو always أو never).
@@ -427,3 +434,4 @@ example.errors_found = { $count ->
     [many] عُثر على { $count } خطأً.
    *[other] عُثر على { $count } خطأ.
 }
+manifest.budget.exceeded = ‏Manifest resource budget exhausted during { $stage } after reaching { $limit }.

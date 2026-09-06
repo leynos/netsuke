@@ -1,7 +1,7 @@
 ---
 source: src/cli/parser_tests.rs
-assertion_line: 48
-expression: normalized_help
+assertion_line: 79
+expression: rendered_help
 ---
 Netsuke transforma manifiestos YAML + Jinja en grafos Ninja reproducibles y ejecuta Ninja con valores seguros.
 
@@ -17,12 +17,12 @@ Commands:
 Options:
   -f, --file <FILE>
           Ruta al archivo de manifiesto Netsuke.
-          
+
           [default: Netsukefile]
 
   -C, --directory <DIR>
           Run as if started in this directory.
-          
+
           This affects manifest lookup, output paths, and config discovery.
 
       --config <FILE>
@@ -30,7 +30,7 @@ Options:
 
   -j, --jobs <N>
           Set the number of parallel build jobs.
-          
+
           Values must be between 1 and 64.
 
   -v, --verbose
@@ -44,16 +44,51 @@ Options:
 
       --fetch-allow-host <HOST>
           Hostnames that are permitted when default deny is enabled.
-          
+
           Supports wildcards such as `*.example.com`.
 
       --fetch-block-host <HOST>
           Hostnames that are always blocked, even when allowed elsewhere.
-          
+
           Supports wildcards such as `*.example.com`.
 
       --fetch-default-deny
           Denegar todos los hosts por defecto; solo permitir la lista de permitidos.
+
+      --manifest-evaluation-fuel <FUEL>
+          Limit MiniJinja instructions for each manifest evaluation.
+
+          [default: 1000000]
+
+      --manifest-fuel <FUEL>
+          Limit MiniJinja instructions across one manifest.
+
+          [default: 100000000]
+
+      --manifest-rendered-value-bytes <BYTES>
+          Limit bytes rendered into one manifest value.
+
+          [default: 1048576]
+
+      --manifest-rendered-manifest-bytes <BYTES>
+          Limit total bytes rendered across one manifest.
+
+          [default: 16777216]
+
+      --manifest-source-bytes <BYTES>
+          Limit template and macro source bytes consumed per manifest.
+
+          [default: 4194304]
+
+      --manifest-foreach-cardinality <COUNT>
+          Limit values processed by one foreach expansion.
+
+          [default: 10000]
+
+      --manifest-expanded-entries <COUNT>
+          Limit targets and actions expanded from one manifest.
+
+          [default: 50000]
 
       --json
           Emitir salida JSON legible por máquinas.
@@ -68,7 +103,7 @@ Options:
           - auto:   Follow the host environment
           - always: Force colour output on when available
           - never:  Force colour output off
-          
+
           [default: auto]
 
       --emoji <POLICY>
@@ -78,7 +113,7 @@ Options:
           - auto:   Follow the host environment and accessibility mode
           - always: Force emoji glyphs on
           - never:  Disable emoji glyphs
-          
+
           [default: auto]
 
       --progress <POLICY>
@@ -88,7 +123,7 @@ Options:
           - auto:   Follow Netsuke's default progress behaviour
           - always: Force progress rendering on
           - never:  Disable progress rendering
-          
+
           [default: auto]
 
       --accessibility <POLICY>
@@ -98,7 +133,7 @@ Options:
           - auto: Follow terminal and environment detection
           - on:   Force accessible output on
           - off:  Force accessible output off
-          
+
           [default: auto]
 
       --default-target <TARGET>

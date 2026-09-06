@@ -39,6 +39,8 @@ pub struct TestWorld {
     pub manifest: RefCell<Option<netsuke::ast::NetsukeManifest>>,
     /// Error text captured when manifest loading fails.
     pub manifest_error: Slot<String>,
+    /// Resource ceilings injected for manifest parsing scenarios.
+    pub manifest_budget_limits: Slot<netsuke::manifest::ManifestBudgetLimits>,
 
     // IR state (non-Clone)
     /// Build graph derived from the active manifest.

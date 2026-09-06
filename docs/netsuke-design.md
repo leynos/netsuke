@@ -476,6 +476,19 @@ The cleaner model is:
 
 ### 2.5 Generated Targets and Actions with `foreach`
 
+#### Manifest resource budget
+
+Every parse creates one manifest budget shared by `foreach`, `when`, macro
+calls, field rendering, and manifest-query rendering. MiniJinja fuel counts
+instructions; Netsuke counts template-plus-import source bytes, rendered bytes,
+`foreach` values, and expanded target/action entries. The defaults are
+1,000,000 instructions per evaluation, 100,000,000 instructions per manifest, 1
+MiB per value, 16 MiB rendered bytes, 4 MiB source bytes, 10,000 iterator
+values, and 50,000 expanded entries. Trusted operator configuration may lower
+these limits; project configuration must not widen them. The loader emits a
+localized redacted exhaustion diagnostic before constructing proportional
+output or cloned expansion data.
+
 Large sets of similar outputs or setup actions can clutter a manifest when
 written individually. Netsuke supports a `foreach` entry within top-level
 `targets` and `actions` to generate multiple entries succinctly. The `foreach`
@@ -3389,6 +3402,23 @@ The primary scanner's platform-specific search determines which automatic file
 is retained first. The `-C/--directory` flag anchors the project-scope fallback
 to the specified directory while leaving the scanner's user- and system-scope
 lookups unchanged.
+
+#### Manifest resource budget precedence
+
+One `ManifestBudget` spans expansion, `when`, macro invocation, normal field
+rendering, and manifest-query rendering. `MiniJinja` fuel counts instructions;
+Netsuke charges template-plus-import source bytes, rendered bytes, `foreach`
+values, and expanded target/action entries. Defaults are 1,000,000 instructions
+per evaluation, 100,000,000 per manifest, 1 MiB per value, 16 MiB rendered
+bytes, 4 MiB source bytes, 10,000 iterator values, and 50,000 expanded entries.
+
+Budget configuration follows the normal precedence ladder, except that the
+primary project file is a monotonic-narrowing layer: it may lower any effective
+ceiling but may not raise one established by a more-trusted source. Exhaustion
+returns a localized redacted diagnostic and closed-vocabulary telemetry. This
+loader-level contract complements the independent
+[fetch and shell helper limits](#network--command-functions--filters), which
+bound external I/O rather than manifest evaluation work.
 
 **Layer merge precedence** (lowest to highest):
 
