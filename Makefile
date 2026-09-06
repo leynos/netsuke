@@ -80,6 +80,12 @@ PYTHON_BASELINE ?= 3.14
 # tests/workflow_contracts keeps the two from drifting apart.
 RUFF_VERSION ?= 0.16.4
 RUFF = $(UV_ENV) $(UV) tool run --from ruff==$(RUFF_VERSION) ruff
+# Pin Interrogate so documentation coverage is stable between local and CI
+# runs. The repository uses it only as a quality gate; it is not a Python
+# distribution and does not need project metadata.
+INTERROGATE_VERSION ?= 1.7.0
+INTERROGATE = $(UV_ENV) $(UV) tool run --from 'interrogate==$(INTERROGATE_VERSION)' \
+	interrogate --fail-under 100
 # Pin ty so `make` and CI invoke the same typechecker release. ty is pre-1.0
 # and diagnostics shift between releases, so an unpinned install breaks the
 # typecheck gate without any code change. Bump deliberately and fix new
@@ -112,6 +118,10 @@ DF12_PYLINT = $(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
 	--enable=$(DF12_PYLINT_MESSAGES)
 AMBRLEAKS = $(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
 	--from '$(DF12_PYTHON_LINTS)' ambrleaks
+# The estate-synchronised spelling helpers retain their standalone coverage
+# policy. Keep this explicit so Interrogate covers every other owned Python
+# definition in the same source boundary as Ruff and Pylint.
+INTERROGATE_EXCLUDES = $(addprefix --exclude ,$(SPELLING_HELPER_FILES))
 SPELLING_HELPER_COVERAGE = --cov=generate_typos_config --cov=typos_rollout_check --cov=typos_rollout \
 	--cov=typos_rollout_cache --cov=typos_rollout_http
 SPELLING_HELPER_FILES = scripts/generate_typos_config.py \
@@ -175,11 +185,12 @@ target/%/$(APP): ## Build binary in debug or release mode
 
 lint: lint-clippy lint-whitaker lint-python github-actions-lint ## Run the Rust, Python, and GitHub Actions lint suites with warnings denied
 
-lint-python: ## Run Ruff, Pylint, the df12 house lints, and ambrleaks over the Python sources
+lint-python: ## Run Ruff, Pylint, Interrogate, the df12 house lints, and ambrleaks over the Python sources
 	$(RUFF) check $(PYTHON_SOURCES)
 	$(PYLINT) $(PYLINT_TARGETS)
 	$(DF12_PYLINT) $(PYLINT_TARGETS)
 	$(AMBRLEAKS) $(PYTHON_SOURCES)
+	$(INTERROGATE) $(INTERROGATE_EXCLUDES) $(PYTHON_SOURCES)
 
 lint-clippy: ## Run rustdoc and Clippy with warnings denied
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) doc --workspace --no-deps

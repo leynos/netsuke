@@ -45,6 +45,7 @@ class CoveragePayloadShapeError(TypeError):
     """Report that Rustdoc emitted a coverage payload other than an object."""
 
     def __init__(self) -> None:
+        """Initialise the error for a non-object coverage payload."""
         super().__init__("expected an object")
 
 
@@ -52,6 +53,7 @@ class CoverageEntryShapeError(ValueError):
     """Report a Rustdoc coverage entry missing a required count."""
 
     def __init__(self) -> None:
+        """Initialise the error for a malformed coverage entry."""
         super().__init__("entry must provide total and with_docs")
 
 
@@ -59,6 +61,7 @@ class CoverageCountError(ValueError):
     """Report a Rustdoc coverage count that violates the count invariants."""
 
     def __init__(self) -> None:
+        """Initialise the error for an invalid coverage count."""
         super().__init__(_COUNT_INVARIANT)
 
 
@@ -66,6 +69,7 @@ class CoverageOutputError(RuntimeError):
     """Report that Rustdoc produced no usable coverage JSON for a target."""
 
     def __init__(self, target: DocTarget, detail: str) -> None:
+        """Initialise the error with the affected target and diagnostic detail."""
         super().__init__(
             f"cargo rustdoc for {target.package} {target.kind}"
             f" ({target.name or 'lib'}) did not emit coverage JSON: {detail}"

@@ -1533,7 +1533,8 @@ The Python gates run inside the ordinary quality-gate targets:
 - `make check-fmt` runs `ruff format --check` over the Python sources.
 - `make fmt` applies `ruff format` and Ruff's import sorting.
 - `make lint` runs `make lint-python`: `ruff check`, a Pylint pass, the
-  df12 house lints, and the `ambrleaks` snapshot scanner.
+  df12 house lints, the `ambrleaks` snapshot scanner, and Interrogate docstring
+  coverage.
 - `make typecheck` runs `make typecheck-python`: the
   [ty](https://github.com/astral-sh/ty) typechecker over the Python sources.
 
@@ -1548,10 +1549,12 @@ source, with the message set enabled in `pyproject.toml`; the
 discipline, and the baseline-gated R9112/C9112 checks) need CPython 3.14 and
 run as a second pass pinned to `DF12_PYTHON_LINTS_REF`.
 
-Tool versions are pinned twice by design: the Makefile defaults (`RUFF_VERSION`,
-`TY_VERSION`, `PYTHON_BASELINE`) drive local runs, and the `env` block of
-`.github/workflows/ci.yml` re-declares the same values, which override the
-Makefile's `?=` assignments in CI.
+Tool versions are pinned by design: the Makefile defaults (`RUFF_VERSION`,
+`INTERROGATE_VERSION`, `TY_VERSION`, `PYTHON_BASELINE`) drive local runs. The
+`env` block of `.github/workflows/ci.yml` re-declares `RUFF_VERSION`,
+`TY_VERSION`, and `PYTHON_BASELINE`, which override their Makefile `?=`
+assignments in CI. CI runs Interrogate through that same pinned Makefile
+command rather than carrying a second workflow-only pin.
 `tests/workflow_contracts/python_toolchain_sync_test.py` asserts the pairs
 agree — without asserting any specific version — so a bump must land in both
 files in the same commit.
@@ -1560,7 +1563,14 @@ The shared spelling-policy rollout helpers (`scripts/generate_typos_config.py`
 and the `typos_rollout*` modules and tests) are estate-synchronized and keep
 their own pinned, isolated Ruff policy enforced by `make spelling-helper-test`;
 they are excluded from the repository-wide Ruff and Pylint configuration so the
-two policies cannot disagree about the same file.
+two policies cannot disagree about the same file. Interrogate uses the same
+explicit file list as an exclusion, so it measures every remaining definition
+under `PYTHON_SOURCES` (`scripts` and `tests/workflow_contracts`) at 100%. The
+skipped spelling helpers remain covered by their dedicated policy; no broader
+path or nested-function exemption applies. There are no `typ.overload` stubs in
+this scope. If one is introduced, add a targeted `--ignore-regex` for that stub
+only because Interrogate 1.7.0 cannot recognise the configured `typ.overload`
+spelling; leave Ruff's real-implementation docstring rule enabled.
 
 Lint and typecheck suppressions are a last resort, tightly scoped, and every
 one must carry a reason on the line — the df12 messages C9106 and C9107 fail any
