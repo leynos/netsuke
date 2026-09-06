@@ -56,23 +56,7 @@ def _write_recording_adapter(directory: Path, name: str, behaviour: str) -> Path
 
 
 def _trace_signature(trace: dict[str, object]) -> tuple[object, ...]:
-    """Return the bounded fields that identify one trace record.
-
-    Parameters
-    ----------
-    trace
-        Decoded trace record with the fixed admission schema.
-
-    Returns
-    -------
-    tuple[object, ...]
-        Event, operation, outcome, and error-category values in schema order.
-
-    Notes
-    -----
-    Contract invariant: identifiers and other unbounded fields are excluded
-    from the returned comparison signature.
-    """
+    """Return the bounded fields that identify one trace record."""
     return tuple(
         trace[field] for field in ("event", "operation", "outcome", "error_category")
     )
@@ -105,22 +89,7 @@ def _write_recording_adapters(directory: Path) -> dict[str, Path]:
 
 
 def _write_failing_clock_adapter(tmp_path: Path) -> Path:
-    """Write a clock adapter that fails on one configured invocation.
-
-    Parameters
-    ----------
-    tmp_path
-        Directory that receives the executable clock fake.
-
-    Returns
-    -------
-    Path
-        Executable clock adapter path.
-
-    Notes
-    -----
-    Contract invariant: tests can fail either clock read through child state.
-    """
+    """Write a clock adapter that fails on one configured invocation."""
     adapter = tmp_path / "clock-adapter"
     adapter.write_text(
         "#!/usr/bin/env bash\n"
@@ -137,6 +106,71 @@ def _write_failing_clock_adapter(tmp_path: Path) -> Path:
     )
     adapter.chmod(0o755)
     return adapter
+
+
+def _assert_fresh_observation_metrics(metrics: list[dict[str, object]]) -> None:
+    """Assert the fixed metric contract for synthetic fresh evidence."""
+    assert len(metrics) == 11, "five operations need counters and durations plus gate"
+    duration_operations = {
+        record["labels"]["operation"]
+        for record in metrics
+        if record["name"] == "netsuke_release_admission_operation_duration_seconds"
+        and isinstance(record["labels"], dict)
+    }
+    assert duration_operations == CANARY_BY_OPERATION.keys(), (
+        "every fixed operation must emit its bounded duration"
+    )
+    for operation, canary in CANARY_BY_OPERATION.items():
+        records = operation_records(metrics, operation)
+        assert len(records) == 1, f"{operation} must emit exactly one counter"
+        outcome = "failure" if operation == "verify_evidence" else "success"
+        error_category = "missing_evidence" if outcome == "failure" else "none"
+        assert records[0]["labels"] == expected_operation_labels(
+            canary, operation, outcome, error_category
+        ), f"{operation} must retain its bounded outcome and error category"
+    assert metrics[-1] == FRESH_OBSERVATION_GATE_RECORD, (
+        "synthetic freshness must retain the producer-backed evidence failure"
+    )
+
+
+def _assert_fresh_observation_outputs(outputs: dict[str, str], tmp_path: Path) -> None:
+    """Assert the fixed workflow-output contract for synthetic fresh evidence."""
+    assert {
+        name: outputs[name] for name in FRESH_OBSERVATION_GATE_OUTPUTS
+    } == FRESH_OBSERVATION_GATE_OUTPUTS, "observation must publish the gate result"
+    expected_metrics_file = str(tmp_path / "release-admission-metrics.jsonl")
+    assert outputs["metrics-file"] == expected_metrics_file, (
+        "workflow output must identify the metric artefact"
+    )
+    assert outputs["trace-file"] == str(tmp_path / "release-admission-traces.jsonl"), (
+        "workflow output must identify the trace artefact"
+    )
+
+
+def _assert_fresh_observation_traces(traces: list[dict[str, object]]) -> None:
+    """Assert the fixed trace sequence for synthetic fresh evidence."""
+    assert {trace["event"] for trace in traces} == EXPECTED_TRACE_EVENTS, (
+        "traces must include operation, gate, output, and delivery boundaries"
+    )
+    assert [_trace_signature(trace) for trace in traces] == [
+        ("operation_complete", operation, "success", "none")
+        for operation in (
+            "resolve_tag_commit",
+            "fetch_candidate_revision",
+            "fetch_workflow_run",
+            "check_scan_freshness",
+        )
+    ] + [
+        (
+            "operation_complete",
+            "verify_evidence",
+            "failure",
+            "missing_evidence",
+        ),
+        ("gate_complete", "verify_evidence", "failure", "missing_evidence"),
+        ("workflow_output_delivery", "verify_evidence", "success", "none"),
+        ("trace_delivery", "verify_evidence", "success", "none"),
+    ], "successful operation sequence must retain all bounded trace hand-offs"
 
 
 def test_gate_observes_synthetic_fresh_evidence_without_blocking(
@@ -164,59 +198,27 @@ def test_gate_observes_synthetic_fresh_evidence_without_blocking(
     assert {call["command"] for call in calls} == {"gh", "git"}, (
         "the production API and Git adapter contracts must both execute"
     )
-    assert len(metrics) == 11, "five operations need counters and durations plus gate"
-    duration_operations = {
-        record["labels"]["operation"]
-        for record in metrics
-        if record["name"] == "netsuke_release_admission_operation_duration_seconds"
-        and isinstance(record["labels"], dict)
+    _assert_fresh_observation_metrics(metrics)
+    _assert_fresh_observation_outputs(outputs, Path(tmp_path))
+    _assert_fresh_observation_traces(traces)
+
+
+def _assert_sink_adapter_targets(
+    calls_by_adapter: dict[str, list[dict[str, object]]],
+    outputs: dict[str, str],
+    run_directory: Path,
+) -> None:
+    """Assert each sink adapter writes only to its configured target."""
+    expected_targets = {
+        "metrics-sink": outputs["metrics-file"],
+        "output-sink": str(run_directory / "github-output"),
+        "trace-sink": outputs["trace-file"],
     }
-    assert duration_operations == CANARY_BY_OPERATION.keys(), (
-        "every fixed operation must emit its bounded duration"
-    )
-    for operation, canary in CANARY_BY_OPERATION.items():
-        records = operation_records(metrics, operation)
-        assert len(records) == 1, f"{operation} must emit exactly one counter"
-        outcome = "failure" if operation == "verify_evidence" else "success"
-        error_category = "missing_evidence" if outcome == "failure" else "none"
-        assert records[0]["labels"] == expected_operation_labels(
-            canary, operation, outcome, error_category
-        ), f"{operation} must retain its bounded outcome and error category"
-    assert metrics[-1] == FRESH_OBSERVATION_GATE_RECORD, (
-        "synthetic freshness must retain the producer-backed evidence failure"
-    )
-    assert {
-        name: outputs[name] for name in FRESH_OBSERVATION_GATE_OUTPUTS
-    } == FRESH_OBSERVATION_GATE_OUTPUTS, "observation must publish the gate result"
-    expected_metrics_file = str(Path(tmp_path) / "release-admission-metrics.jsonl")
-    assert outputs["metrics-file"] == expected_metrics_file, (
-        "workflow output must identify the metric artefact"
-    )
-    assert outputs["trace-file"] == str(
-        Path(tmp_path) / "release-admission-traces.jsonl"
-    ), "workflow output must identify the trace artefact"
-    assert {trace["event"] for trace in traces} == EXPECTED_TRACE_EVENTS, (
-        "traces must include operation, gate, output, and delivery boundaries"
-    )
-    assert [_trace_signature(trace) for trace in traces] == [
-        ("operation_complete", operation, "success", "none")
-        for operation in (
-            "resolve_tag_commit",
-            "fetch_candidate_revision",
-            "fetch_workflow_run",
-            "check_scan_freshness",
-        )
-    ] + [
-        (
-            "operation_complete",
-            "verify_evidence",
-            "failure",
-            "missing_evidence",
-        ),
-        ("gate_complete", "verify_evidence", "failure", "missing_evidence"),
-        ("workflow_output_delivery", "verify_evidence", "success", "none"),
-        ("trace_delivery", "verify_evidence", "success", "none"),
-    ], "successful operation sequence must retain all bounded trace hand-offs"
+    for adapter_name, target in expected_targets.items():
+        assert calls_by_adapter[adapter_name], f"{adapter_name} must receive records"
+        assert all(
+            call["arguments"] == [target] for call in calls_by_adapter[adapter_name]
+        ), f"{adapter_name} must receive only its configured output target"
 
 
 def test_explicit_adapters_receive_native_boundary_contracts(tmp_path: Path) -> None:
@@ -278,16 +280,7 @@ def test_explicit_adapters_receive_native_boundary_contracts(tmp_path: Path) -> 
     assert all(arguments[0] == "-c" for arguments in clock_arguments), (
         "clock adapter must receive the Python clock program argument"
     )
-    expected_targets = {
-        "metrics-sink": outputs["metrics-file"],
-        "output-sink": str(tmp_path / "run" / "github-output"),
-        "trace-sink": outputs["trace-file"],
-    }
-    for adapter_name, target in expected_targets.items():
-        assert calls_by_adapter[adapter_name], f"{adapter_name} must receive records"
-        assert all(
-            call["arguments"] == [target] for call in calls_by_adapter[adapter_name]
-        ), f"{adapter_name} must receive only its configured output target"
+    _assert_sink_adapter_targets(calls_by_adapter, outputs, tmp_path / "run")
 
 
 def test_validator_rejects_non_finite_metric_values() -> None:
