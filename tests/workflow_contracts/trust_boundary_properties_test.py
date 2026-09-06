@@ -10,6 +10,7 @@ from hypothesis import example, given, settings
 from hypothesis import strategies as st
 from trust_boundary_invariants import (
     CREDENTIAL_ENVIRONMENT_KEY,
+    INDEXED_SECRET_EXPRESSIONS,
     REQUIRED_SECRET_JOB_PERMISSIONS,
     TOKEN_PRESENCE_GUARD,
     TRUSTED_CHECKOUT_REF,
@@ -22,6 +23,8 @@ MUTATIONS = (
     "secret-in-pull-request-job",
     "secret-missing-if-guard",
     "checkout-untrusted-ref",
+    "indexed-secret-in-run",
+    "indexed-secret-in-with",
 )
 
 
@@ -63,6 +66,14 @@ def _mutated_boundary(
         steps[1].pop("if")
     if mutation == "checkout-untrusted-ref":
         steps[0]["with"] = {"ref": "${{ github.event.workflow_run.head_sha }}"}
+    if mutation == "indexed-secret-in-run":
+        steps.append({"name": "Leak", "run": f"echo {INDEXED_SECRET_EXPRESSIONS[0]}"})
+    if mutation == "indexed-secret-in-with":
+        steps.append({
+            "name": "Leak",
+            "uses": "example/action@pinned",
+            "with": {"token": INDEXED_SECRET_EXPRESSIONS[0]},
+        })
     return job, steps
 
 
@@ -70,6 +81,8 @@ def _mutated_boundary(
 @example(mutation="secret-in-pull-request-job")
 @example(mutation="secret-missing-if-guard")
 @example(mutation="checkout-untrusted-ref")
+@example(mutation="indexed-secret-in-run")
+@example(mutation="indexed-secret-in-with")
 @given(mutation=st.sampled_from(MUTATIONS))
 def test_generated_boundary_mutations_accept_only_safe_configuration(
     mutation: str,

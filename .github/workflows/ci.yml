@@ -82,6 +82,7 @@ jobs:
           # Full history so the deferred cs-coverage check can reach the pull
           # request's merge base once the gate is wired in.
           fetch-depth: 0
+          persist-credentials: false
       - name: Export sccache credentials
         # A server started without these stays on local disk all job.
         uses: ./.github/actions/sccache-gha-credentials

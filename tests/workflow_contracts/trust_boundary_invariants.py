@@ -11,6 +11,11 @@ import collections.abc as cabc
 CREDENTIAL_ENVIRONMENT_KEY = "CS_ACCESS_TOKEN"
 TOKEN_PRESENCE_GUARD = f"env.{CREDENTIAL_ENVIRONMENT_KEY} != ''"
 SECRET_EXPRESSION = f"${{{{ secrets.{CREDENTIAL_ENVIRONMENT_KEY} }}}}"
+INDEXED_SECRET_EXPRESSIONS = (
+    f"${{{{ secrets['{CREDENTIAL_ENVIRONMENT_KEY}'] }}}}",
+    f'${{{{ secrets["{CREDENTIAL_ENVIRONMENT_KEY}"] }}}}',
+)
+SECRET_EXPRESSIONS = (SECRET_EXPRESSION, *INDEXED_SECRET_EXPRESSIONS)
 TRUSTED_CHECKOUT_REF = "${{ github.event.repository.default_branch }}"
 REQUIRED_SECRET_JOB_PERMISSIONS = {
     "actions": "read",
@@ -146,20 +151,22 @@ def _references_secret_in_executable(step: dict[str, object]) -> bool:
 
     Environment mappings are excluded: the guarded carrier step and any
     ``env.CS_ACCESS_TOKEN`` consumer expressions are the sanctioned local
-    pattern, so only the raw ``secrets.CS_ACCESS_TOKEN`` expression reaching
-    shell commands or action inputs counts as an exfiltration route.
+    pattern, so only raw dotted or indexed ``secrets`` expressions reaching
+    shell commands or action inputs count as exfiltration routes.
 
     Returns
     -------
     bool
-        Whether ``run`` or ``with`` mentions the raw secret expression.
+        Whether ``run`` or ``with`` mentions a raw secret expression.
     """
     executable_surfaces = (
         step.get("run", ""),
         step.get("with", {}),
     )
     return any(
-        contains_text(surface, SECRET_EXPRESSION) for surface in executable_surfaces
+        contains_text(surface, expression)
+        for surface in executable_surfaces
+        for expression in SECRET_EXPRESSIONS
     )
 
 
