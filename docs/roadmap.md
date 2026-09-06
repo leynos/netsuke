@@ -2137,6 +2137,7 @@ and
 result deterministically on a machine with no compiler and no network, and a
 seeded property failure replays identically from its reported seed and tuple
 inputs.
+
 ## 11. Allow-listed structured-command shell selection
 
 Hypothesis: a structured command can select a required shell dialect portably
