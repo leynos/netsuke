@@ -30,6 +30,8 @@ VALIDATION_STEP = "Validate hostile coverage artefact"
 SUBMISSION_STEP = "Check coverage against CodeScene gates"
 REPORT_STEP = "Report CodeScene coverage gate"
 SUMMARY_STEP = "Summarize CodeScene coverage gate"
+START_REPORT_TELEMETRY_STEP = "Start CodeScene Check Run publication telemetry"
+REPORT_TELEMETRY_STEP = "Record CodeScene Check Run publication telemetry"
 TRUSTED_CHECKOUT_STEP = "Check out trusted validation tooling"
 SETUP_UV_STEP = "Setup uv"
 TRUSTED_CHECKOUT_ACTION = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
@@ -110,6 +112,9 @@ def _assert_submission_mechanics(steps: list[dict[str, object]]) -> None:
     assert download.get("uses") == DOWNLOAD_ACTION, (
         "hostile artefact download must remain pinned"
     )
+    assert require_mapping(download.get("with"), "coverage download inputs") == (
+        EXPECTED_DOWNLOAD_INPUTS
+    ), "the download action must receive only its reviewed cross-run inputs"
     assert validation.get("run") == VALIDATION_COMMAND, (
         "the hostile artefact must pass the exact validation gate"
     )
@@ -161,20 +166,6 @@ def test_submission_workflow_orders_the_hostile_data_handoff() -> None:
     """Download, validate, submit, report, and summarize in that strict order."""
     workflow = load_workflow(COVERAGE_PR_WORKFLOW_PATH)
     steps = job_steps(workflow, "submit-coverage")
-    download = named_step(steps, DOWNLOAD_STEP)
-    download_with = require_mapping(download.get("with"), "coverage download inputs")
-    assert download_with["name"] == ARTEFACT_NAME, (
-        "the trusted workflow must download only the fixed coverage artefact"
-    )
-    assert download_with["run-id"] == "${{ github.event.workflow_run.id }}", (
-        "the download must be correlated to the source workflow run"
-    )
-    assert "skip-decompress" not in download_with, (
-        "the validator must receive the extracted LCOV data file"
-    )
-    assert download_with == EXPECTED_DOWNLOAD_INPUTS, (
-        "the download action must receive only its reviewed cross-run inputs"
-    )
     _assert_submission_mechanics(steps)
 
     ordered_steps = [
@@ -237,6 +228,11 @@ def test_check_run_and_summary_publish_only_bounded_correlation() -> None:
     ):
         assert field in report_script, f"the Check Run summary must contain {field!r}"
         assert field in summary_script, f"the workflow summary must contain {field!r}"
+    for field in (
+        "Check Run publication outcome",
+        "Check Run publication duration (ms)",
+    ):
+        assert field in summary_script, f"the workflow summary must contain {field!r}"
     expected_report_environment = (
         ("SUBMISSION_OUTCOME", "${{ steps.submit_coverage.outcome }}"),
         ("ARTIFACT_DOWNLOAD_OUTCOME", "${{ steps.download_coverage.outcome }}"),
@@ -275,31 +271,51 @@ def test_check_run_and_summary_publish_only_bounded_correlation() -> None:
     )
 
 
-def test_telemetry_uses_fixed_operations_and_bounded_stage_fields() -> None:
-    """Record each handoff stage with duration and trusted correlation data."""
-    workflow = load_workflow(COVERAGE_PR_WORKFLOW_PATH)
-    steps = job_steps(workflow, "submit-coverage")
+def _assert_telemetry_contract(steps: list[dict[str, object]]) -> None:
+    """Assert bounded telemetry for every trusted handoff operation."""
     telemetry = (
         (
             "Record coverage artefact download telemetry",
             "coverage-artifact-download",
             "${{ steps.download_coverage.outcome }}",
+            "start_download_coverage",
         ),
         (
             "Record hostile coverage validation telemetry",
             "hostile-coverage-validation",
             "${{ steps.validate_coverage.outcome }}",
+            "start_validate_coverage",
         ),
         (
             "Record CodeScene submission telemetry",
             "codescene-submission",
             "${{ steps.submit_coverage.outcome }}",
+            "start_submit_coverage",
+        ),
+        (
+            REPORT_TELEMETRY_STEP,
+            "codescene-check-run-publication",
+            "${{ steps.report_coverage.outcome }}",
+            "start_report_coverage",
         ),
     )
-    for name, operation, outcome in telemetry:
+    expected_environment_keys = {
+        "STARTED_AT_MS",
+        "OUTCOME",
+        "ORIGINATING_WORKFLOW_RUN_ID",
+        "ORIGINATING_COMMIT_SHA",
+    }
+    for name, operation, outcome, start_step in telemetry:
         step = named_step(steps, name)
         environment = require_mapping(step.get("env"), f"{name} environment")
         script = str(step["run"])
+        assert step.get("if") == "always()", f"{name} must run after failure"
+        assert set(environment) == expected_environment_keys, (
+            f"{name} must receive only timing, outcome, and correlation fields"
+        )
+        assert environment["STARTED_AT_MS"] == (
+            f"${{{{ steps.{start_step}.outputs.started_at_ms }}}}"
+        ), f"{name} must receive its own start time"
         assert environment["OUTCOME"] == outcome, (
             f"{name} must report only its own stage outcome"
         )
@@ -313,6 +329,34 @@ def test_telemetry_uses_fixed_operations_and_bounded_stage_fields() -> None:
             f"{name} must use its fixed operation name"
         )
         assert "duration_ms=" in script, f"{name} must emit a duration metric"
+    report_index = unique_step_index(steps, REPORT_STEP)
+    start_index = unique_step_index(steps, START_REPORT_TELEMETRY_STEP)
+    telemetry_index = unique_step_index(steps, REPORT_TELEMETRY_STEP)
+    assert start_index == report_index - 1, "start telemetry must precede Check Run"
+    assert telemetry_index == report_index + 1, "report telemetry must follow Check Run"
+
+
+def test_telemetry_uses_fixed_operations_and_bounded_stage_fields() -> None:
+    """Record each handoff stage with duration and trusted correlation data."""
+    workflow = load_workflow(COVERAGE_PR_WORKFLOW_PATH)
+    _assert_telemetry_contract(job_steps(workflow, "submit-coverage"))
+
+
+@pytest.mark.parametrize("mutation", ["operation-name", "no-op-script"])
+def test_telemetry_contract_rejects_reporting_mutations(mutation: str) -> None:
+    """Reject reporting telemetry that no longer emits its fixed measurement."""
+    workflow = load_workflow(COVERAGE_PR_WORKFLOW_PATH)
+    steps = copy.deepcopy(job_steps(workflow, "submit-coverage"))
+    report_telemetry = named_step(steps, REPORT_TELEMETRY_STEP)
+    if mutation == "operation-name":
+        report_telemetry["run"] = str(report_telemetry["run"]).replace(
+            "codescene-check-run-publication", "other-operation"
+        )
+    else:
+        report_telemetry["run"] = "true"
+
+    with pytest.raises(AssertionError):
+        _assert_telemetry_contract(steps)
 
 
 def test_observability_avoids_sensitive_or_untrusted_fields() -> None:
@@ -321,6 +365,7 @@ def test_observability_avoids_sensitive_or_untrusted_fields() -> None:
     steps = job_steps(workflow, "submit-coverage")
     report = named_step(steps, REPORT_STEP)
     summary = named_step(steps, SUMMARY_STEP)
+    report_telemetry = named_step(steps, REPORT_TELEMETRY_STEP)
     observable_values = "\n".join([
         str(require_mapping(report.get("with"), "report inputs")["script"]),
         str(require_mapping(report.get("env"), "report environment")),
@@ -332,8 +377,12 @@ def test_observability_avoids_sensitive_or_untrusted_fields() -> None:
                 "Record coverage artefact download telemetry",
                 "Record hostile coverage validation telemetry",
                 "Record CodeScene submission telemetry",
+                REPORT_TELEMETRY_STEP,
             )
         ],
+        str(
+            require_mapping(report_telemetry.get("env"), "report telemetry environment")
+        ),
     ])
 
     for forbidden in (
