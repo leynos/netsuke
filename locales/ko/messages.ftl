@@ -88,7 +88,6 @@ runner.manifest.current_directory_label = 현재 디렉터리
 runner.manifest.default_not_declared = 매니페스트 기본값 '{ $default }'이(가) 선언된 작업 또는 대상을 가리키지 않습니다.
 runner.context.network_policy = 네트워크 정책을 구성하지 못했습니다.
 runner.context.load_manifest = { $path }의 매니페스트를 불러오지 못했습니다.
-runner.context.serialise_manifest = 매니페스트를 직렬화하지 못했습니다.
 runner.context.build_graph = 매니페스트로 그래프를 구성하지 못했습니다.
 runner.context.generate_ninja = Ninja 매니페스트를 생성하지 못했습니다.
 runner.context.render_graph = 그래프 산출물을 렌더링하지 못했습니다.

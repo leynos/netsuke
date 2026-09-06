@@ -88,7 +88,6 @@ runner.manifest.current_directory_label = el directorio actual
 runner.manifest.default_not_declared = El valor predeterminado del manifiesto '{ $default }' no nombra una acción ni un objetivo declarado.
 runner.context.network_policy = No se pudo construir la política de red.
 runner.context.load_manifest = No se pudo cargar el manifiesto en { $path }.
-runner.context.serialise_manifest = No se pudo serializar el manifiesto.
 runner.context.build_graph = No se pudo construir el grafo desde el manifiesto.
 runner.context.generate_ninja = No se pudo generar el manifiesto Ninja.
 runner.context.render_graph = No se pudo renderizar el artefacto de grafo.

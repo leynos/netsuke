@@ -88,7 +88,6 @@ runner.manifest.current_directory_label = nykyinen hakemisto
 runner.manifest.default_not_declared = Manifestin oletus '{ $default }' ei nimeä ilmoitettua toimintoa tai kohdetta.
 runner.context.network_policy = Verkkokäytäntöä ei voitu muodostaa.
 runner.context.load_manifest = Manifestia ei voitu ladata polusta { $path }.
-runner.context.serialise_manifest = Manifestia ei voitu sarjallistaa.
 runner.context.build_graph = Graafia ei voitu muodostaa manifestista.
 runner.context.generate_ninja = Ninja-manifestia ei voitu luoda.
 runner.context.render_graph = Graafituotosta ei voitu hahmontaa.

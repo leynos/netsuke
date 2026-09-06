@@ -88,7 +88,6 @@ runner.manifest.current_directory_label = شاخهٔ کنونی
 runner.manifest.default_not_declared = پیش‌فرض مانیفست «{ $default }» نام یک کنش یا هدف اعلام‌شده نیست.
 runner.context.network_policy = ساخت سیاست شبکه ممکن نشد.
 runner.context.load_manifest = بارگذاری مانیفست از { $path } ممکن نشد.
-runner.context.serialise_manifest = تبدیل مانیفست به داده‌های پیاپی ممکن نشد.
 runner.context.build_graph = ساخت گراف از روی مانیفست ممکن نشد.
 runner.context.generate_ninja = تولید مانیفست Ninja ممکن نشد.
 runner.context.render_graph = نمایش فرآوردهٔ گراف ممکن نشد.
