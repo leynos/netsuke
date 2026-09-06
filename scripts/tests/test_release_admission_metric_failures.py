@@ -5,8 +5,8 @@ import typing as typ
 import pytest
 from release_admission_test_support import (
     CANARY_BY_OPERATION,
-    FailureCase,
     METRICS_VALIDATOR,
+    FailureCase,
     _run_gate,
     expected_gate_labels,
     expected_operation_labels,
@@ -205,7 +205,10 @@ def test_gate_emits_fixed_categories_for_failure_paths(
     assert outputs["gate-error-category"] == case.error_category, (
         "failed operations must retain their bounded category in workflow output"
     )
-    if case.extra_environment.get("NETSUKE_FAKE_WORKFLOW_RUN_ID") == "":
+    if (
+        "NETSUKE_FAKE_WORKFLOW_RUN_ID" in case.extra_environment
+        and not case.extra_environment["NETSUKE_FAKE_WORKFLOW_RUN_ID"]
+    ):
         workflow_run_record = operation_records(metrics, "fetch_workflow_run")[-1]
         assert workflow_run_record["labels"] == expected_operation_labels(
             CANARY_BY_OPERATION["fetch_workflow_run"],

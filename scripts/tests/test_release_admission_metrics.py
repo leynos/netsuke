@@ -44,7 +44,9 @@ def _write_failing_clock_adapter(tmp_path: Path) -> Path:
         "#!/usr/bin/env bash\n"
         "set -euo pipefail\n"
         "count=0\n"
-        'if [[ -e $NETSUKE_FAKE_CLOCK_STATE ]]; then count=$(<"$NETSUKE_FAKE_CLOCK_STATE"); fi\n'
+        "if [[ -e $NETSUKE_FAKE_CLOCK_STATE ]]; then\n"
+        '  count=$(<"$NETSUKE_FAKE_CLOCK_STATE")\n'
+        "fi\n"
         "count=$((count + 1))\n"
         'printf \'%s\' "$count" >"$NETSUKE_FAKE_CLOCK_STATE"\n'
         "if [[ $count == $NETSUKE_FAKE_CLOCK_FAILURE ]]; then exit 1; fi\n"

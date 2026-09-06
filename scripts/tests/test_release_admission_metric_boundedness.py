@@ -1,6 +1,7 @@
 """Exercise the release-admission metric cardinality invariant."""
 
 import tempfile
+import typing as typ
 from pathlib import Path
 
 from hypothesis import given, settings
@@ -66,7 +67,11 @@ def test_identifiers_never_become_metric_labels(
     assert all(call["diagnostics"] == expected_diagnostics for call in calls), (
         "generated paths and URLs must cross each fake command boundary"
     )
-    github_arguments = [call["arguments"] for call in calls if call["command"] == "gh"]
+    github_arguments = [
+        typ.cast("list[str]", call["arguments"])
+        for call in calls
+        if call["command"] == "gh"
+    ]
     assert any(
         any("/commits/" in argument for argument in arguments)
         for arguments in github_arguments

@@ -69,13 +69,6 @@ def parse_metrics(lines: list[str]) -> list[dict[str, object]]:
     list[dict[str, object]]
         Decoded metric mappings in input order.
 
-    Raises
-    ------
-    TypeError
-        If a decoded record is not a JSON object.
-    ValueError
-        If a record is malformed JSON or contains a non-finite JSON number.
-
     Notes
     -----
     The parser rejects `NaN`, `Infinity`, and `-Infinity` so the validator
