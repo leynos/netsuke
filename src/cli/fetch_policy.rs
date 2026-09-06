@@ -7,11 +7,11 @@ use crate::stdlib::reconciliation::{OperatorFetchPolicy, ProjectFetchPolicy, rec
 
 /// Reconcile fetch grants, preserving blocks and unrelated configuration.
 ///
-/// Discovery supplies ordered quarantined requests. The domain owns the trust
+/// Discovery supplies the primary quarantined request. The domain owns the trust
 /// decision and returns value-free outcome data for the merge observer.
 pub(super) fn reconcile_fetch_policy(
     mut config: CliConfig,
-    project_requests: Vec<ProjectFetchPolicyRequest>,
+    project_request: Option<ProjectFetchPolicyRequest>,
 ) -> (CliConfig, FetchPolicyReconciliationOutcome) {
     let operator = OperatorFetchPolicy {
         default_deny: config.fetch_default_deny,
@@ -19,7 +19,7 @@ pub(super) fn reconcile_fetch_policy(
         allow_host: std::mem::take(&mut config.fetch_allow_host),
         trust_project_policy: config.trust_project_fetch_policy,
     };
-    let reconciled = reconcile(operator, project_requests.into_iter().map(domain_request));
+    let reconciled = reconcile(operator, project_request.map(domain_request));
     config.fetch_default_deny = reconciled.default_deny;
     config.fetch_allow_scheme = reconciled.allow_scheme;
     config.fetch_allow_host = reconciled.allow_host;
@@ -52,10 +52,10 @@ mod tests {
         let expected = serde_json::to_value(&config).expect("serialize config");
         let (reconciled, _) = reconcile_fetch_policy(
             config,
-            vec![ProjectFetchPolicyRequest {
+            Some(ProjectFetchPolicyRequest {
                 default_deny: Some(true),
                 ..ProjectFetchPolicyRequest::default()
-            }],
+            }),
         );
         let mut actual = serde_json::to_value(reconciled).expect("serialize reconciled config");
         *actual

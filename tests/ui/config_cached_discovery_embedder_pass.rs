@@ -46,7 +46,10 @@ impl MergeObserver for EmbeddedObserver {
                 let _ = override_keys;
             }
             MergeEvent::FetchPolicyReconciled { outcome } => {
-                let _ = (outcome.trust_enabled, outcome.default_deny_decision.as_str());
+                let _ = (
+                    outcome.trusted_project_policy,
+                    outcome.default_deny_decision.as_str(),
+                );
             }
             MergeEvent::ValidationRejected { key, reason } => {
                 let _ = (key, reason);

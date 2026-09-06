@@ -128,8 +128,7 @@ where
     push_environment_layer(env, &mut composition, &mut events);
     push_cli_layer(cli, matches, &mut composition, &mut events);
 
-    let project_fetch_policy_request =
-        std::mem::take(&mut composition.project_fetch_policy_request);
+    let project_fetch_policy_request = composition.project_fetch_policy_request.take();
     let merged = match composition.into_merge_result() {
         Ok(config) => {
             let (reconciled_config, outcome) =

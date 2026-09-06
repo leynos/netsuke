@@ -25,6 +25,7 @@ tracks sequencing only; it must not replace ADR-003 or the CLI design document
 as the durable architecture record.
 
 [adr-003-cli]: adr-003-agent-consistent-human-first-cli.md
+[reconciliation-module]: ../src/stdlib/network/policy/reconciliation.rs
 
 ### CLI parsing and command-composition boundary
 
@@ -631,6 +632,8 @@ every worker bound from that single number, and
 `tests/workflow_contracts/runner_placement_test.py` holds the flags equal to
 the declared count, so a shape change cannot leave an oversubscribed job behind.
 
+Table: CI lane runner shapes and concurrency settings.
+
 | Lane                                  | Runner                            | Concurrency configuration                                                        |
 | ------------------------------------- | --------------------------------- | -------------------------------------------------------------------------------- |
 | `ci.yml` `build-test`                 | `ubicloud-standard-4-ubuntu-2404` | `BUILD_JOBS=-j 4`, `CARGO_BUILD_JOBS=4`, `NEXTEST_TEST_THREADS=4`                |
@@ -651,7 +654,7 @@ that first prompted it. On the smaller shape the gate lost its runner sixteen
 minutes into the instrumented build with no log. The sampler added to both
 lanes shows disk, not memory, is the constraint: across three runs the peak
 volume usage was 82,523, 82,563 and 82,431 MiB, about 80.6 GiB, which exceeds
-`ubicloud-standard-2`'s entire 72 GB volume, while memory peaked at 2,668 MiB
+`ubicloud-standard-2`'s entire 75 GB volume, while memory peaked at 2,668 MiB
 of 16 GB. Discarding the instrumented tree before any cache save returns
 roughly 13 GB.
 
@@ -1390,6 +1393,8 @@ installing locally so the local installer matches CI:
 INSTALLER_VERSION='0.2.7' # Read from the Install Whitaker action input in CI.
 cargo install --locked whitaker-installer \
   --version "$INSTALLER_VERSION"
+```
+
 ## Workflow pins and Dependabot
 
 Dependabot owns the upgrade of GitHub Actions and reusable workflows, including
@@ -4082,52 +4087,47 @@ policies.
 ### Fetch-policy trust boundary
 
 Network-policy grants do not use the ordinary file-layer precedence contract.
-Discovery preserves provenance for the primary project `.netsuke.toml` and
-every file loaded through its `extends` chain. `FileScope::Operator` marks
-layers loaded through an operator root; `FileScope::Project` marks the primary
-project file; and `FileScope::ProjectExtends` marks its dependencies. It
-extracts each project-scoped layer's `fetch_default_deny`, `fetch_allow_scheme`,
-`fetch_allow_host`, and `trust_project_fetch_policy` fields into project
-requests before the generic merge. Those fields are removed from every
-project-scoped layer; `fetch_block_host` remains in the layers so blocklists
-continue to accumulate.
+Discovery preserves provenance for the exact primary project `.netsuke.toml`.
+`FileScope::Operator` marks ordinary layers, including files loaded through
+`extends`; `FileScope::Project` marks only the primary project file. Discovery
+extracts that file's `fetch_default_deny`, `fetch_allow_scheme`,
+`fetch_allow_host`, and `trust_project_fetch_policy` fields into a project
+request before the generic merge. Those fields are removed only from the
+primary file; `fetch_block_host` remains in all layers so blocklists continue
+to accumulate.
 
 `retain_layers_and_resolve_json` returns the retained layers, the JSON
-preference, and the ordered project requests together. `DiscoveredLayers` owns
-the requests until `into_parts` transfers them with the layers and discovery
-errors. `push_discovered_file_layers` places the layers into `MergeComposition`
-and transfers the requests for the same composition. The requests retain
-dependency-first order, with the primary file last. This preserves provenance
-at the discovery seam without a second discovery or merge pass, and a
-project-scoped layer cannot self-authorize the opt-in. If the same file is
-reached through operator and project roots, both occurrences retain their root
-authority: the operator occurrence remains an operator layer, while the project
-occurrence is quarantined. The loader accepts one scalar `extends` parent per
-file. When an operator-selected child extends the primary project, the layers
-before that project file are still `ProjectExtends`, the primary file is
-`Project`, and any layers after it remain `Operator`; this preserves the
-project boundary across that inherited chain.
+preference, and the optional primary project request together.
+`DiscoveredLayers` owns the request until `into_parts` transfers it with the
+layers and discovery errors. `push_discovered_file_layers` places the layers
+into `MergeComposition` and transfers the request for the same composition.
+This preserves provenance at the discovery seam without a second discovery or
+merge pass, and the primary project file cannot self-authorize the opt-in. If
+the same file is reached through operator and project roots, both occurrences
+retain their root authority: the operator occurrence remains an ordinary layer,
+while the primary project occurrence is quarantined. The `extends` chain
+remains outside this trust boundary.
 
 The network-policy domain module
-[`src/stdlib/network/policy/reconciliation.rs`](../src/stdlib/network/policy/reconciliation.rs)
-owns reconciliation. It accepts domain-shaped operator inputs and ordered
-project requests, returns the reconciled policy and a bounded outcome, and has
-no tracing or metrics side effects. The CLI adapter extracts fetch-policy
-fields from `CliConfig`, calls the domain operation, writes those fields back,
-and leaves unrelated configuration unchanged.
+[`src/stdlib/network/policy/reconciliation.rs`][reconciliation-module] owns
+reconciliation. It accepts domain-shaped operator inputs and a project request,
+returns the reconciled policy and a bounded outcome, and has no tracing or
+metrics side effects. The CLI adapter extracts fetch-policy fields from
+`CliConfig`, calls the domain operation, writes those fields back, and leaves
+unrelated configuration unchanged.
 
 After the generic merge produces `CliConfig`, reconciliation runs before
 `apply_config` copies values onto `Cli`. Without the operator opt-in, project
 grants are discarded, any project `fetch_default_deny = true` tightens the
 result, and `false` never weakens an operator or project restriction. With the
 opt-in from a trusted system, user, environment, or CLI layer, project grants
-append in dependency-first order, with the primary file last; the last present
-project default-deny value applies directly. The merge composition boundary
-then emits exactly one `FetchPolicyReconciled` observer event for a successful
-reconciliation. Its fields are limited to the trust state, request presence, a
-fixed default-deny decision, and requested, accepted, and ignored scheme and
-host grant counts. It contains no schemes, hosts, configuration values, or
-paths, and no event is emitted when generic merging fails first.
+append to operator grants; a present project default-deny value applies
+directly. The merge composition boundary then emits exactly one
+`FetchPolicyReconciled` observer event for a successful reconciliation. Its
+fields are limited to the trust state, request presence, a fixed default-deny
+decision, and requested, accepted, and ignored scheme and host grant counts. It
+contains no schemes, hosts, configuration values, or paths, and no event is
+emitted when generic merging fails first.
 
 ### Layer precedence
 
@@ -4141,9 +4141,9 @@ The final merge order is:
 4. **CLI flags** — values explicitly passed on the command line.
 
 This order describes ordinary configuration fields. Fetch-policy grants use the
-trust-aware reconciliation described above: all files in the primary project's
-`extends` chain are project-scoped, while system, user, environment, and CLI
-values remain operator-controlled.
+trust-aware reconciliation described above: only the primary project file is
+project-scoped, while its `extends` layers, system, user, environment, and CLI
+values remain subject to ordinary merging.
 
 ### Configuration merge helper functions
 

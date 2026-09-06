@@ -44,7 +44,7 @@ operator, user, and contributor references are easier to find.
   Normative amendment adding bounded stdout environment capture, standard-error
   pipelines, environment-selected working directories, and secure temporary
   execution directories to RFC 0001.
-- [rfcs/0011-allow-listed-structured-command-shells.md](rfcs/0011-allow-listed-structured-command-shells.md):
+- [rfcs/0011-allow-listed-structured-command-shells.md][rfc-0011]:
   Normative amendment adding finite built-in and trusted configured shell names
   to RFC 0001 structured command blocks.
 - [rfcs/0002-repository-relative-includes.md][rfc-0002]:
@@ -80,6 +80,7 @@ operator, user, and contributor references are easier to find.
 [rfc-0010]: rfcs/0010-runtime-bindings-and-secure-tempdirs.md
 [rfc-0002]: rfcs/0002-repository-relative-includes.md
 [rfc-0004]: rfcs/0004-digest-pinned-external-bundles.md
+[rfc-0011]: rfcs/0011-allow-listed-structured-command-shells.md
 
 ## Decision records
 

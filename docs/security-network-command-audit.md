@@ -40,20 +40,22 @@ introduces, and concrete remediation tasks that would harden the helpers.
   *(Status: remediated for issue #644.)* Generic configuration precedence
   previously allowed a project `.netsuke.toml` to override a user-supplied
   `fetch_default_deny = true` with `false`. The fetch-policy merge now captures
-  fields from the primary project file and every file in its `extends` chain
-  before generic merging: project `fetch_default_deny = true` may tighten the
-  operator policy, while project `false` cannot widen it.
+  fields from the primary project file before generic merging: project
+  `fetch_default_deny = true` may tighten the operator policy, while project
+  `false` cannot widen it when `trust_project_fetch_policy` is disabled. When
+  an operator enables that opt-in, reconciliation applies a present project
+  `fetch_default_deny` value directly, including `false`; the opt-in therefore
+  governs this scalar as well as project grants.
 - [x] **Project configuration could widen explicit fetch
   allowlists.** *(Status: remediated for issue #644.)* Append semantics
   previously let project `fetch_allow_scheme` and `fetch_allow_host` entries
-  survive a more-trusted environment or CLI policy. Every project-scoped layer,
-  including files in the `extends` chain, now has its grants quarantined before
-  generic merging. Grants are ignored unless an operator enables
-  `trust_project_fetch_policy` from system or user configuration, the
-  environment, or the CLI. With that explicit opt-in, project grants append
-  deliberately in dependency-first order, with the primary file last; a project
-  cannot set the opt-in for itself. Project `fetch_block_host` remains
-  cumulative and continues to override allows.
+  survive a more-trusted environment or CLI policy. The primary project layer
+  now has its grants quarantined before generic merging. Grants are ignored
+  unless an operator enables `trust_project_fetch_policy` from system or user
+  configuration, the environment, or the CLI. With that explicit opt-in,
+  project grants append deliberately; a project cannot set the opt-in for
+  itself. Project `fetch_block_host` remains cumulative and continues to
+  override allows.
 - [x] **Response bodies are read without a size limit.** `fetch_remote` reads
   the entire HTTP response into memory before returning or caching it. An
   attacker controlling the endpoint can stream unbounded data and exhaust

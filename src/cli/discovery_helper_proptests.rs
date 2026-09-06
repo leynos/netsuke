@@ -220,7 +220,7 @@ proptest! {
             .unwrap_or_else(|| crate::cli::Cli::default().json);
         prop_assert_eq!(resolved.json_preference, expected);
         prop_assert_eq!(resolved.layers.len(), source_len);
-        prop_assert!(resolved.project_requests.is_empty());
+        prop_assert!(resolved.project_request.is_none());
         prop_assert!(resolved.errors.is_empty());
     }
 }

@@ -1214,9 +1214,10 @@ configuration chain, so ordinary project values can override the winner while
 fields present only in the winner remain available.
 
 Fetch-policy fields are the security-sensitive exception to this ordinary
-precedence. The primary project file and every file in its `extends` chain are
-project requests, so their grants remain below operator policy unless the
-operator enables `trust_project_fetch_policy`.
+precedence. Only the exact primary project file is a project request, so its
+grants remain below operator policy unless the operator enables
+`trust_project_fetch_policy`. Files loaded through `extends` retain ordinary
+file-layer semantics.
 
 An explicit selector bypasses automatic discovery. Selectors are checked in
 this order:
@@ -1588,8 +1589,8 @@ Exactly one outcome branch is present:
 with global flags or their configuration equivalents. Fetch policy has a trust
 boundary that differs from ordinary configuration precedence: system and user
 configuration, `NETSUKE_` environment variables, and explicit CLI options are
-operator policy, while the primary project `.netsuke.toml` and every file it
-loads through its `extends` chain are untrusted project requests.
+operator policy, while only the primary project `.netsuke.toml` is an untrusted
+project request.
 
 - `--fetch-allow-scheme <SCHEME>`
 - `--fetch-allow-host <HOST>`
@@ -1603,11 +1604,8 @@ By default, project configuration may only narrow the operator policy. A project
 Project `fetch_block_host` entries accumulate with entries from the other
 layers, and a block always wins over an allow. Project `fetch_allow_scheme` and
 `fetch_allow_host` entries are ignored by default; the project cannot enable
-them by setting `trust_project_fetch_policy` itself. Across a project `extends`
-chain, a `fetch_default_deny = true` request remains a restriction; a `false`
-request cannot undo a restriction established by another project layer or by
-the operator. Project requests are evaluated in dependency-first order, with
-the primary file last.
+them by setting `trust_project_fetch_policy` itself. Configuration loaded
+through `extends` is not quarantined and retains ordinary file-layer precedence.
 
 An operator who deliberately trusts a checkout can set
 `trust_project_fetch_policy = true` in system or user configuration, set

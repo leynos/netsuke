@@ -1,4 +1,4 @@
-//! Reconcile ordered project requests against an operator's fetch-policy ceiling.
+//! Reconcile a project request against an operator's fetch-policy ceiling.
 //!
 //! Discovery owns provenance; this module owns only the pure trust decision.
 //! Blocklists are deliberately absent because their cumulative merge is already
@@ -19,7 +19,7 @@ pub(crate) struct OperatorFetchPolicy {
     pub(crate) trust_project_policy: bool,
 }
 
-/// Describe one project layer, supplied in increasing precedence order.
+/// Describe the quarantined request from the primary project configuration.
 #[derive(Debug, Default)]
 pub(crate) struct ProjectFetchPolicy {
     /// Optional default-deny request from this layer.
@@ -63,23 +63,23 @@ impl DefaultDenyDecision {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FetchPolicyReconciliationOutcome {
     /// Whether the operator authorized project widening.
-    pub trust_enabled: bool,
-    /// Whether at least one project layer was supplied.
+    pub trusted_project_policy: bool,
+    /// Whether a primary project request was supplied.
     pub project_request_present: bool,
     /// Closed explanation of the default-deny decision.
     pub default_deny_decision: DefaultDenyDecision,
-    /// Number of scheme grants requested across project layers.
-    pub requested_scheme_grant_count: usize,
+    /// Number of scheme grants requested by the project.
+    pub requested_scheme_grants: usize,
     /// Number of project scheme grants accepted.
-    pub accepted_scheme_grant_count: usize,
+    pub accepted_scheme_grants: usize,
     /// Number of project scheme grants ignored.
-    pub ignored_scheme_grant_count: usize,
-    /// Number of host grants requested across project layers.
-    pub requested_host_grant_count: usize,
+    pub ignored_scheme_grants: usize,
+    /// Number of host grants requested by the project.
+    pub requested_host_grants: usize,
     /// Number of project host grants accepted.
-    pub accepted_host_grant_count: usize,
+    pub accepted_host_grants: usize,
     /// Number of project host grants ignored.
-    pub ignored_host_grant_count: usize,
+    pub ignored_host_grants: usize,
 }
 
 /// Return effective grants separately from their bounded decision summary.
@@ -95,51 +95,41 @@ pub(crate) struct ReconciledFetchPolicy {
     pub(crate) outcome: FetchPolicyReconciliationOutcome,
 }
 
-/// Reconcile all requests without I/O, configuration adapters, or telemetry.
+/// Reconcile one request without I/O, configuration adapters, or telemetry.
 ///
-/// Untrusted requests may only tighten default-deny; a later `false` cannot
-/// erase an earlier restriction. Trusted requests append grants in layer order
-/// and the last present default-deny request wins.
+/// Untrusted requests may only tighten default-deny. Trusted requests append
+/// grants and apply a present default-deny value directly.
 pub(crate) fn reconcile(
     mut operator: OperatorFetchPolicy,
-    requests: impl IntoIterator<Item = ProjectFetchPolicy>,
+    project_request: Option<ProjectFetchPolicy>,
 ) -> ReconciledFetchPolicy {
     let mut outcome = FetchPolicyReconciliationOutcome {
-        trust_enabled: operator.trust_project_policy,
+        trusted_project_policy: operator.trust_project_policy,
         project_request_present: false,
         default_deny_decision: DefaultDenyDecision::OperatorRetained,
-        requested_scheme_grant_count: 0,
-        accepted_scheme_grant_count: 0,
-        ignored_scheme_grant_count: 0,
-        requested_host_grant_count: 0,
-        accepted_host_grant_count: 0,
-        ignored_host_grant_count: 0,
+        requested_scheme_grants: 0,
+        accepted_scheme_grants: 0,
+        ignored_scheme_grants: 0,
+        requested_host_grants: 0,
+        accepted_host_grants: 0,
+        ignored_host_grants: 0,
     };
-    let mut last_default_deny = None;
-    let mut project_restricts = false;
-    for request in requests {
+    if let Some(request) = project_request {
         outcome.project_request_present = true;
-        outcome.requested_scheme_grant_count += request.allow_scheme.len();
-        outcome.requested_host_grant_count += request.allow_host.len();
-        if let Some(default_deny) = request.default_deny {
-            last_default_deny = Some(default_deny);
-            project_restricts |= default_deny;
-        }
+        outcome.requested_scheme_grants = request.allow_scheme.len();
+        outcome.requested_host_grants = request.allow_host.len();
+        outcome.default_deny_decision = default_deny_decision(&operator, request.default_deny);
         if operator.trust_project_policy {
             operator.allow_scheme.extend(request.allow_scheme);
             operator.allow_host.extend(request.allow_host);
+            operator.default_deny = request.default_deny.unwrap_or(operator.default_deny);
+            outcome.accepted_scheme_grants = outcome.requested_scheme_grants;
+            outcome.accepted_host_grants = outcome.requested_host_grants;
+        } else {
+            operator.default_deny |= request.default_deny == Some(true);
+            outcome.ignored_scheme_grants = outcome.requested_scheme_grants;
+            outcome.ignored_host_grants = outcome.requested_host_grants;
         }
-    }
-    outcome.default_deny_decision =
-        default_deny_decision(&operator, last_default_deny, project_restricts);
-    if operator.trust_project_policy {
-        operator.default_deny = last_default_deny.unwrap_or(operator.default_deny);
-        outcome.accepted_scheme_grant_count = outcome.requested_scheme_grant_count;
-        outcome.accepted_host_grant_count = outcome.requested_host_grant_count;
-    } else {
-        operator.default_deny |= project_restricts;
-        outcome.ignored_scheme_grant_count = outcome.requested_scheme_grant_count;
-        outcome.ignored_host_grant_count = outcome.requested_host_grant_count;
     }
     ReconciledFetchPolicy {
         default_deny: operator.default_deny,
@@ -152,21 +142,16 @@ pub(crate) fn reconcile(
 /// Classify the restriction decision before applying it to the operator policy.
 const fn default_deny_decision(
     operator: &OperatorFetchPolicy,
-    last_request: Option<bool>,
-    project_restricts: bool,
+    request: Option<bool>,
 ) -> DefaultDenyDecision {
-    match (
-        last_request,
-        operator.trust_project_policy,
-        project_restricts,
-    ) {
-        (None, _, _) => DefaultDenyDecision::OperatorRetained,
-        (Some(_), true, _) => DefaultDenyDecision::TrustedProjectOverride,
-        (Some(_), false, true) if operator.default_deny => {
+    match (request, operator.trust_project_policy) {
+        (None, _) => DefaultDenyDecision::OperatorRetained,
+        (Some(_), true) => DefaultDenyDecision::TrustedProjectOverride,
+        (Some(true), false) if operator.default_deny => {
             DefaultDenyDecision::ProjectRestrictionRetained
         }
-        (Some(_), false, true) => DefaultDenyDecision::ProjectTightened,
-        (Some(_), false, false) => DefaultDenyDecision::ProjectDowngradeIgnored,
+        (Some(true), false) => DefaultDenyDecision::ProjectTightened,
+        (Some(false), false) => DefaultDenyDecision::ProjectDowngradeIgnored,
     }
 }
 

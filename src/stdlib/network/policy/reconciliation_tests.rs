@@ -65,10 +65,10 @@ fn default_deny_truth_table(
             trust_project_policy: trust,
             ..OperatorFetchPolicy::default()
         },
-        [ProjectFetchPolicy {
+        Some(ProjectFetchPolicy {
             default_deny: project_deny,
             ..ProjectFetchPolicy::default()
-        }],
+        }),
     );
     assert_eq!(result.default_deny, expected_deny);
     assert_eq!(result.outcome.default_deny_decision, decision);
@@ -77,10 +77,10 @@ fn default_deny_truth_table(
 
 #[test]
 fn absence_differs_from_an_empty_project_layer() {
-    let absent = reconcile(OperatorFetchPolicy::default(), []);
+    let absent = reconcile(OperatorFetchPolicy::default(), None);
     let present = reconcile(
         OperatorFetchPolicy::default(),
-        [ProjectFetchPolicy::default()],
+        Some(ProjectFetchPolicy::default()),
     );
     assert!(!absent.outcome.project_request_present);
     assert!(present.outcome.project_request_present);
@@ -90,9 +90,9 @@ fn absence_differs_from_an_empty_project_layer() {
 }
 
 #[rstest]
-#[case(false, (true, 1, 0, 2))]
-#[case(true, (false, 3, 2, 0))]
-fn ordered_project_layers_require_trust_to_undo_restrictions(
+#[case(false, (false, 1, 0, 1))]
+#[case(true, (false, 2, 1, 0))]
+fn project_grants_require_trusted_operator_opt_in(
     #[case] trust: bool,
     #[case] expected: (bool, usize, usize, usize),
 ) {
@@ -104,26 +104,19 @@ fn ordered_project_layers_require_trust_to_undo_restrictions(
             allow_host: hosts(&[0]).expect("valid operator host"),
             ..OperatorFetchPolicy::default()
         },
-        [
-            ProjectFetchPolicy {
-                default_deny: Some(true),
-                allow_scheme: vec!["http".to_owned()],
-                allow_host: hosts(&[1]).expect("valid first project host"),
-            },
-            ProjectFetchPolicy {
-                default_deny: Some(false),
-                allow_scheme: vec!["ftp".to_owned()],
-                allow_host: hosts(&[2]).expect("valid second project host"),
-            },
-        ],
+        Some(ProjectFetchPolicy {
+            default_deny: Some(false),
+            allow_scheme: vec!["http".to_owned()],
+            allow_host: hosts(&[1]).expect("valid project host"),
+        }),
     );
     assert_eq!(result.default_deny, expected_deny);
     assert_eq!(result.allow_scheme.len(), expected_grants);
     assert_eq!(result.allow_host.len(), expected_grants);
-    assert_eq!(result.outcome.accepted_scheme_grant_count, accepted);
-    assert_eq!(result.outcome.accepted_host_grant_count, accepted);
-    assert_eq!(result.outcome.ignored_scheme_grant_count, ignored);
-    assert_eq!(result.outcome.ignored_host_grant_count, ignored);
+    assert_eq!(result.outcome.accepted_scheme_grants, accepted);
+    assert_eq!(result.outcome.accepted_host_grants, accepted);
+    assert_eq!(result.outcome.ignored_scheme_grants, ignored);
+    assert_eq!(result.outcome.ignored_host_grants, ignored);
 }
 
 /// Construct only valid host patterns from generated indices.
@@ -134,65 +127,53 @@ fn hosts(indices: &[u8]) -> Result<Vec<HostPattern>, crate::host_pattern::HostPa
         .collect()
 }
 
-/// Independently select the highest-priority applicable restriction.
-fn model_default_deny(operator: bool, trust: bool, requests: &[ProjectFetchPolicy]) -> bool {
-    if trust {
-        requests
-            .iter()
-            .rev()
-            .find_map(|request| request.default_deny)
-            .unwrap_or(operator)
-    } else {
-        operator
-            || requests
-                .iter()
-                .any(|request| request.default_deny == Some(true))
+/// Independently apply the project request to a simple operator model.
+fn model_default_deny(operator: bool, trust: bool, request: Option<bool>) -> bool {
+    match request {
+        Some(project) if trust => project,
+        Some(true) => true,
+        Some(false) | None => operator,
     }
 }
 
 proptest! {
     #[test]
-    fn ordered_layers_match_independent_policy_model(
+    fn reconciliation_matches_independent_policy_model(
         operator_default in any::<bool>(),
         trust in any::<bool>(),
         operator_schemes in prop::collection::vec("[a-z]{1,8}", 0..5),
         operator_indices in prop::collection::vec(0u8..16, 0..5),
-        layers in prop::collection::vec((
-            prop::option::of(any::<bool>()),
-            prop::collection::vec("[a-z]{1,8}", 0..5),
-            prop::collection::vec(16u8..32, 0..5),
-        ), 0..8),
+        project_default in prop::option::of(any::<bool>()),
+        project_schemes in prop::collection::vec("[a-z]{1,8}", 0..5),
+        project_indices in prop::collection::vec(16u8..32, 0..5),
     ) {
         let operator_hosts = hosts(&operator_indices).expect("valid generated operator hosts");
-        let requests: Vec<_> = layers.into_iter().map(|(default_deny, allow_scheme, indices)| {
-            ProjectFetchPolicy { default_deny, allow_scheme, allow_host: hosts(&indices).expect("valid generated project hosts") }
-        }).collect();
-        let expected_deny = model_default_deny(operator_default, trust, &requests);
-        let scheme_count = requests.iter().map(|request| request.allow_scheme.len()).sum::<usize>();
-        let host_count = requests.iter().map(|request| request.allow_host.len()).sum::<usize>();
-        let expected_schemes = operator_schemes.iter().chain(
-            requests.iter().filter(|_| trust).flat_map(|request| &request.allow_scheme)
-        ).cloned().collect::<Vec<_>>();
-        let expected_hosts = operator_hosts.iter().chain(
-            requests.iter().filter(|_| trust).flat_map(|request| &request.allow_host)
-        ).cloned().collect::<Vec<_>>();
-        let request_present = !requests.is_empty();
+        let project_hosts = hosts(&project_indices).expect("valid generated project hosts");
+        let expected_deny = model_default_deny(operator_default, trust, project_default);
+        let scheme_count = project_schemes.len();
+        let host_count = project_hosts.len();
+        let expected_schemes = operator_schemes.iter().chain(trust.then_some(&project_schemes).into_iter().flatten()).cloned().collect::<Vec<_>>();
+        let expected_hosts = operator_hosts.iter().chain(trust.then_some(&project_hosts).into_iter().flatten()).cloned().collect::<Vec<_>>();
         let result = reconcile(OperatorFetchPolicy {
             default_deny: operator_default,
             trust_project_policy: trust,
             allow_scheme: operator_schemes,
             allow_host: operator_hosts,
-        }, requests);
+        }, Some(ProjectFetchPolicy {
+            default_deny: project_default,
+            allow_scheme: project_schemes,
+            allow_host: project_hosts,
+        }));
         prop_assert_eq!(result.default_deny, expected_deny);
         prop_assert_eq!(result.allow_scheme, expected_schemes);
         prop_assert_eq!(result.allow_host, expected_hosts);
-        prop_assert_eq!(result.outcome.project_request_present, request_present);
-        prop_assert_eq!(result.outcome.trust_enabled, trust);
-        prop_assert_eq!(result.outcome.requested_scheme_grant_count, scheme_count);
-        prop_assert_eq!(result.outcome.requested_host_grant_count, host_count);
-        prop_assert_eq!(result.outcome.accepted_scheme_grant_count, usize::from(trust) * scheme_count);
-        prop_assert_eq!(result.outcome.accepted_host_grant_count, usize::from(trust) * host_count);
-        prop_assert_eq!(result.outcome.ignored_scheme_grant_count, usize::from(!trust) * scheme_count);
-        prop_assert_eq!(result.outcome.ignored_host_grant_count, usize::from(!trust) * host_count);
+        prop_assert!(result.outcome.project_request_present);
+        prop_assert_eq!(result.outcome.trusted_project_policy, trust);
+        prop_assert_eq!(result.outcome.requested_scheme_grants, scheme_count);
+        prop_assert_eq!(result.outcome.requested_host_grants, host_count);
+        prop_assert_eq!(result.outcome.accepted_scheme_grants, usize::from(trust) * scheme_count);
+        prop_assert_eq!(result.outcome.accepted_host_grants, usize::from(trust) * host_count);
+        prop_assert_eq!(result.outcome.ignored_scheme_grants, usize::from(!trust) * scheme_count);
+        prop_assert_eq!(result.outcome.ignored_host_grants, usize::from(!trust) * host_count);
     }
 }

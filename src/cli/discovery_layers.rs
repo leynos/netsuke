@@ -19,10 +19,10 @@ use super::diagnostics::{
     BoundedConfigPath, ProjectLayerDeduplication, debug_optional_config_path_from_fields,
 };
 use super::paths::{PathNormalizer, comparison_key, project_scope_file};
+use super::project_policy::scope_primary_project_layer;
 pub(super) use super::project_policy::{
-    ScopedFileLayer, retain_layers_and_resolve_json, scope_selected_chain,
+    ScopedFileLayer, retain_layers_and_resolve_json, scope_selected_primary_layer,
 };
-use super::project_policy::{scope_chain_through_project, scope_project_chain};
 
 /// Project-scope outcome retained for a later trace replay.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -149,7 +149,7 @@ pub(super) fn collect_file_layers_with_normalizer_and_trace(
     if let Some(index) = project_index {
         return (
             Some(ProjectScopeTrace::Included(project_trace_path)),
-            Ok(scope_chain_through_project(file_layers.value, index)),
+            Ok(scope_primary_project_layer(file_layers.value, index)),
         );
     }
 
@@ -208,12 +208,15 @@ fn merge_project_scope_layers(
             })
         };
         let layers = if let Some(index) = project_index {
-            scope_chain_through_project(discovered_layers, index)
+            scope_primary_project_layer(discovered_layers, index)
         } else {
             discovered_layers
                 .into_iter()
                 .map(ScopedFileLayer::operator)
-                .chain(scope_project_chain(project_layers))
+                .chain(scope_primary_project_layer(
+                    project_layers,
+                    project_layer_count.saturating_sub(1),
+                ))
                 .collect()
         };
         (trace, layers)
