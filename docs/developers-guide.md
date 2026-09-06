@@ -1681,7 +1681,6 @@ their own pinned, isolated Ruff policy enforced by `make spelling-helper-test`;
 they are excluded from the repository-wide Ruff and Pylint configuration so the
 two policies cannot disagree about the same file.
 
-
 ### Release-admission runtime tests
 
 `make test-release-admission` is the runtime gate for the release-admission
