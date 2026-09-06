@@ -8,6 +8,7 @@ from release_admission_test_support import (
     METRICS_VALIDATOR,
     FailureCase,
     _run_gate,
+    assert_failure_trace_sequence,
     expected_gate_labels,
     expected_operation_labels,
     operation_duration,
@@ -24,6 +25,33 @@ INVALID_CONFIGURATION_METRICS = [
         "value": 1,
     }
 ]
+INVALID_CONFIGURATION_TRACE_SIGNATURES = [
+    ("gate_complete", "verify_evidence", "failure", "unknown"),
+    ("workflow_output_delivery", "verify_evidence", "success", "none"),
+    ("trace_delivery", "verify_evidence", "success", "none"),
+]
+
+
+def _trace_signature(trace: dict[str, object]) -> tuple[object, ...]:
+    """Return the bounded fields that identify one trace record.
+
+    Parameters
+    ----------
+    trace
+        Decoded trace record with the fixed admission schema.
+
+    Returns
+    -------
+    tuple[object, ...]
+        Event, operation, outcome, and error category in schema order.
+
+    Notes
+    -----
+    Contract invariant: only bounded fields participate in sequence assertions.
+    """
+    return tuple(
+        trace[field] for field in ("event", "operation", "outcome", "error_category")
+    )
 
 
 @pytest.mark.parametrize(
@@ -205,6 +233,7 @@ def test_gate_emits_fixed_categories_for_failure_paths(
     assert outputs["gate-error-category"] == case.error_category, (
         "failed operations must retain their bounded category in workflow output"
     )
+    assert_failure_trace_sequence(traces, case.operation, case.error_category)
     if (
         "NETSUKE_FAKE_WORKFLOW_RUN_ID" in case.extra_environment
         and not case.extra_environment["NETSUKE_FAKE_WORKFLOW_RUN_ID"]
@@ -325,6 +354,9 @@ def test_invalid_timeout_fails_before_running_admission_operations(
     assert outputs["gate-error-category"] == "unknown", (
         "invalid timeout configuration must publish the fixed unknown category"
     )
+    assert [_trace_signature(trace) for trace in traces] == (
+        INVALID_CONFIGURATION_TRACE_SIGNATURES
+    ), "early configuration failure must retain the bounded trace hand-off sequence"
 
 
 @pytest.mark.parametrize("enforcement_value", ["", "False", "observe"])

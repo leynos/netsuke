@@ -3,11 +3,31 @@
 import dataclasses
 import importlib.util
 import json
-import math
 import os
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the script boundary is under test.
 import typing as typ
 from pathlib import Path
+
+from release_admission_test_fakes import write_fake_commands
+from release_admission_test_records import (
+    assert_failure_trace_sequence,
+    operation_duration,
+    operation_records,
+)
+
+__all__ = (
+    "BASH_PATH",
+    "CANARY_BY_OPERATION",
+    "METRICS_VALIDATOR",
+    "REVISION",
+    "FailureCase",
+    "_run_gate",
+    "assert_failure_trace_sequence",
+    "expected_gate_labels",
+    "expected_operation_labels",
+    "operation_duration",
+    "operation_records",
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = (
@@ -25,50 +45,6 @@ CANARY_BY_OPERATION = {
     "check_scan_freshness": "history_scan",
     "verify_evidence": "history_scan",
 }
-FAKE_ADAPTER_PREAMBLE = """#!/usr/bin/env bash
-set -euo pipefail
-python3 - "$NETSUKE_ADMISSION_CALL_LOG" ADAPTER_NAME "$@" <<'PY'
-import json
-import os
-import sys
-
-with open(sys.argv[1], "a", encoding="utf-8") as call_log:
-    json.dump(
-        {
-            "command": sys.argv[2],
-            "arguments": sys.argv[3:],
-            "diagnostics": {
-                "path": os.environ.get("NETSUKE_FAKE_PATH", ""),
-                "url": os.environ.get("NETSUKE_FAKE_URL", ""),
-            },
-        },
-        call_log,
-    )
-    call_log.write("\\n")
-PY
-"""
-FAKE_GH_BEHAVIOUR = """if [[ "$*" == *"/actions/runs?"* ]]; then
-  gh_failure="${NETSUKE_FAKE_GH_WORKFLOW_FAILURE:-}"
-  gh_delay_seconds="${NETSUKE_FAKE_GH_WORKFLOW_DELAY_SECONDS:-}"
-  gh_ignores_term="${NETSUKE_FAKE_GH_WORKFLOW_IGNORE_TERM:-}"
-else
-  gh_failure="${NETSUKE_FAKE_GH_FAILURE:-}"
-  gh_delay_seconds="${NETSUKE_FAKE_GH_DELAY_SECONDS:-}"
-  gh_ignores_term="${NETSUKE_FAKE_GH_IGNORE_TERM:-}"
-fi
-if [[ "$gh_failure" == "true" ]]; then exit 1; fi
-if [[ "$gh_ignores_term" == "true" ]]; then trap '' TERM; while :; do sleep 1; done; fi
-if [[ -n "$gh_delay_seconds" ]]; then sleep "$gh_delay_seconds"; fi
-if [[ "$*" == *"/commits/"* ]]; then
-  printf '%s\\n' "${NETSUKE_FAKE_RESOLVED_REVISION:-$GITHUB_SHA}"
-else
-  printf '%s\\n' "${NETSUKE_FAKE_WORKFLOW_RUN_ID-1001}"
-fi
-"""
-FAKE_GIT_BEHAVIOUR = """if [[ "${NETSUKE_FAKE_GIT_FAILURE:-}" == "true" ]]; then
-  exit 1
-fi
-"""
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -111,16 +87,60 @@ class MetricsValidator(typ.Protocol):
     """
 
     def parse_metrics(self, lines: list[str]) -> list[dict[str, object]]:
-        """Parse finite JSON Lines metric records into mappings."""
+        """Parse finite JSON Lines metric records into mappings.
+
+        Parameters
+        ----------
+        lines
+            JSON Lines containing release-admission metric records.
+
+        Returns
+        -------
+        list[dict[str, object]]
+            Decoded metric objects in input order.
+        """
 
     def validate_metrics(self, records: list[dict[str, object]]) -> None:
-        """Validate records against the fixed metric contract."""
+        """Validate records against the fixed metric contract.
+
+        Parameters
+        ----------
+        records
+            Decoded metric records to validate.
+
+        Returns
+        -------
+        None
+            The method returns after all records satisfy the contract.
+        """
 
     def parse_traces(self, lines: list[str]) -> list[dict[str, object]]:
-        """Parse finite JSON Lines release-admission trace records."""
+        """Parse finite JSON Lines release-admission trace records.
+
+        Parameters
+        ----------
+        lines
+            JSON Lines containing release-admission trace records.
+
+        Returns
+        -------
+        list[dict[str, object]]
+            Decoded trace objects in input order.
+        """
 
     def validate_traces(self, records: list[dict[str, object]]) -> None:
-        """Validate traces against the fixed trace contract."""
+        """Validate traces against the fixed trace contract.
+
+        Parameters
+        ----------
+        records
+            Decoded trace records to validate.
+
+        Returns
+        -------
+        None
+            The method returns after all records satisfy the contract.
+        """
 
 
 def load_metrics_validator() -> MetricsValidator:
@@ -212,78 +232,6 @@ def expected_gate_labels(outcome: str, error_category: str) -> dict[str, str]:
     return {"outcome": outcome, "error_category": error_category}
 
 
-def operation_records(
-    metrics: list[dict[str, object]], operation: str
-) -> list[dict[str, object]]:
-    """Return counter records for one fixed operation.
-
-    Parameters
-    ----------
-    metrics
-        Parsed release-admission metric records.
-    operation
-        Fixed operation name.
-
-    Returns
-    -------
-    list[dict[str, object]]
-        Records whose bounded operation label matches ``operation``.
-    """
-    return [
-        record
-        for record in metrics
-        if record["name"] == "netsuke_release_admission_operation_total"
-        and isinstance(record["labels"], dict)
-        and record["labels"].get("operation") == operation
-    ]
-
-
-def operation_duration(metrics: list[dict[str, object]], operation: str) -> float:
-    """Return a finite duration observation for a fixed operation.
-
-    Parameters
-    ----------
-    metrics
-        Parsed release-admission metric records.
-    operation
-        Fixed operation name.
-
-    Returns
-    -------
-    float
-        The finite operation duration in seconds.
-
-    Notes
-    -----
-    Contract invariants: reject missing, non-numeric, and non-finite values.
-    """
-    value = next(
-        record["value"]
-        for record in metrics
-        if record["name"] == "netsuke_release_admission_operation_duration_seconds"
-        and record["labels"] == {"operation": operation}
-    )
-    assert isinstance(value, int | float), (
-        "duration records must contain finite numeric values"
-    )
-    assert math.isfinite(value), "duration records must contain finite numeric values"
-    return float(value)
-
-
-def _write_fake_commands(directory: Path) -> Path:
-    """Write executable fake GitHub and Git adapters that log every call."""
-    call_log = directory / "command-calls.jsonl"
-    call_log.touch()
-    for name, behaviour in (("gh", FAKE_GH_BEHAVIOUR), ("git", FAKE_GIT_BEHAVIOUR)):
-        adapter = directory / name
-        adapter.write_text(
-            FAKE_ADAPTER_PREAMBLE.replace("ADAPTER_NAME", name) + behaviour,
-            encoding="utf-8",
-        )
-        adapter.chmod(0o755)
-    return call_log
-
-
 def _run_gate(
     tmp_path: Path,
     *,
@@ -296,7 +244,28 @@ def _run_gate(
     list[dict[str, object]],
     dict[str, str],
 ]:
-    """Run the production gate with fakes and return its records and call log."""
+    """Run the production gate with fakes and return its records and call log.
+
+    Parameters
+    ----------
+    tmp_path
+        Isolated directory for subprocess inputs, outputs, and fakes.
+    evidence_state
+        Evidence state passed to the admission subprocess.
+    extra_environment
+        Optional child-process environment overrides for a test scenario.
+
+    Returns
+    -------
+    tuple
+        The completed process, parsed metrics, parsed traces, adapter calls,
+        and GitHub output values, in that order.
+
+    Notes
+    -----
+    Contract invariants: the subprocess receives an isolated environment and
+    all returned records are decoded from the files it produced.
+    """
     paths = _gate_paths(tmp_path)
     environment = _gate_environment(tmp_path, evidence_state, extra_environment, paths)
     result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - fixed test target.
@@ -315,10 +284,25 @@ def _run_gate(
 
 
 def _gate_paths(tmp_path: Path) -> dict[str, Path]:
-    """Create the fake-boundary files needed by one subprocess gate run."""
+    """Create the fake-boundary files needed by one subprocess gate run.
+
+    Parameters
+    ----------
+    tmp_path
+        Isolated directory that owns the gate's files.
+
+    Returns
+    -------
+    dict[str, Path]
+        Named paths for fake commands, JSON Lines outputs, and workflow output.
+
+    Notes
+    -----
+    Contract invariant: every returned path is confined to ``tmp_path``.
+    """
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir(parents=True)
-    call_log = _write_fake_commands(fake_bin)
+    call_log = write_fake_commands(fake_bin)
     bash_environment = tmp_path / "bash-environment"
     bash_environment.touch()
     return {
@@ -337,7 +321,29 @@ def _gate_environment(
     extra_environment: dict[str, str] | None,
     paths: dict[str, Path],
 ) -> dict[str, str]:
-    """Build an isolated environment for one real shell gate invocation."""
+    """Build an isolated environment for one real shell gate invocation.
+
+    Parameters
+    ----------
+    tmp_path
+        Isolated directory used for runner-local output paths.
+    evidence_state
+        Evidence state exposed to the child process.
+    extra_environment
+        Optional environment overrides for the scenario under test.
+    paths
+        Named fake-boundary paths returned by :func:`_gate_paths`.
+
+    Returns
+    -------
+    dict[str, str]
+        Environment mapping passed to the admission subprocess.
+
+    Notes
+    -----
+    Contract invariants: production environment values are preserved unless
+    explicitly overridden for the child process.
+    """
     environment = {
         **os.environ,
         "GITHUB_OUTPUT": str(paths["output"]),
@@ -359,7 +365,23 @@ def _gate_environment(
 def _read_gate_records(
     paths: dict[str, Path],
 ) -> tuple[list[dict[str, object]], list[dict[str, object]], list[dict[str, object]]]:
-    """Read parsed metric, trace, and fake-boundary records from one run."""
+    """Read parsed metric, trace, and fake-boundary records from one run.
+
+    Parameters
+    ----------
+    paths
+        Named output paths returned by :func:`_gate_paths`.
+
+    Returns
+    -------
+    tuple
+        Parsed metric records, parsed trace records, and fake adapter calls.
+
+    Notes
+    -----
+    Contract invariant: JSON Lines are decoded through the shared validator so
+    runtime tests exercise the same schema as workflow-contract tests.
+    """
     metrics = METRICS_VALIDATOR.parse_metrics(
         paths["metrics"].read_text(encoding="utf-8").splitlines()
     )

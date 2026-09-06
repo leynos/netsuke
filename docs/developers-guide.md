@@ -1051,6 +1051,13 @@ The script keeps fallible boundaries behind explicit Bash adapters. Set
 `git`, `python3`, and direct file or output appends. Adapters must retain the
 fixed, bounded contracts; they must not add identifiers or raw data.
 
+The internal script boundaries are deliberately narrow:
+`require-release-admission-canaries.sh` is the composition and reporting entry
+point, `release-admission-adapters.sh` owns external-effect adapters, and
+`release-admission-policy.sh` owns pure bounded classifications. These scripts
+are internal implementation details and are sourced only by the gate entry
+point.
+
 The metric contract is deliberately closed. The only label names are `canary`,
 `operation`, `outcome`, and `error_category`, and the only values are:
 
@@ -1673,6 +1680,24 @@ and the `typos_rollout*` modules and tests) are estate-synchronized and keep
 their own pinned, isolated Ruff policy enforced by `make spelling-helper-test`;
 they are excluded from the repository-wide Ruff and Pylint configuration so the
 two policies cannot disagree about the same file.
+
+
+### Release-admission runtime tests
+
+`make test-release-admission` is the runtime gate for the release-admission
+shell script. It uses the repository's Python 3.14 baseline and provisions
+`pytest==9.0.2` and `hypothesis==6.151.9` explicitly. The target runs the three
+runtime modules with `python -m pytest`, `-c /dev/null`, `--rootdir=.`, and
+`-p no:cacheprovider`, so the test run is isolated from repository-local pytest
+configuration and cache state:
+
+- `scripts/tests/test_release_admission_metrics.py`
+- `scripts/tests/test_release_admission_metric_failures.py`
+- `scripts/tests/test_release_admission_metric_boundedness.py`
+
+Pull-request CI invokes this target separately from the workflow-contract
+tests. Keep both gates: the runtime suite exercises the Bash boundary, while
+the workflow suite validates YAML and delivery structure.
 
 Lint and typecheck suppressions are a last resort, tightly scoped, and every
 one must carry a reason on the line — the df12 messages C9106 and C9107 fail any

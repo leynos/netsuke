@@ -56,6 +56,11 @@ def test_release_admission_metrics_retain_read_only_delivery() -> None:
     The scaffold remains read-only and non-blocking until a real evidence
     producer exists. Its summary always runs, and its artifact upload preserves
     failure diagnostics while respecting the reusable dry-run contract.
+
+    Notes
+    -----
+    The contract covers read-only permissions, observation-mode publication
+    independence, and metric and trace retention on applicable outcomes.
     """
     (
         admission,
@@ -72,7 +77,15 @@ def test_release_admission_metrics_retain_read_only_delivery() -> None:
 
 
 def _workflow_parts() -> tuple[dict[str, object], ...]:
-    """Return the workflow mappings exercised by the delivery contract."""
+    """Return the workflow mappings exercised by the delivery contract.
+
+    Returns
+    -------
+    tuple[dict[str, object], ...]
+        The workflow, release job, Python setup step, admission step, summary
+        step, metric upload step, and trace upload step, in that order.
+
+    """
     workflow = load_workflow(RELEASE_WORKFLOW_PATH)
     steps = job_steps(workflow, "release-admission-canaries")
     assert step_index_by_key(
@@ -102,7 +115,21 @@ def _workflow_parts() -> tuple[dict[str, object], ...]:
 
 
 def _step_named(steps: list[dict[str, object]], name: str) -> dict[str, object]:
-    """Return the required workflow step with the supplied fixed name."""
+    """Return the required workflow step with the supplied fixed name.
+
+    Parameters
+    ----------
+    steps
+        Workflow steps in declaration order.
+    name
+        Exact fixed step name to find.
+
+    Returns
+    -------
+    dict[str, object]
+        The first step whose ``name`` field matches ``name``.
+
+    """
     return next(step for step in steps if step.get("name") == name)
 
 
@@ -111,7 +138,18 @@ def _assert_admission_job_contract(
     python_step: dict[str, object],
     admission_step: dict[str, object],
 ) -> None:
-    """Assert the admission job retains its read-only non-blocking boundary."""
+    """Assert the admission job retains its read-only non-blocking boundary.
+
+    Parameters
+    ----------
+    admission
+        Parsed release-admission job mapping.
+    python_step
+        Python setup step used for monotonic duration collection.
+    admission_step
+        Gate execution step whose environment and command are inspected.
+
+    """
     permissions = require_mapping(
         admission.get("permissions"), "release-admission-canaries.permissions"
     )
@@ -145,7 +183,18 @@ def _assert_metrics_delivery_contract(
     upload_step: dict[str, object],
     trace_upload: dict[str, object],
 ) -> None:
-    """Assert the summary and artefact preserve failure-path diagnostics."""
+    """Assert summary and artefact steps preserve failure diagnostics.
+
+    Parameters
+    ----------
+    summary_step
+        Job-summary step that reports the gate outcome.
+    upload_step
+        Metrics artefact upload step.
+    trace_upload
+        Trace artefact upload step.
+
+    """
     assert summary_step.get("if") == "always()", (
         "the summary must run after both successful and failed admission checks"
     )
@@ -177,7 +226,18 @@ def _assert_metrics_delivery_contract(
 
 
 def _assert_release_scaffold_boundary(release: dict[str, object]) -> None:
-    """Assert publication defers enforcement until evidence production exists."""
+    """Assert publication defers enforcement until evidence production exists.
+
+    Parameters
+    ----------
+    release
+        Parsed release publication job mapping.
+
+    Notes
+    -----
+    The admission job remains independently observable until a producer-backed
+    evidence workflow enables enforcement.
+    """
     release_needs = release.get("needs")
     assert isinstance(release_needs, list), "release dependencies must be a list"
     assert "release-admission-canaries" not in release_needs, (

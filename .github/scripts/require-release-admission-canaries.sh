@@ -2,6 +2,12 @@
 # Emit bounded release-admission observations while checking RFC 0005 inputs.
 set -euo pipefail
 
+readonly script_directory="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=release-admission-adapters.sh
+source "$script_directory/release-admission-adapters.sh"
+# shellcheck source=release-admission-policy.sh
+source "$script_directory/release-admission-policy.sh"
+
 # These names and value sets are a stable, bounded operator contract.
 readonly GATE_METRIC='netsuke_release_admission_gate_total'
 readonly OPERATION_METRIC='netsuke_release_admission_operation_total'
@@ -68,28 +74,6 @@ is_trace_event() { case "$1" in "$TRACE_OPERATION"|"$TRACE_GATE"|"$TRACE_WORKFLO
 is_metric_value() { [[ "$1" =~ ^[0-9]+([.][0-9]+)?$ ]]; }
 is_operation_timeout() { [[ "$1" =~ ^[1-9][0-9]*$ && ${#1} -le 3 ]] && (( 10#$1 <= MAX_OPERATION_TIMEOUT_SECONDS )); }
 is_admission_enforcement() { [[ "$1" == "$ADMISSION_OBSERVATION_MODE" || "$1" == "$ADMISSION_ENFORCEMENT_MODE" ]]; }
-is_timeout_status() { [[ "$1" -eq 124 || "$1" -eq 137 ]]; }
-
-run_bounded_command() { timeout --kill-after=1s "${operation_timeout_seconds}s" "$@"; }
-github_api() { run_bounded_command "$github_api_adapter" api "$1" --jq "$2"; }
-git_fetch() { run_bounded_command "$git_fetch_adapter" fetch --depth 1 --no-tags origin -- "$1"; }
-monotonic_seconds() { "$clock_adapter" -c 'import time; print(time.monotonic())'; }
-duration_seconds() { python3 - "$1" "$2" <<'PY'
-import sys
-started, finished = map(float, sys.argv[1:])
-print(max(0.0, finished - started))
-PY
-}
-
-append_record() {
-  local adapter="$1" file="$2" record="$3"
-  if [[ -n "$adapter" ]]; then printf '%s\n' "$record" | "$adapter" "$file"; else printf '%s\n' "$record" >>"$file"; fi
-}
-write_metric_record() { append_record "$metrics_sink_adapter" "$metrics_file" "$1"; }
-write_workflow_output() {
-  if [[ -n "$workflow_output_sink_adapter" ]]; then printf '%s\n' "$1" | "$workflow_output_sink_adapter" "$GITHUB_OUTPUT"; else printf '%s\n' "$1" >>"$GITHUB_OUTPUT"; fi
-}
-
 emit_trace() {
   local event="$1" operation="$2" outcome="$3" error_category="$4" duration="$5" record
   if ! is_trace_event "$event" || ! is_operation "$operation" || ! is_outcome "$outcome" || ! is_error_category "$error_category" || ! is_metric_value "$duration"; then
@@ -111,14 +95,16 @@ emit_metric() {
     "$DURATION_METRIC") record=$(printf '{"name":"%s","labels":{"operation":"%s"},"value":%s}' "$metric_name" "$operation" "$value");;
     *) printf '%s\n' 'release-admission metric name is outside the fixed vocabulary' >&2; return 1;;
   esac
-  write_metric_record "$record"
+  write_metric_record "$metrics_sink_adapter" "$metrics_file" "$record"
 }
 
 record_gate_result() {
   emit_metric "$GATE_METRIC" "$CANARY_NONE" "$OPERATION_VERIFY_EVIDENCE" "$gate_outcome" "$gate_error_category" 1
   emit_trace "$TRACE_GATE" "$OPERATION_VERIFY_EVIDENCE" "$gate_outcome" "$gate_error_category" 0
-  write_workflow_output "gate-outcome=$gate_outcome"; write_workflow_output "gate-error-category=$gate_error_category"
-  write_workflow_output "metrics-file=$metrics_file"; write_workflow_output "trace-file=$trace_file"
+  write_workflow_output "$workflow_output_sink_adapter" "$GITHUB_OUTPUT" "gate-outcome=$gate_outcome"
+  write_workflow_output "$workflow_output_sink_adapter" "$GITHUB_OUTPUT" "gate-error-category=$gate_error_category"
+  write_workflow_output "$workflow_output_sink_adapter" "$GITHUB_OUTPUT" "metrics-file=$metrics_file"
+  write_workflow_output "$workflow_output_sink_adapter" "$GITHUB_OUTPUT" "trace-file=$trace_file"
   emit_trace "$TRACE_WORKFLOW_OUTPUT" "$OPERATION_VERIFY_EVIDENCE" "$OUTCOME_SUCCESS" "$ERROR_NONE" 0
   if [[ "$trace_sink_failed" == true ]]; then emit_trace "$TRACE_DELIVERY" "$OPERATION_VERIFY_EVIDENCE" "$OUTCOME_FAILURE" "$ERROR_UNKNOWN" 0; else emit_trace "$TRACE_DELIVERY" "$OPERATION_VERIFY_EVIDENCE" "$OUTCOME_SUCCESS" "$ERROR_NONE" 0; fi
 }
@@ -126,11 +112,13 @@ finish_gate() { record_gate_result; }
 
 run_operation() {
   local canary="$1" operation="$2"; shift 2
-  local started='' finished='' operation_error_category="$ERROR_UNKNOWN" clock_failed=false
+  local started='' finished='' clock_failed=false
   operation_result_operation="$operation"
-  if ! started="$(monotonic_seconds)"; then clock_failed=true; fi
-  if "$@"; then operation_result_outcome="$OUTCOME_SUCCESS"; operation_result_error_category="$ERROR_NONE"; else operation_result_outcome="$OUTCOME_FAILURE"; operation_result_error_category="$operation_error_category"; fi
-  if ! finished="$(monotonic_seconds)"; then clock_failed=true; fi
+  operation_result_outcome="$OUTCOME_UNKNOWN"
+  operation_result_error_category="$ERROR_UNKNOWN"
+  if ! started="$(monotonic_seconds "$clock_adapter")"; then clock_failed=true; fi
+  "$@" || :
+  if ! finished="$(monotonic_seconds "$clock_adapter")"; then clock_failed=true; fi
   if [[ "$clock_failed" == true ]]; then
     operation_result_outcome="$OUTCOME_FAILURE"; operation_result_error_category="$ERROR_UNKNOWN"; operation_result_duration_seconds=0
   else
@@ -139,21 +127,61 @@ run_operation() {
   emit_metric "$OPERATION_METRIC" "$canary" "$operation" "$operation_result_outcome" "$operation_result_error_category" 1
   emit_metric "$DURATION_METRIC" "$CANARY_NONE" "$operation" "$OUTCOME_UNKNOWN" "$ERROR_UNKNOWN" "$operation_result_duration_seconds"
   emit_trace "$TRACE_OPERATION" "$operation" "$operation_result_outcome" "$operation_result_error_category" "$operation_result_duration_seconds"
-  if [[ "$operation_result_outcome" == "$OUTCOME_FAILURE" ]]; then gate_outcome="$OUTCOME_FAILURE"; gate_error_category="$operation_result_error_category"; return 1; fi
+  if [[ "$operation_result_outcome" != "$OUTCOME_SUCCESS" ]]; then
+    gate_outcome="$OUTCOME_FAILURE"
+    gate_error_category="$operation_result_error_category"
+    return 1
+  fi
+}
+
+set_operation_policy_result() {
+  local result
+  result="$("$@")"
+  IFS=$'\t' read -r operation_result_outcome operation_result_error_category <<<"$result"
+  if ! is_outcome "$operation_result_outcome" || ! is_error_category "$operation_result_error_category"; then
+    operation_result_outcome="$OUTCOME_FAILURE"
+    operation_result_error_category="$ERROR_UNKNOWN"
+  fi
 }
 
 resolve_tag_commit() {
   local repository="$1" revision="$2" resolved_revision command_status
-  if resolved_revision="$(github_api "repos/$repository/commits/$revision" '.sha')"; then :; else command_status=$?; if is_timeout_status "$command_status"; then operation_error_category="$ERROR_TIMEOUT"; else operation_error_category="$ERROR_API"; fi; return 1; fi
-  if [[ "$resolved_revision" != "$revision" ]]; then operation_error_category="$ERROR_MISMATCH"; return 1; fi
+  if resolved_revision="$(github_resolve_commit "$github_api_adapter" "$operation_timeout_seconds" "$repository" "$revision")"; then
+    set_operation_policy_result policy_commit_resolution "$revision" "$resolved_revision"
+  else
+    command_status=$?
+    set_operation_policy_result policy_command_failure "$command_status" "$ERROR_API"
+  fi
+  [[ "$operation_result_outcome" == "$OUTCOME_SUCCESS" ]]
 }
-fetch_candidate_revision() { local revision="$1" command_status; if git_fetch "$revision"; then :; else command_status=$?; if is_timeout_status "$command_status"; then operation_error_category="$ERROR_TIMEOUT"; else operation_error_category="$ERROR_FETCH"; fi; return 1; fi; }
+fetch_candidate_revision() {
+  local revision="$1" command_status
+  if git_fetch_revision "$git_fetch_adapter" "$operation_timeout_seconds" "$revision"; then
+    set_operation_policy_result policy_success
+  else
+    command_status=$?
+    set_operation_policy_result policy_command_failure "$command_status" "$ERROR_FETCH"
+  fi
+  [[ "$operation_result_outcome" == "$OUTCOME_SUCCESS" ]]
+}
 fetch_workflow_run() {
   local repository="$1" revision="$2" command_status
-  if workflow_run_id="$(github_api "repos/$repository/actions/runs?head_sha=$revision&per_page=1" '.workflow_runs[0].id // empty')"; then :; else command_status=$?; if is_timeout_status "$command_status"; then operation_error_category="$ERROR_TIMEOUT"; else operation_error_category="$ERROR_API"; fi; return 1; fi
+  if workflow_run_id="$(github_find_workflow_run "$github_api_adapter" "$operation_timeout_seconds" "$repository" "$revision")"; then
+    set_operation_policy_result policy_success
+  else
+    command_status=$?
+    set_operation_policy_result policy_command_failure "$command_status" "$ERROR_API"
+  fi
+  [[ "$operation_result_outcome" == "$OUTCOME_SUCCESS" ]]
 }
-check_scan_freshness() { case "$1" in fresh) ;; stale) operation_error_category="$ERROR_STALE"; return 1;; missing|'') operation_error_category="$ERROR_MISSING"; return 1;; *) operation_error_category="$ERROR_UNKNOWN"; return 1;; esac; }
-verify_evidence() { local state="$1" run_id="$2"; if [[ "$state" == fresh || -z "$run_id" ]]; then operation_error_category="$ERROR_MISSING"; return 1; fi; }
+check_scan_freshness() {
+  set_operation_policy_result policy_scan_freshness "$1"
+  [[ "$operation_result_outcome" == "$OUTCOME_SUCCESS" ]]
+}
+verify_evidence() {
+  set_operation_policy_result policy_evidence "$1" "$2"
+  [[ "$operation_result_outcome" == "$OUTCOME_SUCCESS" ]]
+}
 run_admission_operations() {
   run_operation "$CANARY_NONE" "$OPERATION_RESOLVE_TAG_COMMIT" resolve_tag_commit "$admission_repository" "$candidate_revision" || return 1
   run_operation "$CANARY_RELEASE_CANDIDATE" "$OPERATION_FETCH_CANDIDATE_REVISION" fetch_candidate_revision "$candidate_revision" || return 1
