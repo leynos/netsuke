@@ -2048,11 +2048,18 @@ and [§2](rfcs/0012-netsukefile-property-testing.md#2-quantified-assertions).
     RFC 0012 Table 1.
   - Add the `action`, `actions_for_rule`, and `has_action` helpers, keeping
     the view additive-only and decoupled from internal IR types.
+  - Success: every Table 1 field and helper is observable in plan mode, and
+    identical manifests produce byte-identical, canonically ordered views
+    regardless of declaration or IR iteration order.
 - [ ] 10.1.3. Implement quantified assertions.
   - Requires 7.5.5 and 10.1.2.
   - Add `for_all_actions` and `for_all_targets`, evaluated by the existing
     MiniJinja engine, reporting the falsifying binding with substituted
     actual values under the established FAIL and ERROR taxonomy.
+  - Success: quantified action results follow the canonical projection order,
+    identify the falsifying binding, redact environment keys and values in
+    diagnostics, and preserve the established FAIL versus ERROR outcomes for
+    passing, failing, and erroneous assertions.
 
 ### 10.2. Declarative bounded generation
 
@@ -2068,15 +2075,19 @@ whether further constructors are warranted before the dialect stabilizes. See
     nearest-known-key diagnostics, matching the mock matcher convention.
   - Raise `netsuke_test_version` to 1.1 and gate the new keys on it, so 1.0
     runners fail closed under the RFC 0007 version contract.
+  - Success: version 1.1 files parse every Table 2 constructor, version 1.0
+    runners reject the new keys, and malformed constructors receive the
+    nearest-known-key diagnostic.
 - [ ] 10.2.2. Implement deterministic expansion, sampling, and replay.
   - Requires 10.2.1 and 7.5.2.
   - Enumerate exhaustively at or below the expansion ceiling; above it,
-    sample from the seeded `proptest` generator; name the seed in every
-    failure report and honour `netsuke test --seed`.
+    sample from the `proptest` generator with fixed default seed `0`; name the
+    seed in every failure report and honour `netsuke test --seed`.
   - Persist regression tuples under the test tree, replay them before fresh
     generation, and delta-reduce failing tuples towards domain minima.
-  - Success: repeated default runs are byte-identical, and a reported
-    failure replays from its seed alone.
+  - Success: repeated default runs are byte-identical, and a reported failure
+    replays only when both its reported seed and generated tuple inputs are
+    supplied through the persisted regression artefact.
 
 ### 10.3. Metamorphic relations, coverage, and adoption
 
@@ -2099,16 +2110,33 @@ and
   - Report rules that interpolate commands or construct environments without
     property coverage; keep the report advisory by default and promote it to
     a failure under `--strict-coverage`.
-- [ ] 10.3.3. Dogfood and document the property dialect.
+  - Success: an uncovered command or environment produces an advisory report
+    by default, the same fixture fails under `--strict-coverage`, and covered
+    fixtures produce neither report.
+- [ ] 10.3.3. Dogfood the property dialect on example manifests.
   - Requires 10.3.2.
   - Add property suites over the repository's example manifests covering the
     order-invariance, locality, and environment-closure relations end to end.
-  - Extend the users' guide testing chapter, `contents.md`, and the RFC 0012
-    open questions with the measured expansion-ceiling evidence.
+  - Scope boundary: change only property suites and their example-manifest
+    fixtures; do not add constructors, alter the dialect, or update docs.
+  - Success: the example-manifest suites pass for order invariance, locality,
+    and environment closure, and record the measured expansion ceiling and
+    case count used by each relation.
+- [ ] 10.3.4. Document the adopted property dialect and measurements.
+  - Requires 10.3.3.
+  - Update the users' guide testing chapter, `docs/contents.md`, and the RFC
+    0012 open questions with the measured expansion-ceiling evidence from
+    10.3.3, including links to the example-manifest relations.
+  - Scope boundary: change documentation only; do not change the property
+    implementation, suites, dialect, or measured results.
+  - Success: all three documents state the same measured expansion ceiling,
+    identify the order-invariance, locality, and environment-closure example
+    suites, and link readers to the adopted property dialect.
 
 **Success criterion:** the worked examples in RFC 0012 §§3-4 run to a green
 result deterministically on a machine with no compiler and no network, and a
-seeded property failure replays identically from the values in its report.
+seeded property failure replays identically from its reported seed and tuple
+inputs.
 
 ## 11. Allow-listed structured-command shell selection
 
