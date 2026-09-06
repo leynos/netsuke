@@ -88,7 +88,6 @@ runner.manifest.current_directory_label = الدليل الحالي
 runner.manifest.default_not_declared = الافتراضي للبيان «{ $default }» لا يسمّي إجراءً أو هدفًا معلنًا.
 runner.context.network_policy = تعذّر بناء سياسة الشبكة.
 runner.context.load_manifest = تعذّر تحميل ملف البيانات من { $path }.
-runner.context.serialise_manifest = تعذّرت سَلسَلة ملف البيانات.
 runner.context.build_graph = تعذّر بناء الرسم من ملف البيانات.
 runner.context.generate_ninja = تعذّر توليد ملف بيانات Ninja.
 runner.context.render_graph = تعذّر عرض مخرج الرسم.

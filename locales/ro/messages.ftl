@@ -88,7 +88,6 @@ runner.manifest.current_directory_label = directorul curent
 runner.manifest.default_not_declared = Valoarea implicită a manifestului '{ $default }' nu denumește o acțiune sau o țintă declarată.
 runner.context.network_policy = Politica de rețea nu a putut fi construită.
 runner.context.load_manifest = Manifestul din { $path } nu a putut fi încărcat.
-runner.context.serialise_manifest = Manifestul nu a putut fi serializat.
 runner.context.build_graph = Graful nu a putut fi construit din manifest.
 runner.context.generate_ninja = Manifestul Ninja nu a putut fi generat.
 runner.context.render_graph = Artefactul grafului nu a putut fi redat.

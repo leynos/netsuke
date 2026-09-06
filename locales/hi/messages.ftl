@@ -88,7 +88,6 @@ runner.manifest.current_directory_label = वर्तमान निर्द�
 runner.manifest.default_not_declared = मैनिफ़ेस्ट डिफ़ॉल्ट '{ $default }' किसी घोषित क्रिया या लक्ष्य का नाम नहीं है।
 runner.context.network_policy = नेटवर्क नीति नहीं बनाई जा सकी।
 runner.context.load_manifest = { $path } से मैनिफ़ेस्ट नहीं लादा जा सका।
-runner.context.serialise_manifest = मैनिफ़ेस्ट का क्रमांकन नहीं हो सका।
 runner.context.build_graph = मैनिफ़ेस्ट से ग्राफ़ नहीं बनाया जा सका।
 runner.context.generate_ninja = Ninja मैनिफ़ेस्ट नहीं बनाया जा सका।
 runner.context.render_graph = ग्राफ़ का उत्पाद प्रस्तुत नहीं किया जा सका।
