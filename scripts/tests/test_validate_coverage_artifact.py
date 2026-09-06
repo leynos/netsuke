@@ -36,7 +36,7 @@ class ArtefactCase:
 def _load_script() -> types.ModuleType:
     """Load the hyphenated validator module for its in-process seam."""
     spec = importlib.util.spec_from_file_location(
-        "validate_coverage_artifact", SCRIPT_DIRECTORY / "validate-coverage-artifact.py"
+        "validate_coverage_artifact", SCRIPT_DIRECTORY / "validate_coverage_artifact.py"
     )
     assert spec is not None, "expected coverage validator import setup"
     assert spec.loader is not None, "expected coverage validator loader"
@@ -334,7 +334,7 @@ def test_validator_cli_preserves_filesystem_boundaries(
     result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - fixed interpreter and validator path.
         [
             sys.executable,
-            str(SCRIPT_DIRECTORY / "validate-coverage-artifact.py"),
+            str(SCRIPT_DIRECTORY / "validate_coverage_artifact.py"),
             "--artifact-dir",
             str(tmp_path),
         ],
@@ -372,7 +372,7 @@ def test_validator_cli_never_executes_artefact_content(tmp_path: pathlib.Path) -
     result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - fixed interpreter and validator path.
         [
             sys.executable,
-            str(SCRIPT_DIRECTORY / "validate-coverage-artifact.py"),
+            str(SCRIPT_DIRECTORY / "validate_coverage_artifact.py"),
             "--artifact-dir",
             str(tmp_path),
         ],

@@ -11,6 +11,7 @@ import typing as typ
 
 from trust_boundary_invariants import (
     CREDENTIAL_ENVIRONMENT_KEY,
+    INDEXED_SECRET_EXPRESSIONS,
     REQUIRED_SECRET_JOB_PERMISSIONS,
     SECRET_EXPRESSION,
     TOKEN_PRESENCE_GUARD,
@@ -41,6 +42,11 @@ EXPECTED_SUBMISSION_CONDITION = (
     "github.event.workflow_run.conclusion == 'success' && "
     "github.event.workflow_run.event == 'pull_request' && "
     "github.event.workflow_run.head_repository.full_name == github.repository"
+)
+EXPECTED_EXCLUDED_FORK_CONDITION = (
+    "github.event.workflow_run.conclusion == 'success' && "
+    "github.event.workflow_run.event == 'pull_request' && "
+    "github.event.workflow_run.head_repository.full_name != github.repository"
 )
 EXPECTED_PR_ARTEFACT_STEP = {
     "name": "Upload PR coverage artefact",
@@ -101,6 +107,40 @@ def test_submission_workflow_uses_trusted_workflow_run_boundary() -> None:
     assert job.get("permissions") == REQUIRED_SECRET_JOB_PERMISSIONS, (
         "submission must retain least-privilege permissions"
     )
+
+
+def test_submission_workflow_reports_excluded_forks_neutrally() -> None:
+    """Publish the required Check Run without downloading fork-controlled data."""
+    workflow = load_workflow(COVERAGE_PR_WORKFLOW_PATH)
+    job = workflow_job(workflow, "report-excluded-fork")
+    assert job.get("if") == EXPECTED_EXCLUDED_FORK_CONDITION, (
+        "the excluded-fork report must cover only successful fork PR CI runs"
+    )
+    assert job.get("permissions") == {"checks": "write"}, (
+        "the excluded-fork report must have only Check Run permission"
+    )
+    steps = job_steps(workflow, "report-excluded-fork")
+    assert not any(
+        "actions/checkout@" in str(step.get("uses", "")) for step in steps
+    ), "the excluded-fork report must not check out PR content"
+    assert not any(
+        "download-artifact@" in str(step.get("uses", "")) for step in steps
+    ), "the excluded-fork report must not download the hostile artefact"
+    assert not job_references_secret(steps, CREDENTIAL_ENVIRONMENT_KEY), (
+        "the excluded-fork report must not receive the CodeScene credential"
+    )
+    report = named_step(steps, "Report excluded fork CodeScene coverage gate")
+    script = str(require_mapping(report.get("with"), "fork report inputs")["script"])
+    for required_fragment in (
+        "name: 'CodeScene coverage'",
+        "head_sha: context.payload.workflow_run.head_sha",
+        "external_id: workflowRunId",
+        "conclusion: 'neutral'",
+    ):
+        assert required_fragment in script, (
+            "the excluded-fork report must retain "
+            f"{required_fragment!r} in its trusted reporting path"
+        )
 
 
 def test_secret_job_checks_out_only_trusted_tooling_and_validates_first() -> None:
@@ -206,6 +246,16 @@ def test_isolated_secret_job_detects_non_env_secret_references() -> None:
             "name": "Submit",
             "if": TOKEN_PRESENCE_GUARD,
             "with": {"access-token": "${{ secrets.CS_ACCESS_TOKEN }}"},
+        },
+        {
+            "name": "Submit",
+            "if": TOKEN_PRESENCE_GUARD,
+            "run": f"echo {INDEXED_SECRET_EXPRESSIONS[0]}",
+        },
+        {
+            "name": "Submit",
+            "if": TOKEN_PRESENCE_GUARD,
+            "with": {"access-token": INDEXED_SECRET_EXPRESSIONS[0]},
         },
     ]
     for mutation in mutations:
