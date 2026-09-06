@@ -1,6 +1,5 @@
 """Exercise bounded release-admission metrics through fake command adapters."""
 
-import math
 from pathlib import Path
 
 import pytest
@@ -10,6 +9,8 @@ from release_admission_test_support import (
     _run_gate,
     expected_gate_labels,
     expected_operation_labels,
+    operation_duration,
+    operation_records,
 )
 
 FRESH_OBSERVATION_GATE_OUTPUTS = {
@@ -36,58 +37,22 @@ TRACE_DELIVERY_FAILURE = {
 }
 
 
-def operation_records(
-    metrics: list[dict[str, object]], operation: str
-) -> list[dict[str, object]]:
-    """Return operation-counter records emitted for one fixed operation.
-
-    Parameters
-    ----------
-    metrics
-        Parsed release-admission metric records.
-    operation
-        One fixed operation from ``CANARY_BY_OPERATION``.
-
-    Returns
-    -------
-    list[dict[str, object]]
-        Counter records whose bounded ``operation`` label matches the request.
-    """
-    return [
-        record
-        for record in metrics
-        if record["name"] == "netsuke_release_admission_operation_total"
-        and isinstance(record["labels"], dict)
-        and record["labels"].get("operation") == operation
-    ]
-
-
-def operation_duration(metrics: list[dict[str, object]], operation: str) -> float:
-    """Return one finite duration observation for a fixed operation.
-
-    Parameters
-    ----------
-    metrics
-        Parsed release-admission metric records.
-    operation
-        One fixed operation from ``CANARY_BY_OPERATION``.
-
-    Returns
-    -------
-    float
-        The operation duration in seconds.
-    """
-    value = next(
-        record["value"]
-        for record in metrics
-        if record["name"] == "netsuke_release_admission_operation_duration_seconds"
-        and record["labels"] == {"operation": operation}
+def _write_failing_clock_adapter(tmp_path: Path) -> Path:
+    """Write a clock adapter that fails on one configured invocation."""
+    adapter = tmp_path / "clock-adapter"
+    adapter.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        "count=0\n"
+        'if [[ -e $NETSUKE_FAKE_CLOCK_STATE ]]; then count=$(<"$NETSUKE_FAKE_CLOCK_STATE"); fi\n'
+        "count=$((count + 1))\n"
+        'printf \'%s\' "$count" >"$NETSUKE_FAKE_CLOCK_STATE"\n'
+        "if [[ $count == $NETSUKE_FAKE_CLOCK_FAILURE ]]; then exit 1; fi\n"
+        "printf '%s\\n' \"$count\"\n",
+        encoding="utf-8",
     )
-    assert isinstance(value, int | float), (
-        "duration records must contain finite numeric values"
-    )
-    assert math.isfinite(value), "duration records must contain finite numeric values"
-    return float(value)
+    adapter.chmod(0o755)
+    return adapter
 
 
 def test_gate_observes_synthetic_fresh_evidence_without_blocking(
@@ -194,4 +159,47 @@ def test_trace_sink_failure_preserves_gate_and_reports_recovery(
     )
     assert traces[-1] == TRACE_DELIVERY_FAILURE, (
         "a recovered trace sink must record its fixed delivery failure"
+    )
+
+
+@pytest.mark.parametrize("failure_read", ["1", "2"], ids=["start", "finish"])
+def test_clock_failure_retains_bounded_operation_result(
+    tmp_path: Path,
+    failure_read: str,
+) -> None:
+    """Verify either clock read emits a bounded failed operation result.
+
+    Parameters
+    ----------
+    tmp_path
+        Isolated fake-command and output directory.
+    failure_read
+        The clock invocation that the adapter fails.
+    """
+    adapter = _write_failing_clock_adapter(tmp_path)
+    result, metrics, traces, _, outputs = _run_gate(
+        tmp_path / "run",
+        evidence_state="fresh",
+        extra_environment={
+            "NETSUKE_RELEASE_ADMISSION_CLOCK_ADAPTER": str(adapter),
+            "NETSUKE_FAKE_CLOCK_FAILURE": failure_read,
+            "NETSUKE_FAKE_CLOCK_STATE": str(tmp_path / "clock-state"),
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    METRICS_VALIDATOR.validate_metrics(metrics)
+    METRICS_VALIDATOR.validate_traces(traces)
+    operation = "resolve_tag_commit"
+    assert operation_records(metrics, operation)[-1]["labels"] == (
+        expected_operation_labels("none", operation, "failure", "unknown")
+    ), "clock failure must retain a bounded operation failure"
+    assert operation_duration(metrics, operation) == 0, (
+        "clock failure must retain the defined zero-duration fallback"
+    )
+    assert outputs["gate-outcome"] == "failure", (
+        "clock failure must reach the workflow output boundary"
+    )
+    assert outputs["gate-error-category"] == "unknown", (
+        "clock failure must retain the bounded unknown category"
     )

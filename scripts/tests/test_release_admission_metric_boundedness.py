@@ -5,7 +5,7 @@ from pathlib import Path
 
 from hypothesis import given, settings
 from hypothesis import strategies as st
-from test_release_admission_metrics import METRICS_VALIDATOR, _run_gate
+from release_admission_test_support import METRICS_VALIDATOR, _run_gate
 
 IDENTIFIER_TEXT = st.text(
     alphabet=st.characters(blacklist_categories=("Cs",), blacklist_characters="\x00"),
@@ -66,6 +66,15 @@ def test_identifiers_never_become_metric_labels(
     assert all(call["diagnostics"] == expected_diagnostics for call in calls), (
         "generated paths and URLs must cross each fake command boundary"
     )
+    github_arguments = [call["arguments"] for call in calls if call["command"] == "gh"]
+    assert any(
+        any("/commits/" in argument for argument in arguments)
+        for arguments in github_arguments
+    ), "the commit-resolution request must cross the GitHub boundary"
+    assert any(
+        any("/actions/runs?" in argument for argument in arguments)
+        for arguments in github_arguments
+    ), "the workflow-run request must cross the GitHub boundary"
     for record in metrics:
         labels = record["labels"]
         assert isinstance(labels, dict), "every emitted metric must retain labels"

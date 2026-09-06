@@ -10,6 +10,7 @@ from workflow_loading import (
 )
 
 ADMISSION_PERMISSIONS = {"actions": "read", "contents": "read"}
+ADMISSION_TIMEOUT_MINUTES = 15
 ADMISSION_PYTHON_SETUP = "astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990"
 METRICS_FILE_ENV = {
     "NETSUKE_RELEASE_ADMISSION_METRICS_FILE": (
@@ -116,6 +117,9 @@ def _assert_admission_job_contract(
     )
     assert permissions == ADMISSION_PERMISSIONS, (
         "admission must retain read-only permissions"
+    )
+    assert admission.get("timeout-minutes") == ADMISSION_TIMEOUT_MINUTES, (
+        "admission must bound its overall runtime"
     )
     assert "continue-on-error" not in admission, (
         "observation mode must succeed without suppressing other admission failures"

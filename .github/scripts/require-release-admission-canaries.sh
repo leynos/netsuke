@@ -126,11 +126,16 @@ finish_gate() { record_gate_result; }
 
 run_operation() {
   local canary="$1" operation="$2"; shift 2
-  local started finished operation_error_category="$ERROR_UNKNOWN"
-  started="$(monotonic_seconds)"
+  local started='' finished='' operation_error_category="$ERROR_UNKNOWN" clock_failed=false
+  operation_result_operation="$operation"
+  if ! started="$(monotonic_seconds)"; then clock_failed=true; fi
   if "$@"; then operation_result_outcome="$OUTCOME_SUCCESS"; operation_result_error_category="$ERROR_NONE"; else operation_result_outcome="$OUTCOME_FAILURE"; operation_result_error_category="$operation_error_category"; fi
-  finished="$(monotonic_seconds)"; operation_result_operation="$operation"
-  operation_result_duration_seconds="$(duration_seconds "$started" "$finished")"
+  if ! finished="$(monotonic_seconds)"; then clock_failed=true; fi
+  if [[ "$clock_failed" == true ]]; then
+    operation_result_outcome="$OUTCOME_FAILURE"; operation_result_error_category="$ERROR_UNKNOWN"; operation_result_duration_seconds=0
+  else
+    operation_result_duration_seconds="$(duration_seconds "$started" "$finished")"
+  fi
   emit_metric "$OPERATION_METRIC" "$canary" "$operation" "$operation_result_outcome" "$operation_result_error_category" 1
   emit_metric "$DURATION_METRIC" "$CANARY_NONE" "$operation" "$OUTCOME_UNKNOWN" "$ERROR_UNKNOWN" "$operation_result_duration_seconds"
   emit_trace "$TRACE_OPERATION" "$operation" "$operation_result_outcome" "$operation_result_error_category" "$operation_result_duration_seconds"

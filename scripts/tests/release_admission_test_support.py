@@ -3,6 +3,7 @@
 import dataclasses
 import importlib.util
 import json
+import math
 import os
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the script boundary is under test.
 import typing as typ
@@ -72,7 +73,26 @@ fi
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class FailureCase:
-    """Describe one fixed release-admission failure classification."""
+    """Describe one fixed release-admission failure classification.
+
+    Attributes
+    ----------
+    evidence_state
+        Evidence state supplied to the admission subprocess.
+    extra_environment
+        Additional environment values used to configure a fake boundary.
+    operation
+        Operation expected to classify the failure.
+    error_category
+        Bounded category expected for the failure.
+    enforce
+        Whether the subprocess runs in enforcement mode.
+
+    Notes
+    -----
+    Contract invariants: operation and error category are fixed vocabulary
+    members; ``extra_environment`` applies only to the child process.
+    """
 
     evidence_state: str
     extra_environment: dict[str, str]
@@ -82,23 +102,45 @@ class FailureCase:
 
 
 class MetricsValidator(typ.Protocol):
-    """Define finite-JSON parsing and fixed-label validation operations."""
+    """Define finite-JSON parsing and fixed-label validation operations.
+
+    Notes
+    -----
+    Contract invariants: implementations enforce exact schemas, ordered
+    fields, bounded vocabularies, and finite JSON values.
+    """
 
     def parse_metrics(self, lines: list[str]) -> list[dict[str, object]]:
         """Parse finite JSON Lines metric records into mappings."""
 
     def validate_metrics(self, records: list[dict[str, object]]) -> None:
-        """Validate that records retain the fixed release-admission contract."""
+        """Validate records against the fixed metric contract."""
 
     def parse_traces(self, lines: list[str]) -> list[dict[str, object]]:
         """Parse finite JSON Lines release-admission trace records."""
 
     def validate_traces(self, records: list[dict[str, object]]) -> None:
-        """Validate that traces retain the fixed release-admission contract."""
+        """Validate traces against the fixed trace contract."""
 
 
 def load_metrics_validator() -> MetricsValidator:
-    """Load the workflow-contract validator without changing the import path."""
+    """Load the workflow-contract validator without changing the import path.
+
+    Returns
+    -------
+    MetricsValidator
+        Validator implementation loaded from the workflow-contract module.
+
+    Raises
+    ------
+    AssertionError
+        If the workflow-contract module has no importable loader.
+
+    Notes
+    -----
+    Contract invariants: file loading preserves the repository's single
+    validator contract without package installation.
+    """
     specification = importlib.util.spec_from_file_location(
         "release_admission_metrics_contract", METRICS_VALIDATOR_PATH
     )
@@ -116,7 +158,29 @@ METRICS_VALIDATOR = load_metrics_validator()
 def expected_operation_labels(
     canary: str, operation: str, outcome: str, error_category: str
 ) -> dict[str, str]:
-    """Return the fixed-label metric contract for one operation counter."""
+    """Return fixed labels for one release-admission operation counter.
+
+    Parameters
+    ----------
+    canary
+        Bounded canary identifier assigned to the operation.
+    operation
+        Fixed operation name represented by the counter.
+    outcome
+        Bounded operation outcome.
+    error_category
+        Bounded error category, or ``"none"`` for success.
+
+    Returns
+    -------
+    dict[str, str]
+        Labels in the operation-counter schema order.
+
+    Notes
+    -----
+    Contract invariants: return exactly ``canary``, ``operation``, ``outcome``,
+    and ``error_category`` for validator vocabulary checks.
+    """
     return {
         "canary": canary,
         "operation": operation,
@@ -126,8 +190,84 @@ def expected_operation_labels(
 
 
 def expected_gate_labels(outcome: str, error_category: str) -> dict[str, str]:
-    """Return the fixed-label metric contract for the overall gate counter."""
+    """Return fixed labels for the overall release-admission counter.
+
+    Parameters
+    ----------
+    outcome
+        Bounded overall gate outcome.
+    error_category
+        Bounded error category, or ``"none"`` for success.
+
+    Returns
+    -------
+    dict[str, str]
+        Labels in the gate-counter schema order.
+
+    Notes
+    -----
+    Contract invariants: return exactly ``outcome`` and ``error_category`` for
+    validator vocabulary checks.
+    """
     return {"outcome": outcome, "error_category": error_category}
+
+
+def operation_records(
+    metrics: list[dict[str, object]], operation: str
+) -> list[dict[str, object]]:
+    """Return counter records for one fixed operation.
+
+    Parameters
+    ----------
+    metrics
+        Parsed release-admission metric records.
+    operation
+        Fixed operation name.
+
+    Returns
+    -------
+    list[dict[str, object]]
+        Records whose bounded operation label matches ``operation``.
+    """
+    return [
+        record
+        for record in metrics
+        if record["name"] == "netsuke_release_admission_operation_total"
+        and isinstance(record["labels"], dict)
+        and record["labels"].get("operation") == operation
+    ]
+
+
+def operation_duration(metrics: list[dict[str, object]], operation: str) -> float:
+    """Return a finite duration observation for a fixed operation.
+
+    Parameters
+    ----------
+    metrics
+        Parsed release-admission metric records.
+    operation
+        Fixed operation name.
+
+    Returns
+    -------
+    float
+        The finite operation duration in seconds.
+
+    Notes
+    -----
+    Contract invariants: reject missing, non-numeric, and non-finite values.
+    """
+    value = next(
+        record["value"]
+        for record in metrics
+        if record["name"] == "netsuke_release_admission_operation_duration_seconds"
+        and record["labels"] == {"operation": operation}
+    )
+    assert isinstance(value, int | float), (
+        "duration records must contain finite numeric values"
+    )
+    assert math.isfinite(value), "duration records must contain finite numeric values"
+    return float(value)
 
 
 def _write_fake_commands(directory: Path) -> Path:

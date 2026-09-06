@@ -81,20 +81,7 @@ def parse_metrics(lines: list[str]) -> list[dict[str, object]]:
     The parser rejects `NaN`, `Infinity`, and `-Infinity` so the validator
     accepts only portable JSON metric values.
     """
-    records: list[dict[str, object]] = []
-    for line in lines:
-        if not line.strip():
-            continue
-        try:
-            value = json.loads(line, parse_constant=_reject_non_finite_json_number)
-        except (json.JSONDecodeError, ValueError) as error:
-            message = "release-admission metric records must contain finite JSON"
-            raise ValueError(message) from error
-        if not isinstance(value, dict):
-            message = "each metric record must be a JSON object"
-            raise TypeError(message)
-        records.append(value)
-    return records
+    return _parse_json_lines(lines, "metric")
 
 
 def _reject_non_finite_json_number(value: str) -> object:

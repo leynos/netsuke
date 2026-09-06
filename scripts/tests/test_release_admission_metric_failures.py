@@ -3,9 +3,9 @@
 import typing as typ
 
 import pytest
-from release_admission_test_support import FailureCase
-from test_release_admission_metrics import (
+from release_admission_test_support import (
     CANARY_BY_OPERATION,
+    FailureCase,
     METRICS_VALIDATOR,
     _run_gate,
     expected_gate_labels,
@@ -205,17 +205,16 @@ def test_gate_emits_fixed_categories_for_failure_paths(
     assert outputs["gate-error-category"] == case.error_category, (
         "failed operations must retain their bounded category in workflow output"
     )
+    if case.extra_environment.get("NETSUKE_FAKE_WORKFLOW_RUN_ID") == "":
+        workflow_run_record = operation_records(metrics, "fetch_workflow_run")[-1]
+        assert workflow_run_record["labels"] == expected_operation_labels(
+            CANARY_BY_OPERATION["fetch_workflow_run"],
+            "fetch_workflow_run",
+            "success",
+            "none",
+        ), "an empty run identifier must reach evidence verification"
     if case.error_category == "timeout":
-        duration = next(
-            record["value"]
-            for record in metrics
-            if record["name"] == "netsuke_release_admission_operation_duration_seconds"
-            and record["labels"] == {"operation": case.operation}
-        )
-        assert isinstance(duration, int | float), (
-            "timed-out operations must record numeric durations"
-        )
-        assert duration > 0, (
+        assert operation_duration(metrics, case.operation) > 0, (
             "timed-out operations must retain a positive measured duration"
         )
 
