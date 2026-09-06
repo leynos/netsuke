@@ -315,86 +315,71 @@ def test_operation_durations_measure_controlled_delay(tmp_path: Path) -> None:
     )
 
 
-@pytest.mark.parametrize("timeout_value", ["0", "301", "not-a-number"])
-def test_invalid_timeout_fails_before_running_admission_operations(
+@pytest.mark.parametrize(
+    ("setting", "value"),
+    [
+        pytest.param(
+            "NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS",
+            "0",
+            id="timeout-seconds-0",
+        ),
+        pytest.param(
+            "NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS",
+            "301",
+            id="timeout-seconds-301",
+        ),
+        pytest.param(
+            "NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS",
+            "not-a-number",
+            id="timeout-seconds-not-a-number",
+        ),
+        pytest.param("NETSUKE_RELEASE_ADMISSION_ENFORCE", "", id="enforce-empty"),
+        pytest.param("NETSUKE_RELEASE_ADMISSION_ENFORCE", "False", id="enforce-False"),
+        pytest.param(
+            "NETSUKE_RELEASE_ADMISSION_ENFORCE", "observe", id="enforce-observe"
+        ),
+    ],
+)
+def test_invalid_configuration_fails_before_running_admission_operations(
     tmp_path: Path,
-    timeout_value: str,
+    setting: str,
+    value: str,
 ) -> None:
-    """Verify invalid timeout settings fail before any external command runs.
+    """Verify invalid configuration fails before any external command runs.
 
     Parameters
     ----------
     tmp_path
         Isolated fake-command and output directory.
-    timeout_value
-        Out-of-contract timeout configuration supplied to the shell boundary.
+    setting
+        Closed configuration input that receives an invalid value.
+    value
+        Out-of-contract configuration value supplied to the shell boundary.
 
     Notes
     -----
-    Early validation must still emit valid gate metrics and workflow outputs.
+    Early validation must still emit valid gate metrics, traces, and workflow
+    outputs while preventing every external admission operation.
     """
     result, metrics, traces, calls, outputs = _run_gate(
         tmp_path,
         evidence_state="fresh",
-        extra_environment={
-            "NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS": timeout_value,
-        },
+        extra_environment={setting: value},
     )
 
-    assert result.returncode != 0, "invalid timeout configuration must fail closed"
-    assert calls == [], "invalid timeout configuration must prevent API and Git calls"
+    assert result.returncode != 0, "invalid configuration must fail closed"
+    assert calls == [], "invalid configuration must prevent API and Git calls"
     METRICS_VALIDATOR.validate_metrics(metrics)
     METRICS_VALIDATOR.validate_traces(traces)
     assert metrics == INVALID_CONFIGURATION_METRICS, (
-        "invalid timeout configuration must emit only the fixed failure gate metric"
+        "invalid configuration must emit only the fixed failure gate metric"
     )
     assert outputs["gate-outcome"] == "failure", (
-        "invalid timeout configuration must publish failure"
+        "invalid configuration must publish failure"
     )
     assert outputs["gate-error-category"] == "unknown", (
-        "invalid timeout configuration must publish the fixed unknown category"
+        "invalid configuration must publish the fixed unknown category"
     )
     assert [_trace_signature(trace) for trace in traces] == (
         INVALID_CONFIGURATION_TRACE_SIGNATURES
     ), "early configuration failure must retain the bounded trace hand-off sequence"
-
-
-@pytest.mark.parametrize("enforcement_value", ["", "False", "observe"])
-def test_invalid_enforcement_fails_before_running_admission_operations(
-    tmp_path: Path,
-    enforcement_value: str,
-) -> None:
-    """Verify invalid enforcement settings fail before any external command runs.
-
-    Parameters
-    ----------
-    tmp_path
-        Isolated fake-command and output directory.
-    enforcement_value
-        Out-of-contract enforcement mode supplied to the shell boundary.
-
-    Notes
-    -----
-    Configuration validation must publish the same bounded failure contract as
-    invalid timeout validation before an admission operation runs.
-    """
-    result, metrics, traces, calls, outputs = _run_gate(
-        tmp_path,
-        extra_environment={"NETSUKE_RELEASE_ADMISSION_ENFORCE": enforcement_value},
-    )
-
-    assert result.returncode != 0, "invalid enforcement configuration must fail closed"
-    assert calls == [], (
-        "invalid enforcement configuration must prevent API and Git calls"
-    )
-    METRICS_VALIDATOR.validate_metrics(metrics)
-    METRICS_VALIDATOR.validate_traces(traces)
-    assert metrics == INVALID_CONFIGURATION_METRICS, (
-        "invalid enforcement configuration must emit only the fixed failure gate metric"
-    )
-    assert outputs["gate-outcome"] == "failure", (
-        "invalid enforcement configuration must publish failure"
-    )
-    assert outputs["gate-error-category"] == "unknown", (
-        "invalid enforcement configuration must publish the fixed unknown category"
-    )

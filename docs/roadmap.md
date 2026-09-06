@@ -1989,7 +1989,7 @@ runs prove the failure boundary before any job receives release permissions.
     including missing evidence, but does not fail the workflow or make
     publication depend on the scaffold. Connect publication to the admission
     result only once a real evidence producer is available and enforcement
-    mode is enabled. See [ADR-018](adr-018-release-admission-observability.md)
+    mode is enabled. See [ADR-020](adr-020-release-admission-observability.md)
     and the
     [release-admission observability
     guidance](developers-guide.md#release-admission-observability).

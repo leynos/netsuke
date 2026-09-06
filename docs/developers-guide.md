@@ -4,7 +4,7 @@ This guide describes the day-to-day engineering workflow for Netsuke, with a
 focus on writing and maintaining tests. It is the source of truth for how the
 test suite is expected to be used by contributors. The normative architecture
 reference for bounded release-admission observability is
-[ADR-018](adr-018-release-admission-observability.md).
+[ADR-020](adr-020-release-admission-observability.md).
 
 ## Command-line interface architecture
 
@@ -1123,7 +1123,7 @@ artefact-retention period. These exports are intentionally not a Prometheus,
 OpenTelemetry Protocol (OTLP), or statsd endpoint; no scrape or push service is
 implied. Metric or label renames are breaking contract changes and require an
 ADR and updated workflow-contract tests. See
-[ADR-018](adr-018-release-admission-observability.md) for the durable decision.
+[ADR-020](adr-020-release-admission-observability.md) for the durable decision.
 
 ## GitHub Actions runner placement
 
