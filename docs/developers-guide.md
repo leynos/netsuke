@@ -1261,7 +1261,7 @@ Run these commands before finalizing any change:
 - `make test`
 
 When the change touches the coverage artefact validator
-(`scripts/validate-coverage-artifact.py`) or the trusted coverage workflow
+(`scripts/validate_coverage_artifact.py`) or the trusted coverage workflow
 (`.github/workflows/coverage-pr-submit.yml`), also run:
 
 - `make test-coverage-artifact`
