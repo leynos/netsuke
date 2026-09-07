@@ -18,6 +18,9 @@ from workflow_loading import (
 )
 
 ACTION_MODULE_PATH = REPO_ROOT / ".github" / "scripts" / "coverage_pr_submission.py"
+OBSERVABILITY_MODULE_PATH = (
+    REPO_ROOT / ".github" / "scripts" / "coverage_pr_submission_observability.py"
+)
 ARTEFACT_NAME = "pr-coverage-lcov"
 DOWNLOAD_STEP = "Download PR coverage artefact"
 VALIDATION_STEP = "Validate hostile coverage artefact"
@@ -63,12 +66,16 @@ BOUNDED_CORRELATION_FIELDS = (
 )
 
 
-def _assert_python_action_step(step: dict[str, object], command: str) -> None:
+def _assert_python_action_step(
+    step: dict[str, object],
+    command: str,
+    module_name: str = "coverage_pr_submission.py",
+) -> None:
     """Assert one workflow step invokes the fixed Python action command."""
     script = str(step["run"])
     assert step.get("shell") == "python", "trusted scripts must use Python"
     assert "runpy.run_path" in script, "trusted scripts must run the checked-in module"
-    assert "coverage_pr_submission.py" in script, "wrong trusted action module"
+    assert module_name in script, "wrong trusted action module"
     assert f'"{command}"' in script, f"wrong trusted action command {command!r}"
 
 
@@ -250,6 +257,8 @@ def _assert_telemetry_contract(steps: list[dict[str, object]]) -> None:
         "OUTCOME",
         "ORIGINATING_WORKFLOW_RUN_ID",
         "ORIGINATING_COMMIT_SHA",
+        "NETSUKE_CODESCENE_COVERAGE_METRICS_FILE",
+        "NETSUKE_CODESCENE_COVERAGE_TRACES_FILE",
         "OPERATION",
     }
     for name, operation, outcome, start_step in telemetry:
@@ -268,8 +277,10 @@ def _assert_telemetry_contract(steps: list[dict[str, object]]) -> None:
             "${{ github.event.workflow_run.head_sha }}"
         ), f"{name} must retain source-commit correlation"
         assert environment["OPERATION"] == operation, f"wrong {name} operation"
-        _assert_python_action_step(step, "record-telemetry")
-        assert "duration_ms=" in ACTION_MODULE_PATH.read_text(encoding="utf-8"), (
+        _assert_python_action_step(
+            step, "record-telemetry", "coverage_pr_submission_observability.py"
+        )
+        assert "duration_ms" in OBSERVABILITY_MODULE_PATH.read_text(encoding="utf-8"), (
             f"{name} must emit a duration metric"
         )
     report_index = unique_step_index(steps, REPORT_STEP)
@@ -290,6 +301,7 @@ def test_trusted_workflow_uses_only_checked_in_python_action_scripts() -> None:
     workflow = load_workflow(COVERAGE_PR_WORKFLOW_PATH)
     workflow_text = COVERAGE_PR_WORKFLOW_PATH.read_text(encoding="utf-8")
     action_source = ACTION_MODULE_PATH.read_text(encoding="utf-8")
+    observability_source = OBSERVABILITY_MODULE_PATH.read_text(encoding="utf-8")
 
     assert ".github/scripts" in REPO_ROOT.joinpath("Makefile").read_text(
         encoding="utf-8"
@@ -307,11 +319,18 @@ def test_trusted_workflow_uses_only_checked_in_python_action_scripts() -> None:
                 assert "runpy.run_path" in script, (
                     f"{job_name} scripts must invoke checked-in Python"
                 )
-                assert "coverage_pr_submission.py" in script, (
-                    f"{job_name} scripts must use the trusted action module"
-                )
+                assert any(
+                    module_name in script
+                    for module_name in (
+                        "coverage_pr_submission.py",
+                        "coverage_pr_submission_observability.py",
+                    )
+                ), f"{job_name} scripts must use a trusted action module"
     assert "def coverage_conclusion(" in action_source, (
         "the tested outcome seam must remain in the checked-in Python module"
+    )
+    assert "OPERATION_METRIC_NAME" in observability_source, (
+        "the trusted workflow must retain its bounded metrics implementation"
     )
 
 
@@ -342,6 +361,7 @@ def test_observability_avoids_sensitive_or_untrusted_fields() -> None:
     report_telemetry = named_step(steps, REPORT_TELEMETRY_STEP)
     observable_values = "\n".join([
         ACTION_MODULE_PATH.read_text(encoding="utf-8"),
+        OBSERVABILITY_MODULE_PATH.read_text(encoding="utf-8"),
         str(require_mapping(report.get("env"), "report environment")),
         str(summary["run"]),
         str(require_mapping(summary.get("env"), "summary environment")),

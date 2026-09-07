@@ -108,12 +108,14 @@ same-repository-head guards establish eligibility before download and
 submission; its token-presence guard keeps fork or otherwise secretless runs
 graceful.
 
-The trusted runner checks out only validation tooling from the trusted default
-branch. It downloads the fixed artefact into a dedicated directory, validates
-the exact member and LCOV format, and then supplies the resulting data path to
-the CodeScene action. The action receives `CS_ACCESS_TOKEN` only through its
-step-local environment. The final Check Run uses `head_sha` from the source run
-and stores that run's ID as its external correlation ID.
+The trusted runner uses `actions/checkout` to retrieve the full trusted
+default-branch tree. It executes only the needed checked-in validation and
+submission commands. It downloads the fixed artefact into a dedicated
+directory, validates the exact member and LCOV format, and then supplies the
+resulting data path to the CodeScene action. The action receives
+`CS_ACCESS_TOKEN` only through its step-local environment. The final Check Run
+uses `head_sha` from the source run and stores that run's ID as its external
+correlation ID.
 
 The Check Run is `success` after a successful submission. It is `neutral` only
 when download and validation succeed and submission is skipped solely because
@@ -122,8 +124,15 @@ failing Check Run.
 
 Observability is limited to the workflow-run ID, source commit SHA, fixed
 artefact name, three stage outcomes, and final conclusion in the Check Run and
-workflow summary. The implementation must redact secrets and omit all
-pull-request-controlled text and artefact content from these outputs.
+workflow summary. The trusted workflow also writes bounded JSONL metrics and
+traces to runner-local files and uploads them as the fixed
+`codescene-pr-coverage-metrics` and `codescene-pr-coverage-traces` artefacts.
+Metrics use fixed operation, outcome, and error-category labels with count and
+duration values. Traces use fixed event, operation, outcome, error-category,
+and duration fields plus the originating workflow-run ID and commit SHA. These
+exports are observability artefacts, not a Prometheus, OpenTelemetry Protocol
+(OTLP), or statsd endpoint. No pull-request text, coverage content, filesystem
+paths, or credentials enter these outputs.
 
 ## Goals and non-goals
 

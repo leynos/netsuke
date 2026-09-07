@@ -24,12 +24,6 @@ CHECK_RUN_NAME = "CodeScene coverage"
 GITHUB_API_VERSION = "2022-11-28"
 REPOSITORY_ROOT = pathlib.Path(__file__).resolve().parents[2]
 VALIDATOR_PATH = REPOSITORY_ROOT / "scripts" / "validate_coverage_artifact.py"
-VALID_OPERATIONS = frozenset({
-    "coverage-artifact-download",
-    "hostile-coverage-validation",
-    "codescene-submission",
-    "codescene-check-run-publication",
-})
 REPORT_FIELDS: tuple[SummaryField, ...] = (
     ("Originating workflow run ID", "workflow_run_id"),
     ("Originating commit SHA", "commit_sha"),
@@ -130,39 +124,6 @@ def start_telemetry(
         _now_milliseconds() if now_milliseconds is None else now_milliseconds
     )
     _write_output(environment, "started_at_ms", str(started_at_ms))
-
-
-def _started_at_milliseconds(environment: Environment, ended_at_ms: int) -> int:
-    """Return a stage start time or end time when the prior step did not run."""
-    value = environment.get("STARTED_AT_MS")
-    if not value:
-        return ended_at_ms
-    try:
-        return int(value)
-    except ValueError as error:
-        raise WorkflowEnvironmentError("STARTED_AT_MS") from error
-
-
-def record_telemetry(
-    environment: Environment,
-    now_milliseconds: int | None = None,
-) -> None:
-    """Emit one fixed-operation telemetry line and its measured duration."""
-    operation = _environment_value(environment, "OPERATION")
-    if operation not in VALID_OPERATIONS:
-        raise WorkflowEnvironmentError("OPERATION")
-    ended_at_ms = _now_milliseconds() if now_milliseconds is None else now_milliseconds
-    duration_ms = ended_at_ms - _started_at_milliseconds(environment, ended_at_ms)
-    outcome = _environment_value(environment, "OUTCOME")
-    workflow_run_id = _environment_value(environment, "ORIGINATING_WORKFLOW_RUN_ID")
-    commit_sha = _environment_value(environment, "ORIGINATING_COMMIT_SHA")
-    _write_output(environment, "duration_ms", str(duration_ms))
-    print(
-        "coverage-pr-submission "
-        f"operation={operation} duration_ms={duration_ms} "
-        f"workflow_run_id={workflow_run_id} commit_sha={commit_sha} "
-        f"outcome={outcome}"
-    )
 
 
 def _validator_main() -> ValidatorMain:
@@ -337,7 +298,6 @@ def _arguments(argv: cabc.Sequence[str] | None = None) -> argparse.Namespace:
         "command",
         choices=(
             "start-telemetry",
-            "record-telemetry",
             "validate-artefact",
             "report-coverage",
             "report-excluded-fork",
@@ -367,9 +327,6 @@ def main(argv: cabc.Sequence[str] | None = None) -> int:
     match arguments.command:
         case "start-telemetry":
             start_telemetry(environment)
-            return 0
-        case "record-telemetry":
-            record_telemetry(environment)
             return 0
         case "validate-artefact":
             artifact_directory = arguments.artifact_directory

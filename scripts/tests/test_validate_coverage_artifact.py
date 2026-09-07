@@ -34,7 +34,7 @@ class ArtefactCase:
 
 
 def _load_script() -> types.ModuleType:
-    """Load the hyphenated validator module for its in-process seam."""
+    """Load the coverage validator module for its in-process seam."""
     spec = importlib.util.spec_from_file_location(
         "validate_coverage_artifact", SCRIPT_DIRECTORY / "validate_coverage_artifact.py"
     )
@@ -119,6 +119,38 @@ ARTEFACT_WRITERS = {
     "oversized": _write_oversized_member,
     "non-utf8": _write_non_utf8_member,
 }
+
+ARTEFACT_CASES = (
+    pytest.param(ArtefactCase("valid", 0, None), id="valid"),
+    pytest.param(
+        ArtefactCase("missing-member", 1, "UNEXPECTED_MEMBERS"),
+        id="missing-member",
+    ),
+    pytest.param(
+        ArtefactCase("extra-member", 1, "UNEXPECTED_MEMBERS"),
+        id="extra-member",
+    ),
+    pytest.param(
+        ArtefactCase("symlink-member", 1, "SYMLINK_MEMBER"),
+        id="symlink-member",
+    ),
+    pytest.param(
+        ArtefactCase("symlink-to-valid-external-file", 1, "SYMLINK_MEMBER"),
+        id="symlink-to-valid-external-file",
+    ),
+    pytest.param(
+        ArtefactCase("directory-member", 1, "NON_REGULAR_MEMBER"),
+        id="directory-member",
+    ),
+    pytest.param(
+        ArtefactCase("symlinked-directory", 1, "SYMLINK_DIRECTORY"),
+        id="symlinked-directory",
+    ),
+    pytest.param(ArtefactCase("non-directory", 1, "NON_DIRECTORY"), id="non-directory"),
+    pytest.param(ArtefactCase("oversized", 1, "OVERSIZED_REPORT"), id="oversized"),
+    pytest.param(ArtefactCase("non-utf8", 1, "NON_UTF8_REPORT"), id="non-utf8"),
+    pytest.param(ArtefactCase("malformed", 1, "INVALID_RECORD"), id="malformed"),
+)
 
 
 def _write_case(directory: pathlib.Path, case: ArtefactCase) -> None:
@@ -226,43 +258,7 @@ def test_validate_lcov_text_preserves_diagnostic_order(
     )
 
 
-@pytest.mark.parametrize(
-    "case",
-    [
-        pytest.param(ArtefactCase("valid", 0, None), id="valid"),
-        pytest.param(
-            ArtefactCase("missing-member", 1, "UNEXPECTED_MEMBERS"),
-            id="missing-member",
-        ),
-        pytest.param(
-            ArtefactCase("extra-member", 1, "UNEXPECTED_MEMBERS"),
-            id="extra-member",
-        ),
-        pytest.param(
-            ArtefactCase("symlink-member", 1, "SYMLINK_MEMBER"),
-            id="symlink-member",
-        ),
-        pytest.param(
-            ArtefactCase("symlink-to-valid-external-file", 1, "SYMLINK_MEMBER"),
-            id="symlink-to-valid-external-file",
-        ),
-        pytest.param(
-            ArtefactCase("directory-member", 1, "NON_REGULAR_MEMBER"),
-            id="directory-member",
-        ),
-        pytest.param(
-            ArtefactCase("symlinked-directory", 1, "SYMLINK_DIRECTORY"),
-            id="symlinked-directory",
-        ),
-        pytest.param(
-            ArtefactCase("non-directory", 1, "NON_DIRECTORY"),
-            id="non-directory",
-        ),
-        pytest.param(ArtefactCase("oversized", 1, "OVERSIZED_REPORT"), id="oversized"),
-        pytest.param(ArtefactCase("non-utf8", 1, "NON_UTF8_REPORT"), id="non-utf8"),
-        pytest.param(ArtefactCase("malformed", 1, "INVALID_RECORD"), id="malformed"),
-    ],
-)
+@pytest.mark.parametrize("case", ARTEFACT_CASES)
 def test_validate_filesystem_boundaries_in_process(
     tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str], case: ArtefactCase
 ) -> None:
@@ -287,43 +283,7 @@ def test_validate_filesystem_boundaries_in_process(
         )
 
 
-@pytest.mark.parametrize(
-    "case",
-    [
-        pytest.param(ArtefactCase("valid", 0, None), id="valid"),
-        pytest.param(
-            ArtefactCase("missing-member", 1, "UNEXPECTED_MEMBERS"),
-            id="missing-member",
-        ),
-        pytest.param(
-            ArtefactCase("extra-member", 1, "UNEXPECTED_MEMBERS"),
-            id="extra-member",
-        ),
-        pytest.param(
-            ArtefactCase("symlink-member", 1, "SYMLINK_MEMBER"),
-            id="symlink-member",
-        ),
-        pytest.param(
-            ArtefactCase("symlink-to-valid-external-file", 1, "SYMLINK_MEMBER"),
-            id="symlink-to-valid-external-file",
-        ),
-        pytest.param(
-            ArtefactCase("directory-member", 1, "NON_REGULAR_MEMBER"),
-            id="directory-member",
-        ),
-        pytest.param(
-            ArtefactCase("symlinked-directory", 1, "SYMLINK_DIRECTORY"),
-            id="symlinked-directory",
-        ),
-        pytest.param(
-            ArtefactCase("non-directory", 1, "NON_DIRECTORY"),
-            id="non-directory",
-        ),
-        pytest.param(ArtefactCase("oversized", 1, "OVERSIZED_REPORT"), id="oversized"),
-        pytest.param(ArtefactCase("non-utf8", 1, "NON_UTF8_REPORT"), id="non-utf8"),
-        pytest.param(ArtefactCase("malformed", 1, "INVALID_RECORD"), id="malformed"),
-    ],
-)
+@pytest.mark.parametrize("case", ARTEFACT_CASES)
 def test_validator_cli_preserves_filesystem_boundaries(
     tmp_path: pathlib.Path, case: ArtefactCase
 ) -> None:
@@ -354,6 +314,37 @@ def test_validator_cli_preserves_filesystem_boundaries(
         assert result.stderr == f"error: {error}\n", (
             "the rejected CLI must retain its formatted diagnostic"
         )
+
+
+def test_main_reports_operational_filesystem_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Return the documented operational status without mixing output streams."""
+    script = _load_script()
+
+    class InspectionError(OSError):
+        """Represent the controlled filesystem inspection failure."""
+
+        def __str__(self) -> str:
+            """Return the fixed diagnostic expected from filesystem inspection."""
+            return "inspection unavailable"
+
+    def raise_inspection_error(_: pathlib.Path) -> None:
+        """Raise the controlled filesystem failure consumed by ``main``."""
+        raise InspectionError
+
+    monkeypatch.setattr(script, "validate", raise_inspection_error)
+
+    assert script.main(["--artifact-dir", str(tmp_path)]) == 2, (
+        "filesystem inspection errors must retain exit status 2"
+    )
+    captured = capsys.readouterr()
+    assert not captured.out, "operational failures must not write stdout"
+    assert (
+        captured.err == "error: unable to inspect artefact: inspection unavailable\n"
+    ), "operational failures must retain their exact stderr diagnostic"
 
 
 def test_validator_cli_never_executes_artefact_content(tmp_path: pathlib.Path) -> None:

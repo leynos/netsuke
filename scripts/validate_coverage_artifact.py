@@ -258,10 +258,6 @@ def _first_missing_lcov_record(lines: cabc.Sequence[str]) -> str | None:
     )
 
 
-_invalid_lcov_line_number = _first_invalid_lcov_line
-_missing_lcov_record = _first_missing_lcov_record
-
-
 def _raise_validation_error_if(
     *, should_raise: bool, issue: ValidationIssue, detail: object | None = None
 ) -> None:

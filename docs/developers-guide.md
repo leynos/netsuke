@@ -1392,11 +1392,13 @@ and other state for later steps on their own runner.
 [`coverage-pr-submit.yml`](../.github/workflows/coverage-pr-submit.yml) is a
 separate `workflow_run` workflow whose definition comes from the default
 branch. After a successful same-repository `pull_request` CI run, it starts a
-fresh runner, checks out only the default branch's validation tooling, and
-downloads the artefact into `coverage-artifact/`. It never checks out or
-executes the PR tree or artefact contents. Before the CodeScene action can see
-the secret, `make validate-coverage-artifact` rejects every member except a
-bounded, regular UTF-8 `lcov.info` file with recognized LCOV records.
+fresh runner, and `actions/checkout` retrieves the full trusted default-branch
+tree. The workflow executes only the needed checked-in validation and
+submission commands, then downloads the artefact into `coverage-artifact/`. It
+never checks out or executes the PR tree or artefact contents. Before the
+CodeScene action can see the secret, the checked-in validator rejects every
+member except a bounded, regular UTF-8 `lcov.info` file with recognized LCOV
+records.
 
 Eligibility is enforced by the trusted workflow definition, its successful
 pull-request and same-repository-head guards, and the step-local
@@ -1418,6 +1420,15 @@ to require this Check Run name instead of the former in-job coverage step.
 prevent the secret from returning to a pull-request workflow, a trusted
 checkout from drifting to PR content, a raw secret expression from reaching a
 step's `run` or `with` surfaces, or the validator from being skipped.
+
+The trusted job also writes bounded JSONL metrics and traces to runner-local
+files and uploads them as the fixed `codescene-pr-coverage-metrics` and
+`codescene-pr-coverage-traces` artefacts. Metrics use fixed operation, outcome,
+and error-category labels with count and duration values. Traces use fixed
+event, operation, outcome, error-category, and duration fields, together with
+the originating workflow-run ID and commit SHA. These exports are observability
+artefacts, not a Prometheus, OpenTelemetry Protocol (OTLP), or statsd endpoint.
+They contain no PR text, coverage content, filesystem paths, or credentials.
 
 `make test` runs the non-doctest suite through
 [cargo-nextest](https://nexte.st/) and the doctests separately. CI pins the
@@ -1457,6 +1468,91 @@ invoke it, and each passes its required `installer-version: '0.2.7'` input:
 `build-test` in `ci.yml`, and `lint-windows` in `ci-windows.yml`.
 `build-test-windows` neither installs nor runs Whitaker; it compiles, tests,
 and runs the native Windows recipe smoke steps. There is no
+[ADR-022](adr-022-pr-coverage-trust-boundary.md). The workflow details below
+are the implementation guidance for that decision.
+
+The pull-request CI job is deliberately unprivileged. It builds, tests, and
+generates `lcov.info`, then uploads only that file as the short-lived
+`pr-coverage-lcov` artefact. It does not receive `CS_ACCESS_TOKEN`. This
+matters because PR-controlled commands can persist `BASH_ENV`, `GITHUB_PATH`,
+and other state for later steps on their own runner.
+
+[`coverage-pr-submit.yml`](../.github/workflows/coverage-pr-submit.yml) is a
+separate `workflow_run` workflow whose definition comes from the default
+branch. After a successful same-repository `pull_request` CI run, it starts a
+fresh runner, and `actions/checkout` retrieves the full trusted default-branch
+tree. The workflow executes only the needed checked-in validation and
+submission commands, then downloads the artefact into `coverage-artifact/`. It
+never checks out or executes the PR tree or artefact contents. Before the
+CodeScene action can see the secret, the checked-in validator rejects every
+member except a bounded, regular UTF-8 `lcov.info` file with recognized LCOV
+records.
+
+Eligibility is enforced by the trusted workflow definition, its successful
+pull-request and same-repository-head guards, and the step-local
+`CS_ACCESS_TOKEN` presence guard. Fork PRs still receive the complete
+unprivileged CI result but do not enter the secret-bearing submission job. The
+repository or organization Actions policy must continue to restrict the
+CodeScene credential to this trusted phase. A protected environment with
+independent reviewers is an optional stronger control for organizations that
+need explicit human approval before any coverage submission.
+
+The trusted workflow creates the `CodeScene coverage` Check Run against the
+originating PR `head_sha`. It reports `neutral` only when artefact download and
+validation both succeeded and the submission skipped solely because no token is
+available; a failed or skipped download or validation publishes a failing
+check, so a hostile artefact can never produce a non-failing gate.
+Branch-protection configuration may therefore need an organization-level update
+to require this Check Run name instead of the former in-job coverage step.
+`tests/workflow_contracts/trust_boundary_test.py` and its Hypothesis companion
+prevent the secret from returning to a pull-request workflow, a trusted
+checkout from drifting to PR content, a raw secret expression from reaching a
+step's `run` or `with` surfaces, or the validator from being skipped.
+
+The trusted job also writes bounded JSONL metrics and traces to runner-local
+files and uploads them as the fixed `codescene-pr-coverage-metrics` and
+`codescene-pr-coverage-traces` artefacts. Metrics use fixed operation, outcome,
+and error-category labels with count and duration values. Traces use fixed
+event, operation, outcome, error-category, and duration fields, together with
+the originating workflow-run ID and commit SHA. These exports are observability
+artefacts, not a Prometheus, OpenTelemetry Protocol (OTLP), or statsd endpoint.
+They contain no PR text, coverage content, filesystem paths, or credentials.
+
+`make test` runs the non-doctest suite through
+[cargo-nextest](https://nexte.st/) and the doctests separately. CI pins the
+runner version in `NEXTEST_VERSION` in `.github/workflows/ci.yml`. Install that
+same version locally, so local runs match CI; read the pin from the workflow
+rather than copying the number, so the two cannot drift:
+
+```bash
+NEXTEST_VERSION="$(sed -n "s/.*NEXTEST_VERSION: '\(.*\)'.*/\1/p" \
+  .github/workflows/ci.yml)"
+cargo binstall --no-confirm --locked \
+  "cargo-nextest@$NEXTEST_VERSION"
+```
+
+`make check-fmt` verifies Markdown formatting as well as Rust formatting, and
+needs `mdtablefix` on `PATH`. CI pins the version in `MDTABLEFIX_VERSION` in
+`.github/workflows/ci.yml`. Install that same version locally, so local runs
+match CI; read the pin from the workflow rather than copying the number, so the
+two cannot drift:
+
+```bash
+MDTABLEFIX_VERSION="$(sed -n "s/.*MDTABLEFIX_VERSION: '\(.*\)'.*/\1/p" \
+  .github/workflows/ci.yml)"
+cargo binstall --no-confirm --locked --disable-strategies compile \
+  "mdtablefix@$MDTABLEFIX_VERSION"
+```
+
+Version drift matters here beyond reproducibility: a different `mdtablefix`
+version may reflow prose differently, which would make `make check-fmt` fail on
+an otherwise clean tree.
+
+Install the separately versioned Whitaker installer with:
+
+CI installs Whitaker through the SHA-pinned
+`leynos/shared-actions/.github/actions/install-whitaker` action. Both build
+jobs pass its required `installer-version: '0.2.7'` input; there is no
 `WHITAKER_INSTALLER_VERSION` workflow variable. Read that action input before
 installing locally so the local installer matches CI:
 

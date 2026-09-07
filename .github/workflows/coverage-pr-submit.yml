@@ -60,12 +60,19 @@ jobs:
           OUTCOME: ${{ steps.download_coverage.outcome }}
           ORIGINATING_WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
           ORIGINATING_COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
+          NETSUKE_CODESCENE_COVERAGE_METRICS_FILE: >-
+            ${{ runner.temp }}/codescene-pr-coverage-metrics.jsonl
+          NETSUKE_CODESCENE_COVERAGE_TRACES_FILE: >-
+            ${{ runner.temp }}/codescene-pr-coverage-traces.jsonl
           OPERATION: coverage-artifact-download
         shell: python
         run: |
           import runpy
           import sys
-          sys.argv = [".github/scripts/coverage_pr_submission.py", "record-telemetry"]
+          sys.argv = [
+              ".github/scripts/coverage_pr_submission_observability.py",
+              "record-telemetry",
+          ]
           runpy.run_path(sys.argv[0], run_name="__main__")
       - name: Start hostile coverage validation telemetry
         id: start_validate_coverage
@@ -96,12 +103,19 @@ jobs:
           OUTCOME: ${{ steps.validate_coverage.outcome }}
           ORIGINATING_WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
           ORIGINATING_COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
+          NETSUKE_CODESCENE_COVERAGE_METRICS_FILE: >-
+            ${{ runner.temp }}/codescene-pr-coverage-metrics.jsonl
+          NETSUKE_CODESCENE_COVERAGE_TRACES_FILE: >-
+            ${{ runner.temp }}/codescene-pr-coverage-traces.jsonl
           OPERATION: hostile-coverage-validation
         shell: python
         run: |
           import runpy
           import sys
-          sys.argv = [".github/scripts/coverage_pr_submission.py", "record-telemetry"]
+          sys.argv = [
+              ".github/scripts/coverage_pr_submission_observability.py",
+              "record-telemetry",
+          ]
           runpy.run_path(sys.argv[0], run_name="__main__")
       - name: Start CodeScene submission telemetry
         id: start_submit_coverage
@@ -132,12 +146,19 @@ jobs:
           OUTCOME: ${{ steps.submit_coverage.outcome }}
           ORIGINATING_WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
           ORIGINATING_COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
+          NETSUKE_CODESCENE_COVERAGE_METRICS_FILE: >-
+            ${{ runner.temp }}/codescene-pr-coverage-metrics.jsonl
+          NETSUKE_CODESCENE_COVERAGE_TRACES_FILE: >-
+            ${{ runner.temp }}/codescene-pr-coverage-traces.jsonl
           OPERATION: codescene-submission
         shell: python
         run: |
           import runpy
           import sys
-          sys.argv = [".github/scripts/coverage_pr_submission.py", "record-telemetry"]
+          sys.argv = [
+              ".github/scripts/coverage_pr_submission_observability.py",
+              "record-telemetry",
+          ]
           runpy.run_path(sys.argv[0], run_name="__main__")
       - name: Start CodeScene Check Run publication telemetry
         id: start_report_coverage
@@ -176,12 +197,19 @@ jobs:
           OUTCOME: ${{ steps.report_coverage.outcome }}
           ORIGINATING_WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
           ORIGINATING_COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
+          NETSUKE_CODESCENE_COVERAGE_METRICS_FILE: >-
+            ${{ runner.temp }}/codescene-pr-coverage-metrics.jsonl
+          NETSUKE_CODESCENE_COVERAGE_TRACES_FILE: >-
+            ${{ runner.temp }}/codescene-pr-coverage-traces.jsonl
           OPERATION: codescene-check-run-publication
         shell: python
         run: |
           import runpy
           import sys
-          sys.argv = [".github/scripts/coverage_pr_submission.py", "record-telemetry"]
+          sys.argv = [
+              ".github/scripts/coverage_pr_submission_observability.py",
+              "record-telemetry",
+          ]
           runpy.run_path(sys.argv[0], run_name="__main__")
       - name: Summarize CodeScene coverage gate
         if: always()
@@ -204,6 +232,30 @@ jobs:
           import sys
           sys.argv = [".github/scripts/coverage_pr_submission.py", "summarize-coverage"]
           runpy.run_path(sys.argv[0], run_name="__main__")
+      - name: Upload CodeScene coverage metrics
+        if: >-
+          always() && steps.observe_download_coverage.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        # v7.0.1
+        env:
+          NETSUKE_CODESCENE_COVERAGE_METRICS_FILE: >-
+            ${{ runner.temp }}/codescene-pr-coverage-metrics.jsonl
+        with:
+          name: codescene-pr-coverage-metrics
+          path: ${{ env.NETSUKE_CODESCENE_COVERAGE_METRICS_FILE }}
+          if-no-files-found: error
+      - name: Upload CodeScene coverage traces
+        if: >-
+          always() && steps.observe_download_coverage.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        # v7.0.1
+        env:
+          NETSUKE_CODESCENE_COVERAGE_TRACES_FILE: >-
+            ${{ runner.temp }}/codescene-pr-coverage-traces.jsonl
+        with:
+          name: codescene-pr-coverage-traces
+          path: ${{ env.NETSUKE_CODESCENE_COVERAGE_TRACES_FILE }}
+          if-no-files-found: error
   report-excluded-fork:
     if: >-
       github.event.workflow_run.conclusion == 'success' &&

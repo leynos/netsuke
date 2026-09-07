@@ -75,7 +75,6 @@ UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
 # in sync.
 PYTHON_BASELINE ?= 3.14
 COVERAGE_ARTIFACT_DIR ?= coverage-artifact
-COVERAGE_ARTIFACT_DIR ?= coverage-artifact
 # Pin Ruff so `make` invokes the same version everywhere; floating the version
 # causes version-skew lint failures because rule sets differ between releases.
 # CI pins the same value in .github/workflows/ci.yml; a contract test in
