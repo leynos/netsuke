@@ -5,10 +5,17 @@ name: CI (Windows)
 # stays inside the repository's 400-line file limit. Version pins stay in the
 # caller and arrive as inputs, so there is exactly one place to edit each one.
 #
-# Both jobs run on GitHub-hosted `windows-latest`. Ubicloud offers Linux
-# runners only, so this is the durable placement rather than a fallback. Every
-# cache is keyed by `runner.os` and `runner.arch`, so a Linux archive can
-# never restore onto Windows.
+# This runs on GitHub-hosted `windows-latest`. Ubicloud offers Linux runners
+# only, so this is the durable placement rather than a fallback. Every cache is
+# keyed by `runner.os` and `runner.arch`, so a Linux archive can never restore
+# onto Windows.
+#
+# One job, not two. The native-recipe smoke test used to be a second job that
+# needed this one, which made it a strict serial tail: a measured median of
+# 236s, of which 72s restored caches, 20s set up Rust, 109s rebuilt a binary
+# this job had already built, and 7s did the work it exists for. Folded in as
+# two `shell: pwsh` steps it costs the link and the 7s. `release.yml` keeps its
+# own smoke job, which has no build to share.
 
 'on':
   workflow_call:
@@ -183,6 +190,33 @@ jobs:
         # compiling and running the `#[cfg(windows)]` test tree. A failure
         # blocks the merge.
         run: make SHELL=bash test
+      - name: Build Netsuke
+        # Warm: `make test` above has already compiled the workspace in this
+        # job, so this links the binary rather than rebuilding the graph. As a
+        # separate job it restored caches, set up Rust and rebuilt from the
+        # compiler cache, a measured median of 236s of pure serial tail.
+        shell: pwsh
+        run: |
+          cargo build --locked --bin netsuke
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+      - name: Exercise native Windows recipes
+        # `shell: pwsh` is the point of this step, not an incidental. The job
+        # default is Git Bash, and running Netsuke from PowerShell is what
+        # proves a PowerShell-launched Netsuke directs Ninja legacy recipes to
+        # the PowerShell interpreter selected by the Windows contract (#599).
+        # An override here is exactly as faithful as the separate job was: the
+        # process that launches Netsuke is pwsh either way, and `Lint
+        # (Whitaker)` above already runs this way in this job.
+        shell: pwsh
+        run: |
+          ./scripts/windows-recipe-smoke.ps1 `
+            -Netsuke ./target/debug/netsuke.exe `
+            -Manifest ./tests/data/windows-recipe-smoke.yml
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
       - name: Show sccache statistics
         if: always()
         run: |
@@ -205,64 +239,3 @@ jobs:
           tools-hit: ${{ steps.caches.outputs['tools-hit'] }}
           whitaker-hit: ${{ steps.caches.outputs['whitaker-hit'] }}
           sccache-hit: ${{ steps.caches.outputs['sccache-hit'] }}
-
-  windows-native-recipe-smoke:
-    # This deliberately has no Git-Bash shell override. It proves that a
-    # PowerShell-launched Netsuke directs Ninja legacy recipes to the
-    # PowerShell interpreter selected by the Windows contract (#599).
-    needs: build-test-windows
-    runs-on: windows-latest
-    timeout-minutes: 45
-    permissions:
-      contents: read
-    env:
-      CARGO_TERM_COLOR: always
-      NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
-      # Derived from WINDOWS_LANE_VCPUS at workflow scope.
-      BUILD_JOBS: -j 4
-      CARGO_BUILD_JOBS: '4'
-      RUSTC_WRAPPER: sccache
-      SCCACHE_DIR: ${{ github.workspace }}/.sccache
-      SCCACHE_CACHE_SIZE: 4G
-    defaults:
-      run:
-        shell: pwsh
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Restore gate caches
-        # Restore only. `build-test-windows` is the single writer for both key
-        # families, so this job reads the generation it published by prefix and
-        # never competes for a reservation.
-        uses: ./.github/actions/windows-gate-cache
-        with:
-          toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
-          mode: restore
-          profile: smoke
-      - name: Install sccache
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
-        with:
-          tool: sccache@0.16.0
-          fallback: none
-      - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@e041cb75c35c3524201a32d5e57c87408fbd5874
-        with:
-          toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
-          rustflags: -D warnings
-          cache-provider: external
-          use-sccache: 'false'
-      - name: Install Ninja
-        uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
-      - name: Reset sccache statistics
-        run: sccache --zero-stats
-      - name: Build Netsuke
-        run: cargo build --locked --bin netsuke
-      - name: Exercise native Windows recipes
-        run: >-
-          ./scripts/windows-recipe-smoke.ps1
-          -Netsuke ./target/debug/netsuke.exe
-          -Manifest ./tests/data/windows-recipe-smoke.yml
-      - name: Show sccache statistics
-        if: always()
-        run: sccache --show-stats --stats-format=json

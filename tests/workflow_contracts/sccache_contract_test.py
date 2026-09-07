@@ -77,7 +77,6 @@ def _assert_sccache_contract(workflow_name: str, job_name: str) -> None:
     [
         ("ci.yml", "build-test"),
         ("ci-windows.yml", "build-test-windows"),
-        ("ci-windows.yml", "windows-native-recipe-smoke"),
         ("netsukefile-test.yml", "netsukefile"),
         ("coverage-main.yml", "coverage-upload"),
         ("release.yml", "windows-native-recipe-smoke"),
