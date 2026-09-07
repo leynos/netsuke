@@ -5834,6 +5834,10 @@ per-test allowance, and inside the watchdog once nextest's termination
 procedure and a cold build are counted. Adding one therefore lands in the right
 place rather than merely somewhere.
 
+[Issue 689](https://github.com/leynos/netsuke/issues/689) holds the
+measurements a later pass needs to choose the value, and the constraints it has
+to satisfy.
+
 ### The clocks do not start together
 
 The job timer starts when the job starts, before the checkout, the toolchain
