@@ -28,10 +28,12 @@ Run via ``make test-workflow-contracts``.
 """
 
 import re
+import typing as typ
 
 import pytest
 from coverage_lanes import CoverageLane, coverage_lanes_of, watchdog_of
 from timeout_budgets import (
+    CEILING_MARGIN_SECONDS,
     COLD_BUILD_ALLOWANCE_SECONDS,
     COVERAGE_ACTION,
     NEXTEST_CONFIG,
@@ -44,6 +46,9 @@ from timeout_budgets import (
     seconds,
     termination_allowance,
 )
+
+if typ.TYPE_CHECKING:
+    import collections.abc as cabc
 
 
 @pytest.fixture(scope="module")
@@ -104,10 +109,60 @@ def test_every_coverage_lane_sets_the_watchdog_explicitly(
     )
 
 
-def test_the_job_ceiling_covers_the_watchdog_and_the_work_around_it(
+def _budgets_per_job(
+    coverage_lanes: tuple[CoverageLane, ...],
+) -> dict[tuple[str, str], list[CoverageLane]]:
+    """Group the lanes by the job whose ceiling has to contain them.
+
+    A lane is one coverage step. The ceiling belongs to the job, so a
+    job running the action twice must contain both budgets, and judging
+    each lane separately against the same ceiling asks for the larger
+    of the two rather than their sum.
+
+    Parameters
+    ----------
+    coverage_lanes : tuple[CoverageLane, ...]
+        Every coverage step in the tree.
+
+    Returns
+    -------
+    dict
+        The lanes of each job, keyed by workflow and job identifier.
+    """
+    grouped: dict[tuple[str, str], list[CoverageLane]] = {}
+    for lane in coverage_lanes:
+        grouped.setdefault((lane.workflow, lane.job), []).append(lane)
+    return grouped
+
+
+def required_ceiling(budgets: cabc.Sequence[float]) -> float:
+    """Return the smallest acceptable ceiling for one job, in seconds.
+
+    Three terms. Each coverage step may legitimately spend its whole
+    watchdog, so the sum is the floor. The measured work outside those
+    windows is added because the job timer covers it and the watchdogs
+    do not. The margin is added because a ceiling equal to that sum
+    cancels the job at the moment the watchdog would have reported the
+    overrun, and the report is the only thing that makes an overrun
+    actionable.
+
+    Parameters
+    ----------
+    budgets : cabc.Sequence[float]
+        One watchdog budget per coverage step in the job.
+
+    Returns
+    -------
+    float
+        The smallest acceptable ceiling, in seconds.
+    """
+    return sum(budgets) + OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS + CEILING_MARGIN_SECONDS
+
+
+def test_the_job_ceiling_covers_every_watchdog_and_the_work_around_them(
     coverage_lanes: tuple[CoverageLane, ...],
 ) -> None:
-    """Tier four must not pre-empt tier three.
+    """Tier four must not pre-empt tier three, for the job as a whole.
 
     The two clocks do not start together. The job timer starts when the
     job starts, before the checkout, the toolchain setup and the linting
@@ -116,20 +171,30 @@ def test_the_job_ceiling_covers_the_watchdog_and_the_work_around_it(
     above the watchdog still cancels the job before the watchdog can
     report an overrun, and a cancellation discards the log that would
     have explained it.
+
+    The ceiling belongs to the job rather than to a step, so the lanes
+    are summed per job before the comparison. Judging each lane
+    separately against the same ceiling asks only that it clear the
+    largest of them, which is the requirement a job running the action
+    once happens to satisfy and a job running it twice does not.
     """
-    for lane in coverage_lanes:
-        assert lane.watchdog is not None, str(lane)
-        assert lane.job_timeout is not None, (
-            f"{lane} runs cargo under a {lane.watchdog:.0f}s watchdog in a job "
-            f"with no timeout-minutes; the outermost tier is missing and "
-            f"GitHub's six-hour default applies"
+    for (workflow, job), lanes in _budgets_per_job(coverage_lanes).items():
+        budgets = [lane.watchdog for lane in lanes if lane.watchdog is not None]
+        assert len(budgets) == len(lanes), f"{workflow}:{job} has an unset watchdog"
+        ceiling = lanes[0].job_timeout
+        assert ceiling is not None, (
+            f"{workflow}:{job} runs {len(budgets)} watchdog-bounded cargo "
+            f"invocation(s) in a job with no timeout-minutes; the outermost "
+            f"tier is missing and GitHub's six-hour default applies"
         )
-        required = lane.watchdog + OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS
-        assert lane.job_timeout >= required, (
-            f"{lane} has a job ceiling of {lane.job_timeout:.0f}s, below the "
-            f"{required:.0f}s needed to cover its {lane.watchdog:.0f}s watchdog "
-            f"plus {OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS:.0f}s of measured work "
-            f"outside it; an overrun would be cancelled rather than reported"
+        required = required_ceiling(budgets)
+        assert ceiling >= required, (
+            f"{workflow}:{job} has a job ceiling of {ceiling:.0f}s, below the "
+            f"{required:.0f}s needed to cover {len(budgets)} watchdog(s) "
+            f"totalling {sum(budgets):.0f}s, "
+            f"{OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS:.0f}s of measured work "
+            f"outside them, and a {CEILING_MARGIN_SECONDS:.0f}s margin above "
+            f"that sum; an overrun would be cancelled rather than reported"
         )
 
 

@@ -5895,6 +5895,20 @@ repository's own workflows. Reading the filesystem happens at one named
 boundary rather than inside the derivations, which is what makes the synthetic
 cases possible.
 
+The ceiling is judged per job rather than per step. A lane is one coverage
+step, and the ceiling belongs to the job, so the lanes are summed before the
+comparison: judging each separately against the same ceiling asks only that it
+clear the largest budget, which is the requirement a job running the action
+once happens to satisfy and a job running it twice does not. Both jobs here run
+it once, so the two readings agree today and the tree cannot tell them apart;
+the sum is asserted against controlled lanes instead.
+
+The requirement also carries fifteen minutes above that sum rather than merely
+reaching it, because a ceiling equal to the sum it contains cancels the job at
+the moment the watchdog would have reported the overrun, and the report is the
+only thing that makes an overrun actionable. Both ceilings already clear it, so
+neither moved.
+
 The termination allowance it would demand between a whole-run budget and the
 watchdog is two terms, not one: the largest `grace-period` the configuration
 sets, or nextest's ten-second default when it sets none, plus a fixed 60-second

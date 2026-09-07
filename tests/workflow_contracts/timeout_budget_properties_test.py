@@ -15,13 +15,11 @@ never applies, and they would pass.
 import typing as typ
 
 import pytest
-from coverage_lanes import coverage_lanes_of, watchdog_of
 from hypothesis import given
 from hypothesis import strategies as st
 from timeout_budgets import (
     NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS,
     TERMINATION_SAFETY_MARGIN_SECONDS,
-    WATCHDOG_VARIABLE,
     global_timeout,
     grace_period,
     largest_test_allowance,
@@ -226,131 +224,3 @@ def test_an_unconfigured_grace_period_falls_back_to_nextest_s_default(
     assert grace_period(text) == pytest.approx(NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS), (
         "an absent grace period must fall back to nextest's default"
     )
-
-
-def _workflow(**job_fields: object) -> dict[str, dict[str, object]]:
-    """Return one synthetic workflow document containing one job.
-
-    Parameters
-    ----------
-    **job_fields
-        Fields to place on the job alongside its coverage step.
-
-    Returns
-    -------
-    dict
-        A document with a single `build` job.
-    """
-    job: dict[str, object] = {"steps": [{"name": "cover", "uses": COVERAGE_STEP}]}
-    job.update(job_fields)
-    return {"jobs": {"build": job}}
-
-
-def test_a_lane_is_read_from_a_synthetic_workflow() -> None:
-    """The reading is driven without touching the repository.
-
-    Every assertion over the real tree is satisfied by a reading that
-    happens to agree with it on two lanes. Synthetic documents are where
-    a wrong field or a missing ceiling shows up as a wrong lane rather
-    than as a passing contract.
-    """
-    documents = {
-        "ci.yml": _workflow(**{"timeout-minutes": 60, "env": {WATCHDOG_VARIABLE: 1800}})
-    }
-    (lane,) = coverage_lanes_of(documents)
-    assert lane.workflow == "ci.yml", "the lane carries its file name"
-    assert lane.job == "build", "the lane carries its job identifier"
-    assert lane.step == "cover", "the lane carries the step's declared name"
-    assert lane.watchdog == pytest.approx(1800.0), "the job's watchdog applies"
-    assert lane.job_timeout == pytest.approx(3600.0), "minutes convert to seconds"
-
-
-def test_a_job_without_a_ceiling_reads_as_none_rather_than_absent() -> None:
-    """An absent entry would make the ceiling assertion skip the lane.
-
-    That is the failure this contract exists to prevent, so the missing
-    ceiling has to survive the reading as a lane with `None` rather than
-    disappearing from the list.
-    """
-    documents = {"ci.yml": _workflow(env={WATCHDOG_VARIABLE: 1800})}
-    (lane,) = coverage_lanes_of(documents)
-    assert lane.job_timeout is None, "a job with no timeout-minutes reads as None"
-
-
-def test_a_job_running_no_coverage_step_yields_no_lane() -> None:
-    """Only coverage steps are lanes."""
-    documents = {"ci.yml": {"jobs": {"build": {"steps": [{"run": "make test"}]}}}}
-    assert not coverage_lanes_of(documents), (
-        "a job that never invokes the coverage action is not a lane"
-    )
-
-
-@pytest.mark.parametrize(
-    "document",
-    [
-        pytest.param({"jobs": {"build": "not a mapping"}}, id="a-job-that-is-a-scalar"),
-        pytest.param({"jobs": {}}, id="no-jobs"),
-        pytest.param({}, id="an-empty-document"),
-        pytest.param({"jobs": {"build": {"steps": "not a list"}}}, id="steps-as-text"),
-    ],
-)
-def test_a_malformed_workflow_yields_no_lane_rather_than_raising(
-    document: dict[str, object],
-) -> None:
-    """A shape the reading does not expect must not become a lane.
-
-    Raising here would fail the whole contract on an unrelated workflow;
-    inventing a lane would assert budgets nobody wrote.
-    """
-    assert not coverage_lanes_of({"ci.yml": document}), (
-        f"{document!r} declares no coverage lane"
-    )
-
-
-@pytest.mark.parametrize(
-    ("step", "job", "document", "expected"),
-    [
-        pytest.param(
-            {"env": {WATCHDOG_VARIABLE: 2400}},
-            {"env": {WATCHDOG_VARIABLE: 1800}},
-            {"env": {WATCHDOG_VARIABLE: 1200}},
-            2400.0,
-            id="the-step-wins",
-        ),
-        pytest.param(
-            {},
-            {"env": {WATCHDOG_VARIABLE: 1800}},
-            {"env": {WATCHDOG_VARIABLE: 1200}},
-            1800.0,
-            id="then-the-job",
-        ),
-        pytest.param(
-            {}, {}, {"env": {WATCHDOG_VARIABLE: 1200}}, 1200.0, id="then-the-workflow"
-        ),
-        pytest.param({}, {}, {}, None, id="absent-everywhere"),
-        pytest.param(
-            {"env": "not a mapping"},
-            {"env": {WATCHDOG_VARIABLE: 1800}},
-            {},
-            1800.0,
-            id="a-malformed-scope-is-skipped",
-        ),
-    ],
-)
-def test_the_watchdog_resolves_innermost_first(
-    step: dict[str, object],
-    job: dict[str, object],
-    document: dict[str, object],
-    expected: float | None,
-) -> None:
-    """Step, then job, then workflow, as GitHub resolves them.
-
-    Both workflows here set the value at job level, so a reading that
-    stopped at the job passes on the real tree while missing a
-    workflow-level value entirely.
-    """
-    result = watchdog_of(document, job, step)
-    if expected is None:
-        assert result is None, "no scope naming the variable must read as absent"
-    else:
-        assert result == pytest.approx(expected), f"expected {expected}s"

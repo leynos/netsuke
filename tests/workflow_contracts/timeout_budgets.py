@@ -46,6 +46,12 @@ OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS: typ.Final[float] = 15 * 60.0
 #: it as well as the whole-run budget.
 COLD_BUILD_ALLOWANCE_SECONDS: typ.Final[float] = 10 * 60.0
 
+#: How far a ceiling must sit above the sum it contains, rather than
+#: merely reaching it. A ceiling equal to that sum cancels the job at
+#: the moment the watchdog would have reported the overrun, and the
+#: report is the only thing that makes an overrun actionable.
+CEILING_MARGIN_SECONDS: typ.Final[float] = 15 * 60.0
+
 #: What nextest allows a test between `SIGTERM` and `SIGKILL` when the
 #: configuration names no `grace-period`, as this one does not.
 NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS: typ.Final[float] = 10.0
