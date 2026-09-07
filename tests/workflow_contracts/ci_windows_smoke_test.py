@@ -28,6 +28,32 @@ from workflow_loading import (
 WINDOWS_JOB = "build-test-windows"
 
 
+def command_lines(run: str) -> list[str]:
+    """Return the executable PowerShell lines of `run`, comments removed.
+
+    A substring search over the whole block is satisfied by a commented-out
+    command, which builds nothing, and by an altered command that happens to
+    contain the expected text. Matching against stripped, non-comment lines and
+    anchoring at their start rules both out.
+
+    Parameters
+    ----------
+    run:
+        The step's PowerShell ``run`` block.
+
+    Returns
+    -------
+    list[str]
+        Each non-blank, non-comment line, stripped of surrounding whitespace,
+        in declaration order.
+    """
+    return [
+        stripped
+        for line in run.splitlines()
+        if (stripped := line.strip()) and not stripped.startswith("#")
+    ]
+
+
 @pytest.fixture
 def windows_steps() -> list[dict[str, object]]:
     """Return the build-test-windows job's steps, in declaration order."""
@@ -85,10 +111,17 @@ def test_windows_job_runs_the_native_recipe_smoke_after_the_test_gate(
                 pass
             case _:
                 pytest.fail(f"{step_name} must declare a PowerShell run block")
-        missing = [fragment for fragment in fragments if fragment not in run]
+        lines = command_lines(run)
+        missing = [
+            expected
+            for expected in fragments
+            if not any(line.startswith(expected) for line in lines)
+        ]
         assert not missing, (
-            f"{step_name} must invoke the command it exists to run; "
-            f"missing {missing!r} from {run!r}"
+            f"{step_name} must invoke the command it exists to run as an "
+            f"executable line, not merely mention it: commenting the command "
+            f"out or renaming it must fail here. Missing {missing!r} from "
+            f"{lines!r}"
         )
 
 
