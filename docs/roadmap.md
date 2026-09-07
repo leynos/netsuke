@@ -1982,6 +1982,17 @@ runs prove the failure boundary before any job receives release permissions.
     mismatch.
   - Preserve existing archive names, target coverage, checksum sidecars,
     `cargo-binstall` resolution, action SHA pins, and release staging policy.
+  - Instrument the non-blocking RFC 0005 scaffold with bounded gate and
+    operation metrics, retain the JSONL metrics file as a workflow artefact,
+    and expose the final outcome in the job summary. The current workflow
+    explicitly selects observation mode: it records fail-closed results,
+    including missing evidence, but does not fail the workflow or make
+    publication depend on the scaffold. Connect publication to the admission
+    result only once a real evidence producer is available and enforcement
+    mode is enabled. See [ADR-020](adr-020-release-admission-observability.md)
+    and the
+    [release-admission observability
+    guidance](developers-guide.md#release-admission-observability).
   - See [RFC 0005 §Phase 4: Turn on
     admission](rfcs/0005-release-hardening.md#phase-4-turn-on-admission).
   - Success: no job with publication permission can run before successful
@@ -2001,6 +2012,7 @@ runs prove the failure boundary before any job receives release permissions.
     criteria](rfcs/0005-release-hardening.md#measurable-acceptance-criteria).
   - Success: every invalid matrix case blocks before upload, while clean
     evidence preserves the established archive and sidecar contract.
+
 - [ ] 9.4.4. Enable publication admission and document rollback.
   - Requires 9.4.3.
   - Enable the dependency only after all supported-target dry runs pass, retain

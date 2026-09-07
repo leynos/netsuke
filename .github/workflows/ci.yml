@@ -225,6 +225,8 @@ jobs:
         run: make nixie
       - name: Workflow contract tests
         run: make test-workflow-contracts
+      - name: Release-admission runtime tests
+        run: make test-release-admission
       - name: Test and Measure Coverage
         # The only test execution on this lane: measuring and testing in one
         # instrumented run costs one compile instead of two, so the flags must
