@@ -5890,10 +5890,31 @@ order the real tiers correctly; against generated inputs it does not. That
 module also fixes the error paths, the malformed-workflow cases, and the
 watchdog's resolution across all three environment scopes.
 
+Two modules sit behind that contract, split by what they read.
+`tests/workflow_contracts/coverage_lanes.py` traverses the workflows: it finds
+the coverage steps, resolves each one's watchdog through the step, job and
+workflow environments, and returns one lane per step with its job's ceiling and
+condition. `tests/workflow_contracts/timeout_budgets.py` holds the nextest
+arithmetic: the duration parser, the per-test and whole-run budgets, and the
+termination allowance. Neither imports the other's subject.
+
 The lane reading takes its documents as a parameter, defaulting to the
 repository's own workflows. Reading the filesystem happens at one named
 boundary rather than inside the derivations, which is what makes the synthetic
 cases possible.
+
+A watchdog value the action cannot read fails with the lane named, rather than
+raising a Python fault before any assertion runs. A blank value is treated as a
+source that says nothing and falls through, since that is what a workflow
+writes when it interpolates an expression that resolved to nothing; a zero or a
+negative one is refused, because the action reads those as no timeout at all.
+
+The contract also pins the condition each lane carries. A skipped step runs no
+`cargo`, so its watchdog never arms and the tiers say nothing about it:
+`if: false` on the step or on its job would leave a lane that looks bounded and
+is not. `ci.yml` also runs on pushes, which the trunk lane covers, so its
+coverage step is conditional on the pull request; that condition is pinned
+rather than tolerated.
 
 The ceiling is judged per job rather than per step. A lane is one coverage
 step, and the ceiling belongs to the job, so the lanes are summed before the

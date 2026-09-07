@@ -12,7 +12,12 @@ Run via ``make test-workflow-contracts``.
 import typing as typ
 
 import pytest
-from coverage_lanes import CoverageLane, coverage_lanes_of, watchdog_of
+from coverage_lanes import (
+    CoverageLane,
+    WatchdogValueError,
+    coverage_lanes_of,
+    watchdog_of,
+)
 from timeout_budgets import (
     CEILING_MARGIN_SECONDS,
     OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS,
@@ -213,3 +218,49 @@ def test_two_coverage_steps_in_one_job_are_judged_together() -> None:
         "plus the allowance and the margin; judged one lane at a time it would "
         "have passed"
     )
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["abc", "1800s", "", "   ", "0", "-30"],
+    ids=["words", "a-unit-suffix", "empty", "spaces", "zero", "negative"],
+)
+def test_an_unreadable_watchdog_names_the_lane_or_falls_through(value: str) -> None:
+    """A value the action cannot read must not stop the run silently.
+
+    `float("abc")` raised before any assertion ran, so the failure was a
+    Python fault with no lane in it. A blank value is different again:
+    it is what a workflow writes when it interpolates an expression that
+    resolved to nothing, so it says nothing and resolution continues.
+
+    Zero and negative are refused rather than returned, because the
+    action reads them as no timeout at all: a lane carrying one has no
+    third tier while appearing to declare one.
+    """
+    documents = {
+        "ci.yml": {
+            "jobs": {
+                "build": {
+                    "timeout-minutes": 60,
+                    "steps": [
+                        {
+                            "name": "cover",
+                            "uses": COVERAGE_STEP,
+                            "env": {WATCHDOG_VARIABLE: value},
+                        }
+                    ],
+                }
+            }
+        }
+    }
+
+    if not value.strip():
+        (lane,) = coverage_lanes_of(documents)
+        assert lane.watchdog is None, (
+            "a blank value says nothing, so the lane reads as unset rather "
+            "than as a budget of zero"
+        )
+        return
+
+    with pytest.raises(WatchdogValueError, match=r"ci\.yml:build"):
+        coverage_lanes_of(documents)

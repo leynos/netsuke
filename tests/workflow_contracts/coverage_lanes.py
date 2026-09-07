@@ -28,6 +28,10 @@ class CoverageLane(typ.NamedTuple):
     job_timeout : float or None
         The job's ``timeout-minutes`` in seconds, or None when it
         declares none and so inherits GitHub's six-hour default.
+    condition : tuple[object, object]
+        The ``if`` on the coverage step and on its job. A skipped step
+        runs no ``cargo``, so its watchdog never arms and every budget
+        below says nothing about it.
     """
 
     workflow: str
@@ -35,6 +39,7 @@ class CoverageLane(typ.NamedTuple):
     step: str
     watchdog: float | None
     job_timeout: float | None
+    condition: tuple[object, object] = (None, None)
 
     def __str__(self) -> str:
         """Return a location suitable for a failure message.
@@ -81,9 +86,72 @@ def watchdog_of(
             if isinstance(environment, dict)
             else None
         )
-        if raw is not None:
-            return float(str(raw))
+        budget = _budget_from(raw)
+        if budget is not None:
+            return budget
     return None
+
+
+class WatchdogValueError(ValueError):
+    """Raised when a workflow's watchdog value cannot be read as seconds.
+
+    Distinguished from an unset watchdog rather than folded into it. A
+    lane that sets nothing inherits the action's default, which is one
+    fault; a lane that sets ``abc`` has an author who meant something
+    and got neither, which is another. Reporting the second as the first
+    would name the wrong remedy.
+    """
+
+
+def _budget_from(raw: object) -> float | None:
+    """Return one source's watchdog budget, or None when it sets none.
+
+    A blank or whitespace-only value is a source that says nothing, so
+    it falls through to the next one. That is what a workflow writes
+    when it interpolates an expression that resolved to nothing.
+
+    Anything else that is not a positive number of seconds is refused
+    with the value in the message. The shared action reads a
+    non-positive value as no timeout at all, so a lane carrying one has
+    no third tier while appearing to declare one.
+
+    Parameters
+    ----------
+    raw : object
+        The value the workflow set, as the YAML parser returned it.
+
+    Returns
+    -------
+    float or None
+        The budget in seconds, or None when the source sets none.
+
+    Raises
+    ------
+    WatchdogValueError
+        If the value is present and non-blank but not a positive number
+        of seconds.
+    """
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    if not text:
+        return None
+    try:
+        seconds = float(text)
+    except ValueError as error:
+        message = (
+            f"{WATCHDOG_VARIABLE}={raw!r} is not a number of seconds; the "
+            f"lane sets a watchdog its author meant and the action will not "
+            f"read"
+        )
+        raise WatchdogValueError(message) from error
+    if seconds <= 0:
+        message = (
+            f"{WATCHDOG_VARIABLE}={raw!r} is not positive, so the cargo "
+            f"invocation is unbounded while appearing to be bounded"
+        )
+        raise WatchdogValueError(message)
+    return seconds
 
 
 def workflow_documents() -> dict[str, dict[str, typ.Any]]:
@@ -169,7 +237,21 @@ def _lanes_in_job(
     -------
     list[CoverageLane]
         One entry per coverage step in the job.
+
+    Raises
+    ------
+    WatchdogValueError
+        If a step's watchdog value cannot be read as a positive number
+        of seconds. The lane's coordinate is added to the message, so
+        the failure names the workflow and job at fault rather than
+        reporting a bare conversion error.
     """
+    steps = _coverage_steps(job)
+    try:
+        watchdogs = tuple(watchdog_of(document, job, step) for step in steps)
+    except WatchdogValueError as error:
+        message = f"{workflow}:{job_name}: {error}"
+        raise WatchdogValueError(message) from error
     raw_timeout = job.get("timeout-minutes")
     timeout = None if raw_timeout is None else float(raw_timeout) * 60.0
     return [
@@ -177,10 +259,11 @@ def _lanes_in_job(
             workflow=workflow,
             job=job_name,
             step=str(step.get("name", "")) or job_name,
-            watchdog=watchdog_of(document, job, step),
+            watchdog=watchdogs[index],
             job_timeout=timeout,
+            condition=(step.get("if"), job.get("if")),
         )
-        for step in _coverage_steps(job)
+        for index, step in enumerate(steps)
     ]
 
 

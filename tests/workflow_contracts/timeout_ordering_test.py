@@ -51,6 +51,23 @@ if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
 
+#: The condition each coverage lane legitimately carries, keyed by
+#: workflow and job, as the step's ``if`` and its job's.
+#:
+#: A skipped step runs no `cargo`, so its watchdog never arms and every
+#: assertion below says nothing about it. `if: false` on either would
+#: leave a lane that looks bounded and is not. The values are pinned
+#: rather than merely tolerated, because a lane gaining, losing or
+#: changing a condition changes when it runs at all.
+#:
+#: `ci.yml` also runs on pushes, where the trunk lane covers the same
+#: ground, so its coverage step is conditional on the pull request.
+REQUIRED_CONDITIONS: typ.Final[dict[tuple[str, str], tuple[object, object]]] = {
+    ("ci.yml", "build-test"): ("github.event_name == 'pull_request'", None),
+    ("coverage-main.yml", "coverage-upload"): (None, None),
+}
+
+
 @pytest.fixture(scope="module")
 def nextest_config() -> str:
     """Return the nextest configuration file's text.
@@ -307,4 +324,33 @@ def test_the_watchdog_is_resolved_from_every_environment_scope() -> None:
     )
     assert watchdog_of({}, {}, {}) is None, (
         "no level naming the variable must read as absent, not as a number"
+    )
+
+
+def test_each_coverage_lane_carries_the_condition_it_is_meant_to(
+    coverage_lanes: tuple[CoverageLane, ...],
+) -> None:
+    """A skipped step runs no `cargo`, so its watchdog never arms.
+
+    Every assertion above reads a lane's declared budgets and says
+    nothing about whether the step runs. `if: false` on the step or on
+    its job would leave a lane that looks bounded and is not, and this
+    contract would certify it. So would a plausible condition that
+    quietly excluded the event the lane exists for.
+
+    The conditions are pinned rather than forbidden, because the one
+    here is legitimate: `ci.yml` also runs on pushes, which the trunk
+    lane covers. Pinning it means a lane gaining, losing or changing a
+    condition has to change this contract and the guide with it.
+    """
+    found = {(lane.workflow, lane.job): lane.condition for lane in coverage_lanes}
+    wrong = {
+        coordinate: (expected, found.get(coordinate))
+        for coordinate, expected in REQUIRED_CONDITIONS.items()
+        if found.get(coordinate) != expected
+    }
+    assert not wrong, (
+        f"these coverage lanes do not carry the conditions the developers' "
+        f"guide records, as expected versus found: {wrong}; a lane that is "
+        f"skipped runs no cargo, so its watchdog never arms"
     )
