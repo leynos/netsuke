@@ -2591,6 +2591,25 @@ missed. Three facts shaped the response:
 file it exercises exists for a Windows command-line limit. It keeps a 420s
 budget, which clears the measured 312.9s worst case by 34%.
 
+Removing the second Cargo build sped this one up as well. The two used to run
+concurrently, each with four compile jobs on a four-vCPU runner, so each
+roughly halved the other. Measured on run 34075197897, the first run under the
+new shape:
+
+Table: Windows durations before and after the verification build moved.
+
+| Measure                                          | Before (median) | After  |
+| ------------------------------------------------ | --------------- | ------ |
+| `harness_compiles_under_a_split_build_dir`       | 274.7s          | 125.3s |
+| `packaged_manifest_retains_build_script_sources` | 244.0s          | 4.2s   |
+| nextest run phase                                | 365s            | 185.5s |
+| `Test` step                                      | 471s            | 260s   |
+
+The 420s budget is therefore sized against the older, contended distribution
+and is deliberately conservative while the new shape has a single sample. It is
+a candidate for tightening, or for deletion, once ten runs have accumulated
+under it.
+
 ### How this relates to the isolation utilities
 
 nextest runs each test in its own process, but the codebase does not rely on
