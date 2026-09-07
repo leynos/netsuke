@@ -5882,6 +5882,19 @@ every lane to set the watchdog explicitly rather than inherit the action's
 default, and every such job to declare a ceiling, since a job without one
 silently takes GitHub's six-hour default.
 
+`tests/workflow_contracts/timeout_budget_properties_test.py` holds the readings
+themselves, driven with synthetic nextest configurations and synthetic
+workflows rather than the repository's own. Every `terminate-after` here is 5
+or 10 and every period is 60 s, so a reading that confused the two would still
+order the real tiers correctly; against generated inputs it does not. That
+module also fixes the error paths, the malformed-workflow cases, and the
+watchdog's resolution across all three environment scopes.
+
+The lane reading takes its documents as a parameter, defaulting to the
+repository's own workflows. Reading the filesystem happens at one named
+boundary rather than inside the derivations, which is what makes the synthetic
+cases possible.
+
 The termination allowance it would demand between a whole-run budget and the
 watchdog is two terms, not one: the largest `grace-period` the configuration
 sets, or nextest's ten-second default when it sets none, plus a fixed 60-second

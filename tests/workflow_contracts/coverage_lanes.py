@@ -86,10 +86,12 @@ def watchdog_of(
     return None
 
 
-def _workflow_documents() -> dict[str, dict[str, typ.Any]]:
-    """Return every workflow document, keyed by file name.
+def workflow_documents() -> dict[str, dict[str, typ.Any]]:
+    """Return every workflow document in the repository, keyed by name.
 
-    Both extensions are read. A coverage lane in the other one would
+    This is the one place the contract touches the filesystem, so an
+    unreadable or unparsable workflow fails here rather than inside a
+    budget derivation. Both extensions are read. A coverage lane in the other one would
     otherwise escape every assertion below without failing anything.
 
     Returns
@@ -182,12 +184,19 @@ def _lanes_in_job(
     ]
 
 
-def _declared_jobs() -> list[tuple[str, dict[str, typ.Any], str, dict[str, typ.Any]]]:
+def _declared_jobs(
+    documents: dict[str, dict[str, typ.Any]],
+) -> list[tuple[str, dict[str, typ.Any], str, dict[str, typ.Any]]]:
     """Return every job in every workflow, carrying its file and document.
 
     The job's identity travels with it rather than being reconstructed
     from an enclosing loop, which is what lets the lane building above be
     a single comprehension.
+
+    Parameters
+    ----------
+    documents : dict[str, dict[str, typ.Any]]
+        Parsed workflow documents, keyed by file name.
 
     Returns
     -------
@@ -196,13 +205,15 @@ def _declared_jobs() -> list[tuple[str, dict[str, typ.Any], str, dict[str, typ.A
     """
     return [
         (name, document, str(job_name), job)
-        for name, document in _workflow_documents().items()
+        for name, document in documents.items()
         for job_name, job in (document.get("jobs") or {}).items()
         if isinstance(job, dict)
     ]
 
 
-def coverage_lanes_of() -> tuple[CoverageLane, ...]:
+def coverage_lanes_of(
+    documents: dict[str, dict[str, typ.Any]] | None = None,
+) -> tuple[CoverageLane, ...]:
     """Return every step invoking the coverage action, with its budgets.
 
     Every such step is included, not only those whose job sets a
@@ -210,13 +221,26 @@ def coverage_lanes_of() -> tuple[CoverageLane, ...]:
     rather than absent. An absent entry would make the assertions skip it
     silently and restore the action's default.
 
+    The documents are a parameter so the reading can be driven with
+    synthetic workflows. Reading the repository's own is the default
+    rather than the only option, which keeps the filesystem access at one
+    named boundary instead of inside the derivation.
+
+    Parameters
+    ----------
+    documents : dict[str, dict[str, typ.Any]] or None
+        Parsed workflow documents keyed by file name. When None, the
+        repository's own `.github/workflows` is read.
+
     Returns
     -------
     tuple[CoverageLane, ...]
         One entry per coverage step.
     """
+    if documents is None:
+        documents = workflow_documents()
     return tuple(
         lane
-        for workflow, document, job_name, job in _declared_jobs()
+        for workflow, document, job_name, job in _declared_jobs(documents)
         for lane in _lanes_in_job(workflow, document, job_name, job)
     )
