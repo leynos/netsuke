@@ -88,24 +88,13 @@ def seconds(duration: str) -> float:
     return float(match["value"]) * _UNIT_SECONDS[match["unit"]]
 
 
-def _entries(value: object) -> list[object]:
-    """Return a parsed value as a list, or an empty one.
-
-    Parameters
-    ----------
-    value : object
-        Any value ``tomllib`` produced.
-
-    Returns
-    -------
-    list[object]
-        The list, or an empty one when the value is not a list.
-    """
-    return list(value) if isinstance(value, list) else []
-
-
 def _table(value: object) -> dict[str, object]:
     """Return a parsed value as a table, or an empty one.
+
+    ``tomllib`` returns whatever the document said, so a configuration
+    naming a scalar where a table belongs yields nothing here rather
+    than raising several frames away, and the assertion that finds no
+    budget reports the absence.
 
     Parameters
     ----------
@@ -166,10 +155,11 @@ def _budget_tables(config_text: str) -> list[tuple[str, dict[str, object]]]:
     for name, raw in _table(_parsed(config_text).get("profile")).items():
         profile = _table(raw)
         tables.append((f"profile.{name}", profile))
+        overrides = profile.get("overrides")
+        entries = overrides if isinstance(overrides, list) else []
         tables.extend(
             (f"profile.{name}.overrides[{index}]", _table(entry))
-            for index, entry in enumerate(_entries(profile.get("overrides")))
-            if isinstance(entry, dict)
+            for index, entry in enumerate(entries)
         )
     return tables
 
