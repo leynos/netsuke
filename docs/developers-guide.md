@@ -2635,6 +2635,16 @@ twice and give that baseline two writers.
 purpose, so none is a candidate for folding. The Windows gate keeps its own
 `cargo nextest` pass because no coverage runs there.
 
+One assertion is deliberately not run twice.
+`packaged_manifest_retains_build_script_sources` skips Cargo's publish
+verification build on Windows and keeps it on the Linux coverage lane, because
+what Cargo puts in a package does not vary by platform and the verification
+costs a median of 240.8s on `windows-latest` against about 25s on the cached
+Linux runner. Both platforms still assert the packaged file list. See
+[Windows budget for the isolated-Cargo-build tests][windows-test-budget].
+
+[windows-test-budget]: #windows-budget-for-the-isolated-cargo-build-tests
+
 `tests/workflow_contracts/test_execution_coverage_test.py` holds all of this:
 the coverage inputs, the denied warnings, the doctest pass and its position,
 one coverage producer per event, and the absence of any second Linux job running
@@ -2675,6 +2685,68 @@ governs the non-doctest pass only, and deliberately stays small:
   returns. They intentionally use private Cargo directories to preserve
   isolation and publication-boundary coverage; their diagnostics distinguish
   that work from future regressions without raising the slow-test threshold.
+- **One measured platform override.** `harness_compiles_under_a_split_build_dir`
+  gets seven warning periods (420s) instead of five on Windows alone. See
+  [Windows budget for the isolated-Cargo-build tests][windows-test-budget] for
+  the measurement behind that number. Any future override carries the same
+  obligation: a written rationale citing runs, not an estimate.
+
+#### Windows budget for the isolated-Cargo-build tests
+
+Two tests spawn a complete isolated Cargo build, and on the four-vCPU
+GitHub-hosted `windows-latest` gate that build is 98.8% of each test's wall
+time. Measured across the 58 Windows gate runs between run 33890685806, the
+merge of pull request 664, and run 34064668331:
+
+Table: measured Windows durations for the isolated-Cargo-build tests.
+
+| Test                                             | Min    | Median | Max                      |
+| ------------------------------------------------ | ------ | ------ | ------------------------ |
+| `harness_compiles_under_a_split_build_dir`       | 198.8s | 274.7s | 312.9s (run 33891104448) |
+| `packaged_manifest_retains_build_script_sources` | 172.6s | 244.0s | 267.9s (run 33891104448) |
+
+One run in 58 exceeded the 300s default, and it is the run whose sccache key
+missed. Three facts shaped the response:
+
+- **The compiler cache already reaches the spawned build.** `ci-windows.yml`
+  sets `RUSTC_WRAPPER` and `SCCACHE_DIR` at job scope, and neither test clears
+  the child environment, so the child inherits both. Warming it is worth about
+  3%: the child build took 281.0s on the cold run against a 271.9s warm median.
+  There is no reuse left to claim there.
+- **No target-directory reuse is available.** Cargo's publish verification
+  builds inside a nested target directory whatever `CARGO_TARGET_DIR` it is
+  given, and the split-build harness needs private roots to avoid racing the
+  `#[once]` fixture (`E0460`), so neither test can share artefacts with the
+  lane or with the other.
+- **The packaged content does not vary by platform.** So the verification build
+  moved rather than being dropped:
+  `packaged_manifest_retains_build_script_sources` passes `--no-verify` on
+  Windows and runs the full verification on the Linux coverage lane, while
+  `cargo package --list`, the assertion the test is named for, still runs
+  everywhere. That returns it to the default budget.
+
+`harness_compiles_under_a_split_build_dir` cannot be relocated: the response
+file it exercises exists for a Windows command-line limit. It keeps a 420s
+budget, which clears the measured 312.9s worst case by 34%.
+
+Removing the second Cargo build sped this one up as well. The two used to run
+concurrently, each with four compile jobs on a four-vCPU runner, so each
+roughly halved the other. Measured on runs 34075197897 and 34079222917, the
+first two under the new shape:
+
+Table: Windows durations before and after the verification build moved.
+
+| Measure                                          | Before (median) | Run 34075197897 | Run 34079222917 |
+| ------------------------------------------------ | --------------- | --------------- | --------------- |
+| `harness_compiles_under_a_split_build_dir`       | 274.7s          | 125.3s          | 170.6s          |
+| `packaged_manifest_retains_build_script_sources` | 244.0s          | 4.2s            | 7.6s            |
+| nextest run phase                                | 365s            | 185.5s          | 258.0s          |
+| `Test` step                                      | 471s            | 260s            | 368s            |
+
+The 420s budget is therefore sized against the older, contended distribution
+and is deliberately conservative while the new shape has two samples. It is a
+candidate for tightening, or for deletion, once ten runs have accumulated under
+it.
 
 ### How this relates to the isolation utilities
 
@@ -3982,6 +4054,12 @@ to the test rather than the ambient target directory because the `#[once]`
 `stub_env_builders_compile_under_the_same_harness`. Sharing a target directory
 would make `harness_compiles_under_a_split_build_dir` race that build on the
 uplifted rlibs and fail with version-skew errors (`E0460`).
+
+That private build is why this test is the most expensive one on the Windows
+gate: `test_support` depends on `netsuke-build`, so a private root means
+compiling that crate and roughly 350 dependencies from scratch. Its measured
+budget is recorded in
+[Windows budget for the isolated-Cargo-build tests][windows-test-budget].
 
 ### Manifest `env()` reader
 

@@ -3,6 +3,12 @@
 //! These tests verify the packaged crate builds for publication and ensure
 //! build-script sources remain in its manifest, where an omission would
 //! otherwise fail only during release.
+//!
+//! The verification build runs on the Linux lane only; Windows passes
+//! `--no-verify` (see `PUBLISH_DRY_RUN_ARGS`). The file-list assertions below
+//! are derived from the source tree rather than listed, so a narrowed
+//! `include` that dropped a platform-gated module is caught on every platform
+//! rather than only by the platform that compiles it.
 
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
@@ -66,6 +72,94 @@ fn required_readme_paths() -> Result<Vec<String>> {
     Ok(readmes)
 }
 
+/// The `cargo publish --dry-run` arguments this platform runs.
+///
+/// Windows omits the verification build. That build compiles the packaged
+/// crate and its whole dependency graph from scratch, and on the four-vCPU
+/// GitHub-hosted `windows-latest` gate it measured a median of 240.8s and a
+/// maximum of 265.6s across the 58 runs between run 33890685806 and run
+/// 34064668331; the same work costs about 25s on the cached Linux lane.
+///
+/// This relocates the contract rather than dropping it. What Cargo puts in a
+/// package does not vary by operating system, so the Linux coverage lane runs
+/// this same test with the verification build and keeps "the packaged crate
+/// builds for publication" covered, while every platform still reads
+/// `cargo package --list` below for the manifest-inclusion assertion that this
+/// test is named for. See leynos/netsuke#673.
+const PUBLISH_DRY_RUN_ARGS: &[&str] = if cfg!(windows) {
+    &[
+        "publish",
+        "--dry-run",
+        "--no-verify",
+        "--allow-dirty",
+        "-p",
+        "netsuke-build",
+    ]
+} else {
+    &[
+        "publish",
+        "--dry-run",
+        "--allow-dirty",
+        "-p",
+        "netsuke-build",
+    ]
+};
+
+/// Roots whose Rust sources the crate compiles and must therefore package.
+const COMPILED_SOURCE_ROOTS: [&str; 2] = ["src", "build_l10n_audit"];
+
+/// Every Rust source the crate compiles must ship in the package.
+///
+/// Derived from the tree rather than listed, so a new module is required to be
+/// packaged without anyone remembering to update this test. This is also what
+/// keeps the Windows contract honest while the verification build runs on
+/// Linux: a narrowed `include` that dropped a `#[cfg(windows)]` module would
+/// compile cleanly under a Linux verification build, which never instantiates
+/// those `cfg` arms, but it cannot escape a file-list assertion derived from
+/// the sources themselves.
+fn required_source_paths() -> Result<Vec<String>> {
+    let crate_root = Dir::open_ambient_dir(env!("CARGO_MANIFEST_DIR"), ambient_authority())
+        .context("open the crate root")?;
+    let mut sources = Vec::new();
+    for root in COMPILED_SOURCE_ROOTS {
+        collect_rust_sources(&crate_root, root, &mut sources)
+            .with_context(|| format!("walk the `{root}` source root"))?;
+    }
+    sources.sort();
+    // A sweep that silently matched nothing would make the assertion vacuous.
+    ensure!(
+        !sources.is_empty(),
+        "the compiled source roots should contain at least one Rust source"
+    );
+    Ok(sources)
+}
+
+/// Append every `.rs` path beneath `directory`, depth first, to `sources`.
+fn collect_rust_sources(root: &Dir, directory: &str, sources: &mut Vec<String>) -> Result<()> {
+    for entry_result in root
+        .read_dir(directory)
+        .with_context(|| format!("read `{directory}`"))?
+    {
+        let entry = entry_result.with_context(|| format!("read an entry of `{directory}`"))?;
+        let name = entry
+            .file_name()
+            .with_context(|| format!("read an entry name in `{directory}`"))?;
+        let path = format!("{directory}/{name}");
+        let file_type = entry
+            .file_type()
+            .with_context(|| format!("read the file type of `{path}`"))?;
+        if file_type.is_dir() {
+            collect_rust_sources(root, &path, sources)?;
+        } else if Utf8Path::new(&name)
+            .extension()
+            .is_some_and(|extension| extension == "rs")
+        {
+            sources.push(path);
+        }
+    }
+    Ok(())
+}
+
 /// Create a Cargo subprocess that writes build artefacts beneath `target_dir`.
 fn cargo_subprocess(cargo_binary: &OsStr, target_dir: &TempDir) -> Command {
     let mut command = Command::new(cargo_binary);
@@ -87,13 +181,7 @@ fn packaged_manifest_retains_build_script_sources() {
             .unwrap_or_else(|error| panic!("create isolated Cargo target directory: {error}"));
         let publish_started_at = Instant::now();
         let publish_output = cargo_subprocess(&cargo_binary, &cargo_target_dir)
-            .args([
-                "publish",
-                "--dry-run",
-                "--allow-dirty",
-                "-p",
-                "netsuke-build",
-            ])
+            .args(PUBLISH_DRY_RUN_ARGS)
             .current_dir(env!("CARGO_MANIFEST_DIR"))
             .output()
             .unwrap_or_else(|error| panic!("run cargo publish --dry-run: {error}"));
@@ -133,9 +221,45 @@ fn packaged_manifest_retains_build_script_sources() {
 
         let readme_paths = required_readme_paths()
             .unwrap_or_else(|error| panic!("collect the crate-root READMEs: {error}"));
-        assert_required_paths_present(&packaged_paths, &readme_paths);
+        let source_paths = required_source_paths()
+            .unwrap_or_else(|error| panic!("collect the compiled Rust sources: {error}"));
+        assert_required_paths_present(&packaged_paths, &readme_paths, &source_paths);
         assert_forbidden_roots_absent(&packaged_paths);
     });
+}
+
+/// The verification build is skipped on Windows and run everywhere else.
+///
+/// Scenario: read the publish arguments this build was compiled with.
+/// Invariant: `--no-verify` appears exactly on Windows, while the dry run and
+/// the package selection are unconditional, so relocating the verification can
+/// never silently relocate the dry run or widen it to another package.
+#[test]
+fn publish_dry_run_skips_verification_only_on_windows() {
+    assert_eq!(
+        PUBLISH_DRY_RUN_ARGS.first().copied(),
+        Some("publish"),
+        "the subcommand should stay `publish`"
+    );
+    assert!(
+        PUBLISH_DRY_RUN_ARGS.contains(&"--dry-run"),
+        "the dry run is unconditional; a real publish must never run from a test"
+    );
+    assert_eq!(
+        PUBLISH_DRY_RUN_ARGS
+            .iter()
+            .position(|argument| *argument == "-p")
+            .and_then(|index| PUBLISH_DRY_RUN_ARGS.get(index + 1))
+            .copied(),
+        Some("netsuke-build"),
+        "the packaged crate should stay `netsuke-build`"
+    );
+    assert_eq!(
+        PUBLISH_DRY_RUN_ARGS.contains(&"--no-verify"),
+        cfg!(windows),
+        "Windows relocates the verification build to the Linux lane; \
+         every other platform runs it here"
+    );
 }
 
 #[test]
@@ -155,7 +279,11 @@ fn normalize_packaged_path(path: &str) -> String {
     path.replace('\\', "/")
 }
 
-fn assert_required_paths_present(packaged_paths: &BTreeSet<String>, readme_paths: &[String]) {
+fn assert_required_paths_present(
+    packaged_paths: &BTreeSet<String>,
+    readme_paths: &[String],
+    source_paths: &[String],
+) {
     for required_path in REQUIRED_PACKAGED_FILES {
         assert!(
             packaged_paths.contains(required_path),
@@ -174,6 +302,13 @@ fn assert_required_paths_present(packaged_paths: &BTreeSet<String>, readme_paths
         assert!(
             packaged_paths.contains(required_path.as_str()),
             "packaged manifest should contain `{required_path}`"
+        );
+    }
+
+    for required_path in source_paths {
+        assert!(
+            packaged_paths.contains(required_path.as_str()),
+            "packaged manifest should contain the compiled source `{required_path}`"
         );
     }
 }
