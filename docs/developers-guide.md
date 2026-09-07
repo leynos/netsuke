@@ -616,10 +616,10 @@ only emitted an "Unexpected input(s)" warning on every run;
 The merge gate spans two files. [`ci.yml`](../.github/workflows/ci.yml) holds
 the Linux gate and the Kani smoke job;
 [`ci-windows.yml`](../.github/workflows/ci-windows.yml) holds
-`build-test-windows` and the pull-request `windows-native-recipe-smoke` job, and
-`ci.yml` invokes it through a single `windows` job. The split exists to keep
-both files inside the 400-line limit that AGENTS.md sets for every file in the
-repository; adding a Windows step therefore goes in `ci-windows.yml`.
+`build-test-windows`, the single Windows job, and `ci.yml` invokes it through a
+single `windows` job. The split exists to keep both files inside the 400-line
+limit that AGENTS.md sets for every file in the repository; adding a Windows
+step therefore goes in `ci-windows.yml`.
 
 GitHub does not expose the `env` context to a reusable workflow's `with` block,
 so `ci.yml` repeats its `NEXTEST_VERSION`, `MDTABLEFIX_VERSION`, and
@@ -978,13 +978,13 @@ the remaining harness consequences of that policy.
 
 ### Windows native recipe smoke workflow
 
-The pull-request `windows-native-recipe-smoke` job in
-[`ci-windows.yml`](../.github/workflows/ci-windows.yml) is the native Windows
-execution gate. It waits for the successful `build-test-windows` job, then runs
-on GitHub-hosted `windows-latest` with `pwsh` as the shell for every `run`
-step. It checks out the pull request source, installs the pinned nightly from
-`rust-toolchain.toml` through the shared Rust setup action, installs Ninja, and
-builds the `netsuke` binary from that checkout. The job then invokes:
+Two steps at the end of `build-test-windows` in
+[`ci-windows.yml`](../.github/workflows/ci-windows.yml) are the native Windows
+execution gate. `Build Netsuke` links the binary from the workspace the `Test`
+step has already compiled, and `Exercise native Windows recipes` runs the
+fixture. Both declare `shell: pwsh` rather than inheriting the job's Git Bash
+default, so the process that launches Netsuke is PowerShell. The second step
+invokes:
 
 ```powershell
 ./scripts/windows-recipe-smoke.ps1 `
@@ -994,19 +994,31 @@ builds the `netsuke` binary from that checkout. The job then invokes:
 
 The fixture exercises the Windows PowerShell legacy-recipe contract, including
 target discovery, scalar and script recipes, ordered-list state and failure,
-path quoting, and the large-recipe response-file transport. The job
-deliberately does not set `SHELL=bash` or use Git Bash for its invocation, so
-the launch boundary remains an ordinary PowerShell session.
-`build-test-windows` continues to use Git Bash only for the repository's POSIX
-Makefile quality gates.
+path quoting, and the large-recipe response-file transport. Neither step sets
+`SHELL=bash` or uses Git Bash for its invocation, so the launch boundary
+remains an ordinary PowerShell session. The rest of `build-test-windows`
+continues to use Git Bash only for the repository's POSIX Makefile quality
+gates, exactly as `Lint (Whitaker)` already overrides the default to `pwsh`.
 
-The release workflow has a second `windows-native-recipe-smoke` job for the
-tagged source. It uses the same `pwsh` defaults, pinned Rust toolchain, Ninja
-installation, binary build, smoke script, and
-`tests/data/windows-recipe-smoke.yml` fixture. The smoke job builds the tagged
-source itself; the release publication job separately requires both this smoke
-job and the platform package jobs in its `needs` list. Consequently, release
-publication cannot proceed unless the native Windows smoke test passes.
+These were a second job, `windows-native-recipe-smoke`, that `needs`-ed
+`build-test-windows`. That made it a strict serial tail on every pull request:
+a median of 236s measured over the 57 Windows runs between run 33890685806 and
+run 34064668331, of which 72s restored caches, 20s set up Rust, 109s rebuilt a
+binary the gate job had already built, and 7s ran the fixture. The dependency
+bought cache warmth rather than correctness, since the job was restore-only and
+a pull request saves nothing for it to read, so folding the two steps in
+removes the tail and a runner without weakening the contract.
+`tests/workflow_contracts/ci_windows_job_test.py` holds both halves of that:
+the steps must declare `pwsh` and invoke the smoke script with its binary and
+manifest, and `ci-windows.yml` must declare no second job.
+
+The release workflow keeps a standalone `windows-native-recipe-smoke` job for
+the tagged source, where there is no gate build to share. It uses the same
+`pwsh` defaults, pinned Rust toolchain, Ninja installation, binary build, smoke
+script, and `tests/data/windows-recipe-smoke.yml` fixture. The smoke job builds
+the tagged source itself; the release publication job separately requires both
+this smoke job and the platform package jobs in its `needs` list. Consequently,
+release publication cannot proceed unless the native Windows smoke test passes.
 
 ## Release-admission observability
 
@@ -1135,22 +1147,21 @@ shape would buy nothing and Ubicloud has no single-vCPU option to buy it with.
 
 Table: runner placement for every repository-owned job.
 
-| Workflow and job                               | Runner                            | Reason                                  |
-| ---------------------------------------------- | --------------------------------- | --------------------------------------- |
-| `ci.yml` `build-test`                          | `ubicloud-standard-4-ubuntu-2404` | Linux merge gate, escalated on evidence |
-| `ci.yml` `kani-smoke`                          | `ubicloud-standard-2-ubuntu-2404` | Linux merge gate                        |
-| `coverage-main.yml` `coverage-upload`          | `ubicloud-standard-4-ubuntu-2404` | Same instrumented workload as the gate  |
-| `netsukefile-test.yml` `netsukefile`           | `ubicloud-standard-2-ubuntu-2204` | Deliberate Ubuntu 22.04 compatibility   |
-| `release.yml` `build-linux`                    | `ubicloud-standard-2-ubuntu-2404` | Linux packaging and the dry-run gate    |
-| `ci-windows.yml` `build-test-windows`          | `windows-latest`                  | No Ubicloud Windows image               |
-| `ci-windows.yml` `windows-native-recipe-smoke` | `windows-latest`                  | No Ubicloud Windows image               |
-| `release.yml` `build-windows`                  | `windows-latest`                  | No Ubicloud Windows image               |
-| `release.yml` `windows-native-recipe-smoke`    | `windows-latest`                  | No Ubicloud Windows image               |
-| `release.yml` `build-macos` (x86_64)           | `macos-15-intel`                  | No Ubicloud macOS image                 |
-| `release.yml` `build-macos` (aarch64)          | `macos-15`                        | No Ubicloud macOS image                 |
-| `release.yml` `metadata`                       | `ubuntu-latest`                   | API-bound administrative job            |
-| `release.yml` `release`                        | `ubuntu-latest`                   | API-bound publication job               |
-| `delayed-pr-comment.yml` `delay_and_comment`   | `ubuntu-latest`                   | Not developer-blocking                  |
+| Workflow and job                             | Runner                            | Reason                                  |
+| -------------------------------------------- | --------------------------------- | --------------------------------------- |
+| `ci.yml` `build-test`                        | `ubicloud-standard-4-ubuntu-2404` | Linux merge gate, escalated on evidence |
+| `ci.yml` `kani-smoke`                        | `ubicloud-standard-2-ubuntu-2404` | Linux merge gate                        |
+| `coverage-main.yml` `coverage-upload`        | `ubicloud-standard-4-ubuntu-2404` | Same instrumented workload as the gate  |
+| `netsukefile-test.yml` `netsukefile`         | `ubicloud-standard-2-ubuntu-2204` | Deliberate Ubuntu 22.04 compatibility   |
+| `release.yml` `build-linux`                  | `ubicloud-standard-2-ubuntu-2404` | Linux packaging and the dry-run gate    |
+| `ci-windows.yml` `build-test-windows`        | `windows-latest`                  | No Ubicloud Windows image               |
+| `release.yml` `build-windows`                | `windows-latest`                  | No Ubicloud Windows image               |
+| `release.yml` `windows-native-recipe-smoke`  | `windows-latest`                  | No Ubicloud Windows image               |
+| `release.yml` `build-macos` (x86_64)         | `macos-15-intel`                  | No Ubicloud macOS image                 |
+| `release.yml` `build-macos` (aarch64)        | `macos-15`                        | No Ubicloud macOS image                 |
+| `release.yml` `metadata`                     | `ubuntu-latest`                   | API-bound administrative job            |
+| `release.yml` `release`                      | `ubuntu-latest`                   | API-bound publication job               |
+| `delayed-pr-comment.yml` `delay_and_comment` | `ubuntu-latest`                   | Not developer-blocking                  |
 
 `ubicloud-standard-2` alone would also select Ubuntu 24.04 today, but naming
 the image keeps a change to Ubicloud's default from silently moving compiled
@@ -2614,15 +2625,14 @@ Doctests are the one thing the instrumented run cannot do at all, so
 
 Table: the executed test set of every job that runs tests.
 
-| Job                           | Platform     | Command                                    | Features | Targets     | Warnings |
-| ----------------------------- | ------------ | ------------------------------------------ | -------- | ----------- | -------- |
-| `build-test` coverage step    | Ubuntu 24.04 | `cargo llvm-cov nextest --workspace`       | all      | all         | denied   |
-| `build-test` doctest step     | Ubuntu 24.04 | `cargo test --doc`                         | all      | doctests    | denied   |
-| `coverage-upload`             | Ubuntu 24.04 | `cargo llvm-cov nextest --workspace`       | all      | all         | denied   |
-| `netsukefile`                 | Ubuntu 22.04 | builds a manifest and runs Ninja           | default  | binary only | allowed  |
-| `kani-smoke`                  | Ubuntu 24.04 | `make kani-ir`                             | Kani cfg | harnesses   | allowed  |
-| `build-test-windows`          | Windows      | `cargo nextest run` and `cargo test --doc` | all      | all         | denied   |
-| `windows-native-recipe-smoke` | Windows      | a PowerShell recipe fixture                | default  | binary only | denied   |
+| Job                        | Platform     | Command                                    | Features | Targets     | Warnings |
+| -------------------------- | ------------ | ------------------------------------------ | -------- | ----------- | -------- |
+| `build-test` coverage step | Ubuntu 24.04 | `cargo llvm-cov nextest --workspace`       | all      | all         | denied   |
+| `build-test` doctest step  | Ubuntu 24.04 | `cargo test --doc`                         | all      | doctests    | denied   |
+| `coverage-upload`          | Ubuntu 24.04 | `cargo llvm-cov nextest --workspace`       | all      | all         | denied   |
+| `netsukefile`              | Ubuntu 22.04 | builds a manifest and runs Ninja           | default  | binary only | allowed  |
+| `kani-smoke`               | Ubuntu 24.04 | `make kani-ir`                             | Kani cfg | harnesses   | allowed  |
+| `build-test-windows`       | Windows      | `cargo nextest run` and `cargo test --doc` | all      | all         | denied   |
 
 Coverage is measured once per commit. `build-test` measures it only on a pull
 request, where the changed-line gate consumes `lcov.info`. On a push to `main`,
@@ -2631,9 +2641,10 @@ is the sole writer of the ratchet baseline, so the baseline is comparable with
 what the ratchet later checks against. A second instrumented build would pay
 twice and give that baseline two writers.
 
-`netsukefile`, `kani-smoke`, and the Windows jobs differ in platform or in
-purpose, so none is a candidate for folding. The Windows gate keeps its own
-`cargo nextest` pass because no coverage runs there.
+`netsukefile` and `kani-smoke` differ in platform or in purpose, so neither is
+a candidate for folding. The Windows gate keeps its own `cargo nextest` pass
+because no coverage runs there; its native-recipe smoke steps are part of that
+job rather than a second one.
 
 `tests/workflow_contracts/test_execution_coverage_test.py` holds all of this:
 the coverage inputs, the denied warnings, the doctest pass and its position,
