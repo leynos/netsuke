@@ -26,23 +26,32 @@ filter = 'test(=harness_compiles_under_a_split_build_dir) | test(=packaged_manif
 success-output = "immediate"
 
 [[profile.default.overrides]]
-# The same two tests, given twice the default budget on Windows only.
+# `harness_compiles_under_a_split_build_dir` on Windows: seven warning periods
+# (420s) instead of the default five (300s).
 #
-# A targeted override with a rationale, per the policy above, rather than a
-# retry. The constraint is real and external: each of these spawns a complete
-# isolated Cargo build, and the Windows gate runs on a four-vCPU GitHub-hosted
-# runner whose compile throughput the 300s default does not fit. Run
-# 33876121872 terminated `harness_compiles_under_a_split_build_dir` at
-# 300.081s with the other 2,503 tests passing, while the immediately preceding
-# run finished it inside the budget, which is what "marginal" looks like.
+# Measured rather than guessed, per the policy above. Across the 58 Windows
+# gate runs from the #664 merge (run 33890685806) to run 34064668331 this test
+# ran a median of 274.7s and a maximum of 312.9s, the maximum being run
+# 33891104448, whose sccache key missed. One run in 58 exceeded the 300s
+# default. 420s clears the measured worst case by 34 percent.
 #
-# Windows only. On Ubicloud these tests finish in a fraction of the budget, and
+# The cost is the spawned Cargo build, 98.8 percent of the test's wall time in
+# the median: `test_support` depends on `netsuke-build`, so the build compiles
+# that crate and roughly 350 dependencies into the private directories the test
+# needs for E0460 isolation. The lane's compiler cache does reach that child
+# process, because `ci-windows.yml` sets `RUSTC_WRAPPER` at job scope and the
+# test adds to the environment rather than clearing it, and it is worth about 3
+# percent: 281.0s on the cold run against a 271.9s warm median. There is no
+# artefact reuse left to claim.
+#
+# `packaged_manifest_retains_build_script_sources` is deliberately absent. It
+# skips the packaging verification build on Windows and runs it on the Linux
+# lane instead (see tests/packaging_smoke_tests.rs), which returns it to the
+# default budget with room to spare.
+#
+# Windows only. On Ubicloud both tests finish in a fraction of the budget, and
 # widening the timeout there would blunt the hang detection this file exists to
 # provide.
-#
-# This is a bound, not an explanation: nobody has measured what these actually
-# cost on `windows-latest`, so 600s is generous rather than justified. Issue
-# leynos/netsuke#673 owns replacing it with a measured budget or a faster test.
 platform = 'cfg(target_os = "windows")'
-filter = 'test(=harness_compiles_under_a_split_build_dir) | test(=packaged_manifest_retains_build_script_sources)'
-slow-timeout = { period = "60s", terminate-after = 10 }
+filter = 'test(=harness_compiles_under_a_split_build_dir)'
+slow-timeout = { period = "60s", terminate-after = 7 }
