@@ -2595,22 +2595,22 @@ budget, which clears the measured 312.9s worst case by 34%.
 
 Removing the second Cargo build sped this one up as well. The two used to run
 concurrently, each with four compile jobs on a four-vCPU runner, so each
-roughly halved the other. Measured on run 34075197897, the first run under the
-new shape:
+roughly halved the other. Measured on runs 34075197897 and 34079222917, the
+first two under the new shape:
 
 Table: Windows durations before and after the verification build moved.
 
-| Measure                                          | Before (median) | After  |
-| ------------------------------------------------ | --------------- | ------ |
-| `harness_compiles_under_a_split_build_dir`       | 274.7s          | 125.3s |
-| `packaged_manifest_retains_build_script_sources` | 244.0s          | 4.2s   |
-| nextest run phase                                | 365s            | 185.5s |
-| `Test` step                                      | 471s            | 260s   |
+| Measure                                          | Before (median) | Run 34075197897 | Run 34079222917 |
+| ------------------------------------------------ | --------------- | --------------- | --------------- |
+| `harness_compiles_under_a_split_build_dir`       | 274.7s          | 125.3s          | 170.6s          |
+| `packaged_manifest_retains_build_script_sources` | 244.0s          | 4.2s            | 7.6s            |
+| nextest run phase                                | 365s            | 185.5s          | 258.0s          |
+| `Test` step                                      | 471s            | 260s            | 368s            |
 
 The 420s budget is therefore sized against the older, contended distribution
-and is deliberately conservative while the new shape has a single sample. It is
-a candidate for tightening, or for deletion, once ten runs have accumulated
-under it.
+and is deliberately conservative while the new shape has two samples. It is a
+candidate for tightening, or for deletion, once ten runs have accumulated under
+it.
 
 ### How this relates to the isolation utilities
 

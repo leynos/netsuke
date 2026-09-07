@@ -47,16 +47,16 @@ success-output = "immediate"
 # `packaged_manifest_retains_build_script_sources` is deliberately absent. It
 # skips the packaging verification build on Windows and runs it on the Linux
 # lane instead (see tests/packaging_smoke_tests.rs), which returns it to the
-# default budget with room to spare: 4.2s on run 34075197897, against a 244.0s
-# median before.
+# default budget with room to spare: 4.2s and 7.6s on runs 34075197897 and
+# 34079222917, against a 244.0s median before.
 #
 # Removing that second Cargo build also unblocked this one. The two used to run
 # concurrently, each with four compile jobs on a four-vCPU runner, and each
-# roughly halved the other; on run 34075197897 this test took 125.3s rather
-# than the 274.7s median above. 420s is therefore sized against the older,
-# contended distribution and is deliberately conservative while the new shape
-# has a single sample. It is a candidate for tightening, or for deletion, once
-# ten runs have accumulated under it.
+# roughly halved the other; on those same two runs this test took 125.3s and
+# 170.6s rather than the 274.7s median above. 420s is therefore sized against
+# the older, contended distribution and is deliberately conservative while the
+# new shape has two samples. It is a candidate for tightening, or for deletion,
+# once ten runs have accumulated under it.
 #
 # Windows only. On Ubicloud both tests finish in a fraction of the budget, and
 # widening the timeout there would blunt the hang detection this file exists to
