@@ -584,7 +584,7 @@ affected workflow passes it through the relevant shared action's
 job-level override would win over the action's exported value and silently drop
 whatever the action set.
 
-Five CI jobs across five workflows carry the contract.
+Six CI jobs across five workflows carry the contract.
 
 Table: CI jobs and their shared Rust setup.
 
@@ -635,15 +635,30 @@ literals equal to those pins, so the two copies cannot drift.
 `lint-windows` and `build-test-windows` run concurrently on `windows-latest`.
 They used to be one job, in which formatting, Clippy and Whitaker ran in series
 ahead of the test step for no reason: neither half consumes the other's output.
-Measured over the 57 runs between run 33890685806 and run 34064668331, that
-series cost 19s of `Format`, 114s of `Lint (Clippy)`, 40s installing Whitaker
-and 385s of `Lint (Whitaker)` ahead of a 471s `Test` step, in a job whose
-median total was 1191s.
+Two different measurements are quoted below and they are not interchangeable,
+so each is labelled.
 
-Split, each job pays its own roughly 150s of checkout, cache restore and
-toolchain setup, so the lane becomes about `max(668, 621)` rather than 1191.
-The cost is a second hosted Windows runner and a second cache restore per pull
-request, which is accepted where it speeds development.
+**Per-step medians, single job, 57 successful runs of
+`Windows / build-test-windows` between run 33890685806 and run 34064668331.**
+The lint series cost 19s of `Format`, 114s of `Lint (Clippy)`, 40s installing
+Whitaker and 385s of `Lint (Whitaker)`, ahead of a 471s `Test` step, in a job
+whose median total was 1191s.
+
+**End to end, whole Windows lane.** Before the split this was the gate job plus
+the queue and duration of the native-recipe smoke job that depended on it, a
+median of 1468s over the same runs. After the split it is the slower of the two
+concurrent jobs, measured at 848s, 816s and 877s on runs 34090304160,
+34098601536 and 34164600713.
+
+The two figures answer different questions. The 1191s is what one job took; the
+1468s is what a contributor waited for. Only the second is comparable with the
+post-split numbers, and it is the one to quote.
+
+The cost of the split is a second hosted Windows runner and a second cache
+restore per pull request, which is accepted where it speeds development. Which
+job leads has already changed once, from `Test` to `Lint (Whitaker)`, as
+sccache warmed; the lane tracks the slower half rather than their sum, so the
+useful question after a change is which half now leads.
 
 `tests/workflow_contracts/ci_windows_job_test.py` holds the shape: each Git
 Bash Makefile gate runs exactly once across the lane, each runs in the job that

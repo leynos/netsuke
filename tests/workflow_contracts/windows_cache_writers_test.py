@@ -46,17 +46,26 @@ EXPECTED_KEY_WRITERS = {
     "whitaker": "lint-windows",
 }
 
-_PROFILE_EQ = re.compile(r"inputs\.profile\s*==\s*'([a-z]+)'")
-_PROFILE_NE = re.compile(r"inputs\.profile\s*!=\s*'([a-z]+)'")
+_PROFILE_PREDICATE = re.compile(r"inputs\.profile\s*(==|!=)\s*'([a-z]+)'")
 _KEY_OUTPUT = re.compile(r"steps\.keys\.outputs\.([a-z-]+)")
 
 
 def save_runs_for_profile(condition: str, profile: str) -> bool:
     """Return whether a save step's `if:` admits `profile`.
 
-    Only the profile clause is evaluated. The trunk-push and cache-hit clauses
-    are the same for every family, so they cannot make one family have two
+    Only the profile clauses are evaluated. The trunk-push and cache-hit
+    clauses are identical across families, so they cannot give one family two
     writers and another none.
+
+    The expression is read as a disjunction of conjunctions: `||` separates
+    alternatives, and every profile predicate within an alternative must hold.
+    That covers `== 'lint'`, `!= 'smoke'`, and
+    `== 'lint' || inputs.profile == 'gate'`, the last of which admits both
+    profiles and is exactly how a second writer would arrive.
+
+    Parentheses are rejected rather than guessed at, because a reader that
+    silently misgroups them would report the ownership this file exists to
+    check while the real condition said something else.
 
     Parameters
     ----------
@@ -70,31 +79,43 @@ def save_runs_for_profile(condition: str, profile: str) -> bool:
     bool
         True when a call with `profile` would run this save step.
     """
-    if match := _PROFILE_EQ.search(condition):
-        return match.group(1) == profile
-    if match := _PROFILE_NE.search(condition):
-        return match.group(1) != profile
-    return True
+    assert "(" not in condition, (
+        "the profile reader cannot group a parenthesised condition; extend it "
+        f"rather than letting it guess: {condition!r}"
+    )
+    for alternative in condition.split("||"):
+        predicates = _PROFILE_PREDICATE.findall(alternative)
+        if all(
+            (value == profile) if operator == "==" else (value != profile)
+            for operator, value in predicates
+        ):
+            return True
+    return False
 
 
-def windows_save_profiles() -> dict[str, str]:
-    """Return each Windows job's save profile, keyed by job name.
+def windows_save_profiles() -> dict[str, list[str]]:
+    """Return every save profile each Windows job passes, keyed by job name.
+
+    A list rather than one value: nothing stops a job calling the action twice
+    with different profiles, and that is one way to give a key two writers.
+    Keeping only the last call would hide it.
 
     Returns
     -------
-    dict[str, str]
-        Job name to the `profile` its `mode: save` call passes.
+    dict[str, list[str]]
+        Job name to the profiles of its `mode: save` calls, in declaration
+        order.
     """
     workflow = load_workflow(CI_WINDOWS_WORKFLOW_PATH)
     jobs = require_mapping(workflow.get("jobs"), "ci-windows.yml jobs")
-    profiles: dict[str, str] = {}
+    profiles: dict[str, list[str]] = {}
     for job_name in jobs:
         for step in job_steps(workflow, str(job_name)):
             if str(step.get("uses", "")) != WINDOWS_CACHE_ACTION:
                 continue
             with_ = require_mapping(step.get("with"), f"{job_name} cache call")
             if with_.get("mode") == "save":
-                profiles[str(job_name)] = str(with_.get("profile"))
+                profiles.setdefault(str(job_name), []).append(str(with_.get("profile")))
     return profiles
 
 
@@ -149,8 +170,10 @@ def test_every_windows_cache_key_has_exactly_one_writer() -> None:
         )
         writers[family] = [
             job_name
-            for job_name, profile in profiles.items()
-            if save_runs_for_profile(condition, profile)
+            for job_name, job_profiles in profiles.items()
+            if any(
+                save_runs_for_profile(condition, profile) for profile in job_profiles
+            )
         ]
 
     duplicated = {f: jobs for f, jobs in writers.items() if len(jobs) > 1}
@@ -167,6 +190,41 @@ def test_every_windows_cache_key_has_exactly_one_writer() -> None:
     )
 
 
+def test_a_second_save_call_in_one_job_is_counted() -> None:
+    """A job calling the action twice must not hide its first profile.
+
+    Scenario: `windows_save_profiles` keys by job name, so keeping only the
+    last `mode: save` call would let a job add a second call with the other
+    profile and gain a key without the ownership check noticing. Invariant:
+    every save call's profile is retained, so both are evaluated.
+    """
+    profiles = {"lint-windows": ["lint", "gate"]}
+    condition = "inputs.mode == 'save' && inputs.profile == 'gate'"
+    admitted = [
+        job_name
+        for job_name, job_profiles in profiles.items()
+        if any(save_runs_for_profile(condition, profile) for profile in job_profiles)
+    ]
+    assert admitted == ["lint-windows"], (
+        "a job whose second save call passes the other profile must be counted "
+        f"as a writer for that profile's keys, got {admitted!r}"
+    )
+
+
+def test_a_parenthesised_condition_is_refused_rather_than_guessed() -> None:
+    """An unreadable condition must fail loudly, not be misread as narrow.
+
+    Scenario: the reader groups `||` and `&&` positionally, which parentheses
+    would invalidate. Invariant: a parenthesised condition raises rather than
+    returning a confident answer, so extending the action forces extending the
+    reader instead of silently weakening the ownership check.
+    """
+    with pytest.raises(AssertionError, match="parenthesised"):
+        save_runs_for_profile(
+            "(inputs.profile == 'lint' || inputs.profile == 'gate')", "gate"
+        )
+
+
 @pytest.mark.parametrize(
     ("condition", "profile", "expected"),
     [
@@ -175,6 +233,17 @@ def test_every_windows_cache_key_has_exactly_one_writer() -> None:
         ("inputs.profile != 'smoke'", "lint", True),
         ("inputs.profile != 'smoke'", "gate", True),
         ("inputs.mode == 'save'", "gate", True),
+        ("inputs.profile == 'lint' || inputs.profile == 'gate'", "lint", True),
+        ("inputs.profile == 'lint' || inputs.profile == 'gate'", "gate", True),
+        ("inputs.profile == 'lint' || inputs.profile == 'smoke'", "gate", False),
+        (
+            (
+                "inputs.mode == 'save' && inputs.profile == 'lint' && "
+                "steps.keys.outputs.writer == 'true'"
+            ),
+            "gate",
+            False,
+        ),
     ],
     ids=[
         "equality-admits-its-own-profile",
@@ -182,6 +251,10 @@ def test_every_windows_cache_key_has_exactly_one_writer() -> None:
         "inequality-admits-lint",
         "inequality-admits-gate",
         "no-profile-clause-admits-any",
+        "disjunction-admits-its-first-alternative",
+        "disjunction-admits-its-second-alternative",
+        "disjunction-excludes-a-profile-in-neither-alternative",
+        "conjunction-with-other-clauses-still-narrows",
     ],
 )
 def test_save_condition_evaluation(
