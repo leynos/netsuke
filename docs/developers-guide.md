@@ -2505,7 +2505,9 @@ verification build on Windows and keeps it on the Linux coverage lane, because
 what Cargo puts in a package does not vary by platform and the verification
 costs a median of 240.8s on `windows-latest` against about 25s on the cached
 Linux runner. Both platforms still assert the packaged file list. See
-[Windows budget for the isolated-Cargo-build tests](#windows-budget-for-the-isolated-cargo-build-tests).
+[Windows budget for the isolated-Cargo-build tests][windows-test-budget].
+
+[windows-test-budget]: #windows-budget-for-the-isolated-cargo-build-tests
 
 `tests/workflow_contracts/test_execution_coverage_test.py` holds all of this:
 the coverage inputs, the denied warnings, the doctest pass and its position,
@@ -2549,7 +2551,7 @@ governs the non-doctest pass only, and deliberately stays small:
   that work from future regressions without raising the slow-test threshold.
 - **One measured platform override.** `harness_compiles_under_a_split_build_dir`
   gets seven warning periods (420s) instead of five on Windows alone. See
-  [Windows budget for the isolated-Cargo-build tests](#windows-budget-for-the-isolated-cargo-build-tests)
+  [Windows budget for the isolated-Cargo-build tests][windows-test-budget]
   for the measurement behind that number. Any future override carries the same
   obligation: a written rationale citing runs, not an estimate.
 
@@ -3921,7 +3923,7 @@ That private build is why this test is the most expensive one on the Windows
 gate: `test_support` depends on `netsuke-build`, so a private root means
 compiling that crate and roughly 350 dependencies from scratch. Its measured
 budget is recorded in
-[Windows budget for the isolated-Cargo-build tests](#windows-budget-for-the-isolated-cargo-build-tests).
+[Windows budget for the isolated-Cargo-build tests][windows-test-budget].
 
 ### Manifest `env()` reader
 
