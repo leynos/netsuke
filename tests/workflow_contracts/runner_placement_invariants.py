@@ -62,7 +62,6 @@ LANE_VCPUS = {
 REQUIRED_RUNNER_ASSIGNMENTS = {
     "ci.build-test": UBICLOUD_LARGE_LABEL,
     "ci-windows.build-test-windows": "windows-latest",
-    "ci-windows.windows-native-recipe-smoke": "windows-latest",
     "ci.kani-smoke": UBICLOUD_DEFAULT_LABEL,
     "coverage-main.coverage-upload": UBICLOUD_LARGE_LABEL,
     "delayed-pr-comment.delay_and_comment": "ubuntu-latest",
@@ -89,7 +88,6 @@ UBICLOUD_ASSIGNMENT_KEYS = tuple(
 #: Ubicloud image; the rest are API-bound or not developer-blocking.
 GITHUB_HOSTED_ONLY_KEYS = (
     "ci-windows.build-test-windows",
-    "ci-windows.windows-native-recipe-smoke",
     "delayed-pr-comment.delay_and_comment",
     "release.metadata",
     "release.build-windows",

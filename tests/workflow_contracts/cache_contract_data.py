@@ -109,7 +109,6 @@ SCCACHE_CREDENTIAL_JOBS = (
 #: would re-enable the backend.
 SCCACHE_LOCAL_DIR_JOBS = (
     ("ci-windows.yml", "build-test-windows"),
-    ("ci-windows.yml", "windows-native-recipe-smoke"),
     ("release.yml", "windows-native-recipe-smoke"),
 )
 
@@ -164,7 +163,6 @@ SCCACHE_EXEMPT_LANE = ("build-and-package.yml", "build")
 SCCACHE_WRAPPER_JOBS = (
     ("ci.yml", "build-test"),
     ("ci-windows.yml", "build-test-windows"),
-    ("ci-windows.yml", "windows-native-recipe-smoke"),
     ("netsukefile-test.yml", "netsukefile"),
     ("coverage-main.yml", "coverage-upload"),
     ("release.yml", "windows-native-recipe-smoke"),
@@ -179,7 +177,6 @@ SETUP_RUST_DELEGATING_JOBS = (
     ("ci.yml", "build-test"),
     ("ci.yml", "kani-smoke"),
     ("ci-windows.yml", "build-test-windows"),
-    ("ci-windows.yml", "windows-native-recipe-smoke"),
     ("coverage-main.yml", "coverage-upload"),
     ("netsukefile-test.yml", "netsukefile"),
     ("release.yml", "windows-native-recipe-smoke"),
@@ -212,9 +209,6 @@ CACHE_ACTION_CALLERS = {
     ("ci.yml", "build-test"): "./.github/actions/linux-gate-cache",
     ("ci.yml", "kani-smoke"): "./.github/actions/kani-cache",
     ("ci-windows.yml", "build-test-windows"): "./.github/actions/windows-gate-cache",
-    ("ci-windows.yml", "windows-native-recipe-smoke"): (
-        "./.github/actions/windows-gate-cache"
-    ),
     ("release.yml", "windows-native-recipe-smoke"): (
         "./.github/actions/windows-gate-cache"
     ),
@@ -254,10 +248,7 @@ INLINE_SAVE_WRITERS = tuple(
 )
 
 #: Jobs that call a cache composite with the read-only profile.
-SMOKE_PROFILE_JOBS = (
-    ("ci-windows.yml", "windows-native-recipe-smoke"),
-    ("release.yml", "windows-native-recipe-smoke"),
-)
+SMOKE_PROFILE_JOBS = (("release.yml", "windows-native-recipe-smoke"),)
 
 
 def lane_steps(source: Path, job_name: str | None) -> list[dict[str, object]]:

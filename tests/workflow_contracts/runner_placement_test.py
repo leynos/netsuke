@@ -36,11 +36,6 @@ WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
 DIRECT_RUNNER_SOURCES = (
     ("ci.build-test", "ci.yml", "build-test"),
     ("ci-windows.build-test-windows", "ci-windows.yml", "build-test-windows"),
-    (
-        "ci-windows.windows-native-recipe-smoke",
-        "ci-windows.yml",
-        "windows-native-recipe-smoke",
-    ),
     ("ci.kani-smoke", "ci.yml", "kani-smoke"),
     ("coverage-main.coverage-upload", "coverage-main.yml", "coverage-upload"),
     (
@@ -66,7 +61,6 @@ DIRECT_RUNNER_SOURCES = (
     [
         ("ci.yml", "build-test", UBICLOUD_LARGE_LABEL),
         ("ci-windows.yml", "build-test-windows", "windows-latest"),
-        ("ci-windows.yml", "windows-native-recipe-smoke", "windows-latest"),
         ("ci.yml", "kani-smoke", UBICLOUD_DEFAULT_LABEL),
         ("coverage-main.yml", "coverage-upload", UBICLOUD_LARGE_LABEL),
         ("delayed-pr-comment.yml", "delay_and_comment", "ubuntu-latest"),
