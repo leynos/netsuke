@@ -10,13 +10,21 @@ name: CI (Windows)
 # keyed by `runner.os` and `runner.arch`, so a Linux archive can never restore
 # onto Windows.
 #
-# One job, not two. The native-recipe smoke test used to be a second job that
-# needed this one, which made it a strict serial tail: a measured median of
-# 236s plus queue, of which 72s restored caches, 20s set up Rust, 8s checked
-# out, 109s built the binary and 7s did the work it exists for. Folded in, the
-# build and the fixture remain and everything around them goes, a measured
-# saving of about 127s per run and one runner. `release.yml` keeps its own
-# smoke job, which builds the tagged source and shares nothing with a gate.
+# Two jobs that run concurrently, not three in series. `lint-windows` runs
+# formatting, Clippy and Whitaker; `build-test-windows` runs the tests and the
+# native-recipe smoke steps. Neither needs the other's output, and they used to
+# sit in one job: 518s of lint ahead of a 471s test step, measured over the 57
+# runs between run 33890685806 and run 34064668331.
+#
+# The native-recipe smoke test was itself a third job that needed the gate, a
+# measured median of 236s plus queue for 7s of work; it is now two steps at the
+# end of the test job. `release.yml` keeps its own smoke job, which builds the
+# tagged source and shares nothing with a gate.
+#
+# Every Windows cache key keeps exactly one writer. The lint job owns `tools`
+# and `whitaker`, the two it installs into; the test job owns `registry` and
+# `sccache`, the two its compile fills. Both restore all four. See the
+# `profile` input of `.github/actions/windows-gate-cache`.
 
 'on':
   workflow_call:
@@ -45,9 +53,173 @@ env:
   PYTHON_BASELINE: ${{ inputs['python-baseline'] }}
 
 jobs:
+  lint-windows:
+    # The lint half of the Windows merge gate: formatting, Clippy and Whitaker
+    # over the `#[cfg(windows)]` tree under `-D warnings` (see #518). Split
+    # from the test half because the two ran in series for no reason: 518s of
+    # lint ahead of a 471s test step in one job, measured over the 57 runs
+    # between run 33890685806 and run 34064668331. Neither needs the other's
+    # output. This job owns the `tools` and `whitaker` cache keys, the two it
+    # installs into; see the cache action's `profile` input.
+    runs-on: windows-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    env:
+      CARGO_TERM_COLOR: always
+      BUILD_PROFILE: debug
+      # Derived from WINDOWS_LANE_VCPUS above. Bound compilation and nextest
+      # separately so test workers do not oversubscribe the runner.
+      BUILD_JOBS: -j 4
+      NEXTEST_BUILD_JOBS: --build-jobs 4
+      NEXTEST_TEST_JOBS: -j 4
+      RUSTC_WRAPPER: sccache
+      # A workspace directory rather than the GitHub Actions backend: on that
+      # backend this job recorded 643 failed writes out of 643, which is
+      # GitHub rate limiting. The cache action owns this path; nothing here
+      # caches Cargo's `target` tree, because sccache owns compiler output.
+      SCCACHE_DIR: ${{ github.workspace }}/.sccache
+      SCCACHE_CACHE_SIZE: 4G
+      # The tree requires the Polonius borrow checker, which nightly enables by
+      # default (see docs/adr-006-adopt-polonius-nightly-toolchain.md), so CI
+      # builds with the dated nightly pinned in rust-toolchain.toml.
+      NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
+    defaults:
+      run:
+        # The Makefile uses POSIX shell constructs throughout; Git Bash is
+        # preinstalled on the GitHub-hosted Windows image. GNU Make's default recipe
+        # shell on Windows is cmd.exe, so every make invocation overrides SHELL
+        # to bash.
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Restore gate caches
+        id: caches
+        # Restores before every install so a warm run reuses work an earlier
+        # run completed. The action is the sole owner of every path it lists,
+        # and the single writer of every Windows key.
+        uses: ./.github/actions/windows-gate-cache
+        with:
+          toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
+          mode: restore
+          profile: lint
+      - name: Install GNU Make
+        shell: pwsh
+        run: |
+          $cacheLocation = Join-Path $env:GITHUB_WORKSPACE '.chocolatey-cache'
+          choco install make --yes --no-progress --cache-location="$cacheLocation"
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+      - name: Install sccache
+        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        with:
+          tool: sccache@0.16.0
+          fallback: none
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@e041cb75c35c3524201a32d5e57c87408fbd5874
+        with:
+          toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
+          # Preserve warnings-as-errors through toolchain setup.
+          rustflags: -D warnings
+          cache-provider: external
+          use-sccache: 'false'
+      - name: Reset sccache statistics
+        run: sccache --zero-stats
+      - name: Show rustc version
+        run: |
+          rustup show
+          rustc --version
+          cargo --version
+      - name: Install mdtablefix
+        # Required by `make check-fmt`. mdtablefix 0.5.1 publishes a Windows
+        # x86_64 archive, so this lane installs a prebuilt binary like every
+        # other. It compiled the tool from source until then, which was this
+        # repository's last source-build exception.
+        uses: >-
+          leynos/shared-actions/.github/actions/install-mdtablefix@c5a54701c8603a0fa756a6b34c49bc2af75a6c11
+        with:
+          version: ${{ env.MDTABLEFIX_VERSION }}
+      - name: Setup uv
+        # `make check-fmt` runs the uv-driven Ruff format check on every
+        # platform, so the Windows job needs uv on the PATH as well.
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        with:
+          python-version: ${{ env.PYTHON_BASELINE }}
+          enable-cache: 'false'
+      - name: Format
+        run: make SHELL=bash check-fmt
+      - name: Lint (Clippy)
+        # Clippy and `cargo doc` over the whole workspace under `-D warnings`,
+        # including the `#[cfg(windows)]` arms.
+        run: make SHELL=bash lint-clippy
+      - name: Install Whitaker
+        uses: >-
+          leynos/shared-actions/.github/actions/install-whitaker@e041cb75c35c3524201a32d5e57c87408fbd5874
+        with:
+          installer-version: '0.2.7'
+          # The tool and Whitaker cache steps own `~/.cargo/bin` and the
+          # installer's data directory, so the action must not create a second
+          # owner for the same paths.
+          cache-provider: external
+      - name: Lint (Whitaker)
+        # Whitaker/Dylint over the workspace under `-D warnings`, including
+        # the `#[cfg(windows)]` arms. The shared installer supplies a
+        # PowerShell wrapper on Windows, so invoke it from PowerShell rather
+        # than Git Bash. Resolve the Windows known-folder profile, matching
+        # whitaker-installer rather than PowerShell's environment-derived
+        # $HOME. A failure blocks the merge.
+        shell: pwsh
+        run: |
+          $profileHome = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
+          $whitaker = Join-Path $profileHome '.local\bin\whitaker.ps1'
+          $env:RUSTFLAGS = "$env:RUSTFLAGS -D warnings"
+          $env:DYLINT_TOML = Get-Content dylint.toml -Raw
+          & $whitaker --all --no-deps --package netsuke-build '--' --all-targets --all-features
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+          Push-Location test_support
+          try {
+            $env:DYLINT_TOML = Get-Content dylint.toml -Raw
+            & $whitaker --all --no-deps --package test_support '--' --all-targets --all-features
+            if ($LASTEXITCODE -ne 0) {
+              exit $LASTEXITCODE
+            }
+          } finally {
+            Pop-Location
+          }
+      - name: Show sccache statistics
+        if: always()
+        run: |
+          sccache --show-stats | tee sccache-stats.txt
+          sccache --show-stats --stats-format=json > sccache-stats.json
+          {
+            printf '### sccache\n\n```text\n'
+            cat sccache-stats.txt
+            printf '```\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Save gate caches
+        # The action restricts each save to a push on `main` that missed the
+        # key, so a pull request never publishes a competing generation.
+        uses: ./.github/actions/windows-gate-cache
+        with:
+          toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
+          mode: save
+          profile: lint
+          registry-hit: ${{ steps.caches.outputs['registry-hit'] }}
+          tools-hit: ${{ steps.caches.outputs['tools-hit'] }}
+          whitaker-hit: ${{ steps.caches.outputs['whitaker-hit'] }}
+          sccache-hit: ${{ steps.caches.outputs['sccache-hit'] }}
+
   build-test-windows:
-    # Gates merges: the `#[cfg(windows)]` tree is compiled, linted, and tested
-    # under `-D warnings` on this platform (see #518).
+    # The test half of the Windows merge gate: the `#[cfg(windows)]` tree is
+    # compiled and tested under `-D warnings` on this platform (see #518),
+    # followed by the native-recipe smoke steps. Runs concurrently with
+    # `lint-windows`; neither needs the other's output. This job owns the
+    # `registry` and `sccache` cache keys, the two its compile fills.
     runs-on: windows-latest
     timeout-minutes: 90
     permissions:
@@ -128,64 +300,6 @@ jobs:
           cargo --version
       - name: Show Ninja version
         run: ninja --version
-      - name: Install mdtablefix
-        # Required by `make check-fmt`. mdtablefix 0.5.1 publishes a Windows
-        # x86_64 archive, so this lane installs a prebuilt binary like every
-        # other. It compiled the tool from source until then, which was this
-        # repository's last source-build exception.
-        uses: >-
-          leynos/shared-actions/.github/actions/install-mdtablefix@c5a54701c8603a0fa756a6b34c49bc2af75a6c11
-        with:
-          version: ${{ env.MDTABLEFIX_VERSION }}
-      - name: Setup uv
-        # `make check-fmt` runs the uv-driven Ruff format check on every
-        # platform, so the Windows job needs uv on the PATH as well.
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
-        with:
-          python-version: ${{ env.PYTHON_BASELINE }}
-          enable-cache: 'false'
-      - name: Format
-        run: make SHELL=bash check-fmt
-      - name: Lint (Clippy)
-        # Clippy and `cargo doc` over the whole workspace under `-D warnings`,
-        # including the `#[cfg(windows)]` arms.
-        run: make SHELL=bash lint-clippy
-      - name: Install Whitaker
-        uses: >-
-          leynos/shared-actions/.github/actions/install-whitaker@e041cb75c35c3524201a32d5e57c87408fbd5874
-        with:
-          installer-version: '0.2.7'
-          # The tool and Whitaker cache steps own `~/.cargo/bin` and the
-          # installer's data directory, so the action must not create a second
-          # owner for the same paths.
-          cache-provider: external
-      - name: Lint (Whitaker)
-        # Whitaker/Dylint over the workspace under `-D warnings`, including
-        # the `#[cfg(windows)]` arms. The shared installer supplies a
-        # PowerShell wrapper on Windows, so invoke it from PowerShell rather
-        # than Git Bash. Resolve the Windows known-folder profile, matching
-        # whitaker-installer rather than PowerShell's environment-derived
-        # $HOME. A failure blocks the merge.
-        shell: pwsh
-        run: |
-          $profileHome = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
-          $whitaker = Join-Path $profileHome '.local\bin\whitaker.ps1'
-          $env:RUSTFLAGS = "$env:RUSTFLAGS -D warnings"
-          $env:DYLINT_TOML = Get-Content dylint.toml -Raw
-          & $whitaker --all --no-deps --package netsuke-build '--' --all-targets --all-features
-          if ($LASTEXITCODE -ne 0) {
-            exit $LASTEXITCODE
-          }
-          Push-Location test_support
-          try {
-            $env:DYLINT_TOML = Get-Content dylint.toml -Raw
-            & $whitaker --all --no-deps --package test_support '--' --all-targets --all-features
-            if ($LASTEXITCODE -ne 0) {
-              exit $LASTEXITCODE
-            }
-          } finally {
-            Pop-Location
-          }
       - name: Test
         # cargo-nextest plus doctests under `-D warnings`,
         # compiling and running the `#[cfg(windows)]` test tree. A failure

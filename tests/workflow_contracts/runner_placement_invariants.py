@@ -61,6 +61,7 @@ LANE_VCPUS = {
 
 REQUIRED_RUNNER_ASSIGNMENTS = {
     "ci.build-test": UBICLOUD_LARGE_LABEL,
+    "ci-windows.lint-windows": "windows-latest",
     "ci-windows.build-test-windows": "windows-latest",
     "ci.kani-smoke": UBICLOUD_DEFAULT_LABEL,
     "coverage-main.coverage-upload": UBICLOUD_LARGE_LABEL,
@@ -87,6 +88,7 @@ UBICLOUD_ASSIGNMENT_KEYS = tuple(
 #: Jobs that must never reach a Ubicloud label. Windows and macOS have no
 #: Ubicloud image; the rest are API-bound or not developer-blocking.
 GITHUB_HOSTED_ONLY_KEYS = (
+    "ci-windows.lint-windows",
     "ci-windows.build-test-windows",
     "delayed-pr-comment.delay_and_comment",
     "release.metadata",

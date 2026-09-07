@@ -31,6 +31,7 @@ import pytest
 from workflow_loading import (
     CI_WORKFLOW_PATH,
     MAKEFILE_PATH,
+    NEXTEST_JOBS,
     SETUP_RUST_JOBS,
     _WorkflowLoader,
     job_steps,
@@ -317,7 +318,7 @@ def test_nextest_version_declared_once_at_workflow_scope() -> None:
         f"got {env.get('NEXTEST_VERSION')!r}"
     )
 
-    for workflow_path, job_name in SETUP_RUST_JOBS:
+    for workflow_path, job_name in NEXTEST_JOBS:
         installs = [
             tool
             for step in job_steps(load_workflow(workflow_path), job_name)

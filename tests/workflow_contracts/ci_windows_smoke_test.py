@@ -27,6 +27,9 @@ from workflow_loading import (
 
 WINDOWS_JOB = "build-test-windows"
 
+#: Both halves of the Windows gate, in declaration order.
+EXPECTED_WINDOWS_JOBS = ("lint-windows", WINDOWS_JOB)
+
 
 def command_lines(run: str) -> list[str]:
     """Return the executable PowerShell lines of `run`, comments removed.
@@ -125,17 +128,19 @@ def test_windows_job_runs_the_native_recipe_smoke_after_the_test_gate(
         )
 
 
-def test_windows_workflow_declares_no_second_job() -> None:
-    """The Windows lane must stay one job, so nothing serialises behind it.
+def test_windows_workflow_declares_no_serialised_job() -> None:
+    """The Windows lane must stay two concurrent jobs and no more.
 
-    Scenario: `windows-native-recipe-smoke` used to be a second job that
+    Scenario: `windows-native-recipe-smoke` used to be a third job that
     ``needs``-ed the gate, costing a measured median 236s of serial tail for 7s
-    of work. Invariant: `ci-windows.yml` declares exactly the gate job, so a
-    reinstated second job has to justify the tail rather than arrive quietly.
+    of work. Invariant: `ci-windows.yml` declares exactly the lint and test
+    jobs, so a reinstated serial job has to justify the tail rather than arrive
+    quietly.
     """
     workflow = load_workflow(CI_WINDOWS_WORKFLOW_PATH)
     jobs = require_mapping(workflow.get("jobs"), "ci-windows.yml jobs")
-    assert list(jobs) == [WINDOWS_JOB], (
-        f"ci-windows.yml must declare only {WINDOWS_JOB!r}; the native-recipe "
-        f"smoke test is folded into it as PowerShell steps, got {list(jobs)!r}"
+    assert list(jobs) == list(EXPECTED_WINDOWS_JOBS), (
+        f"ci-windows.yml must declare exactly {list(EXPECTED_WINDOWS_JOBS)!r}; the "
+        f"native-recipe smoke test is folded into the test job as PowerShell "
+        f"steps, got {list(jobs)!r}"
     )

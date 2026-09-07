@@ -259,6 +259,17 @@ fn behavioural_ci_workflow_installs_pinned_cargo_nextest() -> Result<()> {
     let windows_workflow: Value =
         serde_yaml::from_str(&windows_contents).context("parse Windows CI workflow YAML")?;
 
+    // `lint-windows` runs no tests, so it installs no runner; it must still not
+    // shadow the workflow-level pin.
+    ensure!(
+        job_env(
+            job(&windows_workflow, "lint-windows")?,
+            YamlKey("NEXTEST_VERSION")
+        )
+        .is_none(),
+        "lint-windows should not duplicate NEXTEST_VERSION at job scope"
+    );
+
     for (source, job_name) in [
         (&workflow, "build-test"),
         (&windows_workflow, "build-test-windows"),
@@ -350,9 +361,12 @@ fn ensure_shared_whitaker_installer(workflow: &Value, job_name: &'static str) ->
 }
 
 /// Assert that Windows lints both packages through the PowerShell wrapper.
+///
+/// Whitaker runs in `lint-windows`, the lint half of the Windows gate, which
+/// runs concurrently with `build-test-windows` rather than ahead of it.
 fn ensure_windows_whitaker_wrapper(windows_workflow: &Value) -> Result<()> {
     let lint = named_step(
-        steps(job(windows_workflow, "build-test-windows")?)?,
+        steps(job(windows_workflow, "lint-windows")?)?,
         "Lint (Whitaker)",
     )?;
     let script = mapping_get(lint, YamlKey("run"))
@@ -380,7 +394,7 @@ fn behavioural_ci_workflow_uses_shared_tool_installers() -> Result<()> {
         serde_yaml::from_str(&windows_contents).context("parse Windows CI workflow YAML")?;
 
     ensure_shared_whitaker_installer(&workflow, "build-test")?;
-    ensure_shared_whitaker_installer(&windows_workflow, "build-test-windows")?;
+    ensure_shared_whitaker_installer(&windows_workflow, "lint-windows")?;
     ensure_windows_whitaker_wrapper(&windows_workflow)?;
 
     let linux_steps = steps(job(&workflow, "build-test")?)?;

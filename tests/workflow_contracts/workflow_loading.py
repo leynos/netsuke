@@ -30,12 +30,30 @@ PACKAGE_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "build-and-package
 RELEASE_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "release.yml"
 MAKEFILE_PATH = REPO_ROOT / "Makefile"
 
-#: The two jobs that call the shared `setup-rust` action directly, paired with
-#: the workflow that declares each. Several suites assert against both, and the
-#: Windows job moved out of `ci.yml` when that file reached its size limit.
+#: The jobs that call the shared `setup-rust` action directly, paired with the
+#: workflow that declares each. Several suites assert against all of them. The
+#: Windows jobs moved out of `ci.yml` when that file reached its size limit,
+#: and the Windows gate is two concurrent jobs, both of which set up Rust.
 SETUP_RUST_JOBS = (
     (CI_WORKFLOW_PATH, "build-test"),
+    (CI_WINDOWS_WORKFLOW_PATH, "lint-windows"),
     (CI_WINDOWS_WORKFLOW_PATH, "build-test-windows"),
+)
+
+#: The jobs that run tests and therefore install cargo-nextest. A subset of
+#: `SETUP_RUST_JOBS`: on Windows only the test job runs the suite, so only it
+#: needs the runner.
+NEXTEST_JOBS = (
+    (CI_WORKFLOW_PATH, "build-test"),
+    (CI_WINDOWS_WORKFLOW_PATH, "build-test-windows"),
+)
+
+#: The jobs that run the Markdown formatter check and therefore install
+#: mdtablefix. A subset of `SETUP_RUST_JOBS`: on Windows only the lint job
+#: runs `check-fmt`, so only it needs the formatter.
+MDTABLEFIX_JOBS = (
+    (CI_WORKFLOW_PATH, "build-test"),
+    (CI_WINDOWS_WORKFLOW_PATH, "lint-windows"),
 )
 
 
