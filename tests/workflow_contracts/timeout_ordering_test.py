@@ -341,13 +341,26 @@ def test_each_coverage_lane_carries_the_condition_it_is_meant_to(
     The conditions are pinned rather than forbidden, because the one
     here is legitimate: `ci.yml` also runs on pushes, which the trunk
     lane covers. Pinning it means a lane gaining, losing or changing a
-    condition has to change this contract and the guide with it.
+    condition has to change this contract and the guide with it. The
+    coordinates are compared both ways first, so a new lane with no
+    entry here fails rather than passing unexamined, and a lane that
+    disappeared fails rather than being skipped.
+
+    Proved by mutation: `if: false` on the coverage step, the same on
+    its job, a push-only condition, and a coordinate dropped from
+    ``REQUIRED_CONDITIONS`` each fail this test.
     """
     found = {(lane.workflow, lane.job): lane.condition for lane in coverage_lanes}
+    assert set(found) == set(REQUIRED_CONDITIONS), (
+        f"the coverage lanes are not the ones this contract pins: "
+        f"unlisted {sorted(set(found) - set(REQUIRED_CONDITIONS))}, missing "
+        f"{sorted(set(REQUIRED_CONDITIONS) - set(found))}; a lane with no "
+        f"entry here is a lane whose condition nobody has judged"
+    )
     wrong = {
-        coordinate: (expected, found.get(coordinate))
+        coordinate: (expected, found[coordinate])
         for coordinate, expected in REQUIRED_CONDITIONS.items()
-        if found.get(coordinate) != expected
+        if found[coordinate] != expected
     }
     assert not wrong, (
         f"these coverage lanes do not carry the conditions the developers' "
