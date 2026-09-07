@@ -90,7 +90,7 @@ TY_VERSION ?= 0.0.74
 # Every Python source the repository owns. Ruff and Pylint resolve their own
 # configuration and exclusions from pyproject.toml, so these paths only bound
 # the walk.
-PYTHON_SOURCES = scripts tests/workflow_contracts
+PYTHON_SOURCES = .github/scripts scripts tests/workflow_contracts
 # Pylint must run on the Python baseline so it parses every repository-owned
 # source. `--load-plugins=` clears the shim's default plugin list so this pass
 # runs exactly the messages pyproject.toml enables.

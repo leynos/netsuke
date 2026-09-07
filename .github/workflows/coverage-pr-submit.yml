@@ -37,7 +37,12 @@ jobs:
           enable-cache: 'false'
       - name: Start coverage artefact download telemetry
         id: start_download_coverage
-        run: printf 'started_at_ms=%s\n' "$(date --utc +%s%3N)" >> "$GITHUB_OUTPUT"
+        shell: python
+        run: |
+          import runpy
+          import sys
+          sys.argv = [".github/scripts/coverage_pr_submission.py", "start-telemetry"]
+          runpy.run_path(sys.argv[0], run_name="__main__")
       - name: Download PR coverage artefact
         id: download_coverage
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
@@ -55,21 +60,34 @@ jobs:
           OUTCOME: ${{ steps.download_coverage.outcome }}
           ORIGINATING_WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
           ORIGINATING_COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
+          OPERATION: coverage-artifact-download
+        shell: python
         run: |
-          ended_at_ms="$(date --utc +%s%3N)"
-          started_at_ms="${STARTED_AT_MS:-$ended_at_ms}"
-          duration_ms="$((ended_at_ms - started_at_ms))"
-          printf 'duration_ms=%s\n' "$duration_ms" >> "$GITHUB_OUTPUT"
-          telemetry="coverage-pr-submission operation=coverage-artifact-download duration_ms=$duration_ms"
-          telemetry+=" workflow_run_id=$ORIGINATING_WORKFLOW_RUN_ID"
-          telemetry+=" commit_sha=$ORIGINATING_COMMIT_SHA outcome=$OUTCOME"
-          printf '%s\n' "$telemetry"
+          import runpy
+          import sys
+          sys.argv = [".github/scripts/coverage_pr_submission.py", "record-telemetry"]
+          runpy.run_path(sys.argv[0], run_name="__main__")
       - name: Start hostile coverage validation telemetry
         id: start_validate_coverage
-        run: printf 'started_at_ms=%s\n' "$(date --utc +%s%3N)" >> "$GITHUB_OUTPUT"
+        shell: python
+        run: |
+          import runpy
+          import sys
+          sys.argv = [".github/scripts/coverage_pr_submission.py", "start-telemetry"]
+          runpy.run_path(sys.argv[0], run_name="__main__")
       - name: Validate hostile coverage artefact
         id: validate_coverage
-        run: make validate-coverage-artifact COVERAGE_ARTIFACT_DIR=coverage-artifact
+        shell: python
+        run: |
+          import runpy
+          import sys
+          sys.argv = [
+              ".github/scripts/coverage_pr_submission.py",
+              "validate-artefact",
+              "--artifact-directory",
+              "coverage-artifact",
+          ]
+          runpy.run_path(sys.argv[0], run_name="__main__")
       - name: Record hostile coverage validation telemetry
         id: observe_validate_coverage
         if: always()
@@ -78,18 +96,21 @@ jobs:
           OUTCOME: ${{ steps.validate_coverage.outcome }}
           ORIGINATING_WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
           ORIGINATING_COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
+          OPERATION: hostile-coverage-validation
+        shell: python
         run: |
-          ended_at_ms="$(date --utc +%s%3N)"
-          started_at_ms="${STARTED_AT_MS:-$ended_at_ms}"
-          duration_ms="$((ended_at_ms - started_at_ms))"
-          printf 'duration_ms=%s\n' "$duration_ms" >> "$GITHUB_OUTPUT"
-          telemetry="coverage-pr-submission operation=hostile-coverage-validation duration_ms=$duration_ms"
-          telemetry+=" workflow_run_id=$ORIGINATING_WORKFLOW_RUN_ID"
-          telemetry+=" commit_sha=$ORIGINATING_COMMIT_SHA outcome=$OUTCOME"
-          printf '%s\n' "$telemetry"
+          import runpy
+          import sys
+          sys.argv = [".github/scripts/coverage_pr_submission.py", "record-telemetry"]
+          runpy.run_path(sys.argv[0], run_name="__main__")
       - name: Start CodeScene submission telemetry
         id: start_submit_coverage
-        run: printf 'started_at_ms=%s\n' "$(date --utc +%s%3N)" >> "$GITHUB_OUTPUT"
+        shell: python
+        run: |
+          import runpy
+          import sys
+          sys.argv = [".github/scripts/coverage_pr_submission.py", "start-telemetry"]
+          runpy.run_path(sys.argv[0], run_name="__main__")
       - name: Check coverage against CodeScene gates
         id: submit_coverage
         if: env.CS_ACCESS_TOKEN != ''
@@ -111,23 +132,24 @@ jobs:
           OUTCOME: ${{ steps.submit_coverage.outcome }}
           ORIGINATING_WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
           ORIGINATING_COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
+          OPERATION: codescene-submission
+        shell: python
         run: |
-          ended_at_ms="$(date --utc +%s%3N)"
-          started_at_ms="${STARTED_AT_MS:-$ended_at_ms}"
-          duration_ms="$((ended_at_ms - started_at_ms))"
-          printf 'duration_ms=%s\n' "$duration_ms" >> "$GITHUB_OUTPUT"
-          telemetry="coverage-pr-submission operation=codescene-submission duration_ms=$duration_ms"
-          telemetry+=" workflow_run_id=$ORIGINATING_WORKFLOW_RUN_ID"
-          telemetry+=" commit_sha=$ORIGINATING_COMMIT_SHA outcome=$OUTCOME"
-          printf '%s\n' "$telemetry"
+          import runpy
+          import sys
+          sys.argv = [".github/scripts/coverage_pr_submission.py", "record-telemetry"]
+          runpy.run_path(sys.argv[0], run_name="__main__")
       - name: Start CodeScene Check Run publication telemetry
         id: start_report_coverage
-        run: printf 'started_at_ms=%s\n' "$(date --utc +%s%3N)" >> "$GITHUB_OUTPUT"
+        shell: python
+        run: |
+          import runpy
+          import sys
+          sys.argv = [".github/scripts/coverage_pr_submission.py", "start-telemetry"]
+          runpy.run_path(sys.argv[0], run_name="__main__")
       - name: Report CodeScene coverage gate
         id: report_coverage
         if: always()
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
-        # v8.0.0
         env:
           SUBMISSION_OUTCOME: ${{ steps.submit_coverage.outcome }}
           ARTIFACT_DOWNLOAD_OUTCOME: ${{ steps.download_coverage.outcome }}
@@ -138,48 +160,14 @@ jobs:
           ORIGINATING_WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
           ORIGINATING_COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
           ARTIFACT_NAME: pr-coverage-lcov
-        with:
-          script: |
-            const { coverageConclusion } = require(
-              `${process.env.GITHUB_WORKSPACE}/.github/scripts/codescene-coverage-outcome.js`,
-            );
-            const workflowRunId = process.env.ORIGINATING_WORKFLOW_RUN_ID;
-            const commitSha = process.env.ORIGINATING_COMMIT_SHA;
-            const artifactName = process.env.ARTIFACT_NAME;
-            const downloadOutcome = process.env.ARTIFACT_DOWNLOAD_OUTCOME;
-            const validationOutcome = process.env.ARTIFACT_VALIDATION_OUTCOME;
-            const submissionOutcome = process.env.SUBMISSION_OUTCOME;
-            const conclusion = coverageConclusion(
-              downloadOutcome,
-              validationOutcome,
-              submissionOutcome,
-            );
-            const summary = [
-              `Originating workflow run ID: ${workflowRunId}`,
-              `Originating commit SHA: ${commitSha}`,
-              `Artifact name: ${artifactName}`,
-              `Download outcome: ${downloadOutcome}`,
-              `Download duration (ms): ${process.env.ARTIFACT_DOWNLOAD_DURATION_MS}`,
-              `Validation outcome: ${validationOutcome}`,
-              `Validation duration (ms): ${process.env.ARTIFACT_VALIDATION_DURATION_MS}`,
-              `Submission outcome: ${submissionOutcome}`,
-              `Submission duration (ms): ${process.env.SUBMISSION_DURATION_MS}`,
-              `Conclusion: ${conclusion}`,
-            ].join('\n');
-            core.setOutput('conclusion', conclusion);
-            await github.rest.checks.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              name: 'CodeScene coverage',
-              head_sha: context.payload.workflow_run.head_sha,
-              external_id: workflowRunId,
-              status: 'completed',
-              conclusion,
-              output: {
-                title: 'CodeScene coverage',
-                summary,
-              },
-            });
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: python
+        run: |
+          import runpy
+          import sys
+          sys.argv = [".github/scripts/coverage_pr_submission.py", "report-coverage"]
+          runpy.run_path(sys.argv[0], run_name="__main__")
       - name: Record CodeScene Check Run publication telemetry
         id: observe_report_coverage
         if: always()
@@ -188,15 +176,13 @@ jobs:
           OUTCOME: ${{ steps.report_coverage.outcome }}
           ORIGINATING_WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
           ORIGINATING_COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
+          OPERATION: codescene-check-run-publication
+        shell: python
         run: |
-          ended_at_ms="$(date --utc +%s%3N)"
-          started_at_ms="${STARTED_AT_MS:-$ended_at_ms}"
-          duration_ms="$((ended_at_ms - started_at_ms))"
-          printf 'duration_ms=%s\n' "$duration_ms" >> "$GITHUB_OUTPUT"
-          telemetry="coverage-pr-submission operation=codescene-check-run-publication duration_ms=$duration_ms"
-          telemetry+=" workflow_run_id=$ORIGINATING_WORKFLOW_RUN_ID"
-          telemetry+=" commit_sha=$ORIGINATING_COMMIT_SHA outcome=$OUTCOME"
-          printf '%s\n' "$telemetry"
+          import runpy
+          import sys
+          sys.argv = [".github/scripts/coverage_pr_submission.py", "record-telemetry"]
+          runpy.run_path(sys.argv[0], run_name="__main__")
       - name: Summarize CodeScene coverage gate
         if: always()
         env:
@@ -212,22 +198,12 @@ jobs:
           CHECK_RUN_PUBLICATION_OUTCOME: ${{ steps.report_coverage.outcome }}
           CHECK_RUN_PUBLICATION_DURATION_MS: ${{ steps.observe_report_coverage.outputs.duration_ms }}
           CONCLUSION: ${{ steps.report_coverage.outputs.conclusion }}
+        shell: python
         run: |
-          {
-            printf '### CodeScene coverage\n\n'
-            printf '%s\n' "- Originating workflow run ID: $ORIGINATING_WORKFLOW_RUN_ID"
-            printf '%s\n' "- Originating commit SHA: $ORIGINATING_COMMIT_SHA"
-            printf '%s\n' "- Artifact name: $ARTIFACT_NAME"
-            printf '%s\n' "- Download outcome: $ARTIFACT_DOWNLOAD_OUTCOME"
-            printf '%s\n' "- Download duration (ms): $ARTIFACT_DOWNLOAD_DURATION_MS"
-            printf '%s\n' "- Validation outcome: $ARTIFACT_VALIDATION_OUTCOME"
-            printf '%s\n' "- Validation duration (ms): $ARTIFACT_VALIDATION_DURATION_MS"
-            printf '%s\n' "- Submission outcome: $SUBMISSION_OUTCOME"
-            printf '%s\n' "- Submission duration (ms): $SUBMISSION_DURATION_MS"
-            printf '%s\n' "- Check Run publication outcome: $CHECK_RUN_PUBLICATION_OUTCOME"
-            printf '%s\n' "- Check Run publication duration (ms): $CHECK_RUN_PUBLICATION_DURATION_MS"
-            printf '%s\n' "- Conclusion: $CONCLUSION"
-          } >> "$GITHUB_STEP_SUMMARY"
+          import runpy
+          import sys
+          sys.argv = [".github/scripts/coverage_pr_submission.py", "summarize-coverage"]
+          runpy.run_path(sys.argv[0], run_name="__main__")
   report-excluded-fork:
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
@@ -238,36 +214,18 @@ jobs:
       checks: write
     steps:
       - name: Report excluded fork CodeScene coverage gate
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
-        # v8.0.0
         env:
           ORIGINATING_WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
           ORIGINATING_COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
           ARTIFACT_NAME: pr-coverage-lcov
-        with:
-          script: |
-            const workflowRunId = process.env.ORIGINATING_WORKFLOW_RUN_ID;
-            const commitSha = process.env.ORIGINATING_COMMIT_SHA;
-            const artifactName = process.env.ARTIFACT_NAME;
-            const summary = [
-              `Originating workflow run ID: ${workflowRunId}`,
-              `Originating commit SHA: ${commitSha}`,
-              `Artifact name: ${artifactName}`,
-              'Download outcome: skipped',
-              'Validation outcome: skipped',
-              'Submission outcome: skipped',
-              'Conclusion: neutral',
-            ].join('\n');
-            await github.rest.checks.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              name: 'CodeScene coverage',
-              head_sha: context.payload.workflow_run.head_sha,
-              external_id: workflowRunId,
-              status: 'completed',
-              conclusion: 'neutral',
-              output: {
-                title: 'CodeScene coverage',
-                summary,
-              },
-            });
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: python
+        run: |
+          import runpy
+          import sys
+          sys.argv = [
+              ".github/scripts/coverage_pr_submission.py",
+              "report-excluded-fork",
+          ]
+          runpy.run_path(sys.argv[0], run_name="__main__")

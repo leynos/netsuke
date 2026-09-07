@@ -38,6 +38,7 @@ ARTEFACT_NAME = "pr-coverage-lcov"
 ARTEFACT_PATH = "lcov.info"
 SUBMISSION_STEP = "Check coverage against CodeScene gates"
 REPORT_STEP = "Report CodeScene coverage gate"
+ACTION_SCRIPT_PATH = REPO_ROOT / ".github" / "scripts" / "coverage_pr_submission.py"
 EXPECTED_SUBMISSION_CONDITION = (
     "github.event.workflow_run.conclusion == 'success' && "
     "github.event.workflow_run.event == 'pull_request' && "
@@ -130,12 +131,16 @@ def test_submission_workflow_reports_excluded_forks_neutrally() -> None:
         "the excluded-fork report must not receive the CodeScene credential"
     )
     report = named_step(steps, "Report excluded fork CodeScene coverage gate")
-    script = str(require_mapping(report.get("with"), "fork report inputs")["script"])
+    script = ACTION_SCRIPT_PATH.read_text(encoding="utf-8")
+    assert report.get("shell") == "python", "fork reporting must use Python"
+    assert '"report-excluded-fork"' in str(report["run"]), (
+        "the fork report must invoke its fixed Python action command"
+    )
     for required_fragment in (
-        "name: 'CodeScene coverage'",
-        "head_sha: context.payload.workflow_run.head_sha",
-        "external_id: workflowRunId",
-        "conclusion: 'neutral'",
+        '"name": CHECK_RUN_NAME',
+        '"head_sha": _environment_value(environment, "ORIGINATING_COMMIT_SHA")',
+        '"external_id": _environment_value(environment, "ORIGINATING_WORKFLOW_RUN_ID")',
+        '_check_run_payload(environment, "neutral", _fork_summary(environment))',
     ):
         assert required_fragment in script, (
             "the excluded-fork report must retain "
@@ -205,17 +210,21 @@ def test_submission_report_uses_the_checked_in_outcome_seam() -> None:
     """Require the Check Run to use the local, testable outcome decision."""
     workflow = load_workflow(COVERAGE_PR_WORKFLOW_PATH)
     report = named_step(job_steps(workflow, "submit-coverage"), REPORT_STEP)
-    script = str(require_mapping(report.get("with"), "report inputs")["script"])
 
-    outcome_module = REPO_ROOT / ".github" / "scripts" / "codescene-coverage-outcome.js"
+    outcome_module = ACTION_SCRIPT_PATH
     assert outcome_module.is_file(), "the Check Run outcome seam must be checked in"
-    assert "coverageConclusion" in outcome_module.read_text(encoding="utf-8"), (
+    script = outcome_module.read_text(encoding="utf-8")
+    assert "def coverage_conclusion(" in script, (
         "the checked-in outcome seam must export the conclusion function"
     )
+    assert report.get("shell") == "python", "Check Run reporting must use Python"
+    assert '"report-coverage"' in str(report["run"]), (
+        "the final Check Run must invoke the trusted Python reporting command"
+    )
     for required_fragment in (
-        "coverageConclusion(",
-        "head_sha: context.payload.workflow_run.head_sha",
-        "external_id: workflowRunId",
+        "coverage_conclusion(",
+        '"head_sha": _environment_value(environment, "ORIGINATING_COMMIT_SHA")',
+        '"external_id": _environment_value(environment, "ORIGINATING_WORKFLOW_RUN_ID")',
     ):
         assert required_fragment in script, (
             "the final Check Run must retain "

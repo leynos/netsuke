@@ -1,14 +1,10 @@
 """Exercise the trusted PR coverage handoff as an ordered workflow contract.
 
-The pure JavaScript conclusion seam is checked through Node, the runtime used
-by ``actions/github-script``. Keeping the outcome mapping outside the embedded
-workflow script makes every success, neutral, and failure result executable in
-tests without loading workflow event data or an environment.
+The checked-in Python action module owns the pure conclusion seam, so tests
+exercise every result without loading workflow event data or an environment.
 """
 
 import copy
-import shutil
-import subprocess  # ruff: ignore[suspicious-subprocess-import] - invokes the checked-in Node seam.
 
 import pytest
 from workflow_loading import (
@@ -21,9 +17,7 @@ from workflow_loading import (
     unique_step_index,
 )
 
-OUTCOME_MODULE_PATH = (
-    REPO_ROOT / ".github" / "scripts" / "codescene-coverage-outcome.js"
-)
+ACTION_MODULE_PATH = REPO_ROOT / ".github" / "scripts" / "coverage_pr_submission.py"
 ARTEFACT_NAME = "pr-coverage-lcov"
 DOWNLOAD_STEP = "Download PR coverage artefact"
 VALIDATION_STEP = "Validate hostile coverage artefact"
@@ -40,10 +34,6 @@ DOWNLOAD_ACTION = "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a54
 SUBMISSION_ACTION = (
     "leynos/shared-actions/.github/actions/upload-codescene-coverage@"
     "32c8ea649ea44d40119f348ad48861212532061f"
-)
-GITHUB_SCRIPT_ACTION = "actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd"
-VALIDATION_COMMAND = (
-    "make validate-coverage-artifact COVERAGE_ARTIFACT_DIR=coverage-artifact"
 )
 EXPECTED_DOWNLOAD_INPUTS = {
     "name": ARTEFACT_NAME,
@@ -73,37 +63,13 @@ BOUNDED_CORRELATION_FIELDS = (
 )
 
 
-def _coverage_conclusion(
-    download_outcome: str,
-    validation_outcome: str,
-    submission_outcome: str,
-) -> str:
-    """Return the checked-in JavaScript conclusion for three stage outcomes."""
-    script = (
-        "const { coverageConclusion } = require(process.argv[1]);"
-        "process.stdout.write(coverageConclusion(process.argv[2], process.argv[3], "
-        "process.argv[4]));"
-    )
-    node = shutil.which("node")
-    assert node is not None, "Node is required by the github-script action runtime"
-    result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - shell is False.
-        [
-            node,
-            "--eval",
-            script,
-            "--",
-            str(OUTCOME_MODULE_PATH),
-            download_outcome,
-            validation_outcome,
-            submission_outcome,
-        ],
-        capture_output=True,
-        check=False,
-        text=True,
-    )
-
-    assert result.returncode == 0, result.stderr
-    return result.stdout
+def _assert_python_action_step(step: dict[str, object], command: str) -> None:
+    """Assert one workflow step invokes the fixed Python action command."""
+    script = str(step["run"])
+    assert step.get("shell") == "python", "trusted scripts must use Python"
+    assert "runpy.run_path" in script, "trusted scripts must run the checked-in module"
+    assert "coverage_pr_submission.py" in script, "wrong trusted action module"
+    assert f'"{command}"' in script, f"wrong trusted action command {command!r}"
 
 
 def _assert_submission_mechanics(steps: list[dict[str, object]]) -> None:
@@ -114,6 +80,7 @@ def _assert_submission_mechanics(steps: list[dict[str, object]]) -> None:
     validation = named_step(steps, VALIDATION_STEP)
     submission = named_step(steps, SUBMISSION_STEP)
     report = named_step(steps, REPORT_STEP)
+    summary = named_step(steps, SUMMARY_STEP)
 
     assert checkout.get("uses") == TRUSTED_CHECKOUT_ACTION, "checkout must stay pinned"
     assert setup_uv.get("uses") == SETUP_UV_ACTION, "uv setup must stay pinned"
@@ -121,45 +88,16 @@ def _assert_submission_mechanics(steps: list[dict[str, object]]) -> None:
     assert require_mapping(download.get("with"), "coverage download inputs") == (
         EXPECTED_DOWNLOAD_INPUTS
     ), "the download action must receive only its reviewed cross-run inputs"
-    assert validation.get("run") == VALIDATION_COMMAND, "validation command changed"
+    _assert_python_action_step(validation, "validate-artefact")
+    assert '"coverage-artifact"' in str(validation["run"]), (
+        "validation must receive only the downloaded artefact directory"
+    )
     assert submission.get("uses") == SUBMISSION_ACTION, "submission must stay pinned"
     assert require_mapping(submission.get("with"), "submission inputs") == (
         EXPECTED_SUBMISSION_INPUTS
     ), "CodeScene submission must retain its reviewed data-only inputs"
-    assert report.get("uses") == GITHUB_SCRIPT_ACTION, "reporter must stay pinned"
-
-
-@pytest.mark.parametrize(
-    ("download_outcome", "validation_outcome", "submission_outcome", "expected"),
-    [
-        pytest.param("success", "success", "success", "success", id="success"),
-        pytest.param(
-            "success",
-            "success",
-            "skipped",
-            "neutral",
-            id="absent-token",
-        ),
-        pytest.param("failure", "skipped", "skipped", "failure", id="download-failure"),
-        pytest.param(
-            "success", "failure", "skipped", "failure", id="validation-failure"
-        ),
-        pytest.param(
-            "success", "success", "failure", "failure", id="submission-failure"
-        ),
-    ],
-)
-def test_coverage_conclusion_preserves_stage_outcomes(
-    download_outcome: str,
-    validation_outcome: str,
-    submission_outcome: str,
-    expected: str,
-) -> None:
-    """Map every trusted-handoff terminal state to its Check Run conclusion."""
-    assert (
-        _coverage_conclusion(download_outcome, validation_outcome, submission_outcome)
-        == expected
-    ), "the Check Run conclusion must match its three stage outcomes"
+    _assert_python_action_step(report, "report-coverage")
+    _assert_python_action_step(summary, "summarize-coverage")
 
 
 def test_submission_workflow_orders_the_hostile_data_handoff() -> None:
@@ -188,8 +126,10 @@ def test_submission_workflow_rejects_noop_security_stages(target: str) -> None:
     if target == VALIDATION_STEP:
         mutated_step["run"] = "true"
     else:
-        mutated_step["uses"] = GITHUB_SCRIPT_ACTION
-        mutated_step["with"] = {"script": ""}
+        mutated_step["uses"] = (
+            "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
+        )
+        mutated_step["with"] = {}
 
     with pytest.raises(AssertionError):
         _assert_submission_mechanics(steps)
@@ -200,9 +140,9 @@ def _assert_check_run_report_contract(
 ) -> None:
     """Assert the Check Run uses only reviewed correlation data."""
     for required_fragment in (
-        "head_sha: context.payload.workflow_run.head_sha",
-        "external_id: workflowRunId",
-        "core.setOutput('conclusion', conclusion)",
+        '"head_sha": _environment_value(environment, "ORIGINATING_COMMIT_SHA")',
+        '"external_id": _environment_value(environment, "ORIGINATING_WORKFLOW_RUN_ID")',
+        '_write_output(environment, "conclusion", conclusion)',
     ):
         assert required_fragment in report_script, (
             f"the Check Run report must contain {required_fragment!r}"
@@ -228,6 +168,8 @@ def _assert_check_run_report_contract(
         ("ORIGINATING_WORKFLOW_RUN_ID", "${{ github.event.workflow_run.id }}"),
         ("ORIGINATING_COMMIT_SHA", "${{ github.event.workflow_run.head_sha }}"),
         ("ARTIFACT_NAME", ARTEFACT_NAME),
+        ("GITHUB_REPOSITORY", "${{ github.repository }}"),
+        ("GITHUB_TOKEN", "${{ github.token }}"),
     )
     assert set(report_environment) == {
         name for name, _ in expected_report_environment
@@ -265,10 +207,10 @@ def test_check_run_and_summary_publish_only_bounded_correlation() -> None:
     workflow = load_workflow(COVERAGE_PR_WORKFLOW_PATH)
     steps = job_steps(workflow, "submit-coverage")
     report = named_step(steps, REPORT_STEP)
-    report_script = str(require_mapping(report.get("with"), "report inputs")["script"])
+    report_script = ACTION_MODULE_PATH.read_text(encoding="utf-8")
     report_environment = require_mapping(report.get("env"), "report environment")
     summary = named_step(steps, SUMMARY_STEP)
-    summary_script = str(summary["run"])
+    summary_script = report_script
     summary_environment = require_mapping(summary.get("env"), "summary environment")
 
     _assert_check_run_report_contract(report_script, report_environment)
@@ -308,11 +250,11 @@ def _assert_telemetry_contract(steps: list[dict[str, object]]) -> None:
         "OUTCOME",
         "ORIGINATING_WORKFLOW_RUN_ID",
         "ORIGINATING_COMMIT_SHA",
+        "OPERATION",
     }
     for name, operation, outcome, start_step in telemetry:
         step = named_step(steps, name)
         environment = require_mapping(step.get("env"), f"{name} environment")
-        script = str(step["run"])
         assert step.get("if") == "always()", f"{name} must run after failure"
         assert set(environment) == expected_environment_keys, f"bad {name} fields"
         assert environment["STARTED_AT_MS"] == (
@@ -325,8 +267,11 @@ def _assert_telemetry_contract(steps: list[dict[str, object]]) -> None:
         assert environment["ORIGINATING_COMMIT_SHA"] == (
             "${{ github.event.workflow_run.head_sha }}"
         ), f"{name} must retain source-commit correlation"
-        assert f"operation={operation}" in script, f"wrong {name} operation"
-        assert "duration_ms=" in script, f"{name} must emit a duration metric"
+        assert environment["OPERATION"] == operation, f"wrong {name} operation"
+        _assert_python_action_step(step, "record-telemetry")
+        assert "duration_ms=" in ACTION_MODULE_PATH.read_text(encoding="utf-8"), (
+            f"{name} must emit a duration metric"
+        )
     report_index = unique_step_index(steps, REPORT_STEP)
     start_index = unique_step_index(steps, START_REPORT_TELEMETRY_STEP)
     telemetry_index = unique_step_index(steps, REPORT_TELEMETRY_STEP)
@@ -340,6 +285,36 @@ def test_telemetry_uses_fixed_operations_and_bounded_stage_fields() -> None:
     _assert_telemetry_contract(job_steps(workflow, "submit-coverage"))
 
 
+def test_trusted_workflow_uses_only_checked_in_python_action_scripts() -> None:
+    """Keep workflow logic in Python sources covered by repository quality gates."""
+    workflow = load_workflow(COVERAGE_PR_WORKFLOW_PATH)
+    workflow_text = COVERAGE_PR_WORKFLOW_PATH.read_text(encoding="utf-8")
+    action_source = ACTION_MODULE_PATH.read_text(encoding="utf-8")
+
+    assert ".github/scripts" in REPO_ROOT.joinpath("Makefile").read_text(
+        encoding="utf-8"
+    ), "Makefile Python quality gates must cover checked-in workflow scripts"
+    assert "actions/github-script@" not in workflow_text, (
+        "trusted workflow logic must not use JavaScript actions"
+    )
+    for job_name in ("submit-coverage", "report-excluded-fork"):
+        for step in job_steps(workflow, job_name):
+            if "run" in step:
+                script = str(step["run"])
+                assert step.get("shell") == "python", (
+                    f"{job_name} scripts must run with Python"
+                )
+                assert "runpy.run_path" in script, (
+                    f"{job_name} scripts must invoke checked-in Python"
+                )
+                assert "coverage_pr_submission.py" in script, (
+                    f"{job_name} scripts must use the trusted action module"
+                )
+    assert "def coverage_conclusion(" in action_source, (
+        "the tested outcome seam must remain in the checked-in Python module"
+    )
+
+
 @pytest.mark.parametrize("mutation", ["operation-name", "no-op-script"])
 def test_telemetry_contract_rejects_reporting_mutations(mutation: str) -> None:
     """Reject reporting telemetry that no longer emits its fixed measurement."""
@@ -347,9 +322,10 @@ def test_telemetry_contract_rejects_reporting_mutations(mutation: str) -> None:
     steps = copy.deepcopy(job_steps(workflow, "submit-coverage"))
     report_telemetry = named_step(steps, REPORT_TELEMETRY_STEP)
     if mutation == "operation-name":
-        report_telemetry["run"] = str(report_telemetry["run"]).replace(
-            "codescene-check-run-publication", "other-operation"
+        environment = require_mapping(
+            report_telemetry.get("env"), "report telemetry environment"
         )
+        environment["OPERATION"] = "other-operation"
     else:
         report_telemetry["run"] = "true"
 
@@ -365,7 +341,7 @@ def test_observability_avoids_sensitive_or_untrusted_fields() -> None:
     summary = named_step(steps, SUMMARY_STEP)
     report_telemetry = named_step(steps, REPORT_TELEMETRY_STEP)
     observable_values = "\n".join([
-        str(require_mapping(report.get("with"), "report inputs")["script"]),
+        ACTION_MODULE_PATH.read_text(encoding="utf-8"),
         str(require_mapping(report.get("env"), "report environment")),
         str(summary["run"]),
         str(require_mapping(summary.get("env"), "summary environment")),
