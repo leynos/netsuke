@@ -614,6 +614,21 @@ only emitted an "Unexpected input(s)" warning on every run;
 
 ### Where the CI workflow lives
 
+The merge gate spans two files. [`ci.yml`](../.github/workflows/ci.yml) holds
+the Linux gate and the Kani smoke job;
+[`ci-windows.yml`](../.github/workflows/ci-windows.yml) holds `lint-windows` and
+`build-test-windows`, the two concurrent halves of the Windows gate, and
+`ci.yml` invokes both through a single `windows` job. The split exists to keep
+both files inside the 400-line limit that AGENTS.md sets for every file in the
+repository; adding a Windows step therefore goes in `ci-windows.yml`.
+
+GitHub does not expose the `env` context to a reusable workflow's `with` block,
+so `ci.yml` repeats its `NEXTEST_VERSION`, `MDTABLEFIX_VERSION`, and
+`PYTHON_BASELINE` pins as literal inputs, and `ci-windows.yml` re-exports them
+as workflow-level `env`. Each pin is still declared once at workflow scope in
+`ci.yml`, so the `sed` extraction AGENTS.md documents still yields exactly one
+value. `tests/workflow_contracts/ci_windows_job_test.py` holds the caller's
+literals equal to those pins, so the two copies cannot drift.
 
 ### Why the Windows gate is two jobs
 
@@ -634,22 +649,6 @@ request, which is accepted where it speeds development.
 Bash Makefile gate runs exactly once across the lane, each runs in the job that
 owns it, and neither job declares `needs`. Putting the lints back in series, or
 making either job wait for the other, fails there.
-
-The merge gate spans two files. [`ci.yml`](../.github/workflows/ci.yml) holds
-the Linux gate and the Kani smoke job;
-[`ci-windows.yml`](../.github/workflows/ci-windows.yml) holds `lint-windows` and
-`build-test-windows`, the two concurrent halves of the Windows gate, and
-`ci.yml` invokes both through a single `windows` job. The split exists to keep
-both files inside the 400-line limit that AGENTS.md sets for every file in the
-repository; adding a Windows step therefore goes in `ci-windows.yml`.
-
-GitHub does not expose the `env` context to a reusable workflow's `with` block,
-so `ci.yml` repeats its `NEXTEST_VERSION`, `MDTABLEFIX_VERSION`, and
-`PYTHON_BASELINE` pins as literal inputs, and `ci-windows.yml` re-exports them
-as workflow-level `env`. Each pin is still declared once at workflow scope in
-`ci.yml`, so the `sed` extraction AGENTS.md documents still yields exactly one
-value. `tests/workflow_contracts/ci_windows_job_test.py` holds the caller's
-literals equal to those pins, so the two copies cannot drift.
 
 ### Cache ownership and bounded CI resources
 
