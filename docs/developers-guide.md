@@ -5800,8 +5800,8 @@ paths, configuration values, or error text as metric labels.
 
 Four independent timers can end a test run, and the canonical statement of how
 they must be ordered lives in the `generate-coverage` README in
-[`leynos/shared-actions`][shared-actions-coverage]. Three of the four are set
-here.
+[`leynos/shared-actions`](https://github.com/leynos/shared-actions/blob/main/.github/actions/generate-coverage/README.md).
+Three of the four are set here.
 
 | Tier                     | What it bounds                     | Where it is set                               | Current value                                                |
 | ------------------------ | ---------------------------------- | --------------------------------------------- | ------------------------------------------------------------ |
@@ -5847,17 +5847,26 @@ above the watchdog still cancels the job before the watchdog can report an
 overrun, and a cancellation discards the log that would have explained it.
 
 The ceiling is therefore sized as the watchdog plus the work outside its
-window, measured from the worst of several runs rather than one:
+window, measured from the worst of many runs rather than one, and across runs
+of every conclusion rather than successful ones only. A run cancelled at its
+ceiling is the very case the sizing exists to prevent, so excluding it would
+size the ceiling against the runs that never needed it.
 
-| Lane                                  | Worst coverage step | Worst whole job | Outside the step | Run         |
-| ------------------------------------- | ------------------- | --------------- | ---------------- | ----------- |
-| `ci.yml` `build-test`                 | 669 s               | 1,048 s         | 384 s            | 34047430187 |
-| `coverage-main.yml` `coverage-upload` | 624 s               | 663 s           | 53 s             | 33809357448 |
+| Lane                                  | Worst coverage step | Worst whole job | Widest gap | Run         |
+| ------------------------------------- | ------------------- | --------------- | ---------- | ----------- |
+| `ci.yml` `build-test`                 | 746 s               | 1,079 s         | 358 s      | 34077746484 |
+| `coverage-main.yml` `coverage-upload` | 641 s               | 671 s           | 49 s       | 34073520704 |
 
-*Table: measured coverage-step and whole-job durations, read across twelve
-successful runs of each workflow.*
+*Table: measured coverage-step and whole-job durations. The gap is the job's
+duration less its coverage steps, so it is the work the job timer bounds and
+the watchdog does not.*
 
-The widest gap is 384 s, so the contract allows 15 minutes. That makes the
+The sample is the last 60 runs of each workflow: 51 successful and 9 failed for
+`ci.yml`, 58 successful and 2 failed for `coverage-main.yml`. Neither history
+contains a cancelled or timeout-terminated run, so no run in the sample was
+ended by any of these timers.
+
+The widest gap is 358 s, so the contract allows 15 minutes. That makes the
 requirement 1,800 s + 900 s = 45 minutes, and both lanes have 15 minutes of
 slack above it. None of those runs was genuinely cold; one run is the coldest
 seen so far, not a measurement of the cold case.
@@ -5866,18 +5875,26 @@ seen so far, not a measurement of the cold case.
 
 `tests/workflow_contracts/timeout_ordering_test.py` asserts the ordering by
 value over every step invoking the coverage action, in both the `.yml` and
-`.yaml` extensions. It reads a step's own environment before the job's, as
-GitHub resolves it, so a lane that overrode the job value is judged as it will
-run. It requires every lane to set the watchdog explicitly rather than inherit
-the action's default, and every such job to declare a ceiling, since a job
-without one silently takes GitHub's six-hour default.
+`.yaml` extensions. It reads the watchdog from the step, then the job, then the
+workflow, as GitHub resolves it, so a lane that overrode the job value is
+judged as it will run and a workflow-level value is not missed. It requires
+every lane to set the watchdog explicitly rather than inherit the action's
+default, and every such job to declare a ceiling, since a job without one
+silently takes GitHub's six-hour default.
+
+The termination allowance it would demand between a whole-run budget and the
+watchdog is two terms, not one: the largest `grace-period` the configuration
+sets, or nextest's ten-second default when it sets none, plus a fixed 60-second
+safety margin. A grace period is what nextest promises a test after `SIGTERM`;
+the margin covers the process teardown and report writing that follow it. No
+`global-timeout` is set here, so that comparison is skipped entirely, which is
+why the reading has a test of its own rather than resting on an assertion that
+never runs.
 
 It is not the same assertion as
 `tests/workflow_contracts/test_execution_coverage_test.py`, which holds the two
 lanes to the *same* watchdog value. That one stops the lanes drifting apart;
 this one stops the tiers inverting.
-
-[shared-actions-coverage]: https://github.com/leynos/shared-actions/blob/main/.github/actions/generate-coverage/README.md
 
 ## Documentation upkeep
 

@@ -18,7 +18,6 @@ See "Test timeouts: the tiers this repository sets" in
 import re
 import typing as typ
 
-import yaml
 from workflow_loading import REPO_ROOT
 
 #: The environment variable the shared coverage action reads for its
@@ -47,10 +46,15 @@ OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS: typ.Final[float] = 15 * 60.0
 #: it as well as the whole-run budget.
 COLD_BUILD_ALLOWANCE_SECONDS: typ.Final[float] = 10 * 60.0
 
-#: Floor for the termination allowance, used when the configuration sets
-#: no grace period, as this one does not. Generous against nextest's
-#: ten-second default and far too small to hide a real overrun.
-MINIMUM_TERMINATION_ALLOWANCE_SECONDS: typ.Final[float] = 60.0
+#: What nextest allows a test between `SIGTERM` and `SIGKILL` when the
+#: configuration names no `grace-period`, as this one does not.
+NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS: typ.Final[float] = 10.0
+
+#: Added to that grace period to cover the teardown and report writing
+#: that follow it. A separate term rather than a floor over the two, so
+#: raising a grace period raises the requirement instead of vanishing
+#: into it.
+TERMINATION_SAFETY_MARGIN_SECONDS: typ.Final[float] = 60.0
 
 NEXTEST_CONFIG = REPO_ROOT / ".config" / "nextest.toml"
 WORKFLOWS_DIRECTORY = REPO_ROOT / ".github" / "workflows"
@@ -125,16 +129,12 @@ def largest_test_allowance(config_text: str) -> float:
     return max(budgets)
 
 
-def termination_allowance(config_text: str) -> float:
-    """Return the time nextest may take to stop the run, in seconds.
+def grace_period(config_text: str) -> float:
+    """Return the longest grace period the configuration names, in seconds.
 
-    Hitting the global timeout starts nextest's ordinary termination
-    procedure rather than stopping the run: on Unix it signals the process
-    group and waits ``slow-timeout.grace-period`` before killing it; on
-    Windows termination is immediate and the grace period is ignored for
-    timeouts. Read from the configuration rather than fixed, so a profile
-    that raised its grace period raises the requirement too. This file
-    sets none, so the floor applies.
+    Read from the configuration rather than fixed, so a profile that
+    raised its grace period raises the requirement too. nextest's own
+    default applies when none is named, as none is here.
 
     Parameters
     ----------
@@ -144,12 +144,39 @@ def termination_allowance(config_text: str) -> float:
     Returns
     -------
     float
-        The largest configured grace period, or the floor when that is
-        smaller or absent.
+        The largest configured grace period, or nextest's default.
     """
     periods = _GRACE_PERIOD.findall(config_text)
-    largest = max((seconds(period) for period in periods), default=0.0)
-    return max(largest, MINIMUM_TERMINATION_ALLOWANCE_SECONDS)
+    return max(
+        (seconds(period) for period in periods),
+        default=NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS,
+    )
+
+
+def termination_allowance(config_text: str) -> float:
+    """Return the time nextest may take to stop the run, in seconds.
+
+    Two terms, not one. Hitting the whole-run budget starts nextest's
+    ordinary termination procedure rather than stopping the run: on Unix
+    it signals the process group and waits ``slow-timeout.grace-period``
+    before killing it; on Windows termination is immediate and the grace
+    period is ignored for timeouts. That grace period is the first term;
+    the second is a fixed margin for the teardown and report writing
+    that follow it. A single floor over the two would absorb every grace
+    period below the margin, so raising one would look free until the
+    run it cancelled.
+
+    Parameters
+    ----------
+    config_text : str
+        The nextest configuration file's text.
+
+    Returns
+    -------
+    float
+        The grace period plus the safety margin.
+    """
+    return grace_period(config_text) + TERMINATION_SAFETY_MARGIN_SECONDS
 
 
 def global_timeout(config_text: str) -> float | None:
@@ -167,122 +194,3 @@ def global_timeout(config_text: str) -> float | None:
     """
     match = re.search(r'^global-timeout\s*=\s*"([^"]+)"', config_text, re.MULTILINE)
     return None if match is None else seconds(match[1])
-
-
-class CoverageLane(typ.NamedTuple):
-    """One coverage step, with the budgets around it.
-
-    Attributes
-    ----------
-    workflow : str
-        The workflow file's name.
-    job : str
-        The job the step belongs to.
-    step : str
-        The step's declared name.
-    watchdog : float or None
-        The watchdog budget in seconds, or None when the job sets none
-        and so inherits the action's 1,800 s default.
-    job_timeout : float or None
-        The job's ``timeout-minutes`` in seconds, or None when it
-        declares none and so inherits GitHub's six-hour default.
-    """
-
-    workflow: str
-    job: str
-    step: str
-    watchdog: float | None
-    job_timeout: float | None
-
-    def __str__(self) -> str:
-        """Return a location suitable for a failure message.
-
-        Returns
-        -------
-        str
-            ``workflow:job:step`` for this lane.
-        """
-        return f"{self.workflow}:{self.job}:{self.step!r}"
-
-
-def _watchdog_of(job: dict[str, typ.Any], step: dict[str, typ.Any]) -> float | None:
-    """Return the watchdog budget in force for one step.
-
-    A step's own environment wins over the job's, as GitHub resolves it,
-    so a lane that overrode the job value is read as it will run rather
-    than as the job declares.
-
-    Parameters
-    ----------
-    job : dict[str, typ.Any]
-        The enclosing job.
-    step : dict[str, typ.Any]
-        The coverage step.
-
-    Returns
-    -------
-    float or None
-        The budget in seconds, or None when neither sets one.
-    """
-    for source in ((step.get("env") or {}), (job.get("env") or {})):
-        raw = source.get(WATCHDOG_VARIABLE)
-        if raw is not None:
-            return float(str(raw))
-    return None
-
-
-def _workflow_documents() -> dict[str, dict[str, typ.Any]]:
-    """Return every workflow document, keyed by file name.
-
-    Both extensions are read. A coverage lane in the other one would
-    otherwise escape every assertion below without failing anything.
-
-    Returns
-    -------
-    dict[str, dict[str, typ.Any]]
-        File name to parsed document.
-    """
-    documents: dict[str, dict[str, typ.Any]] = {}
-    for pattern in ("*.yml", "*.yaml"):
-        for path in sorted(WORKFLOWS_DIRECTORY.glob(pattern)):
-            parsed = yaml.safe_load(path.read_text(encoding="utf-8"))
-            if isinstance(parsed, dict):
-                documents[path.name] = parsed
-    return documents
-
-
-def coverage_lanes_of() -> tuple[CoverageLane, ...]:
-    """Return every step invoking the coverage action, with its budgets.
-
-    Every such step is included, not only those whose job sets a
-    watchdog, so a lane that lost its override is visible as ``None``
-    rather than absent. An absent entry would make the assertions skip it
-    silently and restore the action's default.
-
-    Returns
-    -------
-    tuple[CoverageLane, ...]
-        One entry per coverage step.
-    """
-    lanes: list[CoverageLane] = []
-    for name, document in _workflow_documents().items():
-        for job_name, job in (document.get("jobs") or {}).items():
-            if not isinstance(job, dict):
-                continue
-            raw_timeout = job.get("timeout-minutes")
-            timeout = None if raw_timeout is None else float(raw_timeout) * 60.0
-            for step in job.get("steps") or []:
-                if not isinstance(step, dict):
-                    continue
-                if COVERAGE_ACTION not in str(step.get("uses", "")):
-                    continue
-                lanes.append(
-                    CoverageLane(
-                        workflow=name,
-                        job=str(job_name),
-                        step=str(step.get("name", "")) or str(job_name),
-                        watchdog=_watchdog_of(job, step),
-                        job_timeout=timeout,
-                    )
-                )
-    return tuple(lanes)

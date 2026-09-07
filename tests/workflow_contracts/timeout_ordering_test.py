@@ -30,14 +30,15 @@ Run via ``make test-workflow-contracts``.
 import re
 
 import pytest
+from coverage_lanes import CoverageLane, coverage_lanes_of, watchdog_of
 from timeout_budgets import (
     COLD_BUILD_ALLOWANCE_SECONDS,
     COVERAGE_ACTION,
     NEXTEST_CONFIG,
+    NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS,
     OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS,
+    TERMINATION_SAFETY_MARGIN_SECONDS,
     WATCHDOG_VARIABLE,
-    CoverageLane,
-    coverage_lanes_of,
     global_timeout,
     largest_test_allowance,
     seconds,
@@ -183,4 +184,62 @@ def test_the_largest_per_test_allowance_counts_the_multiplier(
     assert largest > max(periods), (
         f"the largest per-test allowance came out as {largest:.0f}s, no more "
         f"than the longest bare period; terminate-after was not counted"
+    )
+
+
+def test_the_termination_allowance_is_the_grace_period_plus_the_margin() -> None:
+    """The two terms are added, not maximized over.
+
+    A single floor over the grace period and the margin would absorb
+    every grace period below the margin, so adding one of thirty seconds
+    to this configuration would demand nothing more of the watchdog above
+    it. No `global-timeout` is set here, so the ordering assertion that
+    uses this reading is skipped entirely, which makes a test of the
+    reading itself the only thing standing behind it.
+    """
+    assert termination_allowance("") == pytest.approx(
+        NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS + TERMINATION_SAFETY_MARGIN_SECONDS
+    ), "an unnamed grace period must fall back to nextest's own default"
+    configured = termination_allowance(
+        'slow-timeout = { period = "60s", grace-period = "30s" }'
+    )
+    assert configured == pytest.approx(30.0 + TERMINATION_SAFETY_MARGIN_SECONDS), (
+        "a grace period below the margin must still raise the allowance; "
+        "a maximum over the two terms would have discarded it"
+    )
+    largest = termination_allowance(
+        'slow-timeout = { grace-period = "5s" }\n'
+        'slow-timeout = { grace-period = "45s" }'
+    )
+    assert largest == pytest.approx(45.0 + TERMINATION_SAFETY_MARGIN_SECONDS), (
+        "the largest configured grace period governs the allowance"
+    )
+
+
+def test_the_watchdog_is_resolved_from_every_environment_scope() -> None:
+    """Step, then job, then workflow, as GitHub resolves them.
+
+    Both workflows here set the value at job level, so a reading that
+    consulted only the step would report every lane as inheriting the
+    action's undocumented default and the contract would fail loudly.
+    A reading that stopped at the job would pass on this tree while
+    missing a workflow-level value entirely, which is the case this
+    covers.
+    """
+    document = {"env": {WATCHDOG_VARIABLE: "1200"}}
+    job = {"env": {WATCHDOG_VARIABLE: "1800"}}
+    step = {"env": {WATCHDOG_VARIABLE: "2400"}}
+    assert watchdog_of(document, job, step) == pytest.approx(2400.0), (
+        "a step's own value wins over the job's and the workflow's"
+    )
+    assert watchdog_of(document, job, {}) == pytest.approx(1800.0), (
+        "the job's value applies when the step names none"
+    )
+    assert watchdog_of(document, {}, {}) == pytest.approx(1200.0), (
+        "the workflow's value applies when neither the step nor the job "
+        "names one; a reading that stopped at the job would return None "
+        "and report the lane as inheriting the action's default"
+    )
+    assert watchdog_of({}, {}, {}) is None, (
+        "no level naming the variable must read as absent, not as a number"
     )
