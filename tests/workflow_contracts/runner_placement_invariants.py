@@ -65,6 +65,7 @@ REQUIRED_RUNNER_ASSIGNMENTS = {
     "ci-windows.windows-native-recipe-smoke": "windows-latest",
     "ci.kani-smoke": UBICLOUD_DEFAULT_LABEL,
     "coverage-main.coverage-upload": UBICLOUD_LARGE_LABEL,
+    "coverage-pr-submit.submit-coverage": UBICLOUD_DEFAULT_LABEL,
     "delayed-pr-comment.delay_and_comment": "ubuntu-latest",
     "netsukefile-test.netsukefile": UBICLOUD_COMPAT_LABEL,
     "release.metadata": "ubuntu-latest",

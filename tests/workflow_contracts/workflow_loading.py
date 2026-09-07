@@ -23,6 +23,9 @@ CI_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 #: `ci.yml` stays inside the repository's 400-line file limit.
 CI_WINDOWS_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "ci-windows.yml"
 COVERAGE_MAIN_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "coverage-main.yml"
+COVERAGE_PR_WORKFLOW_PATH = (
+    REPO_ROOT / ".github" / "workflows" / "coverage-pr-submit.yml"
+)
 MUTATION_TESTING_WORKFLOW_PATH = (
     REPO_ROOT / ".github" / "workflows" / "mutation-testing.yml"
 )

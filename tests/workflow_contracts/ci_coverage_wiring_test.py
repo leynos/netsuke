@@ -1,13 +1,11 @@
-"""Contract tests wiring coverage generation to the CodeScene gates.
+"""Contract tests wiring PR coverage generation to its isolated artefact.
 
 ``generate-coverage`` writes the report to ``output-path`` and the
-``upload-codescene-coverage`` steps read that exact path in lcov format. If
-the report path, the format, or the step ordering drifts, CodeScene reports
-"No valid coverage report found in the build pipeline" — a failure with no
-pointer back to the edit that caused it. These tests pin the wiring on both
-the pull-request workflow (``ci.yml``) and the main-branch workflow
-(``coverage-main.yml``). Shared parsing helpers live in
-``workflow_loading.py``.
+dedicated artefact upload step preserves it for the trusted submission
+workflow. If the report path, artefact name, or step ordering drifts, the
+submission cannot find validated coverage. These tests pin that unprivileged
+wiring alongside the direct main-branch upload in ``coverage-main.yml``.
+Shared parsing helpers live in ``workflow_loading.py``.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -21,7 +19,7 @@ from workflow_loading import (
 )
 
 COVERAGE_STEP = "Test and Measure Coverage"
-CODESCENE_CHECK_STEP = "Check coverage against CodeScene gates"
+PR_COVERAGE_ARTEFACT_STEP = "Upload PR coverage artefact"
 CODESCENE_UPLOAD_STEP = "Upload coverage data to CodeScene"
 
 GENERATE_COVERAGE_ACTION = "leynos/shared-actions/.github/actions/generate-coverage@"
@@ -39,20 +37,19 @@ def _assert_with_inputs(
     assert actual == expected, f"{description} must pass {expected!r}, got {actual!r}"
 
 
-def test_coverage_report_is_produced_before_codescene_check() -> None:
-    """The CodeScene gate consumes the report the coverage step produces.
+def test_coverage_report_is_produced_before_artefact_upload() -> None:
+    """The untrusted job uploads only the report generated after its tests.
 
     The coverage step is the lane's test execution as well as its measurement,
-    so the report always reflects the tested tree. The CodeScene check runs
-    after it, so the report exists in the build pipeline by the time it is
-    read.
+    so the report always reflects the tested tree. The artefact upload runs
+    after it, so it receives only the completed report.
     """
     steps = job_steps(load_workflow(), "build-test")
     coverage_index = unique_step_index(steps, COVERAGE_STEP)
-    codescene_index = unique_step_index(steps, CODESCENE_CHECK_STEP)
-    assert coverage_index < codescene_index, (
-        "the build-test job must run coverage before the CodeScene check; "
-        f"got indices {coverage_index}, {codescene_index}"
+    artefact_index = unique_step_index(steps, PR_COVERAGE_ARTEFACT_STEP)
+    assert coverage_index < artefact_index, (
+        "the build-test job must run coverage before its artefact upload; "
+        f"got indices {coverage_index}, {artefact_index}"
     )
 
     _assert_with_inputs(
@@ -61,9 +58,9 @@ def test_coverage_report_is_produced_before_codescene_check() -> None:
         {"language": "rust", "output-path": "lcov.info", "format": "lcov"},
     )
     _assert_with_inputs(
-        steps[codescene_index],
-        CODESCENE_CHECK_STEP,
-        {"path": "lcov.info", "format": "lcov", "mode": "check"},
+        steps[artefact_index],
+        PR_COVERAGE_ARTEFACT_STEP,
+        {"name": "pr-coverage-lcov", "path": "lcov.info", "retention-days": 3},
     )
 
 
