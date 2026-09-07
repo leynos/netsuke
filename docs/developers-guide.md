@@ -2551,8 +2551,8 @@ governs the non-doctest pass only, and deliberately stays small:
   that work from future regressions without raising the slow-test threshold.
 - **One measured platform override.** `harness_compiles_under_a_split_build_dir`
   gets seven warning periods (420s) instead of five on Windows alone. See
-  [Windows budget for the isolated-Cargo-build tests][windows-test-budget]
-  for the measurement behind that number. Any future override carries the same
+  [Windows budget for the isolated-Cargo-build tests][windows-test-budget] for
+  the measurement behind that number. Any future override carries the same
   obligation: a written rationale citing runs, not an estimate.
 
 #### Windows budget for the isolated-Cargo-build tests
