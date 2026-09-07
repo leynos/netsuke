@@ -3,6 +3,12 @@
 //! These tests verify the packaged crate builds for publication and ensure
 //! build-script sources remain in its manifest, where an omission would
 //! otherwise fail only during release.
+//!
+//! The verification build runs on the Linux lane only; Windows passes
+//! `--no-verify` (see `PUBLISH_DRY_RUN_ARGS`). The file-list assertions below
+//! are derived from the source tree rather than listed, so a narrowed
+//! `include` that dropped a platform-gated module is caught on every platform
+//! rather than only by the platform that compiles it.
 
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
@@ -99,6 +105,61 @@ const PUBLISH_DRY_RUN_ARGS: &[&str] = if cfg!(windows) {
     ]
 };
 
+/// Roots whose Rust sources the crate compiles and must therefore package.
+const COMPILED_SOURCE_ROOTS: [&str; 2] = ["src", "build_l10n_audit"];
+
+/// Every Rust source the crate compiles must ship in the package.
+///
+/// Derived from the tree rather than listed, so a new module is required to be
+/// packaged without anyone remembering to update this test. This is also what
+/// keeps the Windows contract honest while the verification build runs on
+/// Linux: a narrowed `include` that dropped a `#[cfg(windows)]` module would
+/// compile cleanly under a Linux verification build, which never instantiates
+/// those `cfg` arms, but it cannot escape a file-list assertion derived from
+/// the sources themselves.
+fn required_source_paths() -> Result<Vec<String>> {
+    let crate_root = Dir::open_ambient_dir(env!("CARGO_MANIFEST_DIR"), ambient_authority())
+        .context("open the crate root")?;
+    let mut sources = Vec::new();
+    for root in COMPILED_SOURCE_ROOTS {
+        collect_rust_sources(&crate_root, root, &mut sources)
+            .with_context(|| format!("walk the `{root}` source root"))?;
+    }
+    sources.sort();
+    // A sweep that silently matched nothing would make the assertion vacuous.
+    ensure!(
+        !sources.is_empty(),
+        "the compiled source roots should contain at least one Rust source"
+    );
+    Ok(sources)
+}
+
+/// Append every `.rs` path beneath `directory`, depth first, to `sources`.
+fn collect_rust_sources(root: &Dir, directory: &str, sources: &mut Vec<String>) -> Result<()> {
+    for entry_result in root
+        .read_dir(directory)
+        .with_context(|| format!("read `{directory}`"))?
+    {
+        let entry = entry_result.with_context(|| format!("read an entry of `{directory}`"))?;
+        let name = entry
+            .file_name()
+            .with_context(|| format!("read an entry name in `{directory}`"))?;
+        let path = format!("{directory}/{name}");
+        let file_type = entry
+            .file_type()
+            .with_context(|| format!("read the file type of `{path}`"))?;
+        if file_type.is_dir() {
+            collect_rust_sources(root, &path, sources)?;
+        } else if Utf8Path::new(&name)
+            .extension()
+            .is_some_and(|extension| extension == "rs")
+        {
+            sources.push(path);
+        }
+    }
+    Ok(())
+}
+
 /// Create a Cargo subprocess that writes build artefacts beneath `target_dir`.
 fn cargo_subprocess(cargo_binary: &OsStr, target_dir: &TempDir) -> Command {
     let mut command = Command::new(cargo_binary);
@@ -160,7 +221,9 @@ fn packaged_manifest_retains_build_script_sources() {
 
         let readme_paths = required_readme_paths()
             .unwrap_or_else(|error| panic!("collect the crate-root READMEs: {error}"));
-        assert_required_paths_present(&packaged_paths, &readme_paths);
+        let source_paths = required_source_paths()
+            .unwrap_or_else(|error| panic!("collect the compiled Rust sources: {error}"));
+        assert_required_paths_present(&packaged_paths, &readme_paths, &source_paths);
         assert_forbidden_roots_absent(&packaged_paths);
     });
 }
@@ -216,7 +279,11 @@ fn normalize_packaged_path(path: &str) -> String {
     path.replace('\\', "/")
 }
 
-fn assert_required_paths_present(packaged_paths: &BTreeSet<String>, readme_paths: &[String]) {
+fn assert_required_paths_present(
+    packaged_paths: &BTreeSet<String>,
+    readme_paths: &[String],
+    source_paths: &[String],
+) {
     for required_path in REQUIRED_PACKAGED_FILES {
         assert!(
             packaged_paths.contains(required_path),
@@ -235,6 +302,13 @@ fn assert_required_paths_present(packaged_paths: &BTreeSet<String>, readme_paths
         assert!(
             packaged_paths.contains(required_path.as_str()),
             "packaged manifest should contain `{required_path}`"
+        );
+    }
+
+    for required_path in source_paths {
+        assert!(
+            packaged_paths.contains(required_path.as_str()),
+            "packaged manifest should contain the compiled source `{required_path}`"
         );
     }
 }
