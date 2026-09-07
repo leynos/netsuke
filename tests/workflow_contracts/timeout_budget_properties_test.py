@@ -17,14 +17,18 @@ import typing as typ
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
-from timeout_budgets import (
-    NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS,
-    TERMINATION_SAFETY_MARGIN_SECONDS,
+from nextest_budgets import (
+    NextestConfigurationError,
+    UnboundedTestError,
     global_timeout,
     grace_period,
     largest_test_allowance,
     seconds,
     termination_allowance,
+)
+from timeout_budgets import (
+    NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS,
+    TERMINATION_SAFETY_MARGIN_SECONDS,
 )
 
 #: The units nextest accepts, with their length in seconds.
@@ -37,6 +41,35 @@ COVERAGE_STEP: typ.Final[str] = (
 whole_numbers = st.integers(min_value=1, max_value=10_000)
 units = st.sampled_from(sorted(UNITS))
 multipliers = st.integers(min_value=1, max_value=20)
+
+
+def document(*tables: str, profile: str = "default") -> str:
+    """Return a nextest document declaring those slow-timeouts.
+
+    The reading parses the file, so a configuration it is driven with
+    has to be shaped the way nextest reads one: the first table is the
+    profile's own and the rest are its overrides. A bare key at the root
+    of the document is not configuration to nextest and is not read as
+    any here either.
+
+    Parameters
+    ----------
+    *tables : str
+        The ``slow-timeout`` assignments, profile's own first.
+    profile : str
+        The profile to declare them under.
+
+    Returns
+    -------
+    str
+        A configuration document.
+    """
+    lines = [f"[profile.{profile}]"]
+    if tables:
+        lines.append(tables[0])
+    for override in tables[1:]:
+        lines += ["", f"[[profile.{profile}.overrides]]", override]
+    return "\n".join(lines) + "\n"
 
 
 @pytest.mark.parametrize(
@@ -91,7 +124,7 @@ def test_an_unreadable_duration_is_refused(duration: str) -> None:
     against a budget nextest never applies, and the contract would pass
     while the ordering it claims to hold did not.
     """
-    with pytest.raises(AssertionError):
+    with pytest.raises(NextestConfigurationError):
         seconds(duration)
 
 
@@ -131,9 +164,11 @@ def test_the_largest_budget_is_the_largest_product(
     its multiplier, agrees with the handwritten cases whenever they
     coincide. Over generated configurations they stop coinciding.
     """
-    config = "\n".join(
-        f'slow-timeout = {{ period = "{value}{unit}", terminate-after = {times} }}'
-        for value, unit, times in budgets
+    config = document(
+        *(
+            f'slow-timeout = {{ period = "{value}{unit}", terminate-after = {times} }}'
+            for value, unit, times in budgets
+        )
     )
     expected = max(value * UNITS[unit] * times for value, unit, times in budgets)
     assert largest_test_allowance(config) == pytest.approx(expected), (
@@ -141,11 +176,31 @@ def test_the_largest_budget_is_the_largest_product(
     )
 
 
-def test_a_slow_timeout_without_a_multiplier_counts_once() -> None:
-    """An omitted `terminate-after` is one period, not none."""
-    assert largest_test_allowance('slow-timeout = { period = "90s" }') == pytest.approx(
-        90.0
-    ), "an absent terminate-after means a single period"
+@pytest.mark.parametrize(
+    "table",
+    [
+        pytest.param('slow-timeout = "90s"', id="a-bare-duration"),
+        pytest.param(
+            'slow-timeout = { period = "90s" }', id="a-table-without-terminate-after"
+        ),
+        pytest.param(
+            'slow-timeout = { period = "90s", grace-period = "5s" }',
+            id="a-table-with-only-a-grace-period",
+        ),
+    ],
+)
+def test_a_slow_timeout_that_never_terminates_is_refused(table: str) -> None:
+    """`terminate-after` is optional, and without it nothing is bounded.
+
+    nextest marks the test slow, warns once per period, and lets it run
+    on. Reading such a configuration as a period-long budget would put a
+    number on the tier that is missing, and every comparison above it
+    would then pass against a tier that does not exist. Every table in
+    this repository's own configuration sets it explicitly, so nothing
+    here relies on the looser reading.
+    """
+    with pytest.raises(UnboundedTestError, match=r"terminate-after"):
+        largest_test_allowance(document(table))
 
 
 def test_a_grace_period_is_not_read_as_a_per_test_budget() -> None:
@@ -154,7 +209,9 @@ def test_a_grace_period_is_not_read_as_a_per_test_budget() -> None:
     A matcher reading `period` as a substring would take a grace period
     for a per-test budget whenever the former were the larger.
     """
-    config = 'slow-timeout = { period = "30s", grace-period = "30m" }'
+    config = document(
+        'slow-timeout = { period = "30s", terminate-after = 1, grace-period = "30m" }'
+    )
     assert largest_test_allowance(config) == pytest.approx(30.0), (
         "the per-test reading took a grace period for a slow-timeout"
     )
@@ -162,12 +219,27 @@ def test_a_grace_period_is_not_read_as_a_per_test_budget() -> None:
 
 @pytest.mark.parametrize(
     "config",
-    ["", "[profile.default]\nfail-fast = false\n", "slow-timeout = { }"],
-    ids=["empty", "no-slow-timeout", "an-empty-table"],
+    [
+        "",
+        "[profile.default]\nfail-fast = false\n",
+        'slow-timeout = { period = "30s", terminate-after = 1 }\n',
+        '# slow-timeout = { period = "30s", terminate-after = 1 }\n',
+    ],
+    ids=[
+        "empty",
+        "no-slow-timeout",
+        "outside-any-profile",
+        "commented-out",
+    ],
 )
 def test_a_configuration_with_no_readable_budget_is_refused(config: str) -> None:
-    """Returning zero would make every whole-run budget look comfortable."""
-    with pytest.raises(AssertionError):
+    """Returning zero would make every whole-run budget look comfortable.
+
+    The last two cases are what parsing buys. A key at the root of the
+    document is not in any profile, and a commented-out one is not
+    configuration at all; a text match counted both.
+    """
+    with pytest.raises(NextestConfigurationError):
         largest_test_allowance(config)
 
 
@@ -175,11 +247,18 @@ def test_a_configuration_with_no_readable_budget_is_refused(config: str) -> None
     ("config", "expected"),
     [
         pytest.param("", None, id="absent"),
-        pytest.param('global-timeout = "45m"', 2700.0, id="present"),
+        pytest.param('global-timeout = "45m"', None, id="outside-any-profile"),
         pytest.param(
             '[profile.default]\nglobal-timeout = "600s"\n', 600.0, id="inside-a-profile"
         ),
-        pytest.param('# global-timeout = "45m"\n', None, id="commented-out-is-not-set"),
+        pytest.param(
+            '[profile.ci]\nglobal-timeout = "600s"\n', None, id="another-profile"
+        ),
+        pytest.param(
+            '[profile.default]\n# global-timeout = "45m"\n',
+            None,
+            id="commented-out-is-not-set",
+        ),
     ],
 )
 def test_the_whole_run_budget_is_read_or_reported_absent(
@@ -203,9 +282,12 @@ def test_the_termination_allowance_tracks_the_largest_grace_period(
     periods: list[tuple[int, str]],
 ) -> None:
     """The allowance is the largest grace period plus the fixed margin."""
-    config = "\n".join(
-        f'slow-timeout = {{ period = "1s", grace-period = "{value}{unit}" }}'
-        for value, unit in periods
+    config = document(
+        *(
+            f'slow-timeout = {{ period = "1s", terminate-after = 1, '
+            f'grace-period = "{value}{unit}" }}'
+            for value, unit in periods
+        )
     )
     largest = max(value * UNITS[unit] for value, unit in periods)
     assert grace_period(config) == pytest.approx(largest), (
@@ -216,11 +298,21 @@ def test_the_termination_allowance_tracks_the_largest_grace_period(
     ), "the allowance is the grace period plus the margin, not the larger"
 
 
-@given(text=st.text(max_size=40).filter(lambda body: "grace-period" not in body))
+@given(
+    periods=st.lists(st.tuples(whole_numbers, units), min_size=1, max_size=6),
+    profile=st.sampled_from(["default", "ci"]),
+)
 def test_an_unconfigured_grace_period_falls_back_to_nextest_s_default(
-    text: str,
+    periods: list[tuple[int, str]], profile: str
 ) -> None:
     """Assuming zero would understate what nextest needs to stop a run."""
-    assert grace_period(text) == pytest.approx(NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS), (
-        "an absent grace period must fall back to nextest's default"
+    config = document(
+        *(
+            f'slow-timeout = {{ period = "{value}{unit}", terminate-after = 1 }}'
+            for value, unit in periods
+        ),
+        profile=profile,
     )
+    assert grace_period(config) == pytest.approx(
+        NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS
+    ), "an absent grace period must fall back to nextest's default"

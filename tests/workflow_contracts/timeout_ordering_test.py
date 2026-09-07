@@ -32,6 +32,13 @@ import typing as typ
 
 import pytest
 from coverage_lanes import CoverageLane, coverage_lanes_of, watchdog_of
+from nextest_budgets import (
+    bounds_a_single_test,
+    global_timeout,
+    largest_test_allowance,
+    seconds,
+    termination_allowance,
+)
 from timeout_budgets import (
     CEILING_MARGIN_SECONDS,
     COLD_BUILD_ALLOWANCE_SECONDS,
@@ -41,10 +48,6 @@ from timeout_budgets import (
     OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS,
     TERMINATION_SAFETY_MARGIN_SECONDS,
     WATCHDOG_VARIABLE,
-    global_timeout,
-    largest_test_allowance,
-    seconds,
-    termination_allowance,
 )
 
 if typ.TYPE_CHECKING:
@@ -283,15 +286,21 @@ def test_the_termination_allowance_is_the_grace_period_plus_the_margin() -> None
         NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS + TERMINATION_SAFETY_MARGIN_SECONDS
     ), "an unnamed grace period must fall back to nextest's own default"
     configured = termination_allowance(
-        'slow-timeout = { period = "60s", grace-period = "30s" }'
+        "[profile.default]\n"
+        'slow-timeout = { period = "60s", terminate-after = 1, '
+        'grace-period = "30s" }\n'
     )
     assert configured == pytest.approx(30.0 + TERMINATION_SAFETY_MARGIN_SECONDS), (
         "a grace period below the margin must still raise the allowance; "
         "a maximum over the two terms would have discarded it"
     )
     largest = termination_allowance(
-        'slow-timeout = { grace-period = "5s" }\n'
-        'slow-timeout = { grace-period = "45s" }'
+        "[profile.default]\n"
+        'slow-timeout = { period = "60s", terminate-after = 1, '
+        'grace-period = "5s" }\n'
+        "\n[[profile.default.overrides]]\n"
+        'slow-timeout = { period = "60s", terminate-after = 1, '
+        'grace-period = "45s" }\n'
     )
     assert largest == pytest.approx(45.0 + TERMINATION_SAFETY_MARGIN_SECONDS), (
         "the largest configured grace period governs the allowance"
@@ -366,4 +375,25 @@ def test_each_coverage_lane_carries_the_condition_it_is_meant_to(
         f"these coverage lanes do not carry the conditions the developers' "
         f"guide records, as expected versus found: {wrong}; a lane that is "
         f"skipped runs no cargo, so its watchdog never arms"
+    )
+
+
+def test_the_default_profile_bounds_a_test_it_matches_no_override_for(
+    nextest_config: str,
+) -> None:
+    """An override bounds its filter's tests; the profile bounds the rest.
+
+    ``largest_test_allowance`` reports the largest budget anywhere in
+    the file, so deleting the profile's own ``slow-timeout`` and leaving
+    the Windows override behind still reports 600 s while every test the
+    override does not match runs with no bound at all. That is the state
+    this assertion exists to detect, and nothing else here would.
+
+    Proved by mutation: commenting out ``[profile.default]``'s own
+    ``slow-timeout`` fails this test and nothing else.
+    """
+    assert bounds_a_single_test(nextest_config), (
+        "[profile.default] itself must set slow-timeout with terminate-after; "
+        "an override satisfies the file as a whole while leaving every test it "
+        "does not match unbounded"
     )

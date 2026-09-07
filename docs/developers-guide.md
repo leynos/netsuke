@@ -5890,13 +5890,28 @@ order the real tiers correctly; against generated inputs it does not. That
 module also fixes the error paths, the malformed-workflow cases, and the
 watchdog's resolution across all three environment scopes.
 
-Two modules sit behind that contract, split by what they read.
+Three modules sit behind that contract, split by what they read.
 `tests/workflow_contracts/coverage_lanes.py` traverses the workflows: it finds
 the coverage steps, resolves each one's watchdog through the step, job and
 workflow environments, and returns one lane per step with its job's ceiling and
-condition. `tests/workflow_contracts/timeout_budgets.py` holds the nextest
+condition. `tests/workflow_contracts/nextest_budgets.py` holds the nextest
 arithmetic: the duration parser, the per-test and whole-run budgets, and the
-termination allowance. Neither imports the other's subject.
+termination allowance. `tests/workflow_contracts/timeout_budgets.py` holds the
+values both compare against. None imports the others' subject.
+
+The nextest configuration is parsed with `tomllib` rather than matched as text.
+A text match finds a key inside a comment, inside a `filter` string, or in a
+table nextest never consults, and reports a budget the runner does not use.
+`terminate-after` is optional, and a `slow-timeout` without it marks a test
+slow and never stops it, so the reading refuses that form rather than reporting
+one period as the budget. Every table in `.config/nextest.toml` sets it
+explicitly, so no value here changes.
+
+The profile's own `slow-timeout` is asserted separately from its overrides. An
+override bounds the tests its filter matches and the profile's own bounds the
+rest, so deleting the base allowance while leaving the Windows override behind
+would still report a 600 s largest budget while every test the override does
+not match ran with no bound at all.
 
 The lane reading takes its documents as a parameter, defaulting to the
 repository's own workflows. Reading the filesystem happens at one named
