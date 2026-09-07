@@ -24,9 +24,20 @@ inputs:
     required: true
   profile:
     description: >-
-      `gate` is the full merge gate, the single writer of every Windows key.
-      `smoke` is the native-recipe job, which restores the gate's generation
-      by prefix and publishes nothing.
+      Which job is calling, and therefore which keys it may publish. Every
+      Windows key has exactly one writer.
+
+      `gate` is the test job: it restores all four families and owns
+      `registry` and `sccache`, the two the larger compile fills.
+
+      `lint` is the lint job: it restores all four and owns `tools` and
+      `whitaker`, the two it actually installs into. `cargo-nextest` lands in
+      `~/.cargo/bin` and so is not in the generation this profile saves; it
+      comes from a pinned install-action at a 2s median, which is cheaper than
+      a fifth key.
+
+      `smoke` is the release native-recipe job, which restores the gate's
+      generation by prefix and publishes nothing.
     required: true
   registry-hit:
     description: Restore result for the Cargo download store.
@@ -113,7 +124,7 @@ runs:
 
     - name: Restore tool directories
       id: tools
-      if: inputs.mode == 'restore' && inputs.profile == 'gate'
+      if: inputs.mode == 'restore' && inputs.profile != 'smoke'
       # Steps C and D merged, plus Chocolatey's download location: the gate
       # installs GNU Make through it and nothing else caches that directory.
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
@@ -126,7 +137,7 @@ runs:
 
     - name: Restore Whitaker suite
       id: whitaker
-      if: inputs.mode == 'restore' && inputs.profile == 'gate'
+      if: inputs.mode == 'restore' && inputs.profile != 'smoke'
       # Step E, mounting the parent of the installer-managed directory so a
       # cold run leaves no empty suite directory behind. The installer
       # executable lives in `~/.cargo/bin` and belongs to the tool step above.
@@ -168,7 +179,7 @@ runs:
             "${REGISTRY_KEY}" "${REGISTRY_HIT:-none}"
           printf -- '- sccache key: `%s` matched: `%s`\n' \
             "${SCCACHE_KEY}" "${SCCACHE_HIT:-none}"
-          if [ "${PROFILE}" = 'gate' ]; then
+          if [ "${PROFILE}" != 'smoke' ]; then
             printf -- '- tools key: `%s` matched: `%s`\n' \
               "${TOOLS_KEY}" "${TOOLS_HIT:-none}"
             printf -- '- whitaker key: `%s` matched: `%s`\n' \
@@ -188,8 +199,10 @@ runs:
         key: ${{ steps.keys.outputs.registry }}
 
     - name: Save tool directories
+      # Owned by the lint job: it installs GNU Make, mdtablefix, uv and the
+      # Whitaker installer, so it is the job that fills these paths.
       if: >-
-        inputs.mode == 'save' && inputs.profile == 'gate' &&
+        inputs.mode == 'save' && inputs.profile == 'lint' &&
         steps.keys.outputs.writer == 'true' && inputs['tools-hit'] != 'true'
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
       with:
@@ -209,8 +222,9 @@ runs:
         key: ${{ steps.keys.outputs.sccache }}
 
     - name: Save Whitaker suite
+      # Owned by the lint job, the only job that installs the suite.
       if: >-
-        inputs.mode == 'save' && inputs.profile == 'gate' &&
+        inputs.mode == 'save' && inputs.profile == 'lint' &&
         steps.keys.outputs.writer == 'true' && inputs['whitaker-hit'] != 'true'
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
       with:
