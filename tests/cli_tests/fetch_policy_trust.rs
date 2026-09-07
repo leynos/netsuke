@@ -55,6 +55,18 @@ fn merge_fetch_policy(
     merge_in_child(args, project.path(), &environment)
 }
 
+/// Merge a scenario that contains only primary project fetch-policy settings.
+fn merge_project_fetch_policy(project_config: &str) -> Result<Cli> {
+    merge_fetch_policy(
+        &FetchPolicyFileLayers {
+            project: Some(project_config),
+            ..FetchPolicyFileLayers::default()
+        },
+        &[],
+        &["netsuke"],
+    )
+}
+
 /// Build a URL for a policy assertion.
 fn url(value: &str) -> Result<Url> {
     Url::parse(value).with_context(|| format!("parse test URL {value}"))
@@ -108,14 +120,7 @@ const PROJECT_TIGHTENING: &str = "fetch_default_deny = true";
 
 #[rstest]
 fn defaults_keep_project_fetch_grants_outside_operator_policy() -> Result<()> {
-    let merged = merge_fetch_policy(
-        &FetchPolicyFileLayers {
-            project: Some(PROJECT_GRANTS),
-            ..FetchPolicyFileLayers::default()
-        },
-        &[],
-        &["netsuke"],
-    )?;
+    let merged = merge_project_fetch_policy(PROJECT_GRANTS)?;
 
     ensure!(
         !merged.fetch_default_deny,
@@ -126,14 +131,7 @@ fn defaults_keep_project_fetch_grants_outside_operator_policy() -> Result<()> {
 
 #[rstest]
 fn project_can_tighten_default_deny_without_operator_policy() -> Result<()> {
-    let merged = merge_fetch_policy(
-        &FetchPolicyFileLayers {
-            project: Some(PROJECT_TIGHTENING),
-            ..FetchPolicyFileLayers::default()
-        },
-        &[],
-        &["netsuke"],
-    )?;
+    let merged = merge_project_fetch_policy(PROJECT_TIGHTENING)?;
 
     ensure!(
         merged.fetch_default_deny,
