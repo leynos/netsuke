@@ -59,6 +59,18 @@ EXPECTED_SUBMISSION_INPUTS = {
     "access-token": "${{ env.CS_ACCESS_TOKEN }}",
     "installer-checksum": "${{ vars.CODESCENE_CLI_SHA256 }}",
 }
+BOUNDED_CORRELATION_FIELDS = (
+    "Originating workflow run ID",
+    "Originating commit SHA",
+    "Artifact name",
+    "Download outcome",
+    "Validation outcome",
+    "Submission outcome",
+    "Download duration (ms)",
+    "Validation duration (ms)",
+    "Submission duration (ms)",
+    "Conclusion",
+)
 
 
 def _coverage_conclusion(
@@ -103,30 +115,18 @@ def _assert_submission_mechanics(steps: list[dict[str, object]]) -> None:
     submission = named_step(steps, SUBMISSION_STEP)
     report = named_step(steps, REPORT_STEP)
 
-    assert checkout.get("uses") == TRUSTED_CHECKOUT_ACTION, (
-        "trusted checkout must remain pinned"
-    )
-    assert setup_uv.get("uses") == SETUP_UV_ACTION, (
-        "the uv setup action must remain pinned"
-    )
-    assert download.get("uses") == DOWNLOAD_ACTION, (
-        "hostile artefact download must remain pinned"
-    )
+    assert checkout.get("uses") == TRUSTED_CHECKOUT_ACTION, "checkout must stay pinned"
+    assert setup_uv.get("uses") == SETUP_UV_ACTION, "uv setup must stay pinned"
+    assert download.get("uses") == DOWNLOAD_ACTION, "download must stay pinned"
     assert require_mapping(download.get("with"), "coverage download inputs") == (
         EXPECTED_DOWNLOAD_INPUTS
     ), "the download action must receive only its reviewed cross-run inputs"
-    assert validation.get("run") == VALIDATION_COMMAND, (
-        "the hostile artefact must pass the exact validation gate"
-    )
-    assert submission.get("uses") == SUBMISSION_ACTION, (
-        "CodeScene submission must remain pinned to the reviewed action"
-    )
+    assert validation.get("run") == VALIDATION_COMMAND, "validation command changed"
+    assert submission.get("uses") == SUBMISSION_ACTION, "submission must stay pinned"
     assert require_mapping(submission.get("with"), "submission inputs") == (
         EXPECTED_SUBMISSION_INPUTS
     ), "CodeScene submission must retain its reviewed data-only inputs"
-    assert report.get("uses") == GITHUB_SCRIPT_ACTION, (
-        "the trusted Check Run reporter must remain pinned"
-    )
+    assert report.get("uses") == GITHUB_SCRIPT_ACTION, "reporter must stay pinned"
 
 
 @pytest.mark.parametrize(
@@ -195,17 +195,10 @@ def test_submission_workflow_rejects_noop_security_stages(target: str) -> None:
         _assert_submission_mechanics(steps)
 
 
-def test_check_run_and_summary_publish_only_bounded_correlation() -> None:
-    """Report the source run and stage outcomes without untrusted PR content."""
-    workflow = load_workflow(COVERAGE_PR_WORKFLOW_PATH)
-    steps = job_steps(workflow, "submit-coverage")
-    report = named_step(steps, REPORT_STEP)
-    report_script = str(require_mapping(report.get("with"), "report inputs")["script"])
-    report_environment = require_mapping(report.get("env"), "report environment")
-    summary = named_step(steps, SUMMARY_STEP)
-    summary_script = str(summary["run"])
-    summary_environment = require_mapping(summary.get("env"), "summary environment")
-
+def _assert_check_run_report_contract(
+    report_script: str, report_environment: dict[str, object]
+) -> None:
+    """Assert the Check Run uses only reviewed correlation data."""
     for required_fragment in (
         "head_sha: context.payload.workflow_run.head_sha",
         "external_id: workflowRunId",
@@ -214,25 +207,8 @@ def test_check_run_and_summary_publish_only_bounded_correlation() -> None:
         assert required_fragment in report_script, (
             f"the Check Run report must contain {required_fragment!r}"
         )
-    for field in (
-        "Originating workflow run ID",
-        "Originating commit SHA",
-        "Artifact name",
-        "Download outcome",
-        "Validation outcome",
-        "Submission outcome",
-        "Download duration (ms)",
-        "Validation duration (ms)",
-        "Submission duration (ms)",
-        "Conclusion",
-    ):
+    for field in BOUNDED_CORRELATION_FIELDS:
         assert field in report_script, f"the Check Run summary must contain {field!r}"
-        assert field in summary_script, f"the workflow summary must contain {field!r}"
-    for field in (
-        "Check Run publication outcome",
-        "Check Run publication duration (ms)",
-    ):
-        assert field in summary_script, f"the workflow summary must contain {field!r}"
     expected_report_environment = (
         ("SUBMISSION_OUTCOME", "${{ steps.submit_coverage.outcome }}"),
         ("ARTIFACT_DOWNLOAD_OUTCOME", "${{ steps.download_coverage.outcome }}"),
@@ -260,6 +236,19 @@ def test_check_run_and_summary_publish_only_bounded_correlation() -> None:
         assert report_environment[name] == expected_value, (
             f"the Check Run must receive the expected {name} correlation value"
         )
+
+
+def _assert_workflow_summary_contract(
+    summary_script: str, summary_environment: dict[str, object]
+) -> None:
+    """Assert the workflow summary contains only bounded correlation data."""
+    for field in BOUNDED_CORRELATION_FIELDS:
+        assert field in summary_script, f"the workflow summary must contain {field!r}"
+    for field in (
+        "Check Run publication outcome",
+        "Check Run publication duration (ms)",
+    ):
+        assert field in summary_script, f"the workflow summary must contain {field!r}"
     assert summary_environment["ORIGINATING_WORKFLOW_RUN_ID"] == (
         "${{ github.event.workflow_run.id }}"
     ), "the workflow summary must retain the source run ID"
@@ -269,6 +258,21 @@ def test_check_run_and_summary_publish_only_bounded_correlation() -> None:
     assert summary_environment["ARTIFACT_NAME"] == ARTEFACT_NAME, (
         "the workflow summary must retain the fixed artefact name"
     )
+
+
+def test_check_run_and_summary_publish_only_bounded_correlation() -> None:
+    """Report the source run and stage outcomes without untrusted PR content."""
+    workflow = load_workflow(COVERAGE_PR_WORKFLOW_PATH)
+    steps = job_steps(workflow, "submit-coverage")
+    report = named_step(steps, REPORT_STEP)
+    report_script = str(require_mapping(report.get("with"), "report inputs")["script"])
+    report_environment = require_mapping(report.get("env"), "report environment")
+    summary = named_step(steps, SUMMARY_STEP)
+    summary_script = str(summary["run"])
+    summary_environment = require_mapping(summary.get("env"), "summary environment")
+
+    _assert_check_run_report_contract(report_script, report_environment)
+    _assert_workflow_summary_contract(summary_script, summary_environment)
 
 
 def _assert_telemetry_contract(steps: list[dict[str, object]]) -> None:
@@ -310,24 +314,18 @@ def _assert_telemetry_contract(steps: list[dict[str, object]]) -> None:
         environment = require_mapping(step.get("env"), f"{name} environment")
         script = str(step["run"])
         assert step.get("if") == "always()", f"{name} must run after failure"
-        assert set(environment) == expected_environment_keys, (
-            f"{name} must receive only timing, outcome, and correlation fields"
-        )
+        assert set(environment) == expected_environment_keys, f"bad {name} fields"
         assert environment["STARTED_AT_MS"] == (
             f"${{{{ steps.{start_step}.outputs.started_at_ms }}}}"
         ), f"{name} must receive its own start time"
-        assert environment["OUTCOME"] == outcome, (
-            f"{name} must report only its own stage outcome"
-        )
+        assert environment["OUTCOME"] == outcome, f"wrong {name} outcome"
         assert environment["ORIGINATING_WORKFLOW_RUN_ID"] == (
             "${{ github.event.workflow_run.id }}"
         ), f"{name} must retain source-run correlation"
         assert environment["ORIGINATING_COMMIT_SHA"] == (
             "${{ github.event.workflow_run.head_sha }}"
         ), f"{name} must retain source-commit correlation"
-        assert f"operation={operation}" in script, (
-            f"{name} must use its fixed operation name"
-        )
+        assert f"operation={operation}" in script, f"wrong {name} operation"
         assert "duration_ms=" in script, f"{name} must emit a duration metric"
     report_index = unique_step_index(steps, REPORT_STEP)
     start_index = unique_step_index(steps, START_REPORT_TELEMETRY_STEP)
