@@ -208,12 +208,18 @@ def test_two_coverage_steps_in_one_job_are_judged_together() -> None:
     assert list(grouped) == [("ci.yml", "build-test")], (
         "both steps belong to the one job whose ceiling contains them"
     )
-    budgets = [lane.watchdog for lane in grouped["ci.yml", "build-test"]]
+    budgets = [
+        lane.watchdog
+        for lane in grouped["ci.yml", "build-test"]
+        if lane.watchdog is not None
+    ]
     assert budgets == [1800.0, 2700.0], (
         f"the group must keep every lane of the job, got {budgets}; keeping "
         f"one would ask the ceiling to contain that lane alone"
     )
-    assert required_ceiling(budgets) > lanes[0].job_timeout, (
+    ceiling = lanes[0].job_timeout
+    assert ceiling is not None, "the synthetic lanes declare a ceiling"
+    assert required_ceiling(budgets) > ceiling, (
         "a 60-minute ceiling cannot contain 1,800 s and 2,700 s of watchdog "
         "plus the allowance and the margin; judged one lane at a time it would "
         "have passed"
