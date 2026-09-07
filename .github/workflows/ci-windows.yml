@@ -12,10 +12,11 @@ name: CI (Windows)
 #
 # One job, not two. The native-recipe smoke test used to be a second job that
 # needed this one, which made it a strict serial tail: a measured median of
-# 236s, of which 72s restored caches, 20s set up Rust, 109s rebuilt a binary
-# this job had already built, and 7s did the work it exists for. Folded in as
-# two `shell: pwsh` steps it costs the link and the 7s. `release.yml` keeps its
-# own smoke job, which has no build to share.
+# 236s plus queue, of which 72s restored caches, 20s set up Rust, 8s checked
+# out, 109s built the binary and 7s did the work it exists for. Folded in, the
+# build and the fixture remain and everything around them goes, a measured
+# saving of about 127s per run and one runner. `release.yml` keeps its own
+# smoke job, which builds the tagged source and shares nothing with a gate.
 
 'on':
   workflow_call:
@@ -191,10 +192,18 @@ jobs:
         # blocks the merge.
         run: make SHELL=bash test
       - name: Build Netsuke
-        # Warm: `make test` above has already compiled the workspace in this
-        # job, so this links the binary rather than rebuilding the graph. As a
-        # separate job it restored caches, set up Rust and rebuilt from the
-        # compiler cache, a measured median of 236s of pure serial tail.
+        # Not warm, and deliberately so. `make test` above builds with
+        # `--all-features`; this builds the default feature set, which is the
+        # binary users get, so Cargo's fingerprints differ and the graph is
+        # rebuilt through the compiler cache. Measured at 107s on run
+        # 34085924383, against a 109s median for the same build in the job this
+        # replaces: the same work, so the saving here is the job overhead
+        # around it, not the build.
+        #
+        # Adding `--all-features` would reuse the artefacts above and take this
+        # close to zero, at the cost of smoke-testing a binary carrying
+        # `legacy-digests` rather than the shipped default. That trade has not
+        # been made.
         shell: pwsh
         run: |
           cargo build --locked --bin netsuke

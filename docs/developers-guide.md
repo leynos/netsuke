@@ -980,11 +980,10 @@ the remaining harness consequences of that policy.
 
 Two steps at the end of `build-test-windows` in
 [`ci-windows.yml`](../.github/workflows/ci-windows.yml) are the native Windows
-execution gate. `Build Netsuke` links the binary from the workspace the `Test`
-step has already compiled, and `Exercise native Windows recipes` runs the
-fixture. Both declare `shell: pwsh` rather than inheriting the job's Git Bash
-default, so the process that launches Netsuke is PowerShell. The second step
-invokes:
+execution gate. `Build Netsuke` builds the default-feature binary and
+`Exercise native Windows recipes` runs the fixture. Both declare `shell: pwsh`
+rather than inheriting the job's Git Bash default, so the process that launches
+Netsuke is PowerShell. The second step invokes:
 
 ```powershell
 ./scripts/windows-recipe-smoke.ps1 `
@@ -1002,12 +1001,23 @@ gates, exactly as `Lint (Whitaker)` already overrides the default to `pwsh`.
 
 These were a second job, `windows-native-recipe-smoke`, that `needs`-ed
 `build-test-windows`. That made it a strict serial tail on every pull request:
-a median of 236s measured over the 57 Windows runs between run 33890685806 and
-run 34064668331, of which 72s restored caches, 20s set up Rust, 109s rebuilt a
-binary the gate job had already built, and 7s ran the fixture. The dependency
+a median of 236s plus queue, measured over the 57 Windows runs between run
+33890685806 and run 34064668331, of which 8s checked out, 72s restored caches,
+20s set up Rust, 109s built the binary and 7s ran the fixture. The dependency
 bought cache warmth rather than correctness, since the job was restore-only and
 a pull request saves nothing for it to read, so folding the two steps in
 removes the tail and a runner without weakening the contract.
+
+The build itself did not get cheaper, and it is worth being exact about why.
+`make test` compiles with `--all-features`, while the smoke test needs the
+default-feature binary users actually get, so Cargo's fingerprints differ and
+the graph is rebuilt through the compiler cache: 107s on run 34085924383
+against the 109s median for the same build in the job it replaces. What the
+fold removes is the checkout, cache restore, Rust setup and job overhead around
+it, about 127s per run and one hosted runner. Passing `--all-features` here
+would reuse the artefacts and take the step close to zero, at the cost of
+smoke-testing a binary carrying `legacy-digests` rather than the shipped
+default; that trade has not been made.
 `tests/workflow_contracts/ci_windows_job_test.py` holds both halves of that:
 the steps must declare `pwsh` and invoke the smoke script with its binary and
 manifest, and `ci-windows.yml` must declare no second job.
