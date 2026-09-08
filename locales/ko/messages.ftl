@@ -340,14 +340,15 @@ stdlib.time.label.nanoseconds = 나노초
 
 # which 도우미 진단.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] PATH 항목 { $count }개를 확인했지만 명령 '{ $command }'을(를) 찾지 못했습니다. 미리 보기: { $preview }
-stdlib.which.not_found.hint.cwd_auto = PATH의 빈 구간은 무시됩니다. 작업 디렉터리를 포함하려면 cwd_mode="auto"를 사용하세요.
-stdlib.which.not_found.hint.cwd_always = 현재 디렉터리를 포함하려면 cwd_mode="always"로 설정하세요.
+stdlib.which.not_found.hint.cwd_auto = Automatic mode searches only directories explicitly named by PATH.
+stdlib.which.not_found.hint.cwd_always = Always mode searches only the current directory before directories named by PATH.
+stdlib.which.not_found.hint.workspace = To recursively search the workspace tree, use cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] '{ $path }'의 명령 '{ $command }'이(가) 없거나 실행할 수 없습니다.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <비어 있음>
 stdlib.which.path_entry.non_utf8 = PATH의 { $index }번째 항목에 UTF-8이 아닌 문자가 있습니다. Netsuke는 UTF-8 경로가 필요합니다.
 stdlib.which.command.empty = which에는 비어 있지 않은 문자열이 필요합니다.
-stdlib.which.cwd_mode.invalid = cwd_mode는 'auto', 'always', 'never' 중 하나여야 하지만 '{ $mode }'이(가) 나왔습니다.
+stdlib.which.cwd_mode.invalid = cwd_mode must be 'auto', 'always', 'never', or 'workspace-recursive', got '{ $mode }'.
 stdlib.which.cwd.resolve_failed = 현재 디렉터리를 확인하지 못했습니다: { $details }.
 stdlib.which.cwd.non_utf8 = 현재 디렉터리에 UTF-8이 아닌 부분이 있습니다.
 stdlib.which.canonicalize_failed = '{ $path }'을(를) 정규화하지 못했습니다: { $details }.

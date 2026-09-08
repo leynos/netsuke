@@ -2,6 +2,20 @@
 
 ## [0.1.0-beta3] - 2026-09-02
 
+<!-- markdownlint-disable-next-line MD024 -->
+### Changed
+
+- **Breaking:** make `which` and `command_available` search only `PATH` by
+  default; manifests that intentionally resolve checkout executables must use
+  `cwd_mode='workspace-recursive'`
+  ([#646](https://github.com/leynos/netsuke/issues/646))
+
+### Security
+
+- Require an explicit recursive-workspace opt-in before an empty or unset
+  `PATH` can resolve a checkout-controlled executable
+  ([#646](https://github.com/leynos/netsuke/issues/646))
+
 - Add injectable Ninja child environments, named Ninja request types, and
   target/action discovery through `description` and `netsuke help targets`.
 - Add cached configuration discovery and opt-in serial dependency ordering.
@@ -35,6 +49,7 @@
   `UnsupportedCommandListExec`
   ([#550](https://github.com/leynos/netsuke/issues/550))
 
+<!-- markdownlint-disable-next-line MD024 -->
 ### Changed
 
 - Require UTF-8 build-file and working-directory paths for Ninja invocation,

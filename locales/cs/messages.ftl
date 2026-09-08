@@ -340,14 +340,15 @@ stdlib.time.label.nanoseconds = nanosekundy
 
 # Diagnostika pomocníka which.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] příkaz „{ $command }“ nebyl nalezen po prohledání { $count } položek proměnné PATH. Náhled: { $preview }
-stdlib.which.not_found.hint.cwd_auto = Prázdné části proměnné PATH se ignorují; pomocí cwd_mode="auto" zahrnete pracovní adresář.
-stdlib.which.not_found.hint.cwd_always = Nastavte cwd_mode="always", chcete-li zahrnout aktuální adresář.
+stdlib.which.not_found.hint.cwd_auto = Automatic mode searches only directories explicitly named by PATH.
+stdlib.which.not_found.hint.cwd_always = Always mode searches only the current directory before directories named by PATH.
+stdlib.which.not_found.hint.workspace = To recursively search the workspace tree, use cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] příkaz „{ $command }“ v „{ $path }“ chybí nebo není spustitelný.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <prázdné>
 stdlib.which.path_entry.non_utf8 = Položka č. { $index } proměnné PATH obsahuje znaky, které nejsou v UTF-8; Netsuke vyžaduje cesty v UTF-8.
 stdlib.which.command.empty = which vyžaduje neprázdný řetězec.
-stdlib.which.cwd_mode.invalid = cwd_mode musí být „auto“, „always“ nebo „never“, obdrženo „{ $mode }“.
+stdlib.which.cwd_mode.invalid = cwd_mode must be 'auto', 'always', 'never', or 'workspace-recursive', got '{ $mode }'.
 stdlib.which.cwd.resolve_failed = Aktuální adresář se nepodařilo určit: { $details }.
 stdlib.which.cwd.non_utf8 = Aktuální adresář obsahuje části, které nejsou v UTF-8.
 stdlib.which.canonicalize_failed = Cestu „{ $path }“ se nepodařilo kanonizovat: { $details }.

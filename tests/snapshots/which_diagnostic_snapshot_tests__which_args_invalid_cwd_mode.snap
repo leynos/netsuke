@@ -2,4 +2,4 @@
 source: tests/which_diagnostic_snapshot_tests.rs
 expression: normalized
 ---
-invalid operation: [netsuke::jinja::which::args] ⁨cwd_mode must be 'auto', 'always', or 'never', got '⁨invalid⁩'.⁩ (in <string>:1)
+invalid operation: [netsuke::jinja::which::args] ⁨cwd_mode must be 'auto', 'always', 'never', or 'workspace-recursive', got '⁨invalid⁩'.⁩ (in <string>:1)

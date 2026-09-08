@@ -340,14 +340,15 @@ stdlib.time.label.nanoseconds = Nanosekunden
 
 # Diagnosen des which-Helfers.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] Befehl „{ $command }“ nach Prüfung von { $count } PATH-Einträgen nicht gefunden. Vorschau: { $preview }
-stdlib.which.not_found.hint.cwd_auto = Leere PATH-Segmente werden ignoriert; verwenden Sie cwd_mode="auto", um das Arbeitsverzeichnis einzubeziehen.
-stdlib.which.not_found.hint.cwd_always = Setzen Sie cwd_mode="always", um das aktuelle Verzeichnis einzubeziehen.
+stdlib.which.not_found.hint.cwd_auto = Automatic mode searches only directories explicitly named by PATH.
+stdlib.which.not_found.hint.cwd_always = Always mode searches only the current directory before directories named by PATH.
+stdlib.which.not_found.hint.workspace = To recursively search the workspace tree, use cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] Der Befehl „{ $command }“ unter „{ $path }“ fehlt oder ist nicht ausführbar.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <leer>
 stdlib.which.path_entry.non_utf8 = Der PATH-Eintrag Nr. { $index } enthält Zeichen ohne gültiges UTF-8; Netsuke benötigt UTF-8-Pfade.
 stdlib.which.command.empty = which benötigt eine nicht leere Zeichenkette.
-stdlib.which.cwd_mode.invalid = cwd_mode muss „auto“, „always“ oder „never“ sein, erhalten wurde „{ $mode }“.
+stdlib.which.cwd_mode.invalid = cwd_mode must be 'auto', 'always', 'never', or 'workspace-recursive', got '{ $mode }'.
 stdlib.which.cwd.resolve_failed = Das aktuelle Verzeichnis konnte nicht ermittelt werden: { $details }.
 stdlib.which.cwd.non_utf8 = Das aktuelle Verzeichnis enthält Komponenten ohne gültiges UTF-8.
 stdlib.which.canonicalize_failed = „{ $path }“ konnte nicht kanonisiert werden: { $details }.

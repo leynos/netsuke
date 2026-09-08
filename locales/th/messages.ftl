@@ -340,14 +340,15 @@ stdlib.time.label.nanoseconds = นาโนวินาที
 
 # การวินิจฉัยของตัวช่วย which
 stdlib.which.not_found = [netsuke::jinja::which::not_found] ไม่พบคำสั่ง “{ $command }” หลังตรวจรายการใน PATH แล้ว { $count } รายการ ตัวอย่าง: { $preview }
-stdlib.which.not_found.hint.cwd_auto = ส่วนที่ว่างเปล่าใน PATH จะถูกละเว้น หากต้องการรวมไดเรกทอรีทำงาน ให้ใช้ cwd_mode="auto"
-stdlib.which.not_found.hint.cwd_always = หากต้องการรวมไดเรกทอรีปัจจุบัน ให้ตั้งค่า cwd_mode="always"
+stdlib.which.not_found.hint.cwd_auto = Automatic mode searches only directories explicitly named by PATH.
+stdlib.which.not_found.hint.cwd_always = Always mode searches only the current directory before directories named by PATH.
+stdlib.which.not_found.hint.workspace = To recursively search the workspace tree, use cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] คำสั่ง “{ $command }” ที่ “{ $path }” ไม่มีอยู่หรือเรียกใช้ไม่ได้
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <ว่างเปล่า>
 stdlib.which.path_entry.non_utf8 = รายการที่ { $index } ใน PATH มีอักขระที่ไม่ใช่ UTF-8 Netsuke ต้องใช้เส้นทางแบบ UTF-8
 stdlib.which.command.empty = which ต้องใช้สายอักขระที่ไม่ว่างเปล่า
-stdlib.which.cwd_mode.invalid = cwd_mode ต้องเป็น “auto” “always” หรือ “never” แต่ได้ “{ $mode }”
+stdlib.which.cwd_mode.invalid = cwd_mode must be 'auto', 'always', 'never', or 'workspace-recursive', got '{ $mode }'.
 stdlib.which.cwd.resolve_failed = ระบุไดเรกทอรีปัจจุบันไม่สำเร็จ: { $details }
 stdlib.which.cwd.non_utf8 = ไดเรกทอรีปัจจุบันมีส่วนที่ไม่ใช่ UTF-8
 stdlib.which.canonicalize_failed = ทำให้ “{ $path }” เป็นรูปแบบมาตรฐานไม่สำเร็จ: { $details }

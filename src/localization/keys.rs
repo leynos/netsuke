@@ -302,6 +302,7 @@ define_keys! {
     STDLIB_WHICH_NOT_FOUND => "stdlib.which.not_found",
     STDLIB_WHICH_NOT_FOUND_HINT_CWD_AUTO => "stdlib.which.not_found.hint.cwd_auto",
     STDLIB_WHICH_NOT_FOUND_HINT_CWD_ALWAYS => "stdlib.which.not_found.hint.cwd_always",
+    STDLIB_WHICH_NOT_FOUND_HINT_WORKSPACE => "stdlib.which.not_found.hint.workspace",
     STDLIB_WHICH_DIRECT_NOT_FOUND => "stdlib.which.direct_not_found",
     STDLIB_WHICH_ARGS_ERROR => "stdlib.which.args_error",
     STDLIB_WHICH_PATH_PREVIEW_EMPTY => "stdlib.which.path_preview.empty",
