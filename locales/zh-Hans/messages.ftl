@@ -416,3 +416,22 @@ example.errors_found = { $count ->
     [0] 未发现错误。
    *[other] 发现 { $count } 个错误。
 }
+
+# 清单静态检查（`netsuke check`）。
+cli.subcommand.check.about = 在不生成或运行构建的情况下检查清单。
+cli.subcommand.check.long_about = 检查所选清单中虽能解析、但很可能有误、不安全、不可移植或不利于缓存的写法。
+cli.subcommand.check.flag.rule.help = 以 NAME=SEVERITY 的形式设置规则或类别的严重级别。
+cli.subcommand.check.flag.fail_on.help = 使发现项导致命令失败的严重级别。
+cli.subcommand.check.flag.limit.help = 报告的发现项上限；0 表示全部报告。
+cli.subcommand.check.flag.explain.help = 输出规则参考，而不检查清单。
+check.threshold_exceeded = 发现项已达到 { $severity } 阈值：已报告 { $reported } 项中的 { $failing } 项。
+check.threshold_exceeded.help = 请修正已报告的发现项，调整 --rule，或放宽 --fail-on。
+check.summary.counts = 检查结果 — 错误：{ $errors }，警告：{ $warnings }，建议：{ $advice }，已抑制：{ $suppressed }。
+check.summary.clean = 没有发现项。
+check.summary.truncated = 显示 { $shown } 项发现；--limit 略去了另外 { $omitted } 项。
+check.rule.malformed = 选择器 { $selector } 未写成 NAME=SEVERITY 的形式。
+check.rule.unknown = 选择器指定的 { $name } 既不是规则也不是类别。
+check.rule.severity = 选择器 { $name } 指定的严重级别 { $severity } 无效；应为 { $values } 之一。
+check.fail_on.invalid = 未知的失败阈值 { $value }；应为 { $values } 之一。
+check.source_index = 无法为诊断在第 { $line } 行索引 { $path }：{ $reason }。
+status.tool.check = 检查

@@ -421,3 +421,22 @@ example.errors_found = { $count ->
     [one] Löytyi { $count } virhe.
    *[other] Löytyi { $count } virhettä.
 }
+
+# Manifestin tarkistus (`netsuke check`).
+cli.subcommand.check.about = Tarkista manifesti luomatta tai suorittamatta koontia.
+cli.subcommand.check.long_about = Tutki valittu manifesti sellaisten rakenteiden varalta, jotka jäsentyvät mutta ovat todennäköisesti virheellisiä, turvattomia, siirrettävyydeltään heikkoja tai välimuistille haitallisia.
+cli.subcommand.check.flag.rule.help = Aseta säännön tai luokan vakavuus muodossa NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Vakavuus, jolla havainnot kaatavat komennon.
+cli.subcommand.check.flag.limit.help = Raportoitavien havaintojen enimmäismäärä; 0 raportoi kaikki.
+cli.subcommand.check.flag.explain.help = Tulosta sääntöviite manifestin tarkistamisen sijaan.
+check.threshold_exceeded = Havainnot saavuttivat kynnyksen { $severity }: { $failing } / { $reported } raportoitua.
+check.threshold_exceeded.help = Korjaa raportoidut havainnot, säädä --rule tai löysennä --fail-on.
+check.summary.counts = Tarkistuksen tulokset — virheet: { $errors }, varoitukset: { $warnings }, ohjeet: { $advice }, vaimennetut: { $suppressed }.
+check.summary.clean = Ei havaintoja.
+check.summary.truncated = Näytetään { $shown } havaintoa; --limit jätti pois { $omitted } muuta.
+check.rule.malformed = Valitsin { $selector } ei ole muodossa NAME=SEVERITY.
+check.rule.unknown = Valitsin nimeää kohteen { $name }, joka ei ole sääntö eikä luokka.
+check.rule.severity = Valitsin { $name } nimeää vakavuuden { $severity }; odotettiin jotakin näistä: { $values }.
+check.fail_on.invalid = Tuntematon virhekynnys { $value }; odotettiin jotakin näistä: { $values }.
+check.source_index = Kohdetta { $path } ei voitu indeksoida diagnostiikkaa varten rivillä { $line }: { $reason }.
+status.tool.check = Tarkistus

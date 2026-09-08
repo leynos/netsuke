@@ -418,3 +418,22 @@ example.errors_found = { $count ->
     [0] Tidak ada galat yang ditemukan.
    *[other] { $count } galat ditemukan.
 }
+
+# Pemeriksaan manifes (`netsuke check`).
+cli.subcommand.check.about = Periksa manifes tanpa membuat atau menjalankan build.
+cli.subcommand.check.long_about = Telaah manifes terpilih untuk konstruksi yang memang terurai tetapi kemungkinan besar keliru, tidak aman, tidak portabel, atau merugikan singgahan.
+cli.subcommand.check.flag.rule.help = Atur tingkat keparahan aturan atau kategori, ditulis sebagai NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Tingkat keparahan saat temuan menggagalkan perintah.
+cli.subcommand.check.flag.limit.help = Jumlah maksimum temuan yang dilaporkan; 0 melaporkan semuanya.
+cli.subcommand.check.flag.explain.help = Cetak rujukan aturan alih-alih memeriksa manifes.
+check.threshold_exceeded = Temuan mencapai ambang { $severity }: { $failing } dari { $reported } yang dilaporkan.
+check.threshold_exceeded.help = Perbaiki temuan yang dilaporkan, sesuaikan --rule, atau longgarkan --fail-on.
+check.summary.counts = Hasil pemeriksaan — galat: { $errors }, peringatan: { $warnings }, saran: { $advice }, ditekan: { $suppressed }.
+check.summary.clean = Tidak ada temuan.
+check.summary.truncated = Menampilkan { $shown } temuan; --limit menghilangkan { $omitted } lainnya.
+check.rule.malformed = Pemilih { $selector } tidak ditulis sebagai NAME=SEVERITY.
+check.rule.unknown = Pemilih menyebut { $name }, yang bukan aturan maupun kategori.
+check.rule.severity = Pemilih { $name } menyebut keparahan { $severity }; diharapkan salah satu dari { $values }.
+check.fail_on.invalid = Ambang kegagalan tidak dikenal { $value }; diharapkan salah satu dari { $values }.
+check.source_index = Tidak dapat mengindeks { $path } untuk diagnostik pada baris { $line }: { $reason }.
+status.tool.check = Periksa

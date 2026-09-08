@@ -419,3 +419,22 @@ example.errors_found = { $count ->
     [one] { $count } fejl fundet.
    *[other] { $count } fejl fundet.
 }
+
+# Manifestanalyse (`netsuke check`).
+cli.subcommand.check.about = Analysér manifestet uden at generere eller køre et build.
+cli.subcommand.check.long_about = Undersøg det valgte manifest for konstruktioner, der godt nok kan fortolkes, men sandsynligvis er fejlbehæftede, usikre, ikke-portable eller cachefjendtlige.
+cli.subcommand.check.flag.rule.help = Angiv en regels eller kategoris alvorsgrad, skrevet som NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Alvorsgrad hvor fund får kommandoen til at fejle.
+cli.subcommand.check.flag.limit.help = Højeste antal rapporterede fund; 0 rapporterer dem alle.
+cli.subcommand.check.flag.explain.help = Udskriv regelreferencen i stedet for at analysere et manifest.
+check.threshold_exceeded = Fund nåede tærsklen { $severity }: { $failing } af { $reported } rapporterede.
+check.threshold_exceeded.help = Ret de rapporterede fund, justér --rule, eller slæk --fail-on.
+check.summary.counts = Analyseresultater — fejl: { $errors }, advarsler: { $warnings }, råd: { $advice }, undertrykt: { $suppressed }.
+check.summary.clean = Ingen fund.
+check.summary.truncated = Viser { $shown } fund; --limit udelod yderligere { $omitted }.
+check.rule.malformed = Vælgeren { $selector } er ikke skrevet som NAME=SEVERITY.
+check.rule.unknown = Vælgeren nævner { $name }, som hverken er en regel eller en kategori.
+check.rule.severity = Vælgeren { $name } nævner alvorsgraden { $severity }; forventede en af { $values }.
+check.fail_on.invalid = Ukendt fejltærskel { $value }; forventede en af { $values }.
+check.source_index = Kunne ikke indeksere { $path } til diagnostik på linje { $line }: { $reason }.
+status.tool.check = Kontrol

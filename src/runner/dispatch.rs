@@ -1,11 +1,11 @@
 //! Dispatch parsed commands and emit their successful JSON result documents.
 
 use super::{
-    ExecutionContext, NinjaContent, NinjaToolSpec, generate_ninja_with_shell, graph, handle_build,
-    handle_ninja_tool, help, materialize_dyndep_bundle, process, prune_dyndep_bundle,
+    ExecutionContext, NinjaContent, NinjaToolSpec, check, generate_ninja_with_shell, graph,
+    handle_build, handle_ninja_tool, help, materialize_dyndep_bundle, process, prune_dyndep_bundle,
     resolve_output_path,
 };
-use crate::cli::{BuildArgs, Cli, Commands, HelpArgs, HelpTopic};
+use crate::cli::{BuildArgs, CheckArgs, Cli, Commands, HelpArgs, HelpTopic};
 use crate::localization::keys;
 use crate::result_json;
 use anyhow::{Context, Result};
@@ -18,6 +18,7 @@ use anyhow::{Context, Result};
 pub(super) fn execute(cli: &Cli, command: Commands, context: &ExecutionContext<'_>) -> Result<()> {
     match command {
         Commands::Build(args) => execute_build(cli, &args, context),
+        Commands::Check(args) => execute_check(cli, &args, context.reporter),
         Commands::Generate { output } => execute_generate(cli, output.as_ref(), context),
         Commands::Clean => execute_clean(cli, context),
         Commands::Graph(args) => graph::handle_graph(cli, &args, context.reporter),
@@ -39,10 +40,30 @@ pub(super) fn execute_help(
         None => help::render_root_help(),
         Some(HelpTopic::Targets) => help::handle_help_targets(cli, reporter),
         Some(HelpTopic::Build) => help::render_subcommand_help("build"),
+        Some(HelpTopic::Check) => help::render_subcommand_help("check"),
         Some(HelpTopic::Clean) => help::render_subcommand_help("clean"),
         Some(HelpTopic::Graph) => help::render_subcommand_help("graph"),
         Some(HelpTopic::Generate) => help::render_subcommand_help("generate"),
     }
+}
+
+/// Lint the selected manifest without generating or running a build.
+///
+/// The handler owns its own output, including the JSON result document, so
+/// this dispatcher does not add the usual command result: a check that passes
+/// has already written its findings, and a check that fails returns the
+/// threshold diagnostic instead.
+///
+/// # Errors
+///
+/// Returns an error when the manifest cannot be linted or when findings reach
+/// the failure threshold.
+pub(super) fn execute_check(
+    cli: &Cli,
+    args: &CheckArgs,
+    reporter: &dyn crate::status::StatusReporter,
+) -> Result<()> {
+    check::handle_check(cli, args, reporter)
 }
 
 /// Run the build through Ninja and emit its successful JSON result when

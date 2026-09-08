@@ -417,3 +417,22 @@ example.errors_found = { $count ->
     [0] ไม่พบข้อผิดพลาด
    *[other] พบข้อผิดพลาด { $count } รายการ
 }
+
+# การตรวจสอบไฟล์รายการ (`netsuke check`).
+cli.subcommand.check.about = ตรวจสอบไฟล์รายการโดยไม่สร้างหรือรันการบิลด์
+cli.subcommand.check.long_about = ตรวจไฟล์รายการที่เลือกเพื่อหาโครงสร้างที่แม้จะแจงได้ แต่มีแนวโน้มผิดพลาด ไม่ปลอดภัย ไม่พอร์ตได้ หรือเป็นผลเสียต่อแคช
+cli.subcommand.check.flag.rule.help = กำหนดระดับความรุนแรงของกฎหรือหมวดหมู่ เขียนเป็น NAME=SEVERITY
+cli.subcommand.check.flag.fail_on.help = ระดับความรุนแรงที่ทำให้ข้อค้นพบทำให้คำสั่งล้มเหลว
+cli.subcommand.check.flag.limit.help = จำนวนข้อค้นพบสูงสุดที่รายงาน; 0 หมายถึงรายงานทั้งหมด
+cli.subcommand.check.flag.explain.help = พิมพ์เอกสารอ้างอิงกฎแทนการตรวจสอบไฟล์รายการ
+check.threshold_exceeded = ข้อค้นพบถึงเกณฑ์ { $severity } แล้ว: { $failing } จาก { $reported } ที่รายงาน
+check.threshold_exceeded.help = แก้ไขข้อค้นพบที่รายงาน ปรับ --rule หรือผ่อนเกณฑ์ --fail-on
+check.summary.counts = ผลการตรวจสอบ — ข้อผิดพลาด: { $errors }, คำเตือน: { $warnings }, คำแนะนำ: { $advice }, ถูกระงับ: { $suppressed }
+check.summary.clean = ไม่พบข้อค้นพบ
+check.summary.truncated = แสดง { $shown } ข้อค้นพบ; --limit ละไว้อีก { $omitted } รายการ
+check.rule.malformed = ตัวเลือก { $selector } ไม่ได้เขียนในรูปแบบ NAME=SEVERITY
+check.rule.unknown = ตัวเลือกระบุ { $name } ซึ่งไม่ใช่ทั้งกฎและหมวดหมู่
+check.rule.severity = ตัวเลือก { $name } ระบุความรุนแรง { $severity }; คาดหวังหนึ่งใน { $values }
+check.fail_on.invalid = เกณฑ์ความล้มเหลวที่ไม่รู้จัก { $value }; คาดหวังหนึ่งใน { $values }
+check.source_index = ไม่สามารถทำดัชนี { $path } สำหรับการวินิจฉัยที่บรรทัด { $line }: { $reason }
+status.tool.check = ตรวจสอบ

@@ -427,3 +427,22 @@ example.errors_found = { $count ->
     [many] Cafwyd hyd i { $count } gwall.
    *[other] Cafwyd hyd i { $count } gwall.
 }
+
+# Dadansoddi'r maniffest (`netsuke check`).
+cli.subcommand.check.about = Dadansoddi'r maniffest heb greu na rhedeg adeiladwaith.
+cli.subcommand.check.long_about = Archwilio'r maniffest a ddewiswyd am gystrawennau sy'n dosrannu ond sy'n debygol o fod yn wallus, yn anniogel, yn anghludadwy neu'n niweidiol i storfa.
+cli.subcommand.check.flag.rule.help = Gosod difrifoldeb rheol neu gategori, wedi'i ysgrifennu fel NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Y difrifoldeb lle mae canfyddiadau'n gwneud i'r gorchymyn fethu.
+cli.subcommand.check.flag.limit.help = Uchafswm y canfyddiadau a adroddir; mae 0 yn adrodd pob un.
+cli.subcommand.check.flag.explain.help = Argraffu'r cyfeirlyfr rheolau yn lle dadansoddi maniffest.
+check.threshold_exceeded = Cyrhaeddodd y canfyddiadau'r trothwy { $severity }: { $failing } o { $reported } a adroddwyd.
+check.threshold_exceeded.help = Trwsiwch y canfyddiadau a adroddwyd, addaswch --rule, neu lacio --fail-on.
+check.summary.counts = Canlyniadau'r dadansoddiad — gwallau: { $errors }, rhybuddion: { $warnings }, cyngor: { $advice }, atalwyd: { $suppressed }.
+check.summary.clean = Dim canfyddiadau.
+check.summary.truncated = Yn dangos { $shown } canfyddiad; hepgorodd --limit { $omitted } arall.
+check.rule.malformed = Nid yw'r dewisydd { $selector } wedi'i ysgrifennu fel NAME=SEVERITY.
+check.rule.unknown = Mae'r dewisydd yn enwi { $name }, nad yw'n rheol nac yn gategori.
+check.rule.severity = Mae'r dewisydd { $name } yn enwi'r difrifoldeb { $severity }; disgwylid un o { $values }.
+check.fail_on.invalid = Trothwy methiant anhysbys { $value }; disgwylid un o { $values }.
+check.source_index = Methwyd mynegeio { $path } ar gyfer diagnosteg ar linell { $line }: { $reason }.
+status.tool.check = Gwirio

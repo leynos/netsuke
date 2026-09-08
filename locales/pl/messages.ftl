@@ -425,3 +425,22 @@ example.errors_found = { $count ->
     [many] Znaleziono { $count } błędów.
    *[other] Znaleziono { $count } błędu.
 }
+
+# Analiza manifestu (`netsuke check`).
+cli.subcommand.check.about = Przeanalizuj manifest bez generowania ani uruchamiania kompilacji.
+cli.subcommand.check.long_about = Zbadaj wybrany manifest pod kątem konstrukcji, które wprawdzie się parsują, ale prawdopodobnie są błędne, niebezpieczne, nieprzenośne lub szkodliwe dla pamięci podręcznej.
+cli.subcommand.check.flag.rule.help = Ustaw ważność reguły lub kategorii, zapisaną jako NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Ważność, przy której ustalenia powodują niepowodzenie polecenia.
+cli.subcommand.check.flag.limit.help = Maksymalna liczba zgłaszanych ustaleń; 0 zgłasza wszystkie.
+cli.subcommand.check.flag.explain.help = Wypisz opis reguł zamiast analizować manifest.
+check.threshold_exceeded = Ustalenia osiągnęły próg { $severity }: { $failing } z { $reported } zgłoszonych.
+check.threshold_exceeded.help = Popraw zgłoszone ustalenia, dostosuj --rule lub złagodź --fail-on.
+check.summary.counts = Wyniki analizy — błędy: { $errors }, ostrzeżenia: { $warnings }, porady: { $advice }, wyciszone: { $suppressed }.
+check.summary.clean = Brak ustaleń.
+check.summary.truncated = Pokazano { $shown } ustaleń; --limit pominął kolejne { $omitted }.
+check.rule.malformed = Selektor { $selector } nie jest zapisany jako NAME=SEVERITY.
+check.rule.unknown = Selektor wskazuje { $name }, co nie jest ani regułą, ani kategorią.
+check.rule.severity = Selektor { $name } wskazuje ważność { $severity }; oczekiwano jednej z { $values }.
+check.fail_on.invalid = Nieznany próg niepowodzenia { $value }; oczekiwano jednego z { $values }.
+check.source_index = Nie udało się zindeksować { $path } dla diagnostyki w wierszu { $line }: { $reason }.
+status.tool.check = Sprawdź

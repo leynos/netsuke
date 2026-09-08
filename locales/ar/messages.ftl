@@ -427,3 +427,22 @@ example.errors_found = { $count ->
     [many] عُثر على { $count } خطأً.
    *[other] عُثر على { $count } خطأ.
 }
+
+# فحص ملف البيان (`netsuke check`).
+cli.subcommand.check.about = افحص ملف البيان دون توليد بناء أو تشغيله.
+cli.subcommand.check.long_about = افحص ملف البيان المحدد بحثًا عن تراكيب تُحلَّل نحويًا لكنها على الأرجح خاطئة أو غير آمنة أو غير قابلة للنقل أو ضارة بالتخزين المؤقت.
+cli.subcommand.check.flag.rule.help = اضبط درجة خطورة قاعدة أو فئة، مكتوبة بالصيغة NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = درجة الخطورة التي تجعل النتائج تُفشل الأمر.
+cli.subcommand.check.flag.limit.help = الحد الأقصى للنتائج المُبلَّغ عنها؛ القيمة 0 تُبلغ عنها جميعًا.
+cli.subcommand.check.flag.explain.help = اطبع مرجع القواعد بدلًا من فحص ملف بيان.
+check.threshold_exceeded = بلغت النتائج عتبة { $severity }: { $failing } من أصل { $reported } نتيجة مُبلَّغ عنها.
+check.threshold_exceeded.help = أصلح النتائج المُبلَّغ عنها، أو عدّل ‎--rule، أو خفّف ‎--fail-on.
+check.summary.counts = نتائج الفحص — أخطاء: { $errors }، تحذيرات: { $warnings }، إرشادات: { $advice }، مكبوتة: { $suppressed }.
+check.summary.clean = لا توجد نتائج.
+check.summary.truncated = يجري عرض { $shown } نتيجة؛ أسقط ‎--limit عدد { $omitted } نتيجة أخرى.
+check.rule.malformed = المُحدِّد { $selector } غير مكتوب بالصيغة NAME=SEVERITY.
+check.rule.unknown = يسمي المُحدِّد { $name }، وهو ليس قاعدة ولا فئة.
+check.rule.severity = يسمي المُحدِّد { $name } درجة الخطورة { $severity }؛ كان المتوقع إحدى القيم { $values }.
+check.fail_on.invalid = عتبة إخفاق غير معروفة { $value }؛ كان المتوقع إحدى القيم { $values }.
+check.source_index = تعذّرت فهرسة { $path } للتشخيص عند السطر { $line }: { $reason }.
+status.tool.check = فحص

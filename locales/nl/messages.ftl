@@ -420,3 +420,22 @@ example.errors_found = { $count ->
     [one] { $count } fout gevonden.
    *[other] { $count } fouten gevonden.
 }
+
+# Manifest-analyse (`netsuke check`).
+cli.subcommand.check.about = Analyseer het manifest zonder een build te genereren of uit te voeren.
+cli.subcommand.check.long_about = Onderzoek het gekozen manifest op constructies die weliswaar ontleed worden maar waarschijnlijk onjuist, onveilig, niet-overdraagbaar of cachevijandig zijn.
+cli.subcommand.check.flag.rule.help = De ernst van een regel of categorie instellen, geschreven als NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Ernst waarbij bevindingen het commando laten falen.
+cli.subcommand.check.flag.limit.help = Maximaal aantal gemelde bevindingen; 0 meldt ze allemaal.
+cli.subcommand.check.flag.explain.help = De regelreferentie afdrukken in plaats van een manifest te analyseren.
+check.threshold_exceeded = Bevindingen bereikten de drempel { $severity }: { $failing } van { $reported } gemeld.
+check.threshold_exceeded.help = Los de gemelde bevindingen op, pas --rule aan of versoepel --fail-on.
+check.summary.counts = Analyseresultaten — fouten: { $errors }, waarschuwingen: { $warnings }, adviezen: { $advice }, onderdrukt: { $suppressed }.
+check.summary.clean = Geen bevindingen.
+check.summary.truncated = { $shown } bevindingen getoond; --limit liet er nog { $omitted } weg.
+check.rule.malformed = Selector { $selector } is niet geschreven als NAME=SEVERITY.
+check.rule.unknown = Selector noemt { $name }, wat noch een regel noch een categorie is.
+check.rule.severity = Selector { $name } noemt ernst { $severity }; verwacht werd een van { $values }.
+check.fail_on.invalid = Onbekende faaldrempel { $value }; verwacht werd een van { $values }.
+check.source_index = Kon { $path } niet indexeren voor diagnostiek op regel { $line }: { $reason }.
+status.tool.check = Controleren

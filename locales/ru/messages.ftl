@@ -426,3 +426,22 @@ example.errors_found = { $count ->
     [many] Найдено { $count } ошибок.
    *[other] Найдено { $count } ошибки.
 }
+
+# Проверка манифеста (`netsuke check`).
+cli.subcommand.check.about = Проверить манифест без создания и запуска сборки.
+cli.subcommand.check.long_about = Проанализировать выбранный манифест на конструкции, которые разбираются, но, вероятно, ошибочны, небезопасны, непереносимы или мешают кэшированию.
+cli.subcommand.check.flag.rule.help = Задать важность правила или категории в виде NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Важность, при которой находки приводят к сбою команды.
+cli.subcommand.check.flag.limit.help = Максимальное число сообщаемых находок; 0 сообщает обо всех.
+cli.subcommand.check.flag.explain.help = Вывести справочник правил вместо анализа манифеста.
+check.threshold_exceeded = Находки достигли порога { $severity }: { $failing } из { $reported } сообщённых.
+check.threshold_exceeded.help = Исправьте сообщённые находки, измените --rule или ослабьте --fail-on.
+check.summary.counts = Результаты проверки — ошибки: { $errors }, предупреждения: { $warnings }, советы: { $advice }, подавлено: { $suppressed }.
+check.summary.clean = Находок нет.
+check.summary.truncated = Показано находок: { $shown }; --limit пропустил ещё { $omitted }.
+check.rule.malformed = Селектор { $selector } записан не в виде NAME=SEVERITY.
+check.rule.unknown = Селектор указывает { $name }, что не является ни правилом, ни категорией.
+check.rule.severity = Селектор { $name } указывает важность { $severity }; ожидалось одно из { $values }.
+check.fail_on.invalid = Неизвестный порог сбоя { $value }; ожидалось одно из { $values }.
+check.source_index = Не удалось проиндексировать { $path } для диагностики в строке { $line }: { $reason }.
+status.tool.check = Проверка

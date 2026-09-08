@@ -421,3 +421,22 @@ example.errors_found = { $count ->
     [one] { $count } erreur trouvée.
    *[other] { $count } erreurs trouvées.
 }
+
+# Analyse statique du manifeste (`netsuke check`).
+cli.subcommand.check.about = Analyser le manifeste sans générer ni exécuter de build.
+cli.subcommand.check.long_about = Analyser le manifeste sélectionné à la recherche de constructions qui s'analysent correctement mais sont probablement erronées, dangereuses, non portables ou hostiles au cache.
+cli.subcommand.check.flag.rule.help = Définir la sévérité d'une règle ou d'une catégorie, écrite NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Sévérité à partir de laquelle les constats font échouer la commande.
+cli.subcommand.check.flag.limit.help = Nombre maximal de constats signalés ; 0 les signale tous.
+cli.subcommand.check.flag.explain.help = Afficher la référence des règles au lieu d'analyser un manifeste.
+check.threshold_exceeded = Les constats ont atteint le seuil { $severity } : { $failing } sur { $reported } signalés.
+check.threshold_exceeded.help = Corrigez les constats signalés, ajustez --rule ou assouplissez --fail-on.
+check.summary.counts = Résultats de l'analyse — erreurs : { $errors }, avertissements : { $warnings }, conseils : { $advice }, supprimés : { $suppressed }.
+check.summary.clean = Aucun constat.
+check.summary.truncated = { $shown } constats affichés ; --limit en a omis { $omitted } autres.
+check.rule.malformed = Le sélecteur { $selector } n'est pas écrit sous la forme NAME=SEVERITY.
+check.rule.unknown = Le sélecteur nomme { $name }, qui n'est ni une règle ni une catégorie.
+check.rule.severity = Le sélecteur { $name } nomme la sévérité { $severity } ; attendu l'une de { $values }.
+check.fail_on.invalid = Seuil d'échec inconnu { $value } ; attendu l'un de { $values }.
+check.source_index = Impossible d'indexer { $path } pour les diagnostics à la ligne { $line } : { $reason }.
+status.tool.check = Vérification

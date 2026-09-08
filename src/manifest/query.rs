@@ -25,8 +25,36 @@ pub(crate) fn from_path_for_manifest_query(
     path: impl AsRef<Path>,
     on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
 ) -> Result<NetsukeManifest> {
+    from_path_for_manifest_query_with_source(path, on_stage).map(|loaded| loaded.manifest)
+}
+
+/// Load a manifest for a discovery query, keeping the source text it came from.
+///
+/// The linter needs the exact bytes the manifest was parsed from so its span
+/// index cannot disagree with the compiler's. Returning them from the same
+/// capability-scoped read is what guarantees that; reading the path again
+/// would open a second, unscoped view of the filesystem.
+///
+/// # Errors
+///
+/// Returns an error if the manifest cannot be read, rendered, or parsed, or if
+/// it invokes an impure template helper.
+pub(crate) fn from_path_for_manifest_query_with_source(
+    path: impl AsRef<Path>,
+    on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
+) -> Result<LoadedManifest> {
     let env_reader = disabled_env_reader();
     from_path_with_registration(path, &env_reader, on_stage, ManifestLoadMode::ManifestQuery)
+}
+
+/// A rendered manifest together with the source text it was parsed from.
+pub(crate) struct LoadedManifest {
+    /// The expanded and rendered manifest.
+    pub(crate) manifest: NetsukeManifest,
+    /// The manifest source, exactly as read.
+    pub(crate) source: String,
+    /// The display name the diagnostics label the source with.
+    pub(crate) name: String,
 }
 
 /// Load a manifest with the full stdlib and an explicit network policy.
@@ -37,6 +65,7 @@ pub(super) fn from_path_with_policy_and_env(
     on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
 ) -> Result<NetsukeManifest> {
     from_path_with_registration(path, env_reader, on_stage, ManifestLoadMode::Full(policy))
+        .map(|loaded| loaded.manifest)
 }
 
 /// Select the standard-library boundary for a manifest load.
@@ -53,7 +82,7 @@ fn from_path_with_registration(
     env_reader: &EnvReader,
     mut on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
     mode: ManifestLoadMode,
-) -> Result<NetsukeManifest> {
+) -> Result<LoadedManifest> {
     notify_stage(&mut on_stage, ManifestLoadStage::ManifestIngestion);
     let path_ref = path.as_ref();
     let workspace = open_manifest_workspace(path_ref, None)?;
@@ -80,7 +109,7 @@ fn from_path_with_registration(
         ManifestLoadMode::ManifestQuery => (StdlibRegistration::ManifestQuery, None),
     };
     let manifest_root = Some(workspace.root);
-    from_str_named(
+    let manifest = from_str_named(
         &data,
         ManifestParse {
             name: &name,
@@ -90,5 +119,10 @@ fn from_path_with_registration(
             expansion_report_observer,
         },
         &mut on_stage,
-    )
+    )?;
+    Ok(LoadedManifest {
+        manifest,
+        source: data,
+        name: name.as_ref().to_owned(),
+    })
 }

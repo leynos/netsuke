@@ -424,3 +424,22 @@ example.errors_found = { $count ->
     [few] Chaidh { $count } mearachdan a lorg.
    *[other] Chaidh { $count } mearachd a lorg.
 }
+
+# Sgrùdadh a' mhaniffeast (`netsuke check`).
+cli.subcommand.check.about = Sgrùd am maniffeast gun togail a chruthachadh no a ruith.
+cli.subcommand.check.long_about = Rannsaich am maniffeast a thagh thu airson structaran a thèid a pharsadh ach a tha coltach ri bhith mearachdach, mì-shàbhailte, neo-ghiùlaineach no cronail don tasgadan.
+cli.subcommand.check.flag.rule.help = Suidhich cho dona 's a tha riaghailt no roinn, sgrìobhte mar NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = An ìre dona far am fàillig an àithne mar thoradh air na lorgar.
+cli.subcommand.check.flag.limit.help = An àireamh as motha de lorgan ri aithris; aithrisidh 0 a h-uile gin.
+cli.subcommand.check.flag.explain.help = Clò-bhuail iomradh nan riaghailtean an àite maniffeast a sgrùdadh.
+check.threshold_exceeded = Ràinig na lorgan an stairsneach { $severity }: { $failing } à { $reported } a chaidh aithris.
+check.threshold_exceeded.help = Càraich na lorgan a chaidh aithris, atharraich --rule, no lasaich --fail-on.
+check.summary.counts = Toraidhean an sgrùdaidh — mearachdan: { $errors }, rabhaidhean: { $warnings }, comhairle: { $advice }, mùchte: { $suppressed }.
+check.summary.clean = Cha deach dad a lorg.
+check.summary.truncated = A' sealltainn { $shown } lorg; dh'fhàg --limit { $omitted } eile às.
+check.rule.malformed = Chan eil an roghnaichear { $selector } sgrìobhte mar NAME=SEVERITY.
+check.rule.unknown = Tha an roghnaichear ag ainmeachadh { $name }, nach eil na riaghailt no na roinn.
+check.rule.severity = Tha an roghnaichear { $name } ag ainmeachadh na h-ìre { $severity }; bha dùil ri fear de { $values }.
+check.fail_on.invalid = Stairsneach fàilligidh neo-aithnichte { $value }; bha dùil ri fear de { $values }.
+check.source_index = Cha b' urrainn { $path } a chlàr-amais airson breithneachaidh air loidhne { $line }: { $reason }.
+status.tool.check = Sgrùd
