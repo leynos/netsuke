@@ -34,13 +34,15 @@ pub(super) fn retain_layers_and_resolve_json(
     layers: Vec<MergeLayer<'static>>,
     directory: Option<&Path>,
     normalizer: &impl PathNormalizer,
-) -> (Vec<MergeLayer<'static>>, bool, ProjectManifestBudgetRequest) {
+) -> OrthoResult<(Vec<MergeLayer<'static>>, bool, ProjectManifestBudgetRequest)> {
     let mut json = Cli::default().json;
     let mut retained = Vec::with_capacity(layers.len());
     let mut project_budget_request = ProjectManifestBudgetRequest::default();
-    let project_key = project_scope_file(directory)
+    let project_file = project_scope_file(directory);
+    let project_key = project_file
         .as_deref()
         .map(|path| comparison_key(normalizer, &path.to_string_lossy()));
+    let project_chain_paths = project_scope_layer_paths(project_file.as_deref())?;
     for layer in layers {
         debug_assert_eq!(
             layer.provenance(),
@@ -49,15 +51,19 @@ pub(super) fn retain_layers_and_resolve_json(
         );
         let path = layer.path().map(ToOwned::to_owned);
         let mut value = layer.into_value();
-        if is_project_scope_layer(path.as_deref(), project_key.as_deref()) {
-            project_budget_request = take_project_manifest_budget_request(&mut value);
+        if is_project_scope_layer(path.as_deref(), project_key.as_deref())
+            || path.as_ref().is_some_and(|candidate_path| {
+                project_chain_paths.contains(candidate_path.as_std_path())
+            })
+        {
+            project_budget_request.narrow_with(&take_project_manifest_budget_request(&mut value));
         }
         if let Some(layer_json) = json_from_value(&value) {
             json = layer_json;
         }
         retained.push(MergeLayer::file(Cow::Owned(value), path));
     }
-    (retained, json, project_budget_request)
+    Ok((retained, json, project_budget_request))
 }
 
 /// Return whether a discovered layer is the primary project configuration file.
@@ -100,11 +106,28 @@ fn take_project_manifest_budget_request(
 /// Remove and deserialize one optional project budget limit.
 fn take_limit<T>(fields: &mut serde_json::Map<String, serde_json::Value>, name: &str) -> Option<T>
 where
-    T: serde::de::DeserializeOwned,
+    T: serde::de::DeserializeOwned + From<u8> + PartialEq,
 {
-    fields
-        .remove(name)
-        .and_then(|value| serde_json::from_value(value).ok())
+    let value = fields.get(name)?;
+    let limit = serde_json::from_value(value.clone()).ok()?;
+    if limit == T::from(0) {
+        return None;
+    }
+    fields.remove(name);
+    Some(limit)
+}
+
+/// Return every resolved file path controlled by the project `extends` chain.
+///
+/// # Errors
+///
+/// Returns an error when the project chain cannot be loaded consistently with
+/// the discovery pass.
+fn project_scope_layer_paths(project_file: Option<&Path>) -> OrthoResult<HashSet<PathBuf>> {
+    Ok(project_scope_layers(project_file)?
+        .into_iter()
+        .filter_map(|layer| layer.path().map(|path| path.as_std_path().to_path_buf()))
+        .collect())
 }
 
 /// Project-scope outcome retained for a later trace replay.

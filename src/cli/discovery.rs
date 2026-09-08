@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use super::command::Cli;
 
-/// Manifest-budget restrictions requested by the primary project file.
+/// Manifest-budget restrictions requested by the project configuration chain.
 #[derive(Debug, Default)]
 pub(crate) struct ProjectManifestBudgetRequest {
     /// Requested per-evaluation instruction limit.
@@ -28,6 +28,29 @@ pub(crate) struct ProjectManifestBudgetRequest {
     pub(crate) foreach_cardinality: Option<usize>,
     /// Requested aggregate expansion count.
     pub(crate) expanded_entries: Option<usize>,
+}
+
+impl ProjectManifestBudgetRequest {
+    /// Retain the most restrictive value requested by project-controlled layers.
+    pub(crate) fn narrow_with(&mut self, other: &Self) {
+        narrow_limit(&mut self.evaluation_fuel, other.evaluation_fuel);
+        narrow_limit(&mut self.manifest_fuel, other.manifest_fuel);
+        narrow_limit(&mut self.rendered_value_bytes, other.rendered_value_bytes);
+        narrow_limit(
+            &mut self.rendered_manifest_bytes,
+            other.rendered_manifest_bytes,
+        );
+        narrow_limit(&mut self.source_bytes, other.source_bytes);
+        narrow_limit(&mut self.foreach_cardinality, other.foreach_cardinality);
+        narrow_limit(&mut self.expanded_entries, other.expanded_entries);
+    }
+}
+
+/// Retain the smaller of two optional project budget restrictions.
+fn narrow_limit<T: Ord + Copy>(current: &mut Option<T>, candidate: Option<T>) {
+    if let Some(requested) = candidate {
+        *current = Some(current.map_or(requested, |existing| existing.min(requested)));
+    }
 }
 
 #[path = "discovery_environment.rs"]
@@ -92,7 +115,7 @@ pub struct DiscoveredLayers {
     layers: Vec<MergeLayer<'static>>,
     /// Whether any discovered layer requested JSON output.
     json_preference: bool,
-    /// Manifest-budget restrictions requested by the primary project file.
+    /// Manifest-budget restrictions requested by the project configuration chain.
     project_manifest_budget_request: ProjectManifestBudgetRequest,
     /// Loading errors deferred beside the layers that may still be usable.
     errors: Vec<Arc<ortho_config::OrthoError>>,
@@ -185,21 +208,26 @@ fn discover_file_layers_with_normalizer(
     let (trace, load_warning, outcome) = collect_file_layers_with_env(cli, env, normalizer);
     let diagnostics = DiscoveryDiagnostics::new(trace, load_warning);
     let layers = match outcome {
-        Ok(discovered_layers) => {
-            let (layers, json_preference, project_manifest_budget_request) =
-                layers::retain_layers_and_resolve_json(
-                    discovered_layers,
-                    cli.directory.as_deref().map(camino::Utf8Path::as_std_path),
-                    normalizer,
-                );
-            DiscoveredLayers {
+        Ok(discovered_layers) => match layers::retain_layers_and_resolve_json(
+            discovered_layers,
+            cli.directory.as_deref().map(camino::Utf8Path::as_std_path),
+            normalizer,
+        ) {
+            Ok((layers, json_preference, project_manifest_budget_request)) => DiscoveredLayers {
                 layers,
                 json_preference,
                 project_manifest_budget_request,
                 errors: Vec::new(),
                 diagnostics,
-            }
-        }
+            },
+            Err(error) => DiscoveredLayers {
+                layers: Vec::new(),
+                json_preference: Cli::default().json,
+                project_manifest_budget_request: ProjectManifestBudgetRequest::default(),
+                errors: vec![error],
+                diagnostics,
+            },
+        },
         Err(error) => DiscoveredLayers {
             layers: Vec::new(),
             json_preference: Cli::default().json,

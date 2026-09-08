@@ -205,6 +205,55 @@ fn macro_and_when_evaluations_share_the_fuel_budget() {
 }
 
 #[test]
+fn expression_macro_results_consume_the_shared_output_budget() {
+    let yaml = concat!(
+        "netsuke_version: 1.0.0\n",
+        "macros:\n",
+        "  - signature: large()\n",
+        "    body: '{{ \"x\" * 17 }}'\n",
+        "targets:\n",
+        "  - name: conditional\n",
+        "    when: 'large()'\n",
+        "    command: echo ok\n",
+    );
+
+    let error = from_str_with_limits(yaml, small_limits())
+        .expect_err("expression macro output must obey the value budget");
+    assert!(
+        format!("{error:#}").contains("resource budget exhausted"),
+        "unexpected error: {error:#}"
+    );
+}
+
+#[test]
+fn repeated_expression_macros_consume_the_shared_fuel_budget() {
+    let yaml = concat!(
+        "netsuke_version: 1.0.0\n",
+        "macros:\n",
+        "  - signature: enabled()\n",
+        "    body: 'true'\n",
+        "targets:\n",
+        "  - name: first\n",
+        "    when: 'enabled()'\n",
+        "    command: echo ok\n",
+        "  - name: second\n",
+        "    when: 'enabled()'\n",
+        "    command: echo ok\n",
+    );
+    let limits = ManifestBudgetLimits {
+        manifest_fuel: small_limits().evaluation_fuel.saturating_mul(2),
+        ..small_limits()
+    };
+
+    let error = from_str_with_limits(yaml, limits)
+        .expect_err("each expression macro must reserve shared fuel");
+    assert!(
+        format!("{error:#}").contains("resource budget exhausted"),
+        "unexpected error: {error:#}"
+    );
+}
+
+#[test]
 fn manifest_query_rendering_uses_the_same_budget() -> Result<()> {
     let workspace = tempdir().context("create query workspace")?;
     let path = workspace.path().join("Netsukefile");

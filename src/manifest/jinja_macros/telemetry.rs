@@ -102,9 +102,6 @@ pub(super) fn instrument_macro_invocation<T>(
     if let Err(error) = &result {
         span.record("error_category", format_args!("{:?}", error.kind()));
         tracing::debug!(error_category = ?error.kind(), "manifest macro invocation failed");
-        if error.kind() == minijinja::ErrorKind::OutOfFuel {
-            record_budget_exhaustion("macro", "fuel");
-        }
     }
     counter!(MACRO_INVOCATIONS_TOTAL, "outcome" => outcome).increment(1);
     histogram!(MACRO_INVOCATION_DURATION).record(started.elapsed());

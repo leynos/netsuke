@@ -198,10 +198,22 @@ pub(crate) fn parse_macro_name(signature: &str) -> Result<String> {
 ///
 /// Returns an error if the macro signature is invalid or template compilation
 /// fails.
+#[cfg(test)]
 pub(crate) fn register_macro(
     env: &mut Environment<'static>,
     macro_def: &MacroDefinition,
     index: usize,
+) -> Result<()> {
+    let budget = ManifestBudget::default();
+    register_macro_with_budget(env, macro_def, index, budget)
+}
+
+/// Register one manifest macro with shared evaluation accounting.
+fn register_macro_with_budget(
+    env: &mut Environment<'static>,
+    macro_def: &MacroDefinition,
+    index: usize,
+    budget: ManifestBudget,
 ) -> Result<()> {
     let name = parse_macro_name(&macro_def.signature)?;
     let template_name = format!("__manifest_macro_{index}_{name}");
@@ -217,7 +229,7 @@ pub(crate) fn register_macro(
 
     validate_macro(env, &template_name, &name)?;
     register_macro_import(env, &template_name, &name);
-    env.add_function(name.clone(), make_macro_fn(template_name, name));
+    env.add_function(name.clone(), make_macro_fn(template_name, name, budget));
     Ok(())
 }
 
@@ -265,7 +277,7 @@ pub(crate) fn register_manifest_macros_with_budget(
                 ManifestBudgetStage::Source,
             )
             .map_err(|exhaustion| exhaustion.into_error(ErrorKind::WriteFailure))?;
-        register_macro(env, def, idx).with_context(|| {
+        register_macro_with_budget(env, def, idx, budget.clone()).with_context(|| {
             localization::message(keys::MANIFEST_MACRO_REGISTER_FAILED)
                 .with_arg("signature", &def.signature)
         })?;

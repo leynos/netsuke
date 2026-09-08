@@ -485,9 +485,11 @@ instructions; Netsuke counts template-plus-import source bytes, rendered bytes,
 1,000,000 instructions per evaluation, 100,000,000 instructions per manifest, 1
 MiB per value, 16 MiB rendered bytes, 4 MiB source bytes, 10,000 iterator
 values, and 50,000 expanded entries. Trusted operator configuration may lower
-these limits; project configuration must not widen them. The loader emits a
-localized redacted exhaustion diagnostic before constructing proportional
-output or cloned expansion data.
+these limits; project configuration, including every file in the project's
+`extends` chain, must not widen them. A malformed, non-positive, or otherwise
+unrepresentable budget value is a configuration error rather than an omitted
+setting. The loader emits a localized redacted exhaustion diagnostic before
+constructing proportional output or cloned expansion data.
 
 Large sets of similar outputs or setup actions can clutter a manifest when
 written individually. Netsuke supports a `foreach` entry within top-level
@@ -3408,10 +3410,12 @@ per evaluation, 100,000,000 per manifest, 1 MiB per value, 16 MiB rendered
 bytes, 4 MiB source bytes, 10,000 iterator values, and 50,000 expanded entries.
 
 Budget configuration follows the normal precedence ladder, except that the
-primary project file is a monotonic-narrowing layer: it may lower any effective
-ceiling but may not raise one established by a more-trusted source. Exhaustion
-returns a localized redacted diagnostic and closed-vocabulary telemetry. This
-loader-level contract complements the independent
+project-owned configuration chain is a monotonic-narrowing layer: values from
+the project file and its `extends` parents may lower any effective ceiling but
+may not raise one established by a more-trusted source. Invalid budget values
+are rejected during configuration merge instead of being silently discarded.
+Exhaustion returns a localized redacted diagnostic and closed-vocabulary
+telemetry. This loader-level contract complements the independent
 [fetch and shell helper limits](#network--command-functions--filters), which
 bound external I/O rather than manifest evaluation work.
 

@@ -1238,14 +1238,22 @@ and 50,000 expanded entries.
 The configuration keys are `manifest_evaluation_fuel`, `manifest_fuel`,
 `manifest_rendered_value_bytes`, `manifest_rendered_manifest_bytes`,
 `manifest_source_bytes`, `manifest_foreach_cardinality`, and
-`manifest_expanded_entries`. Set them in a trusted configuration file, as
-`NETSUKE_MANIFEST_EVALUATION_FUEL`, `NETSUKE_MANIFEST_FUEL`, and the matching
-upper-case environment names, or with the corresponding `--manifest-*` flags.
-Project `.netsuke.toml` values may narrow a ceiling but cannot widen a value
-already established by defaults, user configuration, the environment, or the
-CLI. A failure reports `Manifest resource budget exhausted` with its fixed
-stage and numeric limit, never template text, context values, or rendered
-secrets.
+`manifest_expanded_entries`. Set them in a trusted configuration file, through
+the matching environment variables (`NETSUKE_MANIFEST_EVALUATION_FUEL`,
+`NETSUKE_MANIFEST_FUEL`, `NETSUKE_MANIFEST_RENDERED_VALUE_BYTES`,
+`NETSUKE_MANIFEST_RENDERED_MANIFEST_BYTES`, `NETSUKE_MANIFEST_SOURCE_BYTES`,
+`NETSUKE_MANIFEST_FOREACH_CARDINALITY`, and
+`NETSUKE_MANIFEST_EXPANDED_ENTRIES`), or with the corresponding flags
+(`--manifest-evaluation-fuel`, `--manifest-fuel`,
+`--manifest-rendered-value-bytes`, `--manifest-rendered-manifest-bytes`,
+`--manifest-source-bytes`, `--manifest-foreach-cardinality`, and
+`--manifest-expanded-entries`). Project `.netsuke.toml` values, including
+values supplied through its `extends` chain, may narrow a ceiling but cannot
+widen a value already established by defaults, user configuration, the
+environment, or the CLI. Invalid or non-positive budget values are rejected as
+configuration errors rather than ignored. A resource-limit failure reports
+`Manifest resource budget exhausted` with its fixed stage and numeric limit,
+never template text, context values, or rendered secrets.
 
 On Windows, Netsuke normalizes alternate spellings of a configuration path,
 including short and long path forms, before comparing discovered layers. A

@@ -118,6 +118,65 @@ fn merge_query_without_observer_emits_no_merge_events() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn explicit_manifest_budget_flags_override_environment_limits() -> Result<()> {
+    let directory = tempfile::tempdir().context("create isolated project directory")?;
+    let directory_arg = directory.path().to_string_lossy().into_owned();
+    let localizer = Arc::from(netsuke::cli_localization::build_localizer(None));
+    let (cli, matches) = netsuke::cli::parse_with_localizer_from(
+        [
+            "netsuke",
+            "--directory",
+            directory_arg.as_str(),
+            "--manifest-evaluation-fuel",
+            "11",
+            "--manifest-fuel",
+            "12",
+            "--manifest-rendered-value-bytes",
+            "13",
+            "--manifest-rendered-manifest-bytes",
+            "14",
+            "--manifest-source-bytes",
+            "15",
+            "--manifest-foreach-cardinality",
+            "16",
+            "--manifest-expanded-entries",
+            "17",
+        ],
+        &localizer,
+    )
+    .context("parse explicit manifest-budget flags")?;
+    let env = TestEnv {
+        entries: [
+            ("NETSUKE_MANIFEST_EVALUATION_FUEL", "101"),
+            ("NETSUKE_MANIFEST_FUEL", "102"),
+            ("NETSUKE_MANIFEST_RENDERED_VALUE_BYTES", "103"),
+            ("NETSUKE_MANIFEST_RENDERED_MANIFEST_BYTES", "104"),
+            ("NETSUKE_MANIFEST_SOURCE_BYTES", "105"),
+            ("NETSUKE_MANIFEST_FOREACH_CARDINALITY", "106"),
+            ("NETSUKE_MANIFEST_EXPANDED_ENTRIES", "107"),
+        ]
+        .into_iter()
+        .map(|(name, value)| (OsString::from(name), OsString::from(value)))
+        .collect(),
+    };
+
+    let merged = netsuke::cli::merge_with_config_and_env(&cli, &matches, &env)?;
+    ensure!(
+        (
+            merged.manifest_evaluation_fuel,
+            merged.manifest_fuel,
+            merged.manifest_rendered_value_bytes,
+            merged.manifest_rendered_manifest_bytes,
+            merged.manifest_source_bytes,
+            merged.manifest_foreach_cardinality,
+            merged.manifest_expanded_entries,
+        ) == (11, 12, 13, 14, 15, 16, 17),
+        "explicit manifest-budget flags must override environment limits"
+    );
+    Ok(())
+}
+
 #[rstest]
 fn observer_reports_exact_empty_input_events() -> Result<()> {
     let directory = tempfile::tempdir().context("create empty configuration directory")?;

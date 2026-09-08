@@ -200,7 +200,7 @@ proptest! {
             .map(|value| MergeLayer::file(Cow::Owned(value), None))
             .collect();
         let (final_layers, json_preference, _) =
-            super::layers::retain_layers_and_resolve_json(ordered, None, &FsPathNormalizer);
+            super::layers::retain_layers_and_resolve_json(ordered, None, &FsPathNormalizer)?;
 
         let expected = layers
             .iter()
