@@ -3,9 +3,11 @@
 use std::io::{self, BufRead, BufReader, Read};
 
 use camino::{Utf8Path, Utf8PathBuf};
+#[cfg(unix)]
+use cap_std::fs_utf8::OpenOptionsExt;
 use cap_std::{
     ambient_authority, fs,
-    fs_utf8::{Dir, File, OpenOptions, OpenOptionsExt},
+    fs_utf8::{Dir, File, OpenOptions},
 };
 use minijinja::Error;
 #[cfg(unix)]
