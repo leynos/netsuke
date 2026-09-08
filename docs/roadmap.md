@@ -195,7 +195,7 @@ and agents.
     (deferred to 5.3.1, when the `--profile` flag lands).
 
   - Note: OrthoConfig automatic discovery is exclusive: one discovered file
-    wins, so system-only fields are absent when the user-scope file is
+    wins, so system-only fields are absent when a user-scope file is
     selected (user-over-system and system-only merge-through cases are
     covered by the regression tests added in issue #385).
 
@@ -380,6 +380,7 @@ The identifier remains reserved, not checked off as implemented.
   - [x] Replace `--colour-policy` with `--color auto|always|never`.
   - [x] Replace `--spinner-mode` and boolean `--progress` with
     `--progress auto|always|never`.
+  - [x] Replace `--no-emoji` with `--emoji auto|always|never`.
   - [x] Add `--accessibility auto|on|off`.
   - [x] Update OrthoConfig field integration, environment names, config
     examples, localization keys, and tests.
@@ -397,6 +398,7 @@ The identifier remains reserved, not checked off as implemented.
 - [ ] 3.15.6. Bound every large response.
   - [ ] Add `--limit` and `--cursor` where lists can grow.
   - [ ] Add `--target` and `--depth` to graph inspection.
+  - [ ] Add truncation hints to JSON and human output.
   - [ ] Bound build-log previews in JSON mode and reference log files.
   - [ ] Depend on OrthoConfig `7.2.6` for bounded-list metadata.
 
@@ -618,6 +620,7 @@ configuration, inspect run history, route artefacts, and report friction.
   - [ ] Support `--json` on all run commands.
   - [ ] Bound list output with `--limit` and `--cursor`.
   - [ ] Require `--force` for pruning.
+  - [ ] Include recovery hints for interrupted builds.
 
 - [ ] 5.2.4. Add run-ledger validation and documentation. Requires: 5.2.3.
   - [ ] Test interrupted writes and corrupted record recovery.
@@ -1357,7 +1360,6 @@ Objective: deliver the `netsuke test` command and YAML test dialect specified in
   See [UX design §8](netsuke-test-framework-ux-design.md) and
   [technical design §7](netsuke-test-framework-technical-design.md).
   - [ ] Implement stub, mock, and spy kinds with first-match-wins entries.
-  - [ ] Compile the closed matcher vocabulary at parse time.
   - [ ] Journal every call with per-case isolation (invariants I1 and I3).
 
 - [ ] 7.3.2. Implement verification and reporting hooks. Requires: 7.3.1.
@@ -1446,7 +1448,6 @@ Objective: deliver the `netsuke test` command and YAML test dialect specified in
 - [ ] 7.5.5. Implement assertion evaluation. Requires: 7.5.4.
   - [ ] Normalize scalar and structured assertions.
   - [ ] Distinguish failures from errors end to end.
-  - [ ] Implement `expect_failure` with named diagnostics.
   - [ ] Render failing expressions with substituted actual values.
 
 ### 7.6. Command, localization, and reporting
@@ -1586,7 +1587,7 @@ schedule.
     actionable rule identifier, including allowed-source and declared-repository
     SHA provenance, both `continue-on-error` scopes, `pull_request_target`, and
     privileged `workflow_run` coverage for untrusted checkout content, verified
-    artefact provenance, and pull-request data reaching shell commands, while
+    artefact provenance, and pull-request data flowing to shell commands, while
     all tracked workflows pass.
 - [ ] 8.2.2. Enforce gate, reference, and documentation consistency.
   - Requires 8.1.2 and 8.1.3.
