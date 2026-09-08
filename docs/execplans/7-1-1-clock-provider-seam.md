@@ -50,7 +50,8 @@ Terms used throughout, defined here so no prior reading is required.
 - **Ambient / ambient fallback.** Reading the real host clock, which is what
   happens when no provider is explicitly supplied.
 - **MiniJinja.** The template engine Netsuke embeds (crate `minijinja`,
-  version 2.12.0). Manifest bodies are Jinja templates rendered by it.
+  the lockfile resolves 2.24.0). Manifest bodies are Jinja templates rendered
+  by it.
 - **Stdlib.** Netsuke's library of Jinja filters and functions registered into
   a MiniJinja `Environment`; it lives under `src/stdlib/`.
 - **`StdlibConfig`.** The struct at `src/stdlib/config/mod.rs:21` that carries
@@ -224,24 +225,24 @@ doctests. The clock seam mirrors this shape, naming, and documentation density.
 
 ### Files a novice will touch
 
-| Path                                              | Role                                                                                |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `src/stdlib/time/clock.rs`                        | New. The `ClockProvider` port, `system_clock()` adapter, and the `Clock` container. |
-| `src/stdlib/time/mod.rs`                          | Declares `mod clock;`, re-exports the port, threads the clock into `now()`.         |
-| `src/stdlib/time/tests.rs`                        | Existing unit tests; fixture updated and new cases added.                           |
-| `src/stdlib/config/mod.rs`                        | `StdlibConfig` gains the `clock` field, `with_clock`, and `clock()`.                |
-| `src/stdlib/config_tests.rs`                      | Unit coverage for the new builder and accessor.                                     |
-| `src/stdlib/mod.rs`                               | Re-exports `ClockProvider` and `system_clock` on the public stdlib surface.         |
-| `src/stdlib/register.rs`                          | Passes the clock to `time::register_functions`.                                     |
-| `tests/std_filter_tests/time_functions.rs`        | New. Integration coverage through real `StdlibConfig` registration.                 |
-| `tests/std_filter_tests/support.rs`               | Gains a `stdlib_env_with_clock` helper.                                             |
-| `tests/std_filter_tests.rs`                       | Wires the new integration module (see the wiring contract below).                   |
-| `tests/features/stdlib_time.feature`              | New deterministic scenarios.                                                        |
-| `tests/bdd/steps/stdlib/rendering.rs`             | New `Given` step; `RenderConfig` gains a clock.                                     |
-| `docs/adr-008-environment-seam-taxonomy.md`       | Addendum recording the seam classification.                                         |
-| `docs/developers-guide.md`                        | Seam ownership rules and module boundary entry.                                     |
-| `docs/netsuke-test-framework-technical-design.md` | §5.2 updated to record implemented state.                                           |
-| `docs/roadmap.md`                                 | Mark 7.1.1 done, at the very end.                                                   |
+| Path                                              | Role                                                                                                             |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `src/stdlib/time/clock.rs`                        | New. The `ClockProvider` port, its `system_clock()` and `fixed_clock()` adapters, and the `WallClock` container. |
+| `src/stdlib/time/mod.rs`                          | Declares `mod clock;`, re-exports the port, threads the clock into `now()`.                                      |
+| `src/stdlib/time/tests.rs`                        | Existing unit tests; fixture updated and new cases added.                                                        |
+| `src/stdlib/config/mod.rs`                        | `StdlibConfig` gains the `clock` field, `with_clock`, and `clock()`.                                             |
+| `src/stdlib/config_tests.rs`                      | Unit coverage for the new builder and accessor.                                                                  |
+| `src/stdlib/mod.rs`                               | Re-exports the port, its adapters, and `ClockInstant` on the public stdlib surface.                              |
+| `src/stdlib/register.rs`                          | Passes the clock to `time::register_functions`.                                                                  |
+| `tests/std_filter_tests/time_functions.rs`        | New. Integration coverage through real `StdlibConfig` registration.                                              |
+| `tests/std_filter_tests/support.rs`               | Gains a `stdlib_env_with_clock` helper.                                                                          |
+| `tests/std_filter_tests.rs`                       | Wires the new integration module (see the wiring contract below).                                                |
+| `tests/features/stdlib_time.feature`              | New deterministic scenarios.                                                                                     |
+| `tests/bdd/steps/stdlib/rendering.rs`             | New `Given` step; `RenderConfig` gains a clock.                                                                  |
+| `docs/adr-008-environment-seam-taxonomy.md`       | Addendum recording the seam classification.                                                                      |
+| `docs/developers-guide.md`                        | Seam ownership rules and module boundary entry.                                                                  |
+| `docs/netsuke-test-framework-technical-design.md` | §5.2 updated to record implemented state.                                                                        |
+| `docs/roadmap.md`                                 | Mark 7.1.1 done, at the very end.                                                                                |
 
 ### The integration-test wiring contract
 
@@ -323,6 +324,12 @@ Hard invariants. Violating any of these requires escalation, not a workaround.
 6. **C6 — the clock has exactly one owner.** `StdlibConfig` is the sole place
    a clock is stored, per technical design §5.2. Do not add a parallel clock
    parameter to `register()`, to manifest loading, or to any other entry point.
+   Note honestly that this is a *convention over a single call site*, not a
+   type-enforced property: `time::register_functions` is `pub(crate)` and takes
+   an owned `WallClock`, and EP-M1 deliberately calls it with
+   `WallClock::default()` before `StdlibConfig` is involved. What the compiler
+   does enforce is the crate boundary — no external caller can construct a
+   `WallClock` at all.
 7. **C7 — no ambient-state mutation in tests.** Per ADR-008's 2026-09-01
    addendum, `EnvLock`, `CwdGuard`, and `EnvVarGuard` are retired and no
    sanctioned test mutates the harness process. Determinism comes from
@@ -341,9 +348,9 @@ Stop and escalate — do not improvise — when any threshold is reached.
   overrun means the design was wrong.
 - **Interface.** Any change to a *public* signature other than the three
   additions this plan sanctions (`stdlib::ClockProvider`,
-  `stdlib::system_clock`, `StdlibConfig::with_clock` plus its accessor). In
-  particular, if `StdlibConfig::new` or `into_components` must change shape,
-  stop.
+  `stdlib::ClockInstant`, `stdlib::system_clock`, `stdlib::fixed_clock`, and
+  `StdlibConfig::with_clock` plus its crate-private accessor). In particular, if
+  `StdlibConfig::new` or `into_components` must change shape, stop.
 - **Dependencies.** Any new entry in `Cargo.toml`. Stop.
 - **Iterations.** A given gate still failing after 3 fix attempts. Stop and
   report the log path.
@@ -362,22 +369,49 @@ Stop and escalate — do not improvise — when any threshold is reached.
 
 - **Risk: `Arc<dyn Fn>` is not `Debug`, breaking `StdlibConfig`'s derive.**
   Severity: high. Likelihood: certain (this *will* happen on first compile).
-  Mitigation: this is anticipated and designed for — the `Clock` newtype with a
-  handwritten `Debug` absorbs it, so `StdlibConfig` keeps its derive. See D2.
-  The precedent is `CommandEnv` at `src/runner/process/command_env.rs:73`.
+  Mitigation: this is anticipated and designed for — the `WallClock` newtype
+  with a handwritten `Debug` absorbs it, so `StdlibConfig` keeps its derive.
+  See D2. The precedent is `CommandEnv` at
+  `src/runner/process/command_env.rs:73`.
 
 - **Risk: the clock is captured once at registration rather than consulted per
-  call.** Severity: high. Likelihood: medium. A natural but wrong
-  implementation reads the provider while building the closure and bakes the
-  resulting instant in. Under the fixed-clock tests this defect is invisible,
-  because a fixed provider returns the same value either way. Mitigation: the
-  sequenced-provider test (`OBL-3` below) exists specifically to catch it, and
-  is the designated negative control.
+  call.** Severity: high. Likelihood: low, because
+  `Interfaces and dependencies` hands the implementor the correct body
+  outright. A natural but wrong implementation reads the provider while
+  building the closure and bakes the resulting instant in. Under the
+  fixed-clock tests this defect is invisible, because a fixed provider returns
+  the same value either way. Mitigation: the sequenced-provider test (`OBL-3`)
+  is the designated negative control. Keep it even though the immediate
+  likelihood is low — its value is as a regression guard for later refactors,
+  when the correct body is no longer sitting in front of whoever is editing it.
+
+- **Risk: an injected clock reaches a real build path.** Severity: high.
+  Likelihood: low now, rising at 7.1.2. `StdlibConfig` is `Clone` and the
+  provider is a shared `Arc`, so once the test framework threads a
+  harness-built configuration into code shared with `netsuke build`, a leaked
+  clock would stamp a frozen instant into generated outputs. The worst form is
+  silent: a build file that renders byte-identically every time stops
+  triggering Ninja rebuilds, so CI goes green on stale artefacts. Mitigation:
+  `WallClock::is_system()` and the labelled `Debug` make the installed clock
+  observable rather than invisible; the default path is additionally protected
+  because `StdlibConfig::new` enumerates every field, so the compiler forces
+  `WallClock::default()` there. Revisit this risk explicitly at 7.1.2.
+
+- **Risk: an injected provider returns a non-UTC instant.** Severity: medium.
+  Likelihood: medium. `now()` is documented to yield UTC and `system_clock()`
+  does, but an arbitrary provider need not — a fixture built from a local-time
+  literal would make the harness assert behaviour production never exhibits.
+  Mitigation: `WallClock::read` normalizes with `to_offset(UtcOffset::UTC)`,
+  and OBL-1 carries a non-UTC-provider case that mutation 6 must break.
 
 - **Risk: the seam accidentally reaches manifest-query mode.** Severity:
-  medium. Likelihood: low. Mitigation: C2, plus a new regression test (`OBL-5`)
-  asserting `now()` still errors under `register_manifest_query`. No such test
-  exists today, so this risk is currently unguarded in the repository.
+  medium. Likelihood: low. Mitigation: C2, plus the new regression tests
+  (OBL-5). Note the subtlety recorded there: because the refusing stub is
+  registered *after* the permissive helpers and MiniJinja's `add_function` is
+  last-write-wins, a leak into `register_query_functions` would be masked by
+  the stub. The mitigation is therefore two tests, not one — the second
+  asserting `now` is undefined after the permissive half alone. A single "query
+  mode refuses `now`" test would give false assurance.
 
 - **Risk: `time::register_functions` also registers `timedelta` via
   `register_query_functions`.** Severity: low. Likelihood: medium. Threading a
@@ -476,8 +510,7 @@ tests for them.
   `t.to_offset(o).unix_timestamp() == t.unix_timestamp()` for every valid `o`.
   This is the documented contract of the `time` crate.
 - **AXIOM-3.** MiniJinja's `Environment::add_function` requires its closure to
-  be
-  `Send + Sync + 'static` and may invoke it from any thread. This is what
+  be `Send + Sync + 'static` and may invoke it from any thread. This is what
   forces the `Arc` shape (ADR-008 states the same for `EnvReader`).
 - **AXIOM-4.** `Arc<dyn Fn() -> T + Send + Sync>` is `Clone` and `Send + Sync`,
   and cloning shares one underlying closure rather than duplicating it.
@@ -499,7 +532,10 @@ real registration path rather than against a stub.
 - Rationale: a finite, fully enumerable partition — there is one behaviour to
   pin. Property testing would add nothing.
 - Domain: at least three distinct fixed instants, including one far from the
-  present day so the assertion cannot accidentally pass against the real clock.
+  present day so the assertion cannot accidentally pass against the real clock,
+  **and one provider returning a non-UTC instant** such as
+  `datetime!(2026-06-08 17:30:00 +05:30)`, whose rendered result must still
+  carry `UtcOffset::UTC` and the same absolute instant.
 - Artefact: `src/stdlib/time/tests.rs::now_uses_injected_clock`;
   `tests/std_filter_tests/time_functions.rs::now_uses_configured_clock`.
 - Evidence: fails before the change with a compile error (no `with_clock`
@@ -509,7 +545,13 @@ real registration path rather than against a stub.
   the real clock by far more than any plausible test-runtime skew. The
   designated mutation is "ignore the provider and call
   `OffsetDateTime::now_utc()`"; that mutation makes the assertion fail by
-  years, not milliseconds.
+  years, not milliseconds. The non-UTC case guards a distinct hazard: nothing
+  else in the plan pins the *offset* of the injected path. `system_clock()`
+  yields UTC, but an arbitrary provider need not, and without normalization a
+  fixture built from a local-time literal would make `now()` render a non-`Z`
+  timestamp — harness and production diverging precisely where the seam exists
+  to make them agree. Mutation 6 removes the normalization and this case
+  rejects it.
 
 **OBL-2 — Repeated calls under a fixed provider agree.**
 
@@ -578,30 +620,39 @@ real registration path rather than against a stub.
   type) is rejected — such a default is decades from now. This is the specific
   reason the tolerance is seconds and not, say, a day.
 
-**OBL-5 — Manifest-query mode still refuses `now()`.**
+**OBL-5 — Manifest-query mode never acquires a clock-backed `now()`.**
 
-- Obligation: under `register_manifest_query`, evaluating `now()` returns the
-  manifest-query operation error, and no clock is constructed or consulted on
-  that path.
-- Method: parameterized unit test asserting the error, plus a compile-time
-  argument (the query registration function takes no clock parameter, so it
-  cannot consult one).
-- Rationale: this is constraint C2 and it is currently *unguarded* — no test
-  in the repository asserts the refusal today. The seam is exactly the kind of
-  change that could silently enable a helper the user guide promises is
-  disabled.
-- Domain: `now()` and `now(offset='+02:00')` under query registration.
-- Artefact: a new case in `src/stdlib/time/tests.rs`, or a new test beside the
-  existing manifest-query coverage in `src/manifest/render_tests.rs` if the
-  registration entry point is more naturally reachable there. Choose whichever
-  compiles without widening visibility; record the choice in `Decision log`.
-- Evidence: the evaluation returns `Err`, and the error message matches the
-  `manifest_query_operation_error("now")` shape.
-- Non-vacuity: the mutation "register the real clock-backed `now` in query
-  mode" makes the evaluation succeed — rejected. A witness that the test is
-  reaching real code: the *same* test asserts `timedelta()` still succeeds in
-  query mode, proving the environment is populated and the failure is specific
-  to `now`.
+- Obligation: under manifest-query registration, `now()` returns the
+  manifest-query operation error; and the permissive half of that registration,
+  `time::register_query_functions`, does not define `now` at all.
+- Method: two parameterized unit tests — one against the full
+  `register_manifest_query` environment, one against a bare `Environment` to
+  which only `register_query_functions` has been applied.
+- Rationale: constraint C2, currently unguarded — no test in the repository
+  asserts the refusal today.
+- Domain: `now()` and `now(offset='+02:00')` under query registration; `now`
+  absent under `register_query_functions` alone.
+- Artefact: new cases beside the existing `manifest_query_environment` fixture
+  at `src/manifest/expand_tests.rs:34`, which is `pub(super)` and already
+  builds the restricted environment, so no visibility widening is needed.
+- Evidence: the query-mode evaluation returns `Err` matching the
+  `manifest_query_operation_error("now")` shape; the bare-environment
+  evaluation fails as an *unknown function*, not as a refusal.
+- Non-vacuity: **the obvious formulation of this obligation is vacuous, and
+  the second test exists because of it.** `register_manifest_query`
+  (`src/stdlib/register.rs:135`) calls `time::register_query_functions` and
+  *then* `register_disabled_query_helpers`, which installs the refusing stub
+  (`src/stdlib/register.rs:231`). MiniJinja's `add_function` is last-write-wins
+  over the globals map, so a leaked clock-backed `now` registered in the
+  earlier call would be silently overwritten by the stub — and a test that only
+  asserts "query mode refuses `now`" would still pass while the leak existed.
+  Asserting that `now` is *undefined* after the permissive half alone is what
+  actually detects it. The implementor must confirm the last-write-wins reading
+  against MiniJinja 2.24 before relying on it; if writes are not last-wins,
+  record the finding and keep both assertions regardless. A witness that the
+  tests reach real code: the same cases assert `timedelta()` still succeeds in
+  query mode, so the environment is populated and the failure is specific to
+  `now`.
 
 **OBL-6 — Offset application preserves the injected instant.**
 
@@ -720,10 +771,16 @@ failure; that would weaken the Red evidence.
 ### EP-M1 — The port, its adapter, and the leaf function
 
 - Outcome: `src/stdlib/time/clock.rs` exists with `ClockProvider`,
-  `system_clock()`, and `Clock`; `now()` reads through a `Clock` rather than
-  calling `OffsetDateTime::now_utc()` directly; `time::register_functions`
-  accepts a `Clock`. `StdlibConfig` is not yet involved, so registration passes
-  `Clock::default()`.
+  `ClockInstant`, `system_clock()`, `fixed_clock()`, and `WallClock`, **and
+  `src/stdlib/mod.rs` already re-exports the public items**; `now()` reads
+  through a `WallClock` rather than calling `OffsetDateTime::now_utc()`
+  directly; `time::register_functions` accepts a `WallClock`. `StdlibConfig` is
+  not yet involved, so registration passes `WallClock::default()`.
+
+  The `src/stdlib/mod.rs` re-export belongs to this milestone, not the next one:
+  `clock.rs` carries rustdoc examples that `use netsuke::stdlib::…`, and
+  `make test` runs doctests. Deferring the re-export would leave EP-M1 failing
+  on an unresolved import, so it would not be a plateau at all.
 - Requirements: advances ROADMAP-7.1.1 bullets 1 and 2; discharges OBL-1,
   OBL-2, OBL-3, OBL-4 (unit layer), OBL-6.
 - Acceptance evidence: `make test` passes; the unit tests in
@@ -825,11 +882,20 @@ use std::{fmt, sync::Arc};
 
 use time::OffsetDateTime;
 
+use std::{fmt, sync::Arc};
+
+use time::{OffsetDateTime, UtcOffset};
+
+/// Re-exported so an external caller can name a provider's return type
+/// without adding its own `time` dependency.
+pub use time::OffsetDateTime as ClockInstant;
+
 /// Thread-safe wall-clock source supplied to the `now()` Jinja helper.
 ///
-/// `minijinja` requires registered functions to be `Send + Sync`, so the
-/// provider is an `Arc` captured by the registered closure rather than a
-/// borrowed parameter. See [ADR-008](../../../docs/adr-008-environment-seam-taxonomy.md).
+/// The provider is an `Arc` rather than a `Box` for two reasons, both
+/// binding: `minijinja` requires registered functions to be `Send + Sync`,
+/// and `StdlibConfig` derives `Clone`, which `Box<dyn Fn>` cannot satisfy.
+/// ADR-008 records the same shape for the manifest environment reader.
 pub type ClockProvider = Arc<dyn Fn() -> OffsetDateTime + Send + Sync>;
 
 /// Construct the host-backed clock provider used by production renders.
@@ -838,36 +904,71 @@ pub fn system_clock() -> ClockProvider {
     Arc::new(OffsetDateTime::now_utc)
 }
 
-/// Clock source held by `StdlibConfig` and captured at registration.
+/// Construct a provider that always reports `instant`.
+#[must_use]
+pub fn fixed_clock(instant: OffsetDateTime) -> ClockProvider {
+    Arc::new(move || instant)
+}
+
+/// Wall-clock source held by `StdlibConfig` and captured at registration.
+///
+/// Named `WallClock` to keep it distinct from the monotonic-clock vocabulary
+/// already in the crate: `monotony::MonotonicClock`, the `Clock` generic
+/// parameter in `src/runner/process/mod.rs`, and the private
+/// `type MonotonicClock` in `src/status_timing.rs`.
 #[derive(Clone)]
-pub struct Clock(ClockProvider);
+pub(crate) struct WallClock {
+    /// Provider consulted on every `now()` evaluation.
+    provider: ClockProvider,
+    /// Whether this is the ambient host clock, recorded for diagnostics.
+    is_system: bool,
+}
 
-impl Clock {
+impl WallClock {
     /// Wrap `provider` as the clock backing `now()`.
-    #[must_use]
-    pub fn new(provider: ClockProvider) -> Self {
-        Self(provider)
+    pub(crate) fn new(provider: ClockProvider) -> Self {
+        Self { provider, is_system: false }
     }
 
-    /// Read the current instant from the provider.
+    /// Read the current instant, normalized to UTC.
+    ///
+    /// Normalization is part of the contract, not a convenience: `now()` is
+    /// documented to yield a UTC timestamp, and an injected provider is free
+    /// to return any offset. Without this the harness could assert behaviour
+    /// production never exhibits.
     pub(crate) fn read(&self) -> OffsetDateTime {
-        (self.0)()
+        (self.provider)().to_offset(UtcOffset::UTC)
+    }
+
+    /// Whether the ambient host clock is installed.
+    pub(crate) const fn is_system(&self) -> bool {
+        self.is_system
     }
 }
 
-impl Default for Clock {
+impl Default for WallClock {
     fn default() -> Self {
-        Self(system_clock())
+        Self { provider: system_clock(), is_system: true }
     }
 }
 
-/// Opaque `Debug` output: a closure has no meaningful representation.
-impl fmt::Debug for Clock {
+/// Report the clock's provenance without pretending a closure is printable.
+///
+/// The label makes a mis-wired clock self-diagnosing: an injected clock that
+/// never reached registration, or an ambient clock where a test expected an
+/// injected one, is visible in any `{:?}` of the surrounding config.
+impl fmt::Debug for WallClock {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Clock").finish_non_exhaustive()
+        f.debug_struct("WallClock")
+            .field("source", &if self.is_system { "system" } else { "injected" })
+            .finish_non_exhaustive()
     }
 }
 ```
+
+`is_system` is not decoration. It is the only signal that distinguishes a
+production clock from an injected one at runtime; without it a leaked test
+clock on a build path is undetectable (see the pre-mortem in `Risks`).
 
 Both `ClockProvider` and `system_clock` carry runnable rustdoc examples,
 mirroring `src/manifest/env_reader.rs`. A suitable example for the alias:
@@ -876,13 +977,12 @@ mirroring `src/manifest/env_reader.rs`. A suitable example for the alias:
 /// # Examples
 ///
 /// ```rust
-/// use netsuke::stdlib::ClockProvider;
-/// use std::sync::Arc;
+/// use netsuke::stdlib::{ClockProvider, fixed_clock};
 /// use time::macros::datetime;
 ///
-/// let fixed = datetime!(2026-06-08 12:00:00 UTC);
-/// let clock: ClockProvider = Arc::new(move || fixed);
-/// assert_eq!(clock(), fixed);
+/// let instant = datetime!(2026-06-08 12:00:00 UTC);
+/// let clock: ClockProvider = fixed_clock(instant);
+/// assert_eq!(clock(), instant);
 /// ```
 ```
 
@@ -890,15 +990,16 @@ In `src/stdlib/time/mod.rs`:
 
 ```rust
 mod clock;
-pub use self::clock::{Clock, ClockProvider, system_clock};
+pub(crate) use self::clock::WallClock;
+pub use self::clock::{ClockInstant, ClockProvider, fixed_clock, system_clock};
 
 /// Register time helpers with the environment.
-pub(crate) fn register_functions(env: &mut Environment<'_>, clock: Clock) {
+pub(crate) fn register_functions(env: &mut Environment<'_>, clock: WallClock) {
     env.add_function("now", move |kwargs: Kwargs| now(&kwargs, &clock));
     register_query_functions(env);
 }
 
-fn now(kwargs: &Kwargs, clock: &Clock) -> Result<Value, Error> {
+fn now(kwargs: &Kwargs, clock: &WallClock) -> Result<Value, Error> {
     let offset_spec: Option<String> = kwargs.get("offset")?;
     kwargs.assert_all_used()?;
 
@@ -919,25 +1020,28 @@ In `src/stdlib/config/mod.rs`, `StdlibConfig` gains one field and two methods:
 
 ```rust
     /// Wall-clock source backing the `now()` helper.
-    clock: Clock,
+    clock: WallClock,
 ```
 
 ```rust
     /// Replace the wall-clock source backing `now()`.
     #[must_use]
     pub fn with_clock(mut self, provider: ClockProvider) -> Self {
-        self.clock = Clock::new(provider);
+        self.clock = WallClock::new(provider);
         self
     }
 
     /// Wall-clock source backing the `now()` helper.
-    #[must_use]
-    pub(crate) fn clock(&self) -> &Clock {
+    pub(crate) const fn clock(&self) -> &WallClock {
         &self.clock
     }
 ```
 
-`StdlibConfig::new` initializes the field with `Clock::default()`.
+`StdlibConfig::new` initializes the field with `WallClock::default()`. The
+accessor is `const fn` and carries no `#[must_use]`, matching the sibling
+`home_directory` accessor at `src/stdlib/config/mod.rs:245`: the workspace
+denies `missing_const_for_fn`, and `must_use_candidate` fires only on exported
+items, so `#[must_use]` on a `pub(crate)` getter is inert noise.
 `into_components` is **not** changed: the clock is read by reference before
 that call consumes the configuration, exactly as `home_directory()` is.
 
@@ -951,7 +1055,7 @@ In `src/stdlib/mod.rs`, extend the existing re-export list so callers outside
 the crate can build a provider:
 
 ```rust
-pub use self::time::{ClockProvider, system_clock};
+pub use self::time::{ClockInstant, ClockProvider, fixed_clock, system_clock};
 ```
 
 In `tests/std_filter_tests/support.rs`, beside `stdlib_env_with_home`:
@@ -989,8 +1093,8 @@ Validation for this stage: no build required; you have simply read the code.
 
 Write the failing tests first. In `src/stdlib/time/tests.rs`, add the fixtures
 and cases for OBL-1, OBL-2, OBL-3, and OBL-6, referencing the not-yet-existing
-`Clock`, `ClockProvider`, and the two-argument `register_functions`. Update the
-existing `env` fixture to the new signature.
+`WallClock`, `ClockProvider`, and the two-argument `register_functions`. Update
+the existing `env` fixture to the new signature.
 
 The existing fixture is:
 
@@ -1009,37 +1113,60 @@ It becomes:
 #[fixture]
 fn env() -> Environment<'static> {
     let mut env = Environment::new();
-    register_functions(&mut env, Clock::default());
+    register_functions(&mut env, WallClock::default());
     env
 }
 
 /// Environment whose `now()` always reports `instant`.
 fn env_with_fixed_clock(instant: OffsetDateTime) -> Environment<'static> {
     let mut env = Environment::new();
-    register_functions(&mut env, Clock::new(Arc::new(move || instant)));
+    register_functions(&mut env, WallClock::new(fixed_clock(instant)));
     env
 }
 
-/// Environment whose `now()` reports each element of `instants` in turn,
-/// recording how many times the provider was consulted.
+/// Environment whose `now()` reports `first`, then each element of `rest` in
+/// turn, saturating at the last, and recording how many times the provider was
+/// consulted.
+///
+/// Taking `first` separately makes non-emptiness a type-level precondition.
 fn env_with_sequenced_clock(
-    instants: Vec<OffsetDateTime>,
+    first: OffsetDateTime,
+    rest: &[OffsetDateTime],
 ) -> (Environment<'static>, Arc<AtomicUsize>) {
+    let mut instants = vec![first];
+    instants.extend_from_slice(rest);
     let calls = Arc::new(AtomicUsize::new(0));
     let counter = Arc::clone(&calls);
     let provider: ClockProvider = Arc::new(move || {
         let index = counter.fetch_add(1, Ordering::SeqCst);
-        instants[index.min(instants.len() - 1)]
+        instants
+            .get(index)
+            .or_else(|| instants.last())
+            .copied()
+            .unwrap_or(first)
     });
     let mut env = Environment::new();
-    register_functions(&mut env, Clock::new(provider));
+    register_functions(&mut env, WallClock::new(provider));
     (env, calls)
 }
 ```
 
-The sequenced fixture is the OBL-3 negative control; it is deliberately
-saturating rather than panicking past the end so an over-reading implementation
-fails on the *count* assertion with a legible message rather than on a panic.
+The sequenced fixture is the OBL-3 negative control. Three details are
+deliberate. It saturates rather than panicking past the end, so an over-reading
+implementation fails on the *count* assertion with a legible message rather
+than panicking opaquely inside MiniJinja evaluation. It takes `first` plus
+`rest` rather than a `Vec`, which makes non-emptiness a type-level precondition
+and removes the `instants.len() - 1` underflow an empty vector would cause. And
+it reads with `get(..).or_else(..).copied()` rather than `instants[..]`,
+because the workspace denies `clippy::indexing_slicing` (`Cargo.toml:215`), and
+`clippy.toml`'s `allow-expect-in-tests` keys on `#[test]`-attributed functions,
+which a plain helper is not.
+
+Assert the invocation count against the number of evaluations the test actually
+performs, not a hardcoded literal. Hardcoding `3` silently makes AXIOM-5
+load-bearing, so a wrong assumption about MiniJinja's evaluation behaviour
+would surface as an apparent implementation bug rather than as the axiom
+violation it is.
 
 Use `googletest::prelude::*` with `assert_that!` for the equality assertions and
 `pretty_assertions::assert_eq` where a plain equality diff is clearer, per the
@@ -1056,7 +1183,7 @@ fail with a compile error naming the missing items. Record the error text in
 Create `src/stdlib/time/clock.rs` exactly as specified in
 `Interfaces and dependencies`. Declare and re-export it from
 `src/stdlib/time/mod.rs`. Change `register_functions` and `now` to take the
-clock. Update `src/stdlib/register.rs` to pass `Clock::default()` for now —
+clock. Update `src/stdlib/register.rs` to pass `WallClock::default()` for now —
 `StdlibConfig` is not yet involved. This completes EP-M1.
 
 Then add the `clock` field, `with_clock`, and `clock()` to `StdlibConfig`;
@@ -1137,6 +1264,18 @@ the file's existing dated-addendum format and its plain, decision-first prose:
 > for `now()`. Manifest-query registration receives no clock and keeps its
 > refusing `now` stub.
 >
+> The taxonomy is being applied here to an ambient input that is *not* an
+> environment variable. This ADR's context section is written about
+> `clippy.toml`'s ban on `std::env::var` and friends, and no lint forbids
+> reading the clock; the shape rubric transfers, the original scope does not.
+> Note also that `StdlibConfig` now holds two ambient seams in two shapes —
+> `home_directory: HomeDirectory`, a resolved value, and the clock, a closure.
+> The clock's shape is the one this rubric prescribes for a `Send + Sync`
+> registration point; `HomeDirectory` is the outlier, and the two should not be
+> "harmonized" without revisiting this entry. `ClockProvider` also puts
+> `time::OffsetDateTime` on netsuke's public surface, so a `time` 0.4 bump is a
+> breaking library-API change.
+>
 > `mockable::Clock` was not used: it is typed in `chrono`, which this
 > workspace does not depend on, so adopting it would add a second date-time
 > crate to render one timestamp. `monotony`, already a dependency, abstracts
@@ -1209,9 +1348,9 @@ convention rather than `-m`.
 Acceptance is behavioural, not structural.
 
 **Red evidence.** Before any production change, `make test` fails to compile
-`src/stdlib/time/tests.rs` with errors naming `Clock`, `ClockProvider`, and the
-arity of `register_functions`. Capture the first three compiler errors verbatim
-in `Artefacts and notes`.
+`src/stdlib/time/tests.rs` with errors naming `WallClock`, `ClockProvider`, and
+the arity of `register_functions`. Capture the first three compiler errors
+verbatim in `Artefacts and notes`.
 
 **Green evidence, unit layer.** After EP-M1, `make test` passes.
 `now_uses_injected_clock` renders a timestamp exactly equal to
@@ -1232,7 +1371,7 @@ the manifest-query operation error, while `timedelta()` under the same
 registration still succeeds.
 
 **Mutation evidence (required, run once and discarded).** In a scratch commit
-that is never pushed, apply each of the four designated mutations in turn and
+that is never pushed, apply each of the six designated mutations in turn and
 confirm the named test fails for the intended reason:
 
 1. Replace `clock.read()` with `OffsetDateTime::now_utc()` →
@@ -1241,11 +1380,16 @@ confirm the named test fails for the intended reason:
    instant into the closure → `now_reads_the_provider_on_every_call` fails.
 3. Replace `timestamp.to_offset(parsed)` with an arithmetic shift →
    `now_offset_preserves_the_instant` fails on the `unix_timestamp` conjunct.
-4. Store the clock on `StdlibConfig` but pass `Clock::default()` in
+4. Store the clock on `StdlibConfig` but pass `WallClock::default()` in
    `register_with_config` → the integration and BDD tests fail while every unit
    test still passes.
+5. Delete the refusing `now` stub at `src/stdlib/register.rs:231` → the
+   query-mode refusal case in OBL-5 fails. This is the mutation OBL-5's *first*
+   test catches; its second test exists for the leak this one hides.
+6. Remove the UTC normalization from `WallClock::read` → the
+   non-UTC-provider case in OBL-1 fails on the offset assertion.
 
-Then `git reset --hard` back to the real commit. Record the four outcomes in
+Then `git reset --hard` back to the real commit. Record the six outcomes in
 `Artefacts and notes`. Mutation 4 is the most important: it is the only one
 that demonstrates the integration layer is load-bearing.
 
@@ -1349,7 +1493,7 @@ Recorded during planning; extend during implementation.
 
 - Observation: `StdlibConfig` derives `Debug`, which no closure-bearing field
   can satisfy. Evidence: `src/stdlib/config/mod.rs:20`. Impact: forced the
-  `Clock` newtype rather than a bare `Option<ClockProvider>` field. See D2.
+  `WallClock` newtype rather than a bare `Option<ClockProvider>` field. See D2.
 
 ## Decision log
 
@@ -1360,13 +1504,19 @@ Recorded during planning; extend during implementation.
   parameter, the `mockable::Env` trait, or an `Arc` closure — chosen by
   call-site count and by whether the registration point requires `Send + Sync`.
   MiniJinja's `add_function` requires `Send + Sync`, which ADR-008 itself calls
-  "a real constraint, not a preference", so the `Arc` closure is the only
-  admissible shape. A narrow closure cannot be captured by a registered
-  function; a trait object would add indirection with no extra test-surface
-  benefit for a single-call-site boundary. Date/Author: 2026-09-08, planning.
+  "a real constraint, not a preference". That argument is necessary but **not
+  sufficient**, and this plan should not rest on it alone:
+  `Box<dyn Fn() -> OffsetDateTime + Send + Sync>` satisfies MiniJinja's bound
+  too. The decisive constraint is `Clone`. `StdlibConfig` derives it
+  (`src/stdlib/config/mod.rs:20`), a `Box` cannot provide it, and C4 forbids
+  dropping the derive — so `Arc` is forced by two independent constraints
+  rather than the one ADR-008 names. A narrow closure parameter cannot be
+  captured by a registered function at all; a trait object would add
+  indirection with no extra test-surface benefit for a single-call-site
+  boundary. Date/Author: 2026-09-08, planning; strengthened after design review.
 
-- **D2 — Wrap the provider in a `Clock` newtype with a handwritten `Debug`.**
-  Decided: `StdlibConfig` holds `clock: Clock`, not
+- **D2 — Wrap the provider in a `WallClock` newtype with a handwritten `Debug`
+  .** Decided: `StdlibConfig` holds `clock: WallClock`, not
   `clock: Option<ClockProvider>`. Rationale: `StdlibConfig` derives `Debug`
   (C4), and `Arc<dyn Fn>` is not `Debug`, so a bare field would force a
   handwritten thirteen-field `Debug` on `StdlibConfig` that would drift every
@@ -1378,7 +1528,7 @@ Recorded during planning; extend during implementation.
   `Option` either, using `process_env_reader()` as the production supplier —
   and avoids an `Option` branch in `now()`, which the workspace's
   `option_if_let_else = "deny"` lint would scrutinize. The public vocabulary
-  remains `ClockProvider` exactly as the design specifies; `Clock` is the
+  remains `ClockProvider` exactly as the design specifies; `WallClock` is the
   container, not a replacement for the port type. Date/Author: 2026-09-08,
   planning.
 
@@ -1445,44 +1595,50 @@ Recorded during planning; extend during implementation.
   Verus proof here would restate an axiom, which this project's plan standard
   explicitly calls a vacuous discharge. Date/Author: 2026-09-08, planning.
 
-- **D9 — Placement of the query-refusal regression test is left to the
-  implementor.** Decided: put it wherever it compiles without widening
-  visibility — either `src/stdlib/time/tests.rs` or beside the existing
-  manifest-query coverage in `src/manifest/render_tests.rs` — and record the
-  choice here. Rationale: `register_manifest_query` is `pub(crate)`, so both
-  locations are reachable, but which is more natural depends on whether the
-  test needs the full manifest-render path or only the stdlib environment.
-  Forcing the choice from outside the code would risk prescribing a visibility
-  widening, which the tolerances forbid. This is a genuinely local judgement;
-  make it and note it. Date/Author: 2026-09-08, planning.
+- **D9 — The query-refusal regression tests live beside the existing
+  manifest-query fixture.** Decided: put them next to
+  `manifest_query_environment` in `src/manifest/expand_tests.rs:34`. Rationale:
+  an earlier draft left this to the implementor, which was a mistake. OBL-5 is
+  the sole guard for C2 and is exactly the item that gets dropped when a
+  milestone runs long, so leaving its location under-specified put the plan's
+  most fragile obligation at the greatest risk. The fixture already exists, is
+  `pub(super)`, and already calls `register_manifest_query`, so no visibility
+  widening is needed and there is no real judgement call to delegate.
+  Date/Author: 2026-09-08, planning; revised after design review.
 
 - **D10 — Rejected: a resolved-value enum in the `HomeDirectory` shape.**
-  Considered: `enum Clock { Ambient, Fixed(OffsetDateTime) }`, mirroring
-  `HomeDirectory` (`src/stdlib/config_types.rs:24`), which is the sibling seam
-  in this very module and which ADR-008 describes as the pattern that "injects
-  a resolved *value* rather than a closure". It would derive `Debug` and
-  `Clone` for free, removing the need for D2's handwritten impl entirely. This
-  is the strongest alternative and a reviewer should expect it to have been
-  weighed. Decided: rejected, in favour of the `Arc` closure. Rationale: three
-  reasons, in decreasing order of weight. First, technical design §5.2
-  specifies the `Arc` closure normatively and by exact type; substituting an
-  enum is an architecture deviation that would require amending the design
-  document and obtaining acceptance before implementation, not a free local
-  choice. Second — and this is the substantive objection — a `Fixed(T)` enum
-  makes OBL-3 *unwriteable*. The highest-risk defect in this change is an
-  implementation that reads the clock once at registration and bakes the
-  instant into the closure; the only way to detect it is a provider whose
-  successive calls return different values, which a resolved value cannot
-  express by construction. Choosing the enum would trade a handwritten ten-line
-  `Debug` impl for the loss of the plan's most important negative control.
-  Third, a closure keeps a future advancing or scripted clock expressible
-  without another redesign, whereas the enum would need a new variant and a new
-  match arm at every use site. The `Debug` objection the enum answers is real
-  but cheap to solve: the repository already has the
-  newtype-with-manual-`Debug` idiom in `CommandEnv`
-  (`src/runner/process/command_env.rs:73`). If a reviewer nonetheless prefers
-  the enum, that is an upstream change to technical design §5.2 and must be
-  settled before EP-M1, not during it. Date/Author: 2026-09-08, planning.
+  Considered: `enum WallClock { Ambient, Fixed(OffsetDateTime) }`, mirroring
+  `HomeDirectory` (`src/stdlib/config_types.rs:24`), the sibling seam in this
+  very module, which ADR-008 describes as the pattern that "injects a resolved
+  *value* rather than a closure". It would derive `Debug` and `Clone` for free,
+  removing D2's handwritten impl entirely. This is the strongest alternative
+  and a reviewer should expect it to have been weighed. Decided: rejected, in
+  favour of the `Arc` closure. Rationale: the decisive reason is cohesion, not
+  testability. An earlier draft of this plan claimed the enum makes OBL-3
+  *unwriteable*; **that claim was wrong and has been withdrawn.** An enum could
+  carry a `Sequence(Arc<Mutex<..>>)` variant and preserve the negative control
+  exactly. The real objection is narrower and survives scrutiny: preserving
+  OBL-3 under the enum requires adding a *test-only variant to a production
+  type*, which re-implements a closure badly and forces every `match` site to
+  grow an arm servicing a case production never takes. `HomeDirectory` earns
+  its enum because all three of its variants — `Ambient`, `Missing`,
+  `Explicit` — are production states; a `Sequence` variant would not be.
+  Secondarily, a closure keeps a future advancing or scripted clock expressible
+  without another redesign. Technical design §5.2's normativity is a **tiebreak
+  here, not the argument**. It cannot be decisive on its own while D2
+  simultaneously adds a `WallClock` container the design does not name and
+  resolves that by amending the design at EP-M4; invoking "normative by exact
+  type" against the enum while treating the newtype as a mechanical addition
+  would be applying the same rule two ways. Independent corroboration: every
+  comparable library models a clock as a *callable*, never a resolved value —
+  Java's `java.time.Clock` (with `Clock.fixed` beside `Clock.systemUTC`), Go's
+  `clockwork`, and Rust's `quanta` and `mock_instant`. The `Debug` objection
+  the enum answers is real but cheap: the repository already has the
+  newtype-with-handwritten-`Debug` idiom in `CommandEnv`
+  (`src/runner/process/command_env.rs:73`). If a reviewer still prefers the
+  enum, that is an upstream change to technical design §5.2 and must be settled
+  before EP-M1, not during it. Date/Author: 2026-09-08, planning; rationale
+  repaired after design review.
 
 - **D11 — Extending ADR-008's jurisdiction from environment variables to the
   clock is itself a decision, and is recorded as one.** Decided: classify the
@@ -1508,6 +1664,31 @@ Recorded during planning; extend during implementation.
   `tests/bdd/steps/stdlib/assertions.rs`, both of which legitimately read the
   real clock as a test oracle. Record it as a follow-up rather than doing it.
   Date/Author: 2026-09-08, planning.
+- **D12 — `fixed_clock()` ships beside `system_clock()`.**
+  Decided: add a second public adapter constructing a constant provider.
+  Rationale: `Arc::new(move || instant)` would otherwise be handwritten at five
+  sites in this plan alone — the unit fixture, the sequenced fixture, the
+  integration support helper, the BDD step, and the doctest. Every comparable
+  library pairs a fixed constructor with the system one (D10). It costs three
+  lines and removes the most-repeated incantation in the change. Date/Author:
+  2026-09-08, planning; added after design review.
+
+- **D13 — `time::OffsetDateTime` enters netsuke's public API, and `time` is
+  re-exported so callers need not depend on it directly.** Decided: export
+  `ClockInstant` as an alias for `time::OffsetDateTime` alongside
+  `ClockProvider`. Rationale: this is the first `time` type on netsuke's public
+  surface — `grep -rn "pub .*OffsetDateTime" src/` currently returns nothing —
+  and it is a deliberate departure from the `EnvReader` precedent D1 otherwise
+  follows. `EnvReader` owns `EnvReadError` precisely so it does not expose the
+  adapter's `VarError`, a property ADR-008 calls out. The clock cannot do the
+  same: its whole purpose is to yield a calendar instant, and inventing a
+  netsuke-owned timestamp type to wrap one would be ceremony with no
+  beneficiary. The consequence must be stated rather than inherited silently: a
+  `time` 0.4 bump becomes a breaking change to netsuke's library API. That is
+  acceptable — the crate is pre-1.0, ships as a binary, and its only library
+  consumers are its own tests — but it belongs in the ADR-008 addendum so a
+  later reader is not surprised. Date/Author: 2026-09-08, planning; added after
+  design review.
 
 ## Outcomes & retrospective
 
@@ -1517,7 +1698,7 @@ Before setting this plan to `COMPLETE`, reconcile discoveries against the
 conformance basis:
 
 - Update `docs/netsuke-test-framework-technical-design.md` §5.2 so it records
-  the implemented state rather than a proposal — in particular, the `Clock`
+  the implemented state rather than a proposal — in particular, the `WallClock`
   container (D2) is a mechanical addition the design did not name, and §15
   requires the document be kept in step.
 - Confirm ADR-008's addendum records the classification, states that the
