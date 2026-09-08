@@ -8,8 +8,8 @@ the 400-line limit the Python lint gate enforces.
 import math
 import typing as typ
 
-import yaml
 from timeout_budgets import COVERAGE_ACTION, WATCHDOG_VARIABLE, WORKFLOWS_DIRECTORY
+from workflow_loading import all_workflow_documents
 
 
 class CoverageLane(typ.NamedTuple):
@@ -161,23 +161,30 @@ def _budget_from(raw: object) -> float | None:
 def workflow_documents() -> dict[str, dict[str, typ.Any]]:
     """Return every workflow document in the repository, keyed by name.
 
-    This is the one place the contract touches the filesystem, so an
-    unreadable or unparsable workflow fails here rather than inside a
-    budget derivation. Both extensions are read. A coverage lane in the other one would
-    otherwise escape every assertion below without failing anything.
+    Delegates to ``workflow_loading.all_workflow_documents``, the
+    boundary the rest of this suite already reads workflows through.
+    This module parsed them a second time with ``yaml.safe_load``, which
+    is a YAML 1.1 loader and so reads the ``on:`` trigger key as
+    ``True``, and which reported an unreadable file with whatever
+    exception the failure happened to raise.
+
+    Every derivation below takes its documents as a parameter, so this
+    call is the only filesystem access the lane reading performs.
+
+    A workflow file that cannot be read or parsed propagates
+    :class:`workflow_loading.WorkflowReadError` from the boundary. A
+    budget derived from the workflows this contract could see, while one
+    it could not was silently dropped, would assert nothing about that
+    file.
 
     Returns
     -------
     dict[str, dict[str, typ.Any]]
         File name to parsed document.
     """
-    documents: dict[str, dict[str, typ.Any]] = {}
-    for pattern in ("*.yml", "*.yaml"):
-        for path in sorted(WORKFLOWS_DIRECTORY.glob(pattern)):
-            parsed = yaml.safe_load(path.read_text(encoding="utf-8"))
-            if isinstance(parsed, dict):
-                documents[path.name] = parsed
-    return documents
+    return typ.cast(
+        "dict[str, dict[str, typ.Any]]", all_workflow_documents(WORKFLOWS_DIRECTORY)
+    )
 
 
 def _mappings_in(container: object) -> list[dict[str, typ.Any]]:

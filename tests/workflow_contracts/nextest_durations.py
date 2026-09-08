@@ -5,13 +5,23 @@ the lint gate enforces. nextest parses durations with `humantime`
 through `humantime_serde`, which reads a sequence of value-and-unit
 pairs and sums them, so `2h 30m` and `1d` are valid and a parser taking
 one pair would refuse configuration the runner accepts.
+
+The grammar was measured against humantime 2.4.0, the version nextest
+resolves, rather than assumed. A value may carry a fractional part with
+whitespace tolerated around the point, so `1.5m` and `1 . 5 m` are both
+ninety seconds, and `wk`, `wks`, `yr` and `yrs` are accepted alongside
+the longer spellings.
 """
 
 import re
 import typing as typ
 
+#: One value-and-unit pair. The fractional part is optional and
+#: humantime tolerates whitespace around the point; a leading point, a
+#: trailing point, a second point, a sign and a digit separator are all
+#: refused there and so are refused here.
 _DURATION_TOKEN: typ.Final[re.Pattern[str]] = re.compile(
-    r"(?P<value>\d+)\s*(?P<unit>[A-Za-z\u00b5]+)\s*"
+    r"(?P<value>\d+(?:\s*\.\s*\d+)?)\s*(?P<unit>[A-Za-z\u00b5]+)\s*"
 )
 
 #: Every unit `humantime` accepts, with its length in seconds, using
@@ -46,12 +56,16 @@ _UNIT_SECONDS: typ.Final[dict[str, float]] = {
     "d": 86400.0,
     "weeks": 604800.0,
     "week": 604800.0,
+    "wks": 604800.0,
+    "wk": 604800.0,
     "w": 604800.0,
     "months": 2630016.0,
     "month": 2630016.0,
     "M": 2630016.0,
     "years": 31557600.0,
     "year": 31557600.0,
+    "yrs": 31557600.0,
+    "yr": 31557600.0,
     "y": 31557600.0,
 }
 
@@ -109,7 +123,7 @@ def seconds(duration: str) -> float:
         if match is None:
             message = (
                 f"unrecognized nextest duration {duration!r}: humantime reads "
-                f"a sequence of whole numbers each followed by a unit"
+                f"a sequence of numbers each followed by a unit"
             )
             raise NextestConfigurationError(message)
         unit = match["unit"]
@@ -119,6 +133,8 @@ def seconds(duration: str) -> float:
                 f"a unit humantime accepts"
             )
             raise NextestConfigurationError(message)
-        total += float(match["value"]) * _UNIT_SECONDS[unit]
+        # humantime tolerates whitespace around the fractional point,
+        # so the matched value can read "1 . 5"; float cannot.
+        total += float("".join(match["value"].split())) * _UNIT_SECONDS[unit]
         position = match.end()
     return total

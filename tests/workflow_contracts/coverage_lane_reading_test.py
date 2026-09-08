@@ -13,7 +13,6 @@ import typing as typ
 
 import pytest
 from coverage_lanes import (
-    CoverageLane,
     WatchdogValueError,
     coverage_lanes_of,
     watchdog_of,
@@ -23,7 +22,7 @@ from timeout_budgets import (
     OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS,
     WATCHDOG_VARIABLE,
 )
-from timeout_ordering_test import _budgets_per_job, required_ceiling
+from timeout_ordering_test import required_ceiling
 
 COVERAGE_STEP: typ.Final[str] = (
     "leynos/shared-actions/.github/actions/generate-coverage@abc123"
@@ -178,54 +177,6 @@ def test_the_required_ceiling_sums_the_watchdogs_and_adds_the_margin() -> None:
     ), "the margin is a term of its own, not a fraction of the others"
 
 
-def test_two_coverage_steps_in_one_job_are_judged_together() -> None:
-    """The ceiling belongs to the job, so its lanes are summed.
-
-    Judging each lane separately against the same ceiling asks only that
-    it clear the largest budget. That is the requirement a job running
-    the action once happens to satisfy, and it is why this repository's
-    two lanes could not tell the two readings apart.
-    """
-    lanes = (
-        CoverageLane(
-            workflow="ci.yml",
-            job="build-test",
-            step="cover one",
-            watchdog=1800.0,
-            job_timeout=60 * 60.0,
-        ),
-        CoverageLane(
-            workflow="ci.yml",
-            job="build-test",
-            step="cover two",
-            watchdog=2700.0,
-            job_timeout=60 * 60.0,
-        ),
-    )
-
-    grouped = _budgets_per_job(lanes)
-
-    assert list(grouped) == [("ci.yml", "build-test")], (
-        "both steps belong to the one job whose ceiling contains them"
-    )
-    budgets = [
-        lane.watchdog
-        for lane in grouped["ci.yml", "build-test"]
-        if lane.watchdog is not None
-    ]
-    assert budgets == [1800.0, 2700.0], (
-        f"the group must keep every lane of the job, got {budgets}; keeping "
-        f"one would ask the ceiling to contain that lane alone"
-    )
-    ceiling = lanes[0].job_timeout
-    assert ceiling is not None, "the synthetic lanes declare a ceiling"
-    assert required_ceiling(budgets) > ceiling, (
-        "a 60-minute ceiling cannot contain 1,800 s and 2,700 s of watchdog "
-        "plus the allowance and the margin; judged one lane at a time it would "
-        "have passed"
-    )
-
-
 @pytest.mark.parametrize(
     "value",
     ["abc", "1800s", "", "   ", "0", "-30"],
@@ -353,47 +304,3 @@ def test_a_non_finite_watchdog_is_refused(value: str) -> None:
 
     with pytest.raises(WatchdogValueError, match=r"finite"):
         coverage_lanes_of(documents)
-
-
-def test_a_second_coverage_step_carries_its_own_condition() -> None:
-    """Two steps in one job are two lanes, each judged separately.
-
-    The condition pin was keyed by workflow and job alone, so the second
-    step's entry overwrote the first's. A step skipped by `if: false`
-    beside one carrying the expected condition therefore passed
-    unexamined, which is the shape this reading has to keep distinct.
-    """
-    documents = {
-        "ci.yml": {
-            "jobs": {
-                "build-test": {
-                    "timeout-minutes": 60,
-                    "env": {WATCHDOG_VARIABLE: "1800"},
-                    "steps": [
-                        {
-                            "name": "Coverage",
-                            "uses": COVERAGE_STEP,
-                            "if": "github.event_name == 'pull_request'",
-                        },
-                        {
-                            "name": "Coverage again",
-                            "uses": COVERAGE_STEP,
-                            "if": False,
-                        },
-                    ],
-                }
-            }
-        }
-    }
-
-    lanes = coverage_lanes_of(documents)
-    keyed = {(lane.workflow, lane.job, lane.step): lane.condition for lane in lanes}
-
-    assert len(keyed) == 2, (
-        "two coverage steps in one job are two lanes; keyed by job alone the "
-        "second overwrites the first and its condition is never judged"
-    )
-    assert keyed["ci.yml", "build-test", "Coverage again"] == (False, None), (
-        "the skipped step keeps its own condition rather than inheriting the "
-        "one its neighbour carries"
-    )

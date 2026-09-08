@@ -64,6 +64,113 @@ _WorkflowLoader.add_implicit_resolver(
 )
 
 
+class WorkflowReadError(OSError):
+    """Raised when a workflow file cannot be read or parsed.
+
+    Reading a workflow is fallible in three ways that look nothing alike
+    from the caller: the file may be missing, its bytes may not decode,
+    or its text may not be YAML. A query-shaped reader that let each
+    raise its own type made the filesystem boundary invisible in its
+    signature, so a contract several frames away failed with an opaque
+    decoding error naming no workflow. Every one of them arrives here
+    instead, carrying the path.
+    """
+
+
+def parse_workflow_text(text: str, description: str) -> object:
+    """Parse workflow YAML with YAML 1.2 booleans, or raise.
+
+    Parameters
+    ----------
+    text
+        The workflow file's contents.
+    description
+        What is being parsed, for the failure message.
+
+    Returns
+    -------
+    object
+        Whatever the document parsed to; the caller decides what shape
+        it must have.
+
+    Raises
+    ------
+    WorkflowReadError
+        If the text is not YAML.
+    """
+    # The loader is driven directly rather than through `yaml.load`
+    # because `_WorkflowLoader` derives from `SafeLoader` and constructs
+    # no arbitrary Python objects; going through `yaml.load` would only
+    # obscure that.
+    loader = _WorkflowLoader(text)
+    try:
+        return loader.get_single_data()
+    except yaml.YAMLError as error:
+        message = f"{description} is not valid YAML: {error}"
+        raise WorkflowReadError(message) from error
+    finally:
+        loader.dispose()
+
+
+def read_workflow_document(path: Path) -> object:
+    """Read and parse one workflow file, or raise.
+
+    Parameters
+    ----------
+    path
+        The workflow file to read.
+
+    Returns
+    -------
+    object
+        Whatever the document parsed to.
+
+    Raises
+    ------
+    WorkflowReadError
+        If the file is missing, does not decode as UTF-8, or is not
+        YAML.
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        message = f"{path} could not be read: {error}"
+        raise WorkflowReadError(message) from error
+    return parse_workflow_text(text, str(path))
+
+
+def all_workflow_documents(directory: Path) -> dict[str, dict[str, object]]:
+    """Return every workflow document in a directory, keyed by file name.
+
+    Both GitHub extensions are read: a workflow in the other one would
+    otherwise escape every contract without failing anything. A file
+    that parses to something other than a mapping is not a workflow and
+    is omitted. A file that cannot be read or parsed at all propagates
+    :class:`WorkflowReadError` from :func:`read_workflow_document`,
+    because a contract cannot say anything about a workflow it never
+    saw.
+
+    Parameters
+    ----------
+    directory
+        The directory holding the workflow files.
+
+    Returns
+    -------
+    dict[str, dict[str, object]]
+        File name to parsed document, in file-name order.
+    """
+    documents: dict[str, dict[str, object]] = {}
+    paths = sorted(
+        path for pattern in ("*.yml", "*.yaml") for path in directory.glob(pattern)
+    )
+    for path in paths:
+        parsed = read_workflow_document(path)
+        if isinstance(parsed, dict):
+            documents[path.name] = parsed
+    return documents
+
+
 def require_mapping(value: object, description: str) -> dict[str, object]:
     """Return ``value`` as a mapping, failing the test when it is not one."""
     match value:
@@ -116,15 +223,7 @@ def load_workflow(workflow_path: Path = CI_WORKFLOW_PATH) -> dict[str, object]:
     dict[str, object]
         The parsed, string-keyed workflow mapping.
     """
-    # The loader is driven directly rather than through `yaml.load` because
-    # `_WorkflowLoader` derives from `SafeLoader` and constructs no arbitrary
-    # Python objects; going through `yaml.load` would only obscure that.
-    loader = _WorkflowLoader(workflow_path.read_text(encoding="utf-8"))
-    try:
-        document = loader.get_single_data()
-    finally:
-        loader.dispose()
-
+    document = read_workflow_document(workflow_path)
     workflow = require_mapping(document, "the workflow")
     _require_string_keys(workflow, "the workflow mapping")
     jobs = require_mapping(workflow.get("jobs"), "the workflow jobs")

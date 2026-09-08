@@ -86,6 +86,13 @@ def document(*tables: str, profile: str = "default") -> str:
         pytest.param("1m30s", 90.0, id="a-composite-without-a-space"),
         pytest.param("1d", 86400.0, id="days"),
         pytest.param("15sec", 15.0, id="a-long-unit-spelling"),
+        pytest.param("1.5m", 90.0, id="a-fractional-value"),
+        pytest.param("0.5s", 0.5, id="a-fraction-below-one"),
+        pytest.param("1 . 5 m", 90.0, id="a-fraction-spaced-around-the-point"),
+        pytest.param("1wk", 604800.0, id="the-abbreviated-week"),
+        pytest.param("2wks", 1209600.0, id="the-abbreviated-plural-week"),
+        pytest.param("1yr", 31557600.0, id="the-abbreviated-year"),
+        pytest.param("3yrs", 94672800.0, id="the-abbreviated-plural-year"),
     ],
 )
 def test_each_unit_converts_exactly(duration: str, expected: float) -> None:
@@ -94,6 +101,11 @@ def test_each_unit_converts_exactly(duration: str, expected: float) -> None:
     A single wrong entry would leave every downstream assertion an
     inequality between two plausible numbers, so each unit is pinned
     rather than sampled.
+
+    The fractional values and the abbreviated week and year were
+    measured against humantime 2.4.0, the version nextest resolves,
+    rather than assumed: this reader had refused all of them, which is
+    the fault the module exists to avoid.
     """
     assert seconds(duration) == pytest.approx(expected), (
         f"{duration!r} must convert to {expected}s"
@@ -110,14 +122,28 @@ def test_every_unit_scales_its_value(value: int, unit: str) -> None:
 
 @pytest.mark.parametrize(
     "duration",
-    ["", "300", "s", "five minutes", "-30s", "1.5m", "30 fortnights"],
+    [
+        "",
+        "300",
+        "s",
+        "five minutes",
+        "-30s",
+        ".5s",
+        "1.s",
+        "1.5.5m",
+        "1_000s",
+        "30 fortnights",
+    ],
     ids=[
         "empty",
         "no-unit",
         "no-value",
         "words",
         "negative",
-        "a-decimal-humantime-refuses",
+        "a-fraction-with-no-whole-part",
+        "a-point-with-no-fraction-after-it",
+        "two-points",
+        "a-digit-separator",
         "a-unit-humantime-does-not-know",
     ],
 )
@@ -126,9 +152,10 @@ def test_an_unreadable_duration_is_refused(duration: str) -> None:
 
     Returning something plausible would put a comparison against a
     budget nextest never applies, and the contract would pass while the
-    ordering it claims to hold did not. `humantime` takes whole numbers,
-    so `1.5m` is not a shorter way of writing ninety seconds: it is a
-    value the runner rejects.
+    ordering it claims to hold did not. Each of these was checked
+    against humantime 2.4.0 and refused there: a fraction needs a whole
+    part before the point and a digit after it, values are unsigned, and
+    the only separators are whitespace.
     """
     with pytest.raises(NextestConfigurationError):
         seconds(duration)

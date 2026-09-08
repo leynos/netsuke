@@ -5916,7 +5916,31 @@ not match ran with no bound at all.
 The lane reading takes its documents as a parameter, defaulting to the
 repository's own workflows. Reading the filesystem happens at one named
 boundary rather than inside the derivations, which is what makes the synthetic
-cases possible.
+cases possible. That boundary is
+`tests/workflow_contracts/workflow_loading.py`, which the rest of the suite
+already reads workflows through: this module parsed them a second time with
+`yaml.safe_load`, a YAML 1.1 loader that reads the `on:` trigger key as `True`,
+and reported an unreadable file with whatever exception the failure happened to
+raise. A missing file, bytes that do not decode and text that is not YAML now
+all arrive as `WorkflowReadError`, naming the path.
+
+Durations are read the way nextest reads them, with `humantime`'s grammar,
+measured against humantime 2.4.0 rather than assumed. A value may carry a
+fractional part with whitespace tolerated around the point, so `1.5m` and
+`1 . 5 m` are both ninety seconds, and `wk`, `wks`, `yr` and `yrs` are accepted
+alongside the longer spellings. The reader had refused all of those, which is
+the fault it exists to avoid: a configuration the runner is happy with, called
+broken here. What it still refuses is what `humantime` refuses, checked the
+same way: a point with no whole part before it or no digit after it, two
+points, a signed value, and a digit separator.
+
+A job may run the coverage action more than once, and every matching step is a
+lane. No job in this repository does, so a reading that returned a job's first
+coverage step, or its last, would satisfy every assertion the real workflows
+support. `coverage_lane_multi_step_test.py` drives that case from a synthetic
+document end to end: two steps in one job read as two lanes with their own
+watchdogs, group under the one job, and fail its ceiling together where each
+alone would have passed.
 
 A watchdog value the action cannot read fails with the lane named, rather than
 raising a Python fault before any assertion runs. A blank value is treated as a
