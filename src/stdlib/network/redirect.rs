@@ -133,7 +133,12 @@ fn dispatch_hop(agent: &ureq::Agent, url: &Url) -> Result<ureq::Response, Error>
 
 /// Determine whether a response requires manual redirect handling.
 fn is_redirect(response: &ureq::Response) -> bool {
-    (300..400).contains(&response.status())
+    is_supported_redirect_status(response.status())
+}
+
+/// Determine whether `status` has redirect semantics that preserve GET.
+const fn is_supported_redirect_status(status: u16) -> bool {
+    matches!(status, 301 | 302 | 303 | 307 | 308)
 }
 
 /// Reject a redirect that exceeds the configured hop limit.
@@ -241,7 +246,24 @@ fn redacted_url(url: &Url) -> String {
 mod tests {
     //! Verify redirect-specific policy behaviour without opening connections.
 
+    use rstest::rstest;
+
     use super::*;
+
+    #[rstest]
+    #[case(300, false)]
+    #[case(301, true)]
+    #[case(302, true)]
+    #[case(303, true)]
+    #[case(304, false)]
+    #[case(307, true)]
+    #[case(308, true)]
+    fn supported_redirect_statuses_are_handled_explicitly(
+        #[case] status: u16,
+        #[case] should_redirect: bool,
+    ) {
+        assert_eq!(is_supported_redirect_status(status), should_redirect);
+    }
 
     #[test]
     fn redirect_policy_rejects_http_until_explicitly_allowed() {

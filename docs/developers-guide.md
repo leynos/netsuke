@@ -3863,6 +3863,27 @@ ambient boundary stays where the lint expects it. Prefer that shape — pass in
 what the operation needs and keep the handle here — over widening an exclusion
 to a module that wants a raw `File`.
 
+
+### `test_support::http`
+
+`test_support::http` owns the local HTTP server fixtures used by unit,
+integration, and behavioural tests that exercise network-facing helpers. Its
+public response model, `HttpResponse`, is composed with `spawn_http_server`,
+`spawn_http_server_with_config`, or `spawn_http_server_responses`. The first
+two preserve the one-request fixture contract and emit `200 OK` by default; the
+response-sequence helper is the composition point for redirect chains and
+returns a request counter for asserting which requests were received.
+
+Only test code may call these helpers. Use separate fixture instances for a
+redirecting origin and its target, and use the target counter when a policy
+decision must prove that no connection was attempted. Configure response
+status, headers, and body through `HttpResponse`; do not add protocol-specific
+server logic to individual tests when the response sequence already expresses
+the scenario. Keep one-off fixtures for behaviour that cannot be represented by
+this local server, and do not use the fixture as a production HTTP adapter. The
+server's bounded accept and read deadlines, plus its drop-time cleanup, keep
+expected zero-request cases from stalling the suite.
+
 ### `test_support::ensure_manifest_exists`
 
 `test_support::ensure_manifest_exists` (`test_support/src/manifest.rs`) never

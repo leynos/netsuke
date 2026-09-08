@@ -956,6 +956,27 @@ every helper's signature, defaults, purity, platform caveats, and executable
 examples. Host-observing helpers belong only in trusted manifests: Netsuke
 bounds command and network output, but does not sandbox template evaluation.
 
+
+### Network fetch policy
+
+`fetch()` applies the configured `NetworkPolicy` to the caller-supplied URL and
+to every redirect destination before opening a connection. The default policy
+allows only HTTPS; `--fetch-allow-scheme`, `--fetch-allow-host`,
+`--fetch-default-deny`, and `--fetch-block-host` adjust the scheme and host
+rules. A redirect from HTTPS to HTTP therefore succeeds only when `http` is
+explicitly allowed and the destination host also passes the policy.
+
+Supported redirects (`301`, `302`, `303`, `307`, and `308`) retain GET
+semantics, resolve relative `Location` values against the current URL, and stop
+after five redirects. Repeated destinations, missing or invalid `Location`
+values, and policy-rejected destinations fail with distinct localized
+diagnostics. Credentials in the URL are removed when a redirect changes origin,
+and redirect diagnostics do not disclose URL userinfo.
+
+When `cache=true`, the cache entry is identified by the original URL. A cache
+miss applies the same policy checks to every redirect before storing the body;
+a cache hit performs no network request.
+
 When a Boolean is interpolated into a string field, Netsuke renders it as
 lowercase `true` or `false`. For example, this writes `true` to `status.txt`:
 
