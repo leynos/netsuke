@@ -26,6 +26,10 @@ The defaults are 1,000,000 instructions per evaluation, 100,000,000
 instructions per manifest, 1 MiB per rendered value, 16 MiB rendered output, 4
 MiB source, 10,000 `foreach` values, and 50,000 expanded entries. Exhaustion
 uses a localized, redacted diagnostic and closed-vocabulary telemetry labels.
+Budget values from the project file and every file in its `extends` chain may
+only narrow ceilings established by defaults, trusted configuration, the
+environment, or CLI flags. Malformed, non-positive, and unrepresentable budget
+values are rejected during configuration merge rather than treated as absent.
 
 ## Rationale
 
@@ -37,7 +41,8 @@ consumption stops expansion before it clones every requested entry.
 
 Large manifests now fail deterministically before host memory or CPU
 exhaustion. Operators can lower every ceiling through trusted configuration.
-Project configuration is not permitted to widen an operator-established ceiling.
+Project configuration, including its `extends` chain, is not permitted to widen
+an operator-established ceiling.
 
 ## Alternatives considered
 

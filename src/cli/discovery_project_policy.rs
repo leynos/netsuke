@@ -114,7 +114,7 @@ pub(super) fn retain_layers_and_resolve_json(layers: Vec<ScopedFileLayer>) -> Re
         }
         if scope == FileScope::Project {
             match take_project_manifest_budget_request(&mut value) {
-                Ok(request) => resolved.project_budget_request = request,
+                Ok(request) => resolved.project_budget_request.narrow_with(&request),
                 Err(error) => resolved.errors.push(error),
             }
             match take_project_fetch_policy_request(&mut value) {
