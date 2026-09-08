@@ -156,7 +156,7 @@ operator, user, and contributor references are easier to find.
 - [ADR-019](adr-019-structured-command-shell-selection.md): Allow-listed
   structured-command shell selection, trusted configuration authority,
   resolution, lowering, diagnostics, and safety boundaries.
-- [ADR-018](adr-018-manifest-linting-under-netsuke-check.md):
+- [ADR-021](adr-021-manifest-linting-under-netsuke-check.md):
   Manifest-linting decision record, placing the linter under `netsuke check`,
   treating findings as data with a threshold-selected success or failure
   document, and fixing the rule-identifier and rule-text ownership rules.

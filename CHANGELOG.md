@@ -15,9 +15,9 @@
   Findings are the command's result rather than its failure mode: `--fail-on`
   sets the severity at which they fail the command, `--rule NAME=SEVERITY`
   configures one rule or a whole category, and `--explain` prints the rule
-   reference. Suppression is a comment that names the rules it silences and
-   states a reason; there is no blanket disable
-   ([#592](https://github.com/leynos/netsuke/issues/592))
+  reference. Suppression is a comment that names the rules it silences and
+  states a reason; there is no blanket disable
+  ([#592](https://github.com/leynos/netsuke/issues/592))
 
 ## [0.1.0-beta3] - 2026-09-02
 

@@ -5,7 +5,7 @@
 - **Status:** living. The v0.4.0 linter is a prototype: it is implemented and
   shipped behind `netsuke check`, but its rule set, default severities, and
   most of the contracts below are expected to change once the rules have been
-  used against manifests their authors did not write. Roadmap phase 10 owns
+  used against manifests their authors did not write. Roadmap phase 12 owns
   that feedback loop and the freeze that ends it. Rule identifiers are the
   exception: they are permanent from v0.4.0. Update this document as the phase
   progresses rather than treating it as a record of what was once decided.
@@ -15,7 +15,7 @@
   operators wiring `netsuke check` into `make`, continuous integration (CI),
   editors, and agents.
 - **Documents that take precedence:**
-  - [ADR-018](adr-018-manifest-linting-under-netsuke-check.md) owns the command
+  - [ADR-021](adr-021-manifest-linting-under-netsuke-check.md) owns the command
     placement, the findings-as-data output contract, and the sequencing that
     keeps rule prose in the registry for the prototype period.
   - [ADR-003](adr-003-agent-consistent-human-first-cli.md) owns the command-line
@@ -108,7 +108,7 @@ These are assumed by every later section rather than re-justified.
 1. **No new top-level noun.** `check` is already in the canonical command
    vocabulary and is listed as unbuilt work in roadmap task 3.15.1. The linter
    is that command. See
-   [ADR-018](adr-018-manifest-linting-under-netsuke-check.md).
+   [ADR-021](adr-021-manifest-linting-under-netsuke-check.md).
 2. **Non-interactive and deterministic.** No prompts, no network, no clock, and
    no dependence on terminal capabilities for the analysis itself. Two runs
    over the same manifest and configuration produce byte-identical findings in
@@ -625,11 +625,11 @@ benefit of a diagnostic, and is deferred until evidence says the missing spans
 actually hurt.
 
 **Rule text is not localized yet.** Rule prose will move to the Fluent
-catalogues under roadmap step 10.2, keyed by the rule's stable name; rule
+catalogues under roadmap step 12.2, keyed by the rule's stable name; rule
 identifiers never move, because they are values a user types and a machine
 matches. The command's framing text — help, summary, threshold message, and
 errors — is already localized.
-[ADR-018](adr-018-manifest-linting-under-netsuke-check.md) records why the
+[ADR-021](adr-021-manifest-linting-under-netsuke-check.md) records why the
 prose migration waits for the rule set to settle.
 
 **The rule set will grow faster than the engine.** The registry is a static

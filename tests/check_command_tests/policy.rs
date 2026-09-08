@@ -3,6 +3,7 @@
 use anyhow::{Context, Result, ensure};
 use rstest::rstest;
 use serde_json::Value;
+use test_support::netsuke::NetsukeRun;
 
 use super::support::{
     Workspace, clean_workspace, diagnostic, document, warning_workspace, write_config,
@@ -150,12 +151,22 @@ fn human_failure_at_the_warning_threshold_uses_stderr(
     Ok(())
 }
 
+/// Run `check` with the configured warning threshold and extra arguments.
+fn run_with_configured_warning_threshold(
+    workspace: &Workspace,
+    extra_args: &[&str],
+) -> Result<NetsukeRun> {
+    let config = write_config(workspace, "[cmds.check]\nfail_on = \"warning\"\n")?;
+    let mut args = vec!["--config", config.as_str(), "--json", "check"];
+    args.extend_from_slice(extra_args);
+    workspace.run(&args)
+}
+
 /// A `[cmds.check]` table supplies the policy when the caller gives none.
 #[rstest]
 fn configuration_supplies_the_check_policy(warning_workspace: Result<Workspace>) -> Result<()> {
     let workspace = warning_workspace?;
-    let config = write_config(&workspace, "[cmds.check]\nfail_on = \"warning\"\n")?;
-    let run = workspace.run(&["--config", &config, "--json", "check"])?;
+    let run = run_with_configured_warning_threshold(&workspace, &[])?;
     ensure!(
         !run.success,
         "the configured threshold should fail the run: {}",
@@ -173,8 +184,7 @@ fn configuration_supplies_the_check_policy(warning_workspace: Result<Workspace>)
 #[rstest]
 fn an_explicit_flag_outranks_the_configuration(warning_workspace: Result<Workspace>) -> Result<()> {
     let workspace = warning_workspace?;
-    let config = write_config(&workspace, "[cmds.check]\nfail_on = \"warning\"\n")?;
-    let run = workspace.run(&["--config", &config, "--json", "check", "--fail-on", "error"])?;
+    let run = run_with_configured_warning_threshold(&workspace, &["--fail-on", "error"])?;
     ensure!(
         run.success,
         "the explicit threshold should win over the configured one: {}",

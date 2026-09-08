@@ -1201,7 +1201,6 @@ exception for `netsuke help targets`.
 Recipe-body skipping and conditional catalogue entries are beta3 behaviour.
 Published beta2 `help targets` does not provide those semantics.
 
-
 ### Lint a manifest with `netsuke check`
 
 `netsuke check` analyses the selected manifest for constructs that parse and
