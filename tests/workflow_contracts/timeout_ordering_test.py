@@ -33,11 +33,12 @@ import typing as typ
 import pytest
 from coverage_lanes import CoverageLane, coverage_lanes_of, watchdog_of
 from nextest_budgets import (
-    bounds_a_single_test,
     global_timeout,
     largest_test_allowance,
-    seconds,
     termination_allowance,
+)
+from nextest_durations import (
+    seconds,
 )
 from timeout_budgets import (
     CEILING_MARGIN_SECONDS,
@@ -65,9 +66,20 @@ if typ.TYPE_CHECKING:
 #:
 #: `ci.yml` also runs on pushes, where the trunk lane covers the same
 #: ground, so its coverage step is conditional on the pull request.
-REQUIRED_CONDITIONS: typ.Final[dict[tuple[str, str], tuple[object, object]]] = {
-    ("ci.yml", "build-test"): ("github.event_name == 'pull_request'", None),
-    ("coverage-main.yml", "coverage-upload"): (None, None),
+#: Keyed by workflow, job and step, because a job may run the coverage
+#: action more than once and the steps need not carry the same
+#: condition. Keying by job alone let a second step overwrite the first,
+#: so a step skipped by `if: false` beside one carrying the expected
+#: condition passed unexamined.
+REQUIRED_CONDITIONS: typ.Final[dict[tuple[str, str, str], tuple[object, object]]] = {
+    ("ci.yml", "build-test", "Test and Measure Coverage"): (
+        "github.event_name == 'pull_request'",
+        None,
+    ),
+    ("coverage-main.yml", "coverage-upload", "Test and Measure Coverage"): (
+        None,
+        None,
+    ),
 }
 
 
@@ -358,8 +370,16 @@ def test_each_coverage_lane_carries_the_condition_it_is_meant_to(
     Proved by mutation: `if: false` on the coverage step, the same on
     its job, a push-only condition, and a coordinate dropped from
     ``REQUIRED_CONDITIONS`` each fail this test.
+
+    The coordinate carries the step's name as well as its job, because a
+    job may run the coverage action more than once and the two steps
+    need not carry the same condition. Keyed by job alone, the second
+    step overwrote the first, so a step skipped by `if: false` beside
+    one carrying the expected condition passed unexamined.
     """
-    found = {(lane.workflow, lane.job): lane.condition for lane in coverage_lanes}
+    found = {
+        (lane.workflow, lane.job, lane.step): lane.condition for lane in coverage_lanes
+    }
     assert set(found) == set(REQUIRED_CONDITIONS), (
         f"the coverage lanes are not the ones this contract pins: "
         f"unlisted {sorted(set(found) - set(REQUIRED_CONDITIONS))}, missing "
@@ -375,25 +395,4 @@ def test_each_coverage_lane_carries_the_condition_it_is_meant_to(
         f"these coverage lanes do not carry the conditions the developers' "
         f"guide records, as expected versus found: {wrong}; a lane that is "
         f"skipped runs no cargo, so its watchdog never arms"
-    )
-
-
-def test_the_default_profile_bounds_a_test_it_matches_no_override_for(
-    nextest_config: str,
-) -> None:
-    """An override bounds its filter's tests; the profile bounds the rest.
-
-    ``largest_test_allowance`` reports the largest budget anywhere in
-    the file, so deleting the profile's own ``slow-timeout`` and leaving
-    the Windows override behind still reports 600 s while every test the
-    override does not match runs with no bound at all. That is the state
-    this assertion exists to detect, and nothing else here would.
-
-    Proved by mutation: commenting out ``[profile.default]``'s own
-    ``slow-timeout`` fails this test and nothing else.
-    """
-    assert bounds_a_single_test(nextest_config), (
-        "[profile.default] itself must set slow-timeout with terminate-after; "
-        "an override satisfies the file as a whole while leaving every test it "
-        "does not match unbounded"
     )

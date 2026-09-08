@@ -270,3 +270,130 @@ def test_an_unreadable_watchdog_names_the_lane_or_falls_through(value: str) -> N
 
     with pytest.raises(WatchdogValueError, match=r"ci\.yml:build"):
         coverage_lanes_of(documents)
+
+
+@pytest.mark.parametrize(
+    "blank",
+    [pytest.param("", id="empty"), pytest.param("   ", id="whitespace-only")],
+)
+def test_a_blank_step_value_falls_through_to_the_scope_outside_it(
+    blank: str,
+) -> None:
+    """A blank value says nothing, so the next scope decides.
+
+    That is what a workflow writes when it interpolates an expression
+    that resolved to nothing, and the lane is then bounded by whatever
+    the job or the workflow set. A reading that returned None as soon as
+    the step's own value was blank would report the lane as unset and
+    apply the action's undocumented default in place of the budget the
+    job actually declares.
+
+    The earlier blank case has no outer value to fall through to, so it
+    passes against that mistaken reading as well as the right one.
+    """
+    documents = {
+        "ci.yml": {
+            "env": {WATCHDOG_VARIABLE: "900"},
+            "jobs": {
+                "build-test": {
+                    "timeout-minutes": 60,
+                    "env": {WATCHDOG_VARIABLE: "1800"},
+                    "steps": [
+                        {
+                            "name": "Coverage",
+                            "uses": COVERAGE_STEP,
+                            "env": {WATCHDOG_VARIABLE: blank},
+                        }
+                    ],
+                }
+            },
+        }
+    }
+
+    (lane,) = coverage_lanes_of(documents)
+    assert lane.watchdog == pytest.approx(1800.0), (
+        "a blank step value must fall through to the job's, not read as unset; "
+        "reading it as unset would apply the action's default instead of the "
+        "1,800 s the job declares"
+    )
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param("nan", id="not-a-number"),
+        pytest.param("inf", id="infinity"),
+        pytest.param("-inf", id="negative-infinity"),
+    ],
+)
+def test_a_non_finite_watchdog_is_refused(value: str) -> None:
+    """`float` accepts these, and `<= 0` does not catch them.
+
+    `float("nan") <= 0` is False and so is `float("inf") <= 0`, so both
+    passed the positivity check and reached the ceiling arithmetic,
+    where the comparison against a finite ceiling fails for a reason
+    that names the ceiling rather than the value at fault.
+    """
+    documents = {
+        "ci.yml": {
+            "jobs": {
+                "build-test": {
+                    "timeout-minutes": 60,
+                    "steps": [
+                        {
+                            "name": "Coverage",
+                            "uses": COVERAGE_STEP,
+                            "env": {WATCHDOG_VARIABLE: value},
+                        }
+                    ],
+                }
+            }
+        }
+    }
+
+    with pytest.raises(WatchdogValueError, match=r"finite"):
+        coverage_lanes_of(documents)
+
+
+def test_a_second_coverage_step_carries_its_own_condition() -> None:
+    """Two steps in one job are two lanes, each judged separately.
+
+    The condition pin was keyed by workflow and job alone, so the second
+    step's entry overwrote the first's. A step skipped by `if: false`
+    beside one carrying the expected condition therefore passed
+    unexamined, which is the shape this reading has to keep distinct.
+    """
+    documents = {
+        "ci.yml": {
+            "jobs": {
+                "build-test": {
+                    "timeout-minutes": 60,
+                    "env": {WATCHDOG_VARIABLE: "1800"},
+                    "steps": [
+                        {
+                            "name": "Coverage",
+                            "uses": COVERAGE_STEP,
+                            "if": "github.event_name == 'pull_request'",
+                        },
+                        {
+                            "name": "Coverage again",
+                            "uses": COVERAGE_STEP,
+                            "if": False,
+                        },
+                    ],
+                }
+            }
+        }
+    }
+
+    lanes = coverage_lanes_of(documents)
+    keyed = {(lane.workflow, lane.job, lane.step): lane.condition for lane in lanes}
+
+    assert len(keyed) == 2, (
+        "two coverage steps in one job are two lanes; keyed by job alone the "
+        "second overwrites the first and its condition is never judged"
+    )
+    assert keyed["ci.yml", "build-test", "Coverage again"] == (False, None), (
+        "the skipped step keeps its own condition rather than inheriting the "
+        "one its neighbour carries"
+    )

@@ -18,13 +18,15 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 from nextest_budgets import (
-    NextestConfigurationError,
-    UnboundedTestError,
     global_timeout,
     grace_period,
     largest_test_allowance,
-    seconds,
     termination_allowance,
+)
+from nextest_durations import (
+    NextestConfigurationError,
+    UnboundedTestError,
+    seconds,
 )
 from timeout_budgets import (
     NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS,
@@ -80,7 +82,10 @@ def document(*tables: str, profile: str = "default") -> str:
         pytest.param("15m", 900.0, id="minutes"),
         pytest.param("2h", 7200.0, id="hours"),
         pytest.param("  45s  ", 45.0, id="surrounding-whitespace"),
-        pytest.param("1.5m", 90.0, id="a-decimal-value"),
+        pytest.param("2h 30m", 9000.0, id="a-composite-with-a-space"),
+        pytest.param("1m30s", 90.0, id="a-composite-without-a-space"),
+        pytest.param("1d", 86400.0, id="days"),
+        pytest.param("15sec", 15.0, id="a-long-unit-spelling"),
     ],
 )
 def test_each_unit_converts_exactly(duration: str, expected: float) -> None:
@@ -105,24 +110,25 @@ def test_every_unit_scales_its_value(value: int, unit: str) -> None:
 
 @pytest.mark.parametrize(
     "duration",
-    ["", "300", "s", "300 sec", "five minutes", "-30s", "30d", "3 0s"],
+    ["", "300", "s", "five minutes", "-30s", "1.5m", "30 fortnights"],
     ids=[
         "empty",
         "no-unit",
         "no-value",
-        "an-unsupported-spelling",
         "words",
         "negative",
-        "days-are-not-a-nextest-unit",
-        "an-interior-space",
+        "a-decimal-humantime-refuses",
+        "a-unit-humantime-does-not-know",
     ],
 )
 def test_an_unreadable_duration_is_refused(duration: str) -> None:
     """A duration nextest would reject must not become a number.
 
-    Returning something plausible for `"30d"` would put a comparison
-    against a budget nextest never applies, and the contract would pass
-    while the ordering it claims to hold did not.
+    Returning something plausible would put a comparison against a
+    budget nextest never applies, and the contract would pass while the
+    ordering it claims to hold did not. `humantime` takes whole numbers,
+    so `1.5m` is not a shorter way of writing ninety seconds: it is a
+    value the runner rejects.
     """
     with pytest.raises(NextestConfigurationError):
         seconds(duration)
@@ -316,3 +322,39 @@ def test_an_unconfigured_grace_period_falls_back_to_nextest_s_default(
     assert grace_period(config) == pytest.approx(
         NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS
     ), "an absent grace period must fall back to nextest's default"
+
+
+@pytest.mark.parametrize(
+    "multiplier",
+    [
+        pytest.param("0", id="zero"),
+        pytest.param("-1", id="negative"),
+        pytest.param("1.5", id="fractional"),
+        pytest.param('"1"', id="a-quoted-number"),
+        pytest.param("true", id="a-boolean"),
+    ],
+)
+def test_a_terminate_after_nextest_refuses_is_refused(multiplier: str) -> None:
+    """Nextest types it as a non-zero positive integer.
+
+    Zero is the dangerous one: read as a number it makes the per-test
+    allowance vanish, so every comparison above it passes against a
+    budget of nothing. A boolean is the subtle one, because `True` is an
+    `int` in Python and would otherwise read as a multiplier of one.
+    """
+    config = document(
+        f'slow-timeout = {{ period = "60s", terminate-after = {multiplier} }}'
+    )
+    with pytest.raises(NextestConfigurationError, match=r"terminate-after"):
+        largest_test_allowance(config)
+
+
+def test_a_global_timeout_that_is_not_a_duration_is_refused() -> None:
+    """The option is a duration string, so a bare number is invalid.
+
+    Reading it as absent would skip the whole-run ordering assertion
+    entirely, which is worse than reporting the wrong budget: the tier
+    would look unset while the file plainly tries to set it.
+    """
+    with pytest.raises(NextestConfigurationError, match=r"global-timeout"):
+        global_timeout("[profile.default]\nglobal-timeout = 600\n")

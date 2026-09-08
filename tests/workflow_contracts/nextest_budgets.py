@@ -17,77 +17,24 @@ See "Test timeouts: the tiers this repository sets" in
 ``docs/developers-guide.md``.
 """
 
-import re
 import tomllib
-import typing as typ
 from itertools import starmap
 
+from nextest_durations import (
+    NextestConfigurationError,
+    UnboundedTestError,
+    seconds,
+)
 from timeout_budgets import (
     NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS,
     TERMINATION_SAFETY_MARGIN_SECONDS,
 )
 
-_DURATION: typ.Final[re.Pattern[str]] = re.compile(
-    r"^\s*(?P<value>\d+(?:\.\d+)?)\s*(?P<unit>ms|s|m|h)\s*$"
-)
 
-_UNIT_SECONDS: typ.Final[dict[str, float]] = {
-    "ms": 0.001,
-    "s": 1.0,
-    "m": 60.0,
-    "h": 3600.0,
-}
-
-
-class TimeoutBudgetError(ValueError):
-    """Raised when a configured budget cannot be read as a bound."""
-
-
-class NextestConfigurationError(TimeoutBudgetError):
-    """Raised when the configuration cannot be read at all.
-
-    Separate from a budget that bounds nothing. A file that is not TOML,
-    or one declaring no ``slow-timeout`` anywhere, is a configuration
-    this contract cannot reason about rather than one whose tiers are in
-    the wrong order.
-    """
-
-
-class UnboundedTestError(TimeoutBudgetError):
-    """Raised when a ``slow-timeout`` terminates no test.
-
-    ``terminate-after`` is optional, and without it nextest marks a test
-    slow and lets it run on, so the configuration parses, reads as
-    deliberate, and bounds nothing. Reporting that as a period-long
-    budget would put a number on the tier that is missing.
-    """
-
-
-def seconds(duration: str) -> float:
-    """Convert a nextest duration to seconds.
-
-    Parameters
-    ----------
-    duration : str
-        A duration as nextest spells it, such as ``"60s"``.
-
-    Returns
-    -------
-    float
-        The duration in seconds.
-
-    Raises
-    ------
-    NextestConfigurationError
-        If the text is not a duration nextest would accept.
-    """
-    match = _DURATION.match(duration)
-    if match is None:
-        message = f"unrecognized nextest duration {duration!r}"
-        raise NextestConfigurationError(message)
-    return float(match["value"]) * _UNIT_SECONDS[match["unit"]]
-
-
+#: One value-and-unit pair of a humantime duration. nextest parses its
+#: durations with `humantime` through `humantime_serde`, which reads a
+#: sequence of these and sums them, so `2h 30m` and `1d` are valid and a
+#: parser taking one pair would refuse configuration the runner accepts.
 def _table(value: object) -> dict[str, object]:
     """Return a parsed value as a table, or an empty one.
 
@@ -184,6 +131,50 @@ def _slow_timeouts(config_text: str) -> list[tuple[str, object]]:
     ]
 
 
+def _multiplier_of(path: str, multiplier: object) -> int:
+    """Return a ``terminate-after`` value, refusing what nextest refuses.
+
+    nextest types it as a `NonZeroUsize`, so a zero, a negative, a
+    fraction or a quoted number is a configuration it rejects. Reading
+    any of them as a number here would put a budget on a tier the runner
+    never applies, and zero in particular would make the per-test
+    allowance vanish and every comparison above it pass.
+
+    Booleans are refused before integers because `True` is an `int` in
+    Python and would otherwise read as a multiplier of one.
+
+    Parameters
+    ----------
+    path : str
+        The dotted path of the declaring table, for the message.
+    multiplier : object
+        The value as ``tomllib`` returned it.
+
+    Returns
+    -------
+    int
+        The multiplier.
+
+    Raises
+    ------
+    NextestConfigurationError
+        If the value is not a positive integer.
+    """
+    match multiplier:
+        case bool():
+            pass
+        case int() as count if count > 0:
+            return count
+        case _:
+            pass
+    message = (
+        f"{path}.slow-timeout has terminate-after={multiplier!r}, which "
+        f"nextest refuses: it is typed as a non-zero positive integer, so a "
+        f"zero, a negative, a fraction or a quoted number configures nothing"
+    )
+    raise NextestConfigurationError(message)
+
+
 def _budget_of(path: str, value: object) -> float:
     """Return the per-test budget one ``slow-timeout`` declares.
 
@@ -234,7 +225,7 @@ def _budget_of(path: str, value: object) -> float:
             f"compare against"
         )
         raise UnboundedTestError(message)
-    return seconds(period) * float(str(multiplier))
+    return seconds(period) * _multiplier_of(path, multiplier)
 
 
 def largest_test_allowance(config_text: str) -> float:
@@ -372,7 +363,23 @@ def global_timeout(config_text: str) -> float | None:
     float or None
         The whole-run budget in seconds, or None when the default
         profile declares none.
+
+    Raises
+    ------
+    NextestConfigurationError
+        If the key is present but is not a duration string. Reading that
+        as absent would skip the ordering assertion it exists for.
     """
     profile = _table(_table(_parsed(config_text).get("profile")).get("default"))
-    budget = profile.get("global-timeout")
-    return seconds(budget) if isinstance(budget, str) else None
+    if "global-timeout" not in profile:
+        return None
+    budget = profile["global-timeout"]
+    if not isinstance(budget, str):
+        message = (
+            f"[profile.default].global-timeout is {budget!r}, which nextest "
+            f"refuses: the option is a duration string, so 600 is not a "
+            f'shorter way of writing "600s". Reading it as absent would '
+            f"skip the whole-run ordering assertion and hide the fault"
+        )
+        raise NextestConfigurationError(message)
+    return seconds(budget)

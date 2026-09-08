@@ -5,6 +5,7 @@ nextest arithmetic stay legible apart, and so neither module outgrows
 the 400-line limit the Python lint gate enforces.
 """
 
+import math
 import typing as typ
 
 import yaml
@@ -145,10 +146,13 @@ def _budget_from(raw: object) -> float | None:
             f"read"
         )
         raise WatchdogValueError(message) from error
-    if seconds <= 0:
+    if not math.isfinite(seconds) or seconds <= 0:
         message = (
-            f"{WATCHDOG_VARIABLE}={raw!r} is not positive, so the cargo "
-            f"invocation is unbounded while appearing to be bounded"
+            f"{WATCHDOG_VARIABLE}={raw!r} is not a positive, finite number of "
+            f"seconds, so the cargo invocation is unbounded while appearing to "
+            f"be bounded. `nan` and `inf` parse as floats and pass a `<= 0` "
+            f"test, so they are refused by name rather than reaching the "
+            f"ceiling arithmetic and failing there"
         )
         raise WatchdogValueError(message)
     return seconds
