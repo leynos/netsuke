@@ -1645,6 +1645,29 @@ sequenceDiagram
     end
 ```
 
+Figure: `cwd_mode` selects a flat PATH or current-directory search, while only
+`workspace-recursive` performs a bounded workspace walk after a PATH miss.
+
+```mermaid
+flowchart TD
+    accTitle: Executable discovery by cwd_mode
+    accDescr: Auto searches PATH only; always prepends the workspace root;
+        never excludes empty PATH entries; and workspace-recursive searches
+        PATH before a bounded recursive workspace search after a miss.
+    A["which or command_available"] --> B{"cwd_mode"}
+    B -->|auto| C["Search PATH only"]
+    B -->|always| D["Search workspace root, then PATH"]
+    B -->|never| E["Search non-empty PATH entries"]
+    B -->|workspace-recursive| F["Search PATH first"]
+    F --> G{"PATH miss?"}
+    G -->|yes| H["search_workspace"]
+    G -->|no| I["Return PATH match"]
+    C --> J["Missing command remains absent"]
+    D --> J
+    E --> J
+    H --> K["Return bounded workspace match or not_found"]
+```
+
 Workspace traversal honours a configurable skip list to avoid expensive scans
 of tool caches and IDE metadata. The default skips `.git`, `target`,
 `node_modules`, `.idea`, and `.vscode`, and callers can replace the list via
