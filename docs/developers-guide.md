@@ -743,9 +743,17 @@ uses [`linux-gate-cache`](../.github/actions/linux-gate-cache), the Kani job
 uses [`kani-cache`](../.github/actions/kani-cache), and the Windows jobs use
 [`windows-gate-cache`](../.github/actions/windows-gate-cache). Each action
 renders its keys once, so restore, save, and the observation summary cannot
-drift apart. The Windows action takes a `profile` input: `gate` is the single
-writer of every Windows key, and `smoke` restores that generation by prefix and
-declares no save step at all.
+drift apart. The Windows action takes a `profile` input naming which job is
+calling and therefore which keys it may publish. Every key still has exactly
+one writer, but the Windows gate is two concurrent jobs, so the four families
+are split between them: `lint` is `lint-windows`, which owns `tools` and
+`whitaker`, the paths it installs into; `gate` is `build-test-windows`, which
+owns `registry` and `sccache`, the two its compile fills. Both restore all four.
+`smoke` is the release native-recipe job, which restores the gate's generation
+by prefix and declares no save step at all.
+`tests/workflow_contracts/windows_cache_writers_test.py` evaluates the action's
+save conditions against the profiles the two jobs pass, so widening one by a
+token gives a key two writers and fails there.
 
 One cache action serves every lane: `actions/cache/restore` and
 `actions/cache/save` at `55cc8345863c7cc4c66a329aec7e433d2d1c52a9` (v6.1.0).
@@ -1039,7 +1047,7 @@ remains an ordinary PowerShell session. The rest of `build-test-windows`
 continues to use Git Bash only for the repository's POSIX Makefile quality
 gates, exactly as `Lint (Whitaker)` already overrides the default to `pwsh`.
 
-These were a second job, `windows-native-recipe-smoke`, that `needs`-ed
+These steps were in a second job, `windows-native-recipe-smoke`, that `needs`-ed
 `build-test-windows`. That made it a strict serial tail on every pull request:
 a median of 236s plus queue, measured over the 57 Windows runs between run
 33890685806 and run 34064668331, of which 8s checked out, 72s restored caches,

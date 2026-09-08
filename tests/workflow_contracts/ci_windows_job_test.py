@@ -78,12 +78,6 @@ def normalise_run(run: object) -> object:
 
 
 @pytest.fixture
-def windows_job() -> dict[str, object]:
-    """Return the build-test-windows job mapping."""
-    return workflow_job(load_workflow(CI_WINDOWS_WORKFLOW_PATH), WINDOWS_JOB)
-
-
-@pytest.fixture
 def windows_steps() -> list[dict[str, object]]:
     """Return the build-test-windows job's steps, in declaration order."""
     return job_steps(load_workflow(CI_WINDOWS_WORKFLOW_PATH), WINDOWS_JOB)
@@ -96,32 +90,37 @@ def lane_steps() -> list[dict[str, object]]:
     return [step for name in WINDOWS_JOBS for step in job_steps(workflow, name)]
 
 
-def test_windows_job_runs_on_a_github_hosted_runner(
-    windows_job: dict[str, object],
-) -> None:
-    """The Windows job must run on a GitHub-hosted Windows runner.
+@pytest.mark.parametrize("job_name", WINDOWS_JOBS)
+def test_windows_jobs_run_on_a_github_hosted_runner(job_name: str) -> None:
+    """Both Windows jobs must run on a GitHub-hosted Windows runner.
 
     Ubicloud publishes Ubuntu images only, so `windows-latest` is the durable
-    placement for this lane rather than a fallback.
+    placement for this lane rather than a fallback. Both halves compile the
+    `#[cfg(windows)]` tree, so the requirement is not the test job's alone.
     """
     expected_runner = "windows-latest"
-    assert windows_job.get("runs-on") == expected_runner, (
-        f"{WINDOWS_JOB} must run on {expected_runner} so the "
-        f"#[cfg(windows)] tree is compiled, got {windows_job.get('runs-on')!r}"
+    job = workflow_job(load_workflow(CI_WINDOWS_WORKFLOW_PATH), job_name)
+    assert job.get("runs-on") == expected_runner, (
+        f"{job_name} must run on {expected_runner} so the "
+        f"#[cfg(windows)] tree is compiled, got {job.get('runs-on')!r}"
     )
 
 
-def test_windows_job_uses_git_bash_for_recipes(windows_job: dict[str, object]) -> None:
-    """The job runs recipes under Git Bash, not cmd.exe.
+@pytest.mark.parametrize("job_name", WINDOWS_JOBS)
+def test_windows_jobs_use_git_bash_for_recipes(job_name: str) -> None:
+    """Each job runs recipes under Git Bash, not cmd.exe.
 
     The Makefile uses POSIX shell constructs throughout, and GNU Make's
-    default recipe shell on Windows is cmd.exe, so the job must default every
-    run step to bash.
+    default recipe shell on Windows is cmd.exe, so each job must default every
+    run step to bash. The lint job drives `check-fmt` and `lint-clippy` through
+    the Makefile, so losing the default would break it exactly as it would the
+    test job.
     """
-    defaults = require_mapping(windows_job.get("defaults"), f"{WINDOWS_JOB}.defaults")
-    run = require_mapping(defaults.get("run"), f"{WINDOWS_JOB}.defaults.run")
+    job = workflow_job(load_workflow(CI_WINDOWS_WORKFLOW_PATH), job_name)
+    defaults = require_mapping(job.get("defaults"), f"{job_name}.defaults")
+    run = require_mapping(defaults.get("run"), f"{job_name}.defaults.run")
     assert run.get("shell") == "bash", (
-        f"{WINDOWS_JOB} must run recipes under Git Bash "
+        f"{job_name} must run recipes under Git Bash "
         f"(defaults.run.shell: bash), got {run.get('shell')!r}"
     )
 
@@ -224,26 +223,26 @@ def test_windows_lane_does_not_duplicate_doc_and_audit_gates(
     )
 
 
-def test_windows_job_is_a_blocking_merge_gate(
-    windows_job: dict[str, object],
-    windows_steps: list[dict[str, object]],
-) -> None:
-    """No step in the Windows job is allowed to fail silently.
+@pytest.mark.parametrize("job_name", WINDOWS_JOBS)
+def test_windows_jobs_are_blocking_merge_gates(job_name: str) -> None:
+    """No step in either Windows job is allowed to fail silently.
 
-    A `continue-on-error: true` on the job or any step would let a Windows
-    lint or test failure pass the merge, defeating the gate.
+    Scenario: the gate is two concurrent jobs, and a lint failure blocks the
+    merge exactly as a test failure does. Invariant: neither job, and no step
+    of either, sets `continue-on-error: true`. Checking only the test job would
+    let the whole lint half become advisory without anything failing.
     """
-    assert windows_job.get("continue-on-error") is not True, (
-        f"{WINDOWS_JOB} must not set continue-on-error on the job"
+    workflow = load_workflow(CI_WINDOWS_WORKFLOW_PATH)
+    job = workflow_job(workflow, job_name)
+    assert job.get("continue-on-error") is not True, (
+        f"{job_name} must not set continue-on-error on the job"
     )
     lenient = [
         step.get("name")
-        for step in windows_steps
+        for step in job_steps(workflow, job_name)
         if step.get("continue-on-error") is True
     ]
-    assert not lenient, (
-        f"{WINDOWS_JOB} steps {lenient!r} must not set continue-on-error"
-    )
+    assert not lenient, f"{job_name} steps {lenient!r} must not set continue-on-error"
 
 
 #: Version pins the caller repeats as reusable-workflow inputs, mapped to the

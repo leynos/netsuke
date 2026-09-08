@@ -93,12 +93,22 @@ def save_runs_for_profile(condition: str, profile: str) -> bool:
     return False
 
 
-def windows_save_profiles() -> dict[str, list[str]]:
+def windows_save_profiles(workflow: dict[str, object]) -> dict[str, list[str]]:
     """Return every save profile each Windows job passes, keyed by job name.
+
+    Takes an already-parsed workflow rather than reading one. A helper that
+    reads and parses behind a data-returning name hides `OSError` and
+    `yaml.YAMLError` at a call site that reads like a lookup, and makes the
+    check impossible to exercise on anything but the real file.
 
     A list rather than one value: nothing stops a job calling the action twice
     with different profiles, and that is one way to give a key two writers.
     Keeping only the last call would hide it.
+
+    Parameters
+    ----------
+    workflow:
+        The parsed `ci-windows.yml` mapping.
 
     Returns
     -------
@@ -106,7 +116,6 @@ def windows_save_profiles() -> dict[str, list[str]]:
         Job name to the profiles of its `mode: save` calls, in declaration
         order.
     """
-    workflow = load_workflow(CI_WINDOWS_WORKFLOW_PATH)
     jobs = require_mapping(workflow.get("jobs"), "ci-windows.yml jobs")
     profiles: dict[str, list[str]] = {}
     for job_name in jobs:
@@ -119,21 +128,28 @@ def windows_save_profiles() -> dict[str, list[str]]:
     return profiles
 
 
-def action_save_steps() -> list[tuple[str, str]]:
+def action_save_steps(action: dict[str, object]) -> list[tuple[str, str]]:
     """Return each save step of the action as a key family and condition.
+
+    Takes an already-parsed action for the same reason as
+    `windows_save_profiles`.
+
+    Parameters
+    ----------
+    action:
+        The parsed `windows-gate-cache` action mapping.
 
     Returns
     -------
     list[tuple[str, str]]
-        The key family the step publishes and its `if:` expression.
+        The key family each save step publishes and its `if:` expression.
     """
-    action = yaml.safe_load(ACTION_PATH.read_text(encoding="utf-8"))
     runs = require_mapping(action.get("runs"), "the action's runs block")
-    steps: list[tuple[str, str]] = []
     declared = runs.get("steps")
     assert isinstance(declared, list), (
         f"the action's runs block must declare a list of steps, got {declared!r}"
     )
+    steps: list[tuple[str, str]] = []
     for entry in declared:
         step = require_mapping(entry, "an action step")
         name = str(step.get("name", ""))
@@ -146,7 +162,38 @@ def action_save_steps() -> list[tuple[str, str]]:
     return steps
 
 
-def test_every_windows_cache_key_has_exactly_one_writer() -> None:
+@pytest.fixture
+def windows_workflow() -> dict[str, object]:
+    """Return the parsed `ci-windows.yml` workflow.
+
+    Returns
+    -------
+    dict[str, object]
+        The parsed workflow mapping.
+    """
+    return load_workflow(CI_WINDOWS_WORKFLOW_PATH)
+
+
+@pytest.fixture
+def cache_action() -> dict[str, object]:
+    """Return the parsed `windows-gate-cache` composite action.
+
+    Reading and parsing live here, in a fixture, so a failure to read or parse
+    is reported as a fixture error naming the file rather than surfacing from
+    inside a lookup.
+
+    Returns
+    -------
+    dict[str, object]
+        The parsed action mapping.
+    """
+    parsed = yaml.safe_load(ACTION_PATH.read_text(encoding="utf-8"))
+    return require_mapping(parsed, f"{ACTION_PATH.name}")
+
+
+def test_every_windows_cache_key_has_exactly_one_writer(
+    windows_workflow: dict[str, object], cache_action: dict[str, object]
+) -> None:
     """No Windows cache key may be saved by both jobs, or by neither.
 
     Scenario: the gate is two concurrent jobs, so the four key families are
@@ -156,14 +203,14 @@ def test_every_windows_cache_key_has_exactly_one_writer() -> None:
     paths. Widening one save condition so both profiles match it, which is a
     one-token edit, gains a second writer and fails here.
     """
-    profiles = windows_save_profiles()
+    profiles = windows_save_profiles(windows_workflow)
     assert set(profiles) == set(EXPECTED_KEY_WRITERS.values()), (
         "both Windows jobs must publish through the cache action, "
         f"got save profiles {profiles!r}"
     )
 
     writers: dict[str, list[str]] = {family: [] for family in EXPECTED_KEY_WRITERS}
-    for family, condition in action_save_steps():
+    for family, condition in action_save_steps(cache_action):
         assert family in writers, (
             f"the action saves an unrecognised key family {family!r}; add it to "
             "EXPECTED_KEY_WRITERS with its owner"
