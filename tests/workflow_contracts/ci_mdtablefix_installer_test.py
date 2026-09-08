@@ -19,8 +19,8 @@ import typing as typ
 import pytest
 from cache_contract_data import WORKFLOW_DIR
 from workflow_loading import (
+    MDTABLEFIX_JOBS,
     REPO_ROOT,
-    SETUP_RUST_JOBS,
     job_steps,
     load_workflow,
     named_step,
@@ -49,7 +49,7 @@ def _version_tuple(value: str) -> tuple[int, ...]:
     return tuple(int(part) for part in value.split("."))
 
 
-@pytest.mark.parametrize(("workflow_path", "job_name"), SETUP_RUST_JOBS)
+@pytest.mark.parametrize(("workflow_path", "job_name"), MDTABLEFIX_JOBS)
 def test_both_formatter_jobs_use_the_shared_installer_action(
     workflow_path: pl.Path, job_name: str
 ) -> None:
@@ -157,7 +157,7 @@ def _resolve_literal(version: str, workflow_path: pl.Path) -> str:
     return callers[0]
 
 
-@pytest.mark.parametrize(("workflow_path", "job_name"), SETUP_RUST_JOBS)
+@pytest.mark.parametrize(("workflow_path", "job_name"), MDTABLEFIX_JOBS)
 def test_both_formatter_jobs_pin_a_version_that_publishes_archives(
     workflow_path: pl.Path, job_name: str
 ) -> None:

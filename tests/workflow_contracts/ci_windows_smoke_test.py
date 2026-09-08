@@ -16,6 +16,8 @@ command rather than the step name alone. They live here rather than in
 Run via ``make test-workflow-contracts``.
 """
 
+import re
+
 import pytest
 from workflow_loading import (
     CI_WINDOWS_WORKFLOW_PATH,
@@ -27,6 +29,13 @@ from workflow_loading import (
 
 WINDOWS_JOB = "build-test-windows"
 
+#: PowerShell's block comment, which spans lines. Matched non-greedily so two
+#: separate blocks do not swallow the executable lines between them.
+_BLOCK_COMMENT = re.compile(r"<#.*?#>", re.DOTALL)
+
+#: Both halves of the Windows gate, in declaration order.
+EXPECTED_WINDOWS_JOBS = ("lint-windows", WINDOWS_JOB)
+
 
 def command_lines(run: str) -> list[str]:
     """Return the executable PowerShell lines of `run`, comments removed.
@@ -35,6 +44,10 @@ def command_lines(run: str) -> list[str]:
     command, which builds nothing, and by an altered command that happens to
     contain the expected text. Matching against stripped, non-comment lines and
     anchoring at their start rules both out.
+
+    PowerShell has two comment forms and both must go. `#` runs to end of line;
+    `<# ... #>` spans lines and would otherwise leave every command it wraps
+    looking executable, which is the same defeat by a different syntax.
 
     Parameters
     ----------
@@ -47,11 +60,49 @@ def command_lines(run: str) -> list[str]:
         Each non-blank, non-comment line, stripped of surrounding whitespace,
         in declaration order.
     """
+    without_blocks = _BLOCK_COMMENT.sub(" ", run)
     return [
         stripped
-        for line in run.splitlines()
+        for line in without_blocks.splitlines()
         if (stripped := line.strip()) and not stripped.startswith("#")
     ]
+
+
+@pytest.mark.parametrize(
+    ("run", "expected"),
+    [
+        ("cargo build --locked --bin netsuke", ["cargo build --locked --bin netsuke"]),
+        ("# cargo build --locked --bin netsuke", []),
+        ("<#\ncargo build --locked --bin netsuke\n#>", []),
+        ("<# cargo build --locked --bin netsuke #>", []),
+        (
+            "<#\nfirst --commented\n#>\nsecond --live\n<#\nthird --commented\n#>",
+            ["second --live"],
+        ),
+    ],
+    ids=[
+        "a-bare-command-is-executable",
+        "a-line-comment-hides-it",
+        "a-multi-line-block-comment-hides-it",
+        "a-single-line-block-comment-hides-it",
+        "two-blocks-do-not-swallow-the-command-between-them",
+    ],
+)
+def test_command_lines_ignores_both_comment_forms(
+    run: str, expected: list[str]
+) -> None:
+    """Only commands PowerShell would execute may count as executable.
+
+    Scenario: the step assertions match against this helper's output, so
+    anything it wrongly reports as a command can satisfy them while nothing
+    runs. Invariant: both PowerShell comment forms are removed, including a
+    block comment spanning lines, and two blocks do not swallow the live
+    command between them, which a greedy match would.
+    """
+    assert command_lines(run) == expected, (
+        f"{run!r} should yield the executable lines {expected!r}, "
+        f"got {command_lines(run)!r}"
+    )
 
 
 @pytest.fixture
@@ -125,17 +176,19 @@ def test_windows_job_runs_the_native_recipe_smoke_after_the_test_gate(
         )
 
 
-def test_windows_workflow_declares_no_second_job() -> None:
-    """The Windows lane must stay one job, so nothing serialises behind it.
+def test_windows_workflow_declares_no_serialised_job() -> None:
+    """The Windows lane must stay two concurrent jobs and no more.
 
-    Scenario: `windows-native-recipe-smoke` used to be a second job that
+    Scenario: `windows-native-recipe-smoke` used to be a third job that
     ``needs``-ed the gate, costing a measured median 236s of serial tail for 7s
-    of work. Invariant: `ci-windows.yml` declares exactly the gate job, so a
-    reinstated second job has to justify the tail rather than arrive quietly.
+    of work. Invariant: `ci-windows.yml` declares exactly the lint and test
+    jobs, so a reinstated serial job has to justify the tail rather than arrive
+    quietly.
     """
     workflow = load_workflow(CI_WINDOWS_WORKFLOW_PATH)
     jobs = require_mapping(workflow.get("jobs"), "ci-windows.yml jobs")
-    assert list(jobs) == [WINDOWS_JOB], (
-        f"ci-windows.yml must declare only {WINDOWS_JOB!r}; the native-recipe "
-        f"smoke test is folded into it as PowerShell steps, got {list(jobs)!r}"
+    assert list(jobs) == list(EXPECTED_WINDOWS_JOBS), (
+        f"ci-windows.yml must declare exactly {list(EXPECTED_WINDOWS_JOBS)!r}; the "
+        f"native-recipe smoke test is folded into the test job as PowerShell "
+        f"steps, got {list(jobs)!r}"
     )

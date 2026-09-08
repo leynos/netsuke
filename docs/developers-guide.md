@@ -584,13 +584,14 @@ affected workflow passes it through the relevant shared action's
 job-level override would win over the action's exported value and silently drop
 whatever the action set.
 
-Five CI jobs across five workflows carry the contract.
+Six CI jobs across five workflows carry the contract.
 
 Table: CI jobs and their shared Rust setup.
 
 | Workflow                                                              | Job                  | Shared action        | `with.rustflags`            |
 | --------------------------------------------------------------------- | -------------------- | -------------------- | --------------------------- |
 | [`ci.yml`](../.github/workflows/ci.yml)                               | `build-test`         | `setup-rust`         | `-D warnings`               |
+| [`ci-windows.yml`](../.github/workflows/ci-windows.yml)               | `lint-windows`       | `setup-rust`         | `-D warnings`               |
 | [`ci-windows.yml`](../.github/workflows/ci-windows.yml)               | `build-test-windows` | `setup-rust`         | `-D warnings`               |
 | [`coverage-main.yml`](../.github/workflows/coverage-main.yml)         | `coverage-upload`    | `setup-rust`         | `-D warnings`               |
 | [`netsukefile-test.yml`](../.github/workflows/netsukefile-test.yml)   | `netsukefile`        | `setup-rust`         | *(omitted; action default)* |
@@ -615,11 +616,11 @@ only emitted an "Unexpected input(s)" warning on every run;
 
 The merge gate spans two files. [`ci.yml`](../.github/workflows/ci.yml) holds
 the Linux gate and the Kani smoke job;
-[`ci-windows.yml`](../.github/workflows/ci-windows.yml) holds
-`build-test-windows`, the single Windows job, and `ci.yml` invokes it through a
-single `windows` job. The split exists to keep both files inside the 400-line
-limit that AGENTS.md sets for every file in the repository; adding a Windows
-step therefore goes in `ci-windows.yml`.
+[`ci-windows.yml`](../.github/workflows/ci-windows.yml) holds `lint-windows` and
+`build-test-windows`, the two concurrent halves of the Windows gate, and
+`ci.yml` invokes both through a single `windows` job. The split exists to keep
+both files inside the 400-line limit that AGENTS.md sets for every file in the
+repository; adding a Windows step therefore goes in `ci-windows.yml`.
 
 GitHub does not expose the `env` context to a reusable workflow's `with` block,
 so `ci.yml` repeats its `NEXTEST_VERSION`, `MDTABLEFIX_VERSION`, and
@@ -628,6 +629,41 @@ as workflow-level `env`. Each pin is still declared once at workflow scope in
 `ci.yml`, so the `sed` extraction AGENTS.md documents still yields exactly one
 value. `tests/workflow_contracts/ci_windows_job_test.py` holds the caller's
 literals equal to those pins, so the two copies cannot drift.
+
+### Why the Windows gate is two jobs
+
+`lint-windows` and `build-test-windows` run concurrently on `windows-latest`.
+They used to be one job, in which formatting, Clippy and Whitaker ran in series
+ahead of the test step for no reason: neither half consumes the other's output.
+Two different measurements are quoted below and they are not interchangeable,
+so each is labelled.
+
+**Per-step medians, single job, 57 successful runs of
+`Windows / build-test-windows` between run 33890685806 and run 34064668331.**
+The lint series cost 19s of `Format`, 114s of `Lint (Clippy)`, 40s installing
+Whitaker and 385s of `Lint (Whitaker)`, ahead of a 471s `Test` step, in a job
+whose median total was 1191s.
+
+**End to end, whole Windows lane.** Before the split this was the gate job plus
+the queue and duration of the native-recipe smoke job that depended on it, a
+median of 1468s over the same runs. After the split it is the slower of the two
+concurrent jobs, measured at 848s, 816s and 877s on runs 34090304160,
+34098601536 and 34164600713.
+
+The two figures answer different questions. The 1191s is what one job took; the
+1468s is what a contributor waited for. Only the second is comparable with the
+post-split numbers, and it is the one to quote.
+
+The cost of the split is a second hosted Windows runner and a second cache
+restore per pull request, which is accepted where it speeds development. Which
+job leads has already changed once, from `Test` to `Lint (Whitaker)`, as
+sccache warmed; the lane tracks the slower half rather than their sum, so the
+useful question after a change is which half now leads.
+
+`tests/workflow_contracts/ci_windows_job_test.py` holds the shape: each Git
+Bash Makefile gate runs exactly once across the lane, each runs in the job that
+owns it, and neither job declares `needs`. Putting the lints back in series, or
+making either job wait for the other, fails there.
 
 ### Cache ownership and bounded CI resources
 
@@ -648,6 +684,7 @@ the declared count, so a shape change cannot leave an oversubscribed job behind.
 | `ci.yml` `kani-smoke`                 | `ubicloud-standard-2-ubuntu-2404` | no Cargo or nextest worker variables                                             |
 | `netsukefile-test.yml` `netsukefile`  | `ubicloud-standard-2-ubuntu-2204` | `BUILD_JOBS=-j 2`                                                                |
 | `release.yml` `build-linux`           | `ubicloud-standard-2-ubuntu-2404` | caller-selected packaging runner; no sccache                                     |
+| `ci-windows.yml` `lint-windows`       | `windows-latest`                  | `BUILD_JOBS=-j 4`, `NEXTEST_BUILD_JOBS=--build-jobs 4`, `NEXTEST_TEST_JOBS=-j 4` |
 | `ci-windows.yml` `build-test-windows` | `windows-latest`                  | `BUILD_JOBS=-j 4`, `NEXTEST_BUILD_JOBS=--build-jobs 4`, `NEXTEST_TEST_JOBS=-j 4` |
 
 `build-test` and `coverage-upload` are the two instrumented lanes and both run
@@ -706,9 +743,17 @@ uses [`linux-gate-cache`](../.github/actions/linux-gate-cache), the Kani job
 uses [`kani-cache`](../.github/actions/kani-cache), and the Windows jobs use
 [`windows-gate-cache`](../.github/actions/windows-gate-cache). Each action
 renders its keys once, so restore, save, and the observation summary cannot
-drift apart. The Windows action takes a `profile` input: `gate` is the single
-writer of every Windows key, and `smoke` restores that generation by prefix and
-declares no save step at all.
+drift apart. The Windows action takes a `profile` input naming which job is
+calling and therefore which keys it may publish. Every key still has exactly
+one writer, but the Windows gate is two concurrent jobs, so the four families
+are split between them: `lint` is `lint-windows`, which owns `tools` and
+`whitaker`, the paths it installs into; `gate` is `build-test-windows`, which
+owns `registry` and `sccache`, the two its compile fills. Both restore all four.
+`smoke` is the release native-recipe job, which restores the gate's generation
+by prefix and declares no save step at all.
+`tests/workflow_contracts/windows_cache_writers_test.py` evaluates the action's
+save conditions against the profiles the two jobs pass, so widening one by a
+token gives a key two writers and fails there.
 
 One cache action serves every lane: `actions/cache/restore` and
 `actions/cache/save` at `55cc8345863c7cc4c66a329aec7e433d2d1c52a9` (v6.1.0).
@@ -735,9 +780,12 @@ Restores run immediately after checkout and before every package, tool, or
 toolchain install, so a warm run reuses work an earlier run completed. Saves
 run only on a push to `main`, and only when that key's restore missed. One job
 writes each key family: `build-test` owns the Ubuntu 24.04 Cargo, tool, and
-Whitaker keys; `netsukefile` owns the Ubuntu 22.04 family; `build-test-windows`
-owns the Windows family; `kani-smoke` owns the Kani key and nothing else. The
-coverage job and both native Windows smoke jobs restore only. `ci.yml`
+Whitaker keys; `netsukefile` owns the Ubuntu 22.04 family; `kani-smoke` owns
+the Kani key and nothing else. The Windows family has two owners because the
+gate is two jobs: `lint-windows` owns `tools` and `whitaker`, the two paths it
+installs into, and `build-test-windows` owns `registry` and `sccache`, the two
+its compile fills. Both restore all four, so neither key has two writers. The
+coverage job and the release native-recipe smoke job restore only. `ci.yml`
 therefore carries a `push` trigger on `main`: without a trunk run, no
 generation would ever be written.
 
@@ -999,7 +1047,7 @@ remains an ordinary PowerShell session. The rest of `build-test-windows`
 continues to use Git Bash only for the repository's POSIX Makefile quality
 gates, exactly as `Lint (Whitaker)` already overrides the default to `pwsh`.
 
-These were a second job, `windows-native-recipe-smoke`, that `needs`-ed
+These steps were in a second job, `windows-native-recipe-smoke`, that `needs`-ed
 `build-test-windows`. That made it a strict serial tail on every pull request:
 a median of 236s plus queue, measured over the 57 Windows runs between run
 33890685806 and run 34064668331, of which 8s checked out, 72s restored caches,
@@ -1164,6 +1212,7 @@ Table: runner placement for every repository-owned job.
 | `coverage-main.yml` `coverage-upload`        | `ubicloud-standard-4-ubuntu-2404` | Same instrumented workload as the gate  |
 | `netsukefile-test.yml` `netsukefile`         | `ubicloud-standard-2-ubuntu-2204` | Deliberate Ubuntu 22.04 compatibility   |
 | `release.yml` `build-linux`                  | `ubicloud-standard-2-ubuntu-2404` | Linux packaging and the dry-run gate    |
+| `ci-windows.yml` `lint-windows`              | `windows-latest`                  | No Ubicloud Windows image               |
 | `ci-windows.yml` `build-test-windows`        | `windows-latest`                  | No Ubicloud Windows image               |
 | `release.yml` `build-windows`                | `windows-latest`                  | No Ubicloud Windows image               |
 | `release.yml` `windows-native-recipe-smoke`  | `windows-latest`                  | No Ubicloud Windows image               |
@@ -1348,8 +1397,11 @@ an otherwise clean tree.
 Install the separately versioned Whitaker installer with:
 
 CI installs Whitaker through the SHA-pinned
-`leynos/shared-actions/.github/actions/install-whitaker` action. Both build
-jobs pass its required `installer-version: '0.2.7'` input; there is no
+`leynos/shared-actions/.github/actions/install-whitaker` action. Two jobs
+invoke it, and each passes its required `installer-version: '0.2.7'` input:
+`build-test` in `ci.yml`, and `lint-windows` in `ci-windows.yml`.
+`build-test-windows` neither installs nor runs Whitaker; it compiles, tests,
+and runs the native Windows recipe smoke steps. There is no
 `WHITAKER_INSTALLER_VERSION` workflow variable. Read that action input before
 installing locally so the local installer matches CI:
 
@@ -1562,8 +1614,11 @@ sequenceDiagram
 cache restoration, archive verification, and the delegated Makefile checks.
 
 CI installs Whitaker through the SHA-pinned
-`leynos/shared-actions/.github/actions/install-whitaker` action. Both build
-jobs pass its required `installer-version: '0.2.7'` input; there is no
+`leynos/shared-actions/.github/actions/install-whitaker` action. Two jobs
+invoke it, and each passes its required `installer-version: '0.2.7'` input:
+`build-test` in `ci.yml`, and `lint-windows` in `ci-windows.yml`.
+`build-test-windows` neither installs nor runs Whitaker; it compiles, tests,
+and runs the native Windows recipe smoke steps. There is no
 `WHITAKER_INSTALLER_VERSION` workflow variable. Read that action input before
 installing locally so the local installer matches CI:
 
@@ -2653,8 +2708,9 @@ twice and give that baseline two writers.
 
 `netsukefile` and `kani-smoke` differ in platform or in purpose, so neither is
 a candidate for folding. The Windows gate keeps its own `cargo nextest` pass
-because no coverage runs there; its native-recipe smoke steps are part of that
-job rather than a second one.
+because no coverage runs there; its native-recipe smoke steps are part of the
+test job rather than a job of their own, and its lints run beside that job
+rather than ahead of it.
 
 One assertion is deliberately not run twice.
 `packaged_manifest_retains_build_script_sources` skips Cargo's publish
@@ -4619,13 +4675,15 @@ fallback — in the `#[cfg(any(windows, test))]` unit tests that every host
 executes, and reserve the Windows-gated suite for behaviour that genuinely
 cannot run elsewhere.
 
-The `build-test-windows` job in `.github/workflows/ci-windows.yml` is a merge
-gate: it compiles, lints (Clippy and Whitaker), and tests the `#[cfg(windows)]`
-suite on GitHub-hosted `windows-latest` under `-D warnings`, so a Windows-gated
-test or lint finding blocks a merge. The split still stands: host-independent
-rules stay in the `#[cfg(any(windows, test))]` unit tests so every host —
-including a developer on Unix — exercises them, while the Windows-gated suite
-covers the behaviour that only exists there.
+Two concurrent jobs in `.github/workflows/ci-windows.yml` form the Windows
+merge gate, and a failure in either blocks a merge. `lint-windows` runs
+formatting, Clippy and Whitaker; `build-test-windows` compiles and tests the
+`#[cfg(windows)]` suite, then runs the native Windows recipe smoke steps. Both
+run on GitHub-hosted `windows-latest` under `-D warnings`, so a Windows-gated
+test or lint finding blocks a merge whichever half finds it. The split still
+stands: host-independent rules stay in the `#[cfg(any(windows, test))]` unit
+tests so every host — including a developer on Unix — exercises them, while the
+Windows-gated suite covers the behaviour that only exists there.
 
 The Windows job installs GNU Make through Chocolatey and Ninja through the
 setup action, then runs its Makefile gates through Git Bash with `SHELL=bash`.

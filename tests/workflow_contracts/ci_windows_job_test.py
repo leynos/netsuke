@@ -27,6 +27,20 @@ from workflow_loading import (
 )
 
 WINDOWS_JOB = "build-test-windows"
+LINT_JOB = "lint-windows"
+
+#: Both halves of the Windows merge gate. They run concurrently and neither
+#: needs the other, so every property that makes one a gate must hold for both.
+WINDOWS_JOBS = (LINT_JOB, WINDOWS_JOB)
+
+#: Which job each Git Bash Makefile gate belongs to after the split. Asserted
+#: as a mapping rather than a set so a gate silently migrating between jobs,
+#: which would put the lints back in series with the tests, fails here.
+EXPECTED_GATE_OWNERS = {
+    "make SHELL=bash check-fmt": LINT_JOB,
+    "make SHELL=bash lint-clippy": LINT_JOB,
+    "make SHELL=bash test": WINDOWS_JOB,
+}
 
 #: The Git Bash Makefile gates the Windows job must run through the Makefile,
 #: so the POSIX recipes execute under Git Bash.
@@ -53,39 +67,6 @@ EXCLUDED_WINDOWS_ACTIONS = (
     "leynos/shared-actions/.github/actions/upload-codescene-coverage",
 )
 
-#: Required wrapper, configuration, and root-package lint fragments.
-WHITAKER_WORKSPACE_FRAGMENTS = (
-    (
-        "$profileHome = [Environment]::GetFolderPath("
-        "[Environment+SpecialFolder]::UserProfile)"
-    ),
-    "Join-Path $profileHome '.local\\bin\\whitaker.ps1'",
-    '$env:RUSTFLAGS = "$env:RUSTFLAGS -D warnings"',
-    "$env:DYLINT_TOML = Get-Content dylint.toml -Raw",
-    (
-        "& $whitaker --all --no-deps --package netsuke-build '--' "
-        "--all-targets --all-features"
-    ),
-    "Push-Location test_support",
-)
-
-#: Required nested-package lint and location-restoration fragments.
-WHITAKER_TEST_SUPPORT_FRAGMENTS = (
-    "$env:DYLINT_TOML = Get-Content dylint.toml -Raw",
-    (
-        "& $whitaker --all --no-deps --package test_support '--' "
-        "--all-targets --all-features"
-    ),
-    "finally {",
-    "Pop-Location",
-)
-
-#: Required guard that preserves a native Whitaker failure as the step result.
-WHITAKER_EXIT_GUARD_FRAGMENTS = (
-    "if ($LASTEXITCODE -ne 0) {",
-    "exit $LASTEXITCODE",
-)
-
 
 def normalise_run(run: object) -> object:
     """Return a stripped command string, preserving non-string step values."""
@@ -97,43 +78,49 @@ def normalise_run(run: object) -> object:
 
 
 @pytest.fixture
-def windows_job() -> dict[str, object]:
-    """Return the build-test-windows job mapping."""
-    return workflow_job(load_workflow(CI_WINDOWS_WORKFLOW_PATH), WINDOWS_JOB)
-
-
-@pytest.fixture
 def windows_steps() -> list[dict[str, object]]:
     """Return the build-test-windows job's steps, in declaration order."""
     return job_steps(load_workflow(CI_WINDOWS_WORKFLOW_PATH), WINDOWS_JOB)
 
 
-def test_windows_job_runs_on_a_github_hosted_runner(
-    windows_job: dict[str, object],
-) -> None:
-    """The Windows job must run on a GitHub-hosted Windows runner.
+@pytest.fixture
+def lane_steps() -> list[dict[str, object]]:
+    """Return every step of both Windows jobs, lint first."""
+    workflow = load_workflow(CI_WINDOWS_WORKFLOW_PATH)
+    return [step for name in WINDOWS_JOBS for step in job_steps(workflow, name)]
+
+
+@pytest.mark.parametrize("job_name", WINDOWS_JOBS)
+def test_windows_jobs_run_on_a_github_hosted_runner(job_name: str) -> None:
+    """Both Windows jobs must run on a GitHub-hosted Windows runner.
 
     Ubicloud publishes Ubuntu images only, so `windows-latest` is the durable
-    placement for this lane rather than a fallback.
+    placement for this lane rather than a fallback. Both halves compile the
+    `#[cfg(windows)]` tree, so the requirement is not the test job's alone.
     """
     expected_runner = "windows-latest"
-    assert windows_job.get("runs-on") == expected_runner, (
-        f"{WINDOWS_JOB} must run on {expected_runner} so the "
-        f"#[cfg(windows)] tree is compiled, got {windows_job.get('runs-on')!r}"
+    job = workflow_job(load_workflow(CI_WINDOWS_WORKFLOW_PATH), job_name)
+    assert job.get("runs-on") == expected_runner, (
+        f"{job_name} must run on {expected_runner} so the "
+        f"#[cfg(windows)] tree is compiled, got {job.get('runs-on')!r}"
     )
 
 
-def test_windows_job_uses_git_bash_for_recipes(windows_job: dict[str, object]) -> None:
-    """The job runs recipes under Git Bash, not cmd.exe.
+@pytest.mark.parametrize("job_name", WINDOWS_JOBS)
+def test_windows_jobs_use_git_bash_for_recipes(job_name: str) -> None:
+    """Each job runs recipes under Git Bash, not cmd.exe.
 
     The Makefile uses POSIX shell constructs throughout, and GNU Make's
-    default recipe shell on Windows is cmd.exe, so the job must default every
-    run step to bash.
+    default recipe shell on Windows is cmd.exe, so each job must default every
+    run step to bash. The lint job drives `check-fmt` and `lint-clippy` through
+    the Makefile, so losing the default would break it exactly as it would the
+    test job.
     """
-    defaults = require_mapping(windows_job.get("defaults"), f"{WINDOWS_JOB}.defaults")
-    run = require_mapping(defaults.get("run"), f"{WINDOWS_JOB}.defaults.run")
+    job = workflow_job(load_workflow(CI_WINDOWS_WORKFLOW_PATH), job_name)
+    defaults = require_mapping(job.get("defaults"), f"{job_name}.defaults")
+    run = require_mapping(defaults.get("run"), f"{job_name}.defaults.run")
     assert run.get("shell") == "bash", (
-        f"{WINDOWS_JOB} must run recipes under Git Bash "
+        f"{job_name} must run recipes under Git Bash "
         f"(defaults.run.shell: bash), got {run.get('shell')!r}"
     )
 
@@ -166,101 +153,49 @@ def test_windows_setup_rust_keeps_warnings(
     )
 
 
-def test_windows_job_runs_check_fmt_lint_and_test(
-    windows_steps: list[dict[str, object]],
+def test_windows_lane_runs_check_fmt_lint_and_test(
+    lane_steps: list[dict[str, object]],
 ) -> None:
-    """Assert that listed Makefile gates run exactly once under Git Bash."""
-    runs = [normalise_run(run) for run in step_runs(windows_steps)]
-    bash_makefile_gates = EXPECTED_WINDOWS_BASH_MAKEFILE_GATES
-    counts = {command: runs.count(command) for command in bash_makefile_gates}
+    """Assert that listed Makefile gates run exactly once across the lane."""
+    runs = [normalise_run(run) for run in step_runs(lane_steps)]
+    counts = {command: runs.count(command) for command in EXPECTED_GATE_OWNERS}
     assert set(counts.values()) == {1}, (
-        f"{WINDOWS_JOB} must run each Git Bash Makefile gate "
-        f"{list(EXPECTED_WINDOWS_BASH_MAKEFILE_GATES)!r} exactly once, got "
-        f"occurrence counts {counts!r} from run steps: {runs!r}"
+        f"the Windows lane must run each Git Bash Makefile gate "
+        f"{list(EXPECTED_GATE_OWNERS)!r} exactly once across {list(WINDOWS_JOBS)!r}, "
+        f"got occurrence counts {counts!r} from run steps: {runs!r}"
     )
 
 
-def test_windows_job_installs_whitaker_before_linting(
-    windows_steps: list[dict[str, object]],
-) -> None:
-    """The shared installer must precede the PowerShell Whitaker invocation."""
-    step_names = [str(step.get("name", "")) for step in windows_steps]
-    install_index = step_names.index("Install Whitaker")
-    lint_index = step_names.index("Lint (Whitaker)")
-    assert install_index < lint_index, (
-        "Install Whitaker must precede Lint (Whitaker) so the PowerShell wrapper "
-        f"exists before it is invoked, got step order {step_names!r}"
+def test_windows_lints_and_tests_run_in_separate_concurrent_jobs() -> None:
+    """The lint and test gates must sit in different jobs, neither waiting.
+
+    Scenario: 518s of formatting, Clippy and Whitaker used to run in series
+    ahead of a 471s test step in one job, measured over the 57 runs between run
+    33890685806 and run 34064668331. Invariant: each gate runs in the job that
+    owns it and neither job declares `needs`, so putting them back in series,
+    or making one wait for the other, fails here rather than quietly costing
+    every pull request eight minutes again.
+    """
+    workflow = load_workflow(CI_WINDOWS_WORKFLOW_PATH)
+    owners = {}
+    for job_name in WINDOWS_JOBS:
+        job = workflow_job(workflow, job_name)
+        assert "needs" not in job, (
+            f"{job_name} must not wait on another job; the two halves of the "
+            f"Windows gate are independent, got needs={job.get('needs')!r}"
+        )
+        for run in step_runs(job_steps(workflow, job_name)):
+            owners[normalise_run(run)] = job_name
+
+    actual = {command: owners.get(command) for command in EXPECTED_GATE_OWNERS}
+    assert actual == EXPECTED_GATE_OWNERS, (
+        f"each Windows Makefile gate must run in the job that owns it; "
+        f"expected {EXPECTED_GATE_OWNERS!r}, got {actual!r}"
     )
 
 
-def test_windows_job_runs_whitaker_through_powershell_wrapper(
-    windows_steps: list[dict[str, object]],
-) -> None:
-    """Assert that Windows runs both Whitaker packages through PowerShell."""
-    step_name = "Lint (Whitaker)"
-    step = named_step(windows_steps, step_name)
-    assert step.get("shell") == "pwsh", (
-        f"{step_name} must declare the PowerShell Core shell, got {step.get('shell')!r}"
-    )
-    match step.get("run"):
-        case str() as run:
-            pass
-        case _:
-            pytest.fail(f"{step_name} must declare a PowerShell run block")
-
-    missing = [
-        fragment for fragment in WHITAKER_WORKSPACE_FRAGMENTS if fragment not in run
-    ]
-    assert not missing, (
-        f"{step_name} must resolve the PowerShell wrapper, append -D warnings, "
-        f"load the workspace Dylint configuration, pass the quoted separator to "
-        f"lint netsuke-build, and enter "
-        f"test_support; missing {missing!r}"
-    )
-
-    _, _, run_after_push = run.partition("Push-Location test_support")
-    missing = [
-        fragment
-        for fragment in WHITAKER_TEST_SUPPORT_FRAGMENTS
-        if fragment not in run_after_push
-    ]
-    assert not missing, (
-        f"{step_name} must load test_support's Dylint configuration after entering it, "
-        f"pass the quoted separator to lint test_support, and restore the location "
-        f"in finally; missing "
-        f"{missing!r}"
-    )
-
-    _, _, run_after_workspace_lint = run.partition(WHITAKER_WORKSPACE_FRAGMENTS[3])
-    workspace_exit_guard, _, _ = run_after_workspace_lint.partition(
-        "Push-Location test_support"
-    )
-    missing = [
-        fragment
-        for fragment in WHITAKER_EXIT_GUARD_FRAGMENTS
-        if fragment not in workspace_exit_guard
-    ]
-    assert not missing, (
-        f"{step_name} must stop before entering test_support when linting "
-        f"netsuke-build fails; missing {missing!r}"
-    )
-
-    _, _, run_after_test_support_lint = run_after_push.partition(
-        WHITAKER_TEST_SUPPORT_FRAGMENTS[1]
-    )
-    test_support_exit_guard, _, _ = run_after_test_support_lint.partition("} finally {")
-    missing = [
-        fragment
-        for fragment in WHITAKER_EXIT_GUARD_FRAGMENTS
-        if fragment not in test_support_exit_guard
-    ]
-    assert not missing, (
-        f"{step_name} must propagate a test_support lint failure; missing {missing!r}"
-    )
-
-
-def test_windows_job_does_not_duplicate_doc_and_audit_gates(
-    windows_steps: list[dict[str, object]],
+def test_windows_lane_does_not_duplicate_doc_and_audit_gates(
+    lane_steps: list[dict[str, object]],
 ) -> None:
     """The Windows job excludes platform-independent doc and audit gates.
 
@@ -269,45 +204,45 @@ def test_windows_job_does_not_duplicate_doc_and_audit_gates(
     on Linux. `make SHELL=bash lint-whitaker` is replaced by the PowerShell
     wrapper. Duplicating or restoring any of them on Windows buys nothing.
     """
-    runs = [normalise_run(run) for run in step_runs(windows_steps)]
+    runs = [normalise_run(run) for run in step_runs(lane_steps)]
     duplicated = [command for command in EXCLUDED_WINDOWS_RUNS if command in runs]
     assert not duplicated, (
-        f"{WINDOWS_JOB} must not run the platform-independent {duplicated!r}, "
+        f"the Windows lane must not run the platform-independent {duplicated!r}, "
         f"got run steps: {runs!r}"
     )
 
-    uses = step_uses(windows_steps)
+    uses = step_uses(lane_steps)
     duplicated_actions = [
         action
         for action in EXCLUDED_WINDOWS_ACTIONS
         if any(action in reference for reference in uses)
     ]
     assert not duplicated_actions, (
-        f"{WINDOWS_JOB} must not use the Linux-only audit actions "
+        f"the Windows lane must not use the Linux-only audit actions "
         f"{duplicated_actions!r}, got action steps: {uses!r}"
     )
 
 
-def test_windows_job_is_a_blocking_merge_gate(
-    windows_job: dict[str, object],
-    windows_steps: list[dict[str, object]],
-) -> None:
-    """No step in the Windows job is allowed to fail silently.
+@pytest.mark.parametrize("job_name", WINDOWS_JOBS)
+def test_windows_jobs_are_blocking_merge_gates(job_name: str) -> None:
+    """No step in either Windows job is allowed to fail silently.
 
-    A `continue-on-error: true` on the job or any step would let a Windows
-    lint or test failure pass the merge, defeating the gate.
+    Scenario: the gate is two concurrent jobs, and a lint failure blocks the
+    merge exactly as a test failure does. Invariant: neither job, and no step
+    of either, sets `continue-on-error: true`. Checking only the test job would
+    let the whole lint half become advisory without anything failing.
     """
-    assert windows_job.get("continue-on-error") is not True, (
-        f"{WINDOWS_JOB} must not set continue-on-error on the job"
+    workflow = load_workflow(CI_WINDOWS_WORKFLOW_PATH)
+    job = workflow_job(workflow, job_name)
+    assert job.get("continue-on-error") is not True, (
+        f"{job_name} must not set continue-on-error on the job"
     )
     lenient = [
         step.get("name")
-        for step in windows_steps
+        for step in job_steps(workflow, job_name)
         if step.get("continue-on-error") is True
     ]
-    assert not lenient, (
-        f"{WINDOWS_JOB} steps {lenient!r} must not set continue-on-error"
-    )
+    assert not lenient, f"{job_name} steps {lenient!r} must not set continue-on-error"
 
 
 #: Version pins the caller repeats as reusable-workflow inputs, mapped to the

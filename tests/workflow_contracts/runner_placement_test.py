@@ -35,6 +35,7 @@ from workflow_loading import (
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
 DIRECT_RUNNER_SOURCES = (
     ("ci.build-test", "ci.yml", "build-test"),
+    ("ci-windows.lint-windows", "ci-windows.yml", "lint-windows"),
     ("ci-windows.build-test-windows", "ci-windows.yml", "build-test-windows"),
     ("ci.kani-smoke", "ci.yml", "kani-smoke"),
     ("coverage-main.coverage-upload", "coverage-main.yml", "coverage-upload"),
@@ -60,6 +61,7 @@ DIRECT_RUNNER_SOURCES = (
     ("workflow_name", "job_name", "expected_runner"),
     [
         ("ci.yml", "build-test", UBICLOUD_LARGE_LABEL),
+        ("ci-windows.yml", "lint-windows", "windows-latest"),
         ("ci-windows.yml", "build-test-windows", "windows-latest"),
         ("ci.yml", "kani-smoke", UBICLOUD_DEFAULT_LABEL),
         ("coverage-main.yml", "coverage-upload", UBICLOUD_LARGE_LABEL),

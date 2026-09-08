@@ -108,6 +108,7 @@ SCCACHE_CREDENTIAL_JOBS = (
 #: therefore need no Actions cache credentials, and must not set the flag that
 #: would re-enable the backend.
 SCCACHE_LOCAL_DIR_JOBS = (
+    ("ci-windows.yml", "lint-windows"),
     ("ci-windows.yml", "build-test-windows"),
     ("release.yml", "windows-native-recipe-smoke"),
 )
@@ -162,6 +163,7 @@ SCCACHE_EXEMPT_LANE = ("build-and-package.yml", "build")
 
 SCCACHE_WRAPPER_JOBS = (
     ("ci.yml", "build-test"),
+    ("ci-windows.yml", "lint-windows"),
     ("ci-windows.yml", "build-test-windows"),
     ("netsukefile-test.yml", "netsukefile"),
     ("coverage-main.yml", "coverage-upload"),
@@ -176,6 +178,7 @@ SCCACHE_WRAPPER_JOBS = (
 SETUP_RUST_DELEGATING_JOBS = (
     ("ci.yml", "build-test"),
     ("ci.yml", "kani-smoke"),
+    ("ci-windows.yml", "lint-windows"),
     ("ci-windows.yml", "build-test-windows"),
     ("coverage-main.yml", "coverage-upload"),
     ("netsukefile-test.yml", "netsukefile"),
@@ -190,7 +193,7 @@ DELEGATING_ACTION_STEPS = (
     ("ci.yml", "build-test", "Test and Measure Coverage"),
     ("coverage-main.yml", "coverage-upload", "Test and Measure Coverage"),
     ("ci.yml", "build-test", "Install Whitaker"),
-    ("ci-windows.yml", "build-test-windows", "Install Whitaker"),
+    ("ci-windows.yml", "lint-windows", "Install Whitaker"),
 )
 
 #: The pinned `rust-build-release` revision, and the workflow that both names
@@ -208,6 +211,7 @@ RUST_BUILD_RELEASE_ACTION = "leynos/shared-actions/.github/actions/rust-build-re
 CACHE_ACTION_CALLERS = {
     ("ci.yml", "build-test"): "./.github/actions/linux-gate-cache",
     ("ci.yml", "kani-smoke"): "./.github/actions/kani-cache",
+    ("ci-windows.yml", "lint-windows"): "./.github/actions/windows-gate-cache",
     ("ci-windows.yml", "build-test-windows"): "./.github/actions/windows-gate-cache",
     ("release.yml", "windows-native-recipe-smoke"): (
         "./.github/actions/windows-gate-cache"
