@@ -41,7 +41,23 @@ class ObservabilityEnvironmentError(ValueError):
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class Telemetry:
-    """Hold the bounded values shared by a metric and its trace record."""
+    """Hold bounded values shared by one metric and trace record.
+
+    Attributes
+    ----------
+    operation
+        Fixed trusted workflow operation name.
+    outcome
+        Bounded stage result.
+    error_category
+        Fixed error classification derived from ``outcome``.
+    duration_seconds
+        Non-negative elapsed stage duration.
+    workflow_run_id
+        Originating GitHub Actions workflow run identifier.
+    commit_sha
+        Originating commit SHA used only as trace correlation context.
+    """
 
     operation: str
     outcome: str
@@ -123,7 +139,26 @@ def record_telemetry(
     environment: Environment,
     now_milliseconds: int | None = None,
 ) -> None:
-    """Write and log one trusted coverage metric and trace collection."""
+    """Write and log one trusted coverage metric and trace collection.
+
+    Parameters
+    ----------
+    environment
+        Bounded GitHub Actions stage values and runner-local output paths.
+    now_milliseconds
+        Optional clock seam for deterministic tests. ``None`` uses the current
+        Unix timestamp in milliseconds.
+
+    Raises
+    ------
+    ObservabilityEnvironmentError
+        If a required bounded workflow input is absent or invalid.
+
+    Notes
+    -----
+    Writes compact JSON Lines metrics and traces to runner-local paths, logs
+    the same fixed records, and appends ``duration_ms`` to ``GITHUB_OUTPUT``.
+    """
     operation = _environment_value(environment, "OPERATION")
     if operation not in VALID_OPERATIONS:
         raise ObservabilityEnvironmentError("OPERATION")
@@ -168,7 +203,23 @@ def _arguments(argv: cabc.Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: cabc.Sequence[str] | None = None) -> int:
-    """Run the selected trusted coverage observability command."""
+    """Run the selected trusted coverage observability command.
+
+    Parameters
+    ----------
+    argv
+        Command arguments. ``None`` uses the process arguments.
+
+    Returns
+    -------
+    int
+        ``0`` after writing the fixed metric and trace records.
+
+    Notes
+    -----
+    Invokes ``record-telemetry`` using the process environment and performs
+    only the documented runner-local file and log side effects.
+    """
     _arguments(argv)
     record_telemetry(os.environ)
     return 0

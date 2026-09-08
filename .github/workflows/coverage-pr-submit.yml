@@ -18,6 +18,9 @@ jobs:
       github.event.workflow_run.event == 'pull_request' &&
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubicloud-standard-2-ubuntu-2404
+    concurrency:
+      group: codescene-coverage-${{ github.event.workflow_run.id }}
+      cancel-in-progress: false
     permissions:
       actions: read
       checks: write
@@ -52,6 +55,7 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ github.token }}
           path: coverage-artifact
+          skip-decompress: true
       - name: Record coverage artefact download telemetry
         id: observe_download_coverage
         if: always()
@@ -132,7 +136,7 @@ jobs:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
         uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@32c8ea649ea44d40119f348ad48861212532061f
         with:
-          path: coverage-artifact/lcov.info
+          path: validated-coverage/lcov.info
           format: lcov
           mode: check
           project-url: https://api.codescene.io/v2/projects/69281
@@ -262,6 +266,9 @@ jobs:
       github.event.workflow_run.event == 'pull_request' &&
       github.event.workflow_run.head_repository.full_name != github.repository
     runs-on: ubicloud-standard-2-ubuntu-2404
+    concurrency:
+      group: codescene-coverage-${{ github.event.workflow_run.id }}
+      cancel-in-progress: false
     permissions:
       checks: write
     steps:

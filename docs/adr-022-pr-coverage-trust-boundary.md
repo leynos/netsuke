@@ -59,10 +59,14 @@ boundary.
 
 - The trusted workflow must not check out or execute the pull-request tree and
   must not execute uploaded artefact contents.
-- Validation must accept exactly one member named `lcov.info`, reject links and
-  non-regular files, resolve and contain the member within the artefact
-  directory, enforce a bounded size, decode UTF-8, and accept only recognized
-  LCOV records with the required record types and terminator.
+- The downloaded artefact must remain a raw ZIP until validation. Its outer
+  directory must contain exactly one regular, non-symbolic archive file within
+  its own boundary. Before any member data is written, ZIP metadata must name
+  exactly one safe relative member, `lcov.info`, with no directory or symbolic
+  link and a cumulative uncompressed size within the bound. The bounded member
+  bytes are decoded as UTF-8 and must contain only recognized LCOV records with
+  the required record types and terminator; only then may the validated output
+  file be written.
 - `CS_ACCESS_TOKEN` must be available only through the CodeScene submission
   step's local environment. It must not be placed in job-wide state or
   persisted environment files.
@@ -110,17 +114,24 @@ graceful.
 
 The trusted runner uses `actions/checkout` to retrieve the full trusted
 default-branch tree. It executes only the needed checked-in validation and
-submission commands. It downloads the fixed artefact into a dedicated
-directory, validates the exact member and LCOV format, and then supplies the
-resulting data path to the CodeScene action. The action receives
-`CS_ACCESS_TOKEN` only through its step-local environment. The final Check Run
-uses `head_sha` from the source run and stores that run's ID as its external
-correlation ID.
+submission commands. It downloads the fixed artefact as a raw ZIP into a
+dedicated directory with decompression disabled. The archive validator checks
+the outer directory and ZIP metadata before reading bounded member data,
+validates the UTF-8 LCOV content, and writes only
+`validated-coverage/lcov.info`; the CodeScene action receives that validated
+data path. The action receives `CS_ACCESS_TOKEN` only through its step-local
+environment. The final Check Run uses `head_sha` from the source run and stores
+that run's ID as its external correlation and idempotency key.
 
 The Check Run is `success` after a successful submission. It is `neutral` only
 when download and validation succeed and submission is skipped solely because
 the token is absent. Download, validation, or submission failures produce a
 failing Check Run.
+
+Workflow concurrency serializes publications for one originating workflow-run
+ID. The publisher searches the originating commit for the fixed Check Run name
+and matching external ID, updates that run when it exists, and creates it only
+when no matching run is found.
 
 Observability is limited to the workflow-run ID, source commit SHA, fixed
 artefact name, three stage outcomes, and final conclusion in the Check Run and

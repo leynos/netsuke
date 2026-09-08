@@ -174,7 +174,8 @@ test-release-admission: ## Validate the release-admission runtime contract
 test-coverage-artifact: ## Test hostile LCOV artefact validation
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
 		--with pytest==9.0.2 python -m pytest scripts/tests/test_validate_coverage_artifact.py \
-		-c /dev/null --rootdir=. -p no:cacheprovider
+		scripts/tests/test_validate_coverage_archive.py -c /dev/null --rootdir=. \
+		-p no:cacheprovider
 
 test-markdown-format: ## Validate the Markdown formatter checker
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \

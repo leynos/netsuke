@@ -1338,10 +1338,15 @@ When the change touches the coverage artefact validator
 (`.github/workflows/coverage-pr-submit.yml`), also run:
 
 - `make test-coverage-artifact`
+- `make validate-coverage-artifact`
 
 This suite is the pytest module under `scripts/tests/`; `make test` runs only
 the Rust suite and never executes it, so a validator change is untested unless
-this command runs.
+these commands run. `make validate-coverage-artifact` inspects the configured
+download directory as hostile data: it requires exactly one regular,
+non-symbolic `lcov.info` member that remains within the directory, enforces the
+size and UTF-8 limits, and accepts only recognized LCOV records. It does not
+execute, import, or resolve paths recorded in the report.
 
 When the change touches any Markdown file — documentation, ADRs, execplans, or
 the README — also run:
@@ -1482,11 +1487,15 @@ separate `workflow_run` workflow whose definition comes from the default
 branch. After a successful same-repository `pull_request` CI run, it starts a
 fresh runner, and `actions/checkout` retrieves the full trusted default-branch
 tree. The workflow executes only the needed checked-in validation and
-submission commands, then downloads the artefact into `coverage-artifact/`. It
-never checks out or executes the PR tree or artefact contents. Before the
-CodeScene action can see the secret, the checked-in validator rejects every
-member except a bounded, regular UTF-8 `lcov.info` file with recognized LCOV
-records.
+submission commands, then downloads the artefact as a raw ZIP into
+`coverage-artifact/` with decompression disabled. It never checks out or
+executes the PR tree or artefact contents. Before extraction, the checked-in
+validator requires exactly one regular, non-symbolic archive file inside that
+directory, then checks that the ZIP contains only a safe relative `lcov.info`
+member, has a bounded cumulative uncompressed size, and has no directory or
+symbolic-link member. It reads only the bounded member data, validates UTF-8
+and recognized LCOV records, and writes the resulting
+`validated-coverage/lcov.info` for the CodeScene action.
 
 Eligibility is enforced by the trusted workflow definition, its successful
 pull-request and same-repository-head guards, and the step-local
@@ -1501,13 +1510,26 @@ The trusted workflow creates the `CodeScene coverage` Check Run against the
 originating PR `head_sha`. It reports `neutral` only when artefact download and
 validation both succeeded and the submission skipped solely because no token is
 available; a failed or skipped download or validation publishes a failing
-check, so a hostile artefact can never produce a non-failing gate.
+check, so a hostile artefact can never produce a non-failing gate. Workflow
+concurrency serializes publications for one originating workflow-run ID. The
+publisher uses that ID as the Check Run `external_id`, finds an existing
+matching run for the originating commit and fixed name, and updates it;
+otherwise it creates the run. This keeps repeated trusted notifications
+idempotent without accepting arbitrary pull-request identifiers.
 Branch-protection configuration may therefore need an organization-level update
 to require this Check Run name instead of the former in-job coverage step.
 `tests/workflow_contracts/trust_boundary_test.py` and its Hypothesis companion
 prevent the secret from returning to a pull-request workflow, a trusted
 checkout from drifting to PR content, a raw secret expression from reaching a
-step's `run` or `with` surfaces, or the validator from being skipped.
+step's `run` or `with` surfaces, or the validator from being skipped. The pure
+`.github/scripts/coverage_pr_reporting.py` helper is owned by the trusted
+coverage submission path: only `coverage_pr_submission.py` may call it. It
+performs no environment access or I/O and only composes already-bounded values
+for the Check Run and workflow summary. The
+`.github/scripts/coverage_pr_check_runs.py` adapter is likewise owned by
+`coverage_pr_submission.py` and is the sole production GitHub Check Run API
+boundary. It accepts only already-bounded payloads; tests inject a fake
+publisher at that boundary.
 
 The trusted job also writes bounded JSONL metrics and traces to runner-local
 files and uploads them as the fixed `codescene-pr-coverage-metrics` and
@@ -1865,8 +1887,9 @@ policy.
 
 ## Python tooling and baseline
 
-Every Python source the repository owns — the helper scripts under `scripts/`,
-their test suites under `scripts/tests/`, and the workflow contract tests under
+Every Python source the repository owns — the workflow helpers under
+`.github/scripts/`, the helper scripts under `scripts/`, their test suites under
+`scripts/tests/`, and the workflow contract tests under
 `tests/workflow_contracts/` — targets a **Python 3.14 baseline**. The Makefile
 pins the interpreter in `PYTHON_BASELINE`, `pyproject.toml` sets
 `target-version = "py314"` for Ruff and `py-version = "3.14"` for Pylint, and
@@ -1884,6 +1907,12 @@ The Python gates run inside the ordinary quality-gate targets:
   df12 house lints, and the `ambrleaks` snapshot scanner.
 - `make typecheck` runs `make typecheck-python`: the
   [ty](https://github.com/astral-sh/ty) typechecker over the Python sources.
+
+The Makefile's `PYTHON_SOURCES` includes `.github/scripts`, so the normal
+formatting, lint, and type-check targets cover the trusted workflow helpers as
+well as `scripts/` and the test sources. The validator target reads
+`COVERAGE_ARTIFACT_DIR`, which defaults to `coverage-artifact` and can be
+overridden for a downloaded artefact in another directory.
 
 The configuration in `pyproject.toml` mirrors the df12 estate policy in
 [episodic](https://github.com/leynos/episodic); only path-shaped settings are

@@ -7,6 +7,7 @@ exercise every result without loading workflow event data or an environment.
 import copy
 
 import pytest
+from python_action_dispatch import assert_python_action_dispatch
 from workflow_loading import (
     COVERAGE_PR_WORKFLOW_PATH,
     REPO_ROOT,
@@ -18,6 +19,7 @@ from workflow_loading import (
 )
 
 ACTION_MODULE_PATH = REPO_ROOT / ".github" / "scripts" / "coverage_pr_submission.py"
+REPORTING_MODULE_PATH = REPO_ROOT / ".github" / "scripts" / "coverage_pr_reporting.py"
 OBSERVABILITY_MODULE_PATH = (
     REPO_ROOT / ".github" / "scripts" / "coverage_pr_submission_observability.py"
 )
@@ -43,9 +45,10 @@ EXPECTED_DOWNLOAD_INPUTS = {
     "run-id": "${{ github.event.workflow_run.id }}",
     "github-token": "${{ github.token }}",
     "path": "coverage-artifact",
+    "skip-decompress": True,
 }
 EXPECTED_SUBMISSION_INPUTS = {
-    "path": "coverage-artifact/lcov.info",
+    "path": "validated-coverage/lcov.info",
     "format": "lcov",
     "mode": "check",
     "project-url": "https://api.codescene.io/v2/projects/69281",
@@ -72,11 +75,7 @@ def _assert_python_action_step(
     module_name: str = "coverage_pr_submission.py",
 ) -> None:
     """Assert one workflow step invokes the fixed Python action command."""
-    script = str(step["run"])
-    assert step.get("shell") == "python", "trusted scripts must use Python"
-    assert "runpy.run_path" in script, "trusted scripts must run the checked-in module"
-    assert module_name in script, "wrong trusted action module"
-    assert f'"{command}"' in script, f"wrong trusted action command {command!r}"
+    assert_python_action_dispatch(step, f".github/scripts/{module_name}", command)
 
 
 def _assert_submission_mechanics(steps: list[dict[str, object]]) -> None:
@@ -97,7 +96,7 @@ def _assert_submission_mechanics(steps: list[dict[str, object]]) -> None:
     ), "the download action must receive only its reviewed cross-run inputs"
     _assert_python_action_step(validation, "validate-artefact")
     assert '"coverage-artifact"' in str(validation["run"]), (
-        "validation must receive only the downloaded artefact directory"
+        "validation must receive only the downloaded archive directory"
     )
     assert submission.get("uses") == SUBMISSION_ACTION, "submission must stay pinned"
     assert require_mapping(submission.get("with"), "submission inputs") == (
@@ -147,8 +146,8 @@ def _assert_check_run_report_contract(
 ) -> None:
     """Assert the Check Run uses only reviewed correlation data."""
     for required_fragment in (
-        '"head_sha": _environment_value(environment, "ORIGINATING_COMMIT_SHA")',
-        '"external_id": _environment_value(environment, "ORIGINATING_WORKFLOW_RUN_ID")',
+        '"head_sha": value("ORIGINATING_COMMIT_SHA")',
+        '"external_id": value("ORIGINATING_WORKFLOW_RUN_ID")',
         '_write_output(environment, "conclusion", conclusion)',
     ):
         assert required_fragment in report_script, (
@@ -214,7 +213,10 @@ def test_check_run_and_summary_publish_only_bounded_correlation() -> None:
     workflow = load_workflow(COVERAGE_PR_WORKFLOW_PATH)
     steps = job_steps(workflow, "submit-coverage")
     report = named_step(steps, REPORT_STEP)
-    report_script = ACTION_MODULE_PATH.read_text(encoding="utf-8")
+    report_script = "\n".join([
+        ACTION_MODULE_PATH.read_text(encoding="utf-8"),
+        REPORTING_MODULE_PATH.read_text(encoding="utf-8"),
+    ])
     report_environment = require_mapping(report.get("env"), "report environment")
     summary = named_step(steps, SUMMARY_STEP)
     summary_script = report_script

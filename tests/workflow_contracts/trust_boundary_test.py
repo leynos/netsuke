@@ -7,8 +7,11 @@ runner, consumes no persisted shell state, and exposes the secret only to its
 submission action after validation has completed.
 """
 
+import copy
 import typing as typ
 
+import pytest
+from python_action_dispatch import assert_python_action_dispatch
 from trust_boundary_invariants import (
     CREDENTIAL_ENVIRONMENT_KEY,
     INDEXED_SECRET_EXPRESSIONS,
@@ -39,6 +42,7 @@ ARTEFACT_PATH = "lcov.info"
 SUBMISSION_STEP = "Check coverage against CodeScene gates"
 REPORT_STEP = "Report CodeScene coverage gate"
 ACTION_SCRIPT_PATH = REPO_ROOT / ".github" / "scripts" / "coverage_pr_submission.py"
+REPORTING_SCRIPT_PATH = REPO_ROOT / ".github" / "scripts" / "coverage_pr_reporting.py"
 EXPECTED_SUBMISSION_CONDITION = (
     "github.event.workflow_run.conclusion == 'success' && "
     "github.event.workflow_run.event == 'pull_request' && "
@@ -131,16 +135,20 @@ def test_submission_workflow_reports_excluded_forks_neutrally() -> None:
         "the excluded-fork report must not receive the CodeScene credential"
     )
     report = named_step(steps, "Report excluded fork CodeScene coverage gate")
-    script = ACTION_SCRIPT_PATH.read_text(encoding="utf-8")
-    assert report.get("shell") == "python", "fork reporting must use Python"
-    assert '"report-excluded-fork"' in str(report["run"]), (
-        "the fork report must invoke its fixed Python action command"
+    script = "\n".join([
+        ACTION_SCRIPT_PATH.read_text(encoding="utf-8"),
+        REPORTING_SCRIPT_PATH.read_text(encoding="utf-8"),
+    ])
+    assert_python_action_dispatch(
+        report,
+        ".github/scripts/coverage_pr_submission.py",
+        "report-excluded-fork",
     )
     for required_fragment in (
         '"name": CHECK_RUN_NAME',
-        '"head_sha": _environment_value(environment, "ORIGINATING_COMMIT_SHA")',
-        '"external_id": _environment_value(environment, "ORIGINATING_WORKFLOW_RUN_ID")',
-        '_check_run_payload(environment, "neutral", _fork_summary(environment))',
+        '"head_sha": value("ORIGINATING_COMMIT_SHA")',
+        '"external_id": value("ORIGINATING_WORKFLOW_RUN_ID")',
+        "reporting.fork_summary(",
     ):
         assert required_fragment in script, (
             "the excluded-fork report must retain "
@@ -213,22 +221,68 @@ def test_submission_report_uses_the_checked_in_outcome_seam() -> None:
 
     outcome_module = ACTION_SCRIPT_PATH
     assert outcome_module.is_file(), "the Check Run outcome seam must be checked in"
-    script = outcome_module.read_text(encoding="utf-8")
+    script = "\n".join([
+        outcome_module.read_text(encoding="utf-8"),
+        REPORTING_SCRIPT_PATH.read_text(encoding="utf-8"),
+    ])
     assert "def coverage_conclusion(" in script, (
         "the checked-in outcome seam must export the conclusion function"
     )
-    assert report.get("shell") == "python", "Check Run reporting must use Python"
-    assert '"report-coverage"' in str(report["run"]), (
-        "the final Check Run must invoke the trusted Python reporting command"
+    assert_python_action_dispatch(
+        report,
+        ".github/scripts/coverage_pr_submission.py",
+        "report-coverage",
     )
     for required_fragment in (
         "coverage_conclusion(",
-        '"head_sha": _environment_value(environment, "ORIGINATING_COMMIT_SHA")',
-        '"external_id": _environment_value(environment, "ORIGINATING_WORKFLOW_RUN_ID")',
+        '"head_sha": value("ORIGINATING_COMMIT_SHA")',
+        '"external_id": value("ORIGINATING_WORKFLOW_RUN_ID")',
     ):
         assert required_fragment in script, (
             "the final Check Run must retain "
             f"{required_fragment!r} in its trusted reporting path"
+        )
+
+
+@pytest.mark.parametrize(
+    ("job_name", "step_name", "expected_command", "wrong_command"),
+    [
+        pytest.param(
+            "submit-coverage",
+            REPORT_STEP,
+            "report-coverage",
+            "report-excluded-fork",
+            id="same-repository-report",
+        ),
+        pytest.param(
+            "report-excluded-fork",
+            "Report excluded fork CodeScene coverage gate",
+            "report-excluded-fork",
+            "report-coverage",
+            id="excluded-fork-report",
+        ),
+    ],
+)
+def test_reporting_dispatch_rejects_a_command_mentioned_outside_sys_argv(
+    job_name: str,
+    step_name: str,
+    expected_command: str,
+    wrong_command: str,
+) -> None:
+    """Reject reporting scripts whose argv command differs from their contract."""
+    workflow = load_workflow(COVERAGE_PR_WORKFLOW_PATH)
+    steps = copy.deepcopy(job_steps(workflow, job_name))
+    report = named_step(steps, step_name)
+    report["run"] = (
+        "import runpy\nimport sys\nsys.argv = [\n"
+        '    ".github/scripts/coverage_pr_submission.py",\n'
+        f'"{wrong_command}", "{expected_command}"]\n'
+        'runpy.run_path(sys.argv[0], run_name="__main__")'
+    )
+
+    with pytest.raises(AssertionError):
+        assert_python_action_dispatch(
+            report, ".github/scripts/coverage_pr_submission.py", expected_command
         )
 
 
