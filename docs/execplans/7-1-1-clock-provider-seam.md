@@ -315,7 +315,7 @@ Hard invariants. Violating any of these requires escalation, not a workaround.
    is required because MiniJinja's `add_function` demands it; this is a
    compiler-enforced constraint, not a preference.
 4. **C4 — `StdlibConfig` remains `Debug` and `Clone`.** The derive at
-   `src/stdlib/config/mod.rs:20` must survive. Widening it to a hand-written
+   `src/stdlib/config/mod.rs:20` must survive. Widening it to a handwritten
    thirteen-field `Debug` is not acceptable; see D2.
 5. **C5 — no new external dependencies.** `time`, `minijinja`, `rstest`,
    `googletest`, `pretty_assertions`, `proptest`, and `rstest-bdd` are all
@@ -363,7 +363,7 @@ Stop and escalate — do not improvise — when any threshold is reached.
 - **Risk: `Arc<dyn Fn>` is not `Debug`, breaking `StdlibConfig`'s derive.**
   Severity: high. Likelihood: certain (this *will* happen on first compile).
   Mitigation: this is anticipated and designed for — the `Clock` newtype with a
-  hand-written `Debug` absorbs it, so `StdlibConfig` keeps its derive. See D2.
+  handwritten `Debug` absorbs it, so `StdlibConfig` keeps its derive. See D2.
   The precedent is `CommandEnv` at `src/runner/process/command_env.rs:73`.
 
 - **Risk: the clock is captured once at registration rather than consulted per
@@ -469,21 +469,22 @@ wrong, and each names the mutation it must reject.
 These are third-party or platform behaviours treated as given. Do not write
 tests for them.
 
-- **AX-1.** `time::OffsetDateTime::now_utc()` returns the host wall clock in
+- **AXIOM-1.** `time::OffsetDateTime::now_utc()` returns the host wall clock in
   UTC. The `time` crate's correctness is assumed.
-- **AX-2.** `OffsetDateTime::to_offset(o)` preserves the absolute instant and
+- **AXIOM-2.** `OffsetDateTime::to_offset(o)` preserves the absolute instant and
   changes only the representation, so
   `t.to_offset(o).unix_timestamp() == t.unix_timestamp()` for every valid `o`.
   This is the documented contract of the `time` crate.
-- **AX-3.** MiniJinja's `Environment::add_function` requires its closure to be
+- **AXIOM-3.** MiniJinja's `Environment::add_function` requires its closure to
+  be
   `Send + Sync + 'static` and may invoke it from any thread. This is what
   forces the `Arc` shape (ADR-008 states the same for `EnvReader`).
-- **AX-4.** `Arc<dyn Fn() -> T + Send + Sync>` is `Clone` and `Send + Sync`,
+- **AXIOM-4.** `Arc<dyn Fn() -> T + Send + Sync>` is `Clone` and `Send + Sync`,
   and cloning shares one underlying closure rather than duplicating it.
-- **AX-5.** `minijinja::Environment::compile_expression(..).eval(..)` invokes
+- **AXIOM-5.** `minijinja::Environment::compile_expression(..).eval(..)` invokes
   a registered function once per textual occurrence of a call in the expression.
 
-Repository-owned logic that builds on AX-2 and AX-3 *is* verified: OBL-6
+Repository-owned logic that builds on AXIOM-2 and AXIOM-3 *is* verified: OBL-6
 exercises offset preservation against the real `time` interface through the
 real registration path rather than against a stub.
 
@@ -573,7 +574,7 @@ real registration path rather than against a stub.
   `tests/std_filter_tests/time_functions.rs::now_without_a_clock_reads_the_host`.
 - Evidence: passes before and after the change, unchanged in substance.
 - Non-vacuity: the mutation "default the clock to a fixed epoch instant"
-  (a real hazard, since `Default` must be hand-written for a closure-bearing
+  (a real hazard, since `Default` must be handwritten for a closure-bearing
   type) is rejected — such a default is decades from now. This is the specific
   reason the tolerance is seconds and not, say, a day.
 
@@ -673,13 +674,13 @@ real registration path rather than against a stub.
 - **Bounded model checking (Kani).** Rejected. The change introduces no
   `unsafe` code, no arithmetic-overflow surface of its own, and no bounded
   state machine. The only arithmetic is `to_offset`, which belongs to the
-  `time` crate and is AX-2. A Kani harness here would either restate AX-2 or
-  verify third-party internals, both of which this project's plans forbid.
+  `time` crate and is AXIOM-2. A Kani harness here would either restate AXIOM-2
+  or verify third-party internals, both of which this project's plans forbid.
 - **Formal proof (Verus).** Rejected. No lemma is introduced whose guarantee
   must hold over all admissible inputs beyond what OBL-6's property test covers
   within the closed, finite offset domain. The offset domain is finite and
   small (fewer than 2×86400 values); a property test over it is not
-  meaningfully weaker than a proof, and a proof would rest entirely on AX-2
+  meaningfully weaker than a proof, and a proof would rest entirely on AXIOM-2
   anyway.
 - **State-machine model checking.** Rejected. There is no protocol,
   concurrency, or ordering property. The provider is `Send + Sync` and pure
@@ -1364,12 +1365,12 @@ Recorded during planning; extend during implementation.
   function; a trait object would add indirection with no extra test-surface
   benefit for a single-call-site boundary. Date/Author: 2026-09-08, planning.
 
-- **D2 — Wrap the provider in a `Clock` newtype with a hand-written `Debug`.**
+- **D2 — Wrap the provider in a `Clock` newtype with a handwritten `Debug`.**
   Decided: `StdlibConfig` holds `clock: Clock`, not
   `clock: Option<ClockProvider>`. Rationale: `StdlibConfig` derives `Debug`
   (C4), and `Arc<dyn Fn>` is not `Debug`, so a bare field would force a
-  hand-written thirteen-field `Debug` on `StdlibConfig` that would drift every
-  time a knob is added. A one-field newtype confines the hand-written impl to
+  handwritten thirteen-field `Debug` on `StdlibConfig` that would drift every
+  time a knob is added. A one-field newtype confines the handwritten impl to
   the one type that needs it. The repository already does exactly this for
   `CommandEnv` (`src/runner/process/command_env.rs:73`), which uses
   `debug_struct(..).finish_non_exhaustive()`. Choosing a non-`Option` field
@@ -1440,7 +1441,7 @@ Recorded during planning; extend during implementation.
   Decided: `proptest` for the offset invariant, parameterized tests elsewhere.
   Rationale: recorded in full under "Methods deliberately not used". The change
   adds no `unsafe`, no bounded state machine, and no lemma independent of the
-  `time` crate's documented `to_offset` contract (AX-2). A Kani harness or
+  `time` crate's documented `to_offset` contract (AXIOM-2). A Kani harness or
   Verus proof here would restate an axiom, which this project's plan standard
   explicitly calls a vacuous discharge. Date/Author: 2026-09-08, planning.
 
@@ -1460,7 +1461,7 @@ Recorded during planning; extend during implementation.
   `HomeDirectory` (`src/stdlib/config_types.rs:24`), which is the sibling seam
   in this very module and which ADR-008 describes as the pattern that "injects
   a resolved *value* rather than a closure". It would derive `Debug` and
-  `Clone` for free, removing the need for D2's hand-written impl entirely. This
+  `Clone` for free, removing the need for D2's handwritten impl entirely. This
   is the strongest alternative and a reviewer should expect it to have been
   weighed. Decided: rejected, in favour of the `Arc` closure. Rationale: three
   reasons, in decreasing order of weight. First, technical design §5.2
@@ -1472,7 +1473,7 @@ Recorded during planning; extend during implementation.
   implementation that reads the clock once at registration and bakes the
   instant into the closure; the only way to detect it is a provider whose
   successive calls return different values, which a resolved value cannot
-  express by construction. Choosing the enum would trade a hand-written ten-line
+  express by construction. Choosing the enum would trade a handwritten ten-line
   `Debug` impl for the loss of the plan's most important negative control.
   Third, a closure keeps a future advancing or scripted clock expressible
   without another redesign, whereas the enum would need a new variant and a new
