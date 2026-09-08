@@ -435,7 +435,7 @@ identifier remains reserved, not checked off as implemented.
     `feedback`.
     - [x] `check` lints the selected manifest. See
       [manifest linter design](netsuke-linter-design.md) and
-      [ADR-018](adr-018-manifest-linting-under-netsuke-check.md).
+      [ADR-021](adr-021-manifest-linting-under-netsuke-check.md).
   - [ ] Rename `--file` to `--manifest`, keeping `-f` as an intentional
     shorthand.
   - [ ] Depend on OrthoConfig `7.1.1` to `7.1.3` for shared vocabulary policy
@@ -3290,7 +3290,7 @@ findings that changed a manifest, not by the number of rules registered.
 
 Scope: everything behind `netsuke check`. The
 [manifest linter design](netsuke-linter-design.md) is a living document and
-[ADR-018](adr-018-manifest-linting-under-netsuke-check.md) records the
+[ADR-021](adr-021-manifest-linting-under-netsuke-check.md) records the
 decisions it currently rests on; both are expected to change under this phase,
 and a task that supersedes either must say so. The v0.4.0 rule identifiers are
 already treated as permanent, so a rule withdrawn here keeps its name reserved.
@@ -3330,12 +3330,11 @@ is a proposal rather than a contract.
   - Success: the registry, the rule reference, and the design document agree,
     and the contract tests still bind them.
 
-
 ### 31.2. Localize lint output
 
 This step answers how far the linter's text can move into the localization
 catalogues without letting the emitted text and the rule reference drift apart,
-which is the risk [ADR-018](adr-018-manifest-linting-under-netsuke-check.md)
+which is the risk [ADR-021](adr-021-manifest-linting-under-netsuke-check.md)
 cited when it deferred the work. It is sequenced after step 31.1 so the prose
 being translated is prose the rules have earned.
 
@@ -3405,7 +3404,6 @@ the freeze in step 31.4.
   - Success: every provider configuration the design names as ambiguous has a
     rule, and each cites the design section that defines it.
 
-
 ### 31.4. Freeze the contracts the linter publishes
 
 This step answers whether the linter's published surfaces are stable enough to
@@ -3432,52 +3430,6 @@ completion is what turns the prototype into a supported feature.
     grammar, so an author writing a directive can see the promise it rests on.
   - Success: the policy is published and the rule reference links to it.
 
-
-### 31.5. Pay down the prototype's structural debt
-
-This step answers whether the linter's internals can carry a growing rule set
-and a production workload, as distinct from whether the rules themselves are
-right. Each task is a refactor of code the prototype already ships, so none
-changes a finding, an identifier, or an output schema; they are separated from
-steps 31.1 to 31.4 because they are reviewable independently and none blocks
-the freeze.
-
-- [x] 31.5.1. Move the `miette` dependency out of the lint core into an adapter.
-  - `src/lint` currently converts its own `Span` and `Severity` into `miette`
-    types, implements `Diagnostic` on its finding projection, and owns a
-    `NamedSource`, so the core cannot be used without the reporting framework.
-  - Keep findings, spans, severities, reports, and policy framework-free, and
-    convert them at the runner boundary where the diagnostics are rendered.
-  - Success: `src/lint` names no `miette` type, and the JSON and human output
-    are byte-identical to their current snapshots.
-- [x] 31.5.2. Add runner-boundary telemetry for `netsuke check`.
-  - The command loads a manifest, builds a graph, indexes the source, and runs
-    every rule without emitting a metric or a span, unlike its sibling
-    commands.
-  - Record a bounded invocation counter and a duration histogram labelled by
-    outcome and a finite error category, following the pattern in
-    `src/runner/help_telemetry.rs`.
-  - Keep labels low-cardinality: no rule names, manifest paths, or finding
-    text.
-  - Success: a check run emits one counter and one histogram observation, and
-    the label vocabulary is enumerated in a test.
-- [ ] 31.5.3. Scan each recipe once when matching graph outputs.
-  - `undeclared-target-input` rebuilds the shell-active mask for every
-    (recipe, output) pair, so its cost grows with targets multiplied by
-    outputs.
-  - Extract each recipe's shell-active words once, then intersect them with an
-    indexed output set.
-  - Success: the rule reports exactly what it does now on the example
-    manifests, and its cost grows with the manifest's size rather than with its
-    square.
-
-**Success criterion:** every shipped rule has a recorded disposition drawn from
-manifests its authors did not write; a finding's prose is localized while its
-identifiers are not; findings from expanded manifests carry source spans; the
-lint core names no reporting framework and the command reports its own
-telemetry; and the JSON documents, exit classes, and rule-name guarantees are
-snapshotted, published, and stable enough that a downstream consumer can depend
-on them.
 ### 31.5. Pay down the prototype's structural debt
 
 This step answers whether the linter's internals can carry a growing rule set

@@ -8,7 +8,7 @@
 //!
 //! `docs/netsuke-linter-design.md` specifies the rule model, the stage hooks,
 //! the suppression grammar, and the output schemas;
-//! `docs/adr-018-manifest-linting-under-netsuke-check.md` records the decisions
+//! `docs/adr-021-manifest-linting-under-netsuke-check.md` records the decisions
 //! behind them.
 
 pub mod document;

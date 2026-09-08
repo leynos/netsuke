@@ -879,12 +879,11 @@ are doubled and newline, carriage-return, and NUL characters are rejected. Add
 a separate, explicitly documented conversion for any new Ninja grammar position
 rather than reusing command escaping.
 
-
 ## Adding a lint rule
 
 `netsuke check` is driven by a static registry in `src/lint/registry.rs`. The
 [manifest linter design](netsuke-linter-design.md) specifies the model and
-[ADR-018](adr-018-manifest-linting-under-netsuke-check.md) records the
+[ADR-021](adr-021-manifest-linting-under-netsuke-check.md) records the
 decisions behind it; this section is the mechanics.
 
 A new rule touches four implementation places, the repository localization
@@ -956,7 +955,6 @@ bounded findings into source-backed diagnostics, while the JSON adapter uses
 the same per-finding data in both result and failure documents. Keep command
 parsing, output streams, and reporter construction at the runner boundary;
 rules and policy must remain independent of those concerns.
-
 
 ### Check-command telemetry
 
