@@ -21,27 +21,29 @@
 //! Diagnostic JSON resolution lives in [`super::diag`] so it can run before
 //! the full merge.
 
-use clap::ArgMatches;
-use clap::parser::ValueSource;
-use ortho_config::figment::Figment;
-use ortho_config::{OrthoError, OrthoMergeExt, OrthoResult, sanitize_value};
-use serde::Serialize;
-
-use serde_json::{Map, Value, json};
-
 use super::MergeEvent;
-use super::command::{BuildArgs, Cli, Commands};
-use super::config::{BuildConfig, CliConfig};
+use super::command::{Cli, Commands};
+use super::config::CliConfig;
 use super::discovery::{
     DiscoveredLayers, EnvProvider, StdEnvProvider, discover_file_layers,
     push_discovered_file_layers,
 };
 use super::environment::EnvironmentLayer;
+use super::manifest_budget_policy::reconcile_manifest_budget;
 use super::merge_input::{CachedMergeInput, MergeComposition};
 use super::merge_observability::{
     collect_override_leaf_paths, is_empty_configuration_value, validation_rejection_reason,
 };
 use super::validation::validation_error;
+use clap::{ArgMatches, parser::ValueSource};
+use ortho_config::{OrthoError, OrthoMergeExt, OrthoResult, figment::Figment, sanitize_value};
+use serde::Serialize;
+use serde_json::{Map, Value, json};
+
+mod command_overrides;
+mod manifest_budget_overrides;
+use command_overrides::{build_cli_overrides, resolve_command, resolved_build_config};
+use manifest_budget_overrides::insert_manifest_budget_cli_overrides;
 
 /// Merge discovered configuration layers over parsed CLI input.
 ///
@@ -117,7 +119,7 @@ where
     let mut events = Vec::new();
 
     push_defaults_layer(&mut composition, &mut events);
-    push_discovered_file_layers(
+    composition.project_manifest_budget_request = push_discovered_file_layers(
         &mut composition.composer,
         &mut composition.errors,
         discovered,
@@ -126,8 +128,13 @@ where
     push_environment_layer(env, &mut composition, &mut events);
     push_cli_layer(cli, matches, &mut composition, &mut events);
 
+    let project_manifest_budget_request =
+        std::mem::take(&mut composition.project_manifest_budget_request);
     let merged = match composition.into_merge_result() {
-        Ok(config) => Ok(apply_config(cli, config)),
+        Ok(config) => Ok(apply_config(
+            cli,
+            reconcile_manifest_budget(config, &project_manifest_budget_request),
+        )),
         Err(error) => {
             collect_validation_rejection(&mut events, error.as_ref());
             Err(error)
@@ -253,6 +260,7 @@ fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Va
         &cli.fetch_default_deny,
         &mut root,
     )?;
+    insert_manifest_budget_cli_overrides(cli, matches, &mut root)?;
     maybe_insert_explicit(matches, "json", &cli.json, &mut root)?;
     maybe_insert_explicit(matches, "no_input", &cli.no_input(), &mut root)?;
     maybe_insert_explicit(matches, "color", &cli.color, &mut root)?;
@@ -287,24 +295,13 @@ fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Va
     Ok(Value::Object(root))
 }
 
-/// Collect the `build` subcommand's overrides from explicitly supplied arguments.
-///
-/// # Errors
-///
-/// Returns a validation error when a supplied value cannot be serialized.
-fn build_cli_overrides(args: &BuildArgs, matches: &ArgMatches) -> OrthoResult<Map<String, Value>> {
-    let mut build = Map::new();
-    maybe_insert_explicit(matches, "targets", &args.targets, &mut build)?;
-    Ok(build)
-}
-
 /// Insert `field` into `target` when `matches` reports it was supplied on the
 /// command line.
 ///
 /// # Errors
 ///
 /// Returns a validation error when `value` cannot be serialized.
-fn maybe_insert_explicit<T>(
+pub(super) fn maybe_insert_explicit<T>(
     matches: &ArgMatches,
     field: &str,
     value: &T,
@@ -324,7 +321,7 @@ where
 /// # Errors
 ///
 /// Returns a validation error when serialization fails.
-fn serialize_value<T>(field: &str, value: &T) -> OrthoResult<Value>
+pub(super) fn serialize_value<T>(field: &str, value: &T) -> OrthoResult<Value>
 where
     T: Serialize,
 {
@@ -346,6 +343,13 @@ fn apply_config(parsed: &Cli, config: CliConfig) -> Cli {
         fetch_allow_host: config.fetch_allow_host,
         fetch_block_host: config.fetch_block_host,
         fetch_default_deny: config.fetch_default_deny,
+        manifest_evaluation_fuel: config.manifest_evaluation_fuel,
+        manifest_fuel: config.manifest_fuel,
+        manifest_rendered_value_bytes: config.manifest_rendered_value_bytes,
+        manifest_rendered_manifest_bytes: config.manifest_rendered_manifest_bytes,
+        manifest_source_bytes: config.manifest_source_bytes,
+        manifest_foreach_cardinality: config.manifest_foreach_cardinality,
+        manifest_expanded_entries: config.manifest_expanded_entries,
         json: config.json,
         interaction: super::command::InteractionArgs {
             no_input: config.no_input.is_enabled(),
@@ -356,36 +360,5 @@ fn apply_config(parsed: &Cli, config: CliConfig) -> Cli {
         accessibility: config.accessibility,
         default_targets: build_defaults.targets.clone(),
         command: Some(resolve_command(parsed.command.as_ref(), &build_defaults)),
-    }
-}
-
-/// Resolve the effective build defaults, combining root-level default targets
-/// with subcommand-level targets.
-fn resolved_build_config(config: &CliConfig) -> BuildConfig {
-    let mut build = config.cmds.build.clone();
-    if build.targets.is_empty() {
-        build.targets.clone_from(&config.default_targets);
-    } else if !config.default_targets.is_empty() {
-        let mut targets = config.default_targets.clone();
-        targets.extend(build.targets);
-        build.targets = targets;
-    }
-    build
-}
-
-/// Resolve the final command, substituting default targets when none were given.
-fn resolve_command(parsed: Option<&Commands>, build_defaults: &BuildConfig) -> Commands {
-    match parsed {
-        Some(Commands::Build(args)) => Commands::Build(BuildArgs {
-            targets: if args.targets.is_empty() {
-                build_defaults.targets.clone()
-            } else {
-                args.targets.clone()
-            },
-        }),
-        Some(other) => other.clone(),
-        None => Commands::Build(BuildArgs {
-            targets: build_defaults.targets.clone(),
-        }),
     }
 }

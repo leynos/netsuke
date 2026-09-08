@@ -51,7 +51,9 @@ pub(super) fn generate_ninja_with_shell(
     let policy = cli
         .network_policy()
         .context(localization::message(keys::RUNNER_CONTEXT_NETWORK_POLICY))?;
-    let manifest = load_manifest_with_stage_reporting(&manifest_path, policy, reporter)?;
+    let budget_limits = cli.manifest_budget_limits()?;
+    let manifest =
+        load_manifest_with_stage_reporting(&manifest_path, policy, budget_limits, reporter)?;
     if tracing::enabled!(tracing::Level::DEBUG) {
         let ast_json = serde_json::to_string_pretty(&manifest).context(localization::message(
             keys::RUNNER_CONTEXT_SERIALISE_MANIFEST,

@@ -1,0 +1,5 @@
+netsuke_version: 1.0.0
+targets:
+  - name: '{{ item }}'
+    foreach: [one, two, three]
+    command: echo ok

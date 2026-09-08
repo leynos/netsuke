@@ -16,6 +16,13 @@ cli.flag.fetch_allow_scheme.help = สกีม URL เพิ่มเติม�
 cli.flag.fetch_allow_host.help = ชื่อโฮสต์ที่อนุญาตเมื่อเปิดการปฏิเสธโดยค่าเริ่มต้น
 cli.flag.fetch_block_host.help = ชื่อโฮสต์ที่ถูกปิดกั้นเสมอ แม้จะได้รับอนุญาตจากที่อื่น
 cli.flag.fetch_default_deny.help = ปฏิเสธโฮสต์ทั้งหมดโดยค่าเริ่มต้น อนุญาตเฉพาะรายการที่ประกาศไว้
+cli.flag.manifest_evaluation_fuel.help = Limit MiniJinja instructions for each manifest evaluation.
+cli.flag.manifest_fuel.help = Limit MiniJinja instructions across one manifest.
+cli.flag.manifest_rendered_value_bytes.help = Limit bytes rendered into one manifest value.
+cli.flag.manifest_rendered_manifest_bytes.help = Limit total bytes rendered across one manifest.
+cli.flag.manifest_source_bytes.help = Limit template and macro source bytes consumed per manifest.
+cli.flag.manifest_foreach_cardinality.help = Limit values processed by one foreach expansion.
+cli.flag.manifest_expanded_entries.help = Limit targets and actions expanded from one manifest.
 cli.flag.json.help = แสดงผลเป็น JSON ที่เครื่องอ่านได้
 cli.flag.no_input.help = ไม่อ่านข้อมูลนำเข้าแบบโต้ตอบเลย
 cli.flag.color.help = นโยบายการแสดงผลแบบมีสี (auto, always, never)
@@ -417,3 +424,4 @@ example.errors_found = { $count ->
     [0] ไม่พบข้อผิดพลาด
    *[other] พบข้อผิดพลาด { $count } รายการ
 }
+manifest.budget.exceeded = Manifest resource budget exhausted during { $stage } after reaching { $limit }.

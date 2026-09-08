@@ -38,6 +38,7 @@ const BUILD_SLICE_MODULES: &[(&str, &str)] = &[
 const BUILD_SLICE_RERUN_PATHS: &[&str] = &[
     "src/cli/command.rs",
     "src/cli/config.rs",
+    "src/cli/manifest_budget_config.rs",
     "src/cli/help.rs",
     "src/cli/validation.rs",
 ];

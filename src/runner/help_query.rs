@@ -84,7 +84,8 @@ fn query_entries(cli: &Cli, stages: &mut Vec<PipelineStage>) -> Result<Vec<HelpE
         record_missing_manifest_stage(&error, stages);
         return Err(error);
     }
-    let manifest = load_manifest_for_query(&manifest_path, stages)?;
+    let budget_limits = cli.manifest_budget_limits()?;
+    let manifest = load_manifest_for_query(&manifest_path, budget_limits, stages)?;
     reject_terminal_controls_in_target_names(&manifest)?;
     let entries = build_catalogue(&manifest);
     let defaults = manifest.defaults.clone();
@@ -193,10 +194,11 @@ fn append_target_entries(
 /// Load a manifest for a no-side-effect metadata query and retain its stages.
 fn load_manifest_for_query(
     manifest_path: &camino::Utf8PathBuf,
+    budget_limits: crate::manifest::ManifestBudgetLimits,
     stages: &mut Vec<PipelineStage>,
 ) -> Result<NetsukeManifest> {
     let mut on_stage = |stage| stages.push(pipeline_stage(stage));
-    generation::load_manifest(manifest_path, Some(&mut on_stage))
+    generation::load_manifest_with_limits(manifest_path, budget_limits, Some(&mut on_stage))
 }
 
 /// Map manifest-loading events to data that the command boundary can report.

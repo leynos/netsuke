@@ -51,6 +51,26 @@ Feature: Manifest Parsing
     When the manifest is checked
     Then the first target command is "echo world"
 
+  Scenario: Parsing rejects a compact output loop at the manifest budget
+    Given the manifest budget uses small test limits
+    And the manifest file "tests/data/manifest_budget_loop.yml" is parsed
+    When the parsing result is checked
+    Then parsing the manifest fails
+    And the error message contains "Manifest resource budget exhausted"
+
+  Scenario: Parsing stops foreach at the manifest budget
+    Given the manifest budget uses small test limits
+    And the manifest file "tests/data/manifest_budget_foreach.yml" is parsed
+    When the parsing result is checked
+    Then parsing the manifest fails
+    And the error message contains "Manifest resource budget exhausted"
+
+  Scenario: Ordinary manifests retain their rendered behaviour below the budget
+    Given the manifest budget uses small test limits
+    And the manifest file "tests/data/manifest_budget_ordinary.yml" is parsed
+    When the manifest is checked
+    Then the first target command is "echo unchanged"
+
   Scenario: Parsing fails when a Jinja variable is undefined
     Given the manifest file "tests/data/jinja_undefined.yml" is parsed
     When the parsing result is checked

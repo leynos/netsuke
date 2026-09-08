@@ -16,6 +16,13 @@ cli.flag.fetch_allow_scheme.help = Additional URL schemes allowed for the fetch 
 cli.flag.fetch_allow_host.help = Hostnames that are permitted when default deny is enabled.
 cli.flag.fetch_block_host.help = Hostnames that are always blocked, even when allowed elsewhere.
 cli.flag.fetch_default_deny.help = Deny all hosts by default; only allow the declared allowlist.
+cli.flag.manifest_evaluation_fuel.help = Limit MiniJinja instructions for each manifest evaluation.
+cli.flag.manifest_fuel.help = Limit MiniJinja instructions across one manifest.
+cli.flag.manifest_rendered_value_bytes.help = Limit bytes rendered into one manifest value.
+cli.flag.manifest_rendered_manifest_bytes.help = Limit total bytes rendered across one manifest.
+cli.flag.manifest_source_bytes.help = Limit template and macro source bytes consumed per manifest.
+cli.flag.manifest_foreach_cardinality.help = Limit values processed by one foreach expansion.
+cli.flag.manifest_expanded_entries.help = Limit targets and actions expanded from one manifest.
 cli.flag.json.help = Emit machine-readable JSON output.
 cli.flag.no_input.help = Never read interactive input.
 cli.flag.color.help = Colour output policy (auto, always, never).
@@ -118,6 +125,7 @@ runner.io.dyndep.temp_collisions = Failed to create a unique temporary dyndep fi
 runner.io.dyndep.too_large = Generated dyndep file at { $path } exceeds the { $limit }-byte verification limit.
 
 # Manifest diagnostics.
+manifest.budget.exceeded = Manifest resource budget exhausted during { $stage } after reaching { $limit }.
 manifest.parse = Manifest parse failed.
 manifest.structure_error = Manifest structure error in { $name }: { $details }
 manifest.yaml.parse = YAML parse error at line { $line }, column { $column }: { $details }

@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::ast::{DependencyOrder, Target};
+use crate::manifest::budget::ManifestBudget;
 use semver::Version;
 
 #[test]
@@ -15,10 +16,15 @@ fn large_command_list_prepares_the_jinja_context_once() {
     let mut vars = Vars::new();
     vars.insert("label".into(), ManifestValue::String("rendered".into()));
 
-    render_recipe_string_or_list(&mut command, &Environment::new(), &vars, || {
-        "render command list".into()
-    })
-    .expect("shell-safe command list should render");
+    let env = Environment::new();
+    let budget = ManifestBudget::default();
+    let context = FieldRenderContext {
+        env: &env,
+        budget: &budget,
+        vars: &vars,
+    };
+    render_recipe_string_or_list(&mut command, &context, || "render command list".into())
+        .expect("shell-safe command list should render");
 
     assert_eq!(
         recipe_context_preparations(),
@@ -41,10 +47,14 @@ fn dependency_only_marker_skips_recipe_context_preparation() {
     reset_recipe_context_preparations();
     let mut command = StringOrList::Empty;
     let env = Environment::new();
+    let budget = ManifestBudget::default();
     let vars = Vars::new();
     let context = RecipeRenderContext {
-        env: &env,
-        vars: &vars,
+        fields: FieldRenderContext {
+            env: &env,
+            budget: &budget,
+            vars: &vars,
+        },
         subject: "target",
         mode: RenderMode::Full,
     };

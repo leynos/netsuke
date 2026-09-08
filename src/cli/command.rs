@@ -90,6 +90,34 @@ pub struct Cli {
     #[arg(long = "fetch-default-deny")]
     pub fetch_default_deny: bool,
 
+    /// Maximum `MiniJinja` instructions for one manifest evaluation.
+    #[arg(long, value_name = "FUEL", default_value_t = 1_000_000)]
+    pub manifest_evaluation_fuel: u64,
+
+    /// Maximum `MiniJinja` instructions for one complete manifest.
+    #[arg(long, value_name = "FUEL", default_value_t = 100_000_000)]
+    pub manifest_fuel: u64,
+
+    /// Maximum bytes emitted by one rendered manifest value.
+    #[arg(long, value_name = "BYTES", default_value_t = 1_048_576)]
+    pub manifest_rendered_value_bytes: usize,
+
+    /// Maximum bytes emitted by every rendered manifest value.
+    #[arg(long, value_name = "BYTES", default_value_t = 16_777_216)]
+    pub manifest_rendered_manifest_bytes: usize,
+
+    /// Maximum template and macro-import source bytes consumed by a manifest.
+    #[arg(long, value_name = "BYTES", default_value_t = 4_194_304)]
+    pub manifest_source_bytes: usize,
+
+    /// Maximum values consumed from one manifest `foreach` iterator.
+    #[arg(long, value_name = "COUNT", default_value_t = 10_000)]
+    pub manifest_foreach_cardinality: usize,
+
+    /// Maximum targets and actions emitted by manifest expansion.
+    #[arg(long, value_name = "COUNT", default_value_t = 50_000)]
+    pub manifest_expanded_entries: usize,
+
     /// Emit machine-readable JSON output.
     #[arg(long)]
     pub json: bool,
@@ -159,6 +187,13 @@ impl Default for Cli {
             fetch_allow_host: Vec::new(),
             fetch_block_host: Vec::new(),
             fetch_default_deny: false,
+            manifest_evaluation_fuel: 1_000_000,
+            manifest_fuel: 100_000_000,
+            manifest_rendered_value_bytes: 1_048_576,
+            manifest_rendered_manifest_bytes: 16_777_216,
+            manifest_source_bytes: 4_194_304,
+            manifest_foreach_cardinality: 10_000,
+            manifest_expanded_entries: 50_000,
             json: false,
             interaction: InteractionArgs::default(),
             color: ColourPolicy::Auto,

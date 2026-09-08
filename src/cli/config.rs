@@ -3,24 +3,27 @@
 //! [`CliConfig`] is the single typed schema used for configuration discovery
 //! and merging. It captures global CLI settings plus per-subcommand defaults
 //! under the `cmds` namespace.
+pub(super) use super::validation::validation_error;
+use crate::host_pattern::HostPattern;
 use camino::Utf8PathBuf;
 use ortho_config::{OrthoConfig, OrthoResult, PostMergeContext, PostMergeHook};
 use serde::{Deserialize, Serialize};
-use std::fmt;
-use std::str::FromStr;
+use std::{fmt, str::FromStr};
 
-use super::validation::validation_error;
-use crate::host_pattern::HostPattern;
-
+#[path = "manifest_budget_config.rs"]
+mod manifest_budget_config;
 #[path = "policy_definitions.rs"]
 pub(super) mod policy_definitions;
-
+use manifest_budget_config::{
+    DEFAULT_MANIFEST_EVALUATION_FUEL, DEFAULT_MANIFEST_EXPANDED_ENTRIES,
+    DEFAULT_MANIFEST_FOREACH_CARDINALITY, DEFAULT_MANIFEST_FUEL, DEFAULT_MANIFEST_RENDERED_BYTES,
+    DEFAULT_MANIFEST_RENDERED_VALUE_BYTES, DEFAULT_MANIFEST_SOURCE_BYTES, validate_manifest_budget,
+};
 pub(super) use policy_definitions::{
     ACCESSIBILITY_POLICY_DEFINITIONS, COLOUR_POLICY_DEFINITIONS, EMOJI_POLICY_DEFINITIONS,
     PROGRESS_POLICY_DEFINITIONS,
 };
 use policy_definitions::{definition_for, parse_policy};
-
 /// Required non-interactive execution setting.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -214,6 +217,34 @@ pub struct CliConfig {
     #[ortho_config(default = false)]
     pub fetch_default_deny: bool,
 
+    /// Maximum `MiniJinja` instructions allocated to one manifest evaluation.
+    #[ortho_config(default = DEFAULT_MANIFEST_EVALUATION_FUEL)]
+    pub manifest_evaluation_fuel: u64,
+
+    /// Maximum `MiniJinja` instructions allocated across one manifest.
+    #[ortho_config(default = DEFAULT_MANIFEST_FUEL)]
+    pub manifest_fuel: u64,
+
+    /// Maximum bytes emitted by one rendered manifest value.
+    #[ortho_config(default = DEFAULT_MANIFEST_RENDERED_VALUE_BYTES)]
+    pub manifest_rendered_value_bytes: usize,
+
+    /// Maximum bytes emitted by every rendered value in one manifest.
+    #[ortho_config(default = DEFAULT_MANIFEST_RENDERED_BYTES)]
+    pub manifest_rendered_manifest_bytes: usize,
+
+    /// Maximum template and macro-import source bytes consumed per manifest.
+    #[ortho_config(default = DEFAULT_MANIFEST_SOURCE_BYTES)]
+    pub manifest_source_bytes: usize,
+
+    /// Maximum values consumed from each manifest `foreach` iterator.
+    #[ortho_config(default = DEFAULT_MANIFEST_FOREACH_CARDINALITY)]
+    pub manifest_foreach_cardinality: usize,
+
+    /// Maximum expanded target and action entries per manifest.
+    #[ortho_config(default = DEFAULT_MANIFEST_EXPANDED_ENTRIES)]
+    pub manifest_expanded_entries: usize,
+
     /// Emit machine-readable JSON output.
     #[ortho_config(default = false)]
     pub json: bool,
@@ -260,6 +291,13 @@ impl Default for CliConfig {
             fetch_allow_host: Vec::new(),
             fetch_block_host: Vec::new(),
             fetch_default_deny: false,
+            manifest_evaluation_fuel: DEFAULT_MANIFEST_EVALUATION_FUEL,
+            manifest_fuel: DEFAULT_MANIFEST_FUEL,
+            manifest_rendered_value_bytes: DEFAULT_MANIFEST_RENDERED_VALUE_BYTES,
+            manifest_rendered_manifest_bytes: DEFAULT_MANIFEST_RENDERED_BYTES,
+            manifest_source_bytes: DEFAULT_MANIFEST_SOURCE_BYTES,
+            manifest_foreach_cardinality: DEFAULT_MANIFEST_FOREACH_CARDINALITY,
+            manifest_expanded_entries: DEFAULT_MANIFEST_EXPANDED_ENTRIES,
             json: false,
             no_input: NoInput::default(),
             color: ColourPolicy::Auto,
@@ -295,6 +333,7 @@ impl PostMergeHook for CliConfig {
         validate_manifest_path(self)?;
         validate_non_interactive(self)?;
         validate_jobs(self)?;
+        validate_manifest_budget(self)?;
         Ok(())
     }
 }
@@ -355,7 +394,6 @@ fn validate_jobs(config: &CliConfig) -> OrthoResult<()> {
     }
     Ok(())
 }
-
 #[cfg(test)]
 #[path = "config_tests.rs"]
 mod tests;
