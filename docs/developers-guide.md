@@ -4669,13 +4669,15 @@ fallback — in the `#[cfg(any(windows, test))]` unit tests that every host
 executes, and reserve the Windows-gated suite for behaviour that genuinely
 cannot run elsewhere.
 
-The `build-test-windows` job in `.github/workflows/ci-windows.yml` is a merge
-gate: it compiles, lints (Clippy and Whitaker), and tests the `#[cfg(windows)]`
-suite on GitHub-hosted `windows-latest` under `-D warnings`, so a Windows-gated
-test or lint finding blocks a merge. The split still stands: host-independent
-rules stay in the `#[cfg(any(windows, test))]` unit tests so every host —
-including a developer on Unix — exercises them, while the Windows-gated suite
-covers the behaviour that only exists there.
+Two concurrent jobs in `.github/workflows/ci-windows.yml` form the Windows
+merge gate, and a failure in either blocks a merge. `lint-windows` runs
+formatting, Clippy and Whitaker; `build-test-windows` compiles and tests the
+`#[cfg(windows)]` suite, then runs the native Windows recipe smoke steps. Both
+run on GitHub-hosted `windows-latest` under `-D warnings`, so a Windows-gated
+test or lint finding blocks a merge whichever half finds it. The split still
+stands: host-independent rules stay in the `#[cfg(any(windows, test))]` unit
+tests so every host — including a developer on Unix — exercises them, while the
+Windows-gated suite covers the behaviour that only exists there.
 
 The Windows job installs GNU Make through Chocolatey and Ninja through the
 setup action, then runs its Makefile gates through Git Bash with `SHELL=bash`.

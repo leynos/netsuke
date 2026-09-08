@@ -24,17 +24,15 @@ Run via ``make test-workflow-contracts``.
 import re
 
 import pytest
-import yaml
+from windows_cache_action import ACTION_PATH, load_cache_action
 from workflow_loading import (
     CI_WINDOWS_WORKFLOW_PATH,
-    REPO_ROOT,
     job_steps,
     load_workflow,
     require_mapping,
 )
 
 WINDOWS_CACHE_ACTION = "./.github/actions/windows-gate-cache"
-ACTION_PATH = REPO_ROOT / ".github" / "actions" / "windows-gate-cache" / "action.yml"
 
 #: The key families the Windows action publishes, and the job that must be the
 #: sole writer of each. Stated here so a family losing its writer entirely is a
@@ -178,8 +176,8 @@ def windows_workflow() -> dict[str, object]:
 def cache_action() -> dict[str, object]:
     """Return the parsed `windows-gate-cache` composite action.
 
-    Reading and parsing live here, in a fixture, so a failure to read or parse
-    is reported as a fixture error naming the file rather than surfacing from
+    Reading and parsing live behind `load_cache_action`, so a failure is
+    reported as a fixture error naming the file rather than surfacing from
     inside a lookup.
 
     Returns
@@ -187,8 +185,7 @@ def cache_action() -> dict[str, object]:
     dict[str, object]
         The parsed action mapping.
     """
-    parsed = yaml.safe_load(ACTION_PATH.read_text(encoding="utf-8"))
-    return require_mapping(parsed, f"{ACTION_PATH.name}")
+    return load_cache_action(ACTION_PATH)
 
 
 def test_every_windows_cache_key_has_exactly_one_writer(
