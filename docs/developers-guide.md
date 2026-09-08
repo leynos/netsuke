@@ -1397,8 +1397,11 @@ an otherwise clean tree.
 Install the separately versioned Whitaker installer with:
 
 CI installs Whitaker through the SHA-pinned
-`leynos/shared-actions/.github/actions/install-whitaker` action. Both build
-jobs pass its required `installer-version: '0.2.7'` input; there is no
+`leynos/shared-actions/.github/actions/install-whitaker` action. Two jobs
+invoke it, and each passes its required `installer-version: '0.2.7'` input:
+`build-test` in `ci.yml`, and `lint-windows` in `ci-windows.yml`.
+`build-test-windows` neither installs nor runs Whitaker; it compiles, tests,
+and runs the native Windows recipe smoke steps. There is no
 `WHITAKER_INSTALLER_VERSION` workflow variable. Read that action input before
 installing locally so the local installer matches CI:
 
@@ -1611,8 +1614,11 @@ sequenceDiagram
 cache restoration, archive verification, and the delegated Makefile checks.
 
 CI installs Whitaker through the SHA-pinned
-`leynos/shared-actions/.github/actions/install-whitaker` action. Both build
-jobs pass its required `installer-version: '0.2.7'` input; there is no
+`leynos/shared-actions/.github/actions/install-whitaker` action. Two jobs
+invoke it, and each passes its required `installer-version: '0.2.7'` input:
+`build-test` in `ci.yml`, and `lint-windows` in `ci-windows.yml`.
+`build-test-windows` neither installs nor runs Whitaker; it compiles, tests,
+and runs the native Windows recipe smoke steps. There is no
 `WHITAKER_INSTALLER_VERSION` workflow variable. Read that action input before
 installing locally so the local installer matches CI:
 
