@@ -1360,6 +1360,7 @@ Objective: deliver the `netsuke test` command and YAML test dialect specified in
   See [UX design §8](netsuke-test-framework-ux-design.md) and
   [technical design §7](netsuke-test-framework-technical-design.md).
   - [ ] Implement stub, mock, and spy kinds with first-match-wins entries.
+  - [ ] Compile the closed matcher vocabulary at parse time.
   - [ ] Journal every call with per-case isolation (invariants I1 and I3).
 
 - [ ] 7.3.2. Implement verification and reporting hooks. Requires: 7.3.1.
@@ -1448,6 +1449,7 @@ Objective: deliver the `netsuke test` command and YAML test dialect specified in
 - [ ] 7.5.5. Implement assertion evaluation. Requires: 7.5.4.
   - [ ] Normalize scalar and structured assertions.
   - [ ] Distinguish failures from errors end to end.
+  - [ ] Implement `expect_failure` with named diagnostics.
   - [ ] Render failing expressions with substituted actual values.
 
 ### 7.6. Command, localization, and reporting
@@ -1587,7 +1589,7 @@ schedule.
     actionable rule identifier, including allowed-source and declared-repository
     SHA provenance, both `continue-on-error` scopes, `pull_request_target`, and
     privileged `workflow_run` coverage for untrusted checkout content, verified
-    artefact provenance, and pull-request data flowing to shell commands, while
+    artefact provenance, and pull-request data reaching shell commands, while
     all tracked workflows pass.
 - [ ] 8.2.2. Enforce gate, reference, and documentation consistency.
   - Requires 8.1.2 and 8.1.3.
