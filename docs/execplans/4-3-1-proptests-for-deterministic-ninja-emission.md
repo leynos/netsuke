@@ -1366,9 +1366,8 @@ a failure, read the cited log rather than re-running the gate.
 ### Commits and review
 
 Commit at every milestone boundary, and more often within a milestone whenever
-the tree is green. Use imperative subjects under 50 characters, wrap bodies at
-
-1. Never commit a tree that fails a gate.
+the tree is green. Subjects are imperative and under 50 characters; bodies wrap
+at 72 columns. Never commit a tree that fails a gate.
 
 Request a `coderabbit review --agent` pass at `EP-M3`, `EP-M5`, and `EP-M7`.
 
