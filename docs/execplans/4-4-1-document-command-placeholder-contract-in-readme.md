@@ -627,7 +627,7 @@ boundary.**
   a stronger guarantee than it is. It needs a test that fails loudly if
   rejection is ever relaxed, and prose that a reader cannot mistake for general
   injection defence.
-- Domain: the documented rejecting example, plus two hand-written controls in
+- Domain: the documented rejecting example, plus two handwritten controls in
   the same test file that are *not* in the README: a balanced backtick pair
   containing only author text, which must be **accepted** (proving the guard is
   narrow, exactly as documented); and an odd count of backticks with no marker
