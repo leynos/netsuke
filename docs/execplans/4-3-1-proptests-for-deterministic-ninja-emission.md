@@ -362,7 +362,7 @@ judgement call.
    entries. `proptest 1.11.0`, `rstest 0.26.1`, `googletest 0.14.3`,
    `pretty_assertions 1.4.1`, and `insta 1` are already present and are
    sufficient. In particular, do not add `proptest-derive` or `test-strategy`;
-   the house style is hand-written strategy functions.
+   the house style is handwritten strategy functions.
 4. No file may exceed 400 lines (`AGENTS.md`). The new strategy and property
    code must be split across sibling files from the outset rather than
    retrofitted.
@@ -569,7 +569,7 @@ no path contains a NUL byte, `path_key(p) == path_key(r)` if and only if `p` and
     as a directed `#[test]` documenting that the precondition is load-bearing
     and not vacuous. This is the case `OBL-GUARD` shows is unreachable in
     practice.
-  - *Mutation.* `docs/verification/mutations/path-key-unsorted.patch` deletes
+  - *Mutation.* `MUT-PATHKEY` deletes
     `parts.sort_unstable()`. `path_key_is_permutation_invariant` must fail.
 
 ______________________________________________________________________
@@ -602,7 +602,7 @@ and do so without having emitted any output.
   - *Covers.* The injected character must reach each of `$`, `:`, `|`, NUL, and
     at least one non-NUL control character, and each of the five path
     positions. Classification counts recorded.
-  - *Mutation.* `docs/verification/mutations/guard-after-sort.patch` moves the
+  - *Mutation.* `MUT-GUARD` moves the
     `reject_unsupported_path_characters` call in `src/ninja_gen/mod.rs` and
     `src/ninja_gen/dyndep.rs` to after the edge sort.
     `validation_precedes_path_key_ordering` must fail, and the failure must
@@ -645,17 +645,21 @@ same holds for `generate`.
     different orders (recorded per case and asserted to exceed a floor across
     the run — this is the anti-vacuity check that matters most here); graphs
     with at least one multi-output edge; graphs with at least one
-    dependency-only (`phony`) action; graphs requiring dyndep staging; and
-    graphs with a non-empty `default_targets`. A run in which the
+    dependency-only (`phony`) action; graphs requiring dyndep staging; graphs
+    with a non-empty `default_targets`; and all four combinations of
+    `BuildEdge::always` and `Action::restat`, because `DisplayEdge` emits the
+    `restat` flag only when `edge.always && !action_restat`
+    (`src/ninja_gen/display_edge.rs:37`), an edge-to-action interaction a naive
+    generator would never vary. A run in which the
     "iteration orders actually differed" count is zero must be treated as a
     failure of the test, not a pass of the property.
   - *Mutation.* Three patches, each of which must fail this property:
-    `docs/verification/mutations/edges-unsorted.patch` (delete
+    `MUT-EDGESORT` (delete
     `edges.sort_by_key` in both `src/ninja_gen/mod.rs` and
     `src/ninja_gen/dyndep.rs`);
-    `docs/verification/mutations/actions-unsorted.patch` (delete
+    `MUT-ACTIONSORT` (delete
     `actions.sort_by_key` in `write_action_rules`); and
-    `docs/verification/mutations/edge-sort-by-first-output.patch` (replace the
+    `MUT-FIRSTOUT` (replace the
     `path_key` sort key with the edge's first explicit output, making the key
     non-unique for multi-output edges and thereby exposing the stable-sort
     fallback described in `AXIOM-SORT`).
@@ -695,9 +699,9 @@ and that line's byte offset is greater than the offset of every `build` line.
     set in strictly descending order; and a set containing duplicates. Record
     the counts. The duplicate class is what pins the documented decision that
     `Vec::sort` does not deduplicate.
-  - *Mutation.* `docs/verification/mutations/defaults-unsorted.patch` deletes
+  - *Mutation.* `MUT-DEFSORT` deletes
     `defs.sort()` in both emission paths;
-    `docs/verification/mutations/defaults-emitted-first.patch` moves the
+    `MUT-DEFPOS` moves the
     `default` block before edge rendering. Both must fail this property, the
     second on the positional half.
 
@@ -734,7 +738,7 @@ in different orders intern them to the same identifiers.
     reach each of the six `Action` fields. Record the counts. A run in which
     the unequal arms never produce a hash difference means the generator is
     producing degenerate actions.
-  - *Mutation.* `docs/verification/mutations/action-hash-ignores-metadata.patch`
+  - *Mutation.* `MUT-HASHMETA`
     makes the hasher skip the `pool` field. The single-field-mutation arm must
     fail with `pool` named in the shrunk counter-example.
 
@@ -782,7 +786,7 @@ permutation of its `targets` list (and independently of its `actions` list and
     (reuse of the `OBL-DEFAULT` mutation) must fail this property too, since
     `default_targets` is the one field that carries declaration order into the
     graph. Additionally,
-    `docs/verification/mutations/action-id-includes-index.patch` appends the
+    `MUT-IDINDEX` appends the
     target's declaration index to the interned action identifier; this
     property must fail while `OBL-ORDER` continues to pass, demonstrating that
     `OBL-E2E` is genuinely stronger and not a restatement.
@@ -819,7 +823,7 @@ manifest whose output paths are pairwise distinct, lowering does not return
     every manifest. Record the counts, and assert that the `none` arm produces
     a successful lowering rather than merely a non-`DuplicateOutput` error.
   - *Mutation.*
-    `docs/verification/mutations/find-duplicates-within-target.patch`
+    `MUT-DUPWITHIN`
     removes the within-one-target half of `find_duplicates`. The
     `within one target` arm must fail.
 
@@ -859,7 +863,7 @@ dependencies name paths that no target produces.
     obligation); acyclic graphs with no missing dependencies; and acyclic
     graphs with at least one missing dependency. Record the counts. If the
     long-cycle class count is zero, the obligation has not been discharged.
-  - *Mutation.* `docs/verification/mutations/cycle-detector-depth-limit.patch`
+  - *Mutation.* `MUT-CYCLEDEPTH`
     caps the cycle detector's traversal depth at 4. The long-cycle class must
     fail while the short-cycle class continues to pass, demonstrating the
     obligation reaches strictly beyond the Kani bound.
@@ -893,7 +897,7 @@ the same command list for both insertion permutations.
 - **Non-vacuity:**
   - *Covers.* Cases must reach graphs with multi-output edges, phony edges, and
     a non-empty `default` line. Record the counts.
-  - *Mutation.* `docs/verification/mutations/defaults-emitted-first.patch`
+  - *Mutation.* `MUT-DEFPOS`
     (reused) must cause real Ninja to reject the file, confirming the oracle
     detects a semantic break that byte comparison alone would not.
 
@@ -1016,8 +1020,8 @@ delete it to revert.
 `#[cfg(test)] #[path = ...] mod determinism_property_tests;`. The directed
 NUL-collision witness test is present and documents why `OBL-GUARD` is
 load-bearing. Two mutation patches are committed and demonstrated. *Acceptance:*
-`make proptest` passes; applying `path-key-unsorted.patch` fails
-`path_key_is_permutation_invariant`; applying `guard-after-sort.patch` fails
+`make proptest` passes; applying `MUT-PATHKEY` fails
+`path_key_is_permutation_invariant`; applying `MUT-GUARD` fails
 `validation_precedes_path_key_ordering`; both revert cleanly. *Conformance
 check:* `path_key` is still `pub(crate)`; no file exceeds 400 lines.
 *Recovery:* the whole directory is additive and can be deleted.
@@ -1043,11 +1047,10 @@ classification counts from `EP-M0` question 1 are reproduced within tolerance.
 *End state:* `src/ir/action_hash_property_tests.rs` and `declaration_order.rs`
 are present. The manifest strategy generating typed `NetsukeManifest` values
 lives beside the graph strategy in `test_support`. *Acceptance:*
-`make proptest` passes; `action-hash-ignores-metadata.patch` fails `OBL-ACTION`;
-`action-id-includes-index.patch` fails `OBL-E2E` while `OBL-ORDER` still
-passes. *Conformance check:* if `EP-M0` question 2 answered "no", this
-milestone must not be started until the escalation is resolved. *Recovery:*
-additive.
+`make proptest` passes; `MUT-HASHMETA` fails `OBL-ACTION`; `MUT-IDINDEX` fails
+`OBL-E2E` while `OBL-ORDER` still passes. *Conformance check:* if `EP-M0`
+question 2 answered "no", this milestone must not be started until the
+escalation is resolved. *Recovery:* additive.
 
 ### EP-M5 — inherited larger-N IR obligations
 
@@ -1055,11 +1058,10 @@ additive.
 
 *End state:* `src/ir/graph_property_tests/` with `mod.rs`, `duplicates.rs`, and
 `cycles.rs`, wired from `src/ir/mod.rs`. The cycle generator's long-cycle class
-is confirmed to fire. *Acceptance:* `make proptest` passes;
-`find-duplicates-within-target.patch` fails only the within-target arm;
-`cycle-detector-depth-limit.patch` fails only the long-cycle class.
-*Conformance check:* `ADR-004`'s deferred obligations are now discharged; the
-ADR is annotated to say so in `EP-M6`. *Recovery:* additive.
+is confirmed to fire. *Acceptance:* `make proptest` passes; `MUT-DUPWITHIN`
+fails only the within-target arm; `MUT-CYCLEDEPTH` fails only the long-cycle
+class. *Conformance check:* `ADR-004`'s deferred obligations are now
+discharged; the ADR is annotated to say so in `EP-M6`. *Recovery:* additive.
 
 ### EP-M6 — the determinism contract and documentation
 
@@ -1175,18 +1177,40 @@ Integration test:
 
 Documentation and evidence:
 
+Mutation patches follow the existing house convention in
+`docs/verification/mutations/`: each file is named after the *test it
+falsifies*, with `__` standing in for the module separator, not after the
+mutation it applies. Note that
+`ir__from_manifest__verification__duplicate_output_always_rejected.patch`
+already exists in that directory from the 4.2.1 Kani work and flips `||` to
+`&&` in `find_duplicates`. The new duplicate-output patch below is deliberately
+more surgical, disabling only the within-one-target half, so that `OBL-DUP`'s
+three collision modes can be told apart. Both patches are retained.
+
 - `docs/adr-021-ninja-emission-determinism-contract.md`
-- `docs/verification/mutations/path-key-unsorted.patch`
-- `docs/verification/mutations/guard-after-sort.patch`
-- `docs/verification/mutations/edges-unsorted.patch`
-- `docs/verification/mutations/actions-unsorted.patch`
-- `docs/verification/mutations/edge-sort-by-first-output.patch`
-- `docs/verification/mutations/defaults-unsorted.patch`
-- `docs/verification/mutations/defaults-emitted-first.patch`
-- `docs/verification/mutations/action-hash-ignores-metadata.patch`
-- `docs/verification/mutations/action-id-includes-index.patch`
-- `docs/verification/mutations/find-duplicates-within-target.patch`
-- `docs/verification/mutations/cycle-detector-depth-limit.patch`
+
+Eleven mutation patches under `docs/verification/mutations/`. Each is referred
+to in this plan by a short handle; the filename follows the house convention of
+naming a patch after the test it falsifies, with `__` for the module separator.
+
+| Handle           | Filename (under `docs/verification/mutations/`)                                                   | Falsifies                  | Mutation                                                        |
+| ---------------- | ------------------------------------------------------------------------------------------------- | -------------------------- | --------------------------------------------------------------- |
+| `MUT-PATHKEY`    | `ninja_gen__determinism_property_tests__path_key_is_permutation_invariant.patch`                  | `OBL-PATHKEY`              | Delete `parts.sort_unstable()` in `path_key`.                   |
+| `MUT-GUARD`      | `ninja_gen__determinism_property_tests__validation_precedes_path_key_ordering.patch`              | `OBL-GUARD`                | Move `reject_unsupported_path_characters` after the edge sort.  |
+| `MUT-EDGESORT`   | `ninja_gen__determinism_property_tests__emission_is_insertion_order_invariant.patch`              | `OBL-ORDER`                | Delete `edges.sort_by_key` in both emission paths.              |
+| `MUT-ACTIONSORT` | `ninja_gen__determinism_property_tests__bundle_is_insertion_order_invariant.patch`                | `OBL-ORDER`                | Delete `actions.sort_by_key` in `write_action_rules`.           |
+| `MUT-FIRSTOUT`   | `ninja_gen__determinism_property_tests__emission_is_insertion_order_invariant_multi_output.patch` | `OBL-ORDER`                | Sort edges by first explicit output, making the key non-unique. |
+| `MUT-DEFSORT`    | `ninja_gen__determinism_property_tests__default_line_is_the_ascending_sort.patch`                 | `OBL-DEFAULT`, `OBL-E2E`   | Delete `defs.sort()` in both emission paths.                    |
+| `MUT-DEFPOS`     | `ninja_gen__determinism_property_tests__default_line_position.patch`                              | `OBL-DEFAULT`, `OBL-NINJA` | Emit the `default` block before edge rendering.                 |
+| `MUT-HASHMETA`   | `ir__action_hash_property_tests__action_hash_is_a_function_of_content.patch`                      | `OBL-ACTION`               | Make `ActionHasher::hash` skip the `pool` field.                |
+| `MUT-IDINDEX`    | `ninja_gen__determinism_property_tests__declaration_order_does_not_change_emission.patch`         | `OBL-E2E`                  | Append the declaration index to the interned action identifier. |
+| `MUT-DUPWITHIN`  | `ir__graph_property_tests__duplicate_outputs_are_rejected_at_larger_n.patch`                      | `OBL-DUP`                  | Disable only the within-one-target half of `find_duplicates`.   |
+| `MUT-CYCLEDEPTH` | `ir__graph_property_tests__cycles_are_rejected_at_larger_n.patch`                                 | `OBL-CYCLE`                | Cap the cycle detector's traversal depth at 4.                  |
+
+Commit the regression seed files these properties produce, under
+`proptest-regressions/` for the library-side properties and beside the test as
+`tests/ninja_determinism_oracle_tests.proptest-regressions` for the integration
+test.
 
 ### The shared graph strategy
 
@@ -1310,9 +1334,9 @@ case 500 and passes at 256 has found something.
 ### Applying and reverting a mutation patch
 
 ```bash
-git apply docs/verification/mutations/edges-unsorted.patch
+git apply MUT-EDGESORT
 make proptest 2>&1 | tee /tmp/mutation-edges-unsorted.out   # must FAIL
-git apply -R docs/verification/mutations/edges-unsorted.patch
+git apply -R MUT-EDGESORT
 git diff --quiet && echo "tree restored"
 ```
 
@@ -1373,7 +1397,7 @@ otherwise exist.
 
 1. Running `make proptest` on a clean tree passes and reports the property
    tests by name.
-2. Applying `docs/verification/mutations/edges-unsorted.patch` and running
+2. Applying `MUT-EDGESORT` and running
    `make proptest` fails, and the failure names
    `emission_is_insertion_order_invariant` and prints a shrunk pair of graphs
    small enough to read. Reverting the patch restores a passing run.
