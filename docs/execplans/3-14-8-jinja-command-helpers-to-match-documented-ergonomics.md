@@ -185,11 +185,13 @@ Consequently, POSIX `sh` quoting is correct for `RecipeShell::Posix` and
 
 ### The quoting that already exists
 
-There are three distinct quoting paths today. They are not interchangeable and
-`docs/developers-guide.md:445-458` already documents the distinction.
+There are **five** distinct encoders today, not three. Getting this inventory
+right matters, because the plan's central promise is that it adds none.
+`docs/developers-guide.md:445-458` documents only the last three.
 
-1. `src/ir/cmd_interpolate/substitution.rs::quote_path` (lines 132-151) quotes
-   `{{ ins }}` and `{{ outs }}` for the selected `RecipeShell`:
+1. `src/ir/cmd_interpolate/mod.rs::quote_path` (lines 137-150) quotes
+   `{{ ins }}` and `{{ outs }}` for the selected `RecipeShell` in an
+   **unquoted** recipe context:
 
    ```rust
    fn quote_path(path: &Utf8PathBuf, shell: RecipeShell) -> String {
@@ -202,15 +204,28 @@ There are three distinct quoting paths today. They are not interchangeable and
    }
    ```
 
-   This is the semantics the new template helpers need.
+   This is the semantics the new template helpers need, and **this one encoder
+   is the only one this plan extracts.**
 
-2. `src/stdlib/command/quote.rs::quote` is `#[cfg(windows)]`/
+2. `PathSubstitutions::new` (`src/ir/cmd_interpolate/mod.rs:81-103`) builds a
+   `single_quoted` variant by `path.replace('\'', "'\"'\"'")`, for a
+   placeholder appearing inside existing single quotes.
+
+3. `quote_double_quoted_path` (`src/ir/cmd_interpolate/mod.rs:154-163`)
+   backslash-escapes `\`, `"`, `$`, and `` ` `` for a placeholder inside
+   existing double quotes.
+
+   Encoders 2 and 3 are *context* encoders for the same POSIX shell. They are
+   out of scope: they solve a different problem (splicing into a surrounding
+   quote) from the one the template filters solve (producing a complete word).
+
+4. `src/stdlib/command/quote.rs::quote` is `#[cfg(windows)]`/
    `#[cfg(not(windows))]` and produces `cmd.exe` quoting on Windows. It
    supports the `shell` and `grep` template filters, which *spawn a process*
    through the platform shell at manifest-render time. It is not exposed to
    templates and must keep its `cmd.exe` behaviour.
 
-3. `shell_single_quote` in the Ninja command-list renderer produces a canonical
+5. `shell_single_quote` in the Ninja command-list renderer produces a canonical
    single-quoted `eval` payload. `docs/developers-guide.md:449-454` explicitly
    says to keep it local and not generalize it.
 
@@ -488,7 +503,7 @@ Stop and escalate — do not improvise — when any of these is reached.
   premise is false in the code as it stands. `UG-WIN` and
   `src/recipe_shell.rs:19-26` establish that the default Windows recipe
   interpreter is Windows PowerShell, and
-  `src/ir/cmd_interpolate/substitution.rs:132-151` already implements a second,
+  `src/ir/cmd_interpolate/mod.rs:137-150` already implements a second,
   non-`shell-quote` dialect for exactly that case. Shipping an `sh`-only filter
   would emit POSIX quoting into a PowerShell recipe, which is a silent
   injection-safety defect in the very helper whose stated purpose (`DD-4.5`) is
@@ -538,41 +553,19 @@ Stop and escalate — do not improvise — when any of these is reached.
 
 Be prescriptive. At the end of this work the following must exist.
 
-### `src/recipe_shell/` (module promoted from `src/recipe_shell.rs`)
+### `src/shell_word.rs` (new leaf)
 
-`src/recipe_shell/mod.rs` keeps the `RecipeShell` enum and `host_default`
-unchanged, and gains:
-
-```rust
-mod quoting;
-
-pub(crate) use quoting::quote_word;
-```
-
-`src/recipe_shell/quoting.rs`:
+The encoder does **not** go into `src/recipe_shell.rs`. That module's own doc
+comment calls it "intentionally below both IR lowering and Ninja rendering" and
+"data-only": it is the shared vocabulary type three layers agree on, and giving
+it a `shell_quote` dependency would change its character. Instead add a leaf
+that both `src/ir/` and `src/stdlib/` may depend on, and leave `recipe_shell`
+pure:
 
 ```rust
-/// Quote one string as a single word for `shell`, without validating it.
-///
-/// The caller owns the policy question of which inputs are quotable; this
-/// function only encodes. `quote_path` relies on that split so path quoting
-/// keeps its existing total behaviour.
-pub(crate) fn quote_word(shell: RecipeShell, value: &str) -> String;
-```
+//! Encode one string as a single shell word for a named dialect.
 
-The body is moved verbatim from
-`src/ir/cmd_interpolate/substitution.rs::quote_path`, generalized from
-`&Utf8PathBuf` to `&str`. `quote_path` becomes a one-line caller. The module
-doc comment on `src/recipe_shell/mod.rs` is updated from "data-only" to record
-that it now also owns the interpreter's word-quoting rule, and states that it
-must stay below IR lowering, Ninja rendering, and the standard library.
-
-### `src/stdlib/shell/` (new)
-
-`src/stdlib/shell/dialect.rs`:
-
-```rust
-/// The shell dialect a template helper quotes for.
+/// The shell dialect a word is encoded for.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ShellDialect {
     /// POSIX `sh` word quoting, also correct for Bash and Z Shell.
@@ -582,61 +575,75 @@ pub(crate) enum ShellDialect {
 }
 
 impl ShellDialect {
-    /// Names accepted by the `dialect` keyword argument, in error order.
-    pub(crate) const ACCEPTED: [&'static str; 2] = ["sh", "powershell"];
+    /// Every dialect, in the order errors enumerate them.
+    pub(crate) const ALL: &'static [Self] = &[Self::Sh, Self::PowerShell];
 
-    /// Select the dialect implied by an active recipe interpreter.
-    pub(crate) const fn for_recipe_shell(shell: RecipeShell) -> Self;
+    /// Return the `dialect` keyword-argument spelling of this dialect.
+    pub(crate) const fn as_str(self) -> &'static str;
 
     /// Parse one `dialect` keyword argument, case-insensitively.
+    ///
+    /// Deliberately rejects `bash`. See decision D3: `RecipeShell::Bash` maps
+    /// to `Sh` because `Sh` output is valid Bash, but the `shell-quote` crate's
+    /// `Bash` encoder emits a different `$'...'` form that Netsuke does not
+    /// compile in. Accepting the name now would lock in a meaning a real
+    /// `bash` dialect would have to break.
     pub(crate) fn parse(raw: &str) -> Option<Self>;
-
-    /// Map back to the recipe interpreter whose quoting rule this dialect is.
-    pub(crate) const fn recipe_shell(self) -> RecipeShell;
-}
-```
-
-`src/stdlib/shell/policy.rs`:
-
-```rust
-/// Why a value cannot be quoted for a shell recipe.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum QuotePolicyError {
-    /// The value contains NUL, carriage return, or line feed.
-    ContainsControlCharacter,
 }
 
-/// Quote one string for `dialect`, rejecting values a recipe cannot carry.
+/// Encode `value` as one shell word for `dialect`, without validating it.
 ///
-/// # Errors
-///
-/// Returns [`QuotePolicyError::ContainsControlCharacter`] when `value` contains
-/// `\0`, `\r`, or `\n`. A Ninja `command =` line is single-line by
-/// construction, so such a value could never survive lowering.
-pub(crate) fn quote_for_recipe(
-    dialect: ShellDialect,
-    value: &str,
-) -> Result<String, QuotePolicyError>;
-
-/// Quote each element of `values` and join them with one space.
-///
-/// # Errors
-///
-/// Propagates [`QuotePolicyError`] from any element.
-pub(crate) fn join_for_recipe<'a>(
-    dialect: ShellDialect,
-    values: impl IntoIterator<Item = &'a str>,
-) -> Result<String, QuotePolicyError>;
+/// This function is total: the caller owns the question of which inputs a
+/// recipe may carry. `quote_path` depends on that split to keep its existing
+/// total behaviour.
+pub(crate) fn quote_word(dialect: ShellDialect, value: &str) -> String;
 ```
 
-`quote_for_recipe` validates, then delegates to
-`crate::recipe_shell::quote_word`. This is the whole of the "no second quoting
-implementation" guarantee: `policy.rs` owns *whether*, `quoting.rs` owns *how*.
+`ALL`, `as_str`, and `parse` derive from one another, so adding a third dialect
+is a one-line enum change rather than an edit at every use site.
 
-`src/stdlib/shell/mod.rs`:
+`quote_word`'s body is moved verbatim from
+`src/ir/cmd_interpolate/mod.rs::quote_path`, generalized from `&Utf8PathBuf` to
+`&str`.
+
+### `src/recipe_shell.rs`
+
+Stays a single file and stays data-only. It gains exactly one method, so that
+the mapping lives with the type that knows about all three interpreters:
 
 ```rust
-/// Register the pure shell-text filters on an environment.
+/// Return the dialect whose quoting rules this interpreter follows.
+///
+/// `Posix` and `Bash` share `Sh`: they differ in transport, not in lexis.
+pub(crate) const fn dialect(self) -> ShellDialect;
+```
+
+There is deliberately **no** inverse. `RecipeShell -> ShellDialect` is a
+three-to-two surjection, so a `ShellDialect::recipe_shell` would have to pick
+one of `Posix`/`Bash` arbitrarily and its doc comment could not be truthful.
+`src/stdlib/` never names `RecipeShell`; every edge points downward into
+`shell_word`.
+
+### `src/stdlib/recipe_text/` (new)
+
+Not `src/stdlib/shell/`. `src/stdlib/command/` already registers a template
+filter literally named `shell` (`src/stdlib/command/mod.rs:81-111`) and already
+contains a `quote.rs`. A sibling `shell/` module holding `shell_quote` would
+invert the naming at both ends: a contributor grepping `stdlib/shell` for the
+`shell` filter would find text quoting, and grepping `stdlib/command` for
+`shell_quote` would find `cmd.exe` quoting. Name the module for what it
+produces.
+
+In the same milestone, rename `src/stdlib/command/quote.rs` to
+`child_argument.rs` and its `quote` function to `quote_child_argument`. Both are
+`pub(super)` with a single consumer (`format_command` in
+`src/stdlib/command/filters.rs:126-149`), so the rename is free and it removes
+the last bare `quote` in the subtree.
+
+`src/stdlib/recipe_text/mod.rs`:
+
+```rust
+/// Register the pure recipe-text filters on an environment.
 pub(crate) fn register_filters(env: &mut Environment<'_>, default: ShellDialect);
 ```
 
@@ -648,6 +655,70 @@ It registers exactly two filters:
 Both read `dialect` with `kwargs.get::<Option<String>>("dialect")?`, fall back
 to `default`, and finish with `kwargs.assert_all_used()?`, matching the
 ordering in `src/stdlib/which/mod.rs:82-92`.
+
+Both call the shared admissibility predicate before encoding — see the next
+subsection — and then `shell_word::quote_word`. `shell_join` joins the encoded
+words with one space.
+
+### Control characters: reuse, do not reimplement
+
+The first draft of this plan proposed a `policy.rs` owning a "rejects `\0`,
+`\r`, `\n`" rule. That rule already exists: `src/ninja_gen_escape.rs:43-48`:
+
+```rust
+/// Reject text that cannot remain within one Ninja binding.
+pub(super) fn validate_ninja_value(text: &str) -> Result<(), NinjaGenError> {
+    if text.contains(['\n', '\r', '\0']) {
+        return Err(NinjaGenError::UnsafeNinjaValue);
+    }
+    Ok(())
+}
+```
+
+`docs/adr-014-backend-text-escaping-seam.md` records it as the Ninja writer's
+own admissibility rule. Reimplementing it inside a template filter would put
+one predicate at three enforcement points, and they have **already** drifted:
+`src/stdlib/command/quote.rs:43` rejects `\n` and `\r` but not `\0`.
+
+Instead, promote the predicate to a shared leaf and call it from both places.
+Add to `src/shell_word.rs`:
+
+```rust
+/// Report whether `value` can survive as part of a single-line recipe.
+///
+/// Newline, carriage return, and NUL cannot: a Ninja binding is single-line by
+/// construction. This is the same rule the Ninja writer enforces at its own
+/// boundary; see ADR-014.
+pub(crate) fn is_recipe_admissible(value: &str) -> bool { !value.contains(['\n', '\r', '\0']) }
+```
+
+`validate_ninja_value` becomes a caller of it. The template filters call it and
+raise the localized `stdlib.shell.quote.control_character` diagnostic, so an
+author gets an error naming their expression rather than a backend-attributed
+one. `src/stdlib/command/quote.rs`'s narrower rule is left alone and its
+divergence documented, because a `cmd.exe` argument is not recipe text.
+
+This removes the `QuotePolicyError` type and one of the five message keys was
+already going to be needed for it, so the key count is unchanged.
+
+### Enforcing "exactly one implementation"
+
+Constraint 4 is currently prose. Make it a gate. `shell_quote::QuoteRefExt` is
+imported at exactly two sites today (`src/ir/cmd_interpolate/mod.rs:12` and
+`src/stdlib/command/quote.rs:6`), and `clippy.toml:15-24` already uses
+`disallowed-methods` with reason strings to enforce the ADR-008 environment
+mandate, with sanctioned sites carrying
+`#[expect(clippy::disallowed_methods, reason = "...")]` so the exemption warns
+once it becomes obsolete. Add one entry:
+
+```toml
+{ path = "shell_quote::QuoteRefExt::quoted", reason = "recipe-shell word quoting lives in shell_word::quote_word" },
+```
+
+with one `#[expect(...)]` in `src/shell_word.rs` and one in
+`src/stdlib/command/child_argument.rs`, whose divergence is deliberate. One
+line of configuration turns an aspiration into a check, using machinery the
+repository already trusts.
 
 ### `src/stdlib/collections.rs`
 
@@ -1477,12 +1548,12 @@ catalogue has the key; there is no partial state to clean up.
 ## Surprises & discoveries
 
 - Observation: Netsuke runs Windows recipes under Windows PowerShell, not
-  `cmd.exe`, and `src/ir/cmd_interpolate/substitution.rs` already implements a
-  second quoting dialect for it. Evidence: `src/recipe_shell.rs:19-26`,
+  `cmd.exe`, and `src/ir/cmd_interpolate/mod.rs` already implements a second
+  quoting dialect for it. Evidence: `src/recipe_shell.rs:19-26`,
   `src/ninja_gen_recipe_shell.rs:16-17`, `docs/users-guide.md:330-348`,
-  `src/ir/cmd_interpolate/substitution.rs:132-151`. Impact: invalidates
-  `RFC-0006-8.9`'s premise that `sh` is the only dialect Netsuke can quote for;
-  drives D2 and the extra EP-M5 milestone.
+  `src/ir/cmd_interpolate/mod.rs:137-150`. Impact: invalidates `RFC-0006-8.9`'s
+  premise that `sh` is the only dialect Netsuke can quote for; drives D2 and
+  the extra EP-M5 milestone.
 - Observation: `src/stdlib/command/quote.rs` produces `cmd.exe` quoting on
   Windows, but it is never exposed to templates — it supports the `shell` and
   `grep` filters, which spawn a process through the platform shell. Evidence:
