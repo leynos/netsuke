@@ -61,7 +61,18 @@ DEV_FAST_TOOLCHAIN = $$(awk -F'"' '/^[[:space:]]*channel[[:space:]]*=/ { print $
 MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
 NIXIE ?= nixie
 YAMLLINT ?= yamllint
-ACTIONLINT ?= actionlint
+# `go install` writes to `$GOBIN` when set, otherwise `$GOPATH/bin`, otherwise
+# `$HOME/go/bin`. That directory is absent from a minimal caller PATH, so name
+# it once here and curate it on PATH below, next to the other user tool
+# directories.
+GO_BIN ?= $(if $(GOBIN),$(GOBIN),$(if $(GOPATH),$(GOPATH)/bin,$(HOME)/go/bin))
+# Exported so the ACTIONLINT fallback below can name the directory from the
+# recipe shell rather than interpolating a path into the command line.
+export GO_BIN
+# Resolve actionlint the way CARGO is resolved above. A bare `actionlint` would
+# depend entirely on the caller's PATH and report a missing binary as exit 127
+# with no hint of where it looked; the fallback names the Go tool directory.
+ACTIONLINT ?= $(shell command -v actionlint 2>/dev/null || printf '%s' "$$GO_BIN/actionlint")
 # Single source of truth for the typos version; the markdownlint target and CI
 # both consume it, so the Makefile and CI cannot drift apart.
 TYPOS_VERSION ?= 1.48.0
@@ -141,7 +152,10 @@ VERUS_FLAGS ?=
 VERUS_INSTALL_FLAGS ?=
 WHITAKER ?= whitaker
 
-export PATH := $(HOME)/.cargo/bin:$(HOME)/.local/bin:$(HOME)/.bun/bin:$(PATH)
+# GO_BIN is appended after the three fixed directories so a tool present in
+# more than one location keeps its current precedence; CI's explicit
+# `ACTIONLINT=` override still wins over all of them.
+export PATH := $(HOME)/.cargo/bin:$(HOME)/.local/bin:$(HOME)/.bun/bin:$(GO_BIN):$(PATH)
 
 build: target/debug/$(APP) ## Build debug binary
 release: target/release/$(APP) ## Build release binary
