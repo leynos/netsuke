@@ -1542,10 +1542,21 @@ Install the pinned YAML linter locally with
 installs that exact version. Run the workflow checks with
 `make github-actions-lint` after installing both linters.
 
+The Makefile resolves `actionlint` from the `PATH` it curates for its recipes,
+which includes the Go tool directory: `$GOBIN` when set, otherwise
+`$GOPATH/bin`, otherwise `$HOME/go/bin`. A binary installed with `go install`
+therefore needs no further setup, and the same curated `PATH` carries
+`~/.cargo/bin`, `~/.local/bin`, and `~/.bun/bin` regardless of the calling
+shell. Override `GO_BIN` to name a different directory, or pass
+`ACTIONLINT=/path/to/actionlint` to use a binary elsewhere; CI does exactly
+that with its checked-out copy.
+
 The following shell commands reproduce CI's actionlint v1.7.12 setup. They
 download the installer at its pinned commit and the Linux `x86_64` release
 archive, verify the archive's SHA-256, and feed that verified archive to the
-installer so it cannot download a different artefact:
+installer so it cannot download a different artefact. The installer writes
+`actionlint` into the current directory, and the final command hands that copy
+to the Makefile through `ACTIONLINT`, as CI does:
 
 ```bash
 ACTIONLINT_VERSION='1.7.12'
@@ -1575,7 +1586,7 @@ curl() {
 }
 export -f curl
 bash "${ACTIONLINT_INSTALLER_PATH}" "${ACTIONLINT_VERSION}"
-make github-actions-lint
+ACTIONLINT="$PWD/actionlint" make github-actions-lint
 ```
 
 [`tests/workflow_contracts/github_actions_validation_test.py`][github-actions-validation-test]
