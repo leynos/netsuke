@@ -466,7 +466,7 @@ Stop and escalate — do not improvise — when any of these is reached.
 ## Risks
 
 - **R1 — Translation burden.** Eleven new message keys across 35 catalogues is
-  roughly 385 hand-written lines, and `build.rs` fails the build for any
+  roughly 385 handwritten lines, and `build.rs` fails the build for any
   omission. Severity: medium. Likelihood: high. Mitigation: add every key and
   every catalogue entry in one commit per milestone that introduces them; follow
   `docs/localization-styleguide.md` and `docs/translators-guide.md` §5 for
@@ -777,7 +777,7 @@ other six channels, which today have nothing.
   the encoding composes correctly with ADR-014's `$`-doubling at the Ninja
   writer boundary.
 - For `dialect='powershell'` on a non-Windows host, one class weaker: the
-  guarantee rests on a hand-written inverse model until the Windows job runs.
+  guarantee rests on a handwritten inverse model until the Windows job runs.
   ADR-021 must say so in those words.
 - **It is opt-in and silent when omitted.** Nothing detects
   `command: cc {{ glob(...) | join(' ') }}` and warns. A control that works
@@ -1260,7 +1260,7 @@ not omissions.
   `prop_assume!`-free design plus an explicit assertion that, across a fixed
   seeded run, at least one generated case contained a single quote, at least
   one contained a dollar sign, and at least one contained a space — asserted by
-  a companion deterministic test over a hand-written witness table so the
+  a companion deterministic test over a handwritten witness table so the
   property cannot pass vacuously on an all-alphanumeric sample. **Negative
   control**: a sibling `#[test]` applies a deliberately broken quoter (wrap in
   `"` only) to the witness `$HOME 'x'` through the same subprocess harness and
