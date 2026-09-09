@@ -215,6 +215,12 @@ directive anywhere.
     Python 3.14
     baseline it enforces. `make github-actions-lint` validates GitHub Actions
     workflows with yamllint and actionlint alone; `make lint` includes it.
+    The Makefile curates `$HOME/.cargo/bin`, `$HOME/.local/bin`,
+    `$HOME/.bun/bin`, and the Go tool directory onto `PATH` for its recipes,
+    so a binary installed with `go install` is found even when your own
+    `PATH` omits it. The Go tool directory is `$GOBIN` when set, otherwise
+    `$GOPATH/bin`, otherwise `$HOME/go/bin`; override `GO_BIN` to point at a
+    different directory.
   - `make test` executes:
 
     ```sh
