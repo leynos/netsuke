@@ -684,11 +684,10 @@ pub(crate) const fn recipe_shell(&self) -> RecipeShell;
 
 `StdlibConfig::new` initializes it to `RecipeShell::host_default()`.
 
-`RecipeShell` must become `pub` (it is currently a `pub enum` in a private
-module path; confirm and expose it from the crate root as
-`netsuke::recipe_shell::RecipeShell` so `with_recipe_shell` is callable). If
-that requires widening more than the enum itself, stop and escalate under
-tolerance 2.
+`RecipeShell` is already publicly nameable — `src/lib.rs:27` declares
+`pub mod recipe_shell;` and the enum is `pub` — so `with_recipe_shell` needs no
+visibility widening. `RecipeShell::host_default` stays `pub(crate)`, which is
+sufficient because `StdlibConfig::new` is in-crate.
 
 ### `src/stdlib/register.rs`
 
@@ -1236,8 +1235,9 @@ callers (see constraint 7).
      to `docs/stdlib-yaml-and-jinja-guide.md`. Cross-reference
      `docs/users-guide.md:330-348` so a Windows reader understands why the
      default differs.
-  6. `docs/users-guide.md:773-775`: replace "Beta3 does not accept a default
-     argument" with the shipped `env(name, default=…)` contract.
+  6. `docs/users-guide.md:774-775`: replace the sentence beginning "Beta3 does
+     not accept a default argument" with the shipped `env(name, default=…)`
+     contract, including the empty-string and non-UTF-8 rules.
   7. `docs/stdlib-yaml-and-jinja-guide.md`: add `compact` to "Transform
      collections"; add a new "Build shell recipe text" section documenting
      `shell_quote` and `shell_join` with their dialect rules and purity; update
