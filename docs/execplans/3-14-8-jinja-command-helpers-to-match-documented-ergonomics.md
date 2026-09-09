@@ -1200,20 +1200,20 @@ a real shell while the policy obligation stays a cheap total function.
 
 ### Non-trivial axioms
 
-- **AX-1**: `shell_quote::Sh` emits text that a POSIX `sh` decodes back to the
-  input byte string. This is a third-party contract; it is *exercised*, not
+- **AXIOM-1**: `shell_quote::Sh` emits text that a POSIX `sh` decodes back to
+  the input byte string. This is a third-party contract; it is *exercised*, not
   proven, by OBL-SH-ROUNDTRIP running a real `/bin/sh`.
-- **AX-2**: Windows PowerShell decodes a single-quoted string by collapsing each
-  `''` to `'` and treating every other character literally. Exercised against
-  real `powershell.exe` only on Windows hosts; discharged against an explicit
-  inverse model elsewhere. Residual gap recorded below.
-- **AX-3**: `shlex::split` implements POSIX word splitting faithfully enough to
-  serve as an oracle for "this text is exactly one word".
+- **AXIOM-2**: Windows PowerShell decodes a single-quoted string by collapsing
+  each `''` to `'` and treating every other character literally. Exercised
+  against real `powershell.exe` only on Windows hosts; discharged against an
+  explicit inverse model elsewhere. Residual gap recorded below.
+- **AXIOM-3**: `shlex::split` implements POSIX word splitting faithfully enough
+  to serve as an oracle for "this text is exactly one word".
   `docs/formal-verification-methods-in-netsuke.md:277` records that whether
   `shlex::split` is part of the semantic acceptance contract or only a guard is
   an open question; this plan uses it only as a *test oracle*, alongside the
   real-shell round trip, never as the sole evidence.
-- **AX-4 (corrected)**: MiniJinja's `Kwargs::get::<Option<Value>>` yields
+- **AXIOM-4 (corrected)**: MiniJinja's `Kwargs::get::<Option<Value>>` yields
   `None` for an absent key and a `Value` otherwise, distinguishing an explicit
   `none` and an explicit undefined by `Value::is_none`/`is_undefined`;
   `assert_all_used` rejects unconsumed *keyword* arguments with a message
@@ -1223,8 +1223,8 @@ a real shell while the policy obligation stays a cheap total function.
   `Option<String>` raises on a type mismatch; it does not, it stringifies (D4).
   All three behaviours are exercised: the unknown-keyword case, the
   non-string-`default` case, and the positional case.
-- **AX-5**: A Ninja `command =` value is single-line, so rejecting `\r` and `\n`
-  loses no expressible manifest.
+- **AXIOM-5**: A Ninja `command =` value is single-line, so rejecting `\r` and
+  `\n` loses no expressible manifest.
 
 Verus is not used: `docs/roadmap.md:428-433` records the accepted phase-1
 boundary that Verus is "optional and proof-kernel-only". Kani is not used
@@ -1274,8 +1274,8 @@ not omissions.
 - Method: property test against an explicit inverse model, plus a
   `#[cfg(windows)]` real-`powershell.exe` round trip of the same shape.
 - Rationale: CI for this repository runs Linux and Windows. On Linux the model
-  is the only available oracle; on Windows the real interpreter discharges AX-2
-  directly.
+  is the only available oracle; on Windows the real interpreter discharges
+  AXIOM-2 directly.
 - Domain: the same string strategy as OBL-SH-ROUNDTRIP.
 - Artefact: `tests/shell_filter_property_tests.rs`.
 - Evidence: the Linux run proves model conformance; the Windows CI job proves
@@ -1284,7 +1284,7 @@ not omissions.
   collapse `''`), never by calling the encoder. A negative control feeds the
   decoder a string quoted with the POSIX encoder and asserts it does **not**
   round-trip.
-- Residual gap: on a non-Windows host, AX-2 rests on the model. Stated here
+- Residual gap: on a non-Windows host, AXIOM-2 rests on the model. Stated here
   rather than hidden.
 
 **OBL-ONE-WORD** — a quoted value is exactly one shell word.
@@ -1669,7 +1669,7 @@ callers (see constraint 7).
   exactly that module name and member set; see R9.
 - Red: add the `OBL-ENV-DEFAULT` cases to `tests/manifest_env_tests.rs` and the
   unit cases to `src/manifest/tests/env_function.rs`, plus the non-string and
-  undefined `default` cases from D4 and the positional case from AX-4. Run
+  undefined `default` cases from D4 and the positional case from AXIOM-4. Run
   `cargo nextest run --test manifest_env_tests` and observe failures citing an
   unexpected keyword argument.
 - Green: rename `env_var_with` to `env_var_with_default` with the `fallback`
@@ -1981,8 +1981,8 @@ Quality criteria — what "done" means:
   OBL-JOIN-SPLIT, OBL-COMPACT, OBL-ENV-DEFAULT, OBL-DIALECT-TOTAL,
   OBL-NINJA-STABLE, OBL-NO-ESCAPE, and OBL-QUERY-SURFACE are each discharged,
   with their negative controls observed failing at least once and recorded in
-  `Artefacts and notes`. AX-2's residual gap on non-Windows hosts is stated in
-  ADR-021.
+  `Artefacts and notes`. AXIOM-2's residual gap on non-Windows hosts is stated
+  in ADR-021.
 - **Lint and typecheck**: `make check-fmt`, `make typecheck`, `make lint`, and
   `make doc-coverage` all exit zero. `make markdownlint` and `make nixie` pass.
 - **Performance**: no benchmark threshold applies.
@@ -2082,7 +2082,7 @@ catalogue has the key; there is no partial state to clean up.
       requester.
 - [x] (2026-09-08) ExecPlan drafted.
 - [x] (2026-09-09) Six-lens community-of-experts review completed and applied.
-      Falsified three MiniJinja assumptions (D4, D8, AX-4), corrected the
+      Falsified three MiniJinja assumptions (D4, D8, AXIOM-4), corrected the
       `quote_path` citation, restated the encoder inventory as five, redrew
       three module boundaries, fixed the acceptance transcript's
       double-quoted-context defect, added the threat model, and fused the
@@ -2210,7 +2210,7 @@ To be filled during implementation. Required entries:
   falsified by direct experiment and are now corrected:
   `Kwargs::get::<Option<String>>` stringifies rather than raising (D4),
   `Value::try_iter()` accepts maps, strings, and `none` (D8), and a positional
-  argument yields a detail-free `TooManyArguments` (AX-4). The `quote_path`
+  argument yields a detail-free `TooManyArguments` (AXIOM-4). The `quote_path`
   citation pointed at the wrong file. The encoder inventory said three where
   there are five. The acceptance transcript placed the interpolation inside
   double quotes, where the quoting corrupts the value rather than protecting it
