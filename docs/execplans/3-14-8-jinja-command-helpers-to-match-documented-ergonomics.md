@@ -953,6 +953,29 @@ predicate.
   quote, observe at least one snapshot fail, then revert. Record the failing
   snapshot name in `Artefacts and notes`.
 
+**OBL-NO-ESCAPE** — quoted output survives template rendering verbatim.
+
+- Obligation: rendering `{{ value | shell_quote(dialect='sh') }}` through the
+  manifest path emits the quoter's bytes unchanged, with no HTML or XML
+  escaping applied, for values containing `&`, `<`, `>`, `"`, and `'`.
+- Method: parameterized `rstest` rendering through the real manifest loader,
+  asserting byte equality against the quoter's direct output.
+- Rationale: `src/stdlib/register.rs::register_legacy_boolean_formatter`
+  installs a formatter that delegates to `escape_formatter`, which honours the
+  environment's auto-escape setting. MiniJinja's default auto-escape callback
+  keys off the template name's extension, and
+  `src/manifest/jinja_macros/invocation.rs:63` shows the codebase already
+  branches on `AutoEscape::None`. Nothing in the plan guarantees the manifest
+  path is never auto-escaping, and an escaped `&amp;` inside a recipe would be
+  a silent corruption of the very output this feature exists to protect.
+- Domain: the five HTML-significant characters, plus one witness combining
+  them.
+- Artefact: `tests/shell_filter_property_tests.rs`.
+- Non-vacuity: the assertion compares against `quote_for_recipe`'s own output,
+  so it fails if either side changes. Negative control: construct an
+  environment with auto-escaping forced on and assert the same template *does*
+  differ, proving the test can detect escaping at all.
+
 **OBL-QUERY-SURFACE** — the manifest-query surface stays coherent.
 
 - Obligation: under `register_manifest_query`, `compact`, `shell_quote`, and
@@ -991,12 +1014,12 @@ rather than creating a new one.
   Scenario: shell_quote makes a metacharacter-bearing value one sh word
     Given a stdlib workspace
     When I render the stdlib template "{{ \"a b '$HOME'\" | shell_quote(dialect='sh') }}" without context
-    Then the stdlib output equals "'a b '\\''$HOME'\\'''"
+    Then the stdlib output equals "a' b '\\''$HOME'\\'"
 
   Scenario: shell_join quotes each element separately
     Given a stdlib workspace
     When I render the stdlib template "{{ ['-C', 'target-cpu=native', 'a b'] | shell_join(dialect='sh') }}" without context
-    Then the stdlib output equals "-C target-cpu=native 'a b'"
+    Then the stdlib output equals "-C target-cpu'=native' a' b'"
 
   Scenario: shell_quote rejects an unknown dialect and names the accepted set
     Given a stdlib workspace
@@ -1009,11 +1032,21 @@ rather than creating a new one.
     Then the stdlib error contains "line feed"
 ```
 
-The expected `sh` output strings above are the `shell-quote` crate's
-*fragmented* form (`foo' bar'` rather than `'foo bar'`); confirm each against a
-scratch run before committing the feature file, and correct the feature to
-whatever the crate actually emits. Do not adjust the implementation to match a
-guessed string.
+The expected `sh` strings above are **verified**, not guessed. They are the
+`shell-quote` crate's *fragmented* form, derived from `escape_chars` and
+`Char::from` in `shell-quote-0.7.2/src/{sh,ascii}.rs` and confirmed by running
+the quoted text through a real `/bin/sh`. Two consequences are
+counter-intuitive and must not be "corrected" during implementation:
+
+1. Quoting opens and closes around runs, so `a b` becomes `a' b'`, not
+   `'a b'`. Alphanumerics, comma, full stop, solidus, underscore, and hyphen
+   are the only characters the crate treats as inert.
+2. The equals sign is **not** inert, so `target-cpu=native` becomes
+   `target-cpu'=native'`. This is correct but surprising in flag-heavy output.
+
+If an observed value differs from the above, the crate version has changed;
+record that in `Surprises & discoveries` and re-derive, rather than adjusting
+the implementation to match a guess.
 
 ## Plan of work
 
@@ -1348,8 +1381,8 @@ Quality criteria — what "done" means:
   `tests/documentation_examples_tests.rs` passes with the new example id.
 - **Verification**: OBL-SH-ROUNDTRIP, OBL-PS-ROUNDTRIP, OBL-ONE-WORD,
   OBL-JOIN-SPLIT, OBL-COMPACT, OBL-ENV-DEFAULT, OBL-DIALECT-TOTAL,
-  OBL-NINJA-STABLE, and OBL-QUERY-SURFACE are each discharged, with their
-  negative controls observed failing at least once and recorded in
+  OBL-NINJA-STABLE, OBL-NO-ESCAPE, and OBL-QUERY-SURFACE are each discharged,
+  with their negative controls observed failing at least once and recorded in
   `Artefacts and notes`. AX-2's residual gap on non-Windows hosts is stated in
   ADR-021.
 - **Lint and typecheck**: `make check-fmt`, `make typecheck`, `make lint`, and
@@ -1383,17 +1416,32 @@ netsuke --progress never generate --output build.ninja
 grep RUSTFLAGS build.ninja
 ```
 
-Expect, with `RUSTFLAGS` unset:
+Expect, with `RUSTFLAGS` unset, the recipe to carry `-D warnings` as exactly
+one shell word in the crate's fragmented form:
 
 ```plaintext
-  command = printf '%s\n' "RUSTFLAGS=-D' 'warnings" > stamp.txt
+  command = printf '%s\n' "RUSTFLAGS=-D' warnings'" > stamp.txt
 ```
 
-and with `RUSTFLAGS='-C target-cpu=native'` exported, a single quoted word
-containing both the base flags and the override, with no `${...:+...}`
-expansion anywhere. Confirm the exact quoted spelling against the `shell-quote`
-crate's fragmented output rather than against this transcript; update this
-section with the real transcript once observed.
+With `RUSTFLAGS='-C target-cpu=native'` exported, expect the two flag groups
+joined by one space and quoted as a single word:
+
+```plaintext
+  command = printf '%s\n' "RUSTFLAGS=-D' warnings -C target-cpu'=native''" > stamp.txt
+```
+
+In both cases there must be no `${...:+...}` expansion anywhere, and no empty
+argument when `RUSTFLAGS` is unset. Confirm the word count directly rather than
+by eye:
+
+```sh
+sh -c "set -- -D' warnings -C target-cpu'=native''; echo \$#"
+# 1
+```
+
+These expectations were derived from `shell-quote-0.7.2` and checked against a
+real `/bin/sh`; see the note under the behavioural specification for the two
+counter-intuitive rules that produce them.
 
 ## Idempotence and recovery
 
@@ -1453,6 +1501,17 @@ catalogue has the key; there is no partial state to clean up.
   hand. Evidence: `src/stdlib/register.rs:173-176`; no enumeration test found.
   Impact: drives R8 and OBL-QUERY-SURFACE. A general parity test is worth a
   future roadmap item but is out of scope here.
+- Observation: `shell-quote`'s `Sh` encoder emits *fragmented* quoting, and it
+  does not treat the equals sign as inert. `a b` becomes `a' b'`, and
+  `target-cpu=native` becomes `target-cpu'=native'`. Evidence: `escape_chars`
+  and `Char::from` in `shell-quote-0.7.2/src/sh.rs` and `src/ascii.rs`; the
+  inert set is exactly alphanumerics plus comma, full stop, solidus,
+  underscore, and hyphen. Both forms were round-tripped through a real
+  `/bin/sh`, and `set -- -C target-cpu'=native' a' b'; echo $#` reports `3`.
+  Impact: every expected string in the behavioural specification and the
+  acceptance transcript is fixed by this, not by taste. A reviewer who "tidies"
+  `a' b'` into `'a b'` is changing the crate's output, not the plan's.
+
 - Observation: fenced examples in `README.md`, `docs/users-guide.md`, and
   `docs/stdlib-yaml-and-jinja-guide.md` are executed, and their identifiers are
   pinned by a hand-maintained registry. Evidence:
