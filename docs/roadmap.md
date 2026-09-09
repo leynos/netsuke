@@ -4,12 +4,15 @@ This roadmap tracks unfinished and future Netsuke work. Completed historical
 foundations live in
 [`docs/archive/roadmap-completed-foundations.md`](archive/roadmap-completed-foundations.md)
 so the active roadmap can focus on remaining hypotheses without erasing prior
-implementation detail.
+implementation detail. The [composition roadmap](roadmap-composition.md)
+continues this document with phases 16 to 19 for includes and bundles.
 
-Task identifiers are globally unique across the active roadmap and the archive.
-When a completed task moves to the archive, it keeps its original number and is
-not repeated here. When a historical task is renamed under the command-line
-interface (CLI) redesign, the active task states the mapping explicitly.
+Task identifiers are globally unique across this document, the composition
+roadmap, and the archive. When a completed task moves to the archive, it keeps
+its original number and is not repeated here. When a historical task is renamed
+under the command-line interface (CLI) redesign, the active task states the
+mapping explicitly. Phase numbers identify work; explicit dependencies, not
+numerical order, determine what must complete first.
 
 ## How to read this roadmap
 
@@ -39,6 +42,18 @@ Each phase validates a product hypothesis:
 - Phase 11 validates that structured commands can select a required shell
   dialect without granting Netsukefiles arbitrary interpreter authority or
   weakening Netsuke-managed process boundaries.
+- Phase 12 validates that argv-safe structured commands work through ordinary
+  builds and persistent generated manifests without changing legacy recipes.
+- Phase 13 validates that explicit streams and pipelines preserve bytes,
+  reject destructive file races, and clean up every owned process and relay.
+- Phase 14 validates that runtime discovery and private workspaces remain
+  bounded, action-local, and incapable of forging directory authority.
+- Phase 15 evaluates deferred extensions only after the structured-command
+  contract has demonstrated its value in real builds.
+- Phase 16 validates graph-preserving, deterministic local includes.
+- Phase 17 validates reusable local bundles with private interfaces and locks.
+- Phase 18 validates explicit external acquisition and cache-only builds.
+- Phase 19 evaluates composition and provenance extensions from canary evidence.
 
 Each phase carries one hypothesis, and Phase 6 is the capability track for
 template standard-library work. Phases 3 to 5 predate that separation: each
@@ -46,8 +61,11 @@ mixes capability delivery with verification and consistency work under a single
 hypothesis, and they are not being re-partitioned. New template
 standard-library work belongs in Phase 6, while repository and release
 hardening belong in Phases 8 and 9, property-based test work belongs in Phase
-10, and structured-command shell selection belongs in Phase 11, rather than
-being appended to whichever phase happens to be open.
+10, and structured-command shell selection belongs in Phase 11. Phases 12 to
+14 own the remaining RFC 0001 implementation; Phase 15 keeps its deferred
+extensions separate from the initial delivery contract. Phases 16 to 19 live
+in the [composition roadmap](roadmap-composition.md), with local includes
+before local bundles and external acquisition only after both local layers.
 
 The roadmap keeps user-facing product grammar separate from implementation
 detail. Public tasks name Netsuke capabilities first. Implementation adapters,
@@ -101,6 +119,12 @@ roadmap. Examples must use this list unless a task explicitly extends it.
   `--emoji auto|always|never`, `--progress auto|always|never`, and
   `--accessibility auto|on|off`.
 
+Tasks 17.1.1 and 18.1.1 in the composition roadmap explicitly extend this
+vocabulary before bundle CLI implementation. RFC 0003's conceptual `inspect`
+spelling must reconcile with `get`; RFC 0004 reserves `bundle fetch` as the
+sole external acquisition command and requires explicit `--update-lock` for
+lock mutation. These planned commands are not claims of shipped support.
+
 ## Historical task traceability
 
 The following previous roadmap tasks were assessed during the CLI-roadmap
@@ -108,8 +132,13 @@ rewrite:
 
 - `1.1.1` to `1.3.3`, `2.1.1` to `2.3.2`, and completed `3.x` foundation
   tasks through `3.13.2` moved to the archive as completed foundations.
-- `3.4.5`, `3.4.6`, `3.8.3`, `3.11.4`, `3.12.3`, `3.13.3`, `3.14.1`, and
-  `3.14.3` to `3.14.11` remain active under their existing numbers.
+- `3.4.5`, `3.4.6`, `3.8.3`, `3.11.4`, `3.12.3`, `3.13.3`, `3.14.1`,
+  `3.14.3` to `3.14.9`, and `3.14.11` retain their existing numbers.
+- `3.14.10` is superseded, not completed: RFC 0001 structured commands replace
+  the planned `exec.program`/`exec.args` surface. Phase 12 owns that delivery,
+  and the old identifier remains reserved. Rich environment operations in
+  `3.14.9` are separately deferred behind `15.1.1`, not a prerequisite for
+  RFC 0001's exact per-block overlays.
 - `3.14.2` was completed after restoring coverage for top-level action
   expansion and complementary `command_available(...)` branches.
 - `3.14.4` is complete; `command_available(...)` now has the documented
@@ -127,6 +156,38 @@ rewrite:
   reuses no historical numbers.
 - Git change-detection helper work follows the shared Phase 6 contract in
   [the helper design](git-change-detection-helpers-design.md).
+
+## Execution and composition RFC coverage
+
+The following mapping identifies one implementation owner for each contract;
+shared integration work does not duplicate those implementations.
+
+- [RFC 0001](rfcs/0001-structured-command-blocks.md): phases 12 to 14,
+  with deferred execution extensions in phase 15.
+- [RFC 0002](rfcs/0002-repository-relative-includes.md): phase 16 in the
+  [composition roadmap](roadmap-composition.md).
+- [RFC 0003](rfcs/0003-versioned-local-bundles.md): phase 17, including
+  canonical runtime-resource coverage, private exports, parameters, and locks.
+- [RFC 0004](rfcs/0004-digest-pinned-external-bundles.md): phase 18 after
+  local include and bundle acceptance; deferred provenance policy in phase 19.
+- [RFC 0009](rfcs/0009-structured-command-working-directories.md): 12.1.1
+  reconciles path contracts, 12.2.3 implements literal directories, 13.3.1
+  covers independent stage directories, and 17.4.4 covers fragment and bundle
+  provenance without changing the importing-workspace anchor.
+- [RFC 0010](rfcs/0010-runtime-bindings-and-secure-tempdirs.md): step 13.2
+  owns stderr pipelines, steps 14.1 and 14.2 own runtime bindings and secure
+  directories, and 14.3.1 plus 17.4.4 cover execution and composition matrices.
+- [RFC 0011](rfcs/0011-allow-listed-structured-command-shells.md): phase 11
+  owns registry primitives and resolved-shell integration. Task 11.3.1 needs
+  the codec and basic runner, not completed runtime bindings; 11.3.2 waits for
+  the full pipeline and directory facilities it exercises. Task 12.1.1 must
+  reconcile RFC 0011 §6.2 and ADR-019 with the other stream-path contracts.
+
+Task 17.4.4 joins the local-composition and structured-execution tracks for the
+combined migration canaries in issue `#598`. Local delivery through 16.3.3 and
+17.4.3 does not depend on that join, and neither local delivery nor 14.3.3
+requires external acquisition. These tasks cover the execution and composition
+parts of issue `#593`, not its unrelated OrthoConfig or Git-changeset work.
 
 ## 3. Friendly polish and agent-consistent CLI foundations
 
@@ -294,7 +355,7 @@ and agents.
     `shell_escape`, `shell_join`, and `compact` helpers are not yet
     implemented.
 - [ ] 3.14.9. Add structured recipe environment mappings.
-  Requires 3.14.7 and 3.14.8. See
+  Requires 3.14.7, 3.14.8, and the follow-on design decision in 15.1.1. See
   [netsuke-design.md §2.6](netsuke-design.md#26-planned-recipe-ergonomics-and-execution-feedback).
   - [ ] Parse rule, target, and action `env` mappings with `value`, `default`,
     `prepend`, `append`, and `unset` operations.
@@ -303,16 +364,14 @@ and agents.
   - [ ] Emit backend-specific environment setup without exposing Ninja variable
     syntax in the manifest contract.
   - [ ] Test platform path-list separators for `prepend` and `append`.
-- [ ] 3.14.10. Add structured `exec` recipes for argv-safe commands.
-  Requires 3.14.8 and 3.14.9. See
-  [netsuke-design.md §2.6](netsuke-design.md#26-planned-recipe-ergonomics-and-execution-feedback).
-  - [ ] Extend the recipe union with `exec.program` and `exec.args`.
-  - [ ] Reject manifests that combine `exec` with `rule`, `command`, or
-    `script`.
-  - [ ] Preserve list-valued argument expressions without accidental shell word
-    splitting.
-  - [ ] Add Ninja output and execution tests for arguments containing spaces,
-    shell metacharacters, and empty optional values.
+  - Note: this enclosing, object-valued surface is deferred by RFC 0001 §11.4.
+    It does not block the exact command-block overlay delivered by 12.2.2.
+
+Historical task `3.14.10` proposed `exec.program` and `exec.args`. RFC 0001
+supersedes that surface with structured `command` blocks; tasks 12.1.2 to
+12.3.4 carry its schema, argv, execution, and documentation requirements.
+The identifier remains reserved, not checked off as implemented.
+
 - [ ] 3.14.11. Surface selected conditional actions without recipe `echo`.
   Requires 3.14.2 and 3.14.4. See
   [netsuke-design.md §2.6](netsuke-design.md#26-planned-recipe-ergonomics-and-execution-feedback).
@@ -862,7 +921,7 @@ toolchain configuration problem the template layer can own. See RFC 0006 §8.2.
   6.1.2 and 6.1.4.
   - See RFC 0006 §8.2.
   - Support `recursive` and the `replace`, `keep`, `append`, and `prepend`
-    list policies, enumerating the valid values on an unknown one.
+    list policies, enumerating them on an unknown one.
   - Preserve first-appearance key order, updating an overridden key in place.
   - Add a regression test for the recursive non-associativity counterexample
     in RFC 0006 §8.2: with `a = {'x': {'a': 1}}`, `b = {'x': 0}`, and
@@ -887,7 +946,7 @@ toolchain configuration problem the template layer can own. See RFC 0006 §8.2.
   - See RFC 0006 §8.2.
   - Keep the key as the filter subject so the filter composes with `map`.
   - Reject negative sequence indices, and treat traversal into a
-    non-container as an error even when `default` is supplied.
+    non-container as an error even when `default` is given.
   - Success: a missing key errors naming the failing step of the path unless
     `default` is given; the filter never yields undefined.
 - [ ] 6.3.4. Add `subelements` and `rekey_on_member`. Requires 6.3.3.
@@ -1026,7 +1085,7 @@ surface. See RFC 0006 §8.6.
     reject differing drives or UNC roots under the `windows` dialect.
   - Contrast `relpath` with the stricter existing `relative_to` in the guide.
 - [ ] 6.6.4. Add the `abs` test as a pure lexical predicate. Requires 6.6.1.
-  - See RFC 0006 §§8.7 and 11.4.
+  - See RFC 0006 §8.7.
   - Resolve RFC 0006 §16 question 2 on the name before registering.
   - Success: `abs` is registered in the read-only manifest-query environment,
     unlike the filesystem predicates in step 6.7.
@@ -2132,9 +2191,12 @@ This phase is governed by
 [ADR-019](adr-019-structured-command-shell-selection.md) and
 [RFC 0011](rfcs/0011-allow-listed-structured-command-shells.md). It extends the
 structured-command design in
-[RFC 0001](rfcs/0001-structured-command-blocks.md); primitive work may land
-before that design's AST exists, but command integration depends on RFC 0001
-implementation work tracked by issue `#593`.
+[RFC 0001](rfcs/0001-structured-command-blocks.md). Primitive work can precede
+that design's AST; core integration requires 12.3.1. The full interaction
+matrix in 11.3.2 waits for 12.3.3, 13.2.3, and 14.2.3. This separates basic
+shell selection from the later facilities whose shared semantics it verifies.
+Issue `#593` remains the broader feature umbrella; 17.4.4 validates composed
+recipes without creating another shell registry or changing its authority.
 
 ### 11.1. Settle the contract before implementation
 
@@ -2258,35 +2320,44 @@ outside the execution domain.
 
 ### 11.3. Carry named shells through structured execution boundaries
 
-This step integrates the trusted value only after RFC 0001 supplies the
-structured-command AST and action-runner path. It validates that shell dialect
-selection does not alter Netsuke-managed topology.
+This step integrates the trusted value after RFC 0001 supplies the command AST,
+resolved process value, and action-plan codec. Core integration can land before
+stream and runtime-binding completion; the later cross-platform matrix proves
+that all completed facilities use the same path and authority boundary.
 
 - [ ] 11.3.1. Lower named shells through structured commands.
-  - Requires 11.2.3 and the RFC 0001 schema, compiler, execution-IR, and action
-    runner foundations from issue `#593`.
+  - Requires 11.2.3 and 12.3.1.
   - Accept `Boolean | ShellName` in singular blocks, heterogeneous sequence
     items, and pipeline stages; resolve each stage independently before
-    constructing the IR.
+    constructing the IR. Reject execution of variants not yet supported by
+    the staged runner rather than ignoring their fields.
   - Carry the complete resolved shell through versioned action plans and the
     Ninja adapter without another configuration or environment lookup; reject
-    unknown persisted variants.
-  - Preserve each block's environment, working directory, standard streams,
-    capture, temporary directory, pipeline topology, and failure semantics, and
-    keep legacy commands, rule references, and shebang-based scripts distinct.
-  - Success: unit and behavioural tests prove identical outer structured
+    unknown persisted variants. Later stream, capture, and directory delivery
+    must reuse this path rather than add shell-specific execution facilities.
+  - Preserve each implemented block's environment, working directory, standard
+    streams, and failure semantics; keep legacy commands, rule references,
+    and shebang-based scripts distinct. Task 11.3.2 owns the complete runtime
+    interaction matrix once its prerequisites land.
+  - See [RFC 0011 §§4-6 and 9](rfcs/0011-allow-listed-structured-command-shells.md).
+  - Success: unit and behavioural tests prove identical implemented outer
     semantics for direct and named-shell blocks, while selected shell source
     receives only the rendered `invoke` text after fixed arguments.
 - [ ] 11.3.2. Exercise the cross-platform shell-selection matrix.
-  - Requires 11.3.1.
+  - Requires 11.3.1, 12.3.3, 13.2.3, and 14.2.3.
   - Add Unix-like and Windows end-to-end coverage for absent, `false`, `true`,
     every supported built-in, configured names, unsupported names, unavailable
     executables, and invalid configuration.
   - Exercise named shells as singular blocks, sequence items, and first,
-    middle, and final pipeline stages with independent working directories and
-    stream bindings.
+    middle, and final pipeline stages with independent working directories,
+    stream bindings, both capture modes, and temporary-directory lifetimes.
+    Apply the consolidated stream-path decision from 12.1.1 in every mode.
   - Prove that direct mode retains argv-boundary protection while both Boolean
-    and named shell modes continue to treat `invoke` as shell source.
+    and named shell modes continue to treat `invoke` as shell source. Bindings,
+    command overlays, and source placement must not replace the resolved shell.
+  - See [RFC 0011 §§5-11](rfcs/0011-allow-listed-structured-command-shells.md),
+    [RFC 0009 §19](rfcs/0009-structured-command-working-directories.md), and
+    [RFC 0010 §17](rfcs/0010-runtime-bindings-and-secure-tempdirs.md).
   - Success: the supported-host matrix passes in CI, every invalid case fails
     before execution with its typed diagnostic class, and existing `true` and
     `false` compatibility snapshots remain unchanged.
@@ -2304,3 +2375,590 @@ selection does not alter Netsuke-managed topology.
   - Success: user, operator, developer, sample-configuration, and security
     guidance agree with ADR-019 and make the Netsukefile-versus-`CliConfig`
     authority boundary explicit.
+
+## 12. Argv-safe commands in ordinary builds
+
+Hypothesis: an author can replace a shell-string recipe with a structured
+command, preserve argument boundaries through Ninja, and keep existing legacy
+recipes unchanged without learning a second quoting language.
+
+This phase begins the implementation of
+[RFC 0001](rfcs/0001-structured-command-blocks.md), including its
+[RFC 0009](rfcs/0009-structured-command-working-directories.md),
+[RFC 0010](rfcs/0010-runtime-bindings-and-secure-tempdirs.md), and
+[RFC 0011](rfcs/0011-allow-listed-structured-command-shells.md) amendments.
+Phases 12 to 14 cover the structured-command portion of issue `#593`; the
+[composition roadmap](roadmap-composition.md) owns includes and bundles.
+Phase 11 retains ownership of named-shell selection, with core integration
+at 11.3.1 and the complete runtime matrix at 11.3.2. Task 17.4.4 joins the
+execution and composition tracks without making either local foundation wait
+for the other's implementation.
+
+The RFCs remain proposed until their acceptance work completes. Task 12.1.1
+must settle their conflicting text before implementation; this roadmap does
+not silently choose a different contract. Intermediate slices must reject
+unsupported forms rather than ignore fields or fall back to legacy execution.
+Task 14.3.3 gates publication of the complete amended schema. Every delivery
+task includes unit and behavioural coverage, with properties and bounded
+proofs at pure boundaries and cross-feature suites at integration boundaries.
+
+### 12.1. Fix command structure before evaluating template values
+
+This step asks whether one closed command grammar can preserve source identity
+and argv boundaries through typed interpolation. Its outcome fixes the
+compiler contract before any new command can execute.
+
+- [ ] 12.1.1. Consolidate and ratify the amended execution contract.
+  - Reconcile RFC 0001 §§9 and 12.1, RFC 0009 §§5 and 11, and RFC 0011 §6.2
+    on absolute `cwd`, capability confinement, and workspace-relative versus
+    `cwd`-relative stream paths. Include ADR-019 in the decision, updating
+    any affected accepted architecture through its documented decision process,
+    and align every RFC example before implementation.
+  - Distinguish ephemeral `capture_stdout` from `stdout: { env: NAME }`,
+    and per-stage `temp_dir` variable overrides from `cwd: { tempdir: {} }`
+    directory selection. Record whether both spellings remain and how their
+    combinations validate, without losing either amendment's requirements.
+  - Record acceptance, the next available manifest minor version, action-plan
+    versioning, and bounded termination and stale-plan cleanup policies. Keep
+    the trust boundary from ADR-019 and defer the extensions in phase 15.
+    Coordinate schema allocation with 16.1.1 and 17.1.1 without requiring their
+    implementations to complete first.
+  - See [RFC 0001 §§19 and 23](rfcs/0001-structured-command-blocks.md),
+    [RFC 0009 §§5 and 11](rfcs/0009-structured-command-working-directories.md),
+    [RFC 0010 §§7 and 10](rfcs/0010-runtime-bindings-and-secure-tempdirs.md),
+    and [RFC 0011 §6.2](rfcs/0011-allow-listed-structured-command-shells.md).
+  - Success: one accepted contract and consistent examples define every
+    disputed case, including temporary-directory precedence and lifetime;
+    direct, default-shell, and named-shell implementations share one path
+    contract rather than selecting contradictory paragraphs.
+- [ ] 12.1.2. Add the closed structured-command AST and schema version gate.
+  - Requires 12.1.1 and 11.2.1.
+  - Preserve scalar commands and all-string lists; accept an `invoke` mapping
+    or a non-empty heterogeneous list containing strings, structured blocks,
+    single-key rule references, and single-key script items. Retain source
+    spans and command-list identity through expansion and deserialization.
+  - Validate unknown and duplicate keys, mutually exclusive recipe forms,
+    required values, Boolean-or-name shell intent, and amendment field types;
+    reject unsupported syntax before Ninja or a user command starts.
+  - See [RFC 0001 §§6, 15, and 17.1](rfcs/0001-structured-command-blocks.md).
+  - Success: positive and negative schema fixtures cover every recipe shape,
+    singular-versus-list restrictions, minimum versions, and actionable
+    source-local errors while existing manifest fixtures retain their meaning.
+- [ ] 12.1.3. Compile argv templates without rendering their expressions.
+  - Requires 12.1.2.
+  - Use MiniJinja-aware expression boundaries and typed expression nodes;
+    tokenize only literal command structure into words and fragments. Preserve
+    empty quoted words, expression evaluation inside either quote style,
+    Unicode, Windows backslashes, and the specified double-quote escapes.
+  - Reject malformed expressions, unmatched quotes, whitespace-only commands,
+    unquoted shell operators, and standalone direct-mode `$in` or `$out` with
+    corrective diagnostics; do not add shell expansion or comment syntax.
+  - See [RFC 0001 §7](rfcs/0001-structured-command-blocks.md).
+  - Success: grammar fixtures and bounded generated templates cover all quote,
+    escape, delimiter, and expression-boundary cases without sentinel leakage
+    or reparsing rendered values as command structure.
+- [ ] 12.1.4. Render typed argv values and splice ordered argument lists.
+  - Requires 12.1.3.
+  - Implement deterministic scalar conversion and sole-unquoted-expression
+    sequence splicing, including empty sequences and typed `ins` and `outs`.
+    Reject nested sequences, quoted or composite sequence positions,
+    unsupported values, NUL, and an absent or empty final program.
+  - Preserve literal fragments and scalar values exactly; keep legacy and
+    shell-mode interpolation on their existing, separate rendering path.
+  - See [RFC 0001 §§8 and 21](rfcs/0001-structured-command-blocks.md).
+  - Success: property tests show hostile scalar text never changes argument
+    count, valid splices preserve element order and identity, and malformed
+    values fail before execution; retain every generated regression.
+
+### 12.2. Execute isolated commands without losing legacy sequence semantics
+
+This step asks whether structured processes, legacy shell groups, scripts, and
+referenced rules can share a fail-fast runner without sharing unintended
+process state. It supplies the execution boundary needed by Ninja and streams.
+
+- [ ] 12.2.1. Normalize recipes into typed, source-preserving execution units.
+  - Requires 12.1.4.
+  - Add direct, shell, script, legacy-group, pipeline, and rule-sequence IR
+    distinctions without backend escaping. Group contiguous legacy strings in
+    one fail-fast shell, preserve their internal state, and retain boundaries
+    between source lists when expanding rule references.
+  - Detect unknown rules and reference cycles before execution, preserve both
+    reference-site and definition-site provenance, and stop later units after
+    failure without flattening away future binding scopes.
+  - See
+    [RFC 0001 §§6.3, 14, 15, and 17.3](rfcs/0001-structured-command-blocks.md).
+  - Success: normalization snapshots and bounded properties preserve lexical
+    order, legacy state sharing, boundary isolation, and deterministic cycle
+    diagnostics for nested rules and mixed command lists.
+- [ ] 12.2.2. Spawn direct commands with isolated exact environment overlays.
+  - Requires 12.2.1.
+  - Pass program and arguments separately through a narrow process adapter;
+    render and validate exact string overlays, including duplicate rendered
+    names and Windows case collisions. Use injected environment access and
+    never modify the parent environment or manifest-time `env()` view.
+  - Resolve bare executables using the effective child `PATH`; reject resolved
+    `cmd.exe`, `.bat`, and `.cmd` targets in Windows direct mode with an
+    explicit-shell remedy. Reuse one helper executable that reports argv,
+    environment, working directory, bytes, and requested exit status in tests.
+  - See [RFC 0001 §§9, 11, and 21](rfcs/0001-structured-command-blocks.md).
+  - Success: observed child arguments and overlays match the plan on supported
+    hosts, including spaces, empty arguments, metacharacters, and Unicode;
+    subsequent units and the parent retain their original environment.
+- [ ] 12.2.3. Apply capability-scoped literal working directories at spawn.
+  - Requires 12.1.1 and 12.2.2.
+  - Implement the consolidated RFC 0009 contract: normalize literal `cwd`
+    against the effective workspace after `-C`, reject text escapes, and
+    revalidate directory existence and type immediately before spawning.
+  - Resolve separator-containing relative executable paths from that directory
+    to capability-checked absolute paths before configuring the child;
+    preserve arguments, stream-path bases, and independent per-unit placement.
+    Do not mutate the parent directory or treat source-file placement as
+    directory authority; composed-recipe integration belongs to 17.4.4.
+  - See [RFC 0009 §§5-15 and
+    19](rfcs/0009-structured-command-working-directories.md).
+  - Success: direct-process tests and bounded path properties cover missing,
+    non-directory, permission, lexical and symlink escape, spaces, Unicode,
+    Windows path forms, and source-fragment-independent resolution.
+- [ ] 12.2.4. Run explicit default shells through the same process boundary.
+  - Requires 12.2.3 and 11.2.3.
+  - Render shell `invoke` as one source argument after the resolved fixed
+    prefix; carry the complete shell value in the IR without another lookup.
+    Apply environment and working directory through process APIs, not shell
+    prefixes, and keep shebang scripts and legacy shell groups distinct.
+  - Preserve direct mode for absent or false `shell`; leave named-selector
+    integration to 11.3.1 rather than introducing another registry.
+  - See [RFC 0001 §§10 and 17.3](rfcs/0001-structured-command-blocks.md) and
+    [ADR-019](adr-019-structured-command-shell-selection.md).
+  - Success: Unix-like and Windows tests observe the specified default-shell
+    invocation, directory isolation, and fail-fast behaviour, without claiming
+    direct-mode injection protection for rendered shell source.
+
+### 12.3. Carry structured commands through build and generate workflows
+
+This step asks whether Ninja can invoke structured recipes without putting
+user arguments into a second shell command line. It also establishes whether
+saved Ninja manifests remain usable after the generating process exits.
+
+- [ ] 12.3.1. Add the versioned action-plan codec and hidden action runner.
+  - Requires 12.2.4.
+  - Serialize fully rendered typed units, limits, selectors, and provenance;
+    validate version, unknown variants, structure, and opaque action identity
+    before execution. Keep process and filesystem adapters outside the codec.
+  - Add bounded typed failures with action, item, stage, and source context;
+    render human and JSON diagnostics through the established boundary with
+    environment values, sensitive arguments, and private paths redacted.
+  - See [RFC 0001 §§16, 17.3, and 17.4](rfcs/0001-structured-command-blocks.md).
+  - Success: codec round-trips and hostile-plan fixtures either preserve the
+    exact execution value or fail closed before spawning; diagnostics never
+    dump the plan or use arbitrary arguments and paths as metric labels.
+- [ ] 12.3.2. Lower structured builds to private leased action plans.
+  - Requires 12.3.1.
+  - Route an entire recipe containing structured, rule-reference, or script
+    items through the runner; retain the pure-legacy fast path. Emit only the
+    Netsuke executable, private plan location, and opaque action identifier in
+    Ninja commands, with backend escaping confined to the adapter.
+  - Fingerprint fully rendered execution plans deterministically. Keep build
+    sidecars outside the workspace, owner-private, and leased until Ninja and
+    owned runner descendants finish; implement bounded stale-plan cleanup.
+  - See [RFC 0001 §§17.4 and 20](rfcs/0001-structured-command-blocks.md).
+  - Success: end-to-end builds preserve argv through Ninja, equivalent plans
+    have stable fingerprints, changed execution data invalidates the action, and
+    success, failure, and interruption release only owned sidecars.
+- [ ] 12.3.3. Publish persistent plans with generated Ninja manifests.
+  - Requires 12.3.2.
+  - Give `generate --output` persistent private sidecars, an exclusive output
+    lease, and a versioned manifest-local index. Publish a complete new set
+    atomically while leaving the previous valid generation intact on failure.
+  - Confine action identifiers to their sidecar set and bound replacement,
+    deletion, and stale-state cleanup; do not reuse ephemeral build leases.
+  - See [RFC 0001 §17.4](rfcs/0001-structured-command-blocks.md).
+  - Success: saved manifests execute after the generator exits; interrupted
+    publication, concurrent generation, unknown schemas, and escaping action
+    identifiers cannot expose partial plans or remove another generation.
+- [ ] 12.3.4. Validate and document the first structured-build slice.
+  - Requires 12.3.2, 12.3.3, and 11.3.1.
+  - Add an end-to-end compatibility matrix for scalar commands, all-string
+    lists, mixed lists, nested rules, scripts, direct argv, Boolean and named
+    shells, overlays, literal `cwd`, and build-versus-generate execution.
+  - Document the working slice in the users' and developers' guides, replace
+    the planned `exec.program`/`exec.args` sketch, and explain argv safety
+    versus callee-language interpretation and the explicit shell escape hatch.
+  - See [RFC 0001 §§18-21](rfcs/0001-structured-command-blocks.md).
+  - Success: the matrix passes on supported hosts, legacy snapshots remain
+    unchanged except intentional version metadata, and every documented
+    example executes through the same public workflow it describes.
+
+## 13. Shell-free streams and fail-fast process composition
+
+Hypothesis: explicit stream sinks and pipeline edges can replace redirection
+and pipe syntax while preserving arbitrary bytes, detecting file aliasing
+before truncation, and leaving no owned process or relay behind on failure.
+
+This phase extends the usable runner from phase 12 rather than creating a
+parallel shell-based backend. It implements RFC 0001's stream and pipeline
+contract, including the standard-error selection refined by RFC 0010. Path
+bases follow the consolidated decision in 12.1.1, not whichever original RFC
+paragraph an implementation happens to encounter first.
+
+### 13.1. Bind streams without corrupting aliased or replaced files
+
+This step asks whether redirection can reject conflicting destinations and
+filesystem races before destructive operations. Its result supplies safe file
+handles to individual commands, tee relays, and complete pipelines.
+
+- [ ] 13.1.1. Validate typed stream selections before execution.
+  - Requires 12.1.2 and 12.3.1.
+  - Lower input, output, error, tee, ephemeral capture, and selected pipe
+    variants into mutually exclusive bindings. Validate rendered scalar paths,
+    NUL, capture bounds, competing sinks, and predecessor-input conflicts.
+  - Keep stream paths out of inferred graph dependencies and outputs; apply
+    the agreed path base independently of source-file or bundle placement.
+  - See [RFC 0001 §§12, 15, and 17](rfcs/0001-structured-command-blocks.md).
+  - Success: schema fixtures and bounded exclusivity properties reject every
+    conflicting sink combination before opening a file or starting Ninja.
+- [ ] 13.1.2. Open provisional stream handles without truncation.
+  - Requires 13.1.1 and 12.2.3.
+  - At each execution-unit start, record identities or explicit absence for
+    every configured destination, including all stages of one pipeline.
+    Open inputs read-only and existing outputs without following replacements
+    or truncating; create absent outputs atomically and exclusively.
+  - Reject `EEXIST` after recorded absence rather than reopening the path, do
+    not create missing parent directories, and close provisional handles on
+    failure through a narrow capability-scoped filesystem adapter.
+  - See [RFC 0001 §12.1](rfcs/0001-structured-command-blocks.md).
+  - Success: deterministic barrier tests cover disappearance, replacement, and
+    absent-to-created races, proving that competing files retain their bytes
+    and no rejected path receives a truncating or fallback open.
+- [ ] 13.1.3. Bind streams only after complete handle-identity validation.
+  - Requires 13.1.2.
+  - Compare each fresh path identity with its retained handle and initial
+    state, then compare every pair of handles, including inputs and outputs
+    across pipeline stages. Reject relative, symbolic-link, and hard-link
+    aliases wherever platform identity information supports them.
+  - Truncate and bind only the validated handles after all checks pass; never
+    reopen by path. Start a fresh validation set for each sequential unit so
+    a later unit can consume an earlier unit's output.
+  - See [RFC 0001 §§12.1 and 12.4](rfcs/0001-structured-command-blocks.md).
+  - Success: alias and replacement fixtures fail before truncation or spawn,
+    while sequential output reuse succeeds; tests assert the complete open,
+    identity-check, truncate, bind, and close ordering.
+- [ ] 13.1.4. Add byte-preserving tee relays with owned failure handling.
+  - Requires 13.1.3 and 12.3.2.
+  - Drain standard output continuously into the validated file and inherited
+    output, preserving arbitrary bytes. Make read, file-write, and inherited-
+    output failures fail the unit even when the child exits successfully.
+  - Own relay handles and join completion with child completion; do not detach
+    relays or retain unbounded buffers while a destination applies pressure.
+  - See
+    [RFC 0001 §§12.3, 12.5, and 13.2](rfcs/0001-structured-command-blocks.md).
+  - Success: binary and high-volume fixtures reproduce both destinations
+    byte-for-byte, and injected read or write failure stops execution and
+    leaves no relay or child running.
+- [ ] 13.1.5. Add bounded ephemeral standard-output capture.
+  - Requires 13.1.1 and 13.1.4.
+  - Implement `capture_stdout` as a raw-byte sink with the agreed non-negative
+    bound, including zero. Count before retention, terminate and reap on
+    overflow, and discard the result at unit completion without publishing a
+    runtime binding or silently truncating successful output.
+  - Keep capture diagnostics bounded and redacted; reserve the distinct named
+    UTF-8 capture contract for 14.1.2.
+  - See [RFC 0001 §§12.3, 16, and 21](rfcs/0001-structured-command-blocks.md).
+  - Success: zero, exact-limit, and one-byte-over cases have the specified
+    result and bounded memory, including binary output and child failure.
+
+### 13.2. Run pipelines with explicit byte flow and complete ownership
+
+This step asks whether concurrent stages can preserve stream topology without
+deadlock or ambiguous success. Its outcome defines the lifecycle that runtime
+captures and temporary-directory preparation will extend.
+
+- [ ] 13.2.1. Form maximal pipelines without crossing source boundaries.
+  - Requires 12.2.1 and 13.1.1.
+  - Normalize `false`, `true`, `stdout`, and `stderr` into typed stream
+    selections; connect only immediately adjacent structured blocks in the
+    same source list. Reject terminal pipes, competing input sources, and
+    pipes into or out of legacy groups, scripts, or rule-reference boundaries.
+  - Preserve independent directories and unselected streams for every stage,
+    including stdout tee or capture alongside a stderr pipe.
+  - See [RFC 0001 §13.1](rfcs/0001-structured-command-blocks.md) and
+    [RFC 0010 §8](rfcs/0010-runtime-bindings-and-secure-tempdirs.md).
+  - Success: generated topology cases and bounded Kani checks over the pure
+    normalization kernel preserve stage order and prove one selected stream
+    per edge and at most one predecessor per input.
+- [ ] 13.2.2. Start all pipeline stages and drains before waiting.
+  - Requires 13.2.1, 13.1.3, 13.1.4, and 13.1.5.
+  - Prepare operating-system pipes and every unit-wide stream destination,
+    then start each stage and required drain before waiting for completion.
+    Transfer only assigned endpoints and promptly close unused parent and
+    duplicated handles so downstream readers can observe end-of-file.
+  - Transfer raw bytes for either selected stream; do not decode, prefix,
+    normalize, merge, or implicitly duplicate standard error.
+  - See [RFC 0001 §13.2](rfcs/0001-structured-command-blocks.md) and
+    [RFC 0010 §§8.1 and 8.3](rfcs/0010-runtime-bindings-and-secure-tempdirs.md).
+  - Success: three-stage pipelines exceed pipe-buffer capacity without hanging
+    on supported hosts, preserve binary bytes, and observe timely end-of-file.
+- [ ] 13.2.3. Supervise pipeline status, cancellation, and partial startup.
+  - Requires 13.2.2.
+  - Require every stage and relay to succeed, report failed stage statuses in
+    lexical order, and stop subsequent sequence units after pipeline failure.
+  - On spawn, directory, pipe, relay, tee, cancellation, or timeout failure,
+    close endpoints, apply the agreed bounded process-group or job-object
+    termination policy, reap started children, and join every owned relay.
+    Preserve the primary error and any secondary cleanup failures.
+  - See [RFC 0001 §§13.2-14 and 21](rfcs/0001-structured-command-blocks.md).
+  - Success: injected first, middle, and final stage failures, failed later
+    spawns, broken pipes, and interruptions produce deterministic diagnostics
+    without orphaned children, detached relays, or an unbounded wait.
+
+### 13.3. Validate stream composition through real manifests
+
+This step asks whether the filesystem and process guarantees survive their
+interaction through Ninja rather than only isolated adapters. Its evidence
+sets the baseline for adding action-local state in phase 14.
+
+- [ ] 13.3.1. Add the cross-platform stream and failure interaction suite.
+  - Requires 12.3.3, 13.1.5, and 13.2.3.
+  - Cross direct and Boolean-shell stages with independent `cwd`, both pipe
+    streams, file input, final sinks, tee, capture, and mixed-list boundaries;
+    include binary data, large output, sequential reuse, and cross-stage
+    aliases.
+  - Exercise deterministic replacement and exclusive-create races together
+    with partial startup, failed relays, cancellation, and saved-plan execution
+    using helper processes and synchronization barriers rather than sleeps.
+  - See [RFC 0001 §21](rfcs/0001-structured-command-blocks.md),
+    [RFC 0009 §19](rfcs/0009-structured-command-working-directories.md), and
+    [RFC 0010 §17](rfcs/0010-runtime-bindings-and-secure-tempdirs.md).
+  - Success: the supported-host matrix preserves bytes and existing files,
+    reports the correct item and stage, and demonstrates zero surviving owned
+    children, relays, or leased build sidecars after every completion path.
+- [ ] 13.3.2. Document shell-free stream workflows and inspectable plans.
+  - Requires 13.3.1.
+  - Add executed examples for file redirection, byte-preserving tee, stdout
+    and stderr pipelines, independent directories, and explicit graph inputs
+    and outputs. Explain strict pipeline failure and why stderr piping is not
+    a replacement for merged `2>&1` semantics.
+  - Expose bounded, redacted execution-unit and stream-topology inspection
+    without leaking private plan paths or coupling consumers to internal IR;
+    keep phase 10's `result.actions` implementation owned by 10.1.2.
+  - See [RFC 0001 §§16, 19-21](rfcs/0001-structured-command-blocks.md).
+  - Success: examples run through Ninja, inspection snapshots explain each
+    unit's topology, and the guides agree with the tested path and exit policy.
+
+## 14. Action-local discovery and private execution workspaces
+
+Hypothesis: bounded runtime bindings and runner-owned directories can replace
+shell command substitution and temporary-directory scripts without making
+manifest compilation stateful or allowing captured text to grant filesystem
+authority.
+
+This phase completes the runtime facilities in
+[RFC 0010](rfcs/0010-runtime-bindings-and-secure-tempdirs.md), using the
+consolidated capture and temporary-directory distinctions from 12.1.1. Runtime
+bindings stay within one action-runner sequence; they do not become graph
+outputs, cache keys, or manifest-time Jinja variables.
+
+### 14.1. Pass validated discovery results to later execution units
+
+This step asks whether action-local values can flow in lexical order without
+mutating global state or exposing uncommitted pipeline output. It establishes
+the text-versus-capability distinction used by directory consumers.
+
+- [ ] 14.1.1. Add typed sequence-local bindings and producer validation.
+  - Requires 12.3.1 and 13.2.3.
+  - Extend AST and plan variants with bounded named captures and directory
+    selectors; reserve literal portable producer names, reject duplicates
+    under host case rules, and keep text and directory capabilities distinct.
+  - Construct child environments as inherited base, committed bindings, then
+    explicit overlay. Pass bindings to later scripts and legacy groups, but
+    not across rule-reference or independent action boundaries; reject a stage
+    consuming another stage's uncommitted execution-produced binding.
+  - See [RFC 0010 §§5, 6, 12, and
+    13](rfcs/0010-runtime-bindings-and-secure-tempdirs.md).
+  - Success: scope and precedence properties cover producer collisions,
+    shadowing, rule boundaries, and fresh concurrent action contexts without
+    parent-environment mutation or runtime values entering persisted plans.
+- [ ] 14.1.2. Capture bounded UTF-8 stdout and commit only successful results.
+  - Requires 14.1.1 and 13.1.5.
+  - Add `stdout: { env, chomp, max_bytes }` with the 65,536-byte default and
+    positive limits up to the portable 16 MiB maximum. Count raw bytes before
+    strict UTF-8 decoding and NUL rejection; remove at most one final CRLF or
+    LF when chomp is enabled, preserving other whitespace and empty results.
+  - Commit only after complete unit or pipeline success; on overflow, invalid
+    text, cancellation, execution failure, or cleanup failure before commit,
+    terminate and reap as needed and publish nothing. Allow capture with no
+    pipe or a stderr pipe, never a stdout pipe.
+  - See
+    [RFC 0010 §§5.4 and 7](rfcs/0010-runtime-bindings-and-secure-tempdirs.md).
+  - Success: limit-edge, UTF-8, NUL, newline, and pipeline-failure fixtures
+    observe exact values only after success, and human and JSON diagnostics
+    never expose captured contents by default.
+- [ ] 14.1.3. Resolve environment-selected directories without forging
+  authority.
+  - Requires 14.1.1, 14.1.2, and 12.2.3.
+  - Resolve `cwd: { env: NAME }` from the effective child environment; require
+    present, non-empty, valid UTF-8, NUL-free text and apply workspace
+    confinement to inherited, explicit-overlay, and captured text alike.
+  - Retain authority only for a runner-owned directory binding. An overlay
+    shadow resolves as ordinary text even when its spelling matches the
+    directory path; an absolute captured path never manufactures a capability.
+  - See [RFC 0010 §9](rfcs/0010-runtime-bindings-and-secure-tempdirs.md).
+  - Success: all text sources reject absolute and symlink escapes before
+    spawn, injected directory capabilities retain their identity, and overlay
+    shadowing removes that authority without changing the stored binding.
+
+### 14.2. Own temporary-directory authority and lifetime explicitly
+
+This step asks whether scratch directories can remain private from creation
+through cleanup while supporting both isolated stages and cooperating units.
+Its outcome determines whether temporary execution is safe to expose at all.
+
+- [ ] 14.2.1. Implement owner-private temporary-directory leases.
+  - Requires 12.1.1, 12.2.3, and 13.2.3.
+  - Freeze the trusted temporary-root capability at the composition boundary;
+    atomically create unpredictable, non-reused directories with Unix owner-
+    only permissions or a restricted Windows access-control list before child
+    access. Reject unexpected symlinks and non-directory objects.
+  - Remove through retained capabilities without following symlinks, after
+    owned processes and relays finish, with the root removed last. Cleanup
+    failure fails otherwise successful execution or attaches a secondary cause
+    to an existing failure; never silently retain sensitive temporary data.
+  - See [RFC 0001 §11.3](rfcs/0001-structured-command-blocks.md) and
+    [RFC 0010 §10](rfcs/0010-runtime-bindings-and-secure-tempdirs.md).
+  - Success: permission and fault-injection tests cover every creation and
+    removal boundary, prove privacy before spawn, and reject attempts to
+    redirect the root through command overlays or captured values.
+- [ ] 14.2.2. Integrate stage-local and sequence-local temporary execution.
+  - Requires 14.2.1 and 14.1.3.
+  - Implement the consolidated per-stage `temp_dir` mode and its
+    `TMPDIR`/`TMP`/`TEMP` precedence separately from unnamed unit-scoped and
+    named sequence-scoped `cwd: { tempdir: ... }` directories. The latter
+    selects `cwd` without implicitly rewriting conventional environment keys.
+  - Publish named directory capabilities for current and later children,
+    preserve their sequence lifetime, and exclude generated paths and captured
+    values from serialized plans, graph fingerprints, and telemetry labels.
+  - See [RFC 0001 §11.3](rfcs/0001-structured-command-blocks.md) and
+    [RFC 0010 §§6.4, 10, and
+    12](rfcs/0010-runtime-bindings-and-secure-tempdirs.md).
+  - Success: end-to-end sequences distinguish both temporary modes, reuse only
+    named directory capabilities, and clean the correct lifetime after
+    success, failure, interruption, timeout, or spawn error.
+- [ ] 14.2.3. Prepare pipeline directory capabilities before any stage starts.
+  - Requires 14.2.2 and 13.2.3.
+  - Reserve every directory producer, create and validate all required
+    directories, and atomically publish the pending capability map only after
+    complete preparation. Let concurrent stages consume prepared directory
+    bindings while keeping execution-produced text captures uncommitted.
+  - On preparation failure, publish nothing, start no stage, and clean all
+    prepared directories. Preserve bounded teardown after later execution
+    failures and diagnose incompatible detached descendants explicitly.
+  - See [RFC 0010 §§5.4, 10.3, 10.5, and
+    10.6](rfcs/0010-runtime-bindings-and-secure-tempdirs.md).
+  - Success: barrier-controlled concurrent-stage cases and preparation-failure
+    injection prove all-or-nothing visibility, zero premature spawns, complete
+    cleanup, and retained primary and secondary failure categories.
+
+### 14.3. Prove the amended contract in downstream-style builds
+
+This step asks whether the complete structured surface removes real shell
+wrappers without weakening compatibility or hiding runtime state. Its evidence
+gates the manifest-version promise rather than merely a parser milestone.
+
+- [ ] 14.3.1. Add the full execution-context interaction matrix.
+  - Requires 13.3.1, 14.1.2, 14.2.3, and 11.3.2.
+  - Exercise capture-to-`cwd`, explicit overlay shadowing, named temporary
+    workspace sharing, stdout capture beside stderr piping, independent stage
+    directories, and direct, Boolean-shell, and named-shell execution through
+    ordinary builds and persistent generated plans.
+  - Cross these with first, middle, and final failures, invalid capture text,
+    limit overflow, failed capability preparation, cancellation, timeout,
+    cleanup errors, and concurrent independent actions. Verify source-aware
+    redacted human and JSON diagnostics and no runtime-state persistence.
+  - See [RFC 0001 §21](rfcs/0001-structured-command-blocks.md) and
+    [RFC 0010 §17](rfcs/0010-runtime-bindings-and-secure-tempdirs.md).
+  - Success: the supported-host matrix demonstrates no cross-action binding
+    leaks, forged directory authority, orphaned owned processes, or silent
+    cleanup failures, with deterministic replay of each injected failure.
+- [ ] 14.3.2. Publish migration examples and record structured-command canaries.
+  - Requires 12.3.4, 13.3.2, 14.3.1, and 11.3.3.
+  - Execute the RFC coverage example and migrations for literal `cd`, bounded
+    discovery capture, stderr normalization, and shared private fixtures;
+    preserve legacy groups whenever shell state must persist.
+  - Exercise the structured-command portion of at least two downstream
+    migration canaries tracked by issue `#598`, without making include or
+    bundle implementation a prerequisite. Task 17.4.4 later joins the tracks.
+    Update user, design, developer, repository-layout, and security guidance
+    with the tested scope.
+  - See [RFC 0001 §§18-21](rfcs/0001-structured-command-blocks.md) and
+    [RFC 0010 §§11 and 16](rfcs/0010-runtime-bindings-and-secure-tempdirs.md).
+  - Success: canary evidence records equivalent successful outputs and intended
+    failure behaviour, and documentation states capability limits, byte/text
+    distinctions, cleanup guarantees, and the absence of child sandboxing.
+- [ ] 14.3.3. Enable the complete amended manifest contract.
+  - Requires 14.3.1 and 14.3.2.
+  - Finalize the minor-version gate selected in 12.1.1, including whether
+    named shells share the first structured-command minor. Reject unsupported
+    persisted schemas rather than ignoring fields, and keep legacy manifests
+    supported without automatic semantic migration.
+  - Run the repository's formatting, lint, documentation, unit, behavioural,
+    property, and bounded proof gates on the supported target matrix; retain
+    compatibility, deterministic plan, and cleanup evidence with the change.
+  - See [RFC 0001 §§19-21](rfcs/0001-structured-command-blocks.md) and
+    [RFC 0011](rfcs/0011-allow-listed-structured-command-shells.md).
+  - Success: every in-scope RFC requirement maps to a passing acceptance case,
+    the released version advertises no incomplete variant, and generated
+    manifests remain reproducible and runnable with the matching runner.
+
+## 15. Evidence-led extensions after structured-command adoption
+
+Hypothesis: once the amended structured-command contract works in real builds,
+remaining shell escape hatches can identify worthwhile extensions without
+expanding the initial grammar or authority boundary speculatively.
+
+These are deferred decisions, not prerequisites for 14.3.3 or promises to
+implement every alternative. A decision may retain explicit shell mode or
+reject an extension. RFC 0001's non-goals remain out of the initial release.
+
+### 15.1. Evaluate additional argument and environment surfaces
+
+This step asks which remaining authoring problems need new schema rather than
+better examples. Its outcomes either authorize focused follow-on RFCs or keep
+the existing surface deliberately small.
+
+- [ ] 15.1.1. Decide whether enclosing and object-valued environments are
+  needed.
+  - Requires 14.3.3.
+  - Use canary evidence to scope rule, target, action, and command precedence,
+    plus `default`, `prepend`, `append`, and `unset`, before authorizing the
+    previously planned implementation in 3.14.9. Keep exact per-block overlays
+    independent of this decision.
+  - See [RFC 0001 §§11.1, 11.4, and 23](rfcs/0001-structured-command-blocks.md).
+  - Success: a follow-on RFC defines ordered merges and portable path-list
+    operations, or a recorded rejection leaves 3.14.9 deferred.
+- [ ] 15.1.2. Decide whether an explicit argv escape hatch earns its complexity.
+  - Requires 14.3.3.
+  - Compare real unresolved authoring cases with the existing argv-template
+    grammar; do not revive `exec.program`/`exec.args` or add `args` by default.
+  - See [RFC 0001 §§22 and 23](rfcs/0001-structured-command-blocks.md).
+  - Success: a documented decision names a consumer and compatibility contract
+    for any proposed new form, or explicitly retains the current grammar.
+
+### 15.2. Gate broader stream and process authority behind separate designs
+
+This step asks whether additional process composition justifies a wider safety
+contract. Its outcomes must preserve the shipped argv, lifecycle, and
+capability guarantees before any new execution path can land.
+
+- [ ] 15.2.1. Triage advanced stream and execution capabilities from canaries.
+  - Requires 14.3.3.
+  - Keep append mode, stderr teeing, merged streams, rule-boundary pipelines,
+    trusted Windows batch opt-ins, external text-selected directories,
+    cross-action runtime outputs, and temporary retention outside the initial
+    contract; select only evidenced candidates for independent RFCs.
+  - See [RFC 0001 §§4 and 23](rfcs/0001-structured-command-blocks.md),
+    [RFC 0009 §20](rfcs/0009-structured-command-working-directories.md), and
+    [RFC 0010 §§3.2 and 10](rfcs/0010-runtime-bindings-and-secure-tempdirs.md).
+  - Success: every candidate has an explicit defer, reject, or separately
+    specified disposition, with no relaxation hidden inside an implementation
+    task for phases 12 to 14.
+
+Phases 16 to 19 continue in the [composition roadmap](roadmap-composition.md).
