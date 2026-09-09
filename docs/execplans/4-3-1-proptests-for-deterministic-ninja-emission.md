@@ -6,50 +6,74 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: DRAFT — AWAITING APPROVAL
+Status: DRAFT — AWAITING APPROVAL (revised after design review)
 
 ## Purpose / big picture
 
 Netsuke reads a `Netsukefile` manifest and writes a `build.ninja` file that the
-Ninja build tool then executes. `docs/netsuke-design.md` states the promise
-plainly: "Netsuke's pipeline is **deterministic**. Given the same `Netsukefile`
+Ninja build tool then executes. `docs/netsuke-design.md` §1.2 states the
+promise: "Netsuke's pipeline is **deterministic**. Given the same `Netsukefile`
 and environment variables, the generated `build.ninja` will be byte-for-byte
-identical." The README makes a weaker public promise about "a reproducible,
-fully static dependency graph".
+identical."
 
-That promise is currently held up by three explicit sort calls buried inside
-the emitter, and by an invariant established a layer away in the manifest-to-IR
-lowering. Nothing in the test suite stops a future change from removing a sort,
-reordering validation, or introducing a new collection whose iteration order
-leaks into the output. The existing coverage is snapshot tests over eight fixed
-manifests and a handful of narrow property tests over single-edge graphs.
+That promise is held up by three explicit sort calls inside the emitter, and by
+an invariant established a layer away in the manifest-to-IR lowering. Nothing
+in the test suite stops a future change from deleting a sort, reordering
+validation, or adding a new collection whose iteration order leaks into the
+output. Existing coverage is eight fixed-manifest snapshots plus narrow
+properties over single-edge graphs.
 
-This plan closes that gap. After this work, a maintainer who deletes any one of
-the emitter's ordering guarantees will see a named property test fail with a
-shrunk counter-example naming the two graphs that disagreed and the first byte
-at which their emitted Ninja text diverges. A maintainer who introduces a new
-`HashMap` into the emission path and iterates it directly will see the same
-failure.
+After this work, a maintainer who deletes any one of the emitter's ordering
+guarantees sees a named property fail with a small, reproducible
+counter-example. A maintainer who adds a `HashMap` to the emission path and
+iterates it directly fails a source-shape contract test. And the guarantee that
+users actually read — run Netsuke twice, get the same bytes — is checked
+end-to-end through the binary, which nothing checks today.
 
-The work also discharges two obligations that earlier roadmap items explicitly
-deferred here. Roadmap item `4.2.1` and `ADR-004` both record that Kani proves
-duplicate-output rejection and cycle rejection only for one to three nodes, and
-that "the larger-N graph property is handed off to the future Proptest roadmap
-item `4.3.1`". This plan is that hand-off.
+The work also discharges obligations that earlier items deferred here. Roadmap
+`4.2.1` and `ADR-004` both record that Kani proves duplicate-output rejection
+and cycle rejection only for one to three nodes, and that "the larger-N graph
+property is handed off to the future Proptest roadmap item `4.3.1`". There is a
+crisp reason Kani cannot close this itself: under `#[cfg(kani)]`, `IrHashMap`
+becomes an ordered bounded map (`src/ir/graph_kani_map.rs`), so the
+nondeterminism under test does not exist in the verification build.
 
 Finally, the plan settles a contract question that
 `docs/formal-verification-methods-in-netsuke.md` flags but no roadmap item
-owns: whether byte-for-byte stable Ninja output is a public guarantee or an
-implementation detail. Verifying an unstated property is verification without a
-specification. This plan states the contract in a new ADR and in the
-user-facing documentation first, then verifies exactly that statement.
+owns: which determinism statement is a public guarantee. Verifying an unstated
+property is verification without a specification, so the contract is written
+**first**, in `EP-M1`, before any property is authored.
 
-You can observe success without reading any code. Run `make proptest` and see
-the determinism suite pass. Apply any one of the recorded mutation patches under
-`docs/verification/mutations/`, run `make proptest` again, and see a specific
-named property fail with a minimized counter-example. Revert the patch. Read
-`docs/users-guide.md` and find a stated determinism guarantee that matches what
-the tests check.
+You can observe success without reading code. Run `make proptest` and see the
+suite pass. Apply a recorded mutation patch, re-run, and see one named property
+fail with a minimal counter-example. Revert. Run `netsuke generate` twice on a
+fixture and diff the bytes. Read `docs/users-guide.md` and find a stated
+guarantee that matches what the tests check.
+
+## Revision note on this draft
+
+This plan was rewritten after a six-lens design review. The review found the
+first draft structurally unsound in ways that mattered, and the changes are
+substantial enough that reviewers of the first draft should re-read rather than
+diff. What changed, and why, is recorded in full in `Design review findings`
+near the end. The four that reshaped the plan:
+
+1. The shared strategy cannot live in `test_support`. This was **proven by
+   compile probe**, not argued: passing a `netsuke`-typed value from
+   `test_support` into a `src/`-side `#[cfg(test)]` module fails with "there
+   are multiple different versions of crate `netsuke` in the dependency graph".
+   All strategies therefore live in `src/`.
+2. The insertion-order property as first drafted was **not a deterministic
+   function of its Proptest seed**, because `RandomState` is outside Proptest's
+   control. That silently breaks shrinking and makes committed regression seeds
+   decorative. The obligation is restructured around extracted pure ordering
+   helpers over explicitly shuffled vectors.
+3. `docs/verification/mutations/` is governed by an existing contract test,
+   `tests/kani_mutation_evidence_tests.rs`, which the first draft did not know
+   existed. It rejects any patch stem whose first segment is not `ir`, so the
+   proposed `ninja_gen` patches were unrepresentable.
+4. `src/ninja_gen/mod.rs` is exactly 400 lines, the ceiling `AGENTS.md`
+   imposes, so the first draft breached a constraint on its first commit.
 
 ## Context and orientation
 
@@ -57,19 +81,17 @@ the tests check.
 
 Netsuke is a Rust command-line build front end. A user writes a `Netsukefile`
 in YAML. Netsuke parses it, expands control constructs (`foreach`, `when`),
-renders string fields with the MiniJinja templating engine, lowers the result
-into an intermediate representation (IR) called a *build graph*, and then emits
-a `build.ninja` file. Ninja, a separate program, reads that file and runs the
-build. Netsuke does not run compilers itself.
+renders string fields with MiniJinja, lowers the result into an intermediate
+representation (IR) called a *build graph*, and emits a `build.ninja` file.
+Ninja, a separate program, reads that file and runs the build. Netsuke does not
+run compilers itself.
 
 The crate is published as `netsuke-build`; the library target is `netsuke`.
 Nothing in this plan changes the compiled behaviour of the shipped binary.
 
 ### The emission pipeline this plan targets
 
-Three files matter. Read them before writing any assertion.
-
-`src/ir/graph.rs` defines the build graph. Its shape is short enough to quote:
+`src/ir/graph.rs` defines the build graph:
 
 ```rust
 pub struct BuildGraph {
@@ -80,55 +102,48 @@ pub struct BuildGraph {
 ```
 
 `IrHashMap<K, V>` is a plain `std::collections::HashMap` in ordinary builds
-(`src/ir/graph.rs:28`); it swaps to a bounded bespoke map only under
-`#[cfg(kani)]`. An `Action` is a recipe plus Ninja rule metadata. A `BuildEdge`
-is one `build` statement: an action identifier, inputs, implicit dependencies,
-explicit and implicit outputs, order-only dependencies, and two booleans.
+(`src/ir/graph.rs:28`) and an ordered bounded map under `#[cfg(kani)]`. An
+`Action` is a recipe plus Ninja rule metadata; a `BuildEdge` is one `build`
+statement.
 
-`src/ir/from_manifest.rs` builds that graph from the manifest. Three facts from
-it are load-bearing for everything below:
+`src/ir/from_manifest.rs` builds the graph. Four facts are load-bearing:
 
 1. Actions are interned by content hash. `register_action`
-   (`src/ir/from_manifest_support.rs:46`) hashes the `Action` value with
-   `crate::hasher::ActionHasher::hash` and uses the resulting hexadecimal
-   string as the map key. Equal actions therefore collapse to one key, and the
-   key is a pure function of the action's content.
+   (`src/ir/from_manifest_support.rs:46`) hashes the `Action` with
+   `crate::hasher::ActionHasher::hash` and uses the hexadecimal digest as the
+   map key.
 2. Duplicate outputs are rejected. `find_duplicates`
    (`src/ir/from_manifest_support.rs:291`) fails the lowering if any output
-   path is claimed twice, whether by two different targets or twice within one
-   target. Consequently *no two distinct edges in a well-formed graph share an
-   output path*.
+   path is claimed twice, across targets or within one target. So no two
+   distinct edges in a graph built this way share an output path.
 3. A multi-output edge is stored once per output.
    `insert_edge_for_outputs` (`src/ir/from_manifest_support.rs:129`) clones the
-   edge into `targets` under each of its explicit outputs. An edge with no
-   explicit outputs is silently not inserted at all.
+   edge under each explicit output. An edge with no explicit outputs is
+   silently not inserted — but `register_action` has already run, so its rule
+   block is still emitted with no `build` statement referencing it.
+4. `register_action` hard-codes
+   `depfile: None, deps_format: None, pool: None, restat: false`. No manifest
+   can currently populate those fields.
 
-`src/ninja_gen/` emits the text. There are two entry points. `generate`
-(`src/ninja_gen/mod.rs:106`) is the simple path and rejects any graph needing
-staged serial-dependency lowering. `generate_bundle`
-(`src/ninja_gen/dyndep.rs:91`) is the path production actually uses; it returns
-a `GeneratedNinja { build_file: String, dyndep_files: Vec<GeneratedDyndep> }`
-and can lower serial dependency lists into Ninja `dyndep` sidecars.
+`src/ninja_gen/` emits the text. `generate` (`src/ninja_gen/mod.rs:106`) is the
+simple path and rejects graphs needing staged serial lowering. `generate_bundle`
+(`src/ninja_gen/dyndep.rs:91`) is what production uses and returns
+`GeneratedNinja { build_file, dyndep_files }`. Both:
 
-Both paths do the same four things in the same order:
-
-1. `reject_unsupported_path_characters` — rejects any path containing `$`,
-   `:`, `|`, or any Unicode control character, including NUL
-   (`src/ninja_gen/path_syntax.rs:52`).
+1. `reject_unsupported_path_characters` — rejects `$`, `:`, `|`, and any
+   Unicode control character including NUL (`src/ninja_gen/path_syntax.rs:52`).
 2. `reject_reserved_paths` — rejects paths under `.netsuke/serial` or
-   `.netsuke/dyndep` (`src/ninja_gen/dyndep.rs:346`).
-3. `write_action_rules` — collects `graph.actions` into a `Vec`, sorts it by
-   the map key, and writes one `rule` block per non-dependency-only action
-   (`src/ninja_gen/mod.rs:216`).
-4. Edge rendering — collects `graph.targets.values()` into a `Vec`, sorts it by
-   `path_key(&edge.explicit_outputs)`, deduplicates on the same key, and writes
-   one `build` statement per surviving edge (`src/ninja_gen/mod.rs:173` and
-   `src/ninja_gen/dyndep.rs:155`).
+   `.netsuke/dyndep`.
+3. `write_action_rules` — sorts `graph.actions` by map key, writes one `rule`
+   block per non-dependency-only action.
+4. Edge rendering — sorts `graph.targets.values()` by
+   `path_key(&edge.explicit_outputs)`, deduplicates on the same key, writes one
+   `build` statement per surviving edge.
 
-Then, if `graph.default_targets` is non-empty, both paths clone it, call
-`sort()`, and write a single `default` line.
+Then, if `default_targets` is non-empty, both clone it, `sort()`, and write one
+`default` line last.
 
-`path_key` itself is five lines (`src/ninja_gen/mod.rs:242`):
+`path_key` (`src/ninja_gen/mod.rs:242`):
 
 ```rust
 pub(crate) fn path_key(paths: &[Utf8PathBuf]) -> String {
@@ -138,1489 +153,1477 @@ pub(crate) fn path_key(paths: &[Utf8PathBuf]) -> String {
 }
 ```
 
-It maps a list of paths to a canonical string by sorting the paths and joining
-them with a NUL byte.
-
 ### What "deterministic" means here, precisely
 
-Three different statements are easy to confuse. This plan keeps them apart.
+Four statements are easy to conflate. The plan keeps them apart, and `EP-M1`
+decides which are public.
 
-The **process-level statement** is what the design document already claims: the
-same manifest and environment give byte-identical output. This is what a user
-cares about and what caching depends on.
+The **process-level statement**: the same manifest, environment, platform, and
+Netsuke version give byte-identical output. This is what users care about and
+what caching depends on. Nothing tests it today.
 
-The **graph-level statement** is what roadmap `4.3.1` actually names: emission
-is invariant under `HashMap` insertion order. Two `BuildGraph` values that are
-*equal as values* but whose maps were populated in different sequences must
-emit identical bytes. This is the property that fails if a sort is removed,
-because `std::collections::HashMap` uses `RandomState`: each map instance draws
-a fresh hash key, so two maps built from the same pairs in one process will
-generally iterate differently once they hold more than a couple of entries.
+The **graph-level statement**: emission is invariant under `HashMap` insertion
+order. Two `BuildGraph` values equal as values but whose maps were populated in
+different sequences emit identical bytes. This is what roadmap `4.3.1` names.
 
-The **declaration-level statement** is stronger and not stated anywhere yet:
-permuting the order in which targets are declared in the manifest does not
-change the emitted bytes. It follows from the graph-level statement plus the
-content-hash interning of actions and the sorting of `default_targets`, but
-only if the lowering itself does not smuggle declaration order into any edge.
-Confirming that is worth doing, because it is what a user would actually
-predict, but it is a hypothesis to be measured before it is asserted.
+The **declaration-level statement**: permuting the order of target declarations
+in a manifest does not change the emitted bytes. Stronger, and not currently
+stated anywhere.
 
-One thing is explicitly *not* claimed. Within a single edge, the order of
-`explicit_outputs`, `inputs`, `implicit_deps`, and `order_only_deps` is
-preserved verbatim into the emitted `build` line by `DisplayEdge`
-(`src/ninja_gen/display_edge.rs:22`). `path_key` sorts internally, so two edges
-whose output lists are permutations of each other share a `path_key` but would
-render differently. In a well-formed graph such a pair cannot exist, because
-duplicate outputs are rejected — but this is an invariant of the *lowering*,
-not of the emitter, and `BuildGraph`'s fields are public. That gap is the
-reason obligation `OBL-GUARD` below exists.
+The **platform-and-shell parameter**, which the first draft wrongly omitted.
+`generate`, `generate_bundle`, *and* `from_manifest` are all thin wrappers over
+`*_for_shell` functions taking `RecipeShell::host_default()`, which is
+`PowerShell` on Windows and `Posix` elsewhere, overridable at runtime by
+`NETSUKE_WINDOWS_SHELL` whose `Bash` route additionally depends on a filesystem
+probe. PowerShell takes an `rspfile` branch that POSIX does not
+(`src/ninja_gen/mod.rs:385`). Emitted bytes are therefore a function of
+(manifest, environment, platform, shell selection, Netsuke version). The design
+document's unqualified claim is false across platforms as written, and the
+contract must name the parameter tuple.
+
+What is explicitly **not** claimed: within a single edge, `DisplayEdge`
+(`src/ninja_gen/display_edge.rs:22`) renders each path vector verbatim in
+declaration order, so emission is *not* invariant under permuting an edge's own
+output list — even though `path_key` is. Nor is determinism claimed for error
+paths: `reject_unsupported_path_characters` and `reject_reserved_paths` both
+iterate `graph.targets.values()` and return on the *first* offender, so which
+error a multi-fault graph reports is insertion-order dependent.
+
+### Prior art in this repository
+
+`src/graph_view/tests_property.rs` already contains
+`graphview_is_insertion_order_invariant`: it builds the same logical graph
+twice with reversed insertion order, projects both through
+`GraphView::from_build_graph`, and asserts equality of the view and two
+renderers — in 169 lines, with no shared strategy crate. The first draft of
+this plan claimed "there is no arbitrary-`BuildGraph` strategy today", which is
+wrong.
+
+This matters three ways. Its `arb_graph_inputs` is the strategy this plan must
+absorb or explicitly diverge from, or the repository ends up with two
+incompatible `BuildGraph` generators. Its `retain_disjoint_output_edges`
+*drops* conflicting elements rather than filtering the case, which is the house
+answer to the filtering trap and is adopted here. And `GraphView` is itself a
+canonical projection of `BuildGraph` computed by a structurally different
+mechanism (`BTreeMap`/`BTreeSet` iteration rather than explicit `sort_by_key`),
+which makes it usable as a differential oracle rather than only prior art.
 
 ### What Proptest is and how this repository already uses it
 
-Proptest generates random values from a *strategy*, checks a property against
-each, and on failure *shrinks* the input to a minimal counter-example. It is
-already a dev-dependency at version `1.11.0` (the current release), and
-`test_support` depends on it at the same version.
+Proptest generates values from a *strategy*, checks a property, and shrinks
+failures to a minimal counter-example. It is a dev-dependency at `1.11.0`.
 
-The house conventions, all confirmed against existing code, are:
+House conventions, confirmed against code: the `proptest! { }` macro block;
+`prop_assert*` rather than `assert!`/`unwrap`; strategies as functions returning
+`impl Strategy<Value = T>` (no file implements `Strategy` or `Arbitrary`
+directly, and neither `proptest-derive` nor `test-strategy` is a dependency);
+inline `#![proptest_config(...)]` case counts between 8 and 256; library-side
+suites in sibling files wired from the production module with
+`#[cfg(test)] #[path = ...]`; committed regression seeds.
 
-- Use the `proptest! { ... }` macro block. No file in this repository
-  implements the `Strategy` or `Arbitrary` traits directly, and neither
-  `proptest-derive` nor `test-strategy` is a dependency. Strategies are
-  functions returning `impl Strategy<Value = T>`, composed from
-  `prop::collection::vec`, `prop_oneof!`, regex string strategies, `.prop_map`,
-  and `prop_compose!`.
-- Assert with `prop_assert!` and `prop_assert_eq!`, never `assert!` or
-  `unwrap`, so shrinking is preserved.
-- Set case counts inline with `#![proptest_config(...)]`. Existing counts range
-  from 8 to 256 and scale inversely with per-case cost; 128 is the count used
-  by the existing Ninja property suite.
-- Library-side property tests live in a sibling file wired from the production
-  module with `#[cfg(test)] #[path = "..."] mod property_tests;`. There is no
-  central registry in `src/lib.rs`.
-- Regression seed files are committed. Library-side seeds land under
-  `proptest-regressions/<module path>.txt`; integration-test seeds land beside
-  the test as `tests/<stem>.proptest-regressions`. Seeds retained for reasons
-  other than a live defect carry a comment explaining why.
-
-The existing Ninja property suite is `src/ninja_gen_property_tests.rs`, wired
-from `src/ninja_gen/mod.rs:392`, with two submodules under
-`src/ninja_gen_property_tests/`. One of them, `ninja_oracle.rs`, is important
-prior art: it probes for a real `ninja` binary, and if one is present it writes
-generated files to a temporary directory and runs `ninja -t commands` to check
-that Ninja agrees with what Netsuke thinks it emitted. Because it must skip
-when Ninja is absent, it drives `TestRunner::run` directly rather than using the
-`proptest!` macro. This plan reuses that pattern.
-
-`test_support/src/ninja_gen.rs` already exports
-`paths_strategy(prefix, size_range) -> impl Strategy<Value = Vec<Utf8PathBuf>>`,
-the only cross-crate strategy in the repository. There is no
-arbitrary-`BuildGraph` strategy today; each property test hand-rolls the graph
-shape it needs. Building a shared, well-formed, bounded graph strategy is the
-central new artefact of this plan.
+One deviation is already established:
+`src/ninja_gen_property_tests/ninja_oracle.rs` drives `TestRunner::run`
+directly rather than using the macro, because it must skip when the `ninja`
+binary is absent. This plan reuses that pattern wherever a post-run assertion
+or a conditional skip is needed.
 
 ### Terms used in this plan
 
-- **Build graph / IR** — the `BuildGraph` value described above.
+- **Build graph / IR** — the `BuildGraph` value above.
 - **Edge** — one `BuildEdge`, rendered as one Ninja `build` statement.
 - **Action** — one `Action`, rendered as one Ninja `rule` block.
-- **Well-formed graph** — a `BuildGraph` satisfying the invariants that
+- **Dyndep staging** — when an edge has `DependencyOrder::Serial` and more than
+  one implicit dependency, `generate_bundle` lowers it into Ninja `dyndep`
+  sidecar files under `.netsuke/dyndep/` so the dependencies run in declared
+  order. `generate` refuses such graphs. See `ADR-011`.
+- **Well-formed graph** — a `BuildGraph` satisfying the invariants
   `from_manifest` establishes: every edge has at least one explicit output;
-  explicit output sets are pairwise disjoint and internally duplicate-free;
-  every `action_id` referenced by an edge exists in `actions`; every edge value
-  stored under key `k` has `k` among its explicit outputs; and no path contains
-  a character the emitter rejects.
+  explicit output sets are pairwise disjoint and internally duplicate-free; no
+  output path is empty; every `action_id` exists in `actions`; every edge under
+  key `k` has `k` among its explicit outputs; and no path contains a rejected
+  character.
 - **Insertion-order permutation** — building two `BuildGraph` values from the
-  same set of key-value pairs by inserting those pairs in two different
-  sequences. The resulting values are equal; their maps' iteration orders
-  generally differ.
-- **Metamorphic property** — a property relating the outputs of two runs on
-  *related* inputs, rather than checking one output against a fixed expected
-  value. "Permuting insertion order does not change the bytes" is metamorphic.
-- **Oracle** — an independent source of truth. Here, the real `ninja` binary.
-- **Non-vacuity** — evidence that a property could actually fail. A property
-  that passes because its generator never produces an interesting input proves
-  nothing.
-- **Mutation patch** — a committed `.patch` file that deliberately breaks one
-  production behaviour, used to demonstrate that a named test detects it.
+  same pairs in two different sequences.
+- **Metamorphic property** — one relating outputs of two runs on *related*
+  inputs, rather than checking one output against a fixed expectation.
+- **Differential oracle** — comparing against an independently computed
+  reference (here, `GraphView`, or the real `ninja` binary).
+- **Non-vacuity** — evidence the property could actually fail.
+- **Mutation patch** — a committed `.patch` deliberately breaking one
+  production behaviour, used to show a named test detects it.
 
 ## Signposts: documentation and skills
 
-Read these before starting. They are listed in the order they become useful.
+Repository documentation, in the order it becomes useful:
 
-Repository documentation:
-
-- `docs/roadmap.md` §4.3 — the item being delivered, and §4.2 for the deferred
-  obligations this plan inherits.
+- `docs/roadmap.md` §4.3 (the item) and §4.2 (the deferred obligations).
 - `docs/formal-verification-methods-in-netsuke.md` §"Proptest for determinism
-  and manifest semantics" — the design basis, referred to below as `FV-DET`.
-  Also its §"Determinism contract", which asks for the contract decision this
-  plan makes.
-- `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md` — records the Kani bound
-  and the hand-off to this item.
-- `docs/netsuke-design.md` §1.2 (the determinism claim), §5.4 (Ninja file
-  synthesis), and §5.5 (design decisions, including the sorting rationale).
-- `docs/developers-guide.md` §"Property-based testing with proptest" — the
-  house rules, and the two cited canonical examples.
+  and manifest semantics" (`FV-DET`) and §"Determinism contract"
+  (`FV-CONTRACT`).
+- `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md` (`ADR-004`).
+- `docs/netsuke-design.md` §1.2, §5.4, §5.5.
+- `docs/developers-guide.md` §"Property-based testing with proptest".
+- `docs/adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md`.
+- `docs/documentation-style-guide.md` and `AGENTS.md`.
 - `docs/rust-testing-with-rstest-fixtures.md`,
   `docs/reliable-testing-in-rust-via-dependency-injection.md`,
   `docs/snapshot-testing-in-netsuke-using-insta.md`,
-  `docs/rstest-bdd-users-guide.md`, and `docs/rust-doctest-dry-guide.md` — the
-  testing idioms this repository expects.
-- `docs/documentation-style-guide.md` — required for every documentation edit.
-- `AGENTS.md` — the binding rules: 400-line file ceiling, 80-column Markdown
-  wrap, en-GB-oxendict spelling, the ban on in-process environment mutation,
-  and the gate commands.
-- `docs/adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md` — why the
-  dyndep bundle path exists at all.
+  `docs/rstest-bdd-users-guide.md`, `docs/rust-doctest-dry-guide.md`.
 
-Deliberate non-reference: `docs/rfcs/0012-netsukefile-property-testing.md`
-describes a *manifest-author-facing* property-testing feature for Netsuke users
-(roadmap phase 10). It is unrelated to this plan, which adds internal Rust
-property tests. Do not conflate them.
+Code and configuration that constrains this work, all of which the first draft
+missed and none of which is optional reading:
 
-Agent skills to load:
+- `tests/kani_mutation_evidence_tests.rs` — the contract governing
+  `docs/verification/mutations/`. Read before writing any patch.
+- `src/graph_view/tests_property.rs` — the prior-art insertion-order property.
+- `src/ninja_gen_property_tests/ninja_oracle.rs` — the `TestRunner::run` and
+  skip-when-absent pattern.
+- `test_support/src/ninja.rs` — `ninja_is_required` and the
+  `NETSUKE_REQUIRE_NINJA` escalation, set in `.github/workflows/ci.yml:78` and
+  `coverage-main.yml:77` but **not** in `ci-windows.yml`.
+- `.config/nextest.toml` — the explicit no-blanket-retry policy.
+- `.github/workflows/mutation-testing.yml` — `cargo-mutants`, nightly at 03:05
+  UTC over `src/`, informational.
+- `clippy.toml` — `std::env::var`/`var_os` are in `disallowed-methods`.
 
-- `execplans` — this document's format and its living-section discipline.
-- `rust-router`, then `rust-verification` for adversary selection, then
-  `proptest` for strategy design, the filtering trap, and shrinking discipline.
-- `rust-unit-testing` for assertion and helper shape.
-- `hexagonal-architecture` for the boundary question in
-  `Interfaces and dependencies`.
-- `codegraph-mcp` for navigating callers and impact before editing.
-- `arch-decision-records` for the ADR this plan writes.
-- `en-gb-oxendict` for all prose.
+Deliberate non-reference: `docs/rfcs/0012-netsukefile-property-testing.md` is a
+manifest-author-facing feature for Netsuke *users* (roadmap phase 10),
+unrelated to this item's internal Rust property tests.
 
-External references consulted while drafting: the Ninja manual v1.13.1
-(<https://ninja-build.org/manual.html>), specifically its statement that "A
-default target statement must appear after the build statement that declares
-the target as an output file", which the emitter satisfies by writing `default`
-last; and the Proptest book's guidance on composing rather than filtering
-strategies.
+Agent skills: `execplans`; `rust-router` then `rust-verification` then
+`proptest`; `rust-unit-testing`; `hexagonal-architecture`; `codegraph-mcp`;
+`arch-decision-records`; `en-gb-oxendict`.
+
+External reference: the Ninja manual v1.13.1, specifically "A default target
+statement must appear after the build statement that declares the target as an
+output file", which the emitter satisfies by writing `default` last.
 
 ## Conformance basis
 
-There is no Terms of Reference document in this repository. The upstream
-artefacts are:
+There is no Terms of Reference document in this repository. Upstream artefacts:
 
-- `docs/roadmap.md`, item 4.3.1 and its three sub-items, referred to as
-  `RM-4.3.1.a` (insertion-order stability), `RM-4.3.1.b` (`default` ordering),
-  and `RM-4.3.1.c` (`path_key` invariance).
-- `docs/roadmap.md`, item 4.2.1, whose first and third sub-items each record
-  that "4.3.1 closes the larger-N Proptest coverage". These inherited
-  obligations are referred to as `RM-4.2.1.dup` (duplicate-output rejection at
-  larger N) and `RM-4.2.1.cyc` (cycle rejection at larger N).
-- `docs/formal-verification-methods-in-netsuke.md`, §"Proptest for determinism
-  and manifest semantics" — the design basis, `FV-DET`. Note that `FV-DET`
-  lists a fourth bullet the roadmap omits: "action-hash stability for
-  field-preserving permutations". This plan discharges it as `OBL-ACTION`.
-- `docs/formal-verification-methods-in-netsuke.md`, §"Determinism contract" —
-  `FV-CONTRACT`, the requirement to decide and document what is guaranteed.
-- `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md` — `ADR-004`, which
-  records the hand-off.
-- A new architecture decision record, `ADR-021`, written by this plan, stating
-  the determinism contract.
+- `docs/roadmap.md` item 4.3.1 and its three sub-items, `RM-4.3.1.a`
+  (insertion-order stability), `RM-4.3.1.b` (`default` ordering), `RM-4.3.1.c`
+  (`path_key` invariance).
+- `docs/roadmap.md` item 4.2.1, whose first and third sub-items record that
+  "4.3.1 closes the larger-N Proptest coverage": `RM-4.2.1.dup` and
+  `RM-4.2.1.cyc`.
+- `docs/roadmap.md` item 4.2.2 (cycle canonicalization, complete). `OBL-CYCLE`
+  must state its boundary against it: this plan checks *rejection*, not the
+  canonical *content* of the reported cycle, which 4.2.2 owns.
+- `FV-DET`, which lists a fourth bullet the roadmap omits — "action-hash
+  stability for field-preserving permutations" — discharged as `OBL-ACTION`.
+- `FV-CONTRACT`, the requirement to decide and document what is guaranteed.
+- `ADR-004`, recording the hand-off.
+- A new architecture decision record, referred to throughout as **`ADR-NNN`**.
+  The number is deliberately not allocated: `adr-021-*` is already claimed on
+  four open branches, and `adr-020` on two. Allocate the number in a single
+  pass as the final commit of the plan, after checking remote branches again.
 
 Trace links:
 
 ```plaintext
-RM-4.3.1.a   -> FV-DET      -> EP-M3 -> ninja_gen::determinism_property_tests::emission_is_insertion_order_invariant
-RM-4.3.1.a   -> FV-DET      -> EP-M3 -> ninja_gen::determinism_property_tests::bundle_is_insertion_order_invariant
-RM-4.3.1.b   -> FV-DET      -> EP-M3 -> ninja_gen::determinism_property_tests::default_line_is_the_ascending_sort
-RM-4.3.1.c   -> FV-DET      -> EP-M2 -> ninja_gen::determinism_property_tests::path_key_is_permutation_invariant
-RM-4.3.1.c   -> FV-DET      -> EP-M2 -> ninja_gen::determinism_property_tests::path_key_is_injective_on_validated_paths
-FV-DET       -> FV-DET      -> EP-M2 -> ninja_gen::determinism_property_tests::validation_precedes_path_key_ordering
-FV-DET       -> FV-DET      -> EP-M4 -> ir::action_hash_property_tests::action_hash_is_a_function_of_content
-RM-4.2.1.dup -> ADR-004     -> EP-M5 -> ir::graph_property_tests::duplicate_outputs_are_rejected_at_larger_n
-RM-4.2.1.cyc -> ADR-004     -> EP-M5 -> ir::graph_property_tests::cycles_are_rejected_at_larger_n
-RM-4.2.1.cyc -> ADR-004     -> EP-M5 -> ir::graph_property_tests::acyclic_graphs_with_missing_deps_are_accepted
-FV-CONTRACT  -> ADR-021     -> EP-M6 -> docs/adr-021-ninja-emission-determinism-contract.md
-FV-CONTRACT  -> ADR-021     -> EP-M6 -> docs/users-guide.md (determinism guarantee)
-RM-4.3.1.a   -> ADR-021     -> EP-M4 -> ninja_gen::determinism_property_tests::declaration_order_does_not_change_emission
-RM-4.3.1.a   -> ADR-021     -> EP-M7 -> tests/ninja_determinism_oracle_tests.rs
+RM-4.3.1.a   -> FV-DET      -> EP-M5 -> ninja_gen::determinism::order::ordered_edges_ignore_input_order
+RM-4.3.1.a   -> FV-DET      -> EP-M5 -> ninja_gen::determinism::order::emission_is_insertion_order_invariant
+RM-4.3.1.b   -> FV-DET      -> EP-M5 -> ninja_gen::determinism::defaults::default_line_is_the_ascending_sort
+RM-4.3.1.c   -> FV-DET      -> EP-M4 -> ninja_gen::determinism::path_key::path_key_is_permutation_invariant
+RM-4.3.1.c   -> FV-DET      -> EP-M4 -> ninja_gen::determinism::path_key::path_key_is_injective_on_validated_paths
+FV-DET       -> ADR-NNN     -> EP-M4 -> ninja_gen::determinism::no_loss::every_distinct_edge_is_emitted_once
+FV-DET       -> ADR-NNN     -> EP-M5 -> tests::ninja_gen_hashmap_boundary::no_hashmap_iteration_in_ninja_gen
+FV-DET       -> FV-DET      -> EP-M6 -> ir::action_hash_property_tests::equal_actions_hash_equally
+FV-CONTRACT  -> ADR-NNN     -> EP-M6 -> tests::ninja_determinism_process::two_runs_emit_identical_bytes
+RM-4.3.1.a   -> ADR-NNN     -> EP-M6 -> ninja_gen::determinism::declaration::declaration_order_does_not_change_emission
+RM-4.2.1.dup -> ADR-004     -> EP-M7 -> ir::graph_property_tests::duplicate_outputs_are_rejected_at_larger_n
+RM-4.2.1.cyc -> ADR-004     -> EP-M7 -> ir::graph_property_tests::cycles_are_rejected_at_larger_n
+FV-CONTRACT  -> ADR-NNN     -> EP-M1 -> docs/adr-NNN-ninja-emission-determinism-contract.md
 ```
 
-Roadmap item 4.3.2 declares `Requires 4.1.1`, not this item, so nothing
-downstream is blocked by the scope choices made here. Roadmap 4.4.1 owns the
-README's *command placeholder* section; `ADR-021` and the determinism sentence
-this plan adds are a different subject and do not collide with it.
+Roadmap §4.4 is titled "Contract documentation and optional proof kernels", and
+4.4.1 is its structural twin — a verification item handing a contract to a
+documentation item. This plan writes `ADR-NNN` in `EP-M1` because the contract
+must exist before the properties that check it, and proposes adding roadmap
+4.4.4 "Document the Ninja emission determinism contract" to own the
+*user-facing prose* if reviewers prefer that split. Recorded as an open
+question.
 
 ## Constraints
 
-These are hard invariants. Violating any of them is an escalation, not a
-judgement call.
-
-1. No change to the observable behaviour of the shipped binary. This plan adds
-   tests, documentation, one ADR, and Make targets. If a property fails against
-   current production code, that is a discovery to be recorded and escalated
-   under `Tolerances`, not silently patched.
+1. No change to the observable behaviour of the shipped binary. Pure,
+   behaviour-preserving refactors are permitted and expected — `EP-M2` splits
+   two files and extracts two ordering helpers — but no change to what any
+   input produces. If a property fails against current production code, that is
+   a discovery to escalate, not to patch.
 2. No widening of the public API of `netsuke::ir` or `netsuke::ninja_gen`.
-   `path_key` is `pub(crate)` and must stay so; library-side property tests can
-   reach it through `super::`. If a test genuinely cannot be written without
-   widening, stop and escalate.
-3. No new `[dependencies]`, `[dev-dependencies]`, or `[build-dependencies]`
-   entries. `proptest 1.11.0`, `rstest 0.26.1`, `googletest 0.14.3`,
-   `pretty_assertions 1.4.1`, and `insta 1` are already present and are
-   sufficient. In particular, do not add `proptest-derive` or `test-strategy`;
-   the house style is handwritten strategy functions.
-4. No file may exceed 400 lines (`AGENTS.md`). The new strategy and property
-   code must be split across sibling files from the outset rather than
-   retrofitted.
-5. No in-process environment mutation in tests. There is no
-   `EnvLock`/`serial_test` escape hatch. The only exemption is subprocess
-   isolation via `assert_cmd` or `Command::env`, which the Ninja oracle already
-   uses.
-6. Strategies must construct valid values, not filter for them.
-   `prop_filter` and `prop_assume!` interact badly with shrinking and exhaust
-   the rejection budget. Disjoint output sets, unique action identifiers, and
-   acyclic edge sets must all be produced by construction from the seed.
-7. Every property must be validated by a mutation. A property that still passes
-   after the production behaviour it names is deliberately broken is a
-   falsified property, not a passing one. Each mutation is recorded as a
-   literal patch file under `docs/verification/mutations/`, not as prose.
-8. Regression seed files are committed, and any seed retained for a reason
-   other than a live defect carries a comment saying why.
-9. Assertions inside `proptest!` bodies use `prop_assert*`. No `unwrap`, no
-   `assert!`, no `panic!`.
-10. Graph size stays within the roadmap bound: at most 50 actions and at most
-    100 edges per generated graph.
-11. All prose is en-GB-oxendict, wrapped at 80 columns, with code blocks
-    wrapped at 120. Markdown must be `mdtablefix`-canonical; run `make fmt`
-    and compare table *cells*, never rendered rows.
+   `path_key` stays `pub(crate)`; library-side tests reach it through `super::`.
+3. No new `[dependencies]`, `[dev-dependencies]`, or `[build-dependencies]`.
+   `proptest 1.11.0`, `rstest`, `googletest`, `pretty_assertions`, `insta`, and
+   `assert_cmd` are present and sufficient. Do not add `proptest-derive` or
+   `test-strategy`.
+4. No file may exceed 400 lines. `src/ninja_gen/mod.rs` is **at** 400 and
+   `tests/kani_mutation_evidence_tests.rs` is at 383; both are split in `EP-M2`
+   before anything is added to them.
+5. No in-process environment mutation in tests, and no direct `std::env::var`
+   or `var_os` — both are in `clippy.toml`'s `disallowed-methods` and
+   `make lint` runs with `-D warnings`. Use an injected `Env`, as
+   `test_support/src/ninja.rs` does. Subprocess isolation via `assert_cmd` or
+   `Command::env` is the only exemption.
+6. Strategies construct valid values; they do not filter for them. Where
+   conflicts are unavoidable, *drop* the conflicting elements as
+   `retain_disjoint_output_edges` does, rather than rejecting the case.
+7. Every property is validated by a mutation that it detects, recorded as a
+   patch under `docs/verification/mutations/` and conforming to the contract in
+   `tests/kani_mutation_evidence_tests.rs`.
+8. Regression seeds are committed. Because a seed is a persisted RNG seed and
+   not a value, any strategy change silently repurposes it; every retained seed
+   is therefore paired with a directed `#[test]` encoding the concrete
+   counter-example as a literal.
+9. Assertions inside `proptest!` bodies use `prop_assert*`. Where a property
+   needs a post-run assertion or a conditional skip, it uses the
+   `TestRunner::run` form established in
+   `src/ninja_gen_property_tests/ninja_oracle.rs`, and ordinary assertions are
+   permitted *after* the runner returns.
+10. Generated graphs stay within the roadmap bound of 50 actions and 100 edges,
+    **and** within a total of 200 explicit outputs. The second bound is the one
+    that governs cost: `insert_edge_for_outputs` stores an edge once per
+    output, so the emitter's sort sees `targets.len()`, not the edge count.
+    Without it, per-case cost swings 13-fold.
+11. All prose is en-GB-oxendict, wrapped at 80 columns; code blocks at 120.
+    Markdown must be `mdtablefix`-canonical. After running `make fmt` over
+    authored prose, read the diff: `--renumber` will silently convert a wrapped
+    line beginning with a number and a full stop into an ordered-list item, and
+    no gate catches it.
 12. `make check-fmt`, `make typecheck`, `make lint`, `make doc-coverage`,
-    `make test`, `make markdownlint`, and `make nixie` must pass at every
-    milestone boundary.
+    `make test`, `make markdownlint`, and `make nixie` pass at every milestone
+    boundary.
 
 ## Tolerances (exception triggers)
 
-Stop and escalate when any of these thresholds is reached. Do not work around
-them.
-
-- **Scope.** If implementation needs to touch more than 16 files beyond this
-  ExecPlan, stop. The expected set is: `Makefile`; `.github/workflows/ci.yml`;
-  `test_support/src/ninja_gen.rs` and any new sibling under
-  `test_support/src/ninja_gen/`; `src/ninja_gen/mod.rs` (test-module wiring
-  only); new files under `src/ninja_gen_determinism_property_tests/`;
-  `src/ir/mod.rs` or `src/ir/graph.rs` (test-module wiring only); new files
-  under `src/ir/`; `tests/ninja_determinism_oracle_tests.rs`;
-  `docs/adr-021-ninja-emission-determinism-contract.md`; `docs/contents.md`;
-  `docs/netsuke-design.md`; `docs/developers-guide.md`; `docs/users-guide.md`;
-  `README.md`; `docs/roadmap.md`; the mutation patch files; and the committed
-  regression seed files.
-- **Production change.** If any property cannot be made to pass without
-  changing production code, stop immediately. Record the counter-example in
-  `Surprises & discoveries` and escalate. This is the most likely and most
-  valuable failure mode in the whole plan; treat it as a finding, not an
-  obstacle.
-- **API widening.** If a test needs a symbol made more public than
-  `pub(crate)`, stop and present options.
-- **Runtime.** If the light property tier adds more than 45 seconds of wall
-  time to `make test` on the reference machine (six-core Rocky 10, 64 GB RAM),
-  stop and split the suite into light and heavy tiers as described in `EP-M1`.
-  If the heavy tier exceeds 10 minutes, stop and reduce either the case count
-  or the graph bound, and record the reduction in `Decision log`.
-- **Shrinking.** If any property produces counter-examples that do not shrink
-  to a small, readable graph within `max_shrink_iters`, stop and redesign the
-  strategy. A 50-action counter-example that will not minimize is an unusable
-  test.
+- **Scope.** Stop if the change touches more than 34 files beyond this
+  ExecPlan. That number is deliberately larger than the first draft's 16, which
+  its own artefact list breached on day one; a tolerance that fires immediately
+  teaches the reader to ignore tolerances. The budget is roughly 12 new test
+  and strategy files, 5 mutation patches, 1 ADR, 8 edited documents, and 8
+  edited source or configuration files. Also stop if net added lines exceed
+  2,600 — the axis on which the 4.2.3 precedent overran by 2.2x and which its
+  successor dropped.
+- **Production change.** If any property cannot pass without changing
+  production behaviour, stop immediately, record the counter-example, and
+  escalate. Note that `OBL-E2E` no longer carries a pre-authorized weakening
+  clause: narrowing it is an ADR amendment with a visible diff, not a drafting
+  choice.
+- **API widening.** If a test needs a symbol more public than `pub(crate)`,
+  stop and present options.
+- **Runtime.** The measured budget is ~6 s of CPU for the whole new suite. Stop
+  and reconsider if it exceeds 30 s, or if any single test approaches
+  `.config/nextest.toml`'s 60-second slow warning. That file SIGKILLs a test at
+  300 s and a killed process persists no regression seed, so the 60-second warn
+  is the real ceiling, not a soft one.
+- **Shrinking.** `max_shrink_iters` defaults to `4 x cases`; a `GraphSpec` has
+  roughly 1,500 shrink dimensions, so full minimization is not achievable
+  within the timeout. Set `max_shrink_time` to 30 s on the heavy properties,
+  accept partial minimization, and rely on the compact `Debug` from `EP-M3`. If
+  counter-examples are still unreadable, stop and redesign the strategy rather
+  than raising the iteration cap into the kill window.
 - **Rejection rate.** If any strategy needs `prop_filter` or `prop_assume!` on
-  a structural condition — as opposed to a genuinely rare edge — stop and
-  redesign it to construct valid values. Record generator classification
-  evidence showing the rejection rate is under 5%.
-- **Mutation discipline.** If any property still passes after its matching
-  mutation patch is applied, stop and redesign the property.
-- **Lint friction.** If Clippy or the Whitaker Dylint suite cannot be satisfied
-  without a broad `#[allow(...)]` umbrella, stop and escalate before adding
-  one. Narrowly scoped suppressions with a `reason = "..."` clause are
-  acceptable; blanket ones are not.
-- **Gates.** If `make check-fmt`, `make lint`, `make typecheck`, or `make test`
-  fails after two focused fix attempts, stop and escalate with the captured
-  `/tmp` log paths.
-- **Review.** If `coderabbit review --agent` raises unresolved correctness,
-  testing, or documentation concerns, do not proceed until they are addressed
-  or explicitly waived.
-- **Contract disagreement.** If writing `ADR-021` reveals that the determinism
-  guarantee cannot be stated without qualifying it in a way that contradicts
-  the README or `docs/netsuke-design.md` §1.2, stop and escalate before editing
-  either document.
+  a structural condition, stop and redesign to construct or drop instead.
+- **Mutation discipline.** If any property still passes with its patch applied,
+  stop and redesign the property.
+- **Contract test.** If generalizing `tests/kani_mutation_evidence_tests.rs`
+  requires more than a mechanical widening of `supplemental_property_location`
+  plus a file split, stop and escalate: that file is a repository-wide rot
+  detector and weakening it is worse than dropping a patch.
+- **Lint friction.** If Clippy or Whitaker cannot be satisfied without a broad
+  `#[allow(...)]`, stop and escalate.
+- **Gates.** If a gate fails after two focused fix attempts, stop and escalate
+  with the captured `/tmp` log paths.
+- **Review.** If `coderabbit review --agent` raises unresolved concerns, do not
+  proceed until they are addressed or waived.
+- **Contract disagreement.** If `ADR-NNN` cannot state the guarantee without
+  contradicting `README.md` or `docs/netsuke-design.md` §1.2, stop and escalate
+  before editing either.
 
 ## Risks
 
 - **A property fails against current production code.** *Severity: high.
-  Likelihood: moderate.* The most likely candidates are the declaration-order
-  property (`OBL-E2E`), which depends on the lowering never smuggling
-  declaration order into an edge, and the reserved-path or validation ordering
-  in the dyndep bundle path. *Mitigation:* `EP-M0` runs each candidate property
-  as a throwaway spike before any milestone commits to it. A confirmed failure
-  is escalated under `Tolerances`, not fixed silently.
+  Likelihood: moderate.* Most likely on `OBL-E2E`, which depends on the
+  lowering never smuggling declaration order into an edge. *Mitigation:*
+  `EP-M0` spikes it before `EP-M1` writes the contract.
 - **Weak strategy makes a strong property look strong.** *Severity: high.
-  Likelihood: moderate.* A generator that only ever produces single-output
-  edges with no implicit dependencies would pass every property here while
-  proving almost nothing. *Mitigation:* every obligation carries an explicit
-  non-vacuity clause naming the equivalence classes it must reach, checked with
-  `proptest::prop_assert` on classification counters recorded in `EP-M0` and
-  re-measured at `EP-M7`.
-- **Insertion-order permutation does not actually change iteration order.**
-  *Severity: high. Likelihood: low but real.* For very small maps, two
-  `HashMap`s built from the same pairs may happen to iterate identically, which
-  would make the property vacuous on those cases. *Mitigation:* the property
-  records, per case, whether the two maps' raw iteration orders differed, and
-  the suite asserts that a material fraction of cases exhibited a genuine
-  difference. Cases where they did not are still checked but are not counted as
-  evidence.
-- **Test-suite runtime regresses the inner loop.** *Severity: moderate.
-  Likelihood: moderate.* Fifty-action graphs emitted twice per case at 128
-  cases is far more work than the existing properties do. *Mitigation:* `EP-M1`
-  measures before committing, and the light/heavy split is pre-planned rather
-  than retrofitted.
-- **The 400-line file ceiling forces awkward splits late.** *Severity: low.
-  Likelihood: high.* The strategy code alone will not fit in one file with the
-  properties. *Mitigation:* the file layout in `Interfaces and dependencies` is
-  decided up front.
-- **Real-Ninja oracle is flaky or absent in CI.** *Severity: low. Likelihood:
-  moderate.* *Mitigation:* reuse the existing `NinjaCommandOracle::try_create`
-  skip-when-absent pattern verbatim; the oracle tier never gates the light
-  suite.
-- **Regression seeds do not persist for integration tests.** *Severity: low.
-  Likelihood: moderate.* Two existing integration tests override
-  `failure_persistence` with an explicit `FileFailurePersistence::Direct`,
-  citing seeds being neither written nor replayed; three others work without
-  it. The discrepancy is unexplained. *Mitigation:* `EP-M0` verifies
-  persistence empirically for the new integration test by forcing a failure and
-  confirming a seed file appears; if it does not, mirror the explicit override
-  and record why in `Surprises & discoveries`.
-- **ADR number collision.** *Severity: low. Likelihood: moderate.* The
-  repository already has duplicate ADR numbers at 003, 004, and 014.
-  *Mitigation:* before allocating `021`, enumerate remote branches and open
-  pull requests for an existing `adr-021-*` file, exactly as the RFC-numbering
-  caution requires.
+  Likelihood: moderate.* *Mitigation:* per-case non-vacuity assertions wherever
+  the restructured obligations allow, recorded classification counts elsewhere,
+  and named intersection classes rather than only marginal ones.
+- **Shrinking is unsound because the predicate is not seed-determined.**
+  *Severity: high. Likelihood: was certain in the first draft.* *Mitigation:*
+  `OBL-ORDER` is restructured so its core is a pure function of the seed, and
+  the end-to-end variant re-materializes until the two iteration orders differ,
+  failing the case if they cannot within a bounded number of attempts.
+- **Mutation patches rot.** *Severity: moderate. Likelihood: high.* The 4.2.3
+  retrospective records all five of its patches going stale twice in two days.
+  `every_patch_applies_cleanly` turns rot into a red `make test` for whoever
+  touched the code, not whoever owns the patch. *Mitigation:* five patches, not
+  eleven; prefer single-file patches; lean on the existing nightly
+  `cargo-mutants` job for the faults nobody wrote a patch for.
+- **`git apply --check` proves a patch applies, not that it still kills.**
+  *Severity: moderate. Likelihood: moderate.* *Mitigation:* `EP-M8` re-applies
+  every patch against the final tree and records which properties failed.
+- **Real-Ninja oracle silently vanishes from a lane.** *Severity: moderate.
+  Likelihood: moderate.* `ci-windows.yml` installs Ninja but does not set
+  `NETSUKE_REQUIRE_NINJA`, so that lane skips silently today. *Mitigation:* use
+  the existing `ninja_is_required` mechanism and record the Windows gap as a
+  finding for a separate item rather than fixing it here.
+- **Regression seeds in `tests/` are inert.** *Severity: moderate. Likelihood:
+  high.* Proptest's default `SourceParallel` persistence walks up from
+  `file!()` for a `lib.rs`/`main.rs`; from an integration-test crate it finds
+  neither, so three of the five committed `tests/*.proptest-regressions` files
+  are probably never replayed — including two carrying careful retention
+  comments. *Mitigation:* `EP-M0` question 5 verifies empirically and widens to
+  the existing files; this plan places its properties library-side, where
+  persistence works.
+- **Counter-examples are unreadable.** *Severity: moderate. Likelihood: high.*
+  Proptest prints the input's `Debug` regardless of the assertion message; a
+  50/100 `GraphSpec` is tens of kilobytes. *Mitigation:* a handwritten compact
+  `Debug` is part of `EP-M3`, not a later refinement.
+- **ADR number collision.** *Severity: low. Likelihood: high.* Four branches
+  claim `adr-021` and two claim `adr-020`. *Mitigation:* `ADR-NNN` placeholder,
+  allocated in the final commit.
 
 ## Verification plan
 
 ### Axioms (assumed, not proved)
 
-- **AXIOM-PROPTEST.** Proptest 1.11.0 generates values from strategies and
-  shrinks counter-examples correctly. Its internals are out of scope.
-- **AXIOM-HASHMAP.** `std::collections::HashMap` with the default `RandomState`
-  provides no iteration-order guarantee, and distinct map instances within one
-  process generally draw distinct hash keys. This is what makes the
-  insertion-order property testable in-process rather than requiring separate
-  processes. It is also why the property must *measure* whether orders actually
-  differed rather than assume it.
-- **AXIOM-CAMINO.** `Utf8PathBuf`'s derived `Ord` is the lexicographic ordering
-  of the underlying UTF-8 string. `Vec::sort` on `Vec<Utf8PathBuf>` therefore
-  produces a total, content-determined order. Camino's internals are out of
-  scope.
-- **AXIOM-HASHER.** `crate::hasher::ActionHasher::hash` is a deterministic pure
-  function of the `Action` value's canonical serialization. The cryptographic
-  strength of the digest is out of scope; only its determinism is relied upon,
-  and `OBL-ACTION` checks that reliance rather than assuming it.
-- **AXIOM-NINJA.** The `ninja` binary parses `build.ninja` per its published
-  manual, including the rule that a `default` statement must appear after the
-  build statement declaring the target. Ninja's own correctness is out of
-  scope; only Netsuke's use of it is verified.
-- **AXIOM-SORT.** Rust's `slice::sort_by_key` is a stable sort and
-  `sort_unstable` is not. Stability matters here: the edge sort is stable, so
-  if the sort key were ever non-unique, ties would fall back to `HashMap`
-  iteration order. `OBL-GUARD` exists precisely because that fallback is
-  invisible until the key stops being unique.
+- **AXIOM-PROPTEST.** Proptest 1.11.0 generates and shrinks correctly. Its
+  internals are out of scope. Verified for this plan's use: `prop_shuffle`
+  exists and `Vec<T>: Shuffleable`; `max_shrink_iters()` returns `cases * 4`
+  when unset.
+- **AXIOM-HASHMAP.** `std::collections::HashMap` with `RandomState` gives no
+  iteration-order guarantee, and distinct instances generally draw distinct
+  keys. Crucially, those keys are **not** part of the Proptest seed, so any
+  predicate depending on them is not seed-reproducible. This axiom is the reason
+  `OBL-ORDER` is shaped the way it is rather than the naive way.
+- **AXIOM-CAMINO.** `Utf8PathBuf`'s derived `Ord` is lexicographic over the
+  UTF-8 string, so `Vec::sort` gives a total, content-determined order.
+- **AXIOM-HASHER.** `ActionHasher::hash` is a deterministic pure function of the
+  `Action`'s canonical JSON serialization. Its collision resistance is out of
+  scope, which is why `OBL-ACTION` claims only the direction Proptest can
+  support.
+- **AXIOM-NINJA.** The `ninja` binary parses per its manual. Two behaviours were
+  measured against ninja 1.11.1 rather than assumed: a `default` statement
+  preceding its `build` statement **is** rejected (`unknown target`); and
+  `ninja -t commands` does **not** load dyndep sidecars, so a missing sidecar
+  exits 0 under `-t commands` and fails only under `-n` or a real build.
+- **AXIOM-SORT.** `sort_by_key` is stable and calls its key function O(n log n)
+  times. Stability matters: if the edge sort key stopped being unique, ties
+  would fall back to `HashMap` order invisibly.
 
 ### Obligations
 
 ______________________________________________________________________
 
-**OBL-PATHKEY** — *`path_key` is invariant under permutation of its argument,
-and injective over path lists that the emitter's validator accepts.*
+**OBL-PATHKEY** — *`path_key` is permutation-invariant, and injective over
+non-empty validated paths.*
 
-Statement: for every list of paths `p`, and every permutation `q` of `p`,
-`path_key(p) == path_key(q)`. Further, for any two lists `p` and `r` in which
-no path contains a NUL byte, `path_key(p) == path_key(r)` if and only if `p` and
-`r` are permutations of one another.
+Statement: for every path list `p` and permutation `q` of `p`,
+`path_key(p) == path_key(q)`. Further, for lists `p` and `r` whose elements are
+all non-empty and contain no NUL, `path_key(p) == path_key(r)` if and only if
+`p` and `r` are permutations of one another.
 
-- **Method:** Proptest over generated path lists, plus a directed
-  counter-example test for the injectivity precondition.
-- **Rationale:** this is `RM-4.3.1.c`. Permutation invariance is what makes
-  `path_key` a canonical key for an output *set*. Injectivity is what makes it
-  safe to use as a deduplication key: if two distinct output sets could share a
-  key, the emitter's `seen` set would silently drop a real edge.
-- **Domain:** lists of 0 to 8 paths drawn from a generated pool, permuted with
-  `prop_shuffle`. The injectivity half draws two independent lists from a
-  shared pool so that collisions are reachable rather than astronomically
-  unlikely.
-- **Oracle:** the permutation half compares `path_key` against itself on a
-  shuffled input — a metamorphic relation, not a reimplementation. The
-  injectivity half compares against a sorted-multiset equality computed
-  directly in the test, which is structurally different from `path_key`'s
-  join-with-NUL implementation.
-- **Artefact:** `src/ninja_gen_determinism_property_tests/path_key.rs`,
-  properties `path_key_is_permutation_invariant` and
-  `path_key_is_injective_on_validated_paths`.
-- **Evidence:** `make proptest` reports both properties passing; the shrunk
-  counter-example for the deliberate mutation names two short path lists.
+The non-emptiness precondition is not decoration. `path_key([])` and
+`path_key([""])` are both `""`, and the empty string passes
+`unsupported_character` because it contains no rejected character. The first
+draft stated injectivity without it and was simply wrong.
+
+- **Method:** Proptest, plus directed witness tests.
+- **Rationale:** `RM-4.3.1.c`. Permutation invariance makes `path_key` a
+  canonical key for an output *set*; injectivity makes it safe as a dedup key.
+- **Domain:** lists of 0 to 8 paths from a shared pool, permuted with
+  `prop_shuffle`; the injectivity arm draws two lists from one pool so
+  collisions are reachable.
+- **Oracle:** the permutation arm compares `path_key` against itself on a
+  shuffled input. The injectivity arm compares against sorted-multiset equality
+  computed in the test — structurally different from join-with-NUL.
+- **Artefact:** `src/ninja_gen/determinism/path_key.rs`.
 - **Non-vacuity:**
-  - *Covers.* The generator must reach: the empty list; a single-element list;
-    a list already in sorted order; a list in reverse order; and a list
-    containing repeated paths. Record the classification counts in
-    `Artefacts and notes`. A run in which the repeated-path class is never
-    reached is a failed run, not a passing one.
-  - *Witness.* The injectivity property is guarded by a precondition. Exhibit
-    at least one concrete pair `p = ["a", "b"]`, `r = ["a\0b"]` for which
-    `path_key(p) == path_key(r)` despite `p` and `r` not being permutations,
-    as a directed `#[test]` documenting that the precondition is load-bearing
-    and not vacuous. This is the case `OBL-GUARD` shows is unreachable in
-    practice.
-  - *Mutation.* `MUT-PATHKEY` deletes
-    `parts.sort_unstable()`. `path_key_is_permutation_invariant` must fail.
+  - *Covers.* Per-case `prop_assert!` that the shuffle actually reordered
+    (skipping length < 2). Classes: empty list, singleton, already-sorted,
+    reverse-sorted, repeated elements. Counts recorded.
+  - *Witnesses.* Two directed tests. `path_key(["a","b"]) == path_key(["a\0b"])`
+    shows the NUL precondition is load-bearing;
+    `path_key([]) == path_key([""])` shows the non-emptiness precondition is.
+    Both are stated as *disjunctions*: either the encoding admits the collision,
+    in which case the corresponding precondition is load-bearing, or the
+    encoding is injective without it. A future length-prefixed encoding would
+    be a strict improvement and must not be blocked by these tests.
+  - *Mutation.* `MUT-PATHKEY` deletes `parts.sort_unstable()`.
 
 ______________________________________________________________________
 
-**OBL-GUARD** — *the path-character validator runs before any
-`path_key`-derived ordering, on both emission paths.*
+**OBL-NOLOSS** — *every distinct edge is emitted exactly once; no edge is
+silently dropped.*
 
-Statement: for every `BuildGraph` containing a path with a NUL byte (or any
-other character `unsupported_character` rejects), both `generate` and
-`generate_bundle` return `Err(NinjaGenError::UnsupportedPathCharacter { .. })`,
-and do so without having emitted any output.
+Statement: for every well-formed graph, the number of `build` statements in the
+emitted text equals the number of distinct edges in the graph, and every
+explicit output appears exactly once on the left-hand side of a `build` line.
 
-- **Method:** Proptest over graphs seeded with one adversarial path, plus a
-  directed ordering test.
-- **Rationale:** `OBL-PATHKEY`'s injectivity has a precondition. This
-  obligation discharges that precondition for the only callers that matter. It
-  is the obligation that would catch a future refactor moving validation after
-  sorting — a change that would compile, pass every existing test, and
-  reintroduce a silent edge-dropping bug.
-- **Domain:** well-formed graphs of 1 to 6 edges, into exactly one of which a
-  path containing a generated control character is injected, at a generated
-  position among explicit outputs, implicit outputs, inputs, implicit
-  dependencies, and order-only dependencies.
-- **Oracle:** the expected error variant, determined by the test from the
-  injected character, not by calling `unsupported_character`.
-- **Artefact:** `src/ninja_gen_determinism_property_tests/guard.rs`, property
-  `validation_precedes_path_key_ordering`.
-- **Evidence:** `make proptest` passes; the mutation below fails it.
+This replaces the first draft's `OBL-GUARD`, which asserted a *mechanism*
+("validation runs before sorting") as a proxy for the failure that matters. The
+failure that matters is the `seen` set dropping a real edge. Asserting the
+outcome survives refactors that legitimately move the validator, and it also
+catches the silent drop of output-less edges that `insert_edge_for_outputs`
+performs — which the first draft recorded as a surprise and left untested.
+
+- **Method:** Proptest over well-formed graphs, plus directed tests for the
+  known bypasses.
+- **Rationale:** this is the real content of `RM-4.3.1.c`'s safety argument, and
+  the only obligation covering the `path_key`-collision failure mode as an
+  observable.
+- **Domain:** well-formed graphs of 1 to 30 edges, including multi-output
+  edges. Two directed non-well-formed cases: an edge with
+  `explicit_outputs: []`, and two edges whose output lists are permutations of
+  one another (which `from_manifest` rejects but a direct constructor permits).
+- **Oracle:** the count and set of outputs computed from the spec, independently
+  of the emitter.
+- **Artefact:** `src/ninja_gen/determinism/no_loss.rs`.
 - **Non-vacuity:**
-  - *Covers.* The injected character must reach each of `$`, `:`, `|`, NUL, and
-    at least one non-NUL control character, and each of the five path
-    positions. Classification counts recorded.
-  - *Mutation.* `MUT-GUARD` moves the
-    `reject_unsupported_path_characters` call in `src/ninja_gen/mod.rs` and
-    `src/ninja_gen/dyndep.rs` to after the edge sort.
-    `validation_precedes_path_key_ordering` must fail, and the failure must
-    name the NUL case specifically.
+  - *Covers.* Per-case assertion that at least one graph in the run had a
+    multi-output edge (the case where the map holds several clones). Directed
+    cases pin the two bypasses.
+  - *Mutation.* `MUT-GUARD` moves `reject_unsupported_path_characters` after
+    the edge sort, which under a NUL-bearing path collapses two edges into one
+    and drops a `build` line.
 
 ______________________________________________________________________
 
-**OBL-ORDER** — *emission is invariant under `HashMap` insertion order.*
+**OBL-ORDER** — *emission does not depend on `HashMap` iteration order.*
 
-Statement: for every well-formed graph specification `s` and every pair of
-insertion permutations `(u, v)` of its actions and edges, the graphs `G_u` and
-`G_v` built by inserting in those orders satisfy
-`generate_bundle(G_u) == generate_bundle(G_v)`, comparing the whole bundle: the
-`build_file` string, and the `dyndep_files` vector including each sidecar's
-path, contents, and position. When neither graph requires dyndep staging, the
-same holds for `generate`.
+This obligation is split into two properties because the naive single property
+is not seed-reproducible.
 
-- **Method:** Proptest, metamorphic, over generated well-formed graphs bounded
-  to 50 actions and 100 edges.
-- **Rationale:** this is `RM-4.3.1.a`, the heart of the item. It is the
-  property that fails if any of the three sorts is removed, if a new unsorted
-  collection enters the emission path, or if a sort key stops being unique.
-- **Domain:** `GraphSpec` values (see `Interfaces and dependencies`) with 1 to
-  50 actions and 1 to 100 edges, output namespaces allocated without
-  replacement so disjointness holds by construction, and each edge's
-  `action_id` drawn from the generated action identifiers. Both
-  `DependencyOrder::Parallel` and `DependencyOrder::Serial` are generated, and
-  serial edges are given between 0 and 4 implicit dependencies so that the
-  dyndep staging path is genuinely exercised.
-- **Oracle:** the second emission of the same specification — a metamorphic
-  relation. No reimplementation of the emitter exists or is permitted.
-- **Artefact:** `src/ninja_gen_determinism_property_tests/insertion_order.rs`,
-  properties `emission_is_insertion_order_invariant` and
-  `bundle_is_insertion_order_invariant`.
-- **Evidence:** `make proptest` passes. On failure the assertion reports the
-  first differing byte offset and a windowed excerpt of both outputs, not two
-  50-kilobyte strings.
+*Core (seed-deterministic).* `EP-M2` extracts the two collection points as pure
+helpers,
+`ordered_edges<'a>(impl Iterator<Item = &'a BuildEdge>) -> Vec<&'a BuildEdge>`
+and `ordered_actions`, changing no behaviour. The property feeds each helper an
+explicitly `prop_shuffle`d `Vec` and asserts the output is invariant. Every
+case is genuinely permuted by construction, non-vacuity is structural rather
+than measured, shrinking is exact, and seeds replay.
+
+*End-to-end (composition).* One property builds two `BuildGraph` values from
+one spec in two insertion orders and compares whole bundles — `build_file`, and
+every sidecar's path, content, and position. Because `RandomState` is outside
+the seed, it re-materializes up to eight times until `targets.keys()` and
+`actions.keys()` actually differ between the two graphs, and fails the case if
+they cannot. That makes the predicate near-deterministic and removes the need
+for a run-level vacuity floor entirely.
+
+- **Method:** Proptest, metamorphic.
+- **Rationale:** `RM-4.3.1.a`.
+- **Domain:** `GraphSpec` values with 1 to 50 actions, 1 to 100 edges, and at
+  most 200 explicit outputs in total. Both `DependencyOrder` variants; serial
+  edges get 0 to 4 implicit dependencies so dyndep staging is genuinely
+  exercised.
+- **Oracle:** the second emission — metamorphic. Additionally, a *differential*
+  arm asserts that whenever
+  `GraphView::from_build_graph(g_u) == GraphView::from_build_graph(g_v)`, the
+  bundles are equal. `GraphView` derives its ordering through `BTreeMap`/
+  `BTreeSet` iteration rather than explicit `sort_by_key`, so it is an
+  independent reference, not a reimplementation. Metamorphic testing alone
+  cannot catch two emissions being wrong in the same way; this arm can.
+- **Artefact:** `src/ninja_gen/determinism/order.rs`.
 - **Non-vacuity:**
-  - *Covers.* Cases must reach: graphs whose two maps genuinely iterate in
-    different orders (recorded per case and asserted to exceed a floor across
-    the run — this is the anti-vacuity check that matters most here); graphs
-    with at least one multi-output edge; graphs with at least one
-    dependency-only (`phony`) action; graphs requiring dyndep staging; graphs
-    with a non-empty `default_targets`; and all four combinations of
-    `BuildEdge::always` and `Action::restat`, because `DisplayEdge` emits the
-    `restat` flag only when `edge.always && !action_restat`
-    (`src/ninja_gen/display_edge.rs:37`), an edge-to-action interaction a naive
-    generator would never vary. A run in which the
-    "iteration orders actually differed" count is zero must be treated as a
-    failure of the test, not a pass of the property.
-  - *Mutation.* Three patches, each of which must fail this property:
-    `MUT-EDGESORT` (delete
-    `edges.sort_by_key` in both `src/ninja_gen/mod.rs` and
-    `src/ninja_gen/dyndep.rs`);
-    `MUT-ACTIONSORT` (delete
-    `actions.sort_by_key` in `write_action_rules`); and
-    `MUT-FIRSTOUT` (replace the
-    `path_key` sort key with the edge's first explicit output, making the key
-    non-unique for multi-output edges and thereby exposing the stable-sort
-    fallback described in `AXIOM-SORT`).
+  - *Covers.* Per-case: the shuffle reordered; the two iteration orders
+    differed. Recorded classes must include the *intersection* multi-output ∧
+    phony ∧ dyndep-staged ∧ non-empty defaults, not only the marginals, and all
+    four combinations of `BuildEdge::always` and `Action::restat` — `DisplayEdge`
+    emits `restat` only when `edge.always && !action_restat`
+    (`src/ninja_gen/display_edge.rs:37`).
+  - *Mutation.* `MUT-EDGESORT` deletes `edges.sort_by_key` in both paths;
+    `MUT-ACTIONSORT` deletes `actions.sort_by_key`. Each must fail the core
+    property, which pinpoints the helper rather than the whole emission.
 
 ______________________________________________________________________
 
-**OBL-DEFAULT** — *the emitted `default` line is exactly the ascending sort of
-`default_targets`, and is emitted after every `build` statement.*
+**OBL-NOHASH** — *no unordered collection is iterated inside the emitter.*
+
+Statement: no source file under `src/ninja_gen/` iterates a
+`std::collections::HashMap` or `HashSet` (`.iter()`, `.keys()`, `.values()`,
+`.drain()`, or a `for` loop over the collection). Membership-only `HashSet` use
+is exempt, with the two existing `seen` sets named as the documented exemptions.
+
+- **Method:** a source-shape contract test, following
+  `tests/whitaker_boundary_contract.rs` and
+  `tests/integration_test_wiring_tests.rs`.
+- **Rationale:** this is what actually delivers the plan's stated success
+  criterion. No property can guarantee that a *future* map — keyed on pools, or
+  variables, or anything not yet generated — will be caught, because the
+  generator will not vary the field it is keyed on. A source contract catches
+  it the day it is written. Neither a property nor an ordered-map port provides
+  this.
+- **Artefact:** `tests/ninja_gen_hashmap_boundary.rs`.
+- **Non-vacuity:** the test is validated by temporarily adding an iterating
+  `HashMap` to a scratch copy of `src/ninja_gen/mod.rs` and observing the
+  failure; the exemption list is asserted to be exactly the two known sets, so
+  adding a third requires a deliberate edit.
+
+______________________________________________________________________
+
+**OBL-DEFAULT** — *the `default` line is the ascending sort of
+`default_targets`, and follows every `build` statement.*
 
 Statement: for every well-formed graph with non-empty `default_targets`, the
-emitted text contains exactly one line beginning `default`, that line's
-operands equal `default_targets` sorted ascending with duplicates preserved,
-and that line's byte offset is greater than the offset of every `build` line.
+emitted text contains exactly one line beginning `default`, its operands equal
+`default_targets` sorted ascending with duplicates preserved, and its byte
+offset exceeds that of every `build` line.
 
-- **Method:** Proptest over generated default sets, including permutations and
-  deliberate duplicates.
-- **Rationale:** this is `RM-4.3.1.b`. The ordering half is the stated
-  requirement. The positional half encodes `AXIOM-NINJA`: the Ninja manual
-  requires a `default` statement to follow the build statement declaring its
-  target, so emitting `default` last is a correctness requirement, not a
-  stylistic one, and nothing else in the suite pins it.
+- **Method:** Proptest over generated default sets.
+- **Rationale:** `RM-4.3.1.b` for the ordering. The positional half encodes
+  `AXIOM-NINJA`: a `default` preceding its `build` statement is rejected by
+  real Ninja (measured), so ordering it last is correctness, not style, and
+  nothing else pins it.
 - **Domain:** graphs of 1 to 20 edges whose `default_targets` is a generated
-  sub-multiset of the declared explicit outputs, permuted with `prop_shuffle`,
-  with a generated number of deliberate repetitions between 0 and 3.
-- **Oracle:** a sorted clone computed in the test with `Vec::sort`, compared
-  against the parsed operands of the emitted line. This is structurally the
-  same call the production code makes, so the *ordering* half is weak on its
-  own; its strength comes from the permutation-invariance half, which compares
-  emissions from two different input permutations and cannot be satisfied by a
-  copied implementation.
-- **Artefact:** `src/ninja_gen_determinism_property_tests/defaults.rs`,
-  property `default_line_is_the_ascending_sort`.
-- **Evidence:** `make proptest` passes.
+  sub-multiset of declared outputs, shuffled, with 0 to 3 deliberate repeats.
+- **Oracle:** a sorted clone computed in the test. That half is weak alone,
+  since it mirrors the production call; its strength comes from the
+  permutation-invariance half, which compares two input permutations and cannot
+  be satisfied by copied code.
+- **Artefact:** `src/ninja_gen/determinism/defaults.rs`.
 - **Non-vacuity:**
-  - *Covers.* Cases must reach: an empty `default_targets` (asserting no
-    `default` line is emitted at all); a single target; a set already sorted; a
-    set in strictly descending order; and a set containing duplicates. Record
-    the counts. The duplicate class is what pins the documented decision that
-    `Vec::sort` does not deduplicate.
-  - *Mutation.* `MUT-DEFSORT` deletes
-    `defs.sort()` in both emission paths;
-    `MUT-DEFPOS` moves the
-    `default` block before edge rendering. Both must fail this property, the
-    second on the positional half.
+  - *Covers.* Empty (asserting no `default` line at all), singleton,
+    already-sorted, reverse-sorted, and duplicate-bearing. The duplicate class
+    pins the documented decision that `Vec::sort` does not deduplicate.
+  - *Mutation.* `MUT-DEFSORT` deletes `defs.sort()`; `MUT-DEFPOS` moves the
+    `default` block before edge rendering and must fail both the positional half
+    and `OBL-NINJA`.
 
 ______________________________________________________________________
 
-**OBL-ACTION** — *an action's interned identifier is a function of the action's
-content, and is unchanged by field-preserving permutations of the manifest that
-produced it.*
+**OBL-ACTION** — *equal actions intern to equal identifiers.*
 
-Statement: for every pair of `Action` values `a` and `b`,
-`ActionHasher::hash(a) == ActionHasher::hash(b)` if and only if `a == b`, over
-the generated domain. Consequently, two manifests that declare the same actions
-in different orders intern them to the same identifiers.
+Statement: for every pair of `Action` values, `a == b` implies
+`ActionHasher::hash(a) == ActionHasher::hash(b)`; and over the generated
+domain, no two unequal actions were observed to collide.
+
+The first draft claimed "if and only if", whose converse is collision-freedom
+of SHA-256 — explicitly out of scope under `AXIOM-HASHER` and not establishable
+by sampling. A passing run would have read as proving it.
 
 - **Method:** Proptest over generated `Action` values.
-- **Rationale:** this is the fourth `FV-DET` bullet, which the roadmap's
-  sub-items omit. It is a genuine prerequisite for `OBL-ORDER`: the action sort
-  key's uniqueness, and hence the absence of a stable-sort tie, depends on the
-  interning being content-determined. Without this obligation, `OBL-ORDER`
-  rests on an unchecked assumption.
-- **Domain:** `Action` values with generated recipes (scalar command,
-  command list, and dependency-only variants), and generated `Option<String>`
-  metadata for `description`, `depfile`, `deps_format`, and `pool`, plus the
-  `restat` flag. Pairs are drawn so that both the equal and unequal cases are
-  reachable: one arm generates `(a, a.clone())`, the other generates two
-  independent values, and a third mutates exactly one field of a base value.
-- **Oracle:** structural equality of the `Action` values, computed by the
-  derived `PartialEq`, which is independent of the hasher's serialization path.
-- **Artefact:** `src/ir/action_hash_property_tests.rs`, property
-  `action_hash_is_a_function_of_content`.
-- **Evidence:** `make proptest` passes.
+- **Rationale:** the `FV-DET` bullet the roadmap omits, and a genuine
+  prerequisite for `OBL-ORDER`: the action sort key's uniqueness depends on
+  interning being content-determined.
+- **Domain:** three arms — `(a, a.clone())`; two independent values; and a base
+  value with exactly one field mutated.
+- **Oracle:** structural equality via the derived `PartialEq`, independent of
+  the serialization path.
+- **Artefact:** `src/ir/action_hash_property_tests.rs`.
 - **Non-vacuity:**
-  - *Covers.* All three arms must fire, and the single-field-mutation arm must
-    reach each of the six `Action` fields. Record the counts. A run in which
-    the unequal arms never produce a hash difference means the generator is
-    producing degenerate actions.
-  - *Mutation.* `MUT-HASHMETA`
-    makes the hasher skip the `pool` field. The single-field-mutation arm must
-    fail with `pool` named in the shrunk counter-example.
+  - *Covers.* All three arms fire; the single-field arm reaches each of the six
+    `Action` fields. Record explicitly that `depfile`, `deps_format`, `pool`,
+    and `restat` are **currently unreachable from any manifest**
+    (`register_action` hard-codes them), so this obligation's evidence over
+    those fields concerns the emitter's input domain, not the shipped pipeline.
+    Stating that prevents the evidence being read as stronger than it is.
+  - *Mutation.* `MUT-HASHMETA` makes the hasher skip `pool`.
 
 ______________________________________________________________________
 
-**OBL-E2E** — *permuting the declaration order of a manifest's targets does not
-change the emitted bytes.*
+**OBL-E2E** — *permuting target declaration order does not change the emitted
+bytes, for manifests with distinct rule names.*
 
-Statement: for every generated manifest that lowers successfully, and every
-permutation of its `targets` list (and independently of its `actions` list and
-`rules` list), lowering and emitting the permuted manifest yields byte-identical
-`GeneratedNinja` output.
+Statement: for every generated manifest with pairwise-distinct rule names that
+lowers successfully, and every permutation of its `targets` list, lowering and
+emitting the permuted manifest yields byte-identical output.
 
-- **Method:** Proptest, metamorphic, end-to-end from the manifest AST through
-  `BuildGraph::from_manifest` to `generate_bundle`.
-- **Rationale:** this is the statement a user would actually predict from the
-  README, and it is the one `ADR-021` will commit to. It is strictly stronger
-  than `OBL-ORDER` because it also covers the lowering: it fails if
-  `from_manifest` ever smuggles declaration order into an edge's field order,
-  into `default_targets` in a way the sort does not erase, or into an interned
-  identifier.
-- **Domain:** generated manifest ASTs with 1 to 12 rules and 1 to 30 targets,
-  built directly as typed `NetsukeManifest` values rather than as YAML text, so
-  that parsing and Jinja rendering (owned by roadmap 4.3.2 and 4.3.3) are out
-  of scope. Output namespaces are allocated without replacement so lowering
-  succeeds by construction; dependency edges are drawn only from
-  already-allocated outputs with a strictly increasing index so acyclicity
-  holds by construction.
-- **Oracle:** the emission of the permuted manifest — metamorphic.
-- **Artefact:**
-  `src/ninja_gen_determinism_property_tests/declaration_order.rs`, property
-  `declaration_order_does_not_change_emission`.
-- **Evidence:** `make proptest` passes. **This obligation is contingent on
-  `EP-M0`.** If the spike shows it does not currently hold, the failure is
-  escalated under `Tolerances` and this obligation is either narrowed with a
-  recorded justification or removed, with `ADR-021` weakened to match. Do not
-  weaken the test to fit the code without recording the decision.
+The rule-name precondition is required, not cosmetic. `process_rules`
+(`src/ir/from_manifest.rs:100`) is last-writer-wins on duplicate names and no
+`DuplicateRule` error exists anywhere in `src/`. Permuting two same-named rules
+with different bodies changes which body every referencing target resolves, and
+so changes the bytes. The first draft asserted the unrestricted claim, which is
+false, and its generator allocated unique names — so it would have passed
+vacuously on precisely the class where the contract fails.
+
+Note also that moving a declaration between `manifest.actions` and
+`manifest.targets` is a permutation of the declaration multiset that is *not*
+order-neutral, since `process_targets` chains them. The obligation permutes
+within a list, not across the two.
+
+- **Method:** Proptest, metamorphic, end-to-end from typed manifest through
+  `from_manifest` to `generate_bundle`.
+- **Domain:** typed `NetsukeManifest` values (not YAML text — parsing and Jinja
+  belong to 4.3.2 and 4.3.3) with 1 to 12 rules and 1 to 30 targets. Outputs
+  allocated without replacement; dependencies drawn only from lower indices so
+  acyclicity holds by construction. `NetsukeManifest` does not derive `Clone`,
+  so permutation rebuilds from the spec rather than cloning.
+- **Oracle:** the permuted manifest's emission — metamorphic.
+- **Artefact:** `src/ninja_gen/determinism/declaration.rs`.
 - **Non-vacuity:**
-  - *Covers.* Cases must reach: manifests where the permutation genuinely
-    reorders targets; manifests with at least two targets sharing an identical
-    recipe (so interning collapses them and the permutation could otherwise
-    change which one "wins"); manifests with declared `defaults`; and manifests
-    with cross-target dependencies. Record the counts.
-  - *Mutation.* `docs/verification/mutations/defaults-not-sorted-at-emit.patch`
-    (reuse of the `OBL-DEFAULT` mutation) must fail this property too, since
-    `default_targets` is the one field that carries declaration order into the
-    graph. Additionally,
-    `MUT-IDINDEX` appends the
-    target's declaration index to the interned action identifier; this
-    property must fail while `OBL-ORDER` continues to pass, demonstrating that
-    `OBL-E2E` is genuinely stronger and not a restatement.
+  - *Covers.* The permutation reordered; at least two targets share an
+    identical recipe so interning collapses them; declared `defaults` present;
+    cross-target dependencies present. Additionally, a **directed test that
+    reaches the excluded class**: two same-named rules with different bodies,
+    asserting that the emission *does* differ under permutation. Without it the
+    precondition is an unexamined escape hatch rather than a documented
+    boundary.
+  - *Mutation.* `MUT-DEFSORT` must fail this property too, since
+    `default_targets` is the field that carries declaration order into the
+    graph.
+- **Note on strength.** The first draft called this "strictly stronger" than
+  `OBL-ORDER`. It is not. `from_manifest` can never produce `implicit_outputs`,
+  `pool`, `depfile`, `deps_format`, or `restat`, so `OBL-ORDER`'s direct-graph
+  strategy is the only obligation reaching those emitter branches. `OBL-E2E` is
+  stronger over the lowering and weaker over the emitter's input domain.
+
+______________________________________________________________________
+
+**OBL-PROCESS** — *running Netsuke twice on one manifest emits identical bytes.*
+
+Statement: invoking the built binary twice over a fixture manifest, in separate
+processes, produces byte-identical `build.ninja`.
+
+- **Method:** a directed `assert_cmd` integration test, not a property.
+- **Rationale:** this is the statement `EP-M1`'s ADR publishes and the one users
+  read, and **nothing in the repository tests it**. The eight
+  `tests/snapshots/ninja/*.snap` fixtures are single-run. Every other
+  obligation here runs two emissions in one process. Roughly twenty lines close
+  the gap between what is promised and what is checked; without it the plan
+  publishes a guarantee it does not verify.
+- **Domain:** two or three existing fixture manifests, run twice each, plus one
+  run under a different `TMPDIR` and locale set with `Command::env` so
+  `Constraint 5` holds.
+- **Oracle:** byte equality between runs.
+- **Artefact:** `tests/ninja_determinism_process_tests.rs`.
+- **Non-vacuity:** the test is validated by `MUT-DEFSORT`, which makes two runs
+  diverge whenever the fixture declares more than one default.
 
 ______________________________________________________________________
 
 **OBL-DUP** — *duplicate outputs are rejected at larger N.*
 
-Statement: for every generated manifest containing at least one output path
-claimed twice — whether by two different targets or twice within one target —
-`BuildGraph::from_manifest` returns `Err(IrGenError::DuplicateOutput { .. })`,
-and the reported path list contains the colliding path. For every generated
-manifest whose output paths are pairwise distinct, lowering does not return
-`DuplicateOutput`.
+Statement: for every generated manifest containing an output claimed twice —
+across targets or within one target — `from_manifest` returns
+`Err(IrGenError::DuplicateOutput { .. })` naming the colliding path; and for
+every manifest whose outputs are pairwise distinct, lowering succeeds.
 
-- **Method:** Proptest over generated manifests with a deliberately injected
-  collision, paired with a control arm that injects none.
-- **Rationale:** this is `RM-4.2.1.dup`, the obligation `ADR-004` deferred here.
-  Kani proves it for one to three nodes with fixed minimal manifests; this
-  extends it to the generated range up to 30 targets, and adds the negative
-  arm, which Kani's fixed manifests do not cover.
-- **Domain:** manifests of 2 to 30 targets over an allocated output namespace,
-  with a generated collision mode (`across targets`, `within one target`, or
-  `none`) and generated positions.
-- **Oracle:** the injected collision is known to the test by construction; the
-  expected error variant and the expected colliding path are both computed
-  without calling `find_duplicates`.
-- **Artefact:** `src/ir/graph_property_tests/duplicates.rs`, property
-  `duplicate_outputs_are_rejected_at_larger_n`.
-- **Evidence:** `make proptest` passes.
+- **Method:** Proptest with an injected collision and a control arm.
+- **Rationale:** `RM-4.2.1.dup`, deferred here by `ADR-004`. Kani proves it for
+  fixed minimal manifests; this extends to 30 targets and adds the negative
+  arm, which Kani does not cover.
+- **Domain:** 2 to 30 targets over an allocated namespace, with a generated
+  collision mode (`across`, `within`, `none`).
+- **Oracle:** the injected collision is known by construction; the expected
+  variant and path are computed without calling `find_duplicates`.
+- **Artefact:** `src/ir/graph_property_tests/duplicates.rs`.
 - **Non-vacuity:**
-  - *Covers.* All three collision modes must fire, including `none`. Without
-    the `none` arm the property would be satisfied by a lowering that rejects
-    every manifest. Record the counts, and assert that the `none` arm produces
-    a successful lowering rather than merely a non-`DuplicateOutput` error.
-  - *Mutation.*
-    `MUT-DUPWITHIN`
-    removes the within-one-target half of `find_duplicates`. The
-    `within one target` arm must fail.
+  - *Covers.* All three modes fire. The `none` arm must assert a *successful*
+    lowering, not merely a non-`DuplicateOutput` error — otherwise a lowering
+    that rejected everything would pass.
+  - *Mutation.* `MUT-DUPWITHIN` disables only the within-one-target half. Note
+    that `ir__from_manifest__verification__duplicate_output_always_rejected.patch`
+    already exists from 4.2.1 and flips `||` to `&&`; the new patch is more
+    surgical so the three modes can be told apart.
 
 ______________________________________________________________________
 
-**OBL-CYCLE** — *dependency cycles are rejected at larger N, and missing
-dependencies do not create false cycles.*
+**OBL-CYCLE** — *cycles are rejected at larger N; missing dependencies do not
+create false cycles.*
 
-Statement: for every generated manifest whose target dependency relation
-contains a cycle, `BuildGraph::from_manifest` returns
-`Err(IrGenError::CircularDependency { .. })`. For every generated manifest
-whose relation is acyclic, lowering succeeds, even when some declared
-dependencies name paths that no target produces.
+Statement: for every generated manifest whose dependency relation contains a
+cycle, `from_manifest` returns `Err(IrGenError::CircularDependency { .. })`.
+For every acyclic manifest, lowering succeeds even when some declared
+dependencies name paths no target produces.
 
-- **Method:** Proptest over two generator arms, one acyclic by construction and
-  one with an injected back edge.
-- **Rationale:** this is `RM-4.2.1.cyc`. `ADR-004` records that Kani covers
-  self-edges and two- to three-node cycles, and that "existing unit tests keep
-  cycle path canonicalization and missing-dependency reporting covered until
-  roadmap item `4.3.1` expands generated graph coverage".
-- **Domain:** target sets of 2 to 30 nodes. The acyclic arm draws each target's
-  dependencies only from strictly lower indices, so acyclicity holds by
-  construction with no filtering. The cyclic arm takes an acyclic graph and
-  adds exactly one edge from a lower index to a higher one, with generated
-  endpoints, guaranteeing a cycle by construction. A third arm adds
-  dependencies on paths outside the allocated namespace, exercising the
-  missing-dependency path.
-- **Oracle:** cyclicity is known by construction from the generator's own
-  index discipline, not computed by calling the production cycle detector.
-- **Artefact:** `src/ir/graph_property_tests/cycles.rs`, properties
-  `cycles_are_rejected_at_larger_n` and
-  `acyclic_graphs_with_missing_deps_are_accepted`.
-- **Evidence:** `make proptest` passes.
+Boundary against roadmap 4.2.2 (complete): this obligation asserts *rejection*
+only. The canonical *content* of the reported cycle — preserved length, closed
+cycle, interior multiset, stable start node — is 4.2.2's, proved by Kani over
+`canonicalize_cycle_by`. This plan does not restate it.
+
+- **Method:** Proptest over three generator arms.
+- **Domain:** 2 to 30 nodes. The acyclic arm draws dependencies only from
+  strictly lower indices, so acyclicity is structural. The cyclic arm adds
+  exactly one back edge with generated endpoints. The third arm adds
+  dependencies outside the namespace.
+- **Oracle:** cyclicity known from the generator's index discipline, not from
+  the production detector.
+- **Artefact:** `src/ir/graph_property_tests/cycles.rs`.
 - **Non-vacuity:**
-  - *Covers.* Cases must reach: self-edges; two-node cycles; cycles of length
-    at least 8 (the range Kani cannot reach, which is the entire point of this
-    obligation); acyclic graphs with no missing dependencies; and acyclic
-    graphs with at least one missing dependency. Record the counts. If the
-    long-cycle class count is zero, the obligation has not been discharged.
-  - *Mutation.* `MUT-CYCLEDEPTH`
-    caps the cycle detector's traversal depth at 4. The long-cycle class must
-    fail while the short-cycle class continues to pass, demonstrating the
-    obligation reaches strictly beyond the Kani bound.
+  - *Covers.* Self-edges; two-node cycles; **cycles of length at least 8** —
+    the range Kani cannot reach and the entire point of the obligation; acyclic
+    with and without missing dependencies. If the long-cycle count is zero the
+    obligation is not discharged.
+  - *Mutation.* `MUT-CYCLEDEPTH` caps traversal depth at 4; the long-cycle
+    class must fail while short cycles still pass.
 
 ______________________________________________________________________
 
-**OBL-NINJA** — *permuted emissions are not merely byte-identical but
-semantically accepted by real Ninja.*
+**OBL-NINJA** — *emitted files are accepted by real Ninja, and permuted
+emissions are semantically identical.*
 
-Statement: for every generated well-formed graph, when a `ninja` binary is
-available, the emitted `build.ninja` (with sidecars written alongside) parses
-without error, and `ninja -t commands` over the graph's default targets returns
-the same command list for both insertion permutations.
+Statement: when a `ninja` binary is available, the emitted bundle written to
+disk parses without error and yields the same command list across insertion
+permutations.
 
-- **Method:** Proptest driven through `TestRunner::run` (not the `proptest!`
-  macro, so the whole property can be skipped when Ninja is absent), using the
-  existing `NinjaCommandOracle` pattern.
+- **Method:** Proptest via `TestRunner::run`, using
+  `test_support::ninja::ninja_is_required` so the skip escalates to a panic
+  under `NETSUKE_REQUIRE_NINJA=1` as `ci.yml` sets.
 - **Rationale:** byte equality could in principle be preserved by an emitter
-  that produced identical *garbage*. This obligation closes that gap with an
-  independent oracle, and simultaneously discharges the `AXIOM-NINJA`
-  interaction — that `default` really does have to come last, and that
-  Netsuke's escaping of generated paths survives a real parse.
-- **Domain:** smaller graphs than `OBL-ORDER` — 1 to 8 actions and 1 to 12
-  edges — because each case spawns a subprocess. Paths are restricted to
-  characters that are legal on both POSIX and Windows filesystems.
-- **Oracle:** the `ninja` binary. Structurally independent of Netsuke.
-- **Artefact:** `tests/ninja_determinism_oracle_tests.rs`.
-- **Evidence:** the test reports the number of cases actually run; when Ninja
-  is absent it reports a skip. A run reporting zero cases *and* no skip is a
-  failure.
+  producing identical garbage. An independent oracle closes that, and exercises
+  the `AXIOM-NINJA` interactions.
+- **Domain:** 1 to 8 actions, 1 to 12 edges, paths legal on POSIX and Windows.
+  The domain **must** generate serial edges with at least two implicit
+  dependencies, or the dyndep path is never reached.
+- **Oracle:** the `ninja` binary. Two invocations are required, not one:
+  `-t commands` for the command list, **and** `-n`, because `-t commands` does
+  not load dyndep sidecars — a graph referencing a missing sidecar exits 0 under
+  `-t commands` and fails only under `-n`. As first drafted this obligation
+  was vacuous over the sidecar bundle, the newest and most intricate part of
+  the emitter. Measured cost is 1.63 ms and 1.91 ms respectively.
+- **Artefact:** `src/ninja_gen/determinism/ninja_oracle.rs`. The existing
+  `NinjaCommandOracle::ninja_commands` cannot be reused: `batch_ninja_files`
+  discards the graph and scrapes only `command =` lines. A new harness is
+  budgeted, which must create `.netsuke/dyndep/` and `.netsuke/serial/` before
+  writing sidecars, materialize or exclude out-of-namespace inputs, and use a
+  **fresh temporary directory per case** — the existing oracle reuses one
+  directory, so content-addressed sidecars from earlier cases could satisfy a
+  later case's reference and mask a missing-sidecar bug.
 - **Non-vacuity:**
-  - *Covers.* Cases must reach graphs with multi-output edges, phony edges, and
-    a non-empty `default` line. Record the counts.
-  - *Mutation.* `MUT-DEFPOS`
-    (reused) must cause real Ninja to reject the file, confirming the oracle
-    detects a semantic break that byte comparison alone would not.
+  - *Covers.* Multi-output edges, phony edges, dyndep-staged edges, and a
+    non-empty `default` line. Assert a non-zero case count when Ninja is
+    present.
+  - *Mutation.* `MUT-DEFPOS` must cause real Ninja to reject the file
+    (`unknown target`, measured), confirming the oracle detects a semantic break
+    that byte comparison alone would not.
 
 ### Residual gaps
 
-These are stated so they are not mistaken for coverage:
-
-- Proptest samples; it does not prove. The obligations above hold over the
-  generated domain at the configured case counts, not over all inputs. Where an
-  exhaustive small-N result exists, it is the Kani harnesses from 4.2.x, and
-  the two layers are complementary by design.
-- Manifest parsing, `foreach`/`when` expansion, and MiniJinja rendering are out
-  of scope; they belong to roadmap items 4.3.2 and 4.3.3. `OBL-E2E` starts from
-  a typed `NetsukeManifest`, not from YAML text.
-- Cross-process determinism is not tested. The properties run two emissions in
-  one process, which is sufficient to defeat `RandomState` (per
-  `AXIOM-HASHMAP`) but does not exercise, for example, locale- or
-  environment-dependent formatting. The existing snapshot tests cover the
-  fixed-manifest cross-run case.
-- Path *content* determinism on Windows is not covered beyond what
-  `OBL-NINJA`'s restricted alphabet reaches. `ADR-017` already governs UTF-8
-  invocation paths.
-- The `graph` subcommand's renderer (`src/graph_view/`) also sorts at the IR
-  boundary and also promises deterministic output. It is a different emitter
-  and is out of scope here; note it in `ADR-021` as adjacent but unverified by
-  this item.
+- Proptest samples; it does not prove. Where an exhaustive small-N result
+  exists it is the 4.2.x Kani harnesses, and the layers are complementary by
+  construction: under `#[cfg(kani)]`, `IrHashMap` is an ordered map, so Kani
+  cannot reach `OBL-ORDER` at all.
+- Manifest parsing, `foreach`/`when` expansion, and Jinja rendering are out of
+  scope (4.3.2, 4.3.3). `OBL-E2E` starts from a typed manifest.
+- Only one `RecipeShell` is exercised per machine, since every entry point takes
+  `RecipeShell::host_default()`. The determinism properties pin
+  `RecipeShell::Posix` explicitly, as the existing suite does
+  (`src/ninja_gen_property_tests.rs:79`), so results are comparable across
+  developer machines; the PowerShell `rspfile` branch is therefore covered only
+  on the Windows lane and only by existing tests.
+- Determinism of **error paths** is not claimed and not tested. Both rejection
+  passes return on the first offender found while iterating
+  `graph.targets.values()`, so which error a multi-fault graph reports is
+  insertion-order dependent, as is the order of
+  `CycleDetectionReport::missing_dependencies`. `ADR-NNN` states this exclusion
+  explicitly rather than leaving a reader to assume coverage.
+- Cross-version byte stability is explicitly **not** promised; see `ADR-NNN`.
+- `src/graph_view/` has its own determinism guarantee and its own property. It
+  is out of scope here, and `ADR-NNN` records it as adjacent.
 
 ## Plan of work
 
-### Stage A — measure and confirm (no production changes)
+Stage A measures and confirms, changing nothing. Stage B states the contract.
+Stage C makes the repository able to hold the work — two file splits, the
+mutation-evidence contract, and the shared strategy. Stage D discharges the
+obligations in dependency order. Stage E documents and validates.
 
-Establish that the properties are worth writing and that the strategies can
-reach the classes they claim. Nothing is committed to `main` from this stage
-except measurements recorded in this document.
-
-### Stage B — red
-
-Add each property in a form that fails for the intended reason before the
-supporting strategy or wiring exists, and record the failure. Because the
-production code is expected to be correct already, "red" here means the test
-fails to compile or fails on a deliberately mutated build — not that production
-behaviour is broken. Each obligation's mutation patch is written *before* its
-property is declared complete, and the red evidence is the mutated run.
-
-### Stage C — green: obligations discharged in dependency order
-
-Discharge `OBL-PATHKEY` and `OBL-GUARD` first, because `OBL-ORDER` depends on
-their conclusions. Then `OBL-ACTION`, then `OBL-ORDER` and `OBL-DEFAULT`, then
-`OBL-E2E`, then the inherited `OBL-DUP` and `OBL-CYCLE`, then `OBL-NINJA`.
-
-### Stage D — contract, documentation, and wider validation
-
-Write `ADR-021`, update the design document, developers' guide, users' guide,
-README, and roadmap, and run the full gate set plus a CodeRabbit review.
+Red-green-refactor cannot apply in its usual form, because production code is
+expected to be correct and a new property therefore passes on first run. The
+substitute is mutation-driven red, recorded in `Validation and acceptance`.
 
 ## Milestones and plateaus
 
-Each milestone ends in a state that is correct, gated, and safe to stop at.
-
 ### EP-M0 — feasibility and measurement spike (prototyping)
 
-*Assigned:* de-risking for all obligations. *Prototype; not merged as-is.*
+*Prototype; scratch commits, not merged.* Seven questions. Three are already
+answered and recorded in `Artefacts and notes`; four remain.
 
-Write throwaway tests, on a scratch commit, answering six questions:
+1. Do two insertion permutations of a 50/100 graph actually produce different
+   iteration orders, and how often? Also: how many re-materialization attempts
+   does the bounded loop in `OBL-ORDER` need in practice?
+2. Does `OBL-E2E` hold today? Build a manifest, permute `targets`, lower and
+   emit both, compare bytes. Repeat for `actions`. **This gates `EP-M1`'s ADR
+   content**, so it runs first.
+3. *(Answered.)* Per-case cost.
+4. Does a 50/100 counter-example shrink to something readable within the
+   30-second `max_shrink_time`?
+5. Do regression seeds persist for a library-side property? Widen the check to
+   the three existing `tests/*.proptest-regressions` files suspected inert.
+6. *(Answered.)* Is `adr-021` claimed?
+7. *(Answered.)* Can a `src/`-side `#[cfg(test)]` module receive a
+   `netsuke`-typed value from `test_support`?
 
-1. Does an insertion-order permutation of a 50-action, 100-edge graph actually
-   produce different `HashMap` iteration orders, and in what fraction of cases?
-   Measure by collecting `graph.targets.keys()` into a `Vec` for each
-   permutation and comparing.
-2. Does `OBL-E2E` hold today? Build a small manifest by hand, permute its
-   `targets`, lower and emit both, and compare bytes. Repeat for `actions` and
-   `rules`.
-3. What does one case of the largest planned property cost in wall time?
-   Measure `generate_bundle` twice on a 50/100 graph.
-4. Does a generated 50/100 counter-example shrink to something readable?
-   Deliberately break a sort locally and observe the shrunk output.
-5. Do regression seeds persist for a new `tests/*.rs` proptest without an
-   explicit `failure_persistence` override? Force a failure and look for the
-   file.
-6. Is `adr-021-*` already claimed on any remote branch or open pull request?
+*Acceptance:* every question has a recorded answer. *Conformance check:* if
+question 2 answers "no", stop and escalate before `EP-M1`. *Recovery:* discard
+the scratch commits.
 
-*End state:* a scratch branch, deleted afterwards, and six measurements written
-into `Artefacts and notes`. *Acceptance:* every question has a recorded answer.
-*Conformance check:* if question 2 answers "no", stop and escalate before
-`EP-M1`. *Recovery:* discard the scratch commit; nothing is merged.
+### EP-M1 — state the determinism contract
 
-### EP-M1 — measured test tiering and the `proptest` Make target
+*Assigned:* `FV-CONTRACT`, `ADR-NNN`.
 
-*Assigned:* the tiering decision the user asked to be measured, not assumed.
+Write `docs/adr-NNN-ninja-emission-determinism-contract.md` in the repository's
+Y-Statement style, **before any property is authored**, from the four
+statements in `Context and orientation`. It must state:
 
-Using the `EP-M0` cost figure, add a `proptest` Make target that runs the
-property suites through `cargo nextest` with a filter expression, capturing
-output under `/tmp` in the house style. Measure `make proptest` and measure the
-delta it adds to `make test`. Then decide, and record the decision with its
-numbers:
+- which statements are public guarantees and which are internal invariants;
+- the full parameter tuple the guarantee is a function of — manifest,
+  environment, platform, shell selection, and **Netsuke version**;
+- that byte stability is explicitly **not** promised across Netsuke versions,
+  stated as loudly as the promise, since `ADR-011`'s dyndep schema tags exist
+  precisely so the staging format can change;
+- a numbered precondition list each property can cite: well-formedness as a
+  stated precondition of `generate`/`generate_bundle`; duplicate
+  `default_targets` emitted twice; output-less edges dropped while their rule
+  block is still emitted; duplicate rule names last-writer-wins;
+- which entry point the guarantee covers, and that sidecars are part of the
+  artefact;
+- that error-path diagnostic selection and ordering are excluded;
+- considered-and-rejected options, with honest reasons: the ordered-map port,
+  rejected because it would make the sort calls dead and the mutation evidence
+  evaporate, *not* because a constraint in this plan forbids it; and
+  precomputing `path_key`, rejected as unnecessary at production scale
+  (measured at 16 ms release for 10,000 edges);
+- why Kani cannot discharge `OBL-ORDER`: `#[cfg(kani)]` replaces `IrHashMap`
+  with an ordered map, so the nondeterminism under test does not exist there;
+- the two domain-purity leaks: `Action` derives `Serialize` and its identity
+  *is* its canonical JSON digest; and a verification cfg chooses the domain
+  model's collection type.
 
-- If the light suite adds under 45 seconds to `make test`, keep one tier: all
-  properties run under `make test`, and `make proptest` is a convenience filter
-  for the same tests.
-- Otherwise, split. Light properties keep low case counts and run under
-  `make test`; heavy properties (the 50/100 graphs, `OBL-E2E`, and the
-  inherited IR obligations at their full range) move behind a
-  `PROPTEST_HEAVY=1` environment gate read at test start via an injected
-  provider — never by mutating the harness environment — and run under a new
-  `make proptest-heavy` target wired into a CI job alongside `kani-smoke`.
+*End state:* the contract exists and is reviewable before anything claims to
+verify it. *Acceptance:* `make markdownlint`, `make nixie`, `make check-fmt`
+pass; the ADR is indexed in `docs/contents.md`. *Recovery:* documentation-only.
 
-*End state:* `make proptest` exists, is documented in `make help`, and the
-tiering decision is recorded with measurements. *Acceptance:* `make proptest`
-runs and reports the existing property tests passing; `make test` timing before
-and after is recorded. *Conformance check:* `Constraint 5` — the heavy gate
-must not mutate the process environment. *Recovery:* the target is additive;
-delete it to revert.
+### EP-M2 — make room, and make the patch contract usable
 
-### EP-M2 — `path_key` canonicality and the validator ordering
+*Assigned:* `Constraint 4`, `Constraint 7`, and the `make proptest` target.
 
-*Assigned:* `RM-4.3.1.c`, `OBL-PATHKEY`, `OBL-GUARD`.
+Three preparatory pieces, none of which changes behaviour:
 
-*End state:* `src/ninja_gen_determinism_property_tests/` exists with `mod.rs`,
-`path_key.rs`, and `guard.rs`, wired from `src/ninja_gen/mod.rs` with
-`#[cfg(test)] #[path = ...] mod determinism_property_tests;`. The directed
-NUL-collision witness test is present and documents why `OBL-GUARD` is
-load-bearing. Two mutation patches are committed and demonstrated. *Acceptance:*
-`make proptest` passes; applying `MUT-PATHKEY` fails
-`path_key_is_permutation_invariant`; applying `MUT-GUARD` fails
-`validation_precedes_path_key_ordering`; both revert cleanly. *Conformance
-check:* `path_key` is still `pub(crate)`; no file exceeds 400 lines.
-*Recovery:* the whole directory is additive and can be deleted.
+- Split `src/ninja_gen/mod.rs`, which is exactly at the 400-line ceiling. The
+  `NamedAction` impl block (lines ~256–391) is the obvious seam.
+- Split `tests/kani_mutation_evidence_tests.rs` (383 lines) and generalize
+  `supplemental_property_location`, which currently hard-codes
+  `ensure!(*root == "ir", …)` and derives `src/ir/<segments joined by _>.rs`.
+  It must accept a `ninja_gen` root and directory-style module paths. Update
+  the developers'-guide section describing it. This is the single largest piece
+  of unbudgeted work the design review found.
+- Extract `ordered_edges` and `ordered_actions` as pure helpers, used by both
+  emission paths. Behaviour-preserving; enables `OBL-ORDER`'s
+  seed-deterministic core.
+- Add a `proptest` Make target. **The measurement says do not tier it**: the
+  whole new suite costs about 6 s of CPU and 2–3 s wall, against a 45-second
+  budget, so `PROPTEST_HEAVY`, `make proptest-heavy`, and a separate CI job are
+  branches that would never be taken. A standalone CI job would additionally be
+  ~98% compile — roughly 275 s of build to run 10 s of tests. `make proptest`
+  is therefore a convenience selector over the same tests `make test` runs.
+  Select the suites with a nextest filter that actually matches all of them
+  (the first draft's `-E 'test(determinism_property_tests)'` missed its own
+  `action_hash_property_tests` and `graph_property_tests`), or add a nextest
+  test-group in `.config/nextest.toml`.
 
-### EP-M3 — insertion-order and `default` ordering
+*Acceptance:* `make test` passes with no file over 400 lines; `make proptest`
+runs and reports the existing property tests; a scratch `ninja_gen`-rooted
+patch is accepted by the generalized contract test. *Recovery:* the splits and
+the extraction are pure refactors, revertible independently.
 
-*Assigned:* `RM-4.3.1.a`, `RM-4.3.1.b`, `OBL-ORDER`, `OBL-DEFAULT`.
+### EP-M3 — the shared bounded graph strategy
 
-*End state:* the shared bounded graph strategy lives in `test_support` (see
-`Interfaces and dependencies`), and `insertion_order.rs` and `defaults.rs` are
-present. The insertion-order property records, and asserts a floor on, the
-fraction of cases in which the two maps genuinely iterated differently.
-*Acceptance:* `make proptest` passes; each of the four mutation patches for
-these two obligations fails its named property and only its named property.
-*Conformance check:* graphs stay within 50 actions and 100 edges; the
-classification counts from `EP-M0` question 1 are reproduced within tolerance.
-*Recovery:* additive.
+*Assigned:* the plan's central artefact, given its own milestone because
+`EP-M4` onwards all depend on it.
 
-### EP-M4 — action-hash stability and declaration-order invariance
+Strategies live in `src/`, **not** `test_support`, because the latter does not
+compile from `src/`-side tests (proven; see `EP-M0` question 7). They go in
+`src/ninja_gen/determinism/strategy/`, wired `#[cfg(test)]`, and are reachable
+by every library-side suite in this plan.
 
-*Assigned:* the `FV-DET` action-hash bullet, `OBL-ACTION`, `OBL-E2E`.
+Absorb or explicitly diverge from `src/graph_view/tests_property.rs`'s
+`arb_graph_inputs`. If the new strategy supersedes it, migrate that test onto
+it in this milestone; if not, record in `Decision log` why two `BuildGraph`
+generators are justified. Leaving both unreconciled is the decay path.
 
-*End state:* `src/ir/action_hash_property_tests.rs` and `declaration_order.rs`
-are present. The manifest strategy generating typed `NetsukeManifest` values
-lives beside the graph strategy in `test_support`. *Acceptance:*
-`make proptest` passes; `MUT-HASHMETA` fails `OBL-ACTION`; `MUT-IDINDEX` fails
-`OBL-E2E` while `OBL-ORDER` still passes. *Conformance check:* if `EP-M0`
-question 2 answered "no", this milestone must not be started until the
-escalation is resolved. *Recovery:* additive.
+Deliver a handwritten compact `Debug` for `GraphSpec` — counts per class plus a
+stable digest — in this milestone, not later. Proptest prints the input's
+`Debug` on failure regardless of the assertion message, and a 50/100 spec is
+tens of kilobytes on one line of the seed file.
 
-### EP-M5 — inherited larger-N IR obligations
+*Acceptance:* the strategy compiles and is exercised by a smoke property;
+classification counts reproduce `EP-M0` question 1; a deliberately failed
+assertion prints a counter-example that fits on a screen.
+
+### EP-M4 — `path_key` canonicality and edge preservation
+
+*Assigned:* `RM-4.3.1.c`, `OBL-PATHKEY`, `OBL-NOLOSS`.
+
+*Acceptance:* `make proptest` passes; `MUT-PATHKEY` fails
+`path_key_is_permutation_invariant`; `MUT-GUARD` fails
+`every_distinct_edge_is_emitted_once`; both revert cleanly. The two directed
+witness tests are present and phrased as disjunctions.
+
+### EP-M5 — ordering invariance and the collection boundary
+
+*Assigned:* `RM-4.3.1.a`, `RM-4.3.1.b`, `OBL-ORDER`, `OBL-DEFAULT`,
+`OBL-NOHASH`.
+
+*Acceptance:* `make proptest` passes; `MUT-EDGESORT` and `MUT-ACTIONSORT` each
+fail the seed-deterministic core property; `MUT-DEFSORT` and `MUT-DEFPOS` fail
+`OBL-DEFAULT`; the boundary test rejects a scratch iterating `HashMap` in
+`src/ninja_gen/`. *Conformance check:* graphs stay within 50 actions, 100
+edges, and 200 total outputs.
+
+### EP-M6 — interning, declaration order, and the published guarantee
+
+*Assigned:* `OBL-ACTION`, `OBL-E2E`, `OBL-PROCESS`.
+
+*Acceptance:* `make proptest` passes; `MUT-HASHMETA` fails `OBL-ACTION`;
+`MUT-DEFSORT` fails `OBL-E2E` and `OBL-PROCESS`. The directed duplicate-rule
+test demonstrates the excluded class genuinely diverges. *Conformance check:* if
+`EP-M0` question 2 answered "no", `ADR-NNN` must already have been amended in
+`EP-M1`; this milestone does not start otherwise.
+
+### EP-M7 — inherited larger-N IR obligations
 
 *Assigned:* `RM-4.2.1.dup`, `RM-4.2.1.cyc`, `OBL-DUP`, `OBL-CYCLE`.
 
-*End state:* `src/ir/graph_property_tests/` with `mod.rs`, `duplicates.rs`, and
-`cycles.rs`, wired from `src/ir/mod.rs`. The cycle generator's long-cycle class
-is confirmed to fire. *Acceptance:* `make proptest` passes; `MUT-DUPWITHIN`
-fails only the within-target arm; `MUT-CYCLEDEPTH` fails only the long-cycle
-class. *Conformance check:* `ADR-004`'s deferred obligations are now
-discharged; the ADR is annotated to say so in `EP-M6`. *Recovery:* additive.
+These discharge `ADR-004`, not the determinism contract, and touch a different
+module tree. The design review recommended splitting them into a sibling
+roadmap item; the user has directed that they stay in scope, so they are kept
+as a self-contained milestone that could be lifted out unchanged if that
+changes.
 
-### EP-M6 — the determinism contract and documentation
+*Acceptance:* `make proptest` passes; `MUT-DUPWITHIN` fails only the
+within-target arm; `MUT-CYCLEDEPTH` fails only the long-cycle class. The
+long-cycle class count is non-zero.
 
-*Assigned:* `FV-CONTRACT`, `ADR-021`.
+### EP-M8 — Ninja oracle, documentation, and final validation
 
-Write `docs/adr-021-ninja-emission-determinism-contract.md` in the repository's
-Y-Statement style, stating precisely which of the three determinism statements
-in `Context and orientation` is a public guarantee, which is an internal
-invariant, and which is neither. Record the `graph` subcommand's separate
-guarantee as adjacent and out of scope. Then:
+*Assigned:* `OBL-NINJA`, the documentation set, and the evidence sweep.
 
-- Add the guarantee to `docs/users-guide.md` in user-facing terms, with the
-  caching and source-control consequences that motivate it.
-- Add one sentence to `README.md` immediately following the existing
-  reproducibility statement, as `FV-DET`'s determinism-contract section asks.
-- Update `docs/netsuke-design.md` §5.5 to reference `ADR-021` and to state that
-  the sorting decisions are now property-verified, naming the test module.
-- Add a "Determinism property tests" subsection to `docs/developers-guide.md`
-  under the existing proptest section, describing the shared graph strategy,
-  the light/heavy tiering decided in `EP-M1`, the mutation-patch discipline,
-  and the regression-seed convention.
-- Annotate `ADR-004` to record that its deferred larger-N obligations are
-  discharged by this item.
-- Index `ADR-021` in `docs/contents.md`.
+Documentation is deliberately light here because `EP-M1` already did the hard
+part. Remaining: the users'-guide guarantee in user-facing terms; a README
+sentence — noting that the anchor `FV-CONTRACT` cites ("a reproducible, fully
+static dependency graph") **is not present in `README.md`**, whose nearest
+match at line 165 concerns the `graph` subcommand's renderer, so the anchor
+must be chosen deliberately and `FV-CONTRACT`'s stale citation corrected in the
+same commit; a decision, recorded in `Decision log`, on whether the six
+translated READMEs are updated in step or tracked separately;
+`docs/netsuke-design.md` §5.5 referencing `ADR-NNN` and correcting its
+unqualified determinism claim; a developers'-guide subsection; an annotation on
+`ADR-004` recording its deferred obligations as discharged; the roadmap marked
+done; and allocation of the real ADR number after re-checking remote branches.
 
-*End state:* the contract is stated before it is claimed to be verified.
-*Acceptance:* `make markdownlint`, `make nixie`, and `make check-fmt` pass; the
-users' guide sentence and the tests agree in substance. *Conformance check:*
-en-GB-oxendict throughout; 80-column wrap; `mdtablefix`-canonical. *Recovery:*
-documentation-only; revert individually.
-
-### EP-M7 — real-Ninja oracle, mutation sweep, and final validation
-
-*Assigned:* `OBL-NINJA`, and the non-vacuity evidence for every obligation.
-
-*End state:* `tests/ninja_determinism_oracle_tests.rs` exists and skips
-gracefully when Ninja is absent. Every mutation patch has been applied and
-reverted once more against the final tree, and the results are tabulated in
-`Artefacts and notes`. Classification counts for every obligation are recorded.
-The roadmap entry for 4.3.1 is marked done with its sub-items, and the two
-`4.2.1` sub-items that deferred work here are annotated as discharged.
-*Acceptance:* `make check-fmt`, `make typecheck`, `make lint`,
-`make doc-coverage`, `make test`, `make proptest` (and `make proptest-heavy` if
-`EP-M1` split the suite), `make markdownlint`, and `make nixie` all pass, with
-logs captured under `/tmp`. `coderabbit review --agent` returns no unresolved
-findings. *Conformance check:* every trace link in `Conformance basis` resolves
-to a test that exists and passes. *Recovery:* additive.
+*Acceptance:* all gates pass; every mutation patch applied and reverted once
+more against the final tree with results tabulated; classification counts
+recorded for every obligation; `coderabbit review --agent` returns no
+unresolved findings; every trace link resolves to a passing test.
 
 ## Interfaces and dependencies
 
 ### Architectural note: where the boundary sits
 
-Netsuke's emission path already has the shape hexagonal architecture asks for,
-and this plan must not disturb it. `BuildGraph` is the domain model: it has no
-I/O, no framework types, and no knowledge of Ninja. `src/ninja_gen/` is an
-outbound adapter that renders the domain model into one specific backend's text
-format. `generate_into` writes to a `W: Write`, so the adapter does not own the
-sink either.
+`BuildGraph` is the domain model; `src/ninja_gen/` is an outbound adapter
+rendering it into one backend's text format. `generate_into` writes to a
+`W: Write`, so the adapter does not own the sink.
 
-The obligations respect that boundary. `OBL-PATHKEY`, `OBL-ORDER`,
-`OBL-DEFAULT`, and `OBL-GUARD` are properties of the adapter and are tested
-against the adapter's own entry points. `OBL-DUP`, `OBL-CYCLE`, and
-`OBL-ACTION` are properties of the domain and its lowering, and are tested
-against `BuildGraph::from_manifest` without touching the adapter. `OBL-E2E`
-deliberately spans both, which is the only place a composed property is
-justified: the user-facing determinism claim is about the composition, not
-either half.
+The obligations respect that. `OBL-PATHKEY`, `OBL-NOLOSS`, `OBL-ORDER`,
+`OBL-DEFAULT`, and `OBL-NOHASH` are adapter properties tested at the adapter's
+own entry points. `OBL-DUP`, `OBL-CYCLE`, and `OBL-ACTION` are domain
+properties tested against the lowering. `OBL-E2E` and `OBL-PROCESS`
+deliberately span both, which is justified because the user-facing claim is
+about the composition.
 
-`OBL-NINJA` is the one obligation that crosses out of the process, and it is
-therefore the one that lives in `tests/` rather than `src/`, uses a subprocess,
-and skips when its dependency is absent. That placement is the boundary showing
-through, not an inconsistency.
+Two purity leaks are real and are recorded in `ADR-NNN` rather than papered
+over. `Action` derives `Serialize`, and `ActionHasher` defines action
+*identity* as the SHA-256 of its canonical JSON — a serialization concern
+inside the domain model. The team has already fought this: `DependencyOrder`
+carries a `compile_fail` doctest whose whole purpose is to stop someone
+serializing the domain enum. And `IrHashMap` swaps implementation under
+`#[cfg(kani)]`, so a verification tool's cfg chooses the domain's collection
+type.
 
-The temptation to resist is introducing a "deterministic collection port" —
-swapping `IrHashMap` for an ordered map to make determinism structural rather
-than emergent. That would be a production change, is forbidden by
-`Constraint 1`, and would in any case make the properties tautological. The
-determinism must remain a checked property of the adapter, not a type-system
-consequence. If a future maintainer wants to make it structural, `ADR-021` is
-where that argument belongs; note it there as a considered and rejected option.
+The ordered-map port is rejected, but not on the circular ground that this
+plan's own `Constraint 1` forbids it. It is rejected because under a `BTreeMap`
+the two `sort_by_key` calls become dead code, `MUT-EDGESORT` and
+`MUT-ACTIONSORT` would no longer fail anything, and the fault would stop being
+observable. Structural determinism and mutation-demonstrated determinism are
+alternatives here, not complements. `OBL-NOHASH` provides what the port was
+reaching for, at lower cost and without that trade.
 
-### New files
+### File layout
 
-Shared strategies, in `test_support` so both library-side and integration tests
-can use them, split to respect the 400-line ceiling:
+Strategies and library-side properties, all `#[cfg(test)]`, wired from
+`src/ninja_gen/mod.rs` and `src/ir/mod.rs`:
 
-- `test_support/src/ninja_gen/graph_strategy.rs` — the `GraphSpec` type and its
-  strategy.
-- `test_support/src/ninja_gen/manifest_strategy.rs` — the typed
-  `NetsukeManifest` strategy for `OBL-E2E`, `OBL-DUP`, and `OBL-CYCLE`.
-- `test_support/src/ninja_gen/classification.rs` — the classification counters
-  used for non-vacuity evidence.
-
-Library-side property tests, wired from `src/ninja_gen/mod.rs`:
-
-- `src/ninja_gen_determinism_property_tests/mod.rs`
-- `src/ninja_gen_determinism_property_tests/path_key.rs`
-- `src/ninja_gen_determinism_property_tests/guard.rs`
-- `src/ninja_gen_determinism_property_tests/insertion_order.rs`
-- `src/ninja_gen_determinism_property_tests/defaults.rs`
-- `src/ninja_gen_determinism_property_tests/declaration_order.rs`
-
-Library-side IR property tests, wired from `src/ir/mod.rs`:
-
+- `src/ninja_gen/determinism/mod.rs`
+- `src/ninja_gen/determinism/strategy/mod.rs`, `graph.rs`, `manifest.rs`,
+  `classification.rs`
+- `src/ninja_gen/determinism/path_key.rs`, `no_loss.rs`, `order.rs`,
+  `defaults.rs`, `declaration.rs`, `ninja_oracle.rs`
 - `src/ir/action_hash_property_tests.rs`
-- `src/ir/graph_property_tests/mod.rs`
-- `src/ir/graph_property_tests/duplicates.rs`
-- `src/ir/graph_property_tests/cycles.rs`
+- `src/ir/graph_property_tests/mod.rs`, `duplicates.rs`, `cycles.rs`
 
-Integration test:
+Integration tests (no strategy dependency, so `tests/` placement is sound):
 
-- `tests/ninja_determinism_oracle_tests.rs`
+- `tests/ninja_determinism_process_tests.rs` (`OBL-PROCESS`)
+- `tests/ninja_gen_hashmap_boundary.rs` (`OBL-NOHASH`)
 
-Documentation and evidence:
+New top-level `tests/*.rs` files need no registration; Cargo autodiscovery
+handles them and `tests/integration_test_wiring_tests.rs` confirms it. Only a
+new `tests/` subdirectory with a `mod.rs` needs an explicit `mod` declaration.
 
-Mutation patches follow the existing house convention in
-`docs/verification/mutations/`: each file is named after the *test it
-falsifies*, with `__` standing in for the module separator, not after the
-mutation it applies. Note that
-`ir__from_manifest__verification__duplicate_output_always_rejected.patch`
-already exists in that directory from the 4.2.1 Kani work and flips `||` to
-`&&` in `find_duplicates`. The new duplicate-output patch below is deliberately
-more surgical, disabling only the within-one-target half, so that `OBL-DUP`'s
-three collision modes can be told apart. Both patches are retained.
+Mutation patches, named after the test they falsify per the house convention,
+with `__` for the module separator:
 
-- `docs/adr-021-ninja-emission-determinism-contract.md`
+| Handle           | Falsifies                               | Mutation                                                 |
+| ---------------- | --------------------------------------- | -------------------------------------------------------- |
+| `MUT-PATHKEY`    | `OBL-PATHKEY`                           | Delete `parts.sort_unstable()` in `path_key`.            |
+| `MUT-GUARD`      | `OBL-NOLOSS`                            | Move the path-character validator after the edge sort.   |
+| `MUT-EDGESORT`   | `OBL-ORDER`                             | Delete `edges.sort_by_key` in both paths.                |
+| `MUT-ACTIONSORT` | `OBL-ORDER`                             | Delete `actions.sort_by_key`.                            |
+| `MUT-DEFSORT`    | `OBL-DEFAULT`, `OBL-E2E`, `OBL-PROCESS` | Delete `defs.sort()`.                                    |
+| `MUT-DEFPOS`     | `OBL-DEFAULT`, `OBL-NINJA`              | Emit `default` before edge rendering.                    |
+| `MUT-HASHMETA`   | `OBL-ACTION`                            | Make the hasher skip `pool`.                             |
+| `MUT-DUPWITHIN`  | `OBL-DUP`                               | Disable the within-one-target half of `find_duplicates`. |
+| `MUT-CYCLEDEPTH` | `OBL-CYCLE`                             | Cap cycle traversal depth at 4.                          |
 
-Eleven mutation patches under `docs/verification/mutations/`. Each is referred
-to in this plan by a short handle; the filename follows the house convention of
-naming a patch after the test it falsifies, with `__` for the module separator.
-
-| Handle           | Filename (under `docs/verification/mutations/`)                                                   | Falsifies                  | Mutation                                                        |
-| ---------------- | ------------------------------------------------------------------------------------------------- | -------------------------- | --------------------------------------------------------------- |
-| `MUT-PATHKEY`    | `ninja_gen__determinism_property_tests__path_key_is_permutation_invariant.patch`                  | `OBL-PATHKEY`              | Delete `parts.sort_unstable()` in `path_key`.                   |
-| `MUT-GUARD`      | `ninja_gen__determinism_property_tests__validation_precedes_path_key_ordering.patch`              | `OBL-GUARD`                | Move `reject_unsupported_path_characters` after the edge sort.  |
-| `MUT-EDGESORT`   | `ninja_gen__determinism_property_tests__emission_is_insertion_order_invariant.patch`              | `OBL-ORDER`                | Delete `edges.sort_by_key` in both emission paths.              |
-| `MUT-ACTIONSORT` | `ninja_gen__determinism_property_tests__bundle_is_insertion_order_invariant.patch`                | `OBL-ORDER`                | Delete `actions.sort_by_key` in `write_action_rules`.           |
-| `MUT-FIRSTOUT`   | `ninja_gen__determinism_property_tests__emission_is_insertion_order_invariant_multi_output.patch` | `OBL-ORDER`                | Sort edges by first explicit output, making the key non-unique. |
-| `MUT-DEFSORT`    | `ninja_gen__determinism_property_tests__default_line_is_the_ascending_sort.patch`                 | `OBL-DEFAULT`, `OBL-E2E`   | Delete `defs.sort()` in both emission paths.                    |
-| `MUT-DEFPOS`     | `ninja_gen__determinism_property_tests__default_line_position.patch`                              | `OBL-DEFAULT`, `OBL-NINJA` | Emit the `default` block before edge rendering.                 |
-| `MUT-HASHMETA`   | `ir__action_hash_property_tests__action_hash_is_a_function_of_content.patch`                      | `OBL-ACTION`               | Make `ActionHasher::hash` skip the `pool` field.                |
-| `MUT-IDINDEX`    | `ninja_gen__determinism_property_tests__declaration_order_does_not_change_emission.patch`         | `OBL-E2E`                  | Append the declaration index to the interned action identifier. |
-| `MUT-DUPWITHIN`  | `ir__graph_property_tests__duplicate_outputs_are_rejected_at_larger_n.patch`                      | `OBL-DUP`                  | Disable only the within-one-target half of `find_duplicates`.   |
-| `MUT-CYCLEDEPTH` | `ir__graph_property_tests__cycles_are_rejected_at_larger_n.patch`                                 | `OBL-CYCLE`                | Cap the cycle detector's traversal depth at 4.                  |
-
-Commit the regression seed files these properties produce, under
-`proptest-regressions/` for the library-side properties and beside the test as
-`tests/ninja_determinism_oracle_tests.proptest-regressions` for the integration
-test.
+Nine, not the first draft's eleven. Two were cut because the existing nightly
+`cargo-mutants` job (`.github/workflows/mutation-testing.yml`, 03:05 UTC over
+`src/` with `--all-features`) already generates sort-deletion mutants
+automatically. Handwritten patches earn their keep on faults `cargo-mutants`
+cannot generate — the *reordering* ones, `MUT-GUARD` and `MUT-DEFPOS`. `EP-M8`
+additionally records a scoped
+`cargo mutants -f src/ninja_gen/mod.rs -f src/ninja_gen/dyndep.rs` run with
+survivors tabulated.
 
 ### The shared graph strategy
 
-This is the plan's central new artefact, and its design decides how much the
-properties are worth. It generates a *specification*, not a graph, so that the
-same specification can be materialized twice in two different insertion orders.
+Generates a *specification*, so one spec can be materialized twice under
+different insertion orders.
 
 ```rust
 /// A bounded, well-formed build-graph specification and two insertion orders.
-pub struct GraphSpec {
-    /// Unique action identifiers paired with their actions.
+struct GraphSpec {
     actions: Vec<(String, Action)>,
-    /// Edges whose explicit output sets are pairwise disjoint.
     edges: Vec<BuildEdge>,
-    /// Default targets, drawn from the declared explicit outputs.
     default_targets: Vec<Utf8PathBuf>,
-    /// Insertion order for the first materialisation.
     first_order: Vec<usize>,
-    /// Insertion order for the second materialisation.
     second_order: Vec<usize>,
 }
 ```
 
-Well-formedness is achieved by construction, never by filtering
-(`Constraint 6`):
+Pin these signatures before `EP-M4` starts: the strategy constructor,
+`materialize(&self, order: &[usize]) -> BuildGraph`, and the classification
+API. The first draft specified a struct with every field private and no
+methods, which is not an interface.
 
-- Output paths are drawn from a pre-numbered namespace `out/NNNN`. Each edge is
-  assigned a contiguous, non-overlapping slice, so disjointness is structural.
-  The namespace avoids `.netsuke/`, so `reject_reserved_paths` never fires.
-- Action identifiers are `act-NNNN`, unique by index. For `OBL-ORDER` these
-  stand in for production's content hashes; `OBL-ACTION` separately verifies
-  that the real interning is content-determined, so the substitution is
-  justified rather than assumed.
-- Every edge's `action_id` is drawn from the generated identifier list by
-  index, so `MissingAction` is unreachable.
-- Inputs, implicit dependencies, and order-only dependencies are drawn from
-  already-allocated outputs at strictly lower indices, plus a generated number
-  of external paths outside the namespace. The index discipline means no cycle
-  is generated, and the external paths exercise the missing-dependency path.
-- `default_targets` is a generated sub-multiset of the allocated outputs,
-  shuffled, with a generated repetition count so `OBL-DEFAULT`'s duplicate
-  class is reachable.
-- `first_order` and `second_order` are independent shuffles of `0..n`.
+Well-formedness by construction, never by filtering:
 
-Materialization inserts into fresh `HashMap`s in the given order, including the
-per-output cloning that `insert_edge_for_outputs` performs, so the two graphs
-are equal as values but were built differently.
-
-Because a strategy this size can hide gaps, `classification.rs` records, per
-case, which equivalence classes were reached, and each property asserts a floor
-on the classes its `Non-vacuity` clause names.
-
-### Existing interfaces relied upon
-
-- `netsuke::ninja_gen::{generate, generate_bundle}` — public; unchanged.
-- `netsuke::ninja_gen::path_key` — `pub(crate)`; reached from library-side tests
-  via `super::`. Must not be widened.
-- `netsuke::ir::BuildGraph::from_manifest` — public; unchanged.
-- `netsuke::hasher::ActionHasher::hash` — reached from `src/ir/` tests.
-- `test_support::ninja_gen::{paths_strategy, ninja_integration_setup}` —
-  existing; extended, not replaced.
-- The `NinjaCommandOracle` pattern in
-  `src/ninja_gen_property_tests/ninja_oracle.rs` — copied in shape, including
-  its skip-when-absent behaviour.
-
-### Test-wiring contract
-
-`tests/integration_test_wiring_tests.rs` enforces two rules. A new top-level
-`tests/*.rs` file needs no registration; Cargo's autodiscovery handles it and
-the contract test confirms Cargo saw it. Only a new *subdirectory* under
-`tests/` containing a `mod.rs` needs an explicit `mod` declaration from some
-top-level test file. This plan adds one top-level file and no test
-subdirectory, so no manual wiring is required — but run `make test` and
-confirm, rather than assuming.
-
-Library-side modules are wired locally from their parent production module.
-`src/lib.rs` declares no test modules and must not start.
+- Output paths drawn from a pre-numbered `out/NNNN` namespace, each edge given
+  a contiguous non-overlapping slice, so disjointness is structural and no path
+  is empty. The namespace avoids `.netsuke/`, so `reject_reserved_paths` never
+  fires.
+- Total explicit outputs capped at 200 (`Constraint 10`).
+- Action identifiers `act-NNNN`, unique by index. These stand in for
+  production's content hashes; `OBL-ACTION` separately verifies the property
+  that substitution relies on.
+- Every `action_id` drawn from the generated list, so `MissingAction` is
+  unreachable.
+- Inputs and dependencies drawn from already-allocated outputs at strictly
+  lower indices, plus generated external paths, so no cycle is generated and
+  the missing-dependency path is exercised.
+- `implicit_outputs` allocated from the *same* disjoint namespace. This is not
+  optional: `find_duplicates` never examines `implicit_outputs`, and
+  `from_manifest` always sets it empty, so a freely-generated implicit output
+  would hand real Ninja two edges declaring the same one and `OBL-NINJA` would
+  fail for a reason unrelated to determinism.
+- `default_targets` a shuffled sub-multiset of allocated outputs with generated
+  repeats.
+- `first_order` and `second_order` independent shuffles of `0..n`.
 
 ## Concrete steps
 
-### One-time setup
+### Running the suite
 
 ```bash
-cd /path/to/netsuke/worktree
-git branch --show-current   # must be 4-3-1-proptests-for-deterministic-ninja-emission
-git fetch origin --prune
-git log --oneline -1 origin/main
+B=$(git branch --show-current)
+make proptest 2>&1 | tee /tmp/proptest-netsuke-$B.out
 ```
 
-Confirm the worktree base is not stale before starting. Do not create an
-isolated Cargo cache; use the shared default cache and let Cargo's
-package-cache lock serialize access.
-
-### Running the new suite
-
-```bash
-make proptest 2>&1 | tee /tmp/proptest-netsuke-$(git branch --show-current).out
-```
-
-If `EP-M1` split the suite:
-
-```bash
-make proptest-heavy 2>&1 | tee /tmp/proptest-heavy-netsuke-$(git branch --show-current).out
-```
-
-Run a single property while iterating:
+Iterate on one property, or widen the search without recompiling:
 
 ```bash
 cargo nextest run --all-features -E 'test(emission_is_insertion_order_invariant)'
+PROPTEST_CASES=4096 cargo nextest run --all-features -E 'test(determinism)'
 ```
 
-Widen the search without recompiling:
-
-```bash
-PROPTEST_CASES=4096 cargo nextest run --all-features -E 'test(determinism_property_tests)'
-```
-
-Do not lower a case count to make a failure go away. A property that fails at
-case 500 and passes at 256 has found something.
+Never lower a case count to make a failure go away.
 
 ### Applying and reverting a mutation patch
 
 ```bash
-git apply MUT-EDGESORT
-make proptest 2>&1 | tee /tmp/mutation-edges-unsorted.out   # must FAIL
-git apply -R MUT-EDGESORT
+git apply docs/verification/mutations/<name>.patch
+make proptest 2>&1 | tee /tmp/mutation-<name>.out   # must FAIL
+git apply -R docs/verification/mutations/<name>.patch
 git diff --quiet && echo "tree restored"
 ```
 
-Record, for each patch, which properties failed and which continued to pass. A
-patch that fails *every* property is too coarse to be evidence; narrow it.
+Record which properties failed and which passed. A patch that fails everything
+is too coarse to be evidence.
 
 ### Ordinary gates
 
-Run sequentially, never in parallel — the build cache is shared with other
-agents on this machine.
+Run sequentially; the build cache is shared with other agents.
 
 ```bash
 B=$(git branch --show-current)
-make check-fmt   2>&1 | tee /tmp/check-fmt-netsuke-$B.out
-make typecheck   2>&1 | tee /tmp/typecheck-netsuke-$B.out
-make lint        2>&1 | tee /tmp/lint-netsuke-$B.out
+make check-fmt    2>&1 | tee /tmp/check-fmt-netsuke-$B.out
+make typecheck    2>&1 | tee /tmp/typecheck-netsuke-$B.out
+make lint         2>&1 | tee /tmp/lint-netsuke-$B.out
 make doc-coverage 2>&1 | tee /tmp/doc-coverage-netsuke-$B.out
-make test        2>&1 | tee /tmp/test-netsuke-$B.out
+make test         2>&1 | tee /tmp/test-netsuke-$B.out
 make markdownlint 2>&1 | tee /tmp/markdownlint-netsuke-$B.out
-make nixie       2>&1 | tee /tmp/nixie-netsuke-$B.out
+make nixie        2>&1 | tee /tmp/nixie-netsuke-$B.out
 ```
 
-Prefer delegating full gate runs to the `scrutineer` subagent, which runs them
-sequentially, captures each log, and returns a bounded report. When it reports
-a failure, read the cited log rather than re-running the gate.
+Prefer delegating full gate runs to the `scrutineer` subagent. If a gate fails,
+read the cited log rather than re-running.
 
 ### Commits and review
 
-Commit at every milestone boundary, and more often within a milestone whenever
-the tree is green. Subjects are imperative and under 50 characters; bodies wrap
-at 72 columns. Never commit a tree that fails a gate.
-
-Request a `coderabbit review --agent` pass at `EP-M3`, `EP-M5`, and `EP-M7`.
+Commit at every milestone boundary and whenever the tree is green within one.
+Subjects are imperative and under 50 characters; bodies wrap at 72 columns.
+Never commit a tree that fails a gate. Request `coderabbit review --agent` at
+`EP-M5`, `EP-M7`, and `EP-M8`.
 
 ## Validation and acceptance
 
-### Red-green-refactor evidence to record
+### Red-green-refactor evidence
 
-Ordinary red-green-refactor does not apply cleanly here: the production code is
-expected to be correct, so a new property should pass immediately. Writing a
-test that passes on first run proves nothing about the test. This plan
-substitutes mutation-driven red, which is stronger:
+Production code is expected to be correct, so a new property passes on first
+run and its red stage cannot be observed conventionally. The substitute, which
+is stronger and matches the discipline `ADR-004` established:
 
 - **Red.** Apply the obligation's mutation patch and run the property. Record
-  the failure output, including the shrunk counter-example. If the property
-  passes, it is not yet a test — redesign it before writing anything else.
-- **Green.** Revert the patch and run the property. Record the pass.
-- **Refactor.** Extract shared strategy code, keep every file under 400 lines,
-  rerun the property and the wider gates.
-
-Record both transcripts per obligation in `Artefacts and notes`. This
-substitution is deliberate and is recorded in `Decision log`; it is the
-`Constraints` -mandated observable substitute for a red stage that cannot
-otherwise exist.
+  the failure and the counter-example. If it passes, it is not yet a test.
+- **Green.** Revert and re-run. Record the pass.
+- **Refactor.** Extract shared code, keep files under 400 lines, re-run.
 
 ### Acceptance, phrased as behaviour
 
-1. Running `make proptest` on a clean tree passes and reports the property
-   tests by name.
-2. Applying `MUT-EDGESORT` and running
-   `make proptest` fails, and the failure names
-   `emission_is_insertion_order_invariant` and prints a shrunk pair of graphs
-   small enough to read. Reverting the patch restores a passing run.
-3. The same holds for each of the other ten mutation patches, each failing its
-   named property and not the whole suite.
-4. Running `make test` on a clean tree passes, and the wall-time delta against
-   `origin/main` is within the figure recorded in `EP-M1`.
-5. If Ninja is installed,
-   `cargo nextest run -E 'test(ninja_determinism_oracle)'` passes and reports a
-   non-zero case count. If Ninja is absent, it reports a skip rather than a
-   pass.
-6. Reading `docs/users-guide.md` yields a stated determinism guarantee, and
-   `docs/adr-021-ninja-emission-determinism-contract.md` explains which of the
-   three determinism statements is public and which is internal.
-7. `docs/roadmap.md` item 4.3.1 and its three sub-items are marked done, and the
-   two `4.2.1` sub-items that deferred work here are annotated as discharged.
-8. `make check-fmt`, `make typecheck`, `make lint`, `make doc-coverage`,
-   `make test`, `make markdownlint`, and `make nixie` all pass.
+1. `make proptest` on a clean tree passes and names the properties.
+2. Applying `MUT-EDGESORT` and running `make proptest` fails, naming the
+   insertion-order core property, with a counter-example small enough to read.
+   Reverting restores a passing run.
+3. The same holds for each of the other eight patches. Each fails its named
+   property, **plus** `every_patch_applies_cleanly` in the mutation-evidence
+   contract test — because `git apply --check` of an already-applied patch
+   fails — and no other test. The first draft's criterion omitted that second
+   failure and was therefore unachievable as written.
+4. `make test` passes, and its wall-time delta against `origin/main` is within
+   the figure recorded in `EP-M2` (expected: a few seconds).
+5. With Ninja installed, the oracle property reports a non-zero case count;
+   without it, a skip. Under `NETSUKE_REQUIRE_NINJA=1` an absent Ninja panics.
+6. Running the built binary twice over a fixture yields identical bytes, and
+   `MUT-DEFSORT` breaks that.
+7. `docs/users-guide.md` states a guarantee, and `ADR-NNN` explains which
+   statements are public, under which parameter tuple, and that cross-version
+   stability is not promised.
+8. `docs/roadmap.md` 4.3.1 is marked done, and the two `4.2.1` sub-items that
+   deferred work here are annotated as discharged.
+9. All gates pass.
 
 ### Quality criteria
 
-- Every property uses `prop_assert*`, never `assert!` or `unwrap`.
-- No strategy uses `prop_filter` or `prop_assume!` for a structural condition.
-- Every obligation's classification floors are asserted, not merely printed.
-- Counter-examples shrink to graphs a human can read in a terminal.
+- Every property uses `prop_assert*` inside the body; post-run assertions only
+  in the `TestRunner::run` form.
+- No strategy filters on a structural condition.
+- Non-vacuity is asserted per case wherever the restructuring allows, and
+  recorded where it cannot be.
+- Counter-examples are readable, via the compact `Debug`.
 - No file exceeds 400 lines.
-- All prose is en-GB-oxendict; all Markdown is `mdtablefix`-canonical.
-- Regression seed files are committed, with a comment on any seed retained for
-  a reason other than a live defect.
+- Prose is en-GB-oxendict and `mdtablefix`-canonical.
 
 ## Idempotence and recovery
 
-Every step is re-runnable. The property suites are pure and hold no state
-between runs beyond the committed regression seeds, which are replayed
-deterministically. `make proptest` can be interrupted and re-run.
+Every step is re-runnable. The properties are pure and hold no state between
+runs beyond committed seeds. If a mutation patch is left applied, `git diff`
+shows it and `git apply -R` removes it; `EP-M8` re-verifies a clean tree.
 
-If a mutation patch is left applied by accident, `git diff` will show it and
-`git apply -R` removes it; `EP-M7` re-verifies a clean tree explicitly. If a
-patch stops applying after a production refactor, that is a signal, not a
-nuisance: re-derive the patch against the new code in the same commit as the
-refactor, per `Constraint 7`.
+Every milestone is additive or a pure refactor, so reverting means deleting
+files and their wiring, or reverting a split. No milestone introduces a
+compatibility shim, an alias, or a dual implementation, and none may: there is
+no external consumer of any interface touched here, and every new surface is
+test-only or `pub(crate)`.
 
-If a milestone must be abandoned, every artefact it adds is additive — new
-files, new Make targets, new documentation — so reverting is a matter of
-deleting files and the wiring lines that reference them. No milestone
-introduces a compatibility shim, an alias, or a dual implementation, and none
-is permitted to: there is no external consumer of any interface touched here,
-and every new surface is test-only or `pub(crate)`.
-
-If the shared Cargo cache is locked by another agent's build, wait for the lock
-rather than creating a separate cache. If `/tmp` or the disk fills, stop and
-report it.
+If the shared Cargo cache is locked by another agent, wait rather than creating
+a separate cache. If `/tmp` or the disk fills, stop and report.
 
 ## Artefacts and notes
 
-To be filled in during implementation. The required contents are:
+### Answers already obtained (2026-09-09)
 
-- `EP-M0` measurements: answers to all six spike questions, with figures.
-- `EP-M1` timings: `make test` before and after, `make proptest` alone, and the
-  tiering decision with its threshold comparison.
-- Per-obligation classification counts, showing every named equivalence class
-  was reached.
-- Per-mutation transcripts: which properties failed, which passed, and the
-  shrunk counter-example for each failure.
-- Final gate logs, by `/tmp` path.
-- The `coderabbit review --agent` outcome at each requested point.
+**Question 7 — can `src/`-side tests use `test_support` strategies carrying
+netsuke types? No.** Proven by compile probe: a `test_support` function
+returning `netsuke::ir::BuildGraph`, called from a `#[cfg(test)]` module in
+`src/` and passed to `crate::ninja_gen::generate`, fails to compile.
+
+```plaintext
+expected `ir::graph::BuildGraph`, found `netsuke::ir::graph::BuildGraph`
+note: there are multiple different versions of crate `netsuke` in the dependency graph
+error: could not compile `netsuke-build` (lib test) due to 1 previous error
+```
+
+`test_support` depends on `netsuke-build`, which has `test_support` as a
+dev-dependency, so the lib is compiled twice and the two `BuildGraph` types do
+not unify. The existing `paths_strategy` works only because it returns
+`Vec<Utf8PathBuf>`, a third-party type; `NinjaIntegrationCase`, which does
+carry IR types, is consumed only from `tests/`. The probe was reverted and the
+tree confirmed clean.
+
+**Question 6 — is `adr-021` claimed? Yes, four times**, on the branches for
+issues 592, 643, 644 and 646. `adr-020` is claimed twice. Hence `ADR-NNN`.
+
+**Question 3 — per-case cost.** Measured on this six-core Rocky 10 box, dev
+profile (opt-level 0 with debug assertions, matching `cargo nextest`):
+
+| `targets` entries | `path_key` calls | heap allocs | dev      | release  |
+| ----------------- | ---------------- | ----------- | -------- | -------- |
+| 12                | 74               | 222         | 0.039 ms | 0.005 ms |
+| 100               | 1,152            | 3,456       | 0.561 ms | 0.082 ms |
+| 200               | 2,616            | 10,464      | 1.866 ms | 0.229 ms |
+| 400               | 6,702            | 40,212      | 7.259 ms | 0.814 ms |
+
+One `OBL-ORDER` case costs 13–16 ms in a dev build. The whole new suite is
+about 6 s of CPU and 2–3 s wall under nextest parallelism — well inside the
+45-second budget, which is why no light/heavy split is planned. Recommended
+case counts: `OBL-PATHKEY` 1024; `OBL-ACTION` 512; `OBL-NOLOSS`, `OBL-DEFAULT`,
+`OBL-E2E`, `OBL-DUP`, `OBL-CYCLE` 256 each; `OBL-ORDER` 256; `OBL-NINJA` 64.
+
+Also measured: `ninja -t commands` 1.63 ms, `ninja -n` 1.91 ms; a missing
+dyndep sidecar exits 0 under `-t commands` and fails only under `-n`; a
+`default` preceding its `build` statement is rejected. `sort_by_key` at
+production scale is 16.2 ms release for a 10,000-edge graph, so the repeated
+`path_key` allocation is a test-budget item, not a production defect.
+
+### Still to record
+
+`EP-M0` questions 1, 2, 4, 5; `EP-M2` timings; per-obligation classification
+counts; per-mutation transcripts; final gate logs; CodeRabbit outcomes.
 
 ## Progress
 
-- [x] (2026-09-09T00:00:00Z) Renamed the branch to
-      `4-3-1-proptests-for-deterministic-ninja-emission` and pushed it with
-      upstream tracking.
+- [x] (2026-09-09T00:00:00Z) Renamed the branch and pushed it with upstream
+      tracking.
 - [x] (2026-09-09T00:00:00Z) Loaded the `codegraph-mcp`, `rust-router`,
-      `hexagonal-architecture`, `execplans`, `proptest`, and
-      `rust-verification` skills.
-- [x] (2026-09-09T00:00:00Z) Ran a four-agent Wyvern reconnaissance team over
-      the Ninja emission internals, the repository's proptest conventions, the
+      `hexagonal-architecture`, `execplans`, `proptest`, `rust-verification`,
+      and `logisphere-design-review` skills.
+- [x] (2026-09-09T00:00:00Z) Ran a four-agent reconnaissance team over the
+      emission internals, the repository's proptest conventions, the
       documentation and gate tooling, and the ExecPlan house style.
-- [x] (2026-09-09T00:00:00Z) Researched the Ninja manual v1.13.1 for `default`
-      statement and build-statement semantics, and confirmed current crate
-      versions for `proptest`, `proptest-derive`, `test-strategy`, and
-      `proptest-state-machine`.
-- [x] (2026-09-09T00:00:00Z) Read `src/ninja_gen/mod.rs`,
-      `src/ninja_gen/dyndep.rs`, `src/ninja_gen/display_edge.rs`,
-      `src/ninja_gen/path_syntax.rs`, `src/ir/graph.rs`,
-      `src/ir/from_manifest.rs`, and `src/ir/from_manifest_support.rs`, and
-      established the well-formedness invariant the strategies must reproduce.
-- [x] (2026-09-09T00:00:00Z) Confirmed the three scope decisions with the user:
-      include the inherited larger-N IR obligations, settle the determinism
-      contract in this item, and add a measured `proptest` Make target with a
-      light/heavy split if the measurement justifies one.
-- [x] (2026-09-09T00:00:00Z) Drafted this approval-gated ExecPlan.
-- [ ] Community-of-experts design review of this plan, and revision.
+- [x] (2026-09-09T00:00:00Z) Researched the Ninja manual v1.13.1 and confirmed
+      current versions of `proptest` and its derive ecosystem.
+- [x] (2026-09-09T00:00:00Z) Confirmed three scope decisions with the user:
+      include the inherited larger-N IR obligations; settle the determinism
+      contract here; add a `proptest` target, measure it, and split only if
+      the measurement justifies it.
+- [x] (2026-09-09T00:00:00Z) Drafted the first version of this plan.
+- [x] (2026-09-09T00:00:00Z) Ran a six-lens community-of-experts design review.
+- [x] (2026-09-09T00:00:00Z) Verified the review's decisive claims directly:
+      the `test_support` compile probe; the ADR-021 collisions; the
+      mutation-evidence contract; the 400-line ceiling on
+      `src/ninja_gen/mod.rs`; the `graph_view` prior art; `NETSUKE_REQUIRE_NINJA`;
+      the nextest no-retry policy; and the nightly `cargo-mutants` job.
+- [x] (2026-09-09T00:00:00Z) Rewrote the plan against the review findings.
 - [ ] Approval gate: await explicit user approval before any implementation.
-- [ ] `EP-M0`: feasibility and measurement spike; record six answers.
-- [ ] `EP-M1`: measured tiering and the `proptest` Make target.
-- [ ] `EP-M2`: `OBL-PATHKEY` and `OBL-GUARD`.
-- [ ] `EP-M3`: `OBL-ORDER` and `OBL-DEFAULT`.
-- [ ] `EP-M4`: `OBL-ACTION` and `OBL-E2E`.
-- [ ] `EP-M5`: `OBL-DUP` and `OBL-CYCLE`.
-- [ ] `EP-M6`: `ADR-021` and the documentation set.
-- [ ] `EP-M7`: `OBL-NINJA`, mutation sweep, roadmap update, final validation.
+- [ ] `EP-M0`: answer questions 1, 2, 4, 5. Question 2 gates `EP-M1`.
+- [ ] `EP-M1`: write `ADR-NNN`.
+- [ ] `EP-M2`: file splits, mutation-evidence contract, ordering helpers,
+      `make proptest`.
+- [ ] `EP-M3`: shared strategy and compact `Debug`.
+- [ ] `EP-M4`: `OBL-PATHKEY`, `OBL-NOLOSS`.
+- [ ] `EP-M5`: `OBL-ORDER`, `OBL-DEFAULT`, `OBL-NOHASH`.
+- [ ] `EP-M6`: `OBL-ACTION`, `OBL-E2E`, `OBL-PROCESS`.
+- [ ] `EP-M7`: `OBL-DUP`, `OBL-CYCLE`.
+- [ ] `EP-M8`: `OBL-NINJA`, documentation, evidence sweep, roadmap.
 
 ## Surprises & discoveries
 
-- (2026-09-09) The emitter's edge sort is *stable* and its key,
-  `path_key(&edge.explicit_outputs)`, is only unique because `from_manifest`
-  rejects duplicate outputs. If that invariant were ever weakened, ties would
-  silently fall back to `HashMap` iteration order and the deduplication would
-  drop a real edge non-deterministically. This is the single most valuable
-  thing the reconnaissance found, and it is why `OBL-GUARD` and `OBL-ACTION`
-  exist as separate obligations rather than being folded into `OBL-ORDER`.
-- (2026-09-09) `path_key` joins with a NUL byte, so it is injective only
-  because `reject_unsupported_path_characters` — which runs first — rejects
-  control characters. The concrete collision
-  `path_key(["a", "b"]) == path_key(["a\0b"])` is real and reachable if that
-  ordering is ever changed. It is recorded as a directed witness test rather
-  than left implicit.
-- (2026-09-09) `process_defaults` uses `Vec::extend` and the emitter uses
-  `Vec::sort`, neither of which deduplicates, so a manifest listing the same
-  default twice emits it twice. This is deterministic and probably harmless,
-  but it is undocumented; `ADR-021` should say whether it is intended.
-- (2026-09-09) An edge with no explicit outputs is silently dropped by
-  `insert_edge_for_outputs` rather than rejected. Out of scope here, but worth
-  noting in `ADR-021` as an unstated precondition.
-- (2026-09-09) The repository has duplicate ADR numbers at 003, 004, and 014,
-  so allocating 021 requires checking remote branches first rather than
-  trusting the local maximum.
-- (2026-09-09) Two existing integration tests override `failure_persistence`
-  explicitly, claiming regression seeds are otherwise inert in integration-test
-  crates, while three others rely on the default and do have working seed
-  files. The discrepancy is unexplained and is `EP-M0` question 5.
+- (2026-09-09) The emitter's edge sort is *stable* and its key is unique only
+  because `from_manifest` rejects duplicate outputs. Weaken that and ties fall
+  back to `HashMap` order, dropping a real edge non-deterministically. This
+  drove the obligation structure.
+- (2026-09-09) `path_key` joins with NUL, so it is injective only because the
+  validator runs first and rejects control characters. Two concrete collisions
+  exist: `path_key(["a","b"]) == path_key(["a\0b"])`, and
+  `path_key([]) == path_key([""])` — the second because the empty string passes
+  validation. The first draft asserted injectivity without excluding empty
+  components and was wrong.
+- (2026-09-09) A `test_support` strategy carrying netsuke types **cannot** be
+  used from a `src/`-side test. Proven, not argued; see `Artefacts and notes`.
+- (2026-09-09) `docs/verification/mutations/` is governed by
+  `tests/kani_mutation_evidence_tests.rs`, which rejects any patch stem not
+  rooted at `ir` and requires harness correspondence. The first draft's patches
+  were unrepresentable and would have failed `make test` on the first commit
+  that added one.
+- (2026-09-09) `src/ninja_gen/mod.rs` is exactly 400 lines, the `AGENTS.md`
+  ceiling. Any wiring line breaches it.
+- (2026-09-09) `src/graph_view/tests_property.rs` already implements an
+  insertion-order-invariance property over `BuildGraph`, in 169 lines. The
+  first draft claimed no such strategy existed.
+- (2026-09-09) `RandomState` is not part of the Proptest seed, so a property
+  whose predicate depends on `HashMap` iteration order is not reproducible from
+  its seed. Shrinking silently discards valid candidates and committed
+  regression seeds are decorative. This is the deepest flaw the review found.
+- (2026-09-09) `ninja -t commands` does not load dyndep sidecars: a graph
+  referencing a missing sidecar exits 0. An oracle using only `-t commands`
+  would be vacuous over the sidecar bundle.
+- (2026-09-09) Three of the five committed `tests/*.proptest-regressions` files
+  are probably never replayed, because Proptest's default persistence finds no
+  `lib.rs`/`main.rs` above an integration-test crate. Two carry careful
+  retention comments that may have never had effect.
+- (2026-09-09) `register_action` hard-codes `depfile`, `deps_format`, `pool`,
+  and `restat`, so no manifest can populate them. `OBL-ORDER`'s direct-graph
+  strategy is the only obligation reaching those emitter branches, which makes
+  `OBL-E2E` *not* strictly stronger, contrary to the first draft.
+- (2026-09-09) `process_rules` is last-writer-wins on duplicate rule names and
+  no `DuplicateRule` error exists, so `OBL-E2E`'s unrestricted form is false.
+- (2026-09-09) An output-less target still registers its action, so its `rule`
+  block is emitted with no `build` statement referencing it.
+- (2026-09-09) `make fmt`'s `mdtablefix --renumber` converted a wrapped line
+  beginning "72." into an ordered-list item, truncating the sentence before it.
+  No gate caught it; it was found by a reviewer reading the prose.
 
 ## Decision log
 
 - Decision: keep this ExecPlan pre-implementation and approval-gated.
-  Rationale: the user stated the plan must be approved before it is
-  implemented. Date/Author: 2026-09-09 / planning agent.
+  Rationale: the user stated the plan must be approved before implementation.
+  Date/Author: 2026-09-09 / planning agent.
 
 - Decision: include the larger-N duplicate-output and cycle-rejection
-  obligations inherited from roadmap `4.2.1` and `ADR-004`, and add matching
-  sub-items to roadmap `4.3.1`. Rationale: the user chose the wide scope when
-  asked. Both upstream artefacts state in terms that `4.3.1` closes this
-  coverage, so leaving it out would leave an accepted ADR undischarged with no
-  owner. The bounded manifest strategy needed for `OBL-E2E` also serves these
-  obligations, so the marginal cost is one milestone. Date/Author: 2026-09-09 /
-  planning agent.
+  obligations inherited from `4.2.1` and `ADR-004`. Rationale: the user chose
+  the wide scope. Both upstream artefacts state that `4.3.1` closes this
+  coverage, so omitting it leaves an accepted ADR undischarged with no owner.
+  The design review recommended splitting them into a sibling item; they are
+  kept in a self-contained milestone so that remains possible. Date/Author:
+  2026-09-09 / planning agent.
 
-- Decision: settle the determinism contract in this item, in a new `ADR-021`
-  plus the users' guide and one README sentence. Rationale: the user chose this
-  when asked. `docs/formal-verification-methods-in-netsuke.md` asks for the
-  decision and no roadmap item owns it, and verifying an unstated property is
-  verification without a specification. Date/Author: 2026-09-09 / planning
+- Decision: settle the determinism contract here, in `ADR-NNN` plus the users'
+  guide and README. Rationale: the user chose this; `FV-CONTRACT` asks for the
+  decision and no roadmap item owns it. Date/Author: 2026-09-09 / planning
   agent.
 
-- Decision: add a `proptest` Make target, measure it in `EP-M1`, and split into
-  light and heavy tiers only if the measurement justifies it, with the heavy
-  tier gated in CI. Rationale: the user asked for measurement rather than an
-  assumption. The repository has no proptest target today and all suites run
-  under `make test`; adding a tier speculatively would diverge from convention
-  without evidence. The threshold is stated in `Tolerances` as 45 seconds added
-  to `make test`. Date/Author: 2026-09-09 / planning agent.
-
-- Decision: substitute mutation-driven red for conventional red-green-refactor.
-  Rationale: the production code is expected to be correct, so a new property
-  passes on first run and its red stage cannot be observed the usual way.
-  Applying a recorded mutation patch and observing a named failure is a
-  stronger observable substitute, and is the discipline `ADR-004` and roadmap
-  `4.2.2` already established for the Kani harnesses. Date/Author: 2026-09-09 /
+- Decision: write the ADR in `EP-M1`, before any property. Rationale: the first
+  draft wrote it at milestone six, after every property was green, which would
+  have let the contract be fitted to whatever the code did. Verification of a
+  contract derived from the tests is circular. Date/Author: 2026-09-09 /
   planning agent.
 
-- Decision: generate a `GraphSpec` and materialize it twice, rather than
-  generating two graphs and asserting they are equal. Rationale: generating two
-  graphs independently would make the property depend on the generator
-  producing equal values, which is fragile and shrinks badly. Materializing one
-  specification under two insertion permutations makes value equality
-  structural and isolates the variable under test. Date/Author: 2026-09-09 /
+- Decision: do not tier the suite. Rationale: measured. The whole new suite is
+  about 6 s of CPU and 2–3 s wall against a 45-second budget, so the
+  `PROPTEST_HEAVY` gate, `make proptest-heavy`, and a separate CI job would be
+  branches never taken; a standalone CI job would be ~98% compile. This answers
+  the user's instruction to measure and judge. Date/Author: 2026-09-09 /
   planning agent.
 
-- Decision: use synthetic `act-NNNN` identifiers in the emission-level
-  strategies rather than real content hashes, and verify the real interning
-  separately in `OBL-ACTION`. Rationale: the emitter only reads the identifier
-  as an opaque sort key, so synthesizing it isolates the emitter's behaviour;
-  hashing 50 actions per case would also dominate the runtime budget. The
-  substitution is justified rather than assumed because `OBL-ACTION` checks the
-  property the substitution relies on. Date/Author: 2026-09-09 / planning agent.
-
-- Decision: build `OBL-E2E`'s manifests as typed `NetsukeManifest` values
-  rather than as YAML text. Rationale: parsing, `foreach`/`when` expansion, and
-  Jinja rendering belong to roadmap items 4.3.2 and 4.3.3. Starting from typed
-  values keeps this item's scope to lowering and emission, and avoids
-  duplicating coverage that later items will add. Date/Author: 2026-09-09 /
-  planning agent.
-
-- Decision: do not introduce an ordered-map collection port to make determinism
-  structural. Rationale: it would be a production behaviour change, is
-  forbidden by `Constraint 1`, and would make every property in this plan
-  tautological. `ADR-021` records it as a considered and rejected option so a
-  future maintainer finds the reasoning. Date/Author: 2026-09-09 / planning
+- Decision: place all strategies in `src/`, not `test_support`. Rationale: a
+  compile probe proved the `test_support` route does not work for netsuke-typed
+  values consumed from `src/`-side tests. Date/Author: 2026-09-09 / planning
   agent.
 
-- Decision: follow the obligation-driven ExecPlan style used by
-  `docs/execplans/4-2-3-kani-harnesses-for-command-interpolation.md` rather
-  than the earlier narrative style of `4-1-1` and `4-2-1`, and use sentence
-  case for the back-matter headings. Rationale: `4-2-3` is the most recent
-  precedent and the closest structural analogue, being the plan that hands
-  residual coverage to Proptest. The two precedents disagree on heading case;
-  the more recent one is followed. Date/Author: 2026-09-09 / planning agent.
+- Decision: restructure `OBL-ORDER` into a seed-deterministic core over
+  extracted pure ordering helpers, plus an end-to-end property that
+  re-materializes until iteration orders differ. Rationale: `RandomState` is
+  outside the Proptest seed, so the naive property breaks shrinking and makes
+  regression seeds inert. This also deletes the run-level vacuity floor, which
+  had no implementation path compatible with the `proptest!` macro and was
+  itself a flake source against an explicit no-retry policy. Date/Author:
+  2026-09-09 / planning agent.
+
+- Decision: replace `OBL-GUARD` with `OBL-NOLOSS`, asserting the outcome rather
+  than the mechanism. Rationale: "the validator runs before the sort" is a
+  proxy; "no edge is silently dropped" is the failure that matters, survives
+  legitimate refactors, and additionally catches the output-less-edge drop.
+  Date/Author: 2026-09-09 / planning agent.
+
+- Decision: add `OBL-NOHASH`, a source-shape contract test. Rationale: no
+  property can catch a *future* map keyed on a field the generator does not
+  vary, so the plan's stated success criterion was not actually delivered by
+  any obligation. A source contract delivers it, following three existing
+  contract tests in this repository. Date/Author: 2026-09-09 / planning agent.
+
+- Decision: add `OBL-PROCESS`, a two-run `assert_cmd` byte comparison.
+  Rationale: the plan publishes the process-level guarantee and nothing in the
+  repository tests it. Roughly twenty lines close the gap between what is
+  promised and what is checked. Date/Author: 2026-09-09 / planning agent.
+
+- Decision: reject the ordered-map port, on the ground that it would make the
+  sort calls dead and the mutation evidence evaporate — not on the ground that
+  `Constraint 1` forbids it. Rationale: citing this plan's own constraint as
+  the reason to reject the alternative to that constraint is circular, as the
+  review noted. Date/Author: 2026-09-09 / planning agent.
+
+- Decision: nine mutation patches, not eleven, and generalize
+  `tests/kani_mutation_evidence_tests.rs` rather than bypass it. Rationale: the
+  nightly `cargo-mutants` job already generates sort-deletion mutants; hand
+  patches earn their keep on the reordering faults it cannot generate. The
+  contract test is a repository-wide rot detector and weakening it would be
+  worse than dropping a patch. Date/Author: 2026-09-09 / planning agent.
+
+- Decision: use `ADR-NNN` as a placeholder and allocate the number in the final
+  commit. Rationale: `adr-021` is claimed on four open branches and `adr-020`
+  on two; the repository already has three historical collisions. Date/Author:
+  2026-09-09 / planning agent.
+
+- Decision: state `OBL-E2E` only for manifests with distinct rule names, and
+  add a directed test reaching the excluded class. Rationale: `process_rules`
+  is last-writer-wins and the unrestricted claim is false; a generator that
+  allocates unique names would have passed vacuously on exactly the class where
+  the contract fails. Date/Author: 2026-09-09 / planning agent.
+
+- Decision: follow the obligation-driven ExecPlan style of `4-2-3`, with
+  sentence-case back-matter headings. Rationale: it is the most recent
+  precedent and the closest structural analogue. Date/Author: 2026-09-09 /
+  planning agent.
+
+## Design review findings
+
+A six-lens review (structure, alternatives, scaling, contracts, failure modes,
+viability) was run against the first draft. Findings that changed the plan are
+recorded above in `Surprises & discoveries` and `Decision log`. Findings
+accepted but deferred, so they are not lost:
+
+- The scope tolerance in the first draft was breached by its own artefact list
+  on day one. The number is now 34 files with a net-lines cap, chosen to be
+  believable rather than aspirational.
+- `ci-windows.yml` installs Ninja but does not set `NETSUKE_REQUIRE_NINJA`, so
+  that lane's Ninja-dependent tests skip silently. Out of scope here; worth a
+  separate item.
+- Three committed `tests/*.proptest-regressions` files are probably inert. This
+  plan's properties are library-side, where persistence works; the existing
+  files deserve a separate fix.
+- `src/ninja_gen/mod.rs:178` clones a key that is dead immediately after
+  (`seen.insert(key.clone())`), where `dyndep.rs:161` already moves it. A
+  trivial follow-up, not taken here under `Constraint 1`.
+- The review recommended splitting `EP-M7` into a sibling roadmap item and
+  dropping `OBL-NINJA` entirely. Both were declined: the first because the user
+  directed the wide scope, the second because the measured `-n` finding shows
+  the oracle covers the sidecar path that nothing else reaches.
 
 ## Outcomes & retrospective
 
-To be completed after `EP-M7`. Record: whether any property failed against
-current production code and what was found; the measured cost of the suite and
-the tiering decision that followed; whether `OBL-E2E` held as hypothesized;
-which mutations proved hardest to make specific; and whether the shared graph
-strategy is reusable by roadmap items 4.3.2 and 4.3.3 as intended.
+To be completed after `EP-M8`. Record: whether any property failed against
+current production code; whether `OBL-E2E` held; the measured suite cost
+against the 6-second estimate; which mutations proved hardest to make specific;
+whether the `graph_view` strategy was successfully absorbed; and whether the
+generalized mutation-evidence contract held up.
 
 ## Revision note
 
-- 2026-09-09: Initial draft. Establishes the obligation set, the three
-  determinism statements the plan keeps apart, the shared bounded graph
-  strategy, the mutation-driven red substitute, and the eight milestones.
-  Records the three scope decisions taken with the user: the inherited larger-N
-  IR obligations are in scope, the determinism contract is settled here in
-  `ADR-021`, and the `proptest` Make target is measured in `EP-M1` before any
-  light/heavy split is committed to. Remaining work is the whole of `EP-M0`
-  through `EP-M7`, gated on approval.
+- 2026-09-09 (first draft): established the obligation set, the determinism
+  statements, the shared strategy, mutation-driven red, and eight milestones.
+- 2026-09-09 (this revision): rewritten after a six-lens design review. The
+  strategy moved from `test_support` to `src/` after a compile probe proved the
+  first layout impossible; `OBL-ORDER` was restructured because its predicate
+  was not seed-reproducible; `OBL-GUARD` became `OBL-NOLOSS` to assert an
+  outcome; `OBL-NOHASH` and `OBL-PROCESS` were added to cover the success
+  criterion and the published guarantee, neither of which any first-draft
+  obligation reached; `OBL-PATHKEY`, `OBL-ACTION`, and `OBL-E2E` had incorrect
+  statements corrected; the ADR moved to the first milestone; the contract
+  gained the platform, shell, and version parameters; two file splits and a
+  contract-test generalization were budgeted; the tiering machinery was deleted
+  on measured evidence; and the ADR number became a placeholder. Remaining work
+  is `EP-M0` through `EP-M8`, gated on approval.
