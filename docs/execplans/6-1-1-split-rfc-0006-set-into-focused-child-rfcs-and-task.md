@@ -54,43 +54,42 @@ spelling all fail by name.
 This plan is approval-gated. It must be reviewed and explicitly approved before
 implementation begins.
 
-## Scope divergence from the roadmap's literal wording
+## Scope: settled
 
-Read this before anything else; it explains why the plan does not match the
-roadmap text in the working tree.
+The roadmap and this plan now agree, so there is no divergence left to weigh.
+This section records how that was settled, because the earlier drafts turned on
+it.
 
-`docs/roadmap.md:744` currently reads:
+`docs/roadmap.md:744` used to read "Split the RFC 0006 accepted set into
+focused child issues", with success measured as "exactly one open child issue".
+The commissioned task asked instead for focused **child RFCs and accompanying
+roadmap tasks**, and the reviewer has confirmed that reading and directed that
+work be tracked in committed documentation wherever possible. Task 6.1.1 has
+therefore been rewritten in place, and this plan implements that wording.
 
-```plaintext
-- [ ] 6.1.1. Split the RFC 0006 accepted set into focused child issues.
-```
+Three consequences, all now resolved rather than open.
 
-with a success bullet requiring "exactly one open child issue". The
-commissioned task, and this branch, ask instead for focused **child RFCs and
-accompanying roadmap tasks**. This plan implements the commissioned reading and
-therefore also rewrites task 6.1.1's own roadmap text, and the identical "child
-issue" wording at seven places inside RFC 0006 itself, so that the documents
-and the artefacts agree.
+**No separate issue tracker.** Delivery is tracked by the roadmap checkboxes in
+steps 6.2 to 6.9, which are committed documentation and are reviewed with the
+code. No child RFC gets a GitHub issue, and the amended task says so.
 
-Two consequences a reviewer should weigh before approving.
+**The burn-down survives.** The word *open* in the old wording was doing real
+work: an issue closes when its capability lands, giving a live burn-down, and
+an RFC never closes. That property is preserved by the roadmap checkboxes,
+which already decompose every capability group into tasks. It is not lost, only
+relocated — into the file the reviewer asked to track work in.
 
-The word *open* is doing work. An issue closes when its capability lands, so
-"exactly one open child issue" is a live burn-down. An RFC never closes. The
-burn-down is not lost — roadmap checkboxes 6.2.1 through 6.9.2 already provide
-it — but this plan does not add a second tracker, and no child RFC gets its own
-GitHub issue.
+**"Exactly one" applies to the RFC, not to the task.** Every one of the 60
+accepted helpers is already named in a task under its owning step, but some are
+named by more than one: `product` appears in both 6.4.2 and 6.4.5. The amended
+success criterion therefore reads "exactly one child RFC and at least one
+accompanying roadmap task". `COV-6` checks the roadmap half mechanically.
 
-The originating issue is already closed.
-[#596](https://github.com/leynos/netsuke/issues/596) was closed on 2026-08-28
-with its acceptance criteria, including "accepted capabilities are split into
-focused child issues", unfulfilled. Roadmap 6.1.1 is the surviving carrier of
-that obligation. Child RFCs therefore cite #596 as their **originating** issue,
-not as a tracking issue, so no child RFC claims an open tracker it does not
-have.
-
-If the reviewer prefers the literal roadmap wording, stop before `EP-M2`. The
-audit and the coverage test in `EP-M0` and `EP-M1` are useful under either
-reading; nothing after them is.
+The originating issue [#596](https://github.com/leynos/netsuke/issues/596) was
+closed on 2026-08-28 with this very split among its unfulfilled acceptance
+criteria, so roadmap 6.1.1 is the surviving carrier of the obligation. Child
+RFCs cite #596 as their **originating** issue, not as a tracking issue, so no
+child claims an open tracker it does not have.
 
 ## Constraints
 
@@ -215,6 +214,8 @@ Hard invariants. Violating one requires escalation, not a workaround.
 
 ## Progress
 
+- [x] (2026-09-08) Rewrite roadmap task 6.1.1 to the child-RFC wording and
+  record that delivery is tracked by roadmap checkboxes, not issues (`D8`).
 - [ ] `EP-M0` Audit; confirm the partition and the derivation rules. Go/no-go.
 - [ ] `EP-M1` Land the coverage test, `ADR-021`, the RFC 0006 corrections and
   reservations, and the roadmap 6.1.1 rewrite. Ship as its own pull request.
@@ -408,14 +409,25 @@ Hard invariants. Violating one requires escalation, not a workaround.
   [ADR-015](../adr-015-use-bounded-git-cli-for-change-detection.md).
   Date/Author: 2026-09-08, planning agent.
 
-- Decision `D8`: rewrite roadmap task 6.1.1 from "child issues" to "child RFCs
-  and accompanying roadmap tasks", and the same wording at the seven places
-  inside RFC 0006 that say "child issue". Rationale: leaving either document
-  saying "issues" while the tree contains eight child RFCs would leave both
-  describing work nobody did. RFC 0006 section 6 opens by saying a child issue
-  that does not satisfy every clause is not complete, which after this change
-  is the definition of a child RFC's section 5. See `Scope divergence` for what
-  the word *open* cost. Date/Author: 2026-09-08, planning agent.
+- Decision `D8`: roadmap task 6.1.1 has been rewritten from "child issues" to
+  "child RFCs and accompanying roadmap tasks", and the same wording is to be
+  updated at the seven places inside RFC 0006 that say "child issue". **Done
+  for the roadmap**, on reviewer direction, in the commit that carries this
+  revision; RFC 0006's seven phrases remain `EP-M1` work. Rationale: leaving
+  either document saying "issues" while the tree contains eight child RFCs
+  would leave both describing work nobody did. RFC 0006 section 6 opens by
+  saying a child issue that does not satisfy every clause is not complete,
+  which after this change is the definition of a child RFC's section 5. The
+  reviewer also directed that work be tracked in committed documentation where
+  possible, which settles the open question about the lost burn-down: the
+  roadmap checkboxes in steps 6.2 to 6.9 are the tracker, and no child RFC gets
+  a GitHub issue. The amended task records that explicitly so a later reader
+  does not reintroduce one. The amended success criterion says "exactly one
+  child RFC and at least one accompanying roadmap task" rather than "exactly
+  one" of each, because `product` is already named by tasks 6.4.2 and 6.4.5.
+  Making the roadmap half "exactly one" would have required splitting existing
+  tasks for no benefit. Date/Author: 2026-09-08, planning agent; roadmap
+  wording confirmed by the reviewer.
 
 - Decision `D9`: record the convention in
   `docs/adr-021-focused-child-rfcs-for-survey-rfcs.md`, scoped narrowly.
@@ -724,6 +736,7 @@ RFC0006-S7   -> ROADMAP-6.1.1 -> EP-M1 -> COV-1 -> tests::rfc_stdlib_coverage::e
 RFC0006-S9   -> ROADMAP-6.1.1 -> EP-M1 -> COV-2 -> tests::rfc_stdlib_coverage::no_forbidden_helper_is_registered
 RFC0006-S6.1 -> ROADMAP-6.1.1 -> EP-M1 -> COV-3 -> tests::rfc_stdlib_coverage::totals_and_purity_aggregate_agree
 RFC0006-S14  -> ROADMAP-6.1.1 -> EP-M1 -> COV-4 -> tests::rfc_stdlib_coverage::coverage_map_status_is_reported
+ROADMAP-6.2..6.9 -> ROADMAP-6.1.1 -> EP-M1 -> COV-6 -> tests::rfc_stdlib_coverage::every_capability_has_a_roadmap_task
 RFC0006-S6   -> ROADMAP-6.1.1 -> EP-M3..EP-M10 -> CONF-1 -> tests::rfc_stdlib_coverage::every_child_discharges_every_clause
 ADR-021      -> EP-M1 -> docs/adr-021-focused-child-rfcs-for-survey-rfcs.md
 ```
@@ -867,6 +880,37 @@ row so failures name a location.
 - Non-vacuity: point a scratch copy's link at a non-existent file and expect a
   failure naming the source line and the missing target.
 
+### Obligation `COV-6`: every capability has an accompanying roadmap task
+
+- Obligation: every helper in the derived accepted set is named, in a backticked
+  span, by at least one task bullet under the roadmap phase-6 step that owns
+  its child RFC.
+- Method: parse phase-6 step and task bullets from `docs/roadmap.md`, then check
+  membership per helper against its owning step.
+- Rationale: this is the second half of the amended success criterion, and
+  without it only the RFC half is checked. It also guards the thing the
+  reviewer asked for — that work be tracked in committed documentation —
+  because it fails if a capability is given an RFC but no roadmap task to
+  deliver it. Verified before writing this obligation: all 60 helpers are
+  already named under their owning step, so `COV-6` is green from `EP-M1` on
+  the current roadmap and stays green unless a task is deleted or a helper is
+  reassigned across steps.
+- Domain: 57 new helpers plus 3 optioned existing helpers, against roadmap steps
+  6.2 to 6.9.
+- Artefact: `tests/rfc_stdlib_coverage_tests.rs` and
+  `tests/rfc_stdlib_coverage/`.
+- Evidence: same command as the other obligations.
+- Non-vacuity: green from the start, so a pass proves nothing on its own and a
+  control is compulsory. Delete the `zip_longest` task bullet from a scratch
+  copy of step 6.4 and expect a failure naming `zip_longest` and step 6.4. Move
+  the `expandvars` bullet from step 6.7 to step 6.6 and expect a wrong-step
+  failure, since RFC 0018 owns it. Assert the parsed task-bullet corpus is
+  non-empty and that phase 6 yields exactly eight owning steps, so a parser
+  that matches nothing cannot pass.
+- Note the asymmetry with `COV-1`, and that it is deliberate: `COV-1` requires
+  exactly one owning RFC, whereas `COV-6` requires at least one task, because
+  `product` is legitimately named by both 6.4.2 and 6.4.5.
+
 ### Obligation `CONF-1`: every child discharges every clause
 
 - Obligation: each child RFC contains one section 5 subsection per clause of
@@ -949,8 +993,9 @@ fallback if nothing else proceeds.
   table backfilled and its false claim that no RFC has been merged removed, has
   the section 8.1 and section 8.6 defects corrected, has its seven "child
   issue" phrases updated, and has section 16 question 7 annotated with a
-  pointer to roadmap task 7.1.1. Roadmap 6.1.1 is rewritten per `D8`.
-- Acceptance evidence: `COV-1` through `COV-5` green; all seeded-fault
+  pointer to roadmap task 7.1.1. Roadmap 6.1.1 was already rewritten per `D8`,
+  so `EP-M1` only has to confirm it still matches the delivered artefacts.
+- Acceptance evidence: `COV-1` through `COV-6` green; all seeded-fault
   transcripts recorded; every gate green.
 - Conformance check: no disposition changed; no `src/` file touched; no new
   dependency.
@@ -1116,6 +1161,7 @@ Expected green transcript at `EP-M1`:
     PASS [   0.007s] netsuke::rfc_stdlib_coverage_tests coverage_map_status_is_reported
       coverage map: 0 of 8 capability groups written; 8 remaining
     PASS [   0.010s] netsuke::rfc_stdlib_coverage_tests inter_document_links_resolve
+    PASS [   0.006s] netsuke::rfc_stdlib_coverage_tests every_capability_has_a_roadmap_task
 ```
 
 Expected wrong-owner seeded-fault transcript, the control the first draft
@@ -1159,10 +1205,10 @@ Acceptance is behavioural.
    group-specific consequence: a named bound from RFC 0006 table 3, a
    diagnostic code, a named error condition. Nowhere does a justification
    reduce to matching Ansible.
-3. Run `make test` and observe `rfc_stdlib_coverage_tests` pass with six tests
-   and a line reporting how many capability groups remain unwritten. Delete one
-   row from RFC 0013's section 5.1 registry, re-run, and observe a failure
-   naming that helper and reporting zero owners. Restore the row.
+3. Run `make test` and observe `rfc_stdlib_coverage_tests` pass with seven
+   tests and a line reporting how many capability groups remain unwritten.
+   Delete one row from RFC 0013's section 5.1 registry, re-run, and observe a
+   failure naming that helper and reporting zero owners. Restore the row.
 4. Move a registry row from one child to another, re-run, and observe a
    wrong-owner failure naming both the designated and the actual RFC.
 5. Search the registries in `docs/rfcs/` for `shuffle`, `is_dir`, `is_file`,
@@ -1192,8 +1238,8 @@ bounds through `StdlibConfig` — that is a tolerance breach requiring escalatio
 
 Quality criteria:
 
-- Tests: `make test` green, including the six coverage tests.
-- Verification: `COV-1` through `COV-5` and `CONF-1` discharged, with every
+- Tests: `make test` green, including the seven coverage tests.
+- Verification: `COV-1` through `COV-6` and `CONF-1` discharged, with every
   seeded-fault transcript recorded. `CONF-1`'s semantic residual gap stated
   plainly and not overclaimed.
 - Lint: `make lint`, `make markdownlint`, `make check-fmt`, and `make nixie`
@@ -1247,7 +1293,8 @@ Files created:
 Files modified:
 
 - `docs/rfcs/0006-ansible-inspired-template-standard-library.md`
-- `docs/roadmap.md`
+- `docs/roadmap.md` — task 6.1.1 already amended; steps 6.2 to 6.9 gain a
+  child-RFC citation per child
 - `docs/contents.md`
 - this ExecPlan
 
@@ -1335,5 +1382,27 @@ closed, the naive section 8 heading count is 58 rather than 57,
 `make doc-coverage` does not measure integration tests, and `basename` and
 `dirname` carry a reject disposition the derivation rules must not confuse with
 the forbidden set.
+
+Nothing is implemented; the plan awaits approval.
+
+Revised again 2026-09-08 on reviewer direction. Roadmap task 6.1.1 has been
+rewritten in place to say "child RFCs and accompanying roadmap tasks", and to
+record that delivery is tracked through the roadmap checkboxes in steps 6.2 to
+6.9 rather than through separate issues, so progress stays in committed
+documentation. The plan's `Scope divergence` section is therefore retired and
+replaced by `Scope: settled`, which keeps the reasoning on the record without
+presenting it as an open question. `D8` is updated accordingly, and the lost
+burn-down it worried about is resolved rather than merely noted.
+
+Two precision fixes came out of amending the roadmap. The success criterion now
+reads "exactly one child RFC and by at least one accompanying roadmap task",
+because `product` is already named by both task 6.4.2 and task 6.4.5, so
+requiring exactly one task would have meant splitting existing tasks for no
+benefit. And a new obligation `COV-6` checks the roadmap half of the criterion
+mechanically, which the plan previously left unchecked: every accepted helper
+must be named by at least one task under the step that owns its child RFC. That
+was verified before the obligation was written — all 60 helpers already are — so
+`COV-6` is green on the current roadmap and fails only if a task is deleted or
+a helper is reassigned across steps.
 
 Nothing is implemented; the plan awaits approval.
