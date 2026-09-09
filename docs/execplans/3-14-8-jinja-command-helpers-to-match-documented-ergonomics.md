@@ -387,8 +387,8 @@ RM-3.14.8 -> DD-4.5 (compact) -> EP-M2 -> tests::std_filter::compact_property
 RM-3.14.8 -> DD-4.5 (shell_escape) + RFC-0006-8.9 -> EP-M3, EP-M4
     -> tests::shell_quote::sh_roundtrip_property
 RM-3.14.8 -> DD-4.5 (shell_join) -> EP-M4 -> tests::shell_join::shlex_roundtrip
-UG-WIN + ADR-014 -> EP-M3, EP-M5 -> tests::shell_quote::dialect_follows_recipe_shell
-RM-3.14.8 (RUSTFLAGS) -> DD-2.6 -> EP-M6
+UG-WIN + ADR-014 -> EP-M3, EP-M4 -> tests::shell_quote::dialect_follows_recipe_shell
+RM-3.14.8 (RUSTFLAGS) -> DD-2.6 -> EP-M5
     -> tests::documentation_examples::stdlib-optional-rustflags-manifest
 RM-6.8.3 -> EP-M3 (name and dialect adopted early) -> ADR-021
 ```
@@ -415,22 +415,41 @@ These are hard invariants. Violating one requires escalation, not a workaround.
    injected seam. `clippy.toml` already denies these.
 6. Every new user-facing string is a Fluent message present in all 35
    catalogues with a matching `{ $variable }` set.
-7. Public API changes are permitted (the crate is pre-1.0 and unreleased at
-   1.0), but no compatibility alias, facade, or deprecated entry point may be
-   added. Update every caller in the same change.
+7. Two contracts are in scope and they are governed differently.
+   **(a) The Rust API** — `StdlibConfig`, `netsuke::manifest::*`,
+   `RecipeShell` — is pre-1.0 with no external consumers, so changes are
+   permitted, no compatibility alias or deprecated entry point may be added,
+   and every caller is updated in the same change. **(b) The Jinja template
+   surface** — helper names, argument names, and rendered output — is a
+   user-facing contract independent of the crate version. A `Netsukefile` is
+   written by people who never see the crate. Nothing in this plan removes or
+   renames a template name any manifest can be using: `shell_escape` is
+   documented but has never existed, which Stage A step 1 verifies. Any future
+   change to a *shipped* template name or its output needs a deprecation path,
+   and none exists yet. Whether `netsuke_version` should gate the template
+   surface is an open question this plan does not answer.
 8. No file exceeds 400 lines. No `-Z` compiler flag is added anywhere.
 9. `make check-fmt`, `make typecheck`, `make lint`, `make doc-coverage`, and
    `make test` must all pass at every milestone boundary.
+10. `shell_quote` and `shell_join` must never emit a dialect that differs from
+    the interpreter which will execute the recipe. This is the whole point of
+    the feature; see the silent-corruption path in R11.
+11. Changes under `locales/**` are never "docs-only" for gating purposes. The
+    localization audit runs in `build.rs`, so a gate that skips the Rust build
+    for a translation-only diff would skip the audit that protects it.
 
 ## Tolerances (exception triggers)
 
 Stop and escalate — do not improvise — when any of these is reached.
 
-1. **Scope**: more than 45 non-generated files changed, or more than 900 net
+1. **Scope**: more than 50 non-generated files changed, or more than 1000 net
    added lines outside `locales/` and `docs/`. (The 35 catalogues alone
-   contribute roughly 175 lines; they do not count against this.)
-2. **Interface**: a public signature outside `src/manifest/` and
-   `src/stdlib/config/` must change; or `RESERVED_VAR_NAMES` must grow.
+   contribute roughly 385 lines; they do not count against this.)
+2. **Interface**: a public signature outside `src/manifest/`,
+   `src/stdlib/config/`, and the manifest-loading entry points must change; or
+   `RESERVED_VAR_NAMES` must grow. EP-M4's runner plumbing changes the
+   manifest-loading signatures; that breach is foreseen, recorded in EP-M4, and
+   needs no escalation. Any *further* public signature change does.
 3. **Dependencies**: any new entry in `Cargo.toml`. The plan needs none:
    `shell-quote`, `shlex`, `proptest`, `rstest`, `rstest-bdd`, `insta`,
    `googletest`, `pretty_assertions`, and `mockable` are all present.
@@ -446,13 +465,15 @@ Stop and escalate — do not improvise — when any of these is reached.
 
 ## Risks
 
-- **R1 — Translation burden.** Five new message keys across 35 catalogues is
-  ~175 hand-written lines, and `build.rs` fails the build for any omission.
-  Severity: medium. Likelihood: high. Mitigation: add all five keys and all
-  catalogue entries in one commit per milestone that introduces them; follow
+- **R1 — Translation burden.** Eleven new message keys across 35 catalogues is
+  roughly 385 hand-written lines, and `build.rs` fails the build for any
+  omission. Severity: medium. Likelihood: high. Mitigation: add every key and
+  every catalogue entry in one commit per milestone that introduces them; follow
   `docs/localization-styleguide.md` and `docs/translators-guide.md` §5 for
-  variable usage; run `cargo build` (not just `cargo check`) to trigger the
-  audit early.
+  variable usage; copy the bracketed `[netsuke::jinja::…]` code verbatim into
+  each translation, as `locales/fr/messages.ftl:343-347` does; run
+  `cargo build` (not just `cargo check`) to trigger the audit early. Decision
+  D11 records the alternative that would cut this to one key.
 - **R2 — Refactoring `quote_path` changes generated Ninja.** Extracting the
   quoting into a shared module could alter bytes. Severity: high. Likelihood:
   low. Mitigation: the extraction is a pure move. Before and after, run
@@ -472,12 +493,16 @@ Stop and escalate — do not improvise — when any of these is reached.
   documented example passes an explicit `dialect`, or is gated with
   `#[cfg(unix)]`. The host-default behaviour is covered only by tests that
   assert *which dialect was selected*, not its output.
-- **R5 — Subprocess property tests are slow.** Spawning `/bin/sh` once per
-  generated case multiplies cost. Severity: low. Likelihood: medium.
-  Mitigation: cap the subprocess property at `cases: 64`; keep the pure
-  `shlex`-based properties at the house default of 128. If the file exceeds 10
-  seconds under nextest, move it behind `#[ignore]` **only** with an
-  escalation, never silently.
+- **R5 — Subprocess property tests are slow. Measured: they are not.**
+  Severity: low. Likelihood: low. Evidence: 64 real `sh -c 'printf %s x'`
+  invocations complete in about 86 ms on this machine, and one `sh -c` costs
+  roughly 1 ms. Even at five times that, to allow for `std::process::Command`
+  overhead and case generation, 64 cases land near half a second — two orders
+  of magnitude under the 10-second budget and far under nextest's 60-second
+  slow-test threshold. Mitigation: keep `cases: 64` for the subprocess property
+  and the house default of 128 for the pure `shlex` properties, and do **not**
+  build a batching harness. Batching would break proptest's per-case shrinking,
+  which needs to re-run one input in isolation to minimize a counterexample.
 - **R6 — Documentation gates.** `typos` enforces Oxford spelling over Markdown;
   `mdtablefix` enforces canonical tables; `make fmt` reformats unrelated files
   if they were already non-canonical. Severity: low. Likelihood: medium.
@@ -494,6 +519,54 @@ Stop and escalate — do not improvise — when any of these is reached.
   manifest-query test for the helper they introduce, and EP-M1 adds one proving
   the disabled `env` stub still reports "disabled", not an argument-count
   error, when called with `default=`.
+
+- **R9 — Collision with in-flight budget work.** The remote branch
+  `issue-651-add-resource-budgets-to-manifest-template-evaluation` restructures
+  the exact files this plan edits: `src/manifest/mod.rs` (196 lines changed),
+  `src/manifest/query.rs` (76), `src/manifest/render.rs` (181); it splits
+  `src/manifest/expand.rs` into a directory module and adds
+  `src/manifest/registration.rs` with the same four members this plan extracts.
+  Severity: medium. Likelihood: high. Mitigation: name the new module
+  `src/manifest/registration.rs` and give it exactly that member set, so the
+  branches converge rather than conflict. Rebase onto `origin/main` immediately
+  before requesting review; if issue-651 has landed by then, add the `env`/
+  `glob` registrations to the existing module instead of creating one. That
+  branch also supplies the ceilings (`evaluation_fuel`, `rendered_value_bytes`,
+  `foreach_cardinality`) that would bound a pathological `shell_join`.
+  `shell_join` and `compact` are unbounded by design here; any length ceiling
+  is issue-651's responsibility, not this plan's, and the plan says so rather
+  than leaving the omission ambiguous.
+- **R10 — `env(default=)` converts a loud failure into a silent one.** Today a
+  missing variable fails the build immediately; afterwards a manifest can
+  silently take a default, so a continuous-integration job whose `RUSTFLAGS`
+  export stops propagating builds the wrong artefact instead of failing fast.
+  Severity: medium. Likelihood: medium. Mitigation: emit
+  `tracing::debug!(fallback_used = true, ...)` on the substitution path, naming
+  neither variable nor value, matching the existing failure-path logging and
+  the redaction rule at `src/manifest/env_reader.rs:83-89`. Roadmap 3.14.11
+  sets the precedent that a manifest-time decision changing build behaviour
+  belongs in verbose diagnostics. Document in the user guide that `default=''`
+  trades fail-fast for tolerance, and that a value which must be present should
+  omit `default`.
+- **R11 — Dialect and interpreter mismatch corrupts silently.** If the filters'
+  dialect can differ from the interpreter that runs the recipe, the failure is
+  silent rather than loud. Concretely: PowerShell quoting doubles an embedded
+  single quote, so `a'b` becomes `'a''b'`; fed to a POSIX-family shell that is
+  two adjacent single-quoted strings concatenated, evaluating to `ab`. It is
+  syntactically valid, so `shlex::split` accepts it and the IR guard has
+  nothing to object to. `netsuke build` succeeds and the artefact is wrong.
+  Severity: high. Likelihood: medium if the milestones are separable.
+  Mitigation: constraint 10, discharged by fusing the filter registration and
+  the runner plumbing into one milestone so no shipped commit can contain the
+  divergence. OBL-COMPOSITION exercises the composed path per interpreter.
+- **R12 — `is_valid_command_for_shell` does not guard PowerShell.**
+  `src/ir/cmd_interpolate/mod.rs:226-231` returns `true` unconditionally for
+  `RecipeShell::PowerShell`, so there is no structural validation of a
+  PowerShell recipe at all. This plan does not introduce the gap but routes new
+  traffic through it. Severity: medium. Likelihood: low. Mitigation:
+  OBL-COMPOSITION asserts the PowerShell path end to end rather than relying on
+  a guard that is not there. Closing the guard itself is out of scope; record
+  it as a follow-up roadmap candidate in `Outcomes & retrospective`.
 
 ## Decision log
 
@@ -658,7 +731,7 @@ Stop and escalate — do not improvise — when any of these is reached.
   EP-M3 and EP-M4 shrink by roughly forty per cent and R1 drops from high to
   low likelihood. This decision is cheap to reverse before EP-M4 and expensive
   afterwards, because the template surface becomes documented and executed at
-  EP-M6. Date/Author: 2026-09-09, after alternatives review.
+  EP-M5. Date/Author: 2026-09-09, after alternatives review.
 - **Decision D12**: `shell_quote` and `shell_join` are *safe primitives*, not
   enforced controls, and the plan says so rather than repeating `DD-4.5`'s
   "non-negotiable security feature" unqualified. See "Threat model" below.
@@ -1079,6 +1152,7 @@ STDLIB_SHELL_JOIN_ITEM_NOT_STRING => "stdlib.shell.join.item_not_string",
 STDLIB_SHELL_POSITIONAL_OPTION => "stdlib.shell.positional_option",
 STDLIB_COLLECTIONS_COMPACT_NOT_SEQUENCE
     => "stdlib.collections.compact.not_sequence",
+MANIFEST_ENV_ARGS_ERROR => "manifest.env.args_error",
 MANIFEST_ENV_DEFAULT_NOT_STRING => "manifest.env.default_not_string",
 ```
 
@@ -1094,6 +1168,7 @@ stdlib.shell.join.not_sequence = shell_join expects a sequence, received { $kind
 stdlib.shell.join.item_not_string = shell_join item { $index } is { $kind }, not a string.
 stdlib.shell.positional_option = { $filter } takes its options by keyword; write { $example }.
 stdlib.collections.compact.not_sequence = compact expects a sequence, received { $kind }.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = env default must be a string, received { $kind }.
 ```
 
@@ -1102,16 +1177,19 @@ The first two are wrappers; the rest are details fed through them as
 `stdlib.which.args_error` through `args_message`
 (`src/stdlib/which/mod.rs:262-266`). `stdlib.shell.unquotable` wraps the
 control-character detail; every other shell detail wraps
-`stdlib.shell.args_error`.
+`stdlib.shell.args_error`, and the `env` detail wraps
+`manifest.env.args_error`. The existing `manifest.env.missing` and
+`manifest.env.invalid_utf8` messages are **not** given codes: constraint 1
+freezes their rendered text.
 
 The `{ $variable }` name set must be identical in all 35 catalogues; wording
 and order may differ, but the bracketed code must be copied verbatim, as
 `locales/fr/messages.ftl:343-347` does today. Follow
 `docs/localization-styleguide.md`.
 
-Ten keys, not five. The first draft had five and was wrong on two counts: D4
+Eleven keys, not five. The first draft had five and was wrong on two counts: D4
 and D8 each need a key the draft claimed to save, and D9 adds the two wrappers
-that make the diagnostics locale-stable. Roughly 350 catalogue lines. See R1.
+that make the diagnostics locale-stable. Roughly 385 catalogue lines. See R1.
 
 ## Verification plan
 
@@ -1135,10 +1213,16 @@ a real shell while the policy obligation stays a cheap total function.
   `shlex::split` is part of the semantic acceptance contract or only a guard is
   an open question; this plan uses it only as a *test oracle*, alongside the
   real-shell round trip, never as the sole evidence.
-- **AX-4**: MiniJinja's `Kwargs::get::<Option<T>>` yields `None` for an absent
-  key and for an explicit `none`, and an error for a type mismatch;
-  `assert_all_used` rejects unconsumed keys. Exercised by the unknown-keyword
-  cases.
+- **AX-4 (corrected)**: MiniJinja's `Kwargs::get::<Option<Value>>` yields
+  `None` for an absent key and a `Value` otherwise, distinguishing an explicit
+  `none` and an explicit undefined by `Value::is_none`/`is_undefined`;
+  `assert_all_used` rejects unconsumed *keyword* arguments with a message
+  containing "unknown keyword argument". A trailing **positional** argument is
+  different: it yields a bare `TooManyArguments` with **no detail**, naming
+  neither the filter nor the expected keyword. The first draft assumed
+  `Option<String>` raises on a type mismatch; it does not, it stringifies (D4).
+  All three behaviours are exercised: the unknown-keyword case, the
+  non-string-`default` case, and the positional case.
 - **AX-5**: A Ninja `command =` value is single-line, so rejecting `\r` and `\n`
   loses no expressible manifest.
 
@@ -1325,6 +1409,87 @@ predicate.
   environment with auto-escaping forced on and assert the same template *does*
   differ, proving the test can detect escaping at all.
 
+**OBL-CONTEXT** — quoting is only correct in unquoted argv position.
+
+- Obligation: rendering `{{ v | shell_quote(dialect='sh') }}` in unquoted
+  position yields text a POSIX shell splits into one field equal to `v`;
+  rendering the same filter *inside* an existing pair of double quotes yields
+  text containing the quoter's literal quote characters, which is a manifest
+  defect rather than a filter defect.
+- Method: parameterized `rstest` rendering a whole manifest through the real
+  loader, once per position, asserting the generated Ninja `command =` text.
+- Rationale: this is the plan's own worst failure mode. The first draft's
+  acceptance transcript placed the interpolation inside `"..."`, where
+  `printf '%s' "RUSTFLAGS=-D' warnings'"` emits the quote characters as data.
+  Every other obligation exercises the filter in isolation and is structurally
+  blind to it.
+- Domain: the two positions, with a value containing a space and a single
+  quote.
+- Artefact: `tests/shell_filter_property_tests.rs`.
+- Evidence: the unquoted case matches the documented example byte for byte; the
+  double-quoted case is pinned as the *documented wrong answer*, so a future
+  change that silently "fixes" it fails the test and forces a decision.
+- Non-vacuity: the two cases must differ. If they ever produce equal output the
+  test is measuring nothing.
+
+**OBL-JOIN-QUOTE-AGREE** — `shell_join` is `shell_quote` distributed.
+
+- Obligation: for every dialect `d` and every list `xs` of admissible strings,
+  `join_for_recipe(d, xs)?` equals the elements individually passed through
+  `quote_for_recipe(d, _)?` and joined with one space.
+- Method: property test, `cases: 128`, both dialects.
+- Rationale: the two filters share a `dialect` argument and a documented
+  promise of "the same rules". This is the only obligation that makes that a
+  fact rather than a docstring, and it is what earns `dialect` its place on
+  both filters.
+- Artefact: `tests/shell_filter_property_tests.rs`.
+- Non-vacuity: include a list whose elements need quoting and one that does
+  not; a `join` implementation that quoted only non-inert elements would pass a
+  weaker test and must fail this one.
+
+**OBL-KIND-GATE** — the sequence and string gates reject what `try_iter`
+accepts.
+
+- Obligation: `compact` and `shell_join` reject a mapping, a string, `none`,
+  undefined, a number, and a boolean subject, each with an error naming the
+  received kind; `shell_quote` rejects every non-string subject including a
+  MiniJinja object, with no `to_string` fallback.
+- Method: exhaustive parameterized `rstest` over the finite `ValueKind` set.
+- Rationale: D8 exists because `Value::try_iter()` silently accepts three of
+  these. The domain is a small closed enumeration, so exhaustive enumeration is
+  the strongest available evidence.
+- Artefact: `tests/std_filter_tests/collection_filters.rs` and
+  `tests/shell_filter_property_tests.rs`.
+- Non-vacuity: the negative control is a `try_iter`-based implementation, which
+  must pass `{{ [1,2] | compact }}` and fail `{{ 'abc' | shell_join }}` and
+  `{{ my_map | compact }}` for the intended reason.
+
+**OBL-COMPOSITION** — the filters compose with the rest of the pipeline.
+
+- Obligation: for each `RecipeShell` variant, a manifest whose recipe
+  interpolates `shell_quote`/`shell_join` output containing a single quote and
+  a dollar sign renders, lowers through `interpolate_command_with_bindings`,
+  and generates Ninja text that the corresponding interpreter executes to the
+  intended argument vector. For a command-list recipe, the same holds after the
+  entry passes through `shell_single_quote`'s `eval` payload wrapper.
+- Method: integration test over the full pipeline, plus a real-interpreter
+  execution assertion where the host provides one (`sh` on Unix,
+  `powershell.exe` on Windows CI).
+- Rationale: every other obligation tests an encoder in isolation.
+  `is_valid_command_for_shell` (`src/ir/cmd_interpolate/mod.rs:226-231`) returns
+  `true` unconditionally for PowerShell, so nothing downstream checks that
+  path at all; and the command-list renderer's input distribution changes once
+  a filter routinely emits single quotes. Neither is covered by any isolated
+  test.
+- Domain: three `RecipeShell` variants × {scalar command, command list}.
+- Artefact: `tests/shell_filter_composition_tests.rs` (new; a top-level
+  `tests/*.rs` so `tests/integration_test_wiring_tests.rs` discovers it).
+- Evidence: assert the final `command =` text *and*, where an interpreter is
+  available, the argument vector it actually produces.
+- Non-vacuity: include a value containing `$`, so the assertion also exercises
+  ADR-014's `$`-doubling; a seeded fault that drops the `$$` escaping must fail
+  it.
+
 **OBL-QUERY-SURFACE** — the manifest-query surface stays coherent.
 
 - Obligation: under `register_manifest_query`, `compact`, `shell_quote`, and
@@ -1373,12 +1538,34 @@ rather than creating a new one.
   Scenario: shell_quote rejects an unknown dialect and names the accepted set
     Given a stdlib workspace
     When I render the stdlib template "{{ 'x' | shell_quote(dialect='bash') }}" without context
-    Then the stdlib error contains "powershell"
+    Then the stdlib error contains "netsuke::jinja::shell::args"
+    And the stdlib error contains "powershell"
 
   Scenario: shell_quote rejects a value containing a line feed
     Given a stdlib workspace
     When I render the stdlib template "{{ 'a\nb' | shell_quote(dialect='sh') }}" without context
-    Then the stdlib error contains "line feed"
+    Then the stdlib error contains "netsuke::jinja::shell::unquotable"
+
+  Scenario: shell filter errors keep their code when localised
+    Given a stdlib workspace
+    And the localisation locale is "es-ES"
+    When I render the stdlib template "{{ 'x' | shell_quote(dialect='bash') }}" without context
+    Then the stdlib error contains "netsuke::jinja::shell::args"
+
+  Scenario: shell_join rejects a string subject rather than quoting its characters
+    Given a stdlib workspace
+    When I render the stdlib template "{{ 'abc' | shell_join(dialect='sh') }}" without context
+    Then the stdlib error contains "netsuke::jinja::shell::args"
+
+  Scenario: shell_quote rejects a positional dialect
+    Given a stdlib workspace
+    When I render the stdlib template "{{ 'x' | shell_quote('sh') }}" without context
+    Then the stdlib error contains "netsuke::jinja::shell::args"
+
+  Scenario: env rejects a non-string default rather than stringifying it
+    Given a stdlib workspace
+    When I render the stdlib template "{{ env('NETSUKE_ABSENT', default=['a']) }}" without context
+    Then the stdlib error contains "netsuke::jinja::env::args"
 ```
 
 The expected `sh` strings above are **verified**, not guessed. They are the
@@ -1412,6 +1599,17 @@ and 13; `docs/users-guide.md:330-348` and `:458-495`;
 `docs/documentation-style-guide.md`; `docs/localization-styleguide.md`;
 `docs/translators-guide.md` §§4-5.
 
+Two house rules trip cold executors on exactly this shape of work, so they are
+repeated here rather than left to the blanket "read `AGENTS.md`":
+
+- `.expect()` is banned outside `#[test]` and `#[cfg(test)]` bodies, and
+  `allow-expect-in-tests = true` does **not** cover shared test fixtures. The
+  witness tables and negative-control helpers under OBL-SH-ROUNDTRIP and
+  OBL-COMPACT are exactly where the temptation arises. Return `Result` and use
+  `?`.
+- Function attributes go **after** doc comments, and single-line function
+  bodies are preferred where they fit.
+
 Load these skills before writing code: `rust-router` (then whichever single
 follow-on it routes to — most likely `rust-types-and-apis` for the
 `ShellDialect` surface and `rust-errors` for the policy error),
@@ -1439,11 +1637,11 @@ before observing the intended failure.
 
 ### Stage C — implementation with verification
 
-Milestones EP-M1 to EP-M5.
+Milestones EP-M1 to EP-M4.
 
 ### Stage D — documentation, reconciliation, and wide validation
 
-Milestone EP-M6.
+Milestone EP-M5.
 
 ## Milestones and plateaus
 
@@ -1455,31 +1653,45 @@ deprecated entry point: the crate is pre-1.0, has no external consumers, and
 every caller is in-tree, so each interface is updated together with all of its
 callers (see constraint 7).
 
-### EP-M1 — `env(name, default=...)`
+### EP-M1 — extract `src/manifest/registration.rs`, then `env(name, default=...)`
 
-- Identifier and outcome: `env` accepts an optional `default` keyword argument;
-  the manifest-query stub accepts the same shape; both existing diagnostics are
-  unchanged.
+- Identifier and outcome: manifest helper registration lives in its own module;
+  `env` accepts an optional `default` keyword argument, type-checked rather
+  than stringified; the manifest-query stub accepts the same shape; both
+  existing diagnostics are unchanged.
 - Requirements: `RM-3.14.8` bullet 1, `DD-4.4`.
-- Red: add the twelve `OBL-ENV-DEFAULT` cases to `tests/manifest_env_tests.rs`
-  and the unit cases to `src/manifest/tests/env_function.rs`. Run
+- **Do the extraction first.** `src/manifest/mod.rs` is exactly 400 lines, and
+  constraint 8 caps files at 400, so the first edit would breach it. Move
+  `RESERVED_VAR_NAMES`, `localize_recipe_error`, `register_manifest_vars`, and
+  `manifest_structure_error` into `src/manifest/registration.rs`, then move the
+  `env` and `glob` registrations there too. Commit that as a pure move with no
+  behaviour change and green gates, so the rename is reviewable on its own. Use
+  exactly that module name and member set; see R9.
+- Red: add the `OBL-ENV-DEFAULT` cases to `tests/manifest_env_tests.rs` and the
+  unit cases to `src/manifest/tests/env_function.rs`, plus the non-string and
+  undefined `default` cases from D4 and the positional case from AX-4. Run
   `cargo nextest run --test manifest_env_tests` and observe failures citing an
   unexpected keyword argument.
 - Green: rename `env_var_with` to `env_var_with_default` with the `fallback`
-  parameter; update `src/manifest/mod.rs:131` to take `Kwargs`; update the
-  disabled stub at `src/stdlib/register.rs:173-176`. Add the `OBL-QUERY-SURFACE`
-  `env` case to the new `tests/stdlib_manifest_query_tests.rs`.
+  parameter and the `tracing::debug!(fallback_used = true, ...)` line (R10); add
+  `env_default_from_kwargs` reading `Option<Value>` per D4; update the
+  registration to take `Kwargs`; update the disabled stub at
+  `src/stdlib/register.rs:173-176`. Add the `manifest.env.args_error` and
+  `manifest.env.default_not_string` keys to all 35 catalogues. Add the
+  `OBL-QUERY-SURFACE` `env` case to `tests/stdlib_manifest_query_tests.rs`.
 - Refactor: keep `env_var_with_default` under 40 lines; extract the fallback
   decision into a named predicate if the match grows a third arm.
-- Acceptance evidence: `cargo nextest run --test manifest_env_tests` passes;
-  the two `insta` inline snapshots pass **without** `INSTA_FORCE_UPDATE`;
-  `git status --short` shows no `.snap` change.
+- Acceptance evidence: `cargo build` succeeds, proving the localization audit
+  passes; `cargo nextest run --test manifest_env_tests` passes; the two `insta`
+  inline snapshots pass **without** `INSTA_FORCE_UPDATE`; `git status --short`
+  shows no `.snap` change; `wc -l src/manifest/mod.rs` reports under 400.
 - Conformance check: `DD-4.4`'s "It returns an error if the variable is
   undefined and no `default` is provided, or if the variable contains invalid
-  UTF-8" is satisfied exactly; no new public interface beyond the helper's
-  keyword argument; no new dependency; trace links current.
-- Recovery: revert the single commit; `env()` returns to its one-argument form.
-- Remaining gaps: documentation of `default=` (EP-M6).
+  UTF-8" is satisfied exactly; RFC 0006 §6.6's no-silent-coercion rule is
+  satisfied; no new dependency; trace links current.
+- Recovery: two commits, revert either independently; `env()` returns to its
+  one-argument form.
+- Remaining gaps: documentation of `default=` (EP-M5).
 - Compatibility decision: none required.
 
 ### EP-M2 — `compact`
@@ -1504,7 +1716,7 @@ callers (see constraint 7).
   is shared — confirm by adding the `compact` case to
   `tests/stdlib_manifest_query_tests.rs`.
 - Recovery: revert; the filter disappears with no other effect.
-- Remaining gaps: documentation (EP-M6).
+- Remaining gaps: documentation (EP-M5).
 - Compatibility decision: none required.
 
 ### EP-M3 — shared recipe-shell quoting seam
@@ -1533,66 +1745,73 @@ callers (see constraint 7).
   far as `with_recipe_shell` requires.
 - Recovery: the extraction is a pure move; revert restores the prior file.
 - Remaining gaps: the filters themselves (EP-M4); the runner still injects
-  `host_default()` rather than the resolved shell (EP-M5).
+  `host_default()`; EP-M4 replaces it with the resolved shell in the same
+  commit that registers the filters, so the divergence is never shipped.
 - Compatibility decision: none required — `from_str_with_env_and_config` and
   `StdlibConfig` are pre-1.0 and every caller is in-tree.
 
-### EP-M4 — `shell_quote` and `shell_join`
+### EP-M4 — `shell_quote` and `shell_join`, with the resolved dialect
 
-- Identifier and outcome: both filters are registered on both surfaces, with
-  the five new message keys present in all 35 catalogues.
+The first draft split this in two: register the filters against
+`RecipeShell::host_default()`, then plumb the resolved shell in a later
+milestone. **That split is not safe to stop between.** On a Windows host with
+`NETSUKE_WINDOWS_SHELL=bash`, the intermediate state quotes for PowerShell
+while the recipe runs under Bash. PowerShell quoting doubles an embedded single
+quote, so `a'b` becomes `'a''b'`, which a POSIX shell reads as two adjacent
+quoted strings concatenated — `ab`. Syntactically valid, so `shlex::split`
+accepts it and nothing complains. The build succeeds and the artefact is wrong.
+See R11 and constraint 10. The two are therefore one milestone.
+
+- Identifier and outcome: both filters are registered on both surfaces, quoting
+  for the dialect of the interpreter that will actually run the recipe, with
+  the new message keys present in all 35 catalogues.
 - Requirements: `RM-3.14.8` bullets 2 and 3; `DD-4.5`; `RFC-0006-8.9` as
-  amended by D2.
+  amended by D2; `UG-WIN`.
 - Red: write `tests/shell_filter_property_tests.rs` with OBL-SH-ROUNDTRIP,
-  OBL-PS-ROUNDTRIP, OBL-ONE-WORD, OBL-JOIN-SPLIT and both negative controls;
-  add the four `shell_*` scenarios to `tests/features/stdlib.feature`. Observe
-  compilation failure, then unknown-filter failures.
-- Green: add `src/stdlib/shell/policy.rs` and `src/stdlib/shell/mod.rs`; wire
-  `shell::register_filters` into both `register_read_only_helpers` and
-  `register_query_helpers`; add the five keys to `src/localization/keys.rs` and
-  to all 35 `locales/<tag>/messages.ftl` files.
-- Refactor: keep each of `mod.rs`, `policy.rs`, and `dialect.rs` well under 400
-  lines; if the filter closures grow past a few lines, extract named functions
-  so each carries its own `///` comment.
-- Acceptance evidence: `cargo build` succeeds (proving the localization audit
-  passes); `cargo nextest run --test shell_filter_property_tests` passes; the
-  BDD scenarios pass; both negative controls fail as designed when the broken
-  implementation is substituted.
-- Conformance check: the registered names match `RFC-0006-8.9` as amended; no
-  second quoting implementation; both filters are pure and therefore correctly
-  available to manifest queries (D6); trace links updated.
-- Recovery: revert; the filters and their keys disappear together.
-- Remaining gaps: documentation (EP-M6); `NETSUKE_WINDOWS_SHELL=bash` still
-  yields the PowerShell default (EP-M5).
-- Compatibility decision: none required.
+  OBL-PS-ROUNDTRIP, OBL-ONE-WORD, OBL-JOIN-SPLIT, OBL-JOIN-QUOTE-AGREE,
+  OBL-KIND-GATE, OBL-NO-ESCAPE and OBL-CONTEXT with their negative controls;
+  write `tests/shell_filter_composition_tests.rs` with OBL-COMPOSITION; add the
+  `shell_*` scenarios to `tests/features/stdlib.feature`. Add the test that
+  builds a `StdlibConfig` with `.with_recipe_shell(RecipeShell::Bash)` and
+  asserts `sh` quoting, asserting at the **runner** seam so it is not
+  tautological. Observe compilation failure, then unknown-filter failures.
+- Green: add `src/shell_word.rs`; add `src/stdlib/recipe_text/`; rename
+  `src/stdlib/command/quote.rs` to `child_argument.rs`; wire
+  `recipe_text::register_filters` into both `register_read_only_helpers` and
+  `register_query_helpers`; thread
+  `ExecutionContext.graph_generation.recipe_shell` from `src/runner/mod.rs:149`
+  through the manifest-generation path into the `StdlibConfig` built in
+  `src/manifest/query.rs`; add the `clippy.toml` entry and its two
+  `#[expect(...)]` sites; add the shell message keys to
+  `src/localization/keys.rs` and to all 35 catalogues.
+- Refactor: if a manifest-loading function would exceed four parameters, group
+  them into a named struct per `AGENTS.md`. Keep every new file well under 400
+  lines and give each new function a `///` comment as it is written, not
+  afterwards.
+- Acceptance evidence: `cargo build` succeeds, proving the localization audit
+  passes; the property, composition and BDD suites pass; every negative control
+  fails as designed when its broken implementation is substituted; the
+  `RecipeShell::Bash` test fails when the runner plumbing is reverted while the
+  config seam is kept — record that transcript.
+- Conformance check: the registered names match `RFC-0006-8.9` as amended;
+  exactly one `shell_quote::QuoteRefExt::quoted` call site outside the two
+  `#[expect(...)]`ed ones, now enforced by Clippy; both filters are pure given
+  a dialect (D6) and correctly available to manifest queries; the query-surface
+  dialect divergence is pinned by an assertion rather than left latent;
+  constraint 10 holds; trace links updated.
+- Tolerance note: this milestone changes a public signature outside
+  `src/manifest/` and `src/stdlib/config/` — the manifest-loading entry points
+  gain a recipe-shell parameter. That trips tolerance 2 **by design**, and it
+  is recorded here rather than discovered mid-milestone. No escalation is
+  needed for this specific, foreseen change; any *further* public signature
+  change still escalates.
+- Recovery: revert; the filters, their keys, and the plumbing disappear
+  together. Reverting only part of it would recreate R11, so revert whole.
+- Remaining gaps: documentation (EP-M5).
+- Compatibility decision: none required — pre-1.0, all callers in-tree, and
+  the template surface is new rather than changed (constraint 7b).
 
-### EP-M5 — inject the resolved recipe shell
-
-- Identifier and outcome: on a Windows host with `NETSUKE_WINDOWS_SHELL=bash`,
-  `shell_quote` with no explicit `dialect` produces `sh` quoting, matching the
-  interpreter that will actually run the recipe.
-- Requirements: `UG-WIN`; closes the last correctness hole in D2.
-- Red: add a test that builds a `StdlibConfig` with
-  `.with_recipe_shell(RecipeShell::Bash)`, renders `{{ "a b" | shell_quote }}`,
-  and asserts `sh` quoting. It fails while the runner still passes
-  `host_default()` — assert at the *runner* seam, not only at the config seam,
-  so the test is not tautological.
-- Green: thread `ExecutionContext.graph_generation.recipe_shell` from
-  `src/runner/mod.rs:149` through the manifest-generation path into the
-  `StdlibConfig` built in `src/manifest/query.rs:73-74`. If the parameter list
-  of a manifest-loading function would exceed four parameters, group them into
-  a named struct, per `AGENTS.md`.
-- Refactor: ensure `src/manifest/query.rs` stays under 400 lines.
-- Acceptance evidence: `make test` passes; the new test fails when the runner
-  plumbing is reverted while the config seam is kept — record that transcript.
-- Conformance check: `StdlibConfig` and the manifest-loading signatures are the
-  only interfaces widened; no configuration key added (D7); no new dependency.
-- Recovery: revert this commit only; EP-M4's behaviour (host-default dialect)
-  remains correct for every host that does not set `NETSUKE_WINDOWS_SHELL`.
-- Remaining gaps: none.
-- Compatibility decision: none required — pre-1.0, all callers in-tree.
-
-### EP-M6 — documentation, ADR, and reconciliation
+### EP-M5 — documentation, ADR, and reconciliation
 
 - Identifier and outcome: every document that described these helpers as
   planned or unimplemented now describes what ships, a worked `RUSTFLAGS`
@@ -1634,13 +1853,43 @@ callers (see constraint 7).
   8. Register `stdlib-optional-rustflags-manifest` in `EXPECTED_EXAMPLE_IDS`
      (`tests/documentation_examples_tests.rs:18-61`, alphabetical) and add it as
      a `#[case]` to `documented_manifest_generates_ninja`.
+  8a. Add two bounded, label-safe counters beside the existing manifest
+      instrumentation, following `docs/adr-009-bounded-redacted-manifest-telemetry.md`:
+      `netsuke_manifest_shell_quote_dialect_total{dialect, source}` where
+      `source` is `explicit` or `default` (a four-combination label space), and
+      `netsuke_manifest_env_default_substituted_total` with no labels. Neither
+      carries manifest content, a variable name, or a value. The first makes
+      the population exposed to R11 and D10 visible in aggregate; the second
+      makes R10 visible. Describe both with `describe_counter!`.
+  8b. Write the precise guide contract for each helper, not a summary. At
+      minimum: `shell_quote` renders one string as exactly one word for the
+      named shell, and for `dialect='sh'` a POSIX shell splitting the output
+      produces exactly one field byte-identical to the input; the empty string
+      renders as `''`, not as nothing; the subject must be a string, and
+      numbers, booleans, sequences, mappings, `none`, and undefined are errors;
+      tab, escape, and non-ASCII text are preserved, while NUL, carriage
+      return, and line feed are rejected. `shell_join` never drops an element,
+      so `['']` renders as one empty word — that is why `compact` and
+      `shell_join` are separate helpers — it does not flatten a nested list,
+      and its separator is exactly one space. `compact` drops `none`,
+      undefined, and the empty string only: `0`, `false`, `[]`, `{}`, and a
+      whitespace-only string are retained, which is what distinguishes it from
+      MiniJinja's `select`. State that `shell_quote` and `shell_join` are
+      filters with no function form, and that both are correct **only in
+      unquoted argv position**.
   9. `docs/developers-guide.md`: extend the quoting-paths paragraph at lines
      445-458 to name the new fourth path — `src/recipe_shell/quoting.rs` as the
      single recipe-shell word quoter used by both `quote_path` and the
      `shell_quote`/`shell_join` filters — and state that
      `src/stdlib/command/quote.rs` and `shell_single_quote` remain distinct.
-     Also record the "add a helper to both registration surfaces" convention and
-     the 35-catalogue message rule as it applies to stdlib helpers.
+     Also record: the "add a helper to both registration surfaces" convention;
+     the 35-catalogue message rule and the requirement to copy the bracketed
+     `[netsuke::jinja::…]` code verbatim into every translation; the rule that
+     `Value::try_iter()` is not a sequence check (D8); the argument-style rule
+     that trailing `Option<T>` is for options reading naturally in a fixed
+     order while `Kwargs` is for independent named options and any enumerated
+     value set expected to widen; and the deliberate query-surface dialect
+     divergence.
   10. `docs/repository-layout.md`: add `src/stdlib/shell/` and note the
       `src/recipe_shell/` promotion.
   11. `docs/rfcs/0006-ansible-inspired-template-standard-library.md` §§8.9 and
@@ -1832,14 +2081,18 @@ catalogue has the key; there is no partial state to clean up.
 - [x] (2026-09-08) Design decisions D1-D7 recorded; D1 and D2 confirmed by the
       requester.
 - [x] (2026-09-08) ExecPlan drafted.
-- [ ] Community-of-experts review applied.
+- [x] (2026-09-09) Six-lens community-of-experts review completed and applied.
+      Falsified three MiniJinja assumptions (D4, D8, AX-4), corrected the
+      `quote_path` citation, restated the encoder inventory as five, redrew
+      three module boundaries, fixed the acceptance transcript's
+      double-quoted-context defect, added the threat model, and fused the
+      former EP-M4 and EP-M5 to close R11.
 - [ ] Plan approved by the requester.
 - [ ] EP-M1 `env(name, default=...)`.
 - [ ] EP-M2 `compact`.
 - [ ] EP-M3 shared recipe-shell quoting seam.
 - [ ] EP-M4 `shell_quote` and `shell_join`.
-- [ ] EP-M5 inject the resolved recipe shell.
-- [ ] EP-M6 documentation, ADR-021, roadmap tick.
+- [ ] EP-M5 documentation, ADR-021, roadmap tick.
 
 ## Surprises & discoveries
 
@@ -1849,7 +2102,7 @@ catalogue has the key; there is no partial state to clean up.
   `src/ninja_gen_recipe_shell.rs:16-17`, `docs/users-guide.md:330-348`,
   `src/ir/cmd_interpolate/mod.rs:137-150`. Impact: invalidates `RFC-0006-8.9`'s
   premise that `sh` is the only dialect Netsuke can quote for; drives D2 and
-  the extra EP-M5 milestone.
+  the fusion of filter registration with runner plumbing in EP-M4.
 - Observation: `src/stdlib/command/quote.rs` produces `cmd.exe` quoting on
   Windows, but it is never exposed to templates — it supports the `shell` and
   `grep` filters, which spawn a process through the platform shell. Evidence:
@@ -1879,6 +2132,36 @@ catalogue has the key; there is no partial state to clean up.
   acceptance transcript is fixed by this, not by taste. A reviewer who "tidies"
   `a' b'` into `'a b'` is changing the crate's output, not the plan's.
 
+- Observation: `shell_quote` is correct only in **unquoted** argv position.
+  Inside `"..."` it inserts its own quote characters as data. Evidence:
+  `sh -c 'printf "%s\n" "RUSTFLAGS=-D'"'"' warnings'"'"'"'` prints
+  `RUSTFLAGS=-D' warnings'`, quote characters included. The first draft's
+  acceptance transcript contained exactly this defect, and none of its nine
+  obligations would have caught it, because every one exercised the filter in
+  isolation. Impact: drives OBL-CONTEXT, the corrected transcripts, and the
+  guide precondition. It also explains why `{{ ins }}`/`{{ outs }}` are handled
+  by a shell-context tracker rather than a filter — the tracker is the stronger
+  mechanism, and ADR-021 should name it as the intended successor.
+- Observation: `Value::try_iter()` is not a sequence check.
+  Evidence: `minijinja-2.24.0/src/value/mod.rs::try_iter` returns an empty
+  iterator for `None` and `Undefined`, characters for a string, and an object's
+  own iteration (a map's keys) for `Object`; only numbers and booleans are
+  rejected. Impact: `{{ 'abc' | shell_join }}` would have quoted three
+  characters into a command line. Drives D8 and OBL-KIND-GATE.
+- Observation: `Kwargs::get::<Option<String>>` silently stringifies rather than
+  raising a type error. Evidence: verified against `minijinja 2.24.0` —
+  `default=['a','b']` yields the string `["a", "b"]`, and `default=true` yields
+  `"True"`. Impact: the first draft's D4 would have pasted JSON into a shell
+  recipe, in direct violation of RFC 0006 §6.6. Drives the revised D4.
+- Observation: `src/manifest/mod.rs` is exactly 400 lines, the constraint-8 cap.
+  Evidence: `wc -l src/manifest/mod.rs`. Impact: EP-M1's first edit would
+  breach the cap; drives the extraction step, which also converges with the
+  in-flight `issue-651` branch (R9).
+- Observation: 64 real `sh` subprocess spawns take about 86 ms, not seconds.
+  Evidence: measured on this machine. Impact: retires the batching idea; the
+  plan's 10-second budget had two orders of magnitude of headroom, and batching
+  would have broken proptest shrinking.
+
 - Observation: fenced examples in `README.md`, `docs/users-guide.md`, and
   `docs/stdlib-yaml-and-jinja-guide.md` are executed, and their identifiers are
   pinned by a hand-maintained registry. Evidence:
@@ -1888,7 +2171,7 @@ catalogue has the key; there is no partial state to clean up.
 
 ## Outcomes & retrospective
 
-To be completed at EP-M6. Before setting this plan to `COMPLETE`, reconcile
+To be completed at EP-M5. Before setting this plan to `COMPLETE`, reconcile
 every discovery against the `Conformance basis`:
 
 - D2 is a deviation from `RFC-0006-8.9`. It must be recorded in ADR-021 and the
@@ -1896,9 +2179,12 @@ every discovery against the `Conformance basis`:
 - `RM-6.8.3` is materially reduced by D1 and D2. Record the reduction as a note
   on that roadmap entry; do not tick it, because its `dialect` value set is
   wider than what ships here.
-- If EP-M5's plumbing proves larger than tolerance 1 allows, stop, record the
-  measurement, and propose splitting it into its own roadmap item rather than
-  shipping the host-default-only behaviour silently.
+- If EP-M4's runner plumbing proves larger than tolerance 1 allows, stop and
+  record the measurement. Do **not** resolve it by shipping the
+  host-default-only behaviour and deferring the plumbing: that recreates R11's
+  silent-corruption path, which constraint 10 forbids. The correct escalation
+  is to propose deferring the *filters* as well, leaving EP-M1 to EP-M3
+  shipped, and to raise the plumbing as its own roadmap item.
 
 ## Artefacts and notes
 
@@ -1917,11 +2203,42 @@ To be filled during implementation. Required entries:
 
 ## Revision note
 
-- 2026-09-08: initial draft. Scope, milestones, and verification obligations
-  derived from `RM-3.14.8`, `DD-4.4`, `DD-4.5`, `DD-2.6`, and `RFC-0006-8.9`
-  after full reconnaissance of the template-helper registration surfaces, the
-  recipe-shell contract, the localization gate, and the documented-example
-  machinery. Decisions D1 and D2 were confirmed by the requester before
-  drafting; D2 is a proposed deviation from `RFC-0006-8.9` and is the principal
-  item requiring approval. Remaining work is unchanged: the plan awaits
-  approval before any implementation begins.
+- 2026-09-08: initial draft.
+- 2026-09-09: revised after a six-lens community-of-experts design review.
+
+  **What changed.** Three MiniJinja behaviours the draft asserted were
+  falsified by direct experiment and are now corrected:
+  `Kwargs::get::<Option<String>>` stringifies rather than raising (D4),
+  `Value::try_iter()` accepts maps, strings, and `none` (D8), and a positional
+  argument yields a detail-free `TooManyArguments` (AX-4). The `quote_path`
+  citation pointed at the wrong file. The encoder inventory said three where
+  there are five. The acceptance transcript placed the interpolation inside
+  double quotes, where the quoting corrupts the value rather than protecting it
+  — the plan's own worst failure mode, in the plan's own example, invisible to
+  all nine original obligations. Three module boundaries were redrawn: the
+  encoder into a `src/shell_word.rs` leaf so `src/recipe_shell.rs` stays
+  data-only; the stdlib module named `recipe_text` so it does not collide with
+  `src/stdlib/command/`, which already owns a filter named `shell`; and the
+  `ShellDialect` inverse deleted because the mapping is three-to-two. The
+  control-character rule is reused from `validate_ninja_value` rather than
+  reimplemented for a third time, and constraint 4 became a `clippy.toml` gate
+  instead of prose. A threat model now names the attacker instead of repeating
+  "non-negotiable security feature" unqualified. Five obligations were added
+  (OBL-CONTEXT, OBL-JOIN-QUOTE-AGREE, OBL-KIND-GATE, OBL-COMPOSITION,
+  OBL-NO-ESCAPE) and the behavioural scenarios now assert on the stable
+  `[netsuke::jinja::…]` codes rather than English prose that thirty-two
+  catalogues would translate away.
+
+  **Why it changed the shape of the work.** The former EP-M4 and EP-M5 are now
+  one milestone. Splitting them would have shipped a state where, on a Windows
+  host with `NETSUKE_WINDOWS_SHELL=bash`, the filters quote for PowerShell
+  while the recipe runs under Bash — and PowerShell's doubled single quote is
+  *valid* POSIX syntax, so `a'b` silently becomes `ab` with no error anywhere.
+  That is R11, and constraint 10 now forbids it.
+
+  **Effect on remaining work.** Message keys rose from five to eleven, so the
+  translation burden roughly doubles; decision D11 records the alternative that
+  would cut it to one, and is cheap to adopt before EP-M4 and expensive after.
+  EP-M1 gains a preparatory extraction because `src/manifest/mod.rs` is exactly
+  at the 400-line cap. Milestone count fell from six to five. The plan still
+  awaits approval; no implementation has begun.
