@@ -27,6 +27,7 @@ tracks sequencing only; it must not replace ADR-003 or the CLI design document
 as the durable architecture record.
 
 [adr-003-cli]: adr-003-agent-consistent-human-first-cli.md
+[reconciliation-module]: ../src/stdlib/network/policy/reconciliation.rs
 
 ### CLI parsing and command-composition boundary
 
@@ -677,6 +678,8 @@ every worker bound from that single number, and
 `tests/workflow_contracts/runner_placement_test.py` holds the flags equal to
 the declared count, so a shape change cannot leave an oversubscribed job behind.
 
+Table: CI lane runner shapes and concurrency settings.
+
 | Lane                                  | Runner                            | Concurrency configuration                                                        |
 | ------------------------------------- | --------------------------------- | -------------------------------------------------------------------------------- |
 | `ci.yml` `build-test`                 | `ubicloud-standard-4-ubuntu-2404` | `BUILD_JOBS=-j 4`, `CARGO_BUILD_JOBS=4`, `NEXTEST_TEST_THREADS=4`                |
@@ -698,7 +701,7 @@ that first prompted it. On the smaller shape the gate lost its runner sixteen
 minutes into the instrumented build with no log. The sampler added to both
 lanes shows disk, not memory, is the constraint: across three runs the peak
 volume usage was 82,523, 82,563 and 82,431 MiB, about 80.6 GiB, which exceeds
-`ubicloud-standard-2`'s entire 72 GB volume, while memory peaked at 2,668 MiB
+`ubicloud-standard-2`'s entire 75 GB volume, while memory peaked at 2,668 MiB
 of 16 GB. Discarding the instrumented tree before any cache save returns
 roughly 13 GB.
 
@@ -1626,6 +1629,8 @@ installing locally so the local installer matches CI:
 INSTALLER_VERSION='0.2.7' # Read from the Install Whitaker action input in CI.
 cargo install --locked whitaker-installer \
   --version "$INSTALLER_VERSION"
+```
+
 ## Workflow pins and Dependabot
 
 Dependabot owns the upgrade of GitHub Actions and reusable workflows, including
@@ -4377,7 +4382,8 @@ function returns the merge result alongside bounded events; replay those events
 through `MergeObserver`, such as `TracingMergeObserver`. Another caller can
 provide its own `MergeObserver` implementation. Observers receive bounded
 `MergeEvent` values: layer application and failure states, file `path_hash` and
-layer counts, CLI override leaf keys, and validation `key`/`reason` fields.
+layer counts, CLI override leaf keys, validation `key`/`reason` fields, and one
+bounded fetch-policy reconciliation outcome after a successful merge.
 Configuration values and raw paths are never included. Ordinary
 `merge_with_config*` and `merge_with_cached_file_layers` calls use no-op
 observation and do not emit merge tracing.
@@ -4414,16 +4420,66 @@ errors remain owned by `DiscoveredLayers` and are handled by the diagnostic
 JSON resolver and the full-merge caller according to their respective error
 policies.
 
+### Fetch-policy trust boundary
+
+Network-policy grants do not use the ordinary file-layer precedence contract.
+Discovery preserves provenance for the exact primary project `.netsuke.toml`.
+`FileScope::Operator` marks ordinary layers, including files loaded through
+`extends`; `FileScope::Project` marks only the primary project file. Discovery
+extracts that file's `fetch_default_deny`, `fetch_allow_scheme`,
+`fetch_allow_host`, and `trust_project_fetch_policy` fields into a project
+request before the generic merge. Those fields are removed only from the
+primary file; `fetch_block_host` remains in all layers so blocklists continue
+to accumulate.
+
+`retain_layers_and_resolve_json` returns the retained layers, the JSON
+preference, and the optional primary project request together.
+`DiscoveredLayers` owns the request until `into_parts` transfers it with the
+layers and discovery errors. `push_discovered_file_layers` places the layers
+into `MergeComposition` and transfers the request for the same composition.
+This preserves provenance at the discovery seam without a second discovery or
+merge pass, and the primary project file cannot self-authorize the opt-in. If
+the same file is reached through operator and project roots, both occurrences
+retain their root authority: the operator occurrence remains an ordinary layer,
+while the primary project occurrence is quarantined. The `extends` chain
+remains outside this trust boundary.
+
+The network-policy domain module
+[`src/stdlib/network/policy/reconciliation.rs`][reconciliation-module] owns
+reconciliation. It accepts domain-shaped operator inputs and a project request,
+returns the reconciled policy and a bounded outcome, and has no tracing or
+metrics side effects. The CLI adapter extracts fetch-policy fields from
+`CliConfig`, calls the domain operation, writes those fields back, and leaves
+unrelated configuration unchanged.
+
+After the generic merge produces `CliConfig`, reconciliation runs before
+`apply_config` copies values onto `Cli`. Without the operator opt-in, project
+grants are discarded, any project `fetch_default_deny = true` tightens the
+result, and `false` never weakens an operator or project restriction. With the
+opt-in from a trusted system, user, environment, or CLI layer, project grants
+append to operator grants; a present project default-deny value applies
+directly. The merge composition boundary then emits exactly one
+`FetchPolicyReconciled` observer event for a successful reconciliation. Its
+fields are limited to the trust state, request presence, a fixed default-deny
+decision, and requested, accepted, and ignored scheme and host grant counts. It
+contains no schemes, hosts, configuration values, or paths, and no event is
+emitted when generic merging fails first.
+
 ### Layer precedence
 
 The final merge order is:
 
 1. **Defaults** — `Cli::default()` serialized as a base layer.
 2. **File layers** — discovered config files in discovery order, with project
-   scope taking precedence over user and system scope.
+   scope taking precedence over user and system scope for ordinary fields.
 3. **Environment** — `NETSUKE_*` environment variables via the Figment Env
    provider.
 4. **CLI flags** — values explicitly passed on the command line.
+
+This order describes ordinary configuration fields. Fetch-policy grants use the
+trust-aware reconciliation described above: only the primary project file is
+project-scoped, while its `extends` layers, system, user, environment, and CLI
+values remain subject to ordinary merging.
 
 ### Configuration merge helper functions
 
@@ -4437,7 +4493,8 @@ Configuration merge helpers:
 - `project_scope_file(directory: Option<&Path>) -> Option<PathBuf>` resolves
   the expected project `.netsuke.toml` path for project-layer detection.
 - `project_scope_layers(project_file: Option<&Path>)` loads the project-scope
-  config directly, bypassing automatic discovery, and returns
+  config directly, bypassing automatic discovery, and returns the primary
+  project layer plus its complete `extends` chain as
   `OrthoResult<Vec<MergeLayer<'static>>>`.
 - `env_config_path(env, var_name) -> Option<PathBuf>` reads one config
   environment variable, ignores empty values, and converts the value into a
@@ -4447,9 +4504,10 @@ Configuration merge helpers:
 - `discover_file_layers(cli, env) -> DiscoveryOutcome` performs one discovery
   pass and retains the discovered layers, discovery errors and bounded deferred
   diagnostics for the diagnostic and merge callers.
-- `push_discovered_file_layers(composer, errors, discovered, events) -> ()`
-  transfers the retained layers and discovery errors into the full merge
-  composition while collecting bounded file-layer events for replay.
+- `push_discovered_file_layers(composer, errors, discovered, events)` transfers
+  the retained layers, discovery errors, and ordered quarantined project
+  requests into the full merge composition while collecting bounded file-layer
+  events for replay.
 - `collect_file_layers_with_normalizer_and_trace(directory, normalizer, env_source)`
   runs the one discovery pass with the injected path normalizer and environment
   source, and retains bounded project-scope trace metadata for deferred
@@ -4469,9 +4527,14 @@ Configuration merge helpers:
   application-side replay.
 - `is_empty_value(value: &serde_json::Value) -> bool` detects an empty CLI
   override object.
-- `retain_layers_and_resolve_json(layers)` transfers each owned file-layer
-  value into the cached layer while recording the last valid `json` value,
-  avoiding complete layer or JSON-value copies before the full merge.
+- `retain_layers_and_resolve_json(layers)` returns a `ResolvedFileLayers` value
+  containing the retained layers, JSON preference, ordered project requests,
+  and typed loading errors. It scans every layer, including layers after a
+  malformed request, and keeps the original invalid JSON beside the error so
+  diagnostic JSON preference is preserved. It extracts and validates all
+  quarantined fetch-policy fields from the primary project file and every
+  `extends` layer before generic merging, avoiding complete layer or JSON-value
+  copies before the full merge.
 - `cli_overrides_from_matches(matches: &ArgMatches) -> OrthoValue` extracts
   CLI-supplied fields, stripping defaults and non-CLI sources.
 - `EnvironmentLayer` converts an injected snapshot of `NETSUKE_*` values into
@@ -5895,6 +5958,15 @@ callers of the ordinary merge queries discard their collected events and emit
 no tracing. Custom observers may consume the bounded events, which exclude raw
 configuration values and paths. Keep observer ownership at the application
 boundary rather than installing a subscriber in a query.
+
+Fetch-policy reconciliation contributes exactly one `FetchPolicyReconciled`
+event after generic merging and reconciliation succeed. The event records
+whether trusted project policy was enabled, whether a project request was
+present, a fixed default-deny decision, and requested, accepted, and ignored
+scheme and host grant counts. It carries no scheme names, host patterns,
+configuration values, or paths. The domain reconciliation operation remains a
+pure query with no tracing or metrics side effects, and a generic merge failure
+produces no reconciliation event.
 
 The phase-level metric contract is:
 

@@ -187,8 +187,8 @@ color = "always"
     Ok(())
 }
 
-/// Assert that `default_targets` and `fetch_allow_scheme` have been appended
-/// in config → env → CLI order by the merge pipeline.
+/// Assert that `default_targets` and `fetch_allow_scheme` append in explicit
+/// config → environment → CLI order through the generic merge pipeline.
 fn assert_list_fields_appended(merged: &netsuke::cli::Cli) -> Result<()> {
     // Verify layer order for default_targets: config ["fmt", "lint"] -> env ["test"] -> CLI ["build"]
     ensure!(
@@ -237,11 +237,12 @@ fn assert_list_fields_appended(merged: &netsuke::cli::Cli) -> Result<()> {
 }
 
 #[rstest]
-fn list_fields_append_across_discovered_config_env_and_cli() -> Result<()> {
+fn list_fields_append_across_explicit_config_env_and_cli() -> Result<()> {
     let temp_project = tempdir().context("create project directory")?;
+    let temp_config = tempdir().context("create explicit config directory")?;
 
-    // Write project config with default_targets
-    let project_config = temp_project.path().join(".netsuke.toml");
+    // An explicit non-project configuration retains generic append semantics.
+    let project_config = temp_config.path().join("config.toml");
     fs::write(
         &project_config,
         r#"
@@ -249,7 +250,7 @@ default_targets = ["fmt", "lint"]
 fetch_allow_scheme = ["https"]
 "#,
     )
-    .context("write project .netsuke.toml with lists")?;
+    .context("write explicit config with lists")?;
 
     let merged = merge_in_project(
         &[
@@ -261,6 +262,10 @@ fetch_allow_scheme = ["https"]
         ],
         temp_project.path(),
         &[
+            (
+                OsString::from("NETSUKE_CONFIG"),
+                project_config.into_os_string(),
+            ),
             (
                 OsString::from("NETSUKE_DEFAULT_TARGETS"),
                 OsString::from("test"),

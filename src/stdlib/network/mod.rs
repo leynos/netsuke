@@ -15,6 +15,8 @@ pub use self::policy::NetworkPolicyConfigError;
 pub use self::policy::NetworkPolicyViolation;
 /// Error returned when parsing an invalid host pattern.
 pub use crate::host_pattern::HostPatternError;
+pub(crate) use policy::reconciliation;
+pub use policy::reconciliation::{DefaultDenyDecision, FetchPolicyReconciliationOutcome};
 
 use std::{
     convert::TryFrom,

@@ -16,6 +16,7 @@ cli.flag.fetch_allow_scheme.help = Cynlluniau URL ychwanegol a ganiateir i'r cyn
 cli.flag.fetch_allow_host.help = Enwau gwesteiwyr a ganiateir pan fo'r gwrthod rhagosodedig ymlaen.
 cli.flag.fetch_block_host.help = Enwau gwesteiwyr a rwystrir bob amser, hyd yn oed os caniateir hwy mewn man arall.
 cli.flag.fetch_default_deny.help = Gwrthod pob gwesteiwr yn rhagosodedig; caniatáu'r rhestr a ddatganwyd yn unig.
+cli.flag.trust_project_fetch_policy.help = Caniatáu i ffurfweddiad y prosiect ehangu caniatadau polisi fetch.
 cli.flag.json.help = Allbynnu JSON y gall pheiriant ei ddarllen.
 cli.flag.no_input.help = Peidio byth â darllen mewnbwn rhyngweithiol.
 cli.flag.color.help = Polisi allbwn lliw (auto, always, never).

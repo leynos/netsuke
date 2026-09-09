@@ -16,6 +16,7 @@ cli.flag.fetch_allow_scheme.help = Esquemas de URL adicionais permitidos para o 
 cli.flag.fetch_allow_host.help = Nomes de host permitidos quando a negação padrão está ativa.
 cli.flag.fetch_block_host.help = Nomes de host sempre bloqueados, mesmo que permitidos em outro lugar.
 cli.flag.fetch_default_deny.help = Negar todos os hosts por padrão; permitir apenas a lista declarada.
+cli.flag.trust_project_fetch_policy.help = Permitir que a configuração do projeto amplie as permissões da política de fetch.
 cli.flag.json.help = Emitir saída JSON legível por máquina.
 cli.flag.no_input.help = Nunca ler entrada interativa.
 cli.flag.color.help = Política de cor na saída (auto, always, never).

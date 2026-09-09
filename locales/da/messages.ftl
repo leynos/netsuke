@@ -16,6 +16,7 @@ cli.flag.fetch_allow_scheme.help = Yderligere URL-skemaer, som fetch-hjælperen 
 cli.flag.fetch_allow_host.help = Værtsnavne, der tillades, når standardafvisning er slået til.
 cli.flag.fetch_block_host.help = Værtsnavne, der altid blokeres, også hvis de er tilladt andetsteds.
 cli.flag.fetch_default_deny.help = Afvis alle værter som standard; tillad kun den erklærede liste.
+cli.flag.trust_project_fetch_policy.help = Tillad projektkonfigurationen at udvide tilladelserne i fetch-politikken.
 cli.flag.json.help = Udskriv maskinlæsbart JSON.
 cli.flag.no_input.help = Læs aldrig interaktivt input.
 cli.flag.color.help = Politik for farvet output (auto, always, never).

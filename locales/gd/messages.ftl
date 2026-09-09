@@ -16,6 +16,7 @@ cli.flag.fetch_allow_scheme.help = Sgeamaichean URL a bharrachd a tha ceadaichte
 cli.flag.fetch_allow_host.help = Ainmean òstairean a tha ceadaichte nuair a tha an diùltadh bunaiteach an gnìomh.
 cli.flag.fetch_block_host.help = Ainmean òstairean a thèid a bhacadh an-còmhnaidh, ged a bhiodh iad ceadaichte an àite eile.
 cli.flag.fetch_default_deny.help = Diùlt a h-uile òstair mar bhun-roghainn; na ceadaich ach an liosta a chaidh ainmeachadh.
+cli.flag.trust_project_fetch_policy.help = Leig le rèiteachadh a’ phròiseict ceadan poileasaidh fetch a leudachadh.
 cli.flag.json.help = Cuir a-mach JSON a leughas inneal.
 cli.flag.no_input.help = Na leugh cur-a-steach eadar-ghnìomhach idir.
 cli.flag.color.help = Poileasaidh an às-chuir dhathte (auto, always, never).
