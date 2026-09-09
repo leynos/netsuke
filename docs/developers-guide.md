@@ -857,13 +857,16 @@ export runs immediately after checkout and before anything that could start the
 server.
 
 Both instrumented lanes set `RUN_RUST_CARGO_WAIT_TIMEOUT` to `1800`. The shared
-coverage action wraps `cargo llvm-cov nextest` in a watchdog that defaults to
-600 seconds, a budget sized against a lane that restored a `target` archive and
-so never paid for a cold compile. Nothing here archives a build tree, so a cold
-sccache store leaves the whole instrumented build to do inside that budget. The
-first trunk run after the Ubicloud migration failed exactly there: all 2,790
-tests passed, taking about 512 seconds at 19.42% sccache hits, and the watchdog
-killed cargo 88 seconds later during report generation.
+coverage action wraps `cargo llvm-cov nextest` in a watchdog which defaulted to
+600 seconds when this was written, a budget sized against a lane that restored a
+`target` archive and so never paid for a cold compile. That default is now
+1,800 seconds, the same figure these lanes set, which makes writing it down
+more important rather than less: an accidental deletion would change nothing
+observable until the run it killed. Nothing here archives a build tree, so a
+cold sccache store leaves the whole instrumented build to do inside that
+budget. The first trunk run after the Ubicloud migration failed exactly there:
+all 2,790 tests passed, taking about 512 seconds at 19.42% sccache hits, and
+the watchdog killed cargo 88 seconds later during report generation.
 
 The value is roughly three times the observed cold cost and still far inside
 each job's `timeout-minutes` of 60, so a genuine hang is caught long before the
@@ -6021,6 +6024,193 @@ For human and JSON output, detailed source error text remains in the
 user-facing diagnostic path (stderr for human output and structured JSON for
 JSON output), not in a structured tracing field or metric label. Do not add
 paths, configuration values, or error text as metric labels.
+
+## Test timeouts: the tiers this repository sets
+
+Four independent timers can end a test run, and the canonical statement of how
+they must be ordered lives in the `generate-coverage` README in
+[`leynos/shared-actions`](https://github.com/leynos/shared-actions/blob/main/.github/actions/generate-coverage/README.md).
+Three of the four are set here.
+
+| Tier                     | What it bounds                     | Where it is set                               | Current value                                                |
+| ------------------------ | ---------------------------------- | --------------------------------------------- | ------------------------------------------------------------ |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s (60 s x 5); 600 s (60 s x 10) for two tests on Windows |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                        | **not set**                                                  |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,800 s (30 m)                                               |
+| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 60 m                                                         |
+
+*Table: the timers that can end a run, innermost first.*
+
+### The per-test budget is a product, not a period
+
+`terminate-after` counts warning periods, so the budget a test actually gets is
+`period` multiplied by it. Every period here is 60 s, so reading the period
+alone would report a 60 s allowance where the real figure is 300 s on Linux and
+600 s for the two Windows overrides. Any comparison against the tiers above
+rests on that reading, and the contract asserts it explicitly rather than
+leaving it implied.
+
+### The whole-run budget is a gap, not a decision
+
+No `global-timeout` is set. Unlike a repository that has turned nextest off,
+this one runs it, so the budget exists to be set and has not been.
+
+Until it is, the watchdog is doing tier two's job as well as its own. A run
+whose tests each stay inside their 600 s allowance can still exceed the
+watchdog between them, and the failure then names `cargo` rather than the run.
+The contract binds a `global-timeout` the moment one appears: above the largest
+per-test allowance, and inside the watchdog once nextest's termination
+procedure and a cold build are counted. Adding one therefore lands in the right
+place rather than merely somewhere.
+
+[Issue 689](https://github.com/leynos/netsuke/issues/689) holds the
+measurements a later pass needs to choose the value, and the constraints it has
+to satisfy.
+
+### The clocks do not start together
+
+The job timer starts when the job starts, before the checkout, the toolchain
+setup and the linting that precede coverage, and it is still running through
+whatever follows. The watchdog starts when `cargo` does. So a ceiling merely
+above the watchdog still cancels the job before the watchdog can report an
+overrun, and a cancellation discards the log that would have explained it.
+
+The ceiling is therefore sized as the watchdog plus the work outside its
+window, measured from the worst of many runs rather than one, and across runs
+of every conclusion rather than successful ones only. A run cancelled at its
+ceiling is the very case the sizing exists to prevent, so excluding it would
+size the ceiling against the runs that never needed it.
+
+| Lane                                  | Worst coverage step | Worst whole job | Widest gap | Run         |
+| ------------------------------------- | ------------------- | --------------- | ---------- | ----------- |
+| `ci.yml` `build-test`                 | 746 s               | 1,079 s         | 358 s      | 34077746484 |
+| `coverage-main.yml` `coverage-upload` | 641 s               | 671 s           | 49 s       | 34073520704 |
+
+*Table: measured coverage-step and whole-job durations. The gap is the job's
+duration less its coverage steps, so it is the work the job timer bounds and
+the watchdog does not.*
+
+The sample is the last 60 runs of each workflow: 51 successful and 9 failed for
+`ci.yml`, 58 successful and 2 failed for `coverage-main.yml`. Neither history
+contains a cancelled or timeout-terminated run, so no run in the sample was
+ended by any of these timers.
+
+The widest gap is 358 s, so the contract allows 15 minutes. That makes the
+requirement 1,800 s + 900 s = 45 minutes, and both lanes have 15 minutes of
+slack above it. None of those runs was genuinely cold; one run is the coldest
+seen so far, not a measurement of the cold case.
+
+### The contract
+
+`tests/workflow_contracts/timeout_ordering_test.py` asserts the ordering by
+value over every step invoking the coverage action, in both the `.yml` and
+`.yaml` extensions. It reads the watchdog from the step, then the job, then the
+workflow, as GitHub resolves it, so a lane that overrode the job value is
+judged as it will run and a workflow-level value is not missed. It requires
+every lane to set the watchdog explicitly rather than inherit the action's
+default, and every such job to declare a ceiling, since a job without one
+silently takes GitHub's six-hour default.
+
+`tests/workflow_contracts/timeout_budget_properties_test.py` holds the readings
+themselves, driven with synthetic nextest configurations and synthetic
+workflows rather than the repository's own. Every `terminate-after` here is 5
+or 10 and every period is 60 s, so a reading that confused the two would still
+order the real tiers correctly; against generated inputs it does not. That
+module also fixes the error paths, the malformed-workflow cases, and the
+watchdog's resolution across all three environment scopes.
+
+Three modules sit behind that contract, split by what they read.
+`tests/workflow_contracts/coverage_lanes.py` traverses the workflows: it finds
+the coverage steps, resolves each one's watchdog through the step, job and
+workflow environments, and returns one lane per step with its job's ceiling and
+condition. `tests/workflow_contracts/nextest_budgets.py` holds the nextest
+arithmetic: the duration parser, the per-test and whole-run budgets, and the
+termination allowance. `tests/workflow_contracts/timeout_budgets.py` holds the
+values both compare against. None imports the others' subject.
+
+The nextest configuration is parsed with `tomllib` rather than matched as text.
+A text match finds a key inside a comment, inside a `filter` string, or in a
+table nextest never consults, and reports a budget the runner does not use.
+`terminate-after` is optional, and a `slow-timeout` without it marks a test
+slow and never stops it, so the reading refuses that form rather than reporting
+one period as the budget. Every table in `.config/nextest.toml` sets it
+explicitly, so no value here changes.
+
+The profile's own `slow-timeout` is asserted separately from its overrides. An
+override bounds the tests its filter matches and the profile's own bounds the
+rest, so deleting the base allowance while leaving the Windows override behind
+would still report a 600 s largest budget while every test the override does
+not match ran with no bound at all.
+
+The lane reading takes its documents as a parameter, defaulting to the
+repository's own workflows. Reading the filesystem happens at one named
+boundary rather than inside the derivations, which is what makes the synthetic
+cases possible. That boundary is
+`tests/workflow_contracts/workflow_loading.py`, which the rest of the suite
+already reads workflows through: this module parsed them a second time with
+`yaml.safe_load`, a YAML 1.1 loader that reads the `on:` trigger key as `True`,
+and reported an unreadable file with whatever exception the failure happened to
+raise. A missing file, bytes that do not decode and text that is not YAML now
+all arrive as `WorkflowReadError`, naming the path.
+
+Durations are read the way nextest reads them, with `humantime`'s grammar,
+measured against humantime 2.4.0 rather than assumed. A value may carry a
+fractional part with whitespace tolerated around the point, so `1.5m` and
+`1 . 5 m` are both ninety seconds, and `wk`, `wks`, `yr` and `yrs` are accepted
+alongside the longer spellings. The reader had refused all of those, which is
+the fault it exists to avoid: a configuration the runner is happy with, called
+broken here. What it still refuses is what `humantime` refuses, checked the
+same way: a point with no whole part before it or no digit after it, two
+points, a signed value, and a digit separator.
+
+A job may run the coverage action more than once, and every matching step is a
+lane. No job in this repository does, so a reading that returned a job's first
+coverage step, or its last, would satisfy every assertion the real workflows
+support. `coverage_lane_multi_step_test.py` drives that case from a synthetic
+document end to end: two steps in one job read as two lanes with their own
+watchdogs, group under the one job, and fail its ceiling together where each
+alone would have passed.
+
+A watchdog value the action cannot read fails with the lane named, rather than
+raising a Python fault before any assertion runs. A blank value is treated as a
+source that says nothing and falls through, since that is what a workflow
+writes when it interpolates an expression that resolved to nothing; a zero or a
+negative one is refused, because the action reads those as no timeout at all.
+
+The contract also pins the condition each lane carries. A skipped step runs no
+`cargo`, so its watchdog never arms and the tiers say nothing about it:
+`if: false` on the step or on its job would leave a lane that looks bounded and
+is not. `ci.yml` also runs on pushes, which the trunk lane covers, so its
+coverage step is conditional on the pull request; that condition is pinned
+rather than tolerated.
+
+The ceiling is judged per job rather than per step. A lane is one coverage
+step, and the ceiling belongs to the job, so the lanes are summed before the
+comparison: judging each separately against the same ceiling asks only that it
+clear the largest budget, which is the requirement a job running the action
+once happens to satisfy and a job running it twice does not. Both jobs here run
+it once, so the two readings agree today and the tree cannot tell them apart;
+the sum is asserted against controlled lanes instead.
+
+The requirement also carries fifteen minutes above that sum rather than merely
+reaching it, because a ceiling equal to the sum it contains cancels the job at
+the moment the watchdog would have reported the overrun, and the report is the
+only thing that makes an overrun actionable. Both ceilings already clear it, so
+neither moved.
+
+The termination allowance it would demand between a whole-run budget and the
+watchdog is two terms, not one: the largest `grace-period` the configuration
+sets, or nextest's ten-second default when it sets none, plus a fixed 60-second
+safety margin. A grace period is what nextest promises a test after `SIGTERM`;
+the margin covers the process teardown and report writing that follow it. No
+`global-timeout` is set here, so that comparison is skipped entirely, which is
+why the reading has a test of its own rather than resting on an assertion that
+never runs.
+
+It is not the same assertion as
+`tests/workflow_contracts/test_execution_coverage_test.py`, which holds the two
+lanes to the *same* watchdog value. That one stops the lanes drifting apart;
+this one stops the tiers inverting.
 
 ## Documentation upkeep
 
