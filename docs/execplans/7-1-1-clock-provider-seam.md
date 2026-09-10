@@ -6,7 +6,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: IN PROGRESS (EP-M0 through EP-M3 complete; EP-M4 in progress)
+Status: IN PROGRESS (EP-M0 through EP-M4 complete; EP-M5 in progress)
 
 ## Purpose / big picture
 
@@ -1441,7 +1441,9 @@ above, which are disposable.
 - [x] EP-M2 — integration and BDD coverage over the real registration path.
 - [x] EP-M3 — All four gates green, plus the repository's Markdown and diagram
   gates and the first CodeRabbit pass (zero findings).
-- [ ] EP-M4 — ADR-008 addendum, developers' guide, technical design §5.2.
+- [x] EP-M4 — ADR-008 addendum plus `Implementation references` entry,
+  developers' guide "Environment and template ports", technical design §5.2,
+  RFC 0006 §3.3 and §16 question 7; `make check-fmt` green.
 - [ ] EP-M5 — Roadmap 7.1.1 marked done.
 
 ## Surprises & discoveries
@@ -1631,6 +1633,34 @@ Recorded during planning; extend during implementation.
   (preserve the wall time) are near-miss names, and the seam's contract is the
   former. `WallClock::read` and `now()` both use `to_offset`, and the property
   test now pins that choice.
+
+- Observation: RFC 0006 §3.3's first recorded gap — "sixteen names registered in
+  the full environment are absent from the manifest-query environment
+  altogether" — is stale, independently of this change. Evidence:
+  `register_disabled_query_helpers` (`src/stdlib/register.rs`) now stubs
+  fifteen names: the original six (`env`, `glob`, `fetch`, `shell`, `grep`,
+  `contents`) plus nine added by the `netsuke help targets` work (`realpath`,
+  `expanduser`, `size`, `linecount`, `hash`, `digest`, `which` in both
+  namespaces, `command_available`, `now`). Only the seven file tests (`dir`,
+  `file`, `symlink`, `pipe`, `block_device`, `char_device`, `device`) are still
+  absent, because `register_manifest_query` never calls `register_file_tests`.
+  The totals reconcile exactly: 6 + 16 = 22 = 15 stubs + 7 absent. Impact: the
+  same count also bound RFC 0006 §14.1's slice-0 deliverable, which promised a
+  stub for "every one of the sixteen"; both were corrected in place rather than
+  worked around, per `Outcomes & retrospective`. Slice 0's remaining stub work
+  is the seven file tests. Out of scope for 7.1.1 but recorded here because
+  leaving a known-false claim beside the edit would have been worse; no runtime
+  behaviour changes.
+
+- Observation: the ADR-008 addendum heading date is 2026-09-11, not the
+  `2026-09-08` written in Stage D. Evidence: the plan's text prescribed the
+  heading "along these lines" and the file's convention is that each addendum
+  is dated when it is written (`2026-08-30`, `2026-09-01`, `2026-08-25` are all
+  landing dates, and the ADR was untouched between planning and this commit).
+  Impact: the entry records the date the classification was actually added, so
+  a later reader comparing it with `git log` sees the same day. The prescribed
+  body text is otherwise used verbatim, with `time::OffsetDateTime` on the
+  public surface noted as prescribed.
 
 ## Decision log
 
@@ -1983,7 +2013,18 @@ To be populated during implementation. Required entries:
    of `proptest-regressions/stdlib/path/home_tests.txt`, which records a
    mutation-derived seed the same way. It passes against the unmutated code.
 
-7. The final gate transcript tails for `check-fmt`, `typecheck`, `lint`, and
+7. The EP-M4 documentation edit, one commit over four files. ADR-008 gains the
+   dated addendum `### 2026-09-11: Stdlib clock seam` and an
+   `Implementation references` entry for `src/stdlib/time/clock.rs`;
+   `docs/developers-guide.md` gains the clock paragraph in "Environment and
+   template ports" (same commit, because ADR-008's `Consequences` requires the
+   two to stay consistent); technical design §5.2 moves from proposal to
+   implemented state and names `WallClock`; RFC 0006 §3.3 records the `now` gap
+   as closed and §16 question 7 as resolved, both pointing at the addendum.
+   `make check-fmt` was red on the first pass, `make fmt` was run and touched
+   only those four files, and the re-run was green.
+
+8. The final gate transcript tails for `check-fmt`, `typecheck`, `lint`, and
    `test`.
 
 Keep each excerpt short — the summary line and the failing assertion, not the
