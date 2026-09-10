@@ -5,7 +5,7 @@ use crate::bdd::types::{ContextKey, ContextValue, TemplateContent};
 use anyhow::{Context, Result};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{Environment, context, value::Value};
-use netsuke::stdlib::{self, NetworkPolicy, StdlibConfig};
+use netsuke::stdlib::{self, ClockProvider, NetworkPolicy, StdlibConfig};
 use rstest_bdd_macros::when;
 use test_support::{localizer_test_lock, set_en_localizer};
 
@@ -20,6 +20,7 @@ use super::workspace::{ensure_workspace, resolve_template_path};
 struct RenderConfig {
     policy: Option<NetworkPolicy>,
     home: Option<String>,
+    clock: Option<ClockProvider>,
     fetch_max_bytes: Option<u64>,
     command_max_output_bytes: Option<u64>,
     command_stream_max_bytes: Option<u64>,
@@ -33,6 +34,7 @@ fn extract_render_config(world: &TestWorld) -> RenderConfig {
             .borrow()
             .get("HOME")
             .and_then(|value| value.to_str().map(str::to_owned)),
+        clock: world.stdlib_clock.get(),
         fetch_max_bytes: world.stdlib_fetch_max_bytes.get(),
         command_max_output_bytes: world.stdlib_command_max_output_bytes.get(),
         command_stream_max_bytes: world.stdlib_command_stream_max_bytes.get(),
@@ -75,6 +77,9 @@ pub(crate) fn render_template_with_context(
 
     if let Some(policy) = render_cfg.policy {
         config = config.with_network_policy(policy);
+    }
+    if let Some(clock) = render_cfg.clock {
+        config = config.with_clock(clock);
     }
     if let Some(home) = render_cfg.home {
         config = config.with_home_override(Some(home));

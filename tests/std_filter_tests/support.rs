@@ -63,6 +63,13 @@ pub(crate) mod fallible {
         stdlib_env_with_config(config).map(|(env, _)| env)
     }
 
+    pub(crate) fn stdlib_env_with_clock(
+        provider: stdlib::ClockProvider,
+    ) -> Result<Environment<'static>> {
+        let config = StdlibConfig::from_current_dir()?.with_clock(provider);
+        stdlib_env_with_config(config).map(|(env, _)| env)
+    }
+
     pub(crate) fn stdlib_env() -> Result<Environment<'static>> {
         stdlib_env_with_state().map(|(env, _)| env)
     }

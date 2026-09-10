@@ -6,7 +6,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: IN PROGRESS (EP-M0 complete)
+Status: IN PROGRESS (EP-M0, EP-M1 and EP-M2 complete; EP-M3 in progress)
 
 ## Purpose / big picture
 
@@ -1435,8 +1435,10 @@ above, which are disposable.
 ## Progress
 
 - [x] EP-M0 — Red tests committed; compile failure captured.
-- [ ] EP-M1 — `clock.rs`, threaded `now()`, unit obligations discharged.
-- [ ] EP-M2 — `StdlibConfig` ownership, integration and BDD coverage.
+- [x] EP-M1 — `clock.rs`, threaded `now()`, unit obligations discharged;
+  merged with EP-M2's configuration ownership (see Surprises & discoveries),
+  and OBL-5 added.
+- [x] EP-M2 — integration and BDD coverage over the real registration path.
 - [ ] EP-M3 — All four gates green.
 - [ ] EP-M4 — ADR-008 addendum, developers' guide, technical design §5.2.
 - [ ] EP-M5 — Roadmap 7.1.1 marked done.
@@ -1494,6 +1496,80 @@ Recorded during planning; extend during implementation.
 - Observation: `StdlibConfig` derives `Debug`, which no closure-bearing field
   can satisfy. Evidence: `src/stdlib/config/mod.rs:20`. Impact: forced the
   `WallClock` newtype rather than a bare `Option<ClockProvider>` field. See D2.
+
+- Observation: the EP-M1/EP-M2 split is not a compiling plateau, so the two
+  milestones landed as one commit. Evidence: `WallClock::new` is called only
+  from `#[cfg(test)]` code until `StdlibConfig` owns the clock, and
+  `is_system()` had a `Debug` impl that read the field directly, so
+  `RUSTFLAGS="-D warnings" cargo check --workspace --all-targets --all-features`
+  failed with:
+
+  ```plaintext
+  error: associated items `new` and `is_system` are never used
+     --> src/stdlib/time/clock.rs:100:25
+      |
+   98 | impl WallClock {
+      | -------------- associated items in this implementation
+   99 |     /// Wrap `provider` as the clock backing `now()`.
+  100 |     pub(crate) const fn new(provider: ClockProvider) -> Self {
+      |                         ^^^
+  ...
+  118 |     pub(crate) const fn is_system(&self) -> bool {
+      |                         ^^^^^^^^^
+      = note: `-D dead-code` implied by `-D warnings`
+  ```
+
+  Impact: EP-M1 carries EP-M2's configuration ownership, and EP-M2 is now the
+  integration and behavioural layer. Silencing the lint was rejected: the
+  workspace denies `allow_attributes`, and a suppressive attribute would have
+  hidden the real signal — that the seam had no production consumer yet.
+  Routing the `Debug` impl through `self.is_system()` rather than through the
+  field supplies the accessor's caller, so what the label reports and what the
+  accessor returns cannot drift.
+
+- Observation: OBL-5's second case cannot be written where the plan placed it.
+  Evidence: `time::register_query_functions` is `pub(crate)` inside
+  `src/stdlib/time/mod.rs` and `stdlib::time` is a private module, so
+  `crate::stdlib::time::register_query_functions` is unreachable from
+  `src/manifest/expand_tests.rs`. Re-exporting it at `stdlib` would itself be
+  an unused import in non-test builds, which the workspace also denies. Impact:
+  both OBL-5 cases live in `src/stdlib/time/tests.rs`, where both registration
+  halves are already in scope. The plan's intent — two paired cases, no
+  visibility widening — is met; only the file changed.
+
+- Observation: the `Given` step for the fixed clock belongs in
+  `tests/bdd/steps/stdlib/config.rs`, not `rendering.rs` as the plan proposed.
+  Evidence: every other stdlib `given` step that sets a `RenderConfig` field
+  (`the stdlib fetch response limit is ...`,
+  `the stdlib command output limit is ...`) is in `config.rs`, while
+  `rendering.rs` holds only `when` steps. Impact: the step follows the
+  established convention; `RenderConfig.clock` and its consumption stay in
+  `rendering.rs`.
+
+- Observation: `now()`'s rendered spelling is fixed by `time`'s well-known
+  format, so the new string assertions were written from the format contract
+  rather than fitted to captured output. Evidence: `format_offset_datetime`
+  formats through `Iso8601::DEFAULT`, documented as "separators (such as `-` and
+  `:`) are included" and "the UTC offset has precision to the minute";
+  `format_offset` writes a bare `Z` when `offset.is_utc()`; and the formatter
+  strips a zero fractional part. Impact: the expectations are
+  `2026-06-08T12:00:00Z` for UTC and `2026-06-08T14:00:00+02:00` for an instant
+  re-expressed at `+02:00`.
+
+- Observation: a manifest-query refusal assertion cannot use
+  `Error::to_string()`. Evidence: `Display for Error` writes the kind and the
+  detail joined by a colon, so the refusal renders as
+  `invalid operation: now is disabled while rendering ...`, which fails a
+  `starts_with("now is disabled")` assertion *against correct behaviour*.
+  Impact: the OBL-5 cases assert on `Error::detail()`, which returns the
+  message without the kind prefix.
+
+- Observation: `now()` normalizing its provider is observable only through the
+  rendered string, because `Z` is emitted only for a UTC offset. Evidence:
+  `format_offset` returns early with `b"Z"` when `offset.is_utc()`. Impact: the
+  integration case for a provider carrying `+05:30` proves normalization by
+  rendering `2026-06-08T12:00:00Z`; a separate offset-attribute assertion would
+  have been redundant, so none was added.
 
 ## Decision log
 
@@ -1752,12 +1828,30 @@ To be populated during implementation. Required entries:
    help: remove the extra argument
    ```
 
-   `make test-nextest` then reported `could not compile`netsuke-build
-   `(lib test) due to 8 previous errors`, exit code 101. All eight name the
-   missing seam items or the changed arity; no unrelated failure appeared. Full
-   log: `/tmp/test-netsuke-7-1-1-clock-provider-seam-m0.out`.
+   `make test-nextest` then reported the following, with exit code 101:
 
-2. The `make test` summary line at EP-M1 and EP-M2.
+   ```plaintext
+   error: could not compile `netsuke-build` (lib test) due to 8 previous errors
+   ```
+
+   All eight name the missing seam items or the changed arity; no unrelated
+   failure appeared. Full log:
+   `/tmp/test-netsuke-7-1-1-clock-provider-seam-m0.out`.
+
+2. The `make test` summary line at EP-M1 and EP-M2. At EP-M1 the seam's own
+   suites were run directly, since EP-M1's commit is a plateau rather than the
+   gate milestone:
+
+   ```plaintext
+   # cargo nextest run -E 'test(stdlib::time)'
+   Summary [0.040s] 49 tests run: 49 passed, 2688 skipped
+
+   # cargo nextest run -E 'binary(std_filter_tests)'
+   Summary [5.041s] 72 tests run: 72 passed, 0 skipped
+   ```
+
+   The full-suite `make test` summary is recorded at EP-M3.
+
 3. The four mutation outcomes from `Validation and acceptance`.
 4. The final gate transcript tails for `check-fmt`, `typecheck`, `lint`, and
    `test`.
