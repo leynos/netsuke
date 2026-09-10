@@ -2144,6 +2144,20 @@ To be populated during implementation. Required entries:
    the documentation and reconciliation commits that followed. A finding there
    would have been invisible to a single early pass.
 
+10. The pull request description was replaced once the implementation landed.
+    PR #696 originally carried a body asserting that the PR "contains the plan
+    only — no implementation", which stopped being true at `b3052d95` and
+    would have misled the first reviewer to open it. The replacement body
+    describes the delivered seam, the five design decisions with the arguments
+    against each alternative, the six-mutation table, the two pre-existing
+    gaps now closed, and the documentation changes. It points at this plan for
+    the full delivery record.
+
+    The PR was still a draft at that point. Flipping it to ready-for-review is
+    a human decision about timing — in particular whether to see the branch
+    reviewed before CodeRabbit's own PR-level review runs — and was
+    deliberately left to the maintainer rather than taken here.
+
 One lesson about evidence discipline, recorded because it cost a re-run: gate
 logs are named per branch, so a second run over the same branch silently
 overwrites the first run's transcript. Evidence is only as fresh as the HEAD it
