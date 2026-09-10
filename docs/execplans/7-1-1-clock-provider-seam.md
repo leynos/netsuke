@@ -954,7 +954,7 @@ impl Default for WallClock {
 
 /// Report the clock's provenance without pretending a closure is printable.
 ///
-/// The label makes a mis-wired clock self-diagnosing: an injected clock that
+/// The label makes a wrongly wired clock self-diagnosing: an injected clock that
 /// never reached registration, or an ambient clock where a test expected an
 /// injected one, is visible in any `{:?}` of the surrounding config.
 impl fmt::Debug for WallClock {
@@ -1664,6 +1664,18 @@ Recorded during planning; extend during implementation.
   body text is otherwise used verbatim, with `time::OffsetDateTime` on the
   public surface noted as prescribed.
 
+- Observation: the spelling gate is not part of `make check-fmt`. Evidence: the
+  Makefile declares `markdownlint: spelling`, and `spelling` runs
+  `scripts/typos_rollout_check.py` plus `typos` over every Markdown file; a
+  branch can therefore be `check-fmt`-green and still fail on prose. Two words
+  this change added were rejected: `hand-written` (flagged at
+  `docs/netsuke-test-framework-technical-design.md:280`) and `mis-wired`
+  (`docs/execplans/7-1-1-clock-provider-seam.md`). Impact: `typos` splits on
+  the hyphen, so `mis` is read as a standalone word and reported as a
+  misspelling of `miss`; the fix is to avoid the hyphen, not to add an ignore.
+  Both are now `handwritten` and `wrongly wired`. Markdown gates must be run
+  through `make markdownlint`, not `make check-fmt` alone.
+
 ## Decision log
 
 - **D1 — Port shape follows the `EnvReader` precedent verbatim.**
@@ -1910,6 +1922,10 @@ Upstream changes and deviations, all recorded above or in
 - `make lint` on this branch requires `PATH="$HOME/go/bin:$PATH"`, because the
   base commit predates the Makefile's `GO_BIN` curation. The workaround
   disappears once the branch is rebased past that commit.
+- RFC 0007's "what is missing" list, and one sentence in its architecture
+  section, also recorded the clock seam as absent; both now record it as
+  supplied by 7.1.1. Same rationale as the RFC 0006 correction: leaving a
+  known-false claim in the governing RFC would outlive the change.
 
 Follow-on work, not part of this plan:
 
@@ -2043,7 +2059,7 @@ To be populated during implementation. Required entries:
    `Summary [0.084s] 49 tests run: 49 passed, 2697 skipped` — every unit test
    still green — while `binary(std_filter_tests)` failed and both
    `stdlib_time_a_fixed_clock*` scenarios failed. Unit coverage alone cannot
-   detect a mis-wired registration.
+   detect an incorrectly wired registration.
 
    Mutation 5 also confirms the two OBL-5 cases are not redundant: with the
    stub gone, `query_functions_do_not_define_now` still passes
@@ -2058,16 +2074,25 @@ To be populated during implementation. Required entries:
    of `proptest-regressions/stdlib/path/home_tests.txt`, which records a
    mutation-derived seed the same way. It passes against the unmutated code.
 
-7. The EP-M4 documentation edit, one commit over four files. ADR-008 gains the
-   dated addendum `### 2026-09-11: Stdlib clock seam` and an
-   `Implementation references` entry for `src/stdlib/time/clock.rs`;
-   `docs/developers-guide.md` gains the clock paragraph in "Environment and
-   template ports" (same commit, because ADR-008's `Consequences` requires the
-   two to stay consistent); technical design §5.2 moves from proposal to
-   implemented state and names `WallClock`; RFC 0006 §3.3 records the `now` gap
-   as closed and §16 question 7 as resolved, both pointing at the addendum.
-   `make check-fmt` was red on the first pass, `make fmt` was run and touched
-   only those four files, and the re-run was green.
+7. The EP-M4 documentation edit, one commit over four files, plus a follow-up
+   commit for RFC 0007 and the spelling gate. ADR-008 gains the dated addendum
+   `### 2026-09-11: Stdlib clock seam` and an `Implementation references` entry
+   for `src/stdlib/time/clock.rs`; `docs/developers-guide.md` gains the clock
+   paragraph in "Environment and template ports" (same commit, because ADR-008's
+   `Consequences` requires the two to stay consistent); technical design §5.2
+   moves from proposal to implemented state and names `WallClock`; RFC 0006
+   §3.3 records the `now` gap as closed and §16 question 7 as resolved, both
+   pointing at the addendum. `make check-fmt` was red on the first pass,
+   `make fmt` was run and touched only those four files, and the re-run was
+   green.
+
+   The follow-up commit corrects RFC 0007's gap list and its "two seams are
+   added" sentence, and applies the spelling gate's two findings:
+   `hand-written` and `mis-wired` are both rejected by `typos`, which splits on
+   the hyphen and then reads `mis` as a misspelling. The `mis-wired` wording
+   also lived in the `WallClock` doc comment and in this plan's sketch of it,
+   so all three were changed together. That commit touches
+   `src/stdlib/time/clock.rs`, so the code gates were re-run over it.
 
 8. The final gate transcript tails for `check-fmt`, `typecheck`, `lint`, and
    `test`.

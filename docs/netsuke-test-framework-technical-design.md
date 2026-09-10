@@ -277,10 +277,10 @@ when it installs `now()`, so each evaluation reads the provider again, and no
 provider-less call path can bypass it.
 
 `StdlibConfig` stores the provider in a private `WallClock` container, a
-mechanical addition this design did not name. It confines a hand-written
-`Debug` (a closure is not printable, so `StdlibConfig` could not have derived
-one) and normalizes every read to UTC, because an injected provider is free to
-return any offset while `now()` is documented to yield UTC. Manifest-query
+mechanical addition this design did not name. It confines a handwritten `Debug`
+(a closure is not printable, so `StdlibConfig` could not have derived one) and
+normalizes every read to UTC, because an injected provider is free to return
+any offset while `now()` is documented to yield UTC. Manifest-query
 registration receives no clock and keeps its refusing `now` stub.
 
 The test runner's `given.clock.now` input

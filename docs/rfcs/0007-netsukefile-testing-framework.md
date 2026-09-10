@@ -56,10 +56,12 @@ of capability-scoped non-build loading. The test runner is a third mode of that
 same shape, so it extends the established pattern instead of introducing a
 parallel one; the technical design records the consequences.
 
-What is missing: a clock seam for `now()` (it calls the system clock directly),
-a mechanism to substitute manifest macros, any test dialect, discovery, mock
-engine, fixture lifecycle, or `test` subcommand. The manifest schema rejects
-unknown top-level keys, so the proposed `tests` configuration block is a schema
+What is missing: a mechanism to substitute manifest macros, any test dialect,
+discovery, mock engine, fixture lifecycle, or `test` subcommand. (The clock
+seam for `now()` that this section originally listed was supplied by roadmap
+item 7.1.1; the [technical design](netsuke-test-framework-technical-design.md)
+§5.2 records the implemented shape.) The manifest schema rejects unknown
+top-level keys, so the proposed `tests` configuration block is a schema
 addition with compatibility consequences (see below).
 
 ## Goals and non-goals
@@ -101,9 +103,10 @@ helpers, and carries results over length-prefixed `serde_json` frames versioned
 like the existing JSON envelope, so it adds no new dependency. The same stream
 carries incremental journal checkpoints, so a case killed on the deadline still
 reports the calls it had already made rather than an empty journal. Two seams
-are added (clock provider; macro substitution overlay); network mocking needs
-no transport seam because the deny-all policy plus function-level doubles make
-the real network code unreachable under test.
+are added (the clock provider, supplied by roadmap item 7.1.1, and the macro
+substitution overlay); network mocking needs no transport seam because the
+deny-all policy plus function-level doubles make the real network code
+unreachable under test.
 
 Positioning within the product: phase 3 of the roadmap makes Netsuke
 predictable for humans and automation; phase 4 verifies the compiler itself;

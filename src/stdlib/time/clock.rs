@@ -131,7 +131,7 @@ impl Default for WallClock {
 
 /// Report the clock's provenance without pretending a closure is printable.
 ///
-/// The label makes a mis-wired clock self-diagnosing: an injected clock that
+/// The label makes a wrongly wired clock self-diagnosing: an injected clock that
 /// never reached registration, or an ambient clock where a test expected an
 /// injected one, is visible in any `{:?}` of the surrounding configuration.
 impl fmt::Debug for WallClock {
