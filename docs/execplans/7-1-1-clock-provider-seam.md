@@ -2094,8 +2094,60 @@ To be populated during implementation. Required entries:
    so all three were changed together. That commit touches
    `src/stdlib/time/clock.rs`, so the code gates were re-run over it.
 
-8. The final gate transcript tails for `check-fmt`, `typecheck`, `lint`, and
-   `test`.
+8. The final gate transcript at `d71e18ed`, the branch's closing commit. All
+   seven gates were re-run over it because the EP-M3 evidence had been
+   invalidated by the commits that followed. Verbatim tails:
 
-Keep each excerpt short — the summary line and the failing assertion, not the
-whole log. The full logs live at the `/tmp` paths named in `Concrete steps`.
+   ```plaintext
+   # make check-fmt
+   56 files already formatted
+
+   # make typecheck
+   All checks passed!
+       Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.24s
+
+   # make lint (PATH="$HOME/go/bin:$PATH")
+   Your code has been rated at 10.00/10 (previous run: 10.00/10, +0.00)
+   All checks passed!
+
+   # make test
+   Summary [  89.709s] 2830 tests run: 2830 passed (2 slow), 3 skipped
+   test result: ok. 86 passed; 0 failed; 25 ignored; 0 measured; 0 filtered out; finished in 0.04s
+   test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+   test result: ok. 32 passed; 0 failed; 6 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+   # make doc-coverage
+   aggregate                                   4059/4094   99.15%
+   ok: doc-comment coverage 99.15% meets the 80.00% threshold.
+
+   # make markdownlint
+   Linting: 133 file(s)
+   Summary: 0 error(s)
+
+   # make nixie
+   🧜‍♀️✨ All diagrams validated successfully!
+   ```
+
+   The `make test` counts are identical to EP-M3's, as they must be: the
+   intervening commits changed no test and no code path, only doc comments and
+   Markdown. `make test-podman` was not run — no `ansible/` path is in the
+   change surface — and the Ansible gates are unchanged by this work.
+
+9. Second CodeRabbit pass, run over `d71e18ed` after the seven gates above all
+   exited 0. `coderabbit review --agent` completed on the first attempt with no
+   rate limiting: 23 files reviewed, zero findings
+   (`{"type":"complete","status":"review_completed","findings":0,…}`). Log:
+   `/tmp/coderabbit-netsuke-7-1-1-clock-provider-seam.out`.
+
+   Both CodeRabbit passes were clean, which is the point of running the second:
+   the first covered `e682ac98` and `ccf63eb0`, and had nothing to say about
+   the documentation and reconciliation commits that followed. A finding there
+   would have been invisible to a single early pass.
+
+One lesson about evidence discipline, recorded because it cost a re-run: gate
+logs are named per branch, so a second run over the same branch silently
+overwrites the first run's transcript. Evidence is only as fresh as the HEAD it
+was taken at, and this plan's EP-M3 evidence went stale twice — once when the
+EP-M4 commits landed, and again when the spelling fix touched
+`src/stdlib/time/clock.rs`. Re-running is cheap; asserting that a green result
+still applies is not the same as knowing it.
