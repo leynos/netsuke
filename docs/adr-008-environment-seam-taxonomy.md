@@ -188,6 +188,11 @@ resolution entirely rather than setting the variable for a child to read.
   going through `NETSUKE_NINJA` resolution at all
 - `EnvReader`: [`src/manifest/env_reader.rs`](../src/manifest/env_reader.rs)
   (manifest `env()` Jinja helper)
+- Clock seam: [`src/stdlib/time/clock.rs`](../src/stdlib/time/clock.rs)
+  (`ClockProvider`, `system_clock`, `fixed_clock`); `StdlibConfig::with_clock`
+  in [`src/stdlib/config/mod.rs`](../src/stdlib/config/mod.rs) is the injection
+  point, and [`src/stdlib/register.rs`](../src/stdlib/register.rs) captures the
+  provider when it registers `now()`
 - Child-environment composition:
   [`test_support/src/netsuke.rs`](../test_support/src/netsuke.rs)
   (`run_netsuke_in_with_env`) and `tests/bdd/steps/manifest_command_helpers.rs`
@@ -234,3 +239,32 @@ process-global environment or working-directory changes. Route B avoids CWD
 changes by passing absolute paths or preserving `-C/--directory` for automatic
 project discovery. Explicit relative `--config` and `NETSUKE_CONFIG` selectors
 remain anchored to the child process CWD; they are not rebased beneath `-C`.
+
+### 2026-09-11: Stdlib clock seam
+
+The stdlib `now()` helper reads its instant through an injected
+`ClockProvider`, an `Arc<dyn Fn() -> OffsetDateTime + Send + Sync>` held by
+`StdlibConfig` and captured by the registered Jinja function. It takes the
+`EnvReader` shape, not a narrow closure and not `mockable::Env`, for the same
+reason `EnvReader` does: `minijinja` requires registered functions to be
+`Send + Sync`, so a borrowed closure parameter cannot satisfy the bound.
+`StdlibConfig` is the clock's single owner; `system_clock()` is the sole
+production supplier and the only place `OffsetDateTime::now_utc` is called for
+`now()`. Manifest-query registration receives no clock and keeps its refusing
+`now` stub.
+
+The taxonomy is applied here to an ambient input that is *not* an environment
+variable. This ADR's context section is written about `clippy.toml`'s ban on
+`std::env::var` and friends, and no lint forbids reading the clock; the shape
+rubric transfers, the original scope does not. Note also that `StdlibConfig`
+now holds two ambient seams in two shapes — `home_directory: HomeDirectory`, a
+resolved value, and the clock, a closure. The clock's shape is the one this
+rubric prescribes for a `Send + Sync` registration point; `HomeDirectory` is
+the outlier, and the two should not be "harmonized" without revisiting this
+entry. `ClockProvider` also puts `time::OffsetDateTime` on netsuke's public
+surface, so a `time` 0.4 bump is a breaking library-API change.
+
+`mockable::Clock` was not used: it is typed in `chrono`, which this workspace
+does not depend on, so adopting it would add a second date-time crate to render
+one timestamp. `monotony`, already a dependency, abstracts only monotonic
+elapsed time and has no wall-clock type.
