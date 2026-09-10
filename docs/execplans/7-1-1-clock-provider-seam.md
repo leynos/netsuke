@@ -6,7 +6,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS (EP-M0 complete)
 
 ## Purpose / big picture
 
@@ -1434,7 +1434,7 @@ above, which are disposable.
 
 ## Progress
 
-- [ ] EP-M0 — Red tests committed; compile failure captured.
+- [x] EP-M0 — Red tests committed; compile failure captured.
 - [ ] EP-M1 — `clock.rs`, threaded `now()`, unit obligations discharged.
 - [ ] EP-M2 — `StdlibConfig` ownership, integration and BDD coverage.
 - [ ] EP-M3 — All four gates green.
@@ -1724,6 +1724,39 @@ Do not mark `COMPLETE` while any upstream change or deviation is unrecorded.
 To be populated during implementation. Required entries:
 
 1. The Red-stage compiler error from Stage B (first three errors, verbatim).
+
+   ```plaintext
+   error[E0425]: cannot find type `ClockProvider` in this scope
+     --> src/stdlib/time/tests.rs:54:19
+      |
+   54 |     let provider: ClockProvider = Arc::new(move || {
+      |                   ^^^^^^^^^^^^^ not found in this scope
+
+   error[E0433]: cannot find type `WallClock` in this scope
+     --> src/stdlib/time/tests.rs:30:34
+      |
+   30 |     register_functions(&mut env, WallClock::default());
+      |                                  ^^^^^^^^^ use of undeclared type `WallClock`
+
+   error[E0061]: this function takes 1 argument but 2 arguments were supplied
+     --> src/stdlib/time/tests.rs:30:5
+      |
+   30 |     register_functions(&mut env, WallClock::default());
+      |     ^^^^^^^^^^^^^^^^^^           -------------------- unexpected argument #2
+      |
+   note: function defined here
+     --> src/stdlib/time/mod.rs:43:15
+      |
+   43 | pub(crate) fn register_functions(env: &mut Environment<'_>) {
+      |               ^^^^^^^^^^^^^^^^^^
+   help: remove the extra argument
+   ```
+
+   `make test-nextest` then reported `could not compile`netsuke-build
+   `(lib test) due to 8 previous errors`, exit code 101. All eight name the
+   missing seam items or the changed arity; no unrelated failure appeared. Full
+   log: `/tmp/test-netsuke-7-1-1-clock-provider-seam-m0.out`.
+
 2. The `make test` summary line at EP-M1 and EP-M2.
 3. The four mutation outcomes from `Validation and acceptance`.
 4. The final gate transcript tails for `check-fmt`, `typecheck`, `lint`, and
