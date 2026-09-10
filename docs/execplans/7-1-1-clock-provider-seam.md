@@ -6,7 +6,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: IN PROGRESS (EP-M0, EP-M1 and EP-M2 complete; EP-M3 in progress)
+Status: IN PROGRESS (EP-M0 through EP-M3 complete; EP-M4 in progress)
 
 ## Purpose / big picture
 
@@ -1439,7 +1439,8 @@ above, which are disposable.
   merged with EP-M2's configuration ownership (see Surprises & discoveries),
   and OBL-5 added.
 - [x] EP-M2 — integration and BDD coverage over the real registration path.
-- [ ] EP-M3 — All four gates green.
+- [x] EP-M3 — All four gates green, plus the repository's Markdown and diagram
+  gates and the first CodeRabbit pass (zero findings).
 - [ ] EP-M4 — ADR-008 addendum, developers' guide, technical design §5.2.
 - [ ] EP-M5 — Roadmap 7.1.1 marked done.
 
@@ -1895,8 +1896,40 @@ To be populated during implementation. Required entries:
 
    The full-suite `make test` summary is recorded at EP-M3.
 
-3. The four mutation outcomes from `Validation and acceptance`.
-4. The final gate transcript tails for `check-fmt`, `typecheck`, `lint`, and
+3. The full-suite `make test` summary at EP-M3, verbatim:
+
+   ```plaintext
+   Summary [  59.616s] 2830 tests run: 2830 passed, 3 skipped
+   test result: ok. 86 passed; 0 failed; 25 ignored; 0 measured; 0 filtered out; finished in 0.02s
+   test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+   test result: ok. 32 passed; 0 failed; 6 ignored; 0 measured; 0 filtered out; finished in 0.01s
+   ```
+
+   Log: `/tmp/test-netsuke-7-1-1-clock-provider-seam.out`.
+
+4. Public API coverage at EP-M3, since the seam adds exported items. Verbatim:
+
+   ```plaintext
+   test_support lib                             403/403   100.00%
+   netsuke-build lib                           3541/3576   99.02%
+   netsuke-build bin (netsuke)                  115/115   100.00%
+   aggregate                                   4059/4094   99.15%
+   ok: doc-comment coverage 99.15% meets the 80.00% threshold.
+   ```
+
+   Log: `/tmp/doc-coverage-netsuke-7-1-1-clock-provider-seam.out`.
+
+5. First CodeRabbit pass, run at EP-M3 over `e682ac98` and `ccf63eb0`:
+   `coderabbit review --agent` completed normally (no rate limiting) with 16
+   changed files reviewed and zero findings. Log:
+   `/tmp/coderabbit-netsuke-7-1-1-clock-provider-seam.out`.
+
+   The other gates in the same run were green: `make check-fmt`,
+   `make typecheck`, `make lint` (with `PATH="$HOME/go/bin:$PATH"`),
+   `make markdownlint` (133 files, 0 errors) and `make nixie`.
+
+6. The four mutation outcomes from `Validation and acceptance`.
+7. The final gate transcript tails for `check-fmt`, `typecheck`, `lint`, and
    `test`.
 
 Keep each excerpt short — the summary line and the failing assertion, not the
