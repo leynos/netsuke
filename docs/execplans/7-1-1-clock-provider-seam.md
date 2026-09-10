@@ -1571,6 +1571,49 @@ Recorded during planning; extend during implementation.
   rendering `2026-06-08T12:00:00Z`; a separate offset-attribute assertion would
   have been redundant, so none was added.
 
+- Observation: `clippy::shadow_reuse` is denied workspace-wide, so a step
+  function may not reuse its capture name for a parsed binding. Evidence:
+  `make lint` failed with
+
+  ```plaintext
+  error: `instant` is shadowed
+    --> tests/bdd/steps/stdlib/config.rs:20:9
+     |
+  20 |     let instant = parse_iso_timestamp(instant)?;
+     |         ^^^^^^^
+     = note: requested on the command line with `-D clippy::shadow-reuse`
+  ```
+
+  Impact: the parsed binding is named `parsed`, which also matches the existing
+  convention in `tests/bdd/steps/stdlib/assertions.rs`. Note that
+  `RUSTFLAGS="-D warnings" cargo check --all-targets` does *not* catch this;
+  only Clippy does, so a clean `cargo check` is not evidence that the lint gate
+  will pass.
+
+- Observation: the Whitaker suite caps a module at 400 lines, and the cap
+  applies per file rather than recursively. Evidence: `make lint` failed with
+  `error: Module tests spans 472 lines, exceeding the allowed 400.` at
+  `src/stdlib/time/mod.rs:240:5`. Reading the lint's implementation confirms
+  `module_max_lines` spans each out-of-line module across its own file only, so
+  sibling modules declared in `mod.rs` each get their own budget. Impact:
+  `src/stdlib/time/tests.rs` was split into `clock_tests.rs` (the seam: where
+  `now()` reads its instant, plus the C2 query-mode guarantees), `tests.rs`
+  (clock-independent behaviour: offset parsing, formatting, `timedelta`), and
+  `tests_support.rs` (the fixtures and helpers both need), all three declared
+  under `#[cfg(test)]` in `src/stdlib/time/mod.rs`. This mirrors the existing
+  `network` and `command` test layout. The test count is unchanged at 49, so
+  the split is behaviour-preserving.
+
+- Observation: this branch predates the Makefile's `GO_BIN` curation, so
+  `make lint` cannot find `actionlint`. Evidence:
+  `make: actionlint: No such file or directory` /
+  `Makefile:204: github-actions-lint` while `/home/leynos/go/bin/actionlint`
+  exists. Impact: `make lint` must be run as
+  `PATH="$HOME/go/bin:$PATH" make lint` on this branch; the other gates are
+  unaffected. This is a branch-state artefact of the base commit, not something
+  this change introduced, and it disappears once the branch is rebased past the
+  `GO_BIN` commit.
+
 ## Decision log
 
 - **D1 — Port shape follows the `EnvReader` precedent verbatim.**

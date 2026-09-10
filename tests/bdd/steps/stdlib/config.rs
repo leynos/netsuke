@@ -17,8 +17,8 @@ use super::parsing::parse_iso_timestamp;
 /// accepted, and exercises the normalization `now()` is documented to perform.
 #[given("the stdlib clock is fixed at {instant:string}")]
 pub(crate) fn configure_stdlib_clock(world: &TestWorld, instant: &str) -> Result<()> {
-    let instant = parse_iso_timestamp(instant)?;
-    world.stdlib_clock.set(stdlib::fixed_clock(instant));
+    let parsed = parse_iso_timestamp(instant)?;
+    world.stdlib_clock.set(stdlib::fixed_clock(parsed));
     Ok(())
 }
 
