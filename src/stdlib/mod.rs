@@ -31,6 +31,7 @@ pub use network::{
 pub use path::{FILE_READ_FILTER_VALUES, FILE_READ_OUTCOME_VALUES, FILE_READ_TOTAL};
 pub(crate) use register::{is_manifest_query_disabled_error, register_manifest_query};
 pub use register::{register, register_with_config, value_from_bytes};
+pub use time::{ClockInstant, ClockProvider, fixed_clock, system_clock};
 
 use std::{
     sync::Arc,
