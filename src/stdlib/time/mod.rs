@@ -9,11 +9,13 @@ use minijinja::{
     Environment, Error, ErrorKind,
     value::{Kwargs, Value},
 };
-use time::{
-    Duration, OffsetDateTime, UtcOffset, format_description::FormatItem, macros::format_description,
-};
+use time::{Duration, UtcOffset, format_description::FormatItem, macros::format_description};
 
 use crate::localization::{self, keys};
+
+mod clock;
+pub(crate) use self::clock::WallClock;
+pub use self::clock::{ClockInstant, ClockProvider, fixed_clock, system_clock};
 
 mod format;
 use self::format::{TimeDeltaValue, TimestampValue};
@@ -40,8 +42,12 @@ const OFFSET_FMT: &[FormatItem<'static>] =
     format_description!("[offset_hour]:[offset_minute][optional [:[offset_second]]]");
 
 /// Register time helpers with the environment.
-pub(crate) fn register_functions(env: &mut Environment<'_>) {
-    env.add_function("now", |kwargs: Kwargs| now(&kwargs));
+///
+/// The clock is captured by the registered `now` function and consulted on
+/// every evaluation, so a caller that injects a provider observes it on each
+/// call rather than once at registration.
+pub(crate) fn register_functions(env: &mut Environment<'_>, clock: WallClock) {
+    env.add_function("now", move |kwargs: Kwargs| now(&kwargs, &clock));
     register_query_functions(env);
 }
 
@@ -52,14 +58,17 @@ pub(crate) fn register_query_functions(env: &mut Environment<'_>) {
 
 /// Resolve the `now` helper: the current UTC time shifted by a given offset.
 ///
+/// The instant comes from `clock`, which already normalizes to UTC; the
+/// offset argument is applied on top as a re-expression of that same instant.
+///
 /// # Errors
 ///
 /// Returns an invalid-operation error when the offset string does not parse.
-fn now(kwargs: &Kwargs) -> Result<Value, Error> {
+fn now(kwargs: &Kwargs, clock: &WallClock) -> Result<Value, Error> {
     let offset_spec: Option<String> = kwargs.get("offset")?;
     kwargs.assert_all_used()?;
 
-    let mut timestamp = OffsetDateTime::now_utc();
+    let mut timestamp = clock.read();
     if let Some(raw) = offset_spec {
         let parsed = parse_offset(&raw)?;
         timestamp = timestamp.to_offset(parsed);

@@ -4,7 +4,7 @@
 //! offsets, and that helper functions expose consistent object wrappers for
 //! downstream template evaluation.
 use super::*;
-use anyhow::{Context, Result, anyhow, ensure};
+use anyhow::{Context, Result, anyhow, bail, ensure};
 use googletest::prelude::*;
 use minijinja::{Environment, ErrorKind, context, value::Value};
 use proptest::prelude::*;
@@ -293,6 +293,70 @@ proptest! {
         let offset = format!("{sign}{hour:02}:{minute:02}:{second:02}");
         prop_assert!(parse_offset(&offset).is_err(), "expected {offset} to be rejected");
     }
+}
+
+/// Evaluate `expr`, returning the raw `MiniJinja` error it raised.
+///
+/// The typed error is returned rather than an `anyhow` one because the
+/// manifest-query marker is inspected through `minijinja::Error`; wrapping it
+/// first would hide the type the assertion needs.
+fn eval_expression_error(env: &Environment<'_>, expr: &str) -> Result<minijinja::Error> {
+    let compiled = env
+        .compile_expression(expr)
+        .with_context(|| format!("compiling expression: {expr}"))?;
+    match compiled.eval(context! {}) {
+        Ok(value) => bail!("expected {expr} to fail, but it produced {value:?}"),
+        Err(error) => Ok(error),
+    }
+}
+
+/// Constraint C2: manifest-query registration must keep refusing `now()`, so
+/// discovery metadata can never disclose host time. The refusal is asserted to
+/// name `now` rather than merely carry the marker, which rejects a copy-pasted
+/// stub registered under the wrong helper name.
+#[rstest]
+#[case::bare("now()")]
+#[case::offset("now(offset='+02:00')")]
+fn manifest_query_registration_refuses_now(#[case] expression: &str) -> Result<()> {
+    let mut env = Environment::new();
+    let _state = crate::stdlib::register_manifest_query(&mut env);
+
+    let error = eval_expression_error(&env, expression)?;
+
+    assert_that!(
+        crate::stdlib::is_manifest_query_disabled_error(&error),
+        eq(true)
+    );
+    ensure!(
+        error
+            .detail()
+            .unwrap_or_default()
+            .starts_with("now is disabled while rendering"),
+        "refusal should name the `now` helper: {error}"
+    );
+    Ok(())
+}
+
+/// The permissive half of query registration stays clock-free: it does not
+/// define `now` at all. This is the sharper half of C2 — a helper that was
+/// never declared cannot acquire a clock by having one threaded into it — and
+/// it is distinguished from the refusal above by the error kind rather than by
+/// the mere absence of a value.
+#[rstest]
+#[case::bare("now()")]
+#[case::offset("now(offset='+02:00')")]
+fn query_functions_do_not_define_now(#[case] expression: &str) -> Result<()> {
+    let mut env = Environment::new();
+    register_query_functions(&mut env);
+
+    let error = eval_expression_error(&env, expression)?;
+
+    assert_that!(error.kind(), eq(ErrorKind::UnknownFunction));
+    assert_that!(
+        crate::stdlib::is_manifest_query_disabled_error(&error),
+        eq(false)
+    );
+    Ok(())
 }
 
 #[rstest]
