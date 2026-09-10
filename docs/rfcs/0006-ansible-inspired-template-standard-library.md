@@ -150,26 +150,29 @@ Three existing mechanisms matter to this proposal.
 
 ### 3.3. Known weaknesses in the current surface
 
-Three existing gaps constrain this design and are called out so the follow-up
-work does not silently inherit them.
+Three gaps constrained this design at the time of writing and are called out so
+the follow-up work does not silently inherit them. The first two remain open;
+the third has since been closed.
 
 - **Excluded helpers do not all fail explicitly.** `register_manifest_query`
-  stubs six helpers: `env`, `glob`, `fetch`, `shell`, `grep`, and `contents`. A
-  further sixteen names registered in the full environment are absent from the
-  manifest-query environment altogether, so a manifest query reports "unknown
-  filter" or "unknown test" rather than explaining the restriction. They are
-  the filters `realpath`, `expanduser`, `size`, `linecount`, `hash`, and
-  `digest`; `which`, which is registered as both a filter and a function; the
-  functions `command_available` and `now`; and the file tests `dir`, `file`,
-  `symlink`, `pipe`, `block_device`, `char_device`, and `device`. Section 6.2
-  makes explicit failure normative, and section 14.1 schedules the repair
-  across that whole set rather than the path filters alone.
+  stubs fifteen helpers: `env`, `glob`, `fetch`, `shell`, `grep`, and
+  `contents`, then `realpath`, `expanduser`, `size`, `linecount`, `hash`,
+  `digest`, `which`, `command_available`, and `now`. Each raises a restriction
+  diagnostic rather than "unknown filter" or "unknown test". A further seven
+  names registered in the full environment are absent from the manifest-query
+  environment altogether: the file tests `dir`, `file`, `symlink`, `pipe`,
+  `block_device`, `char_device`, and `device`. Section 6.2 makes explicit
+  failure normative, and section 14.1 schedules the repair of that remaining
+  set.
 - **`manifest_query_operation_error` is not localized.** It builds its message
   with `format!` rather than a Fluent key, unlike the rest of the stdlib.
-- **`now` has no injected clock seam.** It calls `OffsetDateTime::now_utc()`
-  directly. The time helpers proposed here are pure and do not need the seam,
-  but the gap is recorded because it bounds how far time behaviour can be
-  tested deterministically.
+- **`now` had no injected clock seam.** It called `OffsetDateTime::now_utc()`
+  directly. The time helpers proposed here are pure and did not need the seam,
+  but the gap was recorded because it bounded how far time behaviour could be
+  tested deterministically. Roadmap item 7.1.1 has since closed it: `now()`
+  reads through a `ClockProvider` held by `StdlibConfig`, classified in the
+  [ADR-008](../adr-008-environment-seam-taxonomy.md) addendum for 2026-09-11
+  and answered as question 7 in section 16.
 
 ## 4. Goals and non-goals
 
@@ -1917,17 +1920,13 @@ each invent their own version of the same shared machinery.
   once clause 2 of section 6.2 is satisfied.
 - The repair of the two existing gaps recorded in section 3.3. This slice
   localizes `manifest_query_operation_error` through a Fluent key, and it adds
-  an explicit stub for every one of the sixteen names that section 3.3 records
-  as absent from the manifest-query environment, so no helper silently
+  an explicit stub for each of the seven names that section 3.3 records as
+  still absent from the manifest-query environment, so no helper silently
   disappears from a manifest query. Every stub raises the same localized
-  manifest-query restriction diagnostic. The names are:
-  - the filters `realpath`, `expanduser`, `size`, `linecount`, `hash`, and
-    `digest`;
-  - `which`, which needs a stub in both its filter form and its function form,
-    because filters and functions occupy separate namespaces;
-  - the functions `command_available` and `now`; and
-  - the tests `dir`, `file`, `symlink`, `pipe`, `block_device`, `char_device`,
-    and `device`.
+  manifest-query restriction diagnostic. The remaining names are the tests
+  `dir`, `file`, `symlink`, `pipe`, `block_device`, `char_device`, and
+  `device`; the other nine of the original sixteen are already stubbed (section
+  3.3).
 - The **maintained inventory** in
   [the standard-library guide](../stdlib-yaml-and-jinja-guide.md): one table
   distinguishing MiniJinja built-ins, existing Netsuke extensions, adopted
@@ -2098,10 +2097,11 @@ Windows host needs when generating paths for a Unix target.
 6. **Should `text_hash` gain a truncating sibling?** The existing `digest`
    filter is `hash` plus a length. If `text_hash` proves useful, `text_digest`
    is the obvious follow-on. It is not proposed here for want of a use case.
-7. **Does `now` need an injected clock seam?** Section 3.3 records the gap.
-   Nothing in this RFC requires it, because `to_datetime` and `strftime` are
-   pure, but a future slice that wants deterministic time tests will have to
-   answer it.
+7. **Does `now` need an injected clock seam?** Resolved. Section 3.3 records
+   the gap, and nothing in this RFC required the seam, because `to_datetime` and
+   `strftime` are pure. Roadmap item 7.1.1 supplied it: `now()` reads through a
+   `ClockProvider` held by `StdlibConfig`, classified in the
+   [ADR-008](../adr-008-environment-seam-taxonomy.md) addendum for 2026-09-11.
 
 ## 17. Recommendation
 

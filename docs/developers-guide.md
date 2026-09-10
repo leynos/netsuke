@@ -3968,6 +3968,19 @@ pure collection filters without environment state. Keep these registration
 functions as feature-local wiring points rather than calling them independently
 from manifest code.
 
+The stdlib's `now()` helper reads through a `ClockProvider`
+(`src/stdlib/time/clock.rs`), an `Arc`-wrapped `Fn() -> OffsetDateTime` in the
+`EnvReader` shape and for the same reason: registration requires `Send + Sync`.
+`StdlibConfig` is the clock's single owner — `with_clock` replaces the provider,
+`system_clock()` is the production adapter and the only place the helper reads
+the host clock, and `fixed_clock` supplies a deterministic instant to tests.
+Keep the seam confined to the `stdlib::time` registration path: manifest-query
+registration installs the clock-independent helpers only and keeps refusing
+`now`, and the provider is not a general time service for the crate. The clock
+is not an environment variable and no lint polices it, so
+[ADR-008](adr-008-environment-seam-taxonomy.md) supplies the shape rubric here
+but not its original scope.
+
 `CommandConfigInit` is the internal hand-off from `StdlibConfig` to command
 helpers. It carries the capability-scoped workspace root, output limits, and an
 optional `PATH` override. `CommandConfig::new` consumes the owned bundle, and

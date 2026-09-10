@@ -259,22 +259,34 @@ builds one from the case's `given.env` map: declared names return their values,
 environment is reachable only through an explicit future opt-in; the default
 reader never consults it (C2, C4).
 
-### 5.2. Clock (new seam)
+### 5.2. Clock
 
-`now()` currently calls `OffsetDateTime::now_utc()` directly
-(`src/stdlib/time/mod.rs:62`) — a gap relative to ADR-008. The stdlib time
-module gains a clock provider in the `EnvReader` shape (an `Arc` closure,
-because MiniJinja registration requires `Send + Sync`):
+Implemented. The stdlib time module owns a clock provider in the `EnvReader`
+shape (an `Arc` closure, because MiniJinja registration requires `Send + Sync`):
 
 ```rust
 pub type ClockProvider = Arc<dyn Fn() -> OffsetDateTime + Send + Sync>;
 ```
 
-Production registration wraps `OffsetDateTime::now_utc`; the test runner
-supplies a fixed instant parsed from `given.clock.now`. The seam lives in
-`StdlibConfig` alongside the existing `path_override` and `home_directory`
-knobs — the clock's single owner — and is a prerequisite refactor deliverable
-in its own right.
+It lives in `src/stdlib/time/clock.rs` with `system_clock()`, the production
+adapter wrapping `OffsetDateTime::now_utc`, and `fixed_clock(instant)`, the
+deterministic adapter. The seam is held in `StdlibConfig` alongside the existing
+`path_override` and `home_directory` knobs — the clock's single owner — and
+`with_clock` is the injection point; `register_functions` captures the provider
+when it installs `now()`, so each evaluation reads the provider again, and no
+provider-less call path can bypass it.
+
+`StdlibConfig` stores the provider in a private `WallClock` container, a
+mechanical addition this design did not name. It confines a hand-written
+`Debug` (a closure is not printable, so `StdlibConfig` could not have derived
+one) and normalizes every read to UTC, because an injected provider is free to
+return any offset while `now()` is documented to yield UTC. Manifest-query
+registration receives no clock and keeps its refusing `now` stub.
+
+The test runner's `given.clock.now` input
+([UX design §7](netsuke-test-framework-ux-design.md)) is not yet wired to this
+seam; the BDD suite drives it with an explicit clock fixture step instead. That
+wiring belongs to the runner slices, for which this seam is the prerequisite.
 
 ### 5.3. Network (policy, not transport)
 
