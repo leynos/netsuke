@@ -1447,6 +1447,10 @@ above, which are disposable.
 - [x] EP-M5 — Roadmap 7.1.1 and its four sub-bullets marked done, each mapped
   to a named artefact; `Outcomes & retrospective` completed and the plan set to
   `COMPLETE`.
+- [x] Post-completion: rebased onto `origin/main` (`3348cc0a`) with the weave
+  merge driver bypassed, then extracted `configure_stdlib` from the BDD render
+  helper in response to a CodeScene finding — evidence in
+  `Artefacts and notes` entries 12 and 13.
 
 ## Surprises & discoveries
 
@@ -1675,6 +1679,19 @@ Recorded during planning; extend during implementation.
   misspelling of `miss`; the fix is to avoid the hyphen, not to add an ignore.
   Both are now `handwritten` and `wrongly wired`. Markdown gates must be run
   through `make markdownlint`, not `make check-fmt` alone.
+
+- Observation: a branch inherits the complexity bill for the decision points it
+  adds, even to a function it did not write. Evidence: "CodeScene Code Health
+  Review (main)" failed on `1b87a1e5` with a `Complex Method` finding against
+  `tests/bdd/steps/stdlib/rendering.rs::render_template_with_context`, scoring
+  the file 10.00 at the base and 9.69 on the branch. The method predates this
+  work, but the branch's own edit — the three-line clock application added by
+  `fdffbd4e` — is what carried it past CodeScene's threshold, and the check
+  reports its delta against `main` as the base. Every local gate was green
+  throughout, because Clippy has no complexity ceiling and no repository lint
+  enumerates BDD step helpers. Impact: a green local gate set is not a green
+  pull request, and the maintainer's request to split the method (entry 13) is
+  the right response rather than an unrelated tidy-up.
 
 ## Decision log
 
@@ -2174,6 +2191,69 @@ To be populated during implementation. Required entries:
     exercise is identical to what `9ebb539f` exercised, minus the record of it.
     If a future commit changes anything outside this plan, that argument lapses
     and the gates must be re-run.
+
+12. The branch was rebased onto `origin/main` at `3348cc0a` (the merge of PR
+    #644/#663), because the PR's base had moved 20 commits since it opened. All
+    16 branch commits replayed and the tip became `1b87a1e5`.
+
+    The weave merge driver was bypassed for the whole replay with
+    `git -c core.attributesFile=/dev/null rebase origin/main`, rather than
+    trusted to three-way-merge the branch. Weave is configured globally for
+    `*.rs` and `*.md` in this environment, and its failure mode *in this
+    repository* is a clean exit reporting "very_high confidence" while silently
+    duplicating whole sections of long Markdown — recorded against this
+    repository's design documents, where it turned 21 task IDs into 42 and grew
+    a file from 1369 to 1571 lines. A tool that reports success while corrupting
+    its input cannot be audited cheaply, and this plan is 2100 lines of
+    Markdown. Bypassing it costs nothing when the replay is clean and removes
+    the one failure mode that would be invisible in review.
+
+    Only two files overlapped between the branch and `origin/main`:
+    `docs/developers-guide.md` and `src/stdlib/mod.rs`. Correctness of the
+    replay was checked arithmetically rather than by reading a diff: for every
+    changed file the rebased result decomposes exactly as base + branch delta +
+    main delta; the changed-file sets agree; this plan's structural counts are
+    unchanged; and no conflict marker survives anywhere in the tree.
+
+    The four requested gates were re-run over `1b87a1e5` and all exited 0:
+    `make check-fmt` (`56 files already formatted`), `make typecheck`
+    (`All checks passed!`), `make lint` (`10.00/10`), and `make test`
+    (`Summary [  60.673s] 2879 tests run: 2879 passed, 3 skipped`, doctests
+    `86 passed / 2 passed / 32 passed`). The count moved from EP-M3's 2830 to
+    2879 because `origin/main` brought 49 tests of its own; none of this
+    branch's tests changed.
+
+13. `configure_stdlib` was extracted from `render_template_with_context` at
+    `e1568a1b`, in response to the one pull-request gate that was red: CodeScene
+    "Code Health Review (main)" failed with a `Complex Method` finding against
+    `tests/bdd/steps/stdlib/rendering.rs::render_template_with_context`, docking
+    the file from 10.00 to 9.69. The method predates this work, but the branch
+    edited it in `fdffbd4e` — adding the clock application — and CodeScene
+    scores the delta against `main`, so the finding belongs to this change. No
+    local gate can see it: Clippy has no complexity ceiling, and no repository
+    lint enumerates BDD step helpers.
+
+    The extraction is behaviour-preserving by construction and by test. The
+    helper receives the already-open `Dir` and the `Utf8PathBuf` that
+    `ensure_workspace` returns (borrowed, which also retired the `root.clone()`
+    the old call required), applies the seven options in their existing order —
+    network policy, clock, home override, response limit, command output limit,
+    command stream limit, `PATH` override — and returns
+    `Result<StdlibConfig>`. The four error-context strings are unchanged and
+    still attached to the same calls. What remains in
+    `render_template_with_context` is exactly its half of the job: localizer,
+    workspace, environment, stdlib registration, impure-state reset, render,
+    and storing either the output or the error in `TestWorld`.
+
+    `render_template_with_context` fell from cyclomatic complexity 10 to 3, and
+    the helper measures 8 — under CodeScene's threshold. All five gates were
+    re-run over the exact bytes committed as `e1568a1b`, because the helper runs
+    on the BDD path and a green full suite would hide a step that stopped
+    matching: `make check-fmt`, `make typecheck`, `make lint` (10.00/10),
+    `cargo nextest run -E 'binary(bdd_tests)'`
+    (`Summary [   5.322s] 260 tests run: 260 passed, 0 skipped`) and `make test`
+    (`Summary [  67.265s] 2879 tests run: 2879 passed, 3 skipped`). CodeScene's
+    Code Health Review then passed on `e1568a1b`, 50 seconds.
 
 One lesson about evidence discipline, recorded because it cost a re-run: gate
 logs are named per branch, so a second run over the same branch silently
