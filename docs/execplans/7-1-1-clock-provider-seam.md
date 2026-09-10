@@ -6,7 +6,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: IN PROGRESS (EP-M0 through EP-M4 complete; EP-M5 in progress)
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -1444,7 +1444,9 @@ above, which are disposable.
 - [x] EP-M4 — ADR-008 addendum plus `Implementation references` entry,
   developers' guide "Environment and template ports", technical design §5.2,
   RFC 0006 §3.3 and §16 question 7; `make check-fmt` green.
-- [ ] EP-M5 — Roadmap 7.1.1 marked done.
+- [x] EP-M5 — Roadmap 7.1.1 and its four sub-bullets marked done, each mapped
+  to a named artefact; `Outcomes & retrospective` completed and the plan set to
+  `COMPLETE`.
 
 ## Surprises & discoveries
 
@@ -1859,32 +1861,75 @@ Recorded during planning; extend during implementation.
 
 ## Outcomes & retrospective
 
-To be completed at EP-M5.
+Complete. The stdlib `now()` helper reads its instant through an injected
+`ClockProvider` owned by `StdlibConfig`, every evaluation reads the provider
+again, and the no-provider path is behaviourally unchanged:
+`WallClock::default` installs `system_clock()`, the ambient adapter.
+Manifest-query registration still refuses `now`. The change lands in
+`src/stdlib/time/clock.rs`, `src/stdlib/time/mod.rs`,
+`src/stdlib/config/mod.rs`, the registration path in `src/stdlib/register.rs`,
+one integration module, and one BDD feature; unit tests stayed at 49 across the
+test-module split.
 
-Before setting this plan to `COMPLETE`, reconcile discoveries against the
-conformance basis:
+Reconciliation against the conformance basis:
 
-- Update `docs/netsuke-test-framework-technical-design.md` §5.2 so it records
-  the implemented state rather than a proposal — in particular, the `WallClock`
-  container (D2) is a mechanical addition the design did not name, and §15
-  requires the document be kept in step.
-- Confirm ADR-008's addendum records the classification, states that the
-  taxonomy is being applied to a non-environment-variable ambient input (D11),
-  and that its `Implementation references` list names
-  `src/stdlib/time/clock.rs`.
-- Answer RFC 0006 §16 open question 7 ("Does `now` need an injected clock
-  seam?") in that document, and update its §3.3 gap entry to record that the
-  gap is closed. This plan is the "future slice" that question anticipated, so
-  leaving the question open after merging would be a stale upstream artefact.
-- Confirm `docs/developers-guide.md`'s "Environment and template ports"
-  section and ADR-008 remain mutually consistent — ADR-008's own `Consequences`
-  section requires this.
-- Confirm every roadmap 7.1.1 bullet maps to a passing named artefact.
-- If any discovery falsified an assumption in the technical design or RFC
-  0007, update that document rather than working around it, and record the
-  change here.
+- Technical design §5.2 now records the implemented state, including the
+  `WallClock` container (D2) the design did not name; §15's synchronization
+  requirement is satisfied in the same change set as the governing ADR.
+- ADR-008's addendum records the classification, states that the taxonomy is
+  applied to a non-environment-variable ambient input (D11), and its
+  `Implementation references` list names `src/stdlib/time/clock.rs` along with
+  the config and registration call sites.
+- RFC 0006 §16 question 7 is answered and its §3.3 gap entry records the gap
+  closed, both pointing at the addendum. This plan was the "future slice" the
+  question anticipated, so leaving it open would have been a stale upstream
+  artefact.
+- `docs/developers-guide.md`'s "Environment and template ports" section and
+  ADR-008 were edited in one commit, as ADR-008's `Consequences` requires.
+- Every roadmap 7.1.1 bullet maps to a named artefact: registration through
+  `StdlibConfig` to `config/mod.rs` and `register.rs`; ambient preservation to
+  `WallClock::default` plus the integration and BDD ambient coverage; the
+  injected-value, repeated-call, and ambient-fallback tests to `clock_tests.rs`,
+  `tests/std_filter_tests/time_functions.rs`, and `stdlib_time.feature`; the
+  classification to the ADR-008 addendum.
+- No discovery falsified an assumption in the technical design or RFC 0007, so
+  neither needed a correction beyond §5.2's proposal-to-implemented rewrite.
 
-Do not mark `COMPLETE` while any upstream change or deviation is unrecorded.
+Upstream changes and deviations, all recorded above or in
+`Surprises & discoveries`:
+
+- The ADR-008 addendum is dated 2026-09-11 rather than the plan's
+  `2026-09-08`, matching the file's convention of dating each entry when it is
+  written.
+- RFC 0006 §3.3's first gap and §14.1's slice-0 deliverable were corrected:
+  nine of the sixteen names recorded as absent from manifest-query registration
+  have since been stubbed, leaving the seven file tests. This is a
+  documentation correction only, with no runtime change; it was made in place
+  because the stale claim sits in the same bullet as the edit this plan
+  required.
+- `make lint` on this branch requires `PATH="$HOME/go/bin:$PATH"`, because the
+  base commit predates the Makefile's `GO_BIN` curation. The workaround
+  disappears once the branch is rebased past that commit.
+
+Follow-on work, not part of this plan:
+
+- Roadmap item 7.1.2 wires the runner's `given.clock.now` input to this seam;
+  the BDD suite uses an explicit clock fixture step until then.
+- RFC 0006 slice 0's remaining stub work is the seven file tests (`dir`,
+  `file`, `symlink`, `pipe`, `block_device`, `char_device`, `device`).
+
+Retrospective:
+
+- The seam's contract turned on a near-miss API distinction
+  (`to_offset` versus `replace_offset`) that only measurement settled. The
+  mutation exercise earned its keep by surfacing it; a plan that had trusted
+  the first mutation's pass/fail reading would have recorded the wrong lesson.
+- Denied lints are not uniformly visible. `clippy::shadow_reuse` failed the
+  gate but not `cargo check --all-targets` with `-D warnings`, and the
+  module-size cap is per file rather than recursive. Both are recorded so later
+  milestones budget for the real gate, not a proxy.
+- Test-module splits that preserve the test count are a cheap way to satisfy
+  the per-file cap without weakening coverage.
 
 ## Artefacts and notes
 
