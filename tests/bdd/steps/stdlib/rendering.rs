@@ -3,6 +3,7 @@
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
 use crate::bdd::types::{ContextKey, ContextValue, TemplateContent};
 use anyhow::{Context, Result};
+use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{Environment, context, value::Value};
 use netsuke::stdlib::{self, ClockProvider, NetworkPolicy, StdlibConfig};
@@ -60,17 +61,13 @@ fn ensure_stdlib_localizer(world: &TestWorld) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn render_template_with_context(
-    world: &TestWorld,
-    template: &TemplateContent,
-    ctx: Value,
-) -> Result<()> {
-    ensure_stdlib_localizer(world)?;
-    let root = ensure_workspace(world)?;
-    let mut env = Environment::new();
-    let workspace = Dir::open_ambient_dir(&root, ambient_authority())
-        .context("open stdlib workspace directory")?;
-    let mut config = StdlibConfig::new(workspace)?.with_workspace_root_path(root.clone())?;
+/// Build the stdlib configuration a rendering step runs with.
+///
+/// The options are applied in a fixed order — network policy, clock, home
+/// override, the response and command byte limits, then the `PATH` override —
+/// so a scenario that sets several of them renders the same way every run.
+fn configure_stdlib(world: &TestWorld, workspace: Dir, root: &Utf8Path) -> Result<StdlibConfig> {
+    let mut config = StdlibConfig::new(workspace)?.with_workspace_root_path(root)?;
 
     // Extract config from world before applying
     let render_cfg = extract_render_config(world);
@@ -102,6 +99,21 @@ pub(crate) fn render_template_with_context(
     if let Some(path) = world.stdlib_path_override.borrow().as_ref() {
         config = config.with_path_override(path.clone());
     }
+
+    Ok(config)
+}
+
+pub(crate) fn render_template_with_context(
+    world: &TestWorld,
+    template: &TemplateContent,
+    ctx: Value,
+) -> Result<()> {
+    ensure_stdlib_localizer(world)?;
+    let root = ensure_workspace(world)?;
+    let mut env = Environment::new();
+    let workspace = Dir::open_ambient_dir(&root, ambient_authority())
+        .context("open stdlib workspace directory")?;
+    let config = configure_stdlib(world, workspace, &root)?;
 
     let state = stdlib::register_with_config(&mut env, config)?;
     state.reset_impure();
