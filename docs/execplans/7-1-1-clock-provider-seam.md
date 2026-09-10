@@ -1449,8 +1449,8 @@ above, which are disposable.
   `COMPLETE`.
 - [x] Post-completion: rebased onto `origin/main` (`3348cc0a`) with the weave
   merge driver bypassed, then extracted `configure_stdlib` from the BDD render
-  helper in response to a CodeScene finding — evidence in
-  `Artefacts and notes` entries 12 and 13.
+  helper in response to a CodeScene finding — evidence in `Artefacts and notes`
+  entries 12 and 13.
 
 ## Surprises & discoveries
 
