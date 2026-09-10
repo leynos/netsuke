@@ -1615,6 +1615,23 @@ Recorded during planning; extend during implementation.
   this change introduced, and it disappears once the branch is rebased past the
   `GO_BIN` commit.
 
+- Observation: the plan's mutation 3, written literally as
+  `timestamp + Duration::seconds(offset)`, is a *no-op* and therefore does not
+  kill the test it names. Evidence: `OffsetDateTime::replace_offset` preserves
+  the **wall-clock** time, not the instant — measured directly,
+  `datetime!(2026-06-08 12:00:00 UTC).replace_offset(+05:30)` yields
+  `12:00:00 +05:30` with `unix_timestamp` 1780900200, which is 19 800 s
+  *before* the original. Adding `Duration::seconds(19_800)` back moves the
+  instant forward by exactly that much, so the two errors cancel and
+  `now_offset_preserves_the_instant` passes. Impact: the mutation was re-run as
+  `(timestamp + Duration::seconds(offset_seconds)).to_offset(parsed)`, which
+  moves the instant while still setting the requested offset; that version is
+  rejected with minimal failing input `+00:00:01`. The distinction matters
+  beyond the exercise: `to_offset` (preserve the instant) and `replace_offset`
+  (preserve the wall time) are near-miss names, and the seam's contract is the
+  former. `WallClock::read` and `now()` both use `to_offset`, and the property
+  test now pins that choice.
+
 ## Decision log
 
 - **D1 — Port shape follows the `EnvReader` precedent verbatim.**
@@ -1928,7 +1945,44 @@ To be populated during implementation. Required entries:
    `make typecheck`, `make lint` (with `PATH="$HOME/go/bin:$PATH"`),
    `make markdownlint` (133 files, 0 errors) and `make nixie`.
 
-6. The four mutation outcomes from `Validation and acceptance`.
+6. The six mutation outcomes from `Validation and acceptance`. Each mutation was
+   applied to the working tree, the named test run, and the file reverted with
+   `git checkout -- <path>`; the tree at HEAD is unmutated. Per-mutation revert
+   was used in place of one scratched-up commit because the mutations are not
+   mutually compatible — M1 and M2 both rewrite `register_functions`, and M3
+   and M6 both edit the read path — so a single commit containing "all six" is
+   not constructible. Log:
+   `/tmp/mutations-netsuke-7-1-1-clock-provider-seam.log`.
+
+   | #   | Mutation                                           | Named test                                | Outcome                                                                |
+   | --- | -------------------------------------------------- | ----------------------------------------- | ---------------------------------------------------------------------- |
+   | 1   | `clock.read()` → `time::OffsetDateTime::now_utc()` | `now_uses_injected_clock`                 | rejected: all 4 cases fail                                             |
+   | 2   | Instant baked in at registration                   | `now_reads_the_provider_on_every_call`    | rejected: 1/1 fails                                                    |
+   | 3   | Offset applied as an arithmetic shift              | `now_offset_preserves_the_instant`        | rejected: minimal failing input `sign="+", hour=0, minute=0, second=1` |
+   | 4   | Registration passes `WallClock::default()`         | unit / integration / BDD                  | rejected by the integration layer only                                 |
+   | 5   | Refusing `now` stub deleted                        | `manifest_query_registration_refuses_now` | rejected: both cases fail                                              |
+   | 6   | UTC normalization removed from `WallClock::read`   | `now_uses_injected_clock`                 | rejected: `case_4_non_utc` fails, the 3 UTC cases pass                 |
+
+   Mutation 4 is the load-bearing one, and it behaved exactly as predicted:
+   `cargo nextest run -E 'test(stdlib::time)'` reported
+   `Summary [0.084s] 49 tests run: 49 passed, 2697 skipped` — every unit test
+   still green — while `binary(std_filter_tests)` failed and both
+   `stdlib_time_a_fixed_clock*` scenarios failed. Unit coverage alone cannot
+   detect a mis-wired registration.
+
+   Mutation 5 also confirms the two OBL-5 cases are not redundant: with the
+   stub gone, `query_functions_do_not_define_now` still passes
+   (`Summary [0.010s] 2 tests run: 2 passed`) because the permissive half was
+   never registering `now` in the first place. Only the refusal case catches
+   the deletion, and only the absence case catches a leak of `now` into the
+   permissive half.
+
+   Applying mutation 3 left a genuine `proptest` shrink
+   (`sign = "+", hour = 0, minute = 0, second = 1`) that was committed to
+   `proptest-regressions/stdlib/time/clock_tests.txt`, following the precedent
+   of `proptest-regressions/stdlib/path/home_tests.txt`, which records a
+   mutation-derived seed the same way. It passes against the unmutated code.
+
 7. The final gate transcript tails for `check-fmt`, `typecheck`, `lint`, and
    `test`.
 
