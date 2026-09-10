@@ -2158,6 +2158,23 @@ To be populated during implementation. Required entries:
     reviewed before CodeRabbit's own PR-level review runs — and was
     deliberately left to the maintainer rather than taken here.
 
+11. Branch-tip validation at `9ebb539f`, taken because entries 8 and 9
+    evidence `d71e18ed` and two commits had landed since. All seven gates
+    exited 0; `make test` reported
+    `Summary [  56.738s] 2830 tests run: 2830 passed, 3 skipped`, doc-comment
+    coverage held at 99.15%, and CodeRabbit completed on the first attempt with
+    23 files reviewed and zero findings.
+
+    This closes the evidence chain, with one property worth stating plainly so
+    a later reader does not chase it: each commit that records a validation
+    moves the tip past the thing it records. Entry 11 evidences `9ebb539f`, and
+    the commit carrying entry 11 is itself past that. The recursion terminates
+    because the code surface has been frozen since `d71e18ed` — every later
+    commit touches only this file — so what a fresh run over the new tip would
+    exercise is identical to what `9ebb539f` exercised, minus the record of it.
+    If a future commit changes anything outside this plan, that argument lapses
+    and the gates must be re-run.
+
 One lesson about evidence discipline, recorded because it cost a re-run: gate
 logs are named per branch, so a second run over the same branch silently
 overwrites the first run's transcript. Evidence is only as fresh as the HEAD it
