@@ -1542,12 +1542,15 @@ Install the pinned YAML linter locally with
 installs that exact version. Run the workflow checks with
 `make github-actions-lint` after installing both linters.
 
-The Makefile resolves `actionlint` from the `PATH` it curates for its recipes,
-which includes the Go tool directory: `$GOBIN` when set, otherwise
-`$GOPATH/bin`, otherwise `$HOME/go/bin`. A binary installed with `go install`
-therefore needs no further setup, and the same curated `PATH` carries
-`~/.cargo/bin`, `~/.local/bin`, and `~/.bun/bin` regardless of the calling
-shell. Override `GO_BIN` to name a different directory, or pass
+The Makefile resolves `actionlint` in the recipe shell, using the `PATH` it
+curates for its recipes, which includes the Go tool directory: `$GOBIN` when
+set, otherwise `$GOPATH/bin`, otherwise `$HOME/go/bin`. Nothing is resolved
+while Make parses the file, so the curated `PATH`, not the caller's, decides
+which binary runs, and a failed lookup names both the configured `ACTIONLINT`
+value and `$GO_BIN/actionlint` on standard error. A binary installed with
+`go install` therefore needs no further setup, and the same curated `PATH`
+carries `~/.cargo/bin`, `~/.local/bin`, and `~/.bun/bin` regardless of the
+calling shell. Override `GO_BIN` to name a different directory, or pass
 `ACTIONLINT=/path/to/actionlint` to use a binary elsewhere; CI does exactly
 that with its checked-out copy.
 

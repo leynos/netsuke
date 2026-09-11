@@ -17,9 +17,14 @@ DOC_COVERAGE_TOOLCHAIN ?= $(shell awk -F'"' '/^[[:space:]]*channel[[:space:]]*=/
 export DOC_COVERAGE_THRESHOLD DOC_COVERAGE_TOOLCHAIN
 
 APP ?= netsuke
-CARGO ?= $(shell command -v cargo 2>/dev/null || printf '%s' "$$HOME/.cargo/bin/cargo")
-# CARGO is resolved above before it is exported: `export` alone would define
-# the variable empty and shadow the `?=` fallback for every recipe.
+# A bare command name, resolved by the recipe shell. That shell is the only one
+# that receives the curated PATH below, which is where `$HOME/.cargo/bin` is
+# added; a parse-time `command -v` probe would query the environment Make was
+# started with instead, and what that environment exports to a shell function
+# is neither documented nor stable across Make releases.
+CARGO ?= cargo
+# The default must be defined before the export: `export CARGO` on its own
+# would define the variable empty and shadow the `?=` default for every recipe.
 export CARGO
 # Pass `--locked` through only when a caller asks for lockfile verification.
 # Keeping the default empty preserves the interactive inner-loop behaviour.
@@ -58,7 +63,9 @@ DEV_FAST_PREFIX ?= $(HOME)/.local
 export MOLD_VERSION_FILE MOLD_SHA256SUMS_FILE
 export DEV_FAST_CONFIG DEV_FAST_PREFIX
 DEV_FAST_TOOLCHAIN = $$(awk -F'"' '/^[[:space:]]*channel[[:space:]]*=/ { print $$2; exit }' "$$RUST_TOOLCHAIN_FILE")
-MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
+# Command name, resolved by the recipe shell from the curated PATH, which
+# carries `$HOME/.bun/bin` where the global markdownlint install lands.
+MDLINT ?= markdownlint-cli2
 NIXIE ?= nixie
 YAMLLINT ?= yamllint
 # `go install` writes to `$GOBIN` when set, otherwise `$GOPATH/bin`, otherwise
@@ -66,13 +73,15 @@ YAMLLINT ?= yamllint
 # it once here and curate it on PATH below, next to the other user tool
 # directories.
 GO_BIN ?= $(if $(GOBIN),$(GOBIN),$(if $(GOPATH),$(GOPATH)/bin,$(HOME)/go/bin))
-# Exported so the ACTIONLINT fallback below can name the directory from the
-# recipe shell rather than interpolating a path into the command line.
+# Exported so the `github-actions-lint` preflight can name the directory from
+# the recipe shell rather than interpolating a path into the command line.
 export GO_BIN
-# Resolve actionlint the way CARGO is resolved above. A bare `actionlint` would
-# depend entirely on the caller's PATH and report a missing binary as exit 127
-# with no hint of where it looked; the fallback names the Go tool directory.
-ACTIONLINT ?= $(shell command -v actionlint 2>/dev/null || printf '%s' "$$GO_BIN/actionlint")
+# Command name, resolved by the recipe shell like CARGO and MDLINT above, so an
+# absolute `ACTIONLINT=/path/to/actionlint` still overrides it (CI does that).
+# The `github-actions-lint` preflight reports the Go tool directory when the
+# lookup fails, instead of letting the recipe die with a bare exit 127.
+ACTIONLINT ?= actionlint
+export ACTIONLINT
 # Single source of truth for the typos version; the markdownlint target and CI
 # both consume it, so the Makefile and CI cannot drift apart.
 TYPOS_VERSION ?= 1.48.0
@@ -213,8 +222,19 @@ lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
 	# `test_support::fs` exemption from test_support/dylint.toml.
 	cd test_support && DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(WHITAKER) --all --no-deps --package test_support -- --all-targets --all-features
 
+# actionlint is resolved in the recipe shell below, never while Make parses the
+# file: only the recipe shell receives the curated PATH, so a parse-time probe
+# can report a Go-installed actionlint as missing. Checking in the shell also
+# keeps the diagnostic beside the invocation it explains.
 github-actions-lint: ## Validate GitHub Actions workflows
 	$(YAMLLINT) --config-file .yamllint.yml .github/workflows
+	@command -v "$$ACTIONLINT" >/dev/null 2>&1 || { \
+		printf '%s\n' \
+			"actionlint could not be run: ACTIONLINT is '$$ACTIONLINT'." \
+			"Install it with go (go install github.com/rhysd/actionlint/cmd/actionlint@latest)," \
+			"which writes $$GO_BIN/actionlint, or set ACTIONLINT=/path/to/actionlint." >&2; \
+		exit 1; \
+	}
 	$(ACTIONLINT)
 
 doc-coverage: doc-coverage-test ## Verify aggregate Rustdoc doc-comment coverage meets the threshold
