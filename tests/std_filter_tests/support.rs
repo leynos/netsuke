@@ -12,10 +12,18 @@ pub(crate) type Workspace = (tempfile::TempDir, Utf8PathBuf);
 
 pub(crate) mod fallible {
     //! Fallible fixture builders that preserve setup diagnostics for callers.
+    //!
+    //! Fixtures standing in for a special file type — a symlink, a FIFO, a
+    //! device — obey one invariant: a special-file policy test must create the
+    //! requested file type or skip because that file type is unavailable. It
+    //! must not substitute a regular file. A regular-file stand-in silently
+    //! changes what the test exercises, so the policy goes unverified while the
+    //! test still reports a verdict — and a fixture that hands back a regular
+    //! file where a symlink was requested inverts the assertion outright.
 
     use super::{Workspace, stdlib};
     use anyhow::{Context, Result, anyhow};
-    use camino::Utf8PathBuf;
+    use camino::{Utf8Path, Utf8PathBuf};
     use cap_std::{ambient_authority, fs_utf8::Dir};
     use minijinja::{Environment, context};
     use netsuke::stdlib::{StdlibConfig, StdlibState};
@@ -83,6 +91,12 @@ pub(crate) mod fallible {
         stdlib_env_with_state().map(|(env, _)| env)
     }
 
+    /// Build a workspace holding the regular `file` fixture (contents `data`)
+    /// and the `lines.txt` fixture.
+    ///
+    /// No symlink is created here: the workspace deliberately holds only file
+    /// types every platform can provide. Callers needing a symlink ask
+    /// [`file_symlink_fixture`] for one and honour its availability result.
     pub(crate) fn filter_workspace() -> Result<Workspace> {
         let temp = tempdir().context("create standard filter workspace")?;
         let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
@@ -91,15 +105,67 @@ pub(crate) mod fallible {
             .context("open filter workspace directory")?;
         dir.write("file", b"data")
             .context("write fixture file 'file'")?;
-        #[cfg(unix)]
-        dir.symlink("file", "link")
-            .context("create fixture symlink")?;
-        #[cfg(not(unix))]
-        dir.write("link", b"data")
-            .context("create fixture link copy")?;
         dir.write("lines.txt", b"one\ntwo\nthree\n")
             .context("write fixture file 'lines.txt'")?;
         Ok((temp, root))
+    }
+
+    /// Create the workspace's real file symlink, `<root>/link` -> `file`, and
+    /// report the link's path.
+    ///
+    /// `Ok(None)` means this host cannot provide a file symlink at all: either
+    /// the platform has no symlink support, or Windows refused for want of
+    /// `SeCreateSymbolicLinkPrivilege` and Developer Mode — the environmental
+    /// `ERROR_PRIVILEGE_NOT_HELD` condition. Every other failure is a genuine
+    /// setup fault and propagates.
+    ///
+    /// Callers skip their symlink-specific assertions on `Ok(None)`. They must
+    /// not fall back to a regular file: a special-file policy test must create
+    /// the requested file type or skip because that file type is unavailable.
+    /// It must not substitute a regular file.
+    ///
+    /// # Errors
+    ///
+    /// Returns the setup error when the platform can create symlinks but this
+    /// one was not created.
+    pub(crate) fn file_symlink_fixture(root: &Utf8Path) -> Result<Option<Utf8PathBuf>> {
+        #[cfg(unix)]
+        {
+            let dir = Dir::open_ambient_dir(root, ambient_authority())
+                .context("open filter workspace for the symlink fixture")?;
+            dir.symlink("file", "link")
+                .context("create fixture symlink 'link' -> 'file'")?;
+            Ok(Some(root.join("link")))
+        }
+        #[cfg(windows)]
+        {
+            let link = root.join("link");
+            match std::os::windows::fs::symlink_file("file", &link) {
+                Ok(()) => Ok(Some(link)),
+                Err(err) if is_symlink_privilege_error(&err) => Ok(None),
+                Err(err) => Err(err).context("create fixture symlink 'link' -> 'file'"),
+            }
+        }
+        #[cfg(not(any(unix, windows)))]
+        {
+            let _ = root;
+            Ok(None)
+        }
+    }
+
+    /// Whether `err` is Windows declining a symlink for want of
+    /// `SeCreateSymbolicLinkPrivilege` and Developer Mode.
+    ///
+    /// Only that documented environmental condition reports "symlink
+    /// unavailable"; callers surface anything else as a setup failure. Matching
+    /// the raw status rather than `PermissionDenied` keeps an ACL denial on the
+    /// workspace visible instead of silently skipping the symlink assertions.
+    #[cfg(windows)]
+    fn is_symlink_privilege_error(err: &std::io::Error) -> bool {
+        /// Status `CreateSymbolicLink` reports when neither the privilege nor
+        /// Developer Mode is available.
+        const ERROR_PRIVILEGE_NOT_HELD: i32 = 1314;
+        err.raw_os_error() == Some(ERROR_PRIVILEGE_NOT_HELD)
     }
 
     pub(crate) fn render<'a>(

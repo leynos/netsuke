@@ -5,6 +5,7 @@
 //! that can only clamp), the default no-follow regular-file open (symlinks and
 //! FIFOs rejected), and the `follow_symlinks` opt-in.
 use anyhow::{Context, Result, bail, ensure};
+use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{ErrorKind, context};
 use rstest::rstest;
@@ -28,6 +29,30 @@ struct PolicyRender<'a> {
     root: &'a camino::Utf8Path,
     /// Path the template reads.
     path: &'a camino::Utf8Path,
+}
+
+/// Assert that `link` really is a symlink, failing setup when it is not.
+///
+/// The metadata read does not follow the link, so a regular file sitting at the
+/// same path cannot pass for one. A special-file policy test must create the
+/// requested file type or skip because that file type is unavailable; it must
+/// not substitute a regular file, which here would invert the assertion — the
+/// filters would be expected to reject a perfectly ordinary file.
+fn require_real_symlink(root: &Utf8Path, link: &Utf8Path) -> Result<()> {
+    let dir = Dir::open_ambient_dir(root, ambient_authority())
+        .with_context(|| format!("open workspace root {root} to stat the symlink fixture"))?;
+    let name = link
+        .file_name()
+        .with_context(|| format!("symlink fixture {link} has no file name"))?;
+    let metadata = dir
+        .symlink_metadata(Utf8Path::new(name))
+        .with_context(|| format!("stat symlink fixture {link}"))?;
+    ensure!(
+        metadata.file_type().is_symlink(),
+        "fixture {link} is not a symlink; the symlink policy cannot be exercised \
+         without one, and substituting a regular file would invert the assertions"
+    );
+    Ok(())
 }
 
 /// Render a bounded-read template, returning the raw result for assertions.
@@ -172,14 +197,15 @@ fn hash_and_digest_enforce_the_budget() -> Result<()> {
 #[rstest]
 fn reading_filters_reject_symlinks_by_default() -> Result<()> {
     let (_temp, root) = fallible::filter_workspace()?;
-    if !root.join("link").exists() {
-        return Ok(()); // Non-Unix workspaces ship a plain copy instead.
-    }
-    let link = root.join("link");
+    let Some(link) = fallible::file_symlink_fixture(&root)? else {
+        return Ok(()); // This host cannot create symlinks; nothing to police.
+    };
+    require_real_symlink(&root, &link)?;
     for (name, template) in [
         ("contents_symlink", "{{ path | contents }}"),
         ("linecount_symlink", "{{ path | linecount }}"),
         ("hash_symlink", "{{ path | hash }}"),
+        ("digest_symlink", "{{ path | digest(8, 'sha256') }}"),
     ] {
         let result = render_with_file_read_limit(PolicyRender {
             limit: 1024,
@@ -212,15 +238,16 @@ fn reading_filters_reject_symlinks_by_default() -> Result<()> {
 #[rstest]
 fn follow_symlinks_opt_in_reads_the_link_target() -> Result<()> {
     let (_temp, root) = fallible::filter_workspace()?;
-    if !root.join("link").exists() {
+    let Some(link) = fallible::file_symlink_fixture(&root)? else {
         return Ok(());
-    }
+    };
+    require_real_symlink(&root, &link)?;
     let rendered = render_with_file_read_limit(PolicyRender {
         limit: 1024,
         name: "contents_follow",
         template: "{{ path | contents(follow_symlinks=true) }}",
         root: &root,
-        path: &root.join("link"),
+        path: &link,
     })?
     .context("render with follow_symlinks")?;
     ensure!(
