@@ -226,6 +226,27 @@ Hard invariants. Violating one requires escalation, not a workaround.
   registry contents are confirmed unchanged, so `EP-M1` is unblocked. One
   further correction: `D5` rule 2's claim that all three rename rows say
   `Reject` is wrong for `hash`, whose row reads "Accept as `text_hash`".
+- [x] (2026-09-11) `EP-M1` stage A/B derivation, re-verified against RFC 0006
+  before the parser was written. Confirmed: 55 accept rows yielding 55 names
+  with no alias groups among them, 6 defer names, 67 reject names, an accepted
+  set of 60, and a deny set of 71. Every membership witness in `COV-2`'s
+  non-vacuity list holds (`is_file`, `is_dir`, `is_link`, `quote`, `fileglob`,
+  `lookup`, `win_dirname`, `expanduser` all denied; `basename`, `dirname`,
+  `abs`, `glob`, `shell_quote`, `splitdrive`, `text_hash` all permitted), and
+  `hash` is correctly neither — it is an existing helper RFC 0006 leaves
+  unchanged, so it leaves scope entirely rather than counting as accepted. **
+  `EP-M0`'s class-split recovery was falsified**: the recorded rule yields 8
+  alias / 24 exists / 18 principle, not table 11's 22/10/18. The *principle*
+  third is right and every principle row is backtick-free, but the 32-row
+  remainder splits 8/24 against the table's 10/22, the difference being exactly
+  the two rename rows `win_splitdrive` and `fileglob`. Recovering 22/10/18
+  requires special-casing those two out of *exists* while leaving `now` — also
+  a reject row naming an existing helper in backticked call form — inside it,
+  with nothing in the document to distinguish them. The split is therefore
+  **not derivable** and `COV-2` does not assert it; it asserts the parseable
+  totals plus that table 11's three class counts sum to the reject-row count.
+  Amended in place: `D10`'s tail, `COV-2`'s closing note, the audit table's
+  last row, and the `Surprises` bullet that had recorded the rule as working.
 - [ ] `EP-M1` Land the coverage test, `ADR-021`, the RFC 0006 corrections and
   reservations, and the roadmap 6.1.1 rewrite. Ship as its own pull request.
 - [ ] `EP-M2` Write the literal child-RFC template and one worked section 5.
@@ -315,19 +336,20 @@ The audit re-derived every count in this plan mechanically from
 tracked; the derivation it performs is reimplemented in the coverage test at
 `EP-M1`). Results, with the plan's claims alongside:
 
-| Quantity                      | Plan claims | Derived  | Verdict      |
-| ----------------------------- | ----------- | -------- | ------------ |
-| Accept rows in section 7      | 55          | 55       | agree        |
-| Defer rows in section 7       | 6           | 6        | agree        |
-| Reject rows in section 7      | 50          | 50       | agree        |
-| New Netsuke helpers           | 57          | 57       | agree        |
-| Optioned existing helpers     | 3           | 3        | agree        |
-| Accepted set                  | 60          | 60       | agree        |
-| Filters / tests / optioned    | 41/16/3     | 41/16/3  | agree        |
-| Purity (pure/fs/env)          | 52/4/1      | 52/4/1   | agree        |
-| Naive section 8 headings      | 58          | 58       | agree        |
-| Forbidden-set members         | 34          | 71       | **disagree** |
-| Reject rows, classed 22/10/18 | 22/10/18    | 22/10/18 | agree        |
+| Quantity                      | Plan claims | Derived | Verdict      |
+| ----------------------------- | ----------- | ------- | ------------ |
+| Accept rows in section 7      | 55          | 55      | agree        |
+| Defer rows in section 7       | 6           | 6       | agree        |
+| Reject rows in section 7      | 50          | 50      | agree        |
+| New Netsuke helpers           | 57          | 57      | agree        |
+| Optioned existing helpers     | 3           | 3       | agree        |
+| Accepted set                  | 60          | 60      | agree        |
+| Filters / tests / optioned    | 41/16/3     | 41/16/3 | agree        |
+| Purity (pure/fs/env)          | 52/4/1      | 52/4/1  | agree        |
+| Naive section 8 headings      | 58          | 58      | agree        |
+| Forbidden-set members         | 34          | 71      | **disagree** |
+| Table 11 class counts sum     | 50          | 50      | agree        |
+| Class split, last stated rule | 22/10/18    | 8/24/18 | **disagree** |
 
 - Observation: the plan's `COV-2` assertion that the forbidden set has "exactly
   34 members" reconciles only as a **row** count — 50 reject rows minus 22
@@ -359,23 +381,27 @@ tracked; the derivation it performs is reimplemented in the coverage test at
 
 - Observation: the resolution-note column **does** discriminate the three
   reject classes, contrary to `EP-M0`'s first reading, but only under a rule
-  RFC 0006 does not state. The audit's first two attempts gave 24/10/16 and
-  25/6/18 against table 11's 22/10/18; the discrepancies were the auditor's,
-  not the document's. The rule that reproduces 22/10/18 exactly over the 50
-  reject rows is: **alias** if the resolution cell contains the token "alias"
-  or cites §10.2; otherwise **exists** if it begins "Exists" or names a
-  provider in backticks; otherwise **principle**. The two rows that defeated
-  both earlier attempts are `ternary` ("Jinja conditional expressions") and
-  `mandatory` ("Strict undefined already errors"), which name a language
-  feature and a runtime behaviour rather than a helper identifier and are
-  therefore principle — and every principle row is backtick-free, which is what
-  makes the rule work. Evidence: `docs/rfcs/0006-...md:468-635`, `:1617-1690`,
-  and `:600-639`. Impact: `D5` rule 3's prescribed remedy — adding a
-  discriminating column to section 7 — is **not** needed, and no normative edit
-  to RFC 0006 is required. The class split is asserted as a witness, but `D10`
-  deliberately keeps it off the deny set's critical path, because a contract
-  that rests on the literal token "alias" in prose is a contract that breaks on
-  a copy-edit.
+  RFC 0006 does not state — and the rule this bullet first recorded does not in
+  fact reproduce the split. That rule was: **alias** if the resolution cell
+  contains the token "alias" or cites §10.2; otherwise **exists** if it begins
+  "Exists" or names a provider in backticks; otherwise **principle**.
+  Re-derived at `EP-M1` it gives **8 alias / 24 exists / 18 principle**. The
+  *principle* count is right and the (correction at `EP-M1`) premise holds —
+  every principle row is backtick-free, so `ternary` ("Jinja conditional
+  expressions") and `mandatory` ("Strict undefined already errors") land there
+  correctly. The error is the 32-row remainder: table 11 counts 10 alias and 22
+  exists, and the two-row difference is exactly `win_splitdrive` and
+  `fileglob`, the rename rows whose resolution cells name a Netsuke call form
+  rather than the word "alias". Recovering 22/10/18 would mean special-casing
+  those two out of *exists* while leaving `now` — a reject row that also names
+  an existing helper in backticked call form — inside it, with nothing in the
+  document to distinguish them. Evidence: `docs/rfcs/0006-...md:468-635`,
+  `:1617-1690`, and `:600-639`. Impact: the split is **not derivable** and is
+  not asserted; `D5` rule 3's prescribed remedy — adding a discriminating
+  column to section 7 — is needed only if the split is ever wanted as a
+  contract, and no normative edit to RFC 0006 is made now. `COV-2` asserts the
+  parseable totals and that table 11's three class counts sum to the reject-row
+  count, so a broken table still fails loudly.
 
 - Observation: `COV-3`'s purity aggregate is satisfiable only over rows whose
   `Registration` is `New`. The registries carry all 60 accepted helpers, and
@@ -558,26 +584,38 @@ tracked; the derivation it performs is reimplemented in the coverage test at
   `EP-M0` found that the plan's 34 reconciles only as a **row** count — 28
   class-based forbidden rows plus 6 deferred rows — and not as a name count
   under any derivation; that its assertion that the deny set contains `is_file`
-  is false, because the `file` / `is_file` row is classed "already provides";
-  and that the resolution-note prose does not discriminate the three reject
-  classes under any rule the document states. Two independent attempts at a
-  note-parsing rule produced 24/10/16 and 25/6/18 against table 11's 22/10/18;
-  a third rule reproduced 22/10/18 exactly, but it leans on the literal token
-  "alias" and on a citation to §10.2, and neither is a contract the parent
-  document offers. The complement rule needs no prose parsing at all, is
-  strictly safer than any class-based reading because it forbids a superset of
-  what both readings forbid, and requires no normative edit to RFC
+  cannot hold under that same class reading, because the `file` / `is_file` row
+  is classed "already provides", so the plan's number and its membership list
+  were mutually inconsistent; and that the resolution-note prose does not
+  discriminate the three reject classes under any rule the document states. Two
+  independent attempts at a note-parsing rule produced 24/10/16 and 25/6/18
+  against table 11's 22/10/18; a third rule reproduced 22/10/18 exactly, but it
+  leans on the literal token "alias" and on a citation to §10.2, and neither is
+  a contract the parent document offers. The complement rule needs no prose
+  parsing at all, is strictly safer than any class-based reading because it
+  forbids a superset of what both readings forbid, and requires no normative
+  edit to RFC
   0006. Two consequences are accepted: `basename` and `dirname` are the only
   excluded names, so `expanduser` — which the first draft would have permitted
   — is forbidden; and the deny set does not shrink when section 7 gains a
   reject row of the "already provides" class. Neither affects a child RFC,
   because a registry row must name an accepted helper, and the accepted set is
-  checked independently by `COV-1`. The class split is retained as a witness:
-  the derivation rule is that a reject row is **alias** if its resolution cell
-  contains the token "alias" or cites §10.2, otherwise **exists** if it begins
-  "Exists" or names a provider in backticks, otherwise **principle** — which
-  reproduces 22/10/18 against the 50 rows. Date/Author: 2026-09-11,
-  implementation agent, chosen by the reviewer from three options.
+  checked independently by `COV-1`. The class split is **not** retained as a
+  witness. `EP-M1` re-derived it a third time against the rule recorded here
+  and got 8 alias / 24 exists / 18 principle, not 22/10/18, so the rule the
+  earlier draft believed reproduced the split does not do so. Recovering
+  22/10/18 needs a rule that special-cases the two rename rows
+  (`win_splitdrive` and `fileglob`) out of *exists* while leaving `now` — also
+  a reject row naming an existing helper in backticked call form — inside it,
+  and that is curve-fitting, not derivation. RFC 0006 states no rule assigning
+  a reject row to a class, and section 10 groups only some of them. Accordingly
+  `COV-2` asserts the totals that *are* directly parseable — 55 accept rows, 6
+  defer rows, 50 reject rows, 111 surveyed entries — and asserts only that
+  table 11's three class counts **sum** to the derived reject-row count. That
+  is a real consistency check on the table without asserting an undecipherable
+  split. Date/Author: 2026-09-11, implementation agent, chosen by the reviewer
+  from three options; the class-split retraction was added by the same author
+  the same day, after `EP-M1` falsified the rule.
 
 ## Alternatives considered
 
@@ -972,9 +1010,14 @@ row so failures name a location.
   that denied the very helpers the registries must carry would pass.
 - Note: the reject-class split of table 11 — 22 already-provides, 10 redundant
   alias, 18 on principle — is **not** what this obligation checks, because the
-  complement does not need it. `COV-2` still derives and asserts that split as
-  a separate witness, so a future reclassification of a section 7 row fails
-  loudly here even though the deny set itself is unchanged.
+  complement does not need it. Nor does `COV-2` assert the split itself: RFC
+  0006 states no rule assigning a reject row to one of the three classes, and
+  `EP-M1` falsified the rule the earlier draft believed recovered 22/10/18 (it
+  yields 8/24/18). `COV-2` therefore asserts only that table 11's three class
+  counts **sum** to the derived reject-row count, which catches an edit that
+  breaks the table's arithmetic without claiming a derivation it does not have.
+  The totals that are directly parseable — 55 accept rows, 6 defer rows, 50
+  reject rows — are asserted exactly.
 
 ### Obligation `COV-3`: totals and purity aggregate agree
 
@@ -1596,12 +1639,24 @@ registries carry all 60 accepted helpers including the filesystem-observing
 `is_link`, `win_dirname`, and `expanduser` added to its non-vacuity assertions
 and the `expanduser` exclusion dropped.
 
-One `D5` rule 3 remedy was **not** needed. The plan provided that if section
-7's note column did not discriminate the three reject classes, `EP-M1` would
-add a discriminating column. `EP-M0` found that it does discriminate — the rule
-is that a reject row is *alias* if its resolution cell contains "alias" or
-cites §10.2, *exists* if it begins "Exists" or names a provider in backticks,
-and *principle* otherwise, which reproduces table 11's 22/10/18 over all 50
-reject rows. The split is asserted as a derived witness, but `D10` keeps it off
-the deny set's critical path: a gate that turns on the literal token "alias"
-appearing in a prose cell is a gate a copy-edit can break.
+One `D5` rule 3 remedy is now **in scope, but deferred by choice**. The plan
+provided that if section 7's note column did not discriminate the three reject
+classes, `EP-M1` would add a discriminating column. `EP-M0` believed it did
+discriminate — a reject row being *alias* if its resolution cell contains
+"alias" or cites §10.2, *exists* if it begins "Exists" or names a provider in
+backticks, and *principle* otherwise, which was recorded as reproducing table
+11's 22/10/18. `EP-M1` re-derived that rule and got 8 alias / 24 exists / 18
+principle. The *principle* third is correct and every principle row is
+backtick-free, but the remaining 32 rows split 8/24 where table 11 says 10/22;
+the difference is exactly the two rename rows `win_splitdrive` and `fileglob`,
+which §7.8 says are "registered under a Netsuke name rather than the surveyed
+one" and which table 11 therefore counts as aliases while the rule counts them
+as exists. Recovering 22/10/18 needs those two special-cased out of *exists*
+while `now` — also a reject row naming an existing helper in backticked call
+form — stays inside, and the document offers nothing to distinguish them. The
+split is therefore **not derivable from the tables as they stand**, and `COV-2`
+does not assert it: it asserts the directly parseable totals, plus that table
+11's three class counts sum to the derived reject-row count. Adding the
+discriminating column remains the remedy if the split is ever wanted as a
+contract; `D10` keeps it off the deny set's critical path either way, so no
+normative edit to RFC 0006 is made now.
