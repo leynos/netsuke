@@ -32,6 +32,7 @@ pub mod manifest;
 pub mod netsuke;
 pub mod ninja;
 pub mod ninja_gen;
+pub mod ninja_semantics;
 pub mod stdlib_assert;
 /// Re-export the SHA-256 helper for concise call sites.
 pub use hash::sha256_hex;
