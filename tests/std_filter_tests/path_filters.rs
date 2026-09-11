@@ -237,7 +237,9 @@ fn relative_to_filter_outside_root() -> Result<()> {
 fn realpath_filter() -> Result<()> {
     let workspace = fallible::filter_workspace()?;
     with_filter_env(workspace, |root, env| {
-        let link = root.join("link");
+        let Some(link) = fallible::file_symlink_fixture(root)? else {
+            return Ok(()); // No symlink support; the filter has no link to resolve.
+        };
         let output = fallible::render(env, "realpath", "{{ path | realpath }}", &link)
             .context("render realpath filter")?;
         ensure!(
