@@ -6,9 +6,25 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 use rstest::rstest;
 use tempfile::tempdir;
 use test_support::netsuke::run_netsuke_in_with_env;
+use test_support::ninja_semantics::{
+    RecipeTransport, detected_recipe_transports, generated_ninja_contains,
+};
 
 /// Distinctive sentinel injected through `env('CI_SECRET')` in the fixture.
 const SENTINEL: &str = "CI-SECRET-7f3a9c2b5e1d4f60";
+
+/// Describe how generated Ninja text carries recipe semantics.
+///
+/// Naming the active representation keeps the diagnostic useful without
+/// echoing the generated file, which is what this test exists to protect.
+#[must_use]
+fn describe_recipe_representation(generated: &str) -> String {
+    detected_recipe_transports(generated)
+        .into_iter()
+        .map(RecipeTransport::description)
+        .collect::<Vec<_>>()
+        .join(" + ")
+}
 
 #[rstest]
 fn verbose_generate_never_emits_rendered_secret() -> Result<()> {
@@ -42,9 +58,13 @@ fn verbose_generate_never_emits_rendered_secret() -> Result<()> {
     let generated = workspace
         .read_to_string("build.ninja")
         .context("read generated Ninja file")?;
+    // Windows serializes recipes as encoded PowerShell, so compare rendered
+    // semantics rather than raw bytes: a plaintext scan would miss the secret
+    // even when `env('CI_SECRET')` resolved correctly.
     ensure!(
-        generated.contains(SENTINEL),
-        "env('CI_SECRET') must still resolve in generated output"
+        generated_ninja_contains(&generated, SENTINEL)?,
+        "env('CI_SECRET') must still resolve in the generated {} recipe",
+        describe_recipe_representation(&generated)
     );
     Ok(())
 }
