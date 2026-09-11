@@ -1333,20 +1333,26 @@ Run these commands before finalizing any change:
 - `make doc-coverage`
 - `make test`
 
-When the change touches the coverage artefact validator
-(`scripts/validate_coverage_artifact.py`) or the trusted coverage workflow
-(`.github/workflows/coverage-pr-submit.yml`), also run:
+When the change touches the coverage artefact validators under `scripts/` or
+the trusted coverage workflow (`.github/workflows/coverage-pr-submit.yml`),
+also run:
 
 - `make test-coverage-artifact`
 - `make validate-coverage-artifact`
 
 This suite is the pytest module under `scripts/tests/`; `make test` runs only
 the Rust suite and never executes it, so a validator change is untested unless
-these commands run. `make validate-coverage-artifact` inspects the configured
-download directory as hostile data: it requires exactly one regular,
-non-symbolic `lcov.info` member that remains within the directory, enforces the
-size and UTF-8 limits, and accepts only recognized LCOV records. It does not
-execute, import, or resolve paths recorded in the report.
+these commands run. Two entry points form the boundary.
+`scripts/validate_coverage_artifact.py` owns the outer-directory checks and the
+recognized-LCOV text contract, and exposes its own narrow command line.
+`scripts/validate_coverage_archive.py` is the composition entry point that the
+trusted submission path loads; it runs those outer checks and then validates
+ZIP metadata before materializing the sole `lcov.info` member.
+`make validate-coverage-artifact` runs that composition entry point over the
+raw ZIP the trusted workflow downloads, with `COVERAGE_ARTIFACT_DIR` selecting
+the download directory and `validated-coverage` receiving the output. It treats
+the archive as hostile data and does not execute, import, or resolve paths
+recorded in the report.
 
 When the change touches any Markdown file — documentation, ADRs, execplans, or
 the README — also run:
@@ -1399,103 +1405,16 @@ separate `workflow_run` workflow whose definition comes from the default
 branch. After a successful same-repository `pull_request` CI run, it starts a
 fresh runner, and `actions/checkout` retrieves the full trusted default-branch
 tree. The workflow executes only the needed checked-in validation and
-submission commands, then downloads the artefact into `coverage-artifact/`. It
-never checks out or executes the PR tree or artefact contents. Before the
-CodeScene action can see the secret, the checked-in validator rejects every
-member except a bounded, regular UTF-8 `lcov.info` file with recognized LCOV
-records.
-
-Eligibility is enforced by the trusted workflow definition, its successful
-pull-request and same-repository-head guards, and the step-local
-`CS_ACCESS_TOKEN` presence guard. Fork PRs still receive the complete
-unprivileged CI result but do not enter the secret-bearing submission job. The
-repository or organization Actions policy must continue to restrict the
-CodeScene credential to this trusted phase. A protected environment with
-independent reviewers is an optional stronger control for organizations that
-need explicit human approval before any coverage submission.
-
-The trusted workflow creates the `CodeScene coverage` Check Run against the
-originating PR `head_sha`. It reports `neutral` only when artefact download and
-validation both succeeded and the submission skipped solely because no token is
-available; a failed or skipped download or validation publishes a failing
-check, so a hostile artefact can never produce a non-failing gate.
-Branch-protection configuration may therefore need an organization-level update
-to require this Check Run name instead of the former in-job coverage step.
-`tests/workflow_contracts/trust_boundary_test.py` and its Hypothesis companion
-prevent the secret from returning to a pull-request workflow, a trusted
-checkout from drifting to PR content, a raw secret expression from reaching a
-step's `run` or `with` surfaces, or the validator from being skipped.
-
-The trusted job also writes bounded JSONL metrics and traces to runner-local
-files and uploads them as the fixed `codescene-pr-coverage-metrics` and
-`codescene-pr-coverage-traces` artefacts. Metrics use fixed operation, outcome,
-and error-category labels with count and duration values. Traces use fixed
-event, operation, outcome, error-category, and duration fields, together with
-the originating workflow-run ID and commit SHA. These exports are observability
-artefacts, not a Prometheus, OpenTelemetry Protocol (OTLP), or statsd endpoint.
-They contain no PR text, coverage content, filesystem paths, or credentials.
-
-`make test` runs the non-doctest suite through
-[cargo-nextest](https://nexte.st/) and the doctests separately. CI pins the
-runner version in `NEXTEST_VERSION` in `.github/workflows/ci.yml`. Install that
-same version locally, so local runs match CI; read the pin from the workflow
-rather than copying the number, so the two cannot drift:
-
-```bash
-NEXTEST_VERSION="$(sed -n "s/.*NEXTEST_VERSION: '\(.*\)'.*/\1/p" \
-  .github/workflows/ci.yml)"
-cargo binstall --no-confirm --locked \
-  "cargo-nextest@$NEXTEST_VERSION"
-```
-
-`make check-fmt` verifies Markdown formatting as well as Rust formatting, and
-needs `mdtablefix` on `PATH`. CI pins the version in `MDTABLEFIX_VERSION` in
-`.github/workflows/ci.yml`. Install that same version locally, so local runs
-match CI; read the pin from the workflow rather than copying the number, so the
-two cannot drift:
-
-```bash
-MDTABLEFIX_VERSION="$(sed -n "s/.*MDTABLEFIX_VERSION: '\(.*\)'.*/\1/p" \
-  .github/workflows/ci.yml)"
-cargo binstall --no-confirm --locked --disable-strategies compile \
-  "mdtablefix@$MDTABLEFIX_VERSION"
-```
-
-Version drift matters here beyond reproducibility: a different `mdtablefix`
-version may reflow prose differently, which would make `make check-fmt` fail on
-an otherwise clean tree.
-
-Install the separately versioned Whitaker installer with:
-
-CI installs Whitaker through the SHA-pinned
-`leynos/shared-actions/.github/actions/install-whitaker` action. Two jobs
-invoke it, and each passes its required `installer-version: '0.2.7'` input:
-`build-test` in `ci.yml`, and `lint-windows` in `ci-windows.yml`.
-`build-test-windows` neither installs nor runs Whitaker; it compiles, tests,
-and runs the native Windows recipe smoke steps. There is no
-[ADR-022](adr-022-pr-coverage-trust-boundary.md). The workflow details below
-are the implementation guidance for that decision.
-
-The pull-request CI job is deliberately unprivileged. It builds, tests, and
-generates `lcov.info`, then uploads only that file as the short-lived
-`pr-coverage-lcov` artefact. It does not receive `CS_ACCESS_TOKEN`. This
-matters because PR-controlled commands can persist `BASH_ENV`, `GITHUB_PATH`,
-and other state for later steps on their own runner.
-
-[`coverage-pr-submit.yml`](../.github/workflows/coverage-pr-submit.yml) is a
-separate `workflow_run` workflow whose definition comes from the default
-branch. After a successful same-repository `pull_request` CI run, it starts a
-fresh runner, and `actions/checkout` retrieves the full trusted default-branch
-tree. The workflow executes only the needed checked-in validation and
 submission commands, then downloads the artefact as a raw ZIP into
 `coverage-artifact/` with decompression disabled. It never checks out or
-executes the PR tree or artefact contents. Before extraction, the checked-in
-validator requires exactly one regular, non-symbolic archive file inside that
-directory, then checks that the ZIP contains only a safe relative `lcov.info`
-member, has a bounded cumulative uncompressed size, and has no directory or
-symbolic-link member. It reads only the bounded member data, validates UTF-8
-and recognized LCOV records, and writes the resulting
-`validated-coverage/lcov.info` for the CodeScene action.
+executes the PR tree or artefact contents. Before the CodeScene action can see
+the secret, `scripts/validate_coverage_archive.py` requires exactly one
+regular, non-symbolic archive file inside that directory, checks the ZIP
+metadata for a single safe relative `lcov.info` member with a bounded
+cumulative uncompressed size and no directory or symbolic-link entry, and only
+then reads the bounded member bytes, validates UTF-8 and recognized LCOV
+records, and writes `validated-coverage/lcov.info`. Archive metadata is
+therefore authoritative before any member data is read.
 
 Eligibility is enforced by the trusted workflow definition, its successful
 pull-request and same-repository-head guards, and the step-local
@@ -1573,8 +1492,11 @@ an otherwise clean tree.
 Install the separately versioned Whitaker installer with:
 
 CI installs Whitaker through the SHA-pinned
-`leynos/shared-actions/.github/actions/install-whitaker` action. Both build
-jobs pass its required `installer-version: '0.2.7'` input; there is no
+`leynos/shared-actions/.github/actions/install-whitaker` action. Two jobs
+invoke it, and each passes its required `installer-version: '0.2.7'` input:
+`build-test` in `ci.yml`, and `lint-windows` in `ci-windows.yml`.
+`build-test-windows` neither installs nor runs Whitaker; it compiles, tests,
+and runs the native Windows recipe smoke steps. There is no
 `WHITAKER_INSTALLER_VERSION` workflow variable. Read that action input before
 installing locally so the local installer matches CI:
 

@@ -229,7 +229,9 @@ doc-coverage-test: ## Run documentation-coverage pytest modules
 
 validate-coverage-artifact: ## Validate downloaded coverage artefact as hostile data
 	$(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
-		scripts/validate_coverage_artifact.py --artifact-dir "$(COVERAGE_ARTIFACT_DIR)"
+		scripts/validate_coverage_archive.py \
+		--archive-dir "$(COVERAGE_ARTIFACT_DIR)" \
+		--output-dir validated-coverage
 
 fmt: ## Format Rust, Python, and Markdown sources
 	$(CARGO) fmt --all

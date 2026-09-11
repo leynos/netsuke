@@ -178,11 +178,13 @@ def _github_check_run_publisher(environment: Environment) -> CheckRunPublisher:
     module = importlib.util.module_from_spec(specification)
     sys.modules[specification.name] = module
     specification.loader.exec_module(module)
-    publisher = module.GitHubCheckRunPublisher(
-        _environment_value(environment, "GITHUB_REPOSITORY"),
-        _environment_value(environment, "GITHUB_TOKEN"),
+    transport = module.GitHubApiTransport(
+        _environment_value(environment, "GITHUB_TOKEN")
     )
-    return typ.cast("CheckRunPublisher", publisher)
+    publisher = module.GitHubCheckRunPublisher(
+        _environment_value(environment, "GITHUB_REPOSITORY"), transport
+    )
+    return typ.cast("CheckRunPublisher", publisher.publish)
 
 
 def report_coverage(environment: Environment, publisher: CheckRunPublisher) -> None:

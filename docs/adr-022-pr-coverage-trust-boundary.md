@@ -212,3 +212,83 @@ paths, or credentials enter these outputs.
   [`trust_boundary_properties_test.py`](../tests/workflow_contracts/trust_boundary_properties_test.py)
 - Developer guidance:
   [`PR coverage trust boundary`](developers-guide.md#pr-coverage-trust-boundary)
+
+## Addendum — 2026-09-07: trusted checkout scope and bounded observability exports
+
+The body above has been amended to record two changes settled after the
+2026-09-05 acceptance. The checkout wording was broadened: the trusted runner
+uses `actions/checkout` to retrieve the full trusted default-branch tree, and
+it executes only the needed checked-in validation and submission commands. The
+earlier statement that the workflow checks out only validation tooling from the
+trusted default branch no longer describes the implementation. The operative
+boundary is unchanged: the trusted tree may be fully present, but the workflow
+must not check out or execute the pull-request tree or any uploaded artefact
+content.
+
+The same amendment added bounded observability exports. The trusted workflow
+writes bounded JSONL metrics and traces to runner-local files and uploads them
+as the fixed `codescene-pr-coverage-metrics` and `codescene-pr-coverage-traces`
+artefacts. Metrics use fixed operation, outcome, and error-category labels with
+count and duration values; traces use fixed event, operation, outcome,
+error-category, and duration fields plus the originating workflow-run ID and
+commit SHA. These exports are observability artefacts, not a Prometheus,
+OpenTelemetry Protocol (OTLP), or statsd endpoint, and no pull-request text,
+coverage content, filesystem paths, or credentials enter them. They extend the
+accepted correlation surface without widening it beyond bounded, fixed-label
+data.
+
+## Addendum — 2026-09-08: raw-ZIP validation boundary and Check Run idempotency
+
+Two changes were settled after the 2026-09-05 acceptance, and the body above
+has been amended to record them. The technical requirement accepted on
+2026-09-05 was that validation must accept exactly one member named
+`lcov.info`, reject links and non-regular files, resolve and contain the member
+within the artefact directory, enforce a bounded size, decode UTF-8, and accept
+only recognized LCOV records. That requirement is replaced by the raw-ZIP
+contract: the downloaded artefact remains a raw ZIP until validation; its outer
+directory must contain exactly one regular, non-symbolic archive file within
+its own boundary; ZIP metadata must name exactly one safe relative member,
+`lcov.info`, with no directory or symbolic link and a cumulative uncompressed
+size within the bound; the bounded member bytes are decoded as UTF-8 and must
+contain only recognized LCOV records with the required record types and
+terminator; only then may `validated-coverage/lcov.info` be written. Archive
+metadata is therefore authoritative before any member data is read, and no
+member content is materialized until the metadata passes.
+
+The second change settled Check Run publication. Workflow concurrency
+serializes publications for one originating workflow-run ID, and the publisher
+searches the originating commit for the fixed Check Run name and matching
+external ID, updates that run when it exists, and creates it only when no
+matching run is found. The originating workflow-run ID is the Check Run's
+external correlation and idempotency key, not merely an observability label.
+
+## Addendum — 2026-09-11: pull-request checkout credential opt-out and the Check Run publication transport port
+
+Two changes were settled after the 2026-09-08 addendum. Every checkout step in
+every pull-request-triggered workflow now sets `persist-credentials: false`.
+Those jobs execute code the pull request controls, and a checkout that persists
+credentials leaves an authenticated git configuration behind that a later
+untrusted step could reuse. The untrusted `build-test` job that produces the
+coverage artefact is the concrete case this opt-out protects. A
+workflow-contract test in `tests/workflow_contracts/trust_boundary_test.py`
+enforces the opt-out for every checkout in every pull-request-triggered
+workflow.
+
+The trusted Check Run publication is now one explicit, fallible operation on the
+`GitHubCheckRunPublisher` adapter, which depends only on a narrow transport
+port. That operation owns the idempotent publication: it looks up the existing
+Check Run for the originating commit, fixed Check Run name, and external ID,
+then updates or creates as one step, so no caller can issue a Check Run query
+that reaches GitHub on its own and no query-shaped method is exposed. Network
+access, the step-local token, and the bounded response read live in the
+production transport implementation, which is confined to `urllib`. Tests
+inject either that transport against a local contract server or a recording
+transport, so publication logic is exercised without credentials. The trusted
+submission script is the composition root: it assembles repository, transport,
+and publisher, then binds the publication operation to the callable publisher
+port its commands consume.
+
+The operative boundary is unchanged: the artefact still crosses as hostile
+data, the credential still reaches only the guarded submission step, and the
+publication path still uses the originating workflow-run ID as its external
+correlation and idempotency key.

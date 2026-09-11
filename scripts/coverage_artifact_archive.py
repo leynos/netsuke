@@ -113,15 +113,71 @@ def _validated_member(
     if names != [contract.expected_member]:
         raise ArchiveValidationError(ArchiveIssue.MEMBERS)
     member = members[0]
+    _validate_member_path(member, contract.expected_member)
+    _validate_member_type(member)
+    _validate_total_member_size(members, contract.maximum_uncompressed_bytes)
+    return member
+
+
+def _validate_member_path(member: zipfile.ZipInfo, expected_member: str) -> None:
+    """Reject an absolute member name or any path outside the expected one.
+
+    Parameters
+    ----------
+    member
+        Sole archive member whose recorded name is checked.
+    expected_member
+        The single relative member name the contract permits.
+
+    Raises
+    ------
+    ArchiveValidationError
+        With ``ArchiveIssue.PATH`` when the recorded name is absolute or its
+        parsed parts are not exactly the expected member name.
+    """
     member_path = pathlib.PurePosixPath(member.filename)
-    if member_path.is_absolute() or member_path.parts != (contract.expected_member,):
+    if member_path.is_absolute() or member_path.parts != (expected_member,):
         raise ArchiveValidationError(ArchiveIssue.PATH)
+
+
+def _validate_member_type(member: zipfile.ZipInfo) -> None:
+    """Reject a directory, symbolic link, or other non-regular member.
+
+    Parameters
+    ----------
+    member
+        Sole archive member whose recorded external attributes are checked.
+
+    Raises
+    ------
+    ArchiveValidationError
+        With ``ArchiveIssue.TYPE`` for any non-regular member.
+    """
     mode = member.external_attr >> 16
     if _is_non_regular_member(member, mode):
         raise ArchiveValidationError(ArchiveIssue.TYPE)
-    if sum(info.file_size for info in members) > contract.maximum_uncompressed_bytes:
+
+
+def _validate_total_member_size(
+    members: list[zipfile.ZipInfo], maximum_uncompressed_bytes: int
+) -> None:
+    """Reject an archive whose cumulative uncompressed size exceeds the bound.
+
+    Parameters
+    ----------
+    members
+        Archive members whose declared uncompressed sizes are summed.
+    maximum_uncompressed_bytes
+        Largest cumulative uncompressed size the contract permits.
+
+    Raises
+    ------
+    ArchiveValidationError
+        With ``ArchiveIssue.SIZE`` when the declared total exceeds
+        ``maximum_uncompressed_bytes``.
+    """
+    if sum(member.file_size for member in members) > maximum_uncompressed_bytes:
         raise ArchiveValidationError(ArchiveIssue.SIZE)
-    return member
 
 
 def _bounded_member_content(
