@@ -6,7 +6,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 ## Purpose / big picture
 
@@ -216,7 +216,16 @@ Hard invariants. Violating one requires escalation, not a workaround.
 
 - [x] (2026-09-08) Rewrite roadmap task 6.1.1 to the child-RFC wording and
   record that delivery is tracked by roadmap checkboxes, not issues (`D8`).
-- [ ] `EP-M0` Audit; confirm the partition and the derivation rules. Go/no-go.
+- [x] (2026-09-11) `EP-M0` Audit; confirm the partition and the derivation
+  rules. Go/no-go. Every derived count was confirmed except the forbidden-set
+  size, which the plan gave as 34; that number reconciles only as a row count.
+  Both stop conditions were raised and both are resolved: `D10` adopts the
+  complement rule and the deny set is 71, and the note column was shown to
+  discriminate after all, so no edit to RFC 0006 section 7 is needed. Audit
+  results are in `Surprises & discoveries`; the partition and the per-child
+  registry contents are confirmed unchanged, so `EP-M1` is unblocked. One
+  further correction: `D5` rule 2's claim that all three rename rows say
+  `Reject` is wrong for `hash`, whose row reads "Accept as `text_hash`".
 - [ ] `EP-M1` Land the coverage test, `ADR-021`, the RFC 0006 corrections and
   reservations, and the roadmap 6.1.1 rewrite. Ship as its own pull request.
 - [ ] `EP-M2` Write the literal child-RFC template and one worked section 5.
@@ -299,6 +308,98 @@ Hard invariants. Violating one requires escalation, not a workaround.
   relative link between documents is caught by nothing. `COV-5` adds that check
   to the coverage test, which is already reading every file in `docs/rfcs/`.
 
+### `EP-M0` audit results (2026-09-11)
+
+The audit re-derived every count in this plan mechanically from
+`docs/rfcs/0006-...md` with a throwaway script (`/tmp/ep-m0-audit.py`, not
+tracked; the derivation it performs is reimplemented in the coverage test at
+`EP-M1`). Results, with the plan's claims alongside:
+
+| Quantity                      | Plan claims | Derived  | Verdict      |
+| ----------------------------- | ----------- | -------- | ------------ |
+| Accept rows in section 7      | 55          | 55       | agree        |
+| Defer rows in section 7       | 6           | 6        | agree        |
+| Reject rows in section 7      | 50          | 50       | agree        |
+| New Netsuke helpers           | 57          | 57       | agree        |
+| Optioned existing helpers     | 3           | 3        | agree        |
+| Accepted set                  | 60          | 60       | agree        |
+| Filters / tests / optioned    | 41/16/3     | 41/16/3  | agree        |
+| Purity (pure/fs/env)          | 52/4/1      | 52/4/1   | agree        |
+| Naive section 8 headings      | 58          | 58       | agree        |
+| Forbidden-set members         | 34          | 71       | **disagree** |
+| Reject rows, classed 22/10/18 | 22/10/18    | 22/10/18 | agree        |
+
+- Observation: the plan's `COV-2` assertion that the forbidden set has "exactly
+  34 members" reconciles only as a **row** count — 50 reject rows minus 22
+  "already provides" rows, plus 6 deferred rows — and not as a name count under
+  any derivation. Reject-row name cells expand to 67 names; removing the names
+  on rows the notes class as "already provides" leaves 38 or 40, and adding the
+  6 deferred names gives 44 or 46. Evidence: the audit script's alias-group
+  expansion, and `docs/rfcs/0006-...md:468-635`. Impact: the plan's number is a
+  category error. `D10` replaces the size assertion with the complement rule's
+  71-name deny set. The membership assertions are nearly all satisfied:
+  `is_file`, `quote`, `fileglob`, and `lookup` are all forbidden under the
+  complement, so the four names the first draft's handwritten list omitted are
+  still caught. One assertion fails: the plan required the deny set to
+  **exclude** `expanduser`, on the ground that its row is classed "already
+  provides"; the complement forbids it. That exclusion was the one place the
+  plan's stated method and its expected members disagreed, and the members had
+  the better of it — the internal inconsistency, not the number 34, is what
+  made the class-based method untenable.
+
+- Observation: the plan's "exactly 34 members" and its `is_file` membership
+  assertion are mutually inconsistent, which is what actually indicts the
+  class-based method. Under a faithful class reading (`file` / `is_file`
+  classed "already provides") `is_file` is **not** forbidden; under the row
+  count that yields 34 it is not either. The plan could not have both its
+  number and its membership list, and `EP-M0` was right to stop on it. Evidence:
+  `docs/rfcs/0006-...md:468-635` and `:600-639`. Impact: the complement rule
+  satisfies both the intent (catch `is_file`) and the four-name witness, and
+  gives up only the `expanduser` exclusion, which nothing depended on.
+
+- Observation: the resolution-note column **does** discriminate the three
+  reject classes, contrary to `EP-M0`'s first reading, but only under a rule
+  RFC 0006 does not state. The audit's first two attempts gave 24/10/16 and
+  25/6/18 against table 11's 22/10/18; the discrepancies were the auditor's,
+  not the document's. The rule that reproduces 22/10/18 exactly over the 50
+  reject rows is: **alias** if the resolution cell contains the token "alias"
+  or cites §10.2; otherwise **exists** if it begins "Exists" or names a
+  provider in backticks; otherwise **principle**. The two rows that defeated
+  both earlier attempts are `ternary` ("Jinja conditional expressions") and
+  `mandatory` ("Strict undefined already errors"), which name a language
+  feature and a runtime behaviour rather than a helper identifier and are
+  therefore principle — and every principle row is backtick-free, which is what
+  makes the rule work. Evidence: `docs/rfcs/0006-...md:468-635`, `:1617-1690`,
+  and `:600-639`. Impact: `D5` rule 3's prescribed remedy — adding a
+  discriminating column to section 7 — is **not** needed, and no normative edit
+  to RFC 0006 is required. The class split is asserted as a witness, but `D10`
+  deliberately keeps it off the deny set's critical path, because a contract
+  that rests on the literal token "alias" in prose is a contract that breaks on
+  a copy-edit.
+
+- Observation: `COV-3`'s purity aggregate is satisfiable only over rows whose
+  `Registration` is `New`. The registries carry all 60 accepted helpers, and
+  the three optioned rows include `glob`, which is filesystem-observing;
+  all-row aggregation therefore yields 54 pure / 5 filesystem / 1 environment,
+  not the 52/4/1 that section 6.1 states. Evidence:
+  `docs/rfcs/0006-...md:222-260` counts only the 57 proposed helpers. Impact:
+  minor; the fix is to scope the aggregate to `New` rows and say so in `COV-3`.
+
+- Observation: RFC numbers 0013 to 0020 are free. `origin/main` carries RFCs
+  0001 to 0012 only, and every active remote branch checked (`3-14-8-…`,
+  `4-3-1-…`, `4-4-1-…`, `7-1-1-…`, `adopt-rstest-bdd-v0-5-0`,
+  `docs/rfc-0001-implementation-roadmap`, `document-the-timeout-tiers`,
+  `property-testing-rfc`) stops at 0012. Impact: no reservation is required
+  before `EP-M3`, but the allocation is only a convention and `EP-M1` must
+  still backfill the number-allocation table in RFC 0006 and re-enumerate
+  before each child commit.
+
+- Observation: the partition's per-group registry contents all reconcile
+  against the accepted set. Group sizes are 5, 6, 8+7, 4+4, 6+1(+2), 1+4(+1),
+  9, and 2, summing to 41 filters, 16 tests, and 3 optioned helpers, exactly
+  the accepted set of 60. Impact: `EP-M0`'s partition is confirmed; no helper
+  needs to move between children, and the ambiguity tolerance is not triggered.
+
 ## Decision log
 
 - Decision `D1`: eight child RFCs, one per roadmap phase-6 capability step 6.2
@@ -372,17 +473,20 @@ Hard invariants. Violating one requires escalation, not a workaround.
   2. **Renames.** Three accepted capabilities are registered under a Netsuke
      name rather than the surveyed one: Ansible's `hash` becomes `text_hash`,
      its `quote` becomes `shell_quote`, and its `win_splitdrive` becomes
-     `splitdrive` with a windows dialect. Their section 7 rows say `Reject`.
-     This is an explicit three-row exception table transcribed from section
-     7.8, asserted to have exactly three rows.
-  3. **Reject is overloaded.** Table 11 splits it into 22 "already provides",
-     10 "redundant alias", and 18 "on principle". Only the latter 28, plus the
-     6 deferred, are forbidden. Rows whose note says the capability already
-     exists are not forbidden — `basename`, `dirname`, and `expanduser` are
-     such rows, and two of them are required helpers. `EP-M0` must confirm the
-     note column discriminates the three classes reliably; if it does not,
-     `EP-M1` adds a discriminating column to section 7, which changes no
-     disposition and makes the document machine-readable by design.
+     `splitdrive` with a windows dialect. The rule is read off the disposition
+     cell, which for `hash` reads "Accept as `text_hash`" — **not** `Reject`, as
+     the first draft of this rule said — and `Reject` with a rename note for
+     the other two. A disposition beginning "Accept as" therefore names the
+     registered helper directly, and the renaming is not a special case the
+     parser needs to know about. Section 7.8 states the three renames in prose
+     and the test asserts there are exactly three.
+  3. **Reject is overloaded.** The disposition cells, counted by `EP-M0`, are
+     `Accept` (54), "Accept as `text_hash`" (1), `Defer` (6), `Reject` (49),
+     and `Reject as a new name` (1). All 50 reject-dispositioned rows count as
+     rejected whatever their class, so the deny set is the complement of the
+     accepted set: 67 reject names plus 6 deferred names, less the 2 that are
+     themselves accepted Netsuke names. `D10` records why the class
+     distinction, while derivable, is deliberately not load-bearing.
   Date/Author: 2026-09-08, planning agent.
 
 - Decision `D6`: section 5 has five mandatory substantive clauses; the other
@@ -445,6 +549,35 @@ Hard invariants. Violating one requires escalation, not a workaround.
   than a ratchet. The highest existing ADR is 020; three earlier numbers
   collided, so re-check before committing. Date/Author: 2026-09-08, planning
   agent.
+
+- Decision `D10`: the forbidden set is the **complement of the accepted set**
+  — every section 7 reject name and every section 9 deferred name, less the
+  registered Netsuke names of accepted helpers — which is **71 names**, not the
+  34 this plan first asserted. The reject-class split of table 11 is still
+  derived and asserted, but it is not load-bearing for the deny set. Rationale:
+  `EP-M0` found that the plan's 34 reconciles only as a **row** count — 28
+  class-based forbidden rows plus 6 deferred rows — and not as a name count
+  under any derivation; that its assertion that the deny set contains `is_file`
+  is false, because the `file` / `is_file` row is classed "already provides";
+  and that the resolution-note prose does not discriminate the three reject
+  classes under any rule the document states. Two independent attempts at a
+  note-parsing rule produced 24/10/16 and 25/6/18 against table 11's 22/10/18;
+  a third rule reproduced 22/10/18 exactly, but it leans on the literal token
+  "alias" and on a citation to §10.2, and neither is a contract the parent
+  document offers. The complement rule needs no prose parsing at all, is
+  strictly safer than any class-based reading because it forbids a superset of
+  what both readings forbid, and requires no normative edit to RFC
+  0006. Two consequences are accepted: `basename` and `dirname` are the only
+  excluded names, so `expanduser` — which the first draft would have permitted
+  — is forbidden; and the deny set does not shrink when section 7 gains a
+  reject row of the "already provides" class. Neither affects a child RFC,
+  because a registry row must name an accepted helper, and the accepted set is
+  checked independently by `COV-1`. The class split is retained as a witness:
+  the derivation rule is that a reject row is **alias** if its resolution cell
+  contains the token "alias" or cites §10.2, otherwise **exists** if it begins
+  "Exists" or names a provider in backticks, otherwise **principle** — which
+  reproduces 22/10/18 against the 50 rows. Date/Author: 2026-09-11,
+  implementation agent, chosen by the reviewer from three options.
 
 ## Alternatives considered
 
@@ -804,14 +937,22 @@ row so failures name a location.
 
 ### Obligation `COV-2`: no forbidden candidate is registered
 
-- Obligation: no name that RFC 0006 section 9 defers, or that section 7 rejects
-  as a redundant alias or on principle, appears in any child RFC's registry.
-- Method: derived deny set from section 7's disposition column, minus the
-  "already provides" class per `D5` rule 3, plus section 9's six names.
+- Obligation: every name in any child RFC's registry is a member of the derived
+  accepted set. Equivalently, no name that RFC 0006 section 7 rejects under any
+  disposition, or that section 9 defers, appears in any child RFC's registry.
+- Method: derive the accepted set from section 7's accept rows, then the deny
+  set as the **complement** — every surveyed reject or defer name that is not
+  the registered Netsuke name of an accepted helper. See `D10`.
 - Rationale: a hand-maintained list is not a sound contract when the source of
   truth is a tracked file in the same repository. Deriving means the set
-  tightens automatically when section 7 gains a row.
-- Domain: the derived forbidden set, expected to be 34 names.
+  tightens automatically when section 7 gains a row. Stating the check as a
+  complement rather than as a union of reject classes removes the need to parse
+  the resolution-note prose, which `D10` records as too fragile to be a
+  contract; it also makes the deny set a superset of any class-based reading,
+  so no name either reading forbids can slip through.
+- Domain: the derived forbidden set — 71 names, from 67 reject names and 6
+  deferred names, less `basename` and `dirname`, which are `Reject` rows whose
+  surveyed name is the registered Netsuke name of an accepted helper.
 - Artefact: as above.
 - Evidence: same command. Green from `EP-M1`, which is exactly why the controls
   below are compulsory rather than optional.
@@ -819,18 +960,29 @@ row so failures name a location.
   proves nothing on its own. Add a registry row for `shuffle` to a scratch copy
   of RFC 0015 and expect a failure naming `shuffle` and the file. Add `is_dir`
   and expect a failure naming the rejected alias. Assert the derived deny set
-  has exactly 34 members and contains `is_file`, `quote`, `fileglob`, and
-  `lookup` — four names the first draft's handwritten list omitted. Assert it
-  does **not** contain `basename`, `dirname`, or `expanduser`, which are
-  `Reject` rows of the already-provides class and are required helpers; without
-  this assertion `D5` rule 3 is untested.
+  has exactly 71 members and contains `is_file`, `is_dir`, `is_link`, `quote`,
+  `fileglob`, `lookup`, `win_dirname`, and `expanduser`. The first four are the
+  names the first draft's handwritten list omitted; `is_dir`, `is_link`, and
+  `win_dirname` are aliases the plan's own risk names; and `expanduser` is the
+  name the first draft expected the deny set to **exclude**, so asserting it is
+  present is the direct test of `D10`'s complement rule against the class-based
+  reading it replaced. Assert it does **not** contain `basename`, `dirname`,
+  `abs`, `glob`, `shell_quote`, or `splitdrive`, which are accepted helpers;
+  without this assertion the complement's exclusion step is untested, and a bug
+  that denied the very helpers the registries must carry would pass.
+- Note: the reject-class split of table 11 — 22 already-provides, 10 redundant
+  alias, 18 on principle — is **not** what this obligation checks, because the
+  complement does not need it. `COV-2` still derives and asserts that split as
+  a separate witness, so a future reclassification of a section 7 row fails
+  loudly here even though the deny set itself is unchanged.
 
 ### Obligation `COV-3`: totals and purity aggregate agree
 
 - Obligation: the derived accepted set contains 41 filters, 16 tests, and 3
   optioned helpers, matching the totals parsed from table 11; and the
-  registries' purity columns aggregate to 52 pure, 4 filesystem-observing, and
-  1 environment-observing, matching section 6.1.
+  registries' purity columns, taken over rows whose registration is `New`,
+  aggregate to 52 pure, 4 filesystem-observing, and 1 environment-observing,
+  matching section 6.1.
 - Method: parsed count against parsed count.
 - Rationale: genuinely independent, unlike the first draft's version, which
   compared a hardcoded inventory against a hardcoded literal transcribed from
@@ -839,6 +991,12 @@ row so failures name a location.
   match the other without editing a normative document. The purity aggregate is
   the only check reconciling section 6.1 against the registries; without it a
   wrong purity class rots silently.
+- Scoping note: the aggregate is taken over `New` rows only, because section
+  6.1's 52/4/1 counts the 57 **proposed** helpers. The registries carry all 60
+  accepted helpers, and the three optioned rows include `glob`, which is
+  filesystem-observing; aggregating every row would yield 54 pure, 5
+  filesystem-observing, and 1 environment-observing and fail against a correct
+  document. `EP-M0` found this; see `Surprises & discoveries`.
 - Domain: three totals and three purity counts.
 - Artefact: as above.
 - Evidence: same command. The purity half is necessarily partial until every
@@ -967,16 +1125,22 @@ first draft made, and it is true.
 
 ### `EP-M0` — audit and derivation rules. Go/no-go
 
-- Outcome: the partition and the three `D5` derivation rules are confirmed
-  against the document.
+- Outcome: the partition and the `D5` derivation rules are confirmed against
+  the document, with two corrections adopted (`D10`).
 - Acceptance evidence: recorded in `Surprises & discoveries` — the heading
   recount with its four reconciliation adjustments stated explicitly, since the
   naive count is 58 and never 57; confirmation that section 7's note column
-  discriminates the three reject classes; the derived accepted set at 60 and
-  forbidden set at 34; the purity aggregate at 52, 4, and 1; and confirmation
-  that RFC numbers 0013 upward are free.
-- Conformance check: no file modified.
+  discriminates the three reject classes after all, under a rule stated in
+  `D10`; the derived accepted set at 60 and forbidden set at **71** rather than
+  the 34 first written; the purity aggregate at 52, 4, and 1 once scoped to
+  `New` rows; and confirmation that RFC numbers 0013 upward are free on
+  `origin/main` and every active remote branch.
+- Conformance check: no tracked file modified except this plan.
 - Recovery: nothing to revert.
+- Corrections adopted: `D10` (deny set is the complement of the accepted set,
+  not a union of reject classes), the `D5` rule 2 rewording for `hash`, the
+  `COV-3` purity scoping, and the `COV-2` member assertions — `is_file` is
+  forbidden, but by the complement rule rather than by its reject class.
 - **Go/no-go.** Stop if any derived count disagrees, if the note column does
   not discriminate, or if the reviewer prefers a fallback from
   `Alternatives considered`.
@@ -1406,3 +1570,38 @@ was verified before the obligation was written — all 60 helpers already are �
 a helper is reassigned across steps.
 
 Nothing is implemented; the plan awaits approval.
+
+Revised again 2026-09-11 after `EP-M0`. The plan is approved and in progress:
+the implementation agent was asked to proceed, and `EP-M0` ran as the first
+task, as the plan requires. The audit confirmed every derived count except one,
+and the exception was instructive. The plan's 34-member forbidden set was a row
+count wearing a name count's clothes, and it could not coexist with the plan's
+own `is_file` and `expanduser` assertions — under a faithful class reading
+`is_file` is not forbidden, and under the row count that yields 34 neither is
+it. `D10` resolves the inconsistency by stating the deny set as the
+**complement of the accepted set** — 71 names — which keeps the four membership
+witnesses the first draft wanted, gives up only the `expanduser` exclusion, and
+needs no normative edit to RFC 0006. Everything else held: the partition, the
+accepted set at 60, the 41/16/3 totals, the purity aggregate, the naive heading
+count of 58 with its four reconciliation adjustments, and the availability of
+RFC numbers 0013 to 0020 on `origin/main` and every active remote branch.
+
+Three smaller corrections followed. `D5` rule 2 asserted that all three rename
+rows say `Reject`; `hash`'s row actually reads "Accept as `text_hash`", so the
+rule is read off the disposition cell and the rename is not a parser special
+case. `COV-3`'s purity aggregate has to be scoped to `New` rows, because the
+registries carry all 60 accepted helpers including the filesystem-observing
+`glob` and would otherwise aggregate to 54/5/1 against section 6.1's 52/4/1. And
+`COV-2`'s member list was restated against the complement, with `is_dir`,
+`is_link`, `win_dirname`, and `expanduser` added to its non-vacuity assertions
+and the `expanduser` exclusion dropped.
+
+One `D5` rule 3 remedy was **not** needed. The plan provided that if section
+7's note column did not discriminate the three reject classes, `EP-M1` would
+add a discriminating column. `EP-M0` found that it does discriminate — the rule
+is that a reject row is *alias* if its resolution cell contains "alias" or
+cites §10.2, *exists* if it begins "Exists" or names a provider in backticks,
+and *principle* otherwise, which reproduces table 11's 22/10/18 over all 50
+reject rows. The split is asserted as a derived witness, but `D10` keeps it off
+the deny set's critical path: a gate that turns on the literal token "alias"
+appearing in a prose cell is a gate a copy-edit can break.
