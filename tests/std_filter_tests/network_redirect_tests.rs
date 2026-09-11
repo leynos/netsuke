@@ -12,12 +12,12 @@ use url::Url;
 use super::support::fallible;
 
 /// Render a fetch template with `policy` and return its output and impurity state.
-fn render_fetch(policy: NetworkPolicy, url: &str) -> Result<(String, bool)> {
+pub(super) fn render_fetch(policy: NetworkPolicy, url: &str) -> Result<(String, bool)> {
     render_fetch_with_cache(policy, url, false)
 }
 
 /// Render a fetch template with a chosen cache setting.
-fn render_fetch_with_cache(
+pub(super) fn render_fetch_with_cache(
     policy: NetworkPolicy,
     url: &str,
     use_cache: bool,
@@ -40,7 +40,10 @@ fn render_fetch_with_cache(
 }
 
 /// Convert a loopback fixture URL into an equivalent `localhost` URL.
-fn localhost_url(url: &str) -> Result<String> {
+///
+/// Fixtures bind `127.0.0.1`, so a case that must allow the origin it connects
+/// to can allow `localhost` instead of allowlisting the loopback address.
+pub(super) fn localhost_url(url: &str) -> Result<String> {
     let mut parsed = Url::parse(url).context("parse redirector URL")?;
     parsed
         .set_host(Some("localhost"))
@@ -49,7 +52,7 @@ fn localhost_url(url: &str) -> Result<String> {
 }
 
 /// Join a fixture server and report any thread panic.
-fn join_server(server: http::HttpServer, name: &str) -> Result<()> {
+pub(super) fn join_server(server: http::HttpServer, name: &str) -> Result<()> {
     server
         .join()
         .map_err(|err| anyhow!("{name} server thread panicked: {err:?}"))

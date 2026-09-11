@@ -5054,6 +5054,42 @@ nor a variable's contents, nor the expanded result. Adding a rung means adding
 a label to the closed set above and pinning it in the ladder tests, not
 recording the value that distinguished it.
 
+
+### Fetch network telemetry
+
+The fetch boundary emits four bounded metric families, described once per
+process through `Once`-guarded `describe_counter!` and `describe_histogram!`
+calls in `src/stdlib/network/telemetry.rs`, matching the pattern in
+`stdlib::which::cache`:
+
+- `netsuke_stdlib_fetch_total` — a counter labelled `outcome=success|failure`.
+- `netsuke_stdlib_fetch_duration_seconds` — a histogram recording the call
+  duration in seconds, with no labels.
+- `netsuke_stdlib_fetch_policy_total` — a counter labelled
+  `outcome=allowed|rejected`; its `policy_reason` label is one of `allowed`,
+  `scheme_not_allowed`, `missing_host`, `host_not_allowlisted`, or
+  `host_blocked`.
+- `netsuke_stdlib_fetch_redirect_total` — a counter labelled
+  `outcome=followed|rejected`; its `redirect_failure` label is one of `none`,
+  `limit_exceeded`, `loop`, `location_missing`, `location_invalid`,
+  `credentials_not_removable`, or `policy_rejected`.
+
+Every label value is drawn from a closed set declared in the same module, so
+the series count is fixed by the code and never by the manifest. No series
+carries a URL, host, location, or userinfo, which keeps cardinality bounded; a
+debug build panics on a label outside the declared sets, so a widened
+vocabulary is a programming error rather than a new series.
+
+The library only emits these series. Installing the recorder and deciding
+retention remain the application's decision under ADR-013, so no stdlib fetch
+series is added to the in-process recorder allowlist.
+
+The tests in `src/stdlib/network/telemetry_tests.rs` capture samples through a
+local `metrics_util` `DebuggingRecorder` rather than the global recorder,
+following the home-resolution tests. Each series and its closed label set is
+pinned in isolation, and a final case drives a real redirecting fetch so the
+wiring between the fetch boundary and the emitters is covered.
+
 ### Configuration discovery module layout
 
 `src/cli/discovery.rs` attaches several small `#[path = "..."]` modules that

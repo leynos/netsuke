@@ -8,6 +8,8 @@
 mod cache;
 mod policy;
 mod redirect;
+mod redirect_chain;
+mod telemetry;
 /// Network policy that controls which schemes and hosts the fetch helper may reach.
 pub use self::policy::NetworkPolicy;
 /// Error returned when constructing an invalid network policy configuration.
@@ -26,6 +28,7 @@ use std::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
+    time::Instant,
 };
 
 #[cfg(test)]
@@ -63,6 +66,25 @@ pub(crate) fn register_functions(
     });
 }
 
+/// Time one `fetch` call and record its bounded outcome.
+///
+/// # Errors
+///
+/// Propagates every error [`fetch_inner`] reports. The duration and outcome are
+/// recorded even when the call fails, so the counters account for every
+/// attempt.
+fn fetch(
+    url: &str,
+    kwargs: &Kwargs,
+    impure: &Arc<AtomicBool>,
+    context: &FetchContext,
+) -> Result<Value, Error> {
+    let started = Instant::now();
+    let outcome = fetch_inner(url, kwargs, impure, context);
+    telemetry::record_fetch(started.elapsed(), outcome.is_ok());
+    outcome
+}
+
 /// Fetch a URL for the `fetch` template function, applying policy and optional caching.
 ///
 /// # Errors
@@ -72,7 +94,7 @@ pub(crate) fn register_functions(
 /// enabled, cache directory, entry, read, write, and sync failures are also
 /// reported. Remote request failures, response-body read failures, and
 /// responses that exceed the configured size limit are reported as errors.
-fn fetch(
+fn fetch_inner(
     url: &str,
     kwargs: &Kwargs,
     impure: &Arc<AtomicBool>,
@@ -93,6 +115,7 @@ fn fetch(
 
     match context.policy().evaluate(&parsed) {
         Ok(()) => {
+            telemetry::record_policy_decision("allowed", "allowed");
             tracing::debug!(
                 operation = "fetch",
                 policy_outcome = "allowed",
@@ -100,10 +123,12 @@ fn fetch(
             );
         }
         Err(violation) => {
+            let reason = network_policy_rejection_reason(&violation);
+            telemetry::record_policy_decision("rejected", reason);
             tracing::debug!(
                 operation = "fetch",
                 policy_outcome = "rejected",
-                policy_reason = network_policy_rejection_reason(&violation),
+                policy_reason = reason,
                 "network policy rejected fetch"
             );
             return Err(Error::new(

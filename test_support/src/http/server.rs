@@ -5,7 +5,30 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-use super::{HttpResponse, HttpServerConfig, accept_connection, read_request, response};
+use super::{
+    HttpResponse, HttpServerConfig, RequestLog, accept_connection, request::read_request_line,
+    response,
+};
+
+/// What one fixture run records about the requests it answers.
+///
+/// The counter and the log are paired so the server thread takes one argument
+/// for both, keeping every fixture helper within the argument-count limit.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct FixtureLedger<'run> {
+    /// Number of requests the fixture has answered.
+    requests: &'run AtomicUsize,
+    /// Request lines the fixture has answered, in arrival order.
+    log: &'run RequestLog,
+}
+
+impl<'run> FixtureLedger<'run> {
+    /// Pair a request counter with the request log for one fixture run.
+    #[must_use]
+    pub(super) const fn new(requests: &'run AtomicUsize, log: &'run RequestLog) -> Self {
+        Self { requests, log }
+    }
+}
 
 /// Report whether the fixture should keep serving configured responses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -21,11 +44,10 @@ pub(super) fn run_http_server(
     listener: &TcpListener,
     responses: &[HttpResponse],
     config: &HttpServerConfig,
-    requests: &AtomicUsize,
+    ledger: &FixtureLedger<'_>,
 ) {
     for response in responses {
-        if serve_fixture_response(listener, response, config, requests) == FixtureProgress::Shutdown
-        {
+        if serve_fixture_response(listener, response, config, ledger) == FixtureProgress::Shutdown {
             return;
         }
     }
@@ -45,14 +67,16 @@ fn serve_fixture_response(
     listener: &TcpListener,
     response: &HttpResponse,
     config: &HttpServerConfig,
-    requests: &AtomicUsize,
+    ledger: &FixtureLedger<'_>,
 ) -> FixtureProgress {
     let mut stream = accept_fixture_connection(listener, config);
     configure_fixture_stream(&stream);
-    if read_request(&mut stream, config.read_deadline(), config.poll_interval) == 0 {
+    let Some(line) = read_request_line(&mut stream, config.read_deadline(), config.poll_interval)
+    else {
         return FixtureProgress::Shutdown;
-    }
-    requests.fetch_add(1, Ordering::Relaxed);
+    };
+    ledger.log.record(line);
+    ledger.requests.fetch_add(1, Ordering::Relaxed);
     write_fixture_response(&mut stream, response);
     FixtureProgress::Continue
 }

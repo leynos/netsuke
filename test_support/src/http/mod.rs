@@ -6,19 +6,20 @@
 
 use mockable::{DefaultEnv, Env};
 use std::{
-    fmt,
-    io::{self, Read},
+    fmt, io,
     net::{SocketAddr, TcpListener, TcpStream},
     sync::{Arc, atomic::AtomicUsize},
     thread,
     time::{Duration, Instant},
 };
 
+mod request;
 mod response;
 mod server;
 
+pub use self::request::RequestLog;
 pub use self::response::HttpResponse;
-use self::server::run_http_server;
+use self::server::{FixtureLedger, run_http_server};
 
 /// Override for the timeout in milliseconds within which a client must connect.
 pub(crate) const ENV_HTTP_ACCEPT_TIMEOUT_MS: &str = "NETSUKE_TEST_HTTP_ACCEPT_TIMEOUT_MS";
@@ -180,8 +181,8 @@ pub fn spawn_http_server_with_config(
     response_body: impl Into<String>,
     config: HttpServerConfig,
 ) -> io::Result<(String, HttpServer)> {
-    let (url, _requests, server) =
-        spawn_http_server_responses_with_config([HttpResponse::new(200, response_body)], config)?;
+    let (url, _requests, _log, server) =
+        spawn_fixture_server([HttpResponse::new(200, response_body)], config)?;
     Ok((url, server))
 }
 
@@ -193,14 +194,37 @@ pub fn spawn_http_server_with_config(
 pub fn spawn_http_server_responses(
     responses: impl IntoIterator<Item = HttpResponse>,
 ) -> io::Result<(String, Arc<AtomicUsize>, HttpServer)> {
-    spawn_http_server_responses_with_config(responses, HttpServerConfig::from_env())
+    let (url, requests, _log, server) =
+        spawn_fixture_server(responses, HttpServerConfig::from_env())?;
+    Ok((url, requests, server))
+}
+
+/// Spawn an HTTP server that emits each response in sequence and records the
+/// request line of every request it answers.
+///
+/// The request log lets a test assert the method and target a client used at
+/// each hop of a redirect chain, which a request count alone cannot show.
+///
+/// # Errors
+///
+/// Propagates failures while starting the fixture server.
+pub fn spawn_http_server_recording(
+    responses: impl IntoIterator<Item = HttpResponse>,
+) -> io::Result<(String, RequestLog, HttpServer)> {
+    let (url, _requests, log, server) =
+        spawn_fixture_server(responses, HttpServerConfig::from_env())?;
+    Ok((url, log, server))
 }
 
 /// Spawn an HTTP server using `config`, emitting responses in sequence.
-fn spawn_http_server_responses_with_config(
+///
+/// Returns the bound URL, the shared request count, the request log, and the
+/// server handle. The public wrappers above reshape this tuple for their
+/// callers, so every fixture shares one server implementation.
+fn spawn_fixture_server(
     responses: impl IntoIterator<Item = HttpResponse>,
     config: HttpServerConfig,
-) -> io::Result<(String, Arc<AtomicUsize>, HttpServer)> {
+) -> io::Result<(String, Arc<AtomicUsize>, RequestLog, HttpServer)> {
     let response_sequence = responses.into_iter().collect::<Vec<_>>();
     let listener = TcpListener::bind(("127.0.0.1", 0))?;
     listener.set_nonblocking(true)?;
@@ -208,12 +232,22 @@ fn spawn_http_server_responses_with_config(
     let url = format!("http://{addr}");
     let requests = Arc::new(AtomicUsize::new(0));
     let server_requests = Arc::clone(&requests);
+    let log = RequestLog::default();
+    let server_log = log.clone();
     let handle = thread::Builder::new()
         .name("netsuke-http-fixture".into())
-        .spawn(move || run_http_server(&listener, &response_sequence, &config, &server_requests))?;
+        .spawn(move || {
+            run_http_server(
+                &listener,
+                &response_sequence,
+                &config,
+                &FixtureLedger::new(&server_requests, &server_log),
+            );
+        })?;
     Ok((
         url,
         requests,
+        log,
         HttpServer {
             handle: Some(handle),
             addr,
@@ -274,31 +308,6 @@ fn accept_connection(
             }
             Err(err) => panic!("failed to accept connection: {err}"),
         }
-    }
-}
-
-/// Read available request bytes, reporting `WouldBlock` as not-yet-ready.
-#[expect(clippy::panic, reason = "tests panic to surface unexpected IO errors")]
-fn try_read(stream: &mut TcpStream) -> Option<usize> {
-    let mut buf = [0u8; 512];
-    match stream.read(&mut buf) {
-        Ok(0) => Some(0),
-        Ok(n) => Some(n),
-        Err(err) if err.kind() == io::ErrorKind::WouldBlock => None,
-        Err(err) => panic!("failed to read request: {err}"),
-    }
-}
-
-/// Read the request from `stream`, returning `0` once `deadline` passes.
-fn read_request(stream: &mut TcpStream, deadline: Instant, poll_interval: Duration) -> usize {
-    loop {
-        if let Some(bytes_read) = try_read(stream) {
-            return bytes_read;
-        }
-        if Instant::now() >= deadline {
-            return 0;
-        }
-        thread::sleep(poll_interval);
     }
 }
 
