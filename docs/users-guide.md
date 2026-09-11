@@ -1650,7 +1650,6 @@ Avoid placing secrets in URLs. Netsuke logs hosts and cache keys rather than
 complete URLs, but downloaded content and commands still run within the host
 trust boundary.
 
-
 ## Configure file reading limits
 
 The `contents`, `linecount`, `hash`, and `digest` template filters read files

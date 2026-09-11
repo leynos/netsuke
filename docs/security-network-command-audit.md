@@ -99,7 +99,6 @@ introduces, and concrete remediation tasks that would harden the helpers.
     budgets incrementally so long-running commands fail fast once the
     configured allowance is exceeded.
 
-
 ## File helper findings
 
 - [x] **File-reading filters read unbounded, untrusted entries.** *(Status:
