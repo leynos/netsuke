@@ -1693,6 +1693,17 @@ Recorded during planning; extend during implementation.
   pull request, and the maintainer's request to split the method (entry 13) is
   the right response rather than an unrelated tidy-up.
 
+- Observation: a review finding can cite a dependency's documentation while
+  describing a different version of that dependency, and the difference is
+  invisible in the finding's prose. Evidence: CodeRabbit requested changes at
+  `02caf3ee` over `Iso8601::DEFAULT` allegedly writing `+00:00`; its research
+  queried `time` 0.3.44 and itself returned contradictory answers, while
+  `Cargo.lock` pins 0.3.55, whose `formatting/iso8601.rs:185-187` writes `Z`
+  for a UTC offset — and the exact-equality test it cited passes on `Z`.
+  Impact: the suggested edit would have broken a green test. Confirm the
+  resolved version and execute the assertion before applying any
+  version-sensitive finding; the withdrawal is recorded in entry 15.
+
 ## Decision log
 
 - **D1 — Port shape follows the `EnvReader` precedent verbatim.**
@@ -2276,6 +2287,40 @@ To be populated during implementation. Required entries:
     as a draft, so making the PR ready hands the full branch to CodeRabbit's own
     PR review for the first time. The local `coderabbit review --agent` passes
     in entries 9 and 13 are independent of that and do not pre-empt it.
+
+15. CodeRabbit's application-level review ran for the first time at `02caf3ee`,
+    because it had been skipping the branch as a draft, and requested changes
+    over a single finding: that `Iso8601::DEFAULT` emits a minute-precision
+    `+00:00` rather than `Z`, so the expected literals in
+    `tests/std_filter_tests/time_functions.rs` were wrong. The finding was
+    falsified and withdrawn rather than applied; the suggested edit would have
+    turned a green test red.
+
+    The rebuttal rested on three independent pieces of evidence. The ordering
+    matters, because the first two alone are an argument from reading, and the
+    third is the one that settles it:
+
+    - the pin: `Cargo.lock` resolves `time` to **0.3.55**, while the finding's
+      own research queried 0.3.44 — and its two web results contradicted each
+      other, one of them reporting that `DEFAULT` "does not format UTC as
+      `+00:00` by default";
+    - the source: `time-0.3.55/src/formatting/iso8601.rs:185-187` returns
+      `write(output, "Z")` when `offset_is_utc`, and `Iso8601::DEFAULT` is
+      `Config::DEFAULT`, whose `formatted_components` is `DateTimeOffset`;
+    - the execution: `now_uses_configured_clock::case_1_utc` asserts
+      `rendered == "2026-06-08T12:00:00Z"` by exact equality, and
+      `cargo nextest run -E 'binary(std_filter_tests) & test(now_uses_configured_clock)'`
+      reports `Summary [   0.021s] 3 tests run: 3 passed, 66 skipped`. A case
+      that passes on that literal is not passing against `+00:00` output.
+
+    CodeRabbit re-ran its analysis against the resolved version, replied "My
+    finding used an incorrect dependency-version assumption. I withdraw it",
+    and approved; the thread closed as resolved and the merge state returned to
+    `CLEAN`. The episode is recorded because the failure mode generalizes: a
+    finding derived from the published documentation of a *different* version
+    of a dependency is indistinguishable, at a glance, from one derived from
+    the code. The cheapest discriminator is the lock file plus an executed
+    assertion, not a careful reading of the diff.
 
 One lesson about evidence discipline, recorded because it cost a re-run: gate
 logs are named per branch, so a second run over the same branch silently
