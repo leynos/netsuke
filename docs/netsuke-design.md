@@ -1863,11 +1863,13 @@ Implementation details:
   default. Operators can expand the allowlist with
   `--fetch-allow-scheme <SCHEME>`, declare explicit host allowlists via
   `--fetch-allow-host <HOST>` and `--fetch-default-deny`, and block individual
-  hosts through `--fetch-block-host <HOST>`. Policy failures abort before a
-  network call and leave the template marked pure. Redirect handling applies
-  the same policy before every outbound hop; the decision, including bounded
-  redirect handling and cache identity, is recorded in
-  [ADR-020](adr-020-revalidate-fetch-redirects.md).
+  hosts through `--fetch-block-host <HOST>`. Rejecting the caller-supplied URL
+  aborts before any network call and leaves the template marked pure. Redirect
+  handling applies the same policy before every outbound hop. A redirect target
+  that fails policy is therefore rejected only after the initial hop has been
+  dispatched, which already marks the template impure. The decision, including
+  bounded redirect handling and cache identity, is recorded in
+  [ADR-022](adr-022-revalidate-fetch-redirects.md).
 
 For screen readers: `fetch` dispatches the current hop until it receives a
 non-redirect response. For a redirect, it resolves the location and rejects a

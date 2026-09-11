@@ -186,11 +186,12 @@ fn assert_cache_mode_rejects_blocked_redirect(use_cache: bool) -> Result<()> {
 
 /// Verify cached and uncached fetches share redirect-policy enforcement.
 #[rstest]
-fn fetch_cache_modes_reject_blocked_redirects_before_connecting() -> Result<()> {
-    for use_cache in [false, true] {
-        assert_cache_mode_rejects_blocked_redirect(use_cache)?;
-    }
-    Ok(())
+#[case(false)]
+#[case(true)]
+fn fetch_cache_modes_reject_blocked_redirects_before_connecting(
+    #[case] use_cache: bool,
+) -> Result<()> {
+    assert_cache_mode_rejects_blocked_redirect(use_cache)
 }
 
 /// Verify redirects to a previously visited URL fail deterministically.

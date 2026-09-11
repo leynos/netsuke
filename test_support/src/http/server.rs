@@ -7,7 +7,16 @@ use std::{
 
 use super::{HttpResponse, HttpServerConfig, accept_connection, read_request, response};
 
-/// Serve the configured responses in request order.
+/// Report whether the fixture should keep serving configured responses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FixtureProgress {
+    /// The client sent a request and the next response may be served.
+    Continue,
+    /// The client disconnected, so no further connection is accepted.
+    Shutdown,
+}
+
+/// Serve the configured responses in request order until one is not requested.
 pub(super) fn run_http_server(
     listener: &TcpListener,
     responses: &[HttpResponse],
@@ -15,28 +24,37 @@ pub(super) fn run_http_server(
     requests: &AtomicUsize,
 ) {
     for response in responses {
-        serve_fixture_response(listener, response, config, requests);
+        if serve_fixture_response(listener, response, config, requests) == FixtureProgress::Shutdown
+        {
+            return;
+        }
     }
 }
 
 /// Serve one fixture response after a client sends a non-empty request.
 ///
+/// Returns [`FixtureProgress::Shutdown`] when the client disconnects before
+/// sending a request, so an abandoned chain cannot leave later responses
+/// waiting on a connection that will never arrive.
+///
 /// This helper belongs only to the local HTTP fixture: `run_http_server`
 /// composes it once for every configured response, and no production call site
 /// may depend on its panic-oriented test failure contract.
+#[must_use]
 fn serve_fixture_response(
     listener: &TcpListener,
     response: &HttpResponse,
     config: &HttpServerConfig,
     requests: &AtomicUsize,
-) {
+) -> FixtureProgress {
     let mut stream = accept_fixture_connection(listener, config);
     configure_fixture_stream(&stream);
     if read_request(&mut stream, config.read_deadline(), config.poll_interval) == 0 {
-        return;
+        return FixtureProgress::Shutdown;
     }
     requests.fetch_add(1, Ordering::Relaxed);
     write_fixture_response(&mut stream, response);
+    FixtureProgress::Continue
 }
 
 /// Accept one client connection using the fixture configuration.
