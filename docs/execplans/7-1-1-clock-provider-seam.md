@@ -2255,6 +2255,28 @@ To be populated during implementation. Required entries:
     (`Summary [  67.265s] 2879 tests run: 2879 passed, 3 skipped`). CodeScene's
     Code Health Review then passed on `e1568a1b`, 50 seconds.
 
+14. PR #696 was marked ready for review at `be6858fb`, on explicit instruction,
+    once every pull-request check that reports a verdict was green: the
+    seventeen are `build-test`, `kani-smoke`, `netsukefile`, both Windows jobs,
+    the six release builds, the release metadata, admission-canary and
+    Windows-native-recipe jobs, both CodeScene checks, and CodeRabbit — the last
+    reporting a pass on a draft-skip rather than a review. `automerge`,
+    `Kody Code Review` and `release / release` skip by design and were not
+    waited on.
+
+    CodeScene's Code Health Review — the check that was red at `1b87a1e5` and
+    prompted the extraction in entry 13 — passed on the same commit as
+    everything else. That is the evidence the extraction was the right fix
+    rather than a lucky one: the gate that objected to complexity 10 accepted
+    complexity 3 plus a helper at 8.
+
+    This supersedes entry 10's timing note. The flip was left to the maintainer
+    at the time, and the maintainer then asked for it. One consequence is worth
+    stating: CodeRabbit's application-level check had been skipping this branch
+    as a draft, so making the PR ready hands the full branch to CodeRabbit's own
+    PR review for the first time. The local `coderabbit review --agent` passes
+    in entries 9 and 13 are independent of that and do not pre-empt it.
+
 One lesson about evidence discipline, recorded because it cost a re-run: gate
 logs are named per branch, so a second run over the same branch silently
 overwrites the first run's transcript. Evidence is only as fresh as the HEAD it
