@@ -121,6 +121,11 @@ jobs:
         ${{ inputs.platform == 'windows' && 'true' || '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          # The packaging lane hands the workspace to third-party build actions;
+          # keeping the token out of .git/config denies them a reusable push
+          # credential.
+          persist-credentials: false
 
       - name: Install uv
         if: inputs.platform != 'linux'

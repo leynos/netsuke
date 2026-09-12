@@ -1,0 +1,294 @@
+# Architectural decision record (ADR) 022: Isolate PR coverage submission
+
+## Status
+
+Accepted.
+
+## Date
+
+2026-09-05.
+
+## Context and problem statement
+
+The pull-request Continuous Integration (CI) job executes repository-controlled
+commands. Those commands can write persistent runner state, including
+`GITHUB_ENV`, `GITHUB_PATH`, and `BASH_ENV`, for later steps in the same job.
+When that job also ran the CodeScene coverage action with `CS_ACCESS_TOKEN`,
+PR-controlled state could influence a secret-bearing shell context and misuse
+or exfiltrate the credential.
+
+Pinning the CodeScene action does not isolate it from state created by earlier
+steps. Moving the action to a second job in the same pull-request workflow is
+also insufficient because a pull request controls that workflow definition. The
+design therefore needs both a runner boundary and a workflow-definition trust
+boundary.
+
+## Decision drivers
+
+- Keep pull-request builds and tests available to contributors, including fork
+  contributors, without granting them the CodeScene credential.
+- Ensure the secret-bearing workflow definition comes from a trusted ref and
+  cannot be rewritten by the pull request it evaluates.
+- Treat downloaded coverage as hostile data and keep it outside command or
+  interpreter execution paths.
+- Preserve the existing CodeScene gate semantics and identify the originating
+  pull request commit precisely.
+- Keep logs and checks useful for correlation without exposing credentials or
+  unbounded pull-request-controlled data.
+
+## Requirements
+
+### Functional requirements
+
+- The unprivileged `pull_request` CI workflow builds, tests, measures coverage,
+  and uploads only the fixed `pr-coverage-lcov` artefact. It does not receive
+  `CS_ACCESS_TOKEN`.
+- A trusted default-branch `workflow_run` workflow downloads that artefact on a
+  fresh runner and submits it to CodeScene.
+- Submission is eligible only when the source run succeeded, was triggered by
+  a `pull_request` event, and has a same-repository head. The submission step
+  also requires the step-local token-presence guard.
+- The trusted workflow creates the `CodeScene coverage` Check Run against the
+  originating `workflow_run.head_sha`, not the trusted workflow commit.
+- Fork pull requests continue through unprivileged CI. Their trusted
+  submission is excluded by the same-repository guard and, independently, an
+  absent token skips submission without turning successful prerequisites into a
+  failure.
+
+### Technical requirements
+
+- The trusted workflow must not check out or execute the pull-request tree and
+  must not execute uploaded artefact contents.
+- The downloaded artefact must remain a raw ZIP until validation. Its outer
+  directory must contain exactly one regular, non-symbolic archive file within
+  its own boundary. Before any member data is written, ZIP metadata must name
+  exactly one safe relative member, `lcov.info`, with no directory or symbolic
+  link and a cumulative uncompressed size within the bound. The bounded member
+  bytes are decoded as UTF-8 and must contain only recognized LCOV records with
+  the required record types and terminator; only then may the validated output
+  file be written.
+- `CS_ACCESS_TOKEN` must be available only through the CodeScene submission
+  step's local environment. It must not be placed in job-wide state or
+  persisted environment files.
+- Correlation output is bounded to the originating workflow-run ID, originating
+  commit SHA, fixed artefact name, download/validation/submission outcomes, and
+  final conclusion. It must not include token values, secret names, LCOV
+  content, artefact-derived paths, PR titles, or branch names.
+
+## Options considered
+
+### Option A: Trusted `workflow_run` submission
+
+The pull-request workflow produces only `pr-coverage-lcov`. A default-branch
+`workflow_run` consumer downloads it, validates it as hostile data, and invokes
+CodeScene on a fresh runner with a step-scoped token. This creates independent
+execution and workflow-definition boundaries while retaining the coverage gate.
+
+### Option B: A second job in the pull-request workflow
+
+Rejected. Although jobs use separate runners, the pull request can modify the
+workflow definition for both jobs. A second job therefore does not establish a
+trusted workflow-definition boundary for a secret-bearing action.
+
+### Option C: Clean the environment before the CodeScene step
+
+Rejected. Removing selected environment entries or resetting `PATH` cannot
+provide a complete guarantee about state persisted by untrusted commands, and
+it leaves secret use on the same runner as PR-controlled execution.
+
+### Option D: Submit the entire downloaded artefact or execute its helpers
+
+Rejected. The artefact is untrusted input. Only the validated LCOV data file is
+passed as data to the pinned submission action; no member, path, script, or
+other uploaded content is executed.
+
+## Decision outcome / proposed direction
+
+Adopt Option A. `.github/workflows/ci.yml` remains an unprivileged
+`pull_request` workflow and publishes only the bounded `pr-coverage-lcov`
+artefact. `.github/workflows/coverage-pr-submit.yml` is a trusted default-branch
+`workflow_run` consumer. Its successful-source, pull-request, and
+same-repository-head guards establish eligibility before download and
+submission; its token-presence guard keeps fork or otherwise secretless runs
+graceful.
+
+The trusted runner uses `actions/checkout` to retrieve the full trusted
+default-branch tree. It executes only the needed checked-in validation and
+submission commands. It downloads the fixed artefact as a raw ZIP into a
+dedicated directory with decompression disabled. The archive validator checks
+the outer directory and ZIP metadata before reading bounded member data,
+validates the UTF-8 LCOV content, and writes only
+`validated-coverage/lcov.info`; the CodeScene action receives that validated
+data path. The action receives `CS_ACCESS_TOKEN` only through its step-local
+environment. The final Check Run uses `head_sha` from the source run and stores
+that run's ID as its external correlation and idempotency key.
+
+The Check Run is `success` after a successful submission. It is `neutral` only
+when download and validation succeed and submission is skipped solely because
+the token is absent. Download, validation, or submission failures produce a
+failing Check Run.
+
+Workflow concurrency serializes publications for one originating workflow-run
+ID. The publisher searches the originating commit for the fixed Check Run name
+and matching external ID, updates that run when it exists, and creates it only
+when no matching run is found.
+
+Observability is limited to the workflow-run ID, source commit SHA, fixed
+artefact name, three stage outcomes, and final conclusion in the Check Run and
+workflow summary. The trusted workflow also writes bounded JSONL metrics and
+traces to runner-local files and uploads them as the fixed
+`codescene-pr-coverage-metrics` and `codescene-pr-coverage-traces` artefacts.
+Metrics use fixed operation, outcome, and error-category labels with count and
+duration values. Traces use fixed event, operation, outcome, error-category,
+and duration fields plus the originating workflow-run ID and commit SHA. These
+exports are observability artefacts, not a Prometheus, OpenTelemetry Protocol
+(OTLP), or statsd endpoint. No pull-request text, coverage content, filesystem
+paths, or credentials enter these outputs.
+
+## Goals and non-goals
+
+- Goals:
+  - Separate PR-controlled execution from secret-bearing CodeScene submission.
+  - Make hostile artefact validation and the Check Run trust relationship
+    reviewable and contract-tested.
+  - Preserve fork usability and the existing coverage gate for eligible
+    same-repository runs.
+  - Give repository administrators clear controls for eligibility and required
+    checks.
+- Non-goals:
+  - Granting the trusted workflow permission to execute or inspect arbitrary PR
+    source files.
+  - Treating LCOV source-file paths as filesystem paths to resolve or run.
+  - Replacing repository or organization policy with workflow checks alone.
+
+## Migration plan
+
+1. Keep `build-test` responsible for coverage generation and upload, with no
+   CodeScene secret.
+2. Run the trusted `workflow_run` consumer from the default branch with the
+   validator and step-local submission environment.
+3. Configure branch protection to require the `CodeScene coverage` Check Run
+   produced for the originating `head_sha`, and remove any obsolete required
+   check for the former in-job submission step.
+4. Retain repository and organization Actions policies that restrict the
+   CodeScene credential to the trusted phase. Where required, place submission
+   behind a protected environment with independent reviewers, actor
+   restrictions, or equivalent policy controls.
+
+## Known risks and limitations
+
+- A same-repository actor that is eligible to trigger the trusted phase can
+  still cause a submission using the privileges administrators grant to the
+  CodeScene token; token permissions must therefore remain least-privilege.
+- A missing token produces a neutral Check Run after successful prerequisites;
+  branch protection must require the correct Check Run and administrators must
+  decide whether neutral satisfies their repository policy.
+- `workflow_run` and artefact retention are GitHub Actions controls. Changes to
+  repository Actions policy, protected environments, action permissions, or
+  branch protection can weaken this decision and require review.
+- Correlation deliberately omits branch names, titles, and artefact content,
+  so operators must use the workflow-run ID and source SHA to investigate a
+  submission.
+
+## Outstanding decisions
+
+- Repository administrators must retain the Actions policy and secret access
+  restrictions that make the trusted phase eligible.
+- Repository administrators must decide whether a protected environment or
+  independent approval is required in addition to the workflow guards.
+- Organization administrators must update branch-protection required-check
+  names if the old in-job coverage check remains configured.
+
+## Implementation references
+
+- Unprivileged workflow: [`ci.yml`](../.github/workflows/ci.yml)
+- Trusted submission workflow:
+  [`coverage-pr-submit.yml`](../.github/workflows/coverage-pr-submit.yml)
+- Hostile artefact validator:
+  [`validate_coverage_artifact.py`](../scripts/validate_coverage_artifact.py)
+- Workflow contracts:
+  [`trust_boundary_test.py`](../tests/workflow_contracts/trust_boundary_test.py)
+  and
+  [`trust_boundary_properties_test.py`](../tests/workflow_contracts/trust_boundary_properties_test.py)
+- Developer guidance:
+  [`PR coverage trust boundary`](developers-guide.md#pr-coverage-trust-boundary)
+
+## Addendum — 2026-09-07: trusted checkout scope and bounded observability exports
+
+The body above has been amended to record two changes settled after the
+2026-09-05 acceptance. The checkout wording was broadened: the trusted runner
+uses `actions/checkout` to retrieve the full trusted default-branch tree, and
+it executes only the needed checked-in validation and submission commands. The
+earlier statement that the workflow checks out only validation tooling from the
+trusted default branch no longer describes the implementation. The operative
+boundary is unchanged: the trusted tree may be fully present, but the workflow
+must not check out or execute the pull-request tree or any uploaded artefact
+content.
+
+The same amendment added bounded observability exports. The trusted workflow
+writes bounded JSONL metrics and traces to runner-local files and uploads them
+as the fixed `codescene-pr-coverage-metrics` and `codescene-pr-coverage-traces`
+artefacts. Metrics use fixed operation, outcome, and error-category labels with
+count and duration values; traces use fixed event, operation, outcome,
+error-category, and duration fields plus the originating workflow-run ID and
+commit SHA. These exports are observability artefacts, not a Prometheus,
+OpenTelemetry Protocol (OTLP), or statsd endpoint, and no pull-request text,
+coverage content, filesystem paths, or credentials enter them. They extend the
+accepted correlation surface without widening it beyond bounded, fixed-label
+data.
+
+## Addendum — 2026-09-08: raw-ZIP validation boundary and Check Run idempotency
+
+Two changes were settled after the 2026-09-05 acceptance, and the body above
+has been amended to record them. The technical requirement accepted on
+2026-09-05 was that validation must accept exactly one member named
+`lcov.info`, reject links and non-regular files, resolve and contain the member
+within the artefact directory, enforce a bounded size, decode UTF-8, and accept
+only recognized LCOV records. That requirement is replaced by the raw-ZIP
+contract: the downloaded artefact remains a raw ZIP until validation; its outer
+directory must contain exactly one regular, non-symbolic archive file within
+its own boundary; ZIP metadata must name exactly one safe relative member,
+`lcov.info`, with no directory or symbolic link and a cumulative uncompressed
+size within the bound; the bounded member bytes are decoded as UTF-8 and must
+contain only recognized LCOV records with the required record types and
+terminator; only then may `validated-coverage/lcov.info` be written. Archive
+metadata is therefore authoritative before any member data is read, and no
+member content is materialized until the metadata passes.
+
+The second change settled Check Run publication. Workflow concurrency
+serializes publications for one originating workflow-run ID, and the publisher
+searches the originating commit for the fixed Check Run name and matching
+external ID, updates that run when it exists, and creates it only when no
+matching run is found. The originating workflow-run ID is the Check Run's
+external correlation and idempotency key, not merely an observability label.
+
+## Addendum — 2026-09-11: pull-request checkout credential opt-out and the Check Run publication transport port
+
+Two changes were settled after the 2026-09-08 addendum. Every checkout step in
+every pull-request-triggered workflow now sets `persist-credentials: false`.
+Those jobs execute code the pull request controls, and a checkout that persists
+credentials leaves an authenticated git configuration behind that a later
+untrusted step could reuse. The untrusted `build-test` job that produces the
+coverage artefact is the concrete case this opt-out protects. A
+workflow-contract test in `tests/workflow_contracts/trust_boundary_test.py`
+enforces the opt-out for every checkout in every pull-request-triggered
+workflow.
+
+The trusted Check Run publication is now one explicit, fallible operation on the
+`GitHubCheckRunPublisher` adapter, which depends only on a narrow transport
+port. That operation owns the idempotent publication: it looks up the existing
+Check Run for the originating commit, fixed Check Run name, and external ID,
+then updates or creates as one step, so no caller can issue a Check Run query
+that reaches GitHub on its own and no query-shaped method is exposed. Network
+access, the step-local token, and the bounded response read live in the
+production transport implementation, which is confined to `urllib`. Tests
+inject either that transport against a local contract server or a recording
+transport, so publication logic is exercised without credentials. The trusted
+submission script is the composition root: it assembles repository, transport,
+and publisher, then binds the publication operation to the callable publisher
+port its commands consume.
+
+The operative boundary is unchanged: the artefact still crosses as hostile
+data, the credential still reaches only the guarded submission step, and the
+publication path still uses the originating workflow-run ID as its external
+correlation and idempotency key.

@@ -152,6 +152,9 @@ operator, user, and contributor references are easier to find.
 - [ADR-021](adr-021-trust-aware-fetch-policy-merge.md):
   Trust-aware merging of project fetch-policy requests with operator-enforced
   network policy.
+- [ADR-022](adr-022-pr-coverage-trust-boundary.md): Isolated pull-request
+  coverage generation, hostile-artefact validation, and trusted CodeScene
+  submission with bounded correlation observability.
 
 ## Proposals
 
