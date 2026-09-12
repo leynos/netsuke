@@ -1,0 +1,5 @@
+---
+source: src/stdlib/network/redirect_adapter_tests.rs
+expression: rendered
+---
+invalid operation: Redirect URL 'http://blocked.example/next' is disallowed: Scheme 'http' is not allowed..

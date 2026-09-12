@@ -155,6 +155,8 @@ operator, user, and contributor references are easier to find.
 - [ADR-022](adr-022-pr-coverage-trust-boundary.md): Isolated pull-request
   coverage generation, hostile-artefact validation, and trusted CodeScene
   submission with bounded correlation observability.
+- [ADR-023](adr-023-revalidate-fetch-redirects.md): Redirect policy decision
+  record, making network policy an invariant of every outbound fetch hop.
 
 ## Proposals
 

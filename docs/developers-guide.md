@@ -3423,6 +3423,16 @@ It exercises the `-C` directory argument contract through the public factory
 only. Keep fixture assertions here and production test-helper behaviour in
 `check_ninja.rs`; this split keeps the public helper below the 400-line cap.
 
+### `test_support/src/http/accept.rs`
+
+Connection acceptance for the local HTTP fixture, split out of
+`test_support/src/http/mod.rs` to keep the fixture configuration below the
+400-line cap. It owns `AcceptWait`, the retry rules that make polling a
+non-blocking listener safe, and the accept loop itself. The parent module
+declares it `mod accept;`, and its surface is `pub(super)`, so nothing outside
+the fixture can reach it. The wait policy stays in `HttpServerConfig`; this
+module only carries the wait out.
+
 ### `src/ir/cmd_interpolate_property_support.rs`
 
 This test-only sibling module is owned by the command-interpolation property
@@ -3862,6 +3872,26 @@ handle inside this module instead: the caller never sees a `File`, so the
 ambient boundary stays where the lint expects it. Prefer that shape — pass in
 what the operation needs and keep the handle here — over widening an exclusion
 to a module that wants a raw `File`.
+
+### `test_support::http`
+
+`test_support::http` owns the local HTTP server fixtures used by unit,
+integration, and behavioural tests that exercise network-facing helpers. Its
+public response model, `HttpResponse`, is composed with `spawn_http_server`,
+`spawn_http_server_with_config`, or `spawn_http_server_responses`. The first
+two preserve the one-request fixture contract and emit `200 OK` by default; the
+response-sequence helper is the composition point for redirect chains and
+returns a request counter for asserting which requests were received.
+
+Only test code may call these helpers. Use separate fixture instances for a
+redirecting origin and its target, and use the target counter when a policy
+decision must prove that no connection was attempted. Configure response
+status, headers, and body through `HttpResponse`; do not add protocol-specific
+server logic to individual tests when the response sequence already expresses
+the scenario. Keep one-off fixtures for behaviour that cannot be represented by
+this local server, and do not use the fixture as a production HTTP adapter. The
+server's bounded accept and read deadlines, plus its drop-time cleanup, keep
+expected zero-request cases from stalling the suite.
 
 ### `test_support::ensure_manifest_exists`
 
@@ -5032,6 +5062,83 @@ The events carry no paths and no environment values: neither the resolved home,
 nor a variable's contents, nor the expanded result. Adding a rung means adding
 a label to the closed set above and pinning it in the ladder tests, not
 recording the value that distinguished it.
+
+### Fetch network telemetry
+
+The fetch boundary emits four bounded metric families, described once per
+process through `Once`-guarded `describe_counter!` and `describe_histogram!`
+calls in `src/stdlib/network/telemetry.rs`, matching the pattern in
+`stdlib::which::cache`:
+
+- `netsuke_stdlib_fetch_total` — a counter labelled `outcome=success|failure`.
+- `netsuke_stdlib_fetch_duration_seconds` — a histogram recording the call
+  duration in seconds, with no labels.
+- `netsuke_stdlib_fetch_policy_total` — a counter labelled
+  `outcome=allowed|rejected`; its `policy_reason` label is one of `allowed`,
+  `scheme_not_allowed`, `missing_host`, `host_not_allowlisted`, or
+  `host_blocked`.
+- `netsuke_stdlib_fetch_redirect_total` — a counter labelled
+  `outcome=followed|rejected`; its `redirect_failure` label is one of `none`,
+  `limit_exceeded`, `loop`, `location_missing`, `location_invalid`,
+  `credentials_not_removable`, or `policy_rejected`.
+
+Every label value is drawn from a closed set declared in the same module, so
+the series count is fixed by the code and never by the manifest. No series
+carries a URL, host, location, or userinfo, which keeps cardinality bounded; a
+debug build panics on a label outside the declared sets, so a widened
+vocabulary is a programming error rather than a new series.
+
+The library only emits these series. Installing the recorder and deciding
+retention remain the application's decision under ADR-013, so no stdlib fetch
+series is added to the in-process recorder allowlist.
+
+The tests in `src/stdlib/network/telemetry_tests.rs` capture samples through a
+local `metrics_util` `DebuggingRecorder` rather than the global recorder,
+following the home-resolution tests. Each series and its closed label set is
+pinned in isolation, and a final case drives a real redirecting fetch so the
+wiring between the fetch boundary and the emitters is covered.
+
+### Fetch redirect architecture
+
+Redirect handling splits along an ownership boundary.
+[`src/stdlib/network/redirect_chain.rs`](../src/stdlib/network/redirect_chain.rs)
+is a transport-independent state machine holding every pure decision: hop
+accounting, loop detection, cross-origin credential stripping, and per-hop
+network-policy evaluation. It performs no I/O and builds no user-facing text.
+[`src/stdlib/network/redirect.rs`](../src/stdlib/network/redirect.rs) is the
+thin adapter that owns the HTTP client, the bounded telemetry, and the
+localized diagnostics, and applies the chain's decisions. A new redirect rule
+belongs in the chain module; a new transport, metric, or message belongs in the
+adapter.
+
+The per-hop ordering is the security-relevant part. The adapter dispatches a
+GET, classifies the status, and only then asks the chain to resolve the
+`Location` value. The chain applies to the resolved target, in order, the hop
+limit, cross-origin credential removal, the loop check, and finally the policy
+evaluation, so the target is checked against the configured `NetworkPolicy`
+before any request is sent to it.
+
+One `fetch` accepts at most five redirects (`FETCH_REDIRECT_LIMIT`); the
+initial request is not a hop, and a target already requested in the same chain
+is refused as a loop. Only statuses 301, 302, 303, 307, and 308 are followed,
+and every hop is dispatched as GET. Userinfo is removed from a target before a
+cross-origin hop, so credentials never cross an origin boundary; when removal
+cannot be performed the redirect is refused rather than sent.
+
+One wall-clock budget (`FETCH_CHAIN_BUDGET`, 60 seconds) covers the whole
+chain, and each hop receives only the time still remaining, so a chain cannot
+spend the budget once per hop. A failed hop is logged with the host only, never
+the full URL, which may carry userinfo; diagnostics render their URLs through a
+userinfo-stripping helper. The `dispatch_hop` warning also carries a closed
+`error_category` drawn from exactly `http_status`, `connection`, `timeout`,
+`io`, `protocol`, `invalid_url`, and `other`. `http_status` marks an
+unsuccessful HTTP response, `connection` a DNS, connect, or proxy failure,
+`timeout` an I/O failure whose source is a timeout, `io` any other I/O failure,
+`protocol` a malformed status line or header, `invalid_url` a URL the client
+could not use, and `other` anything not otherwise classified.
+
+[ADR-023](adr-023-revalidate-fetch-redirects.md) records the rationale for
+revalidating every redirect against the policy.
 
 ### Configuration discovery module layout
 

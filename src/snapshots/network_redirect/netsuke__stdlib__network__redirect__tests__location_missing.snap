@@ -1,0 +1,5 @@
+---
+source: src/stdlib/network/redirect_adapter_tests.rs
+expression: rendered
+---
+invalid operation: Redirect response from 'http://allowed.example/start' did not include a Location header.
