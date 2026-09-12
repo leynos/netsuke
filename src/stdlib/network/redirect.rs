@@ -7,6 +7,7 @@
 //! user-facing text.
 
 use std::{
+    error::Error as _,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -17,7 +18,7 @@ use std::{
 use minijinja::{Error, ErrorKind};
 use url::Url;
 
-use super::redirect_chain::{RedirectChain, RedirectRejection, is_supported_redirect_status};
+use super::redirect_chain::{RedirectChain, RedirectRejection};
 use super::telemetry;
 use super::{NetworkPolicy, network_policy_rejection_reason};
 use crate::localization::{self, keys};
@@ -64,6 +65,15 @@ pub(super) fn dispatch_request(
             }
         }
     }
+}
+
+/// Report whether `status` carries redirect semantics that preserve GET.
+///
+/// Reading a status code is HTTP interpretation, so the predicate lives here
+/// with the rest of the transport concerns rather than in the pure chain.
+#[must_use]
+const fn is_supported_redirect_status(status: u16) -> bool {
+    matches!(status, 301 | 302 | 303 | 307 | 308)
 }
 
 /// Build a ureq agent that returns every redirect response to the caller.
@@ -118,9 +128,15 @@ fn dispatch_hop(
         .get(url.as_str())
         .timeout(remaining)
         .call()
-        .map_err(|_err| {
-            // Log the host, not the full URL, which may carry userinfo.
-            tracing::warn!(host = url.host_str().unwrap_or(""), "fetch request failed");
+        .map_err(|err| {
+            // Log the host, not the full URL, which may carry userinfo. The
+            // category is a closed value, so the log stays bounded while still
+            // separating a timeout from a refused connection or a bad status.
+            tracing::warn!(
+                host = url.host_str().unwrap_or(""),
+                error_category = ureq_failure_category(&err),
+                "fetch request failed"
+            );
             Error::new(
                 ErrorKind::InvalidOperation,
                 localization::message(keys::STDLIB_FETCH_FAILED)
@@ -129,6 +145,50 @@ fn dispatch_hop(
                     .to_string(),
             )
         })
+}
+
+/// Classify a `ureq` failure into the closed `error_category` vocabulary.
+///
+/// Every failure of a hop is otherwise indistinguishable in the log, so the
+/// category separates an unsuccessful HTTP response from a connection, a
+/// timeout, a malformed response, and an unusable URL.
+fn ureq_failure_category(err: &ureq::Error) -> &'static str {
+    match err {
+        ureq::Error::Status(..) => "http_status",
+        ureq::Error::Transport(transport) => {
+            transport_failure_category(transport.kind(), is_timed_out(err))
+        }
+    }
+}
+
+/// Return the closed category for one transport failure.
+///
+/// The transport carries only its own error kind, which folds connect, DNS, and
+/// proxy failures together and reports a timeout as a plain I/O error, so the
+/// timed-out flag distinguishes the two I/O cases.
+const fn transport_failure_category(kind: ureq::ErrorKind, timed_out: bool) -> &'static str {
+    match kind {
+        ureq::ErrorKind::Dns
+        | ureq::ErrorKind::ConnectionFailed
+        | ureq::ErrorKind::ProxyConnect
+        | ureq::ErrorKind::ProxyUnauthorized => "connection",
+        ureq::ErrorKind::Io if timed_out => "timeout",
+        ureq::ErrorKind::Io => "io",
+        ureq::ErrorKind::BadStatus | ureq::ErrorKind::BadHeader => "protocol",
+        ureq::ErrorKind::InvalidUrl
+        | ureq::ErrorKind::UnknownScheme
+        | ureq::ErrorKind::InvalidProxyUrl => "invalid_url",
+        ureq::ErrorKind::InsecureRequestHttpsOnly
+        | ureq::ErrorKind::TooManyRedirects
+        | ureq::ErrorKind::HTTP => "other",
+    }
+}
+
+/// Report whether a transport failure's source is a timed-out I/O error.
+fn is_timed_out(err: &ureq::Error) -> bool {
+    err.source()
+        .and_then(|source| source.downcast_ref::<std::io::Error>())
+        .is_some_and(|io_err| io_err.kind() == std::io::ErrorKind::TimedOut)
 }
 
 /// Record one accepted redirect and log its bounded policy decision.

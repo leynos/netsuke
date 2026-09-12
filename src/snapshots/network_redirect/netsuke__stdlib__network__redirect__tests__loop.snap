@@ -1,0 +1,5 @@
+---
+source: src/stdlib/network/redirect_adapter_tests.rs
+expression: rendered
+---
+invalid operation: Redirect loop detected at 'http://blocked.example/next'.

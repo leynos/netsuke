@@ -3423,6 +3423,17 @@ It exercises the `-C` directory argument contract through the public factory
 only. Keep fixture assertions here and production test-helper behaviour in
 `check_ninja.rs`; this split keeps the public helper below the 400-line cap.
 
+
+### `test_support/src/http/accept.rs`
+
+Connection acceptance for the local HTTP fixture, split out of
+`test_support/src/http/mod.rs` to keep the fixture configuration below the
+400-line cap. It owns `AcceptWait`, the retry rules that make polling a
+non-blocking listener safe, and the accept loop itself. The parent module
+declares it `mod accept;`, and its surface is `pub(super)`, so nothing outside
+the fixture can reach it. The wait policy stays in `HttpServerConfig`; this
+module only carries the wait out.
+
 ### `src/ir/cmd_interpolate_property_support.rs`
 
 This test-only sibling module is owned by the command-interpolation property
@@ -5089,6 +5100,49 @@ local `metrics_util` `DebuggingRecorder` rather than the global recorder,
 following the home-resolution tests. Each series and its closed label set is
 pinned in isolation, and a final case drives a real redirecting fetch so the
 wiring between the fetch boundary and the emitters is covered.
+
+
+### Fetch redirect architecture
+
+Redirect handling splits along an ownership boundary.
+[`src/stdlib/network/redirect_chain.rs`](../src/stdlib/network/redirect_chain.rs)
+is a transport-independent state machine holding every pure decision: hop
+accounting, loop detection, cross-origin credential stripping, and per-hop
+network-policy evaluation. It performs no I/O and builds no user-facing text.
+[`src/stdlib/network/redirect.rs`](../src/stdlib/network/redirect.rs) is the
+thin adapter that owns the HTTP client, the bounded telemetry, and the
+localized diagnostics, and applies the chain's decisions. A new redirect rule
+belongs in the chain module; a new transport, metric, or message belongs in the
+adapter.
+
+The per-hop ordering is the security-relevant part. The adapter dispatches a
+GET, classifies the status, and only then asks the chain to resolve the
+`Location` value. The chain applies to the resolved target, in order, the hop
+limit, cross-origin credential removal, the loop check, and finally the policy
+evaluation, so the target is checked against the configured `NetworkPolicy`
+before any request is sent to it.
+
+One `fetch` accepts at most five redirects (`FETCH_REDIRECT_LIMIT`); the
+initial request is not a hop, and a target already requested in the same chain
+is refused as a loop. Only statuses 301, 302, 303, 307, and 308 are followed,
+and every hop is dispatched as GET. Userinfo is removed from a target before a
+cross-origin hop, so credentials never cross an origin boundary; when removal
+cannot be performed the redirect is refused rather than sent.
+
+One wall-clock budget (`FETCH_CHAIN_BUDGET`, 60 seconds) covers the whole
+chain, and each hop receives only the time still remaining, so a chain cannot
+spend the budget once per hop. A failed hop is logged with the host only, never
+the full URL, which may carry userinfo; diagnostics render their URLs through a
+userinfo-stripping helper. The `dispatch_hop` warning also carries a closed
+`error_category` drawn from exactly `http_status`, `connection`, `timeout`,
+`io`, `protocol`, `invalid_url`, and `other`. `http_status` marks an
+unsuccessful HTTP response, `connection` a DNS, connect, or proxy failure,
+`timeout` an I/O failure whose source is a timeout, `io` any other I/O failure,
+`protocol` a malformed status line or header, `invalid_url` a URL the client
+could not use, and `other` anything not otherwise classified.
+
+[ADR-022](adr-022-revalidate-fetch-redirects.md) records the rationale for
+revalidating every redirect against the policy.
 
 ### Configuration discovery module layout
 

@@ -104,7 +104,7 @@ impl<'policy> RedirectChain<'policy> {
         self.hops
     }
 
-    /// Resolve, redact, track, and authorise the next redirect target.
+    /// Resolve, redact, track, and authorize the next redirect target.
     ///
     /// # Errors
     ///
@@ -169,12 +169,6 @@ impl<'policy> RedirectChain<'policy> {
                 violation: Box::new(violation),
             })
     }
-}
-
-/// Report whether `status` carries redirect semantics that preserve GET.
-#[must_use]
-pub(super) const fn is_supported_redirect_status(status: u16) -> bool {
-    matches!(status, 301 | 302 | 303 | 307 | 308)
 }
 
 /// Remove credentials that must not cross an origin boundary.

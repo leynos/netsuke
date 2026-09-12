@@ -48,6 +48,17 @@ fn samples_for(record: impl FnOnce()) -> Vec<Sample> {
     collect_samples(snapshotter.snapshot().into_vec())
 }
 
+/// Return the declared failure values a refused redirect may report.
+///
+/// `none` is excluded: the adapter reserves it for a followed redirect, so a
+/// refusal carrying it would contradict the closed vocabulary.
+fn refused_failure_values() -> impl Iterator<Item = &'static str> {
+    FETCH_REDIRECT_FAILURE_VALUES
+        .iter()
+        .copied()
+        .filter(|failure| *failure != "none")
+}
+
 /// Convert raw snapshot entries into samples, keeping the recorder's order.
 fn collect_samples(
     entries: Vec<(
@@ -203,11 +214,11 @@ fn policy_decisions_are_counted_under_closed_labels() {
 fn redirect_decisions_use_the_declared_failure_vocabulary() {
     let samples = samples_for(|| {
         record_redirect_followed();
-        for failure in FETCH_REDIRECT_FAILURE_VALUES {
+        for failure in refused_failure_values() {
             record_redirect_refused(failure);
         }
     });
-    let expected = FETCH_REDIRECT_FAILURE_VALUES.iter().fold(
+    let expected = refused_failure_values().fold(
         BTreeMap::from([(
             vec![
                 label("outcome", "followed"),
@@ -250,11 +261,19 @@ fn a_redirected_fetch_records_every_bounded_series(
     cache_workspace: Result<CacheWorkspace>,
 ) -> Result<()> {
     let (_temp, root, _path) = cache_workspace?;
-    let (url, requests, server) = http::spawn_http_server_responses([
+    let (url, requests, server) = match http::spawn_http_server_responses([
         HttpResponse::new(302, "").with_header("Location", "/next"),
         HttpResponse::new(200, "redirected body"),
-    ])
-    .context("spawn redirect fixture for fetch metrics")?;
+    ]) {
+        Ok(fixture) => fixture,
+        // A sandbox that forbids binding a listener cannot host this fixture,
+        // and other cases already cover the fetch path it drives.
+        Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
+            tracing::warn!("Skipping fetch metrics test: cannot bind HTTP listener ({err})");
+            return Ok(());
+        }
+        Err(err) => return Err(err).context("spawn redirect fixture for fetch metrics"),
+    };
     let policy = NetworkPolicy::default()
         .allow_scheme("http")
         .context("allow HTTP for fetch metrics")?;

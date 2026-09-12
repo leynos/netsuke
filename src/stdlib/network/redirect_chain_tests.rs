@@ -4,9 +4,9 @@
 //! locations a server chooses, so they complement the end-to-end tests that
 //! pin one observable behaviour per fixture.
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 use proptest::prelude::*;
-use rstest::rstest;
+use rstest::{fixture, rstest};
 use url::Url;
 
 use super::*;
@@ -66,23 +66,24 @@ fn generated_targets() -> impl Strategy<Value = String> {
         .prop_map(|(scheme, host, path)| format!("{scheme}://{host}/target/{path}"))
 }
 
-#[rstest]
-#[case(300, false)]
-#[case(301, true)]
-#[case(302, true)]
-#[case(303, true)]
-#[case(304, false)]
-#[case(307, true)]
-#[case(308, true)]
-fn supported_redirect_statuses_are_handled_explicitly(
-    #[case] status: u16,
-    #[case] should_redirect: bool,
-) {
-    assert_eq!(
-        is_supported_redirect_status(status),
-        should_redirect,
-        "status {status} should be classified as a supported redirect: {should_redirect}"
-    );
+/// Base URL and matching policy every chain case below starts from.
+struct ChainSetup {
+    /// URL a chain starts at.
+    base: Url,
+    /// Policy that permits HTTP on `allowed.example` only.
+    policy: NetworkPolicy,
+}
+
+/// Provide the initial URL and the allowlisted policy that accepts it.
+///
+/// Returns an error rather than panicking, so a malformed fixture is reported
+/// by the case that needs it and not by the fixture itself.
+#[fixture]
+fn chain_setup() -> Result<ChainSetup> {
+    Ok(ChainSetup {
+        base: initial_url()?,
+        policy: policy_for_hosts(&["allowed.example"])?,
+    })
 }
 
 /// Verify an accepted chain never exceeds the hop limit, repeats a URL, or
@@ -92,9 +93,10 @@ fn supported_redirect_statuses_are_handled_explicitly(
 /// and an absolute hop, so a single chain exercises acceptance, loop refusal,
 /// and the limit in the order a server would present them.
 #[rstest]
-fn bounded_chain_matches_an_independent_dispatch_record() {
-    let base = initial_url().expect("initial URL should parse");
-    let policy = policy_for_hosts(&["allowed.example"]).expect("policy should build");
+fn bounded_chain_matches_an_independent_dispatch_record(
+    chain_setup: Result<ChainSetup>,
+) -> Result<()> {
+    let ChainSetup { base, policy } = chain_setup?;
     let mut chain = RedirectChain::new(&base, &policy);
     let mut dispatched = vec![base];
     let mut accepted = 0_usize;
@@ -115,37 +117,39 @@ fn bounded_chain_matches_an_independent_dispatch_record() {
             continue;
         };
         accepted += 1;
-        assert!(
+        ensure!(
             accepted <= FETCH_REDIRECT_LIMIT,
-            "a chain must accept at most {FETCH_REDIRECT_LIMIT} redirects"
+            "a chain must accept at most {FETCH_REDIRECT_LIMIT} redirects, got {accepted}"
         );
-        assert_eq!(
-            transition.hop, accepted,
-            "hop numbers must increase by one per accepted redirect"
+        ensure!(
+            transition.hop == accepted,
+            "hop numbers must increase by one per accepted redirect: hop {} at accepted {accepted}",
+            transition.hop,
         );
-        assert!(
+        ensure!(
             !dispatched.contains(&transition.next_url),
-            "a chain must never request the same URL twice"
+            "a chain must never request the same URL twice: {}",
+            transition.next_url,
         );
         dispatched.push(transition.next_url);
     }
 
-    assert_eq!(
-        accepted, FETCH_REDIRECT_LIMIT,
-        "the chain should accept exactly as many redirects as the limit allows"
+    ensure!(
+        accepted == FETCH_REDIRECT_LIMIT,
+        "the chain should accept exactly as many redirects as the limit allows, got {accepted}"
     );
-    assert_eq!(
-        accepted,
+    ensure!(
+        accepted == chain.hops(),
+        "the chain must count exactly the redirects it accepted: accepted {accepted}, counted {}",
         chain.hops(),
-        "the chain must count exactly the redirects it accepted"
     );
+    Ok(())
 }
 
 /// Verify a chain of distinct hops stops exactly at the configured limit.
 #[rstest]
-fn distinct_chain_stops_at_the_redirect_limit() {
-    let base = initial_url().expect("initial URL should parse");
-    let policy = policy_for_hosts(&["allowed.example"]).expect("policy should build");
+fn distinct_chain_stops_at_the_redirect_limit(chain_setup: Result<ChainSetup>) -> Result<()> {
+    let ChainSetup { base, policy } = chain_setup?;
     let mut chain = RedirectChain::new(&base, &policy);
 
     for hop in 0..FETCH_REDIRECT_LIMIT {
@@ -153,31 +157,31 @@ fn distinct_chain_stops_at_the_redirect_limit() {
         let transition = chain
             .advance(Some(&location))
             .expect("a distinct hop within the limit should be accepted");
-        assert_eq!(
-            transition.hop,
+        ensure!(
+            transition.hop == hop + 1,
+            "hop {hop} should be numbered {}, got {}",
             hop + 1,
-            "hop {hop} should be numbered {}",
-            hop + 1
+            transition.hop,
         );
     }
 
     let refused = chain
         .advance(Some("/hop/overflow"))
         .expect_err("the hop after the limit must be refused");
-    assert!(
+    ensure!(
         matches!(
             refused,
             RedirectRejection::LimitExceeded { limit, .. } if limit == FETCH_REDIRECT_LIMIT
         ),
         "the hop after the limit must report the configured limit: {refused:?}"
     );
+    Ok(())
 }
 
 /// Verify a repeated target is refused as a loop without another dispatch.
 #[rstest]
-fn revisited_target_is_refused_as_a_loop() {
-    let base = initial_url().expect("initial URL should parse");
-    let policy = policy_for_hosts(&["allowed.example"]).expect("policy should build");
+fn revisited_target_is_refused_as_a_loop(chain_setup: Result<ChainSetup>) -> Result<()> {
+    let ChainSetup { base, policy } = chain_setup?;
     let mut chain = RedirectChain::new(&base, &policy);
 
     chain
@@ -186,20 +190,28 @@ fn revisited_target_is_refused_as_a_loop() {
     let refused = chain
         .advance(Some("/once"))
         .expect_err("revisiting a target must be refused");
-    assert!(
+    ensure!(
         matches!(refused, RedirectRejection::Loop { .. }),
         "a repeated target must be reported as a loop: {refused:?}"
     );
-    assert_eq!(chain.hops(), 1, "a refused loop must not advance the chain");
+    ensure!(
+        chain.hops() == 1,
+        "a refused loop must not advance the chain, hops = {}",
+        chain.hops(),
+    );
+    Ok(())
 }
 
 /// Verify missing and unresolvable locations are refused before any request.
 #[rstest]
 #[case(None, "missing")]
 #[case(Some("http://[::1"), "invalid")]
-fn unusable_locations_are_refused(#[case] location: Option<&str>, #[case] expected: &str) {
-    let base = initial_url().expect("initial URL should parse");
-    let policy = policy_for_hosts(&["allowed.example"]).expect("policy should build");
+fn unusable_locations_are_refused(
+    chain_setup: Result<ChainSetup>,
+    #[case] location: Option<&str>,
+    #[case] expected: &str,
+) -> Result<()> {
+    let ChainSetup { base, policy } = chain_setup?;
     let mut chain = RedirectChain::new(&base, &policy);
 
     let refused = chain
@@ -210,12 +222,13 @@ fn unusable_locations_are_refused(#[case] location: Option<&str>, #[case] expect
         (RedirectRejection::LocationMissing { .. }, "missing")
             | (RedirectRejection::LocationInvalid { .. }, "invalid")
     );
-    assert!(matched, "unexpected rejection: {refused:?}");
-    assert_eq!(
+    ensure!(matched, "unexpected rejection: {refused:?}");
+    ensure!(
+        chain.hops() == 0,
+        "an unusable location must not advance the chain, hops = {}",
         chain.hops(),
-        0,
-        "an unusable location must not advance the chain"
     );
+    Ok(())
 }
 
 proptest! {

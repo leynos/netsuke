@@ -6,7 +6,7 @@ Accepted.
 
 ## Date
 
-2026-09-02.
+2026-09-02
 
 ## Context and issue
 

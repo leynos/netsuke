@@ -5,7 +5,7 @@
 //! interface.
 
 use super::{
-    ENV_HTTP_ACCEPT_TIMEOUT_MS, ENV_HTTP_POLL_INTERVAL_MS, ENV_HTTP_READ_TIMEOUT_MS,
+    AcceptWait, ENV_HTTP_ACCEPT_TIMEOUT_MS, ENV_HTTP_POLL_INTERVAL_MS, ENV_HTTP_READ_TIMEOUT_MS,
     HttpServerConfig, accept_connection, duration_from_env, take_duration_warnings,
 };
 use super::{HttpResponse, response::render_response};
@@ -16,7 +16,7 @@ use std::{
     collections::HashMap,
     io::{Read, Write},
     net::{TcpListener, TcpStream},
-    panic,
+    panic, thread,
     time::{Duration, Instant},
 };
 
@@ -286,7 +286,7 @@ fn accept_connection_respects_accept_timeout() -> anyhow::Result<()> {
     let result = panic::catch_unwind(|| {
         drop(accept_connection(
             &listener,
-            deadline,
+            AcceptWait::Until(deadline),
             poll_interval,
             accept_timeout,
         ));
@@ -322,6 +322,67 @@ fn accept_connection_respects_accept_timeout() -> anyhow::Result<()> {
     anyhow::ensure!(
         panic_text.contains(&format!("poll_interval={poll_interval:?}")),
         "panic message should embed the poll interval: {panic_text}",
+    );
+    Ok(())
+}
+
+/// A fixture that expects no request must not fail merely for waiting.
+///
+/// The accept watchdog is a liveness guard for fixtures whose request the test
+/// expects. Applying it to a fixture that expects none failed Windows CI: the
+/// wait outlasted the accept timeout while the chain was still being driven, so
+/// the fixture thread panicked before the test could join the server.
+#[test]
+fn expect_no_requests_fixture_waits_past_the_accept_timeout() -> anyhow::Result<()> {
+    let accept_timeout = Duration::from_millis(20);
+    let config = HttpServerConfig {
+        accept_timeout,
+        ..HttpServerConfig::default()
+    }
+    .accepting_until_shutdown();
+    let (url, requests, log, server) =
+        super::spawn_fixture_server([HttpResponse::new(200, "unexpected request")], config)?;
+    anyhow::ensure!(
+        url.starts_with("http://"),
+        "fixture should expose a URL: {url}"
+    );
+
+    // Outwait the accept timeout several times over without connecting.
+    thread::sleep(accept_timeout * 10);
+
+    server
+        .join()
+        .map_err(|err| anyhow::anyhow!("fixture server panicked: {err:?}"))?;
+    anyhow::ensure!(
+        requests.load(std::sync::atomic::Ordering::Relaxed) == 0,
+        "an uncontacted fixture should answer nothing",
+    );
+    anyhow::ensure!(
+        log.is_empty(),
+        "an uncontacted fixture should record nothing: {:?}",
+        log.lines(),
+    );
+    Ok(())
+}
+
+/// The no-request fixture still records a request it receives.
+///
+/// Without this, an empty log would also hold for a fixture that never records
+/// anything, leaving the assertions that rely on it vacuous.
+#[test]
+fn expect_no_requests_fixture_records_a_request_it_receives() -> anyhow::Result<()> {
+    let (url, log, server) =
+        super::spawn_http_server_expecting_no_requests(HttpResponse::new(200, "unexpected"))?;
+
+    send_request(&url)?;
+    server
+        .join()
+        .map_err(|err| anyhow::anyhow!("fixture server panicked: {err:?}"))?;
+
+    anyhow::ensure!(
+        log.lines() == vec!["GET / HTTP/1.1".to_owned()],
+        "the fixture should record the request it answered: {:?}",
+        log.lines(),
     );
     Ok(())
 }

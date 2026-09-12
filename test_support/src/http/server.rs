@@ -85,7 +85,7 @@ fn serve_fixture_response(
 fn accept_fixture_connection(listener: &TcpListener, config: &HttpServerConfig) -> TcpStream {
     accept_connection(
         listener,
-        config.accept_deadline(),
+        config.accept_wait(),
         config.poll_interval,
         config.accept_timeout,
     )

@@ -68,13 +68,20 @@ fn every_supported_redirect_status_is_followed_with_get(#[case] status: u16) -> 
 /// the middle fixture answers with `middle_location`, and the denied fixture
 /// must never be contacted. Every fixture is joined, so a chain that stopped
 /// early is reported as a missing request rather than a hung server.
+///
+/// The denied fixture is the one fixture here whose request is not expected, so
+/// it waits for its client without an accept deadline: the sole connection it
+/// sees is the shutdown probe that joining it sends. Holding it to the accept
+/// timeout failed Windows CI, where driving the chain took longer than the
+/// timeout and the fixture panicked before the test could join it.
 fn assert_second_hop_is_refused(
     policy: NetworkPolicy,
     middle_location: impl Fn(&str) -> Result<String>,
     expected_details: &str,
 ) -> Result<()> {
     let (denied_url, denied_log, denied_server) =
-        match http::spawn_http_server_recording([HttpResponse::new(200, "denied target")]) {
+        match http::spawn_http_server_expecting_no_requests(HttpResponse::new(200, "denied target"))
+        {
             Ok(fixture) => fixture,
             Err(err) if err.kind() == io::ErrorKind::PermissionDenied => return Ok(()),
             Err(err) => bail!("spawn refused hop fixture: {err}"),

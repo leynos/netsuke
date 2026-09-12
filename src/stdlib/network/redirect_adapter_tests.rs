@@ -9,11 +9,18 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Context, Result, bail, ensure};
+use insta::assert_snapshot;
 use rstest::rstest;
-use test_support::fluent::normalize_fluent_isolates;
+use test_support::{
+    fluent::normalize_fluent_isolates,
+    localizer::{EnLocalizer, en_localizer},
+    tracing_capture::with_test_subscriber,
+};
+use tracing_subscriber::filter::LevelFilter;
 
 use super::super::redirect_chain::FETCH_REDIRECT_LIMIT;
 use super::*;
+use crate::snapshot_test_support::snapshot_settings;
 
 /// Credentialed URL used as the current URL of a refused redirect.
 const CREDENTIALED_CURRENT: &str = "http://redirect-user:redirect-secret@allowed.example/start";
@@ -188,5 +195,127 @@ fn exhausted_budget_refuses_the_next_hop() -> Result<()> {
             "an expired budget must not disclose {secret}: {rendered}",
         );
     }
+    Ok(())
+}
+
+/// Only the statuses whose redirect semantics preserve GET are followed.
+#[rstest]
+#[case(300, false)]
+#[case(301, true)]
+#[case(302, true)]
+#[case(303, true)]
+#[case(304, false)]
+#[case(307, true)]
+#[case(308, true)]
+fn supported_redirect_statuses_are_handled_explicitly(
+    #[case] status: u16,
+    #[case] should_redirect: bool,
+) {
+    assert_eq!(
+        is_supported_redirect_status(status),
+        should_redirect,
+        "status {status} should be classified as a supported redirect: {should_redirect}"
+    );
+}
+
+/// Every refusal renders the same diagnostic the user sees, snapshotted.
+///
+/// A substring check survives rewording, a dropped interpolation, or a leaked
+/// location, so the whole normalized message is pinned instead. Each refusal
+/// has its own category, which names its snapshot.
+#[rstest]
+fn every_rejection_diagnostic_is_snapshotted(en_localizer: EnLocalizer) -> Result<()> {
+    let _localizer = en_localizer;
+
+    for (rejection, _message) in every_rejection()? {
+        let rendered = normalize_fluent_isolates(&rejection_error(&rejection).to_string());
+        snapshot_settings("network_redirect").bind(|| {
+            assert_snapshot!(failure_category(&rejection), rendered);
+        });
+    }
+    Ok(())
+}
+
+/// The exhausted-budget diagnostic is snapshotted alongside the refusals.
+#[rstest]
+fn chain_deadline_diagnostic_is_snapshotted(en_localizer: EnLocalizer) -> Result<()> {
+    let _localizer = en_localizer;
+    let url = parse_url(CREDENTIALED_CURRENT)?;
+
+    let Err(err) = remaining_budget(Instant::now(), &url) else {
+        bail!("an expired chain budget must refuse the next hop");
+    };
+    let rendered = normalize_fluent_isolates(&err.to_string());
+    snapshot_settings("network_redirect").bind(|| {
+        assert_snapshot!("chain_deadline", rendered);
+    });
+    Ok(())
+}
+
+/// Build a credentialed URL for a loopback port with no listener.
+///
+/// Binding and then releasing the port gives the dispatch a connection the
+/// kernel refuses at once, so the failure is deterministic and needs no
+/// network or DNS.
+///
+/// # Errors
+///
+/// Returns an error when the probe listener cannot be bound or queried.
+fn closed_loopback_url() -> Result<Url> {
+    let listener = std::net::TcpListener::bind(("127.0.0.1", 0))
+        .context("bind a probe listener for an unused port")?;
+    let port = listener
+        .local_addr()
+        .context("read the probe listener address")?
+        .port();
+    drop(listener);
+    parse_url(&format!(
+        "http://redirect-user:redirect-secret@127.0.0.1:{port}/start"
+    ))
+}
+
+/// A hop that cannot connect logs a bounded category and redacts the URL.
+///
+/// This is the only diagnostic the fixture-backed tests cannot reach: every
+/// other failure is driven by a server that answers.
+#[rstest]
+fn failed_dispatch_reports_a_bounded_category(en_localizer: EnLocalizer) -> Result<()> {
+    let _localizer = en_localizer;
+    let unreachable = closed_loopback_url()?;
+    let agent = build_redirect_agent();
+
+    let (events, dispatch) = with_test_subscriber(LevelFilter::DEBUG, |captured| {
+        // `ureq::Response` has no `Debug`, so the outcome is rendered here
+        // rather than unwrapped with `expect_err`.
+        let dispatch = dispatch_hop(&agent, &unreachable, Duration::from_secs(5))
+            .map(|_response| ())
+            .map_err(|err| err.to_string());
+        (captured.snapshot(), dispatch)
+    });
+
+    let Err(rendered) = dispatch else {
+        bail!("a refused connection must fail the hop");
+    };
+    ensure!(
+        rendered.contains("HTTP request failed"),
+        "a failed hop should name the transport failure, got {rendered}",
+    );
+    ensure!(
+        rendered.contains("127.0.0.1"),
+        "a failed hop should name the redacted location, got {rendered}",
+    );
+    for secret in SECRETS {
+        ensure!(
+            !rendered.contains(secret),
+            "a failed hop must not disclose {secret}: {rendered}",
+        );
+    }
+    ensure!(
+        events
+            .iter()
+            .any(|event| event.contains("error_category=\"connection\"")
+                && event.contains("host=\"127.0.0.1\"")),
+        "a refused connection must log the bounded category, got {events:#?}",
+    );
     Ok(())
 }

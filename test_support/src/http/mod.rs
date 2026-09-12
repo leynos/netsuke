@@ -13,10 +13,12 @@ use std::{
     time::{Duration, Instant},
 };
 
+mod accept;
 mod request;
 mod response;
 mod server;
 
+use self::accept::{AcceptWait, accept_connection};
 pub use self::request::RequestLog;
 pub use self::response::HttpResponse;
 use self::server::{FixtureLedger, run_http_server};
@@ -45,6 +47,12 @@ pub struct HttpServerConfig {
     read_timeout: Duration,
     /// Interval between readiness polls.
     poll_interval: Duration,
+    /// Whether the accept loop waits for a client without a deadline.
+    ///
+    /// Set by fixtures that expect no request: their only guaranteed connection
+    /// is the shutdown probe [`HttpServer::join`] and [`Drop`] send, so a
+    /// deadline there would fail a slow machine rather than a wrong test.
+    accept_without_deadline: bool,
 }
 
 impl HttpServerConfig {
@@ -87,6 +95,22 @@ impl HttpServerConfig {
         Instant::now() + self.accept_timeout
     }
 
+    /// Return a copy of this configuration that accepts without a deadline.
+    #[must_use]
+    const fn accepting_until_shutdown(mut self) -> Self {
+        self.accept_without_deadline = true;
+        self
+    }
+
+    /// Return what the accept loop should wait for.
+    fn accept_wait(&self) -> AcceptWait {
+        if self.accept_without_deadline {
+            AcceptWait::UntilShutdown
+        } else {
+            AcceptWait::Until(self.accept_deadline())
+        }
+    }
+
     /// Return the instant by which the request must be read.
     fn read_deadline(&self) -> Instant {
         Instant::now() + self.read_timeout
@@ -99,6 +123,7 @@ impl Default for HttpServerConfig {
             accept_timeout: Duration::from_secs(10),
             read_timeout: Duration::from_secs(5),
             poll_interval: Duration::from_millis(10),
+            accept_without_deadline: false,
         }
     }
 }
@@ -216,6 +241,27 @@ pub fn spawn_http_server_recording(
     Ok((url, log, server))
 }
 
+/// Spawn a fixture for a hop or target that must receive no request.
+///
+/// The fixture answers and records any request it does receive, so a test can
+/// assert the log stayed empty, but it waits for a connection without the
+/// accept deadline the other fixtures use. A never-contacted fixture's only
+/// connection is the shutdown probe [`HttpServer::join`] sends, so a deadline
+/// would fail a slow machine rather than a wrong test.
+///
+/// # Errors
+///
+/// Propagates failures while starting the fixture server.
+pub fn spawn_http_server_expecting_no_requests(
+    response: HttpResponse,
+) -> io::Result<(String, RequestLog, HttpServer)> {
+    let (url, _requests, log, server) = spawn_fixture_server(
+        [response],
+        HttpServerConfig::from_env().accepting_until_shutdown(),
+    )?;
+    Ok((url, log, server))
+}
+
 /// Spawn an HTTP server using `config`, emitting responses in sequence.
 ///
 /// Returns the bound URL, the shared request count, the request log, and the
@@ -253,62 +299,6 @@ fn spawn_fixture_server(
             addr,
         },
     ))
-}
-
-/// Return whether `deadline` has passed.
-fn is_past_deadline(deadline: Instant) -> bool {
-    Instant::now() >= deadline
-}
-
-/// Return whether an accept error is transient and still within the deadline.
-fn should_retry_accept(
-    err: &io::Error,
-    deadline: Instant,
-    poll_interval: Duration,
-    accept_timeout: Duration,
-) -> bool {
-    assert!(
-        !is_past_deadline(deadline),
-        "timed out waiting for fetch test connection (accept_timeout={accept_timeout:?}, poll_interval={poll_interval:?})"
-    );
-    // Treat transient readiness states (EAGAIN/EWOULDBLOCK) and EINTR as retryable.
-    matches!(
-        err.kind(),
-        io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted
-    )
-}
-
-/// Return the time remaining until `deadline`, never negative.
-fn remaining_until_deadline(deadline: Instant) -> Duration {
-    let now = Instant::now();
-    if deadline > now {
-        deadline - now
-    } else {
-        Duration::from_millis(0)
-    }
-}
-
-/// Accept a client, retrying transient errors until `deadline`.
-#[expect(
-    clippy::panic,
-    reason = "tests panic when the helper cannot accept a client"
-)]
-fn accept_connection(
-    listener: &TcpListener,
-    deadline: Instant,
-    poll_interval: Duration,
-    accept_timeout: Duration,
-) -> TcpStream {
-    loop {
-        match listener.accept() {
-            Ok((stream, _)) => return stream,
-            Err(err) if should_retry_accept(&err, deadline, poll_interval, accept_timeout) => {
-                let remaining = remaining_until_deadline(deadline);
-                thread::sleep(remaining.min(poll_interval));
-            }
-            Err(err) => panic!("failed to accept connection: {err}"),
-        }
-    }
 }
 
 /// Read `var` as whole milliseconds, falling back to `default` when unset or

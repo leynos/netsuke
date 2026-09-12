@@ -67,9 +67,10 @@ fn assert_redirect_rejected_before_connecting(
     policy: NetworkPolicy,
     expected_details: &str,
 ) -> Result<()> {
-    let (target_url, target_requests, target_server) =
-        match http::spawn_http_server_responses([HttpResponse::new(200, "denied target")]) {
-            Ok(server) => server,
+    let (target_url, target_log, target_server) =
+        match http::spawn_http_server_expecting_no_requests(HttpResponse::new(200, "denied target"))
+        {
+            Ok(fixture) => fixture,
             Err(err) if err.kind() == io::ErrorKind::PermissionDenied => {
                 tracing::warn!("Skipping redirect policy test: cannot bind HTTP listener ({err})");
                 return Ok(());
@@ -94,8 +95,9 @@ fn assert_redirect_rejected_before_connecting(
     join_server(redirector_server, "redirector")?;
     join_server(target_server, "denied redirect target")?;
     ensure!(
-        target_requests.load(std::sync::atomic::Ordering::Relaxed) == 0,
-        "denied target must receive no request",
+        target_log.is_empty(),
+        "denied target must receive no request: {:?}",
+        target_log.lines(),
     );
     Ok(())
 }
@@ -156,9 +158,12 @@ fn fetch_follows_relative_redirect_within_allowed_origin() -> Result<()> {
 
 /// Assert that one cache mode rejects a blocked redirect before connecting to it.
 fn assert_cache_mode_rejects_blocked_redirect(use_cache: bool) -> Result<()> {
-    let (target_url, target_requests, target_server) =
-        match http::spawn_http_server_responses([HttpResponse::new(200, "blocked target")]) {
-            Ok(server) => server,
+    let (target_url, target_log, target_server) =
+        match http::spawn_http_server_expecting_no_requests(HttpResponse::new(
+            200,
+            "blocked target",
+        )) {
+            Ok(fixture) => fixture,
             Err(err) if err.kind() == io::ErrorKind::PermissionDenied => return Ok(()),
             Err(err) => return Err(err).context("spawn cached redirect target"),
         };
@@ -181,8 +186,9 @@ fn assert_cache_mode_rejects_blocked_redirect(use_cache: bool) -> Result<()> {
     join_server(redirector_server, "cached redirector")?;
     join_server(target_server, "cached redirect target")?;
     ensure!(
-        target_requests.load(std::sync::atomic::Ordering::Relaxed) == 0,
-        "blocked target must receive no request when cache={use_cache}",
+        target_log.is_empty(),
+        "blocked target must receive no request when cache={use_cache}: {:?}",
+        target_log.lines(),
     );
     Ok(())
 }
