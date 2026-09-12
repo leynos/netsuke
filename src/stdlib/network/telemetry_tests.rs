@@ -155,6 +155,49 @@ fn fetch_duration_seconds(samples: &[Sample]) -> Result<Vec<f64>> {
         .collect())
 }
 
+/// Assert a redirecting fetch recorded every bounded series.
+///
+/// # Errors
+///
+/// Returns an error when a recorded series differs from what one followed
+/// redirect produces, or when the duration histogram is missing or holds a
+/// non-positive observation.
+fn assert_redirected_fetch_metrics(samples: &[Sample]) -> Result<()> {
+    assert_counter_totals(
+        samples,
+        FETCH_TOTAL,
+        &BTreeMap::from([(vec![label("outcome", "success")], 1)]),
+    )?;
+    assert_counter_totals(
+        samples,
+        FETCH_POLICY_TOTAL,
+        &BTreeMap::from([(
+            vec![
+                label("outcome", "allowed"),
+                label("policy_reason", "allowed"),
+            ],
+            2,
+        )]),
+    )?;
+    assert_counter_totals(
+        samples,
+        FETCH_REDIRECT_TOTAL,
+        &BTreeMap::from([(
+            vec![
+                label("outcome", "followed"),
+                label("redirect_failure", "none"),
+            ],
+            1,
+        )]),
+    )?;
+    let recorded = fetch_duration_seconds(samples)?;
+    ensure!(
+        recorded.iter().all(|seconds| *seconds > 0.0),
+        "the redirecting fetch must record a positive duration: {recorded:?}",
+    );
+    Ok(())
+}
+
 /// Return the duration the fixture records exactly once.
 ///
 /// A quarter of a second is exactly representable as an IEEE 754 double, so the
@@ -298,37 +341,6 @@ fn a_redirected_fetch_records_every_bounded_series(
         "the fixture should answer both hops",
     );
     let samples = collect_samples(snapshotter.snapshot().into_vec());
-    assert_counter_totals(
-        &samples,
-        FETCH_TOTAL,
-        &BTreeMap::from([(vec![label("outcome", "success")], 1)]),
-    )?;
-    assert_counter_totals(
-        &samples,
-        FETCH_POLICY_TOTAL,
-        &BTreeMap::from([(
-            vec![
-                label("outcome", "allowed"),
-                label("policy_reason", "allowed"),
-            ],
-            2,
-        )]),
-    )?;
-    assert_counter_totals(
-        &samples,
-        FETCH_REDIRECT_TOTAL,
-        &BTreeMap::from([(
-            vec![
-                label("outcome", "followed"),
-                label("redirect_failure", "none"),
-            ],
-            1,
-        )]),
-    )?;
-    let recorded = fetch_duration_seconds(&samples)?;
-    ensure!(
-        recorded.iter().all(|seconds| *seconds > 0.0),
-        "the redirecting fetch must record a positive duration: {recorded:?}",
-    );
+    assert_redirected_fetch_metrics(&samples)?;
     Ok(())
 }
