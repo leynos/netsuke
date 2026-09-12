@@ -2,7 +2,7 @@
 
 use std::{
     net::{TcpListener, TcpStream},
-    sync::atomic::{AtomicUsize, Ordering},
+    sync::atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 
 use super::{
@@ -10,23 +10,35 @@ use super::{
     response,
 };
 
-/// What one fixture run records about the requests it answers.
+/// What one fixture run records about the requests it answers, and the state it
+/// shares with the test that owns it.
 ///
-/// The counter and the log are paired so the server thread takes one argument
-/// for both, keeping every fixture helper within the argument-count limit.
+/// The counter, the log, and the shutdown flag are grouped so the server thread
+/// takes one argument for all three, keeping every fixture helper within the
+/// argument-count limit.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct FixtureLedger<'run> {
     /// Number of requests the fixture has answered.
     requests: &'run AtomicUsize,
     /// Request lines the fixture has answered, in arrival order.
     log: &'run RequestLog,
+    /// Set by the owning handle to stop the fixture accepting connections.
+    shutdown: &'run AtomicBool,
 }
 
 impl<'run> FixtureLedger<'run> {
-    /// Pair a request counter with the request log for one fixture run.
+    /// Group the request counter, request log, and shutdown flag for one run.
     #[must_use]
-    pub(super) const fn new(requests: &'run AtomicUsize, log: &'run RequestLog) -> Self {
-        Self { requests, log }
+    pub(super) const fn new(
+        requests: &'run AtomicUsize,
+        log: &'run RequestLog,
+        shutdown: &'run AtomicBool,
+    ) -> Self {
+        Self {
+            requests,
+            log,
+            shutdown,
+        }
     }
 }
 
@@ -35,7 +47,8 @@ impl<'run> FixtureLedger<'run> {
 enum FixtureProgress {
     /// The client sent a request and the next response may be served.
     Continue,
-    /// The client disconnected, so no further connection is accepted.
+    /// No further connection is accepted, because either the client
+    /// disconnected or the test asked the fixture to shut down.
     Shutdown,
 }
 
@@ -57,7 +70,8 @@ pub(super) fn run_http_server(
 ///
 /// Returns [`FixtureProgress::Shutdown`] when the client disconnects before
 /// sending a request, so an abandoned chain cannot leave later responses
-/// waiting on a connection that will never arrive.
+/// waiting on a connection that will never arrive, and likewise when the test
+/// shuts the fixture down before any client connects.
 ///
 /// This helper belongs only to the local HTTP fixture: `run_http_server`
 /// composes it once for every configured response, and no production call site
@@ -69,7 +83,9 @@ fn serve_fixture_response(
     config: &HttpServerConfig,
     ledger: &FixtureLedger<'_>,
 ) -> FixtureProgress {
-    let mut stream = accept_fixture_connection(listener, config);
+    let Some(mut stream) = accept_fixture_connection(listener, config, ledger.shutdown) else {
+        return FixtureProgress::Shutdown;
+    };
     configure_fixture_stream(&stream);
     let Some(line) = read_request_line(&mut stream, config.read_deadline(), config.poll_interval)
     else {
@@ -82,10 +98,17 @@ fn serve_fixture_response(
 }
 
 /// Accept one client connection using the fixture configuration.
-fn accept_fixture_connection(listener: &TcpListener, config: &HttpServerConfig) -> TcpStream {
+///
+/// Returns `None` once `shutdown` is set, which ends the run on the signal
+/// alone rather than on the wake-up connection a join sends.
+fn accept_fixture_connection(
+    listener: &TcpListener,
+    config: &HttpServerConfig,
+    shutdown: &AtomicBool,
+) -> Option<TcpStream> {
     accept_connection(
         listener,
-        config.accept_wait(),
+        config.accept_wait(shutdown),
         config.poll_interval,
         config.accept_timeout,
     )

@@ -70,8 +70,9 @@ fn every_supported_redirect_status_is_followed_with_get(#[case] status: u16) -> 
 /// early is reported as a missing request rather than a hung server.
 ///
 /// The denied fixture is the one fixture here whose request is not expected, so
-/// it waits for its client without an accept deadline: the sole connection it
-/// sees is the shutdown probe that joining it sends. Holding it to the accept
+/// it waits for its client without an accept deadline. Nothing but the shutdown
+/// signal raised when the fixture is joined ends that wait, so an accept
+/// deadline would only fail it on a slow machine. Holding it to the accept
 /// timeout failed Windows CI, where driving the chain took longer than the
 /// timeout and the fixture panicked before the test could join it.
 fn assert_second_hop_is_refused(

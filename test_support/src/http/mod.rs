@@ -8,7 +8,10 @@ use mockable::{DefaultEnv, Env};
 use std::{
     fmt, io,
     net::{SocketAddr, TcpListener, TcpStream},
-    sync::{Arc, atomic::AtomicUsize},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+    },
     thread,
     time::{Duration, Instant},
 };
@@ -49,9 +52,9 @@ pub struct HttpServerConfig {
     poll_interval: Duration,
     /// Whether the accept loop waits for a client without a deadline.
     ///
-    /// Set by fixtures that expect no request: their only guaranteed connection
-    /// is the shutdown probe [`HttpServer::join`] and [`Drop`] send, so a
-    /// deadline there would fail a slow machine rather than a wrong test.
+    /// Set by fixtures that expect no request: nothing but a shutdown ends
+    /// their wait, so a deadline there would fail a slow machine rather than a
+    /// wrong test.
     accept_without_deadline: bool,
 }
 
@@ -103,9 +106,12 @@ impl HttpServerConfig {
     }
 
     /// Return what the accept loop should wait for.
-    fn accept_wait(&self) -> AcceptWait {
+    ///
+    /// An unbounded wait is given `shutdown` so the loop can stop on the
+    /// signal alone, without depending on the wake-up connection a join sends.
+    fn accept_wait<'a>(&self, shutdown: &'a AtomicBool) -> AcceptWait<'a> {
         if self.accept_without_deadline {
-            AcceptWait::UntilShutdown
+            AcceptWait::UntilShutdown(shutdown)
         } else {
             AcceptWait::Until(self.accept_deadline())
         }
@@ -140,8 +146,13 @@ impl Default for HttpServerConfig {
 pub struct HttpServer {
     /// The fixture thread's join handle.
     handle: Option<thread::JoinHandle<()>>,
-    /// The bound listener address, used to unblock the accept loop.
+    /// The bound listener address, used to wake a waiting accept loop.
     addr: SocketAddr,
+    /// Set to stop the fixture accepting; the accept loop polls it.
+    ///
+    /// This, rather than the wake-up connection, is what ends the wait, so a
+    /// fixture whose wake-up never arrives still shuts down.
+    shutdown: Arc<AtomicBool>,
 }
 
 impl HttpServer {
@@ -157,9 +168,15 @@ impl HttpServer {
             .map_or_else(|| Ok(()), std::thread::JoinHandle::join)
     }
 
-    /// Connect once to unblock a blocked accept loop, ignoring the outcome.
+    /// Signal the fixture to stop accepting, and wake a waiting accept loop.
+    ///
+    /// The flag is the shutdown condition, so the wait ends whether or not the
+    /// connection below arrives; the connect only shortens it, and its outcome
+    /// is deliberately ignored.
     fn shutdown_listener(&self) {
-        // Connect to unblock the accept loop; the outcome is irrelevant.
+        self.shutdown.store(true, Ordering::Release);
+        // Wake the accept loop promptly. A failed connect is harmless: the flag
+        // set above, not this connection, is what ends the wait.
         drop(TcpStream::connect(self.addr));
     }
 }
@@ -245,9 +262,9 @@ pub fn spawn_http_server_recording(
 ///
 /// The fixture answers and records any request it does receive, so a test can
 /// assert the log stayed empty, but it waits for a connection without the
-/// accept deadline the other fixtures use. A never-contacted fixture's only
-/// connection is the shutdown probe [`HttpServer::join`] sends, so a deadline
-/// would fail a slow machine rather than a wrong test.
+/// accept deadline the other fixtures use. Nothing but the shutdown signal
+/// [`HttpServer::join`] raises ends that wait, so a deadline would fail a slow
+/// machine rather than a wrong test.
 ///
 /// # Errors
 ///
@@ -280,6 +297,8 @@ fn spawn_fixture_server(
     let server_requests = Arc::clone(&requests);
     let log = RequestLog::default();
     let server_log = log.clone();
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let server_shutdown = Arc::clone(&shutdown);
     let handle = thread::Builder::new()
         .name("netsuke-http-fixture".into())
         .spawn(move || {
@@ -287,7 +306,7 @@ fn spawn_fixture_server(
                 &listener,
                 &response_sequence,
                 &config,
-                &FixtureLedger::new(&server_requests, &server_log),
+                &FixtureLedger::new(&server_requests, &server_log, &server_shutdown),
             );
         })?;
     Ok((
@@ -297,6 +316,7 @@ fn spawn_fixture_server(
         HttpServer {
             handle: Some(handle),
             addr,
+            shutdown,
         },
     ))
 }
@@ -352,5 +372,7 @@ fn take_duration_warnings() -> Vec<String> {
     DURATION_WARNINGS.with(|warnings| warnings.borrow_mut().drain(..).collect())
 }
 
+#[cfg(test)]
+mod config_tests;
 #[cfg(test)]
 mod tests;

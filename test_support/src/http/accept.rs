@@ -8,28 +8,42 @@
 use std::{
     io,
     net::{TcpListener, TcpStream},
+    sync::atomic::{AtomicBool, Ordering},
     thread,
     time::{Duration, Instant},
 };
 
 /// How long the fixture waits for its next client connection.
 #[derive(Debug, Clone, Copy)]
-pub(super) enum AcceptWait {
+pub(super) enum AcceptWait<'a> {
     /// Fail the fixture when no client connects before this instant.
     Until(Instant),
-    /// Wait for a client however long it takes.
+    /// Wait for a client until `shutdown` reports a request to stop.
     ///
     /// Used by fixtures that expect no request, so that a slow machine fails
-    /// nothing: the wait ends when the test joins the fixture.
-    UntilShutdown,
+    /// nothing: the wait ends when the test joins the fixture, whenever that
+    /// join chooses to say so.
+    UntilShutdown(&'a AtomicBool),
 }
 
-impl AcceptWait {
+impl AcceptWait<'_> {
     /// Return the instant after which this wait fails, if it is bounded.
     pub(super) const fn deadline(self) -> Option<Instant> {
         match self {
             Self::Until(deadline) => Some(deadline),
-            Self::UntilShutdown => None,
+            Self::UntilShutdown(_) => None,
+        }
+    }
+
+    /// Return whether the fixture has been asked to stop accepting.
+    ///
+    /// This is the shutdown condition, and is deliberately independent of any
+    /// connection: the wake-up a join sends only shortens the wait, so a
+    /// wake-up that never arrives must not be able to strand it.
+    fn is_shutdown(&self) -> bool {
+        match self {
+            Self::Until(_) => false,
+            Self::UntilShutdown(shutdown) => shutdown.load(Ordering::Acquire),
         }
     }
 }
@@ -42,7 +56,7 @@ fn is_past_deadline(deadline: Instant) -> bool {
 /// Return whether an accept error is transient and still within the deadline.
 fn should_retry_accept(
     err: &io::Error,
-    wait: AcceptWait,
+    wait: AcceptWait<'_>,
     poll_interval: Duration,
     accept_timeout: Duration,
 ) -> bool {
@@ -70,19 +84,27 @@ fn remaining_until_deadline(deadline: Instant) -> Duration {
 }
 
 /// Accept a client, retrying transient errors until `wait` is satisfied.
+///
+/// Returns `None` when the fixture is shut down before a client connects. A
+/// caller that treats `None` as a finished run therefore ends the accept loop
+/// on the shutdown signal alone, without depending on the wake-up connection
+/// actually arriving.
 #[expect(
     clippy::panic,
     reason = "tests panic when the helper cannot accept a client"
 )]
 pub(super) fn accept_connection(
     listener: &TcpListener,
-    wait: AcceptWait,
+    wait: AcceptWait<'_>,
     poll_interval: Duration,
     accept_timeout: Duration,
-) -> TcpStream {
+) -> Option<TcpStream> {
     loop {
+        if wait.is_shutdown() {
+            return None;
+        }
         match listener.accept() {
-            Ok((stream, _)) => return stream,
+            Ok((stream, _)) => return Some(stream),
             Err(err) if should_retry_accept(&err, wait, poll_interval, accept_timeout) => {
                 let nap = wait.deadline().map_or(poll_interval, |deadline| {
                     remaining_until_deadline(deadline).min(poll_interval)
