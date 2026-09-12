@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 022: Revalidate every fetch redirect
+# Architectural decision record (ADR) 023: Revalidate every fetch redirect
 
 ## Status
 

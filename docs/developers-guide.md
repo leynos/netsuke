@@ -5141,7 +5141,7 @@ unsuccessful HTTP response, `connection` a DNS, connect, or proxy failure,
 `protocol` a malformed status line or header, `invalid_url` a URL the client
 could not use, and `other` anything not otherwise classified.
 
-[ADR-022](adr-022-revalidate-fetch-redirects.md) records the rationale for
+[ADR-023](adr-023-revalidate-fetch-redirects.md) records the rationale for
 revalidating every redirect against the policy.
 
 ### Configuration discovery module layout

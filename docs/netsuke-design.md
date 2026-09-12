@@ -1869,7 +1869,7 @@ Implementation details:
   that fails policy is therefore rejected only after the initial hop has been
   dispatched, which already marks the template impure. The decision, including
   bounded redirect handling and cache identity, is recorded in
-  [ADR-022](adr-022-revalidate-fetch-redirects.md).
+  [ADR-023](adr-023-revalidate-fetch-redirects.md).
 
 For screen readers: `fetch` dispatches the current hop until it receives a
 non-redirect response. For a redirect, it resolves the location and rejects a
