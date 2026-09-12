@@ -5,22 +5,34 @@ use crate::ir::{BuildEdge, BuildGraph, DependencyOrder};
 use crate::localization;
 use crate::manifest::ManifestLoadStage;
 use crate::status::{LocalizationKey, StageNumber, StatusReporter};
+use crate::test_tracing_capture::with_test_subscriber;
 use crate::{ninja_gen::NinjaGenError, recipe_shell::RecipeShell};
 use anyhow::{Result, ensure};
 use camino::Utf8PathBuf;
 use monotony::test_util::FixedMonotonicClock;
-use rstest::rstest;
+use proptest::prelude::*;
+use rstest::{fixture, rstest};
 use std::cell::Cell;
 use std::path::Path;
 use std::sync::{Mutex, PoisonError};
 use std::time::Duration;
 use test_support::{localizer_test_lock, set_en_localizer};
+use tracing_subscriber::filter::LevelFilter;
 
 const MINIMAL_MANIFEST: &str = concat!(
     "netsuke_version: \"1.0.0\"\n",
     "targets:\n",
     "  - name: hello\n",
     "    command: echo hi\n",
+);
+const MANIFEST_LOG_SENTINEL: &str = "s3cr3t-manifest-sentinel";
+const MANIFEST_WITH_LOG_SENTINEL: &str = concat!(
+    "netsuke_version: \"1.0.0\"\n",
+    "targets:\n",
+    "  - name: s3cr3t-manifest-sentinel\n",
+    "    deps:\n",
+    "      - s3cr3t-manifest-sentinel-dependency\n",
+    "    command: echo s3cr3t-manifest-sentinel\n",
 );
 
 /// Write a manifest and return a UTF-8 path suitable for runner generation.
@@ -57,6 +69,47 @@ impl StatusReporter for StageRecordingReporter {
     }
 
     fn report_complete(&self, _tool_key: LocalizationKey) {}
+}
+
+/// Hold the common runner dependencies for graph-generation tests.
+struct GraphGenerationFixture {
+    _temp: tempfile::TempDir,
+    cli: Cli,
+    reporter: StageRecordingReporter,
+    clock: FixedMonotonicClock,
+}
+
+impl GraphGenerationFixture {
+    /// Construct the graph-generation context borrowing this fixture's clock.
+    fn graph_generation_context(&self) -> GraphGenerationContext<'_> {
+        GraphGenerationContext {
+            recipe_shell: RecipeShell::host_default(),
+            clock: &self.clock,
+        }
+    }
+}
+
+/// Create isolated runner dependencies for a manifest under test.
+#[fixture]
+fn graph_generation_fixture(
+    #[default(MINIMAL_MANIFEST)] manifest: &str,
+) -> Result<GraphGenerationFixture> {
+    let (temp, manifest_path) = write_manifest(manifest)?;
+    let cli = Cli {
+        file: manifest_path,
+        directory: Some(
+            Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+                .map_err(|path| anyhow::anyhow!("non-UTF-8 temp path: {}", path.display()))?,
+        ),
+        command: Some(Commands::Generate { output: None }),
+        ..Cli::default()
+    };
+    Ok(GraphGenerationFixture {
+        _temp: temp,
+        cli,
+        reporter: StageRecordingReporter::default(),
+        clock: FixedMonotonicClock::with_elapsed(Duration::ZERO),
+    })
 }
 
 #[rstest]
@@ -196,29 +249,17 @@ fn ninja_text_propagates_typed_generation_errors() {
     ));
 }
 
-#[test]
-fn runner_reports_the_complete_generation_stage_sequence() -> Result<()> {
-    let (temp, manifest_path) = write_manifest(MINIMAL_MANIFEST)?;
-    let cli = Cli {
-        file: manifest_path,
-        directory: Some(
-            Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
-                .map_err(|path| anyhow::anyhow!("non-UTF-8 temp path: {}", path.display()))?,
-        ),
-        command: Some(Commands::Generate { output: None }),
-        ..Cli::default()
-    };
-    let reporter = StageRecordingReporter::default();
-
-    let clock = FixedMonotonicClock::with_elapsed(Duration::ZERO);
-    let graph_generation = GraphGenerationContext {
-        recipe_shell: RecipeShell::host_default(),
-        clock: &clock,
-    };
-    let generated = generate_ninja_with_shell(&cli, &reporter, None, &graph_generation)?;
+#[rstest]
+fn runner_reports_the_complete_generation_stage_sequence(
+    graph_generation_fixture: Result<GraphGenerationFixture>,
+) -> Result<()> {
+    let fixture = graph_generation_fixture?;
+    let graph_generation = fixture.graph_generation_context();
+    let generated =
+        generate_ninja_with_shell(&fixture.cli, &fixture.reporter, None, &graph_generation)?;
     let (ninja_text, _) = generated.into_parts();
 
-    let stages = reporter.stages();
+    let stages = fixture.reporter.stages();
     ensure!(
         stages == (1..=6).collect::<Vec<_>>(),
         "unexpected runner stage sequence: {stages:?}"
@@ -228,6 +269,83 @@ fn runner_reports_the_complete_generation_stage_sequence() -> Result<()> {
         "runner generation should produce the hello build edge: {ninja_text}"
     );
     Ok(())
+}
+
+#[rstest]
+fn runner_does_not_log_manifest_content_at_debug_level(
+    #[with(MANIFEST_WITH_LOG_SENTINEL)] graph_generation_fixture: Result<GraphGenerationFixture>,
+) -> Result<()> {
+    let fixture = graph_generation_fixture?;
+
+    let (generation, events) = with_test_subscriber(LevelFilter::DEBUG, |captured| {
+        let graph_generation = fixture.graph_generation_context();
+        let generation =
+            generate_ninja_with_shell(&fixture.cli, &fixture.reporter, None, &graph_generation);
+        (generation, captured.snapshot())
+    });
+    generation?;
+
+    ensure!(
+        !events
+            .iter()
+            .any(|event| event.contains(MANIFEST_LOG_SENTINEL)),
+        "manifest content must not reach DEBUG events: {events:?}"
+    );
+    Ok(())
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(16))]
+    #[test]
+    fn graph_generation_never_logs_generated_manifest_content(
+        sentinel in "[a-z][a-z0-9_]{0,7}",
+    ) {
+        let manifest_marker = format!("generated_manifest_secret_{sentinel}_marker");
+        let manifest = format!(
+            concat!(
+                "netsuke_version: \"1.0.0\"\n",
+                "vars:\n",
+                "  global_value: \"{sentinel}\"\n",
+                "macros:\n",
+                "  - signature: \"expose()\"\n",
+                "    body: |-\n",
+                "      {sentinel}\n",
+                "targets:\n",
+                "  - name: \"{sentinel}_target\"\n",
+                "    sources:\n",
+                "      - \"{sentinel}_source\"\n",
+                "    deps:\n",
+                "      - \"{sentinel}_dependency\"\n",
+                "    order_only_deps:\n",
+                "      - \"{sentinel}_order_only\"\n",
+                "    vars:\n",
+                "      target_value: \"{sentinel}\"\n",
+                "    description: \"{sentinel}\"\n",
+                "    command: \"echo {sentinel}\"\n",
+                "defaults:\n",
+                "  - \"{sentinel}_target\"\n",
+            ),
+            sentinel = manifest_marker,
+        );
+        let fixture = graph_generation_fixture(&manifest)
+            .map_err(|error| TestCaseError::fail(error.to_string()))?;
+        let (generation, events) = with_test_subscriber(LevelFilter::DEBUG, |captured| {
+            let graph_generation = fixture.graph_generation_context();
+            let generation = generate_ninja_with_shell(
+                &fixture.cli,
+                &fixture.reporter,
+                None,
+                &graph_generation,
+            );
+            (generation, captured.snapshot())
+        });
+        generation.map_err(|error| TestCaseError::fail(error.to_string()))?;
+
+        prop_assert!(
+            !events.iter().any(|event| event.contains(&manifest_marker)),
+            "manifest content must not reach DEBUG events: {events:?}",
+        );
+    }
 }
 
 #[test]
