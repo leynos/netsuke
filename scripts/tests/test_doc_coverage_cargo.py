@@ -86,6 +86,7 @@ class FakeCargo:
         metadata: str = '{"packages": [], "workspace_members": []}',
         rustdoc: FakeRustdocResult = _DEFAULT_RUSTDOC_RESULT,
     ) -> None:
+        """Initialise the fake Cargo process with configurable outputs."""
         self._cargo = cargo
         self.metadata_payload = metadata
         self.rustdoc = rustdoc

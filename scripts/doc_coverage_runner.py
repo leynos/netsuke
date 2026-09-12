@@ -21,6 +21,7 @@ class ToolchainPinError(RuntimeError):
     INVALID_RECORD = "toolchain.channel must be a non-empty string"
 
     def __init__(self, detail: str) -> None:
+        """Initialise the error with the unreadable toolchain detail."""
         super().__init__(
             f"cannot read the pinned toolchain from rust-toolchain.toml: {detail}"
         )
@@ -30,6 +31,7 @@ class WorkspaceMetadataError(RuntimeError):
     """Report Cargo metadata that omits the workspace packages or members."""
 
     def __init__(self) -> None:
+        """Initialise the error for incomplete Cargo workspace metadata."""
         super().__init__(
             "cargo metadata response lacks the workspace packages or members"
         )
