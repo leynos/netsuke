@@ -159,9 +159,10 @@ read. Relative paths are resolved from the workspace in which Netsuke runs.
 All four filters share one safety policy: the final path component is opened
 without following symlinks, the opened object must be a regular file, and each
 read stops at a shared byte budget (8 MiB by default). A read that exceeds the
-budget, or a path that names a symlink, FIFO, or device, fails with a localized
-diagnostic quoting the path and the applicable limit. Two optional keyword
-arguments narrow a call without touching the operator ceiling:
+budget fails with a localized diagnostic quoting the path and the byte limit,
+while a path that names a symlink, FIFO, or device is rejected as not a regular
+file with a diagnostic quoting the path alone. Two optional keyword arguments
+narrow a call without touching the operator ceiling:
 
 - `max_bytes` lowers the budget for one call (a value above the configured
   budget is clamped to it). Example:

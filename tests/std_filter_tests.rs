@@ -17,7 +17,7 @@ mod network_redirect_tests;
 #[path = "std_filter_tests/path_filters.rs"]
 mod path_filters;
 
-#[path = "std_filter_tests/read_policy_filters.rs"]
+#[path = "std_filter_tests/read_policy_filters/mod.rs"]
 mod read_policy_filters;
 #[path = "std_filter_tests/support.rs"]
 mod support;

@@ -6,7 +6,7 @@
 use camino::Utf8Path;
 use minijinja::{Environment, Error, ErrorKind, value::Kwargs};
 
-use super::{fs_utils, hash_utils, path_utils};
+use super::{bounded_read, fs_utils, hash_utils, path_utils};
 use crate::localization::{self, keys};
 use crate::stdlib::config_types::HomeDirectory;
 use crate::stdlib::path::fs_utils::FileReadLimits;
@@ -89,7 +89,7 @@ pub(crate) fn register_filters(
                 "utf-8" | "utf8" => {
                     let limits = path_call_limits(&kwargs, file_max_read_bytes)?;
                     kwargs.assert_all_used()?;
-                    fs_utils::read_utf8(Utf8Path::new(&raw), &limits)
+                    bounded_read::read_utf8(Utf8Path::new(&raw), &limits)
                 }
                 other => Err(Error::new(
                     ErrorKind::InvalidOperation,
@@ -105,7 +105,7 @@ pub(crate) fn register_filters(
         move |raw: String, kwargs: Kwargs| -> Result<usize, Error> {
             let limits = path_call_limits(&kwargs, file_max_read_bytes)?;
             kwargs.assert_all_used()?;
-            fs_utils::linecount(Utf8Path::new(&raw), &limits)
+            bounded_read::linecount(Utf8Path::new(&raw), &limits)
         },
     );
     env.add_filter(

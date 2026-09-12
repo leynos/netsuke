@@ -2,6 +2,7 @@
 //!
 //! Wires up path and file filters and re-exports crate-private helpers for
 //! registration from the stdlib coordinator.
+mod bounded_read;
 mod filters;
 mod fs_utils;
 mod hash_utils;
