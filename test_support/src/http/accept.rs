@@ -99,10 +99,10 @@ pub(super) fn accept_connection(
     poll_interval: Duration,
     accept_timeout: Duration,
 ) -> Option<TcpStream> {
-    loop {
-        if wait.is_shutdown() {
-            return None;
-        }
+    // The shutdown check belongs in the loop condition, not in its body: a
+    // nested `if` adds a second depth-2 conditional block, which CodeScene's
+    // Bumpy Road biomarker flags. The two forms are otherwise equivalent.
+    while !wait.is_shutdown() {
         match listener.accept() {
             Ok((stream, _)) => return Some(stream),
             Err(err) if should_retry_accept(&err, wait, poll_interval, accept_timeout) => {
@@ -114,4 +114,5 @@ pub(super) fn accept_connection(
             Err(err) => panic!("failed to accept connection: {err}"),
         }
     }
+    None
 }
