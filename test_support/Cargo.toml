@@ -9,6 +9,9 @@ publish = false
 workspace = true
 [dependencies]
 tempfile = "3.8.0"
+# Decoding PowerShell `-EncodedCommand` payloads in the shared Ninja-semantics
+# helper must match the encoder the production renderer uses.
+base64 = "0.22.1"
 mockable = { version = "3.0", features = ["mock"] }
 camino = "1.2.0"
 proptest = "1.11.0"

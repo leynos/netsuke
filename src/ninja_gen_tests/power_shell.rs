@@ -5,8 +5,45 @@ use super::{
     generate_into_with_shell,
 };
 
-use anyhow::{Context, Result, bail, ensure};
-use base64::{Engine as _, engine::general_purpose::STANDARD};
+use anyhow::{Context, Result, ensure};
+// The Base64 UTF-16LE decoding lives in `test_support` so this module and the
+// integration tests that inspect generated Ninja files share one implementation.
+use test_support::ninja_semantics::{
+    GeneratedNinja, RecipeNeedle, RecipeTransport, ResponseFileContent,
+};
+
+/// Verify that the shared semantics helper reads real PowerShell renderer output.
+///
+/// The helper recognises payloads by their transport markers, which are
+/// declared independently of the renderer's constants, so this pins the two
+/// together. Without it a renamed marker would silently turn the Windows
+/// secret-absence regression test into a plaintext scan.
+#[test]
+fn shared_semantics_helper_reads_rendered_power_shell_commands() -> Result<()> {
+    let action = command_action(StringOrList::String("Write-Output netsuke-marker".into()));
+    let mut rendered = String::new();
+    NamedAction {
+        id: "shared_semantics_helper",
+        action: &action,
+        shell: RecipeShell::PowerShell,
+    }
+    .write_into(&mut rendered)?;
+
+    ensure!(
+        !rendered.contains("netsuke-marker"),
+        "the renderer should hide recipe text from the Ninja binding"
+    );
+    let generated = GeneratedNinja::new(&rendered);
+    ensure!(
+        generated.recipe_contains(RecipeNeedle::new("netsuke-marker"))?,
+        "the helper should decode a rendered PowerShell command payload"
+    );
+    ensure!(
+        generated.detected_recipe_transports() == vec![RecipeTransport::PowerShellEncodedCommand],
+        "a rendered PowerShell command should report the encoded-command transport"
+    );
+    Ok(())
+}
 
 /// Render one oversized PowerShell recipe and assert Ninja owns its response-file lifecycle.
 fn assert_large_recipe_uses_ninja_response_file(
@@ -33,11 +70,11 @@ fn assert_large_recipe_uses_ninja_response_file(
     ensure!(rendered.contains("rspfile = $out.netsuke-large_power_shell.ps1"));
     ensure!(rendered.contains("rspfile_content = "));
     ensure!(!rendered.contains(expected_script));
-    let response_file_script = rendered
+    let response_file_content = rendered
         .lines()
         .find_map(|line| line.strip_prefix("  rspfile_content = "))
         .context("oversized PowerShell command should provide Ninja response-file content")?;
-    let script = decode_response_file_payload(response_file_script)?;
+    let script = ResponseFileContent::new(response_file_content).decode_power_shell_payload()?;
     ensure!(script.starts_with("$ErrorActionPreference = 'Stop'\n"));
     ensure!(script.contains(expected_script));
     ensure!(
@@ -132,15 +169,21 @@ fn power_shell_command_lists_preserve_state_and_stop_on_native_failure() -> Resu
         shell: RecipeShell::PowerShell,
     }
     .write_into(&mut rendered)?;
-    let encoded = rendered
-        .lines()
-        .find_map(|line| line.split("-EncodedCommand ").nth(1))
-        .context("PowerShell command should include an encoded script")?
-        .trim();
-    let script = decode_power_shell_script(encoded)?;
-    ensure!(script.contains("$env:NETSUKE_ORDER = 'first'"));
-    ensure!(script.contains("$LASTEXITCODE = 0"));
-    ensure!(script.contains("if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"));
+    let generated = GeneratedNinja::new(&rendered);
+    ensure!(
+        generated.recipe_contains(RecipeNeedle::new("$env:NETSUKE_ORDER = 'first'"))?,
+        "the decoded recipe should preserve command-list state"
+    );
+    ensure!(
+        generated.recipe_contains(RecipeNeedle::new("$LASTEXITCODE = 0"))?,
+        "the decoded recipe should reset the native exit code"
+    );
+    ensure!(
+        generated.recipe_contains(RecipeNeedle::new(
+            "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"
+        ))?,
+        "the decoded recipe should stop on native failure"
+    );
     ensure!(
         !rendered.contains("NETSUKE_ORDER"),
         "Ninja must not parse the PowerShell variable expression: {rendered}"
@@ -160,19 +203,16 @@ fn power_shell_recipes_quote_apostrophe_paths_with_power_shell_literals() -> Res
     let graph = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::PowerShell)?;
     let mut rendered = String::new();
     generate_into_with_shell(&graph, &mut rendered, RecipeShell::PowerShell)?;
-    let encoded = rendered
-        .lines()
-        .find_map(|line| line.split("-EncodedCommand ").nth(1))
-        .context("PowerShell command should include an encoded script")?
-        .trim();
-    let script = decode_power_shell_script(encoded)?;
+    let generated = GeneratedNinja::new(&rendered);
     ensure!(
-        script.contains("Copy-Item 'source''s-file' 'output''s-file'"),
-        "PowerShell must receive apostrophe-safe path literals:\n{script}"
+        generated.recipe_contains(RecipeNeedle::new(
+            "Copy-Item 'source''s-file' 'output''s-file'"
+        ))?,
+        "PowerShell must receive apostrophe-safe path literals"
     );
     ensure!(
-        script.contains("Write-Output \"a`\"b\""),
-        "PowerShell lowering must preserve native escaped double quotes:\n{script}"
+        generated.recipe_contains(RecipeNeedle::new("Write-Output \"a`\"b\""))?,
+        "PowerShell lowering must preserve native escaped double quotes"
     );
     Ok(())
 }
@@ -197,54 +237,18 @@ fn power_shell_scripts_do_not_use_the_posix_script_wrapper() -> Result<()> {
         shell: RecipeShell::PowerShell,
     }
     .write_into(&mut rendered)?;
-    let encoded = rendered
-        .split("-EncodedCommand ")
-        .nth(1)
-        .context("PowerShell command should include an encoded script")?
-        .trim();
-    let script = decode_power_shell_script(encoded)?;
-    ensure!(script.contains("$edition = $PSVersionTable.PSEdition"));
-    ensure!(script.contains("Write-Output $edition"));
+    let generated = GeneratedNinja::new(&rendered);
     ensure!(
-        !script.contains("/bin/sh"),
-        "PowerShell script must not traverse the POSIX script wrapper: {script}"
+        generated.recipe_contains(RecipeNeedle::new("$edition = $PSVersionTable.PSEdition"))?,
+        "the decoded recipe should carry the script body"
+    );
+    ensure!(
+        generated.recipe_contains(RecipeNeedle::new("Write-Output $edition"))?,
+        "the decoded recipe should carry the script's output"
+    );
+    ensure!(
+        !generated.recipe_contains(RecipeNeedle::new("/bin/sh"))?,
+        "PowerShell script must not traverse the POSIX script wrapper"
     );
     Ok(())
-}
-
-/// Decode the UTF-16LE PowerShell payload emitted in a Ninja command binding.
-fn decode_power_shell_script(encoded: &str) -> Result<String> {
-    let bytes = STANDARD
-        .decode(encoded)
-        .context("decode PowerShell command payload")?;
-    let (pairs, remainder) = bytes.as_chunks::<2>();
-    if !remainder.is_empty() {
-        bail!("PowerShell UTF-16 payload must contain an even number of bytes");
-    }
-    let units = pairs
-        .iter()
-        .map(|[low, high]| u16::from(*low) | (u16::from(*high) << 8))
-        .collect::<Vec<_>>();
-    String::from_utf16(&units).context("decode PowerShell UTF-16 payload")
-}
-
-/// Decode the Base64 UTF-16LE recipe payload embedded in a Ninja response script.
-fn decode_response_file_payload(response_file_script: &str) -> Result<String> {
-    let bootstrap = response_file_script.replace("$$", "$");
-    let encoded = bootstrap
-        .strip_prefix("$netsukePayload = '")
-        .and_then(|content| {
-            content.strip_suffix(
-                "'; $netsukeScript = try { [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($netsukePayload)) } catch { throw \"Netsuke could not decode the PowerShell response file: $($_.Exception.Message)\" }; try { . ([ScriptBlock]::Create($netsukeScript)) } finally { Remove-Item -LiteralPath $PSCommandPath -Force }; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }",
-            )
-        })
-        .context("response file should contain the PowerShell Base64 bootstrap")?;
-    decode_power_shell_script(encoded)
-}
-
-/// Verify that malformed odd-length UTF-16LE PowerShell payloads are rejected.
-#[test]
-fn decode_power_shell_script_rejects_odd_length_payloads() {
-    let encoded = STANDARD.encode([0x41]);
-    assert!(decode_power_shell_script(&encoded).is_err());
 }
