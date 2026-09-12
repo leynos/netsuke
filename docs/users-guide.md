@@ -1676,6 +1676,17 @@ and the final metrics snapshot described in
 [Diagnose configuration selection](#diagnose-configuration-selection). It is
 suppressed in JSON mode so stderr remains parseable.
 
+Graph-generation tracing has a strict privacy boundary. At `DEBUG` and `TRACE`,
+it does not emit the manifest AST, target or dependency names, recipe commands,
+variable values, macro bodies, paths, or any other manifest content. The
+retained telemetry is bounded: a trace span; fixed `recipe_shell`, `outcome`,
+and `error_category` fields; the `netsuke_runner_graph_generations_total`
+counter; and the `netsuke_runner_graph_generation_duration_seconds` histogram.
+
+For manifest-specific diagnostics, use an explicit, access-controlled
+diagnostic workflow. There is no replacement log because manifest content may
+be sensitive and unbounded.
+
 ## Review the safety boundary
 
 Netsuke reduces some common quoting mistakes, but it is not a sandbox:
