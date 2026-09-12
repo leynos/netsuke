@@ -114,14 +114,17 @@ introduces, and concrete remediation tasks that would harden the helpers.
     object is a regular file.
   - Count lines incrementally instead of loading the entire file.
   - **Remediation:** the reading filters now share one policy. The final path
-    component is opened with `O_NOFOLLOW` (a pre-open symlink check on
-    Windows), the opened handle must be a regular file, and `contents`,
-    `linecount`, `hash`, and `digest` stream against a running byte total
-    anchored to `StdlibConfig::with_file_max_read_bytes` (default 8 MiB).
-    `linecount` counts terminators incrementally instead of materializing the
-    file. Per-call `max_bytes` may narrow the ceiling and a named
-    `follow_symlinks=true` opt-in permits link following; rejections surface
-    localized diagnostics naming the path and limit without file contents.
+    component is opened without following symlinks (`O_NOFOLLOW` on Unix,
+    where the open is also non-blocking so a FIFO or device cannot wedge a
+    build worker; a pre-open `symlink_metadata` check on Windows), and the
+    opened handle must be a regular file. `contents`, `linecount`, `hash`, and
+    `digest` stream against a running byte total anchored to
+    `StdlibConfig::with_file_max_read_bytes` (default 8 MiB). `linecount`
+    counts terminators incrementally instead of materializing the file.
+    Per-call `max_bytes` may narrow the ceiling and a named
+    `follow_symlinks=true` opt-in permits link following; budget rejections
+    name the path and the applicable limit, file-type rejections name only the
+    path, and neither discloses file contents.
 
 ## Next steps
 

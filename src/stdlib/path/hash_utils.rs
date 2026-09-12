@@ -12,6 +12,7 @@ use minijinja::{Error, ErrorKind};
 use sha1::Sha1;
 use sha2::{Sha256, Sha512};
 
+use super::bounded_read::{BoundedRead, read_bounded_chunk};
 use super::fs_utils::{self, FileReadLimits};
 use crate::hex::to_lower_hex;
 use crate::localization::{self, keys};
@@ -103,10 +104,9 @@ where
     let mut file = fs_utils::open_file_checked(path, limits)?;
     let mut hasher = H::new();
     let mut buffer = [0_u8; 8192];
-    let mut state = fs_utils::BoundedRead::new(limits.max_bytes);
+    let mut state = BoundedRead::new(limits.max_bytes);
     loop {
-        let Some(chunk) = fs_utils::read_bounded_chunk(&mut state, &mut file, &mut buffer, path)?
-        else {
+        let Some(chunk) = read_bounded_chunk(&mut state, &mut file, &mut buffer, path)? else {
             break;
         };
         hasher.update(chunk);
