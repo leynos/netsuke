@@ -1,13 +1,21 @@
-//! UTF-8 file-system helpers for stdlib filters using cap-std Dir handles: metadata queries,
-//! opening files for streaming, and safe error translation.
+//! File-system access for the stdlib filters through capability-scoped
+//! cap-std handles: resolving a path's parent directory, metadata queries,
+//! and the shared open policy that enforces the file-type and symlink rules.
+//!
+//! Reading an opened file within its byte budget belongs to `bounded_read`;
+//! this module only decides what may be opened.
 use std::io;
 
 use camino::{Utf8Path, Utf8PathBuf};
+#[cfg(unix)]
+use cap_std::fs_utf8::OpenOptionsExt;
 use cap_std::{
     ambient_authority, fs,
     fs_utf8::{Dir, File, OpenOptions},
 };
 use minijinja::Error;
+#[cfg(unix)]
+use rustix::fs::OFlags;
 
 use crate::localization::{self, keys};
 
@@ -22,6 +30,161 @@ pub(super) struct ParentDir {
     pub entry: String,
     /// The parent directory's own path.
     pub dir_path: Utf8PathBuf,
+}
+
+/// Per-call limits for the file-reading filters.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct FileReadLimits {
+    /// Maximum number of bytes the read may consume.
+    pub max_bytes: u64,
+    /// Whether the final path component may be a symlink.
+    pub follow_symlinks: bool,
+}
+
+/// Build the localized non-regular-file diagnostic for `path`.
+pub(crate) fn not_regular_file_error(path: &Utf8Path) -> Error {
+    Error::new(
+        minijinja::ErrorKind::InvalidOperation,
+        localization::message(keys::STDLIB_PATH_NOT_REGULAR_FILE)
+            .with_arg("path", path.as_str())
+            .to_string(),
+    )
+}
+
+/// Open `path` for reading under the file-reading safety policy.
+///
+/// On Unix the open is non-blocking, so a FIFO or device final component
+/// cannot wedge the render worker inside `open` even when the caller opted
+/// into following symlinks; blocking mode is restored once the opened object
+/// is confirmed to be a regular file. The final path component is opened
+/// without following symlinks unless `limits.follow_symlinks` opts in, and the
+/// opened object must be a regular file, checked on the opened handle so
+/// devices and FIFOs are rejected race-free.
+///
+/// # Errors
+///
+/// Returns a template error when the parent directory cannot be opened, the
+/// target cannot be opened, the final component is a symlink while following
+/// is disabled, the opened object is not a regular file, or blocking mode
+/// cannot be restored.
+pub(crate) fn open_file_checked(path: &Utf8Path, limits: &FileReadLimits) -> Result<File, Error> {
+    let parent = open_parent_dir(path)?;
+    let mut options = OpenOptions::new();
+    options.read(true);
+    // `O_NONBLOCK` is applied unconditionally so a FIFO or device cannot block
+    // the open under either symlink policy; `O_NOFOLLOW` is added only by the
+    // default policy, which rejects a symlink final component.
+    #[cfg(unix)]
+    apply_unix_open_flags(&mut options, limits.follow_symlinks, path)?;
+    #[cfg(windows)]
+    if !limits.follow_symlinks {
+        reject_windows_symlink(&parent, path)?;
+    }
+    let file = parent
+        .handle
+        .open_with(Utf8Path::new(&parent.entry), &options)
+        .map_err(|err| {
+            io_to_error(
+                path,
+                &localization::message(keys::STDLIB_PATH_ACTION_OPEN_FILE),
+                err,
+            )
+        })?;
+    let metadata = file.metadata().map_err(|err| {
+        io_to_error(
+            path,
+            &localization::message(keys::STDLIB_PATH_ACTION_STAT),
+            err,
+        )
+    })?;
+    if !metadata.is_file() {
+        return Err(not_regular_file_error(path));
+    }
+    #[cfg(unix)]
+    restore_blocking(&file, path)?;
+    Ok(file)
+}
+
+/// Set `O_NONBLOCK`, and `O_NOFOLLOW` unless the policy follows symlinks.
+///
+/// `O_NONBLOCK` is unconditional: a FIFO or device must not block the open,
+/// including on the opt-in path that follows a symlink to one. `O_NOFOLLOW` is
+/// added only by the default policy, which rejects a symlink final component.
+///
+/// # Errors
+///
+/// Returns a template error when the platform flag bits do not fit an `i32`.
+#[cfg(unix)]
+fn apply_unix_open_flags(
+    options: &mut OpenOptions,
+    follow_symlinks: bool,
+    path: &Utf8Path,
+) -> Result<(), Error> {
+    let mut flags = OFlags::NONBLOCK;
+    if !follow_symlinks {
+        flags |= OFlags::NOFOLLOW;
+    }
+    let bits = i32::try_from(flags.bits()).map_err(|err| {
+        io_to_error(
+            path,
+            &localization::message(keys::STDLIB_PATH_ACTION_OPEN_FILE),
+            io::Error::new(io::ErrorKind::InvalidInput, err),
+        )
+    })?;
+    options.custom_flags(bits);
+    Ok(())
+}
+
+/// Reject a symlink final component ahead of an open on Windows.
+///
+/// Windows exposes no `O_NOFOLLOW` through cap-std, so the pre-open
+/// `symlink_metadata` check is the platform's best available guard.
+///
+/// # Errors
+///
+/// Returns a template error when the metadata cannot be read or names a
+/// symlink.
+#[cfg(windows)]
+fn reject_windows_symlink(parent: &ParentDir, path: &Utf8Path) -> Result<(), Error> {
+    let metadata = parent
+        .handle
+        .symlink_metadata(Utf8Path::new(&parent.entry))
+        .map_err(|err| {
+            io_to_error(
+                path,
+                &localization::message(keys::STDLIB_PATH_ACTION_STAT),
+                err,
+            )
+        })?;
+    if metadata.file_type().is_symlink() {
+        return Err(not_regular_file_error(path));
+    }
+    Ok(())
+}
+
+/// Clear `O_NONBLOCK` from `file` after a non-blocking policy open.
+///
+/// # Errors
+///
+/// Returns a template error when the flag swap fails; the caller treats this
+/// as an unreadable file rather than continuing with non-blocking semantics.
+#[cfg(unix)]
+fn restore_blocking(file: &File, path: &Utf8Path) -> Result<(), Error> {
+    let fd = std::os::fd::AsFd::as_fd(file);
+    let flags = rustix::fs::fcntl_getfl(fd).map_err(|err| {
+        io_to_error(
+            path,
+            &localization::message(keys::STDLIB_PATH_ACTION_OPEN_FILE),
+            io::Error::from(err),
+        )
+    })?;
+    rustix::fs::fcntl_setfl(fd, flags & !OFlags::NONBLOCK).map_err(|err| {
+        io_to_error(
+            path,
+            &localization::message(keys::STDLIB_PATH_ACTION_OPEN_FILE),
+            io::Error::from(err),
+        )
+    })
 }
 
 /// Open a path's parent directory with ambient authority.
@@ -111,41 +274,5 @@ pub(super) fn file_size(path: &Utf8Path) -> Result<u64, Error> {
         handle
             .metadata(Utf8Path::new(entry))
             .map(|metadata| metadata.len())
-    })
-}
-
-/// Read the file at `path` as UTF-8 text.
-///
-/// # Errors
-///
-/// Returns a template error when the parent directory cannot be opened, the
-/// file cannot be read, or its contents are not valid UTF-8.
-pub(super) fn read_utf8(path: &Utf8Path) -> Result<String, Error> {
-    with_parent_dir(path, keys::STDLIB_PATH_ACTION_READ, |handle, entry| {
-        handle.read_to_string(Utf8Path::new(entry))
-    })
-}
-
-/// Count the lines in the file at `path`.
-///
-/// # Errors
-///
-/// Returns a template error when the file cannot be opened or read as UTF-8.
-pub(super) fn linecount(path: &Utf8Path) -> Result<usize, Error> {
-    let content = read_utf8(path)?;
-    Ok(content.lines().count())
-}
-
-/// Open the file at `path` for reading through a capability handle.
-///
-/// # Errors
-///
-/// Returns a template error when the parent directory cannot be opened or the
-/// target file cannot be opened for reading.
-pub(crate) fn open_file(path: &Utf8Path) -> Result<File, Error> {
-    with_parent_dir(path, keys::STDLIB_PATH_ACTION_OPEN_FILE, |handle, entry| {
-        let mut options = OpenOptions::new();
-        options.read(true);
-        handle.open_with(Utf8Path::new(entry), &options)
     })
 }

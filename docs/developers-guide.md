@@ -5303,6 +5303,54 @@ content and order, first-present lookup selection across optional
 `CARGO_TARGET_DIR`/profile/target-triple layouts, and missing-candidate
 diagnostics.
 
+## File-reading filter boundary
+
+The four file-reading filters — `contents`, `linecount`, `hash`, and `digest` —
+share one open-and-read policy under `src/stdlib/path/`:
+
+- `fs_utils.rs` owns what may be opened: `FileReadLimits` carries the per-call
+  `max_bytes` and `follow_symlinks` values, and `open_file_checked` resolves
+  the parent directory, applies the platform open flags, and rejects anything
+  that is not a regular file.
+- `bounded_read.rs` owns the read boundary built on that open: `BoundedRead`
+  tracks the running byte total, `read_bounded_chunk` reads through the budget,
+  `read_utf8` reads `contents` as text, and `linecount` counts newlines in
+  fixed chunks while validating UTF-8 incrementally.
+- `hash_utils.rs` owns `hash_stream`, `compute_hash`, and `compute_digest`,
+  which stream through the same `open_file_checked` and `BoundedRead` pair
+  rather than reading the file whole.
+- `filters.rs` owns registration and the kwarg contract: `path_call_limits`
+  resolves `max_bytes` and `follow_symlinks`, and each filter then calls
+  `kwargs.assert_all_used()` so an unrecognized keyword is an error.
+
+The ceiling starts at `DEFAULT_FILE_MAX_READ_BYTES` (8 MiB) and is overridden
+with the public `StdlibConfig::with_file_max_read_bytes`, which rejects zero.
+`register_with_config` passes the ceiling through `register_read_only_helpers`
+into `path::register_filters`, and each filter closure captures it. A per-call
+`max_bytes` may only narrow that ceiling: a value below the configured budget
+is used, and a value at or above it is clamped to the budget. A per-call
+`follow_symlinks` defaults to `false`, so the final path component is opened
+without following symlinks unless the caller opts in.
+
+On Unix, `apply_unix_open_flags` sets `O_NONBLOCK` unconditionally, so a FIFO
+or device cannot block the open even on the opt-in path that follows a symlink
+to one, and adds `O_NOFOLLOW` only while symlinks are not followed. Once the
+opened handle is confirmed to be a regular file, `restore_blocking` clears
+`O_NONBLOCK`. The regular-file check runs on the opened handle, so devices and
+FIFOs are rejected race-free. Windows has no `O_NOFOLLOW` through cap-std, so
+`reject_windows_symlink` checks `symlink_metadata` before the open; that check
+is not race-free and is tracked as issue #703.
+
+Two diagnostics come out of the boundary. `bounded_read.rs` raises
+`file_too_large_error`, which quotes the path and the limit that was exceeded;
+`fs_utils.rs` raises `not_regular_file_error`, which quotes only the path and
+is what rejects an opened FIFO or device (and a Windows symlink). On Unix a
+symlink refused by `O_NOFOLLOW` instead surfaces through the mapped open error.
+All of them, like the invalid-UTF-8 diagnostic that `contents` and `linecount`
+raise for undecodable input, are MiniJinja `InvalidOperation` errors. See
+[Digest rendering](#digest-rendering) for the hashing loop that consumes this
+boundary.
+
 ## Digest rendering
 
 `src/hex.rs` (`netsuke::hex`) is the single owner of lowercase hexadecimal

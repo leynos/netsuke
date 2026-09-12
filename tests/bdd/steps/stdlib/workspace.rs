@@ -25,7 +25,12 @@ const LINES_FIXTURE: &str = concat!("one\n", "two\n", "three\n",);
 /// Returns the workspace root path. If a workspace already exists (cached in
 /// `world.stdlib_root`), returns that path immediately. Otherwise, creates a
 /// new temporary directory with standard test fixtures (`file`, `lines.txt`,
-/// and a symlink on Unix or fallback file on Windows).
+/// and, on Unix, a real `link` symlink).
+///
+/// The workspace never substitutes a regular file for `link`. Only the
+/// Unix-only scenarios consume it, and a copy would invert what they prove: a
+/// special-file fixture must create the requested file type or be absent. It
+/// must not substitute a regular file.
 ///
 /// The workspace is cached in the `TestWorld` state, so subsequent calls
 /// within the same test scenario return the same directory.
@@ -52,10 +57,6 @@ pub(crate) fn ensure_workspace(world: &TestWorld) -> Result<Utf8PathBuf> {
     handle
         .symlink("file", "link")
         .context("create stdlib symlink fixture")?;
-    #[cfg(not(unix))]
-    handle
-        .write("link", b"data")
-        .context("write stdlib link fixture")?;
     world.temp_dir.set_value(temp);
     world.stdlib_root.set(root.clone());
     Ok(root)

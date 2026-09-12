@@ -58,6 +58,7 @@ impact
 | Ninja text escaping          | Write shell dollars normally. `$ins` and `$outs` are shell variables, whereas `{{ ins }}` and `{{ outs }}` are Netsuke path markers. Spaces in build and default-target paths remain rejected. Paths containing `$`, colons, `\|`, or control characters remain rejected, as are newline, carriage-return, and NUL metadata values.                   | [Users' guide](users-guide.md#review-the-safety-boundary)                                        |
 | Manifest discovery           | Optional target/action `description` values are shown by the new `netsuke help targets` command. Manifests without them and existing build output are unchanged.                                                                                                                                                                                      | [Users' guide](users-guide.md)                                                                   |
 | Serial dependencies          | New opt-in `dependency_order: serial` runs an action or target's direct `deps` list in declaration order.                                                                                                                                                                                                                                             | [Serial dependency ordering](users-guide.md#run-direct-dependencies-serially)                    |
+| File-reading filters         | The `contents`, `linecount`, `hash`, and `digest` filters now read under one 8 MiB default byte budget; a symlink final component is rejected unless `follow_symlinks=true` opts in, while FIFOs and devices are rejected outright, and per-call `max_bytes` can only narrow the budget.                                                              | [Configure file reading limits](users-guide.md#configure-file-reading-limits)                    |
 
 ## Nothing to change for existing callers
 
@@ -355,6 +356,24 @@ manifest-query rendering. See the detailed [help targets documentation]
 versioned JSON result document; its `result.command` is `help-targets`. The
 command and the new descriptions are beta-series additions and remain subject
 to the stability caveat above.
+
+## Configure file reading limits
+
+The `contents`, `linecount`, `hash`, and `digest` filters now read through a
+single bounded stream. One read is limited to 8 MiB by default, and a final
+symlink component is rejected unless the manifest opts in; the opened object
+must always be a regular file, so FIFOs and devices are rejected outright.
+
+Raise or lower the ceiling for the whole environment with
+`StdlibConfig::with_file_max_read_bytes`. A per-call `max_bytes` argument can
+only narrow that budget: a larger request is clamped to the configured ceiling
+rather than rejected. Pass `follow_symlinks=true` to any of the four filters
+when following a symlink is intended.
+
+The `contents` and `linecount` filters require UTF-8 input and report an error
+for other byte sequences; `hash` and `digest` stay byte-oriented and accept any
+content. See the [users' guide](users-guide.md#configure-file-reading-limits)
+for the full policy and its diagnostics.
 
 ## Diagnostics
 
