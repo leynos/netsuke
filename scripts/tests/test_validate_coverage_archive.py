@@ -5,6 +5,9 @@ that the archive validator rejects hostile metadata before it writes a report
 for the secret-bearing CodeScene action to consume.
 """
 
+import collections.abc as cabc
+import functools
+import pathlib
 import stat
 import typing as typ
 import zipfile
@@ -13,7 +16,6 @@ import pytest
 from conftest import load_script_module
 
 if typ.TYPE_CHECKING:
-    import pathlib
     import types
 
 
@@ -28,6 +30,9 @@ CENTRAL_HEADER_FLAGS_OFFSET = 8
 CENTRAL_HEADER_COMPRESSION_OFFSET = 10
 ENCRYPTED_MEMBER_FLAGS = 0x0001
 UNSUPPORTED_COMPRESSION_METHOD = 99
+# Each hostile-archive case stages its input through one writer so the shared
+# rejection assertions are the only part of the table that varies by case.
+type ArchiveWriter = cabc.Callable[[pathlib.Path], None]
 
 
 def _assert_contract(condition: object) -> None:
@@ -77,7 +82,7 @@ def _accept_text(text: str) -> None:
 
 
 def _write_archive(
-    directory: pathlib.Path, members: list[tuple[str, bytes | zipfile.ZipInfo]]
+    directory: pathlib.Path, members: cabc.Sequence[tuple[str, bytes | zipfile.ZipInfo]]
 ) -> pathlib.Path:
     """Write one raw archive whose member metadata is controlled by each test."""
     directory.mkdir()
@@ -89,6 +94,17 @@ def _write_archive(
             else:
                 archive.writestr(name, content)
     return archive_path
+
+
+def _write_non_zip_archive(directory: pathlib.Path) -> None:
+    """Write one hostile outer file that is not a ZIP archive."""
+    directory.mkdir()
+    (directory / "artifact").write_bytes(b"not a ZIP archive")
+
+
+def _write_non_utf8_archive(directory: pathlib.Path) -> None:
+    """Write one ZIP archive with non-UTF-8 coverage member bytes."""
+    _write_archive(directory, [("lcov.info", b"\xff\xfelcov")])
 
 
 def _symlink_member() -> zipfile.ZipInfo:
@@ -129,39 +145,81 @@ def test_archive_validation_materializes_only_a_valid_lcov_member(
 
 
 @pytest.mark.parametrize(
-    ("members", "expected_message"),
+    ("writer", "expected_message"),
     [
         pytest.param(
-            [("lcov.info", VALID_LCOV.encode()), ("extra", b"hostile")],
+            functools.partial(
+                _write_archive,
+                members=[("lcov.info", VALID_LCOV.encode()), ("extra", b"hostile")],
+            ),
             "archive must contain exactly lcov.info",
             id="extra-member",
         ),
         pytest.param(
-            [("../lcov.info", VALID_LCOV.encode())],
+            functools.partial(
+                _write_archive, members=[("../lcov.info", VALID_LCOV.encode())]
+            ),
             "archive must contain exactly lcov.info",
             id="escaped-member-path",
         ),
         pytest.param(
-            [
-                (
-                    "lcov.info",
-                    _symlink_member(),
-                )
-            ],
+            functools.partial(
+                _write_archive, members=[("lcov.info", _symlink_member())]
+            ),
             "archive member must be a regular non-link file",
             id="symlink-member",
         ),
+        pytest.param(
+            _write_non_zip_archive,
+            "coverage artefact is not a ZIP archive",
+            id="non-zip-archive",
+        ),
+        pytest.param(
+            _write_non_utf8_archive,
+            "coverage report is not UTF-8 text",
+            id="non-utf8-member",
+        ),
+        pytest.param(
+            functools.partial(
+                _write_archive,
+                members=[
+                    (
+                        "lcov.info",
+                        b"TN:\nSF:src/lib.rs\nDA:1,1\nbogus:record\nend_of_record\n",
+                    )
+                ],
+            ),
+            "invalid LCOV record at line 4",
+            id="unrecognized-record",
+        ),
+        pytest.param(
+            functools.partial(
+                _write_archive,
+                members=[
+                    ("lcov.info", b"TN:\nSF:src/lib.rs\nDA:1,1\nend_of_record\nLF:1\n")
+                ],
+            ),
+            "coverage report must end with end_of_record",
+            id="missing-terminator",
+        ),
+        pytest.param(
+            functools.partial(
+                _write_archive, members=[("lcov.info", b"TN:\nSF:src/lib.rs\nDA:1,1\n")]
+            ),
+            "coverage report is missing required end_of_record record",
+            id="missing-required-record",
+        ),
     ],
 )
-def test_archive_validation_rejects_hostile_metadata_before_materialization(
+def test_archive_validation_rejects_hostile_archive_before_materialization(
     tmp_path: pathlib.Path,
     capsys: pytest.CaptureFixture[str],
-    members: list[tuple[str, bytes | zipfile.ZipInfo]],
+    writer: ArchiveWriter,
     expected_message: str,
 ) -> None:
-    """Reject unsafe ZIP members without creating trusted output data."""
+    """Reject hostile archives without creating trusted output data."""
     archive_directory = tmp_path / "archive"
-    _write_archive(archive_directory, members)
+    writer(archive_directory)
     output_directory = tmp_path / "validated"
 
     _assert_rejected_archive(
@@ -203,75 +261,6 @@ def test_archive_validation_rejects_multiple_outer_files_before_zip_inspection(
     _assert_contract(not captured.out)
     _assert_contract(captured.err.startswith("error: artefact must contain only"))
     _assert_contract(not output_directory.exists())
-
-
-def test_archive_validation_rejects_a_non_zip_archive(
-    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """Reject a sole outer file that is not a ZIP archive at all."""
-    archive_directory = tmp_path / "archive"
-    archive_directory.mkdir()
-    (archive_directory / "artifact").write_bytes(b"not a ZIP archive")
-    output_directory = tmp_path / "validated"
-
-    _assert_rejected_archive(
-        archive_directory,
-        output_directory,
-        capsys,
-        "coverage artefact is not a ZIP archive",
-    )
-
-
-def test_archive_validation_rejects_a_non_utf8_member(
-    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """Reject member bytes that are not decodable UTF-8 text."""
-    archive_directory = tmp_path / "archive"
-    _write_archive(archive_directory, [("lcov.info", b"\xff\xfelcov")])
-    output_directory = tmp_path / "validated"
-
-    _assert_rejected_archive(
-        archive_directory,
-        output_directory,
-        capsys,
-        "coverage report is not UTF-8 text",
-    )
-
-
-@pytest.mark.parametrize(
-    ("content", "expected_message"),
-    [
-        pytest.param(
-            b"TN:\nSF:src/lib.rs\nDA:1,1\nbogus:record\nend_of_record\n",
-            "invalid LCOV record at line 4",
-            id="unrecognized-record",
-        ),
-        pytest.param(
-            b"TN:\nSF:src/lib.rs\nDA:1,1\nend_of_record\nLF:1\n",
-            "coverage report must end with end_of_record",
-            id="missing-terminator",
-        ),
-        pytest.param(
-            b"TN:\nSF:src/lib.rs\nDA:1,1\n",
-            "coverage report is missing required end_of_record record",
-            id="missing-required-record",
-        ),
-    ],
-)
-def test_archive_validation_rejects_malformed_lcov_text(
-    tmp_path: pathlib.Path,
-    capsys: pytest.CaptureFixture[str],
-    content: bytes,
-    expected_message: str,
-) -> None:
-    """Reject decodable member text that breaks the recognized LCOV contract."""
-    archive_directory = tmp_path / "archive"
-    _write_archive(archive_directory, [("lcov.info", content)])
-    output_directory = tmp_path / "validated"
-
-    _assert_rejected_archive(
-        archive_directory, output_directory, capsys, expected_message
-    )
 
 
 @pytest.mark.parametrize("kind", ["populated", "symlink", "regular-file"])
