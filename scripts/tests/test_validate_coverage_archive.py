@@ -5,14 +5,12 @@ that the archive validator rejects hostile metadata before it writes a report
 for the secret-bearing CodeScene action to consume.
 """
 
-import importlib.util
 import stat
-import sys
 import typing as typ
 import zipfile
 
 import pytest
-from conftest import SCRIPT_DIRECTORY
+from conftest import load_script_module
 
 if typ.TYPE_CHECKING:
     import pathlib
@@ -20,6 +18,16 @@ if typ.TYPE_CHECKING:
 
 
 VALID_LCOV = "TN:\nSF:src/lib.rs\nDA:1,1\nLF:1\nLH:1\nend_of_record\n"
+
+VALIDATOR_MODULE_NAME = "validate_coverage_archive_test"
+HELPER_MODULE_NAME = "coverage_artifact_archive_test"
+# The ZIP writing API normalizes a member's general-purpose flags and its
+# compression method, so each unreadable-format case patches the raw
+# central-directory record of the sole written member.
+CENTRAL_HEADER_FLAGS_OFFSET = 8
+CENTRAL_HEADER_COMPRESSION_OFFSET = 10
+ENCRYPTED_MEMBER_FLAGS = 0x0001
+UNSUPPORTED_COMPRESSION_METHOD = 99
 
 
 def _assert_contract(condition: object) -> None:
@@ -29,16 +37,7 @@ def _assert_contract(condition: object) -> None:
 
 def _module() -> types.ModuleType:
     """Load the archive validator through its production command seam."""
-    path = SCRIPT_DIRECTORY / "validate_coverage_archive.py"
-    specification = importlib.util.spec_from_file_location(
-        "validate_coverage_archive_test", path
-    )
-    assert specification is not None, "archive validator must be importable"
-    assert specification.loader is not None, "archive validator must have a loader"
-    module = importlib.util.module_from_spec(specification)
-    sys.modules[specification.name] = module
-    specification.loader.exec_module(module)
-    return module
+    return load_script_module(VALIDATOR_MODULE_NAME, "validate_coverage_archive.py")
 
 
 def _run_archive_validator(
@@ -53,18 +52,23 @@ def _run_archive_validator(
     ])
 
 
+def _assert_rejected_archive(
+    archive_directory: pathlib.Path,
+    output_directory: pathlib.Path,
+    capsys: pytest.CaptureFixture[str],
+    expected_message: str,
+) -> None:
+    """Assert that the command rejects an archive without trusted output."""
+    _assert_contract(_run_archive_validator(archive_directory, output_directory) == 1)
+    captured = capsys.readouterr()
+    _assert_contract(not captured.out)
+    _assert_contract(captured.err == f"error: {expected_message}\n")
+    _assert_contract(not output_directory.exists())
+
+
 def _helper() -> types.ModuleType:
     """Load the ZIP archive helper through an explicit module seam."""
-    path = SCRIPT_DIRECTORY / "coverage_artifact_archive.py"
-    specification = importlib.util.spec_from_file_location(
-        "coverage_artifact_archive_test", path
-    )
-    assert specification is not None, "archive helper must be importable"
-    assert specification.loader is not None, "archive helper must have a loader"
-    module = importlib.util.module_from_spec(specification)
-    sys.modules[specification.name] = module
-    specification.loader.exec_module(module)
-    return module
+    return load_script_module(HELPER_MODULE_NAME, "coverage_artifact_archive.py")
 
 
 def _accept_text(text: str) -> None:
@@ -92,6 +96,16 @@ def _symlink_member() -> zipfile.ZipInfo:
     member = zipfile.ZipInfo("lcov.info")
     member.external_attr = (stat.S_IFLNK | 0o777) << 16
     return member
+
+
+def _patch_member_header_field(
+    archive_path: pathlib.Path, field_offset: int, value: int
+) -> None:
+    """Force an unreadable member format by patching one central-record field."""
+    data = bytearray(archive_path.read_bytes())
+    start = data.index(b"PK\x01\x02") + field_offset
+    data[start : start + 2] = value.to_bytes(2, "little")
+    archive_path.write_bytes(data)
 
 
 def test_archive_validation_materializes_only_a_valid_lcov_member(
@@ -150,12 +164,9 @@ def test_archive_validation_rejects_hostile_metadata_before_materialization(
     _write_archive(archive_directory, members)
     output_directory = tmp_path / "validated"
 
-    _assert_contract(_run_archive_validator(archive_directory, output_directory) == 1)
-
-    captured = capsys.readouterr()
-    _assert_contract(not captured.out)
-    _assert_contract(captured.err == f"error: {expected_message}\n")
-    _assert_contract(not output_directory.exists())
+    _assert_rejected_archive(
+        archive_directory, output_directory, capsys, expected_message
+    )
 
 
 def test_archive_validation_rejects_an_oversized_member_before_writing(
@@ -169,12 +180,12 @@ def test_archive_validation_rejects_an_oversized_member_before_writing(
     )
     output_directory = tmp_path / "validated"
 
-    _assert_contract(_run_archive_validator(archive_directory, output_directory) == 1)
-
-    captured = capsys.readouterr()
-    _assert_contract(not captured.out)
-    _assert_contract(captured.err == "error: archive uncompressed size exceeds limit\n")
-    _assert_contract(not output_directory.exists())
+    _assert_rejected_archive(
+        archive_directory,
+        output_directory,
+        capsys,
+        "archive uncompressed size exceeds limit",
+    )
 
 
 def test_archive_validation_rejects_multiple_outer_files_before_zip_inspection(
@@ -203,12 +214,12 @@ def test_archive_validation_rejects_a_non_zip_archive(
     (archive_directory / "artifact").write_bytes(b"not a ZIP archive")
     output_directory = tmp_path / "validated"
 
-    _assert_contract(_run_archive_validator(archive_directory, output_directory) == 1)
-
-    captured = capsys.readouterr()
-    _assert_contract(not captured.out)
-    _assert_contract(captured.err == "error: coverage artefact is not a ZIP archive\n")
-    _assert_contract(not output_directory.exists())
+    _assert_rejected_archive(
+        archive_directory,
+        output_directory,
+        capsys,
+        "coverage artefact is not a ZIP archive",
+    )
 
 
 def test_archive_validation_rejects_a_non_utf8_member(
@@ -219,12 +230,12 @@ def test_archive_validation_rejects_a_non_utf8_member(
     _write_archive(archive_directory, [("lcov.info", b"\xff\xfelcov")])
     output_directory = tmp_path / "validated"
 
-    _assert_contract(_run_archive_validator(archive_directory, output_directory) == 1)
-
-    captured = capsys.readouterr()
-    _assert_contract(not captured.out)
-    _assert_contract(captured.err == "error: coverage report is not UTF-8 text\n")
-    _assert_contract(not output_directory.exists())
+    _assert_rejected_archive(
+        archive_directory,
+        output_directory,
+        capsys,
+        "coverage report is not UTF-8 text",
+    )
 
 
 @pytest.mark.parametrize(
@@ -258,12 +269,9 @@ def test_archive_validation_rejects_malformed_lcov_text(
     _write_archive(archive_directory, [("lcov.info", content)])
     output_directory = tmp_path / "validated"
 
-    _assert_contract(_run_archive_validator(archive_directory, output_directory) == 1)
-
-    captured = capsys.readouterr()
-    _assert_contract(not captured.out)
-    _assert_contract(captured.err == f"error: {expected_message}\n")
-    _assert_contract(not output_directory.exists())
+    _assert_rejected_archive(
+        archive_directory, output_directory, capsys, expected_message
+    )
 
 
 @pytest.mark.parametrize("kind", ["populated", "symlink", "regular-file"])
@@ -347,4 +355,43 @@ def test_archive_validation_rejects_a_crafted_contract_member_path(
         helper.validate_and_materialize(archive_path, output_directory, contract)
 
     _assert_contract(error.value.issue is helper.ArchiveIssue.PATH)
+    _assert_contract(not output_directory.exists())
+
+
+@pytest.mark.parametrize(
+    ("field_offset", "value", "expected_cause"),
+    [
+        (
+            CENTRAL_HEADER_COMPRESSION_OFFSET,
+            UNSUPPORTED_COMPRESSION_METHOD,
+            NotImplementedError,
+        ),
+        (CENTRAL_HEADER_FLAGS_OFFSET, ENCRYPTED_MEMBER_FLAGS, RuntimeError),
+    ],
+    ids=["unsupported-compression-method", "encrypted-member"],
+)
+def test_archive_validation_rejects_an_unreadable_member_format(
+    tmp_path: pathlib.Path,
+    field_offset: int,
+    value: int,
+    expected_cause: type[Exception],
+) -> None:
+    """Classify a member format ``zipfile`` refuses and keep its cause."""
+    helper = _helper()
+    archive_path = _write_archive(
+        tmp_path / "archive", [("lcov.info", VALID_LCOV.encode())]
+    )
+    _patch_member_header_field(archive_path, field_offset, value)
+    output_directory = tmp_path / "validated"
+
+    with pytest.raises(helper.ArchiveValidationError) as error:
+        helper.validate_and_materialize(
+            archive_path,
+            output_directory,
+            helper.ArchiveContract("lcov.info", 16 * 1024 * 1024, _accept_text),
+        )
+
+    _assert_contract(error.value.issue is helper.ArchiveIssue.FORMAT)
+    _assert_contract(str(error.value) == "archive member format is not supported")
+    _assert_contract(isinstance(error.value.__cause__, expected_cause))
     _assert_contract(not output_directory.exists())

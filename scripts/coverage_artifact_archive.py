@@ -24,6 +24,7 @@ class ArchiveIssue(enum.StrEnum):
     PATH = "path"
     TYPE = "type"
     SIZE = "size"
+    FORMAT = "format"
     ENCODING = "encoding"
     OUTPUT = "output"
 
@@ -34,6 +35,7 @@ ARCHIVE_ERROR_MESSAGES = {
     ArchiveIssue.PATH: "archive member path is unsafe",
     ArchiveIssue.TYPE: "archive member must be a regular non-link file",
     ArchiveIssue.SIZE: "archive uncompressed size exceeds limit",
+    ArchiveIssue.FORMAT: "archive member format is not supported",
     ArchiveIssue.ENCODING: "coverage report is not UTF-8 text",
     ArchiveIssue.OUTPUT: "validated output directory is unsafe",
 }
@@ -87,8 +89,8 @@ def validate_and_materialize(
     Raises
     ------
     ArchiveValidationError
-        If ZIP metadata, member type, path, size, text encoding, or output
-        shape violates the hostile-data contract.
+        If ZIP metadata, member type, path, size, member format, text
+        encoding, or output shape violates the hostile-data contract.
 
     Notes
     -----
@@ -101,6 +103,12 @@ def validate_and_materialize(
             content = _bounded_member_content(archive, member, contract)
     except zipfile.BadZipFile as error:
         raise ArchiveValidationError(ArchiveIssue.NOT_ZIP) from error
+    except (NotImplementedError, RuntimeError) as error:
+        # ``zipfile`` reports a member whose recorded format it cannot read --
+        # an unsupported compression method, a patched-data or strong-encryption
+        # flag, or an encrypted member opened without a password -- as one of
+        # these two exceptions rather than ``BadZipFile``.
+        raise ArchiveValidationError(ArchiveIssue.FORMAT) from error
     _validate_decoded_content(content, contract)
     _write_validated_member(output_directory, contract.expected_member, content)
 

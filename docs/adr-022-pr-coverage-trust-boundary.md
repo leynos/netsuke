@@ -23,7 +23,7 @@ also insufficient because a pull request controls that workflow definition. The
 design therefore needs both a runner boundary and a workflow-definition trust
 boundary.
 
-## Decision Drivers
+## Decision drivers
 
 - Keep pull-request builds and tests available to contributors, including fork
   contributors, without granting them the CodeScene credential.

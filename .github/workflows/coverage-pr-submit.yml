@@ -272,7 +272,21 @@ jobs:
     permissions:
       checks: write
     steps:
+      # The fork publication records the same bounded, fixed-label telemetry as
+      # the same-repository publication above. It stays log-only: uploading the
+      # metrics and traces needs `actions: write`, and this job holds only
+      # `checks: write`, so widening its permissions to export them would make
+      # the excluded-fork path more privileged than the publication it makes.
+      - name: Start excluded fork Check Run publication telemetry
+        id: start_report_excluded_fork
+        shell: python
+        run: |
+          import runpy
+          import sys
+          sys.argv = [".github/scripts/coverage_pr_submission.py", "start-telemetry"]
+          runpy.run_path(sys.argv[0], run_name="__main__")
       - name: Report excluded fork CodeScene coverage gate
+        id: report_excluded_fork
         env:
           ORIGINATING_WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
           ORIGINATING_COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
@@ -286,5 +300,27 @@ jobs:
           sys.argv = [
               ".github/scripts/coverage_pr_submission.py",
               "report-excluded-fork",
+          ]
+          runpy.run_path(sys.argv[0], run_name="__main__")
+      - name: Record excluded fork Check Run publication telemetry
+        id: observe_report_excluded_fork
+        if: always()
+        env:
+          STARTED_AT_MS: ${{ steps.start_report_excluded_fork.outputs.started_at_ms }}
+          OUTCOME: ${{ steps.report_excluded_fork.outcome }}
+          ORIGINATING_WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
+          ORIGINATING_COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
+          NETSUKE_CODESCENE_COVERAGE_METRICS_FILE: >-
+            ${{ runner.temp }}/codescene-pr-coverage-metrics.jsonl
+          NETSUKE_CODESCENE_COVERAGE_TRACES_FILE: >-
+            ${{ runner.temp }}/codescene-pr-coverage-traces.jsonl
+          OPERATION: codescene-check-run-publication
+        shell: python
+        run: |
+          import runpy
+          import sys
+          sys.argv = [
+              ".github/scripts/coverage_pr_submission_observability.py",
+              "record-telemetry",
           ]
           runpy.run_path(sys.argv[0], run_name="__main__")

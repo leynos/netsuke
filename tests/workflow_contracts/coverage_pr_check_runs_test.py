@@ -87,14 +87,14 @@ def _publisher_payload() -> dict[str, object]:
     ("lookup_response", "expected_method", "expected_path"),
     [
         pytest.param(
-            b'{"check_runs":[]}',
+            b'{"total_count":0,"check_runs":[]}',
             "POST",
             "/repos/leynos/netsuke/check-runs",
             id="create",
         ),
         pytest.param(
-            b'{"check_runs":[{"id":17,"name":"CodeScene coverage",'
-            b'"external_id":"123"}]}',
+            b'{"total_count":1,"check_runs":[{"id":17,'
+            b'"name":"CodeScene coverage","external_id":"123"}]}',
             "PATCH",
             "/repos/leynos/netsuke/check-runs/17",
             id="update",
@@ -127,7 +127,9 @@ def test_publish_selects_its_method_through_the_transport_port(
 def test_publisher_binds_its_publication_operation_to_the_callable_port() -> None:
     """Keep the callable publisher contract the trusted command depends on."""
     module = _publisher_module()
-    transport = _RecordingTransport(responses=[b'{"check_runs":[]}', b"{}"])
+    transport = _RecordingTransport(
+        responses=[b'{"total_count":0,"check_runs":[]}', b"{}"]
+    )
     publisher = module.GitHubCheckRunPublisher("leynos/netsuke", transport)
     publish: cabc.Callable[[dict[str, object]], None] = publisher.publish
 
@@ -135,6 +137,43 @@ def test_publisher_binds_its_publication_operation_to_the_callable_port() -> Non
 
     assert [request.method for request in transport.requests] == ["GET", "POST"], (
         "the bound publication operation must cross the transport port"
+    )
+
+
+def test_publisher_finds_a_match_beyond_the_first_page(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Follow the server's page total instead of concluding from one page."""
+    module = _publisher_module()
+    monkeypatch.setattr(module, "CHECK_RUN_PAGE_SIZE", 2)
+    first_page = (
+        b'{"total_count":3,"check_runs":['
+        b'{"id":11,"name":"CodeScene coverage","external_id":"124"},'
+        b'{"id":12,"name":"CodeScene coverage","external_id":"125"}]}'
+    )
+    second_page = (
+        b'{"total_count":3,"check_runs":['
+        b'{"id":13,"name":"CodeScene coverage","external_id":"123"}]}'
+    )
+    transport = _RecordingTransport(responses=[first_page, second_page, b"{}"])
+    publisher = module.GitHubCheckRunPublisher("leynos/netsuke", transport)
+
+    publisher.publish(_publisher_payload())
+
+    assert [request.method for request in transport.requests] == [
+        "GET",
+        "GET",
+        "PATCH",
+    ], "the lookup must read the following page before it publishes"
+    assert all("filter=all" in request.path for request in transport.requests[:2]), (
+        "the lookup must ask for every Check Run, not only the latest per name"
+    )
+    assert "page=1" in transport.requests[0].path, "the lookup must start at page 1"
+    assert "page=2" in transport.requests[1].path, (
+        "the lookup must follow the server's page total"
+    )
+    assert transport.requests[2].path == "/repos/leynos/netsuke/check-runs/13", (
+        "a match on a later page must be updated rather than duplicated"
     )
 
 
@@ -201,7 +240,10 @@ def _check_run_server(
 def test_github_publisher_creates_a_check_run_over_real_http() -> None:
     """Use the documented GET-then-POST protocol with bounded API headers."""
     module = _publisher_module()
-    with _check_run_server([(200, b'{"check_runs":[]}'), (201, b"{}")]) as server:
+    with _check_run_server([
+        (200, b'{"total_count":0,"check_runs":[]}'),
+        (201, b"{}"),
+    ]) as server:
         origin, records = server
         transport = module.GitHubApiTransport("token", origin)
         publisher = module.GitHubCheckRunPublisher("leynos/netsuke", transport)
@@ -228,7 +270,8 @@ def test_github_publisher_updates_an_existing_idempotency_key() -> None:
     """Patch a matching external ID instead of creating a duplicate Check Run."""
     module = _publisher_module()
     response = (
-        b'{"check_runs":[{"id":17,"name":"CodeScene coverage","external_id":"123"}]}'
+        b'{"total_count":1,"check_runs":[{"id":17,'
+        b'"name":"CodeScene coverage","external_id":"123"}]}'
     )
     with _check_run_server([(200, response), (200, b"{}")]) as server:
         origin, records = server
@@ -248,7 +291,7 @@ def test_github_publisher_rejects_an_oversized_response() -> None:
     """Bound the Check Run API response before it can consume runner memory."""
     module = _publisher_module()
     with _check_run_server([
-        (200, b'{"check_runs":[]}'),
+        (200, b'{"total_count":0,"check_runs":[]}'),
         (201, b"x" * (module.MAXIMUM_RESPONSE_BYTES + 1)),
     ]) as server:
         origin, _ = server

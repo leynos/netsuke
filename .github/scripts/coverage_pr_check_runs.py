@@ -18,6 +18,16 @@ if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
 CHECK_RUN_NAME = "CodeScene coverage"
+# Ask for every Check Run on the commit, not just the newest one per name. The
+# documented default, ``latest``, would hide an existing run this publisher
+# must update, and the publication would then create a duplicate Check Run.
+CHECK_RUN_FILTER = "all"
+# The documented page-size default, stated explicitly so the response stays
+# inside ``MAXIMUM_RESPONSE_BYTES`` and the page arithmetic below is fixed.
+CHECK_RUN_PAGE_SIZE = 30
+# The lookup endpoint returns the Check Runs of at most the 1000 most recent
+# check suites on one ref, so these pages cover its whole documented ceiling.
+MAXIMUM_CHECK_RUN_PAGES = 34
 GITHUB_API_ORIGIN = "https://api.github.com"
 GITHUB_API_VERSION = "2022-11-28"
 MAXIMUM_RESPONSE_BYTES = 64 * 1024
@@ -45,6 +55,11 @@ class CheckRunPublicationError(RuntimeError):
     def missing_payload_text(cls, name: str) -> typ.Self:
         """Build the fixed missing-payload diagnostic for one field."""
         return cls(f"Check Run payload lacks {name}")
+
+    @classmethod
+    def lookup_exceeds_limit(cls) -> typ.Self:
+        """Build the fixed over-limit identity-lookup diagnostic."""
+        return cls("GitHub Check Runs lookup exceeds limit")
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -143,7 +158,9 @@ class GitHubCheckRunPublisher:
     -----
     The originating workflow run ID is the idempotency key: a matching Check
     Run is updated, otherwise one is created. Workflow-level concurrency
-    serializes the same key before this API protocol runs.
+    serializes the same key before this API protocol runs, and the identity
+    lookup reads every Check Run on the originating commit rather than only
+    the newest per name, so an already-published run is always found.
     """
 
     def __init__(self, repository: str, transport: CheckRunTransport) -> None:
@@ -180,6 +197,16 @@ class GitHubCheckRunPublisher:
         path = f"/repos/{self.repository}/check-runs"
         return path if check_run_id is None else f"{path}/{check_run_id}"
 
+    def _check_run_lookup_path(self, commit_sha: str, page_number: int) -> str:
+        """Return the fixed one-page lookup path for a commit's Check Runs."""
+        query = urllib.parse.urlencode({
+            "check_name": CHECK_RUN_NAME,
+            "filter": CHECK_RUN_FILTER,
+            "per_page": CHECK_RUN_PAGE_SIZE,
+            "page": page_number,
+        })
+        return f"/repos/{self.repository}/commits/{commit_sha}/check-runs?{query}"
+
     def _matching_check_run_id(self, payload: cabc.Mapping[str, object]) -> int | None:
         """Return the ID of this publisher's already-published Check Run.
 
@@ -199,30 +226,33 @@ class GitHubCheckRunPublisher:
         -----
         The lookup is an internal step of :meth:`publish` rather than an
         independent operation: it exists only to make publication idempotent
-        and reaches the network only through the injected transport. A lookup
-        response that is not a JSON object carrying a ``check_runs`` list fails
-        the publication with ``CheckRunPublicationError``.
+        and reaches the network only through the injected transport. It asks
+        for every Check Run on the commit and then follows the server's page
+        total, so an existing run is found however far down the list it sits;
+        concluding early would create the duplicate this lookup exists to
+        prevent. A lookup response that is not a JSON object carrying a
+        bounded ``total_count`` and a ``check_runs`` list fails the publication
+        with ``CheckRunPublicationError``, as does a total beyond the pages
+        ``MAXIMUM_CHECK_RUN_PAGES`` bounds: a lookup that cannot be exhaustive
+        must not publish a possible duplicate.
         """
         commit_sha = _required_payload_text(payload, "head_sha")
         external_id = _required_payload_text(payload, "external_id")
-        query = urllib.parse.urlencode({"check_name": CHECK_RUN_NAME})
-        response = self._transport(
-            CheckRunRequest(
-                "GET",
-                f"/repos/{self.repository}/commits/{commit_sha}/check-runs?{query}",
+        page_number = 1
+        while True:
+            response = self._transport(
+                CheckRunRequest(
+                    "GET",
+                    self._check_run_lookup_path(commit_sha, page_number),
+                )
             )
-        )
-        response_body = _response_mapping(response)
-        return next(
-            (
-                check_run_id
-                for check_run in _check_run_entries(response_body)
-                if _matches_check_run(check_run, external_id)
-                if (check_run_id := check_run.get("id")) is not None
-                if isinstance(check_run_id, int)
-            ),
-            None,
-        )
+            response_body = _response_mapping(response)
+            check_run_id = _matching_id_in_page(response_body, external_id)
+            if check_run_id is not None:
+                return check_run_id
+            if not _has_next_page(response_body, page_number):
+                return None
+            page_number += 1
 
 
 def _encoded_payload(payload: cabc.Mapping[str, object] | None) -> bytes | None:
@@ -266,3 +296,53 @@ def _matches_check_run(check_run: object, external_id: str) -> bool:
         and check_run.get("name") == CHECK_RUN_NAME
         and check_run.get("external_id") == external_id
     )
+
+
+def _matching_id_in_page(
+    response_body: cabc.Mapping[str, object], external_id: str
+) -> int | None:
+    """Return the ID of one lookup page's matching Check Run, or ``None``."""
+    return next(
+        (
+            check_run_id
+            for check_run in _check_run_entries(response_body)
+            if _matches_check_run(check_run, external_id)
+            if (check_run_id := check_run.get("id")) is not None
+            if isinstance(check_run_id, int)
+        ),
+        None,
+    )
+
+
+def _has_next_page(response_body: cabc.Mapping[str, object], page_number: int) -> bool:
+    """Return whether the server's bounded total holds a page after this one.
+
+    Parameters
+    ----------
+    response_body
+        Decoded lookup response carrying the server's ``total_count``.
+    page_number
+        One-based number of the page just read.
+
+    Returns
+    -------
+    bool
+        Whether the server reports further Check Runs beyond ``page_number``.
+
+    Raises
+    ------
+    malformed_response
+        With the malformed-response diagnostic when the required
+        ``total_count`` is absent, boolean, or not an integer.
+    lookup_exceeds_limit
+        With the over-limit diagnostic when the total exceeds the Check Runs
+        these pages cover. ``MAXIMUM_CHECK_RUN_PAGES`` bounds the lookup at
+        1020 runs, just past the endpoint's documented ceiling, so a lookup
+        that cannot be exhaustive never publishes a possible duplicate.
+    """
+    total_count = response_body.get("total_count")
+    if isinstance(total_count, bool) or not isinstance(total_count, int):
+        raise CheckRunPublicationError.malformed_response()
+    if not 0 <= total_count <= MAXIMUM_CHECK_RUN_PAGES * CHECK_RUN_PAGE_SIZE:
+        raise CheckRunPublicationError.lookup_exceeds_limit()
+    return total_count > page_number * CHECK_RUN_PAGE_SIZE

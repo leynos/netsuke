@@ -64,6 +64,19 @@ EXPECTED_PR_ARTEFACT_STEP = {
 }
 
 
+EXPECTED_FORK_TELEMETRY_ENV = {
+    "STARTED_AT_MS": "${{ steps.start_report_excluded_fork.outputs.started_at_ms }}",
+    "OUTCOME": "${{ steps.report_excluded_fork.outcome }}",
+    "ORIGINATING_WORKFLOW_RUN_ID": "${{ github.event.workflow_run.id }}",
+    "ORIGINATING_COMMIT_SHA": "${{ github.event.workflow_run.head_sha }}",
+    "NETSUKE_CODESCENE_COVERAGE_METRICS_FILE": "${{ runner.temp }}"
+    "/codescene-pr-coverage-metrics.jsonl",
+    "NETSUKE_CODESCENE_COVERAGE_TRACES_FILE": "${{ runner.temp }}"
+    "/codescene-pr-coverage-traces.jsonl",
+    "OPERATION": "codescene-check-run-publication",
+}
+
+
 def _workflow_paths() -> list[Path]:
     """Return every checked-in GitHub Actions workflow path."""
     return sorted((REPO_ROOT / ".github" / "workflows").glob("*.yml"))
@@ -75,26 +88,35 @@ def _is_pull_request_workflow(workflow: dict[str, object]) -> bool:
     return "pull_request" in triggers
 
 
-def _pull_request_checkouts() -> list[tuple[str, str, dict[str, object]]]:
-    """Return ``(workflow, job, step)`` for every pull-request checkout step."""
-    checkouts: list[tuple[str, str, dict[str, object]]] = []
+def _pull_request_workflow_jobs() -> list[tuple[str, str, dict[str, object]]]:
+    """Return ``(workflow, job, declaration)`` for pull-request workflow jobs."""
+    jobs: list[tuple[str, str, dict[str, object]]] = []
     for workflow_path in _workflow_paths():
         workflow = load_workflow(workflow_path)
         if not _is_pull_request_workflow(workflow):
             continue
-        jobs = require_mapping(workflow.get("jobs"), "the workflow jobs")
-        for job_name, declaration in jobs.items():
-            job = require_mapping(declaration, f"the {job_name} job")
-            # A job that delegates to a reusable workflow declares no steps.
-            steps = job.get("steps")
-            if not isinstance(steps, list):
-                continue
-            checkouts.extend(
-                (workflow_path.name, str(job_name), step)
-                for step in steps
-                if "actions/checkout@" in str(step.get("uses", ""))
+        declarations = require_mapping(workflow.get("jobs"), "the workflow jobs")
+        jobs.extend(
+            (
+                workflow_path.name,
+                str(job_name),
+                require_mapping(declaration, f"the {job_name} job"),
             )
-    return checkouts
+            for job_name, declaration in declarations.items()
+        )
+    return jobs
+
+
+def _pull_request_checkouts() -> list[tuple[str, str, dict[str, object]]]:
+    """Return ``(workflow, job, step)`` for every pull-request checkout step."""
+    # A job that delegates to a reusable workflow declares no step list.
+    return [
+        (workflow_name, job_name, step)
+        for workflow_name, job_name, declaration in _pull_request_workflow_jobs()
+        if isinstance(steps := declaration.get("steps"), list)
+        for step in steps
+        if "actions/checkout@" in str(step.get("uses", ""))
+    ]
 
 
 def test_pull_request_workflows_never_reference_codescene_secret() -> None:
@@ -138,6 +160,23 @@ def test_pull_request_workflows_never_persist_checkout_credentials() -> None:
         assert with_.get("persist-credentials") is False, (
             f"{workflow_name} job {job_name} must set persist-credentials: false"
         )
+
+
+def test_pull_request_checkouts_ignore_jobs_without_a_step_list(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Ignore reusable and malformed jobs that declare no actionable steps."""
+    workflow_path = tmp_path / "synthetic.yml"
+    workflow_path.write_text(
+        "on:\n  pull_request:\n"
+        "jobs:\n"
+        "  reusable:\n    uses: owner/repo/.github/workflows/x.yml@main\n"
+        "  malformed:\n    steps: not-a-list\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(f"{__name__}._workflow_paths", lambda: [workflow_path])
+
+    assert _pull_request_checkouts() == [], "no checkout from a job without steps"
 
 
 def test_submission_workflow_uses_trusted_workflow_run_boundary() -> None:
@@ -199,6 +238,33 @@ def test_submission_workflow_reports_excluded_forks_neutrally() -> None:
             "the excluded-fork report must retain "
             f"{required_fragment!r} in its trusted reporting path"
         )
+
+
+def test_excluded_fork_publication_records_only_bounded_telemetry() -> None:
+    """Record fixed-label telemetry around the excluded-fork Check Run."""
+    workflow = load_workflow(COVERAGE_PR_WORKFLOW_PATH)
+    steps = job_steps(workflow, "report-excluded-fork")
+    start = named_step(steps, "Start excluded fork Check Run publication telemetry")
+    report = named_step(steps, "Report excluded fork CodeScene coverage gate")
+    observe = named_step(steps, "Record excluded fork Check Run publication telemetry")
+
+    assert [step.get("name") for step in steps] == [
+        start["name"],
+        report["name"],
+        observe["name"],
+    ], "fork telemetry must bracket the Check Run publication"
+    for step, module_name, command in (
+        (start, "coverage_pr_submission.py", "start-telemetry"),
+        (report, "coverage_pr_submission.py", "report-excluded-fork"),
+        (observe, "coverage_pr_submission_observability.py", "record-telemetry"),
+    ):
+        assert_python_action_dispatch(step, f".github/scripts/{module_name}", command)
+    assert observe.get("if") == "always()", (
+        "fork telemetry must record a failed publication too"
+    )
+    assert observe.get("env") == EXPECTED_FORK_TELEMETRY_ENV, (
+        "the fork telemetry must carry only bounded, fixed correlation fields"
+    )
 
 
 def test_secret_job_checks_out_only_trusted_tooling_and_validates_first() -> None:
