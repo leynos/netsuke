@@ -956,7 +956,6 @@ every helper's signature, defaults, purity, platform caveats, and executable
 examples. Host-observing helpers belong only in trusted manifests: Netsuke
 bounds command and network output, but does not sandbox template evaluation.
 
-
 ### Network fetch policy
 
 `fetch()` applies the configured `NetworkPolicy` to the caller-supplied URL and

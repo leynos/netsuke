@@ -3423,7 +3423,6 @@ It exercises the `-C` directory argument contract through the public factory
 only. Keep fixture assertions here and production test-helper behaviour in
 `check_ninja.rs`; this split keeps the public helper below the 400-line cap.
 
-
 ### `test_support/src/http/accept.rs`
 
 Connection acceptance for the local HTTP fixture, split out of
@@ -3873,7 +3872,6 @@ handle inside this module instead: the caller never sees a `File`, so the
 ambient boundary stays where the lint expects it. Prefer that shape — pass in
 what the operation needs and keep the handle here — over widening an exclusion
 to a module that wants a raw `File`.
-
 
 ### `test_support::http`
 
@@ -5065,7 +5063,6 @@ nor a variable's contents, nor the expanded result. Adding a rung means adding
 a label to the closed set above and pinning it in the ladder tests, not
 recording the value that distinguished it.
 
-
 ### Fetch network telemetry
 
 The fetch boundary emits four bounded metric families, described once per
@@ -5100,7 +5097,6 @@ local `metrics_util` `DebuggingRecorder` rather than the global recorder,
 following the home-resolution tests. Each series and its closed label set is
 pinned in isolation, and a final case drives a real redirecting fetch so the
 wiring between the fetch boundary and the emitters is covered.
-
 
 ### Fetch redirect architecture
 
