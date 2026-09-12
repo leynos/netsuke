@@ -1278,15 +1278,15 @@ Objective: deliver the `netsuke test` command and YAML test dialect specified in
 
 ### 7.1. Seams and loader options
 
-- [ ] 7.1.1. Add the clock provider seam to the stdlib time module. See
+- [x] 7.1.1. Add the clock provider seam to the stdlib time module. See
   [technical design §5.2](netsuke-test-framework-technical-design.md).
-  - [ ] Register `now()` through an injected `ClockProvider` closure held in
+  - [x] Register `now()` through an injected `ClockProvider` closure held in
     `StdlibConfig`.
-  - [ ] Preserve current behaviour when no provider is supplied.
-  - [ ] Test an injected provider value, repeated `now()` calls returning
+  - [x] Preserve current behaviour when no provider is supplied.
+  - [x] Test an injected provider value, repeated `now()` calls returning
     it, and the ambient fallback when no provider is configured, all
     registered through `StdlibConfig`.
-  - [ ] Record the seam classification per
+  - [x] Record the seam classification per
     [ADR-008](adr-008-environment-seam-taxonomy.md).
 
 - [ ] 7.1.2. Introduce the options-carrying manifest loader entry point. See

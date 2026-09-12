@@ -14,6 +14,8 @@ mod network_functions;
 mod path_filters;
 #[path = "std_filter_tests/support.rs"]
 mod support;
+#[path = "std_filter_tests/time_functions.rs"]
+mod time_functions;
 #[path = "std_filter_tests/which_filter_common.rs"]
 mod which_filter_common;
 #[path = "std_filter_tests/which_filter_tests.rs"]

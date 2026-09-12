@@ -30,6 +30,7 @@ pub use network::{
 };
 pub(crate) use register::{is_manifest_query_disabled_error, register_manifest_query};
 pub use register::{register, register_with_config, value_from_bytes};
+pub use time::{ClockInstant, ClockProvider, fixed_clock, system_clock};
 
 use std::{
     sync::Arc,
