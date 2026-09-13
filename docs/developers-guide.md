@@ -5113,8 +5113,9 @@ series is added to the in-process recorder allowlist.
 The tests in `src/stdlib/network/telemetry_tests.rs` capture samples through a
 local `metrics_util` `DebuggingRecorder` rather than the global recorder,
 following the home-resolution tests. Each series and its closed label set is
-pinned in isolation, and a final case drives a real redirecting fetch so the
-wiring between the fetch boundary and the emitters is covered.
+pinned in isolation, and the last two cases drive a real redirecting fetch, one
+followed and one refused, so the wiring between the fetch boundary and the
+emitters is covered.
 
 ### Fetch redirect architecture
 
@@ -5158,9 +5159,9 @@ could not use, and `other` anything not otherwise classified.
 Every refused redirect is logged, not only a policy rejection, because the
 counter alone cannot show which hop of which fetch was refused. Each event
 carries `operation`, an outcome, a closed reason, and `hop`, and never a
-location, URL, host, or userinfo, the bound ADR-023 sets for redirect
-decisions. Policy refusals emit `policy_outcome="rejected"` with a
-`policy_reason` from `scheme_not_allowed`, `missing_host`,
+location, URL, host, or userinfo. Those four fields are the bound that ADR-023
+sets for redirect decisions. Policy refusals emit `policy_outcome="rejected"`
+with a `policy_reason` from `scheme_not_allowed`, `missing_host`,
 `host_not_allowlisted`, and `host_blocked`. Every other refusal emits
 `redirect_outcome="rejected"` with a `redirect_failure` drawn from
 `location_missing`, `location_invalid`, `credentials_not_removable`,
