@@ -145,6 +145,44 @@ fn a_rejected_call_is_counted_as_rejected(
     Ok(())
 }
 
+/// A call refused on its keywords reads nothing, yet is still counted.
+#[rstest]
+#[case::contents(FILTER_CONTENTS, "{{ path | contents(max_byte=1) }}")]
+#[case::linecount(FILTER_LINECOUNT, "{{ path | linecount(max_byte=1) }}")]
+#[case::hash(FILTER_HASH, "{{ path | hash('sha256', max_byte=1) }}")]
+#[case::digest(FILTER_DIGEST, "{{ path | digest(8, 'sha256', max_byte=1) }}")]
+fn a_refused_keyword_is_counted_as_rejected(
+    #[case] filter: &str,
+    #[case] template: &str,
+) -> Result<()> {
+    let (_temp, file) = fixture(PAYLOAD)?;
+    let record = call(&file, 1024, template);
+    ensure!(
+        !record.rendered,
+        "{filter}: an undeclared keyword must be refused"
+    );
+    ensure!(
+        record.samples == vec![(filter.to_owned(), OUTCOME_REJECTED.to_owned(), 1)],
+        "{filter}: expected one rejected sample but recorded {:?}",
+        record.samples
+    );
+    Ok(())
+}
+
+/// An unsupported encoding is likewise a call outcome of `contents`.
+#[test]
+fn an_unsupported_encoding_is_counted_as_rejected() -> Result<()> {
+    let (_temp, file) = fixture(PAYLOAD)?;
+    let record = call(&file, 1024, "{{ path | contents('utf-16') }}");
+    ensure!(!record.rendered, "an unsupported encoding must be refused");
+    ensure!(
+        record.samples == vec![(FILTER_CONTENTS.to_owned(), OUTCOME_REJECTED.to_owned(), 1)],
+        "expected one rejected sample but recorded {:?}",
+        record.samples
+    );
+    Ok(())
+}
+
 /// The debug event carries the bounded facts and nothing else.
 ///
 /// The path is the fact that must never be recorded: it names a file on the

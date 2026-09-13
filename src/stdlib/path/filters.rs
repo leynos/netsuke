@@ -138,49 +138,85 @@ pub(crate) fn register_filters(
 /// UTF-8 arm reads a file, and any other encoding is refused before the
 /// filesystem is touched.
 ///
+/// The keywords are resolved, and any undeclared one refused, before the
+/// encoding is judged. A call such as `contents(encoding="utf-16",
+/// max_byte=1)` is wrong about its keyword, and that mistake must be reported
+/// as such rather than hidden behind the encoding the same call also asked
+/// for. Every refusal here is counted, the encoding included, so the recorded
+/// series tally calls rather than reads alone.
+///
 /// # Errors
 ///
-/// Returns a template error when the encoding is unsupported, or whatever
-/// [`read_bounded`] returns for the requested file.
+/// Returns a template error when a keyword is undeclared or malformed, when
+/// the encoding is unsupported, or whatever [`read_bounded`] returns for the
+/// requested file.
 fn read_contents(
     raw: &str,
     encoding: Option<&str>,
     kwargs: &Kwargs,
     configured_max_read_bytes: u64,
 ) -> Result<String, Error> {
+    let filter = read_telemetry::FILTER_CONTENTS;
+    let limits = match path_call_limits(kwargs, configured_max_read_bytes) {
+        Ok(limits) => limits,
+        Err(err) => return read_telemetry::record_unresolved_read(filter, err),
+    };
+    if let Err(err) = kwargs.assert_all_used() {
+        return read_telemetry::record_unresolved_read(filter, err);
+    }
     let chosen_encoding = encoding.unwrap_or("utf-8").to_ascii_lowercase();
     match chosen_encoding.as_str() {
-        "utf-8" | "utf8" => read_bounded(
-            read_telemetry::FILTER_CONTENTS,
-            kwargs,
-            configured_max_read_bytes,
-            |limits| bounded_read::read_utf8(Utf8Path::new(raw), limits),
-        ),
-        other => Err(Error::new(
-            ErrorKind::InvalidOperation,
-            localization::message(keys::STDLIB_PATH_UNSUPPORTED_ENCODING)
-                .with_arg("encoding", other)
-                .to_string(),
-        )),
+        "utf-8" | "utf8" => read_and_record(filter, &limits, |resolved| {
+            bounded_read::read_utf8(Utf8Path::new(raw), resolved)
+        }),
+        other => {
+            let unsupported = Error::new(
+                ErrorKind::InvalidOperation,
+                localization::message(keys::STDLIB_PATH_UNSUPPORTED_ENCODING)
+                    .with_arg("encoding", other)
+                    .to_string(),
+            );
+            read_telemetry::record_file_read(filter, Some(&limits), Err(unsupported))
+        }
     }
 }
 
-/// Run one bounded read for `filter`, resolving and recording it on the way.
+/// Run one bounded read for `filter`, resolving its keywords on the way.
 ///
-/// The four reading filters share this prologue: resolve the per-call limits
-/// from the kwargs, refuse a keyword the filter does not declare, then hand the
-/// read to the telemetry boundary. Keeping it in one place means a filter
-/// cannot quietly skip a step, and `read` receives the same limits that the
-/// recorded call ran under rather than a second, possibly stale, resolution.
+/// The three filters without a selectable encoding share this prologue:
+/// resolve the per-call limits from the kwargs, refuse a keyword the filter
+/// does not declare, then hand the read to [`read_and_record`]. Keeping it in
+/// one place means a filter cannot quietly skip a step, and `read` receives
+/// the same limits that the recorded call ran under rather than a second,
+/// possibly stale, resolution. A call refused by either check is recorded too:
+/// it reads nothing, but it is still a filter outcome.
 fn read_bounded<T>(
     filter: &'static str,
     kwargs: &Kwargs,
     configured_max_read_bytes: u64,
     read: impl FnOnce(&FileReadLimits) -> Result<T, Error>,
 ) -> Result<T, Error> {
-    let limits = path_call_limits(kwargs, configured_max_read_bytes)?;
-    kwargs.assert_all_used()?;
-    read_telemetry::record_file_read(filter, &limits, read(&limits))
+    let limits = match path_call_limits(kwargs, configured_max_read_bytes) {
+        Ok(limits) => limits,
+        Err(err) => return read_telemetry::record_unresolved_read(filter, err),
+    };
+    if let Err(err) = kwargs.assert_all_used() {
+        return read_telemetry::record_unresolved_read(filter, err);
+    }
+    read_and_record(filter, &limits, read)
+}
+
+/// Run one bounded read under `limits` and record its outcome once.
+///
+/// [`read_contents`] resolves its keywords before judging the encoding, so it
+/// arrives here with the limits already in hand; routing both entry points
+/// through this call keeps exactly one recording per filter result.
+fn read_and_record<T>(
+    filter: &'static str,
+    limits: &FileReadLimits,
+    read: impl FnOnce(&FileReadLimits) -> Result<T, Error>,
+) -> Result<T, Error> {
+    read_telemetry::record_file_read(filter, Some(limits), read(limits))
 }
 
 /// Resolve the per-call read limits from `max_bytes` and `follow_symlinks` kwargs.
