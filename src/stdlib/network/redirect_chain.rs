@@ -72,7 +72,7 @@ pub(super) struct RedirectChain<'policy> {
     policy: &'policy NetworkPolicy,
     /// URL whose request the adapter dispatches next.
     current_url: Url,
-    /// Resolved targets already requested in this chain.
+    /// Fragment-free forms of the targets already requested in this chain.
     visited: BTreeSet<String>,
     /// Number of redirects accepted so far.
     hops: usize,
@@ -83,7 +83,7 @@ impl<'policy> RedirectChain<'policy> {
     #[must_use]
     pub(super) fn new(url: &Url, policy: &'policy NetworkPolicy) -> Self {
         let current_url = url.clone();
-        let visited = BTreeSet::from([current_url.as_str().to_owned()]);
+        let visited = BTreeSet::from([loop_detection_key(&current_url)]);
         Self {
             policy,
             current_url,
@@ -150,9 +150,9 @@ impl<'policy> RedirectChain<'policy> {
         })
     }
 
-    /// Refuse a target that was already requested in this chain.
+    /// Refuse a target whose resource was already requested in this chain.
     fn reject_redirect_loop(&mut self, target: &Url) -> Result<(), RedirectRejection> {
-        if self.visited.insert(target.as_str().to_owned()) {
+        if self.visited.insert(loop_detection_key(target)) {
             return Ok(());
         }
         Err(RedirectRejection::Loop {
@@ -169,6 +169,21 @@ impl<'policy> RedirectChain<'policy> {
                 violation: Box::new(violation),
             })
     }
+}
+
+/// Return `url` as a complete URL string with any fragment removed.
+///
+/// A fragment is never sent to the server, so two URLs differing only in their
+/// fragment name the same request. Keying the visited set on the
+/// fragment-bearing form would let a redirect that only swaps one fragment for
+/// another repeat that request until the hop limit stopped it. Only this key is
+/// normalized: the chain's `current_url` and the target it reports keep their
+/// fragments, because redirect resolution and diagnostics must still show the
+/// URL the server sent.
+fn loop_detection_key(url: &Url) -> String {
+    let mut without_fragment = url.clone();
+    without_fragment.set_fragment(None);
+    without_fragment.as_str().to_owned()
 }
 
 /// Remove credentials that must not cross an origin boundary.

@@ -202,6 +202,48 @@ fn revisited_target_is_refused_as_a_loop(chain_setup: Result<ChainSetup>) -> Res
     Ok(())
 }
 
+/// Verify a redirect that only changes the fragment is refused as a loop.
+///
+/// A fragment is never sent to the server, so `/once#a` and `/once#b` name the
+/// same request. Keying loop detection on the fragment-bearing URL would accept
+/// the second redirect and repeat that request until the hop limit stopped it.
+#[rstest]
+fn fragment_only_redirect_is_refused_as_a_loop(chain_setup: Result<ChainSetup>) -> Result<()> {
+    let ChainSetup { base, policy } = chain_setup?;
+    ensure!(
+        base.fragment().is_none(),
+        "the chain must start from a URL without a fragment: {base}",
+    );
+    let mut chain = RedirectChain::new(&base, &policy);
+
+    let accepted = chain
+        .advance(Some("/once#a"))
+        .expect("the first fragment-bearing hop should be accepted");
+    ensure!(
+        accepted.next_url.fragment() == Some("a"),
+        "an accepted target must keep its fragment: {}",
+        accepted.next_url,
+    );
+
+    let refused = chain
+        .advance(Some("/once#b"))
+        .expect_err("a fragment-only change must be refused as a loop");
+    ensure!(
+        matches!(refused, RedirectRejection::Loop { .. }),
+        "a fragment-only change must be reported as a loop: {refused:?}",
+    );
+    ensure!(
+        matches!(&refused, RedirectRejection::Loop { target } if target.fragment() == Some("b")),
+        "the refusal must keep the differing fragment for diagnostics: {refused:?}",
+    );
+    ensure!(
+        chain.hops() == 1,
+        "a refused fragment-only redirect must not advance the chain, hops = {}",
+        chain.hops(),
+    );
+    Ok(())
+}
+
 /// Verify missing and unresolvable locations are refused before any request.
 #[rstest]
 #[case(None, "missing")]
