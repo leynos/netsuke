@@ -9,13 +9,17 @@
 
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
-use cap_std::{ambient_authority, fs_utf8::Dir};
-use minijinja::ErrorKind;
+use cap_std::{
+    ambient_authority,
+    fs_utf8::{Dir, File},
+};
+use minijinja::{Error, ErrorKind};
 use rstest::rstest;
+use std::io::Seek;
 use tempfile::TempDir;
 
-use super::{Utf8Validator, linecount};
-use crate::stdlib::path::fs_utils::FileReadLimits;
+use super::{Utf8Validator, linecount, linecount_from, read_utf8_from};
+use crate::stdlib::path::fs_utils::{FileReadLimits, open_file_checked};
 
 /// Name of the fixture file staged inside the temporary directory.
 const FIXTURE_NAME: &str = "payload";
@@ -96,6 +100,65 @@ fn linecount_rejects_a_line_longer_than_the_budget() -> Result<()> {
     ensure!(
         message.contains("8 bytes"),
         "the diagnostic should quote the limit: {message}"
+    );
+    Ok(())
+}
+
+/// The bytes `read` consumed from an over-budget fixture before rejecting it.
+///
+/// The offset left on the handle is the read path's own instrument: a reader
+/// that buffered the whole file and only then consulted the budget would leave
+/// the fixture's full length here, while a streaming one asks for at most the
+/// remaining budget plus the single sentinel byte that proves the file is over
+/// it. Driving the filter's own entry point — not a hand-rolled read loop —
+/// keeps that claim about the shipped implementation.
+fn consumed_before_rejection(
+    payload: &[u8],
+    byte_budget: u64,
+    read: impl FnOnce(&mut File) -> Result<(), Error>,
+) -> Result<u64> {
+    let (_dir, file) = fixture(payload)?;
+    let limits = budget(byte_budget);
+    let mut handle = open_file_checked(&file, &limits)?;
+    let err = read(&mut handle).expect_err("an over-budget fixture must be rejected");
+    ensure!(
+        err.kind() == ErrorKind::InvalidOperation,
+        "expected InvalidOperation but was {:?}",
+        err.kind()
+    );
+    Ok(handle.stream_position()?)
+}
+
+/// `contents` stops one byte past the budget rather than reading the file out.
+///
+/// The fixture is 8192 bytes — one whole read buffer — read on a four-byte
+/// budget, so an implementation that fills the buffer before consulting the
+/// budget is separated from this one by the offset it leaves behind.
+#[test]
+fn contents_stops_at_the_budget_plus_one_sentinel_byte() -> Result<()> {
+    const BUDGET: u64 = 4;
+    let consumed = consumed_before_rejection(&[b'x'; 8192], BUDGET, |file| {
+        read_utf8_from(file, Utf8Path::new(FIXTURE_NAME), BUDGET).map(drop)
+    })?;
+    ensure!(
+        consumed <= BUDGET + 1,
+        "contents consumed {consumed} bytes for a {BUDGET}-byte budget; it must stop at \
+         the budget plus one sentinel byte"
+    );
+    Ok(())
+}
+
+/// `linecount` streams the same way: it may not read the file out to count it.
+#[test]
+fn linecount_stops_at_the_budget_plus_one_sentinel_byte() -> Result<()> {
+    const BUDGET: u64 = 4;
+    let consumed = consumed_before_rejection(&[b'x'; 8192], BUDGET, |file| {
+        linecount_from(file, Utf8Path::new(FIXTURE_NAME), BUDGET).map(drop)
+    })?;
+    ensure!(
+        consumed <= BUDGET + 1,
+        "linecount consumed {consumed} bytes for a {BUDGET}-byte budget; it must stop at \
+         the budget plus one sentinel byte"
     );
     Ok(())
 }

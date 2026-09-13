@@ -6,7 +6,7 @@
 use camino::Utf8Path;
 use minijinja::{Environment, Error, ErrorKind, value::Kwargs};
 
-use super::{bounded_read, fs_utils, hash_utils, path_utils};
+use super::{bounded_read, fs_utils, hash_utils, path_utils, read_telemetry};
 use crate::localization::{self, keys};
 use crate::stdlib::config_types::HomeDirectory;
 use crate::stdlib::path::fs_utils::FileReadLimits;
@@ -84,37 +84,30 @@ pub(crate) fn register_filters(
     env.add_filter(
         "contents",
         move |raw: String, encoding: Option<String>, kwargs: Kwargs| -> Result<String, Error> {
-            let chosen_encoding = encoding.unwrap_or_else(|| "utf-8".to_owned());
-            match chosen_encoding.to_ascii_lowercase().as_str() {
-                "utf-8" | "utf8" => {
-                    let limits = path_call_limits(&kwargs, file_max_read_bytes)?;
-                    kwargs.assert_all_used()?;
-                    bounded_read::read_utf8(Utf8Path::new(&raw), &limits)
-                }
-                other => Err(Error::new(
-                    ErrorKind::InvalidOperation,
-                    localization::message(keys::STDLIB_PATH_UNSUPPORTED_ENCODING)
-                        .with_arg("encoding", other)
-                        .to_string(),
-                )),
-            }
+            read_contents(&raw, encoding.as_deref(), &kwargs, file_max_read_bytes)
         },
     );
     env.add_filter(
         "linecount",
         move |raw: String, kwargs: Kwargs| -> Result<usize, Error> {
-            let limits = path_call_limits(&kwargs, file_max_read_bytes)?;
-            kwargs.assert_all_used()?;
-            bounded_read::linecount(Utf8Path::new(&raw), &limits)
+            read_bounded(
+                read_telemetry::FILTER_LINECOUNT,
+                &kwargs,
+                file_max_read_bytes,
+                |limits| bounded_read::linecount(Utf8Path::new(&raw), limits),
+            )
         },
     );
     env.add_filter(
         "hash",
         move |raw: String, alg: Option<String>, kwargs: Kwargs| -> Result<String, Error> {
             let algorithm = alg.unwrap_or_else(|| "sha256".to_owned());
-            let limits = path_call_limits(&kwargs, file_max_read_bytes)?;
-            kwargs.assert_all_used()?;
-            hash_utils::compute_hash(Utf8Path::new(&raw), &algorithm, &limits)
+            read_bounded(
+                read_telemetry::FILTER_HASH,
+                &kwargs,
+                file_max_read_bytes,
+                |limits| hash_utils::compute_hash(Utf8Path::new(&raw), &algorithm, limits),
+            )
         },
     );
     env.add_filter(
@@ -126,11 +119,68 @@ pub(crate) fn register_filters(
               -> Result<String, Error> {
             let digest_len = len.unwrap_or(8);
             let algorithm = alg.unwrap_or_else(|| "sha256".to_owned());
-            let limits = path_call_limits(&kwargs, file_max_read_bytes)?;
-            kwargs.assert_all_used()?;
-            hash_utils::compute_digest(Utf8Path::new(&raw), digest_len, &algorithm, &limits)
+            read_bounded(
+                read_telemetry::FILTER_DIGEST,
+                &kwargs,
+                file_max_read_bytes,
+                |limits| {
+                    hash_utils::compute_digest(Utf8Path::new(&raw), digest_len, &algorithm, limits)
+                },
+            )
         },
     );
+}
+
+/// Read `raw` as text in the requested `encoding`.
+///
+/// `contents` is the one reading filter whose encoding is selectable, so the
+/// dispatch lives here rather than inline in the registration body: only the
+/// UTF-8 arm reads a file, and any other encoding is refused before the
+/// filesystem is touched.
+///
+/// # Errors
+///
+/// Returns a template error when the encoding is unsupported, or whatever
+/// [`read_bounded`] returns for the requested file.
+fn read_contents(
+    raw: &str,
+    encoding: Option<&str>,
+    kwargs: &Kwargs,
+    configured_max_read_bytes: u64,
+) -> Result<String, Error> {
+    let chosen_encoding = encoding.unwrap_or("utf-8").to_ascii_lowercase();
+    match chosen_encoding.as_str() {
+        "utf-8" | "utf8" => read_bounded(
+            read_telemetry::FILTER_CONTENTS,
+            kwargs,
+            configured_max_read_bytes,
+            |limits| bounded_read::read_utf8(Utf8Path::new(raw), limits),
+        ),
+        other => Err(Error::new(
+            ErrorKind::InvalidOperation,
+            localization::message(keys::STDLIB_PATH_UNSUPPORTED_ENCODING)
+                .with_arg("encoding", other)
+                .to_string(),
+        )),
+    }
+}
+
+/// Run one bounded read for `filter`, resolving and recording it on the way.
+///
+/// The four reading filters share this prologue: resolve the per-call limits
+/// from the kwargs, refuse a keyword the filter does not declare, then hand the
+/// read to the telemetry boundary. Keeping it in one place means a filter
+/// cannot quietly skip a step, and `read` receives the same limits that the
+/// recorded call ran under rather than a second, possibly stale, resolution.
+fn read_bounded<T>(
+    filter: &'static str,
+    kwargs: &Kwargs,
+    configured_max_read_bytes: u64,
+    read: impl FnOnce(&FileReadLimits) -> Result<T, Error>,
+) -> Result<T, Error> {
+    let limits = path_call_limits(kwargs, configured_max_read_bytes)?;
+    kwargs.assert_all_used()?;
+    read_telemetry::record_file_read(filter, &limits, read(&limits))
 }
 
 /// Resolve the per-call read limits from `max_bytes` and `follow_symlinks` kwargs.

@@ -1754,9 +1754,9 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   On Unix, scripts use `/bin/sh -e`.
 - `shell`, `grep`, `fetch`, filesystem helpers, and ordinary recipes interact
   with the host.
-- The file-reading filters (`contents`, `linecount`, `hash`, `digest`) read at
-  most the configured byte budget, open the final path entry without following
-  symlinks, and require the opened object to be a regular file. See
+- The file-reading filters (`contents`, `linecount`, `hash`, `digest`) process
+  at most the configured byte budget, open the final path entry without
+  following symlinks, and require the opened object to be a regular file. See
   [Configure file reading limits](#configure-file-reading-limits).
 - `glob` restricts its filesystem metadata access to a capability handle
   scoped to the pattern's literal directory prefix, so it cannot inspect

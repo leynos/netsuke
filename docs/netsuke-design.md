@@ -1453,6 +1453,51 @@ Implementation notes:
   environment.
 - `with_suffix` removes dotted suffix segments (default `n = 1`) before
   appending the provided suffix.
+- `contents`, `linecount`, `hash`, and `digest` share one read boundary, so
+  this policy is enforced once rather than re-implemented per filter.
+  `FileReadLimits` and `open_file_checked` in `src/stdlib/path/fs_utils.rs`
+  decide what may be opened; `BoundedRead` and `read_bounded_chunk` in
+  `src/stdlib/path/bounded_read.rs` stream the bytes and charge the budget as
+  they arrive, so no buffer grows with the length of a line. See the
+  [developer's guide](developers-guide.md#file-reading-filter-boundary).
+- The configured ceiling is `DEFAULT_FILE_MAX_READ_BYTES` (8 MiB) in
+  `src/stdlib/config_types.rs`, stored as `FileConfig::max_read_bytes` and set
+  through `StdlibConfig::with_file_max_read_bytes`; a zero budget is rejected
+  with the `stdlib.config.file_read_limit_positive` diagnostic and the ceiling
+  is propagated into filter registration. See
+  [Configure file reading limits](users-guide.md#configure-file-reading-limits)
+  for operator-facing guidance.
+- A per-call `max_bytes` may only narrow that ceiling: a call asking for more
+  is clamped to the ceiling, never granted a larger read. `follow_symlinks`
+  defaults to `false`, so the final path component is opened without following
+  symlinks unless the call opts in.
+- On Unix the open carries `O_NONBLOCK` unconditionally, so a FIFO or device
+  cannot wedge the render worker inside `open` under either symlink policy;
+  `O_NOFOLLOW` is added only by the default policy, which refuses a symlink
+  final component. Blocking mode is restored once the opened object is
+  confirmed to be a regular file, and the regular-file check runs on the opened
+  handle, so special files are rejected without a check-then-open window. On
+  Windows cap-std exposes no `O_NOFOLLOW`, so the pre-open `symlink_metadata`
+  check is the platform's best available guard; it is not race-free, and that
+  residual risk is tracked separately (issue #703).
+- An over-budget read fails with `stdlib.path.contents.file_too_large`, which
+  quotes the path and the byte limit. An opened object that is not a regular
+  file (a FIFO, device, or a Windows symlink refused ahead of the open) fails
+  with `stdlib.path.contents.not_regular_file`, which quotes the path alone. A
+  Unix symlink refused by `O_NOFOLLOW` surfaces as the mapped open error for
+  the action (the `stdlib.path.io.failed` family) instead of the regular-file
+  diagnostic, because the refusal happens while opening. `linecount` validates
+  UTF-8 incrementally as it counts, so a file that is not text is rejected
+  rather than silently counted as opaque bytes.
+- Each of the four filter closures records its call through
+  `src/stdlib/path/read_telemetry.rs`: one sample of the bounded counter
+  `netsuke_stdlib_file_read_total`, labelled `filter` (`contents`, `linecount`,
+  `hash`, or `digest`) and `outcome` (`ok` or `rejected`), plus a
+  `stdlib.file_read.read` debug event carrying the same two facts with the
+  effective limit and symlink policy. The rejection category is deliberately
+  not a label — it is the localized diagnostic the caller already receives —
+  and paths and file contents are never recorded, so the series stay bounded
+  and safe to export.
 
 #### Executable discovery filter (`which`)
 

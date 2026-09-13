@@ -24,13 +24,24 @@ pub(crate) fn read_bounded_chunk<'a>(
     buffer: &'a mut [u8],
     path: &Utf8Path,
 ) -> Result<Option<&'a [u8]>, Error> {
-    let read = file.read(buffer).map_err(|err| {
-        io_to_error(
-            path,
-            &localization::message(keys::STDLIB_PATH_ACTION_READ),
-            err,
-        )
-    })?;
+    // Ask for one byte past the remaining budget: that sentinel is enough to
+    // prove the source exceeds the budget, so a call with little budget left
+    // never reads (or allocates for) a full buffer beyond it. The window is
+    // still capped by the buffer, which is the other limit on how much a read
+    // may consume.
+    let remaining = state.max_bytes.saturating_sub(state.total);
+    let window = usize::try_from(remaining.saturating_add(1))
+        .unwrap_or(usize::MAX)
+        .min(buffer.len());
+    let read = file
+        .read(buffer.get_mut(..window).unwrap_or(&mut []))
+        .map_err(|err| {
+            io_to_error(
+                path,
+                &localization::message(keys::STDLIB_PATH_ACTION_READ),
+                err,
+            )
+        })?;
     if read == 0 {
         return Ok(None);
     }
@@ -93,10 +104,29 @@ fn invalid_utf8_error(path: &Utf8Path) -> Error {
 /// the configured byte budget.
 pub(crate) fn read_utf8(path: &Utf8Path, limits: &FileReadLimits) -> Result<String, Error> {
     let mut file = open_file_checked(path, limits)?;
-    let mut state = BoundedRead::new(limits.max_bytes);
+    read_utf8_from(&mut file, path, limits.max_bytes)
+}
+
+/// Read the already-opened `file` as UTF-8 text under a `max_bytes` budget.
+///
+/// Split from [`read_utf8`] so a caller can supply the handle: the budget
+/// cases drive this seam with a handle of their own and read back the offset a
+/// rejected read left on it, which is how "stopped at the budget" is
+/// distinguished from "read it all, then checked the length".
+///
+/// # Errors
+///
+/// Returns a template error when a chunk cannot be read, when the contents are
+/// not valid UTF-8, or when the read exceeds `max_bytes`.
+pub(crate) fn read_utf8_from(
+    file: &mut File,
+    path: &Utf8Path,
+    max_bytes: u64,
+) -> Result<String, Error> {
+    let mut state = BoundedRead::new(max_bytes);
     let mut buffer = [0_u8; 8192];
     let mut bytes = Vec::new();
-    while let Some(chunk) = read_bounded_chunk(&mut state, &mut file, &mut buffer, path)? {
+    while let Some(chunk) = read_bounded_chunk(&mut state, file, &mut buffer, path)? {
         bytes.extend_from_slice(chunk);
     }
     String::from_utf8(bytes).map_err(|_| invalid_utf8_error(path))
@@ -171,13 +201,31 @@ impl Utf8Validator {
 /// budget.
 pub(crate) fn linecount(path: &Utf8Path, limits: &FileReadLimits) -> Result<usize, Error> {
     let mut file = open_file_checked(path, limits)?;
-    let mut state = BoundedRead::new(limits.max_bytes);
+    linecount_from(&mut file, path, limits.max_bytes)
+}
+
+/// Count the lines of the already-opened `file` under a `max_bytes` budget.
+///
+/// Split from [`linecount`] for the same reason as [`read_utf8_from`]: the
+/// budget cases need a handle they can inspect afterwards, and both filters
+/// must be shown to stream rather than buffer.
+///
+/// # Errors
+///
+/// Returns a template error when a chunk cannot be read, when the contents are
+/// not valid UTF-8, or when the read exceeds `max_bytes`.
+pub(crate) fn linecount_from(
+    file: &mut File,
+    path: &Utf8Path,
+    max_bytes: u64,
+) -> Result<usize, Error> {
+    let mut state = BoundedRead::new(max_bytes);
     let mut buffer = [0_u8; 8192];
     let mut utf8 = Utf8Validator::default();
     let mut lines: usize = 0;
     let mut read_any = false;
     let mut ends_with_newline = false;
-    while let Some(chunk) = read_bounded_chunk(&mut state, &mut file, &mut buffer, path)? {
+    while let Some(chunk) = read_bounded_chunk(&mut state, file, &mut buffer, path)? {
         utf8.push(chunk, path)?;
         for byte in chunk {
             if *byte == b'\n' {

@@ -1,7 +1,7 @@
 //! Unit tests for [`StdlibConfig`] builders and validation.
 use super::{
     DEFAULT_COMMAND_MAX_OUTPUT_BYTES, DEFAULT_COMMAND_MAX_STREAM_BYTES,
-    DEFAULT_WHICH_CACHE_CAPACITY, StdlibConfig,
+    DEFAULT_FILE_MAX_READ_BYTES, DEFAULT_WHICH_CACHE_CAPACITY, StdlibConfig,
 };
 use crate::localization::{self, keys};
 use anyhow::{Context, Result, ensure};
@@ -59,23 +59,30 @@ fn validate_cache_relative_accepts_workspace_relative_paths() {
 }
 
 #[rstest]
-#[case::output(CommandLimitCase {
+#[case::output(ByteLimitCase {
     builder: StdlibConfig::with_command_max_output_bytes,
     accessor: |cfg: &StdlibConfig| cfg.command_max_output_bytes,
     default_value: DEFAULT_COMMAND_MAX_OUTPUT_BYTES,
     updated: 2_048,
     zero_err_key: keys::STDLIB_COMMAND_OUTPUT_LIMIT_POSITIVE,
 })]
-#[case::stream(CommandLimitCase {
+#[case::stream(ByteLimitCase {
     builder: StdlibConfig::with_command_max_stream_bytes,
     accessor: |cfg: &StdlibConfig| cfg.command_max_stream_bytes,
     default_value: DEFAULT_COMMAND_MAX_STREAM_BYTES,
     updated: 65_536,
     zero_err_key: keys::STDLIB_COMMAND_STREAM_LIMIT_POSITIVE,
 })]
-fn command_limit_builders_validate_and_update(
+#[case::file_read(ByteLimitCase {
+    builder: StdlibConfig::with_file_max_read_bytes,
+    accessor: StdlibConfig::file_max_read_bytes,
+    default_value: DEFAULT_FILE_MAX_READ_BYTES,
+    updated: 4_096,
+    zero_err_key: keys::STDLIB_FILE_READ_LIMIT_POSITIVE,
+})]
+fn byte_limit_builders_validate_and_update(
     #[from(base_config)] base_config_res: Result<StdlibConfig>,
-    #[case] case: CommandLimitCase,
+    #[case] case: ByteLimitCase,
 ) -> Result<()> {
     let base_config = base_config_res?;
     let default_value = (case.accessor)(&base_config);
@@ -103,7 +110,7 @@ fn command_limit_builders_validate_and_update(
     Ok(())
 }
 
-struct CommandLimitCase {
+struct ByteLimitCase {
     builder: fn(StdlibConfig, u64) -> anyhow::Result<StdlibConfig>,
     accessor: fn(&StdlibConfig) -> u64,
     default_value: u64,
@@ -112,13 +119,20 @@ struct CommandLimitCase {
 }
 
 #[rstest]
-fn command_limits_propagate_into_components(base_config: Result<StdlibConfig>) -> Result<()> {
+fn limits_propagate_into_components(base_config: Result<StdlibConfig>) -> Result<()> {
     let config = base_config?
+        .with_file_max_read_bytes(2_097_152)
+        .context("set file-read limit")?
         .with_command_max_output_bytes(4_096)
         .context("set capture limit")?
         .with_command_max_stream_bytes(131_072)
         .context("set streaming limit")?;
-    let (_network, _files, command) = config.into_components();
+    let (_network, files, command) = config.into_components();
+    ensure!(
+        files.max_read_bytes == 2_097_152,
+        "file-read limit {} did not match 2097152",
+        files.max_read_bytes
+    );
     ensure!(
         command.max_capture_bytes == 4_096,
         "capture limit {} did not match 4096",

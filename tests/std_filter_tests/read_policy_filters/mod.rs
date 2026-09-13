@@ -6,12 +6,16 @@
 //! enforced on only some entry points then fails on the entry point that
 //! ignores it instead of passing because a sibling filter was tested. This
 //! module owns the table and the render helpers; `budget_tests` pins the byte
-//! budget, and `file_type_tests` pins the symlink and file-type policy.
-use anyhow::{Context, Result, anyhow, bail, ensure};
+//! budget, `file_type_tests` pins the symlink and file-type policy, and
+//! `unknown_kwargs_tests` pins the per-call keyword contract.
+use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::context;
 
+// Only `create_fifo` builds one, and only Unix has FIFOs to build.
+#[cfg(unix)]
+use anyhow::anyhow;
 #[cfg(unix)]
 use rustix::fs::{Dev, FileType as RxFileType, Mode, mknodat};
 
@@ -229,3 +233,5 @@ pub(super) fn rejection(
 mod budget_tests;
 
 mod file_type_tests;
+
+mod unknown_kwargs_tests;

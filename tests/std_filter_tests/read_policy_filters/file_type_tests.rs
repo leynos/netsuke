@@ -18,6 +18,24 @@ use super::{
     require_real_symlink,
 };
 
+/// Report that this host cannot provide the symlink fixture, then end the case.
+///
+/// `Ok(None)` from the fixture means the platform cannot create a link at all —
+/// on Windows, for want of `SeCreateSymbolicLinkPrivilege` and Developer Mode —
+/// so the case has no symlink policy to assert here. It says so rather than
+/// returning a silent pass: a suite that reports green while quietly skipping
+/// its subject would hide the same regression on a host that can create links.
+#[expect(
+    clippy::print_stderr,
+    reason = "test harness: an unavailable fixture must be visible in the captured test output instead of passing silently"
+)]
+fn skip_without_symlink_support(case: FilterCase) {
+    eprintln!(
+        "skipped: {} — this host cannot create a symlink fixture",
+        case.name
+    );
+}
+
 #[rstest]
 #[case::contents(CONTENTS)]
 #[case::linecount(LINECOUNT)]
@@ -26,7 +44,8 @@ use super::{
 fn reading_filters_reject_symlinks_by_default(#[case] case: FilterCase) -> Result<()> {
     let (_temp, root) = fallible::filter_workspace()?;
     let Some(link) = fallible::file_symlink_fixture(&root)? else {
-        return Ok(()); // This host cannot create symlinks; nothing to police.
+        skip_without_symlink_support(case);
+        return Ok(());
     };
     require_real_symlink(&root, &link)?;
     let err = rejection(
@@ -64,6 +83,7 @@ fn reading_filters_reject_symlinks_by_default(#[case] case: FilterCase) -> Resul
 fn follow_symlinks_opt_in_reads_the_link_target(#[case] case: FilterCase) -> Result<()> {
     let (_temp, root) = fallible::filter_workspace()?;
     let Some(link) = fallible::file_symlink_fixture(&root)? else {
+        skip_without_symlink_support(case);
         return Ok(());
     };
     require_real_symlink(&root, &link)?;
@@ -112,11 +132,13 @@ fn reading_filters_reject_a_fifo(#[case] case: FilterCase) -> Result<()> {
 
 /// The symlink opt-in must not reintroduce a blocking open.
 ///
-/// `O_NOFOLLOW` is what rejects a FIFO under the default policy, so the
-/// follow path is the one that has to carry `O_NONBLOCK` on its own: opening
-/// this FIFO for reading with neither a writer nor `O_NONBLOCK` blocks until
-/// a writer appears, and the test would only end when `nextest` terminates
-/// it. A rejection through the regular-file check proves the open returned.
+/// `O_NONBLOCK` is what keeps this open from wedging the render worker under
+/// either policy: opening a FIFO for reading with neither a writer nor
+/// `O_NONBLOCK` blocks until a writer appears, and the test would only end when
+/// `nextest` terminates it. `O_NOFOLLOW` is not the guard here — it refuses a
+/// symlink final component, and a FIFO is not one. The FIFO therefore reaches
+/// the read-only open, returns because of `O_NONBLOCK`, and is rejected by the
+/// regular-file check on the opened handle, which is what this case asserts.
 #[cfg(unix)]
 #[rstest]
 #[case::contents(CONTENTS)]
