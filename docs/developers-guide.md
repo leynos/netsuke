@@ -3878,20 +3878,38 @@ to a module that wants a raw `File`.
 `test_support::http` owns the local HTTP server fixtures used by unit,
 integration, and behavioural tests that exercise network-facing helpers. Its
 public response model, `HttpResponse`, is composed with `spawn_http_server`,
-`spawn_http_server_with_config`, or `spawn_http_server_responses`. The first
-two preserve the one-request fixture contract and emit `200 OK` by default; the
-response-sequence helper is the composition point for redirect chains and
-returns a request counter for asserting which requests were received.
+`spawn_http_server_with_config`, `spawn_http_server_responses`,
+`spawn_http_server_recording`, or `spawn_http_server_expecting_no_requests`.
+The first two preserve the one-request fixture contract and emit `200 OK` by
+default, and `spawn_http_server_responses` is the composition point for
+redirect chains and returns a request counter for asserting which requests were
+received. The last two return the same `(String, RequestLog, HttpServer)` tuple:
+`spawn_http_server_recording` records the request line of every request the
+fixture answers, while `spawn_http_server_expecting_no_requests` records any
+request it receives for a hop or target that must receive none.
+
+`RequestLog` is a shared handle over those recorded lines in arrival order.
+`lines` returns a snapshot of them, and `len` and `is_empty` report how many
+have been recorded. Use the lines to assert the method and target of each hop,
+which a request counter alone cannot show.
 
 Only test code may call these helpers. Use separate fixture instances for a
-redirecting origin and its target, and use the target counter when a policy
-decision must prove that no connection was attempted. Configure response
-status, headers, and body through `HttpResponse`; do not add protocol-specific
-server logic to individual tests when the response sequence already expresses
-the scenario. Keep one-off fixtures for behaviour that cannot be represented by
-this local server, and do not use the fixture as a production HTTP adapter. The
-server's bounded accept and read deadlines, plus its drop-time cleanup, keep
-expected zero-request cases from stalling the suite.
+redirecting origin and its target, and use
+`spawn_http_server_expecting_no_requests` when a policy decision must prove
+that no connection was attempted: only the shutdown signal raised by
+`HttpServer::join` or by dropping the handle ends that fixture's wait, because
+a request counter read after the accept deadline cannot distinguish a refused
+connection from a slow machine. `HttpServer::join` also propagates a fixture
+thread panic that `Drop` suppresses, so join a fixture whose thread failure
+should fail the test.
+
+Configure response status, headers, and body through `HttpResponse`; do not add
+protocol-specific server logic to individual tests when the response sequence
+already expresses the scenario. Keep one-off fixtures for behaviour that cannot
+be represented by this local server, and do not use the fixture as a production
+HTTP adapter. The other fixtures keep their bounded accept and read waits, and
+every fixture ends an accept wait when its handle is joined or dropped, so
+expected zero-request cases do not stall the suite.
 
 ### `test_support::ensure_manifest_exists`
 
