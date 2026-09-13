@@ -71,6 +71,54 @@ fn fetch_records_bounded_policy_decisions(cache_workspace: Result<CacheWorkspace
     Ok(())
 }
 
+/// Verify a refusal that is not a policy decision is logged with its reason.
+///
+/// The counter records only that some redirect was refused, so the log is what
+/// separates a loop from a missing location or an over-limit chain.
+#[rstest]
+fn refused_redirect_logs_its_bounded_failure_category(
+    cache_workspace: Result<CacheWorkspace>,
+) -> Result<()> {
+    let (_temp, root, _path) = cache_workspace?;
+    // The one response redirects to the URL just requested, so the chain
+    // refuses the hop as a loop without dispatching a second request.
+    let (url, _requests, server) =
+        http::spawn_http_server_responses([
+            http::HttpResponse::new(302, "").with_header("Location", "/")
+        ])
+        .context("spawn loop redirector")?;
+    let policy = NetworkPolicy::default()
+        .allow_scheme("http")
+        .context("allow HTTP for loop trace")?;
+    let context = make_context_with(root, policy, DEFAULT_FETCH_MAX_RESPONSE_BYTES);
+    let kwargs = std::iter::empty::<(String, Value)>().collect::<Kwargs>();
+    let impure = Arc::new(AtomicBool::new(false));
+
+    let events = with_test_subscriber(LevelFilter::DEBUG, |captured| {
+        fetch(&url, &kwargs, &impure, &context).expect_err("a loop must be refused");
+        Ok::<_, anyhow::Error>(captured.snapshot())
+    })?;
+    server
+        .join()
+        .map_err(|err| anyhow::anyhow!("loop redirector thread panicked: {err:?}"))?;
+
+    let refusal = events
+        .iter()
+        .find(|event| event.contains("redirect_failure=\"loop\""))
+        .context("a refused redirect must be logged")?;
+    ensure!(
+        refusal.contains("operation=\"fetch\"")
+            && refusal.contains("redirect_outcome=\"rejected\"")
+            && refusal.contains("hop=1"),
+        "the refusal event must carry the bounded operation, outcome, and hop: {refusal}",
+    );
+    ensure!(
+        !refusal.contains(&url),
+        "the refusal event must not disclose the requested URL: {refusal}",
+    );
+    Ok(())
+}
+
 /// Assert that policy telemetry is complete while redirect identifiers stay redacted.
 fn assert_bounded_policy_events(events: &[String]) -> Result<()> {
     ensure!(

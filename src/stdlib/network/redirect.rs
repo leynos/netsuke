@@ -204,8 +204,14 @@ fn record_followed_redirect(hop: usize) {
 }
 
 /// Record one refused redirect and build its localized diagnostic.
+///
+/// Every refusal is logged, not only a policy rejection: the counter alone
+/// cannot show which hop of which fetch was refused. Each event carries exactly
+/// the four bounded fields ADR-023 permits a redirect decision to emit, using
+/// the closed vocabulary of the decision it reports.
 fn report_refused_redirect(rejection: &RedirectRejection, hop: usize) -> Error {
-    telemetry::record_redirect_refused(failure_category(rejection));
+    let refusal = failure_category(rejection);
+    telemetry::record_redirect_refused(refusal);
     if let RedirectRejection::Policy { violation, .. } = rejection {
         let reason = network_policy_rejection_reason(violation);
         telemetry::record_policy_decision("rejected", reason);
@@ -215,6 +221,14 @@ fn report_refused_redirect(rejection: &RedirectRejection, hop: usize) -> Error {
             policy_reason = reason,
             hop,
             "network policy rejected fetch redirect"
+        );
+    } else {
+        tracing::warn!(
+            operation = "fetch",
+            redirect_outcome = "rejected",
+            redirect_failure = refusal,
+            hop,
+            "fetch redirect refused"
         );
     }
     rejection_error(rejection)
