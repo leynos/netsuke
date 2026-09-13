@@ -5155,6 +5155,17 @@ unsuccessful HTTP response, `connection` a DNS, connect, or proxy failure,
 `protocol` a malformed status line or header, `invalid_url` a URL the client
 could not use, and `other` anything not otherwise classified.
 
+Every refused redirect is logged, not only a policy rejection, because the
+counter alone cannot show which hop of which fetch was refused. Each event
+carries `operation`, an outcome, a closed reason, and `hop`, and never a
+location, URL, host, or userinfo, the bound ADR-023 sets for redirect
+decisions. Policy refusals emit `policy_outcome="rejected"` with a
+`policy_reason` from `scheme_not_allowed`, `missing_host`,
+`host_not_allowlisted`, and `host_blocked`. Every other refusal emits
+`redirect_outcome="rejected"` with a `redirect_failure` drawn from
+`location_missing`, `location_invalid`, `credentials_not_removable`,
+`limit_exceeded`, and `loop`.
+
 [ADR-023](adr-023-revalidate-fetch-redirects.md) records the rationale for
 revalidating every redirect against the policy.
 
