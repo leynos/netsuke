@@ -9,7 +9,7 @@
 use crate::ast::NetsukeManifest;
 use metrics::{counter, describe_counter};
 use std::sync::Once;
-use tracing::trace_span;
+use tracing::{trace, trace_span};
 
 /// Metric counting manifest structural summaries emitted by the runner.
 const MANIFEST_STRUCTURES_TOTAL: &str = "netsuke_runner_manifest_structures_total";
@@ -55,5 +55,14 @@ pub fn record_manifest_structure(manifest: &NetsukeManifest) {
         default_count = manifest.defaults.len(),
     );
     let _guard = span.enter();
+    trace!(
+        variable_count = manifest.vars.len(),
+        macro_count = manifest.macros.len(),
+        rule_count = manifest.rules.len(),
+        action_count = manifest.actions.len(),
+        target_count = manifest.targets.len(),
+        default_count = manifest.defaults.len(),
+        "manifest structure summary"
+    );
     counter!(MANIFEST_STRUCTURES_TOTAL).increment(1);
 }
