@@ -11,6 +11,12 @@ use test_support::ninja_semantics::{GeneratedNinja, RecipeNeedle, RecipeTranspor
 /// Distinctive sentinel injected through `env('CI_SECRET')` in the fixture.
 const SENTINEL: &str = "CI-SECRET-7f3a9c2b5e1d4f60";
 
+/// Fixture targets, each resolving the sentinel through a different site.
+///
+/// Every site tags its own recipe text, so the per-site needles below cannot
+/// match text another site produced.
+const SECRET_SITES: [&str; 3] = ["command-site", "script-site", "var-site"];
+
 /// Describe how generated Ninja text carries recipe semantics.
 ///
 /// Naming the active representation keeps the diagnostic useful without
@@ -41,11 +47,7 @@ fn verbose_generate_never_emits_rendered_secret() -> Result<()> {
         &[("CI_SECRET", SENTINEL)],
     )?;
 
-    ensure!(
-        run.success,
-        "verbose generate should succeed: {}",
-        run.stderr
-    );
+    ensure!(run.success, "verbose generate should succeed");
     ensure!(
         !run.stdout.contains(SENTINEL),
         "rendered secret must not appear on stdout"
@@ -60,11 +62,15 @@ fn verbose_generate_never_emits_rendered_secret() -> Result<()> {
     let generated = GeneratedNinja::new(&ninja_text);
     // Windows serializes recipes as encoded PowerShell, so compare rendered
     // semantics rather than raw bytes: a plaintext scan would miss the secret
-    // even when `env('CI_SECRET')` resolved correctly.
-    ensure!(
-        generated.recipe_contains(RecipeNeedle::new(SENTINEL))?,
-        "env('CI_SECRET') must still resolve in the generated {} recipe",
-        describe_recipe_representation(generated)
-    );
+    // even when `env('CI_SECRET')` resolved correctly. Each site is checked
+    // separately because one resolving site would otherwise mask another
+    // site's failure.
+    for site in SECRET_SITES {
+        ensure!(
+            generated.recipe_contains(RecipeNeedle::new(&format!("{site} {SENTINEL}")))?,
+            "{site} must resolve env('CI_SECRET') in the generated {} recipe",
+            describe_recipe_representation(generated)
+        );
+    }
     Ok(())
 }
