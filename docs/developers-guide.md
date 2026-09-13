@@ -4000,6 +4000,67 @@ claim to model arbitrary scheduler or filesystem interleavings. The fallible
 `test_support::fs::inspect_path` probe treats `NotFound` as absence and
 propagates every other metadata error.
 
+
+### `test_support::ninja_semantics`
+
+`test_support::ninja_semantics` (`test_support/src/ninja_semantics.rs`) is the
+crate's single shared boundary for inspecting generated Ninja recipe text in
+tests. Its ownership is representation-aware inspection: it locates encoded
+recipe payloads, keeps them out of plaintext matching, and decodes them.
+
+It exists because Netsuke lowers a completed legacy recipe through one of three
+transports. The POSIX and Bash transports leave recipe text visible in a
+plaintext Ninja binding; the Windows PowerShell transport hides it in a Base64
+UTF-16LE `-EncodedCommand` argument, or — for recipes too large for a command
+line — in Ninja's response-file bootstrap (an `rspfile` plus an
+`rspfile_content` binding carrying a `netsukePayload = '` payload marker). A
+plaintext scan of generated Ninja therefore misses recipe text on Windows even
+when lowering worked correctly. The production transports this helper mirrors
+are described under [Command and recipe lowering](#command-and-recipe-lowering).
+
+The public surface is deliberately narrow:
+
+- `GeneratedNinja` — wraps a whole generated manifest document.
+  `GeneratedNinja::new` borrows the text; `detected_recipe_transports` reports
+  how that document carries recipe text; `recipe_contains` searches plaintext
+  bindings directly and decodes every PowerShell payload before matching, so
+  encoded payload text never matches as plaintext.
+- `RecipeNeedle` — wraps the text to search for, so a needle cannot be passed
+  where a document is expected, or vice versa.
+- `RecipeTransport` — the transport detected in a document (`Plaintext`,
+  `PowerShellEncodedCommand`, `PowerShellResponseFile`);
+  `RecipeTransport::description` gives the wording used in test failure
+  messages.
+- `ResponseFileContent` — wraps the extracted `rspfile_content` binding text;
+  `ResponseFileContent::decode_power_shell_payload` decodes the recipe that
+  binding embeds.
+
+The payload markers and the Base64/UTF-16LE decoding rules live in this module
+alone. Call sites must not re-implement the decoding or repeat the renderer's
+marker constants; they must go through these types. `GeneratedNinja` owns
+payload location, exclusion of encoded spans from plaintext matching, and
+decoding, so text on opposite sides of a removed payload can never form a false
+match.
+
+Permitted call sites are test-support and test code only, in the same spirit as
+`test_support::fs` and `test_support::tracing_capture`; production code must
+not depend on `test_support`. Current call sites are
+`src/ninja_gen_tests/power_shell.rs` and
+`tests/logging_stderr/verbose_secret_absence.rs`, with unit coverage in
+`test_support/src/ninja_semantics_tests.rs`.
+
+To name the active representation in a failure-message diagnostic, call
+`GeneratedNinja::detected_recipe_transports` and map the result through
+`RecipeTransport::description`. Never interpolate the generated document, an
+encoded payload, or decoded recipe text into a failure message: generated
+recipes can contain rendered secret material interpolated through `env()`,
+which the secret-absence regression test protects. Decoder errors likewise
+never echo the payload.
+
+The production generator has its own `netsuke::ninja_gen::GeneratedNinja`
+output type; `test_support::ninja_semantics::GeneratedNinja` is the test-side
+borrowed view of generated text.
+
 ### Temporary Ninja build files
 
 `runner::process::create_temp_ninja_file` writes, flushes, and synchronizes a
