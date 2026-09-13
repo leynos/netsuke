@@ -149,6 +149,7 @@ fn assert_windows_package_upgrade_family_wiring(contents: &str) {
     let windows_package_step =
         workflow_step_body(contents, "Build Windows installer package").join("\n");
     for expected in [
+        "wxs-path: installer/Package.wxs",
         "product-name: ${{ inputs['bin-name'] }}",
         "install-dir-name: ${{ inputs['bin-name'] }}",
         "version: ${{ inputs.version }}",
@@ -156,6 +157,22 @@ fn assert_windows_package_upgrade_family_wiring(contents: &str) {
         assert!(
             windows_package_step.contains(expected),
             "windows-package should preserve its upgrade family contract: {expected}"
+        );
+    }
+}
+
+/// Check that the Windows workflow supplies an ordered prerelease rank to `WiX`.
+fn assert_windows_package_release_rank_wiring(contents: &str) {
+    let release_rank_step = workflow_step_body(contents, "Set Windows MSI release rank").join("\n");
+    for expected in [
+        "RELEASE_VERSION: ${{ inputs.version }}",
+        "^\\d+\\.\\d+\\.\\d+-beta(?<sequence>[1-9]\\d*)$",
+        "$releaseRank = 65535",
+        "NETSUKE_RELEASE_RANK=$releaseRank",
+    ] {
+        assert!(
+            release_rank_step.contains(expected),
+            "Windows release-rank step should preserve its ordering contract: {expected}"
         );
     }
 }
@@ -174,11 +191,13 @@ fn assert_shared_build_skips_man_page_discovery(contents: &str) {
     }
 }
 
+/// Verify that the release workflow retains its shared-action wiring contract.
 #[test]
 fn behavioural_build_and_package_wiring_matches_shared_actions() {
     let contents = workflow_contents("build-and-package.yml")
         .expect("build-and-package workflow should be readable");
     assert_windows_package_upgrade_family_wiring(&contents);
+    assert_windows_package_release_rank_wiring(&contents);
 
     // Wiring of the shared build action, which is this test's subject.
     assert_shared_build_skips_man_page_discovery(&contents);

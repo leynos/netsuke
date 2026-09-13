@@ -3645,6 +3645,16 @@ inaccessible help format. Windows PowerShell help is staged as sidecar release
 artefacts in the `Netsuke` module layout so users can inspect it with
 `Get-Help Netsuke -Full`.
 
+The MSI keeps a stable WiX `UpgradeCode` for the release family while WiX
+generates a fresh `ProductCode` for each package. Since Windows Installer
+compares only the numeric `major.minor.patch` version, a supplied numeric
+prerelease release-rank marker is persisted in the installer registry and a
+launch condition compares it before allowing a same-version replacement. This
+prevents an older beta from replacing a later beta or final release. Installer
+package tests validate the WiX authoring and workflow wiring statically; the
+repository has no local `msiexec` end-to-end harness, so install and upgrade
+execution remains a Windows packaging workflow concern.
+
 macOS releases execute the shared action twice: once on an Intel runner and
 again on Apple Silicon. The same composite action interprets the TOML
 configuration, emits checksums, and exposes artefact metadata via JSON outputs

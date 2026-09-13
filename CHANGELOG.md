@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Support beta-to-beta and beta-to-final Windows MSI replacement through WiX
+  major-upgrade metadata.
+
 ## [0.1.0-beta3] - 2026-09-02
 
 - Add injectable Ninja child environments, named Ninja request types, and
@@ -69,10 +76,9 @@
   `BuildTargets::as_slice().is_empty()`
   ([#75](https://github.com/leynos/netsuke/issues/75))
 
+<!-- markdownlint-disable-next-line MD024 -->
 ### Fixed
 
-- Support beta-to-beta and beta-to-final Windows MSI replacement through WiX
-  major-upgrade metadata.
 - Expand parent-relative glob patterns such as `glob('../shared/*.h')`; their
   matches previously reached the working-directory capability as `../…` and
   were rejected as sandbox escapes

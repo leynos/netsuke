@@ -280,6 +280,26 @@ jobs:
           $dotnetTools = Join-Path (Join-Path $profileHome '.dotnet') 'tools'
           $dotnetTools | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
 
+      - name: Set Windows MSI release rank
+        if: inputs.platform == 'windows'
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          if ($env:RELEASE_VERSION -match '^\d+\.\d+\.\d+-beta(?<sequence>[1-9]\d*)$') {
+            $releaseRank = [long]$Matches.sequence
+            if ($releaseRank -ge 65535) {
+              throw 'Windows MSI beta sequence must be less than 65535.'
+            }
+          }
+          elseif ($env:RELEASE_VERSION -match '^\d+\.\d+\.\d+$') {
+            $releaseRank = 65535
+          }
+          else {
+            throw 'Windows MSI releases must use a numeric version or a -betaN prerelease suffix.'
+          }
+          "NETSUKE_RELEASE_RANK=$releaseRank" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Package Linux artefacts with dependencies
         if: inputs.platform == 'linux'
         uses: leynos/shared-actions/.github/actions/linux-packages@e041cb75c35c3524201a32d5e57c87408fbd5874
@@ -305,6 +325,7 @@ jobs:
         id: package_windows
         uses: leynos/shared-actions/.github/actions/windows-package@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
+          wxs-path: installer/Package.wxs
           product-name: ${{ inputs['bin-name'] }}
           manufacturer: Leynos
           install-dir-name: ${{ inputs['bin-name'] }}

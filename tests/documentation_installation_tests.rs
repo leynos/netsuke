@@ -12,6 +12,7 @@ use anyhow::{Context, Result, ensure};
 use documentation_examples::{documented_example, load_documented_examples};
 use test_support::fs as test_fs;
 
+/// Verify that installation examples and release details retain their user contract.
 #[test]
 fn installation_examples_match_source_and_release_contracts() -> Result<()> {
     assert_release_installation_contract()?;
