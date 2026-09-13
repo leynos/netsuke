@@ -1,0 +1,5 @@
+---
+source: src/stdlib/network/redirect_adapter_tests.rs
+expression: rendered
+---
+invalid operation: Redirect limit of 5 exceeded while fetching 'http://blocked.example/next'.

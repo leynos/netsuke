@@ -1,226 +1,73 @@
 //! Unit tests for the HTTP fixture implementation in the parent module.
 //!
-//! These tests exercise timeout configuration, connection acceptance, and
-//! warning capture without exposing test-only helpers through `http`'s public
-//! interface.
+//! These tests exercise connection acceptance and fixture response behaviour
+//! without exposing test-only helpers through `http`'s public interface.
+//! Timeout configuration and its warnings live in the sibling `config_tests`
+//! module.
 
 use super::{
-    ENV_HTTP_ACCEPT_TIMEOUT_MS, ENV_HTTP_POLL_INTERVAL_MS, ENV_HTTP_READ_TIMEOUT_MS,
-    HttpServerConfig, accept_connection, duration_from_env, take_duration_warnings,
+    AcceptWait, HttpResponse, HttpServerConfig, accept_connection, response::render_response,
 };
 
-use mockable::MockEnv;
-use rstest::{fixture, rstest};
 use std::{
-    collections::HashMap,
-    net::TcpListener,
+    io::{Read, Write},
+    net::{TcpListener, TcpStream},
     panic,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+        mpsc,
+    },
+    thread,
     time::{Duration, Instant},
 };
 
-fn fixture_env(entries: &[(&str, &str)]) -> MockEnv {
-    let values: HashMap<String, String> = entries
-        .iter()
-        .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
-        .collect();
-    let mut env = MockEnv::new();
-    env.expect_raw().returning(move |key| {
-        values
-            .get(key)
-            .cloned()
-            .ok_or(std::env::VarError::NotPresent)
-    });
-    env
-}
-
-#[fixture]
-fn empty_duration_warnings() -> EmptyDurationWarnings {
-    EmptyDurationWarnings {
-        started_empty: take_duration_warnings().is_empty(),
-    }
-}
-
-struct EmptyDurationWarnings {
-    started_empty: bool,
-}
-
-impl EmptyDurationWarnings {
-    fn take(&self) -> Vec<String> {
-        assert!(self.started_empty, "warnings buffer should start empty");
-        take_duration_warnings()
-    }
-}
-
-#[derive(Clone, Copy)]
-struct DurationCase {
-    key: &'static str,
-    value: Option<&'static str>,
-    expected: Duration,
-    /// Bounded parse-failure text expected in the warning, if it should warn.
-    ///
-    /// Deliberately not the offending value: the warning redacts it, so
-    /// asserting on a category is what keeps that redaction honest.
-    expected_warning_error: Option<&'static str>,
-    /// Byte length the warning should report for the redacted value.
-    ///
-    /// Measured after trimming, matching the call site. This is the one piece of
-    /// shape the redaction still surfaces, so pinning it stops the length going
-    /// missing — or turning back into the value — unnoticed.
-    expected_warning_len: Option<usize>,
-}
-
 #[test]
-fn from_env_applies_overrides() {
-    assert!(
-        take_duration_warnings().is_empty(),
-        "warnings buffer should start empty"
-    );
-    let env = fixture_env(&[
-        (ENV_HTTP_ACCEPT_TIMEOUT_MS, "1500"),
-        (ENV_HTTP_READ_TIMEOUT_MS, "750"),
-        (ENV_HTTP_POLL_INTERVAL_MS, "25"),
-    ]);
+fn response_rendering_preserves_status_headers_and_body() {
+    let response = HttpResponse::new(302, "next")
+        .with_header("Location", "/redirected")
+        .with_header("X-Test", "fixture");
 
-    let config = HttpServerConfig::from_env_provider(&env);
-    assert_eq!(config.accept_timeout, Duration::from_millis(1500));
-    assert_eq!(config.read_timeout, Duration::from_millis(750));
-    assert_eq!(config.poll_interval, Duration::from_millis(25));
-    assert!(
-        take_duration_warnings().is_empty(),
-        "no warnings expected for valid overrides"
+    assert_eq!(
+        render_response(&response),
+        "HTTP/1.1 302 Found\r\nLocation: /redirected\r\nX-Test: fixture\r\nContent-Length: 4\r\nConnection: close\r\n\r\nnext"
     );
 }
 
 #[test]
-fn from_env_clamps_zero_poll_interval() {
-    assert!(
-        take_duration_warnings().is_empty(),
-        "warnings buffer should start empty"
-    );
-    let env = fixture_env(&[(ENV_HTTP_POLL_INTERVAL_MS, "0")]);
+fn response_server_counts_each_client_request() -> anyhow::Result<()> {
+    let (url, requests, server) = super::spawn_http_server_responses([
+        HttpResponse::new(302, "").with_header("Location", "/next"),
+        HttpResponse::new(200, "done"),
+    ])?;
 
-    let config = HttpServerConfig::from_env_provider(&env);
-    assert_eq!(config.poll_interval, Duration::from_millis(1));
-    assert!(
-        take_duration_warnings().is_empty(),
-        "parsing a zero poll interval should not warn",
+    send_request(&url)?;
+    send_request(&url)?;
+    server
+        .join()
+        .map_err(|err| anyhow::anyhow!("fixture server panicked: {err:?}"))?;
+
+    anyhow::ensure!(
+        requests.load(std::sync::atomic::Ordering::Relaxed) == 2,
+        "fixture should count both client requests",
     );
+    Ok(())
 }
 
-#[rstest]
-#[case::missing(DurationCase {
-    key: ENV_HTTP_ACCEPT_TIMEOUT_MS,
-    value: None,
-    expected: Duration::from_secs(3),
-    expected_warning_error: None,
-    expected_warning_len: None,
-})]
-#[case::invalid(DurationCase {
-    key: ENV_HTTP_ACCEPT_TIMEOUT_MS,
-    value: Some("not-a-number"),
-    expected: Duration::from_secs(3),
-    expected_warning_error: Some("invalid digit"),
-    expected_warning_len: Some("not-a-number".len()),
-})]
-#[case::empty(DurationCase {
-    key: ENV_HTTP_ACCEPT_TIMEOUT_MS,
-    value: Some(""),
-    expected: Duration::from_secs(3),
-    expected_warning_error: Some("cannot parse integer from empty string"),
-    expected_warning_len: Some(0),
-})]
-#[case::whitespace_padded(DurationCase {
-    key: ENV_HTTP_READ_TIMEOUT_MS,
-    value: Some("  2500  "),
-    expected: Duration::from_millis(2500),
-    expected_warning_error: None,
-    expected_warning_len: None,
-})]
-fn duration_from_env_handles_input(
-    empty_duration_warnings: EmptyDurationWarnings,
-    #[case] case: DurationCase,
-) {
-    let entries = case.value.map_or_else(Vec::new, |configured_value| {
-        vec![(case.key, configured_value)]
-    });
-    let env = fixture_env(&entries);
-
-    let duration = duration_from_env(&env, case.key, Duration::from_secs(3));
-
-    assert_eq!(duration, case.expected);
-    let warnings = empty_duration_warnings.take();
-    if let Some(expected_error) = case.expected_warning_error {
-        assert_eq!(warnings.len(), 1);
-        let warning = warnings.first().map_or("", String::as_str);
-        assert!(
-            warning.contains(case.key),
-            "warning should mention the variable name"
-        );
-        assert!(
-            warning.contains(expected_error),
-            "warning should name the bounded parse failure, got {warning}"
-        );
-        if let Some(expected_len) = case.expected_warning_len {
-            assert!(
-                warning.contains(&format!("{expected_len} bytes")),
-                "warning should report the redacted value's byte length, got {warning}"
-            );
-        }
-        // The value is caller-controlled, so it must never reach the log.
-        if let Some(configured_value) = case.value.filter(|value| !value.is_empty()) {
-            assert!(
-                !warning.contains(configured_value),
-                "warning must redact the offending value, got {warning}"
-            );
-        }
-    } else {
-        assert!(
-            warnings.is_empty(),
-            "valid or missing values should not warn"
-        );
-    }
-}
-
-proptest::proptest! {
-    /// The redaction must hold for any value a caller might export, not just
-    /// the table's sentinels.
-    ///
-    /// Asserting the whole rendered warning against a message rebuilt from
-    /// bounded parts is stronger than a "does not contain the value" check: it
-    /// leaves the value nowhere to hide, and it cannot be fooled by a generated
-    /// value that happens to be a substring of the template itself — `bytes`,
-    /// for instance, would satisfy a naive `!contains` assertion.
-    #[test]
-    fn invalid_duration_warnings_are_composed_only_of_bounded_parts(
-        raw in r"[^0-9\s][^\s]{0,24}",
-    ) {
-        let trimmed = raw.trim();
-        // A leading `+` still parses as u64, so filter rather than assume the
-        // strategy only yields rejects.
-        proptest::prop_assume!(trimmed.parse::<u64>().is_err());
-        let parse_error = trimmed
-            .parse::<u64>()
-            .expect_err("guarded by the assumption above");
-
-        // Drain any residue so this case observes only the warning it caused.
-        drop(take_duration_warnings());
-        let env = fixture_env(&[(ENV_HTTP_ACCEPT_TIMEOUT_MS, raw.as_str())]);
-        let default = Duration::from_secs(3);
-
-        let duration = duration_from_env(&env, ENV_HTTP_ACCEPT_TIMEOUT_MS, default);
-
-        proptest::prop_assert_eq!(duration, default);
-        let warnings = take_duration_warnings();
-        proptest::prop_assert_eq!(warnings.len(), 1);
-        // The variable name is a crate constant, the parse error is one of
-        // `ParseIntError`'s fixed messages, and the length is a number: an exact
-        // match therefore proves no caller-supplied byte reached the log.
-        let expected = format!(
-            "ignoring invalid {ENV_HTTP_ACCEPT_TIMEOUT_MS}: {parse_error} (value redacted, {} bytes)",
-            trimmed.len()
-        );
-        proptest::prop_assert_eq!(warnings.first().cloned().unwrap_or_default(), expected);
-    }
+/// Send one minimal HTTP request to the fixture at `url`.
+fn send_request(url: &str) -> anyhow::Result<()> {
+    let address = url
+        .strip_prefix("http://")
+        .ok_or_else(|| anyhow::anyhow!("fixture URL must use HTTP: {url}"))?;
+    let mut stream = TcpStream::connect(address)?;
+    stream.write_all(b"GET / HTTP/1.1\r\nHost: fixture\r\nConnection: close\r\n\r\n")?;
+    let mut response = String::new();
+    stream.read_to_string(&mut response)?;
+    anyhow::ensure!(
+        response.starts_with("HTTP/1.1 "),
+        "fixture response should begin with an HTTP status line",
+    );
+    Ok(())
 }
 
 #[test]
@@ -236,7 +83,7 @@ fn accept_connection_respects_accept_timeout() -> anyhow::Result<()> {
     let result = panic::catch_unwind(|| {
         drop(accept_connection(
             &listener,
-            deadline,
+            AcceptWait::Until(deadline),
             poll_interval,
             accept_timeout,
         ));
@@ -272,6 +119,114 @@ fn accept_connection_respects_accept_timeout() -> anyhow::Result<()> {
     anyhow::ensure!(
         panic_text.contains(&format!("poll_interval={poll_interval:?}")),
         "panic message should embed the poll interval: {panic_text}",
+    );
+    Ok(())
+}
+
+/// A signalled shutdown must end an unbounded accept wait by itself.
+///
+/// The wake-up connection a join sends is best-effort, so the accept loop must
+/// not depend on it: were that connect to fail, an unbounded wait whose only
+/// exit was the connection would never end, and the join would hang rather
+/// than fail. Arming the flag with no client ever connecting proves the loop
+/// stops on the signal alone.
+///
+/// The wait is bounded by `recv_timeout` rather than by joining the probe
+/// thread, so a regression fails this test instead of hanging the suite — the
+/// very failure mode the assertion exists to catch.
+#[test]
+fn shutdown_signal_ends_the_accept_wait_without_a_wake_up_connection() -> anyhow::Result<()> {
+    let listener = TcpListener::bind(("127.0.0.1", 0))?;
+    listener.set_nonblocking(true)?;
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let accept_shutdown = Arc::clone(&shutdown);
+    let (ended_tx, ended_rx) = mpsc::channel();
+
+    thread::Builder::new()
+        .name("accept-wait-probe".into())
+        .spawn(move || {
+            let accepted = accept_connection(
+                &listener,
+                AcceptWait::UntilShutdown(&accept_shutdown),
+                Duration::from_millis(5),
+                Duration::from_secs(10),
+            );
+            // The receiver reports the outcome; a dropped one means this test
+            // has already failed, so there is nobody left to tell.
+            drop(ended_tx.send(accepted));
+        })?;
+
+    // Let the probe reach the loop, then shut it down without connecting.
+    thread::sleep(Duration::from_millis(50));
+    shutdown.store(true, Ordering::Release);
+
+    let accepted = ended_rx
+        .recv_timeout(Duration::from_secs(5))
+        .expect("a signalled shutdown must end the accept wait");
+    anyhow::ensure!(
+        accepted.is_none(),
+        "a shut down fixture must report no connection, not a stream",
+    );
+    Ok(())
+}
+
+/// A fixture that expects no request must not fail merely for waiting.
+///
+/// The accept watchdog is a liveness guard for fixtures whose request the test
+/// expects. Applying it to a fixture that expects none failed Windows CI: the
+/// wait outlasted the accept timeout while the chain was still being driven, so
+/// the fixture thread panicked before the test could join the server.
+#[test]
+fn expect_no_requests_fixture_waits_past_the_accept_timeout() -> anyhow::Result<()> {
+    let accept_timeout = Duration::from_millis(20);
+    let config = HttpServerConfig {
+        accept_timeout,
+        ..HttpServerConfig::default()
+    }
+    .accepting_until_shutdown();
+    let (url, requests, log, server) =
+        super::spawn_fixture_server([HttpResponse::new(200, "unexpected request")], config)?;
+    anyhow::ensure!(
+        url.starts_with("http://"),
+        "fixture should expose a URL: {url}"
+    );
+
+    // Outwait the accept timeout several times over without connecting.
+    thread::sleep(accept_timeout * 10);
+
+    server
+        .join()
+        .map_err(|err| anyhow::anyhow!("fixture server panicked: {err:?}"))?;
+    anyhow::ensure!(
+        requests.load(std::sync::atomic::Ordering::Relaxed) == 0,
+        "an uncontacted fixture should answer nothing",
+    );
+    anyhow::ensure!(
+        log.is_empty(),
+        "an uncontacted fixture should record nothing: {:?}",
+        log.lines(),
+    );
+    Ok(())
+}
+
+/// The no-request fixture still records a request it receives.
+///
+/// Without this, an empty log would also hold for a fixture that never records
+/// anything, leaving the assertions that rely on it vacuous.
+#[test]
+fn expect_no_requests_fixture_records_a_request_it_receives() -> anyhow::Result<()> {
+    let (url, log, server) =
+        super::spawn_http_server_expecting_no_requests(HttpResponse::new(200, "unexpected"))?;
+
+    send_request(&url)?;
+    server
+        .join()
+        .map_err(|err| anyhow::anyhow!("fixture server panicked: {err:?}"))?;
+
+    anyhow::ensure!(
+        log.lines() == vec!["GET / HTTP/1.1".to_owned()],
+        "the fixture should record the request it answered: {:?}",
+        log.lines(),
     );
     Ok(())
 }

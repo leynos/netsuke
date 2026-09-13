@@ -6,12 +6,25 @@
 
 use mockable::{DefaultEnv, Env};
 use std::{
-    fmt,
-    io::{self, Read, Write},
+    fmt, io,
     net::{SocketAddr, TcpListener, TcpStream},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+    },
     thread,
     time::{Duration, Instant},
 };
+
+mod accept;
+mod request;
+mod response;
+mod server;
+
+use self::accept::{AcceptWait, accept_connection};
+pub use self::request::RequestLog;
+pub use self::response::HttpResponse;
+use self::server::{FixtureLedger, run_http_server};
 
 /// Override for the timeout in milliseconds within which a client must connect.
 pub(crate) const ENV_HTTP_ACCEPT_TIMEOUT_MS: &str = "NETSUKE_TEST_HTTP_ACCEPT_TIMEOUT_MS";
@@ -37,6 +50,12 @@ pub struct HttpServerConfig {
     read_timeout: Duration,
     /// Interval between readiness polls.
     poll_interval: Duration,
+    /// Whether the accept loop waits for a client without a deadline.
+    ///
+    /// Set by fixtures that expect no request: nothing but a shutdown ends
+    /// their wait, so a deadline there would fail a slow machine rather than a
+    /// wrong test.
+    accept_without_deadline: bool,
 }
 
 impl HttpServerConfig {
@@ -79,6 +98,25 @@ impl HttpServerConfig {
         Instant::now() + self.accept_timeout
     }
 
+    /// Return a copy of this configuration that accepts without a deadline.
+    #[must_use]
+    const fn accepting_until_shutdown(mut self) -> Self {
+        self.accept_without_deadline = true;
+        self
+    }
+
+    /// Return what the accept loop should wait for.
+    ///
+    /// An unbounded wait is given `shutdown` so the loop can stop on the
+    /// signal alone, without depending on the wake-up connection a join sends.
+    fn accept_wait<'a>(&self, shutdown: &'a AtomicBool) -> AcceptWait<'a> {
+        if self.accept_without_deadline {
+            AcceptWait::UntilShutdown(shutdown)
+        } else {
+            AcceptWait::Until(self.accept_deadline())
+        }
+    }
+
     /// Return the instant by which the request must be read.
     fn read_deadline(&self) -> Instant {
         Instant::now() + self.read_timeout
@@ -91,6 +129,7 @@ impl Default for HttpServerConfig {
             accept_timeout: Duration::from_secs(10),
             read_timeout: Duration::from_secs(5),
             poll_interval: Duration::from_millis(10),
+            accept_without_deadline: false,
         }
     }
 }
@@ -107,8 +146,13 @@ impl Default for HttpServerConfig {
 pub struct HttpServer {
     /// The fixture thread's join handle.
     handle: Option<thread::JoinHandle<()>>,
-    /// The bound listener address, used to unblock the accept loop.
+    /// The bound listener address, used to wake a waiting accept loop.
     addr: SocketAddr,
+    /// Set to stop the fixture accepting; the accept loop polls it.
+    ///
+    /// This, rather than the wake-up connection, is what ends the wait, so a
+    /// fixture whose wake-up never arrives still shuts down.
+    shutdown: Arc<AtomicBool>,
 }
 
 impl HttpServer {
@@ -124,9 +168,15 @@ impl HttpServer {
             .map_or_else(|| Ok(()), std::thread::JoinHandle::join)
     }
 
-    /// Connect once to unblock a blocked accept loop, ignoring the outcome.
+    /// Signal the fixture to stop accepting, and wake a waiting accept loop.
+    ///
+    /// The flag is the shutdown condition, so the wait ends whether or not the
+    /// connection below arrives; the connect only shortens it, and its outcome
+    /// is deliberately ignored.
     fn shutdown_listener(&self) {
-        // Connect to unblock the accept loop; the outcome is irrelevant.
+        self.shutdown.store(true, Ordering::Release);
+        // Wake the accept loop promptly. A failed connect is harmless: the flag
+        // set above, not this connection, is what ends the wait.
         drop(TcpStream::connect(self.addr));
     }
 }
@@ -173,139 +223,102 @@ pub fn spawn_http_server_with_config(
     response_body: impl Into<String>,
     config: HttpServerConfig,
 ) -> io::Result<(String, HttpServer)> {
-    let body = response_body.into();
+    let (url, _requests, _log, server) =
+        spawn_fixture_server([HttpResponse::new(200, response_body)], config)?;
+    Ok((url, server))
+}
+
+/// Spawn an HTTP server that emits each response in sequence and counts requests.
+///
+/// # Errors
+///
+/// Propagates failures while starting the fixture server.
+pub fn spawn_http_server_responses(
+    responses: impl IntoIterator<Item = HttpResponse>,
+) -> io::Result<(String, Arc<AtomicUsize>, HttpServer)> {
+    let (url, requests, _log, server) =
+        spawn_fixture_server(responses, HttpServerConfig::from_env())?;
+    Ok((url, requests, server))
+}
+
+/// Spawn an HTTP server that emits each response in sequence and records the
+/// request line of every request it answers.
+///
+/// The request log lets a test assert the method and target a client used at
+/// each hop of a redirect chain, which a request count alone cannot show.
+///
+/// # Errors
+///
+/// Propagates failures while starting the fixture server.
+pub fn spawn_http_server_recording(
+    responses: impl IntoIterator<Item = HttpResponse>,
+) -> io::Result<(String, RequestLog, HttpServer)> {
+    let (url, _requests, log, server) =
+        spawn_fixture_server(responses, HttpServerConfig::from_env())?;
+    Ok((url, log, server))
+}
+
+/// Spawn a fixture for a hop or target that must receive no request.
+///
+/// The fixture answers and records any request it does receive, so a test can
+/// assert the log stayed empty, but it waits for a connection without the
+/// accept deadline the other fixtures use. Nothing but the shutdown signal
+/// [`HttpServer::join`] raises ends that wait, so a deadline would fail a slow
+/// machine rather than a wrong test.
+///
+/// # Errors
+///
+/// Propagates failures while starting the fixture server.
+pub fn spawn_http_server_expecting_no_requests(
+    response: HttpResponse,
+) -> io::Result<(String, RequestLog, HttpServer)> {
+    let (url, _requests, log, server) = spawn_fixture_server(
+        [response],
+        HttpServerConfig::from_env().accepting_until_shutdown(),
+    )?;
+    Ok((url, log, server))
+}
+
+/// Spawn an HTTP server using `config`, emitting responses in sequence.
+///
+/// Returns the bound URL, the shared request count, the request log, and the
+/// server handle. The public wrappers above reshape this tuple for their
+/// callers, so every fixture shares one server implementation.
+fn spawn_fixture_server(
+    responses: impl IntoIterator<Item = HttpResponse>,
+    config: HttpServerConfig,
+) -> io::Result<(String, Arc<AtomicUsize>, RequestLog, HttpServer)> {
+    let response_sequence = responses.into_iter().collect::<Vec<_>>();
     let listener = TcpListener::bind(("127.0.0.1", 0))?;
     listener.set_nonblocking(true)?;
     let addr = listener.local_addr()?;
     let url = format!("http://{addr}");
+    let requests = Arc::new(AtomicUsize::new(0));
+    let server_requests = Arc::clone(&requests);
+    let log = RequestLog::default();
+    let server_log = log.clone();
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let server_shutdown = Arc::clone(&shutdown);
     let handle = thread::Builder::new()
         .name("netsuke-http-fixture".into())
-        .spawn(move || run_http_server(&listener, &body, &config))?;
+        .spawn(move || {
+            run_http_server(
+                &listener,
+                &response_sequence,
+                &config,
+                &FixtureLedger::new(&server_requests, &server_log, &server_shutdown),
+            );
+        })?;
     Ok((
         url,
+        requests,
+        log,
         HttpServer {
             handle: Some(handle),
             addr,
+            shutdown,
         },
     ))
-}
-
-/// Serve a single request from `listener`, responding with `body`.
-#[expect(
-    clippy::panic,
-    reason = "test HTTP helper should fail fast when networking fails"
-)]
-fn run_http_server(listener: &TcpListener, body: &str, config: &HttpServerConfig) {
-    let mut stream = accept_connection(
-        listener,
-        config.accept_deadline(),
-        config.poll_interval,
-        config.accept_timeout,
-    );
-    if let Err(err) = stream.set_nonblocking(true) {
-        panic!("failed to configure stream non-blocking: {err}");
-    }
-    let bytes_read = read_request(&mut stream, config.read_deadline(), config.poll_interval);
-    if bytes_read > 0
-        && let Err(err) = write_response(&mut stream, body)
-    {
-        panic!("failed to write fixture response: {err}");
-    }
-}
-
-/// Return whether `deadline` has passed.
-fn is_past_deadline(deadline: Instant) -> bool {
-    Instant::now() >= deadline
-}
-
-/// Return whether an accept error is transient and still within the deadline.
-fn should_retry_accept(
-    err: &io::Error,
-    deadline: Instant,
-    poll_interval: Duration,
-    accept_timeout: Duration,
-) -> bool {
-    assert!(
-        !is_past_deadline(deadline),
-        "timed out waiting for fetch test connection (accept_timeout={accept_timeout:?}, poll_interval={poll_interval:?})"
-    );
-    // Treat transient readiness states (EAGAIN/EWOULDBLOCK) and EINTR as retryable.
-    matches!(
-        err.kind(),
-        io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted
-    )
-}
-
-/// Return the time remaining until `deadline`, never negative.
-fn remaining_until_deadline(deadline: Instant) -> Duration {
-    let now = Instant::now();
-    if deadline > now {
-        deadline - now
-    } else {
-        Duration::from_millis(0)
-    }
-}
-
-/// Accept a client, retrying transient errors until `deadline`.
-#[expect(
-    clippy::panic,
-    reason = "tests panic when the helper cannot accept a client"
-)]
-fn accept_connection(
-    listener: &TcpListener,
-    deadline: Instant,
-    poll_interval: Duration,
-    accept_timeout: Duration,
-) -> TcpStream {
-    loop {
-        match listener.accept() {
-            Ok((stream, _)) => return stream,
-            Err(err) if should_retry_accept(&err, deadline, poll_interval, accept_timeout) => {
-                let remaining = remaining_until_deadline(deadline);
-                thread::sleep(remaining.min(poll_interval));
-            }
-            Err(err) => panic!("failed to accept connection: {err}"),
-        }
-    }
-}
-
-/// Read available request bytes, reporting `WouldBlock` as not-yet-ready.
-#[expect(clippy::panic, reason = "tests panic to surface unexpected IO errors")]
-fn try_read(stream: &mut TcpStream) -> Option<usize> {
-    let mut buf = [0u8; 512];
-    match stream.read(&mut buf) {
-        Ok(0) => Some(0),
-        Ok(n) => Some(n),
-        Err(err) if err.kind() == io::ErrorKind::WouldBlock => None,
-        Err(err) => panic!("failed to read request: {err}"),
-    }
-}
-
-/// Read the request from `stream`, returning `0` once `deadline` passes.
-fn read_request(stream: &mut TcpStream, deadline: Instant, poll_interval: Duration) -> usize {
-    loop {
-        if let Some(bytes_read) = try_read(stream) {
-            return bytes_read;
-        }
-        if Instant::now() >= deadline {
-            return 0;
-        }
-        thread::sleep(poll_interval);
-    }
-}
-
-/// Write a `200 OK` response carrying `body` to `stream`.
-///
-/// # Errors
-///
-/// Returns an error when the response cannot be written to the stream.
-fn write_response(stream: &mut TcpStream, body: &str) -> io::Result<()> {
-    let response = format!(
-        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-        body.len(),
-        body
-    );
-    stream.write_all(response.as_bytes())
 }
 
 /// Read `var` as whole milliseconds, falling back to `default` when unset or
@@ -359,5 +372,7 @@ fn take_duration_warnings() -> Vec<String> {
     DURATION_WARNINGS.with(|warnings| warnings.borrow_mut().drain(..).collect())
 }
 
+#[cfg(test)]
+mod config_tests;
 #[cfg(test)]
 mod tests;

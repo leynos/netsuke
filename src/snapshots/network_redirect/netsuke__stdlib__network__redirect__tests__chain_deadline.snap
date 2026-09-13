@@ -1,0 +1,5 @@
+---
+source: src/stdlib/network/redirect_adapter_tests.rs
+expression: rendered
+---
+invalid operation: Failed to fetch 'http://allowed.example/start': Redirect chain exceeded its deadline.

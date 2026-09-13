@@ -56,6 +56,15 @@ introduces, and concrete remediation tasks that would harden the helpers.
   project grants append deliberately; a project cannot set the opt-in for
   itself. Project `fetch_block_host` remains cumulative and continues to
   override allows.
+- [x] **Redirects bypass outbound request policy.** *(Status: remediated in
+  issue #647.)* An allowed HTTP endpoint could redirect `fetch` to a target
+  that the initial policy would block, including link-local metadata services.
+  **Remediation:** ureq automatic redirects are disabled. Netsuke resolves and
+  evaluates every `Location` target before opening its connection, bounds
+  chains to five hops, detects loops, strips cross-origin URL credentials, and
+  redacts redirect diagnostics. Cached responses retain the original requested
+  URL as their key; every cache miss validates its complete redirect chain
+  before a response body is stored.
 - [x] **Response bodies are read without a size limit.** `fetch_remote` reads
   the entire HTTP response into memory before returning or caching it. An
   attacker controlling the endpoint can stream unbounded data and exhaust

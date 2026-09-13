@@ -190,7 +190,11 @@ fn open_cache_writer(dir: &Dir, path: &Utf8Path) -> Result<File, Error> {
     })
 }
 
-/// Hash a URL into a SHA-256 cache entry key.
+/// Hash the original caller-supplied URL into a SHA-256 cache entry key.
+///
+/// Redirect destinations deliberately do not become cache identities: every
+/// cache miss validates each redirect hop before writing the resulting body
+/// under the URL the template originally requested.
 pub(super) fn cache_key(url: &str) -> String {
     to_lower_hex(&Sha256::digest(url.as_bytes()))
 }
