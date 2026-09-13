@@ -84,6 +84,53 @@ fn refused_failure_values() -> impl Iterator<Item = &'static str> {
         .filter(|failure| *failure != "none")
 }
 
+/// Expected policy totals for one allowed hop and one rejected redirect.
+fn allowed_then_rejected_policy_totals() -> BTreeMap<Vec<(String, String)>, u64> {
+    BTreeMap::from([
+        (
+            vec![
+                label("outcome", "allowed"),
+                label("policy_reason", "allowed"),
+            ],
+            1,
+        ),
+        (
+            vec![
+                label("outcome", "rejected"),
+                label("policy_reason", "host_not_allowlisted"),
+            ],
+            1,
+        ),
+    ])
+}
+
+/// Expected redirect totals for one followed redirect.
+fn followed_redirect_total() -> BTreeMap<Vec<(String, String)>, u64> {
+    BTreeMap::from([(
+        vec![
+            label("outcome", "followed"),
+            label("redirect_failure", "none"),
+        ],
+        1,
+    )])
+}
+
+/// Assert a fetch recorded exactly one positive duration observation.
+///
+/// # Errors
+///
+/// Returns an error when the duration series is missing, labelled, not a
+/// histogram, does not hold exactly one observation, or holds a non-positive
+/// one.
+fn assert_positive_duration(samples: &[Sample], fetch: &str) -> Result<()> {
+    let recorded = fetch_duration_seconds(samples)?;
+    ensure!(
+        recorded.iter().all(|seconds| *seconds > 0.0),
+        "the {fetch} fetch must record a positive duration: {recorded:?}",
+    );
+    Ok(())
+}
+
 /// Assert a redirecting fetch recorded every bounded series.
 ///
 /// # Errors
@@ -108,23 +155,8 @@ fn assert_redirected_fetch_metrics(samples: &[Sample]) -> Result<()> {
             2,
         )]),
     )?;
-    assert_counter_totals(
-        samples,
-        FETCH_REDIRECT_TOTAL,
-        &BTreeMap::from([(
-            vec![
-                label("outcome", "followed"),
-                label("redirect_failure", "none"),
-            ],
-            1,
-        )]),
-    )?;
-    let recorded = fetch_duration_seconds(samples)?;
-    ensure!(
-        recorded.iter().all(|seconds| *seconds > 0.0),
-        "the redirecting fetch must record a positive duration: {recorded:?}",
-    );
-    Ok(())
+    assert_counter_totals(samples, FETCH_REDIRECT_TOTAL, &followed_redirect_total())?;
+    assert_positive_duration(samples, "redirecting")
 }
 
 /// Assert a refused redirect recorded every bounded refusal series.
@@ -147,22 +179,7 @@ fn assert_refused_redirect_metrics(samples: &[Sample]) -> Result<()> {
     assert_counter_totals(
         samples,
         FETCH_POLICY_TOTAL,
-        &BTreeMap::from([
-            (
-                vec![
-                    label("outcome", "allowed"),
-                    label("policy_reason", "allowed"),
-                ],
-                1,
-            ),
-            (
-                vec![
-                    label("outcome", "rejected"),
-                    label("policy_reason", "host_not_allowlisted"),
-                ],
-                1,
-            ),
-        ]),
+        &allowed_then_rejected_policy_totals(),
     )?;
     assert_counter_totals(
         samples,
@@ -175,12 +192,7 @@ fn assert_refused_redirect_metrics(samples: &[Sample]) -> Result<()> {
             1,
         )]),
     )?;
-    let recorded = fetch_duration_seconds(samples)?;
-    ensure!(
-        recorded.iter().all(|seconds| *seconds > 0.0),
-        "the refused fetch must record a positive duration: {recorded:?}",
-    );
-    Ok(())
+    assert_positive_duration(samples, "refused")
 }
 
 /// Return the duration the fixture records exactly once.
@@ -217,22 +229,7 @@ fn policy_decisions_are_counted_under_closed_labels() {
     });
     assert_eq!(
         counter_totals(&samples, FETCH_POLICY_TOTAL),
-        BTreeMap::from([
-            (
-                vec![
-                    label("outcome", "allowed"),
-                    label("policy_reason", "allowed"),
-                ],
-                1,
-            ),
-            (
-                vec![
-                    label("outcome", "rejected"),
-                    label("policy_reason", "host_not_allowlisted"),
-                ],
-                1,
-            ),
-        ]),
+        allowed_then_rejected_policy_totals(),
         "each policy decision must be counted once under outcome and reason"
     );
 }
@@ -246,15 +243,8 @@ fn redirect_decisions_use_the_declared_failure_vocabulary() {
             record_redirect_refused(failure);
         }
     });
-    let expected = refused_failure_values().fold(
-        BTreeMap::from([(
-            vec![
-                label("outcome", "followed"),
-                label("redirect_failure", "none"),
-            ],
-            1,
-        )]),
-        |mut totals, failure| {
+    let expected =
+        refused_failure_values().fold(followed_redirect_total(), |mut totals, failure| {
             *totals
                 .entry(vec![
                     label("outcome", "rejected"),
@@ -262,8 +252,7 @@ fn redirect_decisions_use_the_declared_failure_vocabulary() {
                 ])
                 .or_insert(0) += 1;
             totals
-        },
-    );
+        });
     assert_eq!(
         counter_totals(&samples, FETCH_REDIRECT_TOTAL),
         expected,
