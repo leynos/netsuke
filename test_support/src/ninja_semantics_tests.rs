@@ -21,6 +21,9 @@ const SENTINEL: &str = "CI-SECRET-7f3a9c2b5e1d4f60";
 /// Sentinel that no generated text contains.
 const ABSENT_SENTINEL: &str = "CI-SECRET-absent-from-every-transport";
 
+/// Sentinel carried by the encoded-command payload in mixed-transport text.
+const SECOND_SENTINEL: &str = "CI-SECRET-2nd-4b7c1e";
+
 /// Encode `script` the way PowerShell's `-EncodedCommand` argument carries it.
 fn encode_power_shell(script: &str) -> String {
     #[expect(
@@ -107,6 +110,51 @@ fn power_shell_response_file_recipe_matches_after_decoding() -> Result<()> {
             .context("the extracted binding text should decode as a PowerShell payload")?
             == script,
         "the response-file binding should decode to the rendered script"
+    );
+    Ok(())
+}
+
+/// Verify that a document mixing transports reports each one once, in order.
+///
+/// The response-file binding appears both before and after the encoded command
+/// so the transport list must merge the duplicate rather than repeat it.
+#[test]
+fn mixed_payloads_report_each_transport_once_in_document_order() -> Result<()> {
+    let response_script = format!("$ErrorActionPreference = 'Stop'\necho {SENTINEL}\n");
+    let command_script = format!("$ErrorActionPreference = 'Stop'\necho {SECOND_SENTINEL}\n");
+    let binding = format!(
+        "$$netsukePayload = '{}'; $$netsukeScript = 'bootstrap'",
+        encode_power_shell(&response_script)
+    );
+    let generated = [
+        format!("  rspfile_content = {binding}"),
+        format!(
+            "  command = powershell.exe -NoProfile -EncodedCommand {}",
+            encode_power_shell(&command_script)
+        ),
+        format!("  rspfile_content = {binding}"),
+    ]
+    .join("\n");
+    ensure!(
+        !generated.contains(SENTINEL) && !generated.contains(SECOND_SENTINEL),
+        "neither sentinel must be visible in the generated bindings"
+    );
+    let document = GeneratedNinja::new(&generated);
+    ensure!(
+        document.detected_recipe_transports()
+            == vec![
+                RecipeTransport::PowerShellResponseFile,
+                RecipeTransport::PowerShellEncodedCommand,
+            ],
+        "mixed payloads should report each transport once, in document order"
+    );
+    ensure!(
+        document.recipe_contains(RecipeNeedle::new(SENTINEL))?,
+        "the response-file payload should decode to the script it carries"
+    );
+    ensure!(
+        document.recipe_contains(RecipeNeedle::new(SECOND_SENTINEL))?,
+        "the encoded-command payload should decode to the script it carries"
     );
     Ok(())
 }

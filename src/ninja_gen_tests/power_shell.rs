@@ -14,7 +14,7 @@ use test_support::ninja_semantics::{
 
 /// Verify that the shared semantics helper reads real PowerShell renderer output.
 ///
-/// The helper recognises payloads by their transport markers, which are
+/// The helper recognizes payloads by their transport markers, which are
 /// declared independently of the renderer's constants, so this pins the two
 /// together. Without it a renamed marker would silently turn the Windows
 /// secret-absence regression test into a plaintext scan.
