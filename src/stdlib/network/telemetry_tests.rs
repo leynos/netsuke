@@ -19,13 +19,13 @@ use anyhow::{Context, Result, ensure};
 use metrics_util::debugging::DebuggingRecorder;
 use minijinja::value::{Kwargs, Value};
 use rstest::rstest;
-use test_support::http::{self, HttpResponse};
+use test_support::http::{self, HttpResponse, HttpServer};
 
 use super::super::tests_support::{
     CacheWorkspace, Sample, assert_counter_totals, cache_workspace, collect_samples,
     counter_totals, fetch_duration_seconds, label, make_context_with,
 };
-use super::super::{NetworkPolicy, fetch};
+use super::super::{FetchContext, NetworkPolicy, fetch};
 use super::*;
 use crate::stdlib::DEFAULT_FETCH_MAX_RESPONSE_BYTES;
 
@@ -43,6 +43,34 @@ fn samples_for(record: impl FnOnce()) -> Vec<Sample> {
     let snapshotter = recorder.snapshotter();
     metrics::with_local_recorder(&recorder, record);
     collect_samples(snapshotter.snapshot().into_vec())
+}
+
+/// Drive one fetch under a local recorder and return its outcome and samples.
+///
+/// The recorder is local rather than global, so the samples describe exactly
+/// this fetch, following the pattern the home-resolution counter set. The
+/// default request carries no keyword arguments and no purity flag of its own.
+fn fetch_recording_samples(
+    url: &str,
+    context: &FetchContext,
+) -> (Result<Value, minijinja::Error>, Vec<Sample>) {
+    let kwargs = std::iter::empty::<(String, Value)>().collect::<Kwargs>();
+    let impure = Arc::new(AtomicBool::new(false));
+    let recorder = DebuggingRecorder::new();
+    let snapshotter = recorder.snapshotter();
+    let fetched = metrics::with_local_recorder(&recorder, || fetch(url, &kwargs, &impure, context));
+    (fetched, collect_samples(snapshotter.snapshot().into_vec()))
+}
+
+/// Join the fixture's server, naming the fixture in any panic report.
+///
+/// # Errors
+///
+/// Returns an error when the fixture thread panicked.
+fn join_fixture(server: HttpServer, label: &str) -> Result<()> {
+    server
+        .join()
+        .map_err(|err| anyhow::anyhow!("{label} fixture panicked: {err:?}"))
 }
 
 /// Return the declared failure values a refused redirect may report.
@@ -278,16 +306,9 @@ fn a_redirected_fetch_records_every_bounded_series(
         .allow_scheme("http")
         .context("allow HTTP for fetch metrics")?;
     let context = make_context_with(root, policy, DEFAULT_FETCH_MAX_RESPONSE_BYTES);
-    let kwargs = std::iter::empty::<(String, Value)>().collect::<Kwargs>();
-    let impure = Arc::new(AtomicBool::new(false));
-    let recorder = DebuggingRecorder::new();
-    let snapshotter = recorder.snapshotter();
 
-    let fetched =
-        metrics::with_local_recorder(&recorder, || fetch(&url, &kwargs, &impure, &context));
-    server
-        .join()
-        .map_err(|err| anyhow::anyhow!("fetch metrics fixture panicked: {err:?}"))?;
+    let (fetched, samples) = fetch_recording_samples(&url, &context);
+    join_fixture(server, "fetch metrics")?;
 
     ensure!(
         fetched.is_ok(),
@@ -297,7 +318,6 @@ fn a_redirected_fetch_records_every_bounded_series(
         requests.load(Ordering::Relaxed) == 2,
         "the fixture should answer both hops",
     );
-    let samples = collect_samples(snapshotter.snapshot().into_vec());
     assert_redirected_fetch_metrics(&samples)?;
     Ok(())
 }
@@ -334,16 +354,9 @@ fn a_refused_redirect_records_its_bounded_series(
         .allow_hosts(["127.0.0.1"])
         .context("allow the fixture host for fetch metrics")?;
     let context = make_context_with(root, policy, DEFAULT_FETCH_MAX_RESPONSE_BYTES);
-    let kwargs = std::iter::empty::<(String, Value)>().collect::<Kwargs>();
-    let impure = Arc::new(AtomicBool::new(false));
-    let recorder = DebuggingRecorder::new();
-    let snapshotter = recorder.snapshotter();
 
-    let fetched =
-        metrics::with_local_recorder(&recorder, || fetch(&url, &kwargs, &impure, &context));
-    server
-        .join()
-        .map_err(|err| anyhow::anyhow!("refused fetch metrics fixture panicked: {err:?}"))?;
+    let (fetched, samples) = fetch_recording_samples(&url, &context);
+    join_fixture(server, "refused fetch metrics")?;
 
     ensure!(
         fetched.is_err(),
@@ -354,7 +367,6 @@ fn a_refused_redirect_records_its_bounded_series(
         "a refused redirect must not reach its target, got {} requests",
         requests.load(Ordering::Relaxed),
     );
-    let samples = collect_samples(snapshotter.snapshot().into_vec());
     assert_refused_redirect_metrics(&samples)?;
     Ok(())
 }
