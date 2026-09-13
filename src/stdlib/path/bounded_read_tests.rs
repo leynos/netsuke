@@ -129,38 +129,41 @@ fn consumed_before_rejection(
     Ok(handle.stream_position()?)
 }
 
-/// `contents` stops one byte past the budget rather than reading the file out.
+/// Assert that a reading entry point stops one sentinel byte past its budget.
 ///
-/// The fixture is 8192 bytes — one whole read buffer — read on a four-byte
-/// budget, so an implementation that fills the buffer before consulting the
-/// budget is separated from this one by the offset it leaves behind.
-#[test]
-fn contents_stops_at_the_budget_plus_one_sentinel_byte() -> Result<()> {
+/// `reader` names the entry point the diagnostic is about. The fixture is 8192
+/// bytes — one whole read buffer — read on a four-byte budget, so an
+/// implementation that fills the buffer before consulting the budget is
+/// separated from this one by the offset it leaves behind. Each caller hands
+/// that same four-byte budget to the entry point it drives.
+fn assert_stops_at_the_budget_plus_one_sentinel_byte(
+    reader: &str,
+    read: impl FnOnce(&mut File) -> Result<(), Error>,
+) -> Result<()> {
     const BUDGET: u64 = 4;
-    let consumed = consumed_before_rejection(&[b'x'; 8192], BUDGET, |file| {
-        read_utf8_from(file, Utf8Path::new(FIXTURE_NAME), BUDGET).map(drop)
-    })?;
+    let consumed = consumed_before_rejection(&[b'x'; 8192], BUDGET, read)?;
     ensure!(
         consumed <= BUDGET + 1,
-        "contents consumed {consumed} bytes for a {BUDGET}-byte budget; it must stop at \
+        "{reader} consumed {consumed} bytes for a {BUDGET}-byte budget; it must stop at \
          the budget plus one sentinel byte"
     );
     Ok(())
 }
 
+/// `contents` stops one byte past the budget rather than reading the file out.
+#[test]
+fn contents_stops_at_the_budget_plus_one_sentinel_byte() -> Result<()> {
+    assert_stops_at_the_budget_plus_one_sentinel_byte("contents", |file| {
+        read_utf8_from(file, Utf8Path::new(FIXTURE_NAME), 4).map(drop)
+    })
+}
+
 /// `linecount` streams the same way: it may not read the file out to count it.
 #[test]
 fn linecount_stops_at_the_budget_plus_one_sentinel_byte() -> Result<()> {
-    const BUDGET: u64 = 4;
-    let consumed = consumed_before_rejection(&[b'x'; 8192], BUDGET, |file| {
-        linecount_from(file, Utf8Path::new(FIXTURE_NAME), BUDGET).map(drop)
-    })?;
-    ensure!(
-        consumed <= BUDGET + 1,
-        "linecount consumed {consumed} bytes for a {BUDGET}-byte budget; it must stop at \
-         the budget plus one sentinel byte"
-    );
-    Ok(())
+    assert_stops_at_the_budget_plus_one_sentinel_byte("linecount", |file| {
+        linecount_from(file, Utf8Path::new(FIXTURE_NAME), 4).map(drop)
+    })
 }
 
 #[test]
