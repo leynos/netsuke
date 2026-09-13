@@ -15,6 +15,15 @@ use test_support::http::{self, HttpResponse};
 
 use super::network_redirect_tests::{join_server, localhost_url, render_fetch};
 
+/// Return whether a fixture could not be spawned because the sandbox forbids
+/// binding a listener.
+///
+/// A denied bind says nothing about the chain under test, so cases skip on it;
+/// every other spawn error fails the case with the caller's context.
+fn bind_permission_denied(err: &io::Error) -> bool {
+    err.kind() == io::ErrorKind::PermissionDenied
+}
+
 /// Every supported redirect status is followed with GET at each hop.
 #[rstest]
 #[case(301)]
@@ -25,10 +34,11 @@ use super::network_redirect_tests::{join_server, localhost_url, render_fetch};
 fn every_supported_redirect_status_is_followed_with_get(#[case] status: u16) -> Result<()> {
     let (url, log, server) = match http::spawn_http_server_recording([
         HttpResponse::new(status, "").with_header("Location", "/next"),
+        HttpResponse::new(status, "").with_header("Location", "/next/2"),
         HttpResponse::new(200, "redirected body"),
     ]) {
         Ok(fixture) => fixture,
-        Err(err) if err.kind() == io::ErrorKind::PermissionDenied => return Ok(()),
+        Err(err) if bind_permission_denied(&err) => return Ok(()),
         Err(err) => bail!("spawn {status} redirect fixture: {err}"),
     };
     let policy = NetworkPolicy::default().allow_scheme("http")?;
@@ -42,8 +52,8 @@ fn every_supported_redirect_status_is_followed_with_get(#[case] status: u16) -> 
     ensure!(impure, "status {status} should mark the template impure");
     let lines = log.lines();
     ensure!(
-        lines.len() == 2,
-        "status {status} should issue exactly two requests: {lines:?}",
+        lines.len() == 3,
+        "status {status} should issue exactly three requests: {lines:?}",
     );
     ensure!(
         lines.iter().all(|line| line.starts_with("GET ")),
@@ -56,8 +66,14 @@ fn every_supported_redirect_status_is_followed_with_get(#[case] status: u16) -> 
         "status {status} should request the original URL first: {lines:?}",
     );
     ensure!(
-        lines.get(1).is_some_and(|line| line.contains("/next")),
-        "status {status} should request the redirect target second: {lines:?}",
+        lines
+            .get(1)
+            .is_some_and(|line| line.contains("/next") && !line.contains("/next/2")),
+        "status {status} should request the first redirect target second: {lines:?}",
+    );
+    ensure!(
+        lines.get(2).is_some_and(|line| line.contains("/next/2")),
+        "status {status} should follow the second redirect to the third request: {lines:?}",
     );
     Ok(())
 }
@@ -84,7 +100,7 @@ fn assert_second_hop_is_refused(
         match http::spawn_http_server_expecting_no_requests(HttpResponse::new(200, "denied target"))
         {
             Ok(fixture) => fixture,
-            Err(err) if err.kind() == io::ErrorKind::PermissionDenied => return Ok(()),
+            Err(err) if bind_permission_denied(&err) => return Ok(()),
             Err(err) => bail!("spawn refused hop fixture: {err}"),
         };
     let location = middle_location(&denied_url)?;

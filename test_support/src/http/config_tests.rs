@@ -65,12 +65,8 @@ struct DurationCase {
     expected_warning_len: Option<usize>,
 }
 
-#[test]
-fn from_env_applies_overrides() {
-    assert!(
-        take_duration_warnings().is_empty(),
-        "warnings buffer should start empty"
-    );
+#[rstest]
+fn from_env_applies_overrides(empty_duration_warnings: EmptyDurationWarnings) {
     let env = fixture_env(&[
         (ENV_HTTP_ACCEPT_TIMEOUT_MS, "1500"),
         (ENV_HTTP_READ_TIMEOUT_MS, "750"),
@@ -82,23 +78,19 @@ fn from_env_applies_overrides() {
     assert_eq!(config.read_timeout, Duration::from_millis(750));
     assert_eq!(config.poll_interval, Duration::from_millis(25));
     assert!(
-        take_duration_warnings().is_empty(),
+        empty_duration_warnings.take().is_empty(),
         "no warnings expected for valid overrides"
     );
 }
 
-#[test]
-fn from_env_clamps_zero_poll_interval() {
-    assert!(
-        take_duration_warnings().is_empty(),
-        "warnings buffer should start empty"
-    );
+#[rstest]
+fn from_env_clamps_zero_poll_interval(empty_duration_warnings: EmptyDurationWarnings) {
     let env = fixture_env(&[(ENV_HTTP_POLL_INTERVAL_MS, "0")]);
 
     let config = HttpServerConfig::from_env_provider(&env);
     assert_eq!(config.poll_interval, Duration::from_millis(1));
     assert!(
-        take_duration_warnings().is_empty(),
+        empty_duration_warnings.take().is_empty(),
         "parsing a zero poll interval should not warn",
     );
 }
