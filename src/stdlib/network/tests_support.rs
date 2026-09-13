@@ -1,16 +1,21 @@
 //! Shared fixtures and assertion helpers for the network fetch tests.
 //!
 //! Provides the temporary cache workspace fixture, `FetchContext` builders,
-//! and reusable assertions for cache-directory and policy rejections.
+//! captured metric samples, and reusable assertions for cache-directory,
+//! policy, and bounded-series checks.
 
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
+use std::{
+    collections::BTreeMap,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
-use anyhow::{Context, Result, anyhow, ensure};
+use anyhow::{Context, Result, anyhow, bail, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
+use metrics_util::debugging::DebugValue;
 use minijinja::{
     ErrorKind,
     value::{Kwargs, Value},
@@ -19,6 +24,7 @@ use rstest::fixture;
 use tempfile::tempdir;
 use test_support::fs;
 
+use super::telemetry::FETCH_DURATION;
 use super::{FetchContext, NetworkConfig, NetworkPolicy, fetch, open_cache_dir};
 use crate::localization;
 use crate::stdlib::{DEFAULT_FETCH_CACHE_DIR, DEFAULT_FETCH_MAX_RESPONSE_BYTES};
@@ -132,4 +138,118 @@ pub(super) fn cache_relative_error(key: &'static str, path: Option<&str>) -> Str
         |value| localization::message(key).with_arg("path", value),
     );
     message.to_string()
+}
+
+/// One captured metric sample: its name, labels, and value.
+pub(super) struct Sample {
+    /// Metric name the sample was recorded under.
+    name: String,
+    /// Labels attached to the sample, in insertion order.
+    labels: Vec<(String, String)>,
+    /// Recorded counter or histogram value.
+    value: DebugValue,
+}
+
+/// Build one label pair for a captured sample.
+pub(super) fn label(name: &str, value: &str) -> (String, String) {
+    (name.to_owned(), value.to_owned())
+}
+
+/// Convert raw snapshot entries into samples, keeping the recorder's order.
+pub(super) fn collect_samples(
+    entries: Vec<(
+        metrics_util::CompositeKey,
+        Option<metrics::Unit>,
+        Option<metrics::SharedString>,
+        DebugValue,
+    )>,
+) -> Vec<Sample> {
+    entries
+        .into_iter()
+        .map(|(key, _unit, _description, value)| Sample {
+            name: key.key().name().to_owned(),
+            labels: key
+                .key()
+                .labels()
+                .map(|pair| (pair.key().to_owned(), pair.value().to_owned()))
+                .collect(),
+            value,
+        })
+        .collect()
+}
+
+/// Total every counter sample named `name` by its label set.
+///
+/// The recorder exposes no ordering guarantee, so the totals are keyed by
+/// labels and compared as maps.
+pub(super) fn counter_totals(
+    samples: &[Sample],
+    name: &str,
+) -> BTreeMap<Vec<(String, String)>, u64> {
+    let mut totals = BTreeMap::new();
+    for sample in samples {
+        if sample.name != name {
+            continue;
+        }
+        if let DebugValue::Counter(count) = sample.value {
+            *totals.entry(sample.labels.clone()).or_insert(0) += count;
+        }
+    }
+    totals
+}
+
+/// Assert the counter totals recorded for `name` equal `expected`.
+///
+/// # Errors
+///
+/// Returns an error when the recorded totals differ from `expected`.
+pub(super) fn assert_counter_totals(
+    samples: &[Sample],
+    name: &str,
+    expected: &BTreeMap<Vec<(String, String)>, u64>,
+) -> Result<()> {
+    let recorded = counter_totals(samples, name);
+    ensure!(
+        &recorded == expected,
+        "{name} should record {expected:?}, but recorded {recorded:?}",
+    );
+    Ok(())
+}
+
+/// Return the seconds held by the single label-free fetch duration series.
+///
+/// # Errors
+///
+/// Returns an error when the duration series is missing, labelled, not a
+/// histogram, or does not hold exactly one observation.
+pub(super) fn fetch_duration_seconds(samples: &[Sample]) -> Result<Vec<f64>> {
+    let durations = samples
+        .iter()
+        .filter(|sample| sample.name == FETCH_DURATION)
+        .collect::<Vec<_>>();
+    ensure!(
+        durations.len() == 1,
+        "one fetch must record one duration series, got {}",
+        durations.len(),
+    );
+    let sample = durations
+        .first()
+        .context("a duration sample must be captured")?;
+    ensure!(
+        sample.labels.is_empty(),
+        "the duration histogram must carry no labels: {:?}",
+        sample.labels,
+    );
+    let DebugValue::Histogram(values) = &sample.value else {
+        bail!("a fetch duration must be recorded as a histogram");
+    };
+    ensure!(
+        values.len() == 1,
+        "one fetch must record exactly one duration observation, got {}",
+        values.len(),
+    );
+    Ok(values
+        .iter()
+        .map(|observation| observation.into_inner())
+        .collect())
 }
