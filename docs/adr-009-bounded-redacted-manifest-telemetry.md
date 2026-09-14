@@ -154,3 +154,25 @@ variable names never reach a span field or a metric label.
   [`src/manifest/tests/macro_invocation_telemetry.rs`](../src/manifest/tests/macro_invocation_telemetry.rs)
 - Developer guide:
   [`docs/developers-guide.md`](developers-guide.md#manifest-telemetry-template-render-and-macro-invocation)
+
+## Addendum — 2026-09-15: Runner manifest-structure boundary
+
+The runner now records a bounded structural summary after
+`load_manifest_with_stage_reporting` loads the manifest in
+`src/runner/graph_generation.rs::generate_ninja_with_shell`, before graph
+construction. The call is owned by the runner composition boundary and is kept
+separate from the pure graph-generation query.
+
+`src/runner/manifest_structure_telemetry.rs::record_manifest_structure` emits
+the `runner.manifest.structure` `TRACE` span and event, then increments the
+unlabelled `netsuke_runner_manifest_structures_total` counter. The
+`describe_counter!` registration is guarded by `std::sync::Once`, so the metric
+description is installed once per process while the counter records each loaded
+manifest.
+
+The span and event carry only the six fixed integer collection counts:
+`variable_count`, `macro_count`, `rule_count`, `action_count`, `target_count`,
+and `default_count`. They do not carry manifest text, paths, recipe contents,
+variable values, macro bodies, or descriptions. This boundary preserves
+structural observability while preventing rendered values, including secrets
+interpolated through `env()`, from crossing into tracing or metrics.

@@ -4005,7 +4005,10 @@ propagates every other metadata error.
 `test_support::ninja_semantics` (`test_support/src/ninja_semantics.rs`) is the
 crate's single shared boundary for inspecting generated Ninja recipe text in
 tests. Its ownership is representation-aware inspection: it locates encoded
-recipe payloads, keeps them out of plaintext matching, and decodes them.
+recipe payloads, keeps them out of plaintext matching, and decodes them. The
+module declares the `base64` crate directly in `test_support/Cargo.toml` and
+uses its standard engine for the Base64 UTF-16LE payloads; this keeps the
+decoder's dependency explicit for the support crate.
 
 It exists because Netsuke lowers a completed legacy recipe through one of three
 transports. The POSIX and Bash transports leave recipe text visible in a
@@ -4349,7 +4352,6 @@ missing `default` item, guarding against the constraint regressing to a
 doc-comment promise. `tests/locale_stub_strictness_tests.rs` covers the panic,
 the trichotomy, and the last-declaration-wins rule with both example-based and
 property tests.
-
 
 #### Direct-`rustc` UI harnesses and split build directories
 
