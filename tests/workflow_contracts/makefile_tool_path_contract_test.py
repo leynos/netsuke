@@ -31,6 +31,9 @@ MINIMAL_PATH = "/usr/bin:/bin"
 #: The probe target is defined on the make command line so the repository's
 #: Makefile gains no test-only target.
 PATH_PROBE_EVAL = 'print-path:;@echo "$$PATH"'
+#: The Go tool directory probe, defined on the make command line for the same
+#: reason as the PATH probe above.
+GO_BIN_PROBE_EVAL = 'print-go-bin:;@echo "$(GO_BIN)"'
 
 
 def _home_default_directory(sandbox: Path) -> tuple[dict[str, str], Path]:
@@ -50,6 +53,13 @@ def _gopath_directory(sandbox: Path) -> tuple[dict[str, str], Path]:
     return {"GOPATH": str(gopath)}, gopath / "bin"
 
 
+def _multi_entry_gopath_directory(sandbox: Path) -> tuple[dict[str, str], Path]:
+    """Return a multi-entry ``$GOPATH``, where only the first entry owns ``bin``."""
+    first = sandbox / "gopath-first"
+    second = sandbox / "gopath-second"
+    return {"GOPATH": f"{first}:{second}"}, first / "bin"
+
+
 #: A Go environment shape: from the sandbox root, the ``GOBIN``/``GOPATH``
 #: environment a Make invocation needs, and the tool directory it must reach.
 type GoEnvironment = cabc.Callable[[Path], tuple[dict[str, str], Path]]
@@ -59,6 +69,15 @@ GO_TOOL_DIRECTORY_CASES = [
     pytest.param(_home_default_directory, id="home-default"),
     pytest.param(_gobin_directory, id="gobin-override"),
     pytest.param(_gopath_directory, id="gopath-override"),
+    pytest.param(_multi_entry_gopath_directory, id="gopath-multi-entry"),
+]
+
+#: Windows ``GOPATH`` lists, which Go separates with ``;``, paired with the
+#: ``GO_BIN`` they must produce. A single entry carries a drive-letter colon, so
+#: it also pins that splitting does not mistake that colon for a separator.
+WINDOWS_GOPATH_CASES = [
+    pytest.param(r"C:\go", r"C:\go/bin", id="single-entry"),
+    pytest.param(r"C:\go-first;C:\go-second", r"C:\go-first/bin", id="multi-entry"),
 ]
 
 
@@ -103,6 +122,18 @@ def _observed_path(home: Path, **overrides: str) -> list[str]:
         f"the Makefile PATH probe must run; stderr was: {result.stderr}"
     )
     return result.stdout.strip().split(":")
+
+
+def _expanded_go_bin(sandbox: Path, **overrides: str) -> str:
+    """Return the ``GO_BIN`` value Make expands for that environment."""
+    result = _run_make(
+        sandbox / "home", f"--eval={GO_BIN_PROBE_EVAL}", "print-go-bin", **overrides
+    )
+
+    assert result.returncode == 0, (
+        f"the Makefile GO_BIN probe must run; stderr was: {result.stderr}"
+    )
+    return result.stdout.strip()
 
 
 def _run_github_actions_lint(
@@ -187,6 +218,22 @@ def test_missing_actionlint_reports_the_go_tool_directory(
     assert "ACTIONLINT is" in result.stderr, (
         "the failure must name the configured ACTIONLINT value; stderr was: "
         f"{result.stderr}"
+    )
+
+
+@pytest.mark.parametrize(("gopath", "expected"), WINDOWS_GOPATH_CASES)
+def test_go_bin_splits_a_windows_gopath_on_its_own_separator(
+    tmp_path: Path, gopath: str, expected: str
+) -> None:
+    """A Windows ``GOPATH`` list splits on ``;``, the separator Go uses there.
+
+    Go separates list entries with ``;`` on Windows and ``:`` elsewhere, so the
+    split must follow the host. ``OS`` is supplied here to exercise that branch
+    on any host; the Windows environment itself is reached only by CI.
+    """
+    assert _expanded_go_bin(tmp_path, OS="Windows_NT", GOPATH=gopath) == expected, (
+        f"a Windows GOPATH of {gopath!r} must resolve its tool directory from "
+        "the first entry, split on the platform separator"
     )
 
 

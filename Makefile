@@ -68,11 +68,17 @@ DEV_FAST_TOOLCHAIN = $$(awk -F'"' '/^[[:space:]]*channel[[:space:]]*=/ { print $
 MDLINT ?= markdownlint-cli2
 NIXIE ?= nixie
 YAMLLINT ?= yamllint
-# `go install` writes to `$GOBIN` when set, otherwise `$GOPATH/bin`, otherwise
-# `$HOME/go/bin`. That directory is absent from a minimal caller PATH, so name
-# it once here and curate it on PATH below, next to the other user tool
-# directories.
-GO_BIN ?= $(if $(GOBIN),$(GOBIN),$(if $(GOPATH),$(GOPATH)/bin,$(HOME)/go/bin))
+# Go separates `GOPATH` entries with the platform list separator: `;` on
+# Windows, `:` elsewhere. `go install` writes to the `bin` directory of the
+# *first* entry, so split on that separator and keep the first one; appending
+# `/bin` to a whole list would curate `$GOPATH` itself and omit the directory Go
+# actually installs into.
+GOPATH_SEPARATOR := $(if $(filter Windows_NT,$(OS)),;,:)
+# `go install` writes to `$GOBIN` when set, otherwise that first `$GOPATH` entry's
+# `bin`, otherwise `$HOME/go/bin`. The directory is absent from a minimal caller
+# PATH, so name it once here and curate it on PATH below, next to the other user
+# tool directories.
+GO_BIN ?= $(if $(GOBIN),$(GOBIN),$(if $(GOPATH),$(word 1,$(subst $(GOPATH_SEPARATOR), ,$(GOPATH)))/bin,$(HOME)/go/bin))
 # Exported so the `github-actions-lint` preflight can name the directory from
 # the recipe shell rather than interpolating a path into the command line.
 export GO_BIN
