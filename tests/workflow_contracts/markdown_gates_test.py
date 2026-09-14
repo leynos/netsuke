@@ -79,8 +79,30 @@ def test_makefile_declares_the_mdtablefix_selection_and_rules() -> None:
     )
 
 
+#: Shell-side Markdown selection the recipes must not carry. mdtablefix owns
+#: the file list through `--git`, and mdtablefix 0.6.0 defines the empty
+#: selection as a success that exits `0`, prints nothing, and reads no stdin,
+#: so no shell guard for an empty file list is needed or permitted.
+SHELL_SELECTION_FRAGMENTS = (
+    "check-markdown-format",
+    "$(MD_FILES_FIND)",
+    "find ",
+    "xargs",
+    "sh -c",
+    '"$$@"',
+    '"$$#"',
+    "--in-place",
+)
+
+
 def test_makefile_check_fmt_runs_mdtablefix_check_over_git_selection() -> None:
-    """`make check-fmt` asks mdtablefix directly whether the tree drifts."""
+    """`make check-fmt` asks mdtablefix directly whether the tree drifts.
+
+    Selection is delegated wholesale to `$(MDTABLEFIX_SELECT)`: the recipe
+    must carry no `find`, `xargs`, positional-parameter forwarding, or
+    empty-input guard of its own, because `mdtablefix --git` selects the
+    files and treats selecting nothing as a success.
+    """
     recipe_lines, recipe = _makefile_recipe("check-fmt")
     mdtablefix_lines = [line for line in recipe_lines if "$(MDTABLEFIX)" in line]
 
@@ -97,9 +119,10 @@ def test_makefile_check_fmt_runs_mdtablefix_check_over_git_selection() -> None:
     assert "$(MDTABLEFIX_RULES)" in invocation, (
         "check-fmt must verify the shared $(MDTABLEFIX_RULES)"
     )
-    for retired in ("--in-place", "check-markdown-format", "$(MD_FILES_FIND)", "xargs"):
+    for retired in SHELL_SELECTION_FRAGMENTS:
         assert retired not in recipe, (
-            f"check-fmt must not use the retired {retired!r} path: {recipe!r}"
+            f"check-fmt must delegate selection to $(MDTABLEFIX_SELECT) rather "
+            f"than the retired shell-side {retired!r}: {recipe!r}"
         )
 
 
