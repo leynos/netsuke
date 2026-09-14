@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-release-admission test-coverage-artifact test-markdown-format test-typos-config build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-dev-fast dev-fast-check dev-build dev-test bench-build bench-config-load bench-glob-expansion
+.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-release-admission test-coverage-artifact test-typos-config build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-dev-fast dev-fast-check dev-build dev-test bench-build bench-config-load bench-glob-expansion
 
 RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 # Export this path before shell probes expand it, so Make does not interpolate
@@ -59,6 +59,15 @@ export MOLD_VERSION_FILE MOLD_SHA256SUMS_FILE
 export DEV_FAST_CONFIG DEV_FAST_PREFIX
 DEV_FAST_TOOLCHAIN = $$(awk -F'"' '/^[[:space:]]*channel[[:space:]]*=/ { print $$2; exit }' "$$RUST_TOOLCHAIN_FILE")
 MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
+# `make fmt` and `make check-fmt` call mdtablefix directly. `--git` selects the
+# Markdown files Git tracks and `--include-untracked` adds the untracked files
+# Git does not ignore, so a new document is formatted before it is staged.
+# `--git` skips symbolic links, so CRUSH.md (a link to AGENTS.md) is never
+# rewritten or checked twice. Both modes need mdtablefix 0.6.0 or later; CI
+# pins the version in MDTABLEFIX_VERSION in .github/workflows/ci.yml.
+MDTABLEFIX ?= mdtablefix
+MDTABLEFIX_SELECT = --git --include-untracked
+MDTABLEFIX_RULES = --wrap --renumber --breaks --ellipsis --fences
 NIXIE ?= nixie
 YAMLLINT ?= yamllint
 ACTIONLINT ?= actionlint
@@ -124,8 +133,9 @@ SPELLING_HELPER_FILES = scripts/generate_typos_config.py \
 	scripts/tests/test_typos_rollout_hardening.py \
 	scripts/tests/test_typos_rollout_refresh.py \
 	scripts/tests/typos_rollout_test_support.py
-# Markdown files, excluding build output and tool caches. CRUSH.md is a symlink
-# to AGENTS.md, so `-type f` skips it and avoids double-checking the same prose.
+# Markdown files for the spelling gate, excluding build output and tool caches.
+# CRUSH.md is a symlink to AGENTS.md, so `-type f` skips it and avoids
+# double-checking the same prose.
 MD_FILES_FIND = find . -type f -name '*.md' \
 	-not -path './target/*' -not -path './.venv/*' \
 	-not -path './.vtcode/*' -not -path './memories/*' \
@@ -176,12 +186,6 @@ test-coverage-artifact: ## Test hostile LCOV artefact validation
 		--with pytest==9.0.2 python -m pytest scripts/tests/test_validate_coverage_artifact.py \
 		scripts/tests/test_validate_coverage_archive.py -c /dev/null --rootdir=. \
 		-p no:cacheprovider
-
-test-markdown-format: ## Validate the Markdown formatter checker
-	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
-		--with pytest==9.0.2 --with hypothesis==6.151.9 \
-		python -m pytest scripts/tests/test_check_markdown_format.py -c /dev/null \
-		--rootdir=. -p no:cacheprovider
 
 test-typos-config: spelling-helper-test ## Verify the shared spelling-policy integration
 
@@ -250,15 +254,13 @@ fmt: ## Format Rust, Python, and Markdown sources
 	$(CARGO) fmt --all
 	$(RUFF) format $(PYTHON_SOURCES)
 	$(RUFF) check --select I --fix $(PYTHON_SOURCES)
-	mdformat-all
+	$(MDTABLEFIX) --in-place $(MDTABLEFIX_SELECT) $(MDTABLEFIX_RULES)
+	@unset FORCE_COLOR; $(MDLINT) --fix "**/*.md"
 
 check-fmt: ## Verify formatting
 	$(CARGO) fmt --all -- --check
 	$(RUFF) format --check $(PYTHON_SOURCES)
-	@$(MD_FILES_FIND) | xargs -0 sh -c '\
-		if [ "$$#" -gt 0 ]; then \
-			scripts/check-markdown-format.sh "$$@"; \
-		fi' sh
+	$(MDTABLEFIX) --check $(MDTABLEFIX_SELECT) $(MDTABLEFIX_RULES)
 
 typecheck: typecheck-python ## Typecheck all targets and features
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) check --all-targets --all-features $(BUILD_JOBS)

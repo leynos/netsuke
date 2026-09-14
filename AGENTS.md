@@ -173,13 +173,17 @@ directive anywhere.
     ```sh
     cargo fmt --all -- --check
     ruff format --check scripts tests/workflow_contracts
-    $(MD_FILES_FIND) | xargs -0 -r scripts/check-markdown-format.sh
+    mdtablefix --check --git --include-untracked \
+      --wrap --renumber --breaks --ellipsis --fences
     ```
 
     validating Rust, Python, and Markdown formatting without modifying files.
     Ruff runs at the version pinned in the Makefile `RUFF_VERSION` variable
-    through `uv tool run`. The Markdown check requires `mdtablefix` on `PATH`;
-    the developers' guide documents how to install the CI-pinned version.
+    through `uv tool run`. The Markdown check requires `mdtablefix` 0.6.0 or
+    later on `PATH`; the developers' guide documents how to install the
+    CI-pinned version. `--git --include-untracked` selects the tracked and
+    untracked Markdown files Git does not ignore, and `--check` exits `1` when
+    any of them would be reformatted.
   - `make lint` executes:
 
     ```sh
