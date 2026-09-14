@@ -3231,7 +3231,7 @@ During Stage 6, Netsuke parses Ninja status lines of the form
 fixed, bounded number of bytes for each candidate line. An oversized line is
 ignored for progress purposes until its newline, while every byte continues to
 the user's standard output; parsing resumes on the next line. The parser
-assumes Ninja's default `NINJA_STATUS` format, so customised templates degrade
+assumes Ninja's default `NINJA_STATUS` format, so customized templates degrade
 to no task-progress updates. Parsed updates are monotonic: malformed lines,
 regressive counts, and total-mismatch lines are ignored to avoid noisy or
 inconsistent progress state. Task updates fall back to textual output when
