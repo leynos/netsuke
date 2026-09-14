@@ -211,33 +211,26 @@ fn text_around_a_removed_payload_cannot_form_a_match() -> Result<()> {
 /// meaning, so a test searching for it must still find it as plaintext.
 #[test]
 fn plaintext_command_mentioning_the_marker_is_not_an_encoded_payload() -> Result<()> {
-    let recipe = "echo -EncodedCommand QQ==";
-    let generated = format!("  command = {recipe}\n");
-    let document = GeneratedNinja::new(&generated);
-    ensure!(
-        document.detected_recipe_transports() == vec![RecipeTransport::Plaintext],
-        "a recipe that prints the marker must not report the encoded-command transport"
-    );
-    ensure!(
-        document.recipe_contains(RecipeNeedle::new(recipe))?,
-        "the marker text in a plaintext recipe should still match"
-    );
-    Ok(())
+    assert_plaintext_marker_recipe("echo -EncodedCommand QQ==", "encoded-command marker")
 }
 
 /// Verify that recipe text mentioning the response-file marker stays plaintext.
 #[test]
 fn plaintext_command_mentioning_the_response_file_marker_is_not_a_payload() -> Result<()> {
-    let recipe = "echo netsukePayload = 'QQ=='";
+    assert_plaintext_marker_recipe("echo netsukePayload = 'QQ=='", "response-file marker")
+}
+
+/// Assert a marker-bearing plaintext recipe remains semantically searchable.
+fn assert_plaintext_marker_recipe(recipe: &str, marker_description: &str) -> Result<()> {
     let generated = format!("  command = {recipe}\n");
     let document = GeneratedNinja::new(&generated);
     ensure!(
         document.detected_recipe_transports() == vec![RecipeTransport::Plaintext],
-        "a recipe that prints the marker must not report the response-file transport"
+        "the {marker_description} must remain plaintext and semantically searchable"
     );
     ensure!(
         document.recipe_contains(RecipeNeedle::new(recipe))?,
-        "the marker text in a plaintext recipe should still match"
+        "the {marker_description} must remain plaintext and semantically searchable"
     );
     Ok(())
 }

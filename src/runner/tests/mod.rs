@@ -19,6 +19,8 @@ use std::time::Duration;
 use test_support::{localizer_test_lock, set_en_localizer};
 use tracing_subscriber::filter::LevelFilter;
 
+mod manifest_structure_telemetry_tests;
+
 const MINIMAL_MANIFEST: &str = concat!(
     "netsuke_version: \"1.0.0\"\n",
     "targets:\n",
@@ -211,7 +213,7 @@ fn query_loader_preserves_load_error_context() -> Result<()> {
 fn build_graph_preserves_graph_error_context() -> Result<()> {
     let _lock = localizer_test_lock().map_err(|error| anyhow::anyhow!("{error}"))?;
     let _guard = set_en_localizer();
-    let (_temp, manifest_path) = write_manifest(include_str!("../../tests/data/circular.yml"))?;
+    let (_temp, manifest_path) = write_manifest(include_str!("../../../tests/data/circular.yml"))?;
     let manifest = generation::load_manifest(&manifest_path, None)?;
 
     let error = generation::build_graph(&manifest).expect_err("cycle should fail graph building");

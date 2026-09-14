@@ -4350,21 +4350,30 @@ doc-comment promise. `tests/locale_stub_strictness_tests.rs` covers the panic,
 the trichotomy, and the last-declaration-wins rule with both example-based and
 property tests.
 
-#### Locale-stub UI harness and split build directories
 
-`tests/locale_stub_ui_tests.rs` builds `test_support` with
-`cargo build --message-format=json` and parses the resulting Cargo JSON
-messages rather than assuming its dependencies sit beside the uplifted
-`test_support` rlib. For every `compiler-artifact` message it records the
-parent directory of each loadable artefact the message names, and passes the
-whole set to `rustc` as `-L dependency=` directories when compiling the UI
-fixtures. This keeps the harness correct when Cargo's `build.build-dir` setting
-splits intermediate artefacts — where dependency rlibs live — from the final,
-uplifted ones, and when Cargo gives each crate its own build directory instead
-of one shared `deps/`, as the Cargo shipped with the 1.99 nightlies does.
-Deriving the directories from what Cargo actually reports, rather than from a
-single assumed location, means the harness does not need to special-case either
-layout.
+#### Direct-`rustc` UI harnesses and split build directories
+
+`tests/support/test_support_rlib.rs` owns the direct-`rustc` preparation used by
+`tests/locale_stub_ui_tests.rs` and `tests/ninja_semantics_ui_tests.rs`. Those
+are its only permitted call sites: include it from a `tests/*.rs` UI harness
+when a fixture must compile against `test_support`; a harness for the
+production crate, or one needing no crate, must use its own narrow support code.
+
+`TestSupportRlib::build` builds `test_support` with
+`cargo build --message-format=json`; `build_with` does the same with narrowly
+scoped Cargo environment overrides for the split-build regression. Both parse
+Cargo's `compiler-artifact` messages, locating the uplifted metadata artefact
+and every dependency directory from the paths Cargo actually reports. This
+avoids assuming dependencies live beside the final `test_support` rlib when
+Cargo's `build.build-dir` setting separates intermediate artefacts, or when the
+Cargo shipped with the 1.99 nightlies gives each crate its own directory.
+
+`TestSupportRlib::compile` then invokes the workspace `rustc` directly with the
+discovered artefact as `--extern test_support=…`, every discovered
+`-L dependency=` directory, and `--emit=metadata`. Cargo still builds the rlib
+under the workspace toolchain; direct `rustc` is limited to the small UI
+fixtures that prove compile-time contracts without a scratch project or a
+toolchain-sensitive `.stderr` snapshot.
 
 "Loadable artefact" means an rlib, an `.rmeta` metadata file, or a file with
 the platform's dynamic-library extension. The `.rmeta` file is needed for the
@@ -4378,10 +4387,11 @@ search path and its dependents fail with `E0463`. The same rule and the same
 reasoning apply to `tests/command_env_ui_tests.rs`, which builds the `netsuke`
 rlib and derives its search path the same way.
 
-The shared `tests/support/cargo_artifacts.rs` module owns parsing Cargo
-`compiler-artifact` messages and extracting loadable artefact directories. It
-may be included only by these direct-`rustc` UI harnesses; the callers retain
-build and process-spawn orchestration.
+`TestSupportRlib` composes `tests/support/cargo_artifacts.rs`, which parses
+Cargo `compiler-artifact` messages, with
+`tests/support/rustc_response_file.rs`, which renders compiler arguments. The
+UI harnesses retain their case assertions, while the shared support code owns
+the Cargo build, artefact discovery, and direct-`rustc` invocation workflow.
 
 Those arguments reach `rustc` through a **response file**, not the command
 line. One `-L dependency=` pair per crate, over the long unique roots the
@@ -4394,17 +4404,11 @@ from `@<path>` — UTF-8, one argument per line, no quoting — which leaves eac
 harness passing exactly one argument, so command-line length no longer scales
 with the dependency count.
 
-`tests/support/rustc_response_file.rs` owns that rendering and is included by
-both harnesses through the usual `#[path = …] mod …;` pattern. Its scope is
-deliberately narrow: it renders an argument vector and writes it, and knows
-nothing about what a compilation needs. Reach for it from a `tests/*.rs` binary
-that invokes `rustc` directly with an argument list whose length is not bounded
-by the source; a harness passing a fixed handful of arguments does not need it.
-Its unit tests assert the file's shape — one argument per line, spaces
-preserved without quoting, newlines rejected, and every source, `--extern`,
-dependency-search, and output argument retained — because the failure it
-prevents is Windows-specific and cannot be reproduced on the hosts that run
-most of this suite.
+`TestSupportRlib::compile` must use the response-file writer for every direct
+`rustc` invocation. The writer renders one UTF-8 argument per line without
+quoting, and its unit tests retain every source, `--extern`, dependency-search,
+and output argument while rejecting newlines. This is mandatory because the
+failure is Windows-specific and cannot be reproduced on most local hosts.
 
 `harness_compiles_under_a_split_build_dir` is the regression test for this: it
 forces a split layout with its own private `CARGO_TARGET_DIR` and
@@ -6056,7 +6060,6 @@ background-query primitive.
   the existing capability-injected dyndep-publication path to materialize its
   sidecars; the read-only steps never write files, start processes, or invoke
   effectful template helpers.
-
 
 ### Module: `runner::manifest_structure_telemetry`
 
