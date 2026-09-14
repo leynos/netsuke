@@ -138,6 +138,7 @@ manifest.yaml.hint.invalid_token = Het YAML-token is ongeldig of onverwacht.
 manifest.yaml.hint.escape = Escape de backslashes of verwijder ongeldige escapereeksen.
 manifest.env.missing = Een vereiste omgevingsvariabele is niet ingesteld.
 manifest.env.invalid_utf8 = Een omgevingsvariabele bevat ongeldige UTF-8.
+manifest.env.blocked = Toegang tot een omgevingsvariabele is geblokkeerd.
 manifest.vars.not_object = De `vars` van het manifest moet een toewijzing of object zijn.
 manifest.vars.reserved_name = De `vars`-sleutel '{ $name }' in het manifest is gereserveerd voor een ingebouwde sjabloonfunctie; hernoem de variabele.
 manifest.read_failed = Het manifest in { $path } kon niet worden gelezen.

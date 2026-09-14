@@ -32,6 +32,7 @@ mod budget;
 pub(crate) mod budget_adapter;
 use budget_adapter::{BudgetErrorExt, from_str_named};
 mod diagnostics;
+mod env_policy;
 mod expand;
 // `glob_paths` is the module's only boundary: every other item, including the
 // `GlobEntryResult` alias, stays module-private. Denying `unreachable_pub`
@@ -56,6 +57,7 @@ pub use budget::ManifestBudgetLimits;
 pub use diagnostics::{
     ManifestError, ManifestName, ManifestSource, map_data_error, map_yaml_error,
 };
+pub use env_policy::{EnvAccessPolicy, EnvPolicyViolation};
 pub use env_reader::{EnvReadError, EnvReader, process_env_reader};
 pub(crate) use expand::expand_foreach_with_budget;
 pub use glob::glob_paths;

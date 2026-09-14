@@ -138,6 +138,7 @@ manifest.yaml.hint.invalid_token = Лексема YAML некорректна и
 manifest.yaml.hint.escape = Экранируйте обратные косые черты либо удалите некорректные escape-последовательности.
 manifest.env.missing = Обязательная переменная окружения не задана.
 manifest.env.invalid_utf8 = Переменная окружения содержит некорректный UTF-8.
+manifest.env.blocked = Доступ к переменной окружения заблокирован.
 manifest.vars.not_object = Поле `vars` манифеста должно быть отображением или объектом.
 manifest.vars.reserved_name = Ключ `vars` '{ $name }' в манифесте зарезервирован для встроенной вспомогательной функции шаблонов; переименуйте переменную.
 manifest.read_failed = Не удалось прочитать манифест по пути { $path }.

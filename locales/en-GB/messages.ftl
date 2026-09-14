@@ -138,6 +138,7 @@ manifest.yaml.hint.invalid_token = YAML token is invalid or unexpected.
 manifest.yaml.hint.escape = Escape backslashes or remove invalid escape sequences.
 manifest.env.missing = A required environment variable is not set.
 manifest.env.invalid_utf8 = An environment variable contains invalid UTF-8.
+manifest.env.blocked = Access to an environment variable is blocked.
 manifest.vars.not_object = Manifest `vars` must be a map/object.
 manifest.vars.reserved_name = Manifest `vars` key '{ $name }' is reserved for a built-in template helper; rename the variable.
 manifest.read_failed = Failed to read manifest at { $path }.
