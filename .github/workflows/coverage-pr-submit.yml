@@ -38,6 +38,16 @@ jobs:
         with:
           python-version: '3.14'
           enable-cache: 'false'
+          # Every trusted step below runs through GitHub Actions' `python`
+          # shell, which resolves `python` on PATH. `python-version` alone only
+          # sets UV_PYTHON, so the steps would run under the runner's system
+          # interpreter (3.12 on ubuntu-2404), where annotations are evaluated
+          # at definition time and a `TYPE_CHECKING`-only import raises
+          # NameError as the module loads. Activating a 3.14 venv puts the
+          # baseline interpreter first on PATH; `no-project` keeps the venv
+          # from reading the config-only pyproject.
+          activate-environment: 'true'
+          no-project: 'true'
       - name: Start coverage artefact download telemetry
         id: start_download_coverage
         shell: python
