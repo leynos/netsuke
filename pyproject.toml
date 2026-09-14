@@ -99,6 +99,9 @@ extend-ignore = [
 # literal expectations; those idioms are the point of a test, not a smell.
 "scripts/tests/*.py" = ["S101", "PLR0913", "PLR0917", "PLR2004", "PLR6301"]
 "tests/workflow_contracts/*.py" = ["S101", "PLR0913", "PLR0917", "PLR2004", "PLR6301"]
+# Cyclopts entry points declare one keyword-only parameter per environment
+# input by design, so the argument-count ceilings do not apply to them.
+"scripts/ci/*.py" = ["PLR0913", "PLR0917"]
 
 [tool.ruff.lint.flake8-import-conventions]
 # Declare the banned `from` imports.

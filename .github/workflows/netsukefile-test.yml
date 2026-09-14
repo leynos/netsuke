@@ -38,6 +38,13 @@ jobs:
         # Before the installer, so before anything can start the server: a
         # server started without these stays on local disk all job.
         uses: ./.github/actions/sccache-gha-credentials
+      - name: Setup uv
+        # The sccache report is a scripts/ci helper run through
+        # `uv run --script`; uv's own cache is not part of this lane's keys.
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        with:
+          python-version: '3.14'
+          enable-cache: 'false'
       - name: Render cache keys
         # This lane owns its own key family: nothing else in the repository
         # runs on Ubuntu 22.04, so a 24.04 archive must never reach it. The
@@ -187,14 +194,8 @@ jobs:
         run: scripts/assert-file-absent.sh unused.txt
       - name: Show sccache statistics
         if: always()
-        run: |
-          sccache --show-stats | tee sccache-stats.txt
-          sccache --show-stats --stats-format=json > sccache-stats.json
-          {
-            printf '### sccache\n\n```text\n'
-            cat sccache-stats.txt
-            printf '```\n'
-          } | tee -a "$GITHUB_STEP_SUMMARY"
+        # Text and JSON files plus a step-summary section, from one script.
+        run: uv run --script scripts/ci/report_sccache_stats.py
       # This job is the only writer of the Ubuntu 22.04 key family, and only
       # on the trunk, so a pull request never publishes a competing archive.
       - name: Save Cargo download store

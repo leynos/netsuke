@@ -32,6 +32,7 @@ from workflow_loading import (
     CI_WORKFLOW_PATH,
     MAKEFILE_PATH,
     NEXTEST_JOBS,
+    REPO_ROOT,
     SETUP_RUST_JOBS,
     _WorkflowLoader,
     job_steps,
@@ -50,14 +51,11 @@ TEST_SHELL_STEP = "Install test shell dependencies"
 #: silently drops `test_support` and the non-default targets from the gate.
 EXPECTED_CLIPPY_FLAGS = "--workspace --all-targets --all-features -- -D warnings"
 
-#: The whole awk staging dance the sandbox probe depends on. Asserting the
-#: fragments as one block reports every part a partial edit dropped, rather
-#: than only the first.
-AWK_STAGING_FRAGMENTS = (
-    'test_shell_bin="${RUNNER_TEMP}/netsuke-test-bin"',
-    'install --mode=0755 "$(command -v gawk)"',
-    '"${test_shell_bin}/awk"',
-)
+#: The Cyclopts helper that installs gawk and stages a regular-file `awk`
+#: the sandbox probe can follow. Its behaviour is covered by
+#: `scripts/tests/test_ci_stage_test_shell.py`; the workflow contract is only
+#: that the step runs it, through uv, after uv is set up.
+TEST_SHELL_SCRIPT = "scripts/ci/stage_test_shell.py"
 
 
 def _tool_input(step: dict[str, object]) -> object:
@@ -144,62 +142,18 @@ def test_load_workflow_rejects_invalid_document_roots(
         load_workflow(workflow_path)
 
 
-@pytest.fixture
-def test_shell_script() -> str:
-    """Return the run script of the test-shell dependency step."""
-    step = named_step(job_steps(load_workflow(), "build-test"), TEST_SHELL_STEP)
-    match step.get("run"):
-        case str() as run:
-            return run
-        case _:
-            pytest.fail(f"{TEST_SHELL_STEP} must declare a run script")
+def test_test_shell_step_runs_the_staging_script_through_uv() -> None:
+    """The step delegates the awk staging to the checked-in, tested script."""
+    steps = job_steps(load_workflow(), "build-test")
+    step = named_step(steps, TEST_SHELL_STEP)
 
-
-def test_test_shell_step_installs_gawk(test_shell_script: str) -> None:
-    """The step installs gawk, the implementation awk is copied from."""
-    assert re.search(r"apt-get install\b.*\bgawk\b", test_shell_script), (
-        f"{TEST_SHELL_STEP} must apt-get install gawk, got:\n{test_shell_script}"
+    assert str(step.get("run", "")).strip() == f"uv run --script {TEST_SHELL_SCRIPT}", (
+        f"{TEST_SHELL_STEP} must run {TEST_SHELL_SCRIPT} and nothing else, "
+        f"got {step.get('run')!r}"
     )
-
-
-def test_test_shell_step_copies_gawk_to_a_regular_awk_executable(
-    test_shell_script: str,
-) -> None:
-    """Gawk is copied — not linked — to ${RUNNER_TEMP}/netsuke-test-bin/awk.
-
-    The sandbox probe cannot follow a symlink out of its directory handle, so
-    the destination must be a regular executable file.
-    """
-    missing = [
-        fragment
-        for fragment in AWK_STAGING_FRAGMENTS
-        if fragment not in test_shell_script
-    ]
-    assert not missing, (
-        f"{TEST_SHELL_STEP} must copy $(command -v gawk) into "
-        f"${{RUNNER_TEMP}}/netsuke-test-bin as a regular awk executable; "
-        f"missing {missing!r}, got:\n{test_shell_script}"
-    )
-
-
-def test_test_shell_step_exports_the_directory_to_github_path(
-    test_shell_script: str,
-) -> None:
-    """Later steps see the staged awk because the directory joins PATH."""
-    assert 'echo "${test_shell_bin}" >> "${GITHUB_PATH}"' in test_shell_script, (
-        f"{TEST_SHELL_STEP} must append the staging directory to "
-        f"GITHUB_PATH, got:\n{test_shell_script}"
-    )
-
-
-def test_test_shell_step_verifies_the_staged_awk(test_shell_script: str) -> None:
-    """The step proves the staged awk resolves and runs before CI proceeds."""
-    lines = [line.strip() for line in test_shell_script.splitlines()]
-    assert "command -v awk" in lines, (
-        f"{TEST_SHELL_STEP} must run `command -v awk`, got:\n{test_shell_script}"
-    )
-    assert "awk --version" in lines, (
-        f"{TEST_SHELL_STEP} must run `awk --version`, got:\n{test_shell_script}"
+    assert (REPO_ROOT / TEST_SHELL_SCRIPT).is_file(), f"{TEST_SHELL_SCRIPT} must exist"
+    assert steps.index(named_step(steps, "Setup uv")) < steps.index(step), (
+        f"Setup uv must precede {TEST_SHELL_STEP}, which runs through uv"
     )
 
 

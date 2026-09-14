@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-release-admission test-coverage-artifact test-markdown-format test-typos-config build release lint lint-clippy lint-whitaker lint-python github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-dev-fast dev-fast-check dev-build dev-test bench-build bench-config-load bench-glob-expansion
+.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-release-admission test-coverage-artifact test-markdown-format test-ci-scripts test-typos-config build release lint lint-clippy lint-whitaker lint-python github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-dev-fast dev-fast-check dev-build dev-test bench-build bench-config-load bench-glob-expansion
 
 RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 # Export this path before shell probes expand it, so Make does not interpolate
@@ -86,6 +86,15 @@ RUFF = $(UV_ENV) $(UV) tool run --from ruff==$(RUFF_VERSION) ruff
 # typecheck gate without any code change. Bump deliberately and fix new
 # diagnostics in the same commit.
 TY_VERSION ?= 0.0.74
+# The CI helper scripts under scripts/ci declare these in their PEP 723
+# blocks; scripts/tests/test_ci_scripts_metadata.py holds the two in step, so
+# `uv run --script` in CI and the test and typecheck gates resolve one release.
+# cuprum is pinned to a leynos/cuprum commit until 0.2.0 ships the
+# `RunOutputOptions` runtime the scripts use.
+CYCLOPTS_VERSION ?= 4.25.2
+CUPRUM_REF ?= a2134c7a3966b224eaed917efb94f8090ce5104a
+CUPRUM_SOURCE = cuprum @ git+https://github.com/leynos/cuprum@$(CUPRUM_REF)
+CI_SCRIPT_DEPS = --with cyclopts==$(CYCLOPTS_VERSION) --with '$(CUPRUM_SOURCE)'
 # Every Python source the repository owns. Ruff and Pylint resolve their own
 # configuration and exclusions from pyproject.toml, so these paths only bound
 # the walk.
@@ -183,6 +192,12 @@ test-markdown-format: ## Validate the Markdown formatter checker
 		python -m pytest scripts/tests/test_check_markdown_format.py -c /dev/null \
 		--rootdir=. -p no:cacheprovider
 
+test-ci-scripts: ## Test the CI helper scripts under scripts/ci with pytest and cmd-mox
+	@PYTHONPATH=scripts/ci:scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
+		--with pytest==9.0.2 --with cmd-mox==0.2.0 $(CI_SCRIPT_DEPS) \
+		python -m pytest -p cmd_mox.pytest_plugin scripts/tests/test_ci_*.py \
+		-c /dev/null --rootdir=. -p no:cacheprovider
+
 test-typos-config: spelling-helper-test ## Verify the shared spelling-policy integration
 
 target/%/$(APP): ## Build binary in debug or release mode
@@ -257,8 +272,9 @@ typecheck-python: ## Typecheck the Python sources with ty
 	$(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
 		--from ty==$(TY_VERSION) --with pytest==9.0.2 --with pytest-cov==7.0.0 \
 		--with 'pyyaml>=6' --with 'hypothesis>=6' --with 'cmd-mox==0.2.0' \
+		$(CI_SCRIPT_DEPS) \
 		ty check --python-version $(PYTHON_BASELINE) \
-		--extra-search-path scripts $(PYTHON_SOURCES)
+		--extra-search-path scripts/ci --extra-search-path scripts $(PYTHON_SOURCES)
 
 markdownlint: spelling ## Lint Markdown and enforce en-GB-oxendict spelling
 	@unset FORCE_COLOR; $(MDLINT) "**/*.md"

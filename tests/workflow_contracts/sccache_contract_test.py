@@ -22,7 +22,7 @@ from cache_contract_data import (
     declared_paths,
     lane_steps,
 )
-from sccache_compile_step_data import is_compile_step
+from sccache_compile_step_data import assert_report_command, is_compile_step
 from workflow_loading import (
     job_steps,
     load_workflow,
@@ -63,10 +63,7 @@ def _assert_sccache_contract(workflow_name: str, job_name: str) -> None:
     assert show.get("if") == "always()", (
         f"{workflow_name} {job_name} must report sccache statistics on failure too"
     )
-    show_command = str(show.get("run"))
-    assert "sccache --show-stats --stats-format=json" in show_command, (
-        f"{workflow_name} {job_name} must export machine-readable sccache statistics"
-    )
+    assert_report_command(workflow_name, job_name, str(show.get("run")))
     assert steps.index(reset) < steps.index(show), (
         f"{workflow_name} {job_name} must reset its counters before reporting them"
     )
