@@ -131,7 +131,6 @@ fn benchmark_glob_expansion_target_is_phony_and_runs_the_expected_bench() -> Res
     Ok(())
 }
 
-/// Verify that the formatter recipe handles an empty Markdown file set portably.
 #[path = "makefile_test_target/rustflags.rs"]
 mod rustflags;
 

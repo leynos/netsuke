@@ -187,6 +187,35 @@ fn behavioural_check_fmt_succeeds_when_git_selects_no_markdown() -> Result<()> {
     Ok(())
 }
 
+/// The exit code the fake markdownlint-cli2 reports when it finds a violation.
+const MARKDOWNLINT_VIOLATION_EXIT: u8 = 1;
+
+#[test]
+fn behavioural_fmt_fails_when_markdownlint_does_after_the_formatters_ran() -> Result<()> {
+    let harness = Harness::new(populated_workspace()?)?;
+
+    let output = harness.run(
+        "fmt",
+        ExitCodes {
+            markdownlint: MARKDOWNLINT_VIOLATION_EXIT,
+            ..ExitCodes::default()
+        },
+    )?;
+
+    ensure!(
+        !output.status.success(),
+        "make fmt must propagate a markdownlint-cli2 failure"
+    );
+    let invocations = harness.invocations()?;
+    ensure!(
+        program_sequence(&invocations)
+            == ["cargo", "ruff", "ruff", "mdtablefix", "markdownlint-cli2"],
+        "every earlier formatter must run before markdownlint-cli2 fails the recipe, \
+         got {invocations:#?}"
+    );
+    Ok(())
+}
+
 #[rstest]
 #[case::drift(1)]
 #[case::operational_failure(2)]

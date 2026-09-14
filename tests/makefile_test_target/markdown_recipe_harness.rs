@@ -59,6 +59,7 @@ pub(super) struct ExitCodes {
     pub(super) cargo: u8,
     pub(super) ruff: u8,
     pub(super) mdtablefix: u8,
+    pub(super) markdownlint: u8,
 }
 
 /// Write a fake executable that logs its name and every argument.
@@ -166,6 +167,10 @@ impl Harness {
             .env("FAKE_CARGO_EXIT", exits.cargo.to_string())
             .env("FAKE_RUFF_EXIT", exits.ruff.to_string())
             .env("FAKE_MDTABLEFIX_EXIT", exits.mdtablefix.to_string())
+            .env(
+                "FAKE_MARKDOWNLINT_CLI2_EXIT",
+                exits.markdownlint.to_string(),
+            )
             // The recipes get no standard input, as they do under CI.
             .stdin(Stdio::null());
         for (variable, path) in &self.fakes {
