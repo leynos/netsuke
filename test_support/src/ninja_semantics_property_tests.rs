@@ -1,6 +1,6 @@
 //! Property tests for representation-aware generated-Ninja inspection.
 //!
-//! The cases in the parent module pin each transport with hand-written
+//! The cases in the parent module pin each transport with handwritten
 //! samples; the properties below generalize them over arbitrary PowerShell
 //! text, so a decoding fault that only appears for a particular mix of
 //! quoting, separators, and non-ASCII characters cannot hide behind the
