@@ -53,6 +53,7 @@ units = st.sampled_from(sorted(UNITS))
         pytest.param("750\u00b5s", 0.00075, id="the-micro-sign"),
         pytest.param("1.5h", 5400.0, id="a-fraction-of-an-hour-in-whole-seconds"),
         pytest.param("0.123s", 0.123, id="a-fraction-of-a-second-in-nanoseconds"),
+        pytest.param("0.000000001m", 6e-8, id="a-fraction-of-a-minute-in-nanoseconds"),
     ],
 )
 def test_each_unit_converts_exactly(duration: str, expected: float) -> None:

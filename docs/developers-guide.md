@@ -6550,6 +6550,22 @@ and 442.8, numbers the runner would never have started with, and the ordering
 would then have been asserted over a budget nextest rejects. The reader works
 in integer nanoseconds throughout and converts to seconds once, at the end.
 
+The port's scope is narrow and deliberately so. `nextest_durations` owns one
+thing: turning the text of a nextest duration into seconds exactly as
+`humantime` would, and refusing what `humantime` refuses. It is a
+workflow-contract helper, not a repository-wide duration parser. Its call-sites
+are `nextest_budgets.py`, which reads `.config/nextest.toml` budgets,
+`timeout_ordering_test.py`, and the two test modules that drive the reading
+directly. Nothing outside `tests/workflow_contracts` imports it, and nothing
+inside should grow a second duration reader beside it.
+
+It composes one way round. `nextest_durations` knows nothing of TOML, of
+workflows, or of what a budget means; callers hand it text and receive seconds
+or a `NextestConfigurationError`. A reading that needs more than that, such as
+the `timeout-minutes` on a job, belongs with its caller: those are GitHub
+Actions values, integers of minutes and seconds, not `humantime` text, and
+reading them here would make this module answerable for two grammars.
+
 A job may run the coverage action more than once, and every matching step is a
 lane. No job in this repository does, so a reading that returned a job's first
 coverage step, or its last, would satisfy every assertion the real workflows
