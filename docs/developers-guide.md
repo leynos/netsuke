@@ -6527,15 +6527,17 @@ measured against humantime 2.3.0 rather than assumed. That is the version the
 lockfile of the pinned `cargo-nextest` release resolves, reached through
 `humantime_serde`. A value may carry a fractional part with whitespace
 tolerated around the point, so `1.5m` and `1 . 5 m` are both ninety seconds, and
-`wk`, `wks`, `yr`, and `yrs` are accepted alongside the longer spellings.
-Whitespace inside the number is ignored as well, so `1 0s` is ten seconds, and
-a bare `0` is the one duration that needs no unit, special-cased by `humantime`
-before its parser reads a character. The reader had refused all of those, which
-is the fault it exists to avoid: a configuration the runner is happy with,
-called broken here. What it still refuses is what `humantime` refuses, checked
-the same way: a point with no whole part before it or no digit after it, two
-points, a signed value, a digit separator, and any other number carrying no
-unit.
+`wk`, `wks`, `yr`, and `yrs` are accepted alongside the longer spellings, as
+are `nanos` and `millis`, read from `humantime`'s own unit table rather than
+guessed at: it takes three spellings each for nanoseconds and milliseconds, and
+this reader had two of each. Whitespace inside the number is ignored as well, so
+`1 0s` is ten seconds, and a bare `0` is the one duration that needs no unit,
+special-cased by `humantime` before its parser reads a character. The reader
+had refused all of those, which is the fault it exists to avoid: a
+configuration the runner is happy with, called broken here. What it still
+refuses is what `humantime` refuses, checked the same way: a point with no
+whole part before it or no digit after it, two points, a signed value, a digit
+separator, and any other number carrying no unit.
 
 A job may run the coverage action more than once, and every matching step is a
 lane. No job in this repository does, so a reading that returned a job's first
