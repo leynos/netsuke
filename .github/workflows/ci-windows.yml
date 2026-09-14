@@ -193,14 +193,8 @@ jobs:
           }
       - name: Show sccache statistics
         if: always()
-        run: |
-          sccache --show-stats | tee sccache-stats.txt
-          sccache --show-stats --stats-format=json > sccache-stats.json
-          {
-            printf '### sccache\n\n```text\n'
-            cat sccache-stats.txt
-            printf '```\n'
-          } >> "$GITHUB_STEP_SUMMARY"
+        # Text and JSON files plus a step-summary section, from one script.
+        run: uv run --script scripts/ci/report_sccache_stats.py
       - name: Save gate caches
         # The action restricts each save to a push on `main` that missed the
         # key, so a pull request never publishes a competing generation.
@@ -264,6 +258,13 @@ jobs:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           mode: restore
           profile: gate
+      - name: Setup uv
+        # The sccache report is a scripts/ci helper run through
+        # `uv run --script`; uv's own cache is not part of this lane's keys.
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        with:
+          python-version: '3.14'
+          enable-cache: 'false'
       - name: Install GNU Make
         shell: pwsh
         run: |
@@ -342,14 +343,8 @@ jobs:
           }
       - name: Show sccache statistics
         if: always()
-        run: |
-          sccache --show-stats | tee sccache-stats.txt
-          sccache --show-stats --stats-format=json > sccache-stats.json
-          {
-            printf '### sccache\n\n```text\n'
-            cat sccache-stats.txt
-            printf '```\n'
-          } >> "$GITHUB_STEP_SUMMARY"
+        # Text and JSON files plus a step-summary section, from one script.
+        run: uv run --script scripts/ci/report_sccache_stats.py
       - name: Save gate caches
         # The action restricts each save to a push on `main` that missed the
         # key, so a pull request never publishes a competing generation.

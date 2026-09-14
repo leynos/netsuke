@@ -1647,6 +1647,13 @@ workflow contract tests can read it.
 | `discard_instrumented_tree.py` | Discard the instrumented build tree  |
 | `install_kani.py`              | Install prebuilt Kani (`kani-smoke`) |
 
+`report_sccache_stats.py` also replaces the same report in `ci-windows.yml`,
+`netsukefile-test.yml`, and `coverage-main.yml`, and `coverage-main.yml` runs
+`discard_instrumented_tree.py` too; each of those jobs sets up uv for the
+purpose. `tests/workflow_contracts/sccache_contract_test.py` requires the
+script on every compiling lane except the release smoke job, which only prints
+the JSON form.
+
 `scripts/ci/ci_support.py` holds what they share: the catalogue, a synchronous
 runner, `GITHUB_PATH` publication, and checksum-verified download and
 extraction of release archives. Downloads accept `https://` and `file://` URLs
