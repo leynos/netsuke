@@ -138,6 +138,14 @@ mod rustflags;
 #[path = "makefile_test_target/rustdocflags.rs"]
 mod rustdocflags;
 
+#[cfg(unix)]
+#[path = "makefile_test_target/markdown_recipe_harness.rs"]
+mod markdown_recipe_harness;
+
+#[cfg(unix)]
+#[path = "makefile_test_target/markdown_recipes.rs"]
+mod markdown_recipes;
+
 /// Returns every nextest profile override.
 fn all_profile_overrides(config: &Value) -> impl Iterator<Item = &Value> {
     config
