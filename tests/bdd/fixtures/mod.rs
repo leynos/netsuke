@@ -12,7 +12,7 @@ use netsuke::localization::LocalizerGuard;
 use netsuke::output_mode::OutputMode;
 use netsuke::output_prefs::OutputPrefs;
 use netsuke::runner::CommandEnv;
-use netsuke::stdlib::{NetworkPolicy, StdlibState as NetsukeStdlibState};
+use netsuke::stdlib::{ClockProvider, NetworkPolicy, StdlibState as NetsukeStdlibState};
 use rstest::fixture;
 use rstest_bdd::Slot;
 use std::cell::RefCell;
@@ -91,6 +91,8 @@ pub struct TestWorld {
     pub stdlib_policy: RefCell<Option<NetworkPolicy>>,
     /// Override for the PATH environment variable used by the `which` resolver.
     pub stdlib_path_override: RefCell<Option<OsString>>,
+    /// Fixed wall-clock source installed for stdlib `now()` scenarios.
+    pub stdlib_clock: Slot<ClockProvider>,
     /// Maximum fetch response size configured for the active scenario.
     pub stdlib_fetch_max_bytes: Slot<u64>,
     /// Maximum captured command output size configured for the scenario.

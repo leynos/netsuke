@@ -1,67 +1,19 @@
 //! Tests for the stdlib time helpers, validating timestamp and duration
 //! conversions alongside ISO 8601 formatting. The cases assert that `now`
-//! respects UTC defaults, applies caller-provided offsets, rejects malformed
-//! offsets, and that helper functions expose consistent object wrappers for
-//! downstream template evaluation.
+//! applies caller-provided offsets, rejects malformed offsets, and that helper
+//! functions expose consistent object wrappers for downstream template
+//! evaluation. Tests that pin *where* `now()` reads its instant from live in
+//! `super::clock_tests`.
 use super::*;
-use anyhow::{Context, Result, anyhow, ensure};
-use minijinja::{Environment, ErrorKind, context, value::Value};
+use anyhow::{Result, anyhow, ensure};
+use minijinja::{ErrorKind, context};
 use proptest::prelude::*;
-use rstest::{fixture, rstest};
+use rstest::rstest;
 use time::{Duration, OffsetDateTime, UtcOffset, macros::datetime};
 
-fn eval_expression(env: &Environment<'_>, expr: &str) -> Result<Value> {
-    let compiled = env
-        .compile_expression(expr)
-        .with_context(|| format!("compiling expression: {expr}"))?;
-    compiled
-        .eval(context! {})
-        .with_context(|| format!("evaluating expression: {expr}"))
-}
-
-#[fixture]
-fn env() -> Environment<'static> {
-    let mut env = Environment::new();
-    register_functions(&mut env);
-    env
-}
-
-fn value_as_timestamp(value: &Value) -> Result<OffsetDateTime> {
-    value
-        .as_object()
-        .and_then(|obj| obj.downcast_ref::<TimestampValue>())
-        .map(|stored| stored.datetime)
-        .ok_or_else(|| anyhow!("value is not a timestamp object: {value:?}"))
-}
-
-fn value_as_duration(value: &Value) -> Result<Duration> {
-    value
-        .as_object()
-        .and_then(|obj| obj.downcast_ref::<TimeDeltaValue>())
-        .map(|stored| stored.duration)
-        .ok_or_else(|| anyhow!("value is not a duration object: {value:?}"))
-}
-
-fn get_iso8601_property(value: &Value) -> Result<String> {
-    let obj = value.as_object().context("value is not an object")?;
-    let iso = obj
-        .get_value(&Value::from("iso8601"))
-        .context("iso8601 attribute missing")?;
-    iso.as_str()
-        .map(ToOwned::to_owned)
-        .context("iso8601 attribute is not a string")
-}
-
-#[rstest]
-fn now_defaults_to_utc(env: Environment<'static>) -> Result<()> {
-    let value = eval_expression(&env, "now()")?;
-    let captured = value_as_timestamp(&value)?;
-    let now = OffsetDateTime::now_utc();
-    let delta = (now - captured).abs();
-    ensure!(delta <= Duration::seconds(3), "delta {delta:?} too large");
-    ensure!(captured.offset() == UtcOffset::UTC);
-    Ok(())
-}
+use super::tests_support::{
+    env, eval_expression, get_iso8601_property, value_as_duration, value_as_timestamp,
+};
 
 #[rstest]
 fn now_applies_custom_offset(env: Environment<'static>) -> Result<()> {
