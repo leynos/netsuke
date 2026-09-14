@@ -5986,6 +5986,18 @@ the margin covers the process teardown and report writing that follow it. No
 why the reading has a test of its own rather than resting on an assertion that
 never runs.
 
+The ordering rule itself is `whole_run_ordering.whole_run_ordering_faults`,
+which takes a configuration and a set of lanes and returns every way the two
+break the ordering. Keeping it out of the contract is what lets
+`whole_run_ordering_test.py` drive it with configurations this repository does
+not have: a whole run below the largest per-test allowance, one equal to it, a
+watchdog one second short of the requirement and one meeting it exactly, a lane
+declaring no watchdog, and two short lanes at once. A rule executed only
+against a file that omits the key is a rule nobody has run, and it agreed with
+every wrong rule while it skipped. `bounds_a_single_test` is driven the same
+way and for the same reason, since this file bounds its default profile and so
+cannot tell that reading from one accepting an override or a bare duration.
+
 It is not the same assertion as
 `tests/workflow_contracts/test_execution_coverage_test.py`, which holds the two
 lanes to the *same* watchdog value. That one stops the lanes drifting apart;

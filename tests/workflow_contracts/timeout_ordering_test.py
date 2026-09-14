@@ -47,7 +47,6 @@ from nextest_durations import (
 )
 from timeout_budgets import (
     CEILING_MARGIN_SECONDS,
-    COLD_BUILD_ALLOWANCE_SECONDS,
     COVERAGE_ACTION,
     NEXTEST_CONFIG,
     NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS,
@@ -55,6 +54,7 @@ from timeout_budgets import (
     TERMINATION_SAFETY_MARGIN_SECONDS,
     WATCHDOG_VARIABLE,
 )
+from whole_run_ordering import whole_run_ordering_faults
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -238,32 +238,19 @@ def test_a_whole_run_budget_would_sit_inside_the_watchdog(
 ) -> None:
     """Tier three must not pre-empt tier two, if tier two appears.
 
-    No ``global-timeout`` is set today, so this asserts nothing about the
-    current tree and is not a licence to leave it that way: the guide
-    records the gap. What it does is bind the value the moment one is
-    added, so it arrives above the largest per-test allowance and inside
-    the watchdog rather than merely somewhere.
+    No ``global-timeout`` is set today, so this skips against the current
+    tree and is not a licence to leave it that way: the guide records the
+    gap. What it does is bind the value the moment one is added, so it
+    arrives above the largest per-test allowance and inside the watchdog
+    rather than merely somewhere. The rule itself is
+    ``whole_run_ordering_faults``, driven with configurations that do set
+    the key in ``whole_run_ordering_test``, because a rule executed only
+    against a file that omits it is a rule nobody has run.
     """
-    whole_run = global_timeout(nextest_config)
-    if whole_run is None:
+    if global_timeout(nextest_config) is None:
         pytest.skip("no global-timeout is set; the guide records this as a gap")
-    largest = largest_test_allowance(nextest_config)
-    assert whole_run > largest, (
-        f"the {whole_run:.0f}s global-timeout is not above the {largest:.0f}s "
-        f"largest per-test allowance; the run would end before that test "
-        f"could use its budget"
-    )
-    required = (
-        whole_run + termination_allowance(nextest_config) + COLD_BUILD_ALLOWANCE_SECONDS
-    )
-    for lane in coverage_lanes:
-        assert lane.watchdog is not None, str(lane)
-        assert lane.watchdog >= required, (
-            f"{lane} sets a {lane.watchdog:.0f}s watchdog, below the "
-            f"{required:.0f}s needed to cover the {whole_run:.0f}s whole-run "
-            f"budget, nextest's termination procedure, and a cold build; "
-            f"cargo would be killed before nextest could report the overrun"
-        )
+    faults = whole_run_ordering_faults(nextest_config, coverage_lanes)
+    assert not faults, "; ".join(faults)
 
 
 def test_the_largest_per_test_allowance_counts_the_multiplier(
