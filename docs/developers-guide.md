@@ -2023,8 +2023,8 @@ untracked files Git does not ignore, so a new document is formatted before it
 is staged and `.gitignore` is respected exactly as Git respects it. Symbolic
 links are skipped, so `CRUSH.md` (a link to `AGENTS.md`) is never rewritten
 twice. The Makefile declares the selection in `MDTABLEFIX_SELECT` and the rules
-in `MDTABLEFIX_RULES`, and `tests/workflow_contracts/ci_lint_test.py` holds
-both recipes to them.
+in `MDTABLEFIX_RULES`, and `tests/workflow_contracts/markdown_gates_test.py`
+holds both recipes to them.
 
 `make check-fmt` runs the Rust and Python formatter checks, then
 `mdtablefix --check` over the same selection and rules. `--check` is read-only:
