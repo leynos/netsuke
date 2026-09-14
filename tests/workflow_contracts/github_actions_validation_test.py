@@ -16,10 +16,9 @@ import typing as typ
 
 import yaml
 from actionlint_installer_contract import (
-    ACTIONLINT_CHECKSUM_COMMAND,
     ACTIONLINT_INSTALL_COMMAND,
-    ACTIONLINT_SCRIPT_CONTRACTS,
-    shell_variable,
+    ACTIONLINT_INSTALL_SCRIPT,
+    ACTIONLINT_STEP_ENV_CONTRACTS,
 )
 from cmd_mox import CmdMox
 from hypothesis import given, settings
@@ -115,35 +114,28 @@ def _assert_yamllint_ci_contract(steps: list[dict[str, object]]) -> None:
     ), "the Linux CI job must install and expose the pinned yamllint binary"
 
 
-ACTIONLINT_REUSE_GUARD = (
-    "if [[ -x ./actionlint ]] \\\n"
-    '  && [[ "$(./actionlint --version | head --lines=1)" == '
-    f'"{shell_variable("ACTIONLINT_VERSION")}" ]]; then'
-)
-
-
 def _assert_actionlint_ci_contract(steps: list[dict[str, object]]) -> None:
     """Assert that Linux CI provisions actionlint and invokes trusted Make."""
     download_actionlint = named_step(steps, "Download actionlint")
     lint = named_step(steps, "Lint")
-    download_script = download_actionlint.get("run")
     cached_paths = [line.strip() for line in _gate_cache_paths().splitlines()]
 
     assert "actionlint" in cached_paths, "the gate cache must own the actionlint binary"
-    assert isinstance(download_script, str), (
-        "the actionlint cache-miss step must define its verified installer script"
+    assert (
+        str(download_actionlint.get("run", "")).strip() == ACTIONLINT_INSTALL_COMMAND
+    ), "the actionlint step must run the checked-in installer script and nothing else"
+    assert (REPO_ROOT / ACTIONLINT_INSTALL_SCRIPT).is_file(), (
+        f"{ACTIONLINT_INSTALL_SCRIPT} must exist; the workflow runs it"
     )
-    assert ACTIONLINT_REUSE_GUARD in download_script, (
-        "the cached actionlint must be reused only when it reports the pinned version"
+    env = require_mapping(download_actionlint.get("env"), "actionlint step env")
+    for key, expected, message in ACTIONLINT_STEP_ENV_CONTRACTS:
+        assert str(env.get(key)) == expected, f"{message}, got {env.get(key)!r}"
+    assert set(env) == {key for key, _, _ in ACTIONLINT_STEP_ENV_CONTRACTS}, (
+        f"the actionlint step passes only its two pins, got {sorted(env)!r}"
     )
-    assert download_script.index(ACTIONLINT_REUSE_GUARD) < download_script.index(
-        ACTIONLINT_INSTALL_COMMAND
-    ), "the cached-version guard must precede the installer invocation"
-    for expected, message in ACTIONLINT_SCRIPT_CONTRACTS:
-        assert expected in download_script, message
-    assert download_script.index(ACTIONLINT_CHECKSUM_COMMAND) < download_script.index(
-        ACTIONLINT_INSTALL_COMMAND
-    ), "the actionlint archive checksum must be verified before running the installer"
+    assert _step_position(steps, "Setup uv") < _step_position(
+        steps, "Download actionlint"
+    ), "uv must be set up before the installer script runs through it"
     assert lint.get("run") == (
         '/usr/bin/make ACTIONLINT="$GITHUB_WORKSPACE/actionlint" lint'
     ), "the Linux CI job must use trusted `/usr/bin/make` with the cached actionlint"

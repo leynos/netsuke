@@ -9,8 +9,6 @@ a workflow edit cannot quietly reintroduce a source build or a stale binary.
 Run via ``make test-workflow-contracts``.
 """
 
-import typing as typ
-
 import yaml
 from workflow_loading import (
     REPO_ROOT,
@@ -106,62 +104,24 @@ def test_kani_payloads_share_one_versioned_cache_entry() -> None:
     assert len(paths) == 1, f"restore and save must claim the same paths: {paths!r}"
 
 
-class _InstallFragment(typ.NamedTuple):
-    """A required substring of the install script, and the concern it protects."""
+KANI_INSTALL_SCRIPT = "scripts/ci/install_kani.py"
+KANI_VERSION_FILE = REPO_ROOT / "tools" / "kani" / "VERSION"
 
-    concern: str
-    text: str
-
-
-#: Required substrings of the install script, one row per concern so a
-#: regression names the property it broke rather than a bare fragment. Each
-#: concern groups the URLs, checksum prefixes, directory layout, or
-#: executable probes that together protect one part of the binary-only,
-#: cache-aware contract.
-REQUIRED_INSTALL_FRAGMENTS = (
-    _InstallFragment(
-        "quickinstall front-end download host",
-        "quickinstall='https://github.com/cargo-bins/cargo-quickinstall'",
-    ),
-    _InstallFragment(
-        "quickinstall front-end archive URL",
-        '"${quickinstall}/releases/download/kani-verifier-${kani_version}/',
-    ),
-    _InstallFragment(
-        "quickinstall front-end archive checksum prefix",
+#: The pins the install step must pass to the script, one row per concern so
+#: a regression names the property it broke. The checksum prefixes are the
+#: same ones the earlier inline script carried; the script verifies each
+#: archive before it is unpacked, which
+#: `scripts/tests/test_ci_install_kani.py` proves for both payloads.
+REQUIRED_INSTALL_PINS = (
+    (
+        "quickinstall front-end archive checksum",
+        "INPUT_FRONTEND_SHA256",
         "ed2bafc239b834e14c6b66fc4838e342",
     ),
-    _InstallFragment(
-        "upstream verifier download host",
-        "upstream='https://github.com/model-checking/kani'",
-    ),
-    _InstallFragment(
-        "upstream verifier bundle URL",
-        '"${upstream}/releases/download/kani-${kani_version}/',
-    ),
-    _InstallFragment(
-        "upstream verifier bundle checksum prefix",
+    (
+        "upstream verifier bundle checksum",
+        "INPUT_BUNDLE_SHA256",
         "3b5f7afd3b51603ee720db7bc1bc4fe4",
-    ),
-    _InstallFragment(
-        "front-end directory layout",
-        'frontend_bin="${CARGO_HOME}/frontend/kani-${kani_version}"',
-    ),
-    _InstallFragment(
-        "verifier directory layout",
-        'kani_dir="${KANI_HOME}/kani-${kani_version}"',
-    ),
-    _InstallFragment(
-        "front-end executable probe",
-        '[[ ! -x "${frontend_bin}/cargo-kani"',
-    ),
-    _InstallFragment(
-        "verifier executable probe",
-        '[[ ! -x "${kani_dir}/bin/kani-driver"',
-    ),
-    _InstallFragment(
-        "local bundle setup invocation",
-        'cargo kani setup --use-local-bundle "${bundle}"',
     ),
 )
 
@@ -183,44 +143,30 @@ def test_kani_uses_cached_prebuilt_frontend_and_release_bundle() -> None:
     assert steps.index(named_step(steps, "Restore Kani payloads")) < steps.index(
         install_step
     ), "the Kani cache must be restored before Kani is installed"
-
-    install_command = str(install_step.get("run"))
-    missing_fragments = [
-        fragment
-        for fragment in REQUIRED_INSTALL_FRAGMENTS
-        if fragment.text not in install_command
-    ]
-    assert not missing_fragments, (
-        "Kani's binary-only cached installation is missing: "
-        + ", ".join(
-            f"{fragment.concern} ({fragment.text!r})" for fragment in missing_fragments
-        )
+    assert steps.index(named_step(steps, "Setup uv")) < steps.index(install_step), (
+        "uv must be set up before the installer script runs through it"
     )
-    _assert_kani_archives_are_verified_before_use(install_command)
+    assert str(install_step.get("run", "")).strip() == (
+        f"uv run --script {KANI_INSTALL_SCRIPT}"
+    ), "the Kani step must run the checked-in installer script and nothing else"
+    assert (REPO_ROOT / KANI_INSTALL_SCRIPT).is_file(), (
+        f"{KANI_INSTALL_SCRIPT} must exist"
+    )
 
-
-def _assert_kani_archives_are_verified_before_use(install_command: str) -> None:
-    """Require each Kani archive's checksum to gate its own unpacking step.
-
-    A bare `sha256sum --check` substring would also pass if the workflow
-    verified an unrelated file, so each assertion names the archive variable
-    and requires the verification to precede that archive's extraction.
-    """
-    frontend_check = '"${frontend_archive}" | sha256sum --check --'
-    frontend_extract = 'tar --extract --gzip --file "${frontend_archive}"'
-    bundle_check = '"${bundle}" | sha256sum --check --'
-    bundle_use = 'cargo kani setup --use-local-bundle "${bundle}"'
-    for check, use, label in (
-        (frontend_check, frontend_extract, "front-end archive"),
-        (bundle_check, bundle_use, "verifier bundle"),
-    ):
-        assert check in install_command, (
-            f"the Kani {label} must be checksum-verified by name"
-        )
-        assert use in install_command, f"the Kani {label} must be unpacked by name"
-        assert install_command.index(check) < install_command.index(use), (
-            f"the Kani {label} must be verified before it is unpacked"
-        )
+    env = require_mapping(install_step.get("env"), "Kani install step env")
+    pinned = KANI_VERSION_FILE.read_text(encoding="utf-8").strip()
+    assert str(env.get("INPUT_KANI_VERSION")) == pinned, (
+        f"the Kani step must pass tools/kani/VERSION ({pinned!r}) as "
+        f"INPUT_KANI_VERSION, got {env.get('INPUT_KANI_VERSION')!r}"
+    )
+    missing = [
+        f"{concern} ({key} starting {prefix!r})"
+        for concern, key, prefix in REQUIRED_INSTALL_PINS
+        if not str(env.get(key, "")).startswith(prefix)
+    ]
+    assert not missing, (
+        "Kani's binary-only cached installation is missing: " + ", ".join(missing)
+    )
 
 
 def test_kani_cache_action_requires_runner_image() -> None:

@@ -1625,6 +1625,44 @@ backend. For a faster inner loop between gate runs, see
 For documentation changes, also run `make fmt`, `make markdownlint`, and
 `make nixie`.
 
+### CI helper scripts
+
+The substantive steps of `.github/workflows/ci.yml` that are not `make` targets
+or actions are Python scripts under [`scripts/ci`](../scripts/ci), written to
+[`docs/scripting-standards.md`](scripting-standards.md): each is a
+[Cyclopts](https://cyclopts.readthedocs.io/) application whose parameters come
+from `INPUT_*` environment variables (and the ambient GitHub Actions variables
+it needs, such as `RUNNER_TEMP` and `GITHUB_PATH`), runs external programs
+through [cuprum](https://github.com/leynos/cuprum)'s allowlisted catalogue
+rather than a shell, and uses `pathlib` for the filesystem. The workflow
+invokes each one as `uv run --script scripts/ci/<name>.py`, so the step body is
+one line and every pin the script needs is an `env:` entry beside it, where the
+workflow contract tests can read it.
+
+| Script                         | Workflow step                        |
+| ------------------------------ | ------------------------------------ |
+| `stage_test_shell.py`          | Install test shell dependencies      |
+| `install_actionlint.py`        | Download actionlint                  |
+| `report_sccache_stats.py`      | Show sccache statistics              |
+| `discard_instrumented_tree.py` | Discard the instrumented build tree  |
+| `install_kani.py`              | Install prebuilt Kani (`kani-smoke`) |
+
+`scripts/ci/ci_support.py` holds what they share: the catalogue, a synchronous
+runner, `GITHUB_PATH` publication, and checksum-verified download and
+extraction of release archives. Downloads accept `https://` and `file://` URLs
+only; the tests serve release fixtures over `file://` so the real download,
+verification, and extraction path runs without a network.
+
+`make test-ci-scripts` runs their suite, `scripts/tests/test_ci_*.py`, with
+pytest and [cmd-mox](https://github.com/leynos/cmd-mox), which shims the
+external programs (`sudo`, `sccache`, `df`, `cargo`) so each script's happy
+path and failure modes are exercised at the process boundary. CI runs the same
+target before `make check-fmt`. The scripts pin `cyclopts` and `cuprum` in
+their PEP 723 blocks at the Makefile's `CYCLOPTS_VERSION` and `CUPRUM_VERSION`,
+held equal by `scripts/tests/test_ci_scripts_metadata.py`, and
+`make typecheck-python` checks them with ty alongside the rest of the Python
+sources.
+
 ### GitHub Actions validation
 
 `make lint` includes `make github-actions-lint`, which runs `yamllint` against
@@ -1637,40 +1675,19 @@ Install the pinned YAML linter locally with
 installs that exact version. Run the workflow checks with
 `make github-actions-lint` after installing both linters.
 
-The following shell commands reproduce CI's actionlint v1.7.12 setup. They
-download the installer at its pinned commit and the Linux `x86_64` release
-archive, verify the archive's SHA-256, and feed that verified archive to the
-installer so it cannot download a different artefact:
+CI installs actionlint v1.7.12 through
+[`scripts/ci/install_actionlint.py`](../scripts/ci/install_actionlint.py),
+which reuses the gate-cached binary when it reports the pinned version and
+otherwise downloads the Linux `x86_64` release archive, verifies its SHA-256
+against the pin, and extracts the single `actionlint` member. The same command
+reproduces that setup locally; the pins are the two `INPUT_*` values beside the
+step in `.github/workflows/ci.yml`:
 
 ```bash
-ACTIONLINT_VERSION='1.7.12'
-ACTIONLINT_SHA256='8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8'
-ACTIONLINT_INSTALLER_COMMIT='914e7df21a07ef503a81201c76d2b11c789d3fca'
-ACTIONLINT_ARCHIVE="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
-ACTIONLINT_RAW_BASE='https://raw.githubusercontent.com/rhysd/actionlint'
-ACTIONLINT_RELEASE_ROOT='https://github.com/rhysd/actionlint/releases/download'
-ACTIONLINT_INSTALLER_URL="${ACTIONLINT_RAW_BASE}/${ACTIONLINT_INSTALLER_COMMIT}/scripts"
-ACTIONLINT_INSTALLER_URL+='/download-actionlint.bash'
-ACTIONLINT_RELEASE_URL="${ACTIONLINT_RELEASE_ROOT}/v${ACTIONLINT_VERSION}/${ACTIONLINT_ARCHIVE}"
-ACTIONLINT_INSTALLER_PATH="$(mktemp)"
-ACTIONLINT_ARCHIVE_PATH="$(mktemp)"
-trap 'rm -f "${ACTIONLINT_INSTALLER_PATH}" "${ACTIONLINT_ARCHIVE_PATH}"' EXIT
-curl --fail --location --show-error --output "${ACTIONLINT_INSTALLER_PATH}" \
-  "${ACTIONLINT_INSTALLER_URL}"
-curl --fail --location --show-error --output "${ACTIONLINT_ARCHIVE_PATH}" \
-  "${ACTIONLINT_RELEASE_URL}"
-printf '%s  %s\n' "${ACTIONLINT_SHA256}" "${ACTIONLINT_ARCHIVE_PATH}" \
-  | sha256sum --check --
-curl() {
-  if [[ "${*: -1}" == "${ACTIONLINT_RELEASE_URL}" ]]; then
-    cat "${ACTIONLINT_ARCHIVE_PATH}"
-  else
-    command curl "$@"
-  fi
-}
-export -f curl
-bash "${ACTIONLINT_INSTALLER_PATH}" "${ACTIONLINT_VERSION}"
-make github-actions-lint
+INPUT_ACTIONLINT_VERSION='1.7.12' \
+INPUT_ACTIONLINT_SHA256='8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8' \
+  uv run --script scripts/ci/install_actionlint.py
+make ACTIONLINT="$PWD/actionlint" github-actions-lint
 ```
 
 [`tests/workflow_contracts/github_actions_validation_test.py`][github-actions-validation-test]
@@ -1694,9 +1711,9 @@ sequenceDiagram
 
     CI->>Cache: Restore yamllint and actionlint
     alt actionlint cache miss
-        CI->>GitHub: Download pinned installer and v1.7.12 archive
-        CI->>CI: sha256sum --check archive
-        CI->>CI: Install actionlint
+        CI->>GitHub: Download the v1.7.12 release archive
+        CI->>CI: Verify the archive SHA-256 against the pin
+        CI->>CI: Extract actionlint
         CI->>Cache: Save actionlint
     end
     CI->>CI: uv tool install yamllint==1.38.0
@@ -2463,10 +2480,10 @@ The fixtures live in `test_support::dev_fast`:
   Add to `SANDBOX_UTILITIES` when a script gains a dependency; a missing entry
   surfaces as a test failure rather than as a silent fallback to the
   developer's own tools. Every allowlisted utility must also be provisioned on
-  CI's host `PATH`; `.github/workflows/ci.yml` installs GNU Awk through the
-  `gawk` package and exposes its binary directly as `awk` for the sandbox's
-  capability-backed executable probe. Its `write_fake` is the domain helper
-  described under
+  CI's host `PATH`; `scripts/ci/stage_test_shell.py`, run by
+  `.github/workflows/ci.yml`, installs GNU Awk through the `gawk` package and
+  stages its binary as a regular-file `awk` for the sandbox's capability-backed
+  executable probe. Its `write_fake` is the domain helper described under
   [temporary executable test helpers](#temporary-executable-test-helpers): it
   composes `write_exec_with_content`, supplying the shebang so call sites carry
   only the behaviour being faked.
