@@ -4000,6 +4000,69 @@ claim to model arbitrary scheduler or filesystem interleavings. The fallible
 `test_support::fs::inspect_path` probe treats `NotFound` as absence and
 propagates every other metadata error.
 
+### `test_support::ninja_semantics`
+
+`test_support::ninja_semantics` (`test_support/src/ninja_semantics.rs`) is the
+crate's single shared boundary for inspecting generated Ninja recipe text in
+tests. Its ownership is representation-aware inspection: it locates encoded
+recipe payloads, keeps them out of plaintext matching, and decodes them. The
+module declares the `base64` crate directly in `test_support/Cargo.toml` and
+uses its standard engine for the Base64 UTF-16LE payloads; this keeps the
+decoder's dependency explicit for the support crate.
+
+It exists because Netsuke lowers a completed legacy recipe through one of three
+transports. The POSIX and Bash transports leave recipe text visible in a
+plaintext Ninja binding; the Windows PowerShell transport hides it in a Base64
+UTF-16LE `-EncodedCommand` argument, or — for recipes too large for a command
+line — in Ninja's response-file bootstrap (an `rspfile` plus an
+`rspfile_content` binding carrying a `netsukePayload = '` payload marker). A
+plaintext scan of generated Ninja therefore misses recipe text on Windows even
+when lowering worked correctly. The production transports this helper mirrors
+are described under [Command and recipe lowering](#command-and-recipe-lowering).
+
+The public surface is deliberately narrow:
+
+- `GeneratedNinja` — wraps a whole generated manifest document.
+  `GeneratedNinja::new` borrows the text; `detected_recipe_transports` reports
+  how that document carries recipe text; `recipe_contains` searches plaintext
+  bindings directly and decodes every PowerShell payload before matching, so
+  encoded payload text never matches as plaintext.
+- `RecipeNeedle` — wraps the text to search for, so a needle cannot be passed
+  where a document is expected, or vice versa.
+- `RecipeTransport` — the transport detected in a document (`Plaintext`,
+  `PowerShellEncodedCommand`, `PowerShellResponseFile`);
+  `RecipeTransport::description` gives the wording used in test failure
+  messages.
+- `ResponseFileContent` — wraps the extracted `rspfile_content` binding text;
+  `ResponseFileContent::decode_power_shell_payload` decodes the recipe that
+  binding embeds.
+
+The payload markers and the Base64/UTF-16LE decoding rules live in this module
+alone. Call sites must not re-implement the decoding or repeat the renderer's
+marker constants; they must go through these types. `GeneratedNinja` owns
+payload location, exclusion of encoded spans from plaintext matching, and
+decoding, so text on opposite sides of a removed payload can never form a false
+match.
+
+Permitted call sites are test-support and test code only, in the same spirit as
+`test_support::fs` and `test_support::tracing_capture`; production code must
+not depend on `test_support`. Current call sites are
+`src/ninja_gen_tests/power_shell.rs` and
+`tests/logging_stderr/verbose_secret_absence.rs`, with unit coverage in
+`test_support/src/ninja_semantics_tests.rs`.
+
+To name the active representation in a failure-message diagnostic, call
+`GeneratedNinja::detected_recipe_transports` and map the result through
+`RecipeTransport::description`. Never interpolate the generated document, an
+encoded payload, or decoded recipe text into a failure message: generated
+recipes can contain rendered secret material interpolated through `env()`,
+which the secret-absence regression test protects. Decoder errors likewise
+never echo the payload.
+
+The production generator has its own `netsuke::ninja_gen::GeneratedNinja`
+output type; `test_support::ninja_semantics::GeneratedNinja` is the test-side
+borrowed view of generated text.
+
 ### Temporary Ninja build files
 
 `runner::process::create_temp_ninja_file` writes, flushes, and synchronizes a
@@ -4290,21 +4353,29 @@ doc-comment promise. `tests/locale_stub_strictness_tests.rs` covers the panic,
 the trichotomy, and the last-declaration-wins rule with both example-based and
 property tests.
 
-#### Locale-stub UI harness and split build directories
+#### Direct-`rustc` UI harnesses and split build directories
 
-`tests/locale_stub_ui_tests.rs` builds `test_support` with
-`cargo build --message-format=json` and parses the resulting Cargo JSON
-messages rather than assuming its dependencies sit beside the uplifted
-`test_support` rlib. For every `compiler-artifact` message it records the
-parent directory of each loadable artefact the message names, and passes the
-whole set to `rustc` as `-L dependency=` directories when compiling the UI
-fixtures. This keeps the harness correct when Cargo's `build.build-dir` setting
-splits intermediate artefacts — where dependency rlibs live — from the final,
-uplifted ones, and when Cargo gives each crate its own build directory instead
-of one shared `deps/`, as the Cargo shipped with the 1.99 nightlies does.
-Deriving the directories from what Cargo actually reports, rather than from a
-single assumed location, means the harness does not need to special-case either
-layout.
+`tests/support/test_support_rlib.rs` owns the direct-`rustc` preparation used by
+`tests/locale_stub_ui_tests.rs` and `tests/ninja_semantics_ui_tests.rs`. Those
+are its only permitted call sites: include it from a `tests/*.rs` UI harness
+when a fixture must compile against `test_support`; a harness for the
+production crate, or one needing no crate, must use its own narrow support code.
+
+`TestSupportRlib::build` builds `test_support` with
+`cargo build --message-format=json`; `build_with` does the same with narrowly
+scoped Cargo environment overrides for the split-build regression. Both parse
+Cargo's `compiler-artifact` messages, locating the uplifted metadata artefact
+and every dependency directory from the paths Cargo actually reports. This
+avoids assuming dependencies live beside the final `test_support` rlib when
+Cargo's `build.build-dir` setting separates intermediate artefacts, or when the
+Cargo shipped with the 1.99 nightlies gives each crate its own directory.
+
+`TestSupportRlib::compile` then invokes the workspace `rustc` directly with the
+discovered artefact as `--extern test_support=…`, every discovered
+`-L dependency=` directory, and `--emit=metadata`. Cargo still builds the rlib
+under the workspace toolchain; direct `rustc` is limited to the small UI
+fixtures that prove compile-time contracts without a scratch project or a
+toolchain-sensitive `.stderr` snapshot.
 
 "Loadable artefact" means an rlib, an `.rmeta` metadata file, or a file with
 the platform's dynamic-library extension. The `.rmeta` file is needed for the
@@ -4318,10 +4389,11 @@ search path and its dependents fail with `E0463`. The same rule and the same
 reasoning apply to `tests/command_env_ui_tests.rs`, which builds the `netsuke`
 rlib and derives its search path the same way.
 
-The shared `tests/support/cargo_artifacts.rs` module owns parsing Cargo
-`compiler-artifact` messages and extracting loadable artefact directories. It
-may be included only by these direct-`rustc` UI harnesses; the callers retain
-build and process-spawn orchestration.
+`TestSupportRlib` composes `tests/support/cargo_artifacts.rs`, which parses
+Cargo `compiler-artifact` messages, with
+`tests/support/rustc_response_file.rs`, which renders compiler arguments. The
+UI harnesses retain their case assertions, while the shared support code owns
+the Cargo build, artefact discovery, and direct-`rustc` invocation workflow.
 
 Those arguments reach `rustc` through a **response file**, not the command
 line. One `-L dependency=` pair per crate, over the long unique roots the
@@ -4334,17 +4406,11 @@ from `@<path>` — UTF-8, one argument per line, no quoting — which leaves eac
 harness passing exactly one argument, so command-line length no longer scales
 with the dependency count.
 
-`tests/support/rustc_response_file.rs` owns that rendering and is included by
-both harnesses through the usual `#[path = …] mod …;` pattern. Its scope is
-deliberately narrow: it renders an argument vector and writes it, and knows
-nothing about what a compilation needs. Reach for it from a `tests/*.rs` binary
-that invokes `rustc` directly with an argument list whose length is not bounded
-by the source; a harness passing a fixed handful of arguments does not need it.
-Its unit tests assert the file's shape — one argument per line, spaces
-preserved without quoting, newlines rejected, and every source, `--extern`,
-dependency-search, and output argument retained — because the failure it
-prevents is Windows-specific and cannot be reproduced on the hosts that run
-most of this suite.
+`TestSupportRlib::compile` must use the response-file writer for every direct
+`rustc` invocation. The writer renders one UTF-8 argument per line without
+quoting, and its unit tests retain every source, `--extern`, dependency-search,
+and output argument while rejecting newlines. This is mandatory because the
+failure is Windows-specific and cannot be reproduced on most local hosts.
 
 `harness_compiles_under_a_split_build_dir` is the regression test for this: it
 forces a split layout with its own private `CARGO_TARGET_DIR` and
@@ -5996,6 +6062,36 @@ background-query primitive.
   the existing capability-injected dyndep-publication path to materialize its
   sidecars; the read-only steps never write files, start processes, or invoke
   effectful template helpers.
+
+### Module: `runner::manifest_structure_telemetry`
+
+`src/runner/manifest_structure_telemetry.rs` is the crate-internal module
+declared by the private `mod manifest_structure_telemetry;` in
+`src/runner/mod.rs`. It owns bounded structural telemetry for a loaded
+manifest: fixed-vocabulary aggregate counts derived from the manifest shape
+only. It never emits manifest text, paths, recipe contents, variable values,
+macro bodies, or descriptions, because rendered manifest values can carry
+secret material interpolated through `env()`.
+
+`record_manifest_structure(manifest: &NetsukeManifest)` is the single entry
+point, called only from `src/runner/graph_generation.rs` inside
+`generate_ninja_with_shell`, immediately after manifest loading by
+`load_manifest_with_stage_reporting` and before graph construction. It emits one
+`TRACE` span named `runner.manifest.structure`, one `TRACE` event with the
+same six fixed integer fields (`variable_count`, `macro_count`, `rule_count`,
+`action_count`, `target_count`, `default_count`) and message
+`manifest structure summary`, and one increment of the unlabelled counter
+`netsuke_runner_manifest_structures_total`. `describe_metrics()` guards the
+`describe_counter!` registration with a `std::sync::Once`.
+
+The drained-snapshot boundary is `ConfigMetricsRecorder` in
+`src/observability_recorder.rs`: `accepts_name` recognizes the counter and
+`exact_labels(key, &[])` keeps only the unlabelled series, rejecting any
+labelled variant. An inline `#[cfg(test)] mod tests` asserts the emission site
+records one unlabelled series and the event carries the six known counts with
+no fixture sentinel text. The governing decision record is
+`docs/adr-009-bounded-redacted-manifest-telemetry.md`, which forbids unbounded
+or caller-controlled values in metric labels and trace fields.
 
 ### Module: `runner::recipe_shell_telemetry`
 

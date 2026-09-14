@@ -9,6 +9,7 @@ mod dyndep_publication;
 mod error;
 mod graph_generation;
 mod graph_generation_telemetry;
+mod manifest_structure_telemetry;
 mod reporter;
 use crate::cli::{BuildArgs, Cli, Commands};
 use crate::localization::keys;

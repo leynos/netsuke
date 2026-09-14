@@ -1403,6 +1403,20 @@ Both series use the same fixed labels. `operation` is `build` or `ninja_tool`;
 Ninja-tool operation and does not imply that the tool executes a recipe. Metric
 labels contain no manifest-controlled or process-controlled values.
 
+#### Manifest structure metrics
+
+Manifest structural summaries emit one further bounded series in the drained
+`metrics snapshot`:
+
+- `netsuke_runner_manifest_structures_total` — an unlabelled counter that
+  counts the manifest structural summaries the runner emits while loading a
+  manifest for graph generation.
+
+The summary records only fixed integer collection counts: variables, macros,
+rules, actions, targets, and defaults. Manifest text, paths, recipe contents,
+variable values, macro bodies, and descriptions are never recorded, because
+rendered manifest values can carry secret material interpolated through `env()`.
+
 The annotated [sample configuration](sample-netsuke.toml) lists every key. A
 small project configuration looks like this:
 

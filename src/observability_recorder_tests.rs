@@ -25,6 +25,10 @@ mod legacy_recipe_tests;
 #[path = "observability_recorder_file_read_tests.rs"]
 mod file_read_tests;
 
+/// Cover the unlabelled manifest-structure counter series separately.
+#[path = "observability_recorder_manifest_structure_tests.rs"]
+mod manifest_structure_tests;
+
 /// Define the rejected label variants for recipe-shell resolution metrics.
 const INVALID_RECIPE_SHELL_RESOLUTION_SERIES: [MetricLabels; 3] = [
     [
