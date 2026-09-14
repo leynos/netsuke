@@ -6539,6 +6539,17 @@ refuses is what `humantime` refuses, checked the same way: a point with no
 whole part before it or no digit after it, two points, a signed value, a digit
 separator, and any other number carrying no unit.
 
+The fractional arithmetic is `humantime`'s own, ported rather than
+approximated. It carries a fraction as a numerator over a power of ten and
+divides with a remainder check, so a fraction that is not a whole step of its
+unit is an error rather than a rounded value. Two consequences a float reader
+cannot express: there is no step below a nanosecond, so `0.5ns` is refused
+outright; and for hours and longer the division is over whole seconds, so
+`0.123h` is refused where `0.123s` is exact. Reading those as floats gave 5e-10
+and 442.8, numbers the runner would never have started with, and the ordering
+would then have been asserted over a budget nextest rejects. The reader works
+in integer nanoseconds throughout and converts to seconds once, at the end.
+
 A job may run the coverage action more than once, and every matching step is a
 lane. No job in this repository does, so a reading that returned a job's first
 coverage step, or its last, would satisfy every assertion the real workflows
