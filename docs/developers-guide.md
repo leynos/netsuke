@@ -5440,7 +5440,6 @@ content and order, first-present lookup selection across optional
 `CARGO_TARGET_DIR`/profile/target-triple layouts, and missing-candidate
 diagnostics.
 
-
 ## File-reading filter boundary
 
 The four file-reading filters — `contents`, `linecount`, `hash`, and `digest` —
@@ -5495,7 +5494,6 @@ All of them, like the invalid-UTF-8 diagnostic that `contents` and `linecount`
 raise for undecodable input, are MiniJinja `InvalidOperation` errors. See
 [Digest rendering](#digest-rendering) for the hashing loop that consumes this
 boundary.
-
 
 ### File-read telemetry
 

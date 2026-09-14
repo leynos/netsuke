@@ -381,7 +381,6 @@ versioned JSON result document; its `result.command` is `help-targets`. The
 command and the new descriptions are beta-series additions and remain subject
 to the stability caveat above.
 
-
 ## Configure file reading limits
 
 The `contents`, `linecount`, `hash`, and `digest` filters now read through a
