@@ -20,9 +20,14 @@ module must load under the baseline.
 Run via ``make test-workflow-contracts``.
 """
 
+import argparse
 import ast
 import importlib.util
 import re
+import runpy
+import subprocess  # ruff: ignore[suspicious-subprocess-import] - the script boundary is under test.
+import sys
+import types
 import typing as typ
 
 import pytest
@@ -35,8 +40,8 @@ from workflow_loading import (
 )
 
 if typ.TYPE_CHECKING:
-    import types
     from pathlib import Path
+
 
 WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 VERIFY_MODULE = ".github/scripts/verify_python_baseline.py"
@@ -206,17 +211,41 @@ def test_verify_module_uses_only_builtin_names_in_annotations() -> None:
     )
 
 
+def _baseline_mismatch_cases() -> list[tuple[tuple[int, ...], str | None, str | None]]:
+    """Return baseline-derived interpreter cases and their expected messages."""
+    module = _load_verify_module()
+    major, minor = module.BASELINE
+    required = f"need Python {major}.{minor}"
+    runner_system = (major, minor - 2, 13)
+    newer = (major, minor + 1, 0)
+    return [
+        ((major, minor, 0), None, None),
+        ((major, minor, 7), None, None),
+        (
+            runner_system,
+            f"found {'.'.join(str(part) for part in runner_system)}",
+            required,
+        ),
+        (
+            newer,
+            f"found {'.'.join(str(part) for part in newer)}",
+            required,
+        ),
+    ]
+
+
 @pytest.mark.parametrize(
-    ("version_info", "expected"),
-    [
-        pytest.param((3, 14, 0, "final", 0), None, id="baseline"),
-        pytest.param((3, 14, 7), None, id="baseline-later-micro"),
-        pytest.param((3, 12, 13), "found 3.12.13", id="runner-system-python"),
-        pytest.param((3, 15, 0), "found 3.15.0", id="newer-than-baseline"),
-    ],
+    ("version_info", "expected", "required"),
+    _baseline_mismatch_cases(),
+    ids=(
+        "baseline",
+        "baseline-later-micro",
+        "runner-system-python",
+        "newer-than-baseline",
+    ),
 )
 def test_baseline_mismatch_names_the_found_interpreter(
-    version_info: tuple[int, ...], expected: str | None
+    version_info: tuple[int, ...], expected: str | None, required: str | None
 ) -> None:
     """Only the baseline major and minor pass; a mismatch names both versions."""
     module = _load_verify_module()
@@ -226,7 +255,116 @@ def test_baseline_mismatch_names_the_found_interpreter(
     else:
         assert message is not None, f"{version_info!r} must be rejected"
         assert expected in message, message
-        assert "need Python 3.14" in message, message
+        assert required is not None, "mismatch cases must name the required version"
+        assert required in message, message
         assert "/opt/python/bin/python" in message, (
             "the message must name the interpreter so the PATH culprit is visible"
         )
+
+
+def _main_verifier_cases() -> list[tuple[tuple[int, ...], int]]:
+    """Return baseline-derived interpreter cases for the command boundary."""
+    module = _load_verify_module()
+    major, minor = module.BASELINE
+    baseline = (major, minor, 2)
+    runner_system = (major, minor - 2, 13)
+    return [
+        (baseline, 0),
+        (runner_system, 1),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("version_info", "status"),
+    _main_verifier_cases(),
+    ids=("baseline", "runner-system-python"),
+)
+def test_verify_main_reports_the_interpreter_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    version_info: tuple[int, ...],
+    status: int,
+) -> None:
+    """Report success or a named mismatch through the verifier's public command."""
+    module = _load_verify_module()
+    executable = "/opt/python/bin/python"
+    version = ".".join(str(part) for part in version_info)
+    monkeypatch.setattr(
+        module,
+        "sys",
+        types.SimpleNamespace(
+            executable=executable,
+            stderr=sys.stderr,
+            version=version,
+            version_info=version_info,
+        ),
+    )
+
+    assert module.main([VERIFY_COMMAND]) == status, "the verifier status is contractual"
+    captured = capsys.readouterr()
+    if status == 0:
+        assert captured.out == f"python {version} at {executable}\n", (
+            "a baseline interpreter must report its resolved executable"
+        )
+        assert not captured.err, "a baseline interpreter must not report a mismatch"
+    else:
+        required = ".".join(str(part) for part in module.BASELINE)
+        assert not captured.out, "a mismatched interpreter must not report success"
+        assert f"need Python {required}" in captured.err, (
+            "a mismatch must name the required baseline"
+        )
+        assert f"found {version}" in captured.err, (
+            "a mismatch must name the detected interpreter version"
+        )
+        assert executable in captured.err, "a mismatch must name the executable"
+
+
+def test_verify_script_exits_with_a_named_mismatch(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Exercise the ``__main__`` path with a controlled wrong interpreter."""
+    module = _load_verify_module()
+    major, minor = module.BASELINE
+    version_info = (major, minor - 2, 13)
+    version = ".".join(str(part) for part in version_info)
+    executable = "/opt/runner-python/bin/python"
+    fake_sys = types.SimpleNamespace(
+        argv=[str(REPO_ROOT / VERIFY_MODULE), VERIFY_COMMAND],
+        executable=executable,
+        stderr=sys.stderr,
+        version=version,
+        version_info=version_info,
+    )
+    monkeypatch.setitem(sys.modules, "sys", fake_sys)
+    monkeypatch.setattr(argparse, "sys", fake_sys)
+
+    with pytest.raises(SystemExit) as exited:
+        runpy.run_path(str(REPO_ROOT / VERIFY_MODULE), run_name="__main__")
+
+    assert exited.value.code == 1, "the script must reject a non-baseline interpreter"
+    captured = capsys.readouterr()
+    assert not captured.out, "a mismatch must not report success"
+    assert f"need Python {major}.{minor}" in captured.err, (
+        "the script mismatch must name the required baseline"
+    )
+    assert f"found {version}" in captured.err, (
+        "the script mismatch must name the detected version"
+    )
+    assert executable in captured.err, "the script mismatch must name the executable"
+
+
+def test_verify_script_runs_successfully_under_the_test_interpreter() -> None:
+    """Run the checked-in ``__main__`` path and report the active interpreter."""
+    result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - fixed interpreter and checked-in script.
+        [sys.executable, str(REPO_ROOT / VERIFY_MODULE), VERIFY_COMMAND],
+        capture_output=True,
+        check=False,
+        shell=False,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == f"python {sys.version.split()[0]} at {sys.executable}\n", (
+        "the script must report the subprocess interpreter"
+    )
+    assert not result.stderr, "the baseline verifier must not emit an error"

@@ -1450,14 +1450,20 @@ Makefile), so the workflow's `setup-uv` step sets `activate-environment` to put
 a baseline interpreter first on `PATH`; `python-version` alone only sets
 `UV_PYTHON`, and under the runner's system interpreter the modules fail as they
 load, because an annotation naming a `TYPE_CHECKING`-only import raises
-`NameError` at definition time there. The first Python step in each job runs
-`.github/scripts/verify_python_baseline.py`, which uses only built-in names in
-its annotations so it loads anywhere and names the mismatch. Three guards hold
-this: `tests/workflow_contracts/python_shell_interpreter_test.py` requires every
-`shell: python` job in every workflow to check out the trusted tree, activate
-the baseline through `setup-uv`, and run the check first, and holds the module's
-`BASELINE` equal to the Makefile; `make lint-workflow-scripts` (run by
-`make lint-python`) loads every trusted module under the baseline; and the
+`NameError` at definition time there. The first Python step in each provisioned
+Python-shell job runs `.github/scripts/verify_python_baseline.py`, which uses
+only built-in names in its annotations so it loads anywhere and names the
+mismatch. Three guards hold this:
+`tests/workflow_contracts/python_shell_interpreter_test.py` requires each
+provisioned `shell: python` job in every workflow to check out the trusted
+tree, activate the baseline through `setup-uv`, and run the check first, and
+holds the module's `BASELINE` equal to the Makefile. The
+`coverage-pr-submit.yml:report-excluded-fork` job is the explicit exception:
+its trust boundary grants only `checks: write` and fixes a three-step telemetry
+sequence, leaving no room for checkout, `setup-uv`, or interpreter verification;
+`UNPROVISIONED_JOBS` records it and the contract test removes it before
+applying those assertions. `make lint-workflow-scripts` (run by
+`make lint-python`) loads every trusted module under the baseline, and the
 check step itself fails by name in CI. This matters more here than elsewhere:
 the workflow always runs the default branch's copy, so a module that cannot
 load on `main` fails the coverage check on every pull request and no pull

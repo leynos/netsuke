@@ -38,6 +38,13 @@ def baseline_mismatch(version_info: tuple[int, ...], executable: str) -> str | N
     str | None
         ``None`` when the major and minor versions equal ``BASELINE``;
         otherwise a message naming the required and found versions.
+
+    Examples
+    --------
+    >>> baseline_mismatch((3, 14, 2), "/opt/python/bin/python") is None
+    True
+    >>> baseline_mismatch((3, 12, 13), "/usr/bin/python")
+    'trusted workflow steps need Python 3.14, found 3.12.13 at /usr/bin/python'
     """
     if tuple(version_info[:2]) == BASELINE:
         return None
@@ -60,6 +67,11 @@ def main(argv: list[str] | None = None) -> int:
     -------
     int
         ``0`` when the interpreter matches ``BASELINE``, ``1`` otherwise.
+
+    Examples
+    --------
+    >>> main(["verify"])
+    0
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=COMMANDS)
