@@ -167,6 +167,8 @@ fn assert_windows_package_release_rank_wiring(contents: &str) {
     for expected in [
         "RELEASE_VERSION: ${{ inputs.version }}",
         "^\\d+\\.\\d+\\.\\d+-beta(?<sequence>[1-9]\\d*)$",
+        "if ($releaseRank -ge 65535)",
+        "Windows MSI beta sequence must be less than 65535.",
         "$releaseRank = 65535",
         "NETSUKE_RELEASE_RANK=$releaseRank",
     ] {

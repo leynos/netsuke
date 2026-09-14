@@ -1031,6 +1031,16 @@ Keep this section and the [Polonius migration notes](polonius.md) in step: both
 describe the same no-directive, pinned-toolchain contract, and the notes record
 the remaining harness consequences of that policy.
 
+### Windows MSI authoring validation
+
+`installer/Package.wxs` uses WiX v4 authoring. The installer contract tests
+parse it as XML, which verifies structure and attributes as text but cannot
+detect WiX schema errors such as an attribute that the compiler no longer
+supports. The `build-test-windows` job therefore performs compiler-backed
+validation with disposable executable and licence fixtures through the same
+SHA-pinned `windows-package` action and WiX/UI-extension versions used by
+release packaging. This validation does not build the Rust application.
+
 ### Windows native recipe smoke workflow
 
 Two steps at the end of `build-test-windows` in

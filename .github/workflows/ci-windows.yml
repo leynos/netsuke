@@ -301,6 +301,39 @@ jobs:
           cargo --version
       - name: Show Ninja version
         run: ninja --version
+      - name: Create WiX authoring validation fixtures
+        # Compile custom authoring with disposable assets before any Rust build.
+        # XML parsing only proves that the source is well formed; WiX itself
+        # must validate whether its v4 schema accepts the authoring.
+        shell: pwsh
+        run: |
+          $fixtureDirectory = Join-Path $env:RUNNER_TEMP 'netsuke-wix-authoring-validation'
+          New-Item -ItemType Directory -Path $fixtureDirectory -Force | Out-Null
+          $applicationPath = Join-Path $fixtureDirectory 'netsuke.exe'
+          [System.IO.File]::WriteAllBytes($applicationPath, [byte[]] @(0x4d, 0x5a))
+          $licensePath = Join-Path $fixtureDirectory 'LICENSE.rtf'
+          Set-Content -LiteralPath $licensePath -Value '{\rtf1\ansi Netsuke validation license}' -NoNewline
+          "WIX_VALIDATION_APPLICATION_PATH=$applicationPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "WIX_VALIDATION_LICENSE_PATH=$licensePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Validate custom WiX authoring
+        # Reuse the release action revision and WiX UI extension version, so
+        # pull requests compile precisely the custom WXS that releases use.
+        uses: leynos/shared-actions/.github/actions/windows-package@e041cb75c35c3524201a32d5e57c87408fbd5874
+        env:
+          NETSUKE_RELEASE_RANK: '1'
+        with:
+          wxs-path: installer/Package.wxs
+          product-name: Netsuke
+          manufacturer: Leynos
+          install-dir-name: netsuke
+          application-path: ${{ env.WIX_VALIDATION_APPLICATION_PATH }}
+          license-rtf-path: ${{ env.WIX_VALIDATION_LICENSE_PATH }}
+          architecture: x64
+          version: 0.1.0-beta1
+          output-basename: netsuke-wix-authoring-validation
+          output-directory: ${{ runner.temp }}/netsuke-wix-authoring-validation-output
+          upload-artefact: 'false'
+          wix-extension-version: '7'
       - name: Test
         # cargo-nextest plus doctests under `-D warnings`,
         # compiling and running the `#[cfg(windows)]` test tree. A failure

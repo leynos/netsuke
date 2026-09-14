@@ -17,6 +17,7 @@ import pytest
 from workflow_loading import (
     CI_WINDOWS_WORKFLOW_PATH,
     CI_WORKFLOW_PATH,
+    PACKAGE_WORKFLOW_PATH,
     job_steps,
     load_workflow,
     named_step,
@@ -150,6 +151,70 @@ def test_windows_setup_rust_keeps_warnings(
         "Setup Rust must pass -D warnings through rustflags so the "
         f"#[cfg(windows)] tree compiles under warnings-as-errors, "
         f"got {with_.get('rustflags')!r}"
+    )
+
+
+def test_windows_job_compiles_custom_wix_authoring_before_rust_build(
+    windows_steps: list[dict[str, object]],
+) -> None:
+    """Compile the release WXS with disposable fixtures in the pull-request gate.
+
+    XML parsing cannot reject authoring that WiX itself no longer supports, so
+    the Windows gate must compile the repository's custom WXS before its Rust
+    build. Reusing the release action revision and UI extension makes this
+    validation detect a schema or action compatibility change before release.
+    """
+    fixture_step = named_step(windows_steps, "Create WiX authoring validation fixtures")
+    validation_step = named_step(windows_steps, "Validate custom WiX authoring")
+    release_steps = job_steps(load_workflow(PACKAGE_WORKFLOW_PATH), "build")
+    release_step = named_step(release_steps, "Build Windows installer package")
+
+    assert fixture_step.get("shell") == "pwsh", (
+        "Create WiX authoring validation fixtures must use PowerShell to create "
+        "the disposable executable and RTF inputs"
+    )
+    fixture_run = str(fixture_step.get("run", ""))
+    for expected in ("netsuke.exe", "LICENSE.rtf", "WIX_VALIDATION_APPLICATION_PATH"):
+        assert expected in fixture_run, (
+            "Create WiX authoring validation fixtures must create and export "
+            f"{expected!r}, got {fixture_run!r}"
+        )
+
+    assert validation_step.get("uses") == release_step.get("uses"), (
+        "Validate custom WiX authoring must reuse the release windows-package "
+        f"action revision, got {validation_step.get('uses')!r} versus "
+        f"{release_step.get('uses')!r}"
+    )
+    with_ = require_mapping(validation_step.get("with"), "WiX validation with block")
+    expected_inputs = {
+        "wxs-path": "installer/Package.wxs",
+        "product-name": "Netsuke",
+        "manufacturer": "Leynos",
+        "application-path": "${{ env.WIX_VALIDATION_APPLICATION_PATH }}",
+        "license-rtf-path": "${{ env.WIX_VALIDATION_LICENSE_PATH }}",
+        "version": "0.1.0-beta1",
+        "upload-artefact": "false",
+        "wix-extension-version": "7",
+    }
+    actual_inputs = {name: str(with_.get(name)) for name in expected_inputs}
+    assert actual_inputs == expected_inputs, (
+        "Validate custom WiX authoring must compile Package.wxs with "
+        f"disposable action inputs, got {actual_inputs!r}"
+    )
+    environment = require_mapping(
+        validation_step.get("env"), "WiX validation environment"
+    )
+    assert environment.get("NETSUKE_RELEASE_RANK") == "1", (
+        "Validate custom WiX authoring must provide the beta release rank, "
+        f"got {environment.get('NETSUKE_RELEASE_RANK')!r}"
+    )
+
+    step_names = [str(step.get("name", "")) for step in windows_steps]
+    assert step_names.index("Validate custom WiX authoring") < step_names.index(
+        "Test"
+    ), (
+        "Validate custom WiX authoring must run before Test so it does not "
+        "depend on a Rust application build"
     )
 
 

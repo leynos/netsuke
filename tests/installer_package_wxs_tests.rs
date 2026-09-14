@@ -50,6 +50,42 @@ fn package_declares_major_upgrade_metadata() -> Result<()> {
     Ok(())
 }
 
+/// Verify that `WiX` v4 package metadata uses the supported schema locations.
+#[test]
+fn package_declares_wix_v4_metadata() -> Result<()> {
+    let contents =
+        test_fs::read_to_string("installer/Package.wxs").context("read installer/Package.wxs")?;
+    let document = Document::parse(&contents).context("parse installer/Package.wxs")?;
+    let package = document
+        .root_element()
+        .children()
+        .find(|node| node.is_element() && node.tag_name().name() == "Package")
+        .context("Package.wxs should contain a Package element")?;
+
+    ensure!(
+        package.attribute("Scope") == Some("perMachine"),
+        "Package should explicitly retain its per-machine installation scope"
+    );
+    ensure!(
+        package.attribute("InstallScope").is_none(),
+        "Package should not use the WiX v3 InstallScope attribute"
+    );
+    ensure!(
+        package.attribute("Description").is_none(),
+        "Package should not use the WiX v3 Description attribute"
+    );
+    let summary_information = package
+        .children()
+        .find(|node| node.is_element() && node.tag_name().name() == "SummaryInformation")
+        .context("Package should declare summary information")?;
+    ensure!(
+        summary_information.attribute("Description")
+            == Some("$(env.PRODUCT_NAME) command line interface"),
+        "SummaryInformation should retain the installer product description"
+    );
+    Ok(())
+}
+
 /// Verify that `WiX` blocks an older prerelease within one numeric release line.
 #[test]
 fn package_declares_same_version_release_ordering() -> Result<()> {

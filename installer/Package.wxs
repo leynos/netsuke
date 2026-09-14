@@ -6,8 +6,8 @@
       Manufacturer="$(env.MANUFACTURER)"
       UpgradeCode="{870359C0-A975-4DCB-992A-AD67D97292DD}"
       Language="1033"
-      Description="$(env.PRODUCT_NAME) command line interface"
-      InstallScope="perMachine">
+      Scope="perMachine">
+    <SummaryInformation Description="$(env.PRODUCT_NAME) command line interface" />
     <MediaTemplate EmbedCab="yes" />
     <!-- Prerelease SemVer suffixes collapse to one MSI major.minor.patch
          version, and Windows Installer compares only those first three fields. -->
