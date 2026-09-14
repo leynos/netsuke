@@ -21,3 +21,4 @@ __pycache__/
 .typos-oxendict-base.json
 .typos-oxendict-base.toml
 *.swo
+.hypothesis/

@@ -9,8 +9,13 @@ use super::network::NetworkPolicy;
 
 /// Default relative path for the fetch cache within the workspace.
 pub const DEFAULT_FETCH_CACHE_DIR: &str = ".netsuke/fetch";
-/// Default upper bound for network helper responses (8 MiB).
+/// Default upper bound for network helper responses (8 MiB).
 pub const DEFAULT_FETCH_MAX_RESPONSE_BYTES: u64 = 8 * 1024 * 1024;
+/// Default upper bound for file-reading filters such as `contents` (8 MiB).
+///
+/// Operators can raise this limit through `StdlibConfig` when legitimate
+/// manifests need to hash or read larger artefacts.
+pub const DEFAULT_FILE_MAX_READ_BYTES: u64 = 8 * 1024 * 1024;
 /// Default upper bound for captured command output (1 MiB).
 pub const DEFAULT_COMMAND_MAX_OUTPUT_BYTES: u64 = 1024 * 1024;
 /// Default upper bound for streamed command output files (64 MiB).
@@ -42,4 +47,15 @@ pub struct NetworkConfig {
     pub policy: NetworkPolicy,
     /// Maximum allowed size for HTTP responses.
     pub max_response_bytes: u64,
+}
+
+/// Internal configuration passed to the path filters that read file contents.
+#[derive(Clone, Copy)]
+pub struct FileConfig {
+    /// Maximum allowed size (in bytes) for reads performed by the
+    /// `contents`, `linecount`, `hash`, and `digest` filters.
+    ///
+    /// Per-call `max_bytes` arguments can narrow this ceiling but never
+    /// raise it.
+    pub max_read_bytes: u64,
 }

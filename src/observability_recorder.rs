@@ -1,10 +1,11 @@
-//! Application-owned recorder for bounded configuration and runner metrics.
+//! Application-owned recorder for bounded configuration, runner, and stdlib
+//! metrics.
 //!
 //! The recorder accepts configuration-load, CLI path-validation, recipe-shell
-//! resolution, Bash preflight, and complete legacy-recipe runner series. The
-//! `observability` composition module installs it at the process boundary;
-//! fixed metric names and label vocabularies prevent manifest- or
-//! process-controlled data from entering the retained snapshot.
+//! resolution, Bash preflight, complete legacy-recipe runner, and stdlib
+//! file-read filter series. The `observability` composition module installs it
+//! at the process boundary; fixed metric names and label vocabularies prevent
+//! manifest- or process-controlled data from entering the retained snapshot.
 
 use super::{
     CONFIG_LOAD_COUNTER, CONFIG_LOAD_DURATION, DIAG_MODE_PHASE, MERGE_PHASE,
@@ -23,6 +24,7 @@ use netsuke::{
         BASH_PREFLIGHT_TOTAL, LEGACY_RECIPE_EXECUTION_DURATION, LEGACY_RECIPE_EXECUTIONS_TOTAL,
         RECIPE_SHELL_RESOLUTIONS_TOTAL,
     },
+    stdlib::{FILE_READ_FILTER_VALUES, FILE_READ_OUTCOME_VALUES, FILE_READ_TOTAL},
 };
 
 /// Counter emitted by the library for bounded timing-summary sink outcomes.
@@ -119,6 +121,7 @@ impl ConfigMetricsRecorder {
                 | FILTERED_TARGETS_TOTAL
                 | FILTERED_ACTIONS_TOTAL
                 | OMITTED_FILTERED_ENTRIES_TOTAL
+                | FILE_READ_TOTAL
         )
     }
 
@@ -172,6 +175,13 @@ impl ConfigMetricsRecorder {
             FILTERED_TARGETS_TOTAL | FILTERED_ACTIONS_TOTAL | OMITTED_FILTERED_ENTRIES_TOTAL => {
                 exact_labels(key, &[])
             }
+            FILE_READ_TOTAL => exact_labels(
+                key,
+                &[
+                    ("filter", &FILE_READ_FILTER_VALUES),
+                    ("outcome", &FILE_READ_OUTCOME_VALUES),
+                ],
+            ),
             _ => false,
         }
     }

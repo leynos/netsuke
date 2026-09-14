@@ -21,6 +21,10 @@ type MetricLabels = [(&'static str, &'static str); 3];
 #[path = "observability_recorder_legacy_recipe_tests.rs"]
 mod legacy_recipe_tests;
 
+/// Cover the bounded stdlib file-read counter series separately.
+#[path = "observability_recorder_file_read_tests.rs"]
+mod file_read_tests;
+
 /// Define the rejected label variants for recipe-shell resolution metrics.
 const INVALID_RECIPE_SHELL_RESOLUTION_SERIES: [MetricLabels; 3] = [
     [

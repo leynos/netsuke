@@ -5440,6 +5440,109 @@ content and order, first-present lookup selection across optional
 `CARGO_TARGET_DIR`/profile/target-triple layouts, and missing-candidate
 diagnostics.
 
+## File-reading filter boundary
+
+The four file-reading filters — `contents`, `linecount`, `hash`, and `digest` —
+share one open-and-read policy under `src/stdlib/path/`:
+
+- `fs_utils.rs` owns what may be opened: `FileReadLimits` carries the per-call
+  `max_bytes` and `follow_symlinks` values, and `open_file_checked` resolves
+  the parent directory, applies the platform open flags, and rejects anything
+  that is not a regular file.
+- `bounded_read.rs` owns the read boundary built on that open: `BoundedRead`
+  tracks the running byte total, `read_bounded_chunk` reads through the budget,
+  `read_utf8` reads `contents` as text, and `linecount` counts newlines in
+  fixed chunks while validating UTF-8 incrementally.
+- `hash_utils.rs` owns `hash_stream`, `compute_hash`, and `compute_digest`,
+  which stream through the same `open_file_checked` and `BoundedRead` pair
+  rather than reading the file whole.
+- `filters.rs` owns registration and the kwarg contract: `path_call_limits`
+  resolves `max_bytes` and `follow_symlinks`, and each filter then calls
+  `kwargs.assert_all_used()` so an unrecognized keyword is an error.
+
+The ceiling starts at `DEFAULT_FILE_MAX_READ_BYTES` (8 MiB) and is overridden
+with the public `StdlibConfig::with_file_max_read_bytes`, which rejects zero.
+`register_with_config` passes it through `register_read_only_helpers` into
+`path::register_filters`, and each filter closure captures it. The same
+accessor, `StdlibConfig::file_max_read_bytes`, supplies the value carried as
+`FileConfig::max_read_bytes` (`src/stdlib/config_types.rs`), which
+`StdlibConfig::into_components` splits out alongside the network and command
+configurations; `path::register_filters` itself receives the plain `u64` from
+the accessor. A per-call `max_bytes` may only narrow that ceiling: a value
+below the configured budget is used, and a value at or above it is clamped to
+the budget. A per-call `follow_symlinks` defaults to `false`, so the final path
+component is opened without following symlinks unless the caller opts in.
+
+On Unix, `apply_unix_open_flags` sets `O_NONBLOCK` unconditionally, so a FIFO
+or device cannot block the open even on the opt-in path that follows a symlink
+to one, and adds `O_NOFOLLOW` only while symlinks are not followed; the flags
+and the `fcntl_getfl`/`fcntl_setfl` calls come from `rustix::fs::OFlags` and
+`rustix::fs`, a production dependency (1.0.8, `fs` feature, per `Cargo.toml`)
+used for this Unix flag handling. Once the opened handle is confirmed to be a
+regular file, `restore_blocking` clears `O_NONBLOCK`. The regular-file check
+runs on the opened handle, so devices and FIFOs are rejected race-free. Windows
+has no `O_NOFOLLOW` through cap-std, so `reject_windows_symlink` checks
+`symlink_metadata` before the open; that check is not race-free and is tracked
+as issue #703.
+
+Two diagnostics come out of the boundary. `bounded_read.rs` raises
+`file_too_large_error`, which quotes the path and the limit that was exceeded;
+`fs_utils.rs` raises `not_regular_file_error`, which quotes only the path and
+is what rejects an opened FIFO or device (and a Windows symlink). On Unix a
+symlink refused by `O_NOFOLLOW` instead surfaces through the mapped open error.
+All of them, like the invalid-UTF-8 diagnostic that `contents` and `linecount`
+raise for undecodable input, are MiniJinja `InvalidOperation` errors. See
+[Digest rendering](#digest-rendering) for the hashing loop that consumes this
+boundary.
+
+### File-read telemetry
+
+`src/stdlib/path/read_telemetry.rs` owns telemetry for the four file-reading
+filters. Each filter closure hands its result to `record_file_read`, which
+returns that result unchanged, so a call that reaches the boundary is recorded
+exactly once whatever its outcome; a rendered value, a read rejected by the
+byte budget, the file-type policy, or invalid UTF-8, and a refusal that came
+before any read was attempted are each counted once. A malformed keyword value
+or an undeclared keyword is refused by `path_call_limits` or
+`kwargs.assert_all_used()` and reaches the counter through
+`record_unresolved_read`, whose entry point passes no limits; the debug event
+for a call refused before its keywords resolved therefore carries `filter` and
+`outcome` alone, since there is no effective budget or symlink policy to
+report. The unsupported-encoding refusal in `contents` is judged after the
+keywords, so it carries the resolved budget and policy like any other rejection.
+
+The counter is `netsuke_stdlib_file_read_total`, with two labels. `filter` is
+drawn from the closed set `contents`, `linecount`, `hash`, and `digest`, and
+`outcome` from `ok` and `rejected`. Both are the module constants
+`FILE_READ_FILTER_VALUES` and `FILE_READ_OUTCOME_VALUES`, re-exported through
+`netsuke::stdlib`, so the number of series is fixed by the module rather than
+by anything a template supplies. The call also emits one debug event with field
+`event = "stdlib.file_read.read"`, carrying `filter`, `outcome`, and — whenever
+the call resolved them — the effective `limit` (the per-call `max_bytes` after
+clamping to the configured ceiling) and `follow_symlinks`: the budget and
+symlink policy the call actually ran under. Nothing else is recorded: no path,
+no file contents, and no rendered value. The rejection category is deliberately
+not a label, because it is already the localized diagnostic the caller sees,
+and a category label would either lose the distinction or grow the label set
+with the locale space.
+
+The counter description is registered once per process behind a `Once`. The
+application recorder in `src/observability_recorder.rs` admits the series:
+`FILE_READ_TOTAL` is listed in `accepts_name` and matched in
+`accepts_counter_registration` against exactly those two label sets, so the
+counter survives into the process snapshot rather than being discarded as a
+noop handle, while any other label name, label count, or out-of-vocabulary
+value is rejected. This is the same allowlist that gates the configuration,
+runner, and manifest-filtering series.
+
+Tests sit beside the module: `src/stdlib/path/read_telemetry_tests.rs` drives
+the registered filters against a local debugging recorder and asserts the
+emitted series and the bounded debug event, while
+`recorder_retains_bounded_file_read_series` in
+`src/observability_recorder_tests.rs` proves the production recorder retains
+the two bounded series and rejects out-of-vocabulary `filter` and `outcome`
+values and a series missing a label.
+
 ## Digest rendering
 
 `src/hex.rs` (`netsuke::hex`) is the single owner of lowercase hexadecimal
@@ -6220,8 +6323,11 @@ labels. The `netsuke_` prefix identifies the public startup-attempt family.
 
 `init_metrics()` installs an application-owned filtering recorder around the
 process-wide `metrics_util::debugging::DebuggingRecorder` after tracing starts.
-It retains only the bounded configuration-load series above (phase-level and
-startup-attempt), so unrelated workload histograms cannot accumulate samples
+It retains the bounded configuration-load series above (phase-level and
+startup-attempt) plus the other allow-listed, bounded series: CLI discovery,
+CLI path-validation, timing-summary sink write, runner (recipe shell
+resolution, Bash preflight, legacy recipe execution), manifest filtering, and
+stdlib file read, so unrelated workload histograms cannot accumulate samples
 until shutdown. Tests must use `metrics::with_local_recorder` with a local
 recorder instead. `emit_metrics_snapshot()` drains and logs that
 configuration-load aggregate at command completion. After a successful
