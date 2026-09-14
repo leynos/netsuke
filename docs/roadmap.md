@@ -741,14 +741,21 @@ boundary, can carry every later helper, or whether each capability group needs
 its own. Its outcome decides whether steps 6.2 to 6.9 can be reviewed as
 ordinary additions or need individual design passes. See RFC 0006 §§6 and 14.1.
 
-- [ ] 6.1.1. Split the RFC 0006 accepted set into focused child issues.
-  - See RFC 0006 §14.
-  - Give each issue the full cross-cutting contract from RFC 0006 §6 rather
-    than a reference to Ansible.
-  - Record a release target of v0.1.x or later for each issue.
+- [ ] 6.1.1. Split the RFC 0006 accepted set into focused child RFCs and
+  accompanying roadmap tasks.
+  - See RFC 0006 §14 and
+    [the execplan](execplans/6-1-1-split-rfc-0006-set-into-focused-child-rfcs-and-task.md).
+  - Give each RFC the full cross-cutting contract from RFC 0006 §6 rather
+    than a reference to Ansible. Discharging each clause for the RFC's own
+    helpers satisfies this; citing §6 without discharging it does not.
+  - Record a release target of v0.1.x or later for each RFC.
+  - Track delivery through the roadmap tasks in steps 6.2 to 6.9 rather than
+    through separate issues, so progress stays in committed documentation.
   - Success: every accepted capability in RFC 0006 §7 is covered by exactly
-    one open child issue, and every deferred or rejected candidate is covered
-    by none.
+    one child RFC and by at least one accompanying roadmap task, and every
+    deferred or rejected candidate is covered by neither. A capability may be
+    named by more than one roadmap task, as `product` already is by 6.4.2 and
+    6.4.5, so only the RFC count is exactly one.
 - [ ] 6.1.2. Implement the canonical value key and equality relation.
   - See RFC 0006 §6.7.
   - Derive the key with the existing `serde_json_canonicalizer` dependency and
