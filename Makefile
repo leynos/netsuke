@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-release-admission test-coverage-artifact test-markdown-format test-typos-config build release lint lint-clippy lint-whitaker lint-python github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-dev-fast dev-fast-check dev-build dev-test bench-build bench-config-load bench-glob-expansion
+.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-release-admission test-coverage-artifact test-markdown-format test-typos-config build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-dev-fast dev-fast-check dev-build dev-test bench-build bench-config-load bench-glob-expansion
 
 RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 # Export this path before shell probes expand it, so Make does not interpolate
@@ -190,11 +190,24 @@ target/%/$(APP): ## Build binary in debug or release mode
 
 lint: lint-clippy lint-whitaker lint-python github-actions-lint ## Run the Rust, Python, and GitHub Actions lint suites with warnings denied
 
-lint-python: ## Run Ruff, Pylint, the df12 house lints, and ambrleaks over the Python sources
+lint-python: lint-workflow-scripts ## Run Ruff, Pylint, the df12 house lints, and ambrleaks over the Python sources
 	$(RUFF) check $(PYTHON_SOURCES)
 	$(PYLINT) $(PYLINT_TARGETS)
 	$(DF12_PYLINT) $(PYLINT_TARGETS)
 	$(AMBRLEAKS) $(PYTHON_SOURCES)
+
+lint-workflow-scripts: ## Load every trusted workflow module under the Python baseline
+	# The trusted coverage workflow runs these through GitHub Actions' `python`
+	# shell, and tests/workflow_contracts/python_shell_interpreter_test.py
+	# holds that shell to the baseline. Ruff and ty read the modules; only
+	# loading them catches a definition-time failure such as an annotation
+	# naming a TYPE_CHECKING-only import, which no pull request can fix once
+	# it is on main because the workflow runs the default branch's copy.
+	@for module in .github/scripts/*.py; do \
+		$(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) python -c \
+			'import runpy, sys; runpy.run_path(sys.argv[1], run_name="lint_workflow_scripts")' \
+			"$$module" || { echo "$$module does not load under Python $(PYTHON_BASELINE)" >&2; exit 1; }; \
+	done
 
 lint-clippy: ## Run rustdoc and Clippy with warnings denied
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) doc --workspace --no-deps
