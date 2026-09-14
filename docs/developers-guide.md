@@ -5921,8 +5921,11 @@ cases possible. That boundary is
 already reads workflows through: this module parsed them a second time with
 `yaml.safe_load`, a YAML 1.1 loader that reads the `on:` trigger key as `True`,
 and reported an unreadable file with whatever exception the failure happened to
-raise. A missing file, bytes that do not decode and text that is not YAML now
-all arrive as `WorkflowReadError`, naming the path.
+raise. A missing file, bytes that do not decode, and text that is not YAML now
+all arrive as `WorkflowReadError`, naming the path. So does a workflow
+directory that is absent or is not a directory: `Path.glob` yields nothing for
+either, so the reading returned an empty mapping and every lane assertion
+passed having read no workflow at all.
 
 Durations are read the way nextest reads them, with `humantime`'s grammar,
 measured against humantime 2.4.0 rather than assumed. A value may carry a

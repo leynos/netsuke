@@ -159,7 +159,20 @@ def all_workflow_documents(directory: Path) -> dict[str, dict[str, object]]:
     -------
     dict[str, dict[str, object]]
         File name to parsed document, in file-name order.
+
+    Raises
+    ------
+    WorkflowReadError
+        If ``directory`` is absent or is not a directory.
     """
+    # `Path.glob` yields nothing for a missing path and for a path that
+    # is not a directory, so without this the reading would return an
+    # empty mapping and every lane assertion above it would pass having
+    # read no workflow at all. That is the same fault as a workflow the
+    # reader never saw, and it is raised the same way.
+    if not directory.is_dir():
+        message = f"{directory} is not a directory, so no workflow was read"
+        raise WorkflowReadError(message)
     documents: dict[str, dict[str, object]] = {}
     paths = sorted(
         path for pattern in ("*.yml", "*.yaml") for path in directory.glob(pattern)

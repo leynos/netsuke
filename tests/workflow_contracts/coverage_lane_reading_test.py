@@ -23,6 +23,10 @@ from timeout_budgets import (
     WATCHDOG_VARIABLE,
 )
 from timeout_ordering_test import required_ceiling
+from workflow_loading import WorkflowReadError, all_workflow_documents
+
+if typ.TYPE_CHECKING:
+    from pathlib import Path
 
 COVERAGE_STEP: typ.Final[str] = (
     "leynos/shared-actions/.github/actions/generate-coverage@abc123"
@@ -304,3 +308,31 @@ def test_a_non_finite_watchdog_is_refused(value: str) -> None:
 
     with pytest.raises(WatchdogValueError, match=r"finite"):
         coverage_lanes_of(documents)
+
+
+def test_a_missing_workflow_directory_is_refused(tmp_path: Path) -> None:
+    """Reading no workflow must fail, not read as no lane to check.
+
+    `Path.glob` yields nothing for a missing path and for a path that is
+    not a directory, so the reading returned an empty mapping and every
+    lane assertion above it passed having read no workflow at all. That
+    is the same fault as a workflow the reader never saw.
+    """
+    absent = tmp_path / "workflows"
+
+    with pytest.raises(WorkflowReadError, match=r"not a directory"):
+        all_workflow_documents(absent)
+
+
+def test_a_workflow_path_that_is_a_file_is_refused(tmp_path: Path) -> None:
+    """A file where a directory belongs reads as nothing, and must not.
+
+    Stated apart from the missing case because `Path.glob` reaches the
+    same empty result by a different route, and a guard testing only for
+    existence would pass this one.
+    """
+    not_a_directory = tmp_path / "workflows"
+    not_a_directory.write_text("", encoding="utf-8")
+
+    with pytest.raises(WorkflowReadError, match=r"not a directory"):
+        all_workflow_documents(not_a_directory)
