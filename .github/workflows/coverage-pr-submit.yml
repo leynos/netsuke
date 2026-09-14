@@ -31,6 +31,16 @@ jobs:
         # v7.0.1
         with:
           ref: ${{ github.event.repository.default_branch }}
+          # Two commits, not one. This job runs on `workflow_run`, so the
+          # CodeScene CLI in the check step below sees no pull-request
+          # context and falls back to the first parent commit as the base
+          # for its changed-line gate. At the default depth of one that
+          # parent is absent and the step dies with `fatal: ambiguous
+          # argument 'HEAD~1'`, which fails the check on every pull
+          # request and leaves the CodeScene coverage check queued for
+          # a submission that never lands. Two is all `HEAD~1` needs;
+          # a full history would cost a clone of the repository per run.
+          fetch-depth: 2
           persist-credentials: false
       - name: Setup uv
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
