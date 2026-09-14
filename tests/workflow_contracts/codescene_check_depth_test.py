@@ -12,38 +12,26 @@ branch.
 Nothing else notices: the workflow parses, the job runs, and the failure
 names a git revision rather than a checkout depth. So the depth is
 pinned here, against every job that runs the gate rather than the one
-that runs it today, and the checkout is required to precede the gate,
-because a checkout after it arrives too late to be read.
+that runs it today. The predicates live in
+``codescene_check_depth_invariants`` so that
+``codescene_check_depth_properties_test`` can drive job shapes this
+repository does not have.
 
 Run via ``make test-workflow-contracts``.
 """
 
 import typing as typ
 
-from workflow_loading import (
-    REPO_ROOT,
-    load_workflow,
-    require_list,
-    require_mapping,
+from codescene_check_depth_invariants import (
+    CODESCENE_COVERAGE_ACTION,
+    FULL_HISTORY_DEPTH,
+    gate_is_prepared,
+    runs_the_gate,
 )
+from workflow_loading import REPO_ROOT, load_workflow, require_list, require_mapping
 
 if typ.TYPE_CHECKING:
     from pathlib import Path
-
-#: The shared action whose `check` mode runs the CodeScene CLI.
-CODESCENE_COVERAGE_ACTION: typ.Final[str] = (
-    "leynos/shared-actions/.github/actions/upload-codescene-coverage"
-)
-
-#: The action that provides the checkout the CLI reads its history from.
-CHECKOUT_ACTION: typ.Final[str] = "actions/checkout"
-
-#: `fetch-depth: 0` is the whole history rather than an empty one, and is
-#: what the shared action documents `mode: check` as requiring.
-FULL_HISTORY_DEPTH: typ.Final[int] = 0
-
-#: What `actions/checkout` fetches when a step names no `fetch-depth`.
-DEFAULT_FETCH_DEPTH: typ.Final[int] = 1
 
 
 class CheckJob(typ.NamedTuple):
@@ -79,55 +67,6 @@ def _workflow_paths() -> list[Path]:
     )
 
 
-def _action_of(step: dict[str, object]) -> str:
-    """Return a step's action reference without its version, or the empty string."""
-    # Split on the version separator rather than matching a prefix: a
-    # prefix match would accept `upload-codescene-coverage-legacy`, and a
-    # substring match would accept an action merely mentioning the name.
-    uses = step.get("uses")
-    return uses.split("@", 1)[0] if isinstance(uses, str) else ""
-
-
-def _runs_the_codescene_check(step: dict[str, object]) -> bool:
-    """Return whether a step runs the CodeScene CLI's changed-line gate."""
-    # `mode: check` is the mode that reads git history. An upload-only
-    # step submits the report and diffs nothing, so it needs no history
-    # and is not held to this depth.
-    if _action_of(step) != CODESCENE_COVERAGE_ACTION:
-        return False
-    with_block = step.get("with")
-    return isinstance(with_block, dict) and with_block.get("mode") == "check"
-
-
-def _declared_depth(step: dict[str, object]) -> int:
-    """Return a checkout step's ``fetch-depth``, or the action's default."""
-    # A workflow may write the depth as a YAML integer or as a quoted
-    # string; both reach the action as the same value, so both are read
-    # here. Anything else is not a depth and reads as the default, which
-    # fails the assertion rather than passing unexamined.
-    with_block = step.get("with")
-    if not isinstance(with_block, dict) or "fetch-depth" not in with_block:
-        return DEFAULT_FETCH_DEPTH
-    match with_block["fetch-depth"]:
-        case bool():
-            # `True` is an `int` in Python and is not a depth.
-            return DEFAULT_FETCH_DEPTH
-        case int() as depth:
-            return depth
-        case str() as text if text.strip().lstrip("-").isdigit():
-            return int(text.strip())
-        case _:
-            return DEFAULT_FETCH_DEPTH
-
-
-def _fetches_whole_history(step: dict[str, object]) -> bool:
-    """Return whether a step is a checkout fetching the whole history."""
-    return (
-        _action_of(step) == CHECKOUT_ACTION
-        and _declared_depth(step) == FULL_HISTORY_DEPTH
-    )
-
-
 def _job_steps(job: dict[str, object], description: str) -> list[dict[str, object]]:
     """Return a job's steps, dropping anything that is not a mapping."""
     return [
@@ -145,29 +84,9 @@ def _check_jobs() -> list[CheckJob]:
         for name, declaration in jobs.items():
             description = f"{path.name}:{name}"
             steps = _job_steps(require_mapping(declaration, description), description)
-            if any(map(_runs_the_codescene_check, steps)):
+            if runs_the_gate(steps):
                 found.append(CheckJob(path.name, str(name), steps))
     return found
-
-
-def _gate_is_prepared(job: CheckJob) -> bool:
-    """Return whether a full-history checkout precedes the job's first gate."""
-    # Both indices are taken from the same step list, so comparing them
-    # is what states the ordering. A checkout after the gate leaves the
-    # same empty history when the CLI runs as no checkout at all.
-    gate = next(
-        (
-            index
-            for index, step in enumerate(job.steps)
-            if _runs_the_codescene_check(step)
-        ),
-        None,
-    )
-    checkout = next(
-        (index for index, step in enumerate(job.steps) if _fetches_whole_history(step)),
-        None,
-    )
-    return gate is not None and checkout is not None and checkout < gate
 
 
 def test_the_codescene_check_is_still_run_somewhere() -> None:
@@ -201,7 +120,7 @@ def test_a_whole_history_checkout_precedes_every_codescene_check() -> None:
     key, deleting the checkout step, and moving the checkout after the
     gate each fail this test.
     """
-    unprepared = [str(job) for job in _check_jobs() if not _gate_is_prepared(job)]
+    unprepared = [str(job) for job in _check_jobs() if not gate_is_prepared(job.steps)]
     assert not unprepared, (
         f"these jobs run the CodeScene changed-line gate without a "
         f"fetch-depth: {FULL_HISTORY_DEPTH} checkout before it: {unprepared}; "
