@@ -1658,10 +1658,12 @@ pytest and [cmd-mox](https://github.com/leynos/cmd-mox), which shims the
 external programs (`sudo`, `sccache`, `df`, `cargo`) so each script's happy
 path and failure modes are exercised at the process boundary. CI runs the same
 target before `make check-fmt`. The scripts pin `cyclopts` and `cuprum` in
-their PEP 723 blocks at the Makefile's `CYCLOPTS_VERSION` and `CUPRUM_VERSION`,
+their PEP 723 blocks at the Makefile's `CYCLOPTS_VERSION` and `CUPRUM_REF`,
 held equal by `scripts/tests/test_ci_scripts_metadata.py`, and
 `make typecheck-python` checks them with ty alongside the rest of the Python
-sources.
+sources. `CUPRUM_REF` is a `leynos/cuprum` commit rather than a PyPI release
+until 0.2.0 ships the `RunOutputOptions` runtime the scripts use; bump it to
+the release pin then.
 
 ### GitHub Actions validation
 
