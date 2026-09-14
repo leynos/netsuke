@@ -15,16 +15,59 @@ use super::{GeneratedNinja, PowerShellPayload, RecipeTransport};
 /// Prefix that introduces a Base64 UTF-16LE PowerShell script argument.
 const POWER_SHELL_ENCODED_COMMAND_PREFIX: &str = "-EncodedCommand ";
 
+/// Ninja binding text that introduces a PowerShell command carrying that argument.
+const POWER_SHELL_COMMAND_BINDING_PREFIX: &str = "command = powershell.exe ";
+
 /// Ninja binding text that introduces a response-file Base64 payload.
 ///
 /// The leading `$` is deliberately omitted so this marker also matches the
 /// `$$` escape Ninja requires in a generated `rspfile_content` binding.
 const POWER_SHELL_RESPONSE_FILE_PAYLOAD_PREFIX: &str = "netsukePayload = '";
 
+/// Ninja binding name that carries the response-file bootstrap.
+const RESPONSE_FILE_CONTENT_BINDING_PREFIX: &str = "rspfile_content = ";
+
+/// Binding context a marker must appear in to carry a payload.
+///
+/// A recipe is written verbatim into a plaintext binding, so recipe text can
+/// contain marker text as well as a transport can. Only the bindings the
+/// renderer writes introduce a payload; a marker anywhere else is recipe text
+/// and stays searchable as plaintext.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PayloadBinding {
+    /// A `command` binding that invokes the PowerShell executable.
+    PowerShellCommand,
+    /// The value of a Ninja `rspfile_content` binding.
+    ResponseFileContent,
+}
+
+impl PayloadBinding {
+    /// Report whether the binding text `prefix` introduces a payload.
+    ///
+    /// `prefix` is the text between the start of the binding's line and the
+    /// marker, with indentation removed. The response-file rule accepts both a
+    /// generated `rspfile_content = ` binding and that binding's value alone,
+    /// because [`super::ResponseFileContent`] wraps the bare value and the
+    /// generated value carries Ninja's `$$` escaping.
+    fn accepts(self, prefix: &str) -> bool {
+        match self {
+            Self::PowerShellCommand => prefix.starts_with(POWER_SHELL_COMMAND_BINDING_PREFIX),
+            Self::ResponseFileContent => {
+                let value = prefix
+                    .strip_prefix(RESPONSE_FILE_CONTENT_BINDING_PREFIX)
+                    .unwrap_or(prefix);
+                !value.is_empty() && value.bytes().all(|byte| byte == b'$')
+            }
+        }
+    }
+}
+
 /// Binding text that introduces a Base64 payload, plus its transport.
 struct PayloadMarker {
     /// Text immediately preceding the Base64 payload.
     text: &'static str,
+    /// Binding that must introduce the marker for it to carry a payload.
+    binding: PayloadBinding,
     /// Transport that carries the payload.
     transport: RecipeTransport,
 }
@@ -32,9 +75,11 @@ struct PayloadMarker {
 impl PayloadMarker {
     /// Record every payload this marker introduces into `payloads`.
     ///
-    /// Scanning resumes after each payload rather than after each marker
-    /// because Base64 cannot contain the marker text, so no marker can hide
-    /// inside a payload.
+    /// An occurrence of the marker text outside this marker's binding is recipe
+    /// text, so scanning resumes after the marker text rather than recording a
+    /// payload for it. Scanning resumes after a recorded payload rather than
+    /// after its marker, because Base64 cannot contain the marker text, so no
+    /// marker can hide inside a payload.
     fn collect(&self, generated: GeneratedNinja<'_>, payloads: &mut Vec<EncodedPayload>) {
         let document = generated.0;
         let mut search_from = 0usize;
@@ -42,7 +87,12 @@ impl PayloadMarker {
             .get(search_from..)
             .and_then(|remaining| remaining.find(self.text))
         {
-            let start = search_from + offset + self.text.len();
+            let marker_start = search_from + offset;
+            let start = marker_start + self.text.len();
+            if !self.binding.accepts(line_prefix(document, marker_start)) {
+                search_from = start;
+                continue;
+            }
             let encoded = document.get(start..).unwrap_or_default();
             let end = start + base64_run_length(encoded);
             payloads.push(EncodedPayload {
@@ -54,14 +104,32 @@ impl PayloadMarker {
     }
 }
 
+/// Borrow the text of the binding that holds `offset`, without its indentation.
+///
+/// The result is the text between the start of `offset`'s line and `offset`
+/// itself, so a binding check describes the run of text that introduces a
+/// marker rather than the whole line a marker happens to sit on.
+fn line_prefix(document: &str, offset: usize) -> &str {
+    let line_start = document
+        .get(..offset)
+        .and_then(|before| before.rfind('\n'))
+        .map_or(0, |newline| newline + 1);
+    document
+        .get(line_start..offset)
+        .unwrap_or_default()
+        .trim_start()
+}
+
 /// Every marker that introduces a Base64 PowerShell payload.
 const PAYLOAD_MARKERS: [PayloadMarker; 2] = [
     PayloadMarker {
         text: POWER_SHELL_ENCODED_COMMAND_PREFIX,
+        binding: PayloadBinding::PowerShellCommand,
         transport: RecipeTransport::PowerShellEncodedCommand,
     },
     PayloadMarker {
         text: POWER_SHELL_RESPONSE_FILE_PAYLOAD_PREFIX,
+        binding: PayloadBinding::ResponseFileContent,
         transport: RecipeTransport::PowerShellResponseFile,
     },
 ];

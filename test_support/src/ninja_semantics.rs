@@ -24,6 +24,11 @@
 //! [`GeneratedNinja::detected_recipe_transports`] rather than echoing the
 //! generated file, which may contain rendered secret material interpolated
 //! through `env()`.
+//!
+//! A marker only carries a payload in the binding the renderer writes for it: a
+//! PowerShell `command` binding, or a Ninja `rspfile_content` binding. Recipe
+//! text that merely mentions `-EncodedCommand ` or `netsukePayload = '` stays
+//! plaintext, so a needle for that text still matches.
 
 #[path = "ninja_semantics_scanner.rs"]
 mod scanner;

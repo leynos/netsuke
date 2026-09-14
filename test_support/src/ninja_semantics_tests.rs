@@ -187,14 +187,68 @@ fn encoded_payload_text_does_not_match_as_plaintext() -> Result<()> {
 #[test]
 fn text_around_a_removed_payload_cannot_form_a_match() -> Result<()> {
     let encoded = encode_power_shell("Write-Output done");
-    let generated = format!("  command = LEFT-EncodedCommand {encoded}-RIGHT\n");
+    let generated =
+        format!("  command = powershell.exe -NoProfile -EncodedCommand {encoded}-RIGHT\n");
     ensure!(
-        !generated.contains("LEFT-RIGHT"),
+        !generated.contains("-EncodedCommand -RIGHT"),
         "the spliced needle must not already appear in the generated text"
     );
     ensure!(
-        !GeneratedNinja::new(&generated).recipe_contains(RecipeNeedle::new("LEFT-RIGHT"))?,
+        !GeneratedNinja::new(&generated)
+            .recipe_contains(RecipeNeedle::new("-EncodedCommand -RIGHT"))?,
         "text either side of a removed payload must not be joined into a match"
+    );
+    Ok(())
+}
+
+/// Verify that recipe text mentioning the encoded-command marker stays plaintext.
+///
+/// Only a `command` binding that invokes the PowerShell executable carries an
+/// encoded payload. A recipe that merely prints the marker text keeps its own
+/// meaning, so a test searching for it must still find it as plaintext.
+#[test]
+fn plaintext_command_mentioning_the_marker_is_not_an_encoded_payload() -> Result<()> {
+    let recipe = "echo -EncodedCommand QQ==";
+    let generated = format!("  command = {recipe}\n");
+    let document = GeneratedNinja::new(&generated);
+    ensure!(
+        document.detected_recipe_transports() == vec![RecipeTransport::Plaintext],
+        "a recipe that prints the marker must not report the encoded-command transport"
+    );
+    ensure!(
+        document.recipe_contains(RecipeNeedle::new(recipe))?,
+        "the marker text in a plaintext recipe should still match"
+    );
+    Ok(())
+}
+
+/// Verify that recipe text mentioning the response-file marker stays plaintext.
+#[test]
+fn plaintext_command_mentioning_the_response_file_marker_is_not_a_payload() -> Result<()> {
+    let recipe = "echo netsukePayload = 'QQ=='";
+    let generated = format!("  command = {recipe}\n");
+    let document = GeneratedNinja::new(&generated);
+    ensure!(
+        document.detected_recipe_transports() == vec![RecipeTransport::Plaintext],
+        "a recipe that prints the marker must not report the response-file transport"
+    );
+    ensure!(
+        document.recipe_contains(RecipeNeedle::new(recipe))?,
+        "the marker text in a plaintext recipe should still match"
+    );
+    Ok(())
+}
+
+/// Verify that a bare payload marker is not accepted as response-file content.
+#[test]
+fn response_file_content_requires_the_binding_value_escaping() -> Result<()> {
+    let error = ResponseFileContent::new("netsukePayload = 'QQ=='")
+        .decode_power_shell_payload()
+        .err()
+        .context("a value without the response-file binding escape must be rejected")?;
+    ensure!(
+        format!("{error:#}").contains("must carry a PowerShell Base64 payload"),
+        "the error should report the missing response-file payload, got {error:#}"
     );
     Ok(())
 }
