@@ -95,6 +95,9 @@ def document(*tables: str, profile: str = "default") -> str:
         pytest.param("3yrs", 94672800.0, id="the-abbreviated-plural-year"),
         pytest.param("1 0s", 10.0, id="whitespace-inside-the-number"),
         pytest.param("0", 0.0, id="a-bare-zero-with-no-unit"),
+        pytest.param("500nanos", 5e-7, id="the-long-nanosecond-spelling"),
+        pytest.param("250millis", 0.25, id="the-long-millisecond-spelling"),
+        pytest.param("750\u00b5s", 0.00075, id="the-micro-sign"),
     ],
 )
 def test_each_unit_converts_exactly(duration: str, expected: float) -> None:
@@ -108,10 +111,13 @@ def test_each_unit_converts_exactly(duration: str, expected: float) -> None:
     carrying whitespace and the bare zero were measured against
     humantime 2.3.0, the version the pinned cargo-nextest release locks,
     rather than assumed: this reader had refused all of them, which is
-    the fault the module exists to avoid. humantime's parser ignores
-    whitespace while it accumulates a number, so `1 0s` is ten seconds,
-    and it special-cases `0` before reading a character, so a zero
-    duration needs no unit.
+    the fault the module exists to avoid. Its parser ignores whitespace
+    while it accumulates a number, so `1 0s` is ten seconds, and reads a
+    bare `0` as a zero duration needing no unit.
+
+    `nanos` and `millis` come from humantime's own unit table, which
+    takes three spellings each where this reader had two; the micro
+    sign is its one non-ASCII spelling, U+00B5 not U+03BC.
     """
     assert seconds(duration) == pytest.approx(expected), (
         f"{duration!r} must convert to {expected}s"

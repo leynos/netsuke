@@ -43,11 +43,13 @@ _BARE_ZERO: typ.Final[str] = "0"
 #: rather than trimmed to the plausible ones, because refusing a unit
 #: nextest accepts would fail a configuration the runner is happy with.
 _UNIT_SECONDS: typ.Final[dict[str, float]] = {
+    "nanos": 1e-9,
     "nsec": 1e-9,
     "ns": 1e-9,
     "usec": 1e-6,
     "us": 1e-6,
     "\u00b5s": 1e-6,
+    "millis": 0.001,
     "msec": 0.001,
     "ms": 0.001,
     "seconds": 1.0,
