@@ -89,9 +89,12 @@ TY_VERSION ?= 0.0.74
 # The CI helper scripts under scripts/ci declare these in their PEP 723
 # blocks; scripts/tests/test_ci_scripts_metadata.py holds the two in step, so
 # `uv run --script` in CI and the test and typecheck gates resolve one release.
+# cuprum is pinned to a leynos/cuprum commit until 0.2.0 ships the
+# `RunOutputOptions` runtime the scripts use.
 CYCLOPTS_VERSION ?= 4.25.2
-CUPRUM_VERSION ?= 0.1.0
-CI_SCRIPT_DEPS = --with cyclopts==$(CYCLOPTS_VERSION) --with cuprum==$(CUPRUM_VERSION)
+CUPRUM_REF ?= a2134c7a3966b224eaed917efb94f8090ce5104a
+CUPRUM_SOURCE = cuprum @ git+https://github.com/leynos/cuprum@$(CUPRUM_REF)
+CI_SCRIPT_DEPS = --with cyclopts==$(CYCLOPTS_VERSION) --with '$(CUPRUM_SOURCE)'
 # Every Python source the repository owns. Ruff and Pylint resolve their own
 # configuration and exclusions from pyproject.toml, so these paths only bound
 # the walk.

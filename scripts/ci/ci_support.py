@@ -25,6 +25,7 @@ from cuprum import (
     Program,
     ProgramCatalogue,
     ProjectSettings,
+    RunOutputOptions,
     sh,
 )
 
@@ -97,7 +98,10 @@ def run(
         raised, so callers decide what it means.
     """
     command = sh.make(Program(program), catalogue=allowed)(*args)
-    return command.run_sync(echo=echo, context=ExecutionContext(env=env))
+    return command.run_sync(
+        output=RunOutputOptions(capture=True, echo=echo),
+        context=ExecutionContext(env=env),
+    )
 
 
 def describe_failure(result: CommandResult) -> str:

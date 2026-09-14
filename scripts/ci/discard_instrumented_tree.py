@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.14"
-# dependencies = ["cyclopts==4.25.2", "cuprum==0.1.0"]
+# dependencies = ["cyclopts==4.25.2", "cuprum @ git+https://github.com/leynos/cuprum@a2134c7a3966b224eaed917efb94f8090ce5104a"]
 # ///
 """Remove the instrumented coverage build trees before any cache save.
 
