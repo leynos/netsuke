@@ -130,6 +130,7 @@ manifest.yaml.hint.invalid_token = Token YAML tidak sah atau tidak terduga.
 manifest.yaml.hint.escape = Lakukan escape pada garis miring terbalik atau hapus urutan pelolosan yang tidak sah.
 manifest.env.missing = Variabel lingkungan wajib belum disetel.
 manifest.env.invalid_utf8 = Variabel lingkungan memuat UTF-8 yang tidak sah.
+manifest.env.blocked = Akses ke variabel lingkungan diblokir.
 manifest.vars.not_object = `vars` pada manifes harus berupa pemetaan atau objek.
 manifest.vars.reserved_name = Kunci `vars` '{ $name }' pada manifes dicadangkan untuk fungsi bantu templat bawaan; ganti nama variabel tersebut.
 manifest.read_failed = Manifes di { $path } tidak dapat dibaca.

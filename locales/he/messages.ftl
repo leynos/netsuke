@@ -130,6 +130,7 @@ manifest.yaml.hint.invalid_token = אסימון ה‑YAML אינו תקין או
 manifest.yaml.hint.escape = בצעו מילוט ללוכסנים אחוריים או הסירו רצפי מילוט לא תקינים.
 manifest.env.missing = משתנה סביבה נדרש אינו מוגדר.
 manifest.env.invalid_utf8 = משתנה סביבה מכיל UTF-8 לא תקין.
+manifest.env.blocked = הגישה למשתנה סביבה חסומה.
 manifest.vars.not_object = השדה `vars` של המניפסט חייב להיות מיפוי או אובייקט.
 manifest.vars.reserved_name = מפתח `vars` בשם '{ $name }' במניפסט שמור לפונקציית עזר מובנית של תבניות; שנה את שם המשתנה.
 manifest.read_failed = לא ניתן היה לקרוא את המניפסט מ‑{ $path }.

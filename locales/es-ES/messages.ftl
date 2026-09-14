@@ -130,6 +130,7 @@ manifest.yaml.hint.invalid_token = Token YAML inválido o inesperado.
 manifest.yaml.hint.escape = Escapa las barras inversas o elimina secuencias inválidas.
 manifest.env.missing = Una variable de entorno requerida no está establecida.
 manifest.env.invalid_utf8 = Una variable de entorno contiene UTF-8 inválido.
+manifest.env.blocked = El acceso a una variable de entorno está bloqueado.
 manifest.vars.not_object = `vars` del manifiesto debe ser un mapa/objeto.
 manifest.vars.reserved_name = La clave `vars` '{ $name }' del manifiesto está reservada para una función auxiliar de plantillas integrada; renombre la variable.
 manifest.read_failed = No se pudo leer el manifiesto en { $path }.

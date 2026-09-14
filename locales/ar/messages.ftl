@@ -130,6 +130,7 @@ manifest.yaml.hint.invalid_token = رمز YAML غير صالح أو غير مت�
 manifest.yaml.hint.escape = هرّب الشرطات المائلة العكسية أو احذف تسلسلات التهريب غير الصالحة.
 manifest.env.missing = متغيّر بيئة مطلوب غير مضبوط.
 manifest.env.invalid_utf8 = يتضمّن متغيّر بيئة ترميز UTF-8 غير صالح.
+manifest.env.blocked = تم حظر الوصول إلى متغير بيئة.
 manifest.vars.not_object = يجب أن يكون `vars` في ملف البيانات تخطيطًا أو كائنًا.
 manifest.vars.reserved_name = يُعدّ مفتاح `vars` المسمّى '{ $name }' في ملف البيانات محجوزًا لدالة قوالب مدمجة؛ أعد تسمية المتغيّر.
 manifest.read_failed = تعذّرت قراءة ملف البيانات من { $path }.

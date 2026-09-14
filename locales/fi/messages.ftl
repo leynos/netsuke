@@ -130,6 +130,7 @@ manifest.yaml.hint.invalid_token = YAML-tunnus on virheellinen tai odottamaton.
 manifest.yaml.hint.escape = Suojaa kenoviivat tai poista virheelliset ohjausmerkkijonot.
 manifest.env.missing = Vaadittua ympäristömuuttujaa ei ole asetettu.
 manifest.env.invalid_utf8 = Ympäristömuuttuja sisältää virheellistä UTF-8:aa.
+manifest.env.blocked = Ympäristömuuttujan käyttö on estetty.
 manifest.vars.not_object = Manifestin `vars` on oltava kuvaus tai objekti.
 manifest.vars.reserved_name = Manifestin `vars`-avain '{ $name }' on varattu sisäänrakennetulle mallineapufunktiolle; nimeä muuttuja uudelleen.
 manifest.read_failed = Manifestia ei voitu lukea polusta { $path }.

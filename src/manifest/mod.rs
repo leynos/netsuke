@@ -29,6 +29,7 @@ use serde::de::Error as _;
 use std::{path::Path, sync::Arc};
 
 mod diagnostics;
+mod env_policy;
 mod expand;
 // `glob_paths` is the module's only boundary: every other item, including the
 // `GlobEntryResult` alias, stays module-private. Denying `unreachable_pub`
@@ -50,10 +51,11 @@ mod render;
 pub type ManifestValue = serde_json::Value;
 /// JSON object mapping string keys to manifest values.
 pub type ManifestMap = serde_json::Map<String, ManifestValue>;
-
+use self::{env_reader::env_var_with, jinja_macros::register_manifest_macros};
 pub use diagnostics::{
     ManifestError, ManifestName, ManifestSource, map_data_error, map_yaml_error,
 };
+pub use env_policy::{EnvAccessPolicy, EnvPolicyViolation};
 pub use env_reader::{EnvReadError, EnvReader, process_env_reader};
 pub(crate) use expand::expand_foreach;
 pub use glob::glob_paths;
@@ -62,8 +64,6 @@ use loading::{notify_stage, trace_expansion_report};
 pub use parse_with_config::from_str_with_env_and_config;
 pub(crate) use query::from_path_for_manifest_query;
 pub use render::render_manifest;
-
-use self::{env_reader::env_var_with, jinja_macros::register_manifest_macros};
 #[cfg(test)]
 use workspace::open_manifest_workspace;
 
