@@ -93,6 +93,8 @@ def document(*tables: str, profile: str = "default") -> str:
         pytest.param("2wks", 1209600.0, id="the-abbreviated-plural-week"),
         pytest.param("1yr", 31557600.0, id="the-abbreviated-year"),
         pytest.param("3yrs", 94672800.0, id="the-abbreviated-plural-year"),
+        pytest.param("1 0s", 10.0, id="whitespace-inside-the-number"),
+        pytest.param("0", 0.0, id="a-bare-zero-with-no-unit"),
     ],
 )
 def test_each_unit_converts_exactly(duration: str, expected: float) -> None:
@@ -102,10 +104,14 @@ def test_each_unit_converts_exactly(duration: str, expected: float) -> None:
     inequality between two plausible numbers, so each unit is pinned
     rather than sampled.
 
-    The fractional values and the abbreviated week and year were
-    measured against humantime 2.4.0, the version nextest resolves,
+    The fractional values, the abbreviated week and year, the number
+    carrying whitespace and the bare zero were measured against
+    humantime 2.3.0, the version the pinned cargo-nextest release locks,
     rather than assumed: this reader had refused all of them, which is
-    the fault the module exists to avoid.
+    the fault the module exists to avoid. humantime's parser ignores
+    whitespace while it accumulates a number, so `1 0s` is ten seconds,
+    and it special-cases `0` before reading a character, so a zero
+    duration needs no unit.
     """
     assert seconds(duration) == pytest.approx(expected), (
         f"{duration!r} must convert to {expected}s"
@@ -153,9 +159,10 @@ def test_an_unreadable_duration_is_refused(duration: str) -> None:
     Returning something plausible would put a comparison against a
     budget nextest never applies, and the contract would pass while the
     ordering it claims to hold did not. Each of these was checked
-    against humantime 2.4.0 and refused there: a fraction needs a whole
+    against humantime 2.3.0 and refused there: a fraction needs a whole
     part before the point and a digit after it, values are unsigned, and
-    the only separators are whitespace.
+    the only separators are whitespace. `0` is the one value that may
+    carry no unit, so `300` stays refused.
     """
     with pytest.raises(NextestConfigurationError):
         seconds(duration)

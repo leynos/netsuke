@@ -6,23 +6,37 @@ through `humantime_serde`, which reads a sequence of value-and-unit
 pairs and sums them, so `2h 30m` and `1d` are valid and a parser taking
 one pair would refuse configuration the runner accepts.
 
-The grammar was measured against humantime 2.4.0, the version nextest
-resolves, rather than assumed. A value may carry a fractional part with
-whitespace tolerated around the point, so `1.5m` and `1 . 5 m` are both
-ninety seconds, and `wk`, `wks`, `yr` and `yrs` are accepted alongside
-the longer spellings.
+The grammar was measured against humantime 2.3.0, the version the
+lockfile of the pinned cargo-nextest release resolves, rather than
+assumed. A value may carry a fractional part with whitespace tolerated
+around the point, so `1.5m` and `1 . 5 m` are both ninety seconds, and
+`wk`, `wks`, `yr` and `yrs` are accepted alongside the longer spellings.
+Whitespace inside the number is ignored as well, so `1 0s` is ten
+seconds, and a bare `0` is a zero duration needing no unit at all.
 """
 
 import re
 import typing as typ
+
+#: Digits with whitespace tolerated between them. humantime's parser
+#: ignores whitespace while it accumulates a number, so `1 0s` is ten
+#: seconds rather than a malformed duration.
+_SPACED_DIGITS: typ.Final[str] = r"\d(?:\s*\d)*"
 
 #: One value-and-unit pair. The fractional part is optional and
 #: humantime tolerates whitespace around the point; a leading point, a
 #: trailing point, a second point, a sign and a digit separator are all
 #: refused there and so are refused here.
 _DURATION_TOKEN: typ.Final[re.Pattern[str]] = re.compile(
-    r"(?P<value>\d+(?:\s*\.\s*\d+)?)\s*(?P<unit>[A-Za-z\u00b5]+)\s*"
+    rf"(?P<value>{_SPACED_DIGITS}(?:\s*\.\s*{_SPACED_DIGITS})?)"
+    r"\s*(?P<unit>[A-Za-z\u00b5]+)\s*"
 )
+
+#: The one duration humantime accepts with no unit. Its parser
+#: special-cases the exact text before reading a single character, so
+#: the comparison here is against the raw value rather than a stripped
+#: one: ``" 0 "`` is not this case and nextest refuses it.
+_BARE_ZERO: typ.Final[str] = "0"
 
 #: Every unit `humantime` accepts, with its length in seconds, using
 #: humantime's own definitions of a month and a year. Spelt out in full
@@ -94,6 +108,30 @@ class UnboundedTestError(TimeoutBudgetError):
     """
 
 
+def _read_pair(duration: str, text: str, position: int) -> tuple[float, int]:
+    """Return one value-and-unit pair's seconds and where it ends."""
+    match = _DURATION_TOKEN.match(text, position)
+    if match is None:
+        message = (
+            f"unrecognized nextest duration {duration!r}: humantime reads "
+            f"a sequence of values, each optionally fractional and each "
+            f"followed by a unit, or a bare {_BARE_ZERO!r}"
+        )
+        raise NextestConfigurationError(message)
+    unit = match["unit"]
+    if unit not in _UNIT_SECONDS:
+        message = (
+            f"unrecognized nextest duration {duration!r}: {unit!r} is not "
+            f"a unit humantime accepts"
+        )
+        raise NextestConfigurationError(message)
+    # humantime ignores whitespace while it accumulates a number and
+    # around the fractional point, so the matched value can read "1 0" or
+    # "1 . 5"; float cannot. The whole duration is named in the message
+    # rather than the pair, since the pair is not what anybody wrote.
+    return float("".join(match["value"].split())) * _UNIT_SECONDS[unit], match.end()
+
+
 def seconds(duration: str) -> float:
     """Convert a nextest duration to seconds.
 
@@ -112,6 +150,8 @@ def seconds(duration: str) -> float:
     NextestConfigurationError
         If the text is not a duration nextest would accept.
     """
+    if duration == _BARE_ZERO:
+        return 0.0
     text = duration.strip()
     if not text:
         message = f"unrecognized nextest duration {duration!r}: it is empty"
@@ -119,22 +159,6 @@ def seconds(duration: str) -> float:
     total = 0.0
     position = 0
     while position < len(text):
-        match = _DURATION_TOKEN.match(text, position)
-        if match is None:
-            message = (
-                f"unrecognized nextest duration {duration!r}: humantime reads "
-                f"a sequence of numbers each followed by a unit"
-            )
-            raise NextestConfigurationError(message)
-        unit = match["unit"]
-        if unit not in _UNIT_SECONDS:
-            message = (
-                f"unrecognized nextest duration {duration!r}: {unit!r} is not "
-                f"a unit humantime accepts"
-            )
-            raise NextestConfigurationError(message)
-        # humantime tolerates whitespace around the fractional point,
-        # so the matched value can read "1 . 5"; float cannot.
-        total += float("".join(match["value"].split())) * _UNIT_SECONDS[unit]
-        position = match.end()
+        pair, position = _read_pair(duration, text, position)
+        total += pair
     return total
