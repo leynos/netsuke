@@ -4000,7 +4000,6 @@ claim to model arbitrary scheduler or filesystem interleavings. The fallible
 `test_support::fs::inspect_path` probe treats `NotFound` as absence and
 propagates every other metadata error.
 
-
 ### `test_support::ninja_semantics`
 
 `test_support::ninja_semantics` (`test_support/src/ninja_semantics.rs`) is the
@@ -6057,6 +6056,37 @@ background-query primitive.
   the existing capability-injected dyndep-publication path to materialize its
   sidecars; the read-only steps never write files, start processes, or invoke
   effectful template helpers.
+
+
+### Module: `runner::manifest_structure_telemetry`
+
+`src/runner/manifest_structure_telemetry.rs` is the crate-internal module
+declared by the private `mod manifest_structure_telemetry;` in
+`src/runner/mod.rs`. It owns bounded structural telemetry for a loaded
+manifest: fixed-vocabulary aggregate counts derived from the manifest shape
+only. It never emits manifest text, paths, recipe contents, variable values,
+macro bodies, or descriptions, because rendered manifest values can carry
+secret material interpolated through `env()`.
+
+`record_manifest_structure(manifest: &NetsukeManifest)` is the single entry
+point, called only from `src/runner/graph_generation.rs` inside
+`generate_ninja_with_shell`, immediately after manifest loading by
+`load_manifest_with_stage_reporting` and before graph construction. It emits one
+`TRACE` span named `runner.manifest.structure`, one `TRACE` event with the
+same six fixed integer fields (`variable_count`, `macro_count`, `rule_count`,
+`action_count`, `target_count`, `default_count`) and message
+`manifest structure summary`, and one increment of the unlabelled counter
+`netsuke_runner_manifest_structures_total`. `describe_metrics()` guards the
+`describe_counter!` registration with a `std::sync::Once`.
+
+The drained-snapshot boundary is `ConfigMetricsRecorder` in
+`src/observability_recorder.rs`: `accepts_name` recognizes the counter and
+`exact_labels(key, &[])` keeps only the unlabelled series, rejecting any
+labelled variant. An inline `#[cfg(test)] mod tests` asserts the emission site
+records one unlabelled series and the event carries the six known counts with
+no fixture sentinel text. The governing decision record is
+`docs/adr-009-bounded-redacted-manifest-telemetry.md`, which forbids unbounded
+or caller-controlled values in metric labels and trace fields.
 
 ### Module: `runner::recipe_shell_telemetry`
 

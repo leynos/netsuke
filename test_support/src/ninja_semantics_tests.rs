@@ -15,6 +15,9 @@ use anyhow::{Context, Result, ensure};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use rstest::rstest;
 
+#[path = "ninja_semantics_property_tests.rs"]
+mod property_tests;
+
 /// Distinctive sentinel standing in for a recipe value rendered from `env()`.
 const SENTINEL: &str = "CI-SECRET-7f3a9c2b5e1d4f60";
 
