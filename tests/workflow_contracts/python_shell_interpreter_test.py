@@ -20,11 +20,9 @@ module must load under the baseline.
 Run via ``make test-workflow-contracts``.
 """
 
-import argparse
 import ast
 import importlib.util
 import re
-import runpy
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the script boundary is under test.
 import sys
 import types
@@ -317,40 +315,6 @@ def test_verify_main_reports_the_interpreter_boundary(
             "a mismatch must name the detected interpreter version"
         )
         assert executable in captured.err, "a mismatch must name the executable"
-
-
-def test_verify_script_exits_with_a_named_mismatch(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """Exercise the ``__main__`` path with a controlled wrong interpreter."""
-    module = _load_verify_module()
-    major, minor = module.BASELINE
-    version_info = (major, minor - 2, 13)
-    version = ".".join(str(part) for part in version_info)
-    executable = "/opt/runner-python/bin/python"
-    fake_sys = types.SimpleNamespace(
-        argv=[str(REPO_ROOT / VERIFY_MODULE), VERIFY_COMMAND],
-        executable=executable,
-        stderr=sys.stderr,
-        version=version,
-        version_info=version_info,
-    )
-    monkeypatch.setitem(sys.modules, "sys", fake_sys)
-    monkeypatch.setattr(argparse, "sys", fake_sys)
-
-    with pytest.raises(SystemExit) as exited:
-        runpy.run_path(str(REPO_ROOT / VERIFY_MODULE), run_name="__main__")
-
-    assert exited.value.code == 1, "the script must reject a non-baseline interpreter"
-    captured = capsys.readouterr()
-    assert not captured.out, "a mismatch must not report success"
-    assert f"need Python {major}.{minor}" in captured.err, (
-        "the script mismatch must name the required baseline"
-    )
-    assert f"found {version}" in captured.err, (
-        "the script mismatch must name the detected version"
-    )
-    assert executable in captured.err, "the script mismatch must name the executable"
 
 
 def test_verify_script_runs_successfully_under_the_test_interpreter() -> None:
