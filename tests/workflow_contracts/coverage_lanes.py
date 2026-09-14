@@ -11,6 +11,9 @@ import typing as typ
 from timeout_budgets import COVERAGE_ACTION, WATCHDOG_VARIABLE, WORKFLOWS_DIRECTORY
 from workflow_loading import all_workflow_documents
 
+if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
 
 class CoverageLane(typ.NamedTuple):
     """One coverage step, with the budgets around it.
@@ -338,3 +341,32 @@ def coverage_lanes_of(
         for workflow, document, job_name, job in _declared_jobs(documents)
         for lane in _lanes_in_job(workflow, document, job_name, job)
     )
+
+
+def conditions_by_coordinate(
+    lanes: cabc.Iterable[CoverageLane],
+) -> dict[tuple[str, str, str], tuple[tuple[object, object], ...]]:
+    """Return each coordinate's conditions, in document order.
+
+    Parameters
+    ----------
+    lanes : cabc.Iterable[CoverageLane]
+        The lanes to group.
+
+    Returns
+    -------
+    dict
+        Workflow, job and step name to the conditions declared there.
+    """
+    # A coordinate can hold more than one lane. An unnamed coverage step
+    # takes its job's name, so two of them in one job share a
+    # coordinate, and a mapping from coordinate to a single condition
+    # keeps only the last: a step skipped by `if: false` beside one
+    # carrying the expected condition then passes unexamined. Keeping
+    # the conditions as a sequence makes that collision fail instead.
+    grouped: dict[tuple[str, str, str], list[tuple[object, object]]] = {}
+    for lane in lanes:
+        grouped.setdefault((lane.workflow, lane.job, lane.step), []).append(
+            lane.condition
+        )
+    return {coordinate: tuple(found) for coordinate, found in grouped.items()}

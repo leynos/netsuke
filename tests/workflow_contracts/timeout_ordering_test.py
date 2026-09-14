@@ -31,7 +31,12 @@ import re
 import typing as typ
 
 import pytest
-from coverage_lanes import CoverageLane, coverage_lanes_of, watchdog_of
+from coverage_lanes import (
+    CoverageLane,
+    conditions_by_coordinate,
+    coverage_lanes_of,
+    watchdog_of,
+)
 from nextest_budgets import (
     global_timeout,
     largest_test_allowance,
@@ -67,10 +72,8 @@ if typ.TYPE_CHECKING:
 #: `ci.yml` also runs on pushes, where the trunk lane covers the same
 #: ground, so its coverage step is conditional on the pull request.
 #: Keyed by workflow, job and step, because a job may run the coverage
-#: action more than once and the steps need not carry the same
-#: condition. Keying by job alone let a second step overwrite the first,
-#: so a step skipped by `if: false` beside one carrying the expected
-#: condition passed unexamined.
+#: action twice and the steps need not carry the same condition; keying
+#: by job alone let the second overwrite the first.
 REQUIRED_CONDITIONS: typ.Final[dict[tuple[str, str, str], tuple[object, object]]] = {
     ("ci.yml", "build-test", "Test and Measure Coverage"): (
         "github.event_name == 'pull_request'",
@@ -354,10 +357,9 @@ def test_each_coverage_lane_carries_the_condition_it_is_meant_to(
     """A skipped step runs no `cargo`, so its watchdog never arms.
 
     Every assertion above reads a lane's declared budgets and says
-    nothing about whether the step runs. `if: false` on the step or on
-    its job would leave a lane that looks bounded and is not, and this
-    contract would certify it. So would a plausible condition that
-    quietly excluded the event the lane exists for.
+    nothing about whether the step runs. `if: false` on the step or its
+    job would leave a lane that looks bounded and is not, and so would a
+    plausible condition quietly excluding the event the lane exists for.
 
     The conditions are pinned rather than forbidden, because the one
     here is legitimate: `ci.yml` also runs on pushes, which the trunk
@@ -371,15 +373,14 @@ def test_each_coverage_lane_carries_the_condition_it_is_meant_to(
     its job, a push-only condition, and a coordinate dropped from
     ``REQUIRED_CONDITIONS`` each fail this test.
 
-    The coordinate carries the step's name as well as its job, because a
-    job may run the coverage action more than once and the two steps
-    need not carry the same condition. Keyed by job alone, the second
-    step overwrote the first, so a step skipped by `if: false` beside
-    one carrying the expected condition passed unexamined.
+    The coordinate carries the step's name as well as its job, since a
+    job may run the coverage action twice and the two steps need not
+    carry the same condition; keyed by job alone, the second overwrote
+    the first. An unnamed step takes its job's name, so a coordinate can
+    still hold two lanes, and each therefore carries the sequence found
+    there rather than one condition: a pinned entry stands for one lane.
     """
-    found = {
-        (lane.workflow, lane.job, lane.step): lane.condition for lane in coverage_lanes
-    }
+    found = conditions_by_coordinate(coverage_lanes)
     assert set(found) == set(REQUIRED_CONDITIONS), (
         f"the coverage lanes are not the ones this contract pins: "
         f"unlisted {sorted(set(found) - set(REQUIRED_CONDITIONS))}, missing "
@@ -387,12 +388,13 @@ def test_each_coverage_lane_carries_the_condition_it_is_meant_to(
         f"entry here is a lane whose condition nobody has judged"
     )
     wrong = {
-        coordinate: (expected, found[coordinate])
+        coordinate: ((expected,), found[coordinate])
         for coordinate, expected in REQUIRED_CONDITIONS.items()
-        if found[coordinate] != expected
+        if found[coordinate] != (expected,)
     }
     assert not wrong, (
         f"these coverage lanes do not carry the conditions the developers' "
         f"guide records, as expected versus found: {wrong}; a lane that is "
-        f"skipped runs no cargo, so its watchdog never arms"
+        f"skipped runs no cargo, so its watchdog never arms, and a coordinate "
+        f"holding two lanes is two steps nobody has told apart"
     )

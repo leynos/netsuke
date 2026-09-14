@@ -17,7 +17,11 @@ Run via ``make test-workflow-contracts``.
 import typing as typ
 
 import pytest
-from coverage_lanes import CoverageLane, coverage_lanes_of
+from coverage_lanes import (
+    CoverageLane,
+    conditions_by_coordinate,
+    coverage_lanes_of,
+)
 from timeout_budgets import WATCHDOG_VARIABLE
 from timeout_ordering_test import _budgets_per_job, required_ceiling
 
@@ -197,4 +201,47 @@ def test_a_second_coverage_step_carries_its_own_condition() -> None:
     assert keyed["ci.yml", "build-test", "Coverage again"] == (False, None), (
         "the skipped step keeps its own condition rather than inheriting the "
         "one its neighbour carries"
+    )
+
+
+def _two_unnamed_steps_workflow() -> dict[str, dict[str, object]]:
+    """Return a job whose two coverage steps declare no name.
+
+    Returns
+    -------
+    dict
+        A document whose `build-test` job runs the action twice, one
+        step skipped by `if: false`.
+    """
+    return {
+        "jobs": {
+            "build-test": {
+                "timeout-minutes": 60,
+                "env": {WATCHDOG_VARIABLE: 1800},
+                "steps": [
+                    {"uses": COVERAGE_STEP},
+                    {"uses": COVERAGE_STEP, "if": "false"},
+                ],
+            }
+        }
+    }
+
+
+def test_two_unnamed_coverage_steps_share_a_coordinate() -> None:
+    """A coordinate holding two lanes keeps both conditions.
+
+    An unnamed step takes its job's name, so both lanes here read as
+    `("ci.yml", "build-test", "build-test")`. A mapping from coordinate
+    to a single condition kept only the last, so the step skipped by
+    `if: false` beside one carrying the expected condition passed the
+    ordering contract unexamined.
+    """
+    lanes = coverage_lanes_of({"ci.yml": _two_unnamed_steps_workflow()})
+
+    found = conditions_by_coordinate(lanes)
+
+    coordinate = ("ci.yml", "build-test", "build-test")
+    expected = {coordinate: ((None, None), ("false", None))}
+    assert found == expected, (
+        f"both lanes must survive the grouping, in document order; got {found}"
     )
