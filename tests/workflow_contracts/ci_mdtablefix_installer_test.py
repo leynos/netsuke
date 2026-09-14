@@ -33,10 +33,12 @@ if typ.TYPE_CHECKING:  # pragma: no cover - imported for annotations only
 #: The shared action, which is the only installer either lane may use.
 SHARED_ACTION = "leynos/shared-actions/.github/actions/install-mdtablefix@"
 
-#: The earliest release that publishes an archive for every platform this
-#: repository formats on. Pinning below it would reintroduce a compile on
-#: Windows, which is the thing this contract exists to prevent.
-MINIMUM_VERSION = (0, 5, 1)
+#: The earliest release `make check-fmt` can use. 0.5.1 was the first to
+#: publish an archive for every platform this repository formats on, so an
+#: earlier pin would reintroduce a compile on Windows; 0.6.0 added the
+#: `--check` and `--git` flags the Makefile now passes, so an earlier pin
+#: would fail the formatter check with a usage error on every lane.
+MINIMUM_VERSION = (0, 6, 0)
 
 #: The local action this replaced. Its absence is asserted rather than assumed,
 #: because a half-finished revert would leave both installers present and the
@@ -177,8 +179,9 @@ def test_both_formatter_jobs_pin_a_version_that_publishes_archives(
     version = _resolve_literal(version, workflow_path)
     assert _version_tuple(version) >= MINIMUM_VERSION, (
         f"{job_name} pins mdtablefix {version}, which predates the first "
-        "release publishing an archive for every platform this repository "
-        "formats on; an earlier pin reintroduces a Windows source build"
+        "release with `--check --git`, the invocation `make check-fmt` runs; "
+        "0.6.0 also carries every platform archive, so an earlier pin can "
+        "only break the gate or reintroduce a Windows source build"
     )
 
 

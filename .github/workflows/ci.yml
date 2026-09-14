@@ -25,8 +25,9 @@ env:
   RUFF_VERSION: '0.16.4'
   TY_VERSION: '0.0.74'
   PYTHON_BASELINE: '3.14'
-  # `make check-fmt` shells out to mdtablefix; pinned once so both lanes agree.
-  MDTABLEFIX_VERSION: '0.5.1'
+  # `make check-fmt` runs `mdtablefix --check --git`; pinned once so both
+  # lanes agree. 0.6.0 is the first release with `--check` and `--git`.
+  MDTABLEFIX_VERSION: '0.6.0'
   NETSUKE_RUNNER_IMAGE: ubuntu2404  # carried in every compiled-tool cache key
 
 jobs:
@@ -201,10 +202,18 @@ jobs:
           leynos/shared-actions/.github/actions/install-nixie@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
           python-version: '3.14'
-      - name: Markdown formatter checker tests
-        run: make test-markdown-format
       - name: Format
         run: make check-fmt
+      - name: Lint Markdown
+        # The upstream action rather than an installation of our own: its
+        # release carries the linter's whole dependency graph, so nothing is
+        # resolved from the registry at run time, and Dependabot manages the
+        # pin alongside the other actions. It reads .markdownlint-cli2.jsonc
+        # from the workspace, so the rules and ignores match `make
+        # markdownlint`. Spelling stays in `make spelling` below.
+        uses: DavidAnson/markdownlint-cli2-action@4580e1612f6407034edd6c0e4e316d725920867b  # v24.2.0
+        with:
+          globs: '**/*.md'
       - name: Install Whitaker
         uses: >-
           leynos/shared-actions/.github/actions/install-whitaker@e041cb75c35c3524201a32d5e57c87408fbd5874
@@ -307,7 +316,7 @@ jobs:
     # tests/workflow_contracts/ci_windows_job_test.py holds them equal.
     with:
       nextest-version: '0.9.133'
-      mdtablefix-version: '0.5.1'
+      mdtablefix-version: '0.6.0'
       python-baseline: '3.14'
 
   kani-smoke:

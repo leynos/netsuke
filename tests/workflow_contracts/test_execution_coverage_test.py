@@ -51,8 +51,8 @@ LINUX_TEST_EXEMPTIONS = {
 }
 LINUX_WORKFLOWS = ("ci.yml", "coverage-main.yml", "netsukefile-test.yml")
 #: Patterns for a Rust suite execution. `make test` is matched only as a whole
-#: target name, so the unrelated `make test-markdown-format` and
-#: `make test-workflow-contracts` gates are not mistaken for one.
+#: target name, so the unrelated `make test-workflow-contracts` gate and its
+#: siblings are not mistaken for one.
 FORBIDDEN_TEST_COMMANDS = (
     re.compile(r"\bcargo nextest\b"),
     re.compile(r"\bcargo test\b"),

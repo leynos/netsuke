@@ -134,8 +134,9 @@ jobs:
           rustc --version
           cargo --version
       - name: Install mdtablefix
-        # Required by `make check-fmt`. mdtablefix 0.5.1 publishes a Windows
-        # x86_64 archive, so this lane installs a prebuilt binary like every
+        # Required by `make check-fmt`, which runs `mdtablefix --check --git`
+        # (0.6.0 or later). mdtablefix has published a Windows x86_64 archive
+        # since 0.5.1, so this lane installs a prebuilt binary like every
         # other. It compiled the tool from source until then, which was this
         # repository's last source-build exception.
         uses: >-

@@ -974,9 +974,10 @@ as a newly permitted entry; and it rejects `cargo install` anywhere in any
 workflow or composite action. `tests/workflow_orthohelp_install.rs` requires
 the release lane to disable binstall's compile strategy, and
 `tests/workflow_contracts/ci_mdtablefix_installer_test.py` requires both
-formatter lanes to use the shared action at a version no earlier than 0.5.1,
-and the retired local action and its build directory to be absent rather than
-merely unused.
+formatter lanes to use the shared action at a version no earlier than 0.6.0
+(the first with the `--check --git` modes `make check-fmt` runs), and the
+retired local action and its build directory to be absent rather than merely
+unused.
 
 The detector behind both parses the command rather than matching its shape. An
 option's value is indistinguishable from a crate name without knowing which
@@ -1526,10 +1527,11 @@ cargo binstall --no-confirm --locked \
 ```
 
 `make check-fmt` verifies Markdown formatting as well as Rust formatting, and
-needs `mdtablefix` on `PATH`. CI pins the version in `MDTABLEFIX_VERSION` in
-`.github/workflows/ci.yml`. Install that same version locally, so local runs
-match CI; read the pin from the workflow rather than copying the number, so the
-two cannot drift:
+needs `mdtablefix` 0.6.0 or later on `PATH`, because it runs the `--check` and
+`--git` modes that release introduced. CI pins the version in
+`MDTABLEFIX_VERSION` in `.github/workflows/ci.yml`. Install that same version
+locally, so local runs match CI; read the pin from the workflow rather than
+copying the number, so the two cannot drift:
 
 ```bash
 MDTABLEFIX_VERSION="$(sed -n "s/.*MDTABLEFIX_VERSION: '\(.*\)'.*/\1/p" \
@@ -2011,18 +2013,36 @@ every command in this completion checklist:
 
 ## Markdown formatting and table alignment
 
-`make fmt` runs `mdformat-all`, which runs `mdtablefix` (with
-`--wrap --renumber --breaks --ellipsis --fences --in-place`) and then
-`markdownlint-cli2 --fix`. `mdtablefix` owns table padding and paragraph
-wrapping; `make markdownlint` then verifies the result.
+`make fmt` calls both Markdown tools directly. It first runs
+`mdtablefix --in-place --git --include-untracked` with the rule flags
+`--wrap --renumber --breaks --ellipsis --fences`, and then
+`markdownlint-cli2 --fix "**/*.md"`. `mdtablefix` owns table padding and
+paragraph wrapping; `make markdownlint` then verifies the result. `--git`
+selects the Markdown files in Git's index and `--include-untracked` adds the
+untracked files Git does not ignore, so a new document is formatted before it
+is staged and `.gitignore` is respected exactly as Git respects it. Symbolic
+links are skipped, so `CRUSH.md` (a link to `AGENTS.md`) is never rewritten
+twice. The Makefile declares the selection in `MDTABLEFIX_SELECT` and the rules
+in `MDTABLEFIX_RULES`, and `tests/workflow_contracts/ci_lint_test.py` holds
+both recipes to them.
 
-`make check-fmt` runs the Rust and Python formatter checks, then passes tracked
-Markdown files to `scripts/check-markdown-format.sh`. The wrapper skips the
-Markdown check when the file list is empty, so the command remains portable
-across hosts. The checker requires `mdtablefix` version `0.5.1`, the version
-pinned by `MDTABLEFIX_VERSION` in the CI workflow; verify an installation with
-`mdtablefix --version`. Run `make test-markdown-format` to exercise the
-checker, including its empty-input behaviour, before changing the wrapper.
+`make check-fmt` runs the Rust and Python formatter checks, then
+`mdtablefix --check` over the same selection and rules. `--check` is read-only:
+it names each file that would be reformatted with its line delta and exits `1`
+when the tree drifts, and `2` when a file cannot be read, so a usage or I/O
+failure is never mistaken for drift. Selecting nothing is a success, so the
+command remains portable across hosts. Both recipes require `mdtablefix` 0.6.0
+or later, the version pinned by `MDTABLEFIX_VERSION` in the CI workflow; verify
+an installation with `mdtablefix --version`.
+
+In CI, Markdown linting runs through the SHA-pinned upstream
+`DavidAnson/markdownlint-cli2-action` step in `ci.yml` rather than through
+`make markdownlint`. The action's release carries the linter's whole dependency
+graph, so nothing is resolved from the registry at run time, and Dependabot
+manages the pin alongside the other actions. It reads
+`.markdownlint-cli2.jsonc` from the workspace and lints the same `**/*.md`
+globs as the Makefile, so the local and CI gates agree on rules and coverage.
+Spelling stays in `make spelling`, which CI runs as its own step.
 
 markdownlint's `MD060` (table-column-style) checks that table pipes align using
 a display-width model that treats CJK characters and emoji as double-width.
@@ -2040,7 +2060,7 @@ Contributors should prefer a file-scoped `markdownlint-disable-file` directive
 (or a narrower `markdownlint-disable-next-line`) over disabling a rule
 repository-wide, and should record the reason in a comment beside the directive.
 
-Note that `mdformat-all` rewraps every Markdown file it finds, not only the
+Note that `make fmt` rewraps every Markdown file Git selects, not only the
 files a change touches. Revert the unrelated reflow before committing so a
 change stays reviewable.
 
