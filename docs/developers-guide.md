@@ -1407,9 +1407,9 @@ and other state for later steps on their own runner.
 separate `workflow_run` workflow whose definition comes from the default
 branch. After a successful same-repository `pull_request` CI run, it starts a
 fresh runner, and `actions/checkout` retrieves the full trusted default-branch
-tree. The workflow executes only the needed checked-in validation and
-submission commands, then downloads the artefact as a raw ZIP into
-`coverage-artifact/` with decompression disabled. It never checks out or
+tree at `fetch-depth: 0`. The workflow executes only the needed checked-in
+validation and submission commands, then downloads the artefact as a raw ZIP
+into `coverage-artifact/` with decompression disabled. It never checks out or
 executes the PR tree or artefact contents. Before the CodeScene action can see
 the secret, `scripts/validate_coverage_archive.py` requires exactly one
 regular, non-symbolic archive file inside that directory, checks the ZIP
@@ -1418,6 +1418,30 @@ cumulative uncompressed size and no directory or symbolic-link entry, and only
 then reads the bounded member bytes, validates UTF-8 and recognized LCOV
 records, and writes `validated-coverage/lcov.info`. Archive metadata is
 therefore authoritative before any member data is read.
+
+The depth is part of the contract rather than an optimization. The shared
+`upload-codescene-coverage` action documents `mode: check` as diffing against a
+merge base and requiring a `fetch-depth: 0` checkout, and the CodeScene CLI
+reads that history rather than a working tree. At `actions/checkout`'s default
+depth of one there is no history to read: the step exits with
+`fatal: ambiguous
+argument 'HEAD~1': unknown revision or path not in the working tree`,
+which fails `CodeScene coverage` on every pull request and leaves
+`CodeScene Code Coverage (main)` waiting for a submission that never lands.
+`tests/workflow_contracts/codescene_check_depth_test.py` holds every job that
+runs the action in `check` mode to a full-history checkout declared before the
+gate step, with `codescene_check_depth_properties_test.py` driving the rule
+over job shapes this repository does not have.
+
+Depth is what stops the gate erroring; it is not what would give it the pull
+request's comparison. This job checks out the default branch and never pull
+request content, so the CLI runs outside pull-request context whatever depth it
+is given and takes the default branch's own first parent as its changeset base.
+Giving it the originating comparison would mean checking out
+`workflow_run.head_sha`, which is the arrangement this boundary exists to
+prevent. Both CodeScene coverage gates are currently disabled for this project,
+so no verdict rests on that base today; enabling one makes the base
+load-bearing and needs its own design.
 
 Eligibility is enforced by the trusted workflow definition, its successful
 pull-request and same-repository-head guards, and the step-local
