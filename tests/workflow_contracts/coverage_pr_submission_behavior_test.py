@@ -326,6 +326,7 @@ def test_trusted_workflow_uses_only_checked_in_python_action_scripts() -> None:
                     for module_name in (
                         "coverage_pr_submission.py",
                         "coverage_pr_submission_observability.py",
+                        "verify_python_baseline.py",
                     )
                 ), f"{job_name} scripts must use a trusted action module"
     assert "def coverage_conclusion(" in action_source, (

@@ -64,6 +64,16 @@ jobs:
           # from reading the config-only pyproject.
           activate-environment: 'true'
           no-project: 'true'
+      - name: Verify the trusted interpreter is the Python baseline
+        # First Python step on purpose: the other trusted modules fail as they
+        # load under any interpreter but the baseline, so this names the real
+        # cause before any of them runs.
+        shell: python
+        run: |
+          import runpy
+          import sys
+          sys.argv = [".github/scripts/verify_python_baseline.py", "verify"]
+          runpy.run_path(sys.argv[0], run_name="__main__")
       - name: Start coverage artefact download telemetry
         id: start_download_coverage
         shell: python
