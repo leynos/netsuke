@@ -3,6 +3,8 @@
 use std::ffi::{OsStr, OsString};
 
 use camino::{Utf8Path, Utf8PathBuf};
+#[cfg(test)]
+use mockable::MockEnv;
 use mockable::{DefaultEnv, Env};
 
 use super::{
@@ -55,6 +57,54 @@ fn capture_workspace_switch(env: &impl Env) -> WorkspaceSwitch {
         );
     }
     switch
+}
+
+/// Build a strict injected environment for a non-Windows snapshot capture.
+///
+/// The fixture mirrors every ambient read made by [`EnvSnapshot::capture_with_env`]
+/// so tests fail when capture's contract gains a new input rather than silently
+/// consulting the host environment.
+#[cfg(all(test, not(windows)))]
+pub(super) fn mock_env_for_capture(
+    path: Option<OsString>,
+    workspace_switch: Result<String, std::env::VarError>,
+) -> MockEnv {
+    let mut env = MockEnv::new();
+    env.expect_os_string()
+        .withf(|key| key == "PATH")
+        .once()
+        .return_once(move |_| path);
+    env.expect_raw()
+        .withf(|key| key == WORKSPACE_FALLBACK_ENV)
+        .once()
+        .return_once(move |_| workspace_switch);
+    env
+}
+
+/// Build a strict injected environment for a Windows snapshot capture.
+///
+/// Windows capture reads `PATHEXT` between `PATH` and the workspace switch, so
+/// every Windows fixture supplies all three values explicitly.
+#[cfg(all(test, windows))]
+pub(super) fn mock_env_for_capture(
+    path: Option<OsString>,
+    pathext: Option<OsString>,
+    workspace_switch: Result<String, std::env::VarError>,
+) -> MockEnv {
+    let mut env = MockEnv::new();
+    env.expect_os_string()
+        .withf(|key| key == "PATH")
+        .once()
+        .return_once(move |_| path);
+    env.expect_os_string()
+        .withf(|key| key == "PATHEXT")
+        .once()
+        .return_once(move |_| pathext);
+    env.expect_raw()
+        .withf(|key| key == WORKSPACE_FALLBACK_ENV)
+        .once()
+        .return_once(move |_| workspace_switch);
+    env
 }
 
 /// Snapshot of the environment inputs one `which` resolution consults.

@@ -1,8 +1,8 @@
 //! Tests for the which lookup helpers, covering PATH search, workspace
 //! fallback, canonicalization, and platform-specific PATHEXT behaviour.
+use super::super::env::mock_env_for_capture;
 use super::*;
 use anyhow::{Context, Result, anyhow, ensure};
-use mockable::MockEnv;
 use rstest::{fixture, rstest};
 use tempfile::TempDir;
 use test_support::exec::write_exec;
@@ -310,15 +310,10 @@ fn cwd_always_lists_current_directory_once(
 }
 /// Capture a workspace-rooted snapshot with `PATH` absent.
 fn snapshot_without_path(workspace: &TempWorkspace) -> Result<EnvSnapshot> {
-    let mut env = MockEnv::new();
-    env.expect_os_string()
-        .withf(|key| key == "PATH")
-        .once()
-        .return_const(None);
-    env.expect_raw()
-        .withf(|key| key == "NETSUKE_WHICH_WORKSPACE")
-        .once()
-        .return_const(Err(std::env::VarError::NotPresent));
+    #[cfg(not(windows))]
+    let env = mock_env_for_capture(None, Err(std::env::VarError::NotPresent));
+    #[cfg(windows)]
+    let env = mock_env_for_capture(None, None, Err(std::env::VarError::NotPresent));
     EnvSnapshot::capture_with_env(Some(workspace.root()), None, &env)
         .context("capture workspace snapshot without PATH")
 }

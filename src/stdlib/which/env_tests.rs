@@ -2,7 +2,6 @@
 
 use super::*;
 use crate::test_tracing_capture::with_test_subscriber;
-use mockable::MockEnv;
 use tracing::level_filters::LevelFilter;
 
 /// The exact warning capture emits for a non-UTF-8 switch value. Asserted
@@ -15,17 +14,7 @@ fn capture_uses_the_injected_path_provider() {
     let cwd = Utf8Path::new("/workspace");
     let configured = OsString::from("/configured/bin");
     let expected = configured.clone();
-    let mut env = MockEnv::new();
-    env.expect_os_string()
-        .withf(|key| key == "PATH")
-        .once()
-        .return_once(move |_| Some(configured));
-    // Capture also reads the workspace switch through the same provider;
-    // pinning the key keeps that read observable rather than wildcarded.
-    env.expect_raw()
-        .withf(|key| key == WORKSPACE_FALLBACK_ENV)
-        .once()
-        .return_const(Err(std::env::VarError::NotPresent));
+    let env = mock_env_for_capture(Some(configured), Err(std::env::VarError::NotPresent));
 
     let snapshot = EnvSnapshot::capture_with_env(Some(cwd), None, &env)
         .expect("injected PATH should produce an environment snapshot");
@@ -46,17 +35,10 @@ fn capture_uses_the_injected_path_provider() {
 /// and no indication why.
 #[test]
 fn capture_warns_once_for_a_non_utf8_workspace_switch() {
-    let mut env = MockEnv::new();
-    env.expect_os_string()
-        .withf(|key| key == "PATH")
-        .once()
-        .return_once(|_| Some(OsString::from("/configured/bin")));
-    env.expect_raw()
-        .withf(|key| key == WORKSPACE_FALLBACK_ENV)
-        .once()
-        .return_const(Err(std::env::VarError::NotUnicode(OsString::from(
-            "ignored",
-        ))));
+    let env = mock_env_for_capture(
+        Some(OsString::from("/configured/bin")),
+        Err(std::env::VarError::NotUnicode(OsString::from("ignored"))),
+    );
 
     let (enabled, events) = with_test_subscriber(LevelFilter::WARN, |captured| {
         let snapshot = EnvSnapshot::capture_with_env(Some(Utf8Path::new("/workspace")), None, &env)
