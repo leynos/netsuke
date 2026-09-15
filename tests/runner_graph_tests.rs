@@ -126,6 +126,38 @@ fn graph_with_invalid_manifest_reports_error() -> Result<()> {
 }
 
 #[rstest]
+fn graph_rejects_environment_variable_blocked_by_cli_policy() -> Result<()> {
+    const VARIABLE_NAME: &str = "NETSUKE_TEST_ENV";
+    let temp = tempfile::tempdir().context("create temporary graph project")?;
+    let manifest_path = temp.path().join("Netsukefile");
+    std::fs::copy("tests/data/jinja_env.yml", &manifest_path).with_context(|| {
+        format!(
+            "copy Jinja environment manifest to {}",
+            manifest_path.display()
+        )
+    })?;
+    let cli = Cli {
+        file: utf8_path(&manifest_path)?,
+        command: Some(Commands::Graph(GraphArgs::default())),
+        env_block_var: vec![String::from(VARIABLE_NAME)],
+        ..Cli::default()
+    };
+
+    let error =
+        run_graph(&cli).expect_err("blocked environment lookup should reject graph loading");
+    let diagnostic = format!("{error:#}");
+    ensure!(
+        diagnostic.contains("Access to an environment variable is blocked."),
+        "graph loading should preserve the bounded blocked diagnostic: {diagnostic}"
+    );
+    ensure!(
+        !diagnostic.contains(VARIABLE_NAME),
+        "graph loading must not disclose the blocked environment variable name"
+    );
+    Ok(())
+}
+
+#[rstest]
 fn graph_html_writes_self_contained_document() -> Result<()> {
     let (temp, manifest_path) = create_test_manifest()?;
     let html_path = temp.path().join("graph.html");
