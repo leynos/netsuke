@@ -430,3 +430,6 @@ example.errors_found = { $count ->
     [one] { $count } hiba található.
    *[other] { $count } hiba található.
 }
+
+cli.flag.env_allow_var.help = Environment variable permitted for the manifest env() helper
+cli.flag.env_block_var.help = Environment variable blocked for the manifest env() helper

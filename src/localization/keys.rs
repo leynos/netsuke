@@ -20,6 +20,8 @@ define_keys! {
     CLI_FLAG_VERBOSE_HELP => "cli.flag.verbose.help",
     CLI_FLAG_LOCALE_HELP => "cli.flag.locale.help",
     CLI_FLAG_FETCH_ALLOW_SCHEME_HELP => "cli.flag.fetch_allow_scheme.help",
+    CLI_FLAG_ENV_ALLOW_VAR_HELP => "cli.flag.env_allow_var.help",
+    CLI_FLAG_ENV_BLOCK_VAR_HELP => "cli.flag.env_block_var.help",
     CLI_FLAG_FETCH_ALLOW_HOST_HELP => "cli.flag.fetch_allow_host.help",
     CLI_FLAG_FETCH_BLOCK_HOST_HELP => "cli.flag.fetch_block_host.help",
     CLI_FLAG_FETCH_DEFAULT_DENY_HELP => "cli.flag.fetch_default_deny.help",

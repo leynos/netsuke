@@ -78,6 +78,14 @@ pub struct Cli {
     #[arg(long = "fetch-allow-scheme", value_name = "SCHEME")]
     pub fetch_allow_scheme: Vec<String>,
 
+    /// Environment variables permitted for the manifest `env()` helper.
+    #[arg(long = "env-allow-var", value_name = "VAR")]
+    pub env_allow_var: Vec<String>,
+
+    /// Environment variables always blocked for the manifest `env()` helper.
+    #[arg(long = "env-block-var", value_name = "VAR")]
+    pub env_block_var: Vec<String>,
+
     /// Hostnames that are permitted when default deny is enabled.
     ///
     /// Supports wildcards such as `*.example.com`.
@@ -164,6 +172,8 @@ impl Default for Cli {
             verbose: false,
             locale: None,
             fetch_allow_scheme: Vec::new(),
+            env_allow_var: Vec::new(),
+            env_block_var: Vec::new(),
             fetch_allow_host: Vec::new(),
             fetch_block_host: Vec::new(),
             fetch_default_deny: false,

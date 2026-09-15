@@ -425,3 +425,6 @@ example.errors_found = { $count ->
     [0] 未發現錯誤。
    *[other] 發現 { $count } 個錯誤。
 }
+
+cli.flag.env_allow_var.help = Environment variable permitted for the manifest env() helper
+cli.flag.env_block_var.help = Environment variable blocked for the manifest env() helper
