@@ -427,5 +427,5 @@ example.errors_found = { $count ->
    *[other] Tìm thấy { $count } lỗi.
 }
 
-cli.flag.env_allow_var.help = Biến môi trường được phép cho hàm trợ giúp env() của tệp kê khai
-cli.flag.env_block_var.help = Biến môi trường bị chặn cho hàm trợ giúp env() của tệp kê khai
+cli.flag.env_allow_var.help = Biến môi trường được phép cho hàm trợ giúp env() của tệp kê khai.
+cli.flag.env_block_var.help = Biến môi trường bị chặn cho hàm trợ giúp env() của tệp kê khai.

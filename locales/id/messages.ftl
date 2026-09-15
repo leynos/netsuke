@@ -428,5 +428,5 @@ example.errors_found = { $count ->
    *[other] { $count } galat ditemukan.
 }
 
-cli.flag.env_allow_var.help = Variabel lingkungan yang diizinkan untuk pembantu env() manifes
-cli.flag.env_block_var.help = Variabel lingkungan yang diblokir untuk pembantu env() manifes
+cli.flag.env_allow_var.help = Variabel lingkungan yang diizinkan untuk pembantu env() manifes.
+cli.flag.env_block_var.help = Variabel lingkungan yang diblokir untuk pembantu env() manifes.

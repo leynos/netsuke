@@ -431,5 +431,5 @@ example.errors_found = { $count ->
    *[other] { $count } hiba található.
 }
 
-cli.flag.env_allow_var.help = A manifest env() segédje számára engedélyezett környezeti változó
-cli.flag.env_block_var.help = A manifest env() segédje számára tiltott környezeti változó
+cli.flag.env_allow_var.help = A manifest env() segédje számára engedélyezett környezeti változó.
+cli.flag.env_block_var.help = A manifest env() segédje számára tiltott környezeti változó.

@@ -430,5 +430,5 @@ example.errors_found = { $count ->
    *[other] { $count } hata bulundu.
 }
 
-cli.flag.env_allow_var.help = Bildirim env() yardımcısı için izin verilen ortam değişkeni
-cli.flag.env_block_var.help = Bildirim env() yardımcısı için engellenen ortam değişkeni
+cli.flag.env_allow_var.help = Bildirim env() yardımcısı için izin verilen ortam değişkeni.
+cli.flag.env_block_var.help = Bildirim env() yardımcısı için engellenen ortam değişkeni.

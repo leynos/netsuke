@@ -437,5 +437,5 @@ example.errors_found = { $count ->
    *[other] عُثر على { $count } خطأ.
 }
 
-cli.flag.env_allow_var.help = متغير البيئة المسموح به لمساعد env() في البيان
-cli.flag.env_block_var.help = متغير البيئة المحظور على مساعد env() في البيان
+cli.flag.env_allow_var.help = متغير البيئة المسموح به لمساعد env() في البيان.
+cli.flag.env_block_var.help = متغير البيئة المحظور على مساعد env() في البيان.

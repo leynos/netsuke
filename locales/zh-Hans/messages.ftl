@@ -426,5 +426,5 @@ example.errors_found = { $count ->
    *[other] 发现 { $count } 个错误。
 }
 
-cli.flag.env_allow_var.help = 允许清单 env() 助手使用的环境变量
-cli.flag.env_block_var.help = 清单 env() 助手阻止使用的环境变量
+cli.flag.env_allow_var.help = 允许清单 env() 助手使用的环境变量。
+cli.flag.env_block_var.help = 清单 env() 助手阻止使用的环境变量。

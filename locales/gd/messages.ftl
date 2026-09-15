@@ -434,5 +434,5 @@ example.errors_found = { $count ->
    *[other] Chaidh { $count } mearachd a lorg.
 }
 
-cli.flag.env_allow_var.help = Caochladair àrainneachd ceadaichte do chuidiche env() a’ mhanaifeist
-cli.flag.env_block_var.help = Caochladair àrainneachd toirmisgte do chuidiche env() a’ mhanaifeist
+cli.flag.env_allow_var.help = Caochladair àrainneachd ceadaichte do chuidiche env() a’ mhanaifeist.
+cli.flag.env_block_var.help = Caochladair àrainneachd toirmisgte do chuidiche env() a’ mhanaifeist.

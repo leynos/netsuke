@@ -433,5 +433,5 @@ example.errors_found = { $count ->
    *[other] S-au găsit { $count } de erori.
 }
 
-cli.flag.env_allow_var.help = Variabilă de mediu permisă pentru ajutorul env() al manifestului
-cli.flag.env_block_var.help = Variabilă de mediu blocată pentru ajutorul env() al manifestului
+cli.flag.env_allow_var.help = Variabilă de mediu permisă pentru ajutorul env() al manifestului.
+cli.flag.env_block_var.help = Variabilă de mediu blocată pentru ajutorul env() al manifestului.

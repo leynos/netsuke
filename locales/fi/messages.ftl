@@ -431,5 +431,5 @@ example.errors_found = { $count ->
    *[other] Löytyi { $count } virhettä.
 }
 
-cli.flag.env_allow_var.help = Manifestin env()-avustajalle sallittu ympäristömuuttuja
-cli.flag.env_block_var.help = Manifestin env()-avustajalta estetty ympäristömuuttuja
+cli.flag.env_allow_var.help = Manifestin env()-avustajalle sallittu ympäristömuuttuja.
+cli.flag.env_block_var.help = Manifestin env()-avustajalta estetty ympäristömuuttuja.
