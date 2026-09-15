@@ -434,5 +434,5 @@ example.errors_found = { $count ->
    *[other] Chaidh { $count } mearachd a lorg.
 }
 
-cli.flag.env_allow_var.help = Environment variable permitted for the manifest env() helper
-cli.flag.env_block_var.help = Environment variable blocked for the manifest env() helper
+cli.flag.env_allow_var.help = Caochladair àrainneachd ceadaichte do chuideachadh env() a’ mhanaifeist
+cli.flag.env_block_var.help = Caochladair àrainneachd toirmisgte do chuideachadh env() a’ mhanaifeist

@@ -431,5 +431,5 @@ example.errors_found = { $count ->
    *[other] { $count } erros encontrados.
 }
 
-cli.flag.env_allow_var.help = Environment variable permitted for the manifest env() helper
-cli.flag.env_block_var.help = Environment variable blocked for the manifest env() helper
+cli.flag.env_allow_var.help = Variável de ambiente permitida para o auxiliar env() do manifesto
+cli.flag.env_block_var.help = Variável de ambiente bloqueada para o auxiliar env() do manifesto

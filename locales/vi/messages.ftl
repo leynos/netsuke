@@ -427,5 +427,5 @@ example.errors_found = { $count ->
    *[other] Tìm thấy { $count } lỗi.
 }
 
-cli.flag.env_allow_var.help = Environment variable permitted for the manifest env() helper
-cli.flag.env_block_var.help = Environment variable blocked for the manifest env() helper
+cli.flag.env_allow_var.help = Biến môi trường được phép cho trợ giúp env() của tệp khai báo
+cli.flag.env_block_var.help = Biến môi trường bị chặn cho trợ giúp env() của tệp khai báo

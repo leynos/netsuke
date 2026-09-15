@@ -434,5 +434,5 @@ example.errors_found = { $count ->
    *[other] Nalezeno { $count } chyb.
 }
 
-cli.flag.env_allow_var.help = Environment variable permitted for the manifest env() helper
-cli.flag.env_block_var.help = Environment variable blocked for the manifest env() helper
+cli.flag.env_allow_var.help = Proměnná prostředí povolená pomocníkovi env() manifestu
+cli.flag.env_block_var.help = Proměnná prostředí blokovaná pomocníkovi env() manifestu

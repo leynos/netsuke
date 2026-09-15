@@ -78,3 +78,31 @@ pub fn from_str_with_env_and_config(
         &mut None,
     )
 }
+
+/// Parse a manifest string with explicit environment inputs.
+///
+/// The policy is evaluated before the reader runs, so a blocked `env()` call
+/// cannot disclose a process value through manifest rendering.
+///
+/// # Errors
+///
+/// Returns an error if YAML parsing or Jinja evaluation fails, including when
+/// an `env()` lookup is denied by `env_access_policy`.
+pub fn from_str_with_env_and_policy(
+    yaml: &str,
+    env_reader: &EnvReader,
+    env_access_policy: &EnvAccessPolicy,
+) -> Result<NetsukeManifest> {
+    from_str_named(
+        yaml,
+        ManifestParse {
+            name: &ManifestName::new("Netsukefile"),
+            stdlib_registration: None,
+            env_reader,
+            env_access_policy,
+            manifest_root: None,
+            expansion_report_observer: Some(trace_expansion_report),
+        },
+        &mut None,
+    )
+}

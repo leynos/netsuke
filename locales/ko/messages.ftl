@@ -427,5 +427,5 @@ example.errors_found = { $count ->
    *[other] 오류 { $count }개를 찾았습니다.
 }
 
-cli.flag.env_allow_var.help = Environment variable permitted for the manifest env() helper
-cli.flag.env_block_var.help = Environment variable blocked for the manifest env() helper
+cli.flag.env_allow_var.help = 매니페스트 env() 도우미에 허용되는 환경 변수
+cli.flag.env_block_var.help = 매니페스트 env() 도우미에서 차단되는 환경 변수

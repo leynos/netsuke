@@ -437,5 +437,5 @@ example.errors_found = { $count ->
    *[other] Cafwyd hyd i { $count } gwall.
 }
 
-cli.flag.env_allow_var.help = Environment variable permitted for the manifest env() helper
-cli.flag.env_block_var.help = Environment variable blocked for the manifest env() helper
+cli.flag.env_allow_var.help = Newidyn amgylchedd a ganiateir i gynorthwyydd env() y maniffest
+cli.flag.env_block_var.help = Newidyn amgylchedd a rwystir i gynorthwyydd env() y maniffest

@@ -56,6 +56,17 @@ introduces, and concrete remediation tasks that would harden the helpers.
   project grants append deliberately; a project cannot set the opt-in for
   itself. Project `fetch_block_host` remains cumulative and continues to
   override allows.
+- [x] **Manifest rendering could ingest arbitrary environment secrets.**
+  *(Status: remediated for issue #666.)* The Jinja `env()` helper previously
+  read any process environment variable requested by a manifest. Operators can
+  now configure exact `env_allow_var` and `env_block_var` entries through the
+  normal configuration layers, `NETSUKE_` environment variables, or CLI flags.
+  Empty lists preserve default-allow compatibility; a non-empty allowlist
+  enables default-deny, and an exact blocklist entry always overrides an
+  allowlist entry. Denied reads fail before the process reader runs and expose
+  only a fixed localized diagnostic. This reduces secret ingress into rendered
+  fields but does not make permitted rendered values safe to log; existing
+  output and logging discipline remains required.
 - [x] **Redirects bypass outbound request policy.** *(Status: remediated in
   issue #647.)* An allowed HTTP endpoint could redirect `fetch` to a target
   that the initial policy would block, including link-local metadata services.

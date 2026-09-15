@@ -50,7 +50,7 @@ pub(crate) use expand::expand_foreach;
 pub use glob::glob_paths;
 pub use load_stage::ManifestLoadStage;
 use loading::{notify_stage, trace_expansion_report};
-pub use parse_with_config::from_str_with_env_and_config;
+pub use parse_with_config::{from_str_with_env_and_config, from_str_with_env_and_policy};
 pub(crate) use query::from_path_for_manifest_query;
 pub use render::render_manifest;
 #[cfg(test)]
@@ -286,18 +286,7 @@ pub fn from_str(yaml: &str) -> Result<NetsukeManifest> {
 /// ```
 pub fn from_str_with_env(yaml: &str, env_reader: &EnvReader) -> Result<NetsukeManifest> {
     let env_access_policy = EnvAccessPolicy::default();
-    from_str_named(
-        yaml,
-        ManifestParse {
-            name: &ManifestName::new("Netsukefile"),
-            stdlib_registration: None,
-            env_reader,
-            env_access_policy: &env_access_policy,
-            manifest_root: None,
-            expansion_report_observer: Some(trace_expansion_report),
-        },
-        &mut None,
-    )
+    from_str_with_env_and_policy(yaml, env_reader, &env_access_policy)
 }
 
 /// Load a [`NetsukeManifest`] from the given file path.
