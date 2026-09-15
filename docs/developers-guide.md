@@ -6254,7 +6254,6 @@ disabled, so this event cannot corrupt its diagnostic output.
   immutably. New reporter kinds or selection policies belong in this module
   beside the mode-selection logic, colocated with the output-mode policy.
 
-
 ### Module: `runner::process::ninja_status`
 
 `src/runner/process/ninja_status.rs` parses Ninja's default `NINJA_STATUS`
