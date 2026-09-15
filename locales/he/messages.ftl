@@ -443,3 +443,6 @@ example.errors_found = { $count ->
    *[other] נמצאו { $count } שגיאות.
 }
 manifest.budget.exceeded = ‏תקציב המשאבים של המניפסט אזל במהלך { $stage } לאחר שהגיע ל־{ $limit }.
+
+cli.flag.env_allow_var.help = Environment variable permitted for the manifest env() helper
+cli.flag.env_block_var.help = Environment variable blocked for the manifest env() helper

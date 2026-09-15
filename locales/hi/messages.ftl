@@ -441,3 +441,6 @@ example.errors_found = { $count ->
    *[other] { $count } त्रुटियाँ मिलीं।
 }
 manifest.budget.exceeded = { $stage } के दौरान { $limit } तक पहुँचने के बाद मैनिफ़ेस्ट का संसाधन बजट समाप्त हो गया।
+
+cli.flag.env_allow_var.help = Environment variable permitted for the manifest env() helper
+cli.flag.env_block_var.help = Environment variable blocked for the manifest env() helper

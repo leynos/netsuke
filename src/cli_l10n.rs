@@ -227,6 +227,8 @@ pub(crate) fn top_level_flag_help_key(arg_id: &str) -> Option<&'static str> {
         "verbose" => Some(keys::CLI_FLAG_VERBOSE_HELP),
         "locale" => Some(keys::CLI_FLAG_LOCALE_HELP),
         "fetch_allow_scheme" => Some(keys::CLI_FLAG_FETCH_ALLOW_SCHEME_HELP),
+        "env_allow_var" => Some(keys::CLI_FLAG_ENV_ALLOW_VAR_HELP),
+        "env_block_var" => Some(keys::CLI_FLAG_ENV_BLOCK_VAR_HELP),
         "fetch_allow_host" => Some(keys::CLI_FLAG_FETCH_ALLOW_HOST_HELP),
         "fetch_block_host" => Some(keys::CLI_FLAG_FETCH_BLOCK_HOST_HELP),
         "fetch_default_deny" => Some(keys::CLI_FLAG_FETCH_DEFAULT_DENY_HELP),

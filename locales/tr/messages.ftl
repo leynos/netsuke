@@ -439,3 +439,6 @@ example.errors_found = { $count ->
    *[other] { $count } hata bulundu.
 }
 manifest.budget.exceeded = Manifest kaynak bütçesi { $stage } aşamasında { $limit } değerine ulaşıldıktan sonra tükendi.
+
+cli.flag.env_allow_var.help = Environment variable permitted for the manifest env() helper
+cli.flag.env_block_var.help = Environment variable blocked for the manifest env() helper

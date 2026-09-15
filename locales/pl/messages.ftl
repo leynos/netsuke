@@ -444,3 +444,6 @@ example.errors_found = { $count ->
    *[other] Znaleziono { $count } błędu.
 }
 manifest.budget.exceeded = Budżet zasobów manifestu został wyczerpany. Etap: { $stage }. Osiągnięta wartość limitu: { $limit }.
+
+cli.flag.env_allow_var.help = Environment variable permitted for the manifest env() helper
+cli.flag.env_block_var.help = Environment variable blocked for the manifest env() helper

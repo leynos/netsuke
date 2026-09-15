@@ -17,6 +17,8 @@ pub(super) fn apply_config(parsed: &Cli, config: CliConfig) -> Cli {
         verbose: config.verbose,
         locale: config.locale,
         fetch_allow_scheme: config.fetch_allow_scheme,
+        env_allow_var: config.env_allow_var,
+        env_block_var: config.env_block_var,
         fetch_allow_host: config.fetch_allow_host,
         fetch_block_host: config.fetch_block_host,
         fetch_default_deny: config.fetch_default_deny,

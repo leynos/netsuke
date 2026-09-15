@@ -442,3 +442,6 @@ example.errors_found = { $count ->
    *[other] S-au găsit { $count } de erori.
 }
 manifest.budget.exceeded = Bugetul de resurse al manifestului s-a epuizat în timpul etapei { $stage }, după atingerea limitei { $limit }.
+
+cli.flag.env_allow_var.help = Environment variable permitted for the manifest env() helper
+cli.flag.env_block_var.help = Environment variable blocked for the manifest env() helper

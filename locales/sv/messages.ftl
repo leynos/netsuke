@@ -438,3 +438,6 @@ example.errors_found = { $count ->
    *[other] { $count } fel hittades.
 }
 manifest.budget.exceeded = Manifestets resursbudget tog slut under { $stage } efter att { $limit } hade nåtts.
+
+cli.flag.env_allow_var.help = Environment variable permitted for the manifest env() helper
+cli.flag.env_block_var.help = Environment variable blocked for the manifest env() helper

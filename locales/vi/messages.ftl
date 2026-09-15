@@ -436,3 +436,6 @@ example.errors_found = { $count ->
    *[other] Tìm thấy { $count } lỗi.
 }
 manifest.budget.exceeded = Đã dùng hết ngân sách tài nguyên của manifest trong { $stage } sau khi đạt { $limit }.
+
+cli.flag.env_allow_var.help = Environment variable permitted for the manifest env() helper
+cli.flag.env_block_var.help = Environment variable blocked for the manifest env() helper

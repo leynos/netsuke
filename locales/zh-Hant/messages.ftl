@@ -435,3 +435,6 @@ example.errors_found = { $count ->
    *[other] 發現 { $count } 個錯誤。
 }
 manifest.budget.exceeded = 資訊清單資源預算在 { $stage } 階段達到 { $limit } 後耗盡。
+
+cli.flag.env_allow_var.help = Environment variable permitted for the manifest env() helper
+cli.flag.env_block_var.help = Environment variable blocked for the manifest env() helper

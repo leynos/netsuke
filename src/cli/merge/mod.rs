@@ -257,6 +257,8 @@ fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Va
         &cli.fetch_allow_scheme,
         &mut root,
     )?;
+    maybe_insert_explicit(matches, "env_allow_var", &cli.env_allow_var, &mut root)?;
+    maybe_insert_explicit(matches, "env_block_var", &cli.env_block_var, &mut root)?;
     maybe_insert_explicit(
         matches,
         "fetch_allow_host",

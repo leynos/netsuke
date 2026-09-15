@@ -41,6 +41,12 @@ Options:
       --fetch-allow-scheme <SCHEME>
           Additional URL schemes allowed for the fetch helper.
 
+      --env-allow-var <VAR>
+          Environment variable permitted for the manifest env() helper
+
+      --env-block-var <VAR>
+          Environment variable blocked for the manifest env() helper
+
       --fetch-allow-host <HOST>
           Hostnames that are permitted when default deny is enabled.
 

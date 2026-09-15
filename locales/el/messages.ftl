@@ -440,3 +440,6 @@ example.errors_found = { $count ->
    *[other] Βρέθηκαν { $count } σφάλματα.
 }
 manifest.budget.exceeded = Ο προϋπολογισμός πόρων του δηλωτικού εξαντλήθηκε κατά το στάδιο { $stage }, αφού έφτασε το { $limit }.
+
+cli.flag.env_allow_var.help = Environment variable permitted for the manifest env() helper
+cli.flag.env_block_var.help = Environment variable blocked for the manifest env() helper

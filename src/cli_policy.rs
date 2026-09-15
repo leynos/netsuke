@@ -1,10 +1,19 @@
 //! Extensions to [`Cli`](crate::cli::Cli) that depend on the full crate.
 
 use crate::cli::Cli;
+use crate::manifest::EnvAccessPolicy;
 use crate::stdlib::NetworkPolicy;
 use anyhow::Result;
 
 impl Cli {
+    /// Construct the environment-access policy requested through configuration.
+    #[must_use]
+    pub fn env_access_policy(&self) -> EnvAccessPolicy {
+        EnvAccessPolicy::default()
+            .allow_vars(self.env_allow_var.clone())
+            .block_vars(self.env_block_var.clone())
+    }
+
     /// Construct the manifest resource ceilings requested through configuration.
     ///
     /// # Errors

@@ -191,6 +191,16 @@ pub struct CliConfig {
     #[serde(default)]
     pub fetch_allow_scheme: Vec<String>,
 
+    /// Environment variables permitted for the manifest `env()` helper.
+    #[ortho_config(merge_strategy = "append")]
+    #[serde(default)]
+    pub env_allow_var: Vec<String>,
+
+    /// Environment variables always blocked for the manifest `env()` helper.
+    #[ortho_config(merge_strategy = "append")]
+    #[serde(default)]
+    pub env_block_var: Vec<String>,
+
     /// Hostnames permitted when default deny is enabled.
     #[ortho_config(merge_strategy = "append")]
     #[serde(default)]
@@ -280,6 +290,8 @@ impl Default for CliConfig {
             verbose: false,
             locale: None,
             fetch_allow_scheme: Vec::new(),
+            env_allow_var: Vec::new(),
+            env_block_var: Vec::new(),
             fetch_allow_host: Vec::new(),
             fetch_block_host: Vec::new(),
             fetch_default_deny: false,

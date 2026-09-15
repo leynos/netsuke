@@ -436,3 +436,6 @@ example.errors_found = { $count ->
    *[other] 오류 { $count }개를 찾았습니다.
 }
 manifest.budget.exceeded = { $stage } 중 매니페스트 리소스 예산이 소진되었습니다. { $limit }에 도달했습니다.
+
+cli.flag.env_allow_var.help = Environment variable permitted for the manifest env() helper
+cli.flag.env_block_var.help = Environment variable blocked for the manifest env() helper

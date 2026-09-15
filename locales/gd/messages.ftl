@@ -443,3 +443,6 @@ example.errors_found = { $count ->
    *[other] Chaidh { $count } mearachd a lorg.
 }
 manifest.budget.exceeded = Dh’fhalbh buidseat ghoireasan na foirm-liosta rè { $stage } às dèidh { $limit } a ruigsinn.
+
+cli.flag.env_allow_var.help = Environment variable permitted for the manifest env() helper
+cli.flag.env_block_var.help = Environment variable blocked for the manifest env() helper
