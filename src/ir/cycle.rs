@@ -1,22 +1,26 @@
 //! Cycle detection utilities for the IR target graph.
 //!
-//! The public entry point is [`analyse`], which accepts the target map
-//! (`IrHashMap<Utf8PathBuf, BuildEdge>`) produced by IR lowering and
+//! The public entry point is [`analyse`], which accepts the canonical
+//! [`BuildGraph`] produced by IR lowering and
 //! returns a [`CycleDetectionReport`].  The report carries an optional
 //! detected cycle — an ordered, canonicalized list of paths — together
 //! with any dependencies referenced by a target but absent from the map.
 //! `order_only_deps` are intentionally excluded from traversal.
 //!
 //! Traversal state is owned by the private [`CycleDetector`] struct in the
-//! sibling `cycle_detector` module; the iteration walks every node in the
-//! target map and delegates depth-first visiting to the detector.  Detected
+//! sibling `cycle_detector` module; the iteration walks every output alias in
+//! the index and resolves its canonical edge through the arena. Detected
 //! cycles are normalized by [`support::canonicalize_cycle`] to produce deterministic
 //! error messages regardless of traversal order.  Consumed by
 //! [`super::from_manifest`] after the full target map is constructed.
 
 use camino::Utf8PathBuf;
 
-use super::graph::{BuildEdge, IrHashMap};
+#[cfg(any(test, kani))]
+use super::graph::BuildEdge;
+use super::graph::BuildGraph;
+#[cfg(kani)]
+use super::graph::IrHashMap;
 
 #[cfg(test)]
 #[path = "cycle_property_tests.rs"]
@@ -64,15 +68,15 @@ pub(crate) struct CycleDetectionReport {
     pub(crate) missing_dependencies: Vec<(Utf8PathBuf, Utf8PathBuf)>,
 }
 
-/// Detect cycles and collect missing dependencies in `targets`.
+/// Detect cycles and collect missing dependencies in `graph`.
 ///
 /// Performs a depth-first traversal of each [`BuildEdge`]'s `inputs` and
 /// `implicit_deps`.  `order_only_deps` are intentionally excluded.
 ///
 /// Returns any detected cycle path and missing dependencies encountered
 /// before that cycle.  Missing dependencies emit debug-level tracing events.
-pub(crate) fn analyse(targets: &IrHashMap<Utf8PathBuf, BuildEdge>) -> CycleDetectionReport {
-    let mut detector = CycleDetector::new(targets);
+pub(crate) fn analyse(graph: &BuildGraph) -> CycleDetectionReport {
+    let mut detector = CycleDetector::new(graph);
     let cycle = detector.detect();
     CycleDetectionReport {
         cycle,
@@ -84,8 +88,8 @@ pub(crate) fn analyse(targets: &IrHashMap<Utf8PathBuf, BuildEdge>) -> CycleDetec
 ///
 /// This drives [`CycleDetector`]'s production traversal in boolean mode.
 #[cfg(kani)]
-pub(crate) fn contains_cycle(targets: &IrHashMap<Utf8PathBuf, BuildEdge>) -> bool {
-    CycleDetector::new(targets).detect_presence()
+pub(crate) fn contains_cycle(graph: &BuildGraph) -> bool {
+    CycleDetector::new(graph).detect_presence()
 }
 
 #[cfg(kani)]

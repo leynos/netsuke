@@ -8,35 +8,15 @@ use std::cmp::Ordering;
 
 use camino::{Utf8Path, Utf8PathBuf};
 
-use super::super::graph::{BuildEdge, IrHashMap};
+use super::super::graph::{BuildEdge, BuildGraph, IrHashMap};
 use super::VisitState;
 
 /// Look up the target entry for `path`, returning its path and edge.
-#[cfg(not(kani))]
 pub(super) fn target_entry_for_path<'targets>(
-    targets: &'targets IrHashMap<Utf8PathBuf, BuildEdge>,
+    graph: &'targets BuildGraph,
     path: &Utf8Path,
 ) -> Option<(&'targets Utf8Path, &'targets BuildEdge)> {
-    targets
-        .get_key_value(path)
-        .map(|(target, edge)| (target.as_path(), edge))
-}
-
-#[cfg(kani)]
-pub(super) fn target_entry_for_path<'targets>(
-    targets: &'targets IrHashMap<Utf8PathBuf, BuildEdge>,
-    path: &Utf8Path,
-) -> Option<(&'targets Utf8Path, &'targets BuildEdge)> {
-    let mut index = 0;
-    while index < targets.len() {
-        if let Some((candidate, edge)) = targets.entry_at(index) {
-            if path_eq(candidate.as_path(), path) {
-                return Some((candidate.as_path(), edge));
-            }
-        }
-        index += 1;
-    }
-    None
+    graph.target_for_output(path)
 }
 
 /// Return the index of the smallest node in `cycle[0..len]`.

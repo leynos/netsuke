@@ -2106,6 +2106,8 @@ Rust
 use std::collections::HashMap;
 use camino::Utf8PathBuf;
 
+pub struct EdgeId(usize);
+
 /// The complete, static build graph.
 pub struct BuildGraph {
     /// A map of all unique actions (rules) in the build.
@@ -2113,8 +2115,11 @@ pub struct BuildGraph {
     /// properties to enable deduplication.
     pub actions: HashMap<String, Action>,
 
-    /// A map of all target files to be built. The key is the output path.
-    pub targets: HashMap<Utf8PathBuf, BuildEdge>,
+    /// Canonical build edges, each owned exactly once.
+    pub edges: Vec<BuildEdge>,
+
+    /// An output-path index pointing to a canonical edge.
+    pub targets: HashMap<Utf8PathBuf, EdgeId>,
 
     /// A list of targets to build by default.
     pub default_targets: Vec<Utf8PathBuf>,
@@ -2183,7 +2188,8 @@ pub struct BuildEdge {
 classDiagram
     class BuildGraph {
         +HashMap<String, Action> actions
-        +HashMap<Utf8PathBuf, BuildEdge> targets
+        +Vec<BuildEdge> edges
+        +HashMap<Utf8PathBuf, EdgeId> targets
         +Vec<Utf8PathBuf> default_targets
     }
      class Action {
@@ -2206,6 +2212,9 @@ classDiagram
         +bool phony
         +bool always
     }
+    class EdgeId {
+        +usize index
+    }
     class Recipe {
          <<enum>>
          Command
@@ -2217,7 +2226,9 @@ classDiagram
         +generate_bundle(graph: &BuildGraph) Result<GeneratedNinja, NinjaGenError>
     }
     BuildGraph "1" o-- "many" Action : actions
-    BuildGraph "1" o-- "many" BuildEdge : targets
+    BuildGraph "1" o-- "many" BuildEdge : edges
+    BuildGraph "1" o-- "many" EdgeId : output index
+    EdgeId --> BuildEdge : arena index
     Action "1" o-- "1" Recipe
     BuildEdge "1" --> "1" Action : action_id
     ninja_gen ..> BuildGraph : uses
@@ -2264,7 +2275,10 @@ This transformation involves several steps:
    `deps` are lowered into a separate `implicit_deps` list, which maps to
    Ninja's implicit dependency syntax (`|`) so Ninja orders and rebuilds them
    without exposing them as recipe arguments; `order_only_deps` remains
-   separate and maps to Ninja's `||` class.
+   separate and maps to Ninja's `||` class. The edge enters the arena once;
+   every explicit output is then indexed to its stable `EdgeId`. Duplicate
+   outputs are rejected before this mutation, so each alias resolves to one
+   canonical edge without copying its output vector.
 
    FUTURE:
 
@@ -2475,13 +2489,12 @@ default my_app
 The live IR structures defined in [src/ir/graph.rs](../src/ir/graph.rs), and
 re-exported through [src/ir/mod.rs](../src/ir/mod.rs), are minimal containers
 that mirror Ninja's conceptual model while remaining backend-agnostic.
-`BuildGraph` collects all `Action`s and `BuildEdge`s in hash maps keyed by
-stable strings and `Utf8PathBuf`s so the graph can be deterministically
-traversed for snapshot tests. Actions hold the parsed `Recipe` and optional
-execution metadata. `BuildEdge` connects inputs to outputs using an action
-identifier and carries the `phony` and `always` flags verbatim from the
-manifest. No Ninja specific placeholders are stored in the IR to keep the
-representation portable.
+`BuildGraph` collects actions in a hash map, canonical edges in an insertion-
+ordered arena, and output aliases in a `Utf8PathBuf` to `EdgeId` hash map.
+Actions hold the parsed `Recipe` and optional execution metadata. `BuildEdge`
+connects inputs to outputs using an action identifier and carries the `phony`
+and `always` flags verbatim from the manifest. No Ninja specific placeholders
+are stored in the IR to keep the representation portable.
 
 - Actions are deduplicated using a SHA-256 hash of a canonical JSON
   serialization of their recipe, inputs, and outputs. Because commands embed
@@ -2491,11 +2504,12 @@ representation portable.
   generator reports `IrGenError::MultipleRules` when encountered.
 - Duplicate output files are rejected. Attempting to define the same output
   path twice results in `IrGenError::DuplicateOutput`.
-- The Ninja generator sorts actions and edges before output and deduplicates
-  edges based on their full set of explicit outputs. Sorting uses the joined
-  path strings to keep ordering stable across platforms, ensuring deterministic
-  `build.ninja` files. Small macros reduce formatting boilerplate when writing
-  optional key-value pairs or flags, keeping the generator easy to scan.
+- The Ninja generator sorts canonical arena edges before output. Output indexing
+  no longer requires generator-side value recovery or deduplication. Sorting
+  uses the joined path strings to keep ordering stable across platforms,
+  ensuring deterministic `build.ninja` files. Small macros reduce formatting
+  boilerplate when writing optional key-value pairs or flags, keeping the
+  generator easy to scan.
 - Integration tests snapshot the generated Ninja file with `insta` and
   execute the Ninja binary to validate structure and no-op behaviour.
   Serial-ordering tests additionally use real Ninja to prove declaration order,

@@ -91,7 +91,7 @@ fn generate_simple_ninja() -> Result<()> {
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("a".into(), action);
-    graph.targets.insert(Utf8PathBuf::from("out"), edge);
+    graph.insert_edge(edge);
     graph.default_targets.push(Utf8PathBuf::from("out"));
 
     let ninja = generate_posix(&graph)?;
@@ -124,9 +124,7 @@ fn string_generation_apis_reject_reserved_paths() -> Result<()> {
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("reserved".into(), action);
-    graph
-        .targets
-        .insert(Utf8PathBuf::from(".netsuke/dyndep/reserved"), edge);
+    graph.insert_edge(edge);
 
     let generate_error = generate(&graph)
         .err()
@@ -224,7 +222,7 @@ fn generate_script_ninja_round_trips() -> Result<()> {
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("a".into(), action);
-    graph.targets.insert(Utf8PathBuf::from("out"), edge);
+    graph.insert_edge(edge);
 
     let ninja = generate_posix(&graph)?;
     ensure!(ninja.contains("rule a"));
@@ -257,7 +255,7 @@ fn generate_command_list_ninja_joins_a_fail_fast_chain() -> Result<()> {
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("a".into(), action);
-    graph.targets.insert(Utf8PathBuf::from("out"), edge);
+    graph.insert_edge(edge);
 
     let ninja = generate_posix(&graph)?;
     ensure!(

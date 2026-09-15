@@ -93,9 +93,8 @@ fn assert_target_paths(
         .build_graph
         .with_ref(|graph| {
             graph
-                .targets
-                .get(&Utf8PathBuf::from(target))
-                .map(|edge| field.paths(edge).to_vec())
+                .target_for_output(Utf8PathBuf::from(target).as_path())
+                .map(|(_, edge)| field.paths(edge).to_vec())
         })
         .context("build graph should be available")?
         .with_context(|| format!("target {target} should be present"))?;
@@ -157,7 +156,7 @@ fn remove_action(world: &TestWorld) -> Result<()> {
         .take_value()
         .ok_or_else(|| anyhow!("build graph should be available"))?;
 
-    let first_action = graph.targets.values().next().map(|e| e.action_id.clone());
+    let first_action = graph.edges().next().map(|edge| edge.action_id.clone());
 
     if let Some(id) = first_action {
         graph.actions.remove(&id);

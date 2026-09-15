@@ -228,20 +228,17 @@ fn build_graph_preserves_graph_error_context() -> Result<()> {
 #[test]
 fn ninja_text_propagates_typed_generation_errors() {
     let mut graph = BuildGraph::default();
-    graph.targets.insert(
-        Utf8PathBuf::from("hello"),
-        BuildEdge {
-            action_id: "missing".into(),
-            inputs: Vec::new(),
-            implicit_deps: Vec::new(),
-            dependency_order: DependencyOrder::Parallel,
-            explicit_outputs: vec![Utf8PathBuf::from("hello")],
-            implicit_outputs: Vec::new(),
-            order_only_deps: Vec::new(),
-            phony: false,
-            always: false,
-        },
-    );
+    graph.insert_edge(BuildEdge {
+        action_id: "missing".into(),
+        inputs: Vec::new(),
+        implicit_deps: Vec::new(),
+        dependency_order: DependencyOrder::Parallel,
+        explicit_outputs: vec![Utf8PathBuf::from("hello")],
+        implicit_outputs: Vec::new(),
+        order_only_deps: Vec::new(),
+        phony: false,
+        always: false,
+    });
 
     let error = generation::ninja_text_for_shell(&graph, RecipeShell::host_default())
         .expect_err("missing action should fail generation");

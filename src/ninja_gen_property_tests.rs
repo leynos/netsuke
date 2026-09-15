@@ -109,20 +109,17 @@ fn serial_graph(dependencies: Vec<Utf8PathBuf>) -> BuildGraph {
             restat: false,
         },
     );
-    graph.targets.insert(
-        Utf8PathBuf::from("aggregate"),
-        BuildEdge {
-            action_id: "a".into(),
-            inputs: Vec::new(),
-            implicit_deps: dependencies,
-            dependency_order: DependencyOrder::Serial,
-            explicit_outputs: vec![Utf8PathBuf::from("aggregate")],
-            implicit_outputs: Vec::new(),
-            order_only_deps: Vec::new(),
-            phony: false,
-            always: false,
-        },
-    );
+    graph.insert_edge(BuildEdge {
+        action_id: "a".into(),
+        inputs: Vec::new(),
+        implicit_deps: dependencies,
+        dependency_order: DependencyOrder::Serial,
+        explicit_outputs: vec![Utf8PathBuf::from("aggregate")],
+        implicit_outputs: Vec::new(),
+        order_only_deps: Vec::new(),
+        phony: false,
+        always: false,
+    });
     graph
 }
 

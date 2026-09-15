@@ -8,6 +8,14 @@ use netsuke::{
 };
 use rstest::rstest;
 
+/// Resolve the canonical edge that produces `output`.
+fn edge_for_output<'a>(graph: &'a BuildGraph, output: &str) -> Result<&'a netsuke::ir::BuildEdge> {
+    graph
+        .target_for_output(Utf8PathBuf::from(output).as_path())
+        .map(|(_, edge)| edge)
+        .with_context(|| format!("expected edge for {output}"))
+}
+
 #[rstest]
 #[case::target_serial(concat!(
     "netsuke_version: '1.0.0'\n",
@@ -34,10 +42,7 @@ fn serial_dependency_order_survives_lowering(
 ) -> Result<()> {
     let manifest = manifest::from_str(yaml)?;
     let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;
-    let edge = graph
-        .targets
-        .get(&Utf8PathBuf::from(output))
-        .with_context(|| format!("expected edge for {output}"))?;
+    let edge = edge_for_output(&graph, output)?;
     ensure!(
         edge.dependency_order == DependencyOrder::Serial,
         "expected serial dependency order for {output}, got {:?}",
@@ -72,10 +77,7 @@ fn explicit_parallel_dependency_order_survives_lowering() -> Result<()> {
     );
     let manifest = manifest::from_str(yaml)?;
     let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;
-    let edge = graph
-        .targets
-        .get(&Utf8PathBuf::from("all"))
-        .context("expected edge for all")?;
+    let edge = edge_for_output(&graph, "all")?;
     ensure!(
         edge.dependency_order == DependencyOrder::Parallel,
         "expected explicit parallel dependency order, got {:?}",
@@ -95,10 +97,7 @@ fn parallel_dependency_order_lowering_is_default() -> Result<()> {
     );
     let manifest = manifest::from_str(yaml)?;
     let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;
-    let edge = graph
-        .targets
-        .get(&Utf8PathBuf::from("all"))
-        .context("expected edge for all")?;
+    let edge = edge_for_output(&graph, "all")?;
     ensure!(
         edge.dependency_order == DependencyOrder::Parallel,
         "omission should default to parallel, got {:?}",

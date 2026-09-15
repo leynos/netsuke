@@ -23,14 +23,13 @@ pub(super) fn instrument_bundle_generation<T>(
 ) -> Result<T, NinjaGenError> {
     describe_metrics();
     let dependency_count = graph
-        .targets
-        .values()
+        .edges()
         .map(|edge| edge.implicit_deps.len())
         .sum::<usize>();
     let span = tracing::trace_span!(
         "runner.ninja.dyndep_bundle.generate",
         action_count = graph.actions.len(),
-        target_count = graph.targets.len(),
+        target_count = graph.edges().count(),
         dependency_count,
         outcome = field::Empty,
         error_category = field::Empty,

@@ -41,20 +41,15 @@ fn parallel_edge(output: &str, deps: &[&str]) -> BuildEdge {
     edge
 }
 
-fn graph_with_edge(edge: BuildEdge) -> Result<BuildGraph> {
+fn graph_with_edge(edge: BuildEdge) -> BuildGraph {
     let mut graph = BuildGraph::default();
     graph.actions.insert("a".into(), action("echo done"));
-    let output = edge
-        .explicit_outputs
-        .first()
-        .cloned()
-        .context("test edge must have an output")?;
-    graph.targets.insert(output, edge);
-    Ok(graph)
+    graph.insert_edge(edge);
+    graph
 }
 
 fn assert_edge_produces_no_staging(edge: BuildEdge) -> Result<()> {
-    let graph = graph_with_edge(edge)?;
+    let graph = graph_with_edge(edge);
     let bundle = generate_bundle(&graph)?;
     ensure!(
         !bundle.build_file().contains("ninja_required_version"),
@@ -69,7 +64,7 @@ fn assert_edge_produces_no_staging(edge: BuildEdge) -> Result<()> {
 
 #[test]
 fn serial_bundle_emits_version_and_staged_sidecars() -> Result<()> {
-    let graph = graph_with_edge(serial_edge("all", &["check-fmt", "lint", "test"]))?;
+    let graph = graph_with_edge(serial_edge("all", &["check-fmt", "lint", "test"]));
     let bundle = generate_bundle(&graph)?;
     ensure!(
         bundle
@@ -106,7 +101,7 @@ fn serial_bundle_emits_version_and_staged_sidecars() -> Result<()> {
 
 #[test]
 fn serial_sidecars_reveal_real_deps_in_order() -> Result<()> {
-    let graph = graph_with_edge(serial_edge("all", &["check-fmt", "lint", "test"]))?;
+    let graph = graph_with_edge(serial_edge("all", &["check-fmt", "lint", "test"]));
     let bundle = generate_bundle(&graph)?;
     let contents: Vec<&str> = bundle
         .dyndep_files()
@@ -146,7 +141,7 @@ fn one_element_serial_list_needs_no_gates() -> Result<()> {
 
 #[test]
 fn parallel_bundle_matches_string_generation() -> Result<()> {
-    let graph = graph_with_edge(parallel_edge("all", &["dep1", "dep2"]))?;
+    let graph = graph_with_edge(parallel_edge("all", &["dep1", "dep2"]));
     let bundle = generate_bundle(&graph)?;
     ensure!(
         bundle.build_file() == crate::ninja_gen::generate(&graph)?,
@@ -157,7 +152,7 @@ fn parallel_bundle_matches_string_generation() -> Result<()> {
 
 #[test]
 fn bundle_rejects_an_empty_command_list() -> Result<()> {
-    let mut graph = graph_with_edge(parallel_edge("all", &[]))?;
+    let mut graph = graph_with_edge(parallel_edge("all", &[]));
     graph
         .actions
         .get_mut("a")
@@ -177,7 +172,7 @@ fn bundle_rejects_an_empty_command_list() -> Result<()> {
 }
 #[test]
 fn repeated_dependency_keeps_separate_stage_sidecars() -> Result<()> {
-    let graph = graph_with_edge(serial_edge("all", &["same", "same"]))?;
+    let graph = graph_with_edge(serial_edge("all", &["same", "same"]));
     let bundle = generate_bundle(&graph)?;
     // Each gate stage is distinct, so each stage has its own content-addressed
     // sidecar even when the revealed dependency is the same node. Ninja
@@ -234,7 +229,7 @@ fn set_edge_path(edge: &mut BuildEdge, field: EdgePathField, path: &str) {
     }
 }
 
-fn graph_with_path(field: GraphPathField, path: &str) -> Result<BuildGraph> {
+fn graph_with_path(field: GraphPathField, path: &str) -> BuildGraph {
     let mut edge = parallel_edge("all", &["dep"]);
     if let GraphPathField::Edge(edge_field) = field {
         set_edge_path(&mut edge, edge_field, path);
@@ -242,11 +237,11 @@ fn graph_with_path(field: GraphPathField, path: &str) -> Result<BuildGraph> {
             edge.explicit_outputs.insert(0, Utf8PathBuf::from("all"));
         }
     }
-    let mut graph = graph_with_edge(edge)?;
+    let mut graph = graph_with_edge(edge);
     if matches!(field, GraphPathField::DefaultTarget) {
         graph.default_targets = vec![Utf8PathBuf::from(path)];
     }
-    Ok(graph)
+    graph
 }
 
 #[rstest]
@@ -263,7 +258,7 @@ fn unsupported_control_characters_are_rejected_in_every_path_field(
     #[values('\0', '\t', '\r', '\n')] character: char,
 ) -> Result<()> {
     let path = format!("invalid{character}path");
-    let graph = graph_with_path(field, &path)?;
+    let graph = graph_with_path(field, &path);
     let error = generate_bundle(&graph)
         .err()
         .context("unsupported control character must be rejected")?;
@@ -296,7 +291,7 @@ fn ninja_metacharacters_are_rejected_in_every_path_field(
     #[case] path: &str,
     #[case] character: char,
 ) -> Result<()> {
-    let graph = graph_with_path(field, path)?;
+    let graph = graph_with_path(field, path);
     let generated_error = crate::ninja_gen::generate(&graph)
         .err()
         .context("Ninja metacharacter must be rejected during string generation")?;
@@ -340,7 +335,7 @@ fn whitespace_paths_are_escaped_in_every_path_field(
     )]
     field: GraphPathField,
 ) -> Result<()> {
-    let graph = graph_with_path(field, "path with space")?;
+    let graph = graph_with_path(field, "path with space");
     let generated = crate::ninja_gen::generate(&graph)?;
     let bundle = generate_bundle(&graph)?;
     ensure!(generated.contains("path$ with$ space"));
@@ -359,7 +354,7 @@ fn reserved_output_namespace_is_rejected(#[case] field: EdgePathField) -> Result
     if edge.explicit_outputs == [Utf8PathBuf::from(".netsuke/serial/x")] {
         edge.explicit_outputs.insert(0, Utf8PathBuf::from("all"));
     }
-    let graph = graph_with_edge(edge)?;
+    let graph = graph_with_edge(edge);
     let err = generate_bundle(&graph)
         .err()
         .context("reserved path must be rejected")?;
@@ -374,13 +369,13 @@ fn reserved_output_namespace_is_rejected(#[case] field: EdgePathField) -> Result
 fn similarly_prefixed_namespace_is_accepted() -> Result<()> {
     let mut edge = parallel_edge("all", &["dep"]);
     edge.implicit_outputs = vec![Utf8PathBuf::from(".netsuke-extra/x")];
-    generate_bundle(&graph_with_edge(edge)?)?;
+    generate_bundle(&graph_with_edge(edge))?;
     Ok(())
 }
 
 #[test]
 fn pipe_in_path_is_rejected_before_generation() -> Result<()> {
-    let graph = graph_with_edge(serial_edge("all", &["unsupported|dependency", "test"]))?;
+    let graph = graph_with_edge(serial_edge("all", &["unsupported|dependency", "test"]));
     let err = generate_bundle(&graph)
         .err()
         .context("pipe path must be rejected")?;
