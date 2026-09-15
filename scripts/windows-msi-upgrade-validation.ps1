@@ -24,12 +24,12 @@ function Get-MsiProperty {
     $installer = New-Object -ComObject WindowsInstaller.Installer
     $database = $installer.OpenDatabase($MsiPath, 0)
     $view = $database.OpenView("SELECT `Value` FROM `Property` WHERE `Property`='$PropertyName'")
-    $view.Execute()
+    [void]$view.Execute()
     $record = $view.Fetch()
     if ($null -eq $record) {
         throw "MSI $MsiPath does not define ProductCode."
     }
-    $record.StringData(1)
+    return [string]$record.StringData(1)
 }
 
 function Invoke-MsiInstall {

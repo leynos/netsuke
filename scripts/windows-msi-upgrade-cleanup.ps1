@@ -21,12 +21,12 @@ function Get-MsiProductCode {
     $installer = New-Object -ComObject WindowsInstaller.Installer
     $database = $installer.OpenDatabase($MsiPath, 0)
     $view = $database.OpenView("SELECT `Value` FROM `Property` WHERE `Property`='ProductCode'")
-    $view.Execute()
+    [void]$view.Execute()
     $record = $view.Fetch()
     if ($null -eq $record) {
         return $null
     }
-    $record.StringData(1)
+    return [string]$record.StringData(1)
 }
 
 foreach ($msiPath in $MsiPaths) {
