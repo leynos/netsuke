@@ -1,8 +1,8 @@
 # Netsuke composition roadmap
 
-This document continues the active [Netsuke roadmap](roadmap.md) with phases
-16 to 19. Task identifiers remain globally unique across both documents and
-the completed-foundations archive. Each phase states a hypothesis, each step
+This document continues the active [Netsuke roadmap](roadmap.md) with phases 16
+to 19. Task identifiers remain globally unique across both documents and the
+completed-foundations archive. Each phase states a hypothesis, each step
 answers one delivery question, and each task names dependencies, source
 contracts, and observable acceptance criteria. The roadmap promises no dates.
 
@@ -19,8 +19,8 @@ Hypothesis: an author can split a monolithic Netsukefile into local fragments
 without changing its graph, executing recipes during discovery, or making
 composition depend on filesystem iteration order.
 
-This phase implements [RFC 0002](rfcs/0002-repository-relative-includes.md).
-It shares provenance concepts with RFC 0001, not an action-runner dependency;
+This phase implements [RFC 0002](rfcs/0002-repository-relative-includes.md). It
+shares provenance concepts with RFC 0001, not an action-runner dependency;
 legacy recipes can validate this entire slice. Versioned instantiation belongs
 in phase 17, and networking belongs only in phase 18. Phase numbers identify
 work, not a requirement to finish every preceding phase.
@@ -151,8 +151,9 @@ bundles without copying monolithic manifests or depending on ambient Git state.
 
 This phase implements [RFC 0003](rfcs/0003-versioned-local-bundles.md) over
 phase 16. Local composition must remain independently usable and offline;
-17.4.4 separately validates its interaction with the structured execution track.
-No local bundle operation gains external acquisition authority from phase 18.
+17.4.4 separately validates its interaction with the structured execution
+track. No local bundle operation gains external acquisition authority from
+phase 18.
 
 ### 17.1. Fix bundle identity and parameter meaning before instantiation
 
@@ -412,8 +413,8 @@ what the object resolver and CLI may request.
 
 ### 18.2. Verify exact Git objects as ordinary bundle content
 
-This step asks whether object provenance and bundle meaning stay separate.
-Its outcome must feed the existing local verifier, not introduce a checkout-
+This step asks whether object provenance and bundle meaning stay separate. Its
+outcome must feed the existing local verifier, not introduce a checkout-
 dependent definition of the canonical digest.
 
 - [ ] 18.2.1. Acquire only the requested exact ref or commit.
@@ -455,9 +456,9 @@ dependent definition of the canonical digest.
 
 ### 18.3. Make cached provenance trustworthy without granting write authority
 
-This step asks whether offline reuse can preserve both content and origin.
-Its outcome gives builds and queries a verified read path separate from the
-fetch command's publication and explicit lock-update capabilities.
+This step asks whether offline reuse can preserve both content and origin. Its
+outcome gives builds and queries a verified read path separate from the fetch
+command's publication and explicit lock-update capabilities.
 
 - [ ] 18.3.1. Validate external locks and detect observed provenance drift.
   - Requires 18.2.3 and 17.3.2.
@@ -545,8 +546,8 @@ content pinning from mutable tag discovery and optional publisher trust.
 ## 19. Evidence-led composition and provenance extensions
 
 Hypothesis: local and externally pinned bundle canaries can identify useful
-extensions without weakening deterministic composition, private interfaces,
-or the explicit acquisition boundary of the initial release.
+extensions without weakening deterministic composition, private interfaces, or
+the explicit acquisition boundary of the initial release.
 
 These tasks decide scope only; they do not block phases 16 to 18 or reopen
 rejected implicit network, mutable-ref, or silent-override behaviour. Phase 15
