@@ -111,10 +111,13 @@ runs:
       if: always()
       shell: pwsh
       run: |
-        ./scripts/windows-msi-upgrade-cleanup.ps1 `
-          -MsiPaths @(
-            '${{ steps.package_beta1.outputs.msi-path }}',
-            '${{ steps.package_beta2.outputs.msi-path }}',
-            '${{ steps.package_final.outputs.msi-path }}'
-          ) `
-          -LogDirectory $env:MSI_VALIDATION_DIRECTORY
+        $msiPaths = @(
+          '${{ steps.package_beta1.outputs.msi-path }}',
+          '${{ steps.package_beta2.outputs.msi-path }}',
+          '${{ steps.package_final.outputs.msi-path }}'
+        ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        if ($msiPaths.Count -gt 0) {
+          ./scripts/windows-msi-upgrade-cleanup.ps1 `
+            -MsiPaths $msiPaths `
+            -LogDirectory $env:MSI_VALIDATION_DIRECTORY
+        }

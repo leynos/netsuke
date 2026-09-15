@@ -3,10 +3,6 @@
 import argparse
 import re
 import sys
-import typing as typ
-
-if typ.TYPE_CHECKING:
-    import collections.abc as cabc
 
 FINAL_RELEASE_RANK = 65_535
 """Rank assigned to a final release after every supported beta release."""
@@ -59,7 +55,7 @@ def release_rank(version: str) -> int:
     return rank
 
 
-def parse_arguments(arguments: cabc.Sequence[str] | None = None) -> argparse.Namespace:
+def parse_arguments(arguments: list[str] | None = None) -> argparse.Namespace:
     """Parse the one release-version argument accepted by the helper CLI."""
     parser = argparse.ArgumentParser(
         description="derive the Windows MSI release rank for a Netsuke version"
@@ -68,7 +64,7 @@ def parse_arguments(arguments: cabc.Sequence[str] | None = None) -> argparse.Nam
     return parser.parse_args(arguments)
 
 
-def main(arguments: cabc.Sequence[str] | None = None) -> int:
+def main(arguments: list[str] | None = None) -> int:
     """Print a release rank and report invalid versions on standard error."""
     version = parse_arguments(arguments).version
     try:
