@@ -33,8 +33,8 @@ WINDOWS_JOB = "build-test-windows"
 #: separate blocks do not swallow the executable lines between them.
 _BLOCK_COMMENT = re.compile(r"<#.*?#>", re.DOTALL)
 
-#: Both halves of the Windows gate, in declaration order.
-EXPECTED_WINDOWS_JOBS = ("lint-windows", WINDOWS_JOB)
+#: Independent Windows merge-gate jobs, in declaration order.
+EXPECTED_WINDOWS_JOBS = ("lint-windows", WINDOWS_JOB, "windows-msi-upgrade")
 
 
 def command_lines(run: str) -> list[str]:
@@ -176,19 +176,23 @@ def test_windows_job_runs_the_native_recipe_smoke_after_the_test_gate(
         )
 
 
-def test_windows_workflow_declares_no_serialised_job() -> None:
-    """The Windows lane must stay two concurrent jobs and no more.
+def test_windows_workflow_declares_the_independent_msi_validation_job() -> None:
+    """Keep the Rust gate concurrent and make MSI validation an explicit job.
 
     Scenario: `windows-native-recipe-smoke` used to be a third job that
     ``needs``-ed the gate, costing a measured median 236s of serial tail for 7s
-    of work. Invariant: `ci-windows.yml` declares exactly the lint and test
-    jobs, so a reinstated serial job has to justify the tail rather than arrive
-    quietly.
+    of work. Invariant: `ci-windows.yml` declares the two concurrent Rust jobs
+    plus the independent MSI integration job; neither may become a hidden
+    serial tail.
     """
     workflow = load_workflow(CI_WINDOWS_WORKFLOW_PATH)
     jobs = require_mapping(workflow.get("jobs"), "ci-windows.yml jobs")
     assert list(jobs) == list(EXPECTED_WINDOWS_JOBS), (
-        f"ci-windows.yml must declare exactly {list(EXPECTED_WINDOWS_JOBS)!r}; the "
-        f"native-recipe smoke test is folded into the test job as PowerShell "
-        f"steps, got {list(jobs)!r}"
+        f"ci-windows.yml must declare exactly {list(EXPECTED_WINDOWS_JOBS)!r}, "
+        f"got {list(jobs)!r}"
+    )
+    msi_job = require_mapping(jobs["windows-msi-upgrade"], "windows-msi-upgrade")
+    assert "needs" not in msi_job, (
+        "windows-msi-upgrade must not wait on the Rust gate; it builds only "
+        "disposable MSI fixtures"
     )

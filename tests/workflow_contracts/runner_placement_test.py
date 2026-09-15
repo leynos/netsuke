@@ -37,6 +37,7 @@ DIRECT_RUNNER_SOURCES = (
     ("ci.build-test", "ci.yml", "build-test"),
     ("ci-windows.lint-windows", "ci-windows.yml", "lint-windows"),
     ("ci-windows.build-test-windows", "ci-windows.yml", "build-test-windows"),
+    ("ci-windows.windows-msi-upgrade", "ci-windows.yml", "windows-msi-upgrade"),
     ("ci.kani-smoke", "ci.yml", "kani-smoke"),
     ("coverage-main.coverage-upload", "coverage-main.yml", "coverage-upload"),
     (
@@ -68,6 +69,7 @@ DIRECT_RUNNER_SOURCES = (
         ("ci.yml", "build-test", UBICLOUD_LARGE_LABEL),
         ("ci-windows.yml", "lint-windows", "windows-latest"),
         ("ci-windows.yml", "build-test-windows", "windows-latest"),
+        ("ci-windows.yml", "windows-msi-upgrade", "windows-latest"),
         ("ci.yml", "kani-smoke", UBICLOUD_DEFAULT_LABEL),
         ("coverage-main.yml", "coverage-upload", UBICLOUD_LARGE_LABEL),
         (

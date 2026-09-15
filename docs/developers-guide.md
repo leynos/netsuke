@@ -631,7 +631,64 @@ as workflow-level `env`. Each pin is still declared once at workflow scope in
 value. `tests/workflow_contracts/ci_windows_job_test.py` holds the caller's
 literals equal to those pins, so the two copies cannot drift.
 
-### Why the Windows gate is two jobs
+### Windows MSI packaging and upgrade validation
+
+The Windows packaging workflow passes the repository-owned authoring file as
+`wxs-path: installer/Package.wxs` to the pinned
+`leynos/shared-actions/.github/actions/windows-package` action. Keep that input
+when changing the packaging action: the caller owns the WiX v4 authoring and
+the shared action passes it to the pinned WiX compiler unchanged.
+
+The merge gate's dedicated `windows-msi-upgrade` job runs on `windows-latest`.
+It uses the local `.github/actions/windows-msi-upgrade-validation` adapter for
+fixture creation, package builds, and the install-transition checks. Keep the
+adapter scoped to this repository's deterministic MSI fixtures; it must not
+replace or rewrite caller-provided WiX authoring.
+
+The MSI `UpgradeCode` in `installer/Package.wxs` is a stable upgrade-family
+identifier and must not change between releases. The `ProductCode` is not
+authored explicitly; WiX generates a new product identity for each package
+build. This combination lets Windows Installer treat a new package as a major
+upgrade while retaining one upgrade family.
+
+The packaging workflow derives `NETSUKE_RELEASE_RANK` with the repository's
+release-rank helper before invoking the action. The accepted version formats are
+`MAJOR.MINOR.PATCH` for a final release and `MAJOR.MINOR.PATCH-betaN` for a
+beta release. Beta sequence `N` is an integer in `1..=65534`; the final release
+has rank `65535`. Empty, non-numeric, zero, and out-of-range beta sequences,
+malformed numeric versions, and unsupported prerelease suffixes are rejected
+before an MSI is built.
+
+The rank preserves release ordering that MSI's numeric version comparison
+cannot represent when prerelease suffixes share the same numeric version. A
+later beta replaces an earlier beta, and the final release replaces betas in
+the same release line. An older beta is rejected after a later beta or the
+final release has been installed. The stable `UpgradeCode`, generated
+`ProductCode`, `MajorUpgrade` metadata, and release-rank launch condition are
+one contract; change them together and update the tests.
+
+Validation has deliberately separate responsibilities:
+
+- `tests/installer_package_wxs_tests.rs` parses the XML and checks the stable
+  WiX structure and upgrade metadata. XML parsing does not validate WiX schema
+  compatibility.
+- The release-rank example and property tests execute the repository-owned
+  parser without GitHub Actions or Windows environment state.
+- The `windows-msi-upgrade` job and its local adapter compile
+  `installer/Package.wxs` with the pinned WiX CLI and UI extension while
+  building beta1, beta2, and final fixtures. They use temporary executable and
+  RTF fixtures and do not compile the Rust application, so WiX schema or
+  extension incompatibilities fail the merge gate.
+- The same adapter then uses quiet `msiexec` installs and preserved logs to
+  verify replacement, registry `ReleaseRank`, product identity, and refused
+  downgrades. An unconditional cleanup step removes every fixture installation,
+  including the final release.
+
+Only the `msiexec` phase exercises Windows Installer's actual install,
+replacement, and downgrade behaviour; passing the XML and compiler checks alone
+does not prove the upgrade path.
+
+### Why the two Windows Rust/cache jobs are split
 
 `lint-windows` and `build-test-windows` run concurrently on `windows-latest`.
 They used to be one job, in which formatting, Clippy and Whitaker ran in series

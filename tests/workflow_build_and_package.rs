@@ -166,10 +166,8 @@ fn assert_windows_package_release_rank_wiring(contents: &str) {
     let release_rank_step = workflow_step_body(contents, "Set Windows MSI release rank").join("\n");
     for expected in [
         "RELEASE_VERSION: ${{ inputs.version }}",
-        "^\\d+\\.\\d+\\.\\d+-beta(?<sequence>[1-9]\\d*)$",
-        "if ($releaseRank -ge 65535)",
-        "Windows MSI beta sequence must be less than 65535.",
-        "$releaseRank = 65535",
+        "python scripts/windows_msi_release_rank.py $env:RELEASE_VERSION",
+        "if ($LASTEXITCODE -ne 0)",
         "NETSUKE_RELEASE_RANK=$releaseRank",
     ] {
         assert!(
