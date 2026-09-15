@@ -8,11 +8,11 @@ use super::*;
 #[kani::solver(kissat)]
 #[kani::unwind(5)]
 fn self_dependency_reports_cycle() {
-    let mut targets = IrHashMap::default();
-    targets.insert(path("a"), edge("a", deps("a"), Vec::new()));
-    kani::assume(targets.len() == 1);
+    let mut graph = BuildGraph::default();
+    graph.insert_edge(edge("a", deps("a"), Vec::new()));
+    kani::assume(graph.targets.len() == 1 && graph.edges.len() == 1);
 
-    kani::assert(contains_cycle(&targets), "self-dependency reports a cycle");
+    kani::assert(contains_cycle(&graph), "self-dependency reports a cycle");
 }
 
 /// Prove a two-node cycle is detected when `a` is inserted first.
@@ -20,12 +20,12 @@ fn self_dependency_reports_cycle() {
 #[kani::solver(kissat)]
 #[kani::unwind(5)]
 fn two_node_cycle_reports_cycle_a_first() {
-    let mut targets = IrHashMap::default();
-    targets.insert(path("a"), edge("a", deps("b"), Vec::new()));
-    targets.insert(path("b"), edge("b", deps("a"), Vec::new()));
-    kani::assume(targets.len() == 2);
+    let mut graph = BuildGraph::default();
+    graph.insert_edge(edge("a", deps("b"), Vec::new()));
+    graph.insert_edge(edge("b", deps("a"), Vec::new()));
+    kani::assume(graph.targets.len() == 2 && graph.edges.len() == 2);
 
-    kani::assert(contains_cycle(&targets), "two-node cycle is rejected");
+    kani::assert(contains_cycle(&graph), "two-node cycle is rejected");
 }
 
 /// Prove a two-node cycle is detected when `b` is inserted first.
@@ -33,20 +33,17 @@ fn two_node_cycle_reports_cycle_a_first() {
 #[kani::solver(kissat)]
 #[kani::unwind(5)]
 fn two_node_cycle_reports_cycle_b_first() {
-    let mut targets = IrHashMap::default();
-    targets.insert(path("b"), edge("b", deps("a"), Vec::new()));
-    targets.insert(path("a"), edge("a", deps("b"), Vec::new()));
-    kani::assume(targets.len() == 2);
+    let mut graph = BuildGraph::default();
+    graph.insert_edge(edge("b", deps("a"), Vec::new()));
+    graph.insert_edge(edge("a", deps("b"), Vec::new()));
+    kani::assume(graph.targets.len() == 2 && graph.edges.len() == 2);
 
-    kani::assert(contains_cycle(&targets), "two-node cycle is rejected");
+    kani::assert(contains_cycle(&graph), "two-node cycle is rejected");
 }
 
 /// Assert that the given target graph contains no cycle.
-fn assert_no_cycle(targets: &IrHashMap<Utf8PathBuf, BuildEdge>, _msg: &'static str) {
-    kani::assert(
-        !contains_cycle(targets),
-        "missing dependency is not a cycle",
-    );
+fn assert_no_cycle(graph: &BuildGraph, _msg: &'static str) {
+    kani::assert(!contains_cycle(graph), "missing dependency is not a cycle");
 }
 
 /// Prove an absent direct dependency is not cyclic.
@@ -54,11 +51,11 @@ fn assert_no_cycle(targets: &IrHashMap<Utf8PathBuf, BuildEdge>, _msg: &'static s
 #[kani::solver(kissat)]
 #[kani::unwind(6)]
 fn direct_missing_dependency_does_not_report_cycle() {
-    let mut targets = IrHashMap::default();
-    targets.insert(path("a"), edge("a", deps("c"), Vec::new()));
-    kani::assume(targets.len() == 1);
+    let mut graph = BuildGraph::default();
+    graph.insert_edge(edge("a", deps("c"), Vec::new()));
+    kani::assume(graph.targets.len() == 1 && graph.edges.len() == 1);
 
-    assert_no_cycle(&targets, "direct missing dependency is not a cycle");
+    assert_no_cycle(&graph, "direct missing dependency is not a cycle");
 }
 
 /// Prove an absent dependency beyond a present target is not cyclic.
@@ -66,12 +63,12 @@ fn direct_missing_dependency_does_not_report_cycle() {
 #[kani::solver(kissat)]
 #[kani::unwind(6)]
 fn transitive_missing_dependency_does_not_report_cycle() {
-    let mut targets = IrHashMap::default();
-    targets.insert(path("a"), edge("a", deps("b"), Vec::new()));
-    targets.insert(path("b"), edge("b", deps("c"), Vec::new()));
-    kani::assume(targets.len() == 2);
+    let mut graph = BuildGraph::default();
+    graph.insert_edge(edge("a", deps("b"), Vec::new()));
+    graph.insert_edge(edge("b", deps("c"), Vec::new()));
+    kani::assume(graph.targets.len() == 2 && graph.edges.len() == 2);
 
-    assert_no_cycle(&targets, "transitive missing dependency is not a cycle");
+    assert_no_cycle(&graph, "transitive missing dependency is not a cycle");
 }
 
 /// Prove two-node canonicalization preserves the canonical cycle contract.

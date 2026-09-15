@@ -69,7 +69,7 @@ fn graph(recipe: Recipe, input: &str, output: &str) -> BuildGraph {
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("action".into(), action(recipe));
-    graph.targets.insert(Utf8PathBuf::from(output), edge);
+    graph.insert_edge(edge);
     graph.default_targets.push(Utf8PathBuf::from(output));
     graph
 }

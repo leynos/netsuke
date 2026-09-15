@@ -5,12 +5,12 @@
 //! order-only dependencies from traversal, reports missing dependencies, and
 //! remains stable across `HashMap` insertion order.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use camino::Utf8PathBuf;
 use proptest::prelude::*;
 
-use super::super::{BuildEdge, analyse};
+use super::super::{BuildEdge, BuildGraph, analyse};
 
 fn node(index: usize) -> Utf8PathBuf {
     Utf8PathBuf::from(format!("n{index}"))
@@ -38,11 +38,8 @@ fn push_dependency(edge: &mut BuildEdge, dep: Utf8PathBuf, is_implicit: bool) {
     }
 }
 
-fn dag_from_edges(
-    node_count: usize,
-    edges: &[(usize, usize, bool)],
-) -> HashMap<Utf8PathBuf, BuildEdge> {
-    let mut graph = HashMap::new();
+fn dag_from_edges(node_count: usize, edges: &[(usize, usize, bool)]) -> BuildGraph {
+    let mut graph = BuildGraph::default();
     for index in 0..node_count {
         let output = node(index);
         let mut edge = build_edge(output.clone());
@@ -51,12 +48,12 @@ fn dag_from_edges(
                 push_dependency(&mut edge, node(to), is_implicit);
             }
         }
-        graph.insert(output, edge);
+        graph.insert_edge(edge);
     }
     graph
 }
 
-fn dag_strategy() -> impl Strategy<Value = HashMap<Utf8PathBuf, BuildEdge>> {
+fn dag_strategy() -> impl Strategy<Value = BuildGraph> {
     (
         1usize..50,
         proptest::collection::vec((0usize..50, 0usize..50, any::<bool>()), 0..250),
@@ -64,8 +61,7 @@ fn dag_strategy() -> impl Strategy<Value = HashMap<Utf8PathBuf, BuildEdge>> {
         .prop_map(|(node_count, edges)| dag_from_edges(node_count, &edges))
 }
 
-fn cyclic_graph_strategy()
--> impl Strategy<Value = (HashMap<Utf8PathBuf, BuildEdge>, Utf8PathBuf, Utf8PathBuf)> {
+fn cyclic_graph_strategy() -> impl Strategy<Value = (BuildGraph, Utf8PathBuf, Utf8PathBuf)> {
     (2usize..50, any::<bool>()).prop_map(|(node_count, back_edge_is_implicit)| {
         let chain_edges: Vec<_> = (1..node_count)
             .map(|index| (index, index - 1, false))
@@ -75,12 +71,18 @@ fn cyclic_graph_strategy()
         let to = node(node_count - 1);
         let mut edge = build_edge(from.clone());
         push_dependency(&mut edge, to.clone(), back_edge_is_implicit);
-        graph.insert(from.clone(), edge);
+        if let Some(existing) = graph
+            .edges
+            .iter_mut()
+            .find(|existing| existing.explicit_outputs.first() == Some(&from))
+        {
+            *existing = edge;
+        }
         (graph, from, to)
     })
 }
 
-fn order_only_back_edge_strategy() -> impl Strategy<Value = HashMap<Utf8PathBuf, BuildEdge>> {
+fn order_only_back_edge_strategy() -> impl Strategy<Value = BuildGraph> {
     (2usize..50).prop_map(|node_count| {
         let chain_edges: Vec<_> = (1..node_count)
             .map(|index| (index, index - 1, false))
@@ -89,21 +91,31 @@ fn order_only_back_edge_strategy() -> impl Strategy<Value = HashMap<Utf8PathBuf,
         let root = node(0);
         let mut edge = build_edge(root.clone());
         edge.order_only_deps.push(node(node_count - 1));
-        graph.insert(root, edge);
+        if let Some(existing) = graph
+            .edges
+            .iter_mut()
+            .find(|existing| existing.explicit_outputs.first() == Some(&root))
+        {
+            *existing = edge;
+        }
         graph
     })
 }
 
-fn missing_graph_strategy() -> impl Strategy<Value = HashMap<Utf8PathBuf, BuildEdge>> {
+fn missing_graph_strategy() -> impl Strategy<Value = BuildGraph> {
     (
         dag_strategy(),
         proptest::collection::vec((0usize..50, 0usize..20, any::<bool>()), 1..50),
     )
         .prop_map(|(mut graph, missing_edges)| {
-            let node_count = graph.len();
+            let node_count = graph.edges.len();
             for (from, missing_index, is_implicit) in missing_edges {
                 let bounded_from = from.min(node_count.saturating_sub(1));
-                let Some(edge) = graph.get_mut(&node(bounded_from)) else {
+                let Some(edge) = graph
+                    .edges
+                    .iter_mut()
+                    .find(|edge| edge.explicit_outputs.first() == Some(&node(bounded_from)))
+                else {
                     continue;
                 };
                 let missing = Utf8PathBuf::from(format!("missing-{missing_index}"));
@@ -116,25 +128,33 @@ fn missing_graph_strategy() -> impl Strategy<Value = HashMap<Utf8PathBuf, BuildE
 // Accept short, duplicate, or out-of-range order vectors. Chosen entries are
 // inserted first, then `or_insert` fills gaps so every original target remains
 // present while insertion order still varies.
-fn rebuild_in_order(
-    graph: &HashMap<Utf8PathBuf, BuildEdge>,
-    order: &[usize],
-) -> HashMap<Utf8PathBuf, BuildEdge> {
-    let mut entries: Vec<_> = graph
-        .iter()
-        .map(|(key, edge)| (key.clone(), edge.clone()))
-        .collect();
-    entries.sort_by(|left, right| left.0.cmp(&right.0));
-    let mut rebuilt = HashMap::new();
+fn rebuild_in_order(graph: &BuildGraph, order: &[usize]) -> BuildGraph {
+    let mut entries: Vec<_> = graph.edges().cloned().collect();
+    entries.sort_by(|left, right| {
+        left.explicit_outputs
+            .first()
+            .cmp(&right.explicit_outputs.first())
+    });
+    let mut rebuilt = BuildGraph::default();
     for index in order {
         let bounded_index = (*index).min(entries.len().saturating_sub(1));
-        let Some((key, edge)) = entries.get(bounded_index) else {
+        let Some(edge) = entries.get(bounded_index) else {
             continue;
         };
-        rebuilt.insert(key.clone(), edge.clone());
+        let Some(output) = edge.explicit_outputs.first() else {
+            continue;
+        };
+        if rebuilt.target_for_output(output.as_path()).is_none() {
+            rebuilt.insert_edge(edge.clone());
+        }
     }
-    for (key, edge) in entries {
-        rebuilt.entry(key).or_insert(edge);
+    for edge in entries {
+        let Some(output) = edge.explicit_outputs.first() else {
+            continue;
+        };
+        if rebuilt.target_for_output(output.as_path()).is_none() {
+            rebuilt.insert_edge(edge);
+        }
     }
     rebuilt
 }
@@ -145,9 +165,9 @@ fn sorted_missing(report: &super::super::CycleDetectionReport) -> Vec<(Utf8PathB
     missing
 }
 
-fn injected_missing_deps(graph: &HashMap<Utf8PathBuf, BuildEdge>) -> HashSet<Utf8PathBuf> {
+fn injected_missing_deps(graph: &BuildGraph) -> HashSet<Utf8PathBuf> {
     graph
-        .values()
+        .edges()
         .flat_map(|edge| edge.inputs.iter().chain(&edge.implicit_deps))
         .filter(|dep| dep.as_str().starts_with("missing-"))
         .cloned()
@@ -192,7 +212,7 @@ proptest! {
 
         prop_assert_eq!(&reported_missing, &injected_missing);
         for (_, dep) in report.missing_dependencies {
-            prop_assert!(!graph.contains_key(&dep));
+            prop_assert!(graph.target_for_output(dep.as_path()).is_none());
         }
     }
 
