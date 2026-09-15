@@ -348,15 +348,15 @@ stdlib.time.label.nanoseconds = nanoeiliadau
 
 # Diagnosteg y cynorthwyydd which.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] ni chafwyd hyd i'r gorchymyn ‘{ $command }’ ar ôl gwirio { $count } cofnod PATH. Rhagolwg: { $preview }
-stdlib.which.not_found.hint.cwd_auto = Automatic mode searches only directories explicitly named by PATH.
-stdlib.which.not_found.hint.cwd_always = Always mode searches only the current directory before directories named by PATH.
-stdlib.which.not_found.hint.workspace = To recursively search the workspace tree, use cwd_mode="workspace-recursive".
+stdlib.which.not_found.hint.cwd_auto = Mae'r modd auto yn chwilio dim ond y cyfeiriaduron a enwir yn benodol yn PATH.
+stdlib.which.not_found.hint.cwd_always = Mae'r modd always yn chwilio dim ond y cyfeiriadur cyfredol cyn cyfeiriaduron a enwir yn PATH.
+stdlib.which.not_found.hint.workspace = I chwilio coeden y gweithle yn ailadroddus, defnyddiwch cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] mae'r gorchymyn ‘{ $command }’ yn ‘{ $path }’ ar goll neu nid yw'n weithredadwy.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <gwag>
 stdlib.which.path_entry.non_utf8 = Mae cofnod PATH rhif { $index } yn cynnwys nodau nad ydynt yn UTF-8; mae Netsuke angen llwybrau UTF-8.
 stdlib.which.command.empty = Mae which angen llinyn nad yw'n wag.
-stdlib.which.cwd_mode.invalid = cwd_mode must be 'auto', 'always', 'never', or 'workspace-recursive', got '{ $mode }'.
+stdlib.which.cwd_mode.invalid = Rhaid i cwd_mode fod yn 'auto', 'always', 'never', neu 'workspace-recursive'; cafwyd '{ $mode }'.
 stdlib.which.cwd.resolve_failed = Methwyd â phennu'r cyfeiriadur cyfredol: { $details }.
 stdlib.which.cwd.non_utf8 = Mae'r cyfeiriadur cyfredol yn cynnwys rhannau nad ydynt yn UTF-8.
 stdlib.which.canonicalize_failed = Methwyd â chanoneiddio ‘{ $path }’: { $details }.

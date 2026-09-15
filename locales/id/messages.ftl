@@ -348,15 +348,15 @@ stdlib.time.label.nanoseconds = nanodetik
 
 # Diagnostik pembantu which.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] perintah "{ $command }" tidak ditemukan setelah memeriksa { $count } entri PATH. Pratinjau: { $preview }
-stdlib.which.not_found.hint.cwd_auto = Automatic mode searches only directories explicitly named by PATH.
-stdlib.which.not_found.hint.cwd_always = Always mode searches only the current directory before directories named by PATH.
-stdlib.which.not_found.hint.workspace = To recursively search the workspace tree, use cwd_mode="workspace-recursive".
+stdlib.which.not_found.hint.cwd_auto = Mode auto hanya mencari direktori yang secara eksplisit disebutkan dalam PATH.
+stdlib.which.not_found.hint.cwd_always = Mode always hanya mencari direktori saat ini sebelum direktori yang disebutkan dalam PATH.
+stdlib.which.not_found.hint.workspace = Untuk mencari pohon ruang kerja secara rekursif, gunakan cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] perintah "{ $command }" di "{ $path }" tidak ada atau tidak dapat dieksekusi.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <kosong>
 stdlib.which.path_entry.non_utf8 = Entri PATH ke-{ $index } memuat karakter yang bukan UTF-8; Netsuke memerlukan jalur UTF-8.
 stdlib.which.command.empty = which memerlukan untai yang tidak kosong.
-stdlib.which.cwd_mode.invalid = cwd_mode must be 'auto', 'always', 'never', or 'workspace-recursive', got '{ $mode }'.
+stdlib.which.cwd_mode.invalid = cwd_mode harus berupa 'auto', 'always', 'never', atau 'workspace-recursive'; diperoleh '{ $mode }'.
 stdlib.which.cwd.resolve_failed = Direktori saat ini tidak dapat ditentukan: { $details }.
 stdlib.which.cwd.non_utf8 = Direktori saat ini memuat bagian yang bukan UTF-8.
 stdlib.which.canonicalize_failed = "{ $path }" tidak dapat dikanonikalisasi: { $details }.

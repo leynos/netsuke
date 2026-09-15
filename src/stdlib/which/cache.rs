@@ -230,7 +230,7 @@ mod tests {
     use anyhow::{Result, anyhow, ensure};
     use camino::Utf8PathBuf;
     use rstest::rstest;
-    use std::{num::NonZeroUsize, sync::Arc};
+    use std::num::NonZeroUsize;
     use tempfile::TempDir;
     fn cache_key_for(command: &str) -> CacheKey {
         CacheKey {
@@ -346,37 +346,38 @@ mod tests {
         Ok(())
     }
     #[test]
-    fn resolver_applies_skip_list_during_resolution() -> Result<()> {
+    fn lookup_applies_skip_list_during_resolution() -> Result<()> {
         let temp = TempDir::new()?;
         let cwd = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
             .map_err(|path| anyhow!("temp path should be utf8: {path:?}"))?;
         let target = cwd.join("target");
         test_support::fs::create_dir_all(target.as_std_path())?;
         test_support::write_exec(target.as_std_path(), "tool")?;
-        let capacity = NonZeroUsize::new(64).expect("non-zero cache capacity");
-        // Use path_override to set empty PATH instead of mutating global env
-        let empty_path = Some(std::ffi::OsString::new());
-        let resolver = WhichResolver::new(WhichConfig::new(
-            Some(Arc::new(cwd.clone())),
-            empty_path.clone(),
-            WorkspaceSkipList::default(),
-            capacity,
-        ));
+        #[cfg(not(windows))]
+        let env = super::super::env::mock_env_for_capture(
+            Some(std::ffi::OsString::new()),
+            Err(std::env::VarError::NotPresent),
+        );
+        #[cfg(windows)]
+        let env = super::super::env::mock_env_for_capture(
+            Some(std::ffi::OsString::new()),
+            None,
+            Err(std::env::VarError::NotPresent),
+        );
+        let snapshot = EnvSnapshot::capture_with_env(Some(cwd.as_path()), None, &env)?;
         let options = WhichOptions {
             cwd_mode: CwdMode::WorkspaceRecursive,
             ..WhichOptions::default()
         };
-        let err = resolver
-            .resolve("tool", &options)
+        let err = lookup("tool", &snapshot, &options, &WorkspaceSkipList::default())
             .expect_err("default skip should ignore target");
         ensure!(matches!(err, ResolveError::NotFound { .. }));
-        let resolver_custom = WhichResolver::new(WhichConfig::new(
-            Some(Arc::new(cwd.clone())),
-            empty_path,
-            WorkspaceSkipList::from_names([".git"]),
-            capacity,
-        ));
-        let matches = resolver_custom.resolve("tool", &options)?;
+        let matches = lookup(
+            "tool",
+            &snapshot,
+            &options,
+            &WorkspaceSkipList::from_names([".git"]),
+        )?;
         ensure!(
             matches == vec![target.join("tool")],
             "expected executable discovery when target not skipped"

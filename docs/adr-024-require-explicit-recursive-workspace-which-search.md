@@ -6,7 +6,7 @@ Accepted.
 
 ## Date
 
-2026-09-04.
+2026-09-04
 
 ## Context and problem statement
 
@@ -18,12 +18,11 @@ crossing that trust boundary.
 
 ## Decision
 
-In the context of executable discovery from trusted manifests, facing an
-implicit checkout-controlled command-resolution path, we decided for an explicit
-`cwd_mode="workspace-recursive"` opt-in, and against default recursive
-workspace discovery or giving `always` recursive behaviour, to achieve a
-predictable PATH-only default and visible trust boundaries, accepting that
-manifests relying on the old fallback must be migrated.
+For executable discovery from trusted manifests, the decision requires an
+explicit `cwd_mode="workspace-recursive"` opt-in. It rejects default recursive
+workspace discovery and recursive `always` behaviour, preserving a predictable
+PATH-only default and visible trust boundaries. Manifests relying on the old
+fallback must migrate.
 
 `auto` searches only `PATH` entries and yields no directories when `PATH` is
 empty or unset. `always` prepends only the workspace root/current directory,

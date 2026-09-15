@@ -348,15 +348,15 @@ stdlib.time.label.nanoseconds = nanosekuntia
 
 # which-apurin diagnostiikka.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] komentoa ”{ $command }” ei löytynyt, kun { $count } PATH-merkintää oli tarkistettu. Esikatselu: { $preview }
-stdlib.which.not_found.hint.cwd_auto = Automatic mode searches only directories explicitly named by PATH.
-stdlib.which.not_found.hint.cwd_always = Always mode searches only the current directory before directories named by PATH.
-stdlib.which.not_found.hint.workspace = To recursively search the workspace tree, use cwd_mode="workspace-recursive".
+stdlib.which.not_found.hint.cwd_auto = auto-tila hakee vain PATH-muuttujaan nimenomaisesti määritetyistä hakemistoista.
+stdlib.which.not_found.hint.cwd_always = always-tila hakee vain nykyisestä hakemistosta ennen PATH-muuttujaan määritettyjä hakemistoja.
+stdlib.which.not_found.hint.workspace = Jos haluat hakea työtilapuusta rekursiivisesti, käytä cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] komento ”{ $command }” polussa ”{ $path }” puuttuu tai ei ole suoritettava.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <tyhjä>
 stdlib.which.path_entry.non_utf8 = PATH-merkintä nro { $index } sisältää merkkejä, jotka eivät ole UTF-8:aa; Netsuke vaatii UTF-8-polkuja.
 stdlib.which.command.empty = which vaatii merkkijonon, joka ei ole tyhjä.
-stdlib.which.cwd_mode.invalid = cwd_mode must be 'auto', 'always', 'never', or 'workspace-recursive', got '{ $mode }'.
+stdlib.which.cwd_mode.invalid = cwd_mode-arvon on oltava 'auto', 'always', 'never' tai 'workspace-recursive'; saatiin '{ $mode }'.
 stdlib.which.cwd.resolve_failed = Nykyistä hakemistoa ei voitu selvittää: { $details }.
 stdlib.which.cwd.non_utf8 = Nykyinen hakemisto sisältää osia, jotka eivät ole UTF-8:aa.
 stdlib.which.canonicalize_failed = Polkua ”{ $path }” ei voitu kanonisoida: { $details }.

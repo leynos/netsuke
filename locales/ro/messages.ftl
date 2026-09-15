@@ -348,15 +348,15 @@ stdlib.time.label.nanoseconds = nanosecunde
 
 # Diagnostice ale ajutorului which.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] comanda „{ $command }” nu a fost găsită după verificarea a { $count } intrări din PATH. Previzualizare: { $preview }
-stdlib.which.not_found.hint.cwd_auto = Automatic mode searches only directories explicitly named by PATH.
-stdlib.which.not_found.hint.cwd_always = Always mode searches only the current directory before directories named by PATH.
-stdlib.which.not_found.hint.workspace = To recursively search the workspace tree, use cwd_mode="workspace-recursive".
+stdlib.which.not_found.hint.cwd_auto = Modul auto caută numai în directoarele indicate explicit în PATH.
+stdlib.which.not_found.hint.cwd_always = Modul always caută numai în directorul curent înaintea directoarelor indicate în PATH.
+stdlib.which.not_found.hint.workspace = Pentru a căuta recursiv în arborele spațiului de lucru, utilizați cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] comanda „{ $command }” din „{ $path }” lipsește sau nu este executabilă.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <gol>
 stdlib.which.path_entry.non_utf8 = Intrarea nr. { $index } din PATH conține caractere care nu sunt UTF-8; Netsuke necesită căi UTF-8.
 stdlib.which.command.empty = which necesită un șir de caractere care nu este gol.
-stdlib.which.cwd_mode.invalid = cwd_mode must be 'auto', 'always', 'never', or 'workspace-recursive', got '{ $mode }'.
+stdlib.which.cwd_mode.invalid = cwd_mode trebuie să fie 'auto', 'always', 'never' sau 'workspace-recursive'; s-a primit '{ $mode }'.
 stdlib.which.cwd.resolve_failed = Directorul curent nu a putut fi determinat: { $details }.
 stdlib.which.cwd.non_utf8 = Directorul curent conține componente care nu sunt UTF-8.
 stdlib.which.canonicalize_failed = „{ $path }” nu a putut fi canonizat: { $details }.
