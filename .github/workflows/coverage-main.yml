@@ -44,6 +44,11 @@ jobs:
       LINUX_LANE_VCPUS: '4'
       CARGO_BUILD_JOBS: '4'
       NEXTEST_TEST_THREADS: '4'
+      # Selects [profile.ci] in .config/nextest.toml, which carries the
+      # 900s whole-run budget. The shared coverage action takes no profile
+      # input, so this variable is the only lever; the default profile is
+      # deliberately uncapped for local runs on contended hosts.
+      NEXTEST_PROFILE: ci
       NETSUKE_RUNNER_IMAGE: ubuntu2404
       # The instrumented coverage build compiles through the same sccache
       # store as the ordinary debug build: the two shapes differ only by
