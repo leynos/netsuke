@@ -344,9 +344,14 @@ fn stage_reporting_callback(
 /// Load the manifest, translating loading stages into reporter updates.
 ///
 /// Thin reporting wrapper over [`generation::load_manifest`].
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The reporting wrapper forwards the policy, environment, budget, and reporter seams explicitly."
+)]
 pub(super) fn load_manifest_with_stage_reporting(
     manifest_path: &Utf8PathBuf,
     policy: crate::stdlib::NetworkPolicy,
+    env_access_policy: crate::manifest::EnvAccessPolicy,
     budget_limits: manifest::ManifestBudgetLimits,
     reporter: &dyn StatusReporter,
 ) -> Result<crate::ast::NetsukeManifest> {
@@ -354,6 +359,7 @@ pub(super) fn load_manifest_with_stage_reporting(
     generation::load_manifest_for_build_with_limits(
         manifest_path,
         policy,
+        env_access_policy,
         budget_limits,
         Some(&mut on_stage),
     )

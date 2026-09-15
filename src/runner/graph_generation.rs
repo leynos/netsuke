@@ -52,8 +52,14 @@ pub(super) fn generate_ninja_with_shell(
         .network_policy()
         .context(localization::message(keys::RUNNER_CONTEXT_NETWORK_POLICY))?;
     let budget_limits = cli.manifest_budget_limits()?;
-    let manifest =
-        load_manifest_with_stage_reporting(&manifest_path, policy, budget_limits, reporter)?;
+    let env_access_policy = crate::manifest::EnvAccessPolicy::default();
+    let manifest = load_manifest_with_stage_reporting(
+        &manifest_path,
+        policy,
+        env_access_policy,
+        budget_limits,
+        reporter,
+    )?;
     record_manifest_structure(&manifest);
 
     report_pipeline_stage(reporter, PipelineStage::IrGenerationValidation, None);

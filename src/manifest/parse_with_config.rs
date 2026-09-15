@@ -7,8 +7,8 @@
 //! environment.
 
 use super::{
-    EnvReader, ManifestBudgetLimits, ManifestName, ManifestParse, StdlibRegistration,
-    from_str_named, trace_expansion_report,
+    EnvAccessPolicy, EnvReader, ManifestBudgetLimits, ManifestName, ManifestParse,
+    StdlibRegistration, from_str_named, trace_expansion_report,
 };
 use crate::{ast::NetsukeManifest, stdlib::StdlibConfig};
 use anyhow::Result;
@@ -64,12 +64,43 @@ pub fn from_str_with_env_and_config(
     env_reader: &EnvReader,
     stdlib_config: StdlibConfig,
 ) -> Result<NetsukeManifest> {
+    let env_access_policy = EnvAccessPolicy::default();
     from_str_named(
         yaml,
         ManifestParse {
             name: &ManifestName::new("Netsukefile"),
             stdlib_registration: Some(StdlibRegistration::Full(Box::new(stdlib_config))),
             env_reader,
+            env_access_policy: &env_access_policy,
+            manifest_root: None,
+            expansion_report_observer: Some(trace_expansion_report),
+            budget_limits: ManifestBudgetLimits::default(),
+        },
+        &mut None,
+    )
+}
+
+/// Parse a manifest string with explicit environment inputs.
+///
+/// The policy is evaluated before the reader runs, so a blocked `env()` call
+/// cannot disclose a process value through manifest rendering.
+///
+/// # Errors
+///
+/// Returns an error if YAML parsing or Jinja evaluation fails, including when
+/// an `env()` lookup is denied by `env_access_policy`.
+pub fn from_str_with_env_and_policy(
+    yaml: &str,
+    env_reader: &EnvReader,
+    env_access_policy: &EnvAccessPolicy,
+) -> Result<NetsukeManifest> {
+    from_str_named(
+        yaml,
+        ManifestParse {
+            name: &ManifestName::new("Netsukefile"),
+            stdlib_registration: None,
+            env_reader,
+            env_access_policy,
             manifest_root: None,
             expansion_report_observer: Some(trace_expansion_report),
             budget_limits: ManifestBudgetLimits::default(),

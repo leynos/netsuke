@@ -1,7 +1,7 @@
 //! Tests covering manifest workspace resolution and filesystem helpers.
 use super::super::{
-    EnvReadError, EnvReader, from_path_for_manifest_query, from_path_with_policy_and_env,
-    open_manifest_workspace,
+    EnvAccessPolicy, EnvReadError, EnvReader, ManifestEnvironment, from_path_for_manifest_query,
+    from_path_with_policy_and_env, open_manifest_workspace,
 };
 use crate::ast::Recipe;
 use crate::stdlib::NetworkPolicy;
@@ -165,13 +165,14 @@ fn from_path_uses_manifest_directory_for_caches() -> AnyResult<()> {
         }
     });
 
+    let environment = ManifestEnvironment::new(&env_reader, EnvAccessPolicy::default());
     let manifest = from_path_with_policy_and_env(
         &manifest_path,
         NetworkPolicy::default()
             .deny_all_hosts()
             .allow_hosts(["127.0.0.1", "localhost"])?
             .allow_scheme("http")?,
-        &env_reader,
+        &environment,
         None,
     )?;
     if let Err(err) = server.join() {

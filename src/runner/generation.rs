@@ -18,8 +18,11 @@ use camino::Utf8Path;
 use crate::ast::NetsukeManifest;
 use crate::ir::{BuildGraph, IrGenError};
 use crate::localization::{self, keys};
-use crate::stdlib::NetworkPolicy;
 use crate::{manifest, ninja_gen};
+use crate::{
+    manifest::{EnvAccessPolicy, ManifestEnvironment},
+    stdlib::NetworkPolicy,
+};
 
 /// Optional observer for manifest-loading stages.
 ///
@@ -61,18 +64,34 @@ pub(super) fn load_manifest_with_limits(
         })
 }
 
-/// Load a build manifest with explicit resource ceilings.
+/// Load a build manifest with explicit environment policy and resource
+/// ceilings.
+///
+/// The access policy is evaluated before the process environment is read, so a
+/// blocked `env()` call cannot disclose a host value.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The build loader keeps the policy, environment, budget, and stage-observer seams explicit."
+)]
 pub(super) fn load_manifest_for_build_with_limits(
     path: &Utf8Path,
     policy: NetworkPolicy,
+    env_access_policy: EnvAccessPolicy,
     budget_limits: manifest::ManifestBudgetLimits,
     on_stage: StageObserver<'_>,
 ) -> Result<NetsukeManifest> {
-    manifest::from_path_with_policy_and_limits(path.as_std_path(), policy, budget_limits, on_stage)
-        .with_context(|| {
-            localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST)
-                .with_arg("path", path.as_str())
-        })
+    let env_reader = manifest::process_env_reader();
+    let environment = ManifestEnvironment::new(&env_reader, env_access_policy);
+    manifest::from_path_with_policy_and_environment_and_limits(
+        path.as_std_path(),
+        policy,
+        &environment,
+        budget_limits,
+        on_stage,
+    )
+    .with_context(|| {
+        localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST).with_arg("path", path.as_str())
+    })
 }
 
 /// Translate a manifest into the build graph intermediate representation.
