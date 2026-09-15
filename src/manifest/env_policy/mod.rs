@@ -71,8 +71,16 @@ impl EnvAccessPolicy {
 
     /// Return whether a block rule or active allowlist denies `name`.
     fn name_is_blocked(&self, name: &str) -> bool {
-        self.blocked_vars.contains(name)
-            || (!self.allowed_vars.is_empty() && !self.allowed_vars.contains(name))
+        if self.blocked_vars.contains(name) {
+            return true;
+        }
+
+        self.active_allowlist_rejects(name)
+    }
+
+    /// Return whether an active allowlist excludes `name`.
+    fn active_allowlist_rejects(&self, name: &str) -> bool {
+        !self.allowed_vars.is_empty() && !self.allowed_vars.contains(name)
     }
 
     /// Validate one environment variable name against this policy.

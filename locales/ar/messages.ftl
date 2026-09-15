@@ -447,5 +447,5 @@ example.errors_found = { $count ->
 }
 manifest.budget.exceeded = ‏استُنفدت ميزانية موارد البيان أثناء { $stage } بعد بلوغ { $limit }.
 
-cli.flag.env_allow_var.help = متغير البيئة المسموح به لمساعد env() في البيان
-cli.flag.env_block_var.help = متغير البيئة المحظور على مساعد env() في البيان
+cli.flag.env_allow_var.help = متغير البيئة المسموح به لمساعد env() في البيان.
+cli.flag.env_block_var.help = متغير البيئة المحظور على مساعد env() في البيان.

@@ -444,5 +444,5 @@ example.errors_found = { $count ->
 }
 manifest.budget.exceeded = Dh’fhalbh buidseat ghoireasan na foirm-liosta rè { $stage } às dèidh { $limit } a ruigsinn.
 
-cli.flag.env_allow_var.help = Caochladair àrainneachd ceadaichte do chuidiche env() a’ mhanaifeist
-cli.flag.env_block_var.help = Caochladair àrainneachd toirmisgte do chuidiche env() a’ mhanaifeist
+cli.flag.env_allow_var.help = Caochladair àrainneachd ceadaichte do chuidiche env() a’ mhanaifeist.
+cli.flag.env_block_var.help = Caochladair àrainneachd toirmisgte do chuidiche env() a’ mhanaifeist.

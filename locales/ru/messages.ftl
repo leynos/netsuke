@@ -446,5 +446,5 @@ example.errors_found = { $count ->
 }
 manifest.budget.exceeded = Бюджет ресурсов манифеста исчерпан. Этап: { $stage }. Достигнутое значение лимита: { $limit }.
 
-cli.flag.env_allow_var.help = Переменная окружения, разрешённая помощнику env() манифеста
-cli.flag.env_block_var.help = Переменная окружения, заблокированная для помощника env() манифеста
+cli.flag.env_allow_var.help = Переменная окружения, разрешённая помощнику env() манифеста.
+cli.flag.env_block_var.help = Переменная окружения, заблокированная для помощника env() манифеста.

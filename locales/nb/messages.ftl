@@ -439,5 +439,5 @@ example.errors_found = { $count ->
 }
 manifest.budget.exceeded = Manifestets ressursbudsjett ble brukt opp under { $stage } etter å ha nådd { $limit }.
 
-cli.flag.env_allow_var.help = Miljøvariabel tillatt for manifestets env()-hjelper
-cli.flag.env_block_var.help = Miljøvariabel blokkert for manifestets env()-hjelper
+cli.flag.env_allow_var.help = Miljøvariabel tillatt for manifestets env()-hjelper.
+cli.flag.env_block_var.help = Miljøvariabel blokkert for manifestets env()-hjelper.

@@ -445,5 +445,5 @@ example.errors_found = { $count ->
 }
 manifest.budget.exceeded = Budżet zasobów manifestu został wyczerpany. Etap: { $stage }. Osiągnięta wartość limitu: { $limit }.
 
-cli.flag.env_allow_var.help = Zmienna środowiskowa dozwolona dla pomocnika env() manifestu
-cli.flag.env_block_var.help = Zmienna środowiskowa zablokowana dla pomocnika env() manifestu
+cli.flag.env_allow_var.help = Zmienna środowiskowa dozwolona dla pomocnika env() manifestu.
+cli.flag.env_block_var.help = Zmienna środowiskowa zablokowana dla pomocnika env() manifestu.

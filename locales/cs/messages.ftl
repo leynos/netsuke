@@ -444,5 +444,5 @@ example.errors_found = { $count ->
 }
 manifest.budget.exceeded = Rozpočet prostředků manifestu byl během fáze { $stage } vyčerpán po dosažení hodnoty { $limit }.
 
-cli.flag.env_allow_var.help = Proměnná prostředí povolená pomocníkovi env() manifestu
-cli.flag.env_block_var.help = Proměnná prostředí blokovaná pomocníkovi env() manifestu
+cli.flag.env_allow_var.help = Proměnná prostředí povolená pomocníkovi env() manifestu.
+cli.flag.env_block_var.help = Proměnná prostředí blokovaná pomocníkovi env() manifestu.

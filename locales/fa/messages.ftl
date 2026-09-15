@@ -439,5 +439,5 @@ example.errors_found = { $count ->
 }
 manifest.budget.exceeded = ‏بودجهٔ منابع مانیفست هنگام { $stage } پس از رسیدن به { $limit } به پایان رسید.
 
-cli.flag.env_allow_var.help = متغیر محیطی مجاز برای دستیار env() مانیفست
-cli.flag.env_block_var.help = متغیر محیطی مسدودشده برای دستیار env() مانیفست
+cli.flag.env_allow_var.help = متغیر محیطی مجاز برای دستیار env() مانیفست.
+cli.flag.env_block_var.help = متغیر محیطی مسدودشده برای دستیار env() مانیفست.

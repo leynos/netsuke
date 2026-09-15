@@ -438,5 +438,5 @@ example.errors_found = { $count ->
 }
 manifest.budget.exceeded = Anggaran sumber daya manifes habis selama { $stage } setelah mencapai { $limit }.
 
-cli.flag.env_allow_var.help = Variabel lingkungan yang diizinkan untuk pembantu env() manifes
-cli.flag.env_block_var.help = Variabel lingkungan yang diblokir untuk pembantu env() manifes
+cli.flag.env_allow_var.help = Variabel lingkungan yang diizinkan untuk pembantu env() manifes.
+cli.flag.env_block_var.help = Variabel lingkungan yang diblokir untuk pembantu env() manifes.

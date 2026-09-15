@@ -442,5 +442,5 @@ example.errors_found = { $count ->
 }
 manifest.budget.exceeded = { $stage } के दौरान { $limit } तक पहुँचने के बाद मैनिफ़ेस्ट का संसाधन बजट समाप्त हो गया।
 
-cli.flag.env_allow_var.help = मैनिफ़ेस्ट env() सहायक के लिए अनुमत परिवेश चर
-cli.flag.env_block_var.help = मैनिफ़ेस्ट env() सहायक के लिए अवरुद्ध परिवेश चर
+cli.flag.env_allow_var.help = मैनिफ़ेस्ट env() सहायक के लिए अनुमत परिवेश चर।
+cli.flag.env_block_var.help = मैनिफ़ेस्ट env() सहायक के लिए अवरुद्ध परिवेश चर।
