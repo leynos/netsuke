@@ -1,6 +1,6 @@
 //! Tests for manifest stage callback ordering.
 
-use crate::manifest::{self, ManifestLoadStage};
+use crate::manifest::{self, EnvAccessPolicy, ManifestLoadStage};
 use crate::stdlib::NetworkPolicy;
 use anyhow::{Context, Result, ensure};
 use rstest::{fixture, rstest};
@@ -37,6 +37,7 @@ fn stage_callback_reports_expected_order_for_valid_manifest(
     let manifest = manifest::from_path_with_policy(
         &manifest_path,
         NetworkPolicy::default(),
+        EnvAccessPolicy::default(),
         Some(&mut |stage| stages.push(stage)),
     )?;
 
@@ -69,6 +70,7 @@ fn stage_callback_stops_after_parse_failure(
     let result = manifest::from_path_with_policy(
         &manifest_path,
         NetworkPolicy::default(),
+        EnvAccessPolicy::default(),
         Some(&mut |stage| stages.push(stage)),
     );
     ensure!(result.is_err(), "invalid manifest should fail");
@@ -110,6 +112,7 @@ fn stage_callback_stops_after_template_expansion_failure(
     let result = manifest::from_path_with_policy(
         &manifest_path,
         NetworkPolicy::default(),
+        EnvAccessPolicy::default(),
         Some(&mut |stage| stages.push(stage)),
     );
     ensure!(result.is_err(), "template expansion should fail");
@@ -150,6 +153,7 @@ fn stage_callback_stops_after_final_rendering_failure(
     let result = manifest::from_path_with_policy(
         &manifest_path,
         NetworkPolicy::default(),
+        EnvAccessPolicy::default(),
         Some(&mut |stage| stages.push(stage)),
     );
     ensure!(result.is_err(), "final rendering should fail");

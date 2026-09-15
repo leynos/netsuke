@@ -10,6 +10,8 @@ use mockable::{DefaultEnv, Env};
 
 use crate::localization::{self, keys};
 
+use super::{EnvAccessPolicy, EnvPolicyViolation};
+
 /// Manifest-owned failure returned by an [`EnvReader`].
 ///
 /// This type distinguishes a missing variable from a value that cannot be
@@ -55,6 +57,39 @@ impl From<VarError> for EnvReadError {
 /// ```
 pub type EnvReader = Arc<dyn Fn(&str) -> Result<String, EnvReadError> + Send + Sync>;
 
+/// Bundle an environment reader with the access policy governing its use.
+///
+/// On-disk manifest loaders consume this bundle at their Jinja boundary. It
+/// keeps the reader and the policy together, so callers cannot accidentally
+/// inject a reader without also making the applicable access decision.
+pub struct ManifestEnvironment<'a> {
+    /// Supplies values to the Jinja `env()` helper after policy evaluation.
+    reader: &'a EnvReader,
+    /// Decides whether each requested variable name may reach the reader.
+    access_policy: EnvAccessPolicy,
+}
+
+impl<'a> ManifestEnvironment<'a> {
+    /// Construct manifest environment inputs from a reader and access policy.
+    #[must_use]
+    pub fn new(reader: &'a EnvReader, access_policy: EnvAccessPolicy) -> Self {
+        Self {
+            reader,
+            access_policy,
+        }
+    }
+
+    /// Return the reader used by the manifest `env()` helper.
+    pub(super) const fn reader(&self) -> &'a EnvReader {
+        self.reader
+    }
+
+    /// Return the access policy evaluated before each environment read.
+    pub(super) const fn access_policy(&self) -> &EnvAccessPolicy {
+        &self.access_policy
+    }
+}
+
 /// Construct the process-backed environment reader used by production loads.
 ///
 /// # Examples
@@ -89,8 +124,14 @@ pub(super) fn disabled_env_reader() -> EnvReader {
 /// tells the author which `env()` call failed.
 pub(super) fn env_var_with(
     name: &str,
+    policy: &EnvAccessPolicy,
     read_env: impl FnOnce(&str) -> Result<String, EnvReadError>,
 ) -> Result<String, Error> {
+    if let Err(EnvPolicyViolation::Blocked { message }) = policy.evaluate(name) {
+        tracing::debug!(failure_kind = "blocked", "manifest env lookup failed");
+        return Err(Error::new(ErrorKind::InvalidOperation, message.to_string()));
+    }
+
     match read_env(name) {
         Ok(value) => Ok(value),
         Err(EnvReadError::NotPresent) => {
@@ -122,6 +163,8 @@ mod tests {
     /// Stands in for a credential named by a manifest; neither the variable
     /// name nor its value may reach a log line.
     const SENTINEL: &str = "s3cr3t-sentinel";
+    /// Stands in for a credential value that a blocked reader must not return.
+    const SENTINEL_VALUE: &str = "s3cr3t-value";
 
     #[rstest]
     #[case::not_present(EnvReadError::NotPresent, "not_present")]
@@ -131,7 +174,8 @@ mod tests {
         #[case] failure_kind: &str,
     ) {
         let events = with_test_subscriber(LevelFilter::DEBUG, |captured| {
-            env_var_with(SENTINEL, |_| Err(failure)).expect_err("the injected reader must fail");
+            env_var_with(SENTINEL, &EnvAccessPolicy::default(), |_| Err(failure))
+                .expect_err("the injected reader must fail");
             captured.snapshot()
         });
 
@@ -157,8 +201,8 @@ mod tests {
         #[case] failure: EnvReadError,
         #[case] expected_kind: ErrorKind,
     ) {
-        let error =
-            env_var_with(SENTINEL, |_| Err(failure)).expect_err("the injected reader must fail");
+        let error = env_var_with(SENTINEL, &EnvAccessPolicy::default(), |_| Err(failure))
+            .expect_err("the injected reader must fail");
 
         assert_eq!(
             error.kind(),
@@ -169,6 +213,44 @@ mod tests {
             !error.to_string().contains(SENTINEL),
             "the variable name must not reach the error: {error}"
         );
+    }
+
+    /// Reject blocked names before the reader can disclose their values.
+    #[test]
+    fn blocked_lookup_omits_name_and_value_from_every_diagnostic_surface() {
+        let policy = EnvAccessPolicy::default().block_var(SENTINEL);
+        let mut reader_was_called = false;
+        let (error, events) = with_test_subscriber(LevelFilter::DEBUG, |captured| {
+            let error = env_var_with(SENTINEL, &policy, |_| {
+                reader_was_called = true;
+                Ok(String::from(SENTINEL_VALUE))
+            })
+            .expect_err("blocked lookup must fail before reading the environment");
+            (error, captured.snapshot())
+        });
+
+        assert!(
+            !reader_was_called,
+            "blocked lookup must not call the reader"
+        );
+        assert_eq!(error.kind(), ErrorKind::InvalidOperation);
+        assert!(
+            events
+                .iter()
+                .any(|event| event.contains("manifest env lookup failed")
+                    && event.contains("failure_kind=\"blocked\"")),
+            "expected a bounded blocked-lookup event in {events:?}"
+        );
+        for diagnostic in events.iter().chain(std::iter::once(&error.to_string())) {
+            assert!(
+                !diagnostic.contains(SENTINEL),
+                "the variable name must not reach diagnostics: {diagnostic}"
+            );
+            assert!(
+                !diagnostic.contains(SENTINEL_VALUE),
+                "the variable value must not reach diagnostics: {diagnostic}"
+            );
+        }
     }
 
     #[test]

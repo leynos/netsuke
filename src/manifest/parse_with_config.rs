@@ -7,7 +7,7 @@
 //! environment.
 
 use super::{
-    EnvReader, ManifestName, ManifestParse, StdlibRegistration, from_str_named,
+    EnvAccessPolicy, EnvReader, ManifestName, ManifestParse, StdlibRegistration, from_str_named,
     trace_expansion_report,
 };
 use crate::{ast::NetsukeManifest, stdlib::StdlibConfig};
@@ -64,12 +64,14 @@ pub fn from_str_with_env_and_config(
     env_reader: &EnvReader,
     stdlib_config: StdlibConfig,
 ) -> Result<NetsukeManifest> {
+    let env_access_policy = EnvAccessPolicy::default();
     from_str_named(
         yaml,
         ManifestParse {
             name: &ManifestName::new("Netsukefile"),
             stdlib_registration: Some(StdlibRegistration::Full(Box::new(stdlib_config))),
             env_reader,
+            env_access_policy: &env_access_policy,
             manifest_root: None,
             expansion_report_observer: Some(trace_expansion_report),
         },

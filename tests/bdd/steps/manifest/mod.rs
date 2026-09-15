@@ -83,10 +83,12 @@ fn parse_manifest_inner(world: &TestWorld, path: &ManifestPath) {
         path.as_str().to_owned()
     };
     let env_reader = manifest_env_reader(world);
+    let environment =
+        manifest::ManifestEnvironment::new(&env_reader, manifest::EnvAccessPolicy::default());
     let outcome = manifest::from_path_with_policy_and_env(
         &manifest_path,
         NetworkPolicy::default(),
-        &env_reader,
+        &environment,
         None,
     )
     .map_err(|e| display_error_chain(e.as_ref()));

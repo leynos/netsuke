@@ -51,7 +51,12 @@ pub(super) fn generate_ninja_with_shell(
     let policy = cli
         .network_policy()
         .context(localization::message(keys::RUNNER_CONTEXT_NETWORK_POLICY))?;
-    let manifest = load_manifest_with_stage_reporting(&manifest_path, policy, reporter)?;
+    let manifest = load_manifest_with_stage_reporting(
+        &manifest_path,
+        policy,
+        crate::manifest::EnvAccessPolicy::default(),
+        reporter,
+    )?;
     record_manifest_structure(&manifest);
 
     report_pipeline_stage(reporter, PipelineStage::IrGenerationValidation, None);
