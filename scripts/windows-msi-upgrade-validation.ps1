@@ -40,7 +40,7 @@ function Invoke-MsiInstall {
         [string]$LogPath
     )
 
-    $arguments = "/i `\"$MsiPath`\" /qn /norestart /l*v `\"$LogPath`\""
+    $arguments = "/i `"$MsiPath`" /qn /norestart /l*v `"$LogPath`""
     $process = Start-Process -FilePath 'msiexec.exe' -ArgumentList $arguments -Wait -PassThru
     return $process.ExitCode
 }
