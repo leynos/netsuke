@@ -157,6 +157,9 @@ operator, user, and contributor references are easier to find.
   submission with bounded correlation observability.
 - [ADR-023](adr-023-revalidate-fetch-redirects.md): Redirect policy decision
   record, making network policy an invariant of every outbound fetch hop.
+- [ADR-024](adr-024-require-explicit-recursive-workspace-which-search.md):
+  Explicit opt-in for recursive workspace executable discovery, preserving a
+  PATH-only default and its manifest trust boundary.
 
 ## Proposals
 

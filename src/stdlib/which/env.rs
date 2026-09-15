@@ -3,6 +3,8 @@
 use std::ffi::{OsStr, OsString};
 
 use camino::{Utf8Path, Utf8PathBuf};
+#[cfg(test)]
+use mockable::MockEnv;
 use mockable::{DefaultEnv, Env};
 
 use super::{
@@ -55,6 +57,54 @@ fn capture_workspace_switch(env: &impl Env) -> WorkspaceSwitch {
         );
     }
     switch
+}
+
+/// Build a strict injected environment for a non-Windows snapshot capture.
+///
+/// The fixture mirrors every ambient read made by [`EnvSnapshot::capture_with_env`]
+/// so tests fail when capture's contract gains a new input rather than silently
+/// consulting the host environment.
+#[cfg(all(test, not(windows)))]
+pub(super) fn mock_env_for_capture(
+    path: Option<OsString>,
+    workspace_switch: Result<String, std::env::VarError>,
+) -> MockEnv {
+    let mut env = MockEnv::new();
+    env.expect_os_string()
+        .withf(|key| key == "PATH")
+        .once()
+        .return_once(move |_| path);
+    env.expect_raw()
+        .withf(|key| key == WORKSPACE_FALLBACK_ENV)
+        .once()
+        .return_once(move |_| workspace_switch);
+    env
+}
+
+/// Build a strict injected environment for a Windows snapshot capture.
+///
+/// Windows capture reads `PATHEXT` between `PATH` and the workspace switch, so
+/// every Windows fixture supplies all three values explicitly.
+#[cfg(all(test, windows))]
+pub(super) fn mock_env_for_capture(
+    path: Option<OsString>,
+    pathext: Option<OsString>,
+    workspace_switch: Result<String, std::env::VarError>,
+) -> MockEnv {
+    let mut env = MockEnv::new();
+    env.expect_os_string()
+        .withf(|key| key == "PATH")
+        .once()
+        .return_once(move |_| path);
+    env.expect_os_string()
+        .withf(|key| key == "PATHEXT")
+        .once()
+        .return_once(move |_| pathext);
+    env.expect_raw()
+        .withf(|key| key == WORKSPACE_FALLBACK_ENV)
+        .once()
+        .return_once(move |_| workspace_switch);
+    env
 }
 
 /// Snapshot of the environment inputs one `which` resolution consults.
@@ -219,6 +269,7 @@ impl EnvSnapshot {
     /// boundary where the data outlives the snapshot.
     pub(super) fn resolved_dirs(&self, mode: CwdMode) -> Vec<&Utf8Path> {
         let mut dirs = Vec::new();
+        let can_search_path_current_dir = can_search_path_current_dir(mode, self.raw_path.as_ref());
         let mut cwd_added = matches!(mode, CwdMode::Always);
         if cwd_added {
             dirs.push(self.cwd.as_path());
@@ -230,7 +281,7 @@ impl EnvSnapshot {
                 // has already prepended it, and repeated current-directory
                 // PATH entries (for example `::/usr/bin::`) collapse to the
                 // first occurrence.
-                PathEntry::CurrentDir if matches!(mode, CwdMode::Auto) && !cwd_added => {
+                PathEntry::CurrentDir if can_search_path_current_dir && !cwd_added => {
                     cwd_added = true;
                     dirs.push(self.cwd.as_path());
                 }
@@ -266,6 +317,12 @@ impl EnvSnapshot {
     pub(super) const fn workspace_switch(&self) -> &WorkspaceSwitch {
         &self.workspace_switch
     }
+}
+
+/// Decide whether a non-empty PATH can contribute its current-directory entry.
+fn can_search_path_current_dir(mode: CwdMode, raw_path: Option<&OsString>) -> bool {
+    matches!(mode, CwdMode::Auto | CwdMode::WorkspaceRecursive)
+        && raw_path.as_ref().is_some_and(|path| !path.is_empty())
 }
 
 /// Read the working directory, `PATH`, and directory entries shared by all snapshots.

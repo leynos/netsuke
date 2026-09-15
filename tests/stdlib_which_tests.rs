@@ -238,7 +238,7 @@ fn command_available_returns_true_for_canonical_symlink(
 #[rstest]
 #[case::present("workspace-helper", "true")]
 #[case::absent("missing-helper", "false")]
-fn command_available_uses_workspace_fallback_when_path_is_empty(
+fn command_available_uses_explicit_workspace_search_when_path_is_empty(
     #[case] command: &str,
     #[case] expected: &str,
     stdlib_workspace: Result<StdlibWorkspace>,
@@ -246,11 +246,40 @@ fn command_available_uses_workspace_fallback_when_path_is_empty(
     let workspace_fixture = stdlib_workspace?;
     write_tool(&workspace_fixture.root, "workspace-helper")?;
     let env = env_without_path(&workspace_fixture)?;
-    let template = format!("{{{{ command_available({command:?}) }}}}");
+    let template =
+        format!("{{{{ command_available({command:?}, cwd_mode='workspace-recursive') }}}}");
 
     let output = env.render_str(&template, context! {})?;
 
     ensure!(output == expected, "expected {expected}, got {output}");
+    Ok(())
+}
+
+#[rstest]
+fn workspace_recursive_prefers_a_path_match(
+    stdlib_workspace: Result<StdlibWorkspace>,
+) -> Result<()> {
+    let workspace_fixture = stdlib_workspace?;
+    let bin = workspace_fixture.root.join("bin");
+    let path_match = write_tool(&bin, "precedence-helper")?;
+    let nested = workspace_fixture.root.join("nested");
+    let workspace_match = write_tool(&nested, "precedence-helper")?;
+    let env = stdlib_env(&workspace_fixture.root, path_override(&[bin])?)?;
+
+    let output = env.render_str(
+        "{{ 'precedence-helper' | which(cwd_mode='workspace-recursive') }}",
+        context! {},
+    )?;
+
+    let expected = path_match.as_str().replace('\\', "/");
+    ensure!(
+        output == expected,
+        "expected PATH match {expected}, got {output}"
+    );
+    ensure!(
+        output != workspace_match.as_str().replace('\\', "/"),
+        "workspace-recursive must not search the workspace before PATH"
+    );
     Ok(())
 }
 
@@ -279,12 +308,14 @@ fn command_available_fresh_bypasses_cached_success(
 }
 
 #[rstest]
-#[case::auto_present("auto", true, "true")]
+#[case::auto_present("auto", true, "false")]
 #[case::auto_absent("auto", false, "false")]
 #[case::always_present("always", true, "true")]
 #[case::always_absent("always", false, "false")]
 #[case::never_present("never", true, "false")]
 #[case::never_absent("never", false, "false")]
+#[case::workspace_recursive_present("workspace-recursive", true, "true")]
+#[case::workspace_recursive_absent("workspace-recursive", false, "false")]
 fn command_available_honours_cwd_mode(
     #[case] cwd_mode: &str,
     #[case] present: bool,

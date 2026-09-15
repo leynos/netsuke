@@ -255,12 +255,9 @@ struct HandleMissContext<'a> {
     workspace_skips: &'a WorkspaceSkipList,
 }
 
-/// Handle a PATH-search miss, falling back to a workspace search when `PATH`
-/// is unset or empty and `ctx.options.cwd_mode` is not [`CwdMode::Never`].
+/// Handle a PATH-search miss, recursively searching the workspace only on request.
 fn handle_miss(ctx: HandleMissContext<'_>) -> Result<Vec<Utf8PathBuf>, ResolveError> {
-    let path_empty = ctx.env.raw_path.as_ref().is_none_or(|path| path.is_empty());
-
-    if path_empty && !matches!(ctx.options.cwd_mode, CwdMode::Never) {
+    if matches!(ctx.options.cwd_mode, CwdMode::WorkspaceRecursive) {
         let discovered =
             search_workspace(ctx.env, ctx.command, ctx.options.all, ctx.workspace_skips)?;
         if !discovered.is_empty() {
