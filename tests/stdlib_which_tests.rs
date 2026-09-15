@@ -256,6 +256,34 @@ fn command_available_uses_explicit_workspace_search_when_path_is_empty(
 }
 
 #[rstest]
+fn workspace_recursive_prefers_a_path_match(
+    stdlib_workspace: Result<StdlibWorkspace>,
+) -> Result<()> {
+    let workspace_fixture = stdlib_workspace?;
+    let bin = workspace_fixture.root.join("bin");
+    let path_match = write_tool(&bin, "precedence-helper")?;
+    let nested = workspace_fixture.root.join("nested");
+    let workspace_match = write_tool(&nested, "precedence-helper")?;
+    let env = stdlib_env(&workspace_fixture.root, path_override(&[bin])?)?;
+
+    let output = env.render_str(
+        "{{ 'precedence-helper' | which(cwd_mode='workspace-recursive') }}",
+        context! {},
+    )?;
+
+    let expected = path_match.as_str().replace('\\', "/");
+    ensure!(
+        output == expected,
+        "expected PATH match {expected}, got {output}"
+    );
+    ensure!(
+        output != workspace_match.as_str().replace('\\', "/"),
+        "workspace-recursive must not search the workspace before PATH"
+    );
+    Ok(())
+}
+
+#[rstest]
 fn command_available_fresh_bypasses_cached_success(
     stdlib_workspace: Result<StdlibWorkspace>,
 ) -> Result<()> {

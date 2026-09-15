@@ -348,15 +348,15 @@ stdlib.time.label.nanoseconds = nano giây
 
 # Chẩn đoán của hàm trợ giúp which.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] không tìm thấy lệnh “{ $command }” sau khi kiểm tra { $count } mục PATH. Xem trước: { $preview }
-stdlib.which.not_found.hint.cwd_auto = Automatic mode searches only directories explicitly named by PATH.
-stdlib.which.not_found.hint.cwd_always = Always mode searches only the current directory before directories named by PATH.
-stdlib.which.not_found.hint.workspace = To recursively search the workspace tree, use cwd_mode="workspace-recursive".
+stdlib.which.not_found.hint.cwd_auto = Chế độ auto chỉ tìm kiếm trong các thư mục được nêu rõ trong PATH.
+stdlib.which.not_found.hint.cwd_always = Chế độ always chỉ tìm kiếm thư mục hiện tại trước các thư mục được nêu trong PATH.
+stdlib.which.not_found.hint.workspace = Để tìm kiếm đệ quy trong cây không gian làm việc, hãy dùng cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] lệnh “{ $command }” tại “{ $path }” không tồn tại hoặc không thực thi được.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <trống>
 stdlib.which.path_entry.non_utf8 = Mục PATH số { $index } chứa ký tự không phải UTF-8; Netsuke yêu cầu đường dẫn UTF-8.
 stdlib.which.command.empty = which cần một chuỗi không rỗng.
-stdlib.which.cwd_mode.invalid = cwd_mode must be 'auto', 'always', 'never', or 'workspace-recursive', got '{ $mode }'.
+stdlib.which.cwd_mode.invalid = cwd_mode phải là 'auto', 'always', 'never' hoặc 'workspace-recursive'; nhận được '{ $mode }'.
 stdlib.which.cwd.resolve_failed = Không xác định được thư mục hiện tại: { $details }.
 stdlib.which.cwd.non_utf8 = Thư mục hiện tại chứa phần không phải UTF-8.
 stdlib.which.canonicalize_failed = Không chuẩn hoá được “{ $path }”: { $details }.

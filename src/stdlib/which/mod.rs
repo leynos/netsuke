@@ -313,19 +313,19 @@ const fn hint_for_mode(mode: options::CwdMode) -> Option<LocalizedMessage> {
     #[cfg(windows)]
     {
         match mode {
-            options::CwdMode::Auto | options::CwdMode::Never => Some(localization::message(
-                keys::STDLIB_WHICH_NOT_FOUND_HINT_WORKSPACE,
-            )),
-            options::CwdMode::Always | options::CwdMode::WorkspaceRecursive => None,
+            options::CwdMode::Auto | options::CwdMode::Always | options::CwdMode::Never => Some(
+                localization::message(keys::STDLIB_WHICH_NOT_FOUND_HINT_WORKSPACE),
+            ),
+            options::CwdMode::WorkspaceRecursive => None,
         }
     }
     #[cfg(not(windows))]
     {
         match mode {
-            options::CwdMode::Auto | options::CwdMode::Never => Some(localization::message(
-                keys::STDLIB_WHICH_NOT_FOUND_HINT_WORKSPACE,
-            )),
-            options::CwdMode::Always | options::CwdMode::WorkspaceRecursive => None,
+            options::CwdMode::Auto | options::CwdMode::Always | options::CwdMode::Never => Some(
+                localization::message(keys::STDLIB_WHICH_NOT_FOUND_HINT_WORKSPACE),
+            ),
+            options::CwdMode::WorkspaceRecursive => None,
         }
     }
 }

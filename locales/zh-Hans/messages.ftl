@@ -347,15 +347,15 @@ stdlib.time.label.nanoseconds = 纳秒
 
 # which 辅助函数的诊断。
 stdlib.which.not_found = [netsuke::jinja::which::not_found] 检查了 { $count } 个 PATH 条目后仍未找到命令“{ $command }”。预览：{ $preview }
-stdlib.which.not_found.hint.cwd_auto = Automatic mode searches only directories explicitly named by PATH.
-stdlib.which.not_found.hint.cwd_always = Always mode searches only the current directory before directories named by PATH.
-stdlib.which.not_found.hint.workspace = To recursively search the workspace tree, use cwd_mode="workspace-recursive".
+stdlib.which.not_found.hint.cwd_auto = auto 模式仅搜索 PATH 中明确指定的目录。
+stdlib.which.not_found.hint.cwd_always = always 模式仅在 PATH 中指定的目录之前搜索当前目录。
+stdlib.which.not_found.hint.workspace = 要递归搜索工作区树，请使用 cwd_mode="workspace-recursive"。
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] “{ $path }”中的命令“{ $command }”不存在或不可执行。
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <空>
 stdlib.which.path_entry.non_utf8 = 第 { $index } 个 PATH 条目包含非 UTF-8 字符；Netsuke 需要 UTF-8 路径。
 stdlib.which.command.empty = which 需要非空的字符串。
-stdlib.which.cwd_mode.invalid = cwd_mode must be 'auto', 'always', 'never', or 'workspace-recursive', got '{ $mode }'.
+stdlib.which.cwd_mode.invalid = cwd_mode 必须为 'auto'、'always'、'never' 或 'workspace-recursive'；得到的是 '{ $mode }'。
 stdlib.which.cwd.resolve_failed = 无法确定当前目录：{ $details }。
 stdlib.which.cwd.non_utf8 = 当前目录包含非 UTF-8 的部分。
 stdlib.which.canonicalize_failed = 无法规范化“{ $path }”：{ $details }。

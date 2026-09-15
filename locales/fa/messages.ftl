@@ -348,15 +348,15 @@ stdlib.time.label.nanoseconds = نانوثانیه
 
 # تشخیص‌های یاور which.
 stdlib.which.not_found = ‏[netsuke::jinja::which::not_found] فرمان «{ $command }» پس از بررسی { $count } مدخل PATH یافت نشد. پیش‌نمایش: { $preview }
-stdlib.which.not_found.hint.cwd_auto = ‏Automatic mode searches only directories explicitly named by PATH.
-stdlib.which.not_found.hint.cwd_always = ‏Always mode searches only the current directory before directories named by PATH.
-stdlib.which.not_found.hint.workspace = ‏To recursively search the workspace tree, use cwd_mode="workspace-recursive".
+stdlib.which.not_found.hint.cwd_auto = ‏حالت auto فقط در پوشه‌هایی جست‌وجو می‌کند که صراحتاً در PATH نام برده شده‌اند.
+stdlib.which.not_found.hint.cwd_always = ‏حالت always فقط پیش از پوشه‌های نام‌برده در PATH، پوشهٔ فعلی را جست‌وجو می‌کند.
+stdlib.which.not_found.hint.workspace = ‏برای جست‌وجوی بازگشتی در درخت فضای کار، از cwd_mode="workspace-recursive" استفاده کنید.
 stdlib.which.direct_not_found = ‏[netsuke::jinja::which::not_found] فرمان «{ $command }» در «{ $path }» وجود ندارد یا اجراشدنی نیست.
 stdlib.which.args_error = ‏[netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = ‏<تهی>
 stdlib.which.path_entry.non_utf8 = مدخل شمارهٔ { $index } در PATH نویسه‌هایی دارد که UTF-8 نیستند؛ ‏Netsuke به مسیرهای UTF-8 نیاز دارد.
 stdlib.which.command.empty = ‏which به رشته‌ای ناتهی نیاز دارد.
-stdlib.which.cwd_mode.invalid = ‏cwd_mode must be 'auto', 'always', 'never', or 'workspace-recursive', got '{ $mode }'.
+stdlib.which.cwd_mode.invalid = ‏cwd_mode باید 'auto'، 'always'، 'never' یا 'workspace-recursive' باشد؛ مقدار '{ $mode }' دریافت شد.
 stdlib.which.cwd.resolve_failed = تعیین شاخهٔ کنونی ممکن نشد: { $details }.
 stdlib.which.cwd.non_utf8 = شاخهٔ کنونی بخش‌هایی دارد که UTF-8 نیستند.
 stdlib.which.canonicalize_failed = متعارف‌سازی «{ $path }» ممکن نشد: { $details }.
