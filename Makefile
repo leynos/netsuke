@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-release-admission test-coverage-artifact test-typos-config build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-dev-fast dev-fast-check dev-build dev-test bench-build bench-config-load bench-glob-expansion
+.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact test-typos-config build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-dev-fast dev-fast-check dev-build dev-test bench-build bench-config-load bench-glob-expansion
 
 RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 # Export this path before shell probes expand it, so Make does not interpolate
@@ -172,6 +172,11 @@ doctest: ## Run doctests, which cargo-nextest cannot execute
 
 test-workflow-contracts: ## Validate GitHub Actions workflow contracts
 	$(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) --with 'pytest>=8' --with 'pyyaml>=6' --with 'hypothesis>=6' --with 'cmd-mox==0.2.0' pytest tests/workflow_contracts -q
+
+test-windows-msi-release-rank: ## Validate Windows MSI release-rank parsing
+	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
+		--with pytest==9.0.2 --with hypothesis==6.151.9 \
+		python -m pytest scripts/tests/test_windows_msi_release_rank.py
 
 test-release-admission: ## Validate the release-admission runtime contract
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \

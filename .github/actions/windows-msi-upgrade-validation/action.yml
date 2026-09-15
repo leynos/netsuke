@@ -1,0 +1,123 @@
+name: Validate Windows MSI upgrades
+description: Build and exercise ordered Netsuke MSI upgrade fixtures.
+runs:
+  using: composite
+  steps:
+    - name: Create MSI upgrade validation fixtures
+      shell: pwsh
+      run: |
+        $fixtureDirectory = $env:MSI_VALIDATION_DIRECTORY
+        New-Item -ItemType Directory -Path $fixtureDirectory -Force | Out-Null
+        foreach ($release in 'beta1', 'beta2', 'final') {
+          $releaseDirectory = Join-Path $fixtureDirectory $release
+          New-Item -ItemType Directory -Path $releaseDirectory -Force | Out-Null
+          $applicationPath = Join-Path $releaseDirectory 'netsuke.exe'
+          [System.IO.File]::WriteAllBytes(
+            $applicationPath,
+            [System.Text.Encoding]::ASCII.GetBytes("MZ$release")
+          )
+          "MSI_VALIDATION_$($release.ToUpperInvariant())_APPLICATION_PATH=$applicationPath" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        }
+        $licensePath = Join-Path $fixtureDirectory 'LICENSE.rtf'
+        Set-Content -LiteralPath $licensePath -Value '{\rtf1\ansi Netsuke MSI validation licence}' -NoNewline
+        "MSI_VALIDATION_LICENSE_PATH=$licensePath" |
+          Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+    - name: Derive MSI upgrade validation release ranks
+      shell: pwsh
+      run: |
+        $versions = @{
+          BETA1 = '1.2.3-beta1'
+          BETA2 = '1.2.3-beta2'
+          FINAL = '1.2.3'
+        }
+        foreach ($release in $versions.Keys) {
+          $rank = python scripts/windows_msi_release_rank.py $versions[$release]
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+          "MSI_VALIDATION_${release}_RANK=$rank" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        }
+
+    - name: Build beta1 MSI fixture
+      id: package_beta1
+      uses: leynos/shared-actions/.github/actions/windows-package@e041cb75c35c3524201a32d5e57c87408fbd5874
+      env:
+        NETSUKE_RELEASE_RANK: ${{ env.MSI_VALIDATION_BETA1_RANK }}
+      with:
+        wxs-path: installer/Package.wxs
+        product-name: Netsuke MSI Upgrade Validation
+        manufacturer: Leynos
+        install-dir-name: NetsukeMsiUpgradeValidation
+        application-path: ${{ env.MSI_VALIDATION_BETA1_APPLICATION_PATH }}
+        license-rtf-path: ${{ env.MSI_VALIDATION_LICENSE_PATH }}
+        architecture: x64
+        version: 1.2.3-beta1
+        output-basename: beta1
+        output-directory: ${{ env.MSI_VALIDATION_DIRECTORY }}
+        upload-artefact: 'false'
+        wix-extension-version: '7'
+
+    - name: Build beta2 MSI fixture
+      id: package_beta2
+      uses: leynos/shared-actions/.github/actions/windows-package@e041cb75c35c3524201a32d5e57c87408fbd5874
+      env:
+        NETSUKE_RELEASE_RANK: ${{ env.MSI_VALIDATION_BETA2_RANK }}
+      with:
+        wxs-path: installer/Package.wxs
+        product-name: Netsuke MSI Upgrade Validation
+        manufacturer: Leynos
+        install-dir-name: NetsukeMsiUpgradeValidation
+        application-path: ${{ env.MSI_VALIDATION_BETA2_APPLICATION_PATH }}
+        license-rtf-path: ${{ env.MSI_VALIDATION_LICENSE_PATH }}
+        architecture: x64
+        version: 1.2.3-beta2
+        output-basename: beta2
+        output-directory: ${{ env.MSI_VALIDATION_DIRECTORY }}
+        upload-artefact: 'false'
+        wix-extension-version: '7'
+
+    - name: Build final MSI fixture
+      id: package_final
+      uses: leynos/shared-actions/.github/actions/windows-package@e041cb75c35c3524201a32d5e57c87408fbd5874
+      env:
+        NETSUKE_RELEASE_RANK: ${{ env.MSI_VALIDATION_FINAL_RANK }}
+      with:
+        wxs-path: installer/Package.wxs
+        product-name: Netsuke MSI Upgrade Validation
+        manufacturer: Leynos
+        install-dir-name: NetsukeMsiUpgradeValidation
+        application-path: ${{ env.MSI_VALIDATION_FINAL_APPLICATION_PATH }}
+        license-rtf-path: ${{ env.MSI_VALIDATION_LICENSE_PATH }}
+        architecture: x64
+        version: 1.2.3
+        output-basename: final
+        output-directory: ${{ env.MSI_VALIDATION_DIRECTORY }}
+        upload-artefact: 'false'
+        wix-extension-version: '7'
+
+    - name: Exercise MSI upgrade and downgrade paths
+      shell: pwsh
+      run: |
+        ./scripts/windows-msi-upgrade-validation.ps1 `
+          -Beta1Msi '${{ steps.package_beta1.outputs.msi-path }}' `
+          -Beta2Msi '${{ steps.package_beta2.outputs.msi-path }}' `
+          -FinalMsi '${{ steps.package_final.outputs.msi-path }}' `
+          -LogDirectory $env:MSI_VALIDATION_DIRECTORY
+
+    - name: Remove MSI upgrade validation installations
+      if: always()
+      shell: pwsh
+      run: |
+        $msiPaths = @(
+          '${{ steps.package_beta1.outputs.msi-path }}',
+          '${{ steps.package_beta2.outputs.msi-path }}',
+          '${{ steps.package_final.outputs.msi-path }}'
+        ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        if ($msiPaths.Count -gt 0) {
+          ./scripts/windows-msi-upgrade-cleanup.ps1 `
+            -MsiPaths $msiPaths `
+            -LogDirectory $env:MSI_VALIDATION_DIRECTORY
+        }

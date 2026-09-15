@@ -10,11 +10,11 @@ name: CI (Windows)
 # keyed by `runner.os` and `runner.arch`, so a Linux archive can never restore
 # onto Windows.
 #
-# Two jobs that run concurrently, not three in series. `lint-windows` runs
-# formatting, Clippy and Whitaker; `build-test-windows` runs the tests and the
-# native-recipe smoke steps. Neither needs the other's output, and they used to
-# sit in one job: 518s of lint ahead of a 471s test step, measured over the 57
-# runs between run 33890685806 and run 34064668331.
+# `lint-windows` and `build-test-windows` run concurrently; the former runs
+# formatting, Clippy and Whitaker, while the latter runs tests and native
+# recipes. `windows-msi-upgrade` is intentionally independent: it
+# packages fixtures without building Rust, then blocks a merge on a failed
+# Windows Installer upgrade contract.
 #
 # The native-recipe smoke test was itself a third job that needed the gate, a
 # measured median of 236s plus queue for 7s of work; it is now two steps at the
@@ -214,7 +214,6 @@ jobs:
           tools-hit: ${{ steps.caches.outputs['tools-hit'] }}
           whitaker-hit: ${{ steps.caches.outputs['whitaker-hit'] }}
           sccache-hit: ${{ steps.caches.outputs['sccache-hit'] }}
-
   build-test-windows:
     # The test half of the Windows merge gate: the `#[cfg(windows)]` tree is
     # compiled and tested under `-D warnings` on this platform (see #518),
@@ -363,3 +362,39 @@ jobs:
           tools-hit: ${{ steps.caches.outputs['tools-hit'] }}
           whitaker-hit: ${{ steps.caches.outputs['whitaker-hit'] }}
           sccache-hit: ${{ steps.caches.outputs['sccache-hit'] }}
+
+  windows-msi-upgrade:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set MSI validation directory
+        shell: pwsh
+        run: |
+          "MSI_VALIDATION_DIRECTORY=$(Join-Path $env:RUNNER_TEMP 'netsuke-msi-upgrade-validation')" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Setup Python
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        with:
+          python-version: ${{ env.PYTHON_BASELINE }}
+          enable-cache: 'false'
+      - name: Test Windows MSI release-rank helper
+        shell: pwsh
+        run: |
+          $env:PYTHONPATH = 'scripts'
+          uv run --no-project --python $env:PYTHON_BASELINE `
+            --with pytest==9.0.2 --with hypothesis==6.151.9 `
+            python -m pytest scripts/tests/test_windows_msi_release_rank.py
+      - name: Validate Windows MSI upgrade paths
+        uses: ./.github/actions/windows-msi-upgrade-validation
+      - name: Upload Windows MSI validation logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: windows-msi-upgrade-validation-logs
+          path: ${{ env.MSI_VALIDATION_DIRECTORY }}/*.log
+          if-no-files-found: warn

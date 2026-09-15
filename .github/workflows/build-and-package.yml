@@ -280,6 +280,18 @@ jobs:
           $dotnetTools = Join-Path (Join-Path $profileHome '.dotnet') 'tools'
           $dotnetTools | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
 
+      - name: Set Windows MSI release rank
+        if: inputs.platform == 'windows'
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          $releaseRank = python scripts/windows_msi_release_rank.py $env:RELEASE_VERSION
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+          "NETSUKE_RELEASE_RANK=$releaseRank" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Package Linux artefacts with dependencies
         if: inputs.platform == 'linux'
         uses: leynos/shared-actions/.github/actions/linux-packages@e041cb75c35c3524201a32d5e57c87408fbd5874
@@ -305,6 +317,7 @@ jobs:
         id: package_windows
         uses: leynos/shared-actions/.github/actions/windows-package@e041cb75c35c3524201a32d5e57c87408fbd5874
         with:
+          wxs-path: installer/Package.wxs
           product-name: ${{ inputs['bin-name'] }}
           manufacturer: Leynos
           install-dir-name: ${{ inputs['bin-name'] }}

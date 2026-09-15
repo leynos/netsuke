@@ -67,9 +67,10 @@ update `PATH`.
 The MSI installer supports pre-release SemVer versions such as `0.1.0-beta3`:
 the pre-release suffix cannot be represented in an MSI product version, so the
 installer carries the numeric release triple (`0.1.0`) while the full version
-remains in the package and release names. Because successive pre-releases share
-that numeric version, installing a later pre-release MSI replaces the existing
-installation for that version series rather than installing alongside it.
+remains in the package and release names. Because successive beta and final
+releases share that numeric version, installing a later beta or final MSI
+replaces the existing installation for that version series rather than
+installing alongside it.
 
 SHA-256 checksum files accompany standalone binaries and staged help,
 completion, and licence files. Installer packages do not have checksum sidecars

@@ -63,6 +63,7 @@ REQUIRED_RUNNER_ASSIGNMENTS = {
     "ci.build-test": UBICLOUD_LARGE_LABEL,
     "ci-windows.lint-windows": "windows-latest",
     "ci-windows.build-test-windows": "windows-latest",
+    "ci-windows.windows-msi-upgrade": "windows-latest",
     "ci.kani-smoke": UBICLOUD_DEFAULT_LABEL,
     "coverage-main.coverage-upload": UBICLOUD_LARGE_LABEL,
     "coverage-pr-submit.submit-coverage": UBICLOUD_DEFAULT_LABEL,
@@ -91,6 +92,7 @@ UBICLOUD_ASSIGNMENT_KEYS = tuple(
 GITHUB_HOSTED_ONLY_KEYS = (
     "ci-windows.lint-windows",
     "ci-windows.build-test-windows",
+    "ci-windows.windows-msi-upgrade",
     "delayed-pr-comment.delay_and_comment",
     "release.metadata",
     "release.build-windows",

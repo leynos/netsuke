@@ -12,6 +12,7 @@ use anyhow::{Context, Result, ensure};
 use documentation_examples::{documented_example, load_documented_examples};
 use test_support::fs as test_fs;
 
+/// Verify that installation examples and release details retain their user contract.
 #[test]
 fn installation_examples_match_source_and_release_contracts() -> Result<()> {
     assert_release_installation_contract()?;
@@ -115,6 +116,18 @@ fn assert_release_installation_contract() -> Result<()> {
             );
         }
     }
+    let users_guide =
+        test_fs::read_to_string("docs/users-guide.md").context("read docs/users-guide.md")?;
+    let expected_msi_replacement_fragments = [
+        "installing a later beta or final MSI",
+        "replaces the existing installation",
+    ];
+    ensure!(
+        expected_msi_replacement_fragments
+            .into_iter()
+            .all(|fragment| users_guide.contains(fragment)),
+        "users' guide should document MSI replacement within a version series"
+    );
     Ok(())
 }
 
