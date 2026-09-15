@@ -221,7 +221,7 @@ pub struct CliConfig {
     #[ortho_config(default = DEFAULT_MANIFEST_RENDERED_VALUE_BYTES)]
     pub manifest_rendered_value_bytes: usize,
 
-    /// Maximum bytes emitted by every rendered value in one manifest.
+    /// Maximum aggregate bytes emitted across all rendered manifest values.
     #[ortho_config(default = DEFAULT_MANIFEST_RENDERED_BYTES)]
     pub manifest_rendered_manifest_bytes: usize,
 

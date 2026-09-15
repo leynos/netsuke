@@ -2295,9 +2295,12 @@ A dependency added outside the slice surfaces as a build-script compile error.
 Prefer moving the new code into a sibling module over widening the slice.
 
 Manifest resource-budget code remains on the runtime side of this boundary.
-`src/cli/command.rs` and `src/cli/manifest_budget_config.rs` contribute the CLI
-schema, defaults, and validation needed by the build script's generated help
-artefacts. The runtime `ManifestBudgetLimits`, `ManifestBudget`, and
+`src/cli/command.rs` and the private `manifest_budget_config` submodule
+included through `src/cli/config.rs` contribute the CLI schema, defaults, and
+validation needed by the build script's generated help artefacts. `build.rs`
+directly declares only the four root files named above; the budget-config path
+is an included submodule of `config.rs`, not a fifth directly declared
+build-script source. The runtime `ManifestBudgetLimits`, `ManifestBudget`, and
 manifest-loading adapters are library code and are deliberately not imported by
 `build.rs`; adding a runtime budget dependency must not widen the build
 script's module slice.
@@ -3607,20 +3610,21 @@ These points are strategy rules, not optional style guidance.
 
 ## Manifest `foreach` expansion
 
-Manifest collection expansion is implemented by `expand_foreach` in
-`src/manifest/expand.rs`. It processes collection-valued manifest entries such
-as `targets` and `actions`: each item may define `foreach` to create one
-concrete item per value, and may define `when` to filter generated or static
-items before later manifest stages run.
+Manifest collection expansion is implemented by the `src/manifest/expand/`
+module. Its `expand_foreach_with_budget` boundary processes collection-valued
+manifest entries such as `targets` and `actions`: each item may define
+`foreach` to create one concrete item per value, and may define `when` to
+filter generated or static items before later manifest stages run.
 
 The pipeline is:
 
 1. Manifest parsing produces a mutable `ManifestValue` document.
-2. The manifest expansion stage passes that document and the configured
-   MiniJinja `Environment` to `expand_foreach`.
-3. `expand_foreach` reads `targets` and `actions`, evaluates each item's
-   `foreach` expression or literal sequence, evaluates any `when` guard, injects
-   `vars.item` and `vars.index` for generated items, and replaces each
+2. The manifest expansion stage passes that document, the configured
+   MiniJinja `Environment`, and the shared `ManifestBudget` to
+   `expand_foreach_with_budget`.
+3. `expand_foreach_with_budget` reads `targets` and `actions`, evaluates each
+   item's `foreach` expression or literal sequence, evaluates any `when` guard,
+   injects `vars.item` and `vars.index` for generated items, and replaces each
    original collection with the expanded concrete list.
 4. Downstream deserialization and rendering consume the expanded
    `ManifestValue`; they should not see the `foreach` or `when` control keys.
@@ -6083,7 +6087,7 @@ deterministic child executable.
 `src/runner/generation.rs` owns the runner's reusable, in-memory generation
 pipeline. It separates manifest loading, IR construction, and Ninja bundle
 synthesis from command reporting and process execution. The read-only pipeline
-is `load_manifest` (optionally observing manifest stages), then
+is `load_manifest_with_limits` (optionally observing manifest stages), then
 `build_graph_for_shell`, then `ninja_text_for_shell`. Its final value is
 `GeneratedNinja`, including any dyndep sidecars, rather than a materialized
 file or a running Ninja process. `generate_ninja_with_shell` is the
@@ -6091,12 +6095,12 @@ orchestration boundary: it selects the legacy `RecipeShell`, performs the shell
 preflight, and carries the same selection through graph lowering and Ninja
 synthesis.
 
-`load_manifest` uses the manifest-query registration: it permits only its
-read-only helpers and rejects template access to the environment, filesystem,
-network, clock, and shell. `load_manifest_for_build` is a separate, explicitly
-effectful loader for build, clean, generate, and graph commands. It receives a
-network policy and enables the full build stdlib; it is not a dry-run or
-background-query primitive.
+`load_manifest_with_limits` uses the manifest-query registration. It permits
+only its read-only helpers and rejects template access to the environment,
+filesystem, network, clock, and shell. `load_manifest_for_build_with_limits` is
+a separate, explicitly effectful loader for build, clean, generate, and graph
+commands. It receives a network policy and enables the full build stdlib; it is
+not a dry-run or background-query primitive.
 
 #### Generation reuse boundary
 
@@ -6106,15 +6110,16 @@ background-query primitive.
   not own `StatusReporter` updates, command dispatch, dyndep publication, or
   Ninja execution.
 - **Permitted call-sites:** `runner::generate_ninja_with_shell` composes the
-  complete shell-aware build pipeline through `load_manifest_for_build` for
-  build, clean, and generate commands. `runner::graph::handle_graph` may stop
-  after the backend-neutral `build_graph` to render the graph, and
-  `runner::help_query` uses `load_manifest` for its read-only target catalogue.
-  Runner unit tests may compose the read-only steps directly. New dry-run or
-  background-generation work may use `load_manifest`, `build_graph_for_shell`,
-  and `ninja_text_for_shell` only within the runner boundary; a public or
-  cross-subsystem consumer requires an explicit application boundary rather
-  than widening these internal helpers.
+  complete shell-aware build pipeline through
+  `load_manifest_for_build_with_limits` for build, clean, and generate commands.
+  `runner::graph::handle_graph` may stop after the backend-neutral
+  `build_graph` to render the graph, and `runner::help_query` uses
+  `load_manifest_with_limits` for its read-only target catalogue. Runner unit
+  tests may compose the read-only steps directly. New dry-run or
+  background-generation work may use `load_manifest_with_limits`,
+  `build_graph_for_shell`, and `ninja_text_for_shell` only within the runner
+  boundary; a public or cross-subsystem consumer requires an explicit
+  application boundary rather than widening these internal helpers.
 - **Composition rules:** command adapters report stages before or after the
   relevant step and wrap `build_graph_for_shell` and dyndep bundle synthesis
   with their respective runner-owned, shell-aware generation telemetry. Only

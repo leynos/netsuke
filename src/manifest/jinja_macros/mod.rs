@@ -219,6 +219,9 @@ fn register_macro_with_budget(
         "{{% macro {} %}}{}{{% endmacro %}}",
         macro_def.signature, macro_def.body
     );
+    budget
+        .charge_source(template_source.len(), ManifestBudgetStage::Source)
+        .map_err(|exhaustion| exhaustion.into_error(ErrorKind::WriteFailure))?;
 
     env.add_template_owned(template_name.clone(), template_source)
         .with_context(|| {
@@ -269,12 +272,6 @@ pub(crate) fn register_manifest_macros_with_budget(
         .context(localization::message(keys::MANIFEST_MACRO_SEQUENCE_INVALID))?;
 
     for (idx, def) in defs.iter().enumerate() {
-        budget
-            .charge_source(
-                def.signature.len().saturating_add(def.body.len()),
-                ManifestBudgetStage::Source,
-            )
-            .map_err(|exhaustion| exhaustion.into_error(ErrorKind::WriteFailure))?;
         register_macro_with_budget(env, def, idx, budget.clone()).with_context(|| {
             localization::message(keys::MANIFEST_MACRO_REGISTER_FAILED)
                 .with_arg("signature", &def.signature)

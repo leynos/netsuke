@@ -20,8 +20,8 @@ cli.flag.trust_project_fetch_policy.help = Permitir que a configuração do proj
 
 cli.flag.manifest_evaluation_fuel.help = Limite o número de instruções MiniJinja para cada avaliação do manifesto.
 cli.flag.manifest_fuel.help = Limite o número de instruções MiniJinja num manifesto.
-cli.flag.manifest_rendered_value_bytes.help = Limite o número de bytes processados num único valor do manifesto.
-cli.flag.manifest_rendered_manifest_bytes.help = Limite o total de bytes processados num manifesto.
+cli.flag.manifest_rendered_value_bytes.help = Limite o número de bytes renderizados num único valor do manifesto.
+cli.flag.manifest_rendered_manifest_bytes.help = Limite o total de bytes renderizados num manifesto.
 cli.flag.manifest_source_bytes.help = Limite os bytes de origem dos modelos e das macros consumidos por manifesto.
 cli.flag.manifest_foreach_cardinality.help = Limite os valores processados por uma expansão foreach.
 cli.flag.manifest_expanded_entries.help = Limite os destinos e as ações expandidos a partir de um manifesto.

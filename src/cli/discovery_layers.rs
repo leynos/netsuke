@@ -19,10 +19,10 @@ use super::diagnostics::{
     BoundedConfigPath, ProjectLayerDeduplication, debug_optional_config_path_from_fields,
 };
 use super::paths::{PathNormalizer, comparison_key, project_scope_file};
+use super::project_policy::scope_project_chain;
 pub(super) use super::project_policy::{
     ScopedFileLayer, retain_layers_and_resolve_json, scope_selected_primary_layer,
 };
-use super::project_policy::{scope_primary_project_layer, scope_project_chain};
 
 /// Project-scope outcome retained for a later trace replay.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -229,22 +229,14 @@ fn scope_merged_layers(
 ) -> Vec<ScopedFileLayer> {
     let project_is_root = project_index.is_some_and(|index| index + 1 == discovered_layers.len());
     if let Some(index) = project_index.filter(|_| project_is_root) {
-        scope_project_chain(discovered_layers, index)
-    } else {
-        let operator_layers = if let Some(index) = project_index {
-            scope_primary_project_layer(discovered_layers, index)
-        } else {
-            discovered_layers
-                .into_iter()
-                .map(ScopedFileLayer::operator)
-                .collect()
-        };
-        let primary_index = project_layers.len().saturating_sub(1);
-        operator_layers
-            .into_iter()
-            .chain(scope_project_chain(project_layers, primary_index))
-            .collect()
+        return scope_project_chain(discovered_layers, index);
     }
+    let primary_index = project_layers.len().saturating_sub(1);
+    discovered_layers
+        .into_iter()
+        .map(ScopedFileLayer::operator)
+        .chain(scope_project_chain(project_layers, primary_index))
+        .collect()
 }
 
 /// Load the project-scope layers rooted at `project_file`, if one was found.

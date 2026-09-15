@@ -180,3 +180,72 @@ pub(crate) struct ManifestBudgetExhaustion {
     /// Supplies the configured limit without manifest-controlled data.
     pub(crate) limit: u64,
 }
+
+#[cfg(test)]
+mod tests {
+    //! Test manifest-budget limit validation at its lower boundary.
+
+    use super::*;
+    use rstest::{fixture, rstest};
+
+    /// Supply limits at the smallest valid value.
+    #[fixture]
+    fn one_unit_limits() -> ManifestBudgetLimits {
+        ManifestBudgetLimits {
+            evaluation_fuel: 1,
+            rendered_value_bytes: 1,
+            rendered_manifest_bytes: 1,
+            source_bytes: 1,
+            foreach_cardinality: 1,
+            expanded_entries: 1,
+            manifest_fuel: 1,
+        }
+    }
+
+    /// Replace one named limit with zero for recognised boundary cases.
+    fn with_zero_limit(
+        mut limits: ManifestBudgetLimits,
+        field: &str,
+    ) -> Option<ManifestBudgetLimits> {
+        match field {
+            "evaluation_fuel" => limits.evaluation_fuel = 0,
+            "rendered_value_bytes" => limits.rendered_value_bytes = 0,
+            "rendered_manifest_bytes" => limits.rendered_manifest_bytes = 0,
+            "source_bytes" => limits.source_bytes = 0,
+            "foreach_cardinality" => limits.foreach_cardinality = 0,
+            "expanded_entries" => limits.expanded_entries = 0,
+            "manifest_fuel" => limits.manifest_fuel = 0,
+            _ => return None,
+        }
+        Some(limits)
+    }
+
+    #[rstest]
+    #[case::evaluation_fuel("evaluation_fuel", "manifest evaluation fuel")]
+    #[case::rendered_value_bytes("rendered_value_bytes", "manifest rendered value bytes")]
+    #[case::rendered_manifest_bytes("rendered_manifest_bytes", "manifest rendered bytes")]
+    #[case::source_bytes("source_bytes", "manifest source bytes")]
+    #[case::foreach_cardinality("foreach_cardinality", "manifest foreach cardinality")]
+    #[case::expanded_entries("expanded_entries", "manifest expanded entries")]
+    #[case::manifest_fuel("manifest_fuel", "manifest fuel")]
+    fn zero_limit_is_rejected(
+        one_unit_limits: ManifestBudgetLimits,
+        #[case] field: &str,
+        #[case] expected: &str,
+    ) {
+        let error = with_zero_limit(one_unit_limits, field)
+            .expect("test fields must name a manifest budget limit")
+            .validate()
+            .expect_err("zero manifest budget limit must be rejected");
+        assert!(
+            error.to_string().contains(expected),
+            "{field} should identify its validation error: {error:#}"
+        );
+    }
+
+    #[rstest]
+    fn one_unit_limits_are_valid(one_unit_limits: ManifestBudgetLimits) -> Result<()> {
+        let _ = one_unit_limits.validate()?;
+        Ok(())
+    }
+}

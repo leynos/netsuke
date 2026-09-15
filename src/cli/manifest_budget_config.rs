@@ -44,3 +44,58 @@ pub(super) fn validate_manifest_budget(config: &CliConfig) -> OrthoResult<()> {
         ))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    //! Test post-merge manifest-budget validation at zero ceilings.
+
+    use super::*;
+    use ortho_config::{PostMergeContext, PostMergeHook};
+    use rstest::{fixture, rstest};
+
+    /// Supply a valid merged operator configuration for each case.
+    #[fixture]
+    fn merged_config() -> CliConfig {
+        CliConfig::default()
+    }
+
+    /// Replace one merged configuration limit with zero when it is known.
+    fn with_zero_limit(mut config: CliConfig, field: &str) -> Option<CliConfig> {
+        match field {
+            "manifest_evaluation_fuel" => config.manifest_evaluation_fuel = 0,
+            "manifest_fuel" => config.manifest_fuel = 0,
+            "manifest_rendered_value_bytes" => config.manifest_rendered_value_bytes = 0,
+            "manifest_rendered_manifest_bytes" => config.manifest_rendered_manifest_bytes = 0,
+            "manifest_source_bytes" => config.manifest_source_bytes = 0,
+            "manifest_foreach_cardinality" => config.manifest_foreach_cardinality = 0,
+            "manifest_expanded_entries" => config.manifest_expanded_entries = 0,
+            _ => return None,
+        }
+        Some(config)
+    }
+
+    #[rstest]
+    #[case::evaluation_fuel("manifest_evaluation_fuel")]
+    #[case::manifest_fuel("manifest_fuel")]
+    #[case::rendered_value_bytes("manifest_rendered_value_bytes")]
+    #[case::rendered_manifest_bytes("manifest_rendered_manifest_bytes")]
+    #[case::source_bytes("manifest_source_bytes")]
+    #[case::foreach_cardinality("manifest_foreach_cardinality")]
+    #[case::expanded_entries("manifest_expanded_entries")]
+    fn post_merge_rejects_each_zero_manifest_budget_limit(
+        merged_config: CliConfig,
+        #[case] field: &str,
+    ) {
+        let mut config = with_zero_limit(merged_config, field)
+            .expect("test fields must name a manifest budget limit");
+        let error = config
+            .post_merge(&PostMergeContext::new("NETSUKE_"))
+            .expect_err("zero manifest budget limit must be rejected after merging");
+        assert!(
+            error
+                .to_string()
+                .contains("all manifest budget limits must be positive"),
+            "{field} should retain the manifest-budget validation error: {error}"
+        );
+    }
+}

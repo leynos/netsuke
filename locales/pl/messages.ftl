@@ -441,4 +441,4 @@ example.errors_found = { $count ->
     [many] Znaleziono { $count } błędów.
    *[other] Znaleziono { $count } błędu.
 }
-manifest.budget.exceeded = Budżet zasobów manifestu został wyczerpany podczas etapu { $stage } po osiągnięciu wartości { $limit }.
+manifest.budget.exceeded = Budżet zasobów manifestu został wyczerpany. Etap: { $stage }. Osiągnięta wartość limitu: { $limit }.

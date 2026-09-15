@@ -79,11 +79,13 @@ fn aggregate_rendered_bytes_allow_the_exact_limit_and_reject_one_more(
         "  - name: a\n",
         "    command: '{{ \"x\" * 16 }}'\n",
         "  - name: b\n",
-        "    command: '{{ \"x\" * 16 }}'\n",
-        "  - name: c\n",
-        "    command: x\n",
+        "    command: '{{ \"x\" * 17 }}'\n",
     );
-    let error = from_str_with_limits(one_more, limits)
+    let one_more_limits = ManifestBudgetLimits {
+        rendered_value_bytes: 17,
+        ..limits
+    };
+    let error = from_str_with_limits(one_more, one_more_limits)
         .expect_err("one byte above the aggregate budget must fail");
     ensure!(
         format!("{error:#}").contains("resource budget exhausted"),
@@ -321,6 +323,7 @@ fn budget_telemetry_uses_only_closed_labels_and_redacted_errors(
     let (labels, value) = counters
         .first()
         .expect("the asserted budget counter must supply labels and a value");
+    assert_eq!(labels.len(), 2, "budget telemetry must use two labels");
     assert!(
         labels
             .iter()

@@ -71,21 +71,12 @@ fn invoke_macro(state: &State, request: &MacroInvocation<'_>) -> Result<Value, E
         &bounded_env,
         request.reference.template_name,
         request.reference.macro_name,
-    )?;
+    )
+    .map_err(|error| map_macro_fuel_exhaustion(error, request.budget))?;
     let maybe_kwargs = collect_kwargs(request.macro_kwargs)?;
     let rendered_value =
-        call_macro_value(captured.state(), &macro_value, request.args, maybe_kwargs).map_err(
-            |error| {
-                if error.kind() == ErrorKind::OutOfFuel {
-                    request
-                        .budget
-                        .fuel_exhaustion(ManifestBudgetStage::Macro)
-                        .into_error(ErrorKind::OutOfFuel)
-                } else {
-                    error
-                }
-            },
-        )?;
+        call_macro_value(captured.state(), &macro_value, request.args, maybe_kwargs)
+            .map_err(|error| map_macro_fuel_exhaustion(error, request.budget))?;
     if let Some((_, unused)) = captured.state().fuel_levels() {
         request.budget.refund_unused_fuel(unused);
     }
@@ -99,6 +90,17 @@ fn invoke_macro(state: &State, request: &MacroInvocation<'_>) -> Result<Value, E
     } else {
         Value::from_safe_string(rendered)
     })
+}
+
+/// Translate engine fuel exhaustion into the manifest budget diagnostic.
+fn map_macro_fuel_exhaustion(error: Error, budget: &ManifestBudget) -> Error {
+    if error.kind() == ErrorKind::OutOfFuel {
+        budget
+            .fuel_exhaustion(ManifestBudgetStage::Macro)
+            .into_error(ErrorKind::OutOfFuel)
+    } else {
+        error
+    }
 }
 
 /// Borrow the complete input required for one macro callback invocation.
@@ -181,6 +183,7 @@ mod tests {
     //! Snapshots for localized macro-invocation failures.
 
     use super::{ManifestBudget, make_macro_fn, validate_macro};
+    use crate::manifest::ManifestBudgetLimits;
     use minijinja::{Environment, ErrorKind, UndefinedBehavior};
     use rstest::rstest;
     use test_support::{EnLocalizer, en_localizer, fluent::normalize_fluent_isolates};
@@ -314,6 +317,37 @@ mod tests {
             normalize_fluent_isolates(&error.to_string()),
             "template not found: Failed to load macro template. (in <expression>:1)"
         );
+    }
+
+    #[rstest]
+    fn compiled_expression_maps_macro_initialization_fuel_exhaustion(en_localizer: EnLocalizer) {
+        let _en = en_localizer;
+        let mut env = Environment::new();
+        env.add_template(
+            "macro-template",
+            "{% for _ in range(2) %}{% endfor %}{% macro greet() %}hi{% endmacro %}",
+        )
+        .expect("macro fixture template should compile");
+        let budget = ManifestBudget::new(ManifestBudgetLimits {
+            evaluation_fuel: 1,
+            manifest_fuel: 1,
+            ..ManifestBudgetLimits::default()
+        })
+        .expect("positive test limits should construct a budget");
+        env.add_function(
+            "greet",
+            make_macro_fn("macro-template".to_owned(), "greet".to_owned(), budget),
+        );
+
+        let expression = env
+            .compile_expression("greet()")
+            .expect("macro expression should compile");
+        let error = expression
+            .eval(())
+            .expect_err("macro initialization should exhaust the manifest fuel budget");
+
+        assert_eq!(error.kind(), ErrorKind::OutOfFuel);
+        assert!(error.to_string().contains("resource budget exhausted"));
     }
 
     proptest::proptest! {

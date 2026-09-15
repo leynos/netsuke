@@ -442,4 +442,4 @@ example.errors_found = { $count ->
     [many] Найдено { $count } ошибок.
    *[other] Найдено { $count } ошибки.
 }
-manifest.budget.exceeded = Бюджет ресурсов манифеста исчерпан на этапе { $stage } после достижения значения { $limit }.
+manifest.budget.exceeded = Бюджет ресурсов манифеста исчерпан. Этап: { $stage }. Достигнутое значение лимита: { $limit }.
