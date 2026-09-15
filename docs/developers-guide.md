@@ -6610,7 +6610,7 @@ All four are set here.
 | Tier                     | What it bounds                     | Where it is set                               | Current value                                              |
 | ------------------------ | ---------------------------------- | --------------------------------------------- | ---------------------------------------------------------- |
 | Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s (60 s x 5); 420 s (60 s x 7) for one test on Windows |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                        | 900 s (15 m)                                               |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 900 s (15 m) in CI; unset locally                          |
 | Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,800 s (30 m)                                             |
 | Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 60 m                                                       |
 
@@ -6627,12 +6627,52 @@ implied.
 
 ### The whole-run budget, and how 15 minutes was arrived at
 
-`[profile.default]` sets `global-timeout = "15m"`, and every profile inherits
-it: nextest's profiles take the default table unless they override it, and both
-coverage lanes run under `default`. Until it was set the watchdog was doing
-tier two's job as well as its own, because a run whose tests each stay inside
-their allowance can still exceed the watchdog between them, and the failure
-then names `cargo` rather than the run.
+`[profile.ci]` sets `global-timeout = "15m"`. Until it was set the watchdog was
+doing tier two's job as well as its own, because a run whose tests each stay
+inside their allowance can still exceed the watchdog between them, and the
+failure then names `cargo` rather than the run.
+
+That profile exists only to carry this budget and inherits everything else from
+`default`, including its `[[overrides]]`: a nextest profile takes the default
+table wherever it declares nothing of its own, so the per-test allowances still
+apply under it.
+
+#### Why the budget is not in `[profile.default]`
+
+`default` is what every local `make test` runs under, and a developer's host is
+contended in a way a CI runner is not. Both
+`harness_compiles_under_a_split_build_dir` and
+`packaged_manifest_retains_build_script_sources` spawn their own `cargo`, and
+those nested invocations queue behind the package-cache lock of every other
+build on the machine. Measured on 2026-09-15, with several concurrent Rust
+gates on one host, the first of those tests spent 688.6 s inside its nested
+`cargo build`, a step that costs seconds unloaded, and the run as a whole
+crossed twenty minutes.
+
+A whole-run cap in `default` would have ended such a run against a figure read
+from CI logs, which have nothing to say about local contention, and the figure
+would have been blamed rather than the contention. So the cap lives in the
+profile CI selects and local runs keep the per-test allowance and no whole-run
+cap.
+
+#### How CI selects it
+
+`ci.yml` and `coverage-main.yml` both set `NEXTEST_PROFILE: ci` at job level.
+The shared `generate-coverage` action takes no profile input, so the
+environment variable is the only lever, and it is set beside
+`NEXTEST_TEST_THREADS`, which the same jobs already resolve that way.
+
+`tests/workflow_contracts/whole_run_profile_test.py` holds the two halves
+together. It asserts the profile each lane actually resolves across all three
+environment scopes, that the profile it names is the one carrying the budget,
+and that `default` carries none. Without it, deleting the variable from a job
+would leave that lane uncapped while every other assertion about the budget
+still passed, because the rest of the contract reads the budget out of the file
+and never asks whether a run selects it.
+
+The Windows lane in `ci-windows.yml` runs nextest without selecting the
+profile, so it has no whole-run budget. The sample below holds no Windows
+figures, and a cap belongs above a measurement rather than beside one.
 
 The budget bounds the instrumented run alone. The coverage action then runs an
 uninstrumented `cargo test --doc` pass, which is not a nextest run, so nothing
@@ -6907,6 +6947,12 @@ well as its place in the order. The ordering holds for everything between the
 420 s largest per-test allowance and the 1,130 s the watchdog can cover, so the
 budget could drift to a value nobody chose with every comparison still passing,
 and the sample above would then describe a figure the file no longer sets.
+
+Every one of those assertions reads the budget out of the file, and none of
+them asks whether a run selects the profile it sits in. That is what
+`tests/workflow_contracts/whole_run_profile_test.py` is for, and why it is a
+separate module: deleting `NEXTEST_PROFILE` from a coverage job would leave
+that lane uncapped with every assertion above it still green.
 
 It is not the same assertion as
 `tests/workflow_contracts/test_execution_coverage_test.py`, which holds the two

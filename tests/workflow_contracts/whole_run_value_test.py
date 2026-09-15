@@ -17,12 +17,13 @@ import typing as typ
 
 import pytest
 from nextest_budgets import global_timeout
-from timeout_budgets import NEXTEST_CONFIG
+from timeout_budgets import CAPPED_PROFILE, NEXTEST_CONFIG
 
 #: The whole-run budget "Test timeouts: the tiers this repository sets"
 #: in `docs/developers-guide.md` states, in seconds. Sized against the
 #: longest measured nextest run and the watchdog above it; the guide
-#: holds the sample and the arithmetic.
+#: holds the sample and the arithmetic. It belongs to the profile CI
+#: selects, not to `default`, which local runs use uncapped.
 STATED_WHOLE_RUN_BUDGET_SECONDS: typ.Final[float] = 15 * 60.0
 
 
@@ -36,8 +37,9 @@ def test_the_whole_run_budget_is_the_value_the_guide_states() -> None:
     configured = global_timeout(NEXTEST_CONFIG.read_text(encoding="utf-8"))
 
     assert configured == pytest.approx(STATED_WHOLE_RUN_BUDGET_SECONDS), (
-        f"[profile.default] sets a global-timeout of {configured}s where the "
-        f"developers' guide states {STATED_WHOLE_RUN_BUDGET_SECONDS:.0f}s; the "
+        f"[profile.{CAPPED_PROFILE}] sets a global-timeout of {configured}s "
+        f"where the developers' guide states "
+        f"{STATED_WHOLE_RUN_BUDGET_SECONDS:.0f}s; the "
         f"ordering assertions accept a wide range, so a value nobody chose "
         f"passes them all, and the guide holds the sample it was sized from"
     )

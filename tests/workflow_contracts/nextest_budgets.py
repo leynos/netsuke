@@ -26,6 +26,7 @@ from nextest_durations import (
     seconds,
 )
 from timeout_budgets import (
+    CAPPED_PROFILE,
     NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS,
     TERMINATION_SAFETY_MARGIN_SECONDS,
 )
@@ -345,24 +346,30 @@ def termination_allowance(config_text: str) -> float:
     return grace_period(config_text) + TERMINATION_SAFETY_MARGIN_SECONDS
 
 
-def global_timeout(config_text: str) -> float | None:
-    """Return the whole-run budget, or None when none is set.
+def global_timeout(config_text: str, profile: str = CAPPED_PROFILE) -> float | None:
+    """Return one profile's whole-run budget, or None when it sets none.
 
-    Read from ``[profile.default]`` alone. nextest's other profiles
-    inherit that table unless they override it, and an ``[[overrides]]``
-    entry cannot carry one, so a value found elsewhere is not the budget
-    in force.
+    Read from the named profile's own table alone. nextest's profiles
+    inherit the default table unless they override it, and an
+    ``[[overrides]]`` entry cannot carry a ``global-timeout`` at all, so
+    a value found elsewhere is not the budget in force for this profile.
+
+    The default is the profile the coverage lanes select rather than
+    ``default``, because that is where this repository's budget lives:
+    reading ``default`` would report no budget while CI runs under one.
 
     Parameters
     ----------
     config_text : str
         The nextest configuration file's text.
+    profile : str
+        The profile to read. Defaults to the profile CI selects.
 
     Returns
     -------
     float or None
-        The whole-run budget in seconds, or None when the default
-        profile declares none.
+        The whole-run budget in seconds, or None when that profile
+        declares none.
 
     Raises
     ------
@@ -370,13 +377,13 @@ def global_timeout(config_text: str) -> float | None:
         If the key is present but is not a duration string. Reading that
         as absent would skip the ordering assertion it exists for.
     """
-    profile = _table(_table(_parsed(config_text).get("profile")).get("default"))
-    if "global-timeout" not in profile:
+    table = _table(_table(_parsed(config_text).get("profile")).get(profile))
+    if "global-timeout" not in table:
         return None
-    budget = profile["global-timeout"]
+    budget = table["global-timeout"]
     if not isinstance(budget, str):
         message = (
-            f"[profile.default].global-timeout is {budget!r}, which nextest "
+            f"[profile.{profile}].global-timeout is {budget!r}, which nextest "
             f"refuses: the option is a duration string, so 600 is not a "
             f'shorter way of writing "600s". Reading it as absent would '
             f"skip the whole-run ordering assertion and hide the fault"

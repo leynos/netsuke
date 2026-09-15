@@ -194,13 +194,17 @@ def test_a_configuration_with_no_readable_budget_is_refused(config: str) -> None
         pytest.param("", None, id="absent"),
         pytest.param('global-timeout = "45m"', None, id="outside-any-profile"),
         pytest.param(
-            '[profile.default]\nglobal-timeout = "600s"\n', 600.0, id="inside-a-profile"
+            '[profile.ci]\nglobal-timeout = "600s"\n',
+            600.0,
+            id="in-the-profile-ci-selects",
         ),
         pytest.param(
-            '[profile.ci]\nglobal-timeout = "600s"\n', None, id="another-profile"
+            '[profile.default]\nglobal-timeout = "600s"\n',
+            None,
+            id="in-another-profile",
         ),
         pytest.param(
-            '[profile.default]\n# global-timeout = "45m"\n',
+            '[profile.ci]\n# global-timeout = "45m"\n',
             None,
             id="commented-out-is-not-set",
         ),
@@ -296,4 +300,4 @@ def test_a_global_timeout_that_is_not_a_duration_is_refused() -> None:
     would look unset while the file plainly tries to set it.
     """
     with pytest.raises(NextestConfigurationError, match=r"global-timeout"):
-        global_timeout("[profile.default]\nglobal-timeout = 600\n")
+        global_timeout("[profile.ci]\nglobal-timeout = 600\n")

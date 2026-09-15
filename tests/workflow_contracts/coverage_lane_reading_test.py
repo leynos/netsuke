@@ -12,11 +12,8 @@ Run via ``make test-workflow-contracts``.
 import typing as typ
 
 import pytest
-from coverage_lanes import (
-    WatchdogValueError,
-    coverage_lanes_of,
-    watchdog_of,
-)
+from coverage_lanes import coverage_lanes_of
+from lane_environment import WatchdogValueError, watchdog_of
 from timeout_budgets import (
     CEILING_MARGIN_SECONDS,
     OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS,

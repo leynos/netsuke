@@ -35,8 +35,8 @@ from coverage_lanes import (
     CoverageLane,
     conditions_by_coordinate,
     coverage_lanes_of,
-    watchdog_of,
 )
+from lane_environment import watchdog_of
 from nextest_budgets import (
     global_timeout,
     largest_test_allowance,
@@ -46,6 +46,7 @@ from nextest_durations import (
     seconds,
 )
 from timeout_budgets import (
+    CAPPED_PROFILE,
     CEILING_MARGIN_SECONDS,
     COVERAGE_ACTION,
     NEXTEST_CONFIG,
@@ -253,10 +254,11 @@ def test_a_whole_run_budget_sits_inside_the_watchdog(
     the watchdog can cover each fail this test.
     """
     assert global_timeout(nextest_config) is not None, (
-        "[profile.default] sets no global-timeout, so nothing bounds the test "
-        "run as a whole and the cargo watchdog is doing tier two's job; a run "
-        "whose tests each stay inside their allowance can exceed the watchdog "
-        "between them, and the failure then names cargo rather than the run"
+        f"[profile.{CAPPED_PROFILE}] sets no global-timeout, so nothing "
+        f"bounds the test run as a whole and the cargo watchdog is doing tier "
+        f"two's job; a run whose tests each stay inside their allowance can "
+        f"exceed the watchdog between them, and the failure then names cargo "
+        f"rather than the run"
     )
     faults = whole_run_ordering_faults(nextest_config, coverage_lanes)
     assert not faults, "; ".join(faults)

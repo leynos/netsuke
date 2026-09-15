@@ -24,6 +24,19 @@ COVERAGE_ACTION: typ.Final[str] = (
     "leynos/shared-actions/.github/actions/generate-coverage"
 )
 
+#: The environment variable nextest reads to select a profile. The
+#: shared coverage action takes no profile input, so this is the only
+#: lever a lane has over which profile's budgets apply to it.
+NEXTEST_PROFILE_VARIABLE: typ.Final[str] = "NEXTEST_PROFILE"
+
+#: The profile carrying the whole-run budget. It is not `default`, and
+#: the difference is the point: `default` is what every local `make
+#: test` runs under, on hosts whose contention CI never sees, so a
+#: whole-run cap sized from CI logs would end a local run against a
+#: figure that had nothing to say about it. See "The whole-run budget"
+#: in `docs/developers-guide.md`.
+CAPPED_PROFILE: typ.Final[str] = "ci"
+
 #: Everything in a coverage job that is not the `cargo` invocation the
 #: watchdog bounds: checkout, toolchain setup, cache restore, linting, and
 #: whatever follows the coverage step. The job timer covers it; the

@@ -18,7 +18,7 @@ import typing as typ
 import pytest
 from coverage_lanes import CoverageLane
 from nextest_budgets import bounds_a_single_test
-from timeout_budgets import COLD_BUILD_ALLOWANCE_SECONDS
+from timeout_budgets import CAPPED_PROFILE, COLD_BUILD_ALLOWANCE_SECONDS
 from whole_run_ordering import watchdog_required_for, whole_run_ordering_faults
 
 #: A default profile bounding one test at 600 s: ten warning periods of
@@ -31,10 +31,25 @@ _BOUNDED_PROFILE: typ.Final[str] = (
 
 
 def _config(global_timeout: str | None = None) -> str:
-    """Return a configuration bounding one test, with an optional whole run."""
+    """Return a configuration bounding one test, with an optional whole run.
+
+    The whole run goes in its own profile, as it does in
+    `.config/nextest.toml`: the per-test allowance belongs to `default`,
+    which every local run uses, and the whole-run budget to the profile
+    CI selects. A case writing both into one table would exercise a
+    shape this repository does not have.
+
+    Returns
+    -------
+    str
+        The configuration text.
+    """
     if global_timeout is None:
         return _BOUNDED_PROFILE
-    return f'{_BOUNDED_PROFILE}global-timeout = "{global_timeout}"\n'
+    return (
+        f"{_BOUNDED_PROFILE}\n[profile.{CAPPED_PROFILE}]\n"
+        f'global-timeout = "{global_timeout}"\n'
+    )
 
 
 def _lane(watchdog: float | None) -> CoverageLane:
@@ -192,7 +207,12 @@ def test_every_lane_at_fault_is_reported() -> None:
             False,
             id="a-bare-duration",
         ),
-        pytest.param("[profile.ci]\n", False, id="no-such-profile"),
+        pytest.param(
+            '[profile.other]\nslow-timeout = { period = "60s", '
+            "terminate-after = 10 }\n",
+            False,
+            id="another-profile-s-table",
+        ),
     ],
 )
 def test_only_a_profile_s_own_terminating_table_bounds_its_tests(
