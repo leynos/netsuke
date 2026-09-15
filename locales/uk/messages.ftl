@@ -446,5 +446,5 @@ example.errors_found = { $count ->
 }
 manifest.budget.exceeded = Бюджет ресурсів маніфесту вичерпано на етапі { $stage } після досягнення значення { $limit }.
 
-cli.flag.env_allow_var.help = Змінна середовища, дозволена помічнику env() маніфесту.
-cli.flag.env_block_var.help = Змінна середовища, заблокована помічнику env() маніфесту.
+cli.flag.env_allow_var.help = Змінна середовища, дозволена для помічника env() маніфесту.
+cli.flag.env_block_var.help = Змінна середовища, заблокована для помічника env() маніфесту.

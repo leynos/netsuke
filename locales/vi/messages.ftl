@@ -437,5 +437,5 @@ example.errors_found = { $count ->
 }
 manifest.budget.exceeded = Đã dùng hết ngân sách tài nguyên của manifest trong { $stage } sau khi đạt { $limit }.
 
-cli.flag.env_allow_var.help = Biến môi trường được phép cho hàm trợ giúp env() của tệp kê khai.
-cli.flag.env_block_var.help = Biến môi trường bị chặn cho hàm trợ giúp env() của tệp kê khai.
+cli.flag.env_allow_var.help = Biến môi trường mà hàm trợ giúp env() của tệp kê khai được phép sử dụng.
+cli.flag.env_block_var.help = Biến môi trường mà hàm trợ giúp env() của tệp kê khai không được phép sử dụng.

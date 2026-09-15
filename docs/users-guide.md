@@ -1743,16 +1743,17 @@ a manifest. Configure exact variable names with `env_allow_var` and
 `NETSUKE_ENV_BLOCK_VAR` in the environment, or repeat `--env-allow-var NAME` and
 `--env-block-var NAME` on the command line.
 
-With neither list configured, `env()` remains default-allow for compatibility.
-Adding at least one `env_allow_var` entry makes the allowlist restrictive: only
-listed names may resolve. An `env_block_var` list without an allowlist blocks
-only its listed names. A blocklist entry always overrides an allowlist entry.
-Every entry is one exact variable name; this policy has no glob or pattern
-matching. Primary-project `env_allow_var` entries are ignored so a manifest
-cannot grant itself access to inherited environment variables. Primary-project
-`env_block_var` entries remain cumulative because they can only restrict
-access. Configuration loaded through `extends` retains ordinary file-layer
-precedence.
+With neither effective list configured, `env()` remains default-allow for
+compatibility. Adding at least one effective `env_allow_var` entry makes the
+allowlist restrictive: only listed names may resolve. An `env_block_var` list
+without an allowlist blocks only its listed names. A blocklist entry always
+overrides an allowlist entry. Every entry is one exact variable name; this
+policy has no glob or pattern matching. Primary-project `env_allow_var` entries
+are removed before policy composition, so a manifest cannot grant itself access
+to inherited environment variables or activate default-deny alone.
+Primary-project `env_block_var` entries remain cumulative because they can only
+restrict access. Configuration loaded through `extends` retains ordinary
+file-layer precedence.
 
 This policy reduces secret ingress into rendered manifest fields. It does not
 make rendered manifest contents safe to log: allowed values still require the
