@@ -140,22 +140,38 @@ pub(super) fn retain_layers_and_resolve_json(layers: Vec<ScopedFileLayer>) -> Re
             resolved.json_preference = json;
         }
         if project_budget {
-            match take_project_manifest_budget_request(&mut value) {
-                Ok(request) => resolved.project_budget_request.narrow_with(&request),
-                Err(error) => resolved.errors.push(error),
-            }
+            quarantine_manifest_budget(&mut value, &mut resolved);
         }
         if scope == FileScope::Project {
-            match take_project_fetch_policy_request(&mut value) {
-                Ok(request) => resolved.project_request = Some(request),
-                Err(error) => resolved.errors.push(error),
-            }
+            quarantine_fetch_policy(&mut value, &mut resolved);
         }
         resolved
             .layers
             .push(MergeLayer::file(Cow::Owned(value), path));
     }
     resolved
+}
+
+/// Retain a project-chain budget request or its deferred validation error.
+///
+/// Discovery calls this only for project-budget occurrences so generic merging
+/// cannot widen operator ceilings, while later JSON preferences remain readable.
+fn quarantine_manifest_budget(value: &mut serde_json::Value, resolved: &mut ResolvedFileLayers) {
+    match take_project_manifest_budget_request(value) {
+        Ok(request) => resolved.project_budget_request.narrow_with(&request),
+        Err(error) => resolved.errors.push(error),
+    }
+}
+
+/// Retain a primary-project fetch request or its deferred validation error.
+///
+/// Keep this primary-only operation separate from whole-chain budget quarantine
+/// to preserve their different authority boundaries during discovery.
+fn quarantine_fetch_policy(value: &mut serde_json::Value, resolved: &mut ResolvedFileLayers) {
+    match take_project_fetch_policy_request(value) {
+        Ok(request) => resolved.project_request = Some(request),
+        Err(error) => resolved.errors.push(error),
+    }
 }
 
 /// Validate and quarantine manifest limits before generic configuration merging.

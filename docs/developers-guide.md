@@ -4739,7 +4739,10 @@ merge pass, and the primary project file cannot self-authorize the opt-in. If
 the same file is reached through operator and project roots, both occurrences
 retain their root authority: the operator occurrence remains an ordinary layer,
 while the primary project occurrence is quarantined. The `extends` chain
-remains outside this trust boundary.
+remains outside this trust boundary. The internal quarantine helpers are
+discovery-only composition points: they preserve each occurrence's authority
+and accumulated validation errors while extracting primary-only fetch requests
+and chain-wide budget narrowing requests.
 
 The network-policy domain module
 [`src/stdlib/network/policy/reconciliation.rs`][reconciliation-module] owns

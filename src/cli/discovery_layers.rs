@@ -209,25 +209,7 @@ fn merge_project_scope_layers(
                 deduplication: Some(deduplication),
             })
         };
-        let layers = if let Some(index) = project_index.filter(|_| project_is_root) {
-            scope_project_chain(discovered_layers, index)
-        } else {
-            let operator_layers = if let Some(index) = project_index {
-                scope_primary_project_layer(discovered_layers, index)
-            } else {
-                discovered_layers
-                    .into_iter()
-                    .map(ScopedFileLayer::operator)
-                    .collect()
-            };
-            operator_layers
-                .into_iter()
-                .chain(scope_project_chain(
-                    project_layers,
-                    project_layer_count.saturating_sub(1),
-                ))
-                .collect()
-        };
+        let layers = scope_merged_layers(discovered_layers, project_layers, project_index);
         (trace, layers)
     });
     match result {
@@ -235,6 +217,36 @@ fn merge_project_scope_layers(
         Err(err) => (Some(error_trace), Err(err)),
     }
 }
+
+/// Assign authority to merged discovery roots without discarding shared occurrences.
+///
+/// Only the project-scope merge calls this helper. A project file inherited by
+/// an operator root retains its occurrence before the separate project chain.
+fn scope_merged_layers(
+    discovered_layers: Vec<MergeLayer<'static>>,
+    project_layers: Vec<MergeLayer<'static>>,
+    project_index: Option<usize>,
+) -> Vec<ScopedFileLayer> {
+    let project_is_root = project_index.is_some_and(|index| index + 1 == discovered_layers.len());
+    if let Some(index) = project_index.filter(|_| project_is_root) {
+        scope_project_chain(discovered_layers, index)
+    } else {
+        let operator_layers = if let Some(index) = project_index {
+            scope_primary_project_layer(discovered_layers, index)
+        } else {
+            discovered_layers
+                .into_iter()
+                .map(ScopedFileLayer::operator)
+                .collect()
+        };
+        let primary_index = project_layers.len().saturating_sub(1);
+        operator_layers
+            .into_iter()
+            .chain(scope_project_chain(project_layers, primary_index))
+            .collect()
+    }
+}
+
 /// Load the project-scope layers rooted at `project_file`, if one was found.
 ///
 /// # Errors
