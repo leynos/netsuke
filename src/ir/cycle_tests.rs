@@ -2,7 +2,6 @@
 use super::*;
 use anyhow::{Context, Result, ensure};
 use rstest::rstest;
-use std::collections::HashMap;
 
 fn path(name: &str) -> Utf8PathBuf {
     Utf8PathBuf::from(name)
@@ -27,21 +26,22 @@ struct MissingDepsCase<'a> {
     expected: &'a [(&'a str, &'a str)],
 }
 fn assert_missing_deps(case: &MissingDepsCase<'_>) -> Result<()> {
-    let mut targets = HashMap::new();
-    targets.insert(
-        path("a"),
-        build_edge(case.primary_inputs, case.primary_implicit_deps, "a"),
-    );
+    let mut graph = BuildGraph::default();
+    graph.insert_edge(build_edge(
+        case.primary_inputs,
+        case.primary_implicit_deps,
+        "a",
+    ));
     for (output, inputs, implicit_deps) in case.extra_targets {
-        targets.insert(path(output), build_edge(inputs, implicit_deps, output));
+        graph.insert_edge(build_edge(inputs, implicit_deps, output));
     }
     let expected: Vec<_> = case
         .expected
         .iter()
         .map(|(dependent, missing)| (path(dependent), path(missing)))
         .collect();
-    let mut detector = CycleDetector::new(&targets);
-    let (target, _) = target_entry_for_path(&targets, path("a").as_path())
+    let mut detector = CycleDetector::new(&graph);
+    let (target, _) = target_entry_for_path(&graph, path("a").as_path())
         .context("primary target should exist")?;
     let visit = detector.visit(target, CycleSearch::Path);
     ensure!(
@@ -59,7 +59,7 @@ fn next_cycle_index(index: usize, cycle_len: usize) -> usize {
     if index + 1 == cycle_len { 0 } else { index + 1 }
 }
 fn insert_cycle_edge(
-    targets: &mut HashMap<Utf8PathBuf, BuildEdge>,
+    graph: &mut BuildGraph,
     index: usize,
     cycle_len: usize,
     implicit_index: usize,
@@ -71,33 +71,33 @@ fn insert_cycle_edge(
     } else {
         build_edge(&[&dep], &[], &output)
     };
-    targets.insert(output.into(), edge);
+    graph.insert_edge(edge);
 }
 fn assert_bounded_cycle_detected(cycle_len: usize, implicit_index: usize) {
-    let mut targets = HashMap::new();
+    let mut graph = BuildGraph::default();
     for index in 0..cycle_len {
-        insert_cycle_edge(&mut targets, index, cycle_len, implicit_index);
+        insert_cycle_edge(&mut graph, index, cycle_len, implicit_index);
     }
     assert!(
-        CycleDetector::find_cycle(&targets).is_some(),
+        CycleDetector::find_cycle(&graph).is_some(),
         "expected cycle with length {cycle_len} and implicit edge at {implicit_index}",
     );
 }
 #[test]
 fn cycle_detector_detects_self_edge_cycle() {
-    let mut targets = HashMap::new();
-    targets.insert(path("a"), build_edge(&["a"], &[], "a"));
-    let cycle = CycleDetector::find_cycle(&targets).expect("cycle");
+    let mut graph = BuildGraph::default();
+    graph.insert_edge(build_edge(&["a"], &[], "a"));
+    let cycle = CycleDetector::find_cycle(&graph).expect("cycle");
     assert_eq!(cycle, vec![path("a"), path("a")]);
 }
 #[test]
 fn cycle_detector_marks_nodes_visited_after_traversal() {
-    let mut targets = HashMap::new();
+    let mut graph = BuildGraph::default();
     let a = path("a");
     let b = path("b");
-    targets.insert(a.clone(), build_edge(&["b"], &[], "a"));
-    targets.insert(b.clone(), build_edge(&[], &[], "b"));
-    let mut detector = CycleDetector::new(&targets);
+    graph.insert_edge(build_edge(&["b"], &[], "a"));
+    graph.insert_edge(build_edge(&[], &[], "b"));
+    let mut detector = CycleDetector::new(&graph);
     assert!(detector.detect().is_none());
     assert!(detector.is_visited(a.as_path()));
     assert!(detector.is_visited(b.as_path()));
@@ -124,26 +124,26 @@ fn cycle_detector_records_missing_dependencies(#[case] case: MissingDepsCase<'_>
 }
 #[test]
 fn find_cycle_identifies_cycle() {
-    let mut targets = HashMap::new();
-    targets.insert(path("a"), build_edge(&["b"], &[], "a"));
-    targets.insert(path("b"), build_edge(&["a"], &[], "b"));
-    let cycle = CycleDetector::find_cycle(&targets).expect("cycle");
+    let mut graph = BuildGraph::default();
+    graph.insert_edge(build_edge(&["b"], &[], "a"));
+    graph.insert_edge(build_edge(&["a"], &[], "b"));
+    let cycle = CycleDetector::find_cycle(&graph).expect("cycle");
     assert_eq!(cycle, vec![path("a"), path("b"), path("a")]);
 }
 #[test]
 fn find_cycle_identifies_implicit_dependency_cycle() {
-    let mut targets = HashMap::new();
-    targets.insert(path("a"), build_edge(&[], &["b"], "a"));
-    targets.insert(path("b"), build_edge(&[], &["a"], "b"));
-    let cycle = CycleDetector::find_cycle(&targets).expect("cycle");
+    let mut graph = BuildGraph::default();
+    graph.insert_edge(build_edge(&[], &["b"], "a"));
+    graph.insert_edge(build_edge(&[], &["a"], "b"));
+    let cycle = CycleDetector::find_cycle(&graph).expect("cycle");
     assert_eq!(cycle, vec![path("a"), path("b"), path("a")]);
 }
 #[test]
 fn cycle_detector_stack_is_empty_after_cycle_detected() {
-    let mut targets = HashMap::new();
-    targets.insert(path("a"), build_edge(&["b"], &[], "a"));
-    targets.insert(path("b"), build_edge(&["a"], &[], "b"));
-    let mut detector = CycleDetector::new(&targets);
+    let mut graph = BuildGraph::default();
+    graph.insert_edge(build_edge(&["b"], &[], "a"));
+    graph.insert_edge(build_edge(&["a"], &[], "b"));
+    let mut detector = CycleDetector::new(&graph);
     assert!(detector.detect().is_some(), "expected a cycle");
     assert!(
         detector.stack.is_empty(),
@@ -152,11 +152,11 @@ fn cycle_detector_stack_is_empty_after_cycle_detected() {
 }
 #[test]
 fn find_cycle_identifies_mixed_input_and_implicit_dependency_cycle() {
-    let mut targets = HashMap::new();
-    targets.insert(path("a"), build_edge(&["b"], &[], "a"));
-    targets.insert(path("b"), build_edge(&[], &["c"], "b"));
-    targets.insert(path("c"), build_edge(&["a"], &[], "c"));
-    let cycle = CycleDetector::find_cycle(&targets).expect("cycle");
+    let mut graph = BuildGraph::default();
+    graph.insert_edge(build_edge(&["b"], &[], "a"));
+    graph.insert_edge(build_edge(&[], &["c"], "b"));
+    graph.insert_edge(build_edge(&["a"], &[], "c"));
+    let cycle = CycleDetector::find_cycle(&graph).expect("cycle");
     assert_eq!(cycle, vec![path("a"), path("b"), path("c"), path("a")]);
 }
 #[test]

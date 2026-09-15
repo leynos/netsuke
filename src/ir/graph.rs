@@ -8,7 +8,7 @@
 //! for Ninja file emission and by [`super::cycle`] for cycle detection.
 
 use crate::localization::LocalizedMessage;
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use serde::Serialize;
 #[cfg(not(kani))]
 use std::collections::HashMap;
@@ -21,21 +21,88 @@ use crate::ast::Recipe;
 mod kani_map;
 
 #[cfg(kani)]
-pub use kani_map::IrHashMap;
+pub use kani_map::{IrHashMap, IrVec};
 
 /// Map used by the IR graph.
 #[cfg(not(kani))]
 pub type IrHashMap<K, V> = HashMap<K, V>;
+
+/// Arena used to own canonical build edges.
+#[cfg(kani)]
+pub type EdgeArena<T> = IrVec<T>;
+
+/// Arena used to own canonical build edges.
+#[cfg(not(kani))]
+pub type EdgeArena<T> = Vec<T>;
 
 /// The complete, static build graph.
 #[derive(Debug, Default, Clone)]
 pub struct BuildGraph {
     /// All unique actions in the build keyed by a stable hash.
     pub actions: IrHashMap<String, Action>,
-    /// All target files to be built keyed by output path.
-    pub targets: IrHashMap<Utf8PathBuf, BuildEdge>,
+    /// Canonical build edges, each owned exactly once.
+    pub edges: EdgeArena<BuildEdge>,
+    /// Output aliases indexed to their canonical producing edge.
+    pub targets: IrHashMap<Utf8PathBuf, EdgeId>,
     /// Targets built when no explicit target is requested.
     pub default_targets: Vec<Utf8PathBuf>,
+}
+
+/// Identifies one canonical [`BuildEdge`] in a [`BuildGraph`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct EdgeId(usize);
+
+impl BuildGraph {
+    /// Store `edge` once and index each of its explicit outputs to it.
+    ///
+    /// Callers must reject duplicate outputs before insertion so that this
+    /// operation never replaces an existing output alias.
+    pub fn insert_edge(&mut self, edge: BuildEdge) -> EdgeId {
+        let edge_id = EdgeId(self.edges.len());
+        self.edges.push(edge);
+        if let Some(stored_edge) = self.edges.get(edge_id.0) {
+            for output in &stored_edge.explicit_outputs {
+                self.targets.insert(output.clone(), edge_id);
+            }
+        }
+        edge_id
+    }
+
+    /// Resolve `output` to its canonical stored key and producing edge.
+    #[cfg(not(kani))]
+    #[must_use]
+    pub fn target_for_output(&self, output: &Utf8Path) -> Option<(&Utf8Path, &BuildEdge)> {
+        self.targets
+            .get_key_value(output)
+            .and_then(|(stored_output, edge_id)| {
+                self.edges
+                    .get(edge_id.0)
+                    .map(|edge| (stored_output.as_path(), edge))
+            })
+    }
+
+    /// Resolve `output` through Kani's bounded path-key model.
+    #[cfg(kani)]
+    #[must_use]
+    pub fn target_for_output(&self, output: &Utf8Path) -> Option<(&Utf8Path, &BuildEdge)> {
+        self.targets
+            .get_key_value_path(output)
+            .and_then(|(stored_output, edge_id)| {
+                self.edges
+                    .get(edge_id.0)
+                    .map(|edge| (stored_output.as_path(), edge))
+            })
+    }
+
+    /// Iterate the graph's canonical build edges in arena insertion order.
+    pub fn edges(&self) -> impl Iterator<Item = &BuildEdge> {
+        self.edges.iter()
+    }
+
+    /// Iterate every explicit output alias in the output index.
+    pub fn output_paths(&self) -> impl Iterator<Item = &Utf8PathBuf> {
+        self.targets.keys()
+    }
 }
 
 /// Dependency scheduling policy carried by the domain build graph.

@@ -39,20 +39,17 @@ pub(super) fn scalar_command_strategy() -> impl Strategy<Value = (String, String
 /// Build the one-action graph used by the real-Ninja scalar command oracle.
 pub(super) fn scalar_graph(command: String) -> BuildGraph {
     let mut graph = super::command_graph(StringOrList::String(command));
-    graph.targets.insert(
-        Utf8PathBuf::from("out"),
-        BuildEdge {
-            action_id: "action".into(),
-            inputs: Vec::new(),
-            implicit_deps: Vec::new(),
-            dependency_order: DependencyOrder::Parallel,
-            explicit_outputs: vec![Utf8PathBuf::from("out")],
-            implicit_outputs: Vec::new(),
-            order_only_deps: Vec::new(),
-            phony: false,
-            always: false,
-        },
-    );
+    graph.insert_edge(BuildEdge {
+        action_id: "action".into(),
+        inputs: Vec::new(),
+        implicit_deps: Vec::new(),
+        dependency_order: DependencyOrder::Parallel,
+        explicit_outputs: vec![Utf8PathBuf::from("out")],
+        implicit_outputs: Vec::new(),
+        order_only_deps: Vec::new(),
+        phony: false,
+        always: false,
+    });
     graph
 }
 

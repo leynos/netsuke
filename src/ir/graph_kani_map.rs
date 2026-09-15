@@ -10,6 +10,54 @@ use std::borrow::Borrow;
 use camino::{Utf8Path, Utf8PathBuf};
 
 const KANI_IR_HASHMAP_CAPACITY: usize = 4;
+const KANI_IR_EDGE_ARENA_CAPACITY: usize = 4;
+
+/// Bounded edge arena used by Kani's IR proofs.
+#[derive(Debug, Clone, PartialEq)]
+pub struct IrVec<T> {
+    entries: [Option<T>; KANI_IR_EDGE_ARENA_CAPACITY],
+    len: usize,
+}
+
+impl<T> Default for IrVec<T> {
+    fn default() -> Self {
+        Self {
+            entries: [None, None, None, None],
+            len: 0,
+        }
+    }
+}
+
+impl<T> IrVec<T> {
+    /// Append `value` to the bounded arena.
+    pub fn push(&mut self, value: T) {
+        assert!(
+            self.len < KANI_IR_EDGE_ARENA_CAPACITY,
+            "Kani IR edge arena capacity exceeded",
+        );
+        self.entries[self.len] = Some(value);
+        self.len += 1;
+    }
+
+    /// Return the arena entry at `index`, if present.
+    pub fn get(&self, index: usize) -> Option<&T> {
+        if index < self.len {
+            self.entries[index].as_ref()
+        } else {
+            None
+        }
+    }
+
+    /// Return the number of stored entries.
+    pub const fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Iterate stored entries in insertion order.
+    pub fn iter(&self) -> impl Iterator<Item = &T> {
+        self.entries[..self.len].iter().filter_map(Option::as_ref)
+    }
+}
 
 /// Map used by the IR graph under Kani.
 #[derive(Debug, Clone, PartialEq)]
@@ -105,6 +153,24 @@ impl<K, V> IrHashMap<K, V> {
         None
     }
 
+    /// Return the stored key and value for `key`, if present.
+    pub fn get_key_value<Q>(&self, key: &Q) -> Option<(&K, &V)>
+    where
+        K: Borrow<Q>,
+        Q: PartialEq + ?Sized,
+    {
+        let mut index = 0;
+        while index < self.len {
+            if let Some((candidate, value)) = &self.entries[index] {
+                if candidate.borrow() == key {
+                    return Some((candidate, value));
+                }
+            }
+            index += 1;
+        }
+        None
+    }
+
     /// Return `true` when `key` is present in the map.
     pub fn contains_key<Q>(&self, key: &Q) -> bool
     where
@@ -170,5 +236,24 @@ impl<K, V> IrHashMap<K, V> {
     /// Return `true` when the map contains no entries.
     pub fn is_empty(&self) -> bool {
         self.len == 0
+    }
+}
+
+impl<V> IrHashMap<Utf8PathBuf, V> {
+    /// Return the bounded stored path and value for `key`, if present.
+    ///
+    /// Kani models path keys as one-byte identifiers so its bounded graph
+    /// proofs do not symbolically traverse Camino's platform path parser.
+    pub fn get_key_value_path(&self, key: &Utf8Path) -> Option<(&Utf8PathBuf, &V)> {
+        let mut index = 0;
+        while index < self.len {
+            if let Some((candidate, value)) = &self.entries[index]
+                && bounded_path_eq(candidate.as_path(), key)
+            {
+                return Some((candidate, value));
+            }
+            index += 1;
+        }
+        None
     }
 }

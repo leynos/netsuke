@@ -17,6 +17,14 @@ use netsuke::{
 };
 use rstest::rstest;
 
+/// Resolve the canonical edge that produces `output`.
+fn edge_for_output<'a>(graph: &'a BuildGraph, output: &str) -> Result<&'a netsuke::ir::BuildEdge> {
+    graph
+        .target_for_output(Utf8PathBuf::from(output).as_path())
+        .map(|(_, edge)| edge)
+        .with_context(|| format!("expected edge for {output}"))
+}
+
 /// Generate the expected action and target counts for each manifest fixture.
 #[rstest]
 #[case::minimal_manifest("tests/data/minimal.yml", 1, 1)]
@@ -37,6 +45,62 @@ fn manifest_fixture_generates_expected_ir(
         graph.targets.len() == expected_targets,
         "expected {expected_targets} targets, got {}",
         graph.targets.len()
+    );
+    Ok(())
+}
+
+/// Store one multi-output target in one canonical edge and many output aliases.
+#[test]
+fn multi_output_target_uses_linear_canonical_storage() -> Result<()> {
+    const OUTPUT_COUNT: usize = 4_096;
+    let outputs = (0..OUTPUT_COUNT)
+        .map(|index| format!("out/{index:04}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let manifest = manifest::from_str(&format!(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: [{outputs}]\n    command: echo {{{{ outs }}}}\n"
+    ))?;
+    let graph = BuildGraph::from_manifest(&manifest)?;
+    let canonical = graph.edges().next().context("expected canonical edge")?;
+
+    ensure!(graph.edges.len() == 1, "one target must own one edge");
+    ensure!(
+        canonical.explicit_outputs.len() == OUTPUT_COUNT,
+        "canonical edge should retain every explicit output"
+    );
+    ensure!(
+        graph.targets.len() == OUTPUT_COUNT,
+        "every explicit output should remain an output alias"
+    );
+    ensure!(
+        canonical.explicit_outputs.len() + graph.targets.len() == OUTPUT_COUNT * 2,
+        "the edge vector and output index must grow linearly"
+    );
+    for output in &canonical.explicit_outputs {
+        let (_, resolved) = graph
+            .target_for_output(output.as_path())
+            .with_context(|| format!("expected producer for {output}"))?;
+        ensure!(
+            std::ptr::eq(canonical, resolved),
+            "every output must resolve to the canonical edge"
+        );
+    }
+
+    let ninja = ninja_gen::generate(&graph)?;
+    let build_statements = ninja
+        .lines()
+        .filter(|line| line.starts_with("build "))
+        .collect::<Vec<_>>();
+    ensure!(
+        build_statements.len() == 1,
+        "one canonical edge must emit one Ninja build statement"
+    );
+    let statement = build_statements
+        .first()
+        .context("expected Ninja build statement")?;
+    ensure!(
+        statement.contains("out/0000") && statement.contains("out/4095"),
+        "the Ninja build statement must contain every explicit output"
     );
     Ok(())
 }
@@ -184,10 +248,7 @@ fn manifest_deps_populate_implicit_deps(
 ) -> Result<()> {
     let manifest = manifest::from_str(yaml)?;
     let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;
-    let edge = graph
-        .targets
-        .get(&Utf8PathBuf::from(output))
-        .with_context(|| format!("expected edge for {output}"))?;
+    let edge = edge_for_output(&graph, output)?;
 
     ensure!(
         edge.implicit_deps
@@ -236,10 +297,7 @@ fn manifest_deps_do_not_contribute_to_recipe_inputs() -> Result<()> {
     let manifest = manifest::from_str(yaml)?;
     let graph = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::Posix)
         .context("expected graph generation")?;
-    let edge = graph
-        .targets
-        .get(&Utf8PathBuf::from("out/app"))
-        .context("expected edge for out/app")?;
+    let edge = edge_for_output(&graph, "out/app")?;
     let action = graph
         .actions
         .get(&edge.action_id)
@@ -305,10 +363,10 @@ fn conditional_action_deps_populate_distinct_ir_classes() -> Result<()> {
     )?;
 
     let rendered_paths = graph
-        .targets
-        .iter()
-        .flat_map(|(output, edge)| {
-            std::iter::once(output)
+        .edges()
+        .flat_map(|edge| {
+            edge.explicit_outputs
+                .iter()
                 .chain(&edge.inputs)
                 .chain(&edge.implicit_deps)
                 .chain(&edge.order_only_deps)
@@ -337,10 +395,7 @@ fn assert_conditional_edge(
     output: &str,
     expected: &ExpectedEdge<'_>,
 ) -> Result<()> {
-    let edge = graph
-        .targets
-        .get(&Utf8PathBuf::from(output))
-        .with_context(|| format!("expected edge for {output}"))?;
+    let edge = edge_for_output(graph, output)?;
     let expected_paths = |paths: &[&str]| {
         paths
             .iter()

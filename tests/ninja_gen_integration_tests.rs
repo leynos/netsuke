@@ -158,7 +158,7 @@ fn ninja_integration_tests(
     }
     let mut graph = BuildGraph::default();
     graph.actions.insert(edge.action_id.clone(), action);
-    graph.targets.insert(output.clone(), edge);
+    graph.insert_edge(edge);
     graph.default_targets.push(output);
 
     let ninja = generate(&graph)?;
@@ -217,7 +217,7 @@ fn errors_when_action_missing() -> Result<()> {
         phony: false,
         always: false,
     };
-    graph.targets.insert(Utf8PathBuf::from("out"), edge);
+    graph.insert_edge(edge);
     let Err(err) = generate(&graph) else {
         bail!("expected missing action to error");
     };
@@ -262,7 +262,7 @@ fn generate_format_error() -> Result<()> {
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("a".into(), action);
-    graph.targets.insert(Utf8PathBuf::from("out"), edge);
+    graph.insert_edge(edge);
 
     let mut writer = FailWriter;
     let Err(err) = generate_into(&graph, &mut writer) else {
@@ -299,7 +299,7 @@ fn serial_graph(command: &str, dependencies: &[&str]) -> BuildGraph {
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("a".into(), action);
-    graph.targets.insert(Utf8PathBuf::from("all"), edge);
+    graph.insert_edge(edge);
     graph
 }
 #[rstest]

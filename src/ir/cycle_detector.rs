@@ -8,7 +8,7 @@
 
 use camino::{Utf8Path, Utf8PathBuf};
 
-use super::super::graph::{BuildEdge, IrHashMap};
+use super::super::graph::{BuildEdge, BuildGraph, IrHashMap};
 #[cfg(test)]
 use super::analyse;
 #[cfg(not(kani))]
@@ -87,8 +87,8 @@ impl CycleVisitResult {
 /// Create with [`CycleDetector::new`] and drive detection with
 /// [`CycleDetector::detect`].
 pub(super) struct CycleDetector<'targets> {
-    /// The target map being traversed, borrowed for the traversal.
-    targets: &'targets IrHashMap<Utf8PathBuf, BuildEdge>,
+    /// Canonical graph being traversed, borrowed for the traversal.
+    graph: &'targets BuildGraph,
     /// DFS recursion stack of in-progress nodes, for back-edge extraction.
     /// Read by the property tests to verify clean state between runs.
     pub(super) stack: Vec<&'targets Utf8Path>,
@@ -100,11 +100,11 @@ pub(super) struct CycleDetector<'targets> {
 }
 
 impl<'targets> CycleDetector<'targets> {
-    /// Create a new detector borrowing `targets` for the duration of the
+    /// Create a new detector borrowing `graph` for the duration of the
     /// traversal.
-    pub(super) fn new(targets: &IrHashMap<Utf8PathBuf, BuildEdge>) -> CycleDetector<'_> {
+    pub(super) fn new(graph: &BuildGraph) -> CycleDetector<'_> {
         CycleDetector {
-            targets,
+            graph,
             stack: Vec::new(),
             states: IrHashMap::default(),
             missing_dependencies: Vec::new(),
@@ -138,14 +138,17 @@ impl<'targets> CycleDetector<'targets> {
         // the traversal, so the collected references stay valid while `self`
         // is mutated. The collection exists for sorting, not to appease the
         // borrow checker.
-        let mut nodes: Vec<&'targets Utf8Path> =
-            self.targets.keys().map(Utf8PathBuf::as_path).collect();
+        let mut nodes: Vec<&'targets Utf8Path> = self
+            .graph
+            .output_paths()
+            .map(Utf8PathBuf::as_path)
+            .collect();
         // Sort keys for deterministic traversal order.  The O(n log n) cost is
         // negligible for typical build graphs (100–10 000 targets) and is
         // outweighed by the benefit of stable, reproducible error messages.
         nodes.sort_by(|left, right| path_cmp(left, right));
         for node in nodes {
-            let Some((target, _)) = target_entry_for_path(self.targets, node) else {
+            let Some((target, _)) = target_entry_for_path(self.graph, node) else {
                 continue;
             };
             if self.is_visited(target) {
@@ -162,10 +165,7 @@ impl<'targets> CycleDetector<'targets> {
     /// Visit the Kani-flavoured target map, probing for any cycle.
     #[cfg(kani)]
     fn detect_targets(&mut self, search: CycleSearch) -> CycleVisitResult {
-        for index in 0..self.targets.len() {
-            let Some((node, _)) = self.targets.entry_at(index) else {
-                continue;
-            };
+        for node in self.graph.output_paths() {
             if self.is_visited(node.as_path()) {
                 continue;
             }
@@ -241,7 +241,7 @@ impl<'targets> CycleDetector<'targets> {
             self.stack.push(node);
         }
 
-        let cycle = match target_entry_for_path(self.targets, node) {
+        let cycle = match target_entry_for_path(self.graph, node) {
             Some((_, edge)) => self.visit_known_edge(node, edge, search),
             None => CycleVisitResult::None,
         };
@@ -310,10 +310,8 @@ impl<'targets> CycleDetector<'targets> {
 
     /// Run a full detection pass and return the cycle, for tests.
     #[cfg(test)]
-    pub(super) fn find_cycle(
-        targets: &IrHashMap<Utf8PathBuf, BuildEdge>,
-    ) -> Option<Vec<Utf8PathBuf>> {
-        analyse(targets).cycle
+    pub(super) fn find_cycle(graph: &BuildGraph) -> Option<Vec<Utf8PathBuf>> {
+        analyse(graph).cycle
     }
 
     /// Record `dep` as a missing dependency.
@@ -334,7 +332,7 @@ impl<'targets> CycleDetector<'targets> {
         dep: &Utf8Path,
         search: CycleSearch,
     ) -> CycleVisitResult {
-        let Some((target, _)) = target_entry_for_path(self.targets, dep) else {
+        let Some((target, _)) = target_entry_for_path(self.graph, dep) else {
             if matches!(search, CycleSearch::Path) {
                 self.record_missing_dependency(node, dep);
             }

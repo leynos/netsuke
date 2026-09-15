@@ -17,7 +17,7 @@ use super::super::{
     cmd_interpolate::{
         CommandBindings, interpolate_command_with_bindings, interpolate_script_with_bindings,
     },
-    graph::{Action, BuildEdge, IrGenError, IrHashMap},
+    graph::{Action, BuildEdge, BuildGraph, EdgeId, IrGenError, IrHashMap},
 };
 
 #[path = "sort_utils.rs"]
@@ -120,22 +120,14 @@ fn resolve_script(script: &str, bindings: ActionBindings<'_>) -> Result<String, 
 /// Report duplicate outputs already known or repeated within one target.
 pub(super) fn duplicate_output_error(
     outputs: &[Utf8PathBuf],
-    targets: &IrHashMap<Utf8PathBuf, BuildEdge>,
+    targets: &IrHashMap<Utf8PathBuf, EdgeId>,
 ) -> Option<IrGenError> {
     find_duplicates(outputs, targets).map(duplicate_output_error_from_paths)
 }
 
-/// Register one edge under each explicit output, moving the final edge.
-pub(super) fn insert_edge_for_outputs(
-    targets: &mut IrHashMap<Utf8PathBuf, BuildEdge>,
-    edge: BuildEdge,
-) {
-    if let Some((last_output, other_outputs)) = edge.explicit_outputs.split_last() {
-        for output in other_outputs {
-            targets.insert(output.clone(), edge.clone());
-        }
-        targets.insert(last_output.clone(), edge);
-    }
+/// Register one canonical edge under each explicit output.
+pub(super) fn insert_edge_for_outputs(graph: &mut BuildGraph, edge: BuildEdge) {
+    graph.insert_edge(edge);
 }
 
 /// Build the duplicate-output error for the reported colliding paths.
@@ -290,7 +282,7 @@ fn rule_not_found_message(target_name: &str, rule_name: &str) -> localization::L
 /// Find output paths that would collide with existing or sibling outputs.
 pub(super) fn find_duplicates(
     outputs: &[Utf8PathBuf],
-    targets: &IrHashMap<Utf8PathBuf, BuildEdge>,
+    targets: &IrHashMap<Utf8PathBuf, EdgeId>,
 ) -> Option<Vec<Utf8PathBuf>> {
     let mut seen: Vec<&Utf8PathBuf> = Vec::new();
     let mut dups = Vec::new();

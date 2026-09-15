@@ -30,4 +30,4 @@ mod from_manifest;
 mod graph;
 
 pub use cmd_interpolate::{INS_TOKEN, OUTS_TOKEN};
-pub use graph::{Action, BuildEdge, BuildGraph, DependencyOrder, IrGenError};
+pub use graph::{Action, BuildEdge, BuildGraph, DependencyOrder, EdgeArena, EdgeId, IrGenError};

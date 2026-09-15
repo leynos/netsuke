@@ -22,20 +22,17 @@ fn dependency_only_serial_bundle_uses_phony_without_a_recipe() -> Result<()> {
             restat: false,
         },
     );
-    graph.targets.insert(
-        Utf8PathBuf::from("all"),
-        BuildEdge {
-            action_id: "aggregate".into(),
-            inputs: Vec::new(),
-            implicit_deps: vec!["check-fmt".into(), "lint".into()],
-            dependency_order: DependencyOrder::Serial,
-            explicit_outputs: vec![Utf8PathBuf::from("all")],
-            implicit_outputs: Vec::new(),
-            order_only_deps: Vec::new(),
-            phony: true,
-            always: false,
-        },
-    );
+    graph.insert_edge(BuildEdge {
+        action_id: "aggregate".into(),
+        inputs: Vec::new(),
+        implicit_deps: vec!["check-fmt".into(), "lint".into()],
+        dependency_order: DependencyOrder::Serial,
+        explicit_outputs: vec![Utf8PathBuf::from("all")],
+        implicit_outputs: Vec::new(),
+        order_only_deps: Vec::new(),
+        phony: true,
+        always: false,
+    });
 
     let bundle = generate_bundle(&graph)?;
     ensure!(
