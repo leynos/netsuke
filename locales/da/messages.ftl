@@ -130,6 +130,7 @@ manifest.yaml.hint.invalid_token = YAML-symbolet er ugyldigt eller uventet.
 manifest.yaml.hint.escape = Escape omvendte skråstreger, eller fjern ugyldige escape-sekvenser.
 manifest.env.missing = En påkrævet miljøvariabel er ikke sat.
 manifest.env.invalid_utf8 = En miljøvariabel indeholder ugyldig UTF-8.
+manifest.env.blocked = Adgang til en miljøvariabel er blokeret.
 manifest.vars.not_object = Manifestets `vars` skal være en tilknytning eller et objekt.
 manifest.vars.reserved_name = Manifestets `vars`-nøgle '{ $name }' er reserveret til en indbygget skabelonhjælper; omdøb variablen.
 manifest.read_failed = Manifestet i { $path } kunne ikke læses.
@@ -427,3 +428,6 @@ example.errors_found = { $count ->
     [one] { $count } fejl fundet.
    *[other] { $count } fejl fundet.
 }
+
+cli.flag.env_allow_var.help = Miljøvariabel tilladt for manifestets env()-hjælper.
+cli.flag.env_block_var.help = Miljøvariabel blokeret for manifestets env()-hjælper.

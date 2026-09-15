@@ -130,6 +130,7 @@ manifest.yaml.hint.invalid_token = A YAML-token érvénytelen vagy váratlan.
 manifest.yaml.hint.escape = Escape-elje a fordított perjeleket, vagy távolítsa el az érvénytelen escape-szekvenciákat.
 manifest.env.missing = Egy kötelező környezeti változó nincs beállítva.
 manifest.env.invalid_utf8 = Egy környezeti változó érvénytelen UTF-8 kódolást tartalmaz.
+manifest.env.blocked = Egy környezeti változóhoz való hozzáférés le van tiltva.
 manifest.vars.not_object = A jegyzék `vars` mezőjének leképezésnek vagy objektumnak kell lennie.
 manifest.vars.reserved_name = A manifest `vars` kulcsa, '{ $name }', egy beépített sablonsegéd számára fenntartott; nevezze át a változót.
 manifest.read_failed = A jegyzéket nem sikerült beolvasni innen: { $path }.
@@ -429,3 +430,6 @@ example.errors_found = { $count ->
     [one] { $count } hiba található.
    *[other] { $count } hiba található.
 }
+
+cli.flag.env_allow_var.help = A manifest env() segédje számára engedélyezett környezeti változó.
+cli.flag.env_block_var.help = A manifest env() segédje számára tiltott környezeti változó.

@@ -67,6 +67,18 @@
 # project false cannot weaken an operator's default-deny setting.
 # fetch_default_deny = false
 
+# Environment variable names allowed for the Jinja `env()` helper. A non-empty
+# effective list enables default-deny. Primary-project allow entries are
+# ignored, so copying this setting to `.netsuke.toml` cannot restrict `env()`;
+# use an operator configuration layer, environment, or CLI flag. Each entry is
+# one exact name; globs and patterns are not supported.
+# env_allow_var = ["CI", "PACKAGE_REGISTRY_TOKEN"]
+
+# Environment variable names always blocked for the Jinja `env()` helper. Each
+# entry is one exact name; globs and patterns are not supported. A block wins
+# when the same name is allowed elsewhere.
+# env_block_var = ["AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN"]
+
 # Allow primary-project fetch grants to append to operator values.
 # Set this only in system or user configuration, through
 # NETSUKE_TRUST_PROJECT_FETCH_POLICY, or with --trust-project-fetch-policy;

@@ -111,6 +111,8 @@ fn cli_merge_layers_respects_precedence_and_appends_lists(
         .context("defaults should be an object")?;
     defaults_object.insert("jobs".to_owned(), json!(1));
     defaults_object.insert("fetch_allow_scheme".to_owned(), json!(["https"]));
+    defaults_object.insert("env_allow_var".to_owned(), json!(["DEFAULT_ALLOW"]));
+    defaults_object.insert("env_block_var".to_owned(), json!(["DEFAULT_BLOCK"]));
     defaults_object.insert("progress".to_owned(), json!("auto"));
     defaults_object.insert("json".to_owned(), json!(false));
     composer.push_defaults(defaults);
@@ -119,6 +121,8 @@ fn cli_merge_layers_respects_precedence_and_appends_lists(
             "file": "Configfile",
             "jobs": 2,
             "fetch_allow_scheme": ["http"],
+            "env_allow_var": ["FILE_ALLOW"],
+            "env_block_var": ["FILE_BLOCK"],
             "locale": "en-US",
             "progress": "never",
             "json": true
@@ -128,12 +132,16 @@ fn cli_merge_layers_respects_precedence_and_appends_lists(
     composer.push_environment(json!({
         "jobs": 3,
         "fetch_allow_scheme": ["ftp"],
+        "env_allow_var": ["ENV_ALLOW"],
+        "env_block_var": ["ENV_BLOCK"],
         "progress": "always",
         "json": false
     }));
     composer.push_cli(json!({
         "jobs": 4,
         "fetch_allow_scheme": ["git"],
+        "env_allow_var": ["CLI_ALLOW"],
+        "env_block_var": ["CLI_BLOCK"],
         "progress": "never",
         "json": true,
         "verbose": true
@@ -144,6 +152,14 @@ fn cli_merge_layers_respects_precedence_and_appends_lists(
         "file layer should override defaults",
     );
     ensure!(merged.jobs == Some(4), "CLI layer should override jobs");
+    ensure!(
+        merged.env_allow_var == ["DEFAULT_ALLOW", "FILE_ALLOW", "ENV_ALLOW", "CLI_ALLOW"],
+        "environment allow variables should append in layer order",
+    );
+    ensure!(
+        merged.env_block_var == ["DEFAULT_BLOCK", "FILE_BLOCK", "ENV_BLOCK", "CLI_BLOCK"],
+        "environment block variables should append in layer order",
+    );
     ensure!(
         merged.fetch_allow_scheme == vec!["https", "http", "ftp", "git"],
         "list values should append in layer order",

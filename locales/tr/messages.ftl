@@ -130,6 +130,7 @@ manifest.yaml.hint.invalid_token = YAML belirteci geçersiz ya da beklenmedik.
 manifest.yaml.hint.escape = Ters eğik çizgileri kaçırın ya da geçersiz kaçış dizilerini kaldırın.
 manifest.env.missing = Gerekli bir ortam değişkeni ayarlanmamış.
 manifest.env.invalid_utf8 = Bir ortam değişkeni geçersiz UTF-8 içeriyor.
+manifest.env.blocked = Bir ortam değişkenine erişim engellendi.
 manifest.vars.not_object = Bildirimin `vars` alanı bir eşleme ya da nesne olmalıdır.
 manifest.vars.reserved_name = Manifestteki `vars` anahtarı '{ $name }' yerleşik bir şablon yardımcı işlevi için ayrılmıştır; değişkeni yeniden adlandırın.
 manifest.read_failed = { $path } konumundaki bildirim okunamadı.
@@ -428,3 +429,6 @@ example.errors_found = { $count ->
     [one] { $count } hata bulundu.
    *[other] { $count } hata bulundu.
 }
+
+cli.flag.env_allow_var.help = Bildirim env() yardımcısı için izin verilen ortam değişkeni.
+cli.flag.env_block_var.help = Bildirim env() yardımcısı için engellenen ortam değişkeni.

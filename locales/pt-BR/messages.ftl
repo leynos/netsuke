@@ -131,6 +131,7 @@ manifest.yaml.hint.invalid_token = O token do YAML é inválido ou inesperado.
 manifest.yaml.hint.escape = Escape as barras invertidas ou remova as sequências de escape inválidas.
 manifest.env.missing = Uma variável de ambiente obrigatória não está definida.
 manifest.env.invalid_utf8 = Uma variável de ambiente contém UTF-8 inválido.
+manifest.env.blocked = O acesso a uma variável de ambiente está bloqueado.
 manifest.vars.not_object = `vars` do manifesto deve ser um mapa ou objeto.
 manifest.vars.reserved_name = A chave `vars` '{ $name }' do manifesto está reservada para uma função auxiliar de template integrada; renomeie a variável.
 manifest.read_failed = Não foi possível ler o manifesto em { $path }.
@@ -429,3 +430,6 @@ example.errors_found = { $count ->
     [one] { $count } erro encontrado.
    *[other] { $count } erros encontrados.
 }
+
+cli.flag.env_allow_var.help = Variável de ambiente permitida para o auxiliar env() do manifesto.
+cli.flag.env_block_var.help = Variável de ambiente bloqueada para o auxiliar env() do manifesto.

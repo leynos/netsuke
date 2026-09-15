@@ -130,6 +130,7 @@ manifest.yaml.hint.invalid_token = Token YAML je neplatný nebo neočekávaný.
 manifest.yaml.hint.escape = Escapujte zpětná lomítka nebo odstraňte neplatné únikové sekvence.
 manifest.env.missing = Povinná proměnná prostředí není nastavena.
 manifest.env.invalid_utf8 = Proměnná prostředí obsahuje neplatné UTF-8.
+manifest.env.blocked = Přístup k proměnné prostředí je zablokován.
 manifest.vars.not_object = Položka `vars` manifestu musí být mapování nebo objekt.
 manifest.vars.reserved_name = Klíč `vars` '{ $name }' v manifestu je vyhrazen pro vestavěného pomocníka šablon; přejmenujte proměnnou.
 manifest.read_failed = Manifest v { $path } se nepodařilo přečíst.
@@ -432,3 +433,6 @@ example.errors_found = { $count ->
     [many] Nalezeno { $count } chyby.
    *[other] Nalezeno { $count } chyb.
 }
+
+cli.flag.env_allow_var.help = Proměnná prostředí povolená pomocníkovi env() manifestu.
+cli.flag.env_block_var.help = Proměnná prostředí blokovaná pomocníkovi env() manifestu.

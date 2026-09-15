@@ -130,6 +130,7 @@ manifest.yaml.hint.invalid_token = YAML 토큰이 잘못되었거나 예상 밖�
 manifest.yaml.hint.escape = 역슬래시를 이스케이프하거나 잘못된 이스케이프 시퀀스를 제거하세요.
 manifest.env.missing = 필수 환경 변수가 설정되지 않았습니다.
 manifest.env.invalid_utf8 = 환경 변수에 잘못된 UTF-8이 들어 있습니다.
+manifest.env.blocked = 환경 변수에 대한 접근이 차단되었습니다.
 manifest.vars.not_object = 매니페스트의 `vars`는 매핑이나 객체여야 합니다.
 manifest.vars.reserved_name = 매니페스트의 `vars` 키 '{ $name }'은(는) 내장 템플릿 헬퍼용으로 예약되어 있습니다. 변수 이름을 바꾸십시오.
 manifest.read_failed = { $path }의 매니페스트를 읽지 못했습니다.
@@ -425,3 +426,6 @@ example.errors_found = { $count ->
     [0] 오류를 찾지 못했습니다.
    *[other] 오류 { $count }개를 찾았습니다.
 }
+
+cli.flag.env_allow_var.help = 매니페스트 env() 도우미에 허용되는 환경 변수.
+cli.flag.env_block_var.help = 매니페스트 env() 도우미에서 차단되는 환경 변수.

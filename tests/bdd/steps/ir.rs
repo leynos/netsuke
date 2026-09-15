@@ -228,10 +228,14 @@ fn compile_manifest_impl(world: &TestWorld, path: &str) {
     // Match the manifest steps' injected-environment flow so IR compilation sees
     // scenario values rather than the host environment.
     let env_reader = manifest_env_reader(world);
+    let environment = netsuke::manifest::ManifestEnvironment::new(
+        &env_reader,
+        world.manifest_env_access_policy.borrow().clone(),
+    );
     let outcome = netsuke::manifest::from_path_with_policy_and_env(
         &resolved,
         NetworkPolicy::default(),
-        &env_reader,
+        &environment,
         None,
     )
     .and_then(|m| {

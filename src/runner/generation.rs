@@ -18,8 +18,8 @@ use camino::Utf8Path;
 use crate::ast::NetsukeManifest;
 use crate::ir::{BuildGraph, IrGenError};
 use crate::localization::{self, keys};
-use crate::stdlib::NetworkPolicy;
 use crate::{manifest, ninja_gen};
+use crate::{manifest::EnvAccessPolicy, stdlib::NetworkPolicy};
 
 /// Optional observer for manifest-loading stages.
 ///
@@ -71,11 +71,14 @@ pub(super) fn load_manifest(
 pub(super) fn load_manifest_for_build(
     path: &Utf8Path,
     policy: NetworkPolicy,
+    env_access_policy: EnvAccessPolicy,
     on_stage: StageObserver<'_>,
 ) -> Result<NetsukeManifest> {
-    manifest::from_path_with_policy(path.as_std_path(), policy, on_stage).with_context(|| {
-        localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST).with_arg("path", path.as_str())
-    })
+    manifest::from_path_with_policy(path.as_std_path(), policy, env_access_policy, on_stage)
+        .with_context(|| {
+            localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST)
+                .with_arg("path", path.as_str())
+        })
 }
 
 /// Translate a manifest into the build graph intermediate representation.

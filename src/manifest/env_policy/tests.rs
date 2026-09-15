@@ -1,0 +1,69 @@
+//! Tests for exact-name manifest environment access policy decisions.
+
+use super::*;
+use rstest::rstest;
+
+/// Preserve default-allow behaviour until an allowlist is configured.
+#[rstest]
+#[case("CI")]
+#[case("PACKAGE_REGISTRY_TOKEN")]
+#[case("UNLISTED_VALUE")]
+fn empty_lists_allow_every_name(#[case] name: &str) {
+    assert!(
+        EnvAccessPolicy::default().evaluate(name).is_ok(),
+        "empty lists should preserve default-allow for {name}"
+    );
+}
+
+/// Activate default-deny when the allowlist has at least one entry.
+#[rstest]
+fn allowlist_restricts_names() {
+    let policy = EnvAccessPolicy::default().allow_var("CI");
+
+    assert!(
+        policy.evaluate("CI").is_ok(),
+        "allowlisted name should pass"
+    );
+    assert!(
+        matches!(
+            policy.evaluate("UNLISTED"),
+            Err(EnvPolicyViolation::Blocked { .. })
+        ),
+        "an unlisted name must be blocked once default-deny is active"
+    );
+}
+
+/// Block only configured names when no allowlist activates default-deny.
+#[rstest]
+fn blocklist_without_allowlist_blocks_only_matching_name() {
+    let policy = EnvAccessPolicy::default().block_var("GITHUB_TOKEN");
+
+    assert!(policy.evaluate("CI").is_ok(), "unblocked name should pass");
+    assert!(
+        matches!(
+            policy.evaluate("GITHUB_TOKEN"),
+            Err(EnvPolicyViolation::Blocked { .. })
+        ),
+        "a blocklisted name must be blocked"
+    );
+}
+
+/// Give an exact block rule precedence over an exact allow rule.
+#[rstest]
+fn blocklist_overrides_allowlist() {
+    let policy = EnvAccessPolicy::default()
+        .allow_vars(["CI", "GITHUB_TOKEN"])
+        .block_var("GITHUB_TOKEN");
+
+    assert!(
+        policy.evaluate("CI").is_ok(),
+        "other allowed names should pass"
+    );
+    assert!(
+        matches!(
+            policy.evaluate("GITHUB_TOKEN"),
+            Err(EnvPolicyViolation::Blocked { .. })
+        ),
+        "a matching block rule must override the allow rule"
+    );
+}

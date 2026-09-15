@@ -130,6 +130,7 @@ manifest.yaml.hint.invalid_token = Das YAML-Token ist ungültig oder unerwartet.
 manifest.yaml.hint.escape = Maskieren Sie Backslashes oder entfernen Sie ungültige Escape-Sequenzen.
 manifest.env.missing = Eine erforderliche Umgebungsvariable ist nicht gesetzt.
 manifest.env.invalid_utf8 = Eine Umgebungsvariable enthält ungültiges UTF-8.
+manifest.env.blocked = Der Zugriff auf eine Umgebungsvariable ist gesperrt.
 manifest.vars.not_object = `vars` im Manifest muss eine Zuordnung bzw. ein Objekt sein.
 manifest.vars.reserved_name = Der `vars`-Schlüssel '{ $name }' im Manifest ist für eine integrierte Vorlagenfunktion reserviert; benennen Sie die Variable um.
 manifest.read_failed = Das Manifest unter { $path } konnte nicht gelesen werden.
@@ -427,3 +428,6 @@ example.errors_found = { $count ->
     [one] { $count } Fehler gefunden.
    *[other] { $count } Fehler gefunden.
 }
+
+cli.flag.env_allow_var.help = Für den env()-Helfer des Manifests erlaubte Umgebungsvariable.
+cli.flag.env_block_var.help = Für den env()-Helfer des Manifests gesperrte Umgebungsvariable.

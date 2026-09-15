@@ -103,6 +103,56 @@ json = false
 }
 
 #[rstest]
+fn project_environment_allowlist_cannot_widen_operator_policy() -> Result<()> {
+    let temp_project = tempdir().context("create temporary project directory")?;
+    let project_config = temp_project.path().join(".netsuke.toml");
+    fs::write(
+        &project_config,
+        r#"
+env_allow_var = ["PROJECT_SECRET"]
+env_block_var = ["PROJECT_BLOCKED"]
+"#,
+    )
+    .context("write project environment policy")?;
+
+    let merged = merge_in_project(
+        &["netsuke"],
+        temp_project.path(),
+        &[(
+            OsString::from("NETSUKE_ENV_ALLOW_VAR"),
+            OsString::from("OPERATOR_ALLOWED"),
+        )],
+    )?;
+
+    ensure!(
+        merged.env_allow_var == ["OPERATOR_ALLOWED"],
+        "project configuration must not widen the environment allowlist"
+    );
+    ensure!(
+        merged
+            .env_access_policy()
+            .evaluate("OPERATOR_ALLOWED")
+            .is_ok(),
+        "operator allowlist entry should remain effective"
+    );
+    ensure!(
+        merged
+            .env_access_policy()
+            .evaluate("PROJECT_SECRET")
+            .is_err(),
+        "project allowlist entry must not reach the policy"
+    );
+    ensure!(
+        merged
+            .env_access_policy()
+            .evaluate("PROJECT_BLOCKED")
+            .is_err(),
+        "project blocklist entry should remain cumulative"
+    );
+    Ok(())
+}
+
+#[rstest]
 #[case("-C")]
 #[case("--directory")]
 fn directory_flag_anchors_project_discovery_to_specified_dir(#[case] flag: &str) -> Result<()> {
@@ -187,8 +237,7 @@ color = "always"
     Ok(())
 }
 
-/// Assert that `default_targets` and `fetch_allow_scheme` append in explicit
-/// config → environment → CLI order through the generic merge pipeline.
+/// Assert that append-merged lists retain explicit config → environment → CLI order.
 fn assert_list_fields_appended(merged: &netsuke::cli::Cli) -> Result<()> {
     // Verify layer order for default_targets: config ["fmt", "lint"] -> env ["test"] -> CLI ["build"]
     ensure!(
@@ -233,6 +282,14 @@ fn assert_list_fields_appended(merged: &netsuke::cli::Cli) -> Result<()> {
         merged.fetch_allow_scheme == vec!["https", "http", "ftp"],
         "fetch_allow_scheme should append across layers"
     );
+    ensure!(
+        merged.env_allow_var == vec!["CONFIG_ALLOW", "ENV_ALLOW", "CLI_ALLOW"],
+        "env_allow_var should append across layers"
+    );
+    ensure!(
+        merged.env_block_var == vec!["CONFIG_BLOCK", "ENV_BLOCK", "CLI_BLOCK"],
+        "env_block_var should append across layers"
+    );
     Ok(())
 }
 
@@ -248,6 +305,8 @@ fn list_fields_append_across_explicit_config_env_and_cli() -> Result<()> {
         r#"
 default_targets = ["fmt", "lint"]
 fetch_allow_scheme = ["https"]
+env_allow_var = ["CONFIG_ALLOW"]
+env_block_var = ["CONFIG_BLOCK"]
 "#,
     )
     .context("write explicit config with lists")?;
@@ -259,6 +318,10 @@ fetch_allow_scheme = ["https"]
             "build",
             "--fetch-allow-scheme",
             "ftp",
+            "--env-allow-var",
+            "CLI_ALLOW",
+            "--env-block-var",
+            "CLI_BLOCK",
         ],
         temp_project.path(),
         &[
@@ -273,6 +336,14 @@ fetch_allow_scheme = ["https"]
             (
                 OsString::from("NETSUKE_FETCH_ALLOW_SCHEME"),
                 OsString::from("http"),
+            ),
+            (
+                OsString::from("NETSUKE_ENV_ALLOW_VAR"),
+                OsString::from("ENV_ALLOW"),
+            ),
+            (
+                OsString::from("NETSUKE_ENV_BLOCK_VAR"),
+                OsString::from("ENV_BLOCK"),
             ),
         ],
     )?;

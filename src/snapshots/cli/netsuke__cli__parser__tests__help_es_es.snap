@@ -41,6 +41,12 @@ Options:
       --fetch-allow-scheme <SCHEME>
           Esquemas de URL adicionales permitidos para el ayudante fetch.
 
+      --env-allow-var <VAR>
+          Variable de entorno permitida para el asistente env() del manifiesto.
+
+      --env-block-var <VAR>
+          Variable de entorno bloqueada para el asistente env() del manifiesto.
+
       --fetch-allow-host <HOST>
           Hostnames that are permitted when default deny is enabled.
           

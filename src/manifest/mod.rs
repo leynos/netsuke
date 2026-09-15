@@ -1,22 +1,11 @@
 //! Manifest loading helpers.
 //!
-//! This module parses a `Netsukefile` without relying on a global Jinja
-//! preprocessing pass. The YAML is parsed first and Jinja expressions are
-//! evaluated only within string values or the `foreach` and `when` keys. It
-//! exposes `env()` to read environment variables and `glob()` to expand
-//! filesystem patterns during template evaluation. Both helpers fail fast when
-//! inputs are missing or patterns are invalid.
-//!
-//! Consumers interact with the intermediate manifest through the re-exported
-//! [`ManifestValue`] and [`ManifestMap`] aliases. Diagnostics wrap manifest
-//! identifiers in [`ManifestName`] and YAML source strings in
-//! [`ManifestSource`] so callers pass domain-specific types instead of raw
-//! strings.
-//!
-//! The optional `vars` section must be a JSON object; lists and scalars fail
-//! with `manifest.vars.not_object`; non-string or composite keys fail during
-//! the initial `serde_saphyr` parse. Reserved `env`/`glob` names fail with
-//! `manifest.vars.reserved_name` because `MiniJinja` shares a global namespace.
+//! Parse `Netsukefile` YAML before evaluating Jinja in supported fields.
+//! Template helpers include environment reads and filesystem globs; malformed
+//! values fail fast. [`ManifestValue`], [`ManifestMap`], [`ManifestName`], and
+//! [`ManifestSource`] keep intermediate data and diagnostics domain-specific.
+//! The optional `vars` section must be an object and cannot shadow `env` or
+//! `glob`, because `MiniJinja` shares their global template namespace.
 
 use crate::{
     ast::{EMPTY_COMMAND_LIST_ERROR, NetsukeManifest},
@@ -29,6 +18,7 @@ use serde::de::Error as _;
 use std::{path::Path, sync::Arc};
 
 mod diagnostics;
+mod env_policy;
 mod expand;
 // `glob_paths` is the module's only boundary: every other item, including the
 // `GlobEntryResult` alias, stays module-private. Denying `unreachable_pub`
@@ -50,34 +40,26 @@ mod render;
 pub type ManifestValue = serde_json::Value;
 /// JSON object mapping string keys to manifest values.
 pub type ManifestMap = serde_json::Map<String, ManifestValue>;
-
+use self::{env_reader::env_var_with, jinja_macros::register_manifest_macros};
 pub use diagnostics::{
     ManifestError, ManifestName, ManifestSource, map_data_error, map_yaml_error,
 };
-pub use env_reader::{EnvReadError, EnvReader, process_env_reader};
+pub use env_policy::{EnvAccessPolicy, EnvPolicyViolation};
+pub use env_reader::{EnvReadError, EnvReader, ManifestEnvironment, process_env_reader};
 pub(crate) use expand::expand_foreach;
 pub use glob::glob_paths;
 pub use load_stage::ManifestLoadStage;
 use loading::{notify_stage, trace_expansion_report};
-pub use parse_with_config::from_str_with_env_and_config;
+pub use parse_with_config::{from_str_with_env_and_config, from_str_with_env_and_policy};
 pub(crate) use query::from_path_for_manifest_query;
 pub use render::render_manifest;
-
-use self::{env_reader::env_var_with, jinja_macros::register_manifest_macros};
 #[cfg(test)]
 use workspace::open_manifest_workspace;
 
 /// Receives normal-loader reports; manifest queries supply `None` to stay
 /// telemetry-free.
 type ExpansionReportObserver = fn(&expand::ExpansionReport);
-/// Parse a manifest string using Jinja for value templating.
-///
-/// The input YAML must be valid on its own. Jinja expressions are evaluated
-/// only inside recognised string fields and the `foreach` and `when` keys.
-///
-/// # Errors
-///
-/// Returns an error if YAML parsing or Jinja evaluation fails.
+
 /// Inputs to a manifest parse, bundled to keep the parameter list bounded.
 struct ManifestParse<'a> {
     /// Name reported in diagnostics.
@@ -86,6 +68,8 @@ struct ManifestParse<'a> {
     stdlib_registration: Option<StdlibRegistration>,
     /// Environment reader backing the `env()` helper.
     env_reader: &'a EnvReader,
+    /// Access policy evaluated before the `env()` reader runs.
+    env_access_policy: &'a EnvAccessPolicy,
     /// Manifest workspace root, anchoring relative `glob()` patterns; `None`
     /// falls back to the process current directory at the composition root.
     manifest_root: Option<camino::Utf8PathBuf>,
@@ -100,6 +84,7 @@ enum StdlibRegistration {
     /// The read-only stdlib used to inspect manifest discovery metadata.
     ManifestQuery,
 }
+
 /// Parse, render, and validate a manifest with injected loading boundaries.
 ///
 /// Render Jinja values, anchor relative `glob()` patterns at `manifest_root`,
@@ -113,6 +98,7 @@ fn from_str_named(
         name,
         stdlib_registration,
         env_reader,
+        env_access_policy,
         manifest_root,
         expansion_report_observer,
     } = parse;
@@ -128,8 +114,9 @@ fn from_str_named(
     jinja.set_undefined_behavior(UndefinedBehavior::Strict);
     // Expose custom helpers to templates.
     let reader = Arc::clone(env_reader);
+    let policy_for_env_lookup = env_access_policy.clone();
     jinja.add_function("env", move |var_name: String| {
-        env_var_with(&var_name, |key| reader(key))
+        env_var_with(&var_name, &policy_for_env_lookup, |key| reader(key))
     });
     let glob_base = glob::GlobBaseCache::new(manifest_root);
     jinja.add_function("glob", move |pattern: String| {
@@ -298,17 +285,8 @@ pub fn from_str(yaml: &str) -> Result<NetsukeManifest> {
 /// ));
 /// ```
 pub fn from_str_with_env(yaml: &str, env_reader: &EnvReader) -> Result<NetsukeManifest> {
-    from_str_named(
-        yaml,
-        ManifestParse {
-            name: &ManifestName::new("Netsukefile"),
-            stdlib_registration: None,
-            env_reader,
-            manifest_root: None,
-            expansion_report_observer: Some(trace_expansion_report),
-        },
-        &mut None,
-    )
+    let env_access_policy = EnvAccessPolicy::default();
+    from_str_with_env_and_policy(yaml, env_reader, &env_access_policy)
 }
 
 /// Load a [`NetsukeManifest`] from the given file path.
@@ -317,37 +295,46 @@ pub fn from_str_with_env(yaml: &str, env_reader: &EnvReader) -> Result<NetsukeMa
 ///
 /// Returns an error if the file cannot be read or the YAML fails to parse.
 pub fn from_path(path: impl AsRef<Path>) -> Result<NetsukeManifest> {
-    from_path_with_policy(path, NetworkPolicy::default(), None)
+    from_path_with_policy(
+        path,
+        NetworkPolicy::default(),
+        EnvAccessPolicy::default(),
+        None,
+    )
 }
 
-/// Load a [`NetsukeManifest`] from the given file path using an explicit
-/// network policy and an optional stage callback.
+/// Load a [`NetsukeManifest`] with explicit network and environment policies.
 ///
-/// The callback, when provided, is invoked in order for each manifest stage.
+/// Invoke `on_stage` in order for each manifest-loading stage when it is set.
 ///
 /// # Errors
 ///
-/// Returns an error if the file cannot be read or the YAML fails to parse.
+/// Return an error when the file cannot be read or rendered.
 ///
 /// # Examples
 ///
 /// ```rust,ignore
-/// use netsuke::manifest;
+/// use netsuke::manifest::{self, EnvAccessPolicy};
 /// use netsuke::stdlib::NetworkPolicy;
 ///
 /// let policy = NetworkPolicy::default();
-/// let manifest = manifest::from_path_with_policy("Netsukefile", policy, None);
+/// let manifest = manifest::from_path_with_policy(
+///     "Netsukefile", policy, EnvAccessPolicy::default(), None,
+/// );
 /// assert!(manifest.is_ok());
 /// ```
 pub fn from_path_with_policy(
     path: impl AsRef<Path>,
     policy: NetworkPolicy,
+    env_access_policy: EnvAccessPolicy,
     on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
 ) -> Result<NetsukeManifest> {
-    from_path_with_policy_and_env(path, policy, &process_env_reader(), on_stage)
+    let env_reader = process_env_reader();
+    let environment = ManifestEnvironment::new(&env_reader, env_access_policy);
+    from_path_with_policy_and_env(path, policy, &environment, on_stage)
 }
 
-/// Load a manifest with explicit network policy and environment reader.
+/// Load a manifest with explicit network policy and environment inputs.
 ///
 /// This adapter boundary lets callers supply deterministic manifest variables
 /// without mutating the process environment.
@@ -359,11 +346,8 @@ pub fn from_path_with_policy(
 /// # Examples
 ///
 /// ```
-/// use netsuke::{
-///     ast::Recipe,
-///     manifest::{EnvReadError, EnvReader, from_path_with_policy_and_env},
-///     stdlib::NetworkPolicy,
-/// };
+/// use netsuke::{ast::Recipe, manifest::{EnvAccessPolicy, EnvReadError, EnvReader,
+///     ManifestEnvironment, from_path_with_policy_and_env}, stdlib::NetworkPolicy};
 /// use std::{io::Write, sync::Arc};
 ///
 /// let mut file = tempfile::NamedTempFile::new().expect("create manifest");
@@ -377,7 +361,8 @@ pub fn from_path_with_policy(
 ///     _ => Err(EnvReadError::NotPresent),
 /// });
 /// let policy = NetworkPolicy::default().deny_all_hosts();
-/// let manifest = from_path_with_policy_and_env(file.path(), policy, &reader, None)
+/// let environment = ManifestEnvironment::new(&reader, EnvAccessPolicy::default());
+/// let manifest = from_path_with_policy_and_env(file.path(), policy, &environment, None)
 ///     .expect("load manifest without network access");
 ///
 /// assert!(matches!(
@@ -388,10 +373,10 @@ pub fn from_path_with_policy(
 pub fn from_path_with_policy_and_env(
     path: impl AsRef<Path>,
     policy: NetworkPolicy,
-    env_reader: &EnvReader,
+    environment: &ManifestEnvironment<'_>,
     on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
 ) -> Result<NetsukeManifest> {
-    query::from_path_with_policy_and_env(path, policy, env_reader, on_stage)
+    query::from_path_with_policy_and_env(path, policy, environment, on_stage)
 }
 
 mod env_reader;

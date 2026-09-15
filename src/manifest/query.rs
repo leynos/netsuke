@@ -6,9 +6,9 @@
 //! network requests, cache writes, or command execution.
 
 use super::{
-    EnvReader, ExpansionReportObserver, ManifestLoadStage, ManifestName, ManifestParse,
-    NetsukeManifest, StdlibConfig, StdlibRegistration, env_reader::disabled_env_reader,
-    from_str_named, loading::trace_expansion_report, notify_stage,
+    EnvAccessPolicy, ExpansionReportObserver, ManifestEnvironment, ManifestLoadStage, ManifestName,
+    ManifestParse, NetsukeManifest, StdlibConfig, StdlibRegistration,
+    env_reader::disabled_env_reader, from_str_named, loading::trace_expansion_report, notify_stage,
     workspace::open_manifest_workspace,
 };
 use crate::{localization, localization::keys, stdlib::NetworkPolicy};
@@ -26,17 +26,23 @@ pub(crate) fn from_path_for_manifest_query(
     on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
 ) -> Result<NetsukeManifest> {
     let env_reader = disabled_env_reader();
-    from_path_with_registration(path, &env_reader, on_stage, ManifestLoadMode::ManifestQuery)
+    let environment = ManifestEnvironment::new(&env_reader, EnvAccessPolicy::default());
+    from_path_with_registration(
+        &environment,
+        path,
+        on_stage,
+        ManifestLoadMode::ManifestQuery,
+    )
 }
 
 /// Load a manifest with the full stdlib and an explicit network policy.
 pub(super) fn from_path_with_policy_and_env(
     path: impl AsRef<Path>,
     policy: NetworkPolicy,
-    env_reader: &EnvReader,
+    environment: &ManifestEnvironment<'_>,
     on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
 ) -> Result<NetsukeManifest> {
-    from_path_with_registration(path, env_reader, on_stage, ManifestLoadMode::Full(policy))
+    from_path_with_registration(environment, path, on_stage, ManifestLoadMode::Full(policy))
 }
 
 /// Select the standard-library boundary for a manifest load.
@@ -49,8 +55,8 @@ enum ManifestLoadMode {
 
 /// Read a manifest and render it with the selected stdlib registration.
 fn from_path_with_registration(
+    environment: &ManifestEnvironment<'_>,
     path: impl AsRef<Path>,
-    env_reader: &EnvReader,
     mut on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
     mode: ManifestLoadMode,
 ) -> Result<NetsukeManifest> {
@@ -85,7 +91,8 @@ fn from_path_with_registration(
         ManifestParse {
             name: &name,
             stdlib_registration: Some(stdlib_registration),
-            env_reader,
+            env_reader: environment.reader(),
+            env_access_policy: environment.access_policy(),
             manifest_root,
             expansion_report_observer,
         },

@@ -9,6 +9,7 @@
 use camino::Utf8PathBuf;
 use netsuke::cli::Cli;
 use netsuke::localization::LocalizerGuard;
+use netsuke::manifest::EnvAccessPolicy;
 use netsuke::output_mode::OutputMode;
 use netsuke::output_prefs::OutputPrefs;
 use netsuke::runner::CommandEnv;
@@ -39,6 +40,8 @@ pub struct TestWorld {
     pub manifest: RefCell<Option<netsuke::ast::NetsukeManifest>>,
     /// Error text captured when manifest loading fails.
     pub manifest_error: Slot<String>,
+    /// Environment access policy applied while parsing the current manifest.
+    pub manifest_env_access_policy: RefCell<EnvAccessPolicy>,
 
     // IR state (non-Clone)
     /// Build graph derived from the active manifest.

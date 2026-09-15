@@ -130,6 +130,7 @@ manifest.yaml.hint.invalid_token = โทเคนของ YAML ไม่ถู
 manifest.yaml.hint.escape = โปรดหลีกอักขระแบ็กสแลช หรือลบลำดับหลีกที่ไม่ถูกต้องออก
 manifest.env.missing = ยังไม่ได้ตั้งค่าตัวแปรสภาพแวดล้อมที่จำเป็น
 manifest.env.invalid_utf8 = ตัวแปรสภาพแวดล้อมมี UTF-8 ที่ไม่ถูกต้อง
+manifest.env.blocked = การเข้าถึงตัวแปรสภาพแวดล้อมถูกบล็อก
 manifest.vars.not_object = `vars` ของไฟล์รายการต้องเป็นการจับคู่หรือวัตถุ
 manifest.vars.reserved_name = คีย์ `vars` '{ $name }' ของมานิเฟสต์ถูกสงวนไว้สำหรับฟังก์ชันช่วยเทมเพลตในตัว โปรดเปลี่ยนชื่อตัวแปร
 manifest.read_failed = อ่านไฟล์รายการที่ { $path } ไม่สำเร็จ
@@ -425,3 +426,6 @@ example.errors_found = { $count ->
     [0] ไม่พบข้อผิดพลาด
    *[other] พบข้อผิดพลาด { $count } รายการ
 }
+
+cli.flag.env_allow_var.help = ตัวแปรสภาพแวดล้อมที่ได้รับอนุญาตสำหรับตัวช่วย env() ของแมนิเฟสต์
+cli.flag.env_block_var.help = ตัวแปรสภาพแวดล้อมที่ถูกบล็อกสำหรับตัวช่วย env() ของแมนิเฟสต์

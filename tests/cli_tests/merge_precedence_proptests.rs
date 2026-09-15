@@ -48,6 +48,14 @@ fn build_generated_layer(
     let schemes = generated_schemes(kind, scheme_indices);
     if !schemes.is_empty() {
         layer.insert("fetch_allow_scheme".to_owned(), json!(schemes));
+        layer.insert(
+            "env_allow_var".to_owned(),
+            json!(generated_variable_names(kind, scheme_indices, "allow")),
+        );
+        layer.insert(
+            "env_block_var".to_owned(),
+            json!(generated_variable_names(kind, scheme_indices, "block")),
+        );
     }
     (!layer.is_empty()).then(|| Value::Object(layer))
 }
@@ -62,6 +70,14 @@ fn generated_schemes(kind: GeneratedLayer, indices: &[u8]) -> Vec<String> {
         .iter()
         .filter(|index| seen.insert(**index))
         .map(|index| format!("{}-scheme{}", kind.scheme_prefix(), index))
+        .collect()
+}
+
+/// Map generated indices to layer-unique environment variable names.
+fn generated_variable_names(kind: GeneratedLayer, indices: &[u8], policy: &str) -> Vec<String> {
+    generated_schemes(kind, indices)
+        .into_iter()
+        .map(|scheme| format!("{scheme}-{policy}-var"))
         .collect()
 }
 
@@ -122,5 +138,17 @@ proptest! {
             .chain(generated_schemes(GeneratedLayer::Cli, &cli_schemes))
             .collect::<Vec<_>>();
         prop_assert_eq!(merged.fetch_allow_scheme, expected_schemes);
+        let expected_allow_vars = generated_variable_names(GeneratedLayer::File, &file_schemes, "allow")
+            .into_iter()
+            .chain(generated_variable_names(GeneratedLayer::Environment, &env_schemes, "allow"))
+            .chain(generated_variable_names(GeneratedLayer::Cli, &cli_schemes, "allow"))
+            .collect::<Vec<_>>();
+        prop_assert_eq!(merged.env_allow_var, expected_allow_vars);
+        let expected_block_vars = generated_variable_names(GeneratedLayer::File, &file_schemes, "block")
+            .into_iter()
+            .chain(generated_variable_names(GeneratedLayer::Environment, &env_schemes, "block"))
+            .chain(generated_variable_names(GeneratedLayer::Cli, &cli_schemes, "block"))
+            .collect::<Vec<_>>();
+        prop_assert_eq!(merged.env_block_var, expected_block_vars);
     }
 }
