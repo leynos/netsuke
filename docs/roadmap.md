@@ -61,11 +61,11 @@ mixes capability delivery with verification and consistency work under a single
 hypothesis, and they are not being re-partitioned. New template
 standard-library work belongs in Phase 6, while repository and release
 hardening belong in Phases 8 and 9, property-based test work belongs in Phase
-10, and structured-command shell selection belongs in Phase 11. Phases 12 to
-14 own the remaining RFC 0001 implementation; Phase 15 keeps its deferred
-extensions separate from the initial delivery contract. Phases 16 to 19 live
-in the [composition roadmap](roadmap-composition.md), with local includes
-before local bundles and external acquisition only after both local layers.
+10, and structured-command shell selection belongs in Phase 11. Phases 12 to 14
+own the remaining RFC 0001 implementation; Phase 15 keeps its deferred
+extensions separate from the initial delivery contract. Phases 16 to 19 live in
+the [composition roadmap](roadmap-composition.md), with local includes before
+local bundles and external acquisition only after both local layers.
 
 The roadmap keeps user-facing product grammar separate from implementation
 detail. Public tasks name Netsuke capabilities first. Implementation adapters,
@@ -137,8 +137,8 @@ rewrite:
 - `3.14.10` is superseded, not completed: RFC 0001 structured commands replace
   the planned `exec.program`/`exec.args` surface. Phase 12 owns that delivery,
   and the old identifier remains reserved. Rich environment operations in
-  `3.14.9` are separately deferred behind `15.1.1`, not a prerequisite for
-  RFC 0001's exact per-block overlays.
+  `3.14.9` are separately deferred behind `15.1.1`, not a prerequisite for RFC
+  0001's exact per-block overlays.
 - `3.14.2` was completed after restoring coverage for top-level action
   expansion and complementary `command_available(...)` branches.
 - `3.14.4` is complete; `command_available(...)` now has the documented
@@ -369,8 +369,8 @@ and agents.
 
 Historical task `3.14.10` proposed `exec.program` and `exec.args`. RFC 0001
 supersedes that surface with structured `command` blocks; tasks 12.1.2 to
-12.3.4 carry its schema, argv, execution, and documentation requirements.
-The identifier remains reserved, not checked off as implemented.
+12.3.4 carry its schema, argv, execution, and documentation requirements. The
+identifier remains reserved, not checked off as implemented.
 
 - [ ] 3.14.11. Surface selected conditional actions without recipe `echo`.
   Requires 3.14.2 and 3.14.4. See
@@ -2339,7 +2339,8 @@ that all completed facilities use the same path and authority boundary.
     streams, and failure semantics; keep legacy commands, rule references,
     and shebang-based scripts distinct. Task 11.3.2 owns the complete runtime
     interaction matrix once its prerequisites land.
-  - See [RFC 0011 §§4-6 and 9](rfcs/0011-allow-listed-structured-command-shells.md).
+  - See
+    [RFC 0011 §§4-6 and 9](rfcs/0011-allow-listed-structured-command-shells.md).
   - Success: unit and behavioural tests prove identical implemented outer
     semantics for direct and named-shell blocks, while selected shell source
     receives only the rendered `invoke` text after fixed arguments.
@@ -2384,29 +2385,28 @@ recipes unchanged without learning a second quoting language.
 
 This phase begins the implementation of
 [RFC 0001](rfcs/0001-structured-command-blocks.md), including its
-[RFC 0009](rfcs/0009-structured-command-working-directories.md),
-[RFC 0010](rfcs/0010-runtime-bindings-and-secure-tempdirs.md), and
-[RFC 0011](rfcs/0011-allow-listed-structured-command-shells.md) amendments.
-Phases 12 to 14 cover the structured-command portion of issue `#593`; the
-[composition roadmap](roadmap-composition.md) owns includes and bundles.
-Phase 11 retains ownership of named-shell selection, with core integration
-at 11.3.1 and the complete runtime matrix at 11.3.2. Task 17.4.4 joins the
-execution and composition tracks without making either local foundation wait
-for the other's implementation.
+[RFC 0009](rfcs/0009-structured-command-working-directories.md), [RFC 0010](rfcs/0010-runtime-bindings-and-secure-tempdirs.md),
+and [RFC 0011](rfcs/0011-allow-listed-structured-command-shells.md)
+amendments. Phases 12 to 14 cover the structured-command portion of issue
+`#593`; the [composition roadmap](roadmap-composition.md) owns includes and
+bundles. Phase 11 retains ownership of named-shell selection, with core
+integration at 11.3.1 and the complete runtime matrix at 11.3.2. Task 17.4.4
+joins the execution and composition tracks without making either local
+foundation wait for the other's implementation.
 
 The RFCs remain proposed until their acceptance work completes. Task 12.1.1
-must settle their conflicting text before implementation; this roadmap does
-not silently choose a different contract. Intermediate slices must reject
+must settle their conflicting text before implementation; this roadmap does not
+silently choose a different contract. Intermediate slices must reject
 unsupported forms rather than ignore fields or fall back to legacy execution.
 Task 14.3.3 gates publication of the complete amended schema. Every delivery
-task includes unit and behavioural coverage, with properties and bounded
-proofs at pure boundaries and cross-feature suites at integration boundaries.
+task includes unit and behavioural coverage, with properties and bounded proofs
+at pure boundaries and cross-feature suites at integration boundaries.
 
 ### 12.1. Fix command structure before evaluating template values
 
 This step asks whether one closed command grammar can preserve source identity
-and argv boundaries through typed interpolation. Its outcome fixes the
-compiler contract before any new command can execute.
+and argv boundaries through typed interpolation. Its outcome fixes the compiler
+contract before any new command can execute.
 
 - [ ] 12.1.1. Consolidate and ratify the amended execution contract.
   - Reconcile RFC 0001 §§9 and 12.1, RFC 0009 §§5 and 11, and RFC 0011 §6.2
@@ -2535,9 +2535,9 @@ process state. It supplies the execution boundary needed by Ninja and streams.
 
 ### 12.3. Carry structured commands through build and generate workflows
 
-This step asks whether Ninja can invoke structured recipes without putting
-user arguments into a second shell command line. It also establishes whether
-saved Ninja manifests remain usable after the generating process exits.
+This step asks whether Ninja can invoke structured recipes without putting user
+arguments into a second shell command line. It also establishes whether saved
+Ninja manifests remain usable after the generating process exits.
 
 - [ ] 12.3.1. Add the versioned action-plan codec and hidden action runner.
   - Requires 12.2.4.
@@ -2633,14 +2633,17 @@ handles to individual commands, tee relays, and complete pipelines.
   - Requires 13.1.2.
   - Compare each fresh path identity with its retained handle and initial
     state, then compare every pair of handles, including inputs and outputs
-    across pipeline stages. Reject relative, symbolic-link, and hard-link
-    aliases wherever platform identity information supports them.
+    across pipeline stages. Reject aliases formed by alternate relative-path,
+    symbolic-link, and hard-link spellings wherever platform identity
+    information supports detection. Allow relative paths resolved against the
+    agreed path base.
   - Truncate and bind only the validated handles after all checks pass; never
     reopen by path. Start a fresh validation set for each sequential unit so
     a later unit can consume an earlier unit's output.
   - See [RFC 0001 §§12.1 and 12.4](rfcs/0001-structured-command-blocks.md).
-  - Success: alias and replacement fixtures fail before truncation or spawn,
-    while sequential output reuse succeeds; tests assert the complete open,
+  - Success: a valid relative-path fixture resolves against the agreed base,
+    while alias and replacement fixtures fail before truncation or spawn;
+    sequential output reuse succeeds, and tests assert the complete open,
     identity-check, truncate, bind, and close ordering.
 - [ ] 13.1.4. Add byte-preserving tee relays with owned failure handling.
   - Requires 13.1.3 and 12.3.2.
@@ -2713,8 +2716,8 @@ captures and temporary-directory preparation will extend.
 ### 13.3. Validate stream composition through real manifests
 
 This step asks whether the filesystem and process guarantees survive their
-interaction through Ninja rather than only isolated adapters. Its evidence
-sets the baseline for adding action-local state in phase 14.
+interaction through Ninja rather than only isolated adapters. Its evidence sets
+the baseline for adding action-local state in phase 14.
 
 - [ ] 13.3.1. Add the cross-platform stream and failure interaction suite.
   - Requires 12.3.3, 13.1.5, and 13.2.3.
