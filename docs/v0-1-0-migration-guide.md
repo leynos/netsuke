@@ -122,7 +122,6 @@ manifest parse boundary supplies this base, so glob expansion does not read or
 mutate process-global working-directory state. Callers of the Rust
 `glob_paths(pattern, base)` API can supply the same base explicitly.
 
-
 ## Opt into recursive workspace executable discovery
 
 Published beta3 recursively searched the workspace after a default `which` or
