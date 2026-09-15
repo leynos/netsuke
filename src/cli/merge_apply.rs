@@ -44,13 +44,9 @@ pub(super) fn apply_config(parsed: &Cli, config: CliConfig) -> Cli {
 /// Resolve effective build defaults from root and subcommand target settings.
 fn resolved_build_config(config: &CliConfig) -> BuildConfig {
     let mut build = config.cmds.build.clone();
-    if build.targets.is_empty() {
-        build.targets.clone_from(&config.default_targets);
-    } else if !config.default_targets.is_empty() {
-        let mut targets = config.default_targets.clone();
-        targets.extend(build.targets);
-        build.targets = targets;
-    }
+    let mut targets = config.default_targets.clone();
+    targets.extend(build.targets);
+    build.targets = targets;
     build
 }
 

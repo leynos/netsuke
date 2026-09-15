@@ -1,8 +1,6 @@
 //! Define manifest-budget limits and safe diagnostic vocabulary.
 
-use crate::{localization, localization::keys, manifest::jinja_macros::telemetry};
 use anyhow::{Result, ensure};
-use minijinja::{Error, ErrorKind};
 
 /// Default maximum `MiniJinja` instructions reserved for one evaluation.
 pub const DEFAULT_EVALUATION_FUEL: u64 = 1_000_000;
@@ -172,7 +170,8 @@ impl ManifestBudgetKind {
 }
 
 /// Describe one deterministic resource-budget exhaustion.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+#[error("manifest resource budget exhausted at {stage:?} (limit {limit})")]
 pub(crate) struct ManifestBudgetExhaustion {
     /// Identifies the exhausted counter.
     pub(crate) kind: ManifestBudgetKind,
@@ -180,18 +179,4 @@ pub(crate) struct ManifestBudgetExhaustion {
     pub(crate) stage: ManifestBudgetStage,
     /// Supplies the configured limit without manifest-controlled data.
     pub(crate) limit: u64,
-}
-
-impl ManifestBudgetExhaustion {
-    /// Convert the exhaustion into the localized `MiniJinja` diagnostic.
-    pub(crate) fn into_error(self, kind: ErrorKind) -> Error {
-        telemetry::record_budget_exhaustion(self.stage.as_str(), self.kind.as_str());
-        Error::new(
-            kind,
-            localization::message(keys::MANIFEST_BUDGET_EXCEEDED)
-                .with_arg("stage", self.stage.as_str())
-                .with_arg("limit", self.limit)
-                .to_string(),
-        )
-    }
 }

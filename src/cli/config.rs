@@ -12,6 +12,9 @@ use std::{fmt, str::FromStr};
 
 #[path = "manifest_budget_config.rs"]
 mod manifest_budget_config;
+#[path = "no_input.rs"]
+mod no_input;
+pub use no_input::NoInput;
 #[path = "policy_definitions.rs"]
 pub(super) mod policy_definitions;
 use manifest_budget_config::{
@@ -24,25 +27,6 @@ pub(super) use policy_definitions::{
     PROGRESS_POLICY_DEFINITIONS,
 };
 use policy_definitions::{definition_for, parse_policy};
-/// Required non-interactive execution setting.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct NoInput(bool);
-
-impl NoInput {
-    /// Return whether interactive input is disabled.
-    #[must_use]
-    pub const fn is_enabled(self) -> bool {
-        self.0
-    }
-}
-
-impl Default for NoInput {
-    fn default() -> Self {
-        Self(true)
-    }
-}
-
 /// Colour-output policy accepted by layered configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]

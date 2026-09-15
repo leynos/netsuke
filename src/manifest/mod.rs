@@ -29,14 +29,14 @@ use serde::de::Error as _;
 use std::{path::Path, sync::Arc};
 
 mod budget;
+pub(crate) mod budget_adapter;
+use budget_adapter::{BudgetErrorExt, from_str_named};
 mod diagnostics;
 mod expand;
 // `glob_paths` is the module's only boundary: every other item, including the
 // `GlobEntryResult` alias, stays module-private. Denying `unreachable_pub`
-// here rejects `pub` items that are still unreachable from the crate root, so
-// the boundary cannot regress silently. The `glob_paths` re-export below makes
-// that one item genuinely reachable and therefore exempt; anything else
-// widened to `pub` fails the build.
+// here rejects `pub` items unreachable from the crate root. The `glob_paths`
+// re-export makes that item reachable and exempt; other `pub` items fail.
 #[deny(unreachable_pub)]
 mod glob;
 mod hints;
@@ -110,7 +110,7 @@ enum StdlibRegistration {
 ///
 /// Render Jinja values, anchor relative `glob()` patterns at `manifest_root`,
 /// notify the optional expansion observer, and validate rendered recipes.
-fn from_str_named(
+fn evaluate_manifest(
     yaml: &str,
     parse: ManifestParse<'_>,
     on_stage: &mut Option<&mut dyn FnMut(ManifestLoadStage)>,

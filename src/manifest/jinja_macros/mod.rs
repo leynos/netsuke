@@ -9,12 +9,15 @@ use super::ManifestValue;
 use crate::ast::MacroDefinition;
 use crate::localization::{self, keys};
 use crate::manifest::budget::{ManifestBudget, ManifestBudgetStage};
+use crate::manifest::budget_adapter::BudgetErrorExt;
 use anyhow::{Context, Result};
 use minijinja::{Environment, Error, ErrorKind, value::Value};
 use serde::Serialize;
 
 mod call;
+mod expression;
 mod invocation;
+pub(crate) use expression::{ExpressionEvaluation, evaluate_with_state};
 pub(crate) mod telemetry;
 
 // Only the manifest test suite reaches the helper through the parent path;
@@ -56,23 +59,18 @@ pub(crate) fn evaluate_when_expression(
     budget
         .charge_source(expression.len(), ManifestBudgetStage::Source)
         .map_err(|exhaustion| exhaustion.into_error(ErrorKind::InvalidOperation))?;
-    let fuel = budget
-        .reserve_fuel(ManifestBudgetStage::When)
-        .map_err(|exhaustion| exhaustion.into_error(ErrorKind::OutOfFuel))?;
-    let mut bounded_env = env.clone();
-    bounded_env.set_fuel(Some(fuel));
-    let Ok(compiled) = bounded_env.compile_expression(expression) else {
+    if env.compile_expression(expression).is_err() {
         return Ok(None);
-    };
-    let evaluation = compiled.eval(context).map_err(|error| {
-        if error.kind() == ErrorKind::OutOfFuel {
-            budget
-                .fuel_exhaustion(ManifestBudgetStage::When)
-                .into_error(ErrorKind::OutOfFuel)
-        } else {
-            error
-        }
-    });
+    }
+    let evaluation = evaluate_with_state(
+        env,
+        budget,
+        &ExpressionEvaluation {
+            expression,
+            context,
+            stage: ManifestBudgetStage::When,
+        },
+    );
     match evaluation {
         Err(error) if is_budget_error(&error) => Err(error.into()),
         result => classify_query_evaluation(result)
@@ -359,7 +357,12 @@ fn render_template_at<T: Serialize + ?Sized>(
                 if let Some((_, unused)) = captured.state().fuel_levels() {
                     budget.refund_unused_fuel(unused);
                 }
-                writer.into_string()
+                writer.into_string().map_err(|_| {
+                    Error::new(
+                        ErrorKind::BadSerialization,
+                        "MiniJinja emitted non-UTF-8 output",
+                    )
+                })
             }
             Err(error) => writer.exhaustion().map_or_else(
                 || {

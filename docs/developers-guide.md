@@ -2270,6 +2270,9 @@ That slice is a maintained boundary, not an accident:
   behaviour, including `Cli::with_default_command()`. Runtime behaviour on
   `Cli` belongs in `src/cli/preferences.rs`, and the localisation-aware parsing
   entry point belongs in `src/cli/parser.rs`.
+- `src/cli/no_input.rs` owns the existing `NoInput` configuration value;
+  `src/cli/config.rs` re-exports it so the public configuration shape and the
+  build-script schema remain unchanged.
 - `src/cli/validation.rs` holds the shared limits and error constructor that
   `src/cli/config.rs` needs, so neither file has to reach up into
   `src/cli/mod.rs`.
@@ -2290,6 +2293,14 @@ module publicly.
 
 A dependency added outside the slice surfaces as a build-script compile error.
 Prefer moving the new code into a sibling module over widening the slice.
+
+Manifest resource-budget code remains on the runtime side of this boundary.
+`src/cli/command.rs` and `src/cli/manifest_budget_config.rs` contribute the CLI
+schema, defaults, and validation needed by the build script's generated help
+artefacts. The runtime `ManifestBudgetLimits`, `ManifestBudget`, and
+manifest-loading adapters are library code and are deliberately not imported by
+`build.rs`; adding a runtime budget dependency must not widen the build
+script's module slice.
 
 `tests/build_module_slice_ui_tests.rs` makes that boundary a direct-`rustc`
 contract. Its fixtures compile the production module paths selected by
@@ -5813,38 +5824,84 @@ the caller's document; values are handed to `Value::from_serialize` by
 reference. Keep that shape when editing the helper — cloning the whole object
 reintroduces a deep copy of every nested value on each manifest parse.
 
+### Shared manifest resource budget
+
+`ManifestBudgetLimits` is the configuration value object for the manifest
+resource contract. `ManifestBudget` creates one set of runtime counters for a
+single load and is shared by manifest expansion, expression evaluation, macro
+invocation, and field rendering. The limits cover per-evaluation MiniJinja
+fuel, aggregate manifest fuel, rendered bytes per value and per manifest,
+template source bytes, `foreach` cardinality, and aggregate expanded entries.
+Each evaluation reserves at most the per-evaluation fuel limit; successful
+expressions, macro calls, and renders refund unused fuel to the aggregate
+manifest allowance. The budget is intentionally manifest-local: callers create
+it at the loading boundary and pass the same handle through every stage.
+
+Budget-aware entry points include the `*_with_limits` manifest loaders,
+`expand_foreach_with_budget`, `render_manifest_with_budget`, and
+`render_manifest_for_manifest_query_with_budget`. The ordinary public wrappers
+construct the safe default limits. Build and manifest-query loading use the
+same accounting path. Query loading selects `ManifestLoadMode::ManifestQuery`;
+that mode suppresses budget-exhaustion telemetry at the loading boundary and
+omits the expansion-report observer, while other instrumentation remains owned
+by the boundaries that invoke it.
+
+The runner boundary promotes a budget exhaustion to the typed
+`RunnerError::ManifestBudgetExceeded` variant. Its localized terminal
+diagnostic carries only the fixed stage and numeric limit; JSON serialization
+uses `netsuke::runner::manifest_budget_exceeded`, and no raw error chain is
+exposed.
+
+Configuration reconciliation is owned by the CLI discovery and merge layers.
+Defaults, trusted operator configuration, environment, and explicit CLI values
+establish the effective ceilings. The project file and every file in its
+`extends` chain are treated as project-controlled narrowing requests, so they
+may lower an established value but may not raise it. Malformed, non-positive,
+or unrepresentable project values remain configuration errors rather than being
+discarded. Keep this monotonic rule at the configuration seam; the manifest
+package consumes the already-resolved `ManifestBudgetLimits` and does not
+decide configuration provenance.
+
 ### Template rendering and macro registration
 
-`manifest::jinja_macros::render_template` is the shared rendering boundary for
-manifest strings. It prepends the import declarations registered in the
-MiniJinja environment, then renders the caller's template and context. This
-keeps manifest-defined macros available to target, rule, and variable
-rendering, including caller-block context; use the higher-level
+`manifest::jinja_macros::render_template_with_budget` is the runtime rendering
+boundary for manifest strings, with the private `render_template_at` helper
+carrying the request and stage details. It prepends the import declarations
+registered in the MiniJinja environment, then renders the caller's template and
+context. This keeps manifest-defined macros available to target, rule, and
+variable rendering, including caller-block context; use the higher-level
 `manifest::render_manifest` entry point unless a lower-level expression must be
-rendered directly.
+rendered directly. The `#[cfg(test)] render_template` wrapper exists only for
+tests and supplies a fresh default budget.
 
 `register_manifest_macros` parses the manifest `macros` section and delegates
 each definition to `register_macro`. Registration validates the compiled
-template and installs both the import declaration used by `render_template` and
-the fallback function built by `make_macro_fn` for compiled expressions.
-`make_macro_fn` captures a macro reference and resolves it against the active
-MiniJinja state on each invocation, so it must not be treated as a reusable
-global template cache. Errors remain at the manifest boundary and retain their
-localized failure category.
+template and installs both the import declaration used by
+`render_template_with_budget` and the fallback function built by
+`make_macro_fn` for compiled expressions. `make_macro_fn` captures a macro
+reference and resolves it against the active MiniJinja state on each
+invocation, so it must not be treated as a reusable global template cache.
+Errors remain at the manifest boundary and retain their localized failure
+category.
 
 ### Manifest telemetry: template render and macro invocation
 
 `src/manifest/jinja_macros/telemetry.rs` instruments the two boundaries above
 with `tracing` spans and `metrics` counters/histograms, kept out of the
-evaluation code so `render_template` and the macro-invocation callback stay
-plain queries. See [ADR-009](adr-009-bounded-redacted-manifest-telemetry.md)
+evaluation code so the runtime render and macro-invocation callbacks stay plain
+queries. Budget exhaustion is a domain result containing only its
+closed-vocabulary kind, stage, and numeric limit. The Jinja adapter maps that
+result to a localized error; the normal full-load boundary records the bounded
+exhaustion metric, while manifest-query loading suppresses this
+budget-exhaustion metric. Other instrumentation remains owned by the boundaries
+that invoke it. See [ADR-009](adr-009-bounded-redacted-manifest-telemetry.md)
 for the decision to separate observability from evaluation this way, and for
 the alternatives it rejected.
 
 There are two independent boundaries, because template rendering and macro
 invocation are different operations with different failure shapes:
 
-- **Template render.** `render_template` composes
+- **Template render.** `render_template_with_budget` composes
   `telemetry::instrument_template_render` around the render. It opens the
   `manifest.template.render` span, increments the
   `netsuke_manifest_template_renders_total` counter, and records the
@@ -5885,7 +5942,7 @@ description exactly once, guarded by `std::sync::Once`. Neither is called from
 a query function: `describe_macro_metrics` runs when `make_macro_fn` builds a
 macro's registration, which is setup rather than evaluation, so the guard never
 sits on the invocation hot path; `describe_render_metrics` runs inside
-`instrument_template_render`, so `render_template` names only the
+`instrument_template_render`, so `render_template_with_budget` names only the
 instrumentation boundary it composes with and never reaches for the metric
 registry itself.
 
@@ -5909,9 +5966,11 @@ tests.
 
 #### expand_foreach
 
-`src/manifest/expand.rs` exposes
-`expand_foreach(doc: &mut ManifestValue, env: &Environment) ->
-Result<ExpansionReport>`.
+`src/manifest/expand/` exposes the budget-aware
+`expand_foreach_with_budget(doc: &mut ManifestValue, env: &Environment,
+budget: &ManifestBudget) -> Result<ExpansionReport>`
+boundary. The `expand_foreach` convenience wrapper supplies a fresh default
+budget for callers that do not need to share accounting.
 
 **Purpose:** expands `foreach`/`when` directives in both `targets` and
 `actions` top-level arrays before the manifest is deserialized into the AST.
@@ -5957,6 +6016,8 @@ reaching telemetry.
 - Non-object entries and entries without `foreach` are passed through
   unchanged.
 - Action entries retain their implicit `phony: true` default after expansion.
+- Consumes `foreach` iterators lazily and charges the shared cardinality and
+  expanded-entry limits before cloning or retaining each generated entry.
 - Filtered entries are absent before IR generation, Ninja generation, and
   process execution. Build-time branching belongs inside the recipe command or
   script until a separately designed runtime-condition feature exists.
@@ -5971,9 +6032,9 @@ reaching telemetry.
   `netsuke_manifest_omitted_filtered_entries_total`. These counters have no
   labels and fixed cardinality: their values are aggregate counts, never
   manifest-controlled values. Manifest-query loading supplies no report
-  observer and explicitly suppresses both expansion tracing and these metrics,
-  so it remains telemetry-free. Keep this observer boundary in the loading
-  orchestrator rather than adding side effects to `expand_foreach`.
+  observer and explicitly suppresses both expansion tracing and these metrics.
+  Keep this observer boundary in the loading orchestrator rather than adding
+  side effects to `expand_foreach`.
 
 ### Executable availability predicate
 

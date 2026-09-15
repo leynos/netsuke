@@ -290,60 +290,6 @@ fn project_layer_scan_normalizes_only_the_project_key() -> Result<()> {
     Ok(())
 }
 
-/// Project-owned inherited configuration must not widen a manifest budget.
-#[test]
-fn project_extends_chain_contributes_only_narrower_budget_limits() -> Result<()> {
-    let temp = tempdir().context("create project directory")?;
-    test_support::fs::write(temp.path().join("base.toml"), "manifest_fuel = 17\n")
-        .context("write inherited budget")?;
-    test_support::fs::write(
-        temp.path().join(".netsuke.toml"),
-        "extends = \"base.toml\"\nmanifest_fuel = 19\n",
-    )
-    .context("write project configuration")?;
-
-    let cli = Cli {
-        directory: Some(utf8_directory(temp.path())?),
-        ..Cli::default()
-    };
-    let discovered = discover_file_layers(&cli, &TestEnv::default()).into_layers();
-    ensure!(discovered.first_error().is_none(), "project chain must load");
-    let (_, _, _, request) = discovered.into_parts();
-
-    assert_eq!(request.manifest_fuel, Some(17));
-    Ok(())
-}
-
-/// Malformed project budget values must remain for the schema validator.
-#[test]
-fn malformed_project_budget_value_is_retained_for_validation() -> Result<()> {
-    let temp = tempdir().context("create project directory")?;
-    test_support::fs::write(
-        temp.path().join(".netsuke.toml"),
-        "manifest_fuel = \"not-a-number\"\n",
-    )
-    .context("write malformed project configuration")?;
-
-    let cli = Cli {
-        directory: Some(utf8_directory(temp.path())?),
-        ..Cli::default()
-    };
-    let discovered = discover_file_layers(&cli, &TestEnv::default()).into_layers();
-    ensure!(discovered.first_error().is_some(), "malformed budget must fail");
-    let (retained, _, _, request) = discovered.into_parts();
-    let value = retained
-        .into_iter()
-        .next()
-        .context("retain malformed project layer")?
-        .into_value();
-
-    assert_eq!(request.manifest_fuel, None);
-    value
-        .get("manifest_fuel")
-        .context("schema validation must receive the malformed project budget value")?;
-    Ok(())
-}
-
 /// Canonicalization failure falls back to literal comparison without failing
 /// discovery.
 #[test]

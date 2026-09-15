@@ -18,13 +18,13 @@ cli.flag.fetch_block_host.help = Ainmean òstairean a thèid a bhacadh an-còmhn
 cli.flag.fetch_default_deny.help = Diùlt a h-uile òstair mar bhun-roghainn; na ceadaich ach an liosta a chaidh ainmeachadh.
 cli.flag.trust_project_fetch_policy.help = Leig le rèiteachadh a’ phròiseict ceadan poileasaidh fetch a leudachadh.
 
-cli.flag.manifest_evaluation_fuel.help = Limit MiniJinja instructions for each manifest evaluation.
-cli.flag.manifest_fuel.help = Limit MiniJinja instructions across one manifest.
-cli.flag.manifest_rendered_value_bytes.help = Limit bytes rendered into one manifest value.
-cli.flag.manifest_rendered_manifest_bytes.help = Limit total bytes rendered across one manifest.
-cli.flag.manifest_source_bytes.help = Limit template and macro source bytes consumed per manifest.
-cli.flag.manifest_foreach_cardinality.help = Limit values processed by one foreach expansion.
-cli.flag.manifest_expanded_entries.help = Limit targets and actions expanded from one manifest.
+cli.flag.manifest_evaluation_fuel.help = Cuir crìoch air stiùiridhean MiniJinja airson gach measadh air foirm-liosta.
+cli.flag.manifest_fuel.help = Cuir crìoch air stiùiridhean MiniJinja thar aon fhoirm-liosta.
+cli.flag.manifest_rendered_value_bytes.help = Cuir crìoch air na beitean a chuirear ann an aon luach foirm-liosta.
+cli.flag.manifest_rendered_manifest_bytes.help = Cuir crìoch air na beitean iomlan a chuirear thar aon fhoirm-liosta.
+cli.flag.manifest_source_bytes.help = Cuir crìoch air beitean tùs nan teamplaidean agus macros a thèid an cleachdadh gach foirm-liosta.
+cli.flag.manifest_foreach_cardinality.help = Cuir crìoch air na luachan a làimhsicheas aon leudachadh foreach.
+cli.flag.manifest_expanded_entries.help = Cuir crìoch air na targaidean agus gnìomhan a leudaichear à aon fhoirm-liosta.
 cli.flag.json.help = Cuir a-mach JSON a leughas inneal.
 cli.flag.no_input.help = Na leugh cur-a-steach eadar-ghnìomhach idir.
 cli.flag.color.help = Poileasaidh an às-chuir dhathte (auto, always, never).
@@ -440,4 +440,4 @@ example.errors_found = { $count ->
     [few] Chaidh { $count } mearachdan a lorg.
    *[other] Chaidh { $count } mearachd a lorg.
 }
-manifest.budget.exceeded = Manifest resource budget exhausted during { $stage } after reaching { $limit }.
+manifest.budget.exceeded = Dh’fhalbh buidseat ghoireasan na foirm-liosta rè { $stage } às dèidh { $limit } a ruigsinn.

@@ -1,8 +1,9 @@
-//! Preserve primary-project provenance and quarantine fetch-policy fields.
+//! Preserve project-chain provenance and quarantine fetch-policy and budget fields.
 //!
 //! Validates each untrusted request before the generic merge removes it from
 //! the project layer, preserving configuration errors rather than treating
-//! malformed policy values as absent values.
+//! malformed policy values as absent values. Fetch grants are primary-scoped;
+//! budget restrictions apply throughout an automatically discovered project chain.
 
 use ortho_config::{MergeLayer, OrthoError, OrthoResult};
 use serde::de::DeserializeOwned;
@@ -11,9 +12,9 @@ use std::path::Path;
 use std::sync::Arc;
 
 use super::super::validation::validation_error;
-use super::{ProjectFetchPolicyRequest, ProjectManifestBudgetRequest};
 use super::json::json_from_value;
 use super::paths::{PathNormalizer, comparison_key, project_scope_file};
+use super::{ProjectFetchPolicyRequest, ProjectManifestBudgetRequest};
 
 /// Identify whether a loaded file is the primary project configuration.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -30,6 +31,8 @@ pub(super) struct ScopedFileLayer {
     pub(super) layer: MergeLayer<'static>,
     /// Authority inherited from the root that loaded this occurrence.
     scope: FileScope,
+    /// Whether this occurrence belongs to the automatically discovered project chain.
+    project_budget: bool,
 }
 
 impl ScopedFileLayer {
@@ -38,6 +41,7 @@ impl ScopedFileLayer {
         Self {
             layer,
             scope: FileScope::Operator,
+            project_budget: false,
         }
     }
 }
@@ -57,6 +61,24 @@ pub(super) fn scope_primary_project_layer(
             } else {
                 FileScope::Operator
             },
+            project_budget: false,
+        })
+        .collect()
+}
+
+/// Retain budget authority across one automatically discovered project chain.
+///
+/// Chain boundaries are available when discovery returns its first root or
+/// appends the project root. Fetch-policy quarantine remains primary-only.
+pub(super) fn scope_project_chain(
+    layers: Vec<MergeLayer<'static>>,
+    project_index: usize,
+) -> Vec<ScopedFileLayer> {
+    scope_primary_project_layer(layers, project_index)
+        .into_iter()
+        .map(|mut layer| {
+            layer.project_budget = true;
+            layer
         })
         .collect()
 }
@@ -106,17 +128,24 @@ pub(super) fn retain_layers_and_resolve_json(layers: Vec<ScopedFileLayer>) -> Re
         json_preference: super::Cli::default().json,
         ..ResolvedFileLayers::default()
     };
-    for ScopedFileLayer { layer, scope } in layers {
+    for ScopedFileLayer {
+        layer,
+        scope,
+        project_budget,
+    } in layers
+    {
         let path = layer.path().map(ToOwned::to_owned);
         let mut value = layer.into_value();
         if let Some(json) = json_from_value(&value) {
             resolved.json_preference = json;
         }
-        if scope == FileScope::Project {
+        if project_budget {
             match take_project_manifest_budget_request(&mut value) {
                 Ok(request) => resolved.project_budget_request.narrow_with(&request),
                 Err(error) => resolved.errors.push(error),
             }
+        }
+        if scope == FileScope::Project {
             match take_project_fetch_policy_request(&mut value) {
                 Ok(request) => resolved.project_request = Some(request),
                 Err(error) => resolved.errors.push(error),
@@ -140,7 +169,10 @@ fn take_project_manifest_budget_request(
         evaluation_fuel: parse_project_policy_field(fields, "manifest_evaluation_fuel")?,
         manifest_fuel: parse_project_policy_field(fields, "manifest_fuel")?,
         rendered_value_bytes: parse_project_policy_field(fields, "manifest_rendered_value_bytes")?,
-        rendered_manifest_bytes: parse_project_policy_field(fields, "manifest_rendered_manifest_bytes")?,
+        rendered_manifest_bytes: parse_project_policy_field(
+            fields,
+            "manifest_rendered_manifest_bytes",
+        )?,
         source_bytes: parse_project_policy_field(fields, "manifest_source_bytes")?,
         foreach_cardinality: parse_project_policy_field(fields, "manifest_foreach_cardinality")?,
         expanded_entries: parse_project_policy_field(fields, "manifest_expanded_entries")?,
@@ -154,7 +186,10 @@ fn take_project_manifest_budget_request(
         "manifest_foreach_cardinality",
         "manifest_expanded_entries",
     ] {
-        if fields.get(field).is_some_and(|value| value.as_u64() == Some(0)) {
+        if fields
+            .get(field)
+            .is_some_and(|candidate| candidate.as_u64() == Some(0))
+        {
             return Err(validation_error(field, "must be greater than zero"));
         }
     }

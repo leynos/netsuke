@@ -8,10 +8,13 @@ use metrics_util::{
     MetricKind,
     debugging::{DebugValue, DebuggingRecorder},
 };
+use rstest::{fixture, rstest};
+use std::fmt::Write as _;
 use tempfile::tempdir;
 use test_support::fs as test_fs;
 
 /// Return deliberately small limits while preserving room for fixture YAML.
+#[fixture]
 fn small_limits() -> ManifestBudgetLimits {
     ManifestBudgetLimits {
         evaluation_fuel: 64,
@@ -24,27 +27,27 @@ fn small_limits() -> ManifestBudgetLimits {
     }
 }
 
-#[test]
-fn rendered_value_at_limit_succeeds() -> Result<()> {
+#[rstest]
+fn rendered_value_at_limit_succeeds(small_limits: ManifestBudgetLimits) -> Result<()> {
     let yaml = concat!(
         "netsuke_version: 1.0.0\n",
         "targets:\n",
         "  - name: exact\n",
         "    command: '{{ \"x\" * 16 }}'\n",
     );
-    from_str_with_limits(yaml, small_limits())?;
+    from_str_with_limits(yaml, small_limits)?;
     Ok(())
 }
 
-#[test]
-fn rendered_value_one_byte_over_fails_without_output_growth() {
+#[rstest]
+fn rendered_value_one_byte_over_fails_without_output_growth(small_limits: ManifestBudgetLimits) {
     let yaml = concat!(
         "netsuke_version: 1.0.0\n",
         "targets:\n",
         "  - name: over\n",
         "    command: '{{ \"x\" * 17 }}'\n",
     );
-    let error = from_str_with_limits(yaml, small_limits()).expect_err("value exceeds budget");
+    let error = from_str_with_limits(yaml, small_limits).expect_err("value exceeds budget");
     assert!(
         format!("{error:#}").contains("resource budget exhausted"),
         "unexpected error: {error:#}"
@@ -52,8 +55,10 @@ fn rendered_value_one_byte_over_fails_without_output_growth() {
     assert!(!format!("{error:#}").contains("xxxxxxxxxxxxxxxxx"));
 }
 
-#[test]
-fn aggregate_rendered_bytes_allow_the_exact_limit_and_reject_one_more() -> Result<()> {
+#[rstest]
+fn aggregate_rendered_bytes_allow_the_exact_limit_and_reject_one_more(
+    small_limits: ManifestBudgetLimits,
+) -> Result<()> {
     let exact = concat!(
         "netsuke_version: 1.0.0\n",
         "targets:\n",
@@ -64,7 +69,7 @@ fn aggregate_rendered_bytes_allow_the_exact_limit_and_reject_one_more() -> Resul
     );
     let limits = ManifestBudgetLimits {
         rendered_manifest_bytes: 34,
-        ..small_limits()
+        ..small_limits
     };
     from_str_with_limits(exact, limits)?;
 
@@ -87,8 +92,8 @@ fn aggregate_rendered_bytes_allow_the_exact_limit_and_reject_one_more() -> Resul
     Ok(())
 }
 
-#[test]
-fn foreach_stops_at_the_configured_cardinality() {
+#[rstest]
+fn foreach_stops_at_the_configured_cardinality(small_limits: ManifestBudgetLimits) {
     let yaml = concat!(
         "netsuke_version: 1.0.0\n",
         "targets:\n",
@@ -96,7 +101,7 @@ fn foreach_stops_at_the_configured_cardinality() {
         "    foreach: [one, two, three]\n",
         "    command: echo ok\n",
     );
-    let error = from_str_with_limits(yaml, small_limits()).expect_err("foreach exceeds budget");
+    let error = from_str_with_limits(yaml, small_limits).expect_err("foreach exceeds budget");
     assert!(
         format!("{error:#}").contains("resource budget exhausted"),
         "unexpected error: {error:#}"
@@ -104,8 +109,10 @@ fn foreach_stops_at_the_configured_cardinality() {
     assert!(!format!("{error:#}").contains("three"));
 }
 
-#[test]
-fn foreach_at_the_configured_cardinality_succeeds() -> Result<()> {
+#[rstest]
+fn foreach_at_the_configured_cardinality_succeeds(
+    small_limits: ManifestBudgetLimits,
+) -> Result<()> {
     let yaml = concat!(
         "netsuke_version: 1.0.0\n",
         "targets:\n",
@@ -113,12 +120,14 @@ fn foreach_at_the_configured_cardinality_succeeds() -> Result<()> {
         "    foreach: [one, two]\n",
         "    command: echo ok\n",
     );
-    from_str_with_limits(yaml, small_limits())?;
+    from_str_with_limits(yaml, small_limits)?;
     Ok(())
 }
 
-#[test]
-fn aggregate_expansion_allows_the_exact_limit_and_rejects_one_more() -> Result<()> {
+#[rstest]
+fn aggregate_expansion_allows_the_exact_limit_and_rejects_one_more(
+    small_limits: ManifestBudgetLimits,
+) -> Result<()> {
     let exact = concat!(
         "netsuke_version: 1.0.0\n",
         "targets:\n",
@@ -129,7 +138,7 @@ fn aggregate_expansion_allows_the_exact_limit_and_rejects_one_more() -> Result<(
     let limits = ManifestBudgetLimits {
         foreach_cardinality: 3,
         expanded_entries: 2,
-        ..small_limits()
+        ..small_limits
     };
     from_str_with_limits(exact, limits)?;
 
@@ -149,15 +158,17 @@ fn aggregate_expansion_allows_the_exact_limit_and_rejects_one_more() -> Result<(
     Ok(())
 }
 
-#[test]
-fn compact_loop_runs_out_of_fuel_before_allocating_requested_output() {
+#[rstest]
+fn compact_loop_runs_out_of_fuel_before_allocating_requested_output(
+    small_limits: ManifestBudgetLimits,
+) {
     let yaml = concat!(
         "netsuke_version: 1.0.0\n",
         "targets:\n",
         "  - name: loop\n",
         "    command: '{% for _ in range(50000) %}x{% endfor %}'\n",
     );
-    let error = from_str_with_limits(yaml, small_limits()).expect_err("loop exceeds fuel");
+    let error = from_str_with_limits(yaml, small_limits).expect_err("loop exceeds fuel");
     assert!(
         format!("{error:#}").contains("resource budget exhausted"),
         "unexpected error: {error:#}"
@@ -165,8 +176,8 @@ fn compact_loop_runs_out_of_fuel_before_allocating_requested_output() {
     assert!(!format!("{error:#}").contains("50000"));
 }
 
-#[test]
-fn macro_and_when_evaluations_share_the_fuel_budget() {
+#[rstest]
+fn macro_and_when_evaluations_share_the_fuel_budget(small_limits: ManifestBudgetLimits) {
     let macro_yaml = concat!(
         "netsuke_version: 1.0.0\n",
         "macros:\n",
@@ -176,7 +187,7 @@ fn macro_and_when_evaluations_share_the_fuel_budget() {
         "  - name: macro\n",
         "    command: '{{ repeat() }}'\n",
     );
-    let macro_error = from_str_with_limits(macro_yaml, small_limits())
+    let macro_error = from_str_with_limits(macro_yaml, small_limits)
         .expect_err("macro loop must consume the shared fuel allowance");
     assert!(
         format!("{macro_error:#}").contains("resource budget exhausted"),
@@ -186,16 +197,16 @@ fn macro_and_when_evaluations_share_the_fuel_budget() {
     let when_yaml = concat!(
         "netsuke_version: 1.0.0\n",
         "targets:\n",
-        "  - name: first-conditional\n",
+        "  - name: first\n",
         "    when: 'true'\n",
         "    command: echo ok\n",
-        "  - name: second-conditional\n",
+        "  - name: second\n",
         "    when: 'true'\n",
         "    command: echo ok\n",
     );
     let when_limits = ManifestBudgetLimits {
-        manifest_fuel: small_limits().evaluation_fuel,
-        ..small_limits()
+        manifest_fuel: 1,
+        ..small_limits
     };
     let when_error = from_str_with_limits(when_yaml, when_limits)
         .expect_err("when expressions must consume the shared fuel allowance");
@@ -204,8 +215,8 @@ fn macro_and_when_evaluations_share_the_fuel_budget() {
     assert!(!rendered.contains("second-conditional"));
 }
 
-#[test]
-fn expression_macro_results_consume_the_shared_output_budget() {
+#[rstest]
+fn expression_macro_results_consume_the_shared_output_budget(small_limits: ManifestBudgetLimits) {
     let yaml = concat!(
         "netsuke_version: 1.0.0\n",
         "macros:\n",
@@ -217,7 +228,7 @@ fn expression_macro_results_consume_the_shared_output_budget() {
         "    command: echo ok\n",
     );
 
-    let error = from_str_with_limits(yaml, small_limits())
+    let error = from_str_with_limits(yaml, small_limits)
         .expect_err("expression macro output must obey the value budget");
     assert!(
         format!("{error:#}").contains("resource budget exhausted"),
@@ -225,36 +236,41 @@ fn expression_macro_results_consume_the_shared_output_budget() {
     );
 }
 
-#[test]
-fn repeated_expression_macros_consume_the_shared_fuel_budget() {
-    let yaml = concat!(
+#[rstest]
+fn repeated_expression_macros_consume_the_shared_fuel_budget(small_limits: ManifestBudgetLimits) {
+    let mut yaml = concat!(
         "netsuke_version: 1.0.0\n",
         "macros:\n",
         "  - signature: enabled()\n",
         "    body: 'true'\n",
         "targets:\n",
-        "  - name: first\n",
-        "    when: 'enabled()'\n",
-        "    command: echo ok\n",
-        "  - name: second\n",
-        "    when: 'enabled()'\n",
-        "    command: echo ok\n",
-    );
+    )
+    .to_owned();
+    for index in 0..32 {
+        writeln!(
+            yaml,
+            "  - name: target-{index}\n    when: 'enabled()'\n    command: echo ok"
+        )
+        .expect("write manifest fixture");
+    }
     let limits = ManifestBudgetLimits {
-        manifest_fuel: small_limits().evaluation_fuel.saturating_mul(2),
-        ..small_limits()
+        manifest_fuel: small_limits.evaluation_fuel.saturating_mul(2),
+        source_bytes: 8_192,
+        rendered_manifest_bytes: 4_096,
+        expanded_entries: 32,
+        ..small_limits
     };
 
-    let error = from_str_with_limits(yaml, limits)
-        .expect_err("each expression macro must reserve shared fuel");
+    let error = from_str_with_limits(&yaml, limits)
+        .expect_err("repeated expression macros must consume shared fuel");
     assert!(
         format!("{error:#}").contains("resource budget exhausted"),
         "unexpected error: {error:#}"
     );
 }
 
-#[test]
-fn manifest_query_rendering_uses_the_same_budget() -> Result<()> {
+#[rstest]
+fn manifest_query_rendering_uses_the_same_budget(small_limits: ManifestBudgetLimits) -> Result<()> {
     let workspace = tempdir().context("create query workspace")?;
     let path = workspace.path().join("Netsukefile");
     test_fs::write(
@@ -268,7 +284,7 @@ fn manifest_query_rendering_uses_the_same_budget() -> Result<()> {
         ),
     )?;
 
-    let error = from_path_for_manifest_query_with_limits(&path, small_limits(), None)
+    let error = from_path_for_manifest_query_with_limits(&path, small_limits, None)
         .expect_err("query rendering must enforce the value budget");
     ensure!(
         format!("{error:#}").contains("resource budget exhausted"),
@@ -277,8 +293,10 @@ fn manifest_query_rendering_uses_the_same_budget() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn budget_telemetry_uses_only_closed_labels_and_redacted_errors() {
+#[rstest]
+fn budget_telemetry_uses_only_closed_labels_and_redacted_errors(
+    small_limits: ManifestBudgetLimits,
+) {
     let yaml = concat!(
         "netsuke_version: 1.0.0\n",
         "targets:\n",
@@ -288,7 +306,7 @@ fn budget_telemetry_uses_only_closed_labels_and_redacted_errors() {
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
     let error = metrics::with_local_recorder(&recorder, || {
-        from_str_with_limits(yaml, small_limits()).expect_err("render must exceed value budget")
+        from_str_with_limits(yaml, small_limits).expect_err("render must exceed value budget")
     });
     let snapshot = snapshotter.snapshot().into_vec();
     let counters = snapshot

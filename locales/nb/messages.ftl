@@ -18,13 +18,13 @@ cli.flag.fetch_block_host.help = Vertsnavn som alltid blokkeres, selv om de till
 cli.flag.fetch_default_deny.help = Avvis alle verter som standard; tillat bare den oppgitte listen.
 cli.flag.trust_project_fetch_policy.help = Tillat prosjektkonfigurasjon å utvide tillatelsene i fetch-policyen.
 
-cli.flag.manifest_evaluation_fuel.help = Limit MiniJinja instructions for each manifest evaluation.
-cli.flag.manifest_fuel.help = Limit MiniJinja instructions across one manifest.
-cli.flag.manifest_rendered_value_bytes.help = Limit bytes rendered into one manifest value.
-cli.flag.manifest_rendered_manifest_bytes.help = Limit total bytes rendered across one manifest.
-cli.flag.manifest_source_bytes.help = Limit template and macro source bytes consumed per manifest.
-cli.flag.manifest_foreach_cardinality.help = Limit values processed by one foreach expansion.
-cli.flag.manifest_expanded_entries.help = Limit targets and actions expanded from one manifest.
+cli.flag.manifest_evaluation_fuel.help = Begrens antallet MiniJinja-instruksjoner for hver manifestevaluering.
+cli.flag.manifest_fuel.help = Begrens antallet MiniJinja-instruksjoner i ett manifest.
+cli.flag.manifest_rendered_value_bytes.help = Begrens antallet byte som gjengis i én manifestverdi.
+cli.flag.manifest_rendered_manifest_bytes.help = Begrens det totale antallet byte som gjengis i ett manifest.
+cli.flag.manifest_source_bytes.help = Begrens antallet byte fra mal- og makrokilde som brukes per manifest.
+cli.flag.manifest_foreach_cardinality.help = Begrens antallet verdier som behandles av én foreach-utvidelse.
+cli.flag.manifest_expanded_entries.help = Begrens antallet mål og handlinger som utvides fra ett manifest.
 cli.flag.json.help = Skriv ut maskinlesbar JSON.
 cli.flag.no_input.help = Les aldri interaktive inndata.
 cli.flag.color.help = Regel for farget utdata (auto, always, never).
@@ -435,4 +435,4 @@ example.errors_found = { $count ->
     [one] { $count } feil funnet.
    *[other] { $count } feil funnet.
 }
-manifest.budget.exceeded = Manifest resource budget exhausted during { $stage } after reaching { $limit }.
+manifest.budget.exceeded = Manifestets ressursbudsjett ble brukt opp under { $stage } etter å ha nådd { $limit }.

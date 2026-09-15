@@ -73,38 +73,31 @@ mod tests {
     //! Unit tests for project manifest-budget reconciliation.
 
     use super::*;
+    use rstest::{fixture, rstest};
 
-    /// Verify that a project cannot raise an operator ceiling.
-    #[test]
-    fn project_cannot_widen_an_operator_limit() {
-        let reconciled = reconcile_manifest_budget(
+    /// Supply operator ceilings and an empty project request for each case.
+    #[fixture]
+    fn budget_request() -> (CliConfig, ProjectManifestBudgetRequest) {
+        (
             CliConfig {
                 manifest_fuel: 16,
                 ..CliConfig::default()
             },
-            &ProjectManifestBudgetRequest {
-                manifest_fuel: Some(17),
-                ..ProjectManifestBudgetRequest::default()
-            },
-        );
-
-        assert_eq!(reconciled.manifest_fuel, 16);
+            ProjectManifestBudgetRequest::default(),
+        )
     }
 
-    /// Verify that a project can narrow an operator ceiling.
-    #[test]
-    fn project_can_narrow_an_operator_limit() {
-        let reconciled = reconcile_manifest_budget(
-            CliConfig {
-                manifest_fuel: 16,
-                ..CliConfig::default()
-            },
-            &ProjectManifestBudgetRequest {
-                manifest_fuel: Some(15),
-                ..ProjectManifestBudgetRequest::default()
-            },
-        );
-
-        assert_eq!(reconciled.manifest_fuel, 15);
+    #[rstest]
+    #[case::cannot_widen(17, 16)]
+    #[case::can_narrow(15, 15)]
+    fn project_budget_only_narrows_operator_limit(
+        budget_request: (CliConfig, ProjectManifestBudgetRequest),
+        #[case] requested: u64,
+        #[case] expected: u64,
+    ) {
+        let (operator_limits, mut request) = budget_request;
+        request.manifest_fuel = Some(requested);
+        let reconciled = reconcile_manifest_budget(operator_limits, &request);
+        assert_eq!(reconciled.manifest_fuel, expected);
     }
 }

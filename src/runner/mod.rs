@@ -111,6 +111,7 @@ impl Default for BuildTargets<'_> {
 /// Returns an error if manifest generation or the Ninja process fails.
 pub fn run(cli: &Cli, prefs: OutputPrefs) -> Result<()> {
     run_with_ninja_program_resolver(cli, prefs, None, process::resolve_ninja_program)
+        .map_err(error::promote_manifest_budget)
 }
 
 /// Execute parsed commands with a Ninja executable selected by the caller.
@@ -120,6 +121,7 @@ pub fn run(cli: &Cli, prefs: OutputPrefs) -> Result<()> {
 /// Returns an error if manifest generation or the selected Ninja process fails.
 pub fn run_with_ninja_program(cli: &Cli, prefs: OutputPrefs, program: &Utf8Path) -> Result<()> {
     run_with_ninja_program_resolver(cli, prefs, Some(program), || program.to_owned())
+        .map_err(error::promote_manifest_budget)
 }
 
 /// Dispatch a command after resolving Ninja only for commands that require it.

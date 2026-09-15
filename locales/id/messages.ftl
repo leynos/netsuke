@@ -18,13 +18,13 @@ cli.flag.fetch_block_host.help = Nama host yang selalu diblokir, meski diizinkan
 cli.flag.fetch_default_deny.help = Tolak semua host secara bawaan; izinkan hanya daftar yang dinyatakan.
 cli.flag.trust_project_fetch_policy.help = Izinkan konfigurasi proyek memperluas izin kebijakan fetch.
 
-cli.flag.manifest_evaluation_fuel.help = Limit MiniJinja instructions for each manifest evaluation.
-cli.flag.manifest_fuel.help = Limit MiniJinja instructions across one manifest.
-cli.flag.manifest_rendered_value_bytes.help = Limit bytes rendered into one manifest value.
-cli.flag.manifest_rendered_manifest_bytes.help = Limit total bytes rendered across one manifest.
-cli.flag.manifest_source_bytes.help = Limit template and macro source bytes consumed per manifest.
-cli.flag.manifest_foreach_cardinality.help = Limit values processed by one foreach expansion.
-cli.flag.manifest_expanded_entries.help = Limit targets and actions expanded from one manifest.
+cli.flag.manifest_evaluation_fuel.help = Batasi instruksi MiniJinja untuk setiap evaluasi manifes.
+cli.flag.manifest_fuel.help = Batasi instruksi MiniJinja di seluruh satu manifes.
+cli.flag.manifest_rendered_value_bytes.help = Batasi byte yang dirender ke dalam satu nilai manifes.
+cli.flag.manifest_rendered_manifest_bytes.help = Batasi total byte yang dirender di seluruh satu manifes.
+cli.flag.manifest_source_bytes.help = Batasi byte sumber templat dan makro yang digunakan untuk setiap manifes.
+cli.flag.manifest_foreach_cardinality.help = Batasi nilai yang diproses oleh satu ekspansi foreach.
+cli.flag.manifest_expanded_entries.help = Batasi target dan tindakan yang diperluas dari satu manifes.
 cli.flag.json.help = Hasilkan keluaran JSON yang terbaca mesin.
 cli.flag.no_input.help = Jangan pernah membaca masukan interaktif.
 cli.flag.color.help = Kebijakan keluaran berwarna (auto, always, never).
@@ -434,4 +434,4 @@ example.errors_found = { $count ->
     [0] Tidak ada galat yang ditemukan.
    *[other] { $count } galat ditemukan.
 }
-manifest.budget.exceeded = Manifest resource budget exhausted during { $stage } after reaching { $limit }.
+manifest.budget.exceeded = Anggaran sumber daya manifes habis selama { $stage } setelah mencapai { $limit }.

@@ -3,6 +3,7 @@
 use super::{
     ExpansionContext, FilteredEntry, ManifestMap, ManifestValue, WhenEvaluation, WhenResolution,
 };
+use crate::manifest::budget_adapter::BudgetErrorExt;
 use crate::{
     hex::push_lower_hex_byte,
     localization::{self, keys},
@@ -24,7 +25,7 @@ pub(super) fn parse_foreach_values(
     let expr = as_str(expr_val, "foreach")?;
     eval_expression(
         context,
-        ExpressionRequest {
+        &ExpressionRequest {
             name: "foreach",
             expression: expr,
             value: context! {},
@@ -210,37 +211,29 @@ struct ExpressionRequest<'a> {
 /// Evaluate a Jinja expression, mapping parse and evaluation errors.
 fn eval_expression(
     context: &ExpansionContext<'_>,
-    request: ExpressionRequest<'_>,
+    request: &ExpressionRequest<'_>,
 ) -> Result<Value> {
     context
         .budget
         .charge_source(request.expression.len(), ManifestBudgetStage::Source)
         .map_err(|exhaustion| exhaustion.into_error(minijinja::ErrorKind::InvalidOperation))?;
-    let fuel = context
-        .budget
-        .reserve_fuel(request.stage)
-        .map_err(|exhaustion| exhaustion.into_error(minijinja::ErrorKind::OutOfFuel))?;
-    let mut bounded_env = context.env.clone();
-    bounded_env.set_fuel(Some(fuel));
-    bounded_env
+    context
+        .env
         .compile_expression(request.expression)
         .with_context(|| {
             localization::message(keys::MANIFEST_EXPRESSION_PARSE_ERROR)
                 .with_arg("name", request.name)
-        })?
-        .eval(request.value)
-        .map_err(|error| {
-            if error.kind() == minijinja::ErrorKind::OutOfFuel {
-                context
-                    .budget
-                    .fuel_exhaustion(request.stage)
-                    .into_error(minijinja::ErrorKind::OutOfFuel)
-            } else {
-                error
-            }
-        })
-        .with_context(|| {
-            localization::message(keys::MANIFEST_EXPRESSION_EVAL_ERROR)
-                .with_arg("name", request.name)
-        })
+        })?;
+    crate::manifest::jinja_macros::evaluate_with_state(
+        context.env,
+        context.budget,
+        &crate::manifest::jinja_macros::ExpressionEvaluation {
+            expression: request.expression,
+            context: &request.value,
+            stage: request.stage,
+        },
+    )
+    .with_context(|| {
+        localization::message(keys::MANIFEST_EXPRESSION_EVAL_ERROR).with_arg("name", request.name)
+    })
 }

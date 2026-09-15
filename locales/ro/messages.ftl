@@ -18,13 +18,13 @@ cli.flag.fetch_block_host.help = Numele de gazde blocate întotdeauna, chiar dac
 cli.flag.fetch_default_deny.help = Refuză implicit toate gazdele; permite doar lista declarată.
 cli.flag.trust_project_fetch_policy.help = Permite configurației proiectului să extindă permisiunile politicii fetch.
 
-cli.flag.manifest_evaluation_fuel.help = Limit MiniJinja instructions for each manifest evaluation.
-cli.flag.manifest_fuel.help = Limit MiniJinja instructions across one manifest.
-cli.flag.manifest_rendered_value_bytes.help = Limit bytes rendered into one manifest value.
-cli.flag.manifest_rendered_manifest_bytes.help = Limit total bytes rendered across one manifest.
-cli.flag.manifest_source_bytes.help = Limit template and macro source bytes consumed per manifest.
-cli.flag.manifest_foreach_cardinality.help = Limit values processed by one foreach expansion.
-cli.flag.manifest_expanded_entries.help = Limit targets and actions expanded from one manifest.
+cli.flag.manifest_evaluation_fuel.help = Limitează instrucțiunile MiniJinja pentru fiecare evaluare a manifestului.
+cli.flag.manifest_fuel.help = Limitează instrucțiunile MiniJinja pentru un singur manifest.
+cli.flag.manifest_rendered_value_bytes.help = Limitează numărul de octeți redați într-o singură valoare a manifestului.
+cli.flag.manifest_rendered_manifest_bytes.help = Limitează numărul total de octeți redați într-un manifest.
+cli.flag.manifest_source_bytes.help = Limitează octeții sursă ai șablonului și macrocomenzilor consumați per manifest.
+cli.flag.manifest_foreach_cardinality.help = Limitează valorile procesate de o singură extindere foreach.
+cli.flag.manifest_expanded_entries.help = Limitează țintele și acțiunile extinse dintr-un singur manifest.
 cli.flag.json.help = Produce ieșire JSON care poate fi prelucrată automat.
 cli.flag.no_input.help = Nu citi niciodată date introduse interactiv.
 cli.flag.color.help = Politica de ieșire colorată (auto, always, never).
@@ -439,4 +439,4 @@ example.errors_found = { $count ->
     [few] S-au găsit { $count } erori.
    *[other] S-au găsit { $count } de erori.
 }
-manifest.budget.exceeded = Manifest resource budget exhausted during { $stage } after reaching { $limit }.
+manifest.budget.exceeded = Bugetul de resurse al manifestului s-a epuizat în timpul etapei { $stage }, după atingerea limitei { $limit }.

@@ -1,7 +1,4 @@
-//! CLI localization helpers.
-//!
-//! This module keeps clap localization logic separate from the core CLI
-//! definitions.
+//! Keep Clap localization logic separate from core CLI definitions.
 
 use crate::localization::keys;
 use clap::Command;

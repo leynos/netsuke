@@ -11,7 +11,9 @@ use std::sync::Arc;
 
 use super::command::Cli;
 use super::config::CliConfig;
-use super::discovery::{DiscoveredLayers, EnvProvider, ProjectFetchPolicyRequest, ProjectManifestBudgetRequest};
+use super::discovery::{
+    DiscoveredLayers, EnvProvider, ProjectFetchPolicyRequest, ProjectManifestBudgetRequest,
+};
 
 /// Inputs for one cached configuration merge, owned by its application caller.
 pub struct CachedMergeInput<'a, E: ?Sized> {

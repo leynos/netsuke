@@ -110,7 +110,7 @@ pub struct Cli {
     #[arg(long, value_name = "BYTES", default_value_t = 1_048_576)]
     pub manifest_rendered_value_bytes: usize,
 
-    /// Maximum bytes emitted by every rendered manifest value.
+    /// Maximum total bytes emitted across all rendered manifest values.
     #[arg(long, value_name = "BYTES", default_value_t = 16_777_216)]
     pub manifest_rendered_manifest_bytes: usize,
 

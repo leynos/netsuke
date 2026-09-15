@@ -38,8 +38,8 @@ use super::discovery::{
 };
 use super::environment::EnvironmentLayer;
 use super::fetch_policy::reconcile_fetch_policy;
-use super::merge_apply::apply_config;
 use super::manifest_budget_policy::reconcile_manifest_budget;
+use super::merge_apply::apply_config;
 use super::merge_input::{CachedMergeInput, MergeComposition};
 use super::merge_observability::{
     collect_override_leaf_paths, is_empty_configuration_value, validation_rejection_reason,
@@ -125,7 +125,10 @@ where
     let mut events = Vec::new();
 
     push_defaults_layer(&mut composition, &mut events);
-    (composition.project_fetch_policy_request, composition.project_manifest_budget_request) = push_discovered_file_layers(
+    (
+        composition.project_fetch_policy_request,
+        composition.project_manifest_budget_request,
+    ) = push_discovered_file_layers(
         &mut composition.composer,
         &mut composition.errors,
         discovered,
@@ -135,13 +138,17 @@ where
     push_cli_layer(cli, matches, &mut composition, &mut events);
 
     let project_fetch_policy_request = composition.project_fetch_policy_request.take();
-    let project_manifest_budget_request = std::mem::take(&mut composition.project_manifest_budget_request);
+    let project_manifest_budget_request =
+        std::mem::take(&mut composition.project_manifest_budget_request);
     let merged = match composition.into_merge_result() {
         Ok(config) => {
             let (reconciled_config, outcome) =
                 reconcile_fetch_policy(config, project_fetch_policy_request);
             events.push(MergeEvent::FetchPolicyReconciled { outcome });
-            Ok(apply_config(cli, reconcile_manifest_budget(reconciled_config, &project_manifest_budget_request)))
+            Ok(apply_config(
+                cli,
+                reconcile_manifest_budget(reconciled_config, &project_manifest_budget_request),
+            ))
         }
         Err(error) => {
             collect_validation_rejection(&mut events, error.as_ref());

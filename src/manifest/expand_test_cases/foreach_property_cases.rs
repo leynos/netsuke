@@ -23,7 +23,7 @@ proptest! {
             .map_err(|error| TestCaseError::fail(error.to_string()))?;
         let limits = ManifestBudgetLimits {
             foreach_cardinality: CARDINALITY_LIMIT,
-            expanded_entries: CARDINALITY_LIMIT,
+            expanded_entries: 12,
             ..ManifestBudgetLimits::default()
         };
 

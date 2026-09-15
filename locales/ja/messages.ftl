@@ -18,13 +18,13 @@ cli.flag.fetch_block_host.help = 他で許可されていても常に遮断す�
 cli.flag.fetch_default_deny.help = 既定ですべてのホストを拒否し、宣言した許可リストのみを通します。
 cli.flag.trust_project_fetch_policy.help = プロジェクト設定による fetch ポリシーの許可範囲の拡大を許可します。
 
-cli.flag.manifest_evaluation_fuel.help = Limit MiniJinja instructions for each manifest evaluation.
-cli.flag.manifest_fuel.help = Limit MiniJinja instructions across one manifest.
-cli.flag.manifest_rendered_value_bytes.help = Limit bytes rendered into one manifest value.
-cli.flag.manifest_rendered_manifest_bytes.help = Limit total bytes rendered across one manifest.
-cli.flag.manifest_source_bytes.help = Limit template and macro source bytes consumed per manifest.
-cli.flag.manifest_foreach_cardinality.help = Limit values processed by one foreach expansion.
-cli.flag.manifest_expanded_entries.help = Limit targets and actions expanded from one manifest.
+cli.flag.manifest_evaluation_fuel.help = 各マニフェスト評価で使用する MiniJinja 命令数を制限します。
+cli.flag.manifest_fuel.help = 1 つのマニフェスト全体で使用する MiniJinja 命令数を制限します。
+cli.flag.manifest_rendered_value_bytes.help = 1 つのマニフェスト値にレンダリングするバイト数を制限します。
+cli.flag.manifest_rendered_manifest_bytes.help = 1 つのマニフェスト全体にレンダリングするバイト数を制限します。
+cli.flag.manifest_source_bytes.help = マニフェストごとに消費するテンプレートとマクロのソースバイト数を制限します。
+cli.flag.manifest_foreach_cardinality.help = 1 回の foreach 展開で処理する値の数を制限します。
+cli.flag.manifest_expanded_entries.help = 1 つのマニフェストから展開するターゲットとアクションの数を制限します。
 cli.flag.json.help = 機械可読な JSON を出力します。
 cli.flag.no_input.help = 対話的な入力を一切読み取りません。
 cli.flag.color.help = 色付き出力の方針（auto、always、never）。
@@ -433,4 +433,4 @@ example.errors_found = { $count ->
     [0] エラーは見つかりませんでした。
    *[other] { $count } 件のエラーが見つかりました。
 }
-manifest.budget.exceeded = Manifest resource budget exhausted during { $stage } after reaching { $limit }.
+manifest.budget.exceeded = { $stage } 中にマニフェストのリソース予算を使い果たしました（{ $limit } に達しました）。

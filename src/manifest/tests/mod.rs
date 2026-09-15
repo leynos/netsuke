@@ -1,6 +1,7 @@
 //! Tests for manifest parsing and macro helpers.
 
 mod budget;
+mod budget_boundary;
 mod macro_invocation_telemetry;
 mod macros;
 mod macros_telemetry;

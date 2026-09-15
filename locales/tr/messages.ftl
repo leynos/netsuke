@@ -18,13 +18,13 @@ cli.flag.fetch_block_host.help = Başka yerde izin verilse bile her zaman engell
 cli.flag.fetch_default_deny.help = Varsayılan olarak tüm makineleri reddet; yalnızca bildirilen listeye izin ver.
 cli.flag.trust_project_fetch_policy.help = Proje yapılandırmasının fetch politikası izinlerini genişletmesine izin ver.
 
-cli.flag.manifest_evaluation_fuel.help = Limit MiniJinja instructions for each manifest evaluation.
-cli.flag.manifest_fuel.help = Limit MiniJinja instructions across one manifest.
-cli.flag.manifest_rendered_value_bytes.help = Limit bytes rendered into one manifest value.
-cli.flag.manifest_rendered_manifest_bytes.help = Limit total bytes rendered across one manifest.
-cli.flag.manifest_source_bytes.help = Limit template and macro source bytes consumed per manifest.
-cli.flag.manifest_foreach_cardinality.help = Limit values processed by one foreach expansion.
-cli.flag.manifest_expanded_entries.help = Limit targets and actions expanded from one manifest.
+cli.flag.manifest_evaluation_fuel.help = Her manifest değerlendirmesi için MiniJinja talimatlarının sayısını sınırla.
+cli.flag.manifest_fuel.help = Tek bir manifest genelindeki MiniJinja talimatlarının sayısını sınırla.
+cli.flag.manifest_rendered_value_bytes.help = Tek bir manifest değerine işlenen bayt sayısını sınırla.
+cli.flag.manifest_rendered_manifest_bytes.help = Tek bir manifeste işlenen toplam bayt sayısını sınırla.
+cli.flag.manifest_source_bytes.help = Manifest başına kullanılan şablon ve makro kaynak baytlarını sınırla.
+cli.flag.manifest_foreach_cardinality.help = Tek bir foreach genişletmesinin işlediği değer sayısını sınırla.
+cli.flag.manifest_expanded_entries.help = Tek bir manifestten genişletilen hedef ve eylem sayısını sınırla.
 cli.flag.json.help = Makinece okunabilir JSON çıktısı üret.
 cli.flag.no_input.help = Etkileşimli girdi hiçbir zaman okunmasın.
 cli.flag.color.help = Renkli çıktı ilkesi (auto, always, never).
@@ -436,4 +436,4 @@ example.errors_found = { $count ->
     [one] { $count } hata bulundu.
    *[other] { $count } hata bulundu.
 }
-manifest.budget.exceeded = Manifest resource budget exhausted during { $stage } after reaching { $limit }.
+manifest.budget.exceeded = Manifest kaynak bütçesi { $stage } aşamasında { $limit } değerine ulaşıldıktan sonra tükendi.

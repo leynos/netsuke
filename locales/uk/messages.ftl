@@ -18,13 +18,13 @@ cli.flag.fetch_block_host.help = Назви вузлів, які блокуют�
 cli.flag.fetch_default_deny.help = Типово забороняти всі вузли; дозволяти лише оголошений перелік.
 cli.flag.trust_project_fetch_policy.help = Дозволити конфігурації проєкту розширювати дозволи політики fetch.
 
-cli.flag.manifest_evaluation_fuel.help = Limit MiniJinja instructions for each manifest evaluation.
-cli.flag.manifest_fuel.help = Limit MiniJinja instructions across one manifest.
-cli.flag.manifest_rendered_value_bytes.help = Limit bytes rendered into one manifest value.
-cli.flag.manifest_rendered_manifest_bytes.help = Limit total bytes rendered across one manifest.
-cli.flag.manifest_source_bytes.help = Limit template and macro source bytes consumed per manifest.
-cli.flag.manifest_foreach_cardinality.help = Limit values processed by one foreach expansion.
-cli.flag.manifest_expanded_entries.help = Limit targets and actions expanded from one manifest.
+cli.flag.manifest_evaluation_fuel.help = Обмежити кількість інструкцій MiniJinja для кожного оцінювання маніфесту.
+cli.flag.manifest_fuel.help = Обмежити кількість інструкцій MiniJinja в одному маніфесті.
+cli.flag.manifest_rendered_value_bytes.help = Обмежити кількість байтів, відрендерених в одне значення маніфесту.
+cli.flag.manifest_rendered_manifest_bytes.help = Обмежити загальну кількість байтів, відрендерених в одному маніфесті.
+cli.flag.manifest_source_bytes.help = Обмежити кількість байтів джерела шаблонів і макросів, спожитих для маніфесту.
+cli.flag.manifest_foreach_cardinality.help = Обмежити кількість значень, оброблених одним розгортанням foreach.
+cli.flag.manifest_expanded_entries.help = Обмежити кількість цілей і дій, розгорнутих з одного маніфесту.
 cli.flag.json.help = Виводити машиночитний JSON.
 cli.flag.no_input.help = Ніколи не читати інтерактивне введення.
 cli.flag.color.help = Політика кольорового виводу (auto, always, never).
@@ -442,4 +442,4 @@ example.errors_found = { $count ->
     [many] Знайдено { $count } помилок.
    *[other] Знайдено { $count } помилки.
 }
-manifest.budget.exceeded = Manifest resource budget exhausted during { $stage } after reaching { $limit }.
+manifest.budget.exceeded = Бюджет ресурсів маніфесту вичерпано на етапі { $stage } після досягнення значення { $limit }.

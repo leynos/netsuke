@@ -1,7 +1,6 @@
 //! Streams rendered template output through manifest-owned byte accounting.
 
 use super::{ManifestBudget, ManifestBudgetExhaustion, ManifestBudgetKind, ManifestBudgetStage};
-use minijinja::{Error, ErrorKind};
 use std::{cell::Cell, io};
 
 /// Write rendered bytes into a bounded value buffer.
@@ -25,13 +24,8 @@ impl<'a> CappedWriter<'a> {
     }
 
     /// Return the accepted bytes as UTF-8 after `MiniJinja` finishes rendering.
-    pub(crate) fn into_string(self) -> std::result::Result<String, Error> {
-        String::from_utf8(self.output).map_err(|_| {
-            Error::new(
-                ErrorKind::BadSerialization,
-                "MiniJinja emitted non-UTF-8 output",
-            )
-        })
+    pub(crate) fn into_string(self) -> Result<String, std::string::FromUtf8Error> {
+        String::from_utf8(self.output)
     }
 
     /// Return the resource exhaustion captured by a failed write.

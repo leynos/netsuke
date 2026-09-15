@@ -18,13 +18,13 @@ cli.flag.fetch_block_host.help = Tên máy chủ luôn bị chặn, kể cả kh
 cli.flag.fetch_default_deny.help = Mặc định từ chối mọi máy chủ; chỉ cho phép danh sách đã khai báo.
 cli.flag.trust_project_fetch_policy.help = Cho phép cấu hình dự án mở rộng các quyền được cấp trong chính sách fetch.
 
-cli.flag.manifest_evaluation_fuel.help = Limit MiniJinja instructions for each manifest evaluation.
-cli.flag.manifest_fuel.help = Limit MiniJinja instructions across one manifest.
-cli.flag.manifest_rendered_value_bytes.help = Limit bytes rendered into one manifest value.
-cli.flag.manifest_rendered_manifest_bytes.help = Limit total bytes rendered across one manifest.
-cli.flag.manifest_source_bytes.help = Limit template and macro source bytes consumed per manifest.
-cli.flag.manifest_foreach_cardinality.help = Limit values processed by one foreach expansion.
-cli.flag.manifest_expanded_entries.help = Limit targets and actions expanded from one manifest.
+cli.flag.manifest_evaluation_fuel.help = Giới hạn số lệnh MiniJinja cho mỗi lần đánh giá manifest.
+cli.flag.manifest_fuel.help = Giới hạn số lệnh MiniJinja trong một manifest.
+cli.flag.manifest_rendered_value_bytes.help = Giới hạn số byte được render vào một giá trị manifest.
+cli.flag.manifest_rendered_manifest_bytes.help = Giới hạn tổng số byte được render trong một manifest.
+cli.flag.manifest_source_bytes.help = Giới hạn số byte mã nguồn template và macro được sử dụng cho mỗi manifest.
+cli.flag.manifest_foreach_cardinality.help = Giới hạn số giá trị được xử lý bởi một lần mở rộng foreach.
+cli.flag.manifest_expanded_entries.help = Giới hạn số mục tiêu và hành động được mở rộng từ một manifest.
 cli.flag.json.help = Xuất dữ liệu JSON máy đọc được.
 cli.flag.no_input.help = Không bao giờ đọc dữ liệu nhập tương tác.
 cli.flag.color.help = Chính sách xuất màu (auto, always, never).
@@ -433,4 +433,4 @@ example.errors_found = { $count ->
     [0] Không tìm thấy lỗi nào.
    *[other] Tìm thấy { $count } lỗi.
 }
-manifest.budget.exceeded = Manifest resource budget exhausted during { $stage } after reaching { $limit }.
+manifest.budget.exceeded = Đã dùng hết ngân sách tài nguyên của manifest trong { $stage } sau khi đạt { $limit }.

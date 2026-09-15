@@ -18,13 +18,13 @@ cli.flag.fetch_block_host.help = Názvy hostitelů, které se vždy blokují, i 
 cli.flag.fetch_default_deny.help = Ve výchozím stavu odmítat všechny hostitele; povolit jen uvedený seznam.
 cli.flag.trust_project_fetch_policy.help = Umožnit konfiguraci projektu rozšířit oprávnění zásady fetch.
 
-cli.flag.manifest_evaluation_fuel.help = Limit MiniJinja instructions for each manifest evaluation.
-cli.flag.manifest_fuel.help = Limit MiniJinja instructions across one manifest.
-cli.flag.manifest_rendered_value_bytes.help = Limit bytes rendered into one manifest value.
-cli.flag.manifest_rendered_manifest_bytes.help = Limit total bytes rendered across one manifest.
-cli.flag.manifest_source_bytes.help = Limit template and macro source bytes consumed per manifest.
-cli.flag.manifest_foreach_cardinality.help = Limit values processed by one foreach expansion.
-cli.flag.manifest_expanded_entries.help = Limit targets and actions expanded from one manifest.
+cli.flag.manifest_evaluation_fuel.help = Omezit instrukce MiniJinja pro každé vyhodnocení manifestu.
+cli.flag.manifest_fuel.help = Omezit instrukce MiniJinja v rámci jednoho manifestu.
+cli.flag.manifest_rendered_value_bytes.help = Omezit počet bajtů vyrenderovaných do jedné hodnoty manifestu.
+cli.flag.manifest_rendered_manifest_bytes.help = Omezit celkový počet bajtů vyrenderovaných v rámci jednoho manifestu.
+cli.flag.manifest_source_bytes.help = Omezit počet bajtů zdroje šablon a maker spotřebovaných pro jeden manifest.
+cli.flag.manifest_foreach_cardinality.help = Omezit počet hodnot zpracovaných jedním rozšířením foreach.
+cli.flag.manifest_expanded_entries.help = Omezit počet cílů a akcí rozšířených z jednoho manifestu.
 cli.flag.json.help = Vypisovat strojově čitelný výstup JSON.
 cli.flag.no_input.help = Nikdy nečíst interaktivní vstup.
 cli.flag.color.help = Zásada barevného výstupu (auto, always, never).
@@ -440,4 +440,4 @@ example.errors_found = { $count ->
     [many] Nalezeno { $count } chyby.
    *[other] Nalezeno { $count } chyb.
 }
-manifest.budget.exceeded = Manifest resource budget exhausted during { $stage } after reaching { $limit }.
+manifest.budget.exceeded = Rozpočet prostředků manifestu byl během fáze { $stage } vyčerpán po dosažení hodnoty { $limit }.

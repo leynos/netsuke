@@ -18,13 +18,13 @@ cli.flag.fetch_block_host.help = Ονόματα κόμβων που αποκλε
 cli.flag.fetch_default_deny.help = Άρνηση όλων των κόμβων από προεπιλογή· να επιτρέπεται μόνο ο δηλωμένος κατάλογος.
 cli.flag.trust_project_fetch_policy.help = Να επιτρέπεται στη διαμόρφωση του έργου να διευρύνει τις παραχωρήσεις της πολιτικής fetch.
 
-cli.flag.manifest_evaluation_fuel.help = Limit MiniJinja instructions for each manifest evaluation.
-cli.flag.manifest_fuel.help = Limit MiniJinja instructions across one manifest.
-cli.flag.manifest_rendered_value_bytes.help = Limit bytes rendered into one manifest value.
-cli.flag.manifest_rendered_manifest_bytes.help = Limit total bytes rendered across one manifest.
-cli.flag.manifest_source_bytes.help = Limit template and macro source bytes consumed per manifest.
-cli.flag.manifest_foreach_cardinality.help = Limit values processed by one foreach expansion.
-cli.flag.manifest_expanded_entries.help = Limit targets and actions expanded from one manifest.
+cli.flag.manifest_evaluation_fuel.help = Περιορισμός των εντολών MiniJinja για κάθε αξιολόγηση δηλωτικού.
+cli.flag.manifest_fuel.help = Περιορισμός των εντολών MiniJinja σε ένα δηλωτικό.
+cli.flag.manifest_rendered_value_bytes.help = Περιορισμός των byte που αποδίδονται σε μία τιμή δηλωτικού.
+cli.flag.manifest_rendered_manifest_bytes.help = Περιορισμός των συνολικών byte που αποδίδονται σε ένα δηλωτικό.
+cli.flag.manifest_source_bytes.help = Περιορισμός των byte προέλευσης προτύπων και μακροεντολών που καταναλώνονται ανά δηλωτικό.
+cli.flag.manifest_foreach_cardinality.help = Περιορισμός των τιμών που επεξεργάζεται μία επέκταση foreach.
+cli.flag.manifest_expanded_entries.help = Περιορισμός των στόχων και των ενεργειών που επεκτείνονται από ένα δηλωτικό.
 cli.flag.json.help = Παραγωγή εξόδου JSON αναγνώσιμης από μηχανή.
 cli.flag.no_input.help = Να μη γίνεται ποτέ ανάγνωση διαδραστικής εισόδου.
 cli.flag.color.help = Πολιτική έγχρωμης εξόδου (auto, always, never).
@@ -437,4 +437,4 @@ example.errors_found = { $count ->
     [one] Βρέθηκε { $count } σφάλμα.
    *[other] Βρέθηκαν { $count } σφάλματα.
 }
-manifest.budget.exceeded = Manifest resource budget exhausted during { $stage } after reaching { $limit }.
+manifest.budget.exceeded = Ο προϋπολογισμός πόρων του δηλωτικού εξαντλήθηκε κατά το στάδιο { $stage }, αφού έφτασε το { $limit }.

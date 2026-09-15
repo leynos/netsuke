@@ -18,13 +18,13 @@ cli.flag.fetch_block_host.help = Hostnamen die altijd worden geblokkeerd, ook al
 cli.flag.fetch_default_deny.help = Weiger standaard alle hosts; sta alleen de opgegeven lijst toe.
 cli.flag.trust_project_fetch_policy.help = Sta projectconfiguratie toe om de toekenningen van het fetch-beleid uit te breiden.
 
-cli.flag.manifest_evaluation_fuel.help = Limit MiniJinja instructions for each manifest evaluation.
-cli.flag.manifest_fuel.help = Limit MiniJinja instructions across one manifest.
-cli.flag.manifest_rendered_value_bytes.help = Limit bytes rendered into one manifest value.
-cli.flag.manifest_rendered_manifest_bytes.help = Limit total bytes rendered across one manifest.
-cli.flag.manifest_source_bytes.help = Limit template and macro source bytes consumed per manifest.
-cli.flag.manifest_foreach_cardinality.help = Limit values processed by one foreach expansion.
-cli.flag.manifest_expanded_entries.help = Limit targets and actions expanded from one manifest.
+cli.flag.manifest_evaluation_fuel.help = Beperk het aantal MiniJinja-instructies voor elke manifestevaluatie.
+cli.flag.manifest_fuel.help = Beperk het aantal MiniJinja-instructies voor één manifest.
+cli.flag.manifest_rendered_value_bytes.help = Beperk het aantal bytes dat in één manifestwaarde wordt gerenderd.
+cli.flag.manifest_rendered_manifest_bytes.help = Beperk het totale aantal bytes dat in één manifest wordt gerenderd.
+cli.flag.manifest_source_bytes.help = Beperk het aantal bytes aan template- en macrobron dat per manifest wordt gebruikt.
+cli.flag.manifest_foreach_cardinality.help = Beperk het aantal waarden dat door één foreach-uitbreiding wordt verwerkt.
+cli.flag.manifest_expanded_entries.help = Beperk het aantal doelen en acties dat uit één manifest wordt uitgebreid.
 cli.flag.json.help = Geef machineleesbare JSON-uitvoer.
 cli.flag.no_input.help = Lees nooit interactieve invoer.
 cli.flag.color.help = Beleid voor gekleurde uitvoer (auto, always, never).
@@ -436,4 +436,4 @@ example.errors_found = { $count ->
     [one] { $count } fout gevonden.
    *[other] { $count } fouten gevonden.
 }
-manifest.budget.exceeded = Manifest resource budget exhausted during { $stage } after reaching { $limit }.
+manifest.budget.exceeded = Het resourcebudget van het manifest is tijdens { $stage } uitgeput nadat { $limit } was bereikt.

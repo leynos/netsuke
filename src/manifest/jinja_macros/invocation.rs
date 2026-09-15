@@ -4,6 +4,7 @@ use super::call::call_macro_value;
 use super::telemetry;
 use crate::localization::{self, keys};
 use crate::manifest::budget::{ManifestBudget, ManifestBudgetStage};
+use crate::manifest::budget_adapter::BudgetErrorExt;
 use minijinja::{
     AutoEscape, Captured, Environment, Error, ErrorKind, State,
     value::{Kwargs, Rest, Value},
@@ -85,6 +86,9 @@ fn invoke_macro(state: &State, request: &MacroInvocation<'_>) -> Result<Value, E
                 }
             },
         )?;
+    if let Some((_, unused)) = captured.state().fuel_levels() {
+        request.budget.refund_unused_fuel(unused);
+    }
     let rendered: String = rendered_value.into();
     request
         .budget

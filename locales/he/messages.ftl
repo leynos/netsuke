@@ -18,13 +18,13 @@ cli.flag.fetch_block_host.help = שמות מארחים החסומים תמיד, 
 cli.flag.fetch_default_deny.help = דחיית כל המארחים כברירת מחדל; התרת הרשימה המוצהרת בלבד.
 cli.flag.trust_project_fetch_policy.help = לאפשר לתצורת הפרויקט להרחיב את ההרשאות של מדיניות fetch.
 
-cli.flag.manifest_evaluation_fuel.help = ‏Limit MiniJinja instructions for each manifest evaluation.
-cli.flag.manifest_fuel.help = ‏Limit MiniJinja instructions across one manifest.
-cli.flag.manifest_rendered_value_bytes.help = ‏Limit bytes rendered into one manifest value.
-cli.flag.manifest_rendered_manifest_bytes.help = ‏Limit total bytes rendered across one manifest.
-cli.flag.manifest_source_bytes.help = ‏Limit template and macro source bytes consumed per manifest.
-cli.flag.manifest_foreach_cardinality.help = ‏Limit values processed by one foreach expansion.
-cli.flag.manifest_expanded_entries.help = ‏Limit targets and actions expanded from one manifest.
+cli.flag.manifest_evaluation_fuel.help = ‏הגבלת הוראות MiniJinja לכל הערכה של מניפסט.
+cli.flag.manifest_fuel.help = ‏הגבלת הוראות MiniJinja במניפסט אחד.
+cli.flag.manifest_rendered_value_bytes.help = ‏הגבלת מספר הבתים שנכתבים לערך מניפסט אחד.
+cli.flag.manifest_rendered_manifest_bytes.help = ‏הגבלת מספר הבתים הכולל שנכתב במניפסט אחד.
+cli.flag.manifest_source_bytes.help = ‏הגבלת בתי המקור של תבניות ומאקרו הנצרכים לכל מניפסט.
+cli.flag.manifest_foreach_cardinality.help = ‏הגבלת הערכים שמעובדים בהרחבת foreach אחת.
+cli.flag.manifest_expanded_entries.help = ‏הגבלת היעדים והפעולות שמורחבים ממניפסט אחד.
 cli.flag.json.help = פלט JSON הניתן לקריאה במכונה.
 cli.flag.no_input.help = לעולם לא לקרוא קלט אינטראקטיבי.
 cli.flag.color.help = מדיניות הפלט הצבעוני (auto, always, never).
@@ -440,4 +440,4 @@ example.errors_found = { $count ->
     [many] נמצאו { $count } שגיאות.
    *[other] נמצאו { $count } שגיאות.
 }
-manifest.budget.exceeded = ‏Manifest resource budget exhausted during { $stage } after reaching { $limit }.
+manifest.budget.exceeded = ‏תקציב המשאבים של המניפסט אזל במהלך { $stage } לאחר שהגיע ל־{ $limit }.

@@ -18,13 +18,13 @@ cli.flag.fetch_block_host.help = Mindig letiltott gépnevek, akkor is, ha másho
 cli.flag.fetch_default_deny.help = Alapértelmezés szerint minden gép tiltása; csak a megadott lista engedélyezése.
 cli.flag.trust_project_fetch_policy.help = Engedélyezze, hogy a projekt konfigurációja kibővítse a fetch-házirend engedélyeit.
 
-cli.flag.manifest_evaluation_fuel.help = Limit MiniJinja instructions for each manifest evaluation.
-cli.flag.manifest_fuel.help = Limit MiniJinja instructions across one manifest.
-cli.flag.manifest_rendered_value_bytes.help = Limit bytes rendered into one manifest value.
-cli.flag.manifest_rendered_manifest_bytes.help = Limit total bytes rendered across one manifest.
-cli.flag.manifest_source_bytes.help = Limit template and macro source bytes consumed per manifest.
-cli.flag.manifest_foreach_cardinality.help = Limit values processed by one foreach expansion.
-cli.flag.manifest_expanded_entries.help = Limit targets and actions expanded from one manifest.
+cli.flag.manifest_evaluation_fuel.help = A MiniJinja-utasítások korlátozása minden jegyzékkiértékeléshez.
+cli.flag.manifest_fuel.help = A MiniJinja-utasítások korlátozása egy jegyzéken belül.
+cli.flag.manifest_rendered_value_bytes.help = Egy jegyzékértékbe renderelt bájtok számának korlátozása.
+cli.flag.manifest_rendered_manifest_bytes.help = Egy jegyzékbe renderelt bájtok teljes számának korlátozása.
+cli.flag.manifest_source_bytes.help = A jegyzékenként felhasznált sablon- és makróforrás-bájtok korlátozása.
+cli.flag.manifest_foreach_cardinality.help = Egy foreach-bővítés által feldolgozott értékek korlátozása.
+cli.flag.manifest_expanded_entries.help = Egy jegyzékből kibővített célok és műveletek korlátozása.
 cli.flag.json.help = Géppel olvasható JSON kimenet előállítása.
 cli.flag.no_input.help = Soha ne olvasson interaktív bemenetet.
 cli.flag.color.help = A színes kimenet szabálya (auto, always, never).
@@ -437,4 +437,4 @@ example.errors_found = { $count ->
     [one] { $count } hiba található.
    *[other] { $count } hiba található.
 }
-manifest.budget.exceeded = Manifest resource budget exhausted during { $stage } after reaching { $limit }.
+manifest.budget.exceeded = A jegyzék erőforrás-kerete kimerült a(z) { $stage } szakaszban, miután elérte ezt: { $limit }.

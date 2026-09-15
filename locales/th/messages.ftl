@@ -18,13 +18,13 @@ cli.flag.fetch_block_host.help = ชื่อโฮสต์ที่ถูก�
 cli.flag.fetch_default_deny.help = ปฏิเสธโฮสต์ทั้งหมดโดยค่าเริ่มต้น อนุญาตเฉพาะรายการที่ประกาศไว้
 cli.flag.trust_project_fetch_policy.help = อนุญาตให้การกำหนดค่าโครงการขยายสิทธิ์ของนโยบาย fetch
 
-cli.flag.manifest_evaluation_fuel.help = Limit MiniJinja instructions for each manifest evaluation.
-cli.flag.manifest_fuel.help = Limit MiniJinja instructions across one manifest.
-cli.flag.manifest_rendered_value_bytes.help = Limit bytes rendered into one manifest value.
-cli.flag.manifest_rendered_manifest_bytes.help = Limit total bytes rendered across one manifest.
-cli.flag.manifest_source_bytes.help = Limit template and macro source bytes consumed per manifest.
-cli.flag.manifest_foreach_cardinality.help = Limit values processed by one foreach expansion.
-cli.flag.manifest_expanded_entries.help = Limit targets and actions expanded from one manifest.
+cli.flag.manifest_evaluation_fuel.help = จำกัดจำนวนคำสั่ง MiniJinja สำหรับการประเมิน manifest แต่ละครั้ง
+cli.flag.manifest_fuel.help = จำกัดจำนวนคำสั่ง MiniJinja ตลอดทั้ง manifest หนึ่งรายการ
+cli.flag.manifest_rendered_value_bytes.help = จำกัดจำนวนไบต์ที่เรนเดอร์ลงในค่าของ manifest หนึ่งค่า
+cli.flag.manifest_rendered_manifest_bytes.help = จำกัดจำนวนไบต์ทั้งหมดที่เรนเดอร์ใน manifest หนึ่งรายการ
+cli.flag.manifest_source_bytes.help = จำกัดจำนวนไบต์ของแหล่งที่มาของเทมเพลตและแมโครที่ใช้ต่อ manifest
+cli.flag.manifest_foreach_cardinality.help = จำกัดจำนวนค่าที่ประมวลผลโดยการขยาย foreach หนึ่งครั้ง
+cli.flag.manifest_expanded_entries.help = จำกัดจำนวนเป้าหมายและการกระทำที่ขยายจาก manifest หนึ่งรายการ
 cli.flag.json.help = แสดงผลเป็น JSON ที่เครื่องอ่านได้
 cli.flag.no_input.help = ไม่อ่านข้อมูลนำเข้าแบบโต้ตอบเลย
 cli.flag.color.help = นโยบายการแสดงผลแบบมีสี (auto, always, never)
@@ -433,4 +433,4 @@ example.errors_found = { $count ->
     [0] ไม่พบข้อผิดพลาด
    *[other] พบข้อผิดพลาด { $count } รายการ
 }
-manifest.budget.exceeded = Manifest resource budget exhausted during { $stage } after reaching { $limit }.
+manifest.budget.exceeded = ใช้งบประมาณทรัพยากรของ manifest หมดระหว่าง { $stage } หลังจากถึง { $limit }
