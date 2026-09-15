@@ -40,8 +40,9 @@ function Invoke-MsiInstall {
         [string]$LogPath
     )
 
-    & msiexec.exe /i $MsiPath /qn /norestart /l*v $LogPath
-    $LASTEXITCODE
+    $arguments = "/i `\"$MsiPath`\" /qn /norestart /l*v `\"$LogPath`\""
+    $process = Start-Process -FilePath 'msiexec.exe' -ArgumentList $arguments -Wait -PassThru
+    return $process.ExitCode
 }
 
 function Assert-InstalledProduct {
@@ -66,7 +67,8 @@ function Assert-InstalledProduct {
     if ($installedRank -ne $ExpectedRank) {
         throw "Expected ReleaseRank $ExpectedRank, got $installedRank."
     }
-    $applicationPath = Join-Path $env:ProgramFiles 'Netsuke MSI Upgrade Validation\netsuke.exe'
+    $programFilesX86 = [Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFilesX86)
+    $applicationPath = Join-Path $programFilesX86 'Netsuke MSI Upgrade Validation\netsuke.exe'
     $payload = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($applicationPath))
     if ($payload -ne $ExpectedPayload) {
         throw "Expected installed payload $ExpectedPayload, got $payload."

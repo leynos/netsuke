@@ -40,8 +40,9 @@ foreach ($msiPath in $MsiPaths) {
     }
     $logName = "cleanup-$($productCode.Trim('{}')).log"
     $logPath = Join-Path $LogDirectory $logName
-    & msiexec.exe /x $productCode /qn /norestart /l*v $logPath
-    if ($LASTEXITCODE -ne 0) {
-        throw "Removing MSI validation product $productCode failed with exit code $LASTEXITCODE."
+    $arguments = "/x $productCode /qn /norestart /l*v `\"$logPath`\""
+    $process = Start-Process -FilePath 'msiexec.exe' -ArgumentList $arguments -Wait -PassThru
+    if ($process.ExitCode -ne 0) {
+        throw "Removing MSI validation product $productCode failed with exit code $($process.ExitCode)."
     }
 }
