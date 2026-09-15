@@ -439,5 +439,5 @@ example.errors_found = { $count ->
 }
 manifest.budget.exceeded = Das Ressourcenbudget des Manifests wurde während { $stage } nach Erreichen von { $limit } ausgeschöpft.
 
-cli.flag.env_allow_var.help = Environment variable permitted for the manifest env() helper
-cli.flag.env_block_var.help = Environment variable blocked for the manifest env() helper
+cli.flag.env_allow_var.help = Für die env()-Hilfe des Manifests erlaubte Umgebungsvariable
+cli.flag.env_block_var.help = Für die env()-Hilfe des Manifests gesperrte Umgebungsvariable

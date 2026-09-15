@@ -1,5 +1,6 @@
 ---
 source: tests/ortho_config_metadata_snapshot_tests.rs
+assertion_line: 143
 expression: metadata_snapshot()
 ---
 ir_version: "1.1"
@@ -60,11 +61,31 @@ fields:
     environment: NETSUKE_FETCH_ALLOW_SCHEME
     file: fetch_allow_scheme
     merge_strategy: append
+  - name: env_allow_var
+    help_id: cli.flag.env_allow_var.help
+    cli:
+      long: env-allow-var
+      short: e
+      multiple: true
+      possible_values: []
+    environment: NETSUKE_ENV_ALLOW_VAR
+    file: env_allow_var
+    merge_strategy: append
+  - name: env_block_var
+    help_id: cli.flag.env_block_var.help
+    cli:
+      long: env-block-var
+      short: E
+      multiple: true
+      possible_values: []
+    environment: NETSUKE_ENV_BLOCK_VAR
+    file: env_block_var
+    merge_strategy: append
   - name: fetch_allow_host
     help_id: cli.flag.fetch_allow_host.help
     cli:
       long: fetch-allow-host
-      short: e
+      short: t
       multiple: true
       possible_values: []
     environment: NETSUKE_FETCH_ALLOW_HOST
@@ -74,7 +95,7 @@ fields:
     help_id: cli.flag.fetch_block_host.help
     cli:
       long: fetch-block-host
-      short: E
+      short: T
       multiple: true
       possible_values: []
     environment: NETSUKE_FETCH_BLOCK_HOST
@@ -84,7 +105,7 @@ fields:
     help_id: cli.flag.fetch_default_deny.help
     cli:
       long: fetch-default-deny
-      short: t
+      short: c
       multiple: false
       possible_values: []
     environment: NETSUKE_FETCH_DEFAULT_DENY
@@ -94,7 +115,7 @@ fields:
     help_id: cli.flag.trust_project_fetch_policy.help
     cli:
       long: trust-project-fetch-policy
-      short: T
+      short: r
       multiple: false
       possible_values: []
     environment: NETSUKE_TRUST_PROJECT_FETCH_POLICY

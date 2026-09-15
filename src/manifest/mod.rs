@@ -218,19 +218,7 @@ pub fn from_str(yaml: &str) -> Result<NetsukeManifest> {
 /// ```
 pub fn from_str_with_env(yaml: &str, env_reader: &EnvReader) -> Result<NetsukeManifest> {
     let env_access_policy = EnvAccessPolicy::default();
-    from_str_named(
-        yaml,
-        ManifestParse {
-            name: &ManifestName::new("Netsukefile"),
-            stdlib_registration: None,
-            env_reader,
-            env_access_policy: &env_access_policy,
-            manifest_root: None,
-            expansion_report_observer: Some(trace_expansion_report),
-            budget_limits: ManifestBudgetLimits::default(),
-        },
-        &mut None,
-    )
+    from_str_with_env_and_policy(yaml, env_reader, &env_access_policy)
 }
 /// Parse a manifest string with explicit resource ceilings for focused tests.
 ///

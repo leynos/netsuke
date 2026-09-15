@@ -230,7 +230,7 @@ fn compile_manifest_impl(world: &TestWorld, path: &str) {
     let env_reader = manifest_env_reader(world);
     let environment = netsuke::manifest::ManifestEnvironment::new(
         &env_reader,
-        netsuke::manifest::EnvAccessPolicy::default(),
+        world.manifest_env_access_policy.borrow().clone(),
     );
     let outcome = netsuke::manifest::from_path_with_policy_and_env(
         &resolved,

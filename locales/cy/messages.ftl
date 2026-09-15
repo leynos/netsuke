@@ -447,5 +447,5 @@ example.errors_found = { $count ->
 }
 manifest.budget.exceeded = Daeth cyllideb adnoddau'r maniffest i ben yn ystod { $stage } ar ôl cyrraedd { $limit }.
 
-cli.flag.env_allow_var.help = Environment variable permitted for the manifest env() helper
-cli.flag.env_block_var.help = Environment variable blocked for the manifest env() helper
+cli.flag.env_allow_var.help = Newidyn amgylchedd a ganiateir i gynorthwyydd env() y maniffest
+cli.flag.env_block_var.help = Newidyn amgylchedd a rwystir i gynorthwyydd env() y maniffest

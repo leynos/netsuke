@@ -82,6 +82,14 @@ Feature: Manifest Parsing
     When the manifest is checked
     Then the first target command is "echo world"
 
+  Scenario: Blocking environment variables in a manifest
+    Given the environment variable "NETSUKE_TEST_ENV" is set to "secret"
+    And the manifest environment variable "NETSUKE_TEST_ENV" is blocked
+    And the manifest file "tests/data/jinja_env.yml" is parsed
+    When the parsing result is checked
+    Then parsing the manifest fails
+    And the blocked environment error omits "NETSUKE_TEST_ENV"
+
   Scenario: Rendering manifest macros
     Given the manifest file "tests/data/jinja_macros.yml" is parsed
     When the manifest is checked
