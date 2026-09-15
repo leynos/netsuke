@@ -29,16 +29,25 @@ COVERAGE_ACTION: typ.Final[str] = (
 #: whatever follows the coverage step. The job timer covers it; the
 #: watchdog does not.
 #:
-#: Measured from the worst of several runs rather than one. Across twelve
-#: successful `ci.yml` runs the widest gap between the coverage step and
-#: its job was 384 s on run 34047430187; across twelve of
-#: `coverage-main.yml` it was 53 s on run 33809357448. Fifteen minutes
-#: covers the worse of those, and none of those runs was genuinely cold.
+#: Measured from the worst of many runs rather than one, and across runs
+#: of every conclusion. Across the last 59 `ci.yml` runs on 2026-09-15 the
+#: widest gap between the coverage step and its job was 648 s on run
+#: 34920593696, whose coverage step did not run at all; across the last 59
+#: of `coverage-main.yml` it was 119 s on run 33411190301. Fifteen minutes
+#: covers the worse of those with 252 s to spare, and none of those runs
+#: was genuinely cold.
 OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS: typ.Final[float] = 15 * 60.0
 
 #: Build time inside the `cargo` invocation, before nextest starts its own
-#: clock. Only used if a `global-timeout` appears: the watchdog must cover
-#: it as well as the whole-run budget.
+#: clock. The watchdog covers it as well as the whole-run budget, so the
+#: requirement derived from a `global-timeout` carries it as a term.
+#:
+#: Measured from the coverage-step logs of the ten longest runs in each
+#: lane on 2026-09-15, timed from `cargo llvm-cov`'s first line to
+#: nextest's "Starting N tests": the longest was 242 s on run 34920593593,
+#: and every one of those runs recompiled the dependency graph from
+#: scratch. All of them read a warm sccache, so ten minutes is the
+#: allowance for the case none of them measured, an empty one.
 COLD_BUILD_ALLOWANCE_SECONDS: typ.Final[float] = 10 * 60.0
 
 #: How far a ceiling must sit above the sum it contains, rather than

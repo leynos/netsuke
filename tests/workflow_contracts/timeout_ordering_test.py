@@ -1,24 +1,24 @@
 """Contract for the timers that can end a test run.
 
 Four independent budgets can end a coverage lane, each set somewhere
-different, and they only work if each sits above the one inside it.
-Three of the four are set here: a per-test ``slow-timeout`` in
-``.config/nextest.toml``, the shared coverage action's wall-clock
-watchdog on the ``cargo`` invocation, and the job's own
-``timeout-minutes``.
+different, and they only work if each sits above the one inside it. All
+four are set here: a per-test ``slow-timeout`` and a whole-run
+``global-timeout`` in ``.config/nextest.toml``, the shared coverage
+action's wall-clock watchdog on the ``cargo`` invocation, and the job's
+own ``timeout-minutes``.
 
-The second tier, nextest's whole-run ``global-timeout``, is not set.
-That is a gap rather than a decision: this repository does run nextest,
-so the budget exists to be set, and until it is the watchdog is doing
-tier two's job as well as its own. A run whose tests each stay inside
-their 600 s allowance can still exceed the watchdog between them, and
+The whole-run tier was the last to arrive, and its absence is the state
+this contract exists to keep from returning. Without it the watchdog
+does tier two's job as well as its own: a run whose tests each stay
+inside their allowance can still exceed the watchdog between them, and
 the failure then names ``cargo`` rather than the run. The contract
-therefore binds the value if it appears, so that adding one later lands
-in the right place rather than merely somewhere.
+therefore asserts that the budget is present as well as where it sits,
+because a commented-out key is what a presence assertion catches and an
+ordering assertion does not.
 
 The per-test allowance is ``period`` multiplied by ``terminate-after``,
 not ``period`` alone. Reading the period as the budget would understate
-the largest allowance here fivefold on Linux and tenfold on Windows.
+the largest allowance here fivefold on Linux and sevenfold on Windows.
 
 See "Test timeouts: the tiers this repository sets" in
 ``docs/developers-guide.md``, and the canonical wording in
@@ -233,22 +233,31 @@ def test_the_job_ceiling_covers_every_watchdog_and_the_work_around_them(
         )
 
 
-def test_a_whole_run_budget_would_sit_inside_the_watchdog(
+def test_a_whole_run_budget_sits_inside_the_watchdog(
     coverage_lanes: tuple[CoverageLane, ...], nextest_config: str
 ) -> None:
-    """Tier three must not pre-empt tier two, if tier two appears.
+    """Tier three must not pre-empt tier two, and tier two must exist.
 
-    No ``global-timeout`` is set today, so this skips against the current
-    tree and is not a licence to leave it that way: the guide records the
-    gap. What it does is bind the value the moment one is added, so it
-    arrives above the largest per-test allowance and inside the watchdog
-    rather than merely somewhere. The rule itself is
-    ``whole_run_ordering_faults``, driven with configurations that do set
-    the key in ``whole_run_ordering_test``, because a rule executed only
-    against a file that omits it is a rule nobody has run.
+    The presence assertion comes first and is not a formality. Every
+    ordering assertion below reads a budget from the file, so commenting
+    the key out or deleting it satisfies each of them by leaving nothing
+    to compare, and the watchdog silently resumes doing tier two's job.
+
+    The ordering rule itself is ``whole_run_ordering_faults``, driven
+    with configurations this repository does not have in
+    ``whole_run_ordering_test``, because a rule exercised only against
+    one file is a rule with one input.
+
+    Proved by mutation: commenting out the ``global-timeout``, lowering
+    it below the largest per-test allowance, and raising it above what
+    the watchdog can cover each fail this test.
     """
-    if global_timeout(nextest_config) is None:
-        pytest.skip("no global-timeout is set; the guide records this as a gap")
+    assert global_timeout(nextest_config) is not None, (
+        "[profile.default] sets no global-timeout, so nothing bounds the test "
+        "run as a whole and the cargo watchdog is doing tier two's job; a run "
+        "whose tests each stay inside their allowance can exceed the watchdog "
+        "between them, and the failure then names cargo rather than the run"
+    )
     faults = whole_run_ordering_faults(nextest_config, coverage_lanes)
     assert not faults, "; ".join(faults)
 
@@ -261,7 +270,7 @@ def test_the_largest_per_test_allowance_counts_the_multiplier(
     This is the reading that decides every comparison above, and it is
     the one easy to get wrong: the periods here are all 60 s, so a
     contract reading the period alone would report a 60 s largest
-    allowance where the real figure is 600 s.
+    allowance where the real figure is 420 s.
     """
     largest = largest_test_allowance(nextest_config)
     periods = [
@@ -280,9 +289,9 @@ def test_the_termination_allowance_is_the_grace_period_plus_the_margin() -> None
     A single floor over the grace period and the margin would absorb
     every grace period below the margin, so adding one of thirty seconds
     to this configuration would demand nothing more of the watchdog above
-    it. No `global-timeout` is set here, so the ordering assertion that
-    uses this reading is skipped entirely, which makes a test of the
-    reading itself the only thing standing behind it.
+    it. The ordering assertion that uses this reading has 230 s of slack
+    against the real tree, so it would pass on either reading; the test
+    of the reading itself is what stands behind the two terms.
     """
     assert termination_allowance("") == pytest.approx(
         NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS + TERMINATION_SAFETY_MARGIN_SECONDS

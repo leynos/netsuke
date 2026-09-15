@@ -9,7 +9,7 @@ The reading that matters most is the per-test one. nextest warns once
 per ``period`` and terminates after ``terminate-after`` of them, so the
 budget is their product. Every period in this repository is 60 s, so a
 reader taking the period alone would report a 60 s allowance where the
-real figure is 300 s, or 600 s for the two Windows overrides. A
+real figure is 300 s, or 420 s for the Windows override. A
 ``slow-timeout`` naming no ``terminate-after`` terminates nothing at
 all, so that form is refused rather than read as a single period.
 
@@ -233,9 +233,9 @@ def largest_test_allowance(config_text: str) -> float:
 
     nextest warns once per ``period`` and terminates after
     ``terminate-after`` of them, so the budget is their product. This
-    repository sets five on Linux and ten on Windows against a 60 s
+    repository sets five on Linux and seven on Windows against a 60 s
     period, so reading the period alone would understate the largest
-    allowance by a factor of ten.
+    allowance sevenfold.
 
     Parameters
     ----------
