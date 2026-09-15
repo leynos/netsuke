@@ -436,5 +436,5 @@ example.errors_found = { $count ->
    *[other] Знайдено { $count } помилки.
 }
 
-cli.flag.env_allow_var.help = Змінна середовища, дозволена помічнику env() маніфесту.
-cli.flag.env_block_var.help = Змінна середовища, заблокована помічнику env() маніфесту.
+cli.flag.env_allow_var.help = Змінна середовища, дозволена для помічника env() маніфесту.
+cli.flag.env_block_var.help = Змінна середовища, заблокована для помічника env() маніфесту.
