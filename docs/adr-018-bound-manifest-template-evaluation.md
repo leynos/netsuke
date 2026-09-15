@@ -39,6 +39,13 @@ trusted configuration, the environment, or CLI flags. Malformed, non-positive,
 and unrepresentable budget values are rejected during configuration merge
 rather than treated as absent.
 
+After a successful full manifest load, the runner continues to call
+`record_manifest_structure` for the bounded fixed-vocabulary structural counts
+defined by [ADR-009](adr-009-bounded-redacted-manifest-telemetry.md). A budget
+failure aborts before that structural telemetry is emitted. Manifest-query
+loading suppresses the budget-exhaustion metric and does not invoke the
+full-load structural emission path.
+
 ## Rationale
 
 One budget makes build and manifest-query loading subject to the same resource
