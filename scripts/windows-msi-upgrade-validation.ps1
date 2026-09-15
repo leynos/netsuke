@@ -94,18 +94,14 @@ function Install-AndAssert {
         [Parameter(Mandatory)]
         [string]$ProductCode,
         [Parameter(Mandatory)]
-        [int]$ExpectedRank,
-        [Parameter(Mandatory)]
-        [string]$ExpectedPayload,
-        [Parameter(Mandatory)]
-        [string]$LogName
+        [hashtable]$ExpectedInstallation
     )
 
-    $exitCode = Invoke-MsiInstall -MsiPath $MsiPath -LogPath (Join-Path $LogDirectory $LogName)
+    $exitCode = Invoke-MsiInstall -MsiPath $MsiPath -LogPath (Join-Path $LogDirectory $ExpectedInstallation.LogName)
     if ($exitCode -ne 0) {
         throw "Installing $MsiPath failed with msiexec exit code $exitCode."
     }
-    Assert-InstalledProduct -ProductCode $ProductCode -ExpectedRank $ExpectedRank -ExpectedPayload $ExpectedPayload
+    Assert-InstalledProduct -ProductCode $ProductCode -ExpectedRank $ExpectedInstallation.Rank -ExpectedPayload $ExpectedInstallation.Payload
 }
 
 function Assert-DowngradeIsRejected {
@@ -125,6 +121,9 @@ function Assert-DowngradeIsRejected {
 $beta1ProductCode = Get-MsiProperty -MsiPath $Beta1Msi -PropertyName ProductCode
 $beta2ProductCode = Get-MsiProperty -MsiPath $Beta2Msi -PropertyName ProductCode
 $finalProductCode = Get-MsiProperty -MsiPath $FinalMsi -PropertyName ProductCode
+$beta1Installation = @{ Rank = 1; Payload = 'MZbeta1'; LogName = 'beta1-install.log' }
+$beta2Installation = @{ Rank = 2; Payload = 'MZbeta2'; LogName = 'beta2-install.log' }
+$finalInstallation = @{ Rank = 65535; Payload = 'MZfinal'; LogName = 'final-install.log' }
 if (
     ($beta1ProductCode -eq $beta2ProductCode) -or
     ($beta1ProductCode -eq $finalProductCode) -or
@@ -133,12 +132,12 @@ if (
     throw 'Each MSI fixture must have a generated, distinct ProductCode.'
 }
 
-Install-AndAssert -MsiPath $Beta1Msi -ProductCode $beta1ProductCode -ExpectedRank 1 -ExpectedPayload MZbeta1 -LogName beta1-install.log
-Install-AndAssert -MsiPath $Beta2Msi -ProductCode $beta2ProductCode -ExpectedRank 2 -ExpectedPayload MZbeta2 -LogName beta2-install.log
+Install-AndAssert -MsiPath $Beta1Msi -ProductCode $beta1ProductCode -ExpectedInstallation $beta1Installation
+Install-AndAssert -MsiPath $Beta2Msi -ProductCode $beta2ProductCode -ExpectedInstallation $beta2Installation
 Assert-ProductAbsent -ProductCode $beta1ProductCode
 Assert-DowngradeIsRejected -MsiPath $Beta1Msi -LogName beta1-downgrade.log
-Assert-InstalledProduct -ProductCode $beta2ProductCode -ExpectedRank 2 -ExpectedPayload MZbeta2
-Install-AndAssert -MsiPath $FinalMsi -ProductCode $finalProductCode -ExpectedRank 65535 -ExpectedPayload MZfinal -LogName final-install.log
+Assert-InstalledProduct -ProductCode $beta2ProductCode -ExpectedRank $beta2Installation.Rank -ExpectedPayload $beta2Installation.Payload
+Install-AndAssert -MsiPath $FinalMsi -ProductCode $finalProductCode -ExpectedInstallation $finalInstallation
 Assert-ProductAbsent -ProductCode $beta2ProductCode
 Assert-DowngradeIsRejected -MsiPath $Beta2Msi -LogName beta2-downgrade.log
-Assert-InstalledProduct -ProductCode $finalProductCode -ExpectedRank 65535 -ExpectedPayload MZfinal
+Assert-InstalledProduct -ProductCode $finalProductCode -ExpectedRank $finalInstallation.Rank -ExpectedPayload $finalInstallation.Payload
