@@ -66,7 +66,7 @@ introduces, and concrete remediation tasks that would harden the helpers.
   lists preserve default-allow compatibility; a non-empty allowlist enables
   default-deny, and an exact blocklist entry always overrides an allowlist
   entry. Denied reads fail before the process reader runs and expose only a
-  fixed localised diagnostic. This reduces secret ingress into rendered fields
+  fixed localized diagnostic. This reduces secret ingress into rendered fields
   but does not make permitted rendered values safe to log; existing output and
   logging discipline remains required.
 - [x] **Redirects bypass outbound request policy.** *(Status: remediated in
