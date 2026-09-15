@@ -25,6 +25,9 @@ operator, user, and contributor references are easier to find.
   Implementation architecture for the Netsukefile testing framework.
 - [roadmap.md](roadmap.md): Phased implementation plan and tracked delivery
   work.
+- [roadmap-composition.md](roadmap-composition.md): Roadmap continuation for
+  local includes, versioned bundles, explicit external acquisition, and
+  composition-specific execution-context integration.
 - [archive/roadmap-completed-foundations.md](archive/roadmap-completed-foundations.md):
   Archived completed roadmap foundations with relevance assessments and
   traceability notes.
