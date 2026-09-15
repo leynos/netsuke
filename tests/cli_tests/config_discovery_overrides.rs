@@ -103,6 +103,56 @@ json = false
 }
 
 #[rstest]
+fn project_environment_allowlist_cannot_widen_operator_policy() -> Result<()> {
+    let temp_project = tempdir().context("create temporary project directory")?;
+    let project_config = temp_project.path().join(".netsuke.toml");
+    fs::write(
+        &project_config,
+        r#"
+env_allow_var = ["PROJECT_SECRET"]
+env_block_var = ["PROJECT_BLOCKED"]
+"#,
+    )
+    .context("write project environment policy")?;
+
+    let merged = merge_in_project(
+        &["netsuke"],
+        temp_project.path(),
+        &[(
+            OsString::from("NETSUKE_ENV_ALLOW_VAR"),
+            OsString::from("OPERATOR_ALLOWED"),
+        )],
+    )?;
+
+    ensure!(
+        merged.env_allow_var == ["OPERATOR_ALLOWED"],
+        "project configuration must not widen the environment allowlist"
+    );
+    ensure!(
+        merged
+            .env_access_policy()
+            .evaluate("OPERATOR_ALLOWED")
+            .is_ok(),
+        "operator allowlist entry should remain effective"
+    );
+    ensure!(
+        merged
+            .env_access_policy()
+            .evaluate("PROJECT_SECRET")
+            .is_err(),
+        "project allowlist entry must not reach the policy"
+    );
+    ensure!(
+        merged
+            .env_access_policy()
+            .evaluate("PROJECT_BLOCKED")
+            .is_err(),
+        "project blocklist entry should remain cumulative"
+    );
+    Ok(())
+}
+
+#[rstest]
 #[case("-C")]
 #[case("--directory")]
 fn directory_flag_anchors_project_discovery_to_specified_dir(#[case] flag: &str) -> Result<()> {

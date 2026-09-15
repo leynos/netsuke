@@ -437,4 +437,4 @@ example.errors_found = { $count ->
 }
 
 cli.flag.env_allow_var.help = Переменная окружения, разрешённая помощнику env() манифеста
-cli.flag.env_block_var.help = Переменная окружения, заблокированная помощнику env() манифеста
+cli.flag.env_block_var.help = Переменная окружения, заблокированная для помощника env() манифеста
