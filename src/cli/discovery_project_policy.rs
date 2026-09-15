@@ -1,4 +1,4 @@
-//! Preserve project-chain provenance and quarantine fetch-policy and budget fields.
+//! Preserve project-chain provenance and quarantine policy grants and budget fields.
 //!
 //! Validates each untrusted request before the generic merge removes it from
 //! the project layer, preserving configuration errors rather than treating
@@ -223,10 +223,11 @@ fn take_project_manifest_budget_request(
     Ok(request)
 }
 
-/// Capture and remove project fetch-policy grants from one JSON layer.
+/// Capture and remove project policy grants from one JSON layer.
 ///
 /// Project configuration may request a narrower policy, but generic precedence
-/// and append merging must not grant it authority to widen operator policy.
+/// and append merging must not grant it authority to widen operator fetch or
+/// environment-access policy.
 pub(super) fn take_project_fetch_policy_request(
     value: &mut serde_json::Value,
 ) -> OrthoResult<ProjectFetchPolicyRequest> {
@@ -237,10 +238,12 @@ pub(super) fn take_project_fetch_policy_request(
     let allow_scheme =
         parse_project_policy_field(fields, "fetch_allow_scheme")?.unwrap_or_default();
     let allow_host = parse_project_policy_field(fields, "fetch_allow_host")?.unwrap_or_default();
+    let _: Option<Vec<String>> = parse_project_policy_field(fields, "env_allow_var")?;
     let _: Option<bool> = parse_project_policy_field(fields, "trust_project_fetch_policy")?;
     fields.remove("fetch_default_deny");
     fields.remove("fetch_allow_scheme");
     fields.remove("fetch_allow_host");
+    fields.remove("env_allow_var");
     fields.remove("trust_project_fetch_policy");
     Ok(ProjectFetchPolicyRequest {
         default_deny,
@@ -272,7 +275,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    //! Unit tests for quarantined project fetch-policy extraction.
+    //! Unit tests for quarantined project-policy extraction.
 
     use super::*;
     use serde_json::json;
@@ -291,6 +294,10 @@ mod tests {
             (
                 "fetch_allow_host",
                 json!({ "fetch_allow_host": "example.org" }),
+            ),
+            (
+                "env_allow_var",
+                json!({ "env_allow_var": "PACKAGE_REGISTRY_TOKEN" }),
             ),
             (
                 "trust_project_fetch_policy",

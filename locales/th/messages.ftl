@@ -437,5 +437,5 @@ example.errors_found = { $count ->
 }
 manifest.budget.exceeded = ใช้งบประมาณทรัพยากรของ manifest หมดระหว่าง { $stage } หลังจากถึง { $limit }
 
-cli.flag.env_allow_var.help = ตัวแปรสภาพแวดล้อมที่อนุญาตสำหรับตัวช่วย env() ของแมนิเฟสต์
-cli.flag.env_block_var.help = ตัวแปรสภาพแวดล้อมที่บล็อกสำหรับตัวช่วย env() ของแมนิเฟสต์
+cli.flag.env_allow_var.help = ตัวแปรสภาพแวดล้อมที่ได้รับอนุญาตสำหรับตัวช่วย env() ของแมนิเฟสต์
+cli.flag.env_block_var.help = ตัวแปรสภาพแวดล้อมที่ถูกบล็อกสำหรับตัวช่วย env() ของแมนิเฟสต์
