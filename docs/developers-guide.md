@@ -6262,9 +6262,11 @@ total-inconsistent updates before they reach the reporter. The adjacent
 streaming adapter retains at most 512 bytes for each candidate line. Once a
 line exceeds that bound, it forwards every byte unchanged, skips progress
 parsing until the line's newline, and then resumes parsing. A customized
-`NINJA_STATUS` template therefore degrades to no task-progress updates without
-affecting child output. Extend `runner::process::ninja_status` if alternate
-formats must be recognized; do not loosen the streaming adapter's bound.
+`NINJA_STATUS` template that retains the `[current/total] description` shape
+continues to update progress; unsupported shapes produce no task-progress
+updates without affecting child output. Extend `runner::process::ninja_status`
+if alternate formats must be recognized; do not loosen the streaming adapter's
+bound.
 
 ### Module: `runner::process::ninja_program`
 

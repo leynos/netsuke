@@ -3231,14 +3231,15 @@ During Stage 6, Netsuke parses Ninja status lines of the form
 fixed, bounded number of bytes for each candidate line. An oversized line is
 ignored for progress purposes until its newline, while every byte continues to
 the user's standard output; parsing resumes on the next line. The parser
-assumes Ninja's default `NINJA_STATUS` format, so customized templates degrade
-to no task-progress updates. Parsed updates are monotonic: malformed lines,
-regressive counts, and total-mismatch lines are ignored to avoid noisy or
-inconsistent progress state. Task updates fall back to textual output when
-stdout is not a teletype terminal (TTY), ensuring deterministic continuous
-integration (CI) logs; accessible mode always uses textual output. Accessible
-output remains text-first and static; it does not animate. The standard
-reporter is configurable through OrthoConfig layering via
+recognizes Ninja's default `[current/total] description` status shape.
+Customized templates that preserve that shape update progress; unsupported
+shapes degrade to no task-progress updates. Parsed updates are monotonic:
+malformed lines, regressive counts, and total-mismatch lines are ignored to
+avoid noisy or inconsistent progress state. Task updates fall back to textual
+output when stdout is not a teletype terminal (TTY), ensuring deterministic
+continuous integration (CI) logs; accessible mode always uses textual output.
+Accessible output remains text-first and static; it does not animate. The
+standard reporter is configurable through OrthoConfig layering via
 `progress: ProgressPolicy` (auto, always, or never), resolved from `--progress`,
 `NETSUKE_PROGRESS`, or a config file, with accessible mode taking precedence
 when enabled. Verbose mode (`--verbose` through OrthoConfig layers) wraps the
