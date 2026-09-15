@@ -179,13 +179,13 @@ jobs:
             fi
           } | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Install sccache
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        uses: taiki-e/install-action@d438492cf8a250514fa2d34b30bc3c0dc37c65ff  # v2.87.8
         with:
           tool: sccache@0.16.0
           fallback: none
       - name: Setup Rust
         # Pinned to the shared-actions revision that adds `cache-provider`.
-        uses: leynos/shared-actions/.github/actions/setup-rust@e041cb75c35c3524201a32d5e57c87408fbd5874
+        uses: leynos/shared-actions/.github/actions/setup-rust@0e3c4d24e43aa48b511d94f3b902711eb02138df
         with:
           # Match rust-toolchain.toml: the tree needs the nightly-default
           # Polonius borrow checker (see
@@ -201,7 +201,7 @@ jobs:
       - name: Reset sccache statistics
         run: sccache --zero-stats
       - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@77ea10341249024e22ec5d9069e3caa7596e0d4f
+        uses: leynos/shared-actions/.github/actions/generate-coverage@0e3c4d24e43aa48b511d94f3b902711eb02138df
         with:
           language: rust
           output-path: lcov.info
@@ -246,7 +246,7 @@ jobs:
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
         if: env.CS_ACCESS_TOKEN != ''
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@e041cb75c35c3524201a32d5e57c87408fbd5874
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@0e3c4d24e43aa48b511d94f3b902711eb02138df
         with:
           path: lcov.info
           format: lcov
