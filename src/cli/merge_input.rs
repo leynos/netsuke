@@ -11,7 +11,9 @@ use std::sync::Arc;
 
 use super::command::Cli;
 use super::config::CliConfig;
-use super::discovery::{DiscoveredLayers, EnvProvider, ProjectFetchPolicyRequest};
+use super::discovery::{
+    DiscoveredLayers, EnvProvider, ProjectFetchPolicyRequest, ProjectManifestBudgetRequest,
+};
 
 /// Inputs for one cached configuration merge, owned by its application caller.
 pub struct CachedMergeInput<'a, E: ?Sized> {
@@ -53,6 +55,8 @@ pub(super) struct MergeComposition {
     pub(super) errors: Vec<Arc<OrthoError>>,
     /// Project fetch-policy restrictions awaiting trust-aware reconciliation.
     pub(super) project_fetch_policy_request: Option<ProjectFetchPolicyRequest>,
+    /// Project budget restrictions awaiting trust-aware reconciliation.
+    pub(super) project_manifest_budget_request: ProjectManifestBudgetRequest,
 }
 
 impl MergeComposition {
@@ -62,6 +66,7 @@ impl MergeComposition {
             composer: MergeComposer::with_capacity(4),
             errors: Vec::new(),
             project_fetch_policy_request: None,
+            project_manifest_budget_request: ProjectManifestBudgetRequest::default(),
         }
     }
 

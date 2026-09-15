@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = 기본 거부가 켜져 있을 때 허용할 �
 cli.flag.fetch_block_host.help = 다른 곳에서 허용되더라도 항상 차단할 호스트 이름입니다.
 cli.flag.fetch_default_deny.help = 기본적으로 모든 호스트를 거부하고 선언한 허용 목록만 통과시킵니다.
 cli.flag.trust_project_fetch_policy.help = 프로젝트 설정이 fetch 정책의 허용 권한을 확대하도록 허용합니다.
+
+cli.flag.manifest_evaluation_fuel.help = 각 매니페스트 평가에서 사용할 MiniJinja 명령어 수를 제한합니다.
+cli.flag.manifest_fuel.help = 하나의 매니페스트 전체에서 사용할 MiniJinja 명령어 수를 제한합니다.
+cli.flag.manifest_rendered_value_bytes.help = 하나의 매니페스트 값으로 렌더링되는 바이트 수를 제한합니다.
+cli.flag.manifest_rendered_manifest_bytes.help = 하나의 매니페스트 전체로 렌더링되는 총 바이트 수를 제한합니다.
+cli.flag.manifest_source_bytes.help = 매니페스트마다 소비되는 템플릿 및 매크로 소스 바이트 수를 제한합니다.
+cli.flag.manifest_foreach_cardinality.help = 하나의 foreach 확장에서 처리하는 값의 수를 제한합니다.
+cli.flag.manifest_expanded_entries.help = 하나의 매니페스트에서 확장되는 대상과 작업의 수를 제한합니다.
 cli.flag.json.help = 기계가 읽을 수 있는 JSON을 출력합니다.
 cli.flag.no_input.help = 대화형 입력을 절대 읽지 않습니다.
 cli.flag.color.help = 색상 출력 정책(auto, always, never).
@@ -425,3 +433,4 @@ example.errors_found = { $count ->
     [0] 오류를 찾지 못했습니다.
    *[other] 오류 { $count }개를 찾았습니다.
 }
+manifest.budget.exceeded = { $stage } 중 매니페스트 리소스 예산이 소진되었습니다. { $limit }에 도달했습니다.

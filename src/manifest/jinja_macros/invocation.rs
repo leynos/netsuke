@@ -3,6 +3,8 @@
 use super::call::call_macro_value;
 use super::telemetry;
 use crate::localization::{self, keys};
+use crate::manifest::budget::{ManifestBudget, ManifestBudgetStage};
+use crate::manifest::budget_adapter::BudgetErrorExt;
 use minijinja::{
     AutoEscape, Captured, Environment, Error, ErrorKind, State,
     value::{Kwargs, Rest, Value},
@@ -30,6 +32,7 @@ struct MacroReference<'a> {
 pub(super) fn make_macro_fn(
     template_name: String,
     macro_name: String,
+    budget: ManifestBudget,
 ) -> impl Fn(&State, Rest<Value>, Kwargs) -> Result<Value, Error> {
     telemetry::describe_macro_metrics();
     move |state, Rest(args), macro_kwargs| {
@@ -38,7 +41,15 @@ pub(super) fn make_macro_fn(
             macro_name: &macro_name,
         };
         telemetry::instrument_macro_invocation(|| {
-            invoke_macro(state, args.as_slice(), &macro_kwargs, reference)
+            invoke_macro(
+                state,
+                &MacroInvocation {
+                    args: args.as_slice(),
+                    macro_kwargs: &macro_kwargs,
+                    reference,
+                    budget: &budget,
+                },
+            )
         })
     }
 }
@@ -49,22 +60,59 @@ pub(super) fn make_macro_fn(
 ///
 /// Returns an error when the macro cannot be captured, keyword arguments
 /// cannot be collected, or the rendered macro output cannot be produced.
-fn invoke_macro(
-    state: &State,
-    args: &[Value],
-    macro_kwargs: &Kwargs,
-    reference: MacroReference<'_>,
-) -> Result<Value, Error> {
-    let (captured, macro_value) =
-        capture_macro(state.env(), reference.template_name, reference.macro_name)?;
-    let maybe_kwargs = collect_kwargs(macro_kwargs)?;
-    let rendered_value = call_macro_value(captured.state(), &macro_value, args, maybe_kwargs)?;
+fn invoke_macro(state: &State, request: &MacroInvocation<'_>) -> Result<Value, Error> {
+    let fuel = request
+        .budget
+        .reserve_fuel(ManifestBudgetStage::Macro)
+        .map_err(|exhaustion| exhaustion.into_error(ErrorKind::OutOfFuel))?;
+    let mut bounded_env = state.env().clone();
+    bounded_env.set_fuel(Some(fuel));
+    let (captured, macro_value) = capture_macro(
+        &bounded_env,
+        request.reference.template_name,
+        request.reference.macro_name,
+    )
+    .map_err(|error| map_macro_fuel_exhaustion(error, request.budget))?;
+    let maybe_kwargs = collect_kwargs(request.macro_kwargs)?;
+    let rendered_value =
+        call_macro_value(captured.state(), &macro_value, request.args, maybe_kwargs)
+            .map_err(|error| map_macro_fuel_exhaustion(error, request.budget))?;
+    if let Some((_, unused)) = captured.state().fuel_levels() {
+        request.budget.refund_unused_fuel(unused);
+    }
     let rendered: String = rendered_value.into();
+    request
+        .budget
+        .charge_macro_output(rendered.len())
+        .map_err(|exhaustion| exhaustion.into_error(ErrorKind::WriteFailure))?;
     Ok(if matches!(state.auto_escape(), AutoEscape::None) {
         Value::from(rendered)
     } else {
         Value::from_safe_string(rendered)
     })
+}
+
+/// Translate engine fuel exhaustion into the manifest budget diagnostic.
+fn map_macro_fuel_exhaustion(error: Error, budget: &ManifestBudget) -> Error {
+    if error.kind() == ErrorKind::OutOfFuel {
+        budget
+            .fuel_exhaustion(ManifestBudgetStage::Macro)
+            .into_error(ErrorKind::OutOfFuel)
+    } else {
+        error
+    }
+}
+
+/// Borrow the complete input required for one macro callback invocation.
+struct MacroInvocation<'a> {
+    /// Holds positional macro arguments.
+    args: &'a [Value],
+    /// Holds keyword macro arguments.
+    macro_kwargs: &'a Kwargs,
+    /// Identifies the resolved macro.
+    reference: MacroReference<'a>,
+    /// Shares manifest-local accounting with the evaluation caller.
+    budget: &'a ManifestBudget,
 }
 
 /// Confirm that a compiled template exports the requested macro.
@@ -134,7 +182,8 @@ fn collect_kwargs(macro_kwargs: &Kwargs) -> Result<Option<Kwargs>, Error> {
 mod tests {
     //! Snapshots for localized macro-invocation failures.
 
-    use super::{make_macro_fn, validate_macro};
+    use super::{ManifestBudget, make_macro_fn, validate_macro};
+    use crate::manifest::ManifestBudgetLimits;
     use minijinja::{Environment, ErrorKind, UndefinedBehavior};
     use rstest::rstest;
     use test_support::{EnLocalizer, en_localizer, fluent::normalize_fluent_isolates};
@@ -190,7 +239,11 @@ mod tests {
         .expect("macro fixture template should compile");
         env.add_function(
             "greet",
-            make_macro_fn("macro-template".to_owned(), "greet".to_owned()),
+            make_macro_fn(
+                "macro-template".to_owned(),
+                "greet".to_owned(),
+                ManifestBudget::default(),
+            ),
         );
 
         let expression = env
@@ -218,7 +271,11 @@ mod tests {
         .expect("macro fixture template should compile");
         env.add_function(
             "greet",
-            make_macro_fn("macro-template".to_owned(), "greet".to_owned()),
+            make_macro_fn(
+                "macro-template".to_owned(),
+                "greet".to_owned(),
+                ManifestBudget::default(),
+            ),
         );
 
         let expression = env
@@ -241,7 +298,11 @@ mod tests {
         let mut env = Environment::new();
         env.add_function(
             "missing_macro",
-            make_macro_fn("missing-template".to_owned(), "missing_macro".to_owned()),
+            make_macro_fn(
+                "missing-template".to_owned(),
+                "missing_macro".to_owned(),
+                ManifestBudget::default(),
+            ),
         );
 
         let expression = env
@@ -256,6 +317,37 @@ mod tests {
             normalize_fluent_isolates(&error.to_string()),
             "template not found: Failed to load macro template. (in <expression>:1)"
         );
+    }
+
+    #[rstest]
+    fn compiled_expression_maps_macro_initialization_fuel_exhaustion(en_localizer: EnLocalizer) {
+        let _en = en_localizer;
+        let mut env = Environment::new();
+        env.add_template(
+            "macro-template",
+            "{% for _ in range(2) %}{% endfor %}{% macro greet() %}hi{% endmacro %}",
+        )
+        .expect("macro fixture template should compile");
+        let budget = ManifestBudget::new(ManifestBudgetLimits {
+            evaluation_fuel: 1,
+            manifest_fuel: 1,
+            ..ManifestBudgetLimits::default()
+        })
+        .expect("positive test limits should construct a budget");
+        env.add_function(
+            "greet",
+            make_macro_fn("macro-template".to_owned(), "greet".to_owned(), budget),
+        );
+
+        let expression = env
+            .compile_expression("greet()")
+            .expect("macro expression should compile");
+        let error = expression
+            .eval(())
+            .expect_err("macro initialization should exhaust the manifest fuel budget");
+
+        assert_eq!(error.kind(), ErrorKind::OutOfFuel);
+        assert!(error.to_string().contains("resource budget exhausted"));
     }
 
     proptest::proptest! {
@@ -277,7 +369,11 @@ mod tests {
             .expect("macro fixture template should compile");
             env.add_function(
                 "pair",
-                make_macro_fn("macro-template".to_owned(), "pair".to_owned()),
+                make_macro_fn(
+                    "macro-template".to_owned(),
+                    "pair".to_owned(),
+                    ManifestBudget::default(),
+                ),
             );
 
             let source = format!("pair('{positional}', second='{keyword}')");

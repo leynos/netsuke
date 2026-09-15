@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = ชื่อโฮสต์ที่อนุ�
 cli.flag.fetch_block_host.help = ชื่อโฮสต์ที่ถูกปิดกั้นเสมอ แม้จะได้รับอนุญาตจากที่อื่น
 cli.flag.fetch_default_deny.help = ปฏิเสธโฮสต์ทั้งหมดโดยค่าเริ่มต้น อนุญาตเฉพาะรายการที่ประกาศไว้
 cli.flag.trust_project_fetch_policy.help = อนุญาตให้การกำหนดค่าโครงการขยายสิทธิ์ของนโยบาย fetch
+
+cli.flag.manifest_evaluation_fuel.help = จำกัดจำนวนคำสั่ง MiniJinja สำหรับการประเมิน manifest แต่ละครั้ง
+cli.flag.manifest_fuel.help = จำกัดจำนวนคำสั่ง MiniJinja ตลอดทั้ง manifest หนึ่งรายการ
+cli.flag.manifest_rendered_value_bytes.help = จำกัดจำนวนไบต์ที่เรนเดอร์ลงในค่าของ manifest หนึ่งค่า
+cli.flag.manifest_rendered_manifest_bytes.help = จำกัดจำนวนไบต์ทั้งหมดที่เรนเดอร์ใน manifest หนึ่งรายการ
+cli.flag.manifest_source_bytes.help = จำกัดจำนวนไบต์ของแหล่งที่มาของเทมเพลตและแมโครที่ใช้ต่อ manifest
+cli.flag.manifest_foreach_cardinality.help = จำกัดจำนวนค่าที่ประมวลผลโดยการขยาย foreach หนึ่งครั้ง
+cli.flag.manifest_expanded_entries.help = จำกัดจำนวนเป้าหมายและการกระทำที่ขยายจาก manifest หนึ่งรายการ
 cli.flag.json.help = แสดงผลเป็น JSON ที่เครื่องอ่านได้
 cli.flag.no_input.help = ไม่อ่านข้อมูลนำเข้าแบบโต้ตอบเลย
 cli.flag.color.help = นโยบายการแสดงผลแบบมีสี (auto, always, never)
@@ -425,3 +433,4 @@ example.errors_found = { $count ->
     [0] ไม่พบข้อผิดพลาด
    *[other] พบข้อผิดพลาด { $count } รายการ
 }
+manifest.budget.exceeded = ใช้งบประมาณทรัพยากรของ manifest หมดระหว่าง { $stage } หลังจากถึง { $limit }

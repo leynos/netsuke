@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = Engedélyezett gépnevek, ha az alapértelmezet
 cli.flag.fetch_block_host.help = Mindig letiltott gépnevek, akkor is, ha máshol engedélyezettek.
 cli.flag.fetch_default_deny.help = Alapértelmezés szerint minden gép tiltása; csak a megadott lista engedélyezése.
 cli.flag.trust_project_fetch_policy.help = Engedélyezze, hogy a projekt konfigurációja kibővítse a fetch-házirend engedélyeit.
+
+cli.flag.manifest_evaluation_fuel.help = A MiniJinja-utasítások korlátozása minden jegyzékkiértékeléshez.
+cli.flag.manifest_fuel.help = A MiniJinja-utasítások korlátozása egy jegyzéken belül.
+cli.flag.manifest_rendered_value_bytes.help = Egy jegyzékértékbe renderelt bájtok számának korlátozása.
+cli.flag.manifest_rendered_manifest_bytes.help = Egy jegyzékbe renderelt bájtok teljes számának korlátozása.
+cli.flag.manifest_source_bytes.help = A jegyzékenként felhasznált sablon- és makróforrás-bájtok korlátozása.
+cli.flag.manifest_foreach_cardinality.help = Egy foreach-bővítés által feldolgozott értékek korlátozása.
+cli.flag.manifest_expanded_entries.help = Egy jegyzékből kibővített célok és műveletek korlátozása.
 cli.flag.json.help = Géppel olvasható JSON kimenet előállítása.
 cli.flag.no_input.help = Soha ne olvasson interaktív bemenetet.
 cli.flag.color.help = A színes kimenet szabálya (auto, always, never).
@@ -429,3 +437,4 @@ example.errors_found = { $count ->
     [one] { $count } hiba található.
    *[other] { $count } hiba található.
 }
+manifest.budget.exceeded = A jegyzék erőforrás-kerete kimerült a(z) { $stage } szakaszban, miután elérte ezt: { $limit }.

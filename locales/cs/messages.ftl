@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = Názvy hostitelů povolené, když je zapnuto v
 cli.flag.fetch_block_host.help = Názvy hostitelů, které se vždy blokují, i když jsou povoleny jinde.
 cli.flag.fetch_default_deny.help = Ve výchozím stavu odmítat všechny hostitele; povolit jen uvedený seznam.
 cli.flag.trust_project_fetch_policy.help = Umožnit konfiguraci projektu rozšířit oprávnění zásady fetch.
+
+cli.flag.manifest_evaluation_fuel.help = Omezit instrukce MiniJinja pro každé vyhodnocení manifestu.
+cli.flag.manifest_fuel.help = Omezit instrukce MiniJinja v rámci jednoho manifestu.
+cli.flag.manifest_rendered_value_bytes.help = Omezit počet bajtů vyrenderovaných do jedné hodnoty manifestu.
+cli.flag.manifest_rendered_manifest_bytes.help = Omezit celkový počet bajtů vyrenderovaných v rámci jednoho manifestu.
+cli.flag.manifest_source_bytes.help = Omezit počet bajtů zdroje šablon a maker spotřebovaných pro jeden manifest.
+cli.flag.manifest_foreach_cardinality.help = Omezit počet hodnot zpracovaných jedním rozšířením foreach.
+cli.flag.manifest_expanded_entries.help = Omezit počet cílů a akcí rozšířených z jednoho manifestu.
 cli.flag.json.help = Vypisovat strojově čitelný výstup JSON.
 cli.flag.no_input.help = Nikdy nečíst interaktivní vstup.
 cli.flag.color.help = Zásada barevného výstupu (auto, always, never).
@@ -432,3 +440,4 @@ example.errors_found = { $count ->
     [many] Nalezeno { $count } chyby.
    *[other] Nalezeno { $count } chyb.
 }
+manifest.budget.exceeded = Rozpočet prostředků manifestu byl během fáze { $stage } vyčerpán po dosažení hodnoty { $limit }.

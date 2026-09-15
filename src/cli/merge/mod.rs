@@ -30,7 +30,7 @@ use serde::Serialize;
 use serde_json::{Map, Value, json};
 
 use super::MergeEvent;
-use super::command::{BuildArgs, Cli, Commands};
+use super::command::{Cli, Commands};
 use super::config::CliConfig;
 use super::discovery::{
     DiscoveredLayers, EnvProvider, StdEnvProvider, discover_file_layers,
@@ -38,12 +38,18 @@ use super::discovery::{
 };
 use super::environment::EnvironmentLayer;
 use super::fetch_policy::reconcile_fetch_policy;
+use super::manifest_budget_policy::reconcile_manifest_budget;
 use super::merge_apply::apply_config;
 use super::merge_input::{CachedMergeInput, MergeComposition};
 use super::merge_observability::{
     collect_override_leaf_paths, is_empty_configuration_value, validation_rejection_reason,
 };
 use super::validation::validation_error;
+
+mod command_overrides;
+mod manifest_budget_overrides;
+use command_overrides::build_cli_overrides;
+use manifest_budget_overrides::insert_manifest_budget_cli_overrides;
 
 /// Merge discovered configuration layers over parsed CLI input.
 ///
@@ -119,7 +125,10 @@ where
     let mut events = Vec::new();
 
     push_defaults_layer(&mut composition, &mut events);
-    composition.project_fetch_policy_request = push_discovered_file_layers(
+    (
+        composition.project_fetch_policy_request,
+        composition.project_manifest_budget_request,
+    ) = push_discovered_file_layers(
         &mut composition.composer,
         &mut composition.errors,
         discovered,
@@ -129,12 +138,17 @@ where
     push_cli_layer(cli, matches, &mut composition, &mut events);
 
     let project_fetch_policy_request = composition.project_fetch_policy_request.take();
+    let project_manifest_budget_request =
+        std::mem::take(&mut composition.project_manifest_budget_request);
     let merged = match composition.into_merge_result() {
         Ok(config) => {
             let (reconciled_config, outcome) =
                 reconcile_fetch_policy(config, project_fetch_policy_request);
             events.push(MergeEvent::FetchPolicyReconciled { outcome });
-            Ok(apply_config(cli, reconciled_config))
+            Ok(apply_config(
+                cli,
+                reconcile_manifest_budget(reconciled_config, &project_manifest_budget_request),
+            ))
         }
         Err(error) => {
             collect_validation_rejection(&mut events, error.as_ref());
@@ -267,6 +281,7 @@ fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Va
         &cli.trust_project_fetch_policy,
         &mut root,
     )?;
+    insert_manifest_budget_cli_overrides(cli, matches, &mut root)?;
     maybe_insert_explicit(matches, "json", &cli.json, &mut root)?;
     maybe_insert_explicit(matches, "no_input", &cli.no_input(), &mut root)?;
     maybe_insert_explicit(matches, "color", &cli.color, &mut root)?;
@@ -301,24 +316,13 @@ fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Va
     Ok(Value::Object(root))
 }
 
-/// Collect the `build` subcommand's overrides from explicitly supplied arguments.
-///
-/// # Errors
-///
-/// Returns a validation error when a supplied value cannot be serialized.
-fn build_cli_overrides(args: &BuildArgs, matches: &ArgMatches) -> OrthoResult<Map<String, Value>> {
-    let mut build = Map::new();
-    maybe_insert_explicit(matches, "targets", &args.targets, &mut build)?;
-    Ok(build)
-}
-
 /// Insert `field` into `target` when `matches` reports it was supplied on the
 /// command line.
 ///
 /// # Errors
 ///
 /// Returns a validation error when `value` cannot be serialized.
-fn maybe_insert_explicit<T>(
+pub(super) fn maybe_insert_explicit<T>(
     matches: &ArgMatches,
     field: &str,
     value: &T,
@@ -338,7 +342,7 @@ where
 /// # Errors
 ///
 /// Returns a validation error when serialization fails.
-fn serialize_value<T>(field: &str, value: &T) -> OrthoResult<Value>
+pub(super) fn serialize_value<T>(field: &str, value: &T) -> OrthoResult<Value>
 where
     T: Serialize,
 {

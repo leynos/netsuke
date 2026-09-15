@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = Имена узлов, разрешённые �
 cli.flag.fetch_block_host.help = Имена узлов, которые блокируются всегда, даже если разрешены в другом месте.
 cli.flag.fetch_default_deny.help = Запрещать все узлы по умолчанию; разрешать только объявленный список.
 cli.flag.trust_project_fetch_policy.help = Разрешить конфигурации проекта расширять разрешения политики fetch.
+
+cli.flag.manifest_evaluation_fuel.help = Ограничить число инструкций MiniJinja для каждой оценки манифеста.
+cli.flag.manifest_fuel.help = Ограничить число инструкций MiniJinja в одном манифесте.
+cli.flag.manifest_rendered_value_bytes.help = Ограничить число байтов, выводимых в одно значение манифеста.
+cli.flag.manifest_rendered_manifest_bytes.help = Ограничить общее число байтов, выводимых в одном манифесте.
+cli.flag.manifest_source_bytes.help = Ограничить число байтов исходного кода шаблонов и макросов, используемых для манифеста.
+cli.flag.manifest_foreach_cardinality.help = Ограничить число значений, обрабатываемых одним расширением foreach.
+cli.flag.manifest_expanded_entries.help = Ограничить число целей и действий, расширяемых из одного манифеста.
 cli.flag.json.help = Выводить машиночитаемый JSON.
 cli.flag.no_input.help = Никогда не читать интерактивный ввод.
 cli.flag.color.help = Политика цветного вывода (auto, always, never).
@@ -434,3 +442,4 @@ example.errors_found = { $count ->
     [many] Найдено { $count } ошибок.
    *[other] Найдено { $count } ошибки.
 }
+manifest.budget.exceeded = Бюджет ресурсов манифеста исчерпан. Этап: { $stage }. Достигнутое значение лимита: { $limit }.

@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = أسماء المضيفين المسموح به
 cli.flag.fetch_block_host.help = أسماء المضيفين المحجوبة دائمًا، حتى إن سُمح بها في موضع آخر.
 cli.flag.fetch_default_deny.help = رفض جميع المضيفين افتراضيًا؛ والسماح بالقائمة المعلنة فقط.
 cli.flag.trust_project_fetch_policy.help = ‏السماح لإعدادات المشروع بتوسيع منح سياسة fetch.
+
+cli.flag.manifest_evaluation_fuel.help = ‏حدّ تعليمات MiniJinja لكل تقييم للبيان.
+cli.flag.manifest_fuel.help = ‏حدّ تعليمات MiniJinja عبر بيان واحد.
+cli.flag.manifest_rendered_value_bytes.help = ‏حدّ وحدات البايت المُخرَجة في قيمة بيان واحدة.
+cli.flag.manifest_rendered_manifest_bytes.help = ‏حدّ إجمالي وحدات البايت المُخرَجة عبر بيان واحد.
+cli.flag.manifest_source_bytes.help = ‏حدّ وحدات بايت مصدر القالب ووحدات الماكرو المستهلكة لكل بيان.
+cli.flag.manifest_foreach_cardinality.help = ‏حدّ القيم المعالَجة في توسعة foreach واحدة.
+cli.flag.manifest_expanded_entries.help = ‏حدّ الأهداف والإجراءات الموسَّعة من بيان واحد.
 cli.flag.json.help = إخراج JSON قابل للقراءة آليًا.
 cli.flag.no_input.help = عدم قراءة أي مدخلات تفاعلية أبدًا.
 cli.flag.color.help = سياسة الإخراج الملوّن (auto أو always أو never).
@@ -435,3 +443,4 @@ example.errors_found = { $count ->
     [many] عُثر على { $count } خطأً.
    *[other] عُثر على { $count } خطأ.
 }
+manifest.budget.exceeded = ‏استُنفدت ميزانية موارد البيان أثناء { $stage } بعد بلوغ { $limit }.

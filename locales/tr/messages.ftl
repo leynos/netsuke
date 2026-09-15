@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = Varsayılan reddetme açıkken izin verilen mak
 cli.flag.fetch_block_host.help = Başka yerde izin verilse bile her zaman engellenen makine adları.
 cli.flag.fetch_default_deny.help = Varsayılan olarak tüm makineleri reddet; yalnızca bildirilen listeye izin ver.
 cli.flag.trust_project_fetch_policy.help = Proje yapılandırmasının fetch politikası izinlerini genişletmesine izin ver.
+
+cli.flag.manifest_evaluation_fuel.help = Her manifest değerlendirmesi için MiniJinja talimatlarının sayısını sınırla.
+cli.flag.manifest_fuel.help = Tek bir manifest genelindeki MiniJinja talimatlarının sayısını sınırla.
+cli.flag.manifest_rendered_value_bytes.help = Tek bir manifest değerine işlenen bayt sayısını sınırla.
+cli.flag.manifest_rendered_manifest_bytes.help = Tek bir manifeste işlenen toplam bayt sayısını sınırla.
+cli.flag.manifest_source_bytes.help = Manifest başına kullanılan şablon ve makro kaynak baytlarını sınırla.
+cli.flag.manifest_foreach_cardinality.help = Tek bir foreach genişletmesinin işlediği değer sayısını sınırla.
+cli.flag.manifest_expanded_entries.help = Tek bir manifestten genişletilen hedef ve eylem sayısını sınırla.
 cli.flag.json.help = Makinece okunabilir JSON çıktısı üret.
 cli.flag.no_input.help = Etkileşimli girdi hiçbir zaman okunmasın.
 cli.flag.color.help = Renkli çıktı ilkesi (auto, always, never).
@@ -428,3 +436,4 @@ example.errors_found = { $count ->
     [one] { $count } hata bulundu.
    *[other] { $count } hata bulundu.
 }
+manifest.budget.exceeded = Manifest kaynak bütçesi { $stage } aşamasında { $limit } değerine ulaşıldıktan sonra tükendi.

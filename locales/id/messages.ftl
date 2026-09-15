@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = Nama host yang diizinkan ketika penolakan bawaa
 cli.flag.fetch_block_host.help = Nama host yang selalu diblokir, meski diizinkan di tempat lain.
 cli.flag.fetch_default_deny.help = Tolak semua host secara bawaan; izinkan hanya daftar yang dinyatakan.
 cli.flag.trust_project_fetch_policy.help = Izinkan konfigurasi proyek memperluas izin kebijakan fetch.
+
+cli.flag.manifest_evaluation_fuel.help = Batasi instruksi MiniJinja untuk setiap evaluasi manifes.
+cli.flag.manifest_fuel.help = Batasi instruksi MiniJinja di seluruh satu manifes.
+cli.flag.manifest_rendered_value_bytes.help = Batasi byte yang dirender ke dalam satu nilai manifes.
+cli.flag.manifest_rendered_manifest_bytes.help = Batasi total byte yang dirender di seluruh satu manifes.
+cli.flag.manifest_source_bytes.help = Batasi byte sumber templat dan makro yang digunakan untuk setiap manifes.
+cli.flag.manifest_foreach_cardinality.help = Batasi nilai yang diproses oleh satu ekspansi foreach.
+cli.flag.manifest_expanded_entries.help = Batasi target dan tindakan yang diperluas dari satu manifes.
 cli.flag.json.help = Hasilkan keluaran JSON yang terbaca mesin.
 cli.flag.no_input.help = Jangan pernah membaca masukan interaktif.
 cli.flag.color.help = Kebijakan keluaran berwarna (auto, always, never).
@@ -426,3 +434,4 @@ example.errors_found = { $count ->
     [0] Tidak ada galat yang ditemukan.
    *[other] { $count } galat ditemukan.
 }
+manifest.budget.exceeded = Anggaran sumber daya manifes habis selama { $stage } setelah mencapai { $limit }.
