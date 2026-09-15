@@ -1991,7 +1991,7 @@ under `PYTHON_SOURCES` (`.github/scripts`, `scripts`, and
 covered by their dedicated policy; no broader path or nested-function exemption
 applies. There are no `typ.overload` stubs in this scope. If one is introduced,
 add a targeted `--ignore-regex` for that stub only because Interrogate 1.7.0
-cannot recognise the configured `typ.overload` spelling; leave Ruff's
+cannot recognize the configured `typ.overload` spelling; leave Ruff's
 real-implementation docstring rule enabled.
 
 ### Release-admission runtime tests
