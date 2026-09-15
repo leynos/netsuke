@@ -6,7 +6,10 @@ use netsuke::{
     manifest::{self, EnvAccessPolicy, EnvReadError, EnvReader},
 };
 use rstest::rstest;
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use test_support::{
     EnLocalizer, en_localizer, fluent::normalize_fluent_isolates, manifest::manifest_yaml,
 };
@@ -69,7 +72,12 @@ fn blocked_lookup_is_value_and_name_free() -> Result<()> {
     let yaml = manifest_yaml(&format!(
         "targets:\n  - name: hello\n    command: \"echo {{{{ env('{VARIABLE_NAME}') }}}}\"\n"
     ));
-    let reader: EnvReader = Arc::new(|_| Ok(String::from(VARIABLE_VALUE)));
+    let reader_was_called = Arc::new(AtomicBool::new(false));
+    let invocation_recorder = Arc::clone(&reader_was_called);
+    let reader: EnvReader = Arc::new(move |_| {
+        invocation_recorder.store(true, Ordering::Relaxed);
+        Ok(String::from(VARIABLE_VALUE))
+    });
     let error = manifest::from_str_with_env_and_policy(
         &yaml,
         &reader,
@@ -78,6 +86,10 @@ fn blocked_lookup_is_value_and_name_free() -> Result<()> {
     .expect_err("a blocked environment variable must fail");
     let diagnostic = format!("{error:#}");
     ensure!(diagnostic.contains("Access to an environment variable is blocked."));
+    ensure!(
+        !reader_was_called.load(Ordering::Relaxed),
+        "a blocked lookup must not call the reader"
+    );
     ensure!(!diagnostic.contains(VARIABLE_NAME));
     ensure!(!diagnostic.contains(VARIABLE_VALUE));
     Ok(())
