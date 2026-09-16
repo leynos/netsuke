@@ -42,13 +42,13 @@ if typ.TYPE_CHECKING:
     from cmd_mox import CmdMox
 
 #: Exercise Makefile commands without resolving their third-party tools.
-pytest_plugins = ("cmd_mox.pytest_plugin",)
+pytest_plugins: tuple[str, ...] = ("cmd_mox.pytest_plugin",)
 
 #: Pins that must agree between the Makefile and the CI workflow env block.
 SYNCED_PINS = ("RUFF_VERSION", "TY_VERSION", "PYTHON_BASELINE")
 
 #: Python sources whose dedicated coverage policy excludes them from Interrogate.
-INTERROGATE_EXCLUDED_FILES = (
+INTERROGATE_EXCLUDED_FILES: tuple[str, ...] = (
     "scripts/generate_typos_config.py",
     "scripts/typos_rollout_check.py",
     "scripts/typos_rollout.py",
@@ -63,10 +63,14 @@ INTERROGATE_EXCLUDED_FILES = (
 )
 
 #: Repository-owned Python roots that the quality targets must scan.
-PYTHON_SOURCES = (".github/scripts", "scripts", "tests/workflow_contracts")
+PYTHON_SOURCES: tuple[str, ...] = (
+    ".github/scripts",
+    "scripts",
+    "tests/workflow_contracts",
+)
 
 #: Parsed shell tokens for the pinned Interrogate Makefile command.
-INTERROGATE_COMMAND = (
+INTERROGATE_COMMAND: tuple[str, ...] = (
     "$(UV_ENV)",
     "$(UV)",
     "tool",
