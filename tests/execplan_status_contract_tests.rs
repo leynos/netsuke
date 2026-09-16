@@ -199,6 +199,12 @@ fn table_rows(section: &str) -> impl Iterator<Item = &str> {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for the header parsing and table reading above.
+    //!
+    //! Each covers one rule the contract tests depend on, so a change to
+    //! `header_lines`, `header_status`, or `table_rows` fails here with a
+    //! narrow cause rather than as an unexplained contract failure.
+
     use super::*;
 
     #[test]
