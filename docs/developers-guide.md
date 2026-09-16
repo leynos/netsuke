@@ -6779,6 +6779,31 @@ pass measured 134 s on the longest run, so nothing fails today; the sizing is
 what is wrong, and [issue 715](https://github.com/leynos/netsuke/issues/715)
 holds it.
 
+### The workflow-contract gate collects docstring examples
+
+`make test-workflow-contracts` passes `--doctest-modules`, so the examples in
+the modules under `tests/workflow_contracts` are executed rather than read.
+Without it pytest collects test functions only, and every `>>>` in those
+modules is prose that nothing runs. Collection rose from 513 tests to 516 when
+the flag went in, and one of the three examples was wrong and had never been
+run.
+
+The flag collects examples only in the modules pytest already walks, so the
+flag and the path are one mechanism: pointing the run elsewhere collects none
+of these examples, and `tests/workflow_contracts/doctest_collection_test.py`
+asserts both against the recipe `make` actually runs. It reads the target's
+tab-indented lines through `tests/workflow_contracts/makefile_recipes.py`
+rather than searching the file, because a flag named in a comment, in a
+variable, or in a neighbouring target is a flag the gate never passes. That
+distinction is the point of the contract: deleting the flag changes no test and
+breaks no import, so the suite would pass exactly as before while the examples
+silently stopped running.
+
+Doctests elsewhere are a separate matter. Rust examples run under
+`make doctest`, which nextest cannot execute, and twelve example lines under
+`scripts` and `.github/scripts` are collected by no target at all, since no
+pytest invocation has those paths in its collection path.
+
 ### The contract
 
 `tests/workflow_contracts/timeout_ordering_test.py` asserts the ordering by
@@ -6798,14 +6823,26 @@ order the real tiers correctly; against generated inputs it does not. That
 module also fixes the error paths, the malformed-workflow cases, and the
 watchdog's resolution across all three environment scopes.
 
-Three modules sit behind that contract, split by what they read.
+Four modules sit behind that contract, split by what they read.
 `tests/workflow_contracts/coverage_lanes.py` traverses the workflows: it finds
-the coverage steps, resolves each one's watchdog through the step, job and
-workflow environments, and returns one lane per step with its job's ceiling and
-condition. `tests/workflow_contracts/nextest_budgets.py` holds the nextest
+the coverage steps and returns one lane per step, with its job's ceiling and
+condition, the watchdog in force, and the nextest profile it selects.
+`tests/workflow_contracts/lane_environment.py` resolves those last two out of
+the step, job and workflow environments, in that order, since it is the same
+walk for both: `watchdog_of` returns a budget in seconds and
+`nextest_profile_of` a profile name, each reporting a blank as nothing set, and
+`WatchdogValueError` separates a watchdog the action cannot read from one no
+scope declares. `tests/workflow_contracts/nextest_budgets.py` holds the nextest
 arithmetic: the duration parser, the per-test and whole-run budgets, and the
 termination allowance. `tests/workflow_contracts/timeout_budgets.py` holds the
-values both compare against. None imports the others' subject.
+values they compare against. None imports the others' subject.
+
+The environment walk is one module rather than two readings because its
+precedence boundary is the subtle part and is worth stating once. GitHub takes
+the most specific declaration, so a step masks its job and a job masks its
+workflow, and a declared blank masks them just as a value does. Getting that
+wrong in either reading credits a lane with a budget or a profile the `cargo`
+invocation never received.
 
 The nextest configuration is parsed with `tomllib` rather than matched as text.
 A text match finds a key inside a comment, inside a `filter` string, or in a
