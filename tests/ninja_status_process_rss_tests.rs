@@ -1,10 +1,10 @@
-#![cfg(unix)]
 //! Process-boundary RSS coverage for bounded Ninja status parsing.
 //!
 //! The test redirects the real CLI's large child-output stream to disk, then
 //! runs a fresh worker process for each measurement. Each worker has exactly
 //! one `netsuke` child and records `RUSAGE_CHILDREN`, keeping the test harness
 //! from retaining the payload it is designed to bound.
+#![cfg(unix)]
 
 use anyhow::{Context, Result, ensure};
 use assert_cmd::cargo::cargo_bin;
