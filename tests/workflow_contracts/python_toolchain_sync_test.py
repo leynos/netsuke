@@ -19,23 +19,27 @@ Run via ``make test-workflow-contracts``.
 
 import re
 import shlex
+
+# This contract invokes `make` through a controlled command shim.
+# ruff: ignore[suspicious-subprocess-import] - the boundary is under test.
 import subprocess
 import typing as typ
 
 import pytest
-from cmd_mox import CmdMox
 from workflow_loading import (
     CI_WORKFLOW_PATH,
     MAKEFILE_PATH,
     PACKAGE_WORKFLOW_PATH,
-    REPO_ROOT,
     RELEASE_WORKFLOW_PATH,
+    REPO_ROOT,
     load_workflow,
     require_mapping,
 )
 
 if typ.TYPE_CHECKING:
     from pathlib import Path
+
+    from cmd_mox import CmdMox
 
 #: Exercise Makefile commands without resolving their third-party tools.
 pytest_plugins = ("cmd_mox.pytest_plugin",)
@@ -60,6 +64,21 @@ INTERROGATE_EXCLUDED_FILES = (
 
 #: Repository-owned Python roots that the quality targets must scan.
 PYTHON_SOURCES = (".github/scripts", "scripts", "tests/workflow_contracts")
+
+#: Parsed shell tokens for the pinned Interrogate Makefile command.
+INTERROGATE_COMMAND = (
+    "$(UV_ENV)",
+    "$(UV)",
+    "tool",
+    "run",
+    "--python",
+    "$(PYTHON_BASELINE)",
+    "--from",
+    "interrogate==$(INTERROGATE_VERSION)",
+    "interrogate",
+    "--fail-under",
+    "100",
+)
 
 
 def _makefile_variable(name: str) -> str:
@@ -254,6 +273,27 @@ def _run_python_lint(cmd_mox: CmdMox) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _interrogate_invocation(baseline: str, version: str) -> list[str]:
+    """Return the expanded Interrogate arguments required by ``lint-python``."""
+    return [
+        "tool",
+        "run",
+        "--python",
+        baseline,
+        "--from",
+        f"interrogate=={version}",
+        "interrogate",
+        "--fail-under",
+        "100",
+        *(
+            argument
+            for path in INTERROGATE_EXCLUDED_FILES
+            for argument in ("--exclude", path)
+        ),
+        *PYTHON_SOURCES,
+    ]
+
+
 def test_python_quality_targets_preserve_their_dependency_graph() -> None:
     """The Rust umbrella gates depend on their corresponding Python gates."""
     lint_prerequisites, _ = _makefile_target("lint")
@@ -302,19 +342,10 @@ def test_interrogate_pin_is_the_selected_release() -> None:
 
 def test_interrogate_command_uses_the_pinned_baseline_and_release() -> None:
     """Interrogate selects the baseline interpreter and exact pinned package."""
-    assert _makefile_command("INTERROGATE") == [
-        "$(UV_ENV)",
-        "$(UV)",
-        "tool",
-        "run",
-        "--python",
-        "$(PYTHON_BASELINE)",
-        "--from",
-        "interrogate==$(INTERROGATE_VERSION)",
-        "interrogate",
-        "--fail-under",
-        "100",
-    ]
+    assert _makefile_command("INTERROGATE") == list(INTERROGATE_COMMAND), (
+        "INTERROGATE must select the baseline, pinned package, executable, "
+        "and 100% threshold"
+    )
 
 
 def test_lint_python_runs_interrogate_over_the_documented_scope(
@@ -333,22 +364,11 @@ def test_lint_python_runs_interrogate_over_the_documented_scope(
         for invocation in uv.invocations
         if invocation.args[:2] == ["tool", "run"] and "interrogate" in invocation.args
     ]
-    assert interrogate_calls == [
-        [
-            "tool",
-            "run",
-            "--python",
-            "3.14",
-            "--from",
-            "interrogate==1.7.0",
-            "interrogate",
-            "--fail-under",
-            "100",
-            *(
-                argument
-                for path in INTERROGATE_EXCLUDED_FILES
-                for argument in ("--exclude", path)
-            ),
-            *PYTHON_SOURCES,
-        ]
-    ]
+    expected = _interrogate_invocation(
+        _makefile_variable("PYTHON_BASELINE"),
+        _makefile_variable("INTERROGATE_VERSION"),
+    )
+    assert interrogate_calls == [expected], (
+        "lint-python must pass Interrogate its baseline, pin, threshold, "
+        "spelling exclusions, and owned source scope"
+    )
