@@ -22,7 +22,7 @@ use netsuke::{
     },
     runner::{
         BASH_PREFLIGHT_TOTAL, LEGACY_RECIPE_EXECUTION_DURATION, LEGACY_RECIPE_EXECUTIONS_TOTAL,
-        RECIPE_SHELL_RESOLUTIONS_TOTAL,
+        NINJA_STATUS_OVERSIZED_LINES_TOTAL, RECIPE_SHELL_RESOLUTIONS_TOTAL,
     },
     stdlib::{FILE_READ_FILTER_VALUES, FILE_READ_OUTCOME_VALUES, FILE_READ_TOTAL},
 };
@@ -126,6 +126,7 @@ impl ConfigMetricsRecorder {
                 | OMITTED_FILTERED_ENTRIES_TOTAL
                 | FILE_READ_TOTAL
                 | MANIFEST_STRUCTURES_TOTAL
+                | NINJA_STATUS_OVERSIZED_LINES_TOTAL
         )
     }
 
@@ -179,7 +180,8 @@ impl ConfigMetricsRecorder {
             FILTERED_TARGETS_TOTAL
             | FILTERED_ACTIONS_TOTAL
             | OMITTED_FILTERED_ENTRIES_TOTAL
-            | MANIFEST_STRUCTURES_TOTAL => exact_labels(key, &[]),
+            | MANIFEST_STRUCTURES_TOTAL
+            | NINJA_STATUS_OVERSIZED_LINES_TOTAL => exact_labels(key, &[]),
             FILE_READ_TOTAL => exact_labels(
                 key,
                 &[

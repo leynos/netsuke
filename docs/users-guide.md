@@ -1546,6 +1546,18 @@ Build complete.
 When stdout is redirected or connected to Continuous Integration (CI), task
 progress falls back to text, so logs remain readable.
 
+### Ninja status progress
+
+Progress-aware Ninja output recognizes status lines in the
+`[current/total] description` form. Netsuke retains at most 512 bytes while
+considering a candidate line for progress. If a line exceeds that limit, its
+bytes are still forwarded unchanged, but progress parsing is skipped through
+the line's newline; parsing resumes with the next line.
+
+Custom `NINJA_STATUS` templates that preserve the recognized shape continue to
+work. Unsupported shapes produce no task-progress update. `--progress never`
+bypasses status parsing, while normal output forwarding remains unchanged.
+
 Netsuke uses semantic text labels as well as glyphs; meaning is not conveyed by
 colour alone. Emoji policy values are:
 

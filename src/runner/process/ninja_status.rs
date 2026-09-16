@@ -74,6 +74,10 @@ fn is_valid_numeric_string(value: &str) -> bool {
 }
 
 /// Parse a Ninja status line in the form `[current/total] description`.
+///
+/// This recognizes Ninja status output in its `[current/total] description` shape. A
+/// customized `NINJA_STATUS` template that preserves that shape still updates progress;
+/// unsupported shapes yield no updates while child output forwarding continues.
 pub(super) fn parse_ninja_status_line(line: &str) -> Option<NinjaTaskProgress> {
     let trimmed = line.trim_start();
     let rest = trimmed.strip_prefix('[')?;

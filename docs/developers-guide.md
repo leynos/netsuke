@@ -6254,6 +6254,28 @@ disabled, so this event cannot corrupt its diagnostic output.
   immutably. New reporter kinds or selection policies belong in this module
   beside the mode-selection logic, colocated with the output-mode policy.
 
+### Module: `runner::process::ninja_status`
+
+`src/runner/process/ninja_status.rs` parses Ninja's default `NINJA_STATUS`
+format, `[current/total] description`, and rejects malformed, regressive, or
+total-inconsistent updates before they reach the reporter. The adjacent
+streaming adapter retains at most 512 bytes for each candidate line. Once a
+line exceeds that bound, it forwards every byte unchanged, skips progress
+parsing until the line's newline, and then resumes parsing. A customized
+`NINJA_STATUS` template that retains the `[current/total] description` shape
+continues to update progress; unsupported shapes produce no task-progress
+updates without affecting child output. Extend `runner::process::ninja_status`
+if alternate formats must be recognized; do not loosen the streaming adapter's
+bound. The unlabelled `netsuke_ninja_status_oversized_lines_total` counter
+records each oversized candidate line. The Unix process-boundary regression
+test in `tests/ninja_status_process_rss_tests.rs` runs each measurement in a
+fresh test-worker process with exactly one Netsuke child. The worker streams
+each 256 MiB fake-Ninja stdout stream to a temporary file and, after the child
+exits, safely records its resource usage through `RUSAGE_CHILDREN` rather than
+measuring the parent test process. It compares progress parsing with
+`--progress never` and permits a fixed 16 MiB overhead, rejecting memory growth
+proportional to the payload.
+
 ### Module: `runner::process::ninja_program`
 
 `src/runner/process/ninja_program.rs` owns the executable-resolution boundary.
