@@ -6605,14 +6605,14 @@ paths, configuration values, or error text as metric labels.
 Four independent timers can end a test run, and the canonical statement of how
 they must be ordered lives in the `generate-coverage` README in
 [`leynos/shared-actions`](https://github.com/leynos/shared-actions/blob/main/.github/actions/generate-coverage/README.md).
-Three of the four are set here.
+All four are set here.
 
-| Tier                     | What it bounds                     | Where it is set                               | Current value                                                |
-| ------------------------ | ---------------------------------- | --------------------------------------------- | ------------------------------------------------------------ |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s (60 s x 5); 600 s (60 s x 10) for two tests on Windows |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                        | **not set**                                                  |
-| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,800 s (30 m)                                               |
-| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 60 m                                                         |
+| Tier                     | What it bounds                     | Where it is set                               | Current value                                              |
+| ------------------------ | ---------------------------------- | --------------------------------------------- | ---------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s (60 s x 5); 420 s (60 s x 7) for one test on Windows |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 900 s (15 m) in CI; unset locally                          |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,800 s (30 m)                                             |
+| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 60 m                                                       |
 
 *Table: the timers that can end a run, innermost first.*
 
@@ -6621,26 +6621,116 @@ Three of the four are set here.
 `terminate-after` counts warning periods, so the budget a test actually gets is
 `period` multiplied by it. Every period here is 60 s, so reading the period
 alone would report a 60 s allowance where the real figure is 300 s on Linux and
-600 s for the two Windows overrides. Any comparison against the tiers above
-rests on that reading, and the contract asserts it explicitly rather than
-leaving it implied.
+420 s for the Windows override. Any comparison against the tiers above rests on
+that reading, and the contract asserts it explicitly rather than leaving it
+implied.
 
-### The whole-run budget is a gap, not a decision
+### The whole-run budget, and how 15 minutes was arrived at
 
-No `global-timeout` is set. Unlike a repository that has turned nextest off,
-this one runs it, so the budget exists to be set and has not been.
+`[profile.ci]` sets `global-timeout = "15m"`. Until it was set the watchdog was
+doing tier two's job as well as its own, because a run whose tests each stay
+inside their allowance can still exceed the watchdog between them, and the
+failure then names `cargo` rather than the run.
 
-Until it is, the watchdog is doing tier two's job as well as its own. A run
-whose tests each stay inside their 600 s allowance can still exceed the
-watchdog between them, and the failure then names `cargo` rather than the run.
-The contract binds a `global-timeout` the moment one appears: above the largest
-per-test allowance, and inside the watchdog once nextest's termination
-procedure and a cold build are counted. Adding one therefore lands in the right
-place rather than merely somewhere.
+That profile exists only to carry this budget and inherits everything else from
+`default`, including its `[[overrides]]`: a nextest profile takes the default
+table wherever it declares nothing of its own, so the per-test allowances still
+apply under it.
 
-[Issue 689](https://github.com/leynos/netsuke/issues/689) holds the
-measurements a later pass needs to choose the value, and the constraints it has
-to satisfy.
+#### Why the budget is not in `[profile.default]`
+
+`default` is what every local `make test` runs under, and a developer's host is
+contended in a way a CI runner is not. Both
+`harness_compiles_under_a_split_build_dir` and
+`packaged_manifest_retains_build_script_sources` spawn their own `cargo`, and
+those nested invocations queue behind the package-cache lock of every other
+build on the machine. Measured on 2026-09-15, with several concurrent Rust
+gates on one host, the first of those tests spent 688.6 s inside its nested
+`cargo build`, a step that costs seconds unloaded, and the run as a whole
+crossed twenty minutes.
+
+A whole-run cap in `default` would have ended such a run against a figure read
+from CI logs, which have nothing to say about local contention, and the figure
+would have been blamed rather than the contention. So the cap lives in the
+profile CI selects and local runs keep the per-test allowance and no whole-run
+cap.
+
+#### How CI selects it
+
+`ci.yml` and `coverage-main.yml` both set `NEXTEST_PROFILE: ci` at job level.
+The shared `generate-coverage` action takes no profile input, so the
+environment variable is the only lever, and it is set beside
+`NEXTEST_TEST_THREADS`, which the same jobs already resolve that way.
+
+`tests/workflow_contracts/whole_run_profile_test.py` holds the two halves
+together. It asserts the profile each lane actually resolves across all three
+environment scopes, that the profile it names is the one carrying the budget,
+and that `default` carries none. Without it, deleting the variable from a job
+would leave that lane uncapped while every other assertion about the budget
+still passed, because the rest of the contract reads the budget out of the file
+and never asks whether a run selects it.
+
+The Windows lane in `ci-windows.yml` runs nextest without selecting the
+profile, so it has no whole-run budget. The sample below holds no Windows
+figures, and a cap belongs above a measurement rather than beside one.
+
+The budget bounds the instrumented run alone. The coverage action then runs an
+uninstrumented `cargo test --doc` pass, which is not a nextest run, so nothing
+in `.config/nextest.toml` bounds it and its own cargo watchdog does.
+
+The value was measured, not assumed. The sample is the last 59 runs of each
+workflow as of 2026-09-15, and for the ten longest coverage steps in each lane
+the step's log was read to separate the build from the test run.
+
+| Lane                                  | Longest build | Longest test run | Run         |
+| ------------------------------------- | ------------- | ---------------- | ----------- |
+| `ci.yml` `build-test`                 | 208 s         | 452 s            | 34914144521 |
+| `coverage-main.yml` `coverage-upload` | 242 s         | 320 s            | 34920593593 |
+
+*Table: the two phases inside one coverage step. The build is timed from
+`cargo llvm-cov`'s first line to nextest's "Starting N tests"; the test run is
+nextest's own reported figure, which is what `global-timeout` bounds. The trunk
+lane's longest build and longest test run fall on different runs; its longest
+test run is 320 s on run 34240220630.*
+
+Fifteen minutes clears the longest test run in the sample by 448 s. It also has
+to sit between its neighbours, and does:
+
+```text
+global-timeout > largest per-test allowance
+900 s          > 420 s
+
+watchdog      >= global-timeout + termination + cold build
+1,800 s       >= 900 s + 70 s + 600 s = 1,570 s
+```
+
+The termination allowance is the largest `grace-period` the configuration sets,
+or nextest's 10 s default where it sets none, as here, plus a 60 s safety
+margin. The cold-build allowance is 600 s against a 242 s worst measured build,
+because every run in the sample had a warm compiler cache and so none of them
+measured the case the allowance is for.
+
+So the watchdog covers the budget with 230 s to spare and does not move, and
+the job ceiling above it does not move either. A larger budget would have moved
+both: the largest this watchdog can cover is 1,130 s, and the estate's
+fifteen-minute margin carried above the worst measured run, rather than made
+the budget itself, gives 1,352 s. That needs a watchdog above 1,800 s and then
+a ceiling above 60 minutes, and the gain is a longer wait for a legible
+failure, so the tighter budget was chosen.
+
+Its purpose is that failure's legibility rather than the saving: a run that
+overruns now ends with nextest naming the run, inside a watchdog that still has
+room to report it.
+
+One term inside the watchdog is not named above. `cargo llvm-cov` merges the
+profile data and writes `lcov.info` after nextest's clock stops, measured as
+274 s on run 34914144521 and 86 s to 91 s on the next two longest runs. So the
+230 s of spare is not spare in the worst case: a cold build, a whole-run budget
+spent in full and that report together exceed the watchdog. Each term is a
+conservative allowance rather than a prediction, and no run has stacked them,
+but the model should carry the term.
+[Issue 715](https://github.com/leynos/netsuke/issues/715) holds that sizing,
+and the canonical model it would change.
 
 ### The clocks do not start together
 
@@ -6658,22 +6748,61 @@ size the ceiling against the runs that never needed it.
 
 | Lane                                  | Worst coverage step | Worst whole job | Widest gap | Run         |
 | ------------------------------------- | ------------------- | --------------- | ---------- | ----------- |
-| `ci.yml` `build-test`                 | 746 s               | 1,079 s         | 358 s      | 34077746484 |
-| `coverage-main.yml` `coverage-upload` | 641 s               | 671 s           | 49 s       | 34073520704 |
+| `ci.yml` `build-test`                 | 1,078 s             | 1,593 s         | 648 s      | 34914144521 |
+| `coverage-main.yml` `coverage-upload` | 781 s               | 824 s           | 119 s      | 34920593593 |
 
 *Table: measured coverage-step and whole-job durations. The gap is the job's
 duration less its coverage steps, so it is the work the job timer bounds and
-the watchdog does not.*
+the watchdog does not. The worst step, the worst job, and the widest gap need
+not fall on the same run: the `ci.yml` gap is from run 34920593696, whose
+coverage step did not run at all, and the `coverage-main.yml` gap from run
+33411190301.*
 
-The sample is the last 60 runs of each workflow: 51 successful and 9 failed for
-`ci.yml`, 58 successful and 2 failed for `coverage-main.yml`. Neither history
-contains a cancelled or timeout-terminated run, so no run in the sample was
-ended by any of these timers.
+The sample is the last 59 runs of each workflow as of 2026-09-15: 42 successful
+and 17 failed for `ci.yml`, 58 successful and 1 failed for `coverage-main.yml`.
+Neither history contains a cancelled or timeout-terminated run, so no run in
+the sample was ended by any of these timers. One `coverage-main.yml` run in the
+sample carried a coverage step and no nextest output at all, so a sample of
+failures can measure nothing.
 
-The widest gap is 358 s, so the contract allows 15 minutes. That makes the
-requirement 1,800 s + 900 s = 45 minutes, and both lanes have 15 minutes of
-slack above it. None of those runs was genuinely cold; one run is the coldest
-seen so far, not a measurement of the cold case.
+The widest gap is 648 s, so the contract allows 15 minutes, 252 s above it.
+That makes the requirement 1,800 s + 900 s = 45 minutes, and both lanes have 15
+minutes of slack above it. None of those runs was genuinely cold; one run is
+the coldest seen so far, not a measurement of the cold case.
+
+That requirement counts one watchdog window per coverage step, and a step holds
+two. Both lanes pass the action's `doctests` input, so an uninstrumented
+`cargo test --doc` follows the instrumented run inside the same step, and the
+log prints `cargo watchdog budget: 1800.0s` for each. Two windows make the
+requirement 5,400 s, above the 60-minute ceiling both jobs set. The doctest
+pass measured 134 s on the longest run, so nothing fails today; the sizing is
+what is wrong, and [issue 715](https://github.com/leynos/netsuke/issues/715)
+holds it.
+
+### The workflow-contract gate collects docstring examples
+
+`make test-workflow-contracts` passes `--doctest-modules`, so the examples in
+the modules under `tests/workflow_contracts` are executed rather than read.
+Without it pytest collects test functions only, and every `>>>` in those
+modules is prose that nothing runs. Collection rose from 513 tests to 516 when
+the flag went in, and one of the three examples was wrong and had never been
+run.
+
+The flag collects examples only in the modules pytest already walks, so the
+flag and the path are one mechanism: pointing the run elsewhere collects none
+of these examples, and `tests/workflow_contracts/doctest_collection_test.py`
+asserts both against the recipe `make` actually runs. It reads the target's
+tab-indented lines through `tests/workflow_contracts/makefile_recipes.py`
+rather than searching the file, because a flag named in a comment, in a
+variable, or in a neighbouring target is a flag the gate never passes. That
+distinction is the point of the contract: deleting the flag changes no test and
+breaks no import, so the suite would pass exactly as before while the examples
+silently stopped running.
+
+Doctests elsewhere are a separate matter. Rust examples run under
+`make doctest`, which nextest cannot execute, and twelve example lines under
+`scripts` and `.github/scripts` are collected by no target at all, since no
+pytest invocation has those paths in its collection path.
 
 ### The contract
 
@@ -6689,19 +6818,31 @@ silently takes GitHub's six-hour default.
 `tests/workflow_contracts/timeout_budget_properties_test.py` holds the readings
 themselves, driven with synthetic nextest configurations and synthetic
 workflows rather than the repository's own. Every `terminate-after` here is 5
-or 10 and every period is 60 s, so a reading that confused the two would still
+or 7 and every period is 60 s, so a reading that confused the two would still
 order the real tiers correctly; against generated inputs it does not. That
 module also fixes the error paths, the malformed-workflow cases, and the
 watchdog's resolution across all three environment scopes.
 
-Three modules sit behind that contract, split by what they read.
+Four modules sit behind that contract, split by what they read.
 `tests/workflow_contracts/coverage_lanes.py` traverses the workflows: it finds
-the coverage steps, resolves each one's watchdog through the step, job and
-workflow environments, and returns one lane per step with its job's ceiling and
-condition. `tests/workflow_contracts/nextest_budgets.py` holds the nextest
+the coverage steps and returns one lane per step, with its job's ceiling and
+condition, the watchdog in force, and the nextest profile it selects.
+`tests/workflow_contracts/lane_environment.py` resolves those last two out of
+the step, job and workflow environments, in that order, since it is the same
+walk for both: `watchdog_of` returns a budget in seconds and
+`nextest_profile_of` a profile name, each reporting a blank as nothing set, and
+`WatchdogValueError` separates a watchdog the action cannot read from one no
+scope declares. `tests/workflow_contracts/nextest_budgets.py` holds the nextest
 arithmetic: the duration parser, the per-test and whole-run budgets, and the
 termination allowance. `tests/workflow_contracts/timeout_budgets.py` holds the
-values both compare against. None imports the others' subject.
+values they compare against. None imports the others' subject.
+
+The environment walk is one module rather than two readings because its
+precedence boundary is the subtle part and is worth stating once. GitHub takes
+the most specific declaration, so a step masks its job and a job masks its
+workflow, and a declared blank masks them just as a value does. Getting that
+wrong in either reading credits a lane with a budget or a profile the `cargo`
+invocation never received.
 
 The nextest configuration is parsed with `tomllib` rather than matched as text.
 A text match finds a key inside a comment, inside a `filter` string, or in a
@@ -6714,7 +6855,7 @@ explicitly, so no value here changes.
 The profile's own `slow-timeout` is asserted separately from its overrides. An
 override bounds the tests its filter matches and the profile's own bounds the
 rest, so deleting the base allowance while leaving the Windows override behind
-would still report a 600 s largest budget while every test the override does
+would still report a 420 s largest budget while every test the override does
 not match ran with no bound at all.
 
 The lane reading takes its documents as a parameter, defaulting to the
@@ -6784,10 +6925,19 @@ watchdogs, group under the one job, and fail its ceiling together where each
 alone would have passed.
 
 A watchdog value the action cannot read fails with the lane named, rather than
-raising a Python fault before any assertion runs. A blank value is treated as a
-source that says nothing and falls through, since that is what a workflow
-writes when it interpolates an expression that resolved to nothing; a zero or a
-negative one is refused, because the action reads those as no timeout at all.
+raising a Python fault before any assertion runs. A zero or a negative one is
+refused, because the action reads those as no timeout at all.
+
+A blank value is a declaration, not a silence. GitHub takes the most specific
+declaration of a variable, and an empty string is one: a step interpolating an
+expression that resolved to nothing hands the process an empty value, and the
+job's value never reaches it. So a blank at an inner scope masks the outer
+scopes rather than falling through to them, and the reader then reports what
+the consumer actually sees, which is nothing set. The earlier reading fell
+through, and that is the one reading under which a lane losing its watchdog, or
+its profile, passes: it credits the lane with a budget the `cargo` invocation
+never received. `whole_run_profile_test.py` drives that shape end to end, with
+a job selecting the capped profile and a step handing the process an empty one.
 
 The contract also pins the condition each lane carries. A skipped step runs no
 `cargo`, so its watchdog never arms and the tiers say nothing about it:
@@ -6810,26 +6960,45 @@ the moment the watchdog would have reported the overrun, and the report is the
 only thing that makes an overrun actionable. Both ceilings already clear it, so
 neither moved.
 
-The termination allowance it would demand between a whole-run budget and the
-watchdog is two terms, not one: the largest `grace-period` the configuration
-sets, or nextest's ten-second default when it sets none, plus a fixed 60-second
-safety margin. A grace period is what nextest promises a test after `SIGTERM`;
-the margin covers the process teardown and report writing that follow it. No
-`global-timeout` is set here, so that comparison is skipped entirely, which is
-why the reading has a test of its own rather than resting on an assertion that
-never runs.
+The termination allowance between the whole-run budget and the watchdog is two
+terms, not one: the largest `grace-period` the configuration sets, or nextest's
+ten-second default when it sets none, as here, plus a fixed 60-second safety
+margin. A grace period is what nextest promises a test after `SIGTERM`; the
+margin covers the process teardown and report writing that follow it. The
+reading has a test of its own as well, because the repository sets no grace
+period and so cannot tell a reading that adds the two terms from one that takes
+the larger.
 
 The ordering rule itself is `whole_run_ordering.whole_run_ordering_faults`,
 which takes a configuration and a set of lanes and returns every way the two
 break the ordering. Keeping it out of the contract is what lets
 `whole_run_ordering_test.py` drive it with configurations this repository does
-not have: a whole run below the largest per-test allowance, one equal to it, a
-watchdog one second short of the requirement and one meeting it exactly, a lane
-declaring no watchdog, and two short lanes at once. A rule executed only
-against a file that omits the key is a rule nobody has run, and it agreed with
-every wrong rule while it skipped. `bounds_a_single_test` is driven the same
-way and for the same reason, since this file bounds its default profile and so
-cannot tell that reading from one accepting an override or a bare duration.
+not have: no whole-run budget at all, one below the largest per-test allowance,
+one equal to it, a watchdog one second short of the requirement and one meeting
+it exactly, a lane declaring no watchdog, and two short lanes at once. The real
+file is one point of that rule and agrees with every rule that happens to
+accept it.
+
+The contract asserts that the budget is present before it asserts where it
+sits. Every ordering assertion reads the value from the file, so commenting the
+key out or deleting it satisfies each of them by leaving nothing to compare,
+and the watchdog silently resumes doing tier two's job. The presence assertion
+is what a comment defeats and an ordering assertion does not.
+`bounds_a_single_test` is driven the same way and for the same reason, since
+this file bounds its default profile and so cannot tell that reading from one
+accepting an override or a bare duration.
+
+`tests/workflow_contracts/whole_run_value_test.py` pins the budget's value as
+well as its place in the order. The ordering holds for everything between the
+420 s largest per-test allowance and the 1,130 s the watchdog can cover, so the
+budget could drift to a value nobody chose with every comparison still passing,
+and the sample above would then describe a figure the file no longer sets.
+
+Every one of those assertions reads the budget out of the file, and none of
+them asks whether a run selects the profile it sits in. That is what
+`tests/workflow_contracts/whole_run_profile_test.py` is for, and why it is a
+separate module: deleting `NEXTEST_PROFILE` from a coverage job would leave
+that lane uncapped with every assertion above it still green.
 
 It is not the same assertion as
 `tests/workflow_contracts/test_execution_coverage_test.py`, which holds the two

@@ -1,9 +1,10 @@
 """The whole-run tier, driven with configurations this repository lacks.
 
-`.config/nextest.toml` sets no ``global-timeout``, so the contract over
-it skips against the real tree and agrees with every wrong rule there.
-These cases set one, above and below each bound in turn, so the branch
-the repository never reaches is executed.
+`.config/nextest.toml` sets one ``global-timeout``, so the contract over
+it exercises one point of the rule and agrees with every rule that
+happens to accept that point. These cases set one above and below each
+bound in turn, including none at all, so the branches the repository
+never reaches are executed.
 
 ``bounds_a_single_test`` is here for the same reason: this file bounds
 its default profile, so the reading agrees with one that accepted an
@@ -17,21 +18,38 @@ import typing as typ
 import pytest
 from coverage_lanes import CoverageLane
 from nextest_budgets import bounds_a_single_test
-from timeout_budgets import COLD_BUILD_ALLOWANCE_SECONDS
+from timeout_budgets import CAPPED_PROFILE, COLD_BUILD_ALLOWANCE_SECONDS
 from whole_run_ordering import watchdog_required_for, whole_run_ordering_faults
 
 #: A default profile bounding one test at 600 s: ten warning periods of
-#: sixty seconds, the shape `.config/nextest.toml` uses.
+#: sixty seconds. The shape `.config/nextest.toml` uses, with a
+#: multiplier of its own so the cases below can sit either side of the
+#: bound without tracking the repository's figures.
 _BOUNDED_PROFILE: typ.Final[str] = (
     '[profile.default]\nslow-timeout = { period = "60s", terminate-after = 10 }\n'
 )
 
 
 def _config(global_timeout: str | None = None) -> str:
-    """Return a configuration bounding one test, with an optional whole run."""
+    """Return a configuration bounding one test, with an optional whole run.
+
+    The whole run goes in its own profile, as it does in
+    `.config/nextest.toml`: the per-test allowance belongs to `default`,
+    which every local run uses, and the whole-run budget to the profile
+    CI selects. A case writing both into one table would exercise a
+    shape this repository does not have.
+
+    Returns
+    -------
+    str
+        The configuration text.
+    """
     if global_timeout is None:
         return _BOUNDED_PROFILE
-    return f'{_BOUNDED_PROFILE}global-timeout = "{global_timeout}"\n'
+    return (
+        f"{_BOUNDED_PROFILE}\n[profile.{CAPPED_PROFILE}]\n"
+        f'global-timeout = "{global_timeout}"\n'
+    )
 
 
 def _lane(watchdog: float | None) -> CoverageLane:
@@ -48,9 +66,10 @@ def _lane(watchdog: float | None) -> CoverageLane:
 def test_a_configuration_with_no_whole_run_budget_has_no_fault() -> None:
     """There is no tier three to order, so the rule says nothing.
 
-    This is the state of the repository today, and the rule reporting a
-    fault here would fail a file that is merely incomplete rather than
-    wrong.
+    A repository that has not set the budget has a file that is
+    incomplete rather than wrong, and the ordering rule is not what
+    reports that: ``timeout_ordering_test`` asserts the key's presence
+    separately, and this repository's own file now sets one.
     """
     assert not whole_run_ordering_faults(_config(), [_lane(4200.0)]), (
         "a configuration setting no global-timeout has no tier three, so the "
@@ -188,7 +207,12 @@ def test_every_lane_at_fault_is_reported() -> None:
             False,
             id="a-bare-duration",
         ),
-        pytest.param("[profile.ci]\n", False, id="no-such-profile"),
+        pytest.param(
+            '[profile.other]\nslow-timeout = { period = "60s", '
+            "terminate-after = 10 }\n",
+            False,
+            id="another-profile-s-table",
+        ),
     ],
 )
 def test_only_a_profile_s_own_terminating_table_bounds_its_tests(

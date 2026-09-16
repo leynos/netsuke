@@ -1,11 +1,11 @@
 """The rule a configured whole-run budget has to satisfy.
 
-`.config/nextest.toml` sets no ``global-timeout`` today, so the contract
-over it asserts nothing against this tree and cannot be driven from it.
-The rule therefore lives here, taking its configuration and its lanes as
-parameters, and is driven with configurations this repository does not
-have in ``whole_run_ordering_test``. A rule that only ever runs against
-a file that omits the key is a rule nobody has executed.
+`.config/nextest.toml` sets one ``global-timeout``, so the contract over
+it exercises this rule at a single point and would agree with every rule
+that happens to accept that point. The rule therefore lives here, taking
+its configuration and its lanes as parameters, and is driven with
+configurations this repository does not have in
+``whole_run_ordering_test``, including one omitting the key entirely.
 
 Run via ``make test-workflow-contracts``.
 """

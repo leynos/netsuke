@@ -64,3 +64,50 @@ success-output = "immediate"
 platform = 'cfg(target_os = "windows")'
 filter = 'test(=harness_compiles_under_a_split_build_dir)'
 slow-timeout = { period = "60s", terminate-after = 7 }
+
+[profile.ci]
+# The CI-only profile. It exists solely to carry the whole-run budget, and
+# inherits everything else from `default`, including that profile's
+# `[[overrides]]`: a nextest profile takes the default table wherever it
+# declares nothing of its own.
+#
+# The coverage lanes select it with `NEXTEST_PROFILE: ci` at job level in
+# `ci.yml` and `coverage-main.yml`. The shared `generate-coverage` action
+# takes no profile input, so the environment variable is the only lever, and
+# tests/workflow_contracts/whole_run_profile_test.py holds each lane to it.
+#
+# The whole test run, which no per-test budget bounds: a run whose tests each
+# stay inside their allowance can still exceed the timers outside nextest
+# between them, and the failure then names `cargo` rather than the run.
+#
+# Measured rather than guessed, per the policy above. Across the ten longest
+# coverage steps of each of the last 59 runs of `ci.yml` and
+# `coverage-main.yml` on 2026-09-15, the longest nextest run was 452.4s (run
+# 34914144521, the pull-request lane) and 320.0s on the trunk lane (run
+# 34240220630). Fifteen minutes clears the worst of those by 448s, and no run
+# in the sample was ended by any of these timers.
+#
+# It bounds the instrumented run alone. The uninstrumented `cargo test --doc`
+# pass the coverage action runs after it is not a nextest run, so nothing in
+# this file bounds it and its own cargo watchdog does.
+#
+# It also has to sit between its neighbours. It is above the 420s largest
+# per-test allowance below it, and the 1,800s cargo watchdog above it covers
+# it with 230s to spare: 900s + 70s of termination + a 600s cold build is
+# 1,570s. A fifteen-minute margin above the worst measured run, rather than
+# the fifteen minutes chosen here, would be 1,352s, above the 1,130s this
+# watchdog can cover, so it needs a larger watchdog and then a job ceiling
+# above 60 minutes.
+#
+# Deliberately not in `[profile.default]`, which every local `make test` uses.
+# A developer's host is shared and contended in a way CI's is not: measured on
+# 2026-09-15, a single `harness_compiles_under_a_split_build_dir` spent 688.6s
+# inside its nested `cargo build` waiting on the package-cache lock behind
+# other work, where the same test costs seconds unloaded. A whole-run cap in
+# `default` would end such a run against a figure sized from CI logs, and the
+# figure would be blamed rather than the contention. Local runs keep the
+# per-test allowance and no whole-run cap.
+#
+# See "Test timeouts: the tiers this repository sets" in
+# docs/developers-guide.md, which holds the arithmetic and the sample.
+global-timeout = "15m"

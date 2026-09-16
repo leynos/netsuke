@@ -1,14 +1,15 @@
 """Reads every coverage-invoking lane out of the workflow files.
 
 Separated from ``timeout_budgets`` so the workflow reading and the
-nextest arithmetic stay legible apart, and so neither module outgrows
-the 400-line limit the Python lint gate enforces.
+nextest arithmetic stay legible apart, and from ``lane_environment``,
+which resolves a variable across the step, job and workflow scopes, so
+no module outgrows the 400-line limit the Python lint gate enforces.
 """
 
-import math
 import typing as typ
 
-from timeout_budgets import COVERAGE_ACTION, WATCHDOG_VARIABLE, WORKFLOWS_DIRECTORY
+from lane_environment import WatchdogValueError, nextest_profile_of, watchdog_of
+from timeout_budgets import COVERAGE_ACTION, WORKFLOWS_DIRECTORY
 from workflow_loading import all_workflow_documents
 
 if typ.TYPE_CHECKING:
@@ -36,6 +37,11 @@ class CoverageLane(typ.NamedTuple):
         The ``if`` on the coverage step and on its job. A skipped step
         runs no ``cargo``, so its watchdog never arms and every budget
         below says nothing about it.
+    nextest_profile : str or None
+        The nextest profile the lane selects, or None when it names
+        none and so runs under ``default``. The whole-run budget lives
+        in one profile, so a lane naming another is a lane that budget
+        does not reach.
     """
 
     workflow: str
@@ -44,6 +50,7 @@ class CoverageLane(typ.NamedTuple):
     watchdog: float | None
     job_timeout: float | None
     condition: tuple[object, object] = (None, None)
+    nextest_profile: str | None = None
 
     def __str__(self) -> str:
         """Return a location suitable for a failure message.
@@ -54,111 +61,6 @@ class CoverageLane(typ.NamedTuple):
             ``workflow:job:step`` for this lane.
         """
         return f"{self.workflow}:{self.job}:{self.step!r}"
-
-
-def watchdog_of(
-    document: dict[str, typ.Any],
-    job: dict[str, typ.Any],
-    step: dict[str, typ.Any],
-) -> float | None:
-    """Return the watchdog budget in force for one step.
-
-    All three levels are read, innermost first, as GitHub resolves them.
-    Both workflows here set the value at job level, so a contract reading
-    only the step would find nothing and report every lane as inheriting
-    the action's default, which is exactly backwards. A workflow-level
-    value would be missed the same way.
-
-    Parameters
-    ----------
-    document : dict[str, typ.Any]
-        The whole workflow document.
-    job : dict[str, typ.Any]
-        The enclosing job.
-    step : dict[str, typ.Any]
-        The coverage step.
-
-    Returns
-    -------
-    float or None
-        The budget in seconds, or None when no level sets one.
-    """
-    for owner in (step, job, document):
-        environment = owner.get("env")
-        raw = (
-            environment.get(WATCHDOG_VARIABLE)
-            if isinstance(environment, dict)
-            else None
-        )
-        budget = _budget_from(raw)
-        if budget is not None:
-            return budget
-    return None
-
-
-class WatchdogValueError(ValueError):
-    """Raised when a workflow's watchdog value cannot be read as seconds.
-
-    Distinguished from an unset watchdog rather than folded into it. A
-    lane that sets nothing inherits the action's default, which is one
-    fault; a lane that sets ``abc`` has an author who meant something
-    and got neither, which is another. Reporting the second as the first
-    would name the wrong remedy.
-    """
-
-
-def _budget_from(raw: object) -> float | None:
-    """Return one source's watchdog budget, or None when it sets none.
-
-    A blank or whitespace-only value is a source that says nothing, so
-    it falls through to the next one. That is what a workflow writes
-    when it interpolates an expression that resolved to nothing.
-
-    Anything else that is not a positive number of seconds is refused
-    with the value in the message. The shared action reads a
-    non-positive value as no timeout at all, so a lane carrying one has
-    no third tier while appearing to declare one.
-
-    Parameters
-    ----------
-    raw : object
-        The value the workflow set, as the YAML parser returned it.
-
-    Returns
-    -------
-    float or None
-        The budget in seconds, or None when the source sets none.
-
-    Raises
-    ------
-    WatchdogValueError
-        If the value is present and non-blank but not a positive number
-        of seconds.
-    """
-    if raw is None:
-        return None
-    text = str(raw).strip()
-    if not text:
-        return None
-    try:
-        seconds = float(text)
-    except ValueError as error:
-        message = (
-            f"{WATCHDOG_VARIABLE}={raw!r} is not a number of seconds; the "
-            f"lane sets a watchdog its author meant and the action will not "
-            f"read"
-        )
-        raise WatchdogValueError(message) from error
-    if not math.isfinite(seconds) or seconds <= 0:
-        message = (
-            f"{WATCHDOG_VARIABLE}={raw!r} is not a positive, finite number of "
-            f"seconds, so the cargo invocation is unbounded while appearing to "
-            f"be bounded. `nan` and `inf` parse as floats and pass a `<= 0` "
-            f"test, so they are refused by name rather than reaching the "
-            f"ceiling arithmetic and failing there"
-        )
-        raise WatchdogValueError(message)
-    return seconds
 
 
 def workflow_documents() -> dict[str, dict[str, typ.Any]]:
@@ -276,6 +178,7 @@ def _lanes_in_job(
             watchdog=watchdogs[index],
             job_timeout=timeout,
             condition=(step.get("if"), job.get("if")),
+            nextest_profile=nextest_profile_of(document, job, step),
         )
         for index, step in enumerate(steps)
     ]
