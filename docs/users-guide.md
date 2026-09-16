@@ -1876,8 +1876,9 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   command-substitution marker sites rather than risking a context escape.
   PowerShell uses backticks as its native escape syntax, so they do not
   suppress marker interpolation.
-- Build and default-target paths reject `$`, spaces, colons, `|`, and control
-  characters because Ninja cannot represent them without ambiguity. Generation
+- Build and default-target paths escape a literal space as a `$` followed by a
+  space, Ninja's own path escape, and reject `$`, colons, `|`, and control
+  characters because Ninja cannot represent those without ambiguity. Generation
   also rejects newline, carriage-return, and NUL characters in emitted metadata
   such as descriptions, `depfile`, `deps`, and `pool`.
 - **Migration:** replace the historical manifest spelling `$$PATH` with

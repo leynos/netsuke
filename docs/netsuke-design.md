@@ -612,9 +612,10 @@ command or script text with no Ninja-specific escaping. The backend conversion
 accepts only completed shell text and returns an opaque Ninja-value type, which
 makes applying the conversion before placeholder lowering or applying it twice
 an invalid internal call rather than a convention left to review. Paths use a
-separate boundary: values containing Ninja-special syntax (`$`, spaces, colons,
-or control characters) are rejected rather than emitted ambiguously. ADR 014
-records the boundary and its migration consequences.
+separate boundary: a literal space is escaped as a `$` followed by a space,
+Ninja's own path escape, while values containing the metacharacters Ninja
+cannot represent unambiguously (`$`, colons, `|`, or control characters) are
+rejected. ADR 014 records the boundary and its migration consequences.
 
 #### Structured environment mapping
 

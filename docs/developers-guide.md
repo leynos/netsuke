@@ -477,10 +477,11 @@ compose a completed command and hand it to the selected renderer. POSIX and
 Bash routes convert `ShellText` through `escape_ninja_value`; the encoded
 PowerShell transport returns a private `NinjaValue` without exposing its
 payload to Ninja parsing. No IR or manifest lowering may call either route.
-Descriptions, `depfile`, `deps`, and `pool` retain their existing raw emission
-semantics because they are not shell text, although metadata is still checked
-for control characters. Add a separate, explicitly documented conversion for
-any new Ninja grammar position rather than reusing command escaping.
+Descriptions, `depfile`, `deps`, and `pool` keep their backend-neutral IR text
+and are converted only at their Ninja emission boundary, where literal dollars
+are doubled and newline, carriage-return, and NUL characters are rejected. Add
+a separate, explicitly documented conversion for any new Ninja grammar position
+rather than reusing command escaping.
 
 ## Package and target naming
 
