@@ -6941,6 +6941,18 @@ carry overflows. One mechanism, two answers: `0.5s 0.5s` is one second while
 `18446744073709551615s 500ms 500ms` is refused. A reader made merely stricter,
 refusing every carry, fails the first, so both are in the contract.
 
+humantime carries in two places, its parser on a strict `>` and `Duration::new`
+on `>=`, and the port was first written with both. The strict one proved
+unreachable: collapsing the two changed no answer over any of the seventy-one
+inputs, so it went, on the grounds that a guard nothing can falsify is worse
+than no guard at all. What survives is the `>=`.
+
+Order is part of the claim, and one input of the seventy-one shows it.
+`18446744073709551615ns 1ns` is read only because the first part is carried
+into seconds before the second arrives; summed the other way round the
+nanosecond accumulator overflows and the whole duration is refused, which would
+be this contract refusing a configuration nextest runs quite happily.
+
 The port's scope is narrow and deliberately so. `nextest_durations` owns one
 thing: turning the text of a nextest duration into seconds exactly as
 `humantime` would, and refusing what `humantime` refuses. It is a
