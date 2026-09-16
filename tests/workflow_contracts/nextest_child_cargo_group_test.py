@@ -35,7 +35,8 @@ NESTED_CARGO_BUILD_TESTS = (
 )
 RUST_FUNCTION = re.compile(
     r"(?ms)^(?P<attributes>(?:#\[[\s\S]*?\]\s*)*)"
-    r"(?P<signature>(?:pub\s+)?fn\s+(?P<name>[a-z0-9_]+)\b[^\{]*)\{"
+    r"(?P<signature>(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?"
+    r"fn\s+(?P<name>[a-z0-9_]+)\b[^\{]*)\{"
 )
 CARGO_COMMAND = re.compile(r"Command::new\([^)]*cargo\w*[^)]*\)", re.IGNORECASE)
 CARGO_OPERATION = re.compile(
@@ -238,6 +239,25 @@ fn new_fixture_compiles() {
     assert _build_capable_test_names(source) == {"new_fixture_compiles"}, (
         "the discovery contract must classify direct Cargo build commands"
     )
+
+
+def test_build_capable_discovery_supports_rust_test_signatures() -> None:
+    """Qualified and asynchronous tests cannot evade the child-Cargo policy."""
+    source = """
+#[test]
+pub(crate) fn restricted_fixture_compiles() {
+    Command::new(cargo()).arg("build");
+}
+
+#[rstest]
+async fn asynchronous_fixture_compiles() {
+    Command::new(cargo()).arg("check");
+}
+"""
+    assert _build_capable_test_names(source) == {
+        "asynchronous_fixture_compiles",
+        "restricted_fixture_compiles",
+    }, "qualified and asynchronous build-capable tests must be discovered"
 
 
 @pytest.mark.parametrize(
