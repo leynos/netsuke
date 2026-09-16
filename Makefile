@@ -94,7 +94,8 @@ RUFF = $(UV_ENV) $(UV) tool run --from ruff==$(RUFF_VERSION) ruff
 # runs. The repository uses it only as a quality gate; it is not a Python
 # distribution and does not need project metadata.
 INTERROGATE_VERSION ?= 1.7.0
-INTERROGATE = $(UV_ENV) $(UV) tool run --from 'interrogate==$(INTERROGATE_VERSION)' \
+INTERROGATE = $(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
+	--from 'interrogate==$(INTERROGATE_VERSION)' \
 	interrogate --fail-under 100
 # Pin ty so `make` and CI invoke the same typechecker release. ty is pre-1.0
 # and diagnostics shift between releases, so an unpinned install breaks the

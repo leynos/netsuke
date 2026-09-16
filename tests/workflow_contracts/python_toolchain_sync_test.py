@@ -18,13 +18,17 @@ Run via ``make test-workflow-contracts``.
 """
 
 import re
+import shlex
+import subprocess
 import typing as typ
 
 import pytest
+from cmd_mox import CmdMox
 from workflow_loading import (
     CI_WORKFLOW_PATH,
     MAKEFILE_PATH,
     PACKAGE_WORKFLOW_PATH,
+    REPO_ROOT,
     RELEASE_WORKFLOW_PATH,
     load_workflow,
     require_mapping,
@@ -33,8 +37,29 @@ from workflow_loading import (
 if typ.TYPE_CHECKING:
     from pathlib import Path
 
+#: Exercise Makefile commands without resolving their third-party tools.
+pytest_plugins = ("cmd_mox.pytest_plugin",)
+
 #: Pins that must agree between the Makefile and the CI workflow env block.
 SYNCED_PINS = ("RUFF_VERSION", "TY_VERSION", "PYTHON_BASELINE")
+
+#: Python sources whose dedicated coverage policy excludes them from Interrogate.
+INTERROGATE_EXCLUDED_FILES = (
+    "scripts/generate_typos_config.py",
+    "scripts/typos_rollout_check.py",
+    "scripts/typos_rollout.py",
+    "scripts/typos_rollout_cache.py",
+    "scripts/typos_rollout_http.py",
+    "scripts/tests/conftest.py",
+    "scripts/tests/test_typos_rollout.py",
+    "scripts/tests/test_typos_rollout_check.py",
+    "scripts/tests/test_typos_rollout_hardening.py",
+    "scripts/tests/test_typos_rollout_refresh.py",
+    "scripts/tests/typos_rollout_test_support.py",
+)
+
+#: Repository-owned Python roots that the quality targets must scan.
+PYTHON_SOURCES = (".github/scripts", "scripts", "tests/workflow_contracts")
 
 
 def _makefile_variable(name: str) -> str:
@@ -191,6 +216,44 @@ def _makefile_target(target: str) -> tuple[list[str], str]:
     return prerequisites, match.group(2)
 
 
+def _makefile_command(name: str) -> list[str]:
+    """Return one continued Makefile command assignment as shell tokens."""
+    text = MAKEFILE_PATH.read_text(encoding="utf-8")
+    match = re.search(
+        rf"^{re.escape(name)} = ((?:[^\n]*\\\n)*[^\n]+)$",
+        text,
+        flags=re.MULTILINE,
+    )
+    assert match is not None, f"the Makefile must define the {name} command"
+    command = match.group(1).replace("\\\n", " ")
+    return shlex.split(command)
+
+
+def _mocked_command(cmd_mox: CmdMox, name: str) -> str:
+    """Return a CmdMox shim path for a Makefile command variable."""
+    shim_dir = cmd_mox.environment.shim_dir
+    assert shim_dir is not None, "CmdMox must create its command shim directory"
+    return str(shim_dir / name)
+
+
+def _run_python_lint(cmd_mox: CmdMox) -> subprocess.CompletedProcess[str]:
+    """Run ``lint-python`` through the controlled uv command shim."""
+    # The command and its arguments are fixed test values; no untrusted input
+    # reaches the child process.
+    # ruff: ignore[subprocess-without-shell-equals-true] - shell is False.
+    return subprocess.run(
+        [  # ruff: ignore[start-process-with-partial-path] - CmdMox controls the test command path.
+            "make",
+            f"UV={_mocked_command(cmd_mox, 'uv')}",
+            "lint-python",
+        ],
+        check=False,
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+    )
+
+
 def test_python_quality_targets_preserve_their_dependency_graph() -> None:
     """The Rust umbrella gates depend on their corresponding Python gates."""
     lint_prerequisites, _ = _makefile_target("lint")
@@ -235,3 +298,57 @@ def test_interrogate_pin_is_the_selected_release() -> None:
     assert _makefile_variable("INTERROGATE_VERSION") == "1.7.0", (
         "INTERROGATE_VERSION must remain pinned to interrogate 1.7.0"
     )
+
+
+def test_interrogate_command_uses_the_pinned_baseline_and_release() -> None:
+    """Interrogate selects the baseline interpreter and exact pinned package."""
+    assert _makefile_command("INTERROGATE") == [
+        "$(UV_ENV)",
+        "$(UV)",
+        "tool",
+        "run",
+        "--python",
+        "$(PYTHON_BASELINE)",
+        "--from",
+        "interrogate==$(INTERROGATE_VERSION)",
+        "interrogate",
+        "--fail-under",
+        "100",
+    ]
+
+
+def test_lint_python_runs_interrogate_over_the_documented_scope(
+    cmd_mox: CmdMox,
+) -> None:
+    """The lint boundary expands the Interrogate baseline, exclusions, and scope."""
+    uv = cmd_mox.spy("uv").returns(exit_code=0)
+
+    result = _run_python_lint(cmd_mox)
+
+    assert result.returncode == 0, (
+        f"the controlled lint-python command must succeed; stderr was: {result.stderr}"
+    )
+    interrogate_calls = [
+        invocation.args
+        for invocation in uv.invocations
+        if invocation.args[:2] == ["tool", "run"] and "interrogate" in invocation.args
+    ]
+    assert interrogate_calls == [
+        [
+            "tool",
+            "run",
+            "--python",
+            "3.14",
+            "--from",
+            "interrogate==1.7.0",
+            "interrogate",
+            "--fail-under",
+            "100",
+            *(
+                argument
+                for path in INTERROGATE_EXCLUDED_FILES
+                for argument in ("--exclude", path)
+            ),
+            *PYTHON_SOURCES,
+        ]
+    ]
