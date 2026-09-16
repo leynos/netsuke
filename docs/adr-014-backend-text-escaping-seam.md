@@ -42,8 +42,8 @@ Netsuke uses a private typed conversion at the Ninja writer boundary:
   followed by a space, Ninja's own path escape, so whitespace-containing
   outputs stay valid. A pipe, newline, carriage return, or NUL is rejected
   because Ninja's path grammar cannot represent it. A dollar or colon is also
-  rejected, although Ninja can escape both, because Netsuke has not adopted
-  that part of the path grammar; supporting it is separate work.
+  rejected, even though Ninja can escape both; Netsuke has not adopted that
+  part of the path grammar, and supporting it is separate work.
 - A script uses substitution-only lowering, preserving script syntax such as
   heredocs. A Netsuke placeholder found inside backticks is rejected with a
   typed IR diagnostic rather than silently reaching the shell unlowered.
