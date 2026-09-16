@@ -112,6 +112,7 @@ fn is_quarantined_policy_validation(error: &OrthoError) -> bool {
                 "fetch_default_deny"
                     | "fetch_allow_scheme"
                     | "fetch_allow_host"
+                    | "env_allow_var"
                     | "trust_project_fetch_policy")
     )
 }

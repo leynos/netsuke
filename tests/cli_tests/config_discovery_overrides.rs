@@ -120,7 +120,7 @@ env_block_var = ["PROJECT_BLOCKED"]
         temp_project.path(),
         &[(
             OsString::from("NETSUKE_ENV_ALLOW_VAR"),
-            OsString::from("OPERATOR_ALLOWED"),
+            OsString::from("[\"OPERATOR_ALLOWED\"]"),
         )],
     )?;
 

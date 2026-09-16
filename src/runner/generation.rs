@@ -9,8 +9,8 @@
 //!
 //! [`load_manifest`] is the read-only query step: it rejects template helpers
 //! that can access the environment, filesystem, network, clock, or shell.
-//! [`load_manifest_for_build`] is deliberately separate because command
-//! execution needs the full, effectful manifest stdlib.
+//! [`load_manifest_for_build_with_limits`] is deliberately separate because
+//! command execution needs the full, effectful manifest stdlib.
 
 use anyhow::{Context, Result};
 use camino::Utf8Path;
@@ -64,11 +64,30 @@ pub(super) fn load_manifest_with_limits(
         })
 }
 
-/// Load a build manifest with explicit environment policy and resource
-/// ceilings.
+/// Load and render a manifest with the full, effectful build stdlib.
+///
+/// This loader is only for command execution. Templates may use configured
+/// network, cache, environment, filesystem, clock, and shell helpers.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let manifest = load_manifest_for_build_with_limits(
+///     Utf8Path::new("Netsukefile"),
+///     NetworkPolicy::default(),
+///     EnvAccessPolicy::default(),
+///     manifest::ManifestBudgetLimits::default(),
+///     None,
+/// )?;
+/// // `manifest` may use build-time template helpers before `build_graph`.
+/// ```
 ///
 /// The access policy is evaluated before the process environment is read, so a
 /// blocked `env()` call cannot disclose a host value.
+///
+/// # Errors
+///
+/// Returns an error when the manifest cannot be read, parsed, or rendered.
 #[expect(
     clippy::too_many_arguments,
     reason = "The build loader keeps the policy, environment, budget, and stage-observer seams explicit."

@@ -232,7 +232,7 @@ fn compile_manifest_impl(world: &TestWorld, path: &str) {
         &env_reader,
         world.manifest_env_access_policy.borrow().clone(),
     );
-    let outcome = netsuke::manifest::from_path_with_policy_and_env(
+    let outcome = netsuke::manifest::from_path_with_policy_and_environment(
         &resolved,
         NetworkPolicy::default(),
         &environment,

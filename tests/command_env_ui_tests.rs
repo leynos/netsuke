@@ -46,6 +46,15 @@ fn command_env_embedder_fixture_compiles() -> io::Result<()> {
     )
 }
 
+/// The manifest-environment fixture type-checks against the public API.
+#[test]
+fn manifest_environment_embedder_fixture_compiles() -> io::Result<()> {
+    compile_public_api_fixture(
+        "tests/ui/manifest_environment_embedder_pass.rs",
+        "the manifest-environment fixture should compile against the public API",
+    )
+}
+
 /// Verifies external callers can parse policy types without depending on Clap.
 #[test]
 fn policy_from_str_embedder_fixture_compiles_without_clap() -> io::Result<()> {
