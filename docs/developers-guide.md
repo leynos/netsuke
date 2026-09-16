@@ -1977,12 +1977,6 @@ Makefile's `?=` assignments in CI.
 agree — without asserting any specific version — so a bump must land in both
 files in the same commit.
 
-The shared spelling-policy rollout helpers (`scripts/generate_typos_config.py`
-and the `typos_rollout*` modules and tests) are estate-synchronized and keep
-their own pinned, isolated Ruff policy enforced by `make spelling-helper-test`;
-they are excluded from the repository-wide Ruff and Pylint configuration so the
-two policies cannot disagree about the same file.
-
 ### Release-admission runtime tests
 
 `make test-release-admission` is the runtime gate for the release-admission
@@ -2136,43 +2130,34 @@ change stays reviewable.
 `make markdownlint` enforces en-GB-oxendict (Oxford) spelling over the
 repository's Markdown prose with [`typos`](https://github.com/crate-ci/typos),
 as required by the [documentation style guide](documentation-style-guide.md).
-The repository-root `typos.toml` is deterministically generated output
-assembled from two policy layers:
+The repository-root `typos.toml` is deterministically generated output. The
+shared `typos-config-builder` gate rebuilds it on every run from two policy
+layers:
 
-1. The shared estate dictionary in `leynos/agent-helper-scripts` supplies
+1. The live shared estate dictionary in `leynos/agent-helper-scripts` supplies
    generally valid Oxford forms, accepted technical terms, corrections, and
-   exclusions. The generator conditionally refreshes this authority into an
-   untracked local cache and reuses a valid cache when working offline.
+   exclusions. The gate conditionally refreshes this authority into an
+   untracked local cache, reuses a valid cache when the authority is
+   unreachable, and falls back to its bundled snapshot when no cache exists.
 2. `typos.local.toml` contains only Netsuke-specific names, identifiers,
    fixtures, and exclusions. It cannot replace a conflicting shared correction.
 
-`scripts/typos_rollout_http.py` owns shared-cache freshness, HTTPS transport
-security and persistence coordination. Only `scripts/typos_rollout.py` may
-compose it with dictionary validation; application and release code must not
-reuse these spelling-policy internals.
-
-The `RemoteResponse` protocol is a context-managed response boundary: callers
-read the body within the context and exit it to release the underlying response.
-`atomic_write` writes complete content to a temporary file beside the
-destination, atomically replaces the destination on the same filesystem, and
-removes the temporary file when writing or replacement fails. The existing
-destination is therefore left intact unless replacement succeeds.
-
-Pull-request CI restores the untracked dictionary and metadata before the
-spelling gate. The helper still performs a conditional freshness check, then
-saves refreshed state for later runs; a transient outage can therefore reuse a
-validated stale cache.
+Because the dictionary is live, `typos.toml` regenerates on every run and must
+never be drift checked in continuous integration. A word added to the shared
+dictionary therefore needs no change here.
 
 The generated policy sets the `en-gb` locale to correct American spellings
 (`color` to `colour`, `behavior` to `behaviour`, `analyzed` to `analysed`). It
 also restores Oxford spelling through generated entries that accept `-ize`
 inflections and correct their plain-British `-ise` equivalents. Stems taking
-`-yse` (`analyse`, `paralyse`) remain governed by the locale.
+`-yse` (`analyse`, `paralyse`) remain governed by the locale. The gate also
+rejects the prohibited phrases the shared dictionary lists, across every
+tracked text file.
 
-Never edit `typos.toml` by hand. Change `typos.local.toml` and regenerate:
+Never edit `typos.toml` by hand. Change `typos.local.toml` and rerun the gate:
 
 ```bash
-uv run scripts/generate_typos_config.py
+make spelling
 ```
 
 If a legitimate Oxford form is missing estate-wide, update the shared
@@ -2180,24 +2165,21 @@ dictionary rather than duplicating it locally. Keep proper names and deliberate
 fixtures in `typos.local.toml`. Quoted APIs keep upstream spelling, so put them
 in backticks rather than adding accepted words.
 
-`make markdownlint` runs the gate with `--force-exclude`, so the `typos.toml`
-excludes also apply to explicitly passed paths. To fix findings mechanically,
-rerun `typos` with `--write-changes` at the pinned version printed by
-`make markdownlint`:
+The gate runs Typos with `--force-exclude`, so the `typos.toml` excludes also
+apply to explicitly passed paths. To fix findings mechanically, rerun `typos`
+over the generated configuration with `--write-changes`:
 
 ```bash
-uv tool run typos@<TYPOS_VERSION> --config typos.toml --force-exclude \
-  --write-changes <files>
+uv tool run typos --config typos.toml --force-exclude --write-changes <files>
 ```
 
 Review automated rewrites before committing; spelling corrections must not
 touch code samples, API names, or quoted material.
 
-The `typos` version is pinned once in the Makefile `TYPOS_VERSION` variable and
-run through `uv tool run typos@$(TYPOS_VERSION)`, so the local gate and CI
-cannot drift. `make spelling` validates the helper implementation, regenerates
-the policy, rejects tracked drift, and scans every tracked Markdown file.
-`make test-typos-config` remains an alias for the focused helper tests.
+The builder is pinned once in the Makefile `TYPOS_CONFIG_BUILDER_VERSION`
+variable, so the local gate and CI cannot drift. `make spelling` regenerates
+the policy, scans every tracked Markdown file, and runs the prohibited-phrase
+check.
 
 ## Release help tooling
 

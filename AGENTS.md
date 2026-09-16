@@ -456,16 +456,15 @@ as `--toolchain`.
 
 ## Markdown guidance
 
-- Validate Markdown files using `make markdownlint`. This target also enforces
-  en-GB-oxendict (Oxford) spelling over Markdown prose with
-  [`typos`](https://github.com/crate-ci/typos), pinned by the Makefile
-  `TYPOS_VERSION` variable and run through `uv tool run`.
-- `typos.toml` is generated from the shared estate dictionary and the narrow
-  repository policy in `typos.local.toml`; never edit generated entries by
-  hand. Change the local overlay and regenerate with
-  `uv run scripts/generate_typos_config.py`. For identifiers or API names that
-  must keep upstream spelling, prefer backticks (which the gate ignores) over
-  widening the accepted-word list. See the
+- Validate Markdown files using `make markdownlint`. This target also runs
+  `make spelling`, the shared en-GB-oxendict (Oxford) spelling gate.
+- Enforce spelling with `make spelling`. The gate regenerates `typos.toml`
+  from the live shared estate dictionary and the `typos.local.toml` overlay on
+  every run, so `typos.toml` is never drift checked in continuous integration.
+- Never edit generated entries in `typos.toml` by hand. Put narrow
+  repository-specific exceptions in `typos.local.toml`. For identifiers or API
+  names that must keep upstream spelling, prefer backticks (which the gate
+  ignores) over widening the accepted-word list. See the
   [developers' guide](docs/developers-guide.md) for the full workflow.
 - Run `make fmt` after any documentation changes to format all Markdown
   files and fix table markup.
@@ -526,9 +525,9 @@ The following tooling is available in this environment:
   and enables editing by syntax tree patterns.
 - `difft` **(Difftastic)** — Semantic diff tool that compares code structure
   rather than just text differences.
-- `typos` — Source-code and prose spell checker. `make markdownlint` runs it
-  against Markdown at the pinned `TYPOS_VERSION` to enforce en-GB-oxendict
-  spelling; run it with `--write-changes` to apply corrections mechanically.
+- `typos` — Source-code and prose spell checker. `make spelling` runs it
+  against Markdown through the shared gate to enforce en-GB-oxendict spelling;
+  run it with `--write-changes` to apply corrections mechanically.
 
 ## Key takeaway
 
