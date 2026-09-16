@@ -17,6 +17,7 @@ the build-and-package workflow default.
 Run via ``make test-workflow-contracts``.
 """
 
+import os
 import re
 import shlex
 
@@ -256,7 +257,8 @@ def _mocked_command(cmd_mox: CmdMox, name: str) -> str:
     """Return a CmdMox shim path for a Makefile command variable."""
     shim_dir = cmd_mox.environment.shim_dir
     assert shim_dir is not None, "CmdMox must create its command shim directory"
-    return str(shim_dir / name)
+    shim_name = f"{name}.cmd" if os.name == "nt" else name
+    return str(shim_dir / shim_name)
 
 
 def _run_python_lint(cmd_mox: CmdMox) -> subprocess.CompletedProcess[str]:
@@ -349,6 +351,26 @@ def test_interrogate_command_uses_the_pinned_baseline_and_release() -> None:
     assert _makefile_command("INTERROGATE") == list(INTERROGATE_COMMAND), (
         "INTERROGATE must select the baseline, pinned package, executable, "
         "and 100% threshold"
+    )
+
+
+@pytest.mark.parametrize(
+    ("platform_name", "expected_suffix"), [("nt", ".cmd"), ("posix", "")]
+)
+def test_mocked_command_uses_the_platform_launcher_suffix(
+    cmd_mox: CmdMox,
+    monkeypatch: pytest.MonkeyPatch,
+    platform_name: str,
+    expected_suffix: str,
+) -> None:
+    """The controlled Make command selects CmdMox's platform launcher."""
+    monkeypatch.setattr(os, "name", platform_name)
+
+    command = _mocked_command(cmd_mox, "uv")
+
+    assert command.endswith(f"uv{expected_suffix}"), (
+        f"{platform_name} must select the CmdMox uv launcher suffix "
+        f"{expected_suffix!r}, got {command!r}"
     )
 
 

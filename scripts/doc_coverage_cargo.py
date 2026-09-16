@@ -70,8 +70,8 @@ class CoverageOutputError(RuntimeError):
         """Parameters
 
         ----------
-        target, detail : Cargo target with no coverage JSON; diagnostic detail
-            explaining its absence.
+        target : Cargo target with no coverage JSON.
+        detail : Diagnostic detail explaining its absence.
         """
         super().__init__(
             f"cargo rustdoc for {target.package} {target.kind}"
