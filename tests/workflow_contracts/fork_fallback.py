@@ -26,6 +26,7 @@ True
 'ubuntu-latest'
 """
 
+import re
 import typing as typ
 
 if typ.TYPE_CHECKING:  # pragma: no cover - typing only
@@ -46,6 +47,12 @@ FORK_FALLBACK_RUNNER: typ.Final[str] = "ubuntu-latest"
 #: arm that fell back to a hosted runner on both sides would satisfy a check
 #: written only about the fork arm while the lane stopped using Ubicloud at all.
 UBICLOUD_PREFIX: typ.Final[str] = "ubicloud-"
+
+
+#: A single-quoted literal with no quote inside it. GitHub's expression
+#: syntax has no escape other than a doubled quote, so a value containing one
+#: is not the simple literal this reader accepts.
+_SIMPLE_LITERAL = re.compile(r"'([^']*)'")
 
 
 class Placement(typ.NamedTuple):
@@ -92,11 +99,8 @@ def _quoted_literal(text: str) -> str | None:
     str or None
         The literal's contents, or None when the text is not a simple literal.
     """
-    stripped = text.strip()
-    if len(stripped) < 2 or not (stripped.startswith("'") and stripped.endswith("'")):
-        return None
-    inner = stripped[1:-1]
-    return None if "'" in inner else inner
+    found = _SIMPLE_LITERAL.fullmatch(text.strip())
+    return None if found is None else found.group(1)
 
 
 def _is_context_path(text: str) -> bool:
@@ -115,6 +119,25 @@ def _is_context_path(text: str) -> bool:
     return bool(stripped) and all(
         character.isalnum() or character in "_." for character in stripped
     )
+
+
+def _split_operands(declaration: str) -> tuple[str, str, str] | None:
+    """Split an expression into its guard and its two unread arms.
+
+    Returns
+    -------
+    tuple of str or None
+        The guard, the truthy arm's text and the falsy arm's text, or None
+        when the value is not one guarded choice between two operands.
+    """
+    body = _expression_body(declaration)
+    if body is None or "&&" not in body:
+        return None
+    guard, arms = body.split("&&", 1)
+    if "||" not in arms or not _is_context_path(guard):
+        return None
+    fork_text, owned_text = arms.split("||", 1)
+    return guard.strip(), fork_text, owned_text
 
 
 def read_placement(declaration: object) -> Placement | None:
@@ -138,18 +161,15 @@ def read_placement(declaration: object) -> Placement | None:
     """
     if not isinstance(declaration, str) or "\n" in declaration:
         return None
-    body = _expression_body(declaration)
-    if body is None or "&&" not in body:
+    parts = _split_operands(declaration)
+    if parts is None:
         return None
-    guard, arms = body.split("&&", 1)
-    if "||" not in arms or not _is_context_path(guard):
-        return None
-    fork_text, owned_text = arms.split("||", 1)
+    guard, fork_text, owned_text = parts
     fork = _quoted_literal(fork_text)
     owned = _quoted_literal(owned_text)
     if fork is None or owned is None:
         return None
-    return Placement(guard=guard.strip(), fork=fork, owned=owned)
+    return Placement(guard=guard, fork=fork, owned=owned)
 
 
 def owned_runner(declaration: object) -> str:

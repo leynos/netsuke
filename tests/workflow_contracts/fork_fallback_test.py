@@ -107,6 +107,17 @@ def test_no_runs_on_declaration_carries_a_line_break() -> None:
         pytest.param("${{ !a.b && 'x' || 'y' }}", None, id="a-negated-guard"),
         pytest.param("${{ a.b == 'c' && 'x' || 'y' }}", None, id="a-compared-guard"),
         pytest.param("${{ a.b && x || 'y' }}", None, id="an-unquoted-arm"),
+        # An arm that is an expression rather than a literal. A reader that
+        # searched for the first literal instead of matching the whole arm
+        # would read this as `a` and report a placement that does not exist.
+        pytest.param("${{ a.b && 'a' + 'c' || 'y' }}", None, id="a-concatenated-arm"),
+        # GitHub escapes a quote inside a literal by doubling it. That is a
+        # valid arm this reader deliberately does not read, because the value
+        # it names is not a runner label, and refusing it is what keeps the
+        # contract from reporting `it''s` as a runner.
+        pytest.param(
+            "${{ a.b && 'it''s' || 'y' }}", None, id="an-escaped-quote-inside-an-arm"
+        ),
         pytest.param("${{ a.b\n&& 'x' || 'y' }}", None, id="a-line-break-inside-it"),
         pytest.param(["a", "b"], None, id="a-label-sequence"),
         pytest.param(None, None, id="no-declaration-at-all"),
