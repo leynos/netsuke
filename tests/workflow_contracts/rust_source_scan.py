@@ -33,18 +33,19 @@ def _block_comment_end(source: str, index: int) -> int | None:
     return end
 
 
-def _quoted_literal_end(source: str, index: int, quote: str) -> int | None:
-    """Return the end of a quoted literal beginning with `quote` at `index`."""
-    if source[index] != quote:
+def _string_literal_end(source: str, index: int) -> int | None:
+    """Return the end of a string literal beginning at `index`."""
+    if source[index] != '"':
         return None
     end = index + 1
     while end < len(source):
-        if source[end] == "\\":
-            end += 2
-        elif source[end] == quote:
-            return end + 1
-        else:
-            end += 1
+        match source[end]:
+            case "\\":
+                end += 2
+            case '"':
+                return end + 1
+            case _:
+                end += 1
     return len(source)
 
 
@@ -58,6 +59,21 @@ def _raw_string_end(source: str, index: int) -> int | None:
     return len(source) if end < 0 else end + len(terminator)
 
 
+def _character_literal_end(source: str, index: int) -> int | None:
+    """Return the end of a character literal, refusing lifetimes and labels."""
+    if source[index] != "'":
+        return None
+    end = index + 1
+    if source.startswith("\\u{", end):
+        closing_brace = source.find("}", end + 3)
+        end = len(source) if closing_brace < 0 else closing_brace + 1
+    elif end < len(source) and source[end] == "\\":
+        end += 2
+    else:
+        end += 1
+    return end + 1 if end < len(source) and source[end] == "'" else None
+
+
 def _non_code_end(source: str, index: int) -> int | None:
     """Return the end of non-code text beginning at `index`, when present."""
     for boundary in (
@@ -67,13 +83,27 @@ def _non_code_end(source: str, index: int) -> int | None:
     ):
         if (end := boundary(source, index)) is not None:
             return end
-    if (end := _quoted_literal_end(source, index, '"')) is not None:
+    if (end := _string_literal_end(source, index)) is not None:
         return end
-    return _quoted_literal_end(source, index, "'")
+    return _character_literal_end(source, index)
 
 
 def mask_non_code(source: str, retained_literals: set[str]) -> str:
-    """Mask Rust comments and literals except tokens needed for command discovery."""
+    """Mask Rust comments and literals except tokens needed for command discovery.
+
+    Parameters
+    ----------
+    source : str
+        Rust source text whose comments and literals are masked.
+    retained_literals : set[str]
+        Literal tokens to leave unchanged for command discovery.
+
+    Returns
+    -------
+    str
+        Source with non-code text replaced by spaces while preserving every
+        original character position and line boundary.
+    """
     masked = list(source)
     index = 0
     while index < len(source):

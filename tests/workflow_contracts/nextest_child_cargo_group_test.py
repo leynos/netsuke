@@ -333,6 +333,39 @@ fn fake_fixture_compiles() {{
 
 
 @pytest.mark.parametrize(
+    "prefix",
+    ["<'a>", "() { 'outer: loop { break 'outer; }"],
+)
+def test_lifetime_and_label_syntax_do_not_hide_child_cargo_commands(
+    prefix: str,
+) -> None:
+    """Lifetimes and labels remain executable source, not character literals."""
+    source = f"""
+#[test]
+fn real_fixture_compiles{prefix} {{
+    Command::new(cargo()).arg("build");
+}}
+"""
+    assert _build_capable_test_names(source) == {"real_fixture_compiles"}, (
+        "lifetimes and labels must not mask child Cargo commands"
+    )
+
+
+def test_character_literals_remain_masked() -> None:
+    """A valid escaped character literal does not disturb child Cargo discovery."""
+    source = """
+#[test]
+fn real_fixture_compiles() {
+    let newline = '\\n';
+    Command::new(cargo()).arg("build");
+}
+"""
+    assert _build_capable_test_names(source) == {"real_fixture_compiles"}, (
+        "character literals must not hide child Cargo commands"
+    )
+
+
+@pytest.mark.parametrize(
     ("workflow", "job"),
     [("ci.yml", "build-test"), ("coverage-main.yml", "coverage-upload")],
 )
