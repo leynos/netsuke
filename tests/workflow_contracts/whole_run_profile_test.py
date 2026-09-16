@@ -179,6 +179,13 @@ def test_a_blank_step_declaration_fails_the_lane_assertion() -> None:
             "",
             id="a-blank-step-masks-the-job",
         ),
+        pytest.param(
+            {"env": {NEXTEST_PROFILE_VARIABLE: "workflow"}},
+            {"env": {NEXTEST_PROFILE_VARIABLE: "ci"}},
+            {"env": {NEXTEST_PROFILE_VARIABLE: None}},
+            None,
+            id="a-valueless-step-masks-the-job",
+        ),
     ],
 )
 def test_the_profile_is_resolved_from_every_environment_scope(
@@ -200,6 +207,13 @@ def test_the_profile_is_resolved_from_every_environment_scope(
     A reading that fell through to the job would report the lane as
     selecting the capped profile while nextest selected nothing, which
     is exactly the fault this module exists to catch.
+
+    A workflow can spell that two ways, and they parse differently.
+    ``NEXTEST_PROFILE: ""`` yields an empty string; ``NEXTEST_PROFILE:``
+    with nothing after it yields ``None``. Both are declarations and
+    both mask, but a reader guarding its walk with ``is not None``
+    masks the first and falls through on the second, so the two are
+    separate cases rather than one.
     """
     assert nextest_profile_of(document, job, step) == expected, (
         f"the profile must resolve to {expected!r} from these scopes; a "
