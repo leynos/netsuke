@@ -11,7 +11,7 @@
 
 use anyhow::{Result, ensure};
 use rstest::rstest;
-use test_support::dev_fast::{BenchFixture, BuildScenario, MakeInvocation, combined};
+use test_support::build_tools::{BenchFixture, BuildScenario, MakeInvocation, combined};
 
 /// Build the standard benchmark invocation for a staged fixture.
 fn bench_invocation(scenario: &BuildScenario, fixture: &BenchFixture) -> MakeInvocation {

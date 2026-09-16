@@ -1655,9 +1655,10 @@ set -o pipefail
 make test 2>&1 | tee /tmp/netsuke-make-test.log
 ```
 
-These gates always use the repository toolchain and the default codegen
-backend. For a faster inner loop between gate runs, see
-[local build acceleration](#local-build-acceleration).
+These gates run on the repository toolchain and on the codegen backend, linker,
+and frontend the repository has chosen as its defaults; there is no separate
+faster path to switch to. See [the build standard](#the-build-standard) for
+what they apply and why release and coverage builds are held out of it.
 
 For documentation changes, also run `make fmt`, `make markdownlint`, and
 `make nixie`.
@@ -2307,7 +2308,7 @@ contract. Its fixtures compile the production module paths selected by
 negative fixture imports `cli::discovery` and must fail with an unresolved
 module diagnostic. Update the fixtures whenever the build-script slice changes.
 
-## Local build acceleration
+## The build standard
 
 The [`mold`] linker, the Cranelift `rustc` codegen backend, and the parallel
 `rustc` frontend (`-Zthreads=8`) are the **defaults** for development, test,
@@ -2321,22 +2322,25 @@ exclusions are enforced rather than assumed; see *Exclusions* below.
 The canonical commands are:
 
 ```bash
-make install-dev-fast   # install the pinned mold release and Cranelift backend
-make dev-fast-check     # verify the prerequisites are present
+make install-build-tools   # install the pinned mold release and Cranelift backend
+make check-build-tools     # verify the prerequisites are present
 make build              # debug binary on the standard
 make test               # the full gate on the standard
 ```
 
 `make build`, `make test-nextest`, `make doctest`, `make lint-clippy`,
-`make lint-whitaker`, and `make typecheck` all depend on `make dev-fast-check`,
-so a missing tool reports an installation hint before Cargo is invoked rather
-than surfacing as an opaque codegen-backend or linker error. `make dev-build`
-and `make dev-test` survive as aliases for `make build` and `make test-nextest`.
+`make lint-whitaker`, and `make typecheck` all depend on
+`make check-build-tools`, so a missing tool reports an installation hint before
+Cargo is invoked rather than surfacing as an opaque codegen-backend or linker
+error. There is no separate accelerated target: `make build`, `make test`,
+`make lint`, and `make typecheck` are the build targets, and every one of them
+runs on the standard.
 
 Every lane in continuous integration that compiles on the dev profile runs
-`make install-dev-fast` before its first build, including both Windows jobs and
-the mutation run, which passes the same command through the shared workflow's
-`setup-commands` input. A contract test asserts that command lane by lane.
+`make install-build-tools` before its first build, including both Windows jobs
+and the mutation run, which passes the same command through the shared
+workflow's `setup-commands` input. A contract test asserts that command lane by
+lane.
 
 `CARGO_LOCKED` defaults to empty. Set `CARGO_LOCKED=--locked` to enable
 repository lockfile verification.
@@ -2352,10 +2356,10 @@ value for a whole job, so a repository that named the flags only in
 frontend during exactly the builds it most wanted accelerated — and report
 success while doing it.
 
-The flags are therefore restated in the Makefile, in `DEV_FAST_THREADS_FLAG` and
-`DEV_FAST_MOLD_FLAG`, and composed into the `RUSTFLAGS` each gate builds.
-`tests/dev_fast_make_target_tests.rs` and
-`tests/dev_fast_cargo_config_tests.rs` hold the sources equal in both
+The flags are therefore restated in the Makefile, in `STANDARD_THREADS_FLAG` and
+`STANDARD_MOLD_FLAG`, and composed into the `RUSTFLAGS` each gate builds.
+`tests/build_tools_make_target_tests.rs` and
+`tests/build_tools_cargo_config_tests.rs` hold the sources equal in both
 directions: a flag the Makefile passes but the configuration omits fails one
 test, and a flag named in `[build] rustflags` but missing from the Linux table
 fails another. Do not consolidate them.
@@ -2374,58 +2378,58 @@ Two pins fix the linker; the toolchain is not pinned separately. Change the
 pins together, never individually.
 
 The scripts locate these files relative to their own path, so `make dev-*`, a
-direct `scripts/dev-fast-check.sh`, and a run from any working directory all
+direct `scripts/check-build-tools.sh`, and a run from any working directory all
 resolve the same committed pins. Setting `MOLD_VERSION_FILE`,
 `MOLD_SHA256SUMS_FILE`, or `RUST_TOOLCHAIN_FILE` overrides the corresponding
 default; the tests use that to point the scripts at fixtures. Either way a
-missing or empty file is reported as `dev-fast: missing version pin: <path>`
+missing or empty file is reported as `build-tools: missing version pin: <path>`
 rather than silently becoming an empty version.
 
-- `rust-toolchain.toml` supplies the toolchain. dev-fast deliberately shares
-  the repository's own dated nightly rather than pinning a second one, keeping
-  the accelerated loop and the gates on the same toolchain. The
-  `make install-dev-fast` target adds `rustc-codegen-cranelift-preview` to that
-  toolchain.
+- `rust-toolchain.toml` supplies the toolchain. the build standard deliberately
+  shares the repository's own dated nightly rather than pinning a second one,
+  keeping the accelerated loop and the gates on the same toolchain. The
+  `make install-build-tools` target adds `rustc-codegen-cranelift-preview` to
+  that toolchain.
 - `tools/mold/VERSION` holds the `mold` release tag.
 - `tools/mold/SHA256SUMS` holds the SHA-256 checksum of each supported `mold`
-  release artefact. `make install-dev-fast` refuses to install an artefact that
-  is absent from this file or whose checksum does not match.
+  release artefact. `make install-build-tools` refuses to install an artefact
+  that is absent from this file or whose checksum does not match.
 
-`make install-dev-fast` unpacks `mold` under `~/.local` by default; override
-the location with `DEV_FAST_PREFIX`. Every `dev-*` recipe prepends
-`$(DEV_FAST_PREFIX)/bin` to `PATH`, so an overridden prefix is the one actually
-selected — `-fuse-ld=mold` resolves by `PATH` order, and the Makefile otherwise
-puts `~/.local/bin` first unconditionally. Invoking the scripts directly rather
-than through `make` means arranging that `PATH` order manually.
+`make install-build-tools` unpacks `mold` under `~/.local` by default; override
+the location with `BUILD_TOOLS_PREFIX`. Every `dev-*` recipe prepends
+`$(BUILD_TOOLS_PREFIX)/bin` to `PATH`, so an overridden prefix is the one
+actually selected — `-fuse-ld=mold` resolves by `PATH` order, and the Makefile
+otherwise puts `~/.local/bin` first unconditionally. Invoking the scripts
+directly rather than through `make` means arranging that `PATH` order manually.
 
-`make dev-fast-check` prints the resolved `mold` path alongside its version, so
-an unexpected pick is visible. A version that differs from the pin fails the
+`make check-build-tools` prints the resolved `mold` path alongside its version,
+so an unexpected pick is visible. A version that differs from the pin fails the
 check, as does a missing `mold` or one that cannot report its version; run
-`make install-dev-fast` to install the pinned release ahead of any distribution
-`mold` on `PATH`. An advisory pin is not a pin: tolerating drift would let the
-linker actually in use stop matching what the repository claims.
+`make install-build-tools` to install the pinned release ahead of any
+distribution `mold` on `PATH`. An advisory pin is not a pin: tolerating drift
+would let the linker actually in use stop matching what the repository claims.
 
-For screen readers: the following flowchart traces `make install-dev-fast` from
-start to exit. It reads the pinned linker version, then branches on the host
-platform. On Linux it selects the architecture, downloads the release tarball,
-verifies its checksum, unpacks it into the install prefix, and reports the
-`PATH` requirement; on other platforms it skips the linker entirely and falls
-back to the platform default. Both branches then converge on the toolchain
-half, which reads the pinned nightly, fails early if `rustup` is absent, and
-otherwise installs the toolchain and the Cranelift backend component before
-printing a readiness message.
+For screen readers: the following flowchart traces `make install-build-tools`
+from start to exit. It reads the pinned linker version, then branches on the
+host platform. On Linux it selects the architecture, downloads the release
+tarball, verifies its checksum, unpacks it into the install prefix, and reports
+the `PATH` requirement; on other platforms it skips the linker entirely and
+falls back to the platform default. Both branches then converge on the
+toolchain half, which reads the pinned nightly, fails early if `rustup` is
+absent, and otherwise installs the toolchain and the Cranelift backend
+component before printing a readiness message.
 
 ```mermaid
 flowchart TD
-  A["Start install-dev-fast.sh"] --> B["Source dev-fast-common.sh"]
+  A["Start install-build-tools.sh"] --> B["Source build-tools-common.sh"]
   B --> C["mold_version"]
   C --> D{"is_linux"}
   D -- No --> E["Skip linker installation<br/>Fall back to platform linker"]
   D -- Yes --> F["mold_arch"]
   F --> G["Download tarball from MOLD_RELEASE_BASE_URL"]
   G --> H["verify_mold_archive"]
-  H --> I["tar extract into DEV_FAST_PREFIX"]
-  I --> J["Report DEV_FAST_PREFIX/bin PATH requirement"]
+  H --> I["tar extract into BUILD_TOOLS_PREFIX"]
+  I --> J["Report BUILD_TOOLS_PREFIX/bin PATH requirement"]
 
   E --> K["cranelift_toolchain"]
   J --> K
@@ -2433,17 +2437,17 @@ flowchart TD
   L -- No --> M["fail: install rustup"]
   L -- Yes --> N["rustup toolchain install pinned nightly --profile minimal"]
   N --> O["rustup component add rustc-codegen-cranelift-preview"]
-  O --> P["Print ready; verify with make dev-fast-check"]
+  O --> P["Print ready; verify with make check-build-tools"]
   M --> Q["Exit"]
   P --> Q
 ```
 
-**Figure**: `make install-dev-fast` control flow. The `is_linux` branch is what
-keeps macOS and Windows on the platform linker while still installing
+**Figure**: `make install-build-tools` control flow. The `is_linux` branch is
+what keeps macOS and Windows on the platform linker while still installing
 Cranelift, and `verify_mold_archive` is the point at which an artefact absent
 from `tools/mold/SHA256SUMS`, or one whose checksum does not match, aborts the
 installation. The final node only reports the `PATH` requirement for direct
-script invocation; the `dev-*` recipes prepend `$(DEV_FAST_PREFIX)/bin`
+script invocation; the `dev-*` recipes prepend `$(BUILD_TOOLS_PREFIX)/bin`
 themselves.
 
 ### Ownership boundary
@@ -2502,8 +2506,8 @@ fails if either flag is handed back.
 - **Quality gates.** `make lint`, `make lint-clippy`, `make lint-whitaker`,
   `make test`, and `make typecheck` run on the standard, on the repository's
   pinned nightly from `rust-toolchain.toml`. They are gated on
-  `make dev-fast-check`, so they stop with an installation hint rather than a
-  codegen-backend error. `make check-fmt` compiles nothing and is unaffected.
+  `make check-build-tools`, so they stop with an installation hint rather than
+  a codegen-backend error. `make check-fmt` compiles nothing and is unaffected.
 - **`RUSTFLAGS`.** `make test-nextest`, `make doctest`, `make typecheck`, and
   the rustdoc and Clippy stages of `make lint` append `-D warnings` *and* the
   standard's flags to whatever the caller set. An externally set `RUSTFLAGS`
@@ -2549,23 +2553,23 @@ fails if either flag is handed back.
 ### Fallback behaviour
 
 - **Non-Linux hosts.** `mold` ships for Linux only, so on macOS and Windows
-  `make install-dev-fast` skips the linker installation, the
+  `make install-build-tools` skips the linker installation, the
   `cfg(target_os = "linux")` gate keeps the link argument inert, the Makefile
-  omits it from the composed `RUSTFLAGS`, and `make dev-fast-check` prints the
-  fallback to the platform linker explicitly. Cranelift still applies: the
+  omits it from the composed `RUSTFLAGS`, and `make check-build-tools` prints
+  the fallback to the platform linker explicitly. Cranelift still applies: the
   pinned nightly publishes `rustc-codegen-cranelift-preview` for
   `x86_64-pc-windows-msvc` and `aarch64-apple-darwin` as well as for Linux. A
   profile setting cannot be gated behind a `cfg`, so if a platform ever loses
   the component the remedy is a job-scoped
   `CARGO_PROFILE_DEV_CODEGEN_BACKEND=llvm` with the failure quoted as its
   reason, not a silent fallback.
-- **Unsupported architecture.** `make install-dev-fast` fails with a clear
+- **Unsupported architecture.** `make install-build-tools` fails with a clear
   message rather than guessing when `uname -m` is not one of the architectures
   recorded in `tools/mold/SHA256SUMS`.
-- **Missing tools.** `make dev-fast-check` names the absent component — `mold`,
-  `rustup`, the pinned toolchain, or the Cranelift backend — and points at
-  `make install-dev-fast`. It exits non-zero, so `make build`, `make test`,
-  `make lint`, and `make typecheck` stop before Cargo runs.
+- **Missing tools.** `make check-build-tools` names the absent component —
+  `mold`, `rustup`, the pinned toolchain, or the Cranelift backend — and points
+  at `make install-build-tools`. It exits non-zero, so `make build`,
+  `make test`, `make lint`, and `make typecheck` stop before Cargo runs.
 
 ### Testing the tooling
 
@@ -2573,33 +2577,33 @@ Seven suites cover the tooling's observable behaviour. All are hermetic — no
 network, and no real `mold`, `rustup`, or Cargo — so they run as part of
 `make test` on any Linux host.
 
-- `tests/dev_fast_check_tests.rs`: the capability gate. Which diagnostic each
+- `tests/build_tools_check_tests.rs`: the capability gate. Which diagnostic each
   failure mode emits, exit status, pin resolution, and refusal of a malformed
   pin.
-- `tests/dev_fast_install_tests.rs`: the installer's happy path and its
-  refusals, `make install-dev-fast` forwarding, and the benchmark script's
+- `tests/build_tools_install_tests.rs`: the installer's happy path and its
+  refusals, `make install-build-tools` forwarding, and the benchmark script's
   Markdown output.
-- `tests/dev_fast_checksum_tests.rs`: property coverage for checksum
+- `tests/build_tools_checksum_tests.rs`: property coverage for checksum
   verification against a model.
-- `tests/dev_fast_make_target_tests.rs`: the Make recipes. That each gate
+- `tests/build_tools_make_target_tests.rs`: the Make recipes. That each gate
   composes the standard's flags *and* the warning policy into `RUSTFLAGS`, that
   the debug build takes the standard without the warning policy, that the
   release build assigns `RUSTFLAGS` and carries neither flag, and that a failed
   capability check reaches zero Cargo invocations.
-- `tests/dev_fast_cargo_config_tests.rs`: the committed `.cargo/config.toml`.
+- `tests/build_tools_cargo_config_tests.rs`: the committed `.cargo/config.toml`.
   That both `rustflags` sources repeat the shared flags, that only the `dev` and
   `release` profiles name a backend and each names the right one, and that
   Cargo itself resolves the keys — `cargo config get` reports Cargo's own view,
   so a key nested under the wrong table shows up as a missing value rather than
   parsing cleanly and being ignored.
-- `tests/dev_fast_bench_tests.rs`: `make bench-build`. Per-variant target
+- `tests/build_tools_bench_tests.rs`: `make bench-build`. Per-variant target
   directories, the clean/incremental cycle, and all three variant rows.
-- `tests/dev_fast_bench_lock_tests.rs`: the benchmark's exclusion lock. That a
-  held lock rejects a second run before it mutates anything, that the lock is
+- `tests/build_tools_bench_lock_tests.rs`: the benchmark's exclusion lock. That
+  a held lock rejects a second run before it mutates anything, that the lock is
   released however a run ends, and that a later run can take it after an
   aborted one.
 
-The fixtures live in `test_support::dev_fast`:
+The fixtures live in `test_support::build_tools`:
 
 - `Sandbox` builds `PATH` from nothing — an explicit allowlist of ordinary
   utilities symlinked into a temporary directory, plus whichever fakes a case
@@ -2640,21 +2644,21 @@ The fixtures live in `test_support::dev_fast`:
   entries are kept apart deliberately: a command-line variable outranks a `?=`
   default, whereas an environment entry is the only channel for a setting a
   script reads without the Makefile naming it.
-- `test_support::dev_fast::scenario` builds on the fixtures above to assemble
-  two starting points. `BuildScenario` is a sandbox where `make dev-fast-check`
-  passes — pinned `mold` on the install prefix, a `rustup` reporting the
-  Cranelift component, and a `RecordingCargo` installed — and is shared by the
-  Make-target and benchmark suites. `BuildScenario::run(target)` returns the
-  single Cargo invocation a target must produce. The scenario is shared by both
-  suites so each can inspect that invocation without relying on process-global
-  state. `InstallerScenario` is a sandbox with a published `FakeRelease` and a
-  usable `rustup`, letting a test concentrate on the linker half of the
-  installer; the installer and checksum suites share it. The module also exports
-  `TEST_MOLD_VERSION`, deliberately not a real `mold` version so a test that
-  accidentally reaches the network fails rather than silently succeeding
-  against an upstream artefact, and `WRONG_SHA256`. `InstallerFixture` groups
-  the installer's pin path, checksum path, and release URL, and renders them via
-  `script_env()`.
+- `test_support::build_tools::scenario` builds on the fixtures above to assemble
+  two starting points. `BuildScenario` is a sandbox where
+  `make check-build-tools` passes — pinned `mold` on the install prefix, a
+  `rustup` reporting the Cranelift component, and a `RecordingCargo` installed
+  — and is shared by the Make-target and benchmark suites.
+  `BuildScenario::run(target)` returns the single Cargo invocation a target
+  must produce. The scenario is shared by both suites so each can inspect that
+  invocation without relying on process-global state. `InstallerScenario` is a
+  sandbox with a published `FakeRelease` and a usable `rustup`, letting a test
+  concentrate on the linker half of the installer; the installer and checksum
+  suites share it. The module also exports `TEST_MOLD_VERSION`, deliberately
+  not a real `mold` version so a test that accidentally reaches the network
+  fails rather than silently succeeding against an upstream artefact, and
+  `WRONG_SHA256`. `InstallerFixture` groups the installer's pin path, checksum
+  path, and release URL, and renders them via `script_env()`.
 
 A scenario earns its place here once a second suite needs it, and not before;
 suite-specific conveniences stay with their suite — the installer tests keep
@@ -2693,8 +2697,8 @@ the corpus small and the strategy structural.
 `test_support` is a workspace member, so `make test` (whose nextest command uses
 `--workspace`), rustdoc, Clippy, and Whitaker visit its unit tests and library
 code. Keep fixture tests beside the fixture when they exercise a local
-invariant; use the `tests/dev_fast_*.rs` integration crates when the assertion
-spans the application-facing sandbox or Makefile contract.
+invariant; use the `tests/build_tools_*.rs` integration crates when the
+assertion spans the application-facing sandbox or Makefile contract.
 
 ### Benchmark evidence
 
@@ -2745,7 +2749,7 @@ things bound it. Both variants now share one nightly, so the comparison
 isolates Cranelift and `mold` rather than also capturing a toolchain change —
 earlier figures in this document did not, and overstated the gain. And the
 benchmark builds only `--bin netsuke`, the smallest useful target, so it
-under-represents what `make dev-test` sees, where Cranelift has every test
+under-represents what `make test` sees, where the backend has every test
 binary's codegen to save on. Measure the actual workload before concluding the
 acceleration is or is not worth the setup.
 
@@ -4003,19 +4007,19 @@ is not obvious from the name:
   string normalization. Keep this exception in `test_support::fs`; production
   code remains capability-scoped or uses its dedicated normalizer.
 - `copy(from, to) -> io::Result<u64>` forwards to `std::fs::copy`, returning
-  the number of bytes copied and propagating its failure. The `dev_fast`
+  the number of bytes copied and propagating its failure. The `build_tools`
   release fixtures use it to place a built archive under its versioned name.
 - `modified(path) -> io::Result<SystemTime>` returns the file's modification
   time. It propagates both the metadata failure and the platform's failure to
   report a timestamp, so it is `io::Result` rather than an `Option`. The
-  `dev_fast` staging fixtures use it to assert a file was or was not rebuilt.
+  `build_tools` staging fixtures use it to assert a file was or was not rebuilt.
 - `write_with_mtime(path, contents, mtime) -> io::Result<()>` (Unix only)
   creates or truncates `path`, writes `contents`, and sets the modification
   time to `mtime`, propagating whichever step fails. The staging fixtures use
   it to backdate a file so a later build sees it as stale.
 
 `write_with_mtime` is the reason `test_support/dylint.toml` carries no
-`dev_fast` exemption. Backdating a fixture needs one open file for both the
+`build_tools` exemption. Backdating a fixture needs one open file for both the
 write and the timestamp, which reads like an irreducibly ambient operation that
 has to happen at the call site. Taking the timestamp as an argument keeps the
 handle inside this module instead: the caller never sees a `File`, so the
@@ -4335,10 +4339,11 @@ the resulting configuration applies the override only when a child command is
 spawned; callers should configure this through `StdlibConfig` rather than
 constructing the internal value directly.
 
-The `test_support::dev_fast` sandbox reuses `mockable::Env` only while locating
-the host utilities it explicitly links into its hermetic `PATH`.
+The `test_support::build_tools` sandbox reuses `mockable::Env` only while
+locating the host utilities it explicitly links into its hermetic `PATH`.
 `real_utility_with_env` is the test seam for that lookup; it is not a general
-executable-discovery API and must not be used outside dev-fast test scaffolding.
+executable-discovery API and must not be used outside build-tools test
+scaffolding.
 
 #### Annotating a sanctioned site
 

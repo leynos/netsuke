@@ -19,7 +19,7 @@
 # `check_ninja` and `fake_ninja` reach it via
 # `exec::write_exec_with_content`.
 #
-# `dev_fast` is not listed. Its sandbox, staging, release, and cargo-log
+# `build_tools` is not listed. Its sandbox, staging, release, and cargo-log
 # modules stage throwaway PATH/HOME trees for the build-acceleration tests, and
 # every operation they need has a wrapper here — including the ones that once
 # looked irreducible. Backdating a fixture needs one open file for the write and

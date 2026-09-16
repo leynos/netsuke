@@ -43,4 +43,4 @@ jobs:
       # puts on the Cranelift backend, so the component has to be present or
       # every mutant fails to compile. The installer adds the pinned `mold`
       # in the same command.
-      setup-commands: "make install-dev-fast"
+      setup-commands: "make install-build-tools"

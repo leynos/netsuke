@@ -41,7 +41,7 @@ EXPECTED_WITH = {
     # cargo-mutants compiles on the dev profile, which `.cargo/config.toml`
     # puts on the Cranelift backend. The shared workflow's only provisioning
     # channel is this input, so without it every mutant fails to build.
-    "setup-commands": "make install-dev-fast",
+    "setup-commands": "make install-build-tools",
 }
 
 

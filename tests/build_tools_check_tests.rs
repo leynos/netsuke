@@ -1,4 +1,4 @@
-//! Behavioural tests for the `dev-fast-check` capability gate.
+//! Behavioural tests for the `check-build-tools` capability gate.
 //!
 //! The gate's whole purpose is to turn a missing tool into an actionable
 //! message instead of an opaque codegen-backend or linker failure, so these
@@ -10,7 +10,7 @@
 
 use anyhow::{Result, ensure};
 use rstest::rstest;
-use test_support::dev_fast::{
+use test_support::build_tools::{
     PinOverrides, Sandbox, combined, pinned_mold_version, pinned_toolchain,
 };
 
@@ -25,7 +25,7 @@ fn healthy_sandbox() -> Result<Sandbox> {
 #[test]
 fn reports_resolved_path_and_version_when_prerequisites_are_met() -> Result<()> {
     let sandbox = healthy_sandbox()?;
-    let output = sandbox.make("dev-fast-check")?;
+    let output = sandbox.make("check-build-tools")?;
     let text = combined(&output);
 
     ensure!(output.status.success(), "check should pass, got `{text}`");
@@ -54,7 +54,7 @@ fn a_non_linux_host_skips_mold_and_still_passes() -> Result<()> {
     // No mold anywhere: the point is that its absence stops mattering.
     sandbox.write_fake(&sandbox.bin(), "uname", "echo Darwin")?;
 
-    let output = sandbox.script_with("dev-fast-check.sh", PinOverrides::Omitted, &[])?;
+    let output = sandbox.script_with("check-build-tools.sh", PinOverrides::Omitted, &[])?;
     let text = combined(&output);
 
     ensure!(
@@ -81,7 +81,7 @@ fn a_non_linux_host_skips_the_mold_install() -> Result<()> {
     sandbox.write_fake(&sandbox.bin(), "uname", "echo Darwin")?;
     // A URL that would fail loudly if the download were ever attempted.
     let output = sandbox.script_with(
-        "install-dev-fast.sh",
+        "install-build-tools.sh",
         PinOverrides::Omitted,
         &[("MOLD_RELEASE_BASE_URL", "file:///nonexistent".to_owned())],
     )?;
@@ -109,7 +109,7 @@ fn a_non_linux_host_skips_the_mold_install() -> Result<()> {
 
 /// The regression this guards: the Makefile unconditionally exports
 /// `$(HOME)/.local/bin` ahead of the caller's `PATH`, so an overridden
-/// `DEV_FAST_PREFIX` used to be installed to but never selected.
+/// `BUILD_TOOLS_PREFIX` used to be installed to but never selected.
 #[test]
 fn overridden_prefix_wins_over_a_mold_in_the_default_location() -> Result<()> {
     let sandbox = Sandbox::new()?;
@@ -118,7 +118,7 @@ fn overridden_prefix_wins_over_a_mold_in_the_default_location() -> Result<()> {
     sandbox.write_mold(&sandbox.home().join(".local/bin"), "0.0.0-decoy")?;
     sandbox.write_mold(&sandbox.prefix().join("bin"), &pinned_mold_version()?)?;
 
-    let output = sandbox.make("dev-fast-check")?;
+    let output = sandbox.make("check-build-tools")?;
     let text = combined(&output);
 
     ensure!(output.status.success(), "check should pass, got `{text}`");
@@ -142,7 +142,7 @@ fn rejects_a_version_drift_from_the_pin() -> Result<()> {
     sandbox.write_rustup(&pinned_toolchain()?, true)?;
     sandbox.write_mold(&sandbox.prefix().join("bin"), "99.0.0")?;
 
-    let output = sandbox.make("dev-fast-check")?;
+    let output = sandbox.make("check-build-tools")?;
     let text = combined(&output);
 
     ensure!(
@@ -150,14 +150,14 @@ fn rejects_a_version_drift_from_the_pin() -> Result<()> {
         "a drifting mold should fail the check, got `{text}`"
     );
     ensure!(
-        text.contains("run make install-dev-fast to match"),
+        text.contains("run make install-build-tools to match"),
         "the remedy should be named, got `{text}`"
     );
     Ok(())
 }
 
 /// Each unusable-tool case names the fault and the remedy, and exits non-zero
-/// so `dev-build` and `dev-test` stop before Cargo runs.
+/// so the build and gate targets stop before Cargo runs.
 /// `arrange` is carried as a function rather than dispatched on a name, so
 /// adding a case cannot leave an unhandled arm behind.
 #[derive(Copy, Clone)]
@@ -214,7 +214,7 @@ fn unusable_prerequisites_fail_with_an_actionable_message(#[case] case: FailureC
     let sandbox = Sandbox::new()?;
     (case.arrange)(&sandbox)?;
 
-    let output = sandbox.make("dev-fast-check")?;
+    let output = sandbox.make("check-build-tools")?;
     let text = combined(&output);
 
     ensure!(
@@ -227,17 +227,19 @@ fn unusable_prerequisites_fail_with_an_actionable_message(#[case] case: FailureC
         case.expected
     );
     ensure!(
-        text.contains("make install-dev-fast") || text.contains("https://rustup.rs"),
+        text.contains("make install-build-tools") || text.contains("https://rustup.rs"),
         "case should point at a remedy, got `{text}`"
     );
     Ok(())
 }
 
-/// `dev-build` and `dev-test` depend on the check, so a missing prerequisite
+/// The build and gate targets depend on the check, so a missing prerequisite
 /// must stop them before Cargo is invoked.
 #[rstest]
-#[case("dev-build")]
-#[case("dev-test")]
+#[case("build")]
+#[case("test-nextest")]
+#[case("lint-clippy")]
+#[case("typecheck")]
 fn build_targets_stop_when_the_check_fails(#[case] target: &str) -> Result<()> {
     let sandbox = Sandbox::new()?;
     sandbox.write_rustup(&pinned_toolchain()?, true)?;

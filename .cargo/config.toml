@@ -27,7 +27,7 @@ codegen-backend = "llvm"
 # `[target.*]` table replaces `[build] rustflags` outright, and an externally
 # set `RUSTFLAGS` replaces both. Every flag that must survive therefore has to
 # be repeated in each source, including the `RUSTFLAGS` the Makefile composes
-# for the gate targets. tests/workflow_contracts/dev_fast_rustflags_test.py
+# for the gate targets. tests/workflow_contracts/build_tools_rustflags_test.py
 # holds the sources equal.
 [build]
 rustflags = ["-Zthreads=8"]

@@ -9,8 +9,8 @@
 set -euo pipefail
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-# shellcheck source=scripts/dev-fast-common.sh
-. "$script_dir/dev-fast-common.sh"
+# shellcheck source=scripts/build-tools-common.sh
+. "$script_dir/build-tools-common.sh"
 
 # Report on the linker half of the prerequisites. Returns non-zero when mold is
 # required but missing, unusable, or a different version from the pin. Only a
@@ -23,7 +23,7 @@ check_mold() {
   fi
   if ! resolved=$(command -v mold 2>/dev/null); then
     note "mold not found on PATH (pinned $pinned)"
-    note 'install it with: make install-dev-fast'
+    note 'install it with: make install-build-tools'
     return 1
   fi
   # A mold that cannot report its version is broken — a truncated download or
@@ -31,7 +31,7 @@ check_mold() {
   # the empty string surface as a confusing version-drift warning.
   if ! installed=$(installed_mold_version) || [ -z "$installed" ]; then
     note "mold at $resolved is on PATH but cannot report its version"
-    note 'reinstall it with: make install-dev-fast'
+    note 'reinstall it with: make install-build-tools'
     return 1
   fi
   # Report the resolved path, not just the version: `-fuse-ld=mold` selects by
@@ -40,11 +40,11 @@ check_mold() {
   # A drift from the pin fails rather than warns. An advisory pin is not a pin:
   # tolerating it means the linker actually used, and so the benchmark figures
   # and any linker-specific behaviour, silently stop matching what the
-  # repository claims. `make install-dev-fast` puts the pinned release ahead of
+  # repository claims. `make install-build-tools` puts the pinned release ahead of
   # a distribution one on PATH, so the remedy is a single command.
   if [ "$installed" != "$pinned" ]; then
     note "mold $installed at $resolved does not match the pin $pinned"
-    note 'run make install-dev-fast to match'
+    note 'run make install-build-tools to match'
     return 1
   fi
   note "mold $installed at $resolved"
@@ -62,12 +62,12 @@ check_cranelift() {
   fi
   if ! rustup toolchain list | grep -q "^$toolchain"; then
     note "toolchain $toolchain is not installed"
-    note 'install it with: make install-dev-fast'
+    note 'install it with: make install-build-tools'
     return 1
   fi
   if ! has_cranelift_component "$toolchain"; then
     note "$CRANELIFT_COMPONENT is not installed for $toolchain"
-    note 'install it with: make install-dev-fast'
+    note 'install it with: make install-build-tools'
     return 1
   fi
   note "$CRANELIFT_COMPONENT available on $toolchain"

@@ -108,10 +108,10 @@ jobs:
       - name: Reset sccache statistics
         run: sccache --zero-stats
       - name: Install the build standard
-        # `make build` below is gated on `dev-fast-check`, so the Cranelift
+        # `make build` below is gated on `check-build-tools`, so the Cranelift
         # backend and the pinned `mold` must be present before the first
         # compile rather than installed on demand.
-        run: make install-dev-fast
+        run: make install-build-tools
       - name: Show rustc version
         run: |
           rustup show

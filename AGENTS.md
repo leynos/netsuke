@@ -563,9 +563,9 @@ frontend (`-Zthreads=8`) are the **defaults** for development, test, lint, and
 typecheck builds. They are committed to `.cargo/config.toml`, which Cargo
 auto-discovers, so a bare `cargo build` gets them too.
 
-Run `make install-dev-fast` to install the pinned nightly's
+Run `make install-build-tools` to install the pinned nightly's
 `rustc-codegen-cranelift-preview` component and, on Linux, the pinned `mold`
-release. `make dev-fast-check` preflights those prerequisites, and is a
+release. `make check-build-tools` preflights those prerequisites, and is a
 prerequisite of `make build`, `make test`, `make lint`, and `make typecheck`,
 so a missing tool reports an installation hint before Cargo runs. Linux hosts
 use `mold`; macOS and Windows keep their platform linker, which the
@@ -588,7 +588,8 @@ warnings, so the standard's flags are restated in the Makefile and composed
 into that value. Changing one source without the other fails a contract test;
 do not "simplify" by deleting a restatement.
 
-`make dev-build` and `make dev-test` remain as aliases for `make build` and
-`make test-nextest`. See "Local build acceleration" in
+There is no separate accelerated target. `make build`, `make test`,
+`make lint`, and `make typecheck` are the build targets, and they all run on
+the standard. See "The build standard" in
 [developers' guide](docs/developers-guide.md) for the full ownership boundary,
 the benchmark, and the fallback behaviour.
