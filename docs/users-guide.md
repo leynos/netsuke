@@ -1739,9 +1739,27 @@ hosts.
 
 The Jinja `env()` helper can read process environment variables while rendering
 a manifest. Configure exact variable names with `env_allow_var` and
-`env_block_var` in a Netsuke configuration layer, `NETSUKE_ENV_ALLOW_VAR` and
-`NETSUKE_ENV_BLOCK_VAR` in the environment, or repeat `--env-allow-var NAME` and
-`--env-block-var NAME` on the command line.
+`env_block_var` as arrays in a Netsuke configuration layer:
+
+```toml
+env_allow_var = ["CI", "PACKAGE_REGISTRY_TOKEN"]
+env_block_var = ["AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN"]
+```
+
+The environment equivalents contain serialized JSON arrays, rather than bare
+variable names:
+
+```sh
+NETSUKE_ENV_ALLOW_VAR='["CI","PACKAGE_REGISTRY_TOKEN"]'
+NETSUKE_ENV_BLOCK_VAR='["AWS_SECRET_ACCESS_KEY","GITHUB_TOKEN"]'
+```
+
+CLI flags take one exact name and may be repeated:
+
+```sh
+netsuke --env-allow-var CI --env-allow-var PACKAGE_REGISTRY_TOKEN \
+    --env-block-var AWS_SECRET_ACCESS_KEY --env-block-var GITHUB_TOKEN
+```
 
 With neither effective list configured, `env()` remains default-allow for
 compatibility. Adding at least one effective `env_allow_var` entry makes the

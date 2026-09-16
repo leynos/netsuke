@@ -60,6 +60,7 @@ impact
 | Manifest discovery           | Optional target/action `description` values are shown by the new `netsuke help targets` command. Manifests without them and existing build output are unchanged.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | [Users' guide](users-guide.md)                                                                           |
 | Serial dependencies          | New opt-in `dependency_order: serial` runs an action or target's direct `deps` list in declaration order.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | [Serial dependency ordering](users-guide.md#run-direct-dependencies-serially)                            |
 | Fetch redirects              | Every redirect destination is now evaluated against the network policy before it is requested, so a redirect can no longer reach a host, scheme, or address the policy refuses. Chains stop after five redirects, a repeated destination is refused as a loop, and URL credentials are removed when the origin changes.                                                                                                                                                                                                                                                                                                                                                                                       | [Users' guide](users-guide.md#network-fetch-policy) and [ADR-023](adr-023-revalidate-fetch-redirects.md) |
+| Manifest environment access  | New optional exact-name `env()` allow and block lists. Existing manifests retain default-allow behaviour when neither list is configured; an active allowlist enables default-deny and a block always wins.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | [Users' guide](users-guide.md#control-manifest-environment-access)                                       |
 | File-reading filters         | The `contents`, `linecount`, `hash`, and `digest` filters now read under one 8 MiB default byte budget; a symlink final component is rejected unless `follow_symlinks=true` opts in, while FIFOs and devices are rejected outright, and per-call `max_bytes` can only narrow the budget.                                                                                                                                                                                                                                                                                                                                                                                                                      | [Configure file reading limits](users-guide.md#configure-file-reading-limits)                            |
 
 ## Bound manifest evaluation
@@ -344,6 +345,41 @@ before storing a body, while a cache hit opens no connection. See
 [Network fetch policy](users-guide.md#network-fetch-policy) for the operator
 surface. Most manifests need no change, but a manifest that relies on
 redirecting to a host outside the allowlist must now grant that host explicitly.
+
+## Control manifest environment access
+
+The Jinja `env()` helper can read process environment variables while rendering
+a manifest. The new policy is optional and keeps existing behaviour when no
+list is configured. Use arrays in configuration files:
+
+```toml
+env_allow_var = ["CI", "PACKAGE_REGISTRY_TOKEN"]
+env_block_var = ["AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN"]
+```
+
+The corresponding `NETSUKE_ENV_ALLOW_VAR` and `NETSUKE_ENV_BLOCK_VAR`
+environment values are serialized JSON arrays. The command-line options take
+one name and can be repeated:
+
+```sh
+export NETSUKE_ENV_ALLOW_VAR='["CI","PACKAGE_REGISTRY_TOKEN"]'
+export NETSUKE_ENV_BLOCK_VAR='["AWS_SECRET_ACCESS_KEY","GITHUB_TOKEN"]'
+netsuke --env-allow-var CI --env-block-var AWS_SECRET_ACCESS_KEY
+```
+
+An empty allowlist preserves default-allow behaviour. Once at least one
+effective `env_allow_var` entry exists, names outside that list are denied.
+`env_block_var` entries deny only their exact names when no allowlist is
+active, and always override matching allow entries. The policy has no glob or
+pattern matching. Primary-project `env_allow_var` entries are quarantined
+before policy composition, so a project cannot grant itself access to inherited
+environment variables or activate default-deny. Primary-project `env_block_var`
+entries remain cumulative because they only restrict access; configuration
+loaded through `extends` retains ordinary file-layer precedence.
+
+This policy reduces secret ingress into rendered manifest fields. It does not
+make rendered manifest contents safe to log: allowed values still require the
+existing output and logging discipline.
 
 ## Opting into serial dependency ordering
 

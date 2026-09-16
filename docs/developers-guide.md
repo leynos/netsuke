@@ -4437,15 +4437,46 @@ one explicitly, so a test can drive the **real registration path** — the same
 `Environment`, the same `add_function("env", ..)` call — without touching the
 process.
 
+`manifest::EnvAccessPolicy` is the manifest-domain policy for this port. It
+stores exact variable names in separate allow and block collections. An empty
+allowlist is default-allow; a non-empty allowlist activates default-deny, and
+block entries take precedence over allow entries. Names are compared using the
+host environment's semantics: case-sensitive on other platforms and
+case-insensitive on Windows. The policy has no glob or pattern matching.
+
+`manifest::ManifestEnvironment<'a>` bundles the caller-owned `EnvReader` with
+the owned `EnvAccessPolicy` used for one manifest load. The on-disk loader's
+process-backed compatibility wrapper constructs the process reader and a
+policy, while `from_path_with_policy_and_env` retains the explicit reader
+surface. `from_path_with_policy_and_environment` is the explicit bundle-based
+entry point; use it when the reader and policy must travel together. The
+string-loading `from_str_with_env_and_policy` variant exposes the same
+composition for callers that already hold an input string.
+
+The CLI composition root builds `EnvAccessPolicy` from the effective merged
+`env_allow_var` and `env_block_var` fields, then passes it into manifest
+loading. Primary-project allow entries are quarantined before this composition
+so an untrusted manifest cannot grant itself access or activate default-deny;
+primary-project block entries remain cumulative because they only restrict
+access.
+
+Policy enforcement belongs at the registered `env()` call boundary. The closure
+evaluates the requested name before invoking `EnvReader`, so a blocked lookup
+cannot obtain a process value. It returns the fixed, localized
+`manifest.env.blocked` diagnostic and emits only the bounded
+`failure_kind="blocked"` trace field. Neither the requested name nor its value
+may appear in that diagnostic or trace.
+
 #### Ownership and permitted call sites
 
 - The caller owns the reader. `from_str` constructs `process_env_reader()`
-  and `from_str_with_env` borrows the caller's reader; both pass it to
-  `from_str_named`, which receives it as `&EnvReader` and `Arc::clone`s it into
-  the registered closure, so the closure co-owns the `Arc` alongside the caller.
-  `from_str_named` remains the only place the `env()` function is registered.
-  In production nothing else constructs a reader; tests build their own with
-  `Arc::new`, which is the point of the seam.
+  and `from_str_with_env` borrows the caller's reader. The explicit loaders
+  build a `ManifestEnvironment` around that borrow and the selected policy;
+  `from_str_named` then clones the reader into the registered closure, so the
+  closure co-owns the `Arc` alongside the caller. `from_str_named` remains the
+  only place the `env()` function is registered. In production nothing else
+  constructs a reader; tests build their own with `Arc::new`, which is the
+  point of the seam.
 - `process_env_reader()` is the sole production supplier and the only place
   `std::env::var` appears in the module.
 - The two test layers cover different things, and both are needed:
