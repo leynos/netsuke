@@ -8,7 +8,13 @@ import tomllib
 import typing as typ
 
 import pytest
-from workflow_loading import REPO_ROOT, load_workflow, require_mapping, workflow_job
+from workflow_loading import (
+    REPO_ROOT,
+    load_workflow,
+    require_list,
+    require_mapping,
+    workflow_job,
+)
 
 if typ.TYPE_CHECKING:
     from pathlib import Path
@@ -34,7 +40,9 @@ NESTED_CARGO_BUILD_TESTS = (
     "packaged_manifest_retains_build_script_sources",
 )
 RUST_FUNCTION = re.compile(
-    r"(?ms)^(?P<attributes>(?:#\[[\s\S]*?\]\s*)*)"
+    r"(?ms)^(?P<indent>[ \t]*)"
+    r"(?P<attributes>(?:(?P=indent)#\[[^\n]*\]\s*|"
+    r"(?P=indent)#\[[\s\S]*?^(?P=indent)[^\n]*\]\s*)*)"
     r"(?P<signature>(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?"
     r"fn\s+(?P<name>[a-z0-9_]+)\b[^\{]*)\{"
 )
@@ -53,8 +61,9 @@ def _default_overrides(config: dict[str, object]) -> list[dict[str, object]]:
     """Return the default profile's parsed override tables."""
     profile = require_mapping(config.get("profile"), "nextest profile table")
     default = require_mapping(profile.get("default"), "nextest default profile")
-    overrides = default.get("overrides")
-    assert isinstance(overrides, list), "default Nextest profile must define overrides"
+    overrides = require_list(
+        default.get("overrides"), "default Nextest profile must define overrides"
+    )
     return [require_mapping(override, "nextest override") for override in overrides]
 
 
@@ -258,6 +267,25 @@ async fn asynchronous_fixture_compiles() {
         "asynchronous_fixture_compiles",
         "restricted_fixture_compiles",
     }, "qualified and asynchronous build-capable tests must be discovered"
+
+
+def test_build_capable_discovery_supports_indented_helpers() -> None:
+    """An indented helper cannot hide a child Cargo build from its test caller."""
+    source = """
+#[test]
+fn helper_fixture_compiles() {
+    Fixture::build();
+}
+
+impl Fixture {
+    fn build() {
+        Command::new(cargo()).arg("build");
+    }
+}
+"""
+    assert _build_capable_test_names(source) == {"helper_fixture_compiles"}, (
+        "indented build-capable helpers must classify their test callers"
+    )
 
 
 @pytest.mark.parametrize(
