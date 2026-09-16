@@ -2168,6 +2168,7 @@ Rust
 
 use std::collections::HashMap;
 use camino::Utf8PathBuf;
+use netsuke::ir::EdgeArena;
 
 pub struct EdgeId(usize);
 
@@ -2179,10 +2180,10 @@ pub struct BuildGraph {
     pub actions: HashMap<String, Action>,
 
     /// Canonical build edges, each owned exactly once.
-    pub edges: Vec<BuildEdge>,
+    edges: EdgeArena<BuildEdge>,
 
     /// An output-path index pointing to a canonical edge.
-    pub targets: HashMap<Utf8PathBuf, EdgeId>,
+    targets: HashMap<Utf8PathBuf, EdgeId>,
 
     /// A list of targets to build by default.
     pub default_targets: Vec<Utf8PathBuf>,
@@ -2247,11 +2248,16 @@ pub struct BuildEdge {
 }
 ```
 
+Figure 5.2: Canonical build-edge ownership and output indexing.
+
+For screen readers: `BuildGraph` owns each `BuildEdge` in one arena and maps
+each output alias to an `EdgeId`; the identifier selects its producing edge.
+
 ```mermaid
 classDiagram
     class BuildGraph {
         +HashMap<String, Action> actions
-        +Vec<BuildEdge> edges
+        +EdgeArena<BuildEdge> edges
         +HashMap<Utf8PathBuf, EdgeId> targets
         +Vec<Utf8PathBuf> default_targets
     }
@@ -2552,12 +2558,12 @@ default my_app
 The live IR structures defined in [src/ir/graph.rs](../src/ir/graph.rs), and
 re-exported through [src/ir/mod.rs](../src/ir/mod.rs), are minimal containers
 that mirror Ninja's conceptual model while remaining backend-agnostic.
-`BuildGraph` collects actions in a hash map, canonical edges in an insertion-
-ordered arena, and output aliases in a `Utf8PathBuf` to `EdgeId` hash map.
-Actions hold the parsed `Recipe` and optional execution metadata. `BuildEdge`
-connects inputs to outputs using an action identifier and carries the `phony`
-and `always` flags verbatim from the manifest. No Ninja specific placeholders
-are stored in the IR to keep the representation portable.
+`BuildGraph` collects actions in a hash map, canonical edges in an
+insertion-ordered arena, and output aliases in a `Utf8PathBuf` to `EdgeId` hash
+map. Actions hold the parsed `Recipe` and optional execution metadata.
+`BuildEdge` connects inputs to outputs using an action identifier and carries
+the `phony` and `always` flags verbatim from the manifest. No Ninja-specific
+placeholders are stored in the IR to keep the representation portable.
 
 - Actions are deduplicated using a SHA-256 hash of a canonical JSON
   serialization of their recipe, inputs, and outputs. Because commands embed

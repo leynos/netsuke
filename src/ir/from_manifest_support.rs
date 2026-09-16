@@ -13,11 +13,13 @@ use crate::hasher::ActionHasher;
 use crate::localization::{self, keys};
 use crate::recipe_shell::RecipeShell;
 
+#[cfg(kani)]
+use super::super::graph::EdgeId;
 use super::super::{
     cmd_interpolate::{
         CommandBindings, interpolate_command_with_bindings, interpolate_script_with_bindings,
     },
-    graph::{Action, BuildEdge, BuildGraph, EdgeId, IrGenError, IrHashMap},
+    graph::{Action, BuildEdge, BuildGraph, IrGenError, IrHashMap},
 };
 
 #[path = "sort_utils.rs"]
@@ -118,14 +120,34 @@ fn resolve_script(script: &str, bindings: ActionBindings<'_>) -> Result<String, 
 }
 
 /// Report duplicate outputs already known or repeated within one target.
+#[cfg(not(kani))]
 pub(super) fn duplicate_output_error(
     outputs: &[Utf8PathBuf],
-    targets: &IrHashMap<Utf8PathBuf, EdgeId>,
+    graph: &BuildGraph,
 ) -> Option<IrGenError> {
-    find_duplicates(outputs, targets).map(duplicate_output_error_from_paths)
+    find_duplicate_graph_outputs(outputs, graph).map(duplicate_output_error_from_paths)
 }
 
-/// Register one canonical edge under each explicit output.
+/// Report duplicate outputs through Kani's bounded output index.
+#[cfg(kani)]
+pub(super) fn duplicate_output_error(
+    outputs: &[Utf8PathBuf],
+    graph: &BuildGraph,
+) -> Option<IrGenError> {
+    find_duplicates(outputs, graph.output_index()).map(duplicate_output_error_from_paths)
+}
+
+/// Register one canonical edge under each output alias.
+#[cfg(not(kani))]
+pub(super) fn insert_edge_for_outputs(
+    graph: &mut BuildGraph,
+    edge: BuildEdge,
+) -> Result<(), IrGenError> {
+    graph.insert_edge(edge).map(|_| ())
+}
+
+/// Store one canonical edge in Kani's bounded graph model.
+#[cfg(kani)]
 pub(super) fn insert_edge_for_outputs(graph: &mut BuildGraph, edge: BuildEdge) {
     graph.insert_edge(edge);
 }
@@ -280,6 +302,7 @@ fn rule_not_found_message(target_name: &str, rule_name: &str) -> localization::L
 }
 
 /// Find output paths that would collide with existing or sibling outputs.
+#[cfg(kani)]
 pub(super) fn find_duplicates(
     outputs: &[Utf8PathBuf],
     targets: &IrHashMap<Utf8PathBuf, EdgeId>,
@@ -305,6 +328,33 @@ pub(super) fn find_duplicates(
             sort_utils::sort_paths(&mut dups);
         }
         Some(dups)
+    }
+}
+
+/// Find output paths that would collide with the canonical graph index.
+#[cfg(not(kani))]
+fn find_duplicate_graph_outputs(
+    outputs: &[Utf8PathBuf],
+    graph: &BuildGraph,
+) -> Option<Vec<Utf8PathBuf>> {
+    let mut seen: Vec<&Utf8PathBuf> = Vec::new();
+    let mut duplicates = Vec::new();
+    for output in outputs {
+        if graph.edge_id_for_output(output.as_path()).is_some()
+            || sort_utils::has_seen_output(seen.as_slice(), output)
+        {
+            duplicates.push(output.clone());
+        } else {
+            seen.push(output);
+        }
+    }
+    if duplicates.is_empty() {
+        None
+    } else {
+        if duplicates.len() > 1 {
+            sort_utils::sort_paths(&mut duplicates);
+        }
+        Some(duplicates)
     }
 }
 

@@ -10,7 +10,8 @@ use std::collections::HashSet;
 use camino::Utf8PathBuf;
 use proptest::prelude::*;
 
-use super::super::{BuildEdge, BuildGraph, analyse};
+use super::super::super::graph::{BuildEdge, BuildGraph};
+use super::super::{CycleDetectionReport, analyse};
 
 fn node(index: usize) -> Utf8PathBuf {
     Utf8PathBuf::from(format!("n{index}"))
@@ -48,7 +49,10 @@ fn dag_from_edges(node_count: usize, edges: &[(usize, usize, bool)]) -> BuildGra
                 push_dependency(&mut edge, node(to), is_implicit);
             }
         }
-        graph.insert_edge(edge);
+        assert!(
+            graph.insert_edge(edge).is_ok(),
+            "test graph output aliases must be unique",
+        );
     }
     graph
 }
@@ -61,44 +65,40 @@ fn dag_strategy() -> impl Strategy<Value = BuildGraph> {
         .prop_map(|(node_count, edges)| dag_from_edges(node_count, &edges))
 }
 
+/// Build a linear graph and replace `n0` with an edge back to its final node.
+fn graph_with_back_edge(
+    node_count: usize,
+    add_back_edge: impl FnOnce(&mut BuildEdge, Utf8PathBuf),
+) -> (BuildGraph, Utf8PathBuf, Utf8PathBuf) {
+    let chain_edges: Vec<_> = (1..node_count)
+        .map(|index| (index, index - 1, false))
+        .collect();
+    let mut graph = dag_from_edges(node_count, &chain_edges);
+    let from = node(0);
+    let to = node(node_count - 1);
+    let mut edge = build_edge(from.clone());
+    add_back_edge(&mut edge, to.clone());
+    assert!(
+        graph.replace_edge_for_output(from.as_path(), edge),
+        "the generated graph must contain n0",
+    );
+    (graph, from, to)
+}
+
 fn cyclic_graph_strategy() -> impl Strategy<Value = (BuildGraph, Utf8PathBuf, Utf8PathBuf)> {
     (2usize..50, any::<bool>()).prop_map(|(node_count, back_edge_is_implicit)| {
-        let chain_edges: Vec<_> = (1..node_count)
-            .map(|index| (index, index - 1, false))
-            .collect();
-        let mut graph = dag_from_edges(node_count, &chain_edges);
-        let from = node(0);
-        let to = node(node_count - 1);
-        let mut edge = build_edge(from.clone());
-        push_dependency(&mut edge, to.clone(), back_edge_is_implicit);
-        if let Some(existing) = graph
-            .edges
-            .iter_mut()
-            .find(|existing| existing.explicit_outputs.first() == Some(&from))
-        {
-            *existing = edge;
-        }
-        (graph, from, to)
+        graph_with_back_edge(node_count, |edge, to| {
+            push_dependency(edge, to, back_edge_is_implicit);
+        })
     })
 }
 
 fn order_only_back_edge_strategy() -> impl Strategy<Value = BuildGraph> {
     (2usize..50).prop_map(|node_count| {
-        let chain_edges: Vec<_> = (1..node_count)
-            .map(|index| (index, index - 1, false))
-            .collect();
-        let mut graph = dag_from_edges(node_count, &chain_edges);
-        let root = node(0);
-        let mut edge = build_edge(root.clone());
-        edge.order_only_deps.push(node(node_count - 1));
-        if let Some(existing) = graph
-            .edges
-            .iter_mut()
-            .find(|existing| existing.explicit_outputs.first() == Some(&root))
-        {
-            *existing = edge;
-        }
-        graph
+        graph_with_back_edge(node_count, |edge, to| {
+            edge.order_only_deps.push(to);
+        })
+        .0
     })
 }
 
@@ -108,18 +108,17 @@ fn missing_graph_strategy() -> impl Strategy<Value = BuildGraph> {
         proptest::collection::vec((0usize..50, 0usize..20, any::<bool>()), 1..50),
     )
         .prop_map(|(mut graph, missing_edges)| {
-            let node_count = graph.edges.len();
+            let node_count = graph.edge_count();
             for (from, missing_index, is_implicit) in missing_edges {
                 let bounded_from = from.min(node_count.saturating_sub(1));
-                let Some(edge) = graph
-                    .edges
-                    .iter_mut()
-                    .find(|edge| edge.explicit_outputs.first() == Some(&node(bounded_from)))
-                else {
+                let output = node(bounded_from);
+                let Some((_, edge)) = graph.target_for_output(output.as_path()) else {
                     continue;
                 };
                 let missing = Utf8PathBuf::from(format!("missing-{missing_index}"));
-                push_dependency(edge, missing, is_implicit);
+                let mut replacement = edge.clone();
+                push_dependency(&mut replacement, missing, is_implicit);
+                let _ = graph.replace_edge_for_output(output.as_path(), replacement);
             }
             graph
         })
@@ -145,7 +144,10 @@ fn rebuild_in_order(graph: &BuildGraph, order: &[usize]) -> BuildGraph {
             continue;
         };
         if rebuilt.target_for_output(output.as_path()).is_none() {
-            rebuilt.insert_edge(edge.clone());
+            assert!(
+                rebuilt.insert_edge(edge.clone()).is_ok(),
+                "test graph output aliases must be unique",
+            );
         }
     }
     for edge in entries {
@@ -153,13 +155,16 @@ fn rebuild_in_order(graph: &BuildGraph, order: &[usize]) -> BuildGraph {
             continue;
         };
         if rebuilt.target_for_output(output.as_path()).is_none() {
-            rebuilt.insert_edge(edge);
+            assert!(
+                rebuilt.insert_edge(edge).is_ok(),
+                "test graph output aliases must be unique",
+            );
         }
     }
     rebuilt
 }
 
-fn sorted_missing(report: &super::super::CycleDetectionReport) -> Vec<(Utf8PathBuf, Utf8PathBuf)> {
+fn sorted_missing(report: &CycleDetectionReport) -> Vec<(Utf8PathBuf, Utf8PathBuf)> {
     let mut missing = report.missing_dependencies.clone();
     missing.sort();
     missing

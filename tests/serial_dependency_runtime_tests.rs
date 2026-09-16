@@ -83,7 +83,12 @@ fn serial_order_graph() -> BuildGraph {
             DependencyOrder::Serial,
         ),
     ] {
-        graph.insert_edge(edge(action_id, output, deps, dependency_order));
+        assert!(
+            graph
+                .insert_edge(edge(action_id, output, deps, dependency_order))
+                .is_ok(),
+            "test graph output aliases must be unique",
+        );
     }
     graph
 }
@@ -129,7 +134,12 @@ fn shared_work_graph() -> BuildGraph {
             DependencyOrder::Parallel,
         ),
     ] {
-        graph.insert_edge(edge(action_id, output, deps, dependency_order));
+        assert!(
+            graph
+                .insert_edge(edge(action_id, output, deps, dependency_order))
+                .is_ok(),
+            "test graph output aliases must be unique",
+        );
     }
     graph
 }
@@ -242,14 +252,14 @@ fn failure_of_early_dep_stops_later_stages() -> Result<()> {
         .actions
         .insert("all".into(), action(StringOrList::Empty));
 
-    graph.insert_edge(edge("fail", "first", &[], DependencyOrder::Parallel));
-    graph.insert_edge(edge("later", "second", &[], DependencyOrder::Parallel));
+    graph.insert_edge(edge("fail", "first", &[], DependencyOrder::Parallel))?;
+    graph.insert_edge(edge("later", "second", &[], DependencyOrder::Parallel))?;
     graph.insert_edge(edge(
         "all",
         "all",
         &["first", "second"],
         DependencyOrder::Serial,
-    ));
+    ))?;
 
     let bundle = generate_bundle(&graph)?;
     let main = stage_bundle(&dir, &bundle)?;

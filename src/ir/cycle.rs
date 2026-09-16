@@ -16,11 +16,7 @@
 
 use camino::Utf8PathBuf;
 
-#[cfg(any(test, kani))]
-use super::graph::BuildEdge;
 use super::graph::BuildGraph;
-#[cfg(kani)]
-use super::graph::IrHashMap;
 
 #[cfg(test)]
 #[path = "cycle_property_tests.rs"]
@@ -28,28 +24,11 @@ mod cycle_property_tests;
 
 #[path = "cycle_support.rs"]
 pub(super) mod support;
-// The test and Kani harnesses reach these through `super::*`/`super::Name`;
-// expose them only in those builds so the production build neither warns nor
-// carries their weight.
-#[cfg(any(test, kani))]
-use support::canonicalize_cycle;
-#[cfg(any(test, kani))]
-use support::canonicalize_cycle_by;
-#[cfg(kani)]
-use support::path_eq;
-#[cfg(test)]
-use support::target_entry_for_path;
 
 #[path = "cycle_detector.rs"]
 mod detector;
-// Plain re-imports: the bindings stay private to `cycle` but remain reachable
-// from its `#[cfg(test)]`/`#[cfg(kani)]` children through `super::*`.
 use self::detector::CycleDetector;
 use self::detector::VisitState;
-#[cfg(test)]
-use self::detector::{CycleSearch, CycleVisitResult};
-#[cfg(kani)]
-use camino::Utf8Path;
 
 #[cfg(test)]
 #[path = "cycle_tests.rs"]
@@ -70,7 +49,7 @@ pub(crate) struct CycleDetectionReport {
 
 /// Detect cycles and collect missing dependencies in `graph`.
 ///
-/// Performs a depth-first traversal of each [`BuildEdge`]'s `inputs` and
+/// Performs a depth-first traversal of each [`BuildEdge`](super::BuildEdge)'s `inputs` and
 /// `implicit_deps`.  `order_only_deps` are intentionally excluded.
 ///
 /// Returns any detected cycle path and missing dependencies encountered

@@ -48,6 +48,15 @@ impl<T> IrVec<T> {
         }
     }
 
+    /// Return a mutable arena entry at `index`, if present.
+    pub fn get_mut(&mut self, index: usize) -> Option<&mut T> {
+        if index < self.len {
+            self.entries[index].as_mut()
+        } else {
+            None
+        }
+    }
+
     /// Return the number of stored entries.
     pub const fn len(&self) -> usize {
         self.len

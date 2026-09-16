@@ -179,7 +179,7 @@ fn graph_actions(world: &TestWorld, count: usize) -> Result<()> {
 
 #[then("the graph has {count:usize} targets")]
 fn graph_targets(world: &TestWorld, count: usize) -> Result<()> {
-    assert_graph_collection_count(world, count, |g| g.targets.len(), "targets")
+    assert_graph_collection_count(world, count, BuildGraph::output_count, "targets")
 }
 
 #[then("the graph has {count:usize} default targets")]

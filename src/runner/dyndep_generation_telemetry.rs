@@ -26,10 +26,13 @@ pub(super) fn instrument_bundle_generation<T>(
         .edges()
         .map(|edge| edge.implicit_deps.len())
         .sum::<usize>();
+    // Count logical build operations once; `output_count` measures aliases and
+    // would inflate this span for a single multi-output edge.
+    let canonical_target_count = graph.edge_count();
     let span = tracing::trace_span!(
         "runner.ninja.dyndep_bundle.generate",
         action_count = graph.actions.len(),
-        target_count = graph.edges().count(),
+        target_count = canonical_target_count,
         dependency_count,
         outcome = field::Empty,
         error_category = field::Empty,

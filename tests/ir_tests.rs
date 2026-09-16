@@ -7,15 +7,15 @@
 
 use camino::Utf8PathBuf;
 use netsuke::ast::Recipe;
-use netsuke::ir::{Action, BuildEdge, BuildGraph};
+use netsuke::ir::{Action, BuildEdge, BuildGraph, IrGenError};
 use rstest::rstest;
 
 #[rstest]
 fn build_graph_default_is_empty() {
     let graph = BuildGraph::default();
     assert!(graph.actions.is_empty());
-    assert_eq!(graph.edges, Vec::new());
-    assert!(graph.targets.is_empty());
+    assert_eq!(graph.edge_count(), 0);
+    assert_eq!(graph.output_count(), 0);
     assert_eq!(graph.default_targets, Vec::<Utf8PathBuf>::new());
 }
 
@@ -44,9 +44,11 @@ fn create_action_and_edge() {
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("id".into(), action);
-    graph.insert_edge(edge);
+    graph
+        .insert_edge(edge)
+        .expect("test graph output aliases must be unique");
     assert_eq!(graph.actions.len(), 1);
-    assert_eq!(graph.targets.len(), 1);
+    assert_eq!(graph.output_count(), 1);
 }
 
 #[test]
@@ -96,19 +98,48 @@ fn build_graph_indexes_canonical_targets() {
         implicit_deps: Vec::new(),
         dependency_order: netsuke::ir::DependencyOrder::Parallel,
         explicit_outputs: vec![Utf8PathBuf::from("out")],
-        implicit_outputs: Vec::new(),
+        implicit_outputs: vec![Utf8PathBuf::from("out.d")],
         order_only_deps: Vec::new(),
         phony: false,
         always: false,
     };
-    let edge_id = graph.insert_edge(edge1);
-    assert_eq!(graph.targets.len(), 1);
-    assert_eq!(graph.edges.len(), 1);
+    let edge_id = graph
+        .insert_edge(edge1)
+        .expect("canonical edge aliases are unique");
+    assert_eq!(graph.output_count(), 2);
+    assert_eq!(graph.edge_count(), 1);
     let out_key = Utf8PathBuf::from("out");
     let Some((stored_output, edge)) = graph.target_for_output(out_key.as_path()) else {
         panic!("expected edge for out");
     };
     assert_eq!(stored_output, out_key);
-    assert_eq!(graph.targets.get(&out_key), Some(&edge_id));
+    assert_eq!(graph.edge_id_for_output(out_key.as_path()), Some(edge_id));
+    assert_eq!(
+        graph.edge_id_for_output(Utf8PathBuf::from("out.d").as_path()),
+        Some(edge_id)
+    );
     assert!(!edge.always);
+}
+
+#[test]
+fn build_graph_rejects_duplicate_aliases_before_mutation() {
+    let mut graph = BuildGraph::default();
+    let duplicate_output = Utf8PathBuf::from("out");
+    let edge = BuildEdge {
+        action_id: "a".into(),
+        inputs: Vec::new(),
+        implicit_deps: Vec::new(),
+        dependency_order: netsuke::ir::DependencyOrder::Parallel,
+        explicit_outputs: vec![duplicate_output.clone(), duplicate_output],
+        implicit_outputs: Vec::new(),
+        order_only_deps: Vec::new(),
+        phony: false,
+        always: false,
+    };
+
+    let result = graph.try_insert_edge(edge);
+
+    assert!(matches!(result, Err(IrGenError::DuplicateOutput { .. })));
+    assert_eq!(graph.edge_count(), 0);
+    assert_eq!(graph.output_count(), 0);
 }

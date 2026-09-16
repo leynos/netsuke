@@ -1,6 +1,10 @@
 //! Unit tests for cycle detection and canonicalization.
-use super::*;
 use anyhow::{Context, Result, ensure};
+use camino::Utf8PathBuf;
+
+use super::super::graph::{BuildEdge, BuildGraph};
+use super::detector::{CycleDetector, CycleSearch, CycleVisitResult};
+use super::support::target_entry_for_path;
 use rstest::rstest;
 
 fn path(name: &str) -> Utf8PathBuf {
@@ -31,9 +35,9 @@ fn assert_missing_deps(case: &MissingDepsCase<'_>) -> Result<()> {
         case.primary_inputs,
         case.primary_implicit_deps,
         "a",
-    ));
+    ))?;
     for (output, inputs, implicit_deps) in case.extra_targets {
-        graph.insert_edge(build_edge(inputs, implicit_deps, output));
+        graph.insert_edge(build_edge(inputs, implicit_deps, output))?;
     }
     let expected: Vec<_> = case
         .expected
@@ -71,7 +75,10 @@ fn insert_cycle_edge(
     } else {
         build_edge(&[&dep], &[], &output)
     };
-    graph.insert_edge(edge);
+    assert!(
+        graph.insert_edge(edge).is_ok(),
+        "test graph output aliases must be unique",
+    );
 }
 fn assert_bounded_cycle_detected(cycle_len: usize, implicit_index: usize) {
     let mut graph = BuildGraph::default();
@@ -86,7 +93,9 @@ fn assert_bounded_cycle_detected(cycle_len: usize, implicit_index: usize) {
 #[test]
 fn cycle_detector_detects_self_edge_cycle() {
     let mut graph = BuildGraph::default();
-    graph.insert_edge(build_edge(&["a"], &[], "a"));
+    graph
+        .insert_edge(build_edge(&["a"], &[], "a"))
+        .expect("test graph output aliases must be unique");
     let cycle = CycleDetector::find_cycle(&graph).expect("cycle");
     assert_eq!(cycle, vec![path("a"), path("a")]);
 }
@@ -95,8 +104,12 @@ fn cycle_detector_marks_nodes_visited_after_traversal() {
     let mut graph = BuildGraph::default();
     let a = path("a");
     let b = path("b");
-    graph.insert_edge(build_edge(&["b"], &[], "a"));
-    graph.insert_edge(build_edge(&[], &[], "b"));
+    graph
+        .insert_edge(build_edge(&["b"], &[], "a"))
+        .expect("test graph output aliases must be unique");
+    graph
+        .insert_edge(build_edge(&[], &[], "b"))
+        .expect("test graph output aliases must be unique");
     let mut detector = CycleDetector::new(&graph);
     assert!(detector.detect().is_none());
     assert!(detector.is_visited(a.as_path()));
@@ -125,24 +138,36 @@ fn cycle_detector_records_missing_dependencies(#[case] case: MissingDepsCase<'_>
 #[test]
 fn find_cycle_identifies_cycle() {
     let mut graph = BuildGraph::default();
-    graph.insert_edge(build_edge(&["b"], &[], "a"));
-    graph.insert_edge(build_edge(&["a"], &[], "b"));
+    graph
+        .insert_edge(build_edge(&["b"], &[], "a"))
+        .expect("test graph output aliases must be unique");
+    graph
+        .insert_edge(build_edge(&["a"], &[], "b"))
+        .expect("test graph output aliases must be unique");
     let cycle = CycleDetector::find_cycle(&graph).expect("cycle");
     assert_eq!(cycle, vec![path("a"), path("b"), path("a")]);
 }
 #[test]
 fn find_cycle_identifies_implicit_dependency_cycle() {
     let mut graph = BuildGraph::default();
-    graph.insert_edge(build_edge(&[], &["b"], "a"));
-    graph.insert_edge(build_edge(&[], &["a"], "b"));
+    graph
+        .insert_edge(build_edge(&[], &["b"], "a"))
+        .expect("test graph output aliases must be unique");
+    graph
+        .insert_edge(build_edge(&[], &["a"], "b"))
+        .expect("test graph output aliases must be unique");
     let cycle = CycleDetector::find_cycle(&graph).expect("cycle");
     assert_eq!(cycle, vec![path("a"), path("b"), path("a")]);
 }
 #[test]
 fn cycle_detector_stack_is_empty_after_cycle_detected() {
     let mut graph = BuildGraph::default();
-    graph.insert_edge(build_edge(&["b"], &[], "a"));
-    graph.insert_edge(build_edge(&["a"], &[], "b"));
+    graph
+        .insert_edge(build_edge(&["b"], &[], "a"))
+        .expect("test graph output aliases must be unique");
+    graph
+        .insert_edge(build_edge(&["a"], &[], "b"))
+        .expect("test graph output aliases must be unique");
     let mut detector = CycleDetector::new(&graph);
     assert!(detector.detect().is_some(), "expected a cycle");
     assert!(
@@ -153,9 +178,15 @@ fn cycle_detector_stack_is_empty_after_cycle_detected() {
 #[test]
 fn find_cycle_identifies_mixed_input_and_implicit_dependency_cycle() {
     let mut graph = BuildGraph::default();
-    graph.insert_edge(build_edge(&["b"], &[], "a"));
-    graph.insert_edge(build_edge(&[], &["c"], "b"));
-    graph.insert_edge(build_edge(&["a"], &[], "c"));
+    graph
+        .insert_edge(build_edge(&["b"], &[], "a"))
+        .expect("test graph output aliases must be unique");
+    graph
+        .insert_edge(build_edge(&[], &["c"], "b"))
+        .expect("test graph output aliases must be unique");
+    graph
+        .insert_edge(build_edge(&["a"], &[], "c"))
+        .expect("test graph output aliases must be unique");
     let cycle = CycleDetector::find_cycle(&graph).expect("cycle");
     assert_eq!(cycle, vec![path("a"), path("b"), path("c"), path("a")]);
 }

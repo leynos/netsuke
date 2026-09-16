@@ -63,15 +63,17 @@ fn retain_disjoint_output_edges(edges: Vec<EdgeSpec>) -> Vec<EdgeSpec> {
     let mut owned_outputs = std::collections::BTreeSet::new();
     edges
         .into_iter()
-        .filter(|e| {
-            let mut all = e.explicit_outputs.clone();
-            all.extend(e.implicit_outputs.iter().cloned());
-            if all.iter().any(|o| owned_outputs.contains(o)) {
+        .filter(|edge| {
+            let mut all = edge.explicit_outputs.clone();
+            all.extend(edge.implicit_outputs.iter().cloned());
+            let mut edge_outputs = std::collections::BTreeSet::new();
+            if all
+                .iter()
+                .any(|output| owned_outputs.contains(output) || !edge_outputs.insert(output))
+            {
                 return false;
             }
-            for o in &all {
-                owned_outputs.insert(o.clone());
-            }
+            owned_outputs.extend(all);
             true
         })
         .collect()

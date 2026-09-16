@@ -25,20 +25,25 @@ fn dependency_only_graph(dependencies: &[String], order: DependencyOrder) -> Bui
             restat: false,
         },
     );
-    graph.insert_edge(BuildEdge {
-        action_id: "aggregate".into(),
-        inputs: Vec::new(),
-        implicit_deps: dependencies
-            .iter()
-            .map(|dependency| Utf8PathBuf::from(dependency.as_str()))
-            .collect(),
-        dependency_order: order,
-        explicit_outputs: vec![Utf8PathBuf::from("all")],
-        implicit_outputs: Vec::new(),
-        order_only_deps: Vec::new(),
-        phony: false,
-        always: false,
-    });
+    assert!(
+        graph
+            .insert_edge(BuildEdge {
+                action_id: "aggregate".into(),
+                inputs: Vec::new(),
+                implicit_deps: dependencies
+                    .iter()
+                    .map(|dependency| Utf8PathBuf::from(dependency.as_str()))
+                    .collect(),
+                dependency_order: order,
+                explicit_outputs: vec![Utf8PathBuf::from("all")],
+                implicit_outputs: Vec::new(),
+                order_only_deps: Vec::new(),
+                phony: false,
+                always: false,
+            })
+            .is_ok(),
+        "test graph output aliases must be unique",
+    );
     graph
 }
 

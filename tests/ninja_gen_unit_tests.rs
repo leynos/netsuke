@@ -206,7 +206,9 @@ fn generate_ninja_scenarios(
 ) {
     let mut graph = BuildGraph::default();
     graph.actions.insert(edge.action_id.clone(), action);
-    graph.insert_edge(edge);
+    graph
+        .insert_edge(edge)
+        .expect("test graph output aliases must be unique");
 
     let ninja = generate_posix(&graph).expect("generate POSIX Ninja manifest");
     assert_eq!(
@@ -238,17 +240,19 @@ fn generate_multiline_script_snapshot() {
             restat: false,
         },
     );
-    graph.insert_edge(BuildEdge {
-        action_id: "script".into(),
-        inputs: Vec::new(),
-        implicit_deps: Vec::new(),
-        dependency_order: netsuke::ir::DependencyOrder::Parallel,
-        explicit_outputs: vec![Utf8PathBuf::from("out")],
-        implicit_outputs: Vec::new(),
-        order_only_deps: Vec::new(),
-        phony: false,
-        always: false,
-    });
+    graph
+        .insert_edge(BuildEdge {
+            action_id: "script".into(),
+            inputs: Vec::new(),
+            implicit_deps: Vec::new(),
+            dependency_order: netsuke::ir::DependencyOrder::Parallel,
+            explicit_outputs: vec![Utf8PathBuf::from("out")],
+            implicit_outputs: Vec::new(),
+            order_only_deps: Vec::new(),
+            phony: false,
+            always: false,
+        })
+        .expect("test graph output aliases must be unique");
     graph.default_targets.push(Utf8PathBuf::from("out"));
 
     let ninja = generate_posix(&graph).expect("generate POSIX Ninja manifest");

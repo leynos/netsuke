@@ -128,7 +128,7 @@ impl BuildGraph {
                 implicit_deps_count = implicit_deps.len(),
                 "populating implicit dependencies for target",
             );
-            if let Some(error) = duplicate_output_error(&outputs, &graph.targets) {
+            if let Some(error) = duplicate_output_error(&outputs, graph) {
                 return Err(error);
             }
 
@@ -174,6 +174,9 @@ impl BuildGraph {
                 always: target.always,
             };
 
+            #[cfg(not(kani))]
+            insert_edge_for_outputs(graph, edge)?;
+            #[cfg(kani)]
             insert_edge_for_outputs(graph, edge);
         }
         Ok(())

@@ -42,7 +42,7 @@
 //!         order_only_deps: Vec::new(),
 //!         phony: false,
 //!         always: false,
-//! });
+//! }).expect("test graph output aliases must be unique");
 //! let bundle = generate_bundle(&graph).expect("generate bundle");
 //! assert!(bundle.build_file().contains("ninja_required_version = 1.10"));
 //! assert_eq!(bundle.dyndep_files().len(), 2);

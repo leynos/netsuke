@@ -44,7 +44,10 @@ fn parallel_edge(output: &str, deps: &[&str]) -> BuildEdge {
 fn graph_with_edge(edge: BuildEdge) -> BuildGraph {
     let mut graph = BuildGraph::default();
     graph.actions.insert("a".into(), action("echo done"));
-    graph.insert_edge(edge);
+    assert!(
+        graph.insert_edge(edge).is_ok(),
+        "test graph output aliases must be unique",
+    );
     graph
 }
 

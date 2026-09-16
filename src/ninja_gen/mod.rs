@@ -85,7 +85,7 @@ pub(crate) use display_edge::DisplayEdge;
 ///     explicit_outputs: vec![Utf8PathBuf::from("out")],
 ///     implicit_outputs: Vec::new(), order_only_deps: Vec::new(),
 ///     phony: false, always: false
-/// });
+/// }).expect("test graph output aliases must be unique");
 /// # let result: Result<(), netsuke::ninja_gen::NinjaGenError> = (|| {
 /// let text = netsuke::ninja_gen::generate(&graph)?;
 /// assert!(text.contains("rule a"));
@@ -128,7 +128,7 @@ pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 ///     explicit_outputs: vec![Utf8PathBuf::from("out")],
 ///     implicit_outputs: Vec::new(), order_only_deps: Vec::new(),
 ///     phony: false, always: false
-/// });
+/// }).expect("test graph output aliases must be unique");
 /// let mut out = String::new();
 /// # let result: Result<(), netsuke::ninja_gen::NinjaGenError> = (|| {
 /// netsuke::ninja_gen::generate_into(&graph, &mut out)?;

@@ -88,10 +88,17 @@ impl RustflagsCase {
             line_marker: "check",
         }
     }
+
+    const fn kani_full() -> Self {
+        Self {
+            target: "kani-full",
+            line_marker: "$(KANI) $(KANI_FLAGS)",
+        }
+    }
 }
 
 /// Every `RUSTFLAGS`-setting recipe line under contract.
-const RUSTFLAGS_CASES: [RustflagsCase; 7] = [
+const RUSTFLAGS_CASES: [RustflagsCase; 8] = [
     RustflagsCase::test_nextest(),
     RustflagsCase::doctest(),
     RustflagsCase::lint_rustdoc(),
@@ -99,6 +106,7 @@ const RUSTFLAGS_CASES: [RustflagsCase; 7] = [
     RustflagsCase::lint_whitaker(),
     RustflagsCase::lint_whitaker_test_support(),
     RustflagsCase::typecheck(),
+    RustflagsCase::kani_full(),
 ];
 /// Extracts the double-quoted `RUSTFLAGS` assignment from a recipe line.
 ///

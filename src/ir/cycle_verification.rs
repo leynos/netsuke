@@ -1,7 +1,12 @@
 //! Kani harnesses for bounded IR cycle-handling properties.
 
-use super::support::rotate_index;
-use super::*;
+use camino::{Utf8Path, Utf8PathBuf};
+
+use super::super::graph::{BuildEdge, BuildGraph};
+use super::{
+    contains_cycle,
+    support::{canonicalize_cycle, canonicalize_cycle_by, path_eq, rotate_index},
+};
 
 /// Prove a self-dependency reports a cycle and no missing dependency.
 #[kani::proof]
@@ -10,7 +15,7 @@ use super::*;
 fn self_dependency_reports_cycle() {
     let mut graph = BuildGraph::default();
     graph.insert_edge(edge("a", deps("a"), Vec::new()));
-    kani::assume(graph.targets.len() == 1 && graph.edges.len() == 1);
+    kani::assume(graph.output_count() == 1 && graph.edge_count() == 1);
 
     kani::assert(contains_cycle(&graph), "self-dependency reports a cycle");
 }
@@ -23,7 +28,7 @@ fn two_node_cycle_reports_cycle_a_first() {
     let mut graph = BuildGraph::default();
     graph.insert_edge(edge("a", deps("b"), Vec::new()));
     graph.insert_edge(edge("b", deps("a"), Vec::new()));
-    kani::assume(graph.targets.len() == 2 && graph.edges.len() == 2);
+    kani::assume(graph.output_count() == 2 && graph.edge_count() == 2);
 
     kani::assert(contains_cycle(&graph), "two-node cycle is rejected");
 }
@@ -36,7 +41,7 @@ fn two_node_cycle_reports_cycle_b_first() {
     let mut graph = BuildGraph::default();
     graph.insert_edge(edge("b", deps("a"), Vec::new()));
     graph.insert_edge(edge("a", deps("b"), Vec::new()));
-    kani::assume(graph.targets.len() == 2 && graph.edges.len() == 2);
+    kani::assume(graph.output_count() == 2 && graph.edge_count() == 2);
 
     kani::assert(contains_cycle(&graph), "two-node cycle is rejected");
 }
@@ -53,7 +58,7 @@ fn assert_no_cycle(graph: &BuildGraph, _msg: &'static str) {
 fn direct_missing_dependency_does_not_report_cycle() {
     let mut graph = BuildGraph::default();
     graph.insert_edge(edge("a", deps("c"), Vec::new()));
-    kani::assume(graph.targets.len() == 1 && graph.edges.len() == 1);
+    kani::assume(graph.output_count() == 1 && graph.edge_count() == 1);
 
     assert_no_cycle(&graph, "direct missing dependency is not a cycle");
 }
@@ -66,7 +71,7 @@ fn transitive_missing_dependency_does_not_report_cycle() {
     let mut graph = BuildGraph::default();
     graph.insert_edge(edge("a", deps("b"), Vec::new()));
     graph.insert_edge(edge("b", deps("c"), Vec::new()));
-    kani::assume(graph.targets.len() == 2 && graph.edges.len() == 2);
+    kani::assume(graph.output_count() == 2 && graph.edge_count() == 2);
 
     assert_no_cycle(&graph, "transitive missing dependency is not a cycle");
 }

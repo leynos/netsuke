@@ -3,7 +3,13 @@
 //! Exercises `analyse` across cycle and missing-dependency combinations so
 //! the report contract is checked separately from detector internals.
 
-use super::*;
+use proptest::prelude::*;
+
+use super::super::super::graph::BuildGraph;
+use super::super::support::canonicalize_cycle;
+use super::{
+    EdgeBuilder, analyse, make_acyclic_chain, make_cycle, make_cycle_graph, path, sequential_nodes,
+};
 
 /// Add one missing implicit dependency to the first node in an acyclic graph.
 fn make_acyclic_chain_with_missing_dependency(nodes: &[camino::Utf8PathBuf]) -> BuildGraph {
@@ -15,13 +21,7 @@ fn make_acyclic_chain_with_missing_dependency(nodes: &[camino::Utf8PathBuf]) -> 
     if let Some(next) = nodes.get(1) {
         builder = builder.input(next.clone());
     }
-    if let Some(edge) = graph
-        .edges
-        .iter_mut()
-        .find(|edge| edge.explicit_outputs.first() == Some(first))
-    {
-        *edge = builder.build();
-    }
+    let _ = graph.replace_edge_for_output(first.as_path(), builder.build());
     graph
 }
 
@@ -29,14 +29,20 @@ fn make_acyclic_chain_with_missing_dependency(nodes: &[camino::Utf8PathBuf]) -> 
 #[test]
 fn analyse_reports_missing_dependencies_before_detected_cycle() {
     let mut graph = BuildGraph::default();
-    graph.insert_edge(
-        EdgeBuilder::new(path("a"))
-            .input(path("missing"))
-            .implicit_dep(path("also_missing"))
-            .build(),
-    );
-    graph.insert_edge(EdgeBuilder::new(path("b")).input(path("c")).build());
-    graph.insert_edge(EdgeBuilder::new(path("c")).input(path("b")).build());
+    graph
+        .insert_edge(
+            EdgeBuilder::new(path("a"))
+                .input(path("missing"))
+                .implicit_dep(path("also_missing"))
+                .build(),
+        )
+        .expect("test graph output aliases must be unique");
+    graph
+        .insert_edge(EdgeBuilder::new(path("b")).input(path("c")).build())
+        .expect("test graph output aliases must be unique");
+    graph
+        .insert_edge(EdgeBuilder::new(path("c")).input(path("b")).build())
+        .expect("test graph output aliases must be unique");
 
     let report = analyse(&graph);
 
@@ -54,8 +60,12 @@ fn analyse_reports_missing_dependencies_before_detected_cycle() {
 #[test]
 fn analyse_returns_no_cycle_for_acyclic_graph() {
     let mut graph = BuildGraph::default();
-    graph.insert_edge(EdgeBuilder::new(path("a")).input(path("b")).build());
-    graph.insert_edge(EdgeBuilder::new(path("b")).build());
+    graph
+        .insert_edge(EdgeBuilder::new(path("a")).input(path("b")).build())
+        .expect("test graph output aliases must be unique");
+    graph
+        .insert_edge(EdgeBuilder::new(path("b")).build())
+        .expect("test graph output aliases must be unique");
 
     let report = analyse(&graph);
 
@@ -73,13 +83,17 @@ fn analyse_returns_no_cycle_for_acyclic_graph() {
 #[test]
 fn analyse_returns_missing_dependencies_for_acyclic_graph() {
     let mut graph = BuildGraph::default();
-    graph.insert_edge(
-        EdgeBuilder::new(path("a"))
-            .input(path("b"))
-            .implicit_dep(path("missing"))
-            .build(),
-    );
-    graph.insert_edge(EdgeBuilder::new(path("b")).build());
+    graph
+        .insert_edge(
+            EdgeBuilder::new(path("a"))
+                .input(path("b"))
+                .implicit_dep(path("missing"))
+                .build(),
+        )
+        .expect("test graph output aliases must be unique");
+    graph
+        .insert_edge(EdgeBuilder::new(path("b")).build())
+        .expect("test graph output aliases must be unique");
 
     let report = analyse(&graph);
 
@@ -98,8 +112,12 @@ fn analyse_returns_missing_dependencies_for_acyclic_graph() {
 #[test]
 fn analyse_returns_cycle_with_empty_missing_dependencies() {
     let mut graph = BuildGraph::default();
-    graph.insert_edge(EdgeBuilder::new(path("a")).input(path("b")).build());
-    graph.insert_edge(EdgeBuilder::new(path("b")).input(path("a")).build());
+    graph
+        .insert_edge(EdgeBuilder::new(path("a")).input(path("b")).build())
+        .expect("test graph output aliases must be unique");
+    graph
+        .insert_edge(EdgeBuilder::new(path("b")).input(path("a")).build())
+        .expect("test graph output aliases must be unique");
 
     let report = analyse(&graph);
 
