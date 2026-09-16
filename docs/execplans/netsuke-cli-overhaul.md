@@ -6,8 +6,8 @@ and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: IN PROGRESS
 
-Status qualifier: roadmap fidelity review. The plan is drafted and partially
-delivered; the remaining stages are recorded in `Progress`.
+The plan is drafted and partially delivered; a roadmap fidelity review is
+outstanding, and the remaining stages are recorded in `Progress`.
 
 ## Purpose / big picture
 
