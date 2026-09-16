@@ -4,6 +4,8 @@ This ExecPlan is a living document. The sections `Progress`,
 `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must
 be kept up to date as work proceeds.
 
+Status: COMPLETE
+
 This plan covers all three items in roadmap section 3.6:
 
 - 3.6.1 Ensure default subcommand builds manifest defaults

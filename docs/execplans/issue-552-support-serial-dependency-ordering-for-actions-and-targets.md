@@ -4,8 +4,10 @@ This ExecPlan is a living document. Keep `Progress`, `Surprises & discoveries`,
 `Decision log`, and `Outcomes & retrospective` current as implementation
 proceeds.
 
-Status: **Complete — coordinated, bounded dyndep retention passes deterministic
-and focused validation.**
+Status: COMPLETE
+
+Coordinated, bounded dyndep retention passes deterministic and focused
+validation.
 
 Issue: [#552](https://github.com/leynos/netsuke/issues/552)
 
