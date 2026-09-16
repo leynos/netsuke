@@ -1,8 +1,8 @@
 """Inspect and materialize a hostile coverage ZIP archive without extraction.
 
-The trusted coverage workflow calls this helper only after downloading a raw
-GitHub Actions artifact. It inspects ZIP metadata before decompressing data and
-writes exactly one validated LCOV member through a controlled output path.
+The standalone archive validator calls this helper for a supplied raw GitHub
+Actions artifact. It inspects ZIP metadata before decompressing data and writes
+exactly one validated LCOV member through a controlled output path.
 """
 
 import dataclasses
