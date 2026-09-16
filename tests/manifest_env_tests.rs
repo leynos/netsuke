@@ -65,64 +65,55 @@ fn allowlisted_lookup_resolves_successfully() -> Result<()> {
     Ok(())
 }
 
-#[rstest]
-fn blocked_lookup_is_value_and_name_free() -> Result<()> {
-    const VARIABLE_NAME: &str = "CREDENTIAL_LIKE_VARIABLE";
-    const VARIABLE_VALUE: &str = "credential-like-value";
+/// Assert that a denied lookup cannot reach or disclose an injected reader.
+fn denied_lookup_is_value_and_name_free(
+    policy: &EnvAccessPolicy,
+    variable_name: &str,
+    variable_value: &str,
+    failure_context: &str,
+) -> Result<()> {
     let yaml = manifest_yaml(&format!(
-        "targets:\n  - name: hello\n    command: \"echo {{{{ env('{VARIABLE_NAME}') }}}}\"\n"
+        "targets:\n  - name: hello\n    command: \"echo {{{{ env('{variable_name}') }}}}\"\n"
     ));
     let reader_was_called = Arc::new(AtomicBool::new(false));
     let invocation_recorder = Arc::clone(&reader_was_called);
+    let reader_value = variable_value.to_owned();
     let reader: EnvReader = Arc::new(move |_| {
         invocation_recorder.store(true, Ordering::Relaxed);
-        Ok(String::from(VARIABLE_VALUE))
+        Ok(reader_value.clone())
     });
-    let error = manifest::from_str_with_env_and_policy(
-        &yaml,
-        &reader,
-        &EnvAccessPolicy::default().block_var(VARIABLE_NAME),
-    )
-    .expect_err("a blocked environment variable must fail");
+    let Err(error) = manifest::from_str_with_env_and_policy(&yaml, &reader, policy) else {
+        return Err(anyhow!("{failure_context}"));
+    };
     let diagnostic = format!("{error:#}");
     ensure!(diagnostic.contains("Access to an environment variable is blocked."));
     ensure!(
         !reader_was_called.load(Ordering::Relaxed),
-        "a blocked lookup must not call the reader"
+        "a denied lookup must not call the reader"
     );
-    ensure!(!diagnostic.contains(VARIABLE_NAME));
-    ensure!(!diagnostic.contains(VARIABLE_VALUE));
+    ensure!(!diagnostic.contains(variable_name));
+    ensure!(!diagnostic.contains(variable_value));
     Ok(())
 }
 
 #[rstest]
-fn unlisted_allowlist_lookup_is_value_and_name_free() -> Result<()> {
-    const VARIABLE_NAME: &str = "UNLISTED_CREDENTIAL_LIKE_VARIABLE";
-    const VARIABLE_VALUE: &str = "unlisted-credential-like-value";
-    let yaml = manifest_yaml(&format!(
-        "targets:\n  - name: hello\n    command: \"echo {{{{ env('{VARIABLE_NAME}') }}}}\"\n"
-    ));
-    let reader_was_called = Arc::new(AtomicBool::new(false));
-    let invocation_recorder = Arc::clone(&reader_was_called);
-    let reader: EnvReader = Arc::new(move |_| {
-        invocation_recorder.store(true, Ordering::Relaxed);
-        Ok(String::from(VARIABLE_VALUE))
-    });
-    let error = manifest::from_str_with_env_and_policy(
-        &yaml,
-        &reader,
-        &EnvAccessPolicy::default().allow_var("ANOTHER_VARIABLE"),
+fn blocked_lookup_is_value_and_name_free() -> Result<()> {
+    denied_lookup_is_value_and_name_free(
+        &EnvAccessPolicy::default().block_var("CREDENTIAL_LIKE_VARIABLE"),
+        "CREDENTIAL_LIKE_VARIABLE",
+        "credential-like-value",
+        "a blocked environment variable must fail",
     )
-    .expect_err("an unlisted environment variable must fail");
-    let diagnostic = format!("{error:#}");
-    ensure!(diagnostic.contains("Access to an environment variable is blocked."));
-    ensure!(
-        !reader_was_called.load(Ordering::Relaxed),
-        "an unlisted lookup must not call the reader"
-    );
-    ensure!(!diagnostic.contains(VARIABLE_NAME));
-    ensure!(!diagnostic.contains(VARIABLE_VALUE));
-    Ok(())
+}
+
+#[rstest]
+fn unlisted_allowlist_lookup_is_value_and_name_free() -> Result<()> {
+    denied_lookup_is_value_and_name_free(
+        &EnvAccessPolicy::default().allow_var("ANOTHER_VARIABLE"),
+        "UNLISTED_CREDENTIAL_LIKE_VARIABLE",
+        "unlisted-credential-like-value",
+        "an unlisted environment variable must fail",
+    )
 }
 
 #[rstest]

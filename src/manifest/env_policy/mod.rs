@@ -33,9 +33,8 @@ pub struct EnvAccessPolicy {
 impl EnvAccessPolicy {
     /// Append one exact variable name to the allowlist.
     #[must_use]
-    pub fn allow_var(mut self, name: impl Into<String>) -> Self {
-        self.allowed_vars.insert(normalize_name(&name.into()));
-        self
+    pub fn allow_var(self, name: impl Into<String>) -> Self {
+        self.allow_vars([name])
     }
 
     /// Append exact variable names to the allowlist.
@@ -45,17 +44,14 @@ impl EnvAccessPolicy {
         I: IntoIterator<Item = S>,
         S: Into<String>,
     {
-        for name in names {
-            self.allowed_vars.insert(normalize_name(&name.into()));
-        }
+        insert_names(&mut self.allowed_vars, names);
         self
     }
 
     /// Append one exact variable name to the blocklist.
     #[must_use]
-    pub fn block_var(mut self, name: impl Into<String>) -> Self {
-        self.blocked_vars.insert(normalize_name(&name.into()));
-        self
+    pub fn block_var(self, name: impl Into<String>) -> Self {
+        self.block_vars([name])
     }
 
     /// Append exact variable names to the blocklist.
@@ -65,9 +61,7 @@ impl EnvAccessPolicy {
         I: IntoIterator<Item = S>,
         S: Into<String>,
     {
-        for name in names {
-            self.blocked_vars.insert(normalize_name(&name.into()));
-        }
+        insert_names(&mut self.blocked_vars, names);
         self
     }
 
@@ -123,6 +117,15 @@ fn normalize_name(name: &str) -> String {
     } else {
         name.to_owned()
     }
+}
+
+/// Insert normalized variable names into one policy collection.
+fn insert_names<I, S>(names_to_insert: &mut BTreeSet<String>, names: I)
+where
+    I: IntoIterator<Item = S>,
+    S: Into<String>,
+{
+    names_to_insert.extend(names.into_iter().map(|name| normalize_name(&name.into())));
 }
 
 #[cfg(test)]
