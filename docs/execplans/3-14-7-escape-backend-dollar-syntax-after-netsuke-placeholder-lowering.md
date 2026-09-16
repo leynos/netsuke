@@ -678,11 +678,14 @@ the generated file, and the inner shell observes the real paths.
   through the command validator.
 
 **I7 — path emission is total or diagnosed.** Every path written into a `build`
-or `default` line either contains no Ninja-special character, or generation
-fails with a typed error naming the offending path.
+or `default` line contains no Ninja-special character, contains only literal
+spaces that are escaped as a `$` followed by a space, or fails generation with
+a typed error naming the offending path. The escaped space is the one
+Ninja-special character that is encoded rather than diagnosed.
 
 - Method: `rstest` cases over paths containing `$`, a space, a colon, `|`, and
-  control characters.
+  control characters. The `$`, colon, `|`, and control-character cases must
+  fail; the space case must generate and then survive Ninja's lexer unchanged.
 - Rationale: without this, EP-M2 makes the command and the dependency edge
   disagree for a path like `input$1`, so Ninja reports one dependency while the
   command reads another. `tests/command_escaping_tests.rs:55` already uses such

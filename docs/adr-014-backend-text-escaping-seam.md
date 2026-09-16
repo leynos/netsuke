@@ -40,8 +40,10 @@ Netsuke uses a private typed conversion at the Ninja writer boundary:
   emission boundary and reject newline, carriage-return, and NUL characters.
 - Build-edge paths remain separate values. A literal space is escaped as a `$`
   followed by a space, Ninja's own path escape, so whitespace-containing
-  outputs stay valid; a dollar, colon, pipe, newline, carriage return, or NUL
-  is rejected because Ninja cannot represent it without ambiguity.
+  outputs stay valid. A pipe, newline, carriage return, or NUL is rejected
+  because Ninja's path grammar cannot represent it. A dollar or colon is also
+  rejected, although Ninja can escape both, because Netsuke has not adopted
+  that part of the path grammar; supporting it is separate work.
 - A script uses substitution-only lowering, preserving script syntax such as
   heredocs. A Netsuke placeholder found inside backticks is rejected with a
   typed IR diagnostic rather than silently reaching the shell unlowered.
@@ -115,4 +117,7 @@ literal space is escaped as Ninja's dollar-then-space path escape rather than
 rejected, so whitespace-containing outputs remain buildable, and a pipe is
 rejected alongside the dollar, colon, and control characters. The earlier
 wording described a rejection guard that the Windows recipe-shell work
-superseded.
+superseded. The same entry records why each rejected character is rejected:
+Ninja's path grammar cannot represent a pipe, newline, carriage return, or NUL
+at all, whereas it can escape a dollar and a colon, which Netsuke rejects as a
+deliberate limit of the path grammar it accepts.

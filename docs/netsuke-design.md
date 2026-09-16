@@ -613,9 +613,11 @@ accepts only completed shell text and returns an opaque Ninja-value type, which
 makes applying the conversion before placeholder lowering or applying it twice
 an invalid internal call rather than a convention left to review. Paths use a
 separate boundary: a literal space is escaped as a `$` followed by a space,
-Ninja's own path escape, while values containing the metacharacters Ninja
-cannot represent unambiguously (`$`, colons, `|`, or control characters) are
-rejected. ADR 014 records the boundary and its migration consequences.
+Ninja's own path escape, while values containing a pipe or a control character
+are rejected because Ninja's path grammar cannot represent them. A dollar or a
+colon is likewise rejected, even though Ninja can escape both, because Netsuke
+has not adopted that part of the grammar. ADR 014 records the boundary and its
+migration consequences.
 
 #### Structured environment mapping
 
