@@ -1741,6 +1741,8 @@ The Jinja `env()` helper can read process environment variables while rendering
 a manifest. Configure exact variable names with `env_allow_var` and
 `env_block_var` as arrays in a Netsuke configuration layer:
 
+<!-- tested-example: guide-manifest-environment-policy -->
+
 ```toml
 env_allow_var = ["CI", "PACKAGE_REGISTRY_TOKEN"]
 env_block_var = ["AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN"]
