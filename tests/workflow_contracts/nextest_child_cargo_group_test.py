@@ -8,6 +8,7 @@ import tomllib
 import typing as typ
 
 import pytest
+from rust_source_scan import mask_non_code
 from workflow_loading import (
     REPO_ROOT,
     load_workflow,
@@ -50,6 +51,10 @@ CARGO_COMMAND = re.compile(r"Command::new\([^)]*cargo\w*[^)]*\)", re.IGNORECASE)
 CARGO_OPERATION = re.compile(
     rf'\.(?:arg|args)\(\s*(?:\[\s*)?"(?:{"|".join(BUILD_CAPABLE_SUBCOMMANDS)})"'
 )
+RETAINED_RUST_LITERALS = {
+    *(f'"{operation}"' for operation in BUILD_CAPABLE_SUBCOMMANDS),
+    '"cargo"',
+}
 
 
 def _nextest_config() -> dict[str, object]:
@@ -152,9 +157,10 @@ def _calls_build_helper(body: str) -> bool:
 
 def _build_capable_test_names(source: str) -> set[str]:
     """Return tests reaching a direct or helper-mediated Cargo build command."""
-    functions = _rust_functions(source)
+    executable_source = mask_non_code(source, RETAINED_RUST_LITERALS)
+    functions = _rust_functions(executable_source)
     wrappers = _cargo_wrappers(functions)
-    operation_constants = _operation_constants(source)
+    operation_constants = _operation_constants(executable_source)
     build_capable = {
         name
         for _, _, name, body in functions
@@ -285,6 +291,44 @@ impl Fixture {
 """
     assert _build_capable_test_names(source) == {"helper_fixture_compiles"}, (
         "indented build-capable helpers must classify their test callers"
+    )
+
+
+def test_build_capable_discovery_ignores_block_comment_functions() -> None:
+    """Function-like text in a block comment does not create a nested Cargo test."""
+    source = """
+/*
+#[test]
+fn fake_fixture_compiles() {
+    Command::new(cargo()).arg("build");
+}
+*/
+"""
+    assert not _build_capable_test_names(source), (
+        "block comments must not create build-capable child Cargo tests"
+    )
+
+
+@pytest.mark.parametrize("literal_prefix", ["/*", 'r#"'])
+def test_non_code_function_text_does_not_truncate_real_test(
+    literal_prefix: str,
+) -> None:
+    """Comments and raw strings cannot hide a real child Cargo command."""
+    literal_suffix = "*/" if literal_prefix == "/*" else '"#'
+    source = f"""
+#[test]
+fn real_fixture_compiles() {{
+    let non_code = {literal_prefix}
+#[test]
+fn fake_fixture_compiles() {{
+    Command::new(cargo()).arg("build");
+}}
+{literal_suffix};
+    Command::new(cargo()).arg("build");
+}}
+"""
+    assert _build_capable_test_names(source) == {"real_fixture_compiles"}, (
+        "non-code function text must not truncate the real test body"
     )
 
 
