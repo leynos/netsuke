@@ -9,8 +9,27 @@ history requirement should that mode ever be reconsidered.
 Run via `make test-workflow-contracts`.
 """
 
+import typing as typ
+
 from codescene_check_depth_invariants import runs_the_gate
 from workflow_loading import REPO_ROOT, load_workflow, require_list, require_mapping
+
+if typ.TYPE_CHECKING:
+    from pathlib import Path
+
+
+def _codescene_check_jobs_in_workflow(path: Path) -> list[str]:
+    """Return jobs that invoke CodeScene in check mode in one workflow."""
+    jobs = require_mapping(load_workflow(path).get("jobs"), f"{path.name} jobs")
+    found: list[str] = []
+    for name, declaration in jobs.items():
+        description = f"{path.name}:{name}"
+        job = require_mapping(declaration, description)
+        raw_steps = require_list(job.get("steps", []), f"{description} steps")
+        steps = [step for step in raw_steps if isinstance(step, dict)]
+        if runs_the_gate(steps):
+            found.append(description)
+    return found
 
 
 def _codescene_check_jobs() -> list[str]:
@@ -19,14 +38,7 @@ def _codescene_check_jobs() -> list[str]:
     found: list[str] = []
     for pattern in ("*.yml", "*.yaml"):
         for path in sorted(workflow_dir.glob(pattern)):
-            jobs = require_mapping(load_workflow(path).get("jobs"), f"{path.name} jobs")
-            for name, declaration in jobs.items():
-                description = f"{path.name}:{name}"
-                job = require_mapping(declaration, description)
-                raw_steps = require_list(job.get("steps", []), f"{description} steps")
-                steps = [step for step in raw_steps if isinstance(step, dict)]
-                if runs_the_gate(steps):
-                    found.append(description)
+            found.extend(_codescene_check_jobs_in_workflow(path))
     return found
 
 
