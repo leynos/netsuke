@@ -128,6 +128,12 @@ jobs:
           use-sccache: 'false'
       - name: Reset sccache statistics
         run: sccache --zero-stats
+      - name: Install the build standard
+        # Cranelift is the repository's default backend and `dev-fast-check`
+        # gates every build target on it. `mold` is Linux-only, so the
+        # installer skips the linker here and Windows keeps its platform
+        # linker; the component is what this step is for.
+        run: make SHELL=bash install-dev-fast
       - name: Show rustc version
         run: |
           rustup show
@@ -293,6 +299,12 @@ jobs:
           tool: nextest@${{ env.NEXTEST_VERSION }}
       - name: Reset sccache statistics
         run: sccache --zero-stats
+      - name: Install the build standard
+        # Cranelift is the repository's default backend and `dev-fast-check`
+        # gates every build target on it. `mold` is Linux-only, so the
+        # installer skips the linker here and Windows keeps its platform
+        # linker; the component is what this step is for.
+        run: make SHELL=bash install-dev-fast
       - name: Show rustc version
         run: |
           rustup show

@@ -60,6 +60,32 @@ FORBIDDEN_TEST_COMMANDS = (
 )
 
 
+def _expand_makefile_variables(text: str) -> str:
+    """Substitute one level of ``$(NAME)`` references from the Makefile.
+
+    The gate recipes compose their flags through a shared variable rather than
+    spelling them out, so a contract reading the recipe text alone would report
+    the warning policy as absent when it is merely named indirectly. One level
+    is enough for the recipes here and keeps the substitution obvious; a
+    reference the Makefile does not define is left as written, so a typo shows
+    up as a failed assertion rather than as a silent empty expansion.
+
+    Returns
+    -------
+    str
+        ``text`` with each defined ``$(NAME)`` replaced by its value.
+    """
+    makefile = MAKEFILE_PATH.read_text(encoding="utf-8")
+    definitions = dict(
+        re.findall(r"^([A-Z][A-Z0-9_]*) \??= (.*)$", makefile, flags=re.MULTILINE)
+    )
+    return re.sub(
+        r"\$\(([A-Z][A-Z0-9_]*)\)",
+        lambda match: definitions.get(match.group(1), match.group(0)),
+        text,
+    )
+
+
 def _makefile_recipe(target: str) -> str:
     """Return the recipe lines of a Makefile target.
 
@@ -161,10 +187,10 @@ def test_the_local_test_target_still_runs_both_passes() -> None:
     assert "test: test-nextest doctest" in makefile, (
         "`make test` must compose the nextest and doctest passes"
     )
-    nextest = _makefile_recipe("test-nextest")
+    nextest = _expand_makefile_variables(_makefile_recipe("test-nextest"))
     for flag in ("--workspace", "--all-targets", "--all-features"):
         assert flag in nextest, f"the local nextest pass must pass {flag}"
-    doctest = _makefile_recipe("doctest")
+    doctest = _expand_makefile_variables(_makefile_recipe("doctest"))
     for flag in ("--workspace", "--doc", "--all-features"):
         assert flag in doctest, f"the local doctest pass must pass {flag}"
     for recipe, label in ((nextest, "nextest"), (doctest, "doctest")):
