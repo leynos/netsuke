@@ -122,6 +122,12 @@ measure_variant() {
   local clean incremental
   shift 2
   export CARGO_TARGET_DIR="$BENCH_ROOT/$slug"
+  # Cargo can be told to keep intermediates outside the target directory. If a
+  # caller has done that, every variant shares one build directory, the `rm -rf`
+  # below stops making the next pass clean, and the table reports three warm
+  # builds while looking exactly like three cold ones. Drop the override so
+  # intermediates land under each variant's own directory.
+  unset CARGO_BUILD_BUILD_DIR
 
   note "measuring $label (clean)"
   rm -rf "$CARGO_TARGET_DIR"
