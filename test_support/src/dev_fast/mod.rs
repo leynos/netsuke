@@ -1,7 +1,7 @@
-//! Test scaffolding for the opt-in `dev-fast` build-acceleration tooling.
+//! Test scaffolding for the `dev-fast` build-standard tooling.
 //!
-//! The `make dev-*` targets and their backing scripts probe `PATH` for `mold`
-//! and `rustup`, download a pinned release, and shell out to Cargo. Testing
+//! The capability check, installer and benchmark probe `PATH` for `mold` and
+//! `rustup`, download a pinned release, and shell out to Cargo. Testing
 //! them needs three things this module provides:
 //!
 //! - [`Sandbox`], a `PATH` and `HOME` built from nothing, so a case can express
@@ -34,7 +34,10 @@ mod sandbox;
 mod scenario;
 mod staging;
 
-pub use bench::{BASELINE_MTIME, BenchFixture, DEFAULT_SLUG, DEV_FAST_SLUG, write_with_old_mtime};
+pub use bench::{
+    BASELINE_MTIME, BENCH_SLUGS, BenchFixture, CRANELIFT_SLUG, CRANELIFT_THREADS_SLUG,
+    DEFAULT_SLUG, write_with_old_mtime,
+};
 pub use cargo_log::{CargoInvocation, RecordingCargo, TargetState};
 pub use make::MakeInvocation;
 pub use release::FakeRelease;
@@ -52,7 +55,7 @@ pub use release::FakeRelease;
 /// environment.
 pub use sandbox::real_utility_with_env;
 pub use sandbox::{
-    DEV_FAST_CONFIG_PATH, PinOverrides, Sandbox, combined, dev_fast_config, pinned_mold_version,
+    CARGO_CONFIG_PATH, PinOverrides, Sandbox, cargo_config, combined, pinned_mold_version,
     pinned_toolchain, real_utility,
 };
 pub use scenario::{

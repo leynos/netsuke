@@ -4,7 +4,8 @@
 //! artefact it cannot verify, so these tests serve a locally built tarball over
 //! a `file://` URL and vary only the recorded checksum. No network is used.
 //!
-//! The Make targets that wrap these scripts are covered separately in
+//! `make install-dev-fast` is covered here too, because it is the installer's
+//! own entry point; the build and gate recipes live in
 //! `dev_fast_make_target_tests.rs`.
 
 #![cfg(all(unix, target_os = "linux"))]
@@ -15,8 +16,8 @@ use proptest::prelude::*;
 use proptest::proptest;
 use rstest::rstest;
 use test_support::dev_fast::{
-    FakeRelease, InstallerFixture, InstallerScenario, PinOverrides, Sandbox, WRONG_SHA256,
-    combined, pinned_mold_version, pinned_toolchain,
+    FakeRelease, InstallerFixture, InstallerScenario, MakeInvocation, PinOverrides, Sandbox,
+    TEST_MOLD_VERSION, WRONG_SHA256, combined, pinned_mold_version, pinned_toolchain,
 };
 
 /// Inputs whose checksum file fails verification in the given way.
@@ -310,7 +311,7 @@ proptest! {
 }
 
 #[test]
-fn benchmark_emits_a_markdown_table_for_both_paths() -> Result<()> {
+fn benchmark_emits_a_markdown_table_for_every_variant() -> Result<()> {
     let sandbox = Sandbox::new()?;
     sandbox.write_mold(&sandbox.prefix().join("bin"), &pinned_mold_version()?)?;
     sandbox.write_rustup(&pinned_toolchain()?, true)?;
@@ -339,10 +340,10 @@ fn benchmark_emits_a_markdown_table_for_both_paths() -> Result<()> {
     );
     let rows: Vec<&str> = stdout
         .lines()
-        .filter(|line| line.starts_with("| Default") || line.starts_with("| dev-fast"))
+        .filter(|line| line.starts_with("| Default") || line.starts_with("| Cranelift"))
         .collect();
     ensure!(
-        rows.len() == 2,
+        rows.len() == 3,
         "should report one row per variant, got `{stdout}`"
     );
     for row in rows {
@@ -352,5 +353,42 @@ fn benchmark_emits_a_markdown_table_for_both_paths() -> Result<()> {
             "row should carry two decimal timings, got `{row}`"
         );
     }
+    Ok(())
+}
+
+#[test]
+fn install_target_forwards_the_prefix_pins_and_release_url() -> Result<()> {
+    let sandbox = Sandbox::new()?;
+    sandbox.write_rustup(&pinned_toolchain()?, true)?;
+    let release = FakeRelease::publish(&sandbox, TEST_MOLD_VERSION)?;
+    let version_pin = release.write_version_pin(&sandbox)?;
+    let checksums = release.write_checksums(&sandbox, release.sha256())?;
+
+    // Pins go through as command-line variables, outranking the Makefile's `?=`
+    // defaults; the release URL is read straight from the environment by the
+    // script, which is the only channel available for it.
+    let invocation = MakeInvocation::new("install-dev-fast")
+        .variable("MOLD_VERSION_FILE", &version_pin)
+        .variable("MOLD_SHA256SUMS_FILE", &checksums)
+        .environment("MOLD_RELEASE_BASE_URL", release.base_url());
+    let output = sandbox.run_make(&invocation)?;
+    let text = combined(&output);
+
+    ensure!(
+        output.status.success(),
+        "make install-dev-fast should succeed, got `{text}`"
+    );
+    ensure!(
+        text.contains(&release.base_url()),
+        "should fetch from the local release URL, got `{text}`"
+    );
+    ensure!(
+        text.contains(&format!("verified {}", release.name())),
+        "should verify against the overridden checksum file, got `{text}`"
+    );
+    ensure!(
+        sandbox.prefix().join("bin/mold").as_std_path().is_file(),
+        "the pinned linker should land in the forwarded prefix"
+    );
     Ok(())
 }

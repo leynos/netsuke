@@ -18,10 +18,14 @@ use super::{BuildScenario, Sandbox};
 /// granularity.
 pub const BASELINE_MTIME: i64 = 1_600_000_000;
 
-/// Target-directory slugs the benchmark uses, one per variant.
+/// Target-directory slug for the LLVM baseline variant.
 pub const DEFAULT_SLUG: &str = "default";
-/// Stable benchmark scenario identifier used in generated paths and commands.
-pub const DEV_FAST_SLUG: &str = "dev-fast";
+/// Target-directory slug for the repository default: Cranelift and `mold`.
+pub const CRANELIFT_SLUG: &str = "cranelift";
+/// Target-directory slug for the default plus the parallel `rustc` frontend.
+pub const CRANELIFT_THREADS_SLUG: &str = "cranelift-threads";
+/// Every variant slug, in the order the benchmark measures them.
+pub const BENCH_SLUGS: [&str; 3] = [DEFAULT_SLUG, CRANELIFT_SLUG, CRANELIFT_THREADS_SLUG];
 
 /// Create the touch file with [`BASELINE_MTIME`], returning that timestamp.
 ///
@@ -66,7 +70,7 @@ impl BenchFixture {
         let baseline_mtime = write_with_old_mtime(sandbox, &touch_file)?;
 
         let root = sandbox.home().join("bench");
-        for slug in [DEFAULT_SLUG, DEV_FAST_SLUG] {
+        for slug in BENCH_SLUGS {
             sandbox.create_dir(&root.join(slug))?;
         }
         Ok(Self {

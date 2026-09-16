@@ -1,9 +1,12 @@
 //! A fake `cargo` that records how it was called.
 //!
-//! The `dev-build` and `dev-test` recipes are worth asserting on directly: they
-//! select a toolchain, pass a configuration fragment, and prepend the install
-//! prefix to `PATH`. Recording the arguments and environment each invocation
-//! received turns those into checkable facts rather than assumptions.
+//! The build and gate recipes are worth asserting on directly: they compose
+//! `RUSTFLAGS` and prepend the install prefix to `PATH`. Recording the
+//! arguments and environment each invocation received turns those into
+//! checkable facts rather than assumptions. `RUSTFLAGS` in particular cannot be
+//! inferred from a command line: Cargo reads it from the environment, and an
+//! externally set value silently displaces every `rustflags` table in
+//! `.cargo/config.toml`.
 
 use anyhow::{Context, Result, bail};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -59,6 +62,8 @@ impl RecordingCargo {
                 "  printf 'arguments\\t%s\\n' \"$*\"\n",
                 "  printf 'toolchain\\t%s\\n' \"${{RUSTUP_TOOLCHAIN:-}}\"\n",
                 "  printf 'path\\t%s\\n' \"${{PATH:-}}\"\n",
+                "  printf 'rustflags\\t%s\\n' \"${{RUSTFLAGS-}}\"\n",
+                "  printf 'rustflags_set\\t%s\\n' \"${{RUSTFLAGS+yes}}\"\n",
                 "  printf 'target_dir\\t%s\\n' \"$target_dir\"\n",
                 "  printf 'target_state\\t%s\\n' \"$target_state\"\n",
                 "  printf 'touch_mtime\\t%s\\n' \"$touch_mtime\"\n",
@@ -135,6 +140,13 @@ pub struct CargoInvocation {
     toolchain: String,
     /// The `PATH` the invocation saw, recorded verbatim.
     path: String,
+    /// `RUSTFLAGS` as the invocation saw it, or `None` when it was unset.
+    ///
+    /// Unset and empty are different facts here and must not be conflated: an
+    /// empty `RUSTFLAGS` is still an assignment, and an assignment is what
+    /// displaces the configuration file's `rustflags` tables, so the release
+    /// recipe's correctness turns on which of the two it produced.
+    rustflags: Option<String>,
     /// The `CARGO_TARGET_DIR` value, empty when unset.
     target_dir: String,
     /// Whether the target directory existed at invocation start.
@@ -185,6 +197,12 @@ impl CargoInvocation {
             )
         };
 
+        let rustflags = if take("rustflags_set")?.is_empty() {
+            None
+        } else {
+            Some(take("rustflags")?)
+        };
+
         Ok(Self {
             arguments: take("arguments")?
                 .split_whitespace()
@@ -192,6 +210,7 @@ impl CargoInvocation {
                 .collect(),
             toolchain: take("toolchain")?,
             path: take("path")?,
+            rustflags,
             target_dir,
             target_state,
             touch_mtime,
@@ -239,6 +258,24 @@ impl CargoInvocation {
     #[must_use]
     pub fn path(&self) -> &str {
         &self.path
+    }
+
+    /// `RUSTFLAGS` as the invocation saw it, `None` when never assigned.
+    #[must_use]
+    pub fn rustflags(&self) -> Option<&str> {
+        self.rustflags.as_deref()
+    }
+
+    /// Whether every flag in `flags` appears in the recorded `RUSTFLAGS`.
+    ///
+    /// Membership rather than equality: the recipes append to whatever the
+    /// caller already set, so the surrounding value is not the subject.
+    #[must_use]
+    pub fn rustflags_contain(&self, flags: &[&str]) -> bool {
+        self.rustflags.as_ref().is_some_and(|value| {
+            let present: Vec<&str> = value.split_whitespace().collect();
+            flags.iter().all(|flag| present.contains(flag))
+        })
     }
 
     /// The `CARGO_TARGET_DIR` the invocation was given, empty when unset.

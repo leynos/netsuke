@@ -253,9 +253,7 @@ impl Sandbox {
         env: &[(&str, String)],
     ) -> Result<Output> {
         let mut command = self.base_command(&self.bin().join("bash"));
-        command
-            .env("DEV_FAST_PREFIX", self.prefix().as_std_path())
-            .env("DEV_FAST_CONFIG", "tools/dev-fast/config.toml");
+        command.env("DEV_FAST_PREFIX", self.prefix().as_std_path());
         if matches!(pins, PinOverrides::Supplied) {
             command
                 .env("MOLD_VERSION_FILE", "tools/mold/VERSION")
@@ -328,17 +326,20 @@ fn read_pin(path: &str) -> Result<String> {
         .to_owned())
 }
 
-/// The committed Cargo fragment's path, relative to the repository root.
-pub const DEV_FAST_CONFIG_PATH: &str = "tools/dev-fast/config.toml";
+/// The committed Cargo configuration's path, relative to the repository root.
+///
+/// Cargo auto-discovers this file, which is what makes the build standard the
+/// default rather than something a target has to opt into.
+pub const CARGO_CONFIG_PATH: &str = ".cargo/config.toml";
 
-/// The committed Cargo fragment's contents, so a test can assert on what the
-/// `dev-*` recipes actually apply rather than only on the path they pass.
+/// The committed Cargo configuration's contents, so a test can assert on what
+/// every build actually applies rather than only on a recipe's command line.
 ///
 /// # Errors
 ///
-/// Returns an error if the checked-in dev-fast configuration cannot be read.
-pub fn dev_fast_config() -> Result<String> {
-    fs::read_to_string(DEV_FAST_CONFIG_PATH).with_context(|| format!("read {DEV_FAST_CONFIG_PATH}"))
+/// Returns an error if the checked-in Cargo configuration cannot be read.
+pub fn cargo_config() -> Result<String> {
+    fs::read_to_string(CARGO_CONFIG_PATH).with_context(|| format!("read {CARGO_CONFIG_PATH}"))
 }
 
 /// The repository's pinned mold release tag.

@@ -1,0 +1,39 @@
+# Repository-wide Cargo defaults for the development build standard.
+#
+# Cranelift, the mold linker and the parallel rustc frontend are the defaults
+# for every development, test, lint and typecheck build. Release and coverage
+# builds are excluded: release artefacts need the supported LLVM backend and the
+# platform linker, and `cargo llvm-cov` needs LLVM source-based instrumentation,
+# which Cranelift does not emit.
+#
+# See "Local build acceleration" in docs/developers-guide.md for the exclusion
+# mechanism and the contracts that hold the rustflags sources equal.
+
+[unstable]
+codegen-backend = true
+
+# The `test` and `bench` profiles inherit `dev` and `release` respectively, so
+# naming these two profiles covers every build Cargo performs.
+[profile.dev]
+codegen-backend = "cranelift"
+
+# Stated rather than left to the default: an explicit value is what the release
+# exclusion contract reads, so deleting it fails a test rather than silently
+# handing a shipped artefact to whichever backend the config last named.
+[profile.release]
+codegen-backend = "llvm"
+
+# Cargo selects a single rustflags source rather than merging them: a matching
+# `[target.*]` table replaces `[build] rustflags` outright, and an externally
+# set `RUSTFLAGS` replaces both. Every flag that must survive therefore has to
+# be repeated in each source, including the `RUSTFLAGS` the Makefile composes
+# for the gate targets. tests/workflow_contracts/dev_fast_rustflags_test.py
+# holds the sources equal.
+[build]
+rustflags = ["-Zthreads=8"]
+
+# mold ships for Linux only, so the linker flag is gated behind a target `cfg`.
+# macOS and Windows fall through to `[build] rustflags` above and use their
+# platform default linker.
+[target.'cfg(target_os = "linux")']
+rustflags = ["-Zthreads=8", "-Clink-arg=-fuse-ld=mold"]

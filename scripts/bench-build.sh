@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
-# Benchmark the default (LLVM + platform linker) debug build against the opt-in
-# mold + Cranelift path.
+# Benchmark the three debug build shapes: the LLVM baseline, the repository's
+# Cranelift plus `mold` default, and that default with the parallel `rustc`
+# frontend added.
 #
 # Each variant is measured twice: a clean build from an empty target directory,
 # and an incremental rebuild after touching the binary's entry point. Variants
 # use separate target directories so neither warms nor invalidates the other's
 # cache, and neither disturbs the working `target/` tree. Results are printed as
 # a Markdown table so the developers' guide can be regenerated verbatim.
+#
+# The variants are selected by environment override rather than by a Cargo
+# configuration fragment. `.cargo/config.toml` is the committed default, so the
+# baseline is expressed by overriding it back to LLVM and displacing its
+# `rustflags`, and the two accelerated rows differ only by one flag.
 
 set -euo pipefail
 
@@ -15,7 +21,10 @@ script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 . "$script_dir/dev-fast-common.sh"
 
 : "${CARGO:=cargo}"
-: "${DEV_FAST_CONFIG:?DEV_FAST_CONFIG must be set}"
+# Supplied by the Makefile from the same variables the gate targets compose, so
+# a flag cannot be benchmarked in a shape the gates do not actually use.
+: "${DEV_FAST_THREADS_FLAG:=-Zthreads=8}"
+: "${DEV_FAST_MOLD_FLAG:=-Clink-arg=-fuse-ld=mold}"
 
 # The timer below reads EPOCHREALTIME, which Bash gained in 5.0. Fail here with
 # a named prerequisite rather than silently reporting every duration as zero.
@@ -142,25 +151,44 @@ report() {
   done
 }
 
-# Measure the default path first so its numbers are not attributed to a warm
-# page cache created by the accelerated run.
+# Measure the LLVM baseline first so its numbers are not attributed to a warm
+# page cache created by an accelerated run.
 main() {
-  local toolchain
+  local toolchain linker_flag=''
   toolchain=$(cranelift_toolchain)
+  # `mold` is Linux-only, so elsewhere the accelerated rows differ from the
+  # baseline by the backend and the frontend alone. Saying so in the log keeps
+  # a macOS table from being read as a linker comparison.
+  if is_linux; then
+    linker_flag=$DEV_FAST_MOLD_FLAG
+  else
+    note "mold is Linux-only; measuring on $(uname -s) without a linker change"
+  fi
 
   # Before the first `rm -rf` or `touch`, so a rejected run leaves the holder's
   # state untouched.
   acquire_bench_lock
 
+  # Assigning RUSTFLAGS at all displaces every `rustflags` table in
+  # `.cargo/config.toml`, and the profile override takes the backend back to
+  # LLVM. Together those restore the pre-standard build exactly.
   measure_variant default 'Default (LLVM, platform linker)' \
+    env RUSTUP_TOOLCHAIN="$toolchain" \
+    CARGO_PROFILE_DEV_CODEGEN_BACKEND=llvm RUSTFLAGS='' \
     "$CARGO" build --bin "$BENCH_BIN"
 
-  # The label is backticked because the developers' guide embeds this table
+  # The labels are backticked because the developers' guide embeds this table
   # verbatim, and the repository spelling gate reads a bare "mold" as "mould".
   # shellcheck disable=SC2016 # the backticks are Markdown, not a subshell.
-  measure_variant dev-fast 'dev-fast (Cranelift, `mold`)' \
+  measure_variant cranelift 'Cranelift, `mold`' \
+    env RUSTUP_TOOLCHAIN="$toolchain" RUSTFLAGS="$linker_flag" \
+    "$CARGO" build --bin "$BENCH_BIN"
+
+  # shellcheck disable=SC2016 # the backticks are Markdown, not a subshell.
+  measure_variant cranelift-threads 'Cranelift, `mold`, parallel frontend' \
     env RUSTUP_TOOLCHAIN="$toolchain" \
-    "$CARGO" --config "$DEV_FAST_CONFIG" build --bin "$BENCH_BIN"
+    RUSTFLAGS="$DEV_FAST_THREADS_FLAG${linker_flag:+ $linker_flag}" \
+    "$CARGO" build --bin "$BENCH_BIN"
 
   report
 }

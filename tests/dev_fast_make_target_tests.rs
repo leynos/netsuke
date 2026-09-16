@@ -1,228 +1,351 @@
-//! Behavioural tests for hermetic `dev-fast` Make target contracts.
+//! Behavioural tests for the hermetic build-standard Make target contracts.
 //!
-//! A fake Cargo verifies recipes: what each target selects, what it forwards,
-//! and how it propagates failure. Two clusters with subjects of their own live
-//! beside this file — the capability gate in [`capability_gate`], and the Cargo
-//! fragment in [`cargo_fragment`].
+//! A fake Cargo verifies the recipes; real Cargo resolves the committed
+//! configuration in its own test.
 #![cfg(all(unix, target_os = "linux"))]
 
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use rstest::{fixture, rstest};
 use test_support::dev_fast::{
-    BuildScenario, DEV_FAST_CONFIG_PATH, FakeRelease, MakeInvocation, Sandbox, combined,
-    pinned_toolchain,
+    BuildScenario, CARGO_CONFIG_PATH, CargoInvocation, MakeInvocation, RecordingCargo, Sandbox,
+    cargo_config, combined, pinned_mold_version, pinned_toolchain,
 };
 
-#[path = "dev_fast_make_target_tests/capability_gate.rs"]
-mod capability_gate;
-
-#[path = "dev_fast_make_target_tests/cargo_fragment.rs"]
-mod cargo_fragment;
-
-/// The version the fake release is published as; see the installer tests.
-const TEST_MOLD_VERSION: &str = "9.9.9";
-/// What a given build target must ask Cargo to do.
+/// A binary name no build tree can already contain, so the file rule's recipe
+/// runs instead of being skipped as up to date on a developer's machine.
+const PROBE_APP: &str = "netsuke-make-contract-probe";
+/// What a given target must ask Cargo to do.
 #[derive(Copy, Clone, Debug)]
 struct BuildTarget {
     name: &'static str,
     subcommand: &'static [&'static str],
 }
-/// Prepare a hermetic dev-fast scenario for a Make target contract test.
+
+/// Prepare a hermetic scenario for a Make target contract test.
 #[fixture]
 fn prepared_build_scenario() -> Result<BuildScenario> {
     BuildScenario::prepare()
 }
-#[rstest]
-#[case::dev_build(BuildTarget {
-    name: "dev-build",
-    subcommand: &["build", "--bin", "netsuke"],
-})]
-#[case::dev_test(
-    BuildTarget {
-        name: "dev-test",
-        // Mirrors `make test-nextest`, so the accelerated loop and the gate run
-        // the same runner under the same `.config/nextest.toml`.
-        subcommand: &[
-            "nextest",
-            "run",
-            "--workspace",
-            "--all-targets",
-            "--all-features",
-        ],
-    }
-)]
-fn build_targets_select_the_pinned_toolchain_and_fragment(
-    #[case] target: BuildTarget,
-    #[from(prepared_build_scenario)] scenario_res: Result<BuildScenario>,
-) -> Result<()> {
-    let scenario = scenario_res?;
-    let invocation = scenario.run(target.name)?;
-    ensure!(
-        invocation.toolchain() == pinned_toolchain()?,
-        "`{}` should select the pinned nightly, got `{}`",
-        target.name,
-        invocation.toolchain()
-    );
-    ensure!(
-        invocation.contains_sequence(&["--config", DEV_FAST_CONFIG_PATH]),
-        "`{}` should pass the fragment, got `{:?}`",
-        target.name,
-        invocation.arguments()
-    );
-    ensure!(
-        invocation.contains_sequence(target.subcommand),
-        "`{}` should run `{:?}`, got `{:?}`",
-        target.name,
-        target.subcommand,
-        invocation.arguments()
-    );
-    ensure!(
-        !invocation
-            .arguments()
-            .iter()
-            .any(|argument| argument == "--locked"),
-        "`{}` should leave lockfile verification disabled by default, got `{:?}`",
-        target.name,
-        invocation.arguments()
-    );
-    // The linker is resolved by PATH order, so leading the prefix is the
-    // whole mechanism by which the pinned mold, and not a system one, gets
-    // used.
-    ensure!(
-        invocation.path_starts_with(&scenario.prefix_bin()),
-        "`{}` should lead PATH with the install prefix, got `{}`",
-        target.name,
-        invocation.path()
-    );
-    Ok(())
-}
 
-#[rstest]
-#[case::dev_build("dev-build", &["--locked", "--config"])]
-#[case::dev_test("dev-test", &["nextest", "run", "--locked"])]
-fn build_targets_forward_config_and_lockfile_overrides(
-    #[case] target: &str,
-    #[case] lockfile_arguments: &[&str],
-    #[from(prepared_build_scenario)] scenario_res: Result<BuildScenario>,
-) -> Result<()> {
-    let scenario = scenario_res?;
-    let config = "tools/dev-fast/config.local.toml";
+/// Run `target` under `scenario` with the probe binary name, returning every
+/// Cargo invocation it produced.
+fn run_target(scenario: &BuildScenario, target: &str) -> Result<Vec<CargoInvocation>> {
     let invocation = MakeInvocation::new(target)
         .variable("CARGO", scenario.cargo().executable())
-        .variable("CARGO_LOCKED", "--locked")
-        .variable("DEV_FAST_CONFIG", config);
+        .variable("APP", PROBE_APP);
     let output = scenario.sandbox().run_make(&invocation)?;
-
     ensure!(
         output.status.success(),
         "make {target} should succeed, got `{}`",
         combined(&output)
     );
-    let recorded = scenario.cargo().sole_invocation()?;
+    let recorded = scenario.cargo().invocations()?;
     ensure!(
-        recorded.contains_sequence(lockfile_arguments),
-        "{target} should place CARGO_LOCKED as `{:?}`, got `{:?}`",
-        lockfile_arguments,
-        recorded.arguments()
+        !recorded.is_empty(),
+        "make {target} should invoke Cargo at least once"
     );
-    ensure!(
-        recorded.contains_sequence(&["--config", config]),
-        "{target} should forward DEV_FAST_CONFIG, got `{:?}`",
-        recorded.arguments()
-    );
-    Ok(())
+    Ok(recorded)
 }
 
-/// The two nextest worker bounds travel as far as Cargo's argument vector.
+/// The flags the standard applies on this platform, read from the committed
+/// configuration so the test cannot restate the Makefile's own answer.
+fn standard_flags() -> Result<Vec<String>> {
+    let config: toml::Value = toml::from_str(&cargo_config()?)?;
+    let flags = config
+        .get("target")
+        .and_then(|table| table.get(r#"cfg(target_os = "linux")"#))
+        .and_then(|table| table.get("rustflags"))
+        .and_then(toml::Value::as_array)
+        .context("the configuration must gate rustflags behind the Linux cfg")?;
+    Ok(flags
+        .iter()
+        .filter_map(toml::Value::as_str)
+        .map(str::to_owned)
+        .collect())
+}
+
+/// Every gate target must hand Cargo the standard's flags through `RUSTFLAGS`.
 ///
-/// `test-nextest` is exercised by CI, so a bound dropped there fails loudly;
-/// `dev-test` is a local loop no lane runs, so nothing else would notice one
-/// going missing. Asserting on the recorded invocation rather than on recipe
-/// text is what makes the agreement between the two targets a fact rather than
-/// a reading: a variable the recipe fails to expand reaches Cargo as a literal
-/// `$(...)` argument, which the count below rejects and a recipe-level
-/// substring check would accept.
-///
-/// The empty case is the control. With nothing set the recipe must contribute
-/// no bound of its own, so every bound observed in the other cases came from
-/// the caller's variable.
+/// This is the whole point of restating them in the Makefile. Each of these
+/// recipes assigns `RUSTFLAGS` to deny warnings, and an assigned `RUSTFLAGS`
+/// displaces every `rustflags` table in `.cargo/config.toml`, so a recipe that
+/// forgot to restate them would link with the platform linker and a
+/// single-threaded frontend while still reporting success.
 #[rstest]
-#[case::no_bounds(&[])]
-#[case::build_jobs_only(&[("NEXTEST_BUILD_JOBS", "--build-jobs 4")])]
-#[case::test_jobs_only(&[("NEXTEST_TEST_JOBS", "-j 4")])]
-#[case::both_bounds(&[("NEXTEST_BUILD_JOBS", "--build-jobs 4"), ("NEXTEST_TEST_JOBS", "-j 4")])]
-fn dev_test_forwards_the_nextest_worker_bounds(
-    #[case] bounds: &[(&str, &str)],
+#[case::test_nextest(BuildTarget {
+    name: "test-nextest",
+    subcommand: &["nextest", "run", "--workspace", "--all-targets", "--all-features"],
+})]
+#[case::doctest(BuildTarget {
+    name: "doctest",
+    subcommand: &["test", "--workspace", "--doc", "--all-features"],
+})]
+#[case::lint_clippy(BuildTarget { name: "lint-clippy", subcommand: &["clippy"] })]
+fn gate_targets_deny_warnings_and_apply_the_standard(
+    #[case] target: BuildTarget,
     #[from(prepared_build_scenario)] scenario_res: Result<BuildScenario>,
 ) -> Result<()> {
     let scenario = scenario_res?;
-    let mut invocation =
-        MakeInvocation::new("dev-test").variable("CARGO", scenario.cargo().executable());
-    for (name, value) in bounds {
-        invocation = invocation.variable(name, value);
-    }
-    let output = scenario.sandbox().run_make(&invocation)?;
+    let recorded = run_target(&scenario, target.name)?;
+    let flags = standard_flags()?;
+    let borrowed: Vec<&str> = flags.iter().map(String::as_str).collect();
 
-    ensure!(
-        output.status.success(),
-        "make dev-test should succeed, got `{}`",
-        combined(&output)
-    );
-    let recorded = scenario.cargo().sole_invocation()?;
-    for (name, value) in bounds {
+    for invocation in &recorded {
         ensure!(
-            recorded.contains_sequence(&value.split_whitespace().collect::<Vec<_>>()),
-            "dev-test should forward {name}={value}, got `{:?}`",
-            recorded.arguments()
+            invocation.rustflags_contain(&["-D", "warnings"]),
+            "`{}` should deny warnings, got `{:?}`",
+            target.name,
+            invocation.rustflags()
+        );
+        ensure!(
+            invocation.rustflags_contain(&borrowed),
+            "`{}` should apply {:?}, got `{:?}`",
+            target.name,
+            flags,
+            invocation.rustflags()
+        );
+        // The linker is resolved by PATH order, so leading the prefix is the
+        // whole mechanism by which the pinned mold, and not a system one, is
+        // the one `-fuse-ld=mold` finds.
+        ensure!(
+            invocation.path_starts_with(&scenario.prefix_bin()),
+            "`{}` should lead PATH with the install prefix, got `{}`",
+            target.name,
+            invocation.path()
         );
     }
-    // Each bound the caller sets contributes exactly one flag here, so matching
-    // the count proves the recipe neither drops one nor invents a bound of its
-    // own to replace it.
-    let bound_flags = recorded
-        .arguments()
-        .iter()
-        .filter(|argument| matches!(argument.as_str(), "--build-jobs" | "-j"))
-        .count();
     ensure!(
-        bound_flags == bounds.len(),
-        "dev-test should forward exactly the {} bound(s) the caller set, got `{:?}`",
-        bounds.len(),
-        recorded.arguments()
+        recorded
+            .iter()
+            .any(|invocation| invocation.contains_sequence(target.subcommand)),
+        "`{}` should run `{:?}`",
+        target.name,
+        target.subcommand
     );
     Ok(())
 }
 
+/// The debug build takes the standard but not the gates' warning policy.
+///
+/// Asserting the absence matters: folding `-D warnings` into the shared
+/// composition would silently turn every `make build` into a gate, which is a
+/// different contract from the one this target has always had.
 #[rstest]
-#[case("dev-build")]
-#[case("dev-test")]
-fn build_targets_do_not_evaluate_a_config_override(
+fn the_debug_build_applies_the_standard_without_denying_warnings(
+    #[from(prepared_build_scenario)] scenario_res: Result<BuildScenario>,
+) -> Result<()> {
+    let scenario = scenario_res?;
+    let recorded = run_target(&scenario, "build")?;
+    let invocation = recorded.first().context("build should invoke Cargo")?;
+    let flags = standard_flags()?;
+    let borrowed: Vec<&str> = flags.iter().map(String::as_str).collect();
+
+    ensure!(
+        invocation.rustflags_contain(&borrowed),
+        "build should apply {flags:?}, got `{:?}`",
+        invocation.rustflags()
+    );
+    ensure!(
+        !invocation.rustflags_contain(&["-D", "warnings"]),
+        "build should not impose the gates' warning policy, got `{:?}`",
+        invocation.rustflags()
+    );
+    ensure!(
+        invocation.contains_sequence(&["build", "--bin", PROBE_APP]),
+        "build should build the binary, got `{:?}`",
+        invocation.arguments()
+    );
+    Ok(())
+}
+
+/// Release builds are one of the two exclusions, and the exclusion works by
+/// assignment rather than by content: assigning `RUSTFLAGS` at all is what
+/// displaces the configuration file's tables. A recipe that left the variable
+/// unset would inherit the standard from the configuration and ship an
+/// artefact built with the parallel frontend and `mold`.
+#[rstest]
+fn the_release_build_assigns_rustflags_and_takes_neither_flag(
+    #[from(prepared_build_scenario)] scenario_res: Result<BuildScenario>,
+) -> Result<()> {
+    let scenario = scenario_res?;
+    let recorded = run_target(&scenario, "release")?;
+    let invocation = recorded.first().context("release should invoke Cargo")?;
+
+    ensure!(
+        invocation.rustflags().is_some(),
+        "release must assign RUSTFLAGS, or the configuration's tables apply"
+    );
+    for flag in standard_flags()? {
+        ensure!(
+            !invocation.rustflags_contain(&[flag.as_str()]),
+            "release must not carry `{flag}`, got `{:?}`",
+            invocation.rustflags()
+        );
+    }
+    ensure!(
+        invocation.contains_sequence(&["--release", "--bin", PROBE_APP]),
+        "release should build the release binary, got `{:?}`",
+        invocation.arguments()
+    );
+    Ok(())
+}
+
+/// Every standard flag a gate passes must be one the committed configuration
+/// names, and vice versa.
+///
+/// The two directions fail to different mutations, which is why both are here:
+/// dropping a flag from the Makefile fails the forward check in the tests
+/// above, while dropping one from the configuration — leaving a bare `cargo
+/// build` without it — fails only this reverse check.
+#[rstest]
+fn the_makefile_passes_no_standard_flag_the_configuration_omits(
+    #[from(prepared_build_scenario)] scenario_res: Result<BuildScenario>,
+) -> Result<()> {
+    let scenario = scenario_res?;
+    let recorded = run_target(&scenario, "build")?;
+    let invocation = recorded.first().context("build should invoke Cargo")?;
+    let configured = standard_flags()?;
+    let passed = invocation.rustflags().unwrap_or_default();
+
+    for flag in passed.split_whitespace() {
+        ensure!(
+            configured.iter().any(|known| known == flag),
+            "`{flag}` reaches Cargo from the Makefile but is absent from {CARGO_CONFIG_PATH}, \
+             so a bare `cargo build` would not get it"
+        );
+    }
+    Ok(())
+}
+
+#[rstest]
+#[case::dev_build("dev-build")]
+#[case::dev_test("dev-test")]
+fn deprecated_aliases_still_reach_cargo(
     #[case] target: &str,
     #[from(prepared_build_scenario)] scenario_res: Result<BuildScenario>,
 ) -> Result<()> {
     let scenario = scenario_res?;
-    let marker = scenario.sandbox().home().join("config-evaluation-marker");
-    let config = format!("`touch {marker}`");
+    let recorded = run_target(&scenario, target)?;
+    let flags = standard_flags()?;
+    let borrowed: Vec<&str> = flags.iter().map(String::as_str).collect();
+
+    ensure!(
+        recorded
+            .iter()
+            .all(|invocation| invocation.rustflags_contain(&borrowed)),
+        "`{target}` should apply the same standard as the target it aliases"
+    );
+    Ok(())
+}
+
+/// The capability check gates the build targets, so a failing check must stop
+/// them before Cargo runs. Asserting on the recorded invocations proves that
+/// directly, where relying on Cargo's absence from the sandbox would pass even
+/// if the recipe did invoke it.
+#[rstest]
+#[case("build")]
+#[case("test-nextest")]
+#[case("doctest")]
+#[case("lint-clippy")]
+fn a_failed_gate_invokes_cargo_not_at_all(#[case] target: &str) -> Result<()> {
+    let sandbox = Sandbox::new()?;
+    sandbox.write_rustup(&pinned_toolchain()?, true)?;
+    // A usable cargo is present and recording; only mold is missing.
+    let cargo = RecordingCargo::install(&sandbox)?;
+
     let invocation = MakeInvocation::new(target)
-        .variable("CARGO", scenario.cargo().executable())
-        .variable("DEV_FAST_CONFIG", config);
-    let output = scenario.sandbox().run_make(&invocation)?;
+        .variable("CARGO", cargo.executable())
+        .variable("APP", PROBE_APP);
+    let output = sandbox.run_make(&invocation)?;
+    let text = combined(&output);
+
+    ensure!(
+        !output.status.success(),
+        "`{target}` should fail, got `{text}`"
+    );
+    ensure!(
+        text.contains("mold not found on PATH"),
+        "`{target}` should fail in the capability check, got `{text}`"
+    );
+    let recorded = cargo.invocations()?;
+    ensure!(
+        recorded.is_empty(),
+        "`{target}` should not reach Cargo, recorded {} invocation(s)",
+        recorded.len()
+    );
+    Ok(())
+}
+
+/// A drifting `mold` fails the gate, so it must stop the build targets exactly
+/// as a missing one does.
+///
+/// Worth asserting separately from the absent case: a drift leaves a perfectly
+/// usable linker on `PATH`, so nothing but the gate's own verdict prevents the
+/// recipe from proceeding.
+#[rstest]
+#[case("build")]
+#[case("test-nextest")]
+fn a_drifting_mold_invokes_cargo_not_at_all(#[case] target: &str) -> Result<()> {
+    let sandbox = Sandbox::new()?;
+    sandbox.write_rustup(&pinned_toolchain()?, true)?;
+    sandbox.write_mold(&sandbox.prefix().join("bin"), "99.0.0")?;
+    let cargo = RecordingCargo::install(&sandbox)?;
+
+    let invocation = MakeInvocation::new(target)
+        .variable("CARGO", cargo.executable())
+        .variable("APP", PROBE_APP);
+    let output = sandbox.run_make(&invocation)?;
+    let text = combined(&output);
+
+    ensure!(
+        !output.status.success(),
+        "`{target}` should fail on a drifting mold, got `{text}`"
+    );
+    // Pin the failure to its cause. Asserting only the exit status would let
+    // this pass on an unrelated failure — a missing `rustup`, or a broken
+    // recipe — and so would stop testing the drift gate at all.
+    ensure!(
+        text.contains("does not match the pin") && text.contains(&pinned_mold_version()?),
+        "`{target}` should name the version mismatch and the pin, got `{text}`"
+    );
+    let recorded = cargo.invocations()?;
+    ensure!(
+        recorded.is_empty(),
+        "`{target}` should not reach Cargo, recorded {} invocation(s)",
+        recorded.len()
+    );
+    Ok(())
+}
+
+/// The release build is deliberately *not* gated: it uses neither Cranelift nor
+/// `mold`, so requiring them would make packaging depend on tools it never
+/// invokes.
+#[test]
+fn the_release_build_runs_without_the_capability_check() -> Result<()> {
+    let sandbox = Sandbox::new()?;
+    sandbox.write_rustup(&pinned_toolchain()?, true)?;
+    let cargo = RecordingCargo::install(&sandbox)?;
+
+    let invocation = MakeInvocation::new("release")
+        .variable("CARGO", cargo.executable())
+        .variable("APP", PROBE_APP);
+    let output = sandbox.run_make(&invocation)?;
 
     ensure!(
         output.status.success(),
-        "make {target} should treat the override as data, got `{}`",
+        "make release should not require mold, got `{}`",
         combined(&output)
     );
     ensure!(
-        !marker.as_std_path().exists(),
-        "make {target} must not evaluate DEV_FAST_CONFIG as shell syntax"
+        cargo.invocations()?.len() == 1,
+        "make release should invoke Cargo exactly once"
     );
     Ok(())
 }
 
 #[rstest]
-#[case("dev-build")]
-#[case("dev-test")]
+#[case("build")]
+#[case("test-nextest")]
 fn build_targets_propagate_cargo_failure(
     #[case] target: &str,
     #[from(prepared_build_scenario)] scenario_res: Result<BuildScenario>,
@@ -237,7 +360,9 @@ fn build_targets_propagate_cargo_failure(
         "failing-cargo",
         &format!(": > \"{marker}\"\nexit 17"),
     )?;
-    let invocation = MakeInvocation::new(target).variable("CARGO", cargo);
+    let invocation = MakeInvocation::new(target)
+        .variable("CARGO", cargo)
+        .variable("APP", PROBE_APP);
     let output = scenario.sandbox().run_make(&invocation)?;
 
     ensure!(
@@ -248,51 +373,6 @@ fn build_targets_propagate_cargo_failure(
         output.status.code() == Some(2),
         "make {target} should report Cargo exit status 17 as Make failure 2, got `{:?}`",
         output.status.code()
-    );
-    ensure!(
-        !output.status.success(),
-        "make {target} must fail when Cargo exits unsuccessfully"
-    );
-    Ok(())
-}
-
-#[test]
-fn install_target_forwards_the_prefix_pins_and_release_url() -> Result<()> {
-    let sandbox = Sandbox::new()?;
-    sandbox.write_rustup(&pinned_toolchain()?, true)?;
-    let release = FakeRelease::publish(&sandbox, TEST_MOLD_VERSION)?;
-    let version_pin = release.write_version_pin(&sandbox)?;
-    let checksums = release.write_checksums(&sandbox, release.sha256())?;
-
-    // Pins go through as command-line variables, outranking the Makefile's `?=`
-    // defaults; the release URL is read straight from the environment by the
-    // script, which is the only channel available for it.
-    let invocation = MakeInvocation::new("install-dev-fast")
-        .variable("MOLD_VERSION_FILE", &version_pin)
-        .variable("MOLD_SHA256SUMS_FILE", &checksums)
-        .environment("MOLD_RELEASE_BASE_URL", release.base_url());
-    let output = sandbox.run_make(&invocation)?;
-    let text = combined(&output);
-
-    ensure!(
-        output.status.success(),
-        "make install-dev-fast should succeed, got `{text}`"
-    );
-    ensure!(
-        text.contains(&release.base_url()),
-        "should fetch from the local release URL, got `{text}`"
-    );
-    ensure!(
-        text.contains(&format!("verified {}", release.name())),
-        "should verify against the overridden checksum file, got `{text}`"
-    );
-    ensure!(
-        text.contains(sandbox.prefix().as_str()),
-        "should install into the forwarded prefix, got `{text}`"
-    );
-    ensure!(
-        sandbox.prefix().join("bin/mold").as_std_path().is_file(),
-        "the pinned linker should land in the forwarded prefix"
     );
     Ok(())
 }

@@ -19,45 +19,71 @@ use proptest::proptest;
 use proptest::test_runner::FileFailurePersistence;
 use rstest::rstest;
 use test_support::dev_fast::{
-    BenchFixture, BuildScenario, CargoInvocation, DEFAULT_SLUG, DEV_FAST_CONFIG_PATH,
-    DEV_FAST_SLUG, MakeInvocation, Sandbox, TargetState, combined, pinned_toolchain, real_utility,
-    write_with_old_mtime,
+    BENCH_SLUGS, BenchFixture, BuildScenario, CRANELIFT_SLUG, CRANELIFT_THREADS_SLUG,
+    CargoInvocation, DEFAULT_SLUG, MakeInvocation, Sandbox, TargetState, combined,
+    pinned_toolchain, real_utility, write_with_old_mtime,
 };
+
+/// The flags each variant must hand Cargo through `RUSTFLAGS`.
+///
+/// The baseline's empty list is the point of the whole row: assigning
+/// `RUSTFLAGS` to nothing is what displaces `.cargo/config.toml`'s tables and
+/// restores the pre-standard build, so "no flags" here means "assigned and
+/// empty", not "unset".
+const VARIANT_FLAGS: [(&str, &[&str]); 3] = [
+    (DEFAULT_SLUG, &[]),
+    (CRANELIFT_SLUG, &["-Clink-arg=-fuse-ld=mold"]),
+    (
+        CRANELIFT_THREADS_SLUG,
+        &["-Zthreads=8", "-Clink-arg=-fuse-ld=mold"],
+    ),
+];
 
 /// Check the recorded passes: their count and pairing, each variant's own
 /// contract, that the variants measured separately, and where each pass sits
 /// relative to the touch.
 fn check_benchmark_invocations(invocations: &[CargoInvocation], baseline_mtime: i64) -> Result<()> {
-    // Four builds: clean and incremental, for each of the two variants.
+    // Six builds: clean and incremental, for each of the three variants.
     ensure!(
-        invocations.len() == 4,
+        invocations.len() == 2 * BENCH_SLUGS.len(),
         "should measure two builds per variant, recorded {}",
         invocations.len()
     );
 
-    // The benchmark measures the default variant first, then the accelerated
-    // one, each as a clean pass followed by an incremental pass.
+    // The benchmark measures the baseline first, then the two accelerated
+    // variants, each as a clean pass followed by an incremental pass.
     let (pairs, rest) = invocations.as_chunks::<2>();
     ensure!(
         rest.is_empty(),
         "passes should come in pairs, got {} spare",
         rest.len()
     );
-    let [default_chunk, dev_fast_chunk] = pairs else {
+    let [baseline, cranelift, cranelift_threads] = pairs else {
         bail!("expected one pair per variant, got {}", pairs.len());
     };
-    let default_pass = BenchVariant::from_pair(DEFAULT_SLUG, default_chunk, false);
-    let dev_fast_pass = BenchVariant::from_pair(DEV_FAST_SLUG, dev_fast_chunk, true);
-    for variant in [&default_pass, &dev_fast_pass] {
-        variant.check(&pinned_toolchain()?)?;
+    let variants: Vec<BenchVariant<'_>> = VARIANT_FLAGS
+        .iter()
+        .zip([baseline, cranelift, cranelift_threads])
+        .map(|((label, flags), pair)| BenchVariant::from_pair(label, pair, flags))
+        .collect();
+    let toolchain = pinned_toolchain()?;
+    for variant in &variants {
+        variant.check(&toolchain)?;
     }
 
-    ensure!(
-        default_pass.target_dir() != dev_fast_pass.target_dir(),
-        "variants must not share a target directory, got `{}` and `{}`",
-        default_pass.target_dir(),
-        dev_fast_pass.target_dir()
-    );
+    // Pairwise rather than against the first alone: two accelerated variants
+    // sharing a directory would warm each other's cache and understate the
+    // second, which a check against the baseline would not catch.
+    for (index, variant) in variants.iter().enumerate() {
+        for other in &variants[index + 1..] {
+            ensure!(
+                variant.target_dir() != other.target_dir(),
+                "variants must not share a target directory, got `{}` and `{}`",
+                variant.target_dir(),
+                other.target_dir()
+            );
+        }
+    }
 
     check_touch_ordering(invocations, baseline_mtime)
 }
@@ -139,7 +165,7 @@ proptest! {
     #[test]
     fn the_benchmark_wipes_whatever_each_variant_started_from(
         default_pre in pre_state_strategy(),
-        dev_fast_pre in pre_state_strategy(),
+        cranelift_pre in pre_state_strategy(),
     ) {
         let fail = |error: anyhow::Error| TestCaseError::fail(error.to_string());
         let scenario = BuildScenario::prepare().map_err(fail)?;
@@ -148,7 +174,7 @@ proptest! {
         let touch_file = sandbox.home().join("bench-touch");
         write_with_old_mtime(sandbox, &touch_file).map_err(fail)?;
         let bench_root = sandbox.home().join("bench");
-        for (slug, pre) in [(DEFAULT_SLUG, default_pre), (DEV_FAST_SLUG, dev_fast_pre)] {
+        for (slug, pre) in BENCH_SLUGS.into_iter().zip([default_pre, cranelift_pre, cranelift_pre]) {
             pre.stage(sandbox, &bench_root.join(slug)).map_err(fail)?;
         }
 
@@ -161,23 +187,22 @@ proptest! {
             output.status.success(),
             "bench-build should succeed from {:?}/{:?}, got `{}`",
             default_pre,
-            dev_fast_pre,
+            cranelift_pre,
             combined(&output)
         );
 
         let invocations = scenario.cargo().invocations().map_err(fail)?;
         let states: Vec<TargetState> = invocations.iter().map(CargoInvocation::target_state).collect();
+        let expected: Vec<TargetState> = BENCH_SLUGS
+            .iter()
+            .flat_map(|_| [TargetState::Absent, TargetState::Present])
+            .collect();
         prop_assert_eq!(
             states,
-            vec![
-                TargetState::Absent,
-                TargetState::Present,
-                TargetState::Absent,
-                TargetState::Present,
-            ],
+            expected,
             "each variant should measure a clean then an incremental pass, from {:?}/{:?}",
             default_pre,
-            dev_fast_pre
+            cranelift_pre
         );
     }
 }
@@ -198,11 +223,13 @@ fn the_touched_file_is_restored_however_the_run_ends(#[case] succeeds: bool) -> 
     let fixture = BenchFixture::prepare(&scenario)?;
 
     if !succeeds {
-        // Fail the second variant, after the first has already touched the file.
+        // Fail the first accelerated variant, after the baseline has already
+        // touched the file. A non-empty RUSTFLAGS is what distinguishes an
+        // accelerated variant from the baseline, which assigns it empty.
         sandbox.write_fake(
             &sandbox.bin(),
             "cargo",
-            "case \"$*\" in *--config*) exit 1 ;; *) exit 0 ;; esac",
+            "[ -z \"${RUSTFLAGS:-}\" ] || exit 1\nexit 0",
         )?;
     }
 
@@ -274,7 +301,7 @@ fn a_failed_restore_warns_rather_than_passing_silently() -> Result<()> {
 }
 
 #[test]
-fn bench_target_emits_both_variant_rows() -> Result<()> {
+fn bench_target_emits_every_variant_row() -> Result<()> {
     let scenario = BuildScenario::prepare()?;
     let fixture = BenchFixture::prepare(&scenario)?;
 
@@ -292,7 +319,8 @@ fn bench_target_emits_both_variant_rows() -> Result<()> {
     );
     for variant in [
         "| Default (LLVM, platform linker) |",
-        "| dev-fast (Cranelift,",
+        "| Cranelift, `mold` |",
+        "| Cranelift, `mold`, parallel frontend |",
     ] {
         ensure!(
             stdout.contains(variant),
@@ -308,9 +336,10 @@ struct BenchVariant<'a> {
     label: &'a str,
     clean: &'a CargoInvocation,
     incremental: &'a CargoInvocation,
-    /// Whether this variant is the accelerated one, which alone carries the
-    /// Cranelift fragment and the pinned toolchain.
-    expects_fragment: bool,
+    /// The flags this variant must hand Cargo, which is the only thing that
+    /// distinguishes one row from another now that all three share a backend
+    /// configuration file.
+    flags: &'a [&'a str],
 }
 
 impl<'a> BenchVariant<'a> {
@@ -321,13 +350,13 @@ impl<'a> BenchVariant<'a> {
     const fn from_pair(
         label: &'a str,
         [clean, incremental]: &'a [CargoInvocation; 2],
-        expects_fragment: bool,
+        flags: &'a [&'a str],
     ) -> Self {
         Self {
             label,
             clean,
             incremental,
-            expects_fragment,
+            flags,
         }
     }
 
@@ -343,17 +372,22 @@ impl<'a> BenchVariant<'a> {
                 "`{label}` should build the binary, got `{:?}`",
                 pass.arguments()
             );
+            // Assigned, never inherited: an unset RUSTFLAGS would let
+            // `.cargo/config.toml` decide the variant, and every row would
+            // then measure the same build.
+            let recorded: Vec<&str> = pass
+                .rustflags()
+                .with_context(|| format!("`{label}` must assign RUSTFLAGS"))?
+                .split_whitespace()
+                .collect();
             ensure!(
-                pass.contains_sequence(&["--config", DEV_FAST_CONFIG_PATH])
-                    == self.expects_fragment,
-                "`{label}` fragment expectation ({}) not met, got `{:?}`",
-                self.expects_fragment,
-                pass.arguments()
+                recorded == self.flags,
+                "`{label}` should pass {:?}, got {recorded:?}",
+                self.flags
             );
-            let expected_toolchain = if self.expects_fragment { toolchain } else { "" };
             ensure!(
-                pass.toolchain() == expected_toolchain,
-                "`{label}` should run under `{expected_toolchain}`, got `{}`",
+                pass.toolchain() == toolchain,
+                "`{label}` should run under `{toolchain}`, got `{}`",
                 pass.toolchain()
             );
         }
