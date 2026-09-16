@@ -1,5 +1,5 @@
 # Generated from the shared en-GB-oxendict dictionary.
-# Regenerate with scripts/generate_typos_config.py; do not edit by hand.
+# Regenerate with typos-config-builder; do not edit by hand.
 
 [files]
 extend-exclude = [
@@ -27,7 +27,6 @@ extend-exclude = [
     "node_modules",
     "package-lock.json",
     "pnpm-lock.yaml",
-    "scripts/tests/test_typos_rollout_hardening.py",
     "target",
     "typos.local.toml",
     "typos.toml",

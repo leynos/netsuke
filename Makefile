@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact test-typos-config build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-dev-fast dev-fast-check dev-build dev-test bench-build bench-config-load bench-glob-expansion
+.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-dev-fast dev-fast-check dev-build dev-test bench-build bench-config-load bench-glob-expansion
 
 RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 # Export this path before shell probes expand it, so Make does not interpolate
@@ -71,9 +71,9 @@ MDTABLEFIX_RULES = --wrap --renumber --breaks --ellipsis --fences
 NIXIE ?= nixie
 YAMLLINT ?= yamllint
 ACTIONLINT ?= actionlint
-# Single source of truth for the typos version; the markdownlint target and CI
-# both consume it, so the Makefile and CI cannot drift apart.
-TYPOS_VERSION ?= 1.48.0
+# Single source of truth for the shared spelling gate; the Makefile and CI
+# both consume it, so the pinned builder cannot drift apart.
+TYPOS_CONFIG_BUILDER_VERSION ?= v0.1.1
 YAMLLINT_VERSION ?= 1.38.0
 UV ?= uv
 UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
@@ -122,27 +122,12 @@ DF12_PYLINT = $(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
 	--enable=$(DF12_PYLINT_MESSAGES)
 AMBRLEAKS = $(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
 	--from '$(DF12_PYTHON_LINTS)' ambrleaks
-SPELLING_HELPER_COVERAGE = --cov=generate_typos_config --cov=typos_rollout_check --cov=typos_rollout \
-	--cov=typos_rollout_cache --cov=typos_rollout_http
-SPELLING_HELPER_FILES = scripts/generate_typos_config.py \
-	scripts/typos_rollout_check.py \
-	scripts/typos_rollout.py scripts/typos_rollout_cache.py \
-	scripts/typos_rollout_http.py scripts/tests/conftest.py \
-	scripts/tests/test_typos_rollout.py \
-	scripts/tests/test_typos_rollout_check.py \
-	scripts/tests/test_typos_rollout_hardening.py \
-	scripts/tests/test_typos_rollout_refresh.py \
-	scripts/tests/typos_rollout_test_support.py
-# Markdown files for the spelling gate, excluding build output and tool caches.
-# CRUSH.md is a symlink to AGENTS.md, so `-type f` skips it and avoids
-# double-checking the same prose.
-MD_FILES_FIND = find . -type f -name '*.md' \
-	-not -path './target/*' -not -path './.venv/*' \
-	-not -path './.vtcode/*' -not -path './memories/*' \
-	-not -path './.pytest_cache/*' \
-	-not -path './.uv-cache/*' \
-	-not -path './.uv-tools/*' \
-	-not -path './node_modules/*' -print0
+# The shared en-GB-oxendict spelling gate. It regenerates `typos.toml` from
+# the live shared dictionary and the `typos.local.toml` overlay on every run,
+# then runs Typos and the prohibited-phrase check.
+TYPOS_CONFIG_BUILDER = $(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
+	--from "git+https://github.com/leynos/typos-config-builder.git@$(TYPOS_CONFIG_BUILDER_VERSION)" \
+	typos-config-builder
 PROVER_TOOLS_SOURCE ?= git+https://github.com/leynos/rust-prover-tools@b07ef696f8373d54ae68e517d39d47a5d27a5bd5
 PROVER_TOOLS ?= uv tool run --from $(PROVER_TOOLS_SOURCE) prover-tools
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
@@ -191,8 +176,6 @@ test-coverage-artifact: ## Test hostile LCOV artefact validation
 		--with pytest==9.0.2 python -m pytest scripts/tests/test_validate_coverage_artifact.py \
 		scripts/tests/test_validate_coverage_archive.py -c /dev/null --rootdir=. \
 		-p no:cacheprovider
-
-test-typos-config: spelling-helper-test ## Verify the shared spelling-policy integration
 
 target/%/$(APP): ## Build binary in debug or release mode
 	$(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP)
@@ -283,22 +266,8 @@ typecheck-python: ## Typecheck the Python sources with ty
 markdownlint: spelling ## Lint Markdown and enforce en-GB-oxendict spelling
 	@unset FORCE_COLOR; $(MDLINT) "**/*.md"
 
-spelling: spelling-config ## Enforce en-GB-oxendict spelling in Markdown prose
-	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) scripts/typos_rollout_check.py --repository .
-	@$(MD_FILES_FIND) | xargs -0 -r env $(UV_ENV) \
-		$(UV) tool run typos@$(TYPOS_VERSION) --config typos.toml --force-exclude
-
-spelling-config: spelling-helper-test ## Generate and validate the spelling configuration
-	@$(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) scripts/generate_typos_config.py
-	@git ls-files --error-unmatch typos.toml >/dev/null
-	@git diff --exit-code -- typos.toml
-
-spelling-helper-test: ## Validate the shared spelling-policy integration
-	# `--isolated` keeps this gate independent of the repository configuration
-	# so the spelling helpers stay self-contained on the shared estate policy.
-	@$(UV_ENV) $(UV) tool run ruff@$(RUFF_VERSION) format --isolated --target-version py314 --check $(SPELLING_HELPER_FILES)
-	@$(UV_ENV) $(UV) tool run ruff@$(RUFF_VERSION) check --isolated --target-version py314 $(SPELLING_HELPER_FILES)
-	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) --with pytest==9.0.2 --with pytest-cov==7.0.0 python -m pytest scripts/tests/test_typos_rollout*.py -c /dev/null --rootdir=. -p no:cacheprovider $(SPELLING_HELPER_COVERAGE) --cov-fail-under=90
+spelling: ## Enforce en-GB-oxendict spelling
+	$(TYPOS_CONFIG_BUILDER) gate --repository .
 
 nixie: ## Validate Mermaid diagrams
 	nixie --no-sandbox

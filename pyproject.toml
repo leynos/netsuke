@@ -19,21 +19,6 @@ extend-exclude = [
     ".uv-cache",
     ".uv-tools",
     "target",
-    # The shared spelling-policy rollout helpers are estate-synchronized code
-    # with their own pinned, isolated Ruff policy enforced by the Makefile's
-    # `spelling-helper-test` target; linting them against the repository
-    # configuration as well would fork them from the estate.
-    "scripts/generate_typos_config.py",
-    "scripts/typos_rollout.py",
-    "scripts/typos_rollout_cache.py",
-    "scripts/typos_rollout_check.py",
-    "scripts/typos_rollout_http.py",
-    "scripts/tests/conftest.py",
-    "scripts/tests/test_typos_rollout.py",
-    "scripts/tests/test_typos_rollout_check.py",
-    "scripts/tests/test_typos_rollout_hardening.py",
-    "scripts/tests/test_typos_rollout_refresh.py",
-    "scripts/tests/typos_rollout_test_support.py",
 ]
 
 [tool.ruff.lint]
@@ -188,22 +173,6 @@ py-version = "3.14"
 recursive = true
 # Match the project file-size ceiling enforced during review.
 max-module-lines = 400
-# The shared spelling-policy rollout helpers have their own pinned Ruff and
-# coverage policy (see the Makefile's `spelling-helper-test` target). Keep
-# these path-specific so the workflow-contract fixture remains linted.
-ignore-paths = [
-    ".*scripts/generate_typos_config[.]py$",
-    ".*scripts/typos_rollout[.]py$",
-    ".*scripts/typos_rollout_cache[.]py$",
-    ".*scripts/typos_rollout_check[.]py$",
-    ".*scripts/typos_rollout_http[.]py$",
-    ".*scripts/tests/conftest[.]py$",
-    ".*scripts/tests/test_typos_rollout[.]py$",
-    ".*scripts/tests/test_typos_rollout_check[.]py$",
-    ".*scripts/tests/test_typos_rollout_hardening[.]py$",
-    ".*scripts/tests/test_typos_rollout_refresh[.]py$",
-    ".*scripts/tests/typos_rollout_test_support[.]py$",
-]
 
 [tool.pylint.design]
 # Keep function call surfaces small enough to understand without memorising
