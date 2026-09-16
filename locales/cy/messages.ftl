@@ -350,7 +350,7 @@ stdlib.time.label.nanoseconds = nanoeiliadau
 stdlib.which.not_found = [netsuke::jinja::which::not_found] ni chafwyd hyd i'r gorchymyn ‘{ $command }’ ar ôl gwirio { $count } cofnod PATH. Rhagolwg: { $preview }
 stdlib.which.not_found.hint.cwd_auto = Mae'r modd auto yn chwilio dim ond y cyfeiriaduron a enwir yn benodol yn PATH.
 stdlib.which.not_found.hint.cwd_always = Mae'r modd always yn chwilio dim ond y cyfeiriadur cyfredol cyn cyfeiriaduron a enwir yn PATH.
-stdlib.which.not_found.hint.workspace = I chwilio coeden y gweithle yn ailadroddus, defnyddiwch cwd_mode="workspace-recursive".
+stdlib.which.not_found.hint.workspace = I chwilio'r gweithle a'i holl isgyfeiriaduron, defnyddiwch cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] mae'r gorchymyn ‘{ $command }’ yn ‘{ $path }’ ar goll neu nid yw'n weithredadwy.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <gwag>
