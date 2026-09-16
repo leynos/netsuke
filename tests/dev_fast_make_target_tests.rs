@@ -125,6 +125,66 @@ fn build_targets_forward_config_and_lockfile_overrides(
     Ok(())
 }
 
+/// The two nextest worker bounds travel as far as Cargo's argument vector.
+///
+/// `test-nextest` is exercised by CI, so a bound dropped there fails loudly;
+/// `dev-test` is a local loop no lane runs, so nothing else would notice one
+/// going missing. Asserting on the recorded invocation rather than on recipe
+/// text is what makes the agreement between the two targets a fact rather than
+/// a reading: a variable the recipe fails to expand reaches Cargo as a literal
+/// `$(...)` argument, which the count below rejects and a recipe-level
+/// substring check would accept.
+///
+/// The empty case is the control. With nothing set the recipe must contribute
+/// no bound of its own, so every bound observed in the other cases came from
+/// the caller's variable.
+#[rstest]
+#[case::no_bounds(&[])]
+#[case::build_jobs_only(&[("NEXTEST_BUILD_JOBS", "--build-jobs 4")])]
+#[case::test_jobs_only(&[("NEXTEST_TEST_JOBS", "-j 4")])]
+#[case::both_bounds(&[("NEXTEST_BUILD_JOBS", "--build-jobs 4"), ("NEXTEST_TEST_JOBS", "-j 4")])]
+fn dev_test_forwards_the_nextest_worker_bounds(
+    #[case] bounds: &[(&str, &str)],
+    #[from(prepared_build_scenario)] scenario_res: Result<BuildScenario>,
+) -> Result<()> {
+    let scenario = scenario_res?;
+    let mut invocation =
+        MakeInvocation::new("dev-test").variable("CARGO", scenario.cargo().executable());
+    for (name, value) in bounds {
+        invocation = invocation.variable(name, value);
+    }
+    let output = scenario.sandbox().run_make(&invocation)?;
+
+    ensure!(
+        output.status.success(),
+        "make dev-test should succeed, got `{}`",
+        combined(&output)
+    );
+    let recorded = scenario.cargo().sole_invocation()?;
+    for (name, value) in bounds {
+        ensure!(
+            recorded.contains_sequence(&value.split_whitespace().collect::<Vec<_>>()),
+            "dev-test should forward {name}={value}, got `{:?}`",
+            recorded.arguments()
+        );
+    }
+    // Each bound the caller sets contributes exactly one flag here, so matching
+    // the count proves the recipe neither drops one nor invents a bound of its
+    // own to replace it.
+    let bound_flags = recorded
+        .arguments()
+        .iter()
+        .filter(|argument| matches!(argument.as_str(), "--build-jobs" | "-j"))
+        .count();
+    ensure!(
+        bound_flags == bounds.len(),
+        "dev-test should forward exactly the {} bound(s) the caller set, got `{:?}`",
+        bounds.len(),
+        recorded.arguments()
+    );
+    Ok(())
+}
+
 #[rstest]
 #[case("dev-build")]
 #[case("dev-test")]

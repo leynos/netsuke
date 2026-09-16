@@ -2468,7 +2468,11 @@ The fragment sets the `codegen-backend` unstable flag,
   Cargo-level rather than runner-level, which is why they compose with nextest
   unchanged. Note the target uses `NEXTEST_BUILD_JOBS`, not `BUILD_JOBS`:
   nextest reserves `-j` for test concurrency, so a Cargo-shaped `-j` would
-  silently become a thread count.
+  silently become a thread count. It forwards `NEXTEST_TEST_JOBS` as well, so
+  both worker bounds mean the same thing under `make dev-test` as under
+  `make test-nextest`; a bound honoured by one and dropped by the other would
+  make a local run diverge from the gate for no stated reason.
+  `tests/makefile_test_target.rs` holds the two targets to that agreement.
 - **rust-analyzer.** No rust-analyzer configuration is committed, so the
   language server uses the repository toolchain and the default backend. Opting
   rust-analyzer into Cranelift is a personal, machine-local choice; it needs a

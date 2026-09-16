@@ -4,7 +4,9 @@
 //! `make test` is the single command local development and continuous
 //! integration (CI) both run. These tests pin the runner contract it encodes:
 //! non-doctest tests go through cargo-nextest and doctests run separately
-//! because nextest cannot execute them.
+//! because nextest cannot execute them. Every recipe that invokes
+//! `cargo nextest run` shares one worker-bound contract, so the gate and the
+//! accelerated local loop cannot disagree about which bounds a caller set.
 //!
 //! They also pin the `RUSTFLAGS` contract shared by every recipe that sets the
 //! variable. Each such recipe adds `-D warnings` and prepends any value the
@@ -27,6 +29,15 @@ use camino::Utf8Path;
 use makefile::{phony_targets, read_repo_file, target_prerequisites, target_recipe};
 use toml::Value;
 
+/// Every Make target that invokes `cargo nextest run`, and so shares the
+/// worker-bound contract.
+///
+/// `test-nextest` is the gate `make test` composes; `dev-test` is the
+/// accelerated local loop. A contributor sets the bounds once and expects them
+/// honoured wherever nextest runs, so both targets are held to the same rule
+/// rather than only the one CI exercises.
+const NEXTEST_TARGETS: [&str; 2] = ["test-nextest", "dev-test"];
+
 /// Verify both nextest worker bounds are arguments to the `nextest run` call.
 ///
 /// Two separate bounds, not one. `NEXTEST_BUILD_JOBS` limits the compile that
@@ -39,19 +50,41 @@ use toml::Value;
 /// [`target_recipe`] returns the recipe's lines joined together, so a check
 /// over that string would accept a bound sitting in an unrelated later
 /// command, reading as configured while bounding nothing.
-fn ensure_worker_bounds_reach_nextest(recipe: &str) -> Result<()> {
+///
+/// `dev-test` forwards the bounds only when a caller set them, so the contract
+/// covers the empty default too: the passed-in recipe is a real one, where an
+/// unset variable expands to nothing and nextest sees no bound at all.
+fn ensure_worker_bounds_reach_nextest(target: &str, recipe: &str) -> Result<()> {
     let run_command = recipe
         .lines()
         .find(|line| line.contains("nextest run"))
-        .context("test-nextest should invoke cargo nextest run")?;
+        .with_context(|| format!("{target} should invoke cargo nextest run"))?;
     ensure!(
         run_command.contains("$(NEXTEST_BUILD_JOBS)"),
-        "NEXTEST_BUILD_JOBS should be an argument to nextest run, found {run_command:?}"
+        "{target} should pass NEXTEST_BUILD_JOBS to nextest run, found {run_command:?}"
     );
     ensure!(
         run_command.contains("$(NEXTEST_TEST_JOBS)"),
-        "NEXTEST_TEST_JOBS should be an argument to nextest run, found {run_command:?}"
+        "{target} should pass NEXTEST_TEST_JOBS to nextest run, found {run_command:?}"
     );
+    Ok(())
+}
+
+/// Verify every nextest-invoking target forwards both worker bounds.
+///
+/// The agreement between `test-nextest` and `dev-test` is the point: they run
+/// the same runner, so a bound honoured by one and dropped by the other is a
+/// silent divergence for anyone comparing a green gate against a red local run.
+/// Driving the check from [`NEXTEST_TARGETS`] means adding a third target
+/// widens the contract rather than escaping it.
+#[test]
+fn behavioural_nextest_targets_forward_both_worker_bounds() -> Result<()> {
+    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
+    for target in NEXTEST_TARGETS {
+        let recipe = target_recipe(&makefile, target)
+            .with_context(|| format!("Makefile should declare a {target} target"))?;
+        ensure_worker_bounds_reach_nextest(target, &recipe)?;
+    }
     Ok(())
 }
 
@@ -90,7 +123,7 @@ fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()>
         "test-nextest should preserve inherited flags and deny warnings, found {nextest_recipe:?}"
     );
 
-    ensure_worker_bounds_reach_nextest(&nextest_recipe)?;
+    ensure_worker_bounds_reach_nextest("test-nextest", &nextest_recipe)?;
 
     let doctest_recipe =
         target_recipe(&makefile, "doctest").context("Makefile should declare a doctest target")?;
