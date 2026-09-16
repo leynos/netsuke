@@ -21,7 +21,14 @@ class ToolchainPinError(RuntimeError):
     INVALID_RECORD = "toolchain.channel must be a non-empty string"
 
     def __init__(self, detail: str) -> None:
-        """Initialise the error with the unreadable toolchain detail."""
+        """Initialise the error with the unreadable toolchain detail.
+
+        Parameters
+        ----------
+        detail
+            Diagnostic detail explaining why the pinned toolchain could not be
+            read.
+        """
         super().__init__(
             f"cannot read the pinned toolchain from rust-toolchain.toml: {detail}"
         )

@@ -9,8 +9,6 @@ import dataclasses as dc
 import json
 import os
 import pathlib
-
-# Driving Cargo and Rustdoc as child processes is this module's whole purpose.
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the boundary is deliberate.
 
 from doc_coverage_model import Coverage, DocTarget
@@ -69,7 +67,12 @@ class CoverageOutputError(RuntimeError):
     """Report that Rustdoc produced no usable coverage JSON for a target."""
 
     def __init__(self, target: DocTarget, detail: str) -> None:
-        """Initialise the error with the affected target and diagnostic detail."""
+        """Parameters
+
+        ----------
+        target, detail : Cargo target with no coverage JSON; diagnostic detail
+            explaining its absence.
+        """
         super().__init__(
             f"cargo rustdoc for {target.package} {target.kind}"
             f" ({target.name or 'lib'}) did not emit coverage JSON: {detail}"

@@ -86,7 +86,17 @@ class FakeCargo:
         metadata: str = '{"packages": [], "workspace_members": []}',
         rustdoc: FakeRustdocResult = _DEFAULT_RUSTDOC_RESULT,
     ) -> None:
-        """Initialise the fake Cargo process with configurable outputs."""
+        """Initialise the fake Cargo process with configurable outputs.
+
+        Parameters
+        ----------
+        cargo
+            Cargo module whose subprocess runner is patched.
+        metadata
+            JSON payload returned for metadata requests.
+        rustdoc
+            Configured output returned for Rustdoc requests.
+        """
         self._cargo = cargo
         self.metadata_payload = metadata
         self.rustdoc = rustdoc
