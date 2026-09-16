@@ -144,11 +144,15 @@ class WatchdogValueError(ValueError):
 
 
 def _budget_from(raw: object) -> float | None:
-    """Return one source's watchdog budget, or None when it sets none.
+    """Return the resolved watchdog budget, or None when none is set.
 
-    A blank or whitespace-only value is a source that says nothing, so
-    it falls through to the next one. That is what a workflow writes
-    when it interpolates an expression that resolved to nothing.
+    This reads the one declaration :func:`_declared_in_scope` chose, so
+    there is no next source to consider. A blank or whitespace-only
+    value, which is what a workflow writes when it interpolates an
+    expression that resolved to nothing, reads as no budget: the action
+    receives the blank and applies its own default. It does not fall
+    through to an outer scope, because that scope's value never reaches
+    the action either.
 
     Anything else that is not a positive number of seconds is refused
     with the value in the message. The shared action reads a
