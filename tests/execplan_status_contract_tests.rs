@@ -11,7 +11,7 @@
 //! assert the *shape* of the field, never a particular plan's status, so a
 //! plan moving from `IN PROGRESS` to `COMPLETE` needs no test change — only a
 //! stray value, a missing line, a qualifier glued to the value, or a second
-//! field further down fails.
+//! field in the same header fails.
 //!
 //! The authority order the tests cannot check is recorded in the style guide:
 //! a plan's `Progress` and `Outcomes & retrospective` sections, and its

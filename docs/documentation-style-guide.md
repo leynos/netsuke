@@ -558,7 +558,7 @@ Table: the closed set of ExecPlan header status values.
 **Authority.** An ExecPlan's authoritative state is its `Progress` and
 `Outcomes & retrospective` sections together with its roadmap checkbox. The
 header status line is a summary of that state, kept in step with it; when the
-two disagree, the sections and the roadmap are correct and the header is the
+two disagree, the sections and the roadmap are correct, and the header is the
 defect. Reserve `COMPLETE` for a plan whose work is delivered and whose review
 has concluded, not for work merely handed off for review.
 

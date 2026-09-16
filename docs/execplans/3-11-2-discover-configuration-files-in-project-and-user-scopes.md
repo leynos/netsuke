@@ -592,3 +592,12 @@ This plan has been completed as indicated by the `Status: COMPLETE` header. The
 original stages were implemented, tested, and integrated into the codebase; the
 historical validation record above must not be read as current follow-up gate
 evidence.
+
+Completion was asserted by the header before issue #586: this plan carried
+`Status: COMPLETED` on the default branch, and the change to `COMPLETE` was one
+token of vocabulary, not a new claim. The evidence behind the assertion is
+above. Re-running this plan's gates now would produce evidence for whatever the
+tree currently contains, which is not evidence that Stage A–F were delivered,
+so the status rests on the recorded validation and the roadmap checkbox
+together with this plan's `Progress` section, per the authority order in the
+documentation style guide.
