@@ -1,6 +1,6 @@
-//! Contract tests for the `Status:` header field of every ExecPlan.
+//! Contract tests for the `Status:` header field of every `ExecPlan`.
 //!
-//! ExecPlans under `docs/execplans/` each open with a single `Status:` line.
+//! `ExecPlan`s under `docs/execplans/` each open with a single `Status:` line.
 //! The documentation style guide defines its value as a closed set, and the
 //! field's whole value is that it can be grepped, counted, and checked without
 //! reading the plan. Issue #586 found that it had instead drifted: five
@@ -24,12 +24,12 @@ use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 
-/// The prefix marking an ExecPlan's header status field.
+/// The prefix marking an `ExecPlan`'s header status field.
 const STATUS_PREFIX: &str = "Status:";
 
 /// The closed set of values the header status field may carry.
 ///
-/// Mirrors the table under *ExecPlan* in
+/// Mirrors the vocabulary table in the `### ExecPlan` section of
 /// `docs/documentation-style-guide.md`, which this suite also checks for
 /// agreement so the two cannot drift apart.
 const STATUS_VALUES: [&str; 5] = ["DRAFT", "APPROVED", "IN PROGRESS", "BLOCKED", "COMPLETE"];
@@ -51,7 +51,7 @@ fn repo_root() -> Result<Dir> {
         .with_context(|| format!("open repository root {root}"))
 }
 
-/// The file names of every ExecPlan, sorted.
+/// The file names of every `ExecPlan`, sorted.
 ///
 /// # Errors
 ///
@@ -104,23 +104,23 @@ fn header_status(source: &str) -> Result<String> {
         .collect();
 
     ensure!(
-        !fields.is_empty(),
-        "the ExecPlan header should carry a `{STATUS_PREFIX}` line above the first section"
-    );
-    ensure!(
         fields.len() == 1,
-        "the ExecPlan header should carry exactly one `{STATUS_PREFIX}` line; found {}: {fields:?}",
+        "the ExecPlan header should carry exactly one `{STATUS_PREFIX}` line above the \
+         first section; found {}: {fields:?}",
         fields.len()
     );
 
-    let value = fields[0]
-        .strip_prefix(STATUS_PREFIX)
+    // One field, so the strip cannot fail; the fallback keeps the function
+    // panic-free rather than trusting that invariant at a distance.
+    let value = fields
+        .first()
+        .and_then(|field| field.strip_prefix(STATUS_PREFIX))
         .unwrap_or_default()
         .trim();
     Ok(value.to_owned())
 }
 
-/// Verify every ExecPlan header declares exactly one status from the closed set.
+/// Verify every `ExecPlan` header carries exactly one status from the closed set.
 ///
 /// The value is reported for a plan that breaks the rule, so the failure names
 /// the offending file and the stray value in one line.
@@ -160,23 +160,41 @@ fn the_style_guide_defines_every_accepted_status_value() -> Result<()> {
     let source = root
         .read_to_string(STYLE_GUIDE)
         .context("read the documentation style guide")?;
-    let section = source
+    let after_heading = source
         .split("### ExecPlan")
         .nth(1)
         .context("the style guide should carry an `### ExecPlan` section")?;
-    let section = section.split("\n## ").next().unwrap_or(section);
+    let section = after_heading.split("\n## ").next().unwrap_or(after_heading);
 
+    let documented: BTreeSet<&str> = table_rows(section).collect();
     let missing: BTreeSet<&str> = STATUS_VALUES
         .iter()
         .copied()
-        .filter(|value| !section.contains(value))
+        .filter(|value| !documented.contains(value))
         .collect();
     ensure!(
         missing.is_empty(),
-        "the style guide's ExecPlan section should name every accepted status; \
+        "the style guide's ExecPlan section should document every accepted status; \
          missing: {missing:?}"
     );
     Ok(())
+}
+
+/// The first column of every Markdown table row in a section.
+///
+/// Reading the table's first column rather than scanning the section as text
+/// keeps the check honest: the section names the rejected values too, in the
+/// bullet giving `Status: COMPLETED` as a counter-example, so a substring
+/// search would find `COMPLETE` inside `COMPLETED` and pass with the row
+/// deleted.
+fn table_rows(section: &str) -> impl Iterator<Item = &str> {
+    section.lines().filter_map(|raw| {
+        let rest = raw.trim().strip_prefix('|')?;
+        let (first_cell, _) = rest.split_once('|')?;
+        let cell = first_cell.trim();
+        // The delimiter row separates header from body; its cells are dashes.
+        (!cell.is_empty() && !cell.starts_with('-')).then_some(cell)
+    })
 }
 
 #[cfg(test)]
@@ -237,6 +255,37 @@ mod tests {
         ensure!(
             !STATUS_VALUES.contains(&value.as_str()),
             "a qualified status should not satisfy the closed set, found {value:?}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn table_rows_yield_the_first_cell_of_body_rows_only() -> Result<()> {
+        let section = "Some prose.\n\n\
+             | Value  | Meaning |\n\
+             | ------ | ------- |\n\
+             | DRAFT  | Draft.  |\n\
+             | BLOCKED | Blocked. |\n\n\
+             Trailing prose naming COMPLETED.\n";
+        let rows: Vec<&str> = table_rows(section).collect();
+        ensure!(
+            rows == ["Value", "DRAFT", "BLOCKED"],
+            "table rows should carry the header and body first cells, found {rows:?}"
+        );
+        ensure!(
+            !rows.contains(&"COMPLETE"),
+            "prose outside the table must not contribute rows, found {rows:?}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn table_rows_ignore_a_row_whose_first_cell_is_empty() -> Result<()> {
+        let section = "| | Meaning |\n| - | ------- |\n";
+        let rows: Vec<&str> = table_rows(section).collect();
+        ensure!(
+            rows.is_empty(),
+            "a row with a blank first cell should contribute nothing, found {rows:?}"
         );
         Ok(())
     }
