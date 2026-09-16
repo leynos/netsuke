@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -83,8 +83,8 @@ previous merge, while CodeScene receives coverage only after changes reach
 - [x] (2026-09-16 18:40Z) Record the replacement architecture and update
       contributor documentation.
 - [x] (2026-09-16 18:45Z) Run focused tests and every repository quality gate.
-- [ ] Review the complete diff, commit, push `code-coverage-failure`, and open a
-  draft pull request against `main`.
+- [x] (2026-09-16 18:55Z) Review the complete diff, commit, push
+  `code-coverage-failure`, and open draft pull request #724 against `main`.
 
 ## Surprises & discoveries
 
