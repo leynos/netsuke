@@ -116,11 +116,11 @@ env_block_var = ["PROJECT_BLOCKED"]
     .context("write project environment policy")?;
 
     let merged = merge_in_project(
-        &["netsuke", "--env-allow-var", "PROJECT_BLOCKED"],
+        &["netsuke"],
         temp_project.path(),
         &[(
             OsString::from("NETSUKE_ENV_ALLOW_VAR"),
-            OsString::from("[\"OPERATOR_ALLOWED\"]"),
+            OsString::from("[\"OPERATOR_ALLOWED\",\"PROJECT_BLOCKED\"]"),
         )],
     )?;
 
