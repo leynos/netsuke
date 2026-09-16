@@ -1948,7 +1948,9 @@ The Python gates run inside the ordinary quality-gate targets:
 - `make check-fmt` runs `ruff format --check` over the Python sources.
 - `make fmt` applies `ruff format` and Ruff's import sorting.
 - `make lint` runs `make lint-python`: `ruff check`, a Pylint pass, the
-  df12 house lints, and the `ambrleaks` snapshot scanner.
+  df12 house lints, the `ambrleaks` snapshot scanner, and Interrogate docstring
+  coverage. Interrogate runs through `uv tool run --python $(PYTHON_BASELINE)`
+  so local tool environments parse the same supported Python syntax as CI.
 - `make typecheck` runs `make typecheck-python`: the
   [ty](https://github.com/astral-sh/ty) typechecker over the Python sources.
 
