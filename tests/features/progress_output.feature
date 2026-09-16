@@ -23,6 +23,15 @@ Feature: Progress output
     Then the command should succeed
     And stderr should not contain "Task 1/"
 
+  Scenario: Oversized Ninja status output forwards and then resumes progress
+    Given a minimal Netsuke workspace
+    And a fake ninja executable that emits an oversized status line then a valid task status line
+    When netsuke is run with arguments "--accessibility on --progress always build"
+    Then the command should succeed
+    And stdout should contain the oversized Ninja status prefix
+    And stdout should contain "[1/2] cc -c resumed.c"
+    And stderr should contain "Task 1/2"
+
   Scenario: Standard mode shows six stage summaries with success prefix
     Given a minimal Netsuke workspace
     When netsuke is run with arguments "--accessibility off --progress always generate"

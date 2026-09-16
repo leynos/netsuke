@@ -125,6 +125,40 @@ fn install_fake_ninja(world: &TestWorld, lines: &[&str]) -> Result<()> {
     )
 }
 
+/// Bytes emitted before the newline in the oversized-status BDD fixture.
+const OVERSIZED_STATUS_PREFIX_BYTES: usize = 513;
+
+/// Build the distinctive unterminated prefix used by the oversized-status fixture.
+fn oversized_status_prefix() -> String {
+    "x".repeat(OVERSIZED_STATUS_PREFIX_BYTES)
+}
+
+/// Install a fake Ninja that emits an oversized raw line before a valid status line.
+///
+/// [`FakeNinjaConfig`] deliberately terminates every configured line, so this
+/// fixture writes a raw prefix to exercise the parser's ignore-until-newline
+/// state through the real CLI process boundary.
+fn install_fake_ninja_with_oversized_status_line(world: &TestWorld) -> Result<()> {
+    let root = workspace_root(world)?;
+    let script_path = fake_ninja_path(&root);
+    let prefix = oversized_status_prefix();
+    let script = if cfg!(windows) {
+        format!(
+            "@echo off\r\n<nul set /p \"={prefix}\"\r\necho.\r\necho [1/2] cc -c resumed.c\r\nexit /B 0\r\n"
+        )
+    } else {
+        format!("#!/bin/sh\nprintf '%s' '{prefix}'\nprintf '\n[1/2] cc -c resumed.c\n'\nexit 0\n")
+    };
+    fs::write(&script_path, script)
+        .with_context(|| format!("write fake ninja script {}", script_path.display()))?;
+    make_script_executable(&script_path)?;
+    world.track_env_var(
+        netsuke::runner::NINJA_ENV.to_owned(),
+        Some(script_path.as_os_str().to_owned()),
+    );
+    Ok(())
+}
+
 #[rstest_bdd_macros::given("a fake ninja executable that emits task status lines")]
 fn fake_ninja_emits_task_status_lines(world: &TestWorld) -> Result<()> {
     install_fake_ninja(world, &["[1/2] cc -c src/a.c", "[2/2] cc -c src/b.c"])
@@ -152,6 +186,26 @@ fn fake_ninja_builds_documented_hello(world: &TestWorld) -> Result<()> {
 #[rstest_bdd_macros::given("a fake ninja executable that emits malformed task status lines")]
 fn fake_ninja_emits_malformed_task_status_lines(world: &TestWorld) -> Result<()> {
     install_fake_ninja(world, &["[x/2] broken", "[2/] broken", "plain output only"])
+}
+
+#[rstest_bdd_macros::given(
+    "a fake ninja executable that emits an oversized status line then a valid task status line"
+)]
+fn fake_ninja_emits_oversized_status_line(world: &TestWorld) -> Result<()> {
+    install_fake_ninja_with_oversized_status_line(world)
+}
+
+#[rstest_bdd_macros::then("stdout should contain the oversized Ninja status prefix")]
+fn stdout_contains_oversized_ninja_status_prefix(world: &TestWorld) -> Result<()> {
+    let stdout = world
+        .command_stdout
+        .get()
+        .context("no stdout captured for oversized Ninja status assertion")?;
+    ensure!(
+        stdout.contains(&oversized_status_prefix()),
+        "stdout should retain the full oversized Ninja status prefix"
+    );
+    Ok(())
 }
 
 #[rstest_bdd_macros::given("a fake ninja executable that emits stdout output")]

@@ -6266,7 +6266,8 @@ parsing until the line's newline, and then resumes parsing. A customized
 continues to update progress; unsupported shapes produce no task-progress
 updates without affecting child output. Extend `runner::process::ninja_status`
 if alternate formats must be recognized; do not loosen the streaming adapter's
-bound.
+bound. The unlabelled `netsuke_ninja_status_oversized_lines_total` counter
+records each oversized candidate line.
 
 ### Module: `runner::process::ninja_program`
 

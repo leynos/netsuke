@@ -29,6 +29,10 @@ mod file_read_tests;
 #[path = "observability_recorder_manifest_structure_tests.rs"]
 mod manifest_structure_tests;
 
+/// Cover the unlabelled oversized Ninja status counter separately.
+#[path = "observability_recorder_ninja_status_tests.rs"]
+mod ninja_status_tests;
+
 /// Define the rejected label variants for recipe-shell resolution metrics.
 const INVALID_RECIPE_SHELL_RESOLUTION_SERIES: [MetricLabels; 3] = [
     [

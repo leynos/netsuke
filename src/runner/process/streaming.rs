@@ -1,7 +1,11 @@
 //! Streaming helpers for subprocess output forwarding.
 
 use super::ninja_status::{NinjaTaskProgressTracker, parse_ninja_status_line};
-use std::io::{self, Read, Write};
+use metrics::{counter, describe_counter};
+use std::{
+    io::{self, Read, Write},
+    sync::Once,
+};
 
 /// Forwarding statistics for a child output stream.
 #[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
@@ -59,6 +63,26 @@ enum NinjaStatusLineState {
     IgnoringUntilNewline,
 }
 
+/// Count status lines skipped because they exceed the retained candidate bound.
+pub const NINJA_STATUS_OVERSIZED_LINES_TOTAL: &str = "netsuke_ninja_status_oversized_lines_total";
+
+/// Describe the oversized-status-line counter once per process.
+fn describe_metrics() {
+    static DESCRIBE: Once = Once::new();
+    DESCRIBE.call_once(|| {
+        describe_counter!(
+            NINJA_STATUS_OVERSIZED_LINES_TOTAL,
+            "Counts Ninja status lines skipped after exceeding the retained candidate bound."
+        );
+    });
+}
+
+/// Record one oversized status line without retaining its output.
+fn record_oversized_status_line() {
+    describe_metrics();
+    counter!(NINJA_STATUS_OVERSIZED_LINES_TOTAL).increment(1);
+}
+
 /// Read wrapper that parses bounded Ninja status lines and reports progress.
 ///
 /// This reader forwards every byte unchanged. It retains at most
@@ -107,6 +131,7 @@ impl<R, F> NinjaStatusParsingReader<'_, R, F> {
         } else {
             self.pending_line.clear();
             self.line_state = NinjaStatusLineState::IgnoringUntilNewline;
+            record_oversized_status_line();
         }
     }
 
@@ -246,6 +271,9 @@ where
     copy_with_stats(&mut parsing_reader, &mut writer, stream_name)
 }
 
+#[cfg(test)]
+#[path = "streaming_telemetry_tests.rs"]
+mod telemetry_tests;
 #[cfg(test)]
 #[path = "streaming_tests.rs"]
 mod tests;

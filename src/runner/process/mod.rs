@@ -36,6 +36,7 @@ pub(crate) use dyndep_retention::{DyndepPublicationLease, prune_dyndep_cache};
 pub use file_io::*;
 pub use ninja_program::resolve_ninja_program;
 use output_forwarding::{StatusObserver, spawn_and_stream_output};
+pub use streaming::NINJA_STATUS_OVERSIZED_LINES_TOTAL;
 
 mod command_env;
 mod configure;

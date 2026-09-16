@@ -258,6 +258,27 @@ fn oversized_line_forwards_unchanged_and_next_status_line_updates_progress() {
 }
 
 #[test]
+fn oversized_status_suffix_stays_ignored_across_read_boundaries() {
+    let mut input = vec![b'x'; TEST_MAX_LINE_BYTES];
+    input.extend_from_slice(b"[1/2] spoofed.c\n[2/2] cc -c resumed.c\n");
+    let reader = ChunkedReader::new(input.clone(), vec![TEST_MAX_LINE_BYTES, 4, 11, 1, 5, 7, 64]);
+    let mut output = Vec::new();
+    let mut updates = Vec::new();
+
+    let stats = forward_child_output_with_ninja_status(
+        reader,
+        &mut output,
+        |current, total, description| updates.push((current, total, description.to_owned())),
+        "stdout",
+    );
+
+    assert_eq!(stats.bytes_read, input.len());
+    assert_eq!(stats.bytes_written, input.len());
+    assert_eq!(output, input);
+    assert_eq!(updates, vec![(2, 2, "cc -c resumed.c".to_owned())]);
+}
+
+#[test]
 fn split_status_line_updates_once_and_eof_partial_line_stays_bounded() {
     let input = b"[1/2] cc -c split.c\n[2/2] cc -c eof.c".to_vec();
     let reader = ChunkedReader::new(input.clone(), vec![5, 3, 7, 2, 11, 1, 9]);
