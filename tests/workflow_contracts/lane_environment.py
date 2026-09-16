@@ -60,11 +60,15 @@ def _declared_in_scope(
     them in. A reading that stopped at any one of the three would report
     a lane as setting nothing while an outer scope set it.
 
-    A blank or whitespace-only value is a scope that says nothing, so
-    it falls through to the next one rather than stopping the walk.
-    That is what a workflow writes when it interpolates an expression
-    that resolved to nothing, and treating it as a declaration would
-    mask the value an outer scope set.
+    A blank or whitespace-only value stops the walk like any other.
+    GitHub takes the most specific declaration of a variable, and an
+    empty string is a declaration: a step interpolating an expression
+    that resolved to nothing hands the process an empty value and the
+    job's value never reaches it. Falling through here would report the
+    outer budget or profile while the action received neither, which is
+    the one reading that turns a lane losing its budget into a pass.
+    What a blank means is then the reader's business: each one below
+    reports it as nothing set, which is what the consumer sees.
 
     Parameters
     ----------
@@ -81,15 +85,15 @@ def _declared_in_scope(
     -------
     object
         The value as the YAML parser returned it, or None when no scope
-        declares one.
+        declares the variable at all. A declared blank is returned as
+        the blank it is, not as an absence.
     """
     for owner in (step, job, document):
         environment = owner.get("env")
         if not isinstance(environment, dict):
             continue
-        raw = environment.get(variable)
-        if raw is not None and str(raw).strip():
-            return raw
+        if variable in environment:
+            return environment[variable]
     return None
 
 
@@ -105,9 +109,10 @@ def nextest_profile_of(
     consulting only the step would report every lane as running under
     ``default`` and the whole-run budget as reaching none of them.
 
-    A blank or whitespace-only value falls through to the enclosing
-    scope and, failing that, reads as absent rather than as a profile
-    named the empty string.
+    A declared blank reads as the empty string rather than as the
+    enclosing scope's value: nextest receives an empty `NEXTEST_PROFILE`
+    and selects nothing, so the lane has no whole-run budget however the
+    job above it is written.
 
     Parameters
     ----------

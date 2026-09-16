@@ -24,8 +24,10 @@ from lane_environment import nextest_profile_of
 from nextest_budgets import global_timeout
 from timeout_budgets import (
     CAPPED_PROFILE,
+    COVERAGE_ACTION,
     NEXTEST_CONFIG,
     NEXTEST_PROFILE_VARIABLE,
+    WATCHDOG_VARIABLE,
 )
 
 
@@ -99,6 +101,45 @@ def test_the_selected_profile_is_the_one_carrying_the_budget() -> None:
     )
 
 
+def test_a_blank_step_declaration_fails_the_lane_assertion() -> None:
+    """The masking matters because it decides whether a lane passes.
+
+    Reading the scopes correctly is not the point on its own. This is
+    the shape the fault takes in a workflow: a job selects the capped
+    profile and a step hands the process an empty value, so nextest
+    selects nothing and the run has no whole-run budget. A reading that
+    fell through to the job would report ``ci`` and pass.
+    """
+    documents = {
+        "ci.yml": {
+            "jobs": {
+                "build-test": {
+                    "timeout-minutes": 60,
+                    "env": {
+                        NEXTEST_PROFILE_VARIABLE: CAPPED_PROFILE,
+                        WATCHDOG_VARIABLE: "1800",
+                    },
+                    "steps": [
+                        {
+                            "name": "Coverage",
+                            "uses": COVERAGE_ACTION,
+                            "env": {NEXTEST_PROFILE_VARIABLE: ""},
+                        }
+                    ],
+                }
+            },
+        }
+    }
+
+    (lane,) = coverage_lanes_of(documents)
+
+    assert lane.nextest_profile != CAPPED_PROFILE, (
+        "a step handing the process an empty NEXTEST_PROFILE selects no "
+        "profile, so the lane has no whole-run budget however the job above "
+        "it is written; reporting the job's value would pass the lane"
+    )
+
+
 @pytest.mark.parametrize(
     ("document", "job", "step", "expected"),
     [
@@ -128,8 +169,15 @@ def test_the_selected_profile_is_the_one_carrying_the_budget() -> None:
             {},
             {"env": {NEXTEST_PROFILE_VARIABLE: "   "}},
             {},
-            None,
-            id="blank-reads-as-absent",
+            "",
+            id="a-blank-with-nothing-outside-it",
+        ),
+        pytest.param(
+            {"env": {NEXTEST_PROFILE_VARIABLE: "workflow"}},
+            {"env": {NEXTEST_PROFILE_VARIABLE: "ci"}},
+            {"env": {NEXTEST_PROFILE_VARIABLE: ""}},
+            "",
+            id="a-blank-step-masks-the-job",
         ),
     ],
 )
@@ -143,10 +191,15 @@ def test_the_profile_is_resolved_from_every_environment_scope(
 
     Both lanes here set the variable at job level, so against the real
     tree a reading that consulted only the job would agree with this
-    one. The scopes it never reaches are what these cases execute, and a
-    blank value is included because that is what an interpolated
-    expression writes when it resolves to nothing: read as a profile
-    name it would be a profile that cannot exist.
+    one. The scopes it never reaches are what these cases execute.
+
+    The blank cases are the ones that matter most. An interpolated
+    expression that resolves to nothing writes an empty value, and
+    GitHub takes the most specific declaration, so the step's blank is
+    what the process receives and the job's profile never reaches it.
+    A reading that fell through to the job would report the lane as
+    selecting the capped profile while nextest selected nothing, which
+    is exactly the fault this module exists to catch.
     """
     assert nextest_profile_of(document, job, step) == expected, (
         f"the profile must resolve to {expected!r} from these scopes; a "

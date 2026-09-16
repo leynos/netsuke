@@ -6753,7 +6753,7 @@ size the ceiling against the runs that never needed it.
 
 *Table: measured coverage-step and whole-job durations. The gap is the job's
 duration less its coverage steps, so it is the work the job timer bounds and
-the watchdog does not. The worst step, the worst job and the widest gap need
+the watchdog does not. The worst step, the worst job, and the widest gap need
 not fall on the same run: the `ci.yml` gap is from run 34920593696, whose
 coverage step did not run at all, and the `coverage-main.yml` gap from run
 33411190301.*
@@ -6888,10 +6888,19 @@ watchdogs, group under the one job, and fail its ceiling together where each
 alone would have passed.
 
 A watchdog value the action cannot read fails with the lane named, rather than
-raising a Python fault before any assertion runs. A blank value is treated as a
-source that says nothing and falls through, since that is what a workflow
-writes when it interpolates an expression that resolved to nothing; a zero or a
-negative one is refused, because the action reads those as no timeout at all.
+raising a Python fault before any assertion runs. A zero or a negative one is
+refused, because the action reads those as no timeout at all.
+
+A blank value is a declaration, not a silence. GitHub takes the most specific
+declaration of a variable, and an empty string is one: a step interpolating an
+expression that resolved to nothing hands the process an empty value, and the
+job's value never reaches it. So a blank at an inner scope masks the outer
+scopes rather than falling through to them, and the reader then reports what
+the consumer actually sees, which is nothing set. The earlier reading fell
+through, and that is the one reading under which a lane losing its watchdog, or
+its profile, passes: it credits the lane with a budget the `cargo` invocation
+never received. `whole_run_profile_test.py` drives that shape end to end, with
+a job selecting the capped profile and a step handing the process an empty one.
 
 The contract also pins the condition each lane carries. A skipped step runs no
 `cargo`, so its watchdog never arms and the tiers say nothing about it:

@@ -228,20 +228,21 @@ def test_an_unreadable_watchdog_names_the_lane_or_falls_through(value: str) -> N
     "blank",
     [pytest.param("", id="empty"), pytest.param("   ", id="whitespace-only")],
 )
-def test_a_blank_step_value_falls_through_to_the_scope_outside_it(
+def test_a_blank_step_value_masks_the_scope_outside_it(
     blank: str,
 ) -> None:
-    """A blank value says nothing, so the next scope decides.
+    """A declared blank is a declaration, and the innermost one wins.
 
     That is what a workflow writes when it interpolates an expression
-    that resolved to nothing, and the lane is then bounded by whatever
-    the job or the workflow set. A reading that returned None as soon as
-    the step's own value was blank would report the lane as unset and
-    apply the action's undocumented default in place of the budget the
-    job actually declares.
+    that resolved to nothing, and GitHub hands the step an empty value:
+    the job's 1,800 s never reaches the action, which falls back to its
+    own default. A reading that fell through to the job would report the
+    lane as carrying a budget the `cargo` invocation never received,
+    which is the one reading that turns a lane losing its watchdog into
+    a pass.
 
-    The earlier blank case has no outer value to fall through to, so it
-    passes against that mistaken reading as well as the right one.
+    The earlier blank case has no outer value to be masked, so it passes
+    against that mistaken reading as well as the right one.
     """
     documents = {
         "ci.yml": {
@@ -263,10 +264,11 @@ def test_a_blank_step_value_falls_through_to_the_scope_outside_it(
     }
 
     (lane,) = coverage_lanes_of(documents)
-    assert lane.watchdog == pytest.approx(1800.0), (
-        "a blank step value must fall through to the job's, not read as unset; "
-        "reading it as unset would apply the action's default instead of the "
-        "1,800 s the job declares"
+    assert lane.watchdog is None, (
+        "a blank step value must mask the job's, not fall through to it; the "
+        "action receives the blank and applies its own default, so reporting "
+        "the 1,800 s the job declares would credit the lane with a budget "
+        "nothing ever set"
     )
 
 
