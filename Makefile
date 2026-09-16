@@ -45,24 +45,44 @@ KANI_FLAGS ?=
 KANI_INSTALL_FLAGS ?=
 KANI_CHECK_FLAGS ?=
 KANI_VERSION_FILE ?= tools/kani/VERSION
-# Opt-in local build acceleration. The Cargo fragment is deliberately kept out
-# of an auto-discovered `.cargo/config.toml`, because Cranelift and mold must
-# stay opt-in so release, packaging, coverage, and formal-verification paths
-# keep the supported LLVM backend and platform linker. The toolchain is not
-# pinned separately — dev-fast uses the repository's own nightly.
+# The development build standard: the Cranelift codegen backend, the `mold`
+# linker, and the parallel `rustc` frontend are the defaults for development,
+# test, lint, and typecheck builds. `.cargo/config.toml` carries them so a bare
+# `cargo` invocation gets them too; release and coverage builds are excluded
+# there and below. The toolchain is not pinned separately — the standard uses
+# the repository's own nightly from `rust-toolchain.toml`.
 MOLD_VERSION_FILE ?= tools/mold/VERSION
 MOLD_SHA256SUMS_FILE ?= tools/mold/SHA256SUMS
-DEV_FAST_CONFIG ?= tools/dev-fast/config.toml
-# Preserve the raw override before export: otherwise Make expands a caller's
-# literal dollar signs while preparing the environment for the recipe shell.
-override DEV_FAST_CONFIG := $(value DEV_FAST_CONFIG)
 DEV_FAST_PREFIX ?= $(HOME)/.local
 # Exported rather than interpolated into the recipes. Make hands an exported
 # variable to the child process directly, so a path containing a quote cannot
 # break the command line the shell parses; a `VAR='$(VAR)'` prefix could.
 export MOLD_VERSION_FILE MOLD_SHA256SUMS_FILE
-export DEV_FAST_CONFIG DEV_FAST_PREFIX
-DEV_FAST_TOOLCHAIN = $$(awk -F'"' '/^[[:space:]]*channel[[:space:]]*=/ { print $$2; exit }' "$$RUST_TOOLCHAIN_FILE")
+export DEV_FAST_PREFIX
+
+# Cargo picks a single `rustflags` source rather than merging them, and an
+# externally set `RUSTFLAGS` outranks every `rustflags` table in
+# `.cargo/config.toml`. Every gate target below sets `RUSTFLAGS` to deny
+# warnings, and CI's `setup-rust` exports the same value for a whole job, so
+# without restating the flags here the gates would silently fall back to the
+# platform linker and a single-threaded frontend while still reporting success.
+# tests/workflow_contracts/dev_fast_rustflags_test.py holds this variable equal
+# to the configuration file; changing one without the other fails that test.
+DEV_FAST_THREADS_FLAG ?= -Zthreads=8
+DEV_FAST_MOLD_FLAG ?= -Clink-arg=-fuse-ld=mold
+# `mold` ships for Linux only. macOS and Windows keep their platform linker,
+# matching the `cfg(target_os = "linux")` gate in `.cargo/config.toml`.
+DEV_FAST_HOST_OS := $(shell uname -s)
+DEV_FAST_RUSTFLAGS = $(DEV_FAST_THREADS_FLAG)$(if $(filter Linux,$(DEV_FAST_HOST_OS)), $(DEV_FAST_MOLD_FLAG))
+# Warnings-as-errors plus the standard, appended to whatever the caller set.
+GATE_RUSTFLAGS = RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(DEV_FAST_RUSTFLAGS)"
+# A debug build that keeps the caller's warning policy rather than imposing one.
+DEBUG_RUSTFLAGS = RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }$(DEV_FAST_RUSTFLAGS)"
+# Release builds take neither the parallel frontend nor `mold`: assigning
+# `RUSTFLAGS` at all, even to an empty inherited value, displaces the
+# configuration file's `rustflags` tables, which is the whole mechanism. The
+# backend is held to LLVM by `[profile.release]` in `.cargo/config.toml`.
+RELEASE_RUSTFLAGS = RUSTFLAGS="$${RUSTFLAGS-}"
 # Command name, resolved by the recipe shell from the curated PATH, which
 # carries `$HOME/.bun/bin` where the global markdownlint install lands.
 MDLINT ?= markdownlint-cli2
@@ -185,10 +205,13 @@ VERUS_FLAGS ?=
 VERUS_INSTALL_FLAGS ?=
 WHITAKER ?= whitaker
 
+# The dev-fast install prefix leads: `-fuse-ld=mold` resolves by PATH order, so
+# the pinned release must outrank any distribution `mold`. Every build target
+# now links with it, so this is global rather than target-specific.
 # GO_BIN is appended after the three fixed directories so a tool present in
 # more than one location keeps its current precedence; CI's explicit
 # `ACTIONLINT=` override still wins over all of them.
-export PATH := $(HOME)/.cargo/bin:$(HOME)/.local/bin:$(HOME)/.bun/bin:$(GO_BIN):$(PATH)
+export PATH := $(DEV_FAST_PREFIX)/bin:$(HOME)/.cargo/bin:$(HOME)/.local/bin:$(HOME)/.bun/bin:$(GO_BIN):$(PATH)
 
 build: target/debug/$(APP) ## Build debug binary
 release: target/release/$(APP) ## Build release binary
@@ -200,11 +223,11 @@ clean: ## Remove build artefacts
 
 test: test-nextest doctest ## Run every Rust test with warnings treated as errors
 
-test-nextest: ## Run all non-doctest Rust tests through cargo-nextest
-	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) nextest run --workspace --all-targets --all-features $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
+test-nextest: dev-fast-check ## Run all non-doctest Rust tests through cargo-nextest
+	$(GATE_RUSTFLAGS) $(CARGO) nextest run --workspace --all-targets --all-features $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
 
-doctest: ## Run doctests, which cargo-nextest cannot execute
-	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) test --workspace --doc --all-features $(BUILD_JOBS)
+doctest: dev-fast-check ## Run doctests, which cargo-nextest cannot execute
+	$(GATE_RUSTFLAGS) $(CARGO) test --workspace --doc --all-features $(BUILD_JOBS)
 
 test-workflow-contracts: ## Validate GitHub Actions workflow contracts
 	$(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) --with 'pytest>=8' --with 'pyyaml>=6' --with 'hypothesis>=6' --with 'cmd-mox==0.2.0' pytest tests/workflow_contracts -q --doctest-modules
@@ -228,8 +251,14 @@ test-coverage-artifact: ## Test hostile LCOV artefact validation
 		scripts/tests/test_validate_coverage_archive.py -c /dev/null --rootdir=. \
 		-p no:cacheprovider
 
-target/%/$(APP): ## Build binary in debug or release mode
-	$(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP)
+# Split rather than a single `target/%/$(APP)` pattern: the two profiles no
+# longer share a command line. The debug build takes the standard; the release
+# build is one of the two exclusions.
+target/debug/$(APP): | dev-fast-check ## Build the debug binary
+	$(DEBUG_RUSTFLAGS) $(CARGO) build $(BUILD_JOBS) --bin $(APP)
+
+target/release/$(APP): ## Build the release binary on the LLVM backend
+	$(RELEASE_RUSTFLAGS) $(CARGO) build $(BUILD_JOBS) --release --bin $(APP)
 
 lint: lint-clippy lint-whitaker lint-python github-actions-lint ## Run the Rust, Python, and GitHub Actions lint suites with warnings denied
 
@@ -253,15 +282,15 @@ lint-workflow-scripts: ## Load every trusted workflow module under the Python ba
 			"$$module" || { echo "$$module does not load under Python $(PYTHON_BASELINE)" >&2; exit 1; }; \
 	done
 
-lint-clippy: ## Run rustdoc and Clippy with warnings denied
-	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) doc --workspace --no-deps
-	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) clippy $(CLIPPY_FLAGS)
+lint-clippy: dev-fast-check ## Run rustdoc and Clippy with warnings denied
+	$(GATE_RUSTFLAGS) $(CARGO) doc --workspace --no-deps
+	$(GATE_RUSTFLAGS) $(CARGO) clippy $(CLIPPY_FLAGS)
 
-lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
-	DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(WHITAKER) --all --no-deps --package netsuke-build -- --all-targets --all-features
+lint-whitaker: dev-fast-check ## Run the Whitaker Dylint suite with warnings denied
+	DYLINT_TOML="$$(cat dylint.toml)" $(GATE_RUSTFLAGS) $(WHITAKER) --all --no-deps --package netsuke-build -- --all-targets --all-features
 	# Run from the crate directory as well so Whitaker loads the narrow
 	# `test_support::fs` exemption from test_support/dylint.toml.
-	cd test_support && DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(WHITAKER) --all --no-deps --package test_support -- --all-targets --all-features
+	cd test_support && DYLINT_TOML="$$(cat dylint.toml)" $(GATE_RUSTFLAGS) $(WHITAKER) --all --no-deps --package test_support -- --all-targets --all-features
 
 # actionlint is resolved in the recipe shell below, never while Make parses the
 # file: only the recipe shell receives the curated PATH, so a parse-time probe
@@ -313,8 +342,8 @@ check-fmt: ## Verify formatting
 	$(RUFF) format --check $(PYTHON_SOURCES)
 	$(MDTABLEFIX) --check $(MDTABLEFIX_SELECT) $(MDTABLEFIX_RULES)
 
-typecheck: typecheck-python ## Typecheck all targets and features
-	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) check --all-targets --all-features $(BUILD_JOBS)
+typecheck: typecheck-python dev-fast-check ## Typecheck all targets and features
+	$(GATE_RUSTFLAGS) $(CARGO) check --all-targets --all-features $(BUILD_JOBS)
 
 typecheck-python: ## Typecheck the Python sources with ty
 	# `uv tool run` materialises one venv holding ty plus the test-suite
@@ -373,21 +402,12 @@ install-dev-fast: ## Install the pinned mold linker and Cranelift backend
 dev-fast-check: ## Check the mold and Cranelift local build prerequisites
 	@scripts/dev-fast-check.sh
 
-# Every dev-fast target needs the install prefix ahead of a distribution mold:
-# the check probes PATH for it, and `-fuse-ld=mold` resolves by PATH order.
-# Target-specific exports do not reach prerequisites, so `dev-fast-check` is
-# listed in its own right as well as being a prerequisite of the others.
-DEV_FAST_TARGETS = install-dev-fast dev-fast-check dev-build dev-test bench-build
-$(DEV_FAST_TARGETS): export PATH := $(DEV_FAST_PREFIX)/bin:$(PATH)
+dev-build: build ## Deprecated alias for `make build`
+dev-test: test-nextest ## Deprecated alias for `make test-nextest`
 
-dev-build: dev-fast-check ## Build the debug binary with Cranelift and mold
-	RUSTUP_TOOLCHAIN=$(DEV_FAST_TOOLCHAIN) $(CARGO) $(CARGO_LOCKED) --config "$$DEV_FAST_CONFIG" build $(BUILD_JOBS) --bin $(APP)
-
-dev-test: dev-fast-check ## Run the nextest pass with Cranelift and mold
-	RUSTUP_TOOLCHAIN=$(DEV_FAST_TOOLCHAIN) $(CARGO) --config "$$DEV_FAST_CONFIG" nextest run $(CARGO_LOCKED) --workspace --all-targets --all-features $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
-
-bench-build: dev-fast-check ## Time clean and incremental debug builds for both paths
-	@CARGO="$(CARGO)" scripts/bench-build.sh
+bench-build: dev-fast-check ## Time clean and incremental debug builds for all three paths
+	@CARGO="$(CARGO)" DEV_FAST_THREADS_FLAG="$(DEV_FAST_THREADS_FLAG)" \
+		DEV_FAST_MOLD_FLAG="$(DEV_FAST_MOLD_FLAG)" scripts/bench-build.sh
 
 bench-config-load: ## Benchmark cached configuration loading without layer copies
 	$(CARGO) bench --bench config_load_cached_merge

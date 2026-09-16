@@ -32,13 +32,12 @@ const DENY_WARNINGS_RUSTFLAGS: &str = "-D warnings";
 
 /// Build-configuration surfaces that could reintroduce the retired directive.
 ///
-/// `.cargo/config.toml` is listed even though it no longer exists: it is the
-/// path Cargo auto-discovers, so recreating it to carry the flag is the most
-/// likely regression and a missing file is simply skipped.
-const BUILD_CONFIGURATION_FILES: [&str; 8] = [
+/// `.cargo/config.toml` is the path Cargo auto-discovers, so it is the surface
+/// on which the directive would reach every build at once; a missing file is
+/// simply skipped.
+const BUILD_CONFIGURATION_FILES: [&str; 7] = [
     "Makefile",
     ".cargo/config.toml",
-    "tools/dev-fast/config.toml",
     "scripts/dev-fast-common.sh",
     ".github/workflows/ci.yml",
     ".github/workflows/netsukefile-test.yml",
