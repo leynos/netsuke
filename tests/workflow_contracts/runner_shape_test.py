@@ -11,8 +11,9 @@ Run via ``make test-workflow-contracts``.
 
 import pytest
 import yaml
-from fork_fallback import owned_runner
+from fork_fallback import owned_runner, read_placement
 from runner_placement_invariants import (
+    GITHUB_HOSTED_LABELS,
     INSTRUMENTED_BUILD_JOBS,
     LANE_VCPUS,
     UBICLOUD_DEFAULT_LABEL,
@@ -37,12 +38,103 @@ def _workflow_env(workflow: dict[str, object]) -> dict[str, object]:
     return require_mapping(workflow.get("env", {}), "the workflow env")
 
 
-def _all_workflow_text() -> str:
-    """Return every workflow file's text, concatenated."""
-    return "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in sorted([*WORKFLOW_DIR.glob("*.yml"), *WORKFLOW_DIR.glob("*.yaml")])
-    )
+def _all_jobs() -> list[tuple[str, str, dict[str, object]]]:
+    """Return every job in every workflow, with the file that declares it.
+
+    Returns
+    -------
+    list of tuple
+        Workflow file name, job identifier and the job's mapping.
+    """
+    found: list[tuple[str, str, dict[str, object]]] = []
+    for path in sorted([*WORKFLOW_DIR.glob("*.yml"), *WORKFLOW_DIR.glob("*.yaml")]):
+        jobs = load_workflow(path).get("jobs")
+        if not isinstance(jobs, dict):
+            continue
+        found.extend(
+            (path.name, str(job_name), job)
+            for job_name, job in jobs.items()
+            if isinstance(job, dict)
+        )
+    return found
+
+
+def is_self_hosted_label(label: str) -> bool:
+    """Return whether a label names a runner GitHub does not host.
+
+    By name, not by prefix. A prefix test absorbs any new label that looks
+    hosted, so a lane moved onto an unknown image would drop out of "in use"
+    and its registration would go unnoticed.
+
+    Returns
+    -------
+    bool
+        True when the label is not one of GitHub's own.
+    """
+    return label not in GITHUB_HOSTED_LABELS
+
+
+def _selected_labels(declaration: object) -> list[str]:
+    """Return the labels one `runs-on` value can select.
+
+    Both arms of a conditional count: a job that falls back for forks may run
+    on either, and reading only the declaration would take the whole
+    expression for one unrecognized label.
+
+    Returns
+    -------
+    list[str]
+        Every label the value can select, empty when it names none.
+    """
+    placement = read_placement(declaration)
+    if placement is not None:
+        return [placement.fork, placement.owned]
+    match declaration:
+        case str() as label:
+            return [label]
+        case list() as entries:
+            return [str(entry) for entry in entries]
+        case _:
+            return []
+
+
+def _matrix_runners(job: dict[str, object]) -> set[str]:
+    """Return every runner a job's matrix selects through a `runner` entry.
+
+    The macOS lanes choose their image this way, and a label smuggled into a
+    matrix is still a label in use.
+
+    Returns
+    -------
+    set[str]
+        The runner values the matrix includes, empty when it declares none.
+    """
+    strategy = job.get("strategy")
+    matrix = strategy.get("matrix") if isinstance(strategy, dict) else None
+    includes = (matrix or {}).get("include") or []
+    return {
+        str(item["runner"])
+        for item in includes
+        if isinstance(item, dict) and "runner" in item
+    }
+
+
+def _self_hosted_labels_in_use() -> set[str]:
+    """Return every label the workflows select that GitHub does not host.
+
+    A matrix `runner` value counts too, because the macOS lanes select their
+    image that way and a label smuggled into a matrix is still one in use.
+
+    Returns
+    -------
+    set[str]
+        The self-hosted labels the workflows select.
+    """
+    found: set[str] = set()
+    for _, _, job in _all_jobs():
+        found.update(_selected_labels(job.get("runs-on")))
+        found.update(_matrix_runners(job))
+    return {label for label in found if is_self_hosted_label(label)}
 
 
 UBICLOUD_WORKER_BOUNDS = (
@@ -174,10 +266,19 @@ def test_windows_lane_names_its_vcpu_count_once() -> None:
 
 
 def test_actionlint_registers_exactly_the_ubicloud_labels_in_use() -> None:
-    """Register every intentional Ubicloud label, and nothing else.
+    """Register every self-hosted label in use, and nothing else.
 
-    actionlint rejects an unregistered self-hosted label, so a typo or an
-    unreviewed shape fails the lint gate instead of queueing forever.
+    Equality in both directions. actionlint rejects an unregistered
+    self-hosted label, so a typo or an unreviewed shape fails the lint gate
+    instead of queueing forever; and a registration left behind after a lane
+    moved back to GitHub's pool hides a runner assignment already retired.
+
+    "In use" is derived from the workflows rather than read from the reviewed
+    constant, and the two are compared separately, so a lane that quietly
+    stops using a shape fails rather than agreeing with a constant nobody
+    revisited. The previous form asked only whether each registered label
+    appeared anywhere in the concatenated workflow text, which a mention in a
+    comment satisfies.
     """
     config = yaml.safe_load(
         (REPO_ROOT / ".github" / "actionlint.yaml").read_text(encoding="utf-8")
@@ -190,12 +291,17 @@ def test_actionlint_registers_exactly_the_ubicloud_labels_in_use() -> None:
             "self-hosted-runner labels",
         )
     )
-    assert sorted(labels) == sorted(UBICLOUD_LABELS), (
-        f"actionlint must register exactly {UBICLOUD_LABELS!r}, got {labels!r}"
+    in_use = _self_hosted_labels_in_use()
+    assert sorted(labels) == sorted(in_use), (
+        f"actionlint must register exactly the self-hosted labels the "
+        f"workflows select. It registers {sorted(labels)!r} and they select "
+        f"{sorted(in_use)!r}"
     )
-    workflow_text = _all_workflow_text()
-    for label in labels:
-        assert label in workflow_text, f"{label} is registered but never used"
+    assert sorted(in_use) == sorted(UBICLOUD_LABELS), (
+        f"the reviewed label set and the labels in use have diverged: "
+        f"{sorted(UBICLOUD_LABELS)!r} against {sorted(in_use)!r}. A shape "
+        f"change belongs in both, with the measurement that justifies it"
+    )
 
 
 @pytest.mark.parametrize(("workflow_name", "job_name"), INSTRUMENTED_BUILD_JOBS)
@@ -249,4 +355,34 @@ def test_both_instrumented_jobs_share_one_lane_size() -> None:
     }
     assert len(set(sizes.values())) == 1, (
         f"the instrumented jobs must share one lane size, got {sizes!r}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("label", "self_hosted"),
+    [
+        pytest.param("ubicloud-standard-2-ubuntu-2404", True, id="a-label-in-use"),
+        pytest.param("ubuntu-latest", False, id="a-named-hosted-label"),
+        pytest.param("macos-15-intel", False, id="another-named-one"),
+        # The case that separates a named set from a prefix test: a hosted
+        # family, a label this repository does not use, and one that must
+        # therefore be reported rather than silently excused.
+        pytest.param("ubuntu-20.04", True, id="a-hosted-family-member-not-named"),
+        pytest.param(
+            "${{ inputs.runner }}",
+            False,
+            id="a-caller-supplied-runner-names-no-label-here",
+        ),
+    ],
+)
+def test_the_registry_reads_hosted_labels_by_name(
+    label: str, *, self_hosted: bool
+) -> None:
+    """The registry question asks by name, and the two readings differ.
+
+    Over this repository's own workflows a prefix test and the named set agree
+    exactly, so the derivation above cannot tell them apart. These cases can.
+    """
+    assert is_self_hosted_label(label) is self_hosted, (
+        f"`{label}` must be classified by name for the registry question"
     )

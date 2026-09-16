@@ -44,6 +44,27 @@ INSTRUMENTED_BUILD_JOBS = (
 UBICLOUD_LARGE_LABEL = "ubicloud-standard-4-ubuntu-2404"
 #: The deliberate Ubuntu 22.04 compatibility lane.
 UBICLOUD_COMPAT_LABEL = "ubicloud-standard-2-ubuntu-2204"
+#: The runner labels GitHub hosts, written out rather than matched by prefix.
+#:
+#: The registry question needs an exact set. A prefix test absorbs any new
+#: label that looks hosted, so a lane moved onto an unknown image would drop
+#: out of "in use" and its registration would go unnoticed. A name added here
+#: is a deliberate statement that GitHub hosts it.
+#:
+#: `${{ inputs.runner }}` is here because a reusable workflow's caller chooses
+#: the runner, so the callee names no label of its own. Its callers are in the
+#: table above and are checked there.
+GITHUB_HOSTED_LABELS = (
+    "ubuntu-latest",
+    "ubuntu-24.04",
+    "ubuntu-22.04",
+    "windows-latest",
+    "macos-latest",
+    "macos-15",
+    "macos-15-intel",
+    CALLER_SELECTED_RUNNER,
+)
+
 UBICLOUD_LABELS = (
     UBICLOUD_DEFAULT_LABEL,
     UBICLOUD_LARGE_LABEL,
