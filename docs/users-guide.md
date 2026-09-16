@@ -1760,6 +1760,8 @@ NETSUKE_ENV_BLOCK_VAR='["AWS_SECRET_ACCESS_KEY","GITHUB_TOKEN"]'
 
 CLI flags take one exact name and may be repeated:
 
+<!-- tested-example: guide-manifest-environment-policy-cli -->
+
 ```sh
 netsuke --env-allow-var CI --env-allow-var PACKAGE_REGISTRY_TOKEN \
     --env-block-var AWS_SECRET_ACCESS_KEY --env-block-var GITHUB_TOKEN
