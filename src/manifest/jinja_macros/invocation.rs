@@ -229,14 +229,12 @@ mod tests {
         );
     }
 
-    #[test]
-    fn compiled_expression_invokes_macro_fallback() {
+    /// Render a greet macro expression using the test-only fallback setup.
+    fn render_compiled_greet_expression(template: &str, source: &str) -> String {
         let mut env = Environment::new();
-        env.add_template(
-            "macro-template",
-            "{% macro greet(name) %}Hello {{ name }}{% endmacro %}",
-        )
-        .expect("macro fixture template should compile");
+        if let Err(error) = env.add_template("macro-template", template) {
+            panic!("macro fixture template should compile: {error}");
+        }
         env.add_function(
             "greet",
             make_macro_fn(
@@ -246,14 +244,24 @@ mod tests {
             ),
         );
 
-        let expression = env
-            .compile_expression("greet('Ada')")
-            .expect("macro expression should compile");
-        let rendered = expression
-            .eval(())
-            .expect("compiled expression should invoke the macro fallback");
+        let expression = match env.compile_expression(source) {
+            Ok(expression) => expression,
+            Err(error) => panic!("macro expression should compile: {error}"),
+        };
+        match expression.eval(()) {
+            Ok(rendered) => rendered.to_string(),
+            Err(error) => panic!("compiled expression should invoke the macro fallback: {error}"),
+        }
+    }
 
-        assert_eq!(rendered.to_string(), "Hello Ada");
+    #[test]
+    fn compiled_expression_invokes_macro_fallback() {
+        let rendered = render_compiled_greet_expression(
+            "{% macro greet(name) %}Hello {{ name }}{% endmacro %}",
+            "greet('Ada')",
+        );
+
+        assert_eq!(rendered, "Hello Ada");
     }
 
     /// Keyword arguments must survive [`collect_kwargs`] and override the
@@ -263,28 +271,10 @@ mod tests {
     /// `crate::manifest::tests::macros::register_macro_handles_arguments`.
     #[test]
     fn compiled_expression_passes_keyword_arguments_over_defaults() {
-        let mut env = Environment::new();
-        env.add_template(
-            "macro-template",
+        let rendered = render_compiled_greet_expression(
             "{% macro greet(name='World') %}Hello {{ name }}{% endmacro %}",
-        )
-        .expect("macro fixture template should compile");
-        env.add_function(
-            "greet",
-            make_macro_fn(
-                "macro-template".to_owned(),
-                "greet".to_owned(),
-                ManifestBudget::default(),
-            ),
+            "greet(name='Ada')",
         );
-
-        let expression = env
-            .compile_expression("greet(name='Ada')")
-            .expect("macro expression should compile");
-        let rendered = expression
-            .eval(())
-            .expect("compiled expression should forward keyword arguments")
-            .to_string();
 
         assert_eq!(
             rendered, "Hello Ada",
