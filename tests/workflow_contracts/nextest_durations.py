@@ -329,18 +329,20 @@ class _Total:
         not fit is refused here rather than accumulated.
         """
         nanos = _u64(duration, self.nanoseconds + nanoseconds)
-        carried = seconds
-        if nanos > _SECOND:
-            carried = _u64(duration, carried + nanos // _SECOND)
-            nanos %= _SECOND
-        running = _u64(duration, self.seconds + carried)
-        # humantime normalizes on a strict `>`, so a nanosecond part of
-        # exactly one second reaches `Duration::new`, which carries it
-        # and aborts the process rather than returning an error when
-        # that carry overflows. nextest cannot run either way, so the
-        # refusal here is the same. This is why `0.5s 0.5s` is one
-        # second while `18446744073709551615s 500ms 500ms` is refused:
-        # one mechanism, two answers.
+        running = _u64(duration, self.seconds + seconds)
+        # humantime carries in two places, not one. Its parser
+        # normalizes on a strict `>`, so a nanosecond part of exactly
+        # one second survives the loop untouched and reaches
+        # `Duration::new`, which carries it on `>=` and aborts the
+        # process rather than erroring when that carry overflows.
+        # nextest cannot run either way, so a refusal here answers
+        # both. The two were written out separately here at first and
+        # the strict one proved unreachable: collapsing them changed
+        # no answer over the differential's seventy-one inputs, and an
+        # unfalsifiable guard is worse than none. This single `>=` is
+        # what the evidence supports, and it is what makes
+        # `0.5s 0.5s` one second while
+        # `18446744073709551615s 500ms 500ms` is refused.
         if nanos >= _SECOND:
             running = _u64(duration, running + nanos // _SECOND)
             nanos %= _SECOND

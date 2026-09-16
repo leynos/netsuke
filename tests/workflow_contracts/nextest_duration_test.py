@@ -333,6 +333,16 @@ def test_a_duration_outside_humantimes_range_is_refused(duration: str) -> None:
         pytest.param("1.0000000000000000000s", 1.0, id="a-denominator-that-fits"),
         pytest.param("307445734561825860m", 18446744073709551600.0, id="minutes-at-it"),
         pytest.param("584542046090y", 18446744073689784000.0, id="years-near-it"),
+        pytest.param(
+            "18446744073709551615ns 1ns",
+            18446744073.709551616,
+            id="a-nanosecond-maximum-then-one-more",
+        ),
+        pytest.param(
+            "18446744073709551614s 1000000000ns 1ns",
+            18446744073709551615.000000001,
+            id="three-parts-where-the-middle-one-carries",
+        ),
     ],
 )
 def test_a_duration_at_humantimes_limit_is_read(duration: str, expected: float) -> None:
@@ -345,6 +355,14 @@ def test_a_duration_at_humantimes_limit_is_read(duration: str, expected: float) 
     ``18446744073709551615s 500ms 500ms`` is refused, and a reader made
     strict enough to refuse the second by refusing every carry fails
     the first. Both are here for that reason.
+
+    The last two pin the order the parts are summed in.
+    ``18446744073709551615ns 1ns`` is read only because the first part
+    is carried into seconds before the second arrives: taken the other
+    way round the nanosecond accumulator overflows and the whole
+    duration is refused, which is a refusal of a configuration nextest
+    would have run. It is the one input of the seventy-one that tells
+    the two orders apart.
     """
     assert seconds(duration) == pytest.approx(expected), (
         f"{duration!r} is inside humantime's range and must still be read"
