@@ -116,7 +116,7 @@ env_block_var = ["PROJECT_BLOCKED"]
     .context("write project environment policy")?;
 
     let merged = merge_in_project(
-        &["netsuke"],
+        &["netsuke", "--env-allow-var", "PROJECT_BLOCKED"],
         temp_project.path(),
         &[(
             OsString::from("NETSUKE_ENV_ALLOW_VAR"),
@@ -125,7 +125,7 @@ env_block_var = ["PROJECT_BLOCKED"]
     )?;
 
     ensure!(
-        merged.env_allow_var == ["OPERATOR_ALLOWED"],
+        merged.env_allow_var == ["OPERATOR_ALLOWED", "PROJECT_BLOCKED"],
         "project configuration must not widen the environment allowlist"
     );
     ensure!(
@@ -147,7 +147,7 @@ env_block_var = ["PROJECT_BLOCKED"]
             .env_access_policy()
             .evaluate("PROJECT_BLOCKED")
             .is_err(),
-        "project blocklist entry should remain cumulative"
+        "project blocklist entry should override an operator allowlist entry"
     );
     Ok(())
 }
