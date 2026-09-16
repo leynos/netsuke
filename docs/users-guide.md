@@ -1751,6 +1751,8 @@ env_block_var = ["AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN"]
 The environment equivalents contain serialized JSON arrays, rather than bare
 variable names:
 
+<!-- tested-example: guide-manifest-environment-policy-env -->
+
 ```sh
 NETSUKE_ENV_ALLOW_VAR='["CI","PACKAGE_REGISTRY_TOKEN"]'
 NETSUKE_ENV_BLOCK_VAR='["AWS_SECRET_ACCESS_KEY","GITHUB_TOKEN"]'
