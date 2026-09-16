@@ -1,8 +1,7 @@
 """Adapt Cargo and Rustdoc commands for the documentation-coverage gate.
 
-This module owns process invocation and Rustdoc's generated coverage artefact.
-``doc_coverage_runner`` owns repository policy and target selection, while the
-command-line entry point owns argument parsing, reporting, and exit codes.
+This module owns process invocation and Rustdoc coverage artefacts; the runner owns
+policy and target selection, while the CLI owns parsing, reporting, and exit codes.
 """
 
 import dataclasses as dc
@@ -21,6 +20,11 @@ class CargoAdapter:
     """Adapt one explicit Cargo executable to coverage measurements.
 
     This interface enables subprocess-free target selection and aggregation.
+
+    Parameters
+    ----------
+    executable : str
+        Explicit Cargo executable used for adapter subprocesses.
     """
 
     executable: str
@@ -170,11 +174,8 @@ def aggregate_coverage_payload(per_file: object) -> Coverage:
     Raises
     ------
     CoveragePayloadShapeError
-        If Rustdoc's payload is not an object.
-
-    Notes
-    -----
-    Entry shape and count errors propagate from :func:`coverage_from_entry`.
+        If Rustdoc's payload is not an object. Entry shape and count errors
+        propagate from :func:`coverage_from_entry`.
     """
     match per_file:
         case dict() as entries:
@@ -204,8 +205,7 @@ def coverage_from_entry(entry: object) -> Coverage:
     CoverageEntryShapeError
         If the entry is not an object carrying both required counts.
     CoverageCountError
-        If a count is not a non-negative integer, or documented items exceed
-        total items.
+        If a count is invalid or documented items exceed the total.
     """
     match entry:
         case {"total": raw_total, "with_docs": raw_with_docs}:
@@ -234,8 +234,7 @@ def coverage_count(count: object) -> int:
     Raises
     ------
     CoverageCountError
-        If the value is not an integer count, including JSON booleans and
-        non-finite floats, or if it is negative.
+        If the value is invalid, negative, non-finite, or a JSON boolean.
     """
     match count:
         # JSON booleans decode to ``bool``, which is an ``int`` subclass, so
