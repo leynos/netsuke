@@ -20,8 +20,7 @@ _COUNT_INVARIANT = "counts must be non-negative integers with with_docs <= total
 class CargoAdapter:
     """Adapt one explicit Cargo executable to coverage measurements.
 
-    The runner depends on this narrow interface instead of process globals, so
-    its target selection and aggregation can be tested without subprocesses.
+    This interface enables subprocess-free target selection and aggregation.
     """
 
     executable: str
@@ -67,11 +66,14 @@ class CoverageOutputError(RuntimeError):
     """Report that Rustdoc produced no usable coverage JSON for a target."""
 
     def __init__(self, target: DocTarget, detail: str) -> None:
-        """Parameters
+        """Initialise the error with the affected target and diagnostic detail.
 
+        Parameters
         ----------
-        target : Cargo target with no coverage JSON.
-        detail : Diagnostic detail explaining its absence.
+        target : DocTarget
+            Cargo target for which Rustdoc emitted no coverage JSON.
+        detail : str
+            Diagnostic detail explaining why coverage JSON was unavailable.
         """
         super().__init__(
             f"cargo rustdoc for {target.package} {target.kind}"
@@ -172,9 +174,7 @@ def aggregate_coverage_payload(per_file: object) -> Coverage:
 
     Notes
     -----
-    Per-entry validation is delegated to :func:`coverage_from_entry`, so
-    :class:`CoverageEntryShapeError` and :class:`CoverageCountError` propagate
-    from here whenever an entry violates a coverage-count invariant.
+    Entry shape and count errors propagate from :func:`coverage_from_entry`.
     """
     match per_file:
         case dict() as entries:
