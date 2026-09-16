@@ -6,8 +6,6 @@
 
 use std::collections::BTreeSet;
 
-use crate::localization::{self, LocalizedMessage, keys};
-
 /// Declarative allow- and block-list policy for manifest environment access.
 ///
 /// An empty allowlist is permissive for backwards compatibility. Adding an
@@ -36,7 +34,7 @@ impl EnvAccessPolicy {
     /// Append one exact variable name to the allowlist.
     #[must_use]
     pub fn allow_var(mut self, name: impl Into<String>) -> Self {
-        self.allowed_vars.insert(name.into());
+        self.allowed_vars.insert(normalize_name(&name.into()));
         self
     }
 
@@ -47,14 +45,16 @@ impl EnvAccessPolicy {
         I: IntoIterator<Item = S>,
         S: Into<String>,
     {
-        self.allowed_vars.extend(names.into_iter().map(Into::into));
+        for name in names {
+            self.allowed_vars.insert(normalize_name(&name.into()));
+        }
         self
     }
 
     /// Append one exact variable name to the blocklist.
     #[must_use]
     pub fn block_var(mut self, name: impl Into<String>) -> Self {
-        self.blocked_vars.insert(name.into());
+        self.blocked_vars.insert(normalize_name(&name.into()));
         self
     }
 
@@ -65,17 +65,20 @@ impl EnvAccessPolicy {
         I: IntoIterator<Item = S>,
         S: Into<String>,
     {
-        self.blocked_vars.extend(names.into_iter().map(Into::into));
+        for name in names {
+            self.blocked_vars.insert(normalize_name(&name.into()));
+        }
         self
     }
 
     /// Return whether a block rule or active allowlist denies `name`.
     fn name_is_blocked(&self, name: &str) -> bool {
-        if self.blocked_vars.contains(name) {
+        let normalized_name = normalize_name(name);
+        if self.blocked_vars.contains(&normalized_name) {
             return true;
         }
 
-        self.active_allowlist_rejects(name)
+        self.active_allowlist_rejects(&normalized_name)
     }
 
     /// Return whether an active allowlist excludes `name`.
@@ -95,9 +98,7 @@ impl EnvAccessPolicy {
     /// absent from an active allowlist.
     pub fn evaluate(&self, name: &str) -> Result<(), EnvPolicyViolation> {
         if self.name_is_blocked(name) {
-            return Err(EnvPolicyViolation::Blocked {
-                message: localization::message(keys::MANIFEST_ENV_BLOCKED),
-            });
+            return Err(EnvPolicyViolation::Blocked);
         }
 
         Ok(())
@@ -108,11 +109,20 @@ impl EnvAccessPolicy {
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum EnvPolicyViolation {
     /// The variable name is blocked by a block rule or an active allowlist.
-    #[error("{message}")]
-    Blocked {
-        /// Fixed localized diagnostic that deliberately omits the variable name.
-        message: LocalizedMessage,
-    },
+    #[error("environment access is blocked")]
+    Blocked,
+}
+
+/// Normalize a variable name to the platform's environment lookup semantics.
+///
+/// Windows resolves environment variable names without regard to case. Other
+/// supported platforms preserve case, so their policy matching remains exact.
+fn normalize_name(name: &str) -> String {
+    if cfg!(windows) {
+        name.to_uppercase()
+    } else {
+        name.to_owned()
+    }
 }
 
 #[cfg(test)]

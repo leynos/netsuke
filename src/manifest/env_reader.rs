@@ -10,7 +10,7 @@ use mockable::{DefaultEnv, Env};
 
 use crate::localization::{self, keys};
 
-use super::{EnvAccessPolicy, EnvPolicyViolation};
+use super::EnvAccessPolicy;
 
 /// Manifest-owned failure returned by an [`EnvReader`].
 ///
@@ -127,9 +127,12 @@ pub(super) fn env_var_with(
     policy: &EnvAccessPolicy,
     read_env: impl FnOnce(&str) -> Result<String, EnvReadError>,
 ) -> Result<String, Error> {
-    if let Err(EnvPolicyViolation::Blocked { message }) = policy.evaluate(name) {
+    if policy.evaluate(name).is_err() {
         tracing::debug!(failure_kind = "blocked", "manifest env lookup failed");
-        return Err(Error::new(ErrorKind::InvalidOperation, message.to_string()));
+        return Err(Error::new(
+            ErrorKind::InvalidOperation,
+            localization::message(keys::MANIFEST_ENV_BLOCKED).to_string(),
+        ));
     }
 
     match read_env(name) {

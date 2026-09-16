@@ -27,7 +27,7 @@ fn allowlist_restricts_names() {
     assert!(
         matches!(
             policy.evaluate("UNLISTED"),
-            Err(EnvPolicyViolation::Blocked { .. })
+            Err(EnvPolicyViolation::Blocked)
         ),
         "an unlisted name must be blocked once default-deny is active"
     );
@@ -42,7 +42,7 @@ fn blocklist_without_allowlist_blocks_only_matching_name() {
     assert!(
         matches!(
             policy.evaluate("GITHUB_TOKEN"),
-            Err(EnvPolicyViolation::Blocked { .. })
+            Err(EnvPolicyViolation::Blocked)
         ),
         "a blocklisted name must be blocked"
     );
@@ -62,8 +62,25 @@ fn blocklist_overrides_allowlist() {
     assert!(
         matches!(
             policy.evaluate("GITHUB_TOKEN"),
-            Err(EnvPolicyViolation::Blocked { .. })
+            Err(EnvPolicyViolation::Blocked)
         ),
         "a matching block rule must override the allow rule"
+    );
+}
+
+/// Match Windows environment-variable names without regard to case.
+#[cfg(windows)]
+#[rstest]
+fn windows_case_insensitive_name_matching() {
+    let allowed = EnvAccessPolicy::default().allow_var("PATH");
+    assert!(
+        allowed.evaluate("Path").is_ok(),
+        "a Windows case variant should match the allowlist"
+    );
+
+    let blocked = allowed.block_var("PATH");
+    assert!(
+        matches!(blocked.evaluate("Path"), Err(EnvPolicyViolation::Blocked)),
+        "a Windows case variant should match the blocklist"
     );
 }
