@@ -6267,7 +6267,14 @@ continues to update progress; unsupported shapes produce no task-progress
 updates without affecting child output. Extend `runner::process::ninja_status`
 if alternate formats must be recognized; do not loosen the streaming adapter's
 bound. The unlabelled `netsuke_ninja_status_oversized_lines_total` counter
-records each oversized candidate line.
+records each oversized candidate line. The Unix process-boundary regression
+test in `tests/ninja_status_process_rss_tests.rs` runs each measurement in a
+fresh test-worker process with exactly one Netsuke child. The worker streams
+each 256 MiB fake-Ninja stdout stream to a temporary file and, after the child
+exits, safely records its resource usage through `RUSAGE_CHILDREN` rather than
+measuring the parent test process. It compares progress parsing with
+`--progress never` and permits a fixed 16 MiB overhead, rejecting memory growth
+proportional to the payload.
 
 ### Module: `runner::process::ninja_program`
 
