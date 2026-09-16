@@ -1,4 +1,4 @@
-//! A hermetic `PATH` and `HOME` for exercising the `dev-fast` targets.
+//! A hermetic `PATH` and `HOME` for exercising the build-tools targets.
 //!
 //! See the parent module for why the sandbox is built from nothing rather
 //! than by prepending fakes to the ambient `PATH`.
@@ -64,7 +64,7 @@ impl Sandbox {
     ///
     /// ```rust,no_run
     /// use mockable::DefaultEnv;
-    /// use test_support::dev_fast::Sandbox;
+    /// use test_support::build_tools::Sandbox;
     ///
     /// let sandbox = Sandbox::with_env(&DefaultEnv).expect("create utility sandbox");
     /// assert!(sandbox.bin().is_absolute());
@@ -99,7 +99,7 @@ impl Sandbox {
         self.root.join("home")
     }
 
-    /// An install prefix that starts out empty; `DEV_FAST_PREFIX` points here.
+    /// An install prefix that starts out empty; `BUILD_TOOLS_PREFIX` points here.
     #[must_use]
     pub fn prefix(&self) -> Utf8PathBuf {
         self.root.join("prefix")
@@ -253,7 +253,7 @@ impl Sandbox {
         env: &[(&str, String)],
     ) -> Result<Output> {
         let mut command = self.base_command(&self.bin().join("bash"));
-        command.env("DEV_FAST_PREFIX", self.prefix().as_std_path());
+        command.env("BUILD_TOOLS_PREFIX", self.prefix().as_std_path());
         if matches!(pins, PinOverrides::Supplied) {
             command
                 .env("MOLD_VERSION_FILE", "tools/mold/VERSION")
@@ -292,7 +292,7 @@ impl Sandbox {
             .arg("--no-print-directory")
             .arg("-f")
             .arg("Makefile")
-            .arg(format!("DEV_FAST_PREFIX={}", self.prefix()));
+            .arg(format!("BUILD_TOOLS_PREFIX={}", self.prefix()));
         for (name, value) in invocation.environment_entries() {
             command.env(name, value);
         }
@@ -353,7 +353,7 @@ pub fn pinned_mold_version() -> Result<String> {
 
 /// The repository's toolchain, read from `rust-toolchain.toml`.
 ///
-/// dev-fast deliberately shares it rather than pinning a second nightly, so the
+/// the build standard deliberately shares it rather than pinning a second nightly, so the
 /// accelerated loop and the gates borrow-check identically; the pinned nightly
 /// is what enables Polonius.
 ///

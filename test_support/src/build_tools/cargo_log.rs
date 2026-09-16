@@ -18,7 +18,7 @@ use crate::fs;
 
 /// Separator between records in the log. Chosen so it cannot collide with an
 /// argument or a path.
-const RECORD_SEPARATOR: &str = "--dev-fast-record--";
+const RECORD_SEPARATOR: &str = "--build-tools-record--";
 
 /// A `cargo` stand-in installed on the sandbox `PATH`, plus its log.
 pub struct RecordingCargo {
@@ -222,7 +222,7 @@ impl CargoInvocation {
     }
 
     /// The arguments Cargo received. Recorded via `"$*"`, so an argument
-    /// containing whitespace would be split; none of the `dev-fast` recipes
+    /// containing whitespace would be split; none of the build recipes
     /// pass one.
     #[must_use]
     pub fn arguments(&self) -> &[String] {

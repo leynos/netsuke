@@ -1,6 +1,6 @@
 //! Contracts for the committed `.cargo/config.toml`.
 //!
-//! The recipes are covered by `dev_fast_make_target_tests`; this suite is about
+//! The recipes are covered by `build_tools_make_target_tests`; this suite is about
 //! the file Cargo auto-discovers, which is what makes the build standard the
 //! default for a bare `cargo` invocation rather than something a Make target
 //! has to opt into.
@@ -9,7 +9,7 @@
 use anyhow::{Context, Result, ensure};
 use rstest::rstest;
 use std::process::Command;
-use test_support::dev_fast::cargo_config;
+use test_support::build_tools::cargo_config;
 
 /// `[build] rustflags` and the Linux table must carry the same non-linker
 /// flags, because Cargo replaces one source with the other rather than merging

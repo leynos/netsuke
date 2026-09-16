@@ -38,7 +38,7 @@ const DENY_WARNINGS_RUSTFLAGS: &str = "-D warnings";
 const BUILD_CONFIGURATION_FILES: [&str; 7] = [
     "Makefile",
     ".cargo/config.toml",
-    "scripts/dev-fast-common.sh",
+    "scripts/build-tools-common.sh",
     ".github/workflows/ci.yml",
     ".github/workflows/netsukefile-test.yml",
     ".github/workflows/coverage-main.yml",

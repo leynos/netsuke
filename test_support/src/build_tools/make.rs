@@ -14,7 +14,7 @@ use std::fmt::Display;
 /// [`Sandbox::run_make`](super::Sandbox::run_make):
 ///
 /// ```rust,no_run
-/// use test_support::dev_fast::MakeInvocation;
+/// use test_support::build_tools::MakeInvocation;
 ///
 /// let invocation = MakeInvocation::new("bench-build")
 ///     .variable("CARGO", "/path/to/fake/cargo")

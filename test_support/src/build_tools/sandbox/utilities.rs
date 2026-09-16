@@ -1,4 +1,4 @@
-//! Host-utility discovery for the hermetic dev-fast sandbox.
+//! Host-utility discovery for the hermetic build-tools sandbox.
 
 use anyhow::{Context, Result, bail};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -48,7 +48,7 @@ pub(super) const SANDBOX_UTILITIES: &[&str] = &[
 /// # Examples
 ///
 /// ```rust,no_run
-/// use test_support::dev_fast::real_utility;
+/// use test_support::build_tools::real_utility;
 ///
 /// let shell = real_utility("sh").expect("resolve the host shell");
 /// assert!(shell.is_absolute());
@@ -78,7 +78,7 @@ pub fn real_utility(utility: &str) -> Result<Utf8PathBuf> {
 /// ```rust,no_run
 /// use camino::Utf8Path;
 /// use mockable::MockEnv;
-/// use test_support::dev_fast::real_utility_with_env;
+/// use test_support::build_tools::real_utility_with_env;
 ///
 /// let mut env = MockEnv::new();
 /// env.expect_raw()

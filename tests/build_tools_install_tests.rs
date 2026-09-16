@@ -1,12 +1,12 @@
-//! Behavioural tests for the `dev-fast` installer and benchmark scripts.
+//! Behavioural tests for the build-tools installer and benchmark scripts.
 //!
 //! The installer's security-relevant behaviour is that it refuses to unpack an
 //! artefact it cannot verify, so these tests serve a locally built tarball over
 //! a `file://` URL and vary only the recorded checksum. No network is used.
 //!
-//! `make install-dev-fast` is covered here too, because it is the installer's
+//! `make install-build-tools` is covered here too, because it is the installer's
 //! own entry point; the build and gate recipes live in
-//! `dev_fast_make_target_tests.rs`.
+//! `build_tools_make_target_tests.rs`.
 
 #![cfg(all(unix, target_os = "linux"))]
 
@@ -15,7 +15,7 @@ use camino::Utf8PathBuf;
 use proptest::prelude::*;
 use proptest::proptest;
 use rstest::rstest;
-use test_support::dev_fast::{
+use test_support::build_tools::{
     FakeRelease, InstallerFixture, InstallerScenario, MakeInvocation, PinOverrides, Sandbox,
     TEST_MOLD_VERSION, WRONG_SHA256, combined, pinned_mold_version, pinned_toolchain,
 };
@@ -67,7 +67,7 @@ fn installs_and_records_the_verification_when_the_checksum_matches() -> Result<(
 
     let output = scenario
         .sandbox()
-        .script("install-dev-fast.sh", &fixture.script_env())?;
+        .script("install-build-tools.sh", &fixture.script_env())?;
     let text = combined(&output);
 
     ensure!(
@@ -107,7 +107,7 @@ fn installs_and_records_the_verification_when_the_checksum_matches() -> Result<(
 /// The download must be bounded at both ends.
 ///
 /// A server that completes the handshake and then stops sending leaves an
-/// unbounded `curl` waiting forever, so `install-dev-fast` hangs and its own
+/// unbounded `curl` waiting forever, so `install-build-tools` hangs and its own
 /// failure path is never reached. Asserting on the flags `curl` actually
 /// received is the only way to see that from outside: a bounded and an
 /// unbounded download look identical unless one is left to stall.
@@ -129,7 +129,7 @@ fn the_download_is_bounded_at_both_ends(#[case] flag: &str) -> Result<()> {
 
     let output = scenario
         .sandbox()
-        .script("install-dev-fast.sh", &fixture.script_env())?;
+        .script("install-build-tools.sh", &fixture.script_env())?;
     ensure!(
         !output.status.success(),
         "a refused download should abort, got `{}`",
@@ -153,7 +153,7 @@ fn a_refused_artefact_never_reaches_the_toolchain_install() -> Result<()> {
 
     let output = scenario
         .sandbox()
-        .script("install-dev-fast.sh", &fixture.script_env())?;
+        .script("install-build-tools.sh", &fixture.script_env())?;
     ensure!(!output.status.success(), "install should abort");
 
     let rustup = scenario.sandbox().rustup_invocations()?;
@@ -177,7 +177,7 @@ fn refuses_to_install_an_unverifiable_artefact(#[case] failure: ChecksumFailure)
 
     let output = scenario
         .sandbox()
-        .script("install-dev-fast.sh", &fixture.script_env())?;
+        .script("install-build-tools.sh", &fixture.script_env())?;
     let text = combined(&output);
 
     ensure!(
@@ -212,7 +212,7 @@ fn falls_back_to_the_committed_pins_when_no_overrides_are_given() -> Result<()> 
     let release = FakeRelease::publish(&sandbox, &committed_version)?;
 
     let output = sandbox.script_with(
-        "install-dev-fast.sh",
+        "install-build-tools.sh",
         PinOverrides::Omitted,
         &[("MOLD_RELEASE_BASE_URL", release.base_url())],
     )?;
@@ -246,7 +246,7 @@ fn an_unreadable_pin_aborts_before_any_download() -> Result<()> {
     let missing = sandbox.home().join("absent/MOLD_VERSION");
 
     let output = sandbox.script_with(
-        "install-dev-fast.sh",
+        "install-build-tools.sh",
         PinOverrides::Omitted,
         &[
             ("MOLD_VERSION_FILE", missing.to_string()),
@@ -367,7 +367,7 @@ fn install_target_forwards_the_prefix_pins_and_release_url() -> Result<()> {
     // Pins go through as command-line variables, outranking the Makefile's `?=`
     // defaults; the release URL is read straight from the environment by the
     // script, which is the only channel available for it.
-    let invocation = MakeInvocation::new("install-dev-fast")
+    let invocation = MakeInvocation::new("install-build-tools")
         .variable("MOLD_VERSION_FILE", &version_pin)
         .variable("MOLD_SHA256SUMS_FILE", &checksums)
         .environment("MOLD_RELEASE_BASE_URL", release.base_url());
@@ -376,7 +376,7 @@ fn install_target_forwards_the_prefix_pins_and_release_url() -> Result<()> {
 
     ensure!(
         output.status.success(),
-        "make install-dev-fast should succeed, got `{text}`"
+        "make install-build-tools should succeed, got `{text}`"
     );
     ensure!(
         text.contains(&release.base_url()),

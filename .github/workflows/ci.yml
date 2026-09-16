@@ -147,9 +147,9 @@ jobs:
         run: sccache --zero-stats
       - name: Install the build standard
         # Cranelift and the pinned `mold` are the repository's defaults, and
-        # `dev-fast-check` gates every build target on them, so this runs before
+        # `check-build-tools` gates every build target on them, so this runs before
         # the first compile rather than as a convenience.
-        run: make install-dev-fast
+        run: make install-build-tools
       - name: Show rustc version
         run: |
           rustup show

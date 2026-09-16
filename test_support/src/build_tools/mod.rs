@@ -1,4 +1,4 @@
-//! Test scaffolding for the `dev-fast` build-standard tooling.
+//! Test scaffolding for the build-standard tooling.
 //!
 //! The capability check, installer and benchmark probe `PATH` for `mold` and
 //! `rustup`, download a pinned release, and shell out to Cargo. Testing
@@ -17,7 +17,7 @@
 //! variable overrides and environment so tests exercise the real recipes rather
 //! than reimplementing them.
 //!
-//! Scope: these helpers exist for the `dev-fast` target tests. They spawn child
+//! Scope: these helpers exist for the build-tools target tests. They spawn child
 //! processes with a bespoke environment and never mutate the parent's, so they
 //! qualify for the subprocess-isolation exemption to the ban on in-process
 //! environment mutation (`AGENTS.md`). That exemption is written around

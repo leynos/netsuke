@@ -18,7 +18,7 @@ use proptest::prelude::*;
 use proptest::proptest;
 use proptest::test_runner::FileFailurePersistence;
 use rstest::rstest;
-use test_support::dev_fast::{
+use test_support::build_tools::{
     BENCH_SLUGS, BenchFixture, BuildScenario, CRANELIFT_SLUG, CRANELIFT_THREADS_SLUG,
     CargoInvocation, DEFAULT_SLUG, MakeInvocation, Sandbox, TargetState, combined,
     pinned_toolchain, real_utility, write_with_old_mtime,
@@ -149,7 +149,7 @@ proptest! {
         // in an integration-test crate, so recorded seeds were neither
         // written nor replayed — the file on disk was inert.
         failure_persistence: Some(Box::new(FileFailurePersistence::Direct(
-            "tests/dev_fast_bench_tests.proptest-regressions",
+            "tests/build_tools_bench_tests.proptest-regressions",
         ))),
         ..ProptestConfig::default()
     })]

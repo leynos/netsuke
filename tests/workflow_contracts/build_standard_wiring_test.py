@@ -3,7 +3,7 @@
 ``.cargo/config.toml`` puts every dev-profile build on the Cranelift backend
 and, on Linux, on the pinned ``mold`` linker. That file is auto-discovered, so
 the setting reaches lanes nobody edited: a job that compiles on the dev profile
-without the Cranelift component fails to build at all, and ``dev-fast-check``
+without the Cranelift component fails to build at all, and ``check-build-tools``
 gates the Make targets on it besides.
 
 Two exclusions run the other way. ``cargo llvm-cov`` needs LLVM source-based
@@ -37,7 +37,7 @@ if typ.TYPE_CHECKING:
     from pathlib import Path
 
 #: The command that installs the Cranelift component and the pinned linker.
-INSTALL_COMMAND = "install-dev-fast"
+INSTALL_COMMAND = "install-build-tools"
 
 #: The Cargo environment override that takes a build back to the LLVM backend.
 BACKEND_OVERRIDE = "CARGO_PROFILE_DEV_CODEGEN_BACKEND"
@@ -129,7 +129,7 @@ def test_the_mutation_lane_installs_the_standard_before_mutating() -> None:
         f"the mutation lane must declare setup-commands as a string, got {setup!r}"
     )
     assert INSTALL_COMMAND in setup, (
-        "the mutation lane must pass `make install-dev-fast` as setup-commands, "
+        "the mutation lane must pass `make install-build-tools` as setup-commands, "
         f"got {setup!r}"
     )
 

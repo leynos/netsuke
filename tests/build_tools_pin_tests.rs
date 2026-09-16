@@ -1,10 +1,10 @@
-//! Behavioural tests for how the `dev-fast` scripts resolve their pins.
+//! Behavioural tests for how the build-tools scripts resolve their pins.
 //!
 //! The scripts locate `tools/mold/VERSION` and `rust-toolchain.toml` relative to
 //! their own path, so they work from any working directory and without the
 //! Makefile supplying every path. These tests cover that resolution and its
 //! refusals; the capability gate's own diagnostics live in
-//! `dev_fast_check_tests.rs`.
+//! `build_tools_check_tests.rs`.
 //!
 //! A malformed pin must be refused rather than silently rewritten — a corrupted
 //! version would otherwise reach a download URL looking well-formed.
@@ -14,7 +14,7 @@
 use anyhow::{Result, ensure};
 use mockable::MockEnv;
 use rstest::rstest;
-use test_support::dev_fast::{
+use test_support::build_tools::{
     PinOverrides, Sandbox, combined, pinned_mold_version, pinned_toolchain, real_utility_with_env,
 };
 
@@ -45,7 +45,7 @@ fn falls_back_to_the_committed_pins_when_no_overrides_are_given() -> Result<()> 
     sandbox.write_mold(&sandbox.bin(), &pinned_mold_version()?)?;
     sandbox.write_rustup(&pinned_toolchain()?, true)?;
 
-    let output = sandbox.script_with("dev-fast-check.sh", PinOverrides::Omitted, &[])?;
+    let output = sandbox.script_with("check-build-tools.sh", PinOverrides::Omitted, &[])?;
     let text = combined(&output);
 
     ensure!(
@@ -72,7 +72,7 @@ fn default_pins_are_the_committed_ones_not_an_empty_fallback() -> Result<()> {
     sandbox.write_mold(&sandbox.bin(), "99.0.0")?;
     sandbox.write_rustup(&pinned_toolchain()?, true)?;
 
-    let output = sandbox.script_with("dev-fast-check.sh", PinOverrides::Omitted, &[])?;
+    let output = sandbox.script_with("check-build-tools.sh", PinOverrides::Omitted, &[])?;
     let text = combined(&output);
 
     ensure!(
@@ -101,7 +101,7 @@ fn an_explicit_pin_override_wins_over_the_committed_default() -> Result<()> {
     sandbox.write_rustup(&pinned_toolchain()?, true)?;
 
     let output = sandbox.script_with(
-        "dev-fast-check.sh",
+        "check-build-tools.sh",
         PinOverrides::Omitted,
         &[("RUST_TOOLCHAIN_FILE", toolchain_pin.to_string())],
     )?;
@@ -128,7 +128,7 @@ fn a_missing_pin_file_reports_the_actionable_diagnostic() -> Result<()> {
     let missing = sandbox.home().join("absent/MOLD_VERSION");
 
     let output = sandbox.script_with(
-        "dev-fast-check.sh",
+        "check-build-tools.sh",
         PinOverrides::Omitted,
         &[("MOLD_VERSION_FILE", missing.to_string())],
     )?;
@@ -163,7 +163,7 @@ fn a_malformed_version_pin_is_refused_not_rewritten(
     sandbox.write_file(&pin, contents)?;
 
     let output = sandbox.script_with(
-        "dev-fast-check.sh",
+        "check-build-tools.sh",
         PinOverrides::Omitted,
         &[("MOLD_VERSION_FILE", pin.to_string())],
     )?;
@@ -191,7 +191,7 @@ fn boundary_whitespace_around_a_pin_is_trimmed(#[case] contents: &str) -> Result
     sandbox.write_file(&pin, contents)?;
 
     let output = sandbox.script_with(
-        "dev-fast-check.sh",
+        "check-build-tools.sh",
         PinOverrides::Omitted,
         &[("MOLD_VERSION_FILE", pin.to_string())],
     )?;

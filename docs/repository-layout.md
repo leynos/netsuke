@@ -12,6 +12,7 @@ output and some leaf files so the long-lived structure remains visible.
 
 ```plaintext
 .
+├── .cargo/
 ├── .github/
 │   ├── actions/
 │   └── workflows/
@@ -44,7 +45,6 @@ output and some leaf files so the long-lived structure remains visible.
 │   ├── fixtures/
 │   └── snapshots/
 └── tools/
-    ├── dev-fast/
     ├── kani/
     └── mold/
 ```
@@ -63,6 +63,11 @@ output and some leaf files so the long-lived structure remains visible.
   overview, linked from the localization menu at the top of each README. They
   follow [the localization glossary](localization-glossary.md) and are exempt
   from the en-GB-oxendict spelling gate via `typos.local.toml`.
+- `.cargo/`: Cargo configuration Cargo auto-discovers, holding the repository's
+  build standard: the codegen backend each profile selects and the `rustflags`
+  every build takes. It reaches release and coverage builds too, so a setting
+  that is only safe for the development loop does not belong here; see
+  [developers' guide](developers-guide.md).
 - `.github/actions/`: Reusable GitHub Actions used by workflow definitions.
 - `.github/workflows/`: Continuous Integration (CI), release, packaging, and
   repository automation workflows.
@@ -123,9 +128,6 @@ output and some leaf files so the long-lived structure remains visible.
 - `tests/features/`: Cross-platform behavioural feature files.
 - `tests/features_unix/`: Unix-specific behavioural feature files.
 - `tests/snapshots/`: Checked-in integration-test snapshots.
-- `tools/dev-fast/`: Non-auto-loaded Cargo configuration fragment for the
-  opt-in Cranelift and `mold` build path. Cargo never discovers this file on
-  its own; only the `make dev-*` targets pass it through `cargo --config`.
 - `tools/kani/`: Kani formal-verification harness configuration and related
   local tooling.
 - `tools/mold/`: Pinned `mold` linker release version and the SHA-256 checksums

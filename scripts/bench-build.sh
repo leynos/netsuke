@@ -17,14 +17,14 @@
 set -euo pipefail
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-# shellcheck source=scripts/dev-fast-common.sh
-. "$script_dir/dev-fast-common.sh"
+# shellcheck source=scripts/build-tools-common.sh
+. "$script_dir/build-tools-common.sh"
 
 : "${CARGO:=cargo}"
 # Supplied by the Makefile from the same variables the gate targets compose, so
 # a flag cannot be benchmarked in a shape the gates do not actually use.
-: "${DEV_FAST_THREADS_FLAG:=-Zthreads=8}"
-: "${DEV_FAST_MOLD_FLAG:=-Clink-arg=-fuse-ld=mold}"
+: "${STANDARD_THREADS_FLAG:=-Zthreads=8}"
+: "${STANDARD_MOLD_FLAG:=-Clink-arg=-fuse-ld=mold}"
 
 # The timer below reads EPOCHREALTIME, which Bash gained in 5.0. Fail here with
 # a named prerequisite rather than silently reporting every duration as zero.
@@ -166,7 +166,7 @@ main() {
   # baseline by the backend and the frontend alone. Saying so in the log keeps
   # a macOS table from being read as a linker comparison.
   if is_linux; then
-    linker_flag=$DEV_FAST_MOLD_FLAG
+    linker_flag=$STANDARD_MOLD_FLAG
   else
     note "mold is Linux-only; measuring on $(uname -s) without a linker change"
   fi
@@ -193,7 +193,7 @@ main() {
   # shellcheck disable=SC2016 # the backticks are Markdown, not a subshell.
   measure_variant cranelift-threads 'Cranelift, `mold`, parallel frontend' \
     env RUSTUP_TOOLCHAIN="$toolchain" \
-    RUSTFLAGS="$DEV_FAST_THREADS_FLAG${linker_flag:+ $linker_flag}" \
+    RUSTFLAGS="$STANDARD_THREADS_FLAG${linker_flag:+ $linker_flag}" \
     "$CARGO" build --bin "$BENCH_BIN"
 
   report

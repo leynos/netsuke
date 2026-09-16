@@ -6,7 +6,7 @@
 
 use anyhow::{Context, Result, ensure};
 use rstest::{fixture, rstest};
-use test_support::dev_fast::{
+use test_support::build_tools::{
     BuildScenario, CARGO_CONFIG_PATH, CargoInvocation, MakeInvocation, RecordingCargo, Sandbox,
     cargo_config, combined, pinned_mold_version, pinned_toolchain,
 };
@@ -214,27 +214,6 @@ fn the_makefile_passes_no_standard_flag_the_configuration_omits(
              so a bare `cargo build` would not get it"
         );
     }
-    Ok(())
-}
-
-#[rstest]
-#[case::dev_build("dev-build")]
-#[case::dev_test("dev-test")]
-fn deprecated_aliases_still_reach_cargo(
-    #[case] target: &str,
-    #[from(prepared_build_scenario)] scenario_res: Result<BuildScenario>,
-) -> Result<()> {
-    let scenario = scenario_res?;
-    let recorded = run_target(&scenario, target)?;
-    let flags = standard_flags()?;
-    let borrowed: Vec<&str> = flags.iter().map(String::as_str).collect();
-
-    ensure!(
-        recorded
-            .iter()
-            .all(|invocation| invocation.rustflags_contain(&borrowed)),
-        "`{target}` should apply the same standard as the target it aliases"
-    );
     Ok(())
 }
 

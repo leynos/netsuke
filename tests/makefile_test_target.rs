@@ -201,9 +201,11 @@ fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()>
         nextest_recipe.contains("--workspace"),
         "test-nextest should cover the workspace, found {nextest_recipe:?}"
     );
+    // What that value expands to is contracted in the `rustflags` module; here
+    // the point is only that the pass composes it rather than rolling its own.
     ensure!(
-        nextest_recipe.contains(r#"RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings""#),
-        "test-nextest should preserve inherited flags and deny warnings, found {nextest_recipe:?}"
+        nextest_recipe.contains("$(GATE_RUSTFLAGS)"),
+        "test-nextest should compose GATE_RUSTFLAGS, found {nextest_recipe:?}"
     );
 
     ensure_worker_bounds_reach_nextest("test-nextest", &nextest_recipe)?;
@@ -219,8 +221,8 @@ fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()>
         "doctests cannot run under nextest, found {doctest_recipe:?}"
     );
     ensure!(
-        doctest_recipe.contains(r#"RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings""#),
-        "doctest should preserve inherited flags and deny warnings; found {doctest_recipe:?}"
+        doctest_recipe.contains("$(GATE_RUSTFLAGS)"),
+        "doctest should compose GATE_RUSTFLAGS, found {doctest_recipe:?}"
     );
     ensure!(
         doctest_recipe.contains("--workspace"),
