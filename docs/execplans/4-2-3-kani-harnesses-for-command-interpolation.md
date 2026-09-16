@@ -1916,11 +1916,11 @@ pending.
 warnings. `make check-fmt` and `make lint` also passed. The mutation workflow's
 comment-spacing and line-length failures are resolved.
 
-**Revision 2.27 (2026-09-16, issue #586).** The header moved from
-`IN PROGRESS` to `COMPLETE` and the closing sentence of Revision 2.26 was
-dropped, because that sentence had gone stale. Commit `6c646f1c` (PR #564,
-merged 2026-09-03) flipped roadmap 4.2.3 to `[x]`, so the work was already
-delivered when Revision 2.26 was written; its "Status remains `IN PROGRESS`"
-line outlived its truth. Under the authority order in the documentation style
-guide the roadmap checkbox and this plan's `Progress` and Outcomes sections
-outrank the header, so the stale artefact was the header, not the roadmap.
+**Revision 2.27 (2026-09-16, issue #586).** The header moved from `IN PROGRESS`
+to `COMPLETE` and the closing sentence of Revision 2.26 was dropped, because
+that sentence had gone stale. Commit `6c646f1c` (PR #564, merged 2026-09-03)
+flipped roadmap 4.2.3 to `[x]`, so the work was already delivered when Revision
+2.26 was written; its "Status remains `IN PROGRESS`" line outlived its truth.
+Under the authority order in the documentation style guide the roadmap checkbox
+and this plan's `Progress` and Outcomes sections outrank the header, so the
+stale artefact was the header, not the roadmap.

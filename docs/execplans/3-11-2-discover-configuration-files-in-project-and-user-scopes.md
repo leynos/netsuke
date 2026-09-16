@@ -588,7 +588,7 @@ Expected evidence:
 
 ## Completion acknowledgement
 
-This plan has been completed as indicated by the `Status: COMPLETE` header.
-The original stages were implemented, tested, and integrated into the codebase;
-the historical validation record above must not be read as current follow-up
-gate evidence.
+This plan has been completed as indicated by the `Status: COMPLETE` header. The
+original stages were implemented, tested, and integrated into the codebase; the
+historical validation record above must not be read as current follow-up gate
+evidence.
