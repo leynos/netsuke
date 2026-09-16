@@ -741,6 +741,8 @@ Scalar `command:` rows:
 | A7  | `echo $$`                                 | `$$$$`                          | `echo $$`            | prints a process identifier                                                                                  |
 | A8  | `echo hi`                                 | byte-identical to today         | `echo hi`            | control row; must pass before and after                                                                      |
 
+*Table 1: Scalar command regression matrix.*
+
 Script `script:` rows:
 
 | Row | Script                                        | Obligation                                                                                     |
@@ -751,6 +753,8 @@ Script `script:` rows:
 | B4  | `` echo `basename $out` ``                    | interaction of backtick preservation with escaping; behaviour follows decision `D-BACKTICK`    |
 | B5  | a heredoc plus an apostrophe inside a comment | must still generate; proves scripts did not get routed through the shlex validator             |
 
+*Table 2: Script regression matrix.*
+
 Command-list rows:
 
 | Row | Entries                                 | Obligation                                                                                                     |
@@ -760,6 +764,8 @@ Command-list rows:
 | C3  | `["V=1", "echo $V"]`                    | prints `1`; proves the current-shell brace-group contract documented at `src/ninja_gen.rs:233-238` still holds |
 | C4  | `tests/data/multi_command.yml`          | snapshot byte-identical                                                                                        |
 | C5  | `["echo $in", "echo $out"]`             | already lowered; assert no `$` survives                                                                        |
+
+*Table 3: Command-list regression matrix.*
 
 Injection rows: a scalar command containing `\n`, and one containing `\r`, must
 produce a typed error rather than a generated file (obligation I5).
