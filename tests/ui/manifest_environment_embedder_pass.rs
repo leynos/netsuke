@@ -19,14 +19,23 @@ fn reference_manifest_loader_apis() {
     let reader: EnvReader = Arc::new(|_| Err(EnvReadError::NotPresent));
     let environment = ManifestEnvironment::new(&reader, EnvAccessPolicy::default());
 
-    let _ = from_path_with_policy("Netsukefile", NetworkPolicy::default(), None);
-    let _ = from_path_with_policy_and_env("Netsukefile", NetworkPolicy::default(), &reader, None);
-    let _ = from_path_with_policy_and_environment(
+    drop(from_path_with_policy(
+        "Netsukefile",
+        NetworkPolicy::default(),
+        None,
+    ));
+    drop(from_path_with_policy_and_env(
+        "Netsukefile",
+        NetworkPolicy::default(),
+        &reader,
+        None,
+    ));
+    drop(from_path_with_policy_and_environment(
         "Netsukefile",
         NetworkPolicy::default(),
         &environment,
         None,
-    );
+    ));
 }
 
 fn main() { reference_manifest_loader_apis(); }
