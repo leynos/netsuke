@@ -99,6 +99,31 @@ type TestStatusObserver = fn(u32, u32, &str);
 const TEST_MAX_LINE_BYTES: usize =
     NinjaStatusParsingReader::<ChunkedReader, TestStatusObserver>::MAX_LINE_BYTES;
 
+/// Assert status-aware forwarding preserves bytes and accepted progress updates.
+fn assert_ninja_status_forwarding<R>(reader: R, input: &[u8], expected_updates: &[(u32, u32, &str)])
+where
+    R: Read,
+{
+    let mut output = Vec::new();
+    let mut updates = Vec::new();
+
+    let stats = forward_child_output_with_ninja_status(
+        reader,
+        &mut output,
+        |current, total, description| updates.push((current, total, description.to_owned())),
+        "stdout",
+    );
+
+    assert_eq!(stats.bytes_read, input.len());
+    assert_eq!(stats.bytes_written, input.len());
+    assert_eq!(output, input);
+    let expected_update_strings = expected_updates
+        .iter()
+        .map(|(current, total, description)| (*current, *total, (*description).to_owned()))
+        .collect::<Vec<_>>();
+    assert_eq!(updates, expected_update_strings);
+}
+
 /// Generate a large stream without retaining its forwarded bytes in memory.
 #[cfg(unix)]
 struct RepeatingByteReader {
@@ -241,20 +266,12 @@ fn bounded_status_reader_forwards_large_unterminated_output() {
 fn oversized_line_forwards_unchanged_and_next_status_line_updates_progress() {
     let mut input = vec![b'x'; TEST_MAX_LINE_BYTES + 1];
     input.extend_from_slice(b"\n[2/3] cc -c resumed.c\n");
-    let mut output = Vec::new();
-    let mut updates = Vec::new();
 
-    let stats = forward_child_output_with_ninja_status(
+    assert_ninja_status_forwarding(
         Cursor::new(input.clone()),
-        &mut output,
-        |current, total, description| updates.push((current, total, description.to_owned())),
-        "stdout",
+        &input,
+        &[(2, 3, "cc -c resumed.c")],
     );
-
-    assert_eq!(stats.bytes_read, input.len());
-    assert_eq!(stats.bytes_written, input.len());
-    assert_eq!(output, input);
-    assert_eq!(updates, vec![(2, 3, "cc -c resumed.c".to_owned())]);
 }
 
 #[test]
@@ -262,20 +279,8 @@ fn oversized_status_suffix_stays_ignored_across_read_boundaries() {
     let mut input = vec![b'x'; TEST_MAX_LINE_BYTES];
     input.extend_from_slice(b"[1/2] spoofed.c\n[2/2] cc -c resumed.c\n");
     let reader = ChunkedReader::new(input.clone(), vec![TEST_MAX_LINE_BYTES, 4, 11, 1, 5, 7, 64]);
-    let mut output = Vec::new();
-    let mut updates = Vec::new();
 
-    let stats = forward_child_output_with_ninja_status(
-        reader,
-        &mut output,
-        |current, total, description| updates.push((current, total, description.to_owned())),
-        "stdout",
-    );
-
-    assert_eq!(stats.bytes_read, input.len());
-    assert_eq!(stats.bytes_written, input.len());
-    assert_eq!(output, input);
-    assert_eq!(updates, vec![(2, 2, "cc -c resumed.c".to_owned())]);
+    assert_ninja_status_forwarding(reader, &input, &[(2, 2, "cc -c resumed.c")]);
 }
 
 #[test]
