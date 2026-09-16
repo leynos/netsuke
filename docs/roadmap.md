@@ -2384,15 +2384,20 @@ command, preserve argument boundaries through Ninja, and keep existing legacy
 recipes unchanged without learning a second quoting language.
 
 This phase begins the implementation of
-[RFC 0001](rfcs/0001-structured-command-blocks.md), including its
-[RFC 0009](rfcs/0009-structured-command-working-directories.md), [RFC 0010](rfcs/0010-runtime-bindings-and-secure-tempdirs.md),
-and [RFC 0011](rfcs/0011-allow-listed-structured-command-shells.md)
-amendments. Phases 12 to 14 cover the structured-command portion of issue
-`#593`; the [composition roadmap](roadmap-composition.md) owns includes and
-bundles. Phase 11 retains ownership of named-shell selection, with core
-integration at 11.3.1 and the complete runtime matrix at 11.3.2. Task 17.4.4
-joins the execution and composition tracks without making either local
-foundation wait for the other's implementation.
+[RFC 0001](rfcs/0001-structured-command-blocks.md).
+
+Its amendments include
+
+- [RFC 0009](rfcs/0009-structured-command-working-directories.md).
+- [RFC 0010](rfcs/0010-runtime-bindings-and-secure-tempdirs.md).
+- [RFC 0011](rfcs/0011-allow-listed-structured-command-shells.md).
+
+Phases 12 to 14 cover the structured-command portion of issue `#593`; the
+[composition roadmap](roadmap-composition.md) owns includes and bundles. Phase
+11 retains ownership of named-shell selection, with core integration at 11.3.1
+and the complete runtime matrix at 11.3.2. Task 17.4.4 joins the execution and
+composition tracks without making either local foundation wait for the other's
+implementation.
 
 The RFCs remain proposed until their acceptance work completes. Task 12.1.1
 must settle their conflicting text before implementation; this roadmap does not

@@ -492,7 +492,8 @@ command's publication and explicit lock-update capabilities.
     expected digest instead of fetching, publishing cache state, or updating
     locks; propagate verified relative provenance into composition.
   - [ ] Keep discovery recipe-free, even for external bundles, and prevent
-    update-like manifest settings from acquiring a write or network port.
+    update-like manifest settings from acquiring write access or network
+    access.
   - See [RFC 0004 §§4.2, 9-11, 14, and
     19](rfcs/0004-digest-pinned-external-bundles.md).
   - Success: instrumented cache hits, misses, corruption, and lock failures
