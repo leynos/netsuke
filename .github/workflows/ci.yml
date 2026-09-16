@@ -265,15 +265,6 @@ jobs:
           # Compare changed-line coverage against the baseline written by
           # coverage-main.yml (caches saved on main are readable by every PR).
           with-ratchet: 'true'
-      - name: Upload PR coverage artefact
-        if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        # v7.0.1
-        with:
-          name: pr-coverage-lcov
-          path: lcov.info
-          retention-days: 3
-          if-no-files-found: error
       - name: Show sccache statistics
         if: always()
         run: |

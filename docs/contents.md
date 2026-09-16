@@ -163,6 +163,8 @@ operator, user, and contributor references are easier to find.
 - [ADR-024](adr-024-require-explicit-recursive-workspace-which-search.md):
   Explicit opt-in for recursive workspace executable discovery, preserving a
   PATH-only default and its manifest trust boundary.
+- [ADR-024](adr-024-main-owned-coverage-publication.md): Local pull-request
+  coverage ratcheting with persistent coverage data owned by `main`.
 
 ## Proposals
 

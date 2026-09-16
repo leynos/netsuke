@@ -1,10 +1,9 @@
-"""Contract tests wiring PR coverage generation to its isolated artefact.
+"""Contract tests separating the PR ratchet from the main coverage upload.
 
-``generate-coverage`` writes the report to ``output-path`` and the
-dedicated artefact upload step preserves it for the trusted submission
-workflow. If the report path, artefact name, or step ordering drifts, the
-submission cannot find validated coverage. These tests pin that unprivileged
-wiring alongside the direct main-branch upload in ``coverage-main.yml``.
+Pull requests generate coverage and compare it with the ratcheted baseline;
+they do not publish coverage artefacts or contact CodeScene. The main workflow
+generates the matching report, advances the ratchet baseline, and uploads that
+authoritative report to CodeScene. These tests pin both halves of that split.
 Shared parsing helpers live in ``workflow_loading.py``.
 
 Run via ``make test-workflow-contracts``.
@@ -12,8 +11,10 @@ Run via ``make test-workflow-contracts``.
 
 from workflow_loading import (
     COVERAGE_MAIN_WORKFLOW_PATH,
+    COVERAGE_PR_WORKFLOW_PATH,
     job_steps,
     load_workflow,
+    named_step,
     require_mapping,
     unique_step_index,
 )
@@ -37,30 +38,25 @@ def _assert_with_inputs(
     assert actual == expected, f"{description} must pass {expected!r}, got {actual!r}"
 
 
-def test_coverage_report_is_produced_before_artefact_upload() -> None:
-    """The untrusted job uploads only the report generated after its tests.
-
-    The coverage step is the lane's test execution as well as its measurement,
-    so the report always reflects the tested tree. The artefact upload runs
-    after it, so it receives only the completed report.
-    """
+def test_pr_coverage_stays_local_and_uses_the_main_ratchet() -> None:
+    """Keep pull-request coverage inside CI and compare it with main."""
     steps = job_steps(load_workflow(), "build-test")
-    coverage_index = unique_step_index(steps, COVERAGE_STEP)
-    artefact_index = unique_step_index(steps, PR_COVERAGE_ARTEFACT_STEP)
-    assert coverage_index < artefact_index, (
-        "the build-test job must run coverage before its artefact upload; "
-        f"got indices {coverage_index}, {artefact_index}"
-    )
-
+    coverage_step = named_step(steps, COVERAGE_STEP)
     _assert_with_inputs(
-        steps[coverage_index],
+        coverage_step,
         COVERAGE_STEP,
-        {"language": "rust", "output-path": "lcov.info", "format": "lcov"},
+        {
+            "language": "rust",
+            "output-path": "lcov.info",
+            "format": "lcov",
+            "with-ratchet": "true",
+        },
     )
-    _assert_with_inputs(
-        steps[artefact_index],
-        PR_COVERAGE_ARTEFACT_STEP,
-        {"name": "pr-coverage-lcov", "path": "lcov.info", "retention-days": 3},
+    assert not [
+        step for step in steps if step.get("name") == PR_COVERAGE_ARTEFACT_STEP
+    ], "pull requests must not publish their coverage report"
+    assert not COVERAGE_PR_WORKFLOW_PATH.exists(), (
+        "pull requests must not have a privileged CodeScene submission workflow"
     )
 
 

@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted.
+Superseded by [ADR-024](adr-024-main-owned-coverage-publication.md).
 
 ## Date
 

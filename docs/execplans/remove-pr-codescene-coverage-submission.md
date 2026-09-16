@@ -1,11 +1,11 @@
 # Keep pull-request coverage enforcement local
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & discoveries`,
-`Decision log`, `Outcomes & retrospective`, `Conformance basis`, and
-`Verification plan` must be kept up to date as work proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & discoveries`, `Decision log`,
+`Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
+be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 ## Purpose / big picture
 
@@ -40,8 +40,8 @@ previous merge, while CodeScene receives coverage only after changes reach
   `upload-codescene-coverage` action contract must change.
 - Dependencies: stop if any new external dependency is required.
 - External configuration: stop if completion requires changing CodeScene or
-  GitHub settings beyond the already agreed project configuration; document
-  the exact manual operation instead.
+  GitHub settings beyond the already agreed project configuration; document the
+  exact manual operation instead.
 - Iterations: stop if a focused workflow-contract failure remains unexplained
   after three correction attempts.
 - Ambiguity: stop if repository evidence shows that another consumer relies on
@@ -50,27 +50,21 @@ previous merge, while CodeScene receives coverage only after changes reach
 ## Risks
 
 - Risk: branch rules may still require a retired check name.
-  Severity: high.
-  Likelihood: medium.
-  Mitigation: inspect repository rulesets before deletion and record any
-  remaining external configuration in the pull-request notes.
+  Severity: high. Likelihood: medium. Mitigation: inspect repository rulesets
+  before deletion and record any remaining external configuration in the
+  pull-request notes.
 - Risk: deleting the trusted submission workflow may leave orphaned scripts,
-  tests, documentation, runner placement entries, or Make targets.
-  Severity: medium.
-  Likelihood: high.
-  Mitigation: search the complete repository before and after deletion and
-  make the absence of the obsolete workflow a contract test.
+  tests, documentation, runner placement entries, or Make targets. Severity:
+  medium. Likelihood: high. Mitigation: search the complete repository before
+  and after deletion and make the absence of the obsolete workflow a contract
+  test.
 - Risk: changing the coverage topology could accidentally stop the main
-  baseline from advancing.
-  Severity: high.
-  Likelihood: low.
-  Mitigation: retain and strengthen contracts proving that PRs read the
-  ratchet while only a push to `main` publishes it and uploads to CodeScene.
+  baseline from advancing. Severity: high. Likelihood: low. Mitigation: retain
+  and strengthen contracts proving that PRs read the ratchet while only a push
+  to `main` publishes it and uploads to CodeScene.
 - Risk: an ADR number may already exist on an unmerged remote branch.
-  Severity: medium.
-  Likelihood: low.
-  Mitigation: inspect all remote branch trees before allocating the next ADR
-  number.
+  Severity: medium. Likelihood: low. Mitigation: inspect all remote branch
+  trees before allocating the next ADR number.
 
 ## Progress
 
@@ -78,13 +72,17 @@ previous merge, while CodeScene receives coverage only after changes reach
   trusted PR workflow checks `main`, reports zero measured coverage, and passes
   only because both CodeScene gates are disabled.
 - [x] (2026-09-16 17:35Z) Draft this ExecPlan for approval.
-- [ ] Inspect branch rules, remote ADR allocations, and every repository
+- [x] (2026-09-16 17:45Z) Receive explicit approval and begin execution.
+- [x] (2026-09-16 18:00Z) Inspect branch rules, remote ADR allocations, and
+      every repository
   reference to the PR submission boundary.
-- [ ] Add the focused failing workflow-contract test.
-- [ ] Remove the PR artefact upload, trusted submission workflow, owned helper
+- [x] (2026-09-16 18:10Z) Add the focused failing workflow-contract test.
+- [x] (2026-09-16 18:25Z) Remove the PR artefact upload, trusted submission
+      workflow, owned helper
   modules, and tests that exist only for that workflow.
-- [ ] Record the replacement architecture and update contributor documentation.
-- [ ] Run focused tests and every repository quality gate.
+- [x] (2026-09-16 18:40Z) Record the replacement architecture and update
+      contributor documentation.
+- [x] (2026-09-16 18:45Z) Run focused tests and every repository quality gate.
 - [ ] Review the complete diff, commit, push `code-coverage-failure`, and open a
   draft pull request against `main`.
 
@@ -92,40 +90,59 @@ previous merge, while CodeScene receives coverage only after changes reach
 
 - Observation: the trusted `workflow_run` job deliberately checks out `main`,
   so `cs-coverage check` runs outside pull-request context and compares `main`
-  with its first parent.
-  Evidence: run 35117392122 reported `base_ref nil` and commit
-  `72256e83f8a52c0b9b0e77f47eafa1427d98d60b` while PR 716 was at
-  `776e3bb7749fa6b1bbc92a1dd6158d394fe276c5`.
-  Impact: the custom green check is not evidence about the pull request.
+  with its first parent. Evidence: run 35117392122 reported `base_ref nil` and
+  commit `72256e83f8a52c0b9b0e77f47eafa1427d98d60b` while PR 716 was at
+  `776e3bb7749fa6b1bbc92a1dd6158d394fe276c5`. Impact: the custom green check is
+  not evidence about the pull request.
 - Observation: `.github/workflows/ci.yml` and
   `.github/workflows/coverage-main.yml` already implement the desired local
-  ratchet topology.
-  Evidence: both call `generate-coverage` with `with-ratchet: 'true'`; the
-  action pin publishes the baseline only on a push to `refs/heads/main`.
-  Impact: implementation should remove redundant machinery rather than invent
-  a replacement.
+  ratchet topology. Evidence: both call `generate-coverage` with
+  `with-ratchet: 'true'`; the action pin publishes the baseline only on a push
+  to `refs/heads/main`. Impact: implementation should remove redundant
+  machinery rather than invent a replacement.
+- Observation: the active `main-required-checks` ruleset does not require the
+  custom CodeScene coverage check. Evidence: its required contexts are
+  `build-test`, `kani-smoke`, `netsukefile`, and `release / metadata`. Impact:
+  removing the custom publisher needs no GitHub ruleset change.
+- Observation: the hostile-artefact validators under `scripts/` have explicit
+  standalone Make targets as well as their former workflow consumer. Evidence:
+  `test-coverage-artifact` and `validate-coverage-artifact` remain documented
+  quality and inspection entry points. Impact: retain them as maintenance
+  tools; remove only the private submission implementation under
+  `.github/scripts`.
 
 ## Decision log
 
 - Decision: make the repository ratchet the only pull-request coverage gate.
   Rationale: it compares the candidate report with a baseline written from
   `main`, needs no secret-bearing PR submission, and already runs in ordinary
-  CI.
-  Date/Author: 2026-09-16, user and Codex.
+  CI. Date/Author: 2026-09-16, user and Codex.
 - Decision: keep CodeScene coverage upload confined to
-  `.github/workflows/coverage-main.yml`.
-  Rationale: CodeScene remains useful for historical analysis and hotspot
-  visualization without participating in merge admission.
-  Date/Author: 2026-09-16, user and Codex.
+  `.github/workflows/coverage-main.yml`. Rationale: CodeScene remains useful
+  for historical analysis and hotspot visualization without participating in
+  merge admission. Date/Author: 2026-09-16, user and Codex.
 - Decision: remove the obsolete boundary atomically rather than retain a
-  compatibility workflow or inert check.
-  Rationale: the workflow, helper scripts, and check name are private CI
-  surfaces with no valid consumer once the ratchet owns PR enforcement.
-  Date/Author: 2026-09-16, Codex.
+  compatibility workflow or inert check. Rationale: the workflow, helper
+  scripts, and check name are private CI surfaces with no valid consumer once
+  the ratchet owns PR enforcement. Date/Author: 2026-09-16, Codex.
 
 ## Outcomes & retrospective
 
-No implementation outcome is recorded while this plan remains in draft.
+Pull-request coverage now stops at the local ratchet enforced by `build-test`.
+The PR artefact hand-off, privileged `workflow_run` consumer, private publisher
+modules, and their owned contracts have been removed. The main coverage
+workflow remains the only CodeScene uploader and the only ratchet-baseline
+writer.
+
+ADR-024 records the replacement architecture and supersedes ADR-022. The
+developer guide now separates repository behaviour from CodeScene's external
+analysis schedule and unavailable-data policy. The active ruleset did not
+require the retired custom check, so no GitHub configuration change was
+necessary.
+
+All focused and repository gates passed. The final change used 25 tracked
+paths, exactly the plan's scope tolerance, without changing shared actions,
+dependencies, Rust behaviour, or coverage thresholds.
 
 ## Context and orientation
 
@@ -144,8 +161,8 @@ pull-request context.
 the same coverage shape, advances the shared ratchet baseline, and uploads the
 report to CodeScene. This is the topology to retain.
 
-`docs/adr-022-pr-coverage-trust-boundary.md` records the boundary being
-retired. `docs/developers-guide.md` describes its operation. Tests under
+`docs/adr-022-pr-coverage-trust-boundary.md` records the boundary being retired.
+`docs/developers-guide.md` describes its operation. Tests under
 `tests/workflow_contracts/` load the workflow, validate its security
 properties, and assign its job to a runner class. Those owned surfaces must be
 updated together.
@@ -181,51 +198,44 @@ owned YAML documents.
 
 - Obligation: `ARCH-PR-LOCAL`. Pull-request CI generates coverage with the
   ratchet enabled and does not upload `pr-coverage-lcov` or call CodeScene.
-  Method: deterministic workflow-contract test.
-  Rationale: the relevant workflow has a finite step list and explicit action
-  inputs.
-  Domain: every step in the PR `build-test` job and every workflow path.
-  Artefact: the relevant module under `tests/workflow_contracts/` selected
-  after repository inspection.
-  Evidence: the focused pytest command fails before deletion because the
-  artefact step and trusted workflow exist, then passes after implementation.
-  Non-vacuity: the test also asserts the positive witness that
+  Method: deterministic workflow-contract test. Rationale: the relevant
+  workflow has a finite step list and explicit action inputs. Domain: every
+  step in the PR `build-test` job and every workflow path. Artefact: the
+  relevant module under `tests/workflow_contracts/` selected after repository
+  inspection. Evidence: the focused pytest command fails before deletion
+  because the artefact step and trusted workflow exist, then passes after
+  implementation. Non-vacuity: the test also asserts the positive witness that
   `Test and Measure Coverage` remains present with `with-ratchet: 'true'`; a
   fixture mutation that restores the artefact step must fail.
 - Obligation: `ARCH-MAIN-AUTHORITATIVE`. The main workflow retains the same
   test selection, ratchet enablement, push trigger, and CodeScene upload.
   Method: deterministic workflow-contract test using the parsed workflow.
-  Rationale: exact input assertions detect accidental removal or drift.
-  Domain: the `coverage-upload` job's trigger and named steps.
-  Artefact: existing ratchet and coverage workflow-contract tests, strengthened
-  only where they do not already cover the obligation.
-  Evidence: focused pytest passes and a representative mutation removing the
-  upload or ratchet setting fails.
+  Rationale: exact input assertions detect accidental removal or drift. Domain:
+  the `coverage-upload` job's trigger and named steps. Artefact: existing
+  ratchet and coverage workflow-contract tests, strengthened only where they do
+  not already cover the obligation. Evidence: focused pytest passes and a
+  representative mutation removing the upload or ratchet setting fails.
   Non-vacuity: assertions require both named steps and exact action inputs; an
   empty job cannot pass.
 - Obligation: `ARCH-NO-PR-CODESCENE`. No repository workflow, script, test, or
-  documentation claims that PR coverage is sent to CodeScene.
-  Method: structural test plus bounded repository search and diff review.
-  Rationale: the obsolete surface consists of a known finite set of tracked
-  files and literal integration names.
-  Domain: tracked repository files excluding historical ADR text that clearly
-  identifies the superseded design.
-  Artefact: workflow-contract test and validation transcript in this plan.
-  Evidence: focused test and `rg` inventory show only main upload and explicit
-  historical references.
-  Non-vacuity: the pre-change search finds the workflow, action invocation,
-  helper modules, and check name.
+  documentation claims that PR coverage is sent to CodeScene. Method:
+  structural test plus bounded repository search and diff review. Rationale:
+  the obsolete surface consists of a known finite set of tracked files and
+  literal integration names. Domain: tracked repository files excluding
+  historical ADR text that clearly identifies the superseded design. Artefact:
+  workflow-contract test and validation transcript in this plan. Evidence:
+  focused test and `rg` inventory show only main upload and explicit historical
+  references. Non-vacuity: the pre-change search finds the workflow, action
+  invocation, helper modules, and check name.
 - Obligation: `ARCH-DOCUMENTED-REVERSAL`. Documentation explains that the
   ratchet owns PR enforcement and CodeScene consumes only `main` uploads.
   Method: documentation review plus Markdown, spelling, and Mermaid gates.
-  Rationale: this is prose architecture with no executable semantics beyond
-  the linked workflow contracts.
-  Domain: the new superseding ADR, `docs/contents.md`, and
-  `docs/developers-guide.md`.
-  Artefact: repository documentation files.
-  Evidence: `make markdownlint`, `make nixie`, and link/diff inspection pass.
-  Non-vacuity: links point to existing files and the prose names both the kept
-  and removed paths.
+  Rationale: this is prose architecture with no executable semantics beyond the
+  linked workflow contracts. Domain: the new superseding ADR,
+  `docs/contents.md`, and `docs/developers-guide.md`. Artefact: repository
+  documentation files. Evidence: `make markdownlint`, `make nixie`, and
+  link/diff inspection pass. Non-vacuity: links point to existing files and the
+  prose names both the kept and removed paths.
 
 External axioms are limited to the shared action contract that
 `with-ratchet: 'true'` reads the candidate report and publishes a baseline only
@@ -246,9 +256,9 @@ submission workflow still exist. No production workflow changes occur in this
 stage.
 
 Stage C removes the PR artefact step, trusted workflow, its private Python
-implementation, runner-placement entry, and tests that specify only the
-retired design. It retains or strengthens tests for the PR ratchet and main
-upload. The focused suite must pass before documentation work proceeds.
+implementation, runner-placement entry, and tests that specify only the retired
+design. It retains or strengthens tests for the PR ratchet and main upload. The
+focused suite must pass before documentation work proceeds.
 
 Stage D records the superseding ADR, updates the developer guide and contents
 index, formats the repository, and runs the complete quality gates. The final
@@ -258,31 +268,26 @@ diff is reviewed for unrelated churn before delivery.
 
 - Identifier and outcome: `EP-M1`, repository behaviour contains one local PR
   coverage ratchet and one authoritative main upload, with no privileged PR
-  submission path.
-  Requirements and gaps: discharges `ARCH-PR-LOCAL`,
-  `ARCH-MAIN-AUTHORITATIVE`, and `ARCH-NO-PR-CODESCENE`.
-  Acceptance evidence: focused workflow-contract tests and bounded repository
-  inventory pass.
+  submission path. Requirements and gaps: discharges `ARCH-PR-LOCAL`,
+  `ARCH-MAIN-AUTHORITATIVE`, and `ARCH-NO-PR-CODESCENE`. Acceptance evidence:
+  focused workflow-contract tests and bounded repository inventory pass.
   Conformance check: ratchet and upload action contracts remain unchanged; no
   dependency, application API, persisted format, or new trust boundary is
-  introduced.
-  Recovery: restore the atomic deletion and test changes together, then rerun
-  the focused contract suite.
-  Remaining gaps: architecture documentation and full gates.
-  Compatibility decision: none; the removed workflow and helper modules are
-  private CI surfaces, and the retired check must not remain as an inert shim.
+  introduced. Recovery: restore the atomic deletion and test changes together,
+  then rerun the focused contract suite. Remaining gaps: architecture
+  documentation and full gates. Compatibility decision: none; the removed
+  workflow and helper modules are private CI surfaces, and the retired check
+  must not remain as an inert shim.
 - Identifier and outcome: `EP-M2`, documentation and full validation agree
-  with the delivered topology.
-  Requirements and gaps: discharges `ARCH-DOCUMENTED-REVERSAL` and completes
-  the other obligations with repository-wide evidence.
-  Acceptance evidence: required quality gates pass, the worktree contains only
-  intended changes, and the draft pull request links the relevant files.
-  Conformance check: the superseding ADR names the reversal, all upstream
-  claims are reconciled, and no external setting is misrepresented as a
-  repository change.
-  Recovery: correct the failing owned surface; do not weaken or skip a gate.
-  Remaining gaps: none within repository scope.
-  Compatibility decision: none.
+  with the delivered topology. Requirements and gaps: discharges
+  `ARCH-DOCUMENTED-REVERSAL` and completes the other obligations with
+  repository-wide evidence. Acceptance evidence: required quality gates pass,
+  the worktree contains only intended changes, and the draft pull request links
+  the relevant files. Conformance check: the superseding ADR names the
+  reversal, all upstream claims are reconciled, and no external setting is
+  misrepresented as a repository change. Recovery: correct the failing owned
+  surface; do not weaken or skip a gate. Remaining gaps: none within repository
+  scope. Compatibility decision: none.
 
 ## Concrete steps
 
@@ -295,8 +300,8 @@ Run all commands from
    module. Expect failure naming the still-present PR artefact or submission
    workflow.
 3. Remove the obsolete workflow and owned modules with `apply_patch`; update
-   every affected contract and run the focused workflow-contract suite until
-   it passes.
+   every affected contract and run the focused workflow-contract suite until it
+   passes.
 4. Add the superseding ADR and update `docs/contents.md` and
    `docs/developers-guide.md`. Run `make fmt` after documentation edits.
 5. Run `make check-fmt`, `make lint`, `make doc-coverage`, `make test`,
@@ -373,4 +378,7 @@ workflow implementation details and receive no compatibility layer.
 ## Revision note
 
 2026-09-16: Created the initial draft from the observed PR 716 and main-upload
-evidence. Implementation remains gated on explicit approval.
+evidence.
+
+2026-09-16: Marked the plan in progress after explicit approval. The planned
+scope and verification obligations are unchanged.

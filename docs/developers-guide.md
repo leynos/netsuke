@@ -1404,9 +1404,8 @@ Run these commands before finalizing any change:
 - `make doc-coverage`
 - `make test`
 
-When the change touches the coverage artefact validators under `scripts/` or
-the trusted coverage workflow (`.github/workflows/coverage-pr-submit.yml`),
-also run:
+When the change touches the standalone coverage artefact validators under
+`scripts/`, also run:
 
 - `make test-coverage-artifact`
 - `make validate-coverage-artifact`
@@ -1416,14 +1415,13 @@ the Rust suite and never executes it, so a validator change is untested unless
 these commands run. Two entry points form the boundary.
 `scripts/validate_coverage_artifact.py` owns the outer-directory checks and the
 recognized-LCOV text contract, and exposes its own narrow command line.
-`scripts/validate_coverage_archive.py` is the composition entry point that the
-trusted submission path loads; it runs those outer checks and then validates
-ZIP metadata before materializing the sole `lcov.info` member.
-`make validate-coverage-artifact` runs that composition entry point over the
-raw ZIP the trusted workflow downloads, with `COVERAGE_ARTIFACT_DIR` selecting
-the download directory and `validated-coverage` receiving the output. It treats
-the archive as hostile data and does not execute, import, or resolve paths
-recorded in the report.
+`scripts/validate_coverage_archive.py` is the composition entry point; it runs
+those outer checks and then validates ZIP metadata before materializing the sole
+`lcov.info` member. `make validate-coverage-artifact` runs that composition
+entry point over the raw ZIP under inspection, with `COVERAGE_ARTIFACT_DIR`
+selecting the input directory and `validated-coverage` receiving the output. It
+treats the archive as hostile data and does not execute, import, or resolve
+paths recorded in the report.
 
 When the change touches any Markdown file — documentation, ADRs, execplans, or
 the README — also run:
@@ -1459,126 +1457,37 @@ workflow, job, and step helpers in
 workflow-specific projections and assertions, so parsing and structural
 validation remain consistent across the workflows under test.
 
-### PR coverage trust boundary
+### Coverage ratchet and CodeScene publication
 
-The accepted architecture for this boundary is recorded in
-[ADR-022](adr-022-pr-coverage-trust-boundary.md). The workflow details below
-are the implementation guidance for that decision.
+The accepted architecture is recorded in
+[ADR-024](adr-024-main-owned-coverage-publication.md), which supersedes the
+trusted pull-request submission design in
+[ADR-022](adr-022-pr-coverage-trust-boundary.md).
 
-The pull-request CI job is deliberately unprivileged. It builds, tests, and
-generates `lcov.info`, then uploads only that file as the short-lived
-`pr-coverage-lcov` artefact. It does not receive `CS_ACCESS_TOKEN`. This
-matters because PR-controlled commands can persist `BASH_ENV`, `GITHUB_PATH`,
-and other state for later steps on their own runner.
+Pull-request CI generates `lcov.info` and runs the shared coverage action with
+ratchet mode enabled. The ratchet compares changed-line coverage with the
+baseline written from `main`. Pull requests do not upload the report as an
+artefact, receive `CS_ACCESS_TOKEN`, invoke CodeScene, or create a CodeScene
+Check Run.
 
-[`coverage-pr-submit.yml`](../.github/workflows/coverage-pr-submit.yml) is a
-separate `workflow_run` workflow whose definition comes from the default
-branch. After a successful same-repository `pull_request` CI run, it starts a
-fresh runner, and `actions/checkout` retrieves the full trusted default-branch
-tree at `fetch-depth: 0`. The workflow executes only the needed checked-in
-validation and submission commands, then downloads the artefact as a raw ZIP
-into `coverage-artifact/` with decompression disabled. It never checks out or
-executes the PR tree or artefact contents. Before the CodeScene action can see
-the secret, `scripts/validate_coverage_archive.py` requires exactly one
-regular, non-symbolic archive file inside that directory, checks the ZIP
-metadata for a single safe relative `lcov.info` member with a bounded
-cumulative uncompressed size and no directory or symbolic-link entry, and only
-then reads the bounded member bytes, validates UTF-8 and recognized LCOV
-records, and writes `validated-coverage/lcov.info`. Archive metadata is
-therefore authoritative before any member data is read.
+The `coverage-main.yml` workflow owns persistent coverage data. A push to
+`main` runs the same coverage workload, advances the ratchet baseline, and
+uploads that run's LCOV report to CodeScene. The upload therefore describes the
+branch and commit that CodeScene analyses. Manual dispatches remain read-only
+warm-run diagnostics and do not replace the ratchet baseline.
 
-The depth is part of the contract rather than an optimization. The shared
-`upload-codescene-coverage` action documents `mode: check` as diffing against a
-merge base and requiring a `fetch-depth: 0` checkout, and the CodeScene CLI
-reads that history rather than a working tree. At `actions/checkout`'s default
-depth of one there is no history to read: the step exits with
-`fatal: ambiguous
-argument 'HEAD~1': unknown revision or path not in the working tree`,
-which fails `CodeScene coverage` on every pull request and leaves
-`CodeScene Code Coverage (main)` waiting for a submission that never lands.
-`tests/workflow_contracts/codescene_check_depth_test.py` holds every job that
-runs the action in `check` mode to a full-history checkout declared before the
-gate step, with `codescene_check_depth_properties_test.py` driving the rule
-over job shapes this repository does not have.
+The CodeScene analysis schedule and the setting that suppresses its coverage
+gate when data is unavailable live in CodeScene's project configuration, not in
+this repository. A main upload can appear in CodeScene only after the service
+analyses that commit; re-running a pull-request workflow is neither a baseline
+refresh nor a substitute for that analysis.
 
-Depth is what stops the gate erroring; it is not what would give it the pull
-request's comparison. This job checks out the default branch and never pull
-request content, so the CLI runs outside pull-request context whatever depth it
-is given and takes the default branch's own first parent as its changeset base.
-Giving it the originating comparison would mean checking out
-`workflow_run.head_sha`, which is the arrangement this boundary exists to
-prevent. Both CodeScene coverage gates are currently disabled for this project,
-so no verdict rests on that base today; enabling one makes the base
-load-bearing and needs its own design.
-
-Every step of that workflow runs through GitHub Actions' `python` shell, which
-resolves `python` on `PATH`. The trusted modules under `.github/scripts` are
-written to the repository's Python baseline (`PYTHON_BASELINE` in the
-Makefile), so the workflow's `setup-uv` step sets `activate-environment` to put
-a baseline interpreter first on `PATH`; `python-version` alone only sets
-`UV_PYTHON`, and under the runner's system interpreter the modules fail as they
-load, because an annotation naming a `TYPE_CHECKING`-only import raises
-`NameError` at definition time there. The first Python step in each provisioned
-Python-shell job runs `.github/scripts/verify_python_baseline.py`, which uses
-only built-in names in its annotations so it loads anywhere and names the
-mismatch. Three guards hold this:
-`tests/workflow_contracts/python_shell_interpreter_test.py` requires each
-provisioned `shell: python` job in every workflow to check out the trusted
-tree, activate the baseline through `setup-uv`, and run the check first, and
-holds the module's `BASELINE` equal to the Makefile. The
-`coverage-pr-submit.yml:report-excluded-fork` job is the explicit exception:
-its trust boundary grants only `checks: write` and fixes a three-step telemetry
-sequence, leaving no room for checkout, `setup-uv`, or interpreter verification;
-`UNPROVISIONED_JOBS` records it and the contract test removes it before
-applying those assertions. `make lint-workflow-scripts` (run by
-`make lint-python`) loads every trusted module under the baseline, and the
-check step itself fails by name in CI. This matters more here than elsewhere:
-the workflow always runs the default branch's copy, so a module that cannot
-load on `main` fails the coverage check on every pull request and no pull
-request can repair it.
-
-Eligibility is enforced by the trusted workflow definition, its successful
-pull-request and same-repository-head guards, and the step-local
-`CS_ACCESS_TOKEN` presence guard. Fork PRs still receive the complete
-unprivileged CI result but do not enter the secret-bearing submission job. The
-repository or organization Actions policy must continue to restrict the
-CodeScene credential to this trusted phase. A protected environment with
-independent reviewers is an optional stronger control for organizations that
-need explicit human approval before any coverage submission.
-
-The trusted workflow creates the `CodeScene coverage` Check Run against the
-originating PR `head_sha`. It reports `neutral` only when artefact download and
-validation both succeeded and the submission skipped solely because no token is
-available; a failed or skipped download or validation publishes a failing
-check, so a hostile artefact can never produce a non-failing gate. Workflow
-concurrency serializes publications for one originating workflow-run ID. The
-publisher uses that ID as the Check Run `external_id`, finds an existing
-matching run for the originating commit and fixed name, and updates it;
-otherwise it creates the run. This keeps repeated trusted notifications
-idempotent without accepting arbitrary pull-request identifiers.
-Branch-protection configuration may therefore need an organization-level update
-to require this Check Run name instead of the former in-job coverage step.
-`tests/workflow_contracts/trust_boundary_test.py` and its Hypothesis companion
-prevent the secret from returning to a pull-request workflow, a trusted
-checkout from drifting to PR content, a raw secret expression from reaching a
-step's `run` or `with` surfaces, or the validator from being skipped. The pure
-`.github/scripts/coverage_pr_reporting.py` helper is owned by the trusted
-coverage submission path: only `coverage_pr_submission.py` may call it. It
-performs no environment access or I/O and only composes already-bounded values
-for the Check Run and workflow summary. The
-`.github/scripts/coverage_pr_check_runs.py` adapter is likewise owned by
-`coverage_pr_submission.py` and is the sole production GitHub Check Run API
-boundary. It accepts only already-bounded payloads; tests inject a fake
-publisher at that boundary.
-
-The trusted job also writes bounded JSONL metrics and traces to runner-local
-files and uploads them as the fixed `codescene-pr-coverage-metrics` and
-`codescene-pr-coverage-traces` artefacts. Metrics use fixed operation, outcome,
-and error-category labels with count and duration values. Traces use fixed
-event, operation, outcome, error-category, and duration fields, together with
-the originating workflow-run ID and commit SHA. These exports are observability
-artefacts, not a Prometheus, OpenTelemetry Protocol (OTLP), or statsd endpoint.
-They contain no PR text, coverage content, filesystem paths, or credentials.
+Workflow contract tests keep the boundary explicit: the pull-request coverage
+step must retain ratchet mode, the artefact upload and privileged submission
+workflow must remain absent, and the main workflow must upload the report
+generated earlier in its job. The standalone hostile-artefact validators under
+`scripts/` remain available for maintenance use, but no active workflow
+downloads pull-request coverage.
 
 `make test` runs the non-doctest suite through
 [cargo-nextest](https://nexte.st/) and the doctests separately. CI pins the
