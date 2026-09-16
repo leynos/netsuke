@@ -73,7 +73,11 @@ output and some leaf files so the long-lived structure remains visible.
 - `docs/archive/`: Historical planning documents retained for traceability
   after active roadmap work moves on.
 - `docs/execplans/`: Execution plans used as implementation handoff documents
-  for scoped tasks.
+  for scoped tasks. Each plan opens with a `Status:` line drawn from the closed
+  set `DRAFT | APPROVED | IN PROGRESS | BLOCKED | COMPLETE`; the plan's
+  `Progress` and `Outcomes & retrospective` sections, and its roadmap checkbox,
+  are authoritative over that line. The status vocabulary is defined under
+  *ExecPlan* in the [documentation style guide](documentation-style-guide.md).
 - `docs/rfcs/`: Requests for Comments proposing changes that need technical
   review before they become binding, named `NNNN-short-topic.md` and numbered
   in allocation order. Numbers are never reused, and are never renumbered after

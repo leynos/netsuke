@@ -56,6 +56,12 @@
   conventions and practices in [developers' guide](docs/developers-guide.md).
 - **Style:** All documentation must adhere to the
   [documentation style guide](docs/documentation-style-guide.md).
+- **ExecPlans:** Keep an ExecPlan's header `Status:` line to one bare value
+  from the closed set `DRAFT | APPROVED | IN PROGRESS | BLOCKED | COMPLETE`,
+  and move free-text qualifiers into a sentence beneath the header. The plan's
+  `Progress` and `Outcomes & retrospective` sections and its roadmap checkbox
+  are authoritative over that line. See *ExecPlan* in the
+  [documentation style guide](docs/documentation-style-guide.md).
 
 ## Change quality & committing
 
