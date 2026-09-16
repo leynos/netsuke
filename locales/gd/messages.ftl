@@ -349,7 +349,7 @@ stdlib.time.label.nanoseconds = nano-dhiogan
 # Breithneachadh a' chuidiche which.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] cha deach an àithne “{ $command }” a lorg às dèidh { $count } innteart PATH a sgrùdadh. Ro-shealladh: { $preview }
 stdlib.which.not_found.hint.cwd_auto = Cha bhith am modh auto a’ lorg ach ann an clàran a tha ainmichte gu soilleir ann am PATH.
-stdlib.which.not_found.hint.cwd_always = Cha bhith am modh always a’ lorg ach sa chlàr làithreach mus lorg e ann an clàran ainmichte ann am PATH.
+stdlib.which.not_found.hint.cwd_always = Bidh am modh always a’ lorg sa chlàr làithreach an toiseach, agus an uair sin ann an clàran ainmichte ann am PATH.
 stdlib.which.not_found.hint.workspace = Gus craobh an àite-obrach a lorg gu h-ath-chùrsach, cleachd cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] tha an àithne “{ $command }” aig “{ $path }” a dhìth no chan eil i so-ruithe.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }

@@ -349,7 +349,7 @@ stdlib.time.label.nanoseconds = מיליארדיות שנייה
 # אבחון העוזר which.
 stdlib.which.not_found = ‏[netsuke::jinja::which::not_found] הפקודה „{ $command }” לא נמצאה לאחר בדיקת { $count } רשומות ב‑PATH. תצוגה מקדימה: { $preview }
 stdlib.which.not_found.hint.cwd_auto = ‏מצב auto מחפש רק בספריות המצוינות במפורש ב־PATH.
-stdlib.which.not_found.hint.cwd_always = ‏מצב always מחפש רק בספרייה הנוכחית לפני הספריות המצוינות ב־PATH.
+stdlib.which.not_found.hint.cwd_always = ‏מצב always מחפש תחילה בספרייה הנוכחית ולאחר מכן בספריות המצוינות במפורש ב־PATH.
 stdlib.which.not_found.hint.workspace = ‏כדי לחפש באופן רקורסיבי בעץ סביבת העבודה, השתמשו ב־cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = ‏[netsuke::jinja::which::not_found] הפקודה „{ $command }” ב‑„{ $path }” חסרה או אינה ניתנת להרצה.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }

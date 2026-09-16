@@ -348,7 +348,7 @@ stdlib.time.label.nanoseconds = 纳秒
 # which 辅助函数的诊断。
 stdlib.which.not_found = [netsuke::jinja::which::not_found] 检查了 { $count } 个 PATH 条目后仍未找到命令“{ $command }”。预览：{ $preview }
 stdlib.which.not_found.hint.cwd_auto = auto 模式仅搜索 PATH 中明确指定的目录。
-stdlib.which.not_found.hint.cwd_always = always 模式仅在 PATH 中指定的目录之前搜索当前目录。
+stdlib.which.not_found.hint.cwd_always = always 模式先搜索当前目录，再搜索 PATH 中指定的目录。
 stdlib.which.not_found.hint.workspace = 要递归搜索工作区树，请使用 cwd_mode="workspace-recursive"。
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] “{ $path }”中的命令“{ $command }”不存在或不可执行。
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }

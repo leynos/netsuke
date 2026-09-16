@@ -349,7 +349,7 @@ stdlib.time.label.nanoseconds = nanosekuntia
 # which-apurin diagnostiikka.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] komentoa ”{ $command }” ei löytynyt, kun { $count } PATH-merkintää oli tarkistettu. Esikatselu: { $preview }
 stdlib.which.not_found.hint.cwd_auto = auto-tila hakee vain PATH-muuttujaan nimenomaisesti määritetyistä hakemistoista.
-stdlib.which.not_found.hint.cwd_always = always-tila hakee vain nykyisestä hakemistosta ennen PATH-muuttujaan määritettyjä hakemistoja.
+stdlib.which.not_found.hint.cwd_always = always-tila hakee ensin nykyisestä hakemistosta ja sen jälkeen PATH-muuttujassa nimenomaisesti määritetyistä hakemistoista.
 stdlib.which.not_found.hint.workspace = Jos haluat hakea työtilapuusta rekursiivisesti, käytä cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] komento ”{ $command }” polussa ”{ $path }” puuttuu tai ei ole suoritettava.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }

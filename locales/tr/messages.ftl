@@ -349,7 +349,7 @@ stdlib.time.label.nanoseconds = nanosaniye
 # which yardımcısının tanılaması.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] { $count } PATH girdisi denetlendikten sonra "{ $command }" komutu bulunamadı. Önizleme: { $preview }
 stdlib.which.not_found.hint.cwd_auto = auto modu yalnızca PATH içinde açıkça belirtilen dizinlerde arama yapar.
-stdlib.which.not_found.hint.cwd_always = always modu yalnızca PATH içinde belirtilen dizinlerden önce geçerli dizinde arama yapar.
+stdlib.which.not_found.hint.cwd_always = always modu önce geçerli dizinde, ardından PATH içinde belirtilen dizinlerde arama yapar.
 stdlib.which.not_found.hint.workspace = Çalışma alanı ağacında özyinelemeli arama yapmak için cwd_mode="workspace-recursive" kullanın.
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] "{ $path }" konumundaki "{ $command }" komutu yok ya da çalıştırılabilir değil.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }

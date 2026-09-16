@@ -260,11 +260,16 @@ fn workspace_recursive_prefers_a_path_match(
     stdlib_workspace: Result<StdlibWorkspace>,
 ) -> Result<()> {
     let workspace_fixture = stdlib_workspace?;
-    let bin = workspace_fixture.root.join("bin");
-    let path_match = write_tool(&bin, "precedence-helper")?;
+    let path_fixture = tempfile::tempdir().context("create PATH fixture")?;
+    let path_dir = Utf8PathBuf::from_path_buf(path_fixture.path().to_path_buf())
+        .map_err(|path| anyhow!("PATH fixture path should be UTF-8: {}", path.display()))?;
+    let path_match = write_tool(&path_dir, "precedence-helper")?;
     let nested = workspace_fixture.root.join("nested");
     let workspace_match = write_tool(&nested, "precedence-helper")?;
-    let env = stdlib_env(&workspace_fixture.root, path_override(&[bin])?)?;
+    let env = stdlib_env(
+        &workspace_fixture.root,
+        path_override(std::slice::from_ref(&path_dir))?,
+    )?;
 
     let output = env.render_str(
         "{{ 'precedence-helper' | which(cwd_mode='workspace-recursive') }}",

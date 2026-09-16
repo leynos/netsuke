@@ -349,7 +349,7 @@ stdlib.time.label.nanoseconds = nanosecunde
 # Diagnostice ale ajutorului which.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] comanda „{ $command }” nu a fost găsită după verificarea a { $count } intrări din PATH. Previzualizare: { $preview }
 stdlib.which.not_found.hint.cwd_auto = Modul auto caută numai în directoarele indicate explicit în PATH.
-stdlib.which.not_found.hint.cwd_always = Modul always caută numai în directorul curent înaintea directoarelor indicate în PATH.
+stdlib.which.not_found.hint.cwd_always = Modul always caută mai întâi în directorul curent, apoi în directoarele indicate în PATH.
 stdlib.which.not_found.hint.workspace = Pentru a căuta recursiv în arborele spațiului de lucru, utilizați cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] comanda „{ $command }” din „{ $path }” lipsește sau nu este executabilă.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }

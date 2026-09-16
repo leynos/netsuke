@@ -349,7 +349,7 @@ stdlib.time.label.nanoseconds = नैनोसेकंड
 # which सहायक के निदान।
 stdlib.which.not_found = [netsuke::jinja::which::not_found] PATH की { $count } प्रविष्टियाँ जाँचने पर भी आदेश “{ $command }” नहीं मिला। झलक: { $preview }
 stdlib.which.not_found.hint.cwd_auto = auto मोड केवल PATH में स्पष्ट रूप से नामित निर्देशिकाओं में खोजता है।
-stdlib.which.not_found.hint.cwd_always = always मोड PATH में नामित निर्देशिकाओं से पहले केवल वर्तमान निर्देशिका में खोजता है।
+stdlib.which.not_found.hint.cwd_always = always मोड पहले वर्तमान निर्देशिका में और फिर PATH में स्पष्ट रूप से नामित निर्देशिकाओं में खोजता है।
 stdlib.which.not_found.hint.workspace = कार्यस्थान वृक्ष में पुनरावर्ती खोज के लिए cwd_mode="workspace-recursive" का उपयोग करें।
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] “{ $path }” पर आदेश “{ $command }” अनुपस्थित है अथवा निष्पादनीय नहीं है।
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }

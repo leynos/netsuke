@@ -349,7 +349,7 @@ stdlib.time.label.nanoseconds = nano giây
 # Chẩn đoán của hàm trợ giúp which.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] không tìm thấy lệnh “{ $command }” sau khi kiểm tra { $count } mục PATH. Xem trước: { $preview }
 stdlib.which.not_found.hint.cwd_auto = Chế độ auto chỉ tìm kiếm trong các thư mục được nêu rõ trong PATH.
-stdlib.which.not_found.hint.cwd_always = Chế độ always chỉ tìm kiếm thư mục hiện tại trước các thư mục được nêu trong PATH.
+stdlib.which.not_found.hint.cwd_always = Chế độ always tìm kiếm thư mục hiện tại trước, rồi đến các thư mục được nêu trong PATH.
 stdlib.which.not_found.hint.workspace = Để tìm kiếm đệ quy trong cây không gian làm việc, hãy dùng cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] lệnh “{ $command }” tại “{ $path }” không tồn tại hoặc không thực thi được.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }

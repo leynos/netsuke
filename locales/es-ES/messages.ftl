@@ -349,7 +349,7 @@ stdlib.time.label.nanoseconds = nanosegundos
 # Diagnósticos de which.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] comando '{ $command }' no encontrado tras revisar { $count } entradas PATH. Vista previa: { $preview }
 stdlib.which.not_found.hint.cwd_auto = El modo auto busca solo en los directorios indicados explícitamente en PATH.
-stdlib.which.not_found.hint.cwd_always = El modo always busca solo en el directorio actual antes de los directorios indicados en PATH.
+stdlib.which.not_found.hint.cwd_always = El modo always busca primero en el directorio actual y después en los directorios explícitamente indicados en PATH.
 stdlib.which.not_found.hint.workspace = Para buscar recursivamente en el árbol del espacio de trabajo, utilice cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] el comando '{ $command }' en '{ $path }' no existe o no es ejecutable.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }

@@ -349,7 +349,7 @@ stdlib.time.label.nanoseconds = наносекунди
 # Діагностика помічника which.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] команду «{ $command }» не знайдено після перевірки { $count } записів PATH. Попередній перегляд: { $preview }
 stdlib.which.not_found.hint.cwd_auto = Режим auto шукає лише в каталогах, явно вказаних у PATH.
-stdlib.which.not_found.hint.cwd_always = Режим always шукає лише в поточному каталозі перед каталогами, вказаними у PATH.
+stdlib.which.not_found.hint.cwd_always = Режим always спочатку шукає в поточному каталозі, а потім у каталогах, вказаних у PATH.
 stdlib.which.not_found.hint.workspace = Щоб рекурсивно шукати в дереві робочої області, використовуйте cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] команда «{ $command }» за шляхом «{ $path }» відсутня або не є виконуваною.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }

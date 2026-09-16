@@ -349,7 +349,7 @@ stdlib.time.label.nanoseconds = nanodetik
 # Diagnostik pembantu which.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] perintah "{ $command }" tidak ditemukan setelah memeriksa { $count } entri PATH. Pratinjau: { $preview }
 stdlib.which.not_found.hint.cwd_auto = Mode auto hanya mencari direktori yang secara eksplisit disebutkan dalam PATH.
-stdlib.which.not_found.hint.cwd_always = Mode always hanya mencari direktori saat ini sebelum direktori yang disebutkan dalam PATH.
+stdlib.which.not_found.hint.cwd_always = Mode always mencari direktori saat ini terlebih dahulu, kemudian direktori yang secara eksplisit disebutkan dalam PATH.
 stdlib.which.not_found.hint.workspace = Untuk mencari pohon ruang kerja secara rekursif, gunakan cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] perintah "{ $command }" di "{ $path }" tidak ada atau tidak dapat dieksekusi.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }

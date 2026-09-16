@@ -94,6 +94,12 @@ Feature: Template stdlib filters
     When I render the stdlib template "{{ which('tool', cwd_mode='workspace-recursive') }}" without context
     Then the stdlib output is the workspace executable "local/tool"
 
+  Scenario: which function searches the workspace after a non-matching PATH entry
+    Given the stdlib executable "nested/tool" exists
+    And the stdlib PATH entries are "bin"
+    When I render the stdlib template "{{ which('tool', cwd_mode='workspace-recursive') }}" without context
+    Then the stdlib output is the workspace executable "nested/tool"
+
   Scenario: which automatic mode does not recursively search the workspace
     Given the stdlib executable "local/tool" exists
     And the stdlib PATH entries are ""
