@@ -64,6 +64,7 @@ impl RecordingCargo {
                 "  printf 'path\\t%s\\n' \"${{PATH:-}}\"\n",
                 "  printf 'rustflags\\t%s\\n' \"${{RUSTFLAGS-}}\"\n",
                 "  printf 'rustflags_set\\t%s\\n' \"${{RUSTFLAGS+yes}}\"\n",
+                "  printf 'build_dir\\t%s\\n' \"${{CARGO_BUILD_BUILD_DIR:-}}\"\n",
                 "  printf 'target_dir\\t%s\\n' \"$target_dir\"\n",
                 "  printf 'target_state\\t%s\\n' \"$target_state\"\n",
                 "  printf 'touch_mtime\\t%s\\n' \"$touch_mtime\"\n",
@@ -140,6 +141,8 @@ pub struct CargoInvocation {
     toolchain: String,
     /// The `PATH` the invocation saw, recorded verbatim.
     path: String,
+    /// `CARGO_BUILD_BUILD_DIR` as the invocation saw it, empty when unset.
+    build_dir: String,
     /// `RUSTFLAGS` as the invocation saw it, or `None` when it was unset.
     ///
     /// Unset and empty are different facts here and must not be conflated: an
@@ -210,6 +213,7 @@ impl CargoInvocation {
                 .collect(),
             toolchain: take("toolchain")?,
             path: take("path")?,
+            build_dir: take("build_dir")?,
             rustflags,
             target_dir,
             target_state,
@@ -258,6 +262,16 @@ impl CargoInvocation {
     #[must_use]
     pub fn path(&self) -> &str {
         &self.path
+    }
+
+    /// The `CARGO_BUILD_BUILD_DIR` the invocation saw, empty when unset.
+    ///
+    /// A benchmark's clean pass is only clean if Cargo's intermediates live
+    /// under the directory the harness removed, so this is the fact that
+    /// distinguishes a cold build from a warm one wearing its clothes.
+    #[must_use]
+    pub fn build_dir(&self) -> &str {
+        &self.build_dir
     }
 
     /// `RUSTFLAGS` as the invocation saw it, `None` when never assigned.

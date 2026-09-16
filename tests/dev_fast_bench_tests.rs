@@ -207,6 +207,43 @@ proptest! {
     }
 }
 
+/// A clean pass is only clean if Cargo's intermediates live under the directory
+/// the harness removed.
+///
+/// Cargo can be told to keep them elsewhere, and a caller that has done so —
+/// a shared build tree on a multi-agent host, say — would have every variant
+/// share one directory. The `rm -rf` would then stop making the next pass
+/// clean, and the table would report three warm builds while looking exactly
+/// like three cold ones. Nothing about the output would give that away, which
+/// is why it is asserted rather than assumed.
+#[test]
+fn the_benchmark_takes_back_a_redirected_build_directory() -> Result<()> {
+    let scenario = BuildScenario::prepare()?;
+    let fixture = BenchFixture::prepare(&scenario)?;
+    let redirected = scenario.sandbox().home().join("shared-build-tree");
+
+    let invocation = MakeInvocation::new("bench-build")
+        .variable("CARGO", scenario.cargo().executable())
+        .environment("BENCH_ROOT", &fixture.root)
+        .environment("BENCH_TOUCH_FILE", &fixture.touch_file)
+        .environment("CARGO_BUILD_BUILD_DIR", &redirected);
+    let output = scenario.sandbox().run_make(&invocation)?;
+    ensure!(
+        output.status.success(),
+        "bench-build should succeed, got `{}`",
+        combined(&output)
+    );
+
+    for pass in scenario.cargo().invocations()? {
+        ensure!(
+            pass.build_dir().is_empty(),
+            "the benchmark must drop an inherited build directory, got `{}`",
+            pass.build_dir()
+        );
+    }
+    Ok(())
+}
+
 /// The touched file's timestamp must be put back, whether the run finishes or
 /// aborts partway.
 ///
