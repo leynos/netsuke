@@ -53,6 +53,30 @@ def _constructs_trybuild(text: str) -> bool:
     return TRYBUILD_CONSTRUCTION.search(normalized) is not None
 
 
+#: A nextest binary selector naming one binary exactly. `binary(name)` matches
+#: by substring and `binary(=name)` by equality; only the second is read as
+#: coverage, because the first would accept a filter written for a different
+#: binary whose name happens to contain this one.
+_BINARY_SELECTOR = re.compile(r"\bbinary(?:_id)?\s*\(\s*=\s*([^)\s]+)\s*\)")
+
+#: Any negation in a filterset. `not test(ui)` names the binary and excludes
+#: it, so a reader that looks for the name in the text reports coverage where
+#: nextest applies none. A filter carrying one is read as covering nothing
+#: rather than evaluated, because evaluating a filterset is nextest's job.
+_NEGATION = re.compile(r"(?:^|[^\w])(?:not\b|!)")
+
+
+def _filter_covers(filter_text: str, target: str) -> bool:
+    """Return whether one override filter selects `target`'s binary exactly."""
+    if _NEGATION.search(filter_text):
+        return False
+    stem = Path(target).stem
+    return any(
+        stem in {selector, selector.rsplit("::", 1)[-1]}
+        for selector in _BINARY_SELECTOR.findall(filter_text)
+    )
+
+
 def _trybuild_targets() -> list[str]:
     """Return every integration-test target that constructs a trybuild harness."""
     return sorted(
@@ -65,8 +89,13 @@ def _trybuild_targets() -> list[str]:
 def _base_terminates() -> bool:
     """Return whether the default profile terminates a test on its allowance."""
     config = tomllib.loads(NEXTEST_CONFIG.read_text(encoding="utf-8"))
-    timeout = config.get("profile", {}).get("default", {}).get("slow-timeout")
-    return isinstance(timeout, dict) and "terminate-after" in timeout
+    match config.get("profile", {}).get("default", {}).get("slow-timeout"):
+        case {"terminate-after": _}:
+            return True
+        case _:
+            # A bare duration sets a warning period and terminates nothing, and
+            # so does an absent key; both leave a trybuild target unbounded.
+            return False
 
 
 def _override_filters() -> list[str]:
@@ -94,24 +123,88 @@ def test_the_base_allowance_terminates() -> None:
 
 
 def test_every_trybuild_target_has_an_allowance_of_its_own() -> None:
-    """The set is discovered from the tree, not listed here.
+    """The set is discovered from the tree, and the empty set is pinned too.
 
-    Listing it here would be the same defect one level up: a list written once
-    against the names of the day. Discovery fails when a target is added, which
-    is the moment the allowance has to be decided.
+    Listing the set here would be the same defect one level up: a list written
+    once against the names of the day. Discovery fails when a target is added,
+    which is the moment the allowance has to be decided.
+
+    The emptiness is asserted separately because coverage alone cannot see it.
+    Every member of an empty set is covered, so an assertion that each
+    discovered target has an allowance passes when discovery finds nothing,
+    whether the repository has no trybuild target or the reader has stopped
+    finding them.
     """
+    targets = _trybuild_targets()
+    assert targets == [], (
+        f"this repository declared no trybuild target when this contract was "
+        f"written and now declares {targets}; decide the allowance for each "
+        f"and pin the new set here, because a set asserted only through its "
+        f"coverage is satisfied by an empty discovery"
+    )
     uncovered = [
         target
-        for target in _trybuild_targets()
+        for target in targets
         if not any(
-            Path(target).stem in filter_text for filter_text in _override_filters()
+            _filter_covers(filter_text, target) for filter_text in _override_filters()
         )
     ]
     assert not uncovered, (
         f"these trybuild targets inherit the base allowance: {uncovered}; a "
         f"trybuild target builds a scratch crate against this workspace's "
         f"dependency graph and will be terminated on a cold run. Give each an "
-        f"override sized for that build"
+        f"override whose filter selects its binary exactly, sized for that "
+        f"build"
+    )
+
+
+@pytest.mark.parametrize(
+    ("filter_text", "target", "covers"),
+    [
+        pytest.param("binary(=ui)", "tests/ui.rs", True, id="an-exact-binary"),
+        pytest.param(
+            "binary_id(=netsuke::ui)", "tests/ui.rs", True, id="an-exact-binary-id"
+        ),
+        pytest.param(
+            "binary(=ui) | test(=other)", "tests/ui.rs", True, id="one-arm-of-a-union"
+        ),
+        pytest.param("binary(ui)", "tests/ui.rs", False, id="a-substring-binary"),
+        pytest.param("not binary(=ui)", "tests/ui.rs", False, id="a-negated-selector"),
+        pytest.param(
+            "!binary(=ui)", "tests/ui.rs", False, id="a-negated-selector-in-symbols"
+        ),
+        pytest.param(
+            "test(=harness_compiles_under_a_split_build_dir)",
+            "tests/ui.rs",
+            False,
+            id="a-test-name-that-contains-the-stem",
+        ),
+        pytest.param(
+            "binary(=user_interface)",
+            "tests/ui.rs",
+            False,
+            id="a-binary-whose-name-contains-the-stem",
+        ),
+    ],
+)
+def test_coverage_needs_an_exact_selector_that_is_not_negated(
+    filter_text: str, target: str, *, covers: bool
+) -> None:
+    """Containment is not selection, and a name inside a filter is not either.
+
+    `test(=harness_compiles_under_a_split_build_dir)` contains `ui`, inside
+    `build`, so a `tests/ui.rs` harness read as covered by a filter that
+    selects a different test entirely. `not binary(=ui)` names the binary and
+    excludes it, which containment reads as coverage with the sign inverted.
+    `binary(ui)` matches by substring in nextest, so it is not evidence that
+    this binary is the one the override was written for.
+
+    A filter carrying a negation covers nothing here rather than being
+    evaluated: evaluating a filterset is nextest's work, and a reader that
+    guessed would be the defect one layer down.
+    """
+    assert _filter_covers(filter_text, target) is covers, (
+        f"{filter_text!r} must read as covers={covers} for {target}"
     )
 
 
