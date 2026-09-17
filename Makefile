@@ -142,7 +142,8 @@ SPELLING_HELPER_FILES = scripts/generate_typos_config.py \
 	scripts/tests/test_typos_rollout.py \
 	scripts/tests/test_typos_rollout_check.py \
 	scripts/tests/test_typos_rollout_hardening.py \
-	scripts/tests/test_typos_rollout_refresh.py
+	scripts/tests/test_typos_rollout_refresh.py \
+	scripts/tests/typos_rollout_test_support.py
 # The shared en-GB-oxendict spelling gate. It regenerates `typos.toml` from
 # the live shared dictionary and the `typos.local.toml` overlay on every run,
 # then runs Typos and the prohibited-phrase check.

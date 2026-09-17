@@ -99,6 +99,7 @@ class Total:
     """
 
     def __init__(self) -> None:
+        """Initialize an empty total."""
         self.seconds = 0
         self.nanoseconds = 0
 

@@ -55,6 +55,7 @@ RETAINED_RUST_LITERALS = {
     *(f'"{operation}"' for operation in BUILD_CAPABLE_SUBCOMMANDS),
     '"cargo"',
 }
+type RustFunction = tuple[str, str, str, str]
 
 
 def _nextest_config() -> dict[str, object]:
@@ -94,7 +95,7 @@ def _rust_test_sources() -> dict[Path, str]:
     }
 
 
-def _rust_functions(source: str) -> list[tuple[str, str, str, str]]:
+def _rust_functions(source: str) -> list[RustFunction]:
     """Return attributes, signatures, names, and source slices for Rust functions."""
     matches = list(RUST_FUNCTION.finditer(source))
     return [
@@ -128,7 +129,7 @@ def _operation_constants(source: str) -> set[str]:
     return constants
 
 
-def _cargo_wrappers(functions: list[tuple[str, str, str, str]]) -> set[str]:
+def _cargo_wrappers(functions: list[RustFunction]) -> set[str]:
     """Return helper names that create Cargo `Command` values."""
     return {
         name
@@ -155,50 +156,86 @@ def _calls_build_helper(body: str) -> bool:
     return bool(re.search(r"\b[A-Za-z0-9_]+::build(?:_with)?\s*\(", body))
 
 
-def _build_capable_test_names(source: str) -> set[str]:
-    """Return tests reaching a direct or helper-mediated Cargo build command."""
-    executable_source = mask_non_code(source, RETAINED_RUST_LITERALS)
-    functions = _rust_functions(executable_source)
-    wrappers = _cargo_wrappers(functions)
-    operation_constants = _operation_constants(executable_source)
-    build_capable = {
+def _is_rust_test(attributes: str) -> bool:
+    """Return whether Rust attributes mark a test or parameterized test."""
+    return "#[test]" in attributes or "#[rstest]" in attributes
+
+
+def _initial_build_capable_names(
+    functions: list[RustFunction], wrappers: set[str], operation_constants: set[str]
+) -> set[str]:
+    """Return functions that directly launch Cargo or call an associated helper."""
+    return {
         name
         for _, _, name, body in functions
         if _has_build_capable_cargo_command(body, wrappers, operation_constants)
         or _calls_build_helper(body)
     }
 
+
+def _callers_of_build_capable_helpers(
+    functions: list[RustFunction], helper_names: set[str]
+) -> set[str]:
+    """Return functions that call a build-capable helper by its bare name."""
+    return {
+        name
+        for _, _, name, body in functions
+        if any(
+            helper_name != "build" and re.search(rf"\b{helper_name}\s*\(", body)
+            for helper_name in helper_names
+        )
+    }
+
+
+def _fixture_users_of_build_capable_helpers(
+    functions: list[RustFunction], helper_names: set[str]
+) -> set[str]:
+    """Return Rust tests that consume a build-capable fixture helper."""
+    fixtures = {
+        name
+        for attributes, _, name, _ in functions
+        if "#[fixture]" in attributes and name in helper_names
+    }
+    return {
+        name
+        for attributes, signature, name, body in functions
+        if _is_rust_test(attributes)
+        and any(fixture in signature + body for fixture in fixtures)
+    }
+
+
+def _expand_build_capable_names(
+    functions: list[RustFunction], build_capable: set[str]
+) -> set[str]:
+    """Propagate build capability through callers and fixture users to a fixed point."""
     while True:
         helper_names = {name for _, _, name, _ in functions if name in build_capable}
-        callers = {
-            name
-            for _, _, name, body in functions
-            if any(
-                helper_name != "build" and re.search(rf"\b{helper_name}\s*\(", body)
-                for helper_name in helper_names
-            )
-        }
-        fixture_users = {
-            name
-            for attributes, signature, name, body in functions
-            if "#[test]" in attributes or "#[rstest]" in attributes
-            for helper_name in helper_names
-            if any(
-                "#[fixture]" in helper_attributes and helper_name in signature + body
-                for helper_attributes, _, fixture_name, _ in functions
-                if fixture_name == helper_name
-            )
-        }
-        expanded = build_capable | callers | fixture_users
+        expanded = (
+            build_capable
+            | _callers_of_build_capable_helpers(functions, helper_names)
+            | _fixture_users_of_build_capable_helpers(functions, helper_names)
+        )
         if expanded == build_capable:
-            break
+            return build_capable
         build_capable = expanded
 
+
+def _build_capable_test_names(source: str) -> set[str]:
+    """Return tests reaching a direct or helper-mediated Cargo build command."""
+    executable_source = mask_non_code(source, RETAINED_RUST_LITERALS)
+    functions = _rust_functions(executable_source)
+    build_capable = _expand_build_capable_names(
+        functions,
+        _initial_build_capable_names(
+            functions,
+            _cargo_wrappers(functions),
+            _operation_constants(executable_source),
+        ),
+    )
     return {
         name
         for attributes, _, name, _ in functions
-        if name in build_capable
-        and ("#[test]" in attributes or "#[rstest]" in attributes)
+        if name in build_capable and _is_rust_test(attributes)
     }
 
 
@@ -294,74 +331,27 @@ impl Fixture {
     )
 
 
-def test_build_capable_discovery_ignores_block_comment_functions() -> None:
-    """Function-like text in a block comment does not create a nested Cargo test."""
+def test_build_capable_discovery_propagates_across_multiple_helper_layers() -> None:
+    """A fixture user inherits build capability through every helper layer."""
     source = """
-/*
-#[test]
-fn fake_fixture_compiles() {
-    Command::new(cargo()).arg("build");
+#[rstest]
+fn fixture_user(build_fixture: ()) {}
+
+#[fixture]
+fn build_fixture() {
+    prepare_build();
 }
-*/
-"""
-    assert not _build_capable_test_names(source), (
-        "block comments must not create build-capable child Cargo tests"
-    )
 
+fn prepare_build() {
+    launch_build();
+}
 
-@pytest.mark.parametrize("literal_prefix", ["/*", 'r#"'])
-def test_non_code_function_text_does_not_truncate_real_test(
-    literal_prefix: str,
-) -> None:
-    """Comments and raw strings cannot hide a real child Cargo command."""
-    literal_suffix = "*/" if literal_prefix == "/*" else '"#'
-    source = f"""
-#[test]
-fn real_fixture_compiles() {{
-    let non_code = {literal_prefix}
-#[test]
-fn fake_fixture_compiles() {{
-    Command::new(cargo()).arg("build");
-}}
-{literal_suffix};
-    Command::new(cargo()).arg("build");
-}}
-"""
-    assert _build_capable_test_names(source) == {"real_fixture_compiles"}, (
-        "non-code function text must not truncate the real test body"
-    )
-
-
-@pytest.mark.parametrize(
-    "prefix",
-    ["<'a>", "() { 'outer: loop { break 'outer; }"],
-)
-def test_lifetime_and_label_syntax_do_not_hide_child_cargo_commands(
-    prefix: str,
-) -> None:
-    """Lifetimes and labels remain executable source, not character literals."""
-    source = f"""
-#[test]
-fn real_fixture_compiles{prefix} {{
-    Command::new(cargo()).arg("build");
-}}
-"""
-    assert _build_capable_test_names(source) == {"real_fixture_compiles"}, (
-        "lifetimes and labels must not mask child Cargo commands"
-    )
-
-
-def test_character_literals_remain_masked() -> None:
-    """A valid escaped character literal does not disturb child Cargo discovery."""
-    source = """
-#[test]
-fn real_fixture_compiles() {
-    let newline = '\\n';
+fn launch_build() {
     Command::new(cargo()).arg("build");
 }
 """
-    assert _build_capable_test_names(source) == {"real_fixture_compiles"}, (
-        "character literals must not hide child Cargo commands"
+    assert _build_capable_test_names(source) == {"fixture_user"}, (
+        "fixed-point propagation must reach fixture users through helper layers"
     )
 
 

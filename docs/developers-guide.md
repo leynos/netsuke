@@ -1972,14 +1972,13 @@ discipline, and the baseline-gated R9112/C9112 checks) need CPython 3.14 and
 run as a second pass pinned to `DF12_PYTHON_LINTS_REF`.
 
 Tool versions are pinned twice by design: the Makefile defaults (`RUFF_VERSION`,
-`INTERROGATE_VERSION`, `TY_VERSION`, `PYTHON_BASELINE`) drive local runs, and the `env` block of
-`.github/workflows/ci.yml` re-declares the same values, which override the
-Makefile's `?=` assignments in CI.
-CI runs Interrogate through that same pinned Makefile command rather than
-carrying a second workflow-only pin.
-`tests/workflow_contracts/python_toolchain_sync_test.py` asserts the pairs
-agree — without asserting any specific version — so a bump must land in both
-files in the same commit.
+`INTERROGATE_VERSION`, `TY_VERSION`, `PYTHON_BASELINE`) drive local runs, and
+the `env` block of `.github/workflows/ci.yml` re-declares the same values,
+which override the Makefile's `?=` assignments in CI. CI runs Interrogate
+through that same pinned Makefile command rather than carrying a second
+workflow-only pin. `tests/workflow_contracts/python_toolchain_sync_test.py`
+asserts the pairs agree — without asserting any specific version — so a bump
+must land in both files in the same commit.
 
 The shared spelling-policy rollout helpers (`scripts/generate_typos_config.py`
 and the `typos_rollout*` modules and tests) are estate-synchronized and keep
