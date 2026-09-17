@@ -6,45 +6,44 @@ invoke the shared action in `check` mode. The pure gate-shape predicates
 remain property-tested separately because they document the external action's
 history requirement should that mode ever be reconsidered.
 
+Reading the workflow files is `workflow_loading.all_workflow_documents`'s
+job: it already reads both GitHub extensions and refuses a directory that
+would silently yield nothing.
+
 Run via `make test-workflow-contracts`.
 """
 
-import typing as typ
-
 from codescene_check_depth_invariants import runs_the_gate
-from workflow_loading import REPO_ROOT, load_workflow, require_list, require_mapping
-
-if typ.TYPE_CHECKING:
-    from pathlib import Path
+from timeout_budgets import WORKFLOWS_DIRECTORY
+from workflow_loading import all_workflow_documents, require_list, require_mapping
 
 
-def _codescene_check_jobs_in_workflow(path: Path) -> list[str]:
-    """Return jobs that invoke CodeScene in check mode in one workflow."""
-    jobs = require_mapping(load_workflow(path).get("jobs"), f"{path.name} jobs")
+def _check_jobs_in(name: str, document: dict[str, object]) -> list[str]:
+    """Return the jobs of one workflow that invoke CodeScene in check mode."""
+    jobs = require_mapping(document.get("jobs"), f"{name} jobs")
     found: list[str] = []
-    for name, declaration in jobs.items():
-        description = f"{path.name}:{name}"
+    for job_name, declaration in jobs.items():
+        description = f"{name}:{job_name}"
         job = require_mapping(declaration, description)
         raw_steps = require_list(job.get("steps", []), f"{description} steps")
-        steps = [step for step in raw_steps if isinstance(step, dict)]
-        if runs_the_gate(steps):
+        if runs_the_gate([step for step in raw_steps if isinstance(step, dict)]):
             found.append(description)
     return found
 
 
 def _codescene_check_jobs() -> list[str]:
     """Return every workflow job that invokes CodeScene in check mode."""
-    workflow_dir = REPO_ROOT / ".github" / "workflows"
-    found: list[str] = []
-    for pattern in ("*.yml", "*.yaml"):
-        for path in sorted(workflow_dir.glob(pattern)):
-            found.extend(_codescene_check_jobs_in_workflow(path))
-    return found
+    documents = all_workflow_documents(WORKFLOWS_DIRECTORY)
+    return [
+        description
+        for name, document in sorted(documents.items())
+        for description in _check_jobs_in(name, document)
+    ]
 
 
 def test_no_workflow_runs_a_codescene_coverage_check() -> None:
     """Keep pull-request coverage enforcement inside the local ratchet."""
-    assert not _codescene_check_jobs(), (
-        "CodeScene check mode must not publish pull-request coverage: "
-        f"{_codescene_check_jobs()!r}"
+    found = _codescene_check_jobs()
+    assert not found, (
+        f"CodeScene check mode must not publish pull-request coverage: {found!r}"
     )
