@@ -99,6 +99,14 @@ jobs:
           persist-credentials: false
       - name: Export sccache credentials
         # A server started without these stays on local disk all job.
+        # Only on the owned arm. This action clears the v2 switch and
+        # exports Ubicloud's proxy address; a fork's pull request runs on a
+        # GitHub-hosted runner where that address is GitHub's own or empty,
+        # and the verification step below then fails the job outright
+        # because `SCCACHE_GHA_ENABLED` is true. The hosted arm keeps
+        # GitHub's native cache configuration, which sccache reads for
+        # itself.
+        if: github.event.pull_request.head.repo.fork != true
         uses: ./.github/actions/sccache-gha-credentials
       - name: Start resource sampler
         uses: ./.github/actions/memory-sampler

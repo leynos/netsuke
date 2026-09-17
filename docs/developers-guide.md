@@ -777,6 +777,21 @@ mapping is proved by a mutation that sends `netsukefile` to `ubuntu-latest`:
 hosted, Linux, and the right answer for every other lane, so nothing but a
 per-lane expectation separates it.
 
+The sccache credential export is guarded on the same arm. The action at
+`.github/actions/sccache-gha-credentials` clears sccache's v2 switch and
+publishes Ubicloud's proxy address, which is correct only on a Ubicloud runner.
+On a fork's GitHub-hosted run that address is GitHub's own or empty, and the
+action's own verification step then fails the job, because
+`SCCACHE_GHA_ENABLED` is `true`. Both lanes that carry the export and a fork
+arm declare `if: github.event.pull_request.head.repo.fork != true`;
+`coverage-upload` carries the export and no fork arm, so its export is
+unconditional and the contract asserts that too. A guard there would switch the
+export off on the only runs the lane has.
+`test_the_credential_export_runs_on_the_owned_arm_alone` reads both cases, and
+asserts the guard is satisfiable as well as present: `== true` in place of
+`!= true` disables the export on this repository's own branches while every
+other assertion about it goes on passing.
+
 Every other Ubicloud lane keeps its plain label, and the contract asserts that
 too, so the expression does not spread by imitation. `coverage-upload` is push
 and dispatch only. Both jobs in `coverage-pr-submit.yml` trigger on
