@@ -11,17 +11,30 @@ consumer must still fail. Both pull-request triggers are read, because
 `pull_request_target` runs in the base repository's context and can read its
 secrets. The detectors are driven against synthetic workflow text as well, so a
 detector that stopped matching cannot make the repository assertion pass by
-finding nothing. Shared parsing helpers live in ``workflow_loading.py``.
+finding nothing. Shared parsing helpers live in ``workflow_loading.py`` and the
+predicates under test live in ``ci_coverage_wiring_invariants.py``.
 
 Run via ``make test-workflow-contracts``.
 """
 
-import typing as typ
-
+from ci_coverage_wiring_invariants import (
+    COVERAGE_REPORT_PATH,
+    CREDENTIAL_ENVIRONMENT_KEY,
+    GENERATE_COVERAGE_ACTION,
+    PUBLISH_ARTEFACT_ACTION,
+    PULL_REQUEST_TARGET_TRIGGER,
+    PULL_REQUEST_TRIGGER,
+    SUBMISSION_TRIGGER,
+    UPLOAD_COVERAGE_ACTION,
+    coverage_surface_offenders,
+    declares_trigger,
+    publishes_the_coverage_report,
+    steps_in_all_jobs,
+)
+from timeout_budgets import WORKFLOWS_DIRECTORY
 from workflow_loading import (
     COVERAGE_MAIN_WORKFLOW_PATH,
     COVERAGE_PR_WORKFLOW_PATH,
-    REPO_ROOT,
     all_workflow_documents,
     job_steps,
     load_workflow,
@@ -31,174 +44,9 @@ from workflow_loading import (
     unique_step_index,
 )
 
-if typ.TYPE_CHECKING:
-    import collections.abc as cabc
-
 COVERAGE_STEP = "Test and Measure Coverage"
 PR_COVERAGE_ARTEFACT_STEP = "Upload PR coverage artefact"
 CODESCENE_UPLOAD_STEP = "Upload coverage data to CodeScene"
-
-WORKFLOWS_DIRECTORY = REPO_ROOT / ".github" / "workflows"
-
-GENERATE_COVERAGE_ACTION = "leynos/shared-actions/.github/actions/generate-coverage@"
-UPLOAD_COVERAGE_ACTION = (
-    "leynos/shared-actions/.github/actions/upload-codescene-coverage@"
-)
-PUBLISH_ARTEFACT_ACTION = "actions/upload-artifact"
-
-CREDENTIAL_ENVIRONMENT_KEY = "CS_ACCESS_TOKEN"
-COVERAGE_REPORT_PATH = "lcov.info"
-
-PULL_REQUEST_TRIGGER = "pull_request"
-
-#: The variant that runs in the base repository's context and therefore *can*
-#: read its secrets, unlike `pull_request`. A coverage step here would be
-#: worse than one in an ordinary pull-request job, not equivalent to it.
-PULL_REQUEST_TARGET_TRIGGER = "pull_request_target"
-
-SUBMISSION_TRIGGER = "workflow_run"
-
-
-def action_of(step: dict[str, object]) -> str:
-    """Return a step's action reference without its version.
-
-    Splitting on the version separator rather than matching a prefix keeps
-    ``upload-codescene-coverage-legacy`` from reading as the real action.
-
-    Parameters
-    ----------
-    step : dict[str, object]
-        One parsed workflow step.
-
-    Returns
-    -------
-    str
-        The action reference without its version, or the empty string when
-        the step runs a command instead of an action.
-    """
-    uses = step.get("uses")
-    return uses.split("@", 1)[0] if isinstance(uses, str) else ""
-
-
-def declares_trigger(document: dict[str, object], trigger: str) -> bool:
-    """Return whether a parsed workflow declares the given trigger.
-
-    Parameters
-    ----------
-    document : dict[str, object]
-        One parsed workflow document.
-    trigger : str
-        The trigger name, such as ``pull_request``.
-
-    Returns
-    -------
-    bool
-        True when the workflow declares the trigger in any of the scalar,
-        sequence, or mapping forms ``on:`` accepts.
-    """
-    match document.get("on"):
-        case str() as declared:
-            return declared == trigger
-        case list() as sequence:
-            return trigger in sequence
-        case dict() as mapping:
-            return trigger in mapping
-        case _:
-            return False
-
-
-def steps_in_all_jobs(document: dict[str, object]) -> list[dict[str, object]]:
-    """Return every step of every job in one parsed workflow.
-
-    Parameters
-    ----------
-    document : dict[str, object]
-        One parsed workflow document.
-
-    Returns
-    -------
-    list[dict[str, object]]
-        Every step mapping, in declaration order. A job without a step list
-        contributes nothing rather than failing, because this is a scan for
-        prohibited references and not an assertion about job shape.
-    """
-    jobs = require_mapping(document.get("jobs"), "jobs")
-    steps: list[dict[str, object]] = []
-    for name, declaration in jobs.items():
-        job = require_mapping(declaration, f"job {name}")
-        raw_steps = job.get("steps", [])
-        if isinstance(raw_steps, list):
-            steps.extend(step for step in raw_steps if isinstance(step, dict))
-    return steps
-
-
-def _iter_strings(value: object) -> cabc.Iterator[str]:
-    """Yield every string nested anywhere in a parsed YAML value."""
-    match value:
-        case str() as text:
-            yield text
-        case dict() as mapping:
-            for key, item in mapping.items():
-                yield from _iter_strings(key)
-                yield from _iter_strings(item)
-        case list() as sequence:
-            for item in sequence:
-                yield from _iter_strings(item)
-        case _:
-            return
-
-
-def _publishes_the_coverage_report(step: dict[str, object]) -> bool:
-    """Return whether a step publishes the coverage report as an artefact."""
-    if action_of(step) != PUBLISH_ARTEFACT_ACTION:
-        return False
-    with_ = step.get("with")
-    if not isinstance(with_, dict) or "path" not in with_:
-        # A publish step naming no path uploads the workspace, which holds the
-        # generated report. Fail closed rather than read it as an exemption.
-        return True
-    return COVERAGE_REPORT_PATH in str(with_["path"])
-
-
-def coverage_surface_offenders(
-    name: str, document: dict[str, object], raw_text: str
-) -> list[str]:
-    """Return every prohibited coverage-surface reference in one workflow.
-
-    Parameters
-    ----------
-    name : str
-        The workflow file's name, used in failure messages.
-    document : dict[str, object]
-        The workflow's parsed document.
-    raw_text : str
-        The workflow's raw text. The credential is matched here as well as in
-        the parsed values, so a reference inside a comment or an unparsed
-        shape is still reported.
-
-    Returns
-    -------
-    list[str]
-        One description per violation, empty when the workflow is clean.
-    """
-    offenders = [
-        f"{name}: step {index} publishes the coverage report as an artefact"
-        for index, step in enumerate(steps_in_all_jobs(document))
-        if _publishes_the_coverage_report(step)
-    ]
-    offenders.extend(
-        f"{name}: step {index} invokes the CodeScene coverage action"
-        for index, step in enumerate(steps_in_all_jobs(document))
-        if action_of(step) == UPLOAD_COVERAGE_ACTION.split("@", 1)[0]
-    )
-    if CREDENTIAL_ENVIRONMENT_KEY in raw_text:
-        offenders.append(f"{name}: raw text references {CREDENTIAL_ENVIRONMENT_KEY}")
-    offenders.extend(
-        f"{name}: parsed value references {CREDENTIAL_ENVIRONMENT_KEY}"
-        for value in _iter_strings(document)
-        if CREDENTIAL_ENVIRONMENT_KEY in value
-    )
-    return offenders
 
 
 def _pull_request_workflows() -> list[tuple[str, dict[str, object], str]]:
@@ -217,11 +65,16 @@ def _pull_request_workflows() -> list[tuple[str, dict[str, object], str]]:
     """
     documents = all_workflow_documents(WORKFLOWS_DIRECTORY)
     return [
-        (name, document, (WORKFLOWS_DIRECTORY / name).read_text(encoding="utf-8"))
+        (name, document, _workflow_text(name))
         for name, document in sorted(documents.items())
         if declares_trigger(document, PULL_REQUEST_TRIGGER)
         or declares_trigger(document, PULL_REQUEST_TARGET_TRIGGER)
     ]
+
+
+def _workflow_text(name: str) -> str:
+    """Return the raw text of one workflow file by name."""
+    return (WORKFLOWS_DIRECTORY / name).read_text(encoding="utf-8")
 
 
 def _assert_with_inputs(
@@ -233,6 +86,13 @@ def _assert_with_inputs(
     assert actual == expected, f"{description} must pass {expected!r}, got {actual!r}"
 
 
+def _synthetic_document(text: str) -> tuple[dict[str, object], str]:
+    """Parse synthetic workflow text into a document and its raw text."""
+    parsed = parse_workflow_text(text, "synthetic workflow")
+    assert isinstance(parsed, dict), "synthetic workflow must parse to a mapping"
+    return parsed, text
+
+
 def test_pr_coverage_stays_local_and_uses_the_main_ratchet() -> None:
     """Keep pull-request coverage inside CI and compare it with main."""
     steps = job_steps(load_workflow(), "build-test")
@@ -242,7 +102,7 @@ def test_pr_coverage_stays_local_and_uses_the_main_ratchet() -> None:
         COVERAGE_STEP,
         {
             "language": "rust",
-            "output-path": "lcov.info",
+            "output-path": COVERAGE_REPORT_PATH,
             "format": "lcov",
             "with-ratchet": "true",
         },
@@ -287,9 +147,7 @@ def test_no_pr_reachable_workflow_run_consumer_touches_that_surface() -> None:
         offender
         for name, document in sorted(documents.items())
         if declares_trigger(document, SUBMISSION_TRIGGER)
-        for offender in coverage_surface_offenders(
-            name, document, (WORKFLOWS_DIRECTORY / name).read_text(encoding="utf-8")
-        )
+        for offender in coverage_surface_offenders(name, document, _workflow_text(name))
     ]
     assert not offenders, (
         "no workflow_run consumer may publish coverage or reach the CodeScene "
@@ -297,29 +155,22 @@ def test_no_pr_reachable_workflow_run_consumer_touches_that_surface() -> None:
     )
 
 
-def _synthetic_document(text: str) -> tuple[dict[str, object], str]:
-    """Parse synthetic workflow text into a document and its raw text."""
-    parsed = parse_workflow_text(text, "synthetic workflow")
-    assert isinstance(parsed, dict), "synthetic workflow must parse to a mapping"
-    return parsed, text
-
-
 def test_the_detectors_report_renamed_publishers_and_secret_references() -> None:
     """Fail the detectors against shapes the retired files no longer have."""
     renamed, renamed_text = _synthetic_document(
-        """
+        f"""
 on: pull_request
 jobs:
   build-test:
     steps:
       - name: Publish measurements
-        uses: actions/upload-artifact@v4
+        uses: {PUBLISH_ARTEFACT_ACTION}@v4
         with:
           name: something-else-entirely
-          path: lcov.info
+          path: {COVERAGE_REPORT_PATH}
 """
     )
-    assert _publishes_the_coverage_report(steps_in_all_jobs(renamed)[0]), (
+    assert publishes_the_coverage_report(steps_in_all_jobs(renamed)[0]), (
         "a renamed publisher must still be detected by its action and path"
     )
     assert coverage_surface_offenders("synthetic.yml", renamed, renamed_text), (
@@ -327,13 +178,13 @@ jobs:
     )
 
     codescene, codescene_text = _synthetic_document(
-        """
+        f"""
 on: pull_request
 jobs:
   build-test:
     steps:
       - name: Measure
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@abc123
+        uses: {UPLOAD_COVERAGE_ACTION}@abc123
 """
     )
     assert coverage_surface_offenders("synthetic.yml", codescene, codescene_text), (
@@ -341,14 +192,14 @@ jobs:
     )
 
     secret, secret_text = _synthetic_document(
-        """
+        f"""
 on: pull_request
 jobs:
   build-test:
     steps:
       - name: Measure
         env:
-          CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
+          {CREDENTIAL_ENVIRONMENT_KEY}: ${{{{ secrets.{CREDENTIAL_ENVIRONMENT_KEY} }}}}
         run: make test
 """
     )
@@ -394,13 +245,13 @@ def test_the_prong_reads_every_pull_request_trigger_the_parser_accepts() -> None
 def test_a_clean_synthetic_workflow_produces_no_offenders() -> None:
     """Keep the detectors from firing on a workflow inside the boundary."""
     clean, clean_text = _synthetic_document(
-        """
+        f"""
 on: pull_request
 jobs:
   build-test:
     steps:
       - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@abc123
+        uses: {GENERATE_COVERAGE_ACTION}@abc123
         with:
           with-ratchet: 'true'
       - name: Show sccache statistics
@@ -435,10 +286,10 @@ def test_main_coverage_upload_reads_the_generated_lcov_report() -> None:
     _assert_with_inputs(
         coverage_step,
         "main coverage production",
-        {"language": "rust", "output-path": "lcov.info", "format": "lcov"},
+        {"language": "rust", "output-path": COVERAGE_REPORT_PATH, "format": "lcov"},
     )
     _assert_with_inputs(
         upload_step,
         "main CodeScene upload",
-        {"path": "lcov.info", "format": "lcov"},
+        {"path": COVERAGE_REPORT_PATH, "format": "lcov"},
     )
