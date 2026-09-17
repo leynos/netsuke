@@ -116,6 +116,24 @@ time_command() {
   LC_ALL=C awk -v start="$start" -v end="$end" 'BEGIN { printf "%.1f", end - start }'
 }
 
+# Prefix applied to every measured build. Each variant already assigns
+# `RUSTFLAGS`; these two are assigned here because they are the difference
+# between compiling and retrieving.
+#
+# A developer shell on a shared host commonly exports a `RUSTC_WRAPPER` that
+# chains to `sccache`. With one in force a variant's first clean pass populates
+# the cache and every later pass reads it back, so the table reports cache
+# retrieval times under variant labels and the ordering of the rows decides the
+# result. Worse, the flags are part of the cache key, so the variants warm each
+# other unevenly and the bias is invisible. Both variables are assigned empty
+# rather than unset: Cargo honours `RUSTC_WORKSPACE_WRAPPER` independently, so
+# clearing one alone still leaves the workspace's own crates wrapped.
+#
+# Measured 2026-09-17 on a 32-core host: with the wrapper inherited, the same
+# variant's clean build ranged from 37 s to 154 s across three runs, and the
+# ordering of the rows reversed the verdict twice.
+bench_env=(RUSTC_WRAPPER='' RUSTC_WORKSPACE_WRAPPER='')
+
 # Usage: measure_variant <slug> <label> <command...>
 # The slug names the variant's private target directory; the label is the table
 # caption for that row.
@@ -133,7 +151,7 @@ measure_variant() {
 
   note "measuring $label (clean)"
   rm -rf "$CARGO_TARGET_DIR"
-  clean=$(time_command "$@")
+  clean=$(time_command env "${bench_env[@]}" "$@")
 
   note "measuring $label (incremental)"
   if [ -z "$BENCH_TOUCH_STAMP" ]; then
@@ -141,7 +159,7 @@ measure_variant() {
     touch -r "$BENCH_TOUCH_FILE" "$BENCH_TOUCH_STAMP"
   fi
   touch "$BENCH_TOUCH_FILE"
-  incremental=$(time_command "$@")
+  incremental=$(time_command env "${bench_env[@]}" "$@")
 
   unset CARGO_TARGET_DIR
   results+=("$label|$clean|$incremental")
