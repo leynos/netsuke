@@ -220,3 +220,36 @@ impl Default for ManifestBudget {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    //! Verify isolated aggregate accounting boundaries.
+
+    use super::*;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case::exact_limit(8, true)]
+    #[case::one_byte_over(9, false)]
+    fn source_byte_limit_accepts_the_exact_allowance_and_rejects_one_more(
+        #[case] requested_bytes: usize,
+        #[case] should_succeed: bool,
+    ) {
+        const LIMIT: usize = 8;
+        let budget = ManifestBudget::new(ManifestBudgetLimits {
+            source_bytes: LIMIT,
+            ..ManifestBudgetLimits::default()
+        })
+        .expect("positive default limits plus a positive source limit must validate");
+        let result = budget.charge_source(requested_bytes, ManifestBudgetStage::Source);
+
+        if should_succeed {
+            result.expect("the exact source limit must succeed");
+        } else {
+            let exhaustion = result.expect_err("one byte over the source limit must fail");
+            assert_eq!(exhaustion.kind, ManifestBudgetKind::SourceBytes);
+            assert_eq!(exhaustion.stage, ManifestBudgetStage::Source);
+            assert_eq!(exhaustion.limit, LIMIT as u64);
+        }
+    }
+}

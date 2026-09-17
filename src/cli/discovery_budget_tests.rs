@@ -4,8 +4,56 @@ use super::*;
 use crate::cli::test_support::TestEnv;
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
+use clap::{CommandFactory, Parser};
 use rstest::rstest;
 use tempfile::tempdir;
+
+/// Identify one manifest-budget configuration key and its CLI spelling.
+#[derive(Clone, Copy, Debug)]
+enum ManifestBudgetField {
+    /// Select the per-evaluation `MiniJinja` instruction limit.
+    EvaluationFuel,
+    /// Select the aggregate `MiniJinja` instruction limit.
+    ManifestFuel,
+    /// Select the per-value rendered-byte limit.
+    RenderedValueBytes,
+    /// Select the aggregate rendered-byte limit.
+    RenderedManifestBytes,
+    /// Select the template and macro-import source-byte limit.
+    SourceBytes,
+    /// Select the per-foreach cardinality limit.
+    ForeachCardinality,
+    /// Select the aggregate expanded-entry limit.
+    ExpandedEntries,
+}
+
+impl ManifestBudgetField {
+    /// Return the configuration key represented by this budget field.
+    const fn config_key(self) -> &'static str {
+        match self {
+            Self::EvaluationFuel => "manifest_evaluation_fuel",
+            Self::ManifestFuel => "manifest_fuel",
+            Self::RenderedValueBytes => "manifest_rendered_value_bytes",
+            Self::RenderedManifestBytes => "manifest_rendered_manifest_bytes",
+            Self::SourceBytes => "manifest_source_bytes",
+            Self::ForeachCardinality => "manifest_foreach_cardinality",
+            Self::ExpandedEntries => "manifest_expanded_entries",
+        }
+    }
+
+    /// Return the long CLI option represented by this budget field.
+    const fn cli_option(self) -> &'static str {
+        match self {
+            Self::EvaluationFuel => "--manifest-evaluation-fuel",
+            Self::ManifestFuel => "--manifest-fuel",
+            Self::RenderedValueBytes => "--manifest-rendered-value-bytes",
+            Self::RenderedManifestBytes => "--manifest-rendered-manifest-bytes",
+            Self::SourceBytes => "--manifest-source-bytes",
+            Self::ForeachCardinality => "--manifest-foreach-cardinality",
+            Self::ExpandedEntries => "--manifest-expanded-entries",
+        }
+    }
+}
 
 /// Convert isolated test directories into CLI paths.
 fn utf8_directory(path: &Path) -> Result<Utf8PathBuf> {
@@ -97,6 +145,71 @@ fn nested_project_chain_reconciles_with_operator_limit(
     ensure!(
         resolved.manifest_fuel == expected,
         "project budget must reconcile to {expected}"
+    );
+    Ok(())
+}
+
+#[rstest]
+#[case::widening(23, 19, 17)]
+#[case::narrowing(13, 15, 13)]
+fn automatic_project_chain_budget_limits_remain_monotonic_through_merge(
+    #[values(
+        ManifestBudgetField::EvaluationFuel,
+        ManifestBudgetField::ManifestFuel,
+        ManifestBudgetField::RenderedValueBytes,
+        ManifestBudgetField::RenderedManifestBytes,
+        ManifestBudgetField::SourceBytes,
+        ManifestBudgetField::ForeachCardinality,
+        ManifestBudgetField::ExpandedEntries
+    )]
+    field: ManifestBudgetField,
+    #[case] inherited_request: u64,
+    #[case] primary_request: u64,
+    #[case] expected: u64,
+) -> Result<()> {
+    let temp = tempdir().context("create project directory")?;
+    let key = field.config_key();
+    test_support::fs::write(
+        temp.path().join("base.toml"),
+        format!("{key} = {inherited_request}\n"),
+    )?;
+    test_support::fs::write(
+        temp.path().join(".netsuke.toml"),
+        format!("extends = \"base.toml\"\n{key} = {primary_request}\n"),
+    )?;
+    let directory = temp
+        .path()
+        .to_str()
+        .context("project directory must be UTF-8")?;
+    let args = [
+        "netsuke",
+        "--directory",
+        directory,
+        field.cli_option(),
+        "17",
+    ];
+    let cli = Cli::parse_from(args);
+    let matches = Cli::command().get_matches_from(args);
+    let env = TestEnv::default();
+
+    let outcome = discover_file_layers(&cli, &env);
+    ensure!(
+        outcome.first_error().is_none(),
+        "automatic project-chain discovery must succeed"
+    );
+    ensure!(
+        outcome.layers().len() == 2,
+        "automatic discovery must load the inherited project configuration chain"
+    );
+
+    let merged =
+        crate::cli::merge_with_cached_file_layers(&cli, &matches, &env, outcome.into_layers())
+            .context("merge automatically discovered project budget restriction")?;
+    let merged_config =
+        serde_json::to_value(merged).context("serialize merged CLI configuration")?;
+    ensure!(
+        merged_config.get(key).and_then(serde_json::Value::as_u64) == Some(expected),
+        "project budget {key} must resolve to {expected} after discovery and reconciliation"
     );
     Ok(())
 }
