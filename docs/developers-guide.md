@@ -6927,8 +6927,8 @@ runner.
 
 The second is the 64-bit range. humantime accumulates in `u64` and checks every
 product and every sum; Python's integers do neither, so `18446744073709551616s`
-and `584542046091y` were read as numbers. `_u64` makes each of those checks
-explicit.
+and `584542046091y` were read as numbers. `nextest_totals.u64` makes each of
+those checks explicit.
 
 The third is the carry, and it is why the total is a pair rather than a count
 of nanoseconds. humantime keeps whole seconds and a nanosecond part, both
@@ -6941,11 +6941,25 @@ carry overflows. One mechanism, two answers: `0.5s 0.5s` is one second while
 `18446744073709551615s 500ms 500ms` is refused. A reader made merely stricter,
 refusing every carry, fails the first, so both are in the contract.
 
-humantime carries in two places, its parser on a strict `>` and `Duration::new`
-on `>=`, and the port was first written with both. The strict one proved
-unreachable: collapsing the two changed no answer over any of the seventy-one
-inputs, so it went, on the grounds that a guard nothing can falsify is worse
-than no guard at all. What survives is the `>=`.
+humantime carries in two places, its `add_current` on a strict `>` and the
+`Duration::new` that ends the same function on `>=`, and the port was first
+written with both. The strict one is unreachable from outside, and by
+construction rather than by luck: every part passes through `add_current`, and
+each call of it finishes by carrying an exact second, so the running total
+offered to the next part never holds one. Collapsing the two changed no answer
+over any of the seventy-one inputs, so the strict one went, on the grounds that
+a guard nothing can falsify is worse than no guard at all. What survives is the
+`>=`.
+
+Where a reader would go wrong is in deferring that carry to the end of the
+parse instead. `1000000000ns 18446744073709551615ns` is the input that shows
+it: taken together the two parts overflow the nanosecond accumulator, and a
+reader holding the first as a nanosecond part until the end refuses the
+sequence. humantime reads it as 18446744074.709551615 seconds, measured with
+the pinned probe, because the first part is already a whole second by the time
+the second arrives. It is in the contract for that reason. The input is not one
+of the differential's seventy-one, which do not discriminate the two placements
+of the carry.
 
 Order is part of the claim, and one input of the seventy-one shows it.
 `18446744073709551615ns 1ns` is read only because the first part is carried
@@ -6961,10 +6975,13 @@ are `nextest_budgets.py`, which reads `.config/nextest.toml` budgets,
 `timeout_ordering_test.py`, and the two test modules that drive the reading
 directly. Nothing outside `tests/workflow_contracts` imports it, and nothing
 inside should grow a second duration reader beside it. humantime's unit table
-sits beside it in `nextest_units.py`, split off to keep both modules inside the
-400-line limit; the seam is data against behaviour, the table being what each
-unit is called and what it is worth, and the reader being the grammar that
-consumes them.
+sits beside it in `nextest_units.py`, and humantime's accumulator in
+`nextest_totals.py`, both split off to keep every module inside the 400-line
+limit. The seams are alike: the table is what each unit is called and what it
+is worth, the accumulator is the 64-bit range and the carry, and the reader is
+the grammar that drives both. The three error classes live with the
+accumulator, because every check there raises one, and `nextest_durations`
+re-exports them, so callers import them from the reader as they always did.
 
 It composes one way round. `nextest_durations` knows nothing of TOML, of
 workflows, or of what a budget means; callers hand it text and receive seconds

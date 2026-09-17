@@ -343,6 +343,11 @@ def test_a_duration_outside_humantimes_range_is_refused(duration: str) -> None:
             18446744073709551615.000000001,
             id="three-parts-where-the-middle-one-carries",
         ),
+        pytest.param(
+            "1000000000ns 18446744073709551615ns",
+            18446744074.709551615,
+            id="a-whole-second-of-nanoseconds-then-the-maximum",
+        ),
     ],
 )
 def test_a_duration_at_humantimes_limit_is_read(duration: str, expected: float) -> None:
@@ -363,6 +368,17 @@ def test_a_duration_at_humantimes_limit_is_read(duration: str, expected: float) 
     duration is refused, which is a refusal of a configuration nextest
     would have run. It is the one input of the seventy-one that tells
     the two orders apart.
+
+    The last of them pins where the carry happens. humantime's
+    ``add_current`` normalizes on a strict ``>``, so a nanosecond part
+    of exactly one second survives that step, but the same function
+    ends with ``Duration::new``, which carries it before the next part
+    is read. A reader deferring its carry to the end of the parse
+    would refuse ``1000000000ns 18446744073709551615ns``, because the
+    two parts together overflow the nanosecond accumulator; humantime
+    reads it as 18446744074.709551615 seconds, measured with the
+    pinned probe, because the first is already a whole second by the
+    time the second arrives.
     """
     assert seconds(duration) == pytest.approx(expected), (
         f"{duration!r} is inside humantime's range and must still be read"

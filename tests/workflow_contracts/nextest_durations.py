@@ -27,8 +27,11 @@ inputs; this reader read twenty-two against that set before the work
 below and reads none after. The three families, each answered in a
 different place: the character classes, because Python's
 ``\s`` and ``\d`` are both wider than humantime's, in ``_SPACE_CHARS``
-and ``_DIGIT_CHARS``; the 64-bit range, in ``_u64``; and the carry, in
-``_Total``. "Test timeouts: the tiers this repository sets" in
+and ``_DIGIT_CHARS`` here; the 64-bit range, in ``nextest_totals.u64``;
+and the carry, in ``nextest_totals.Total``. The error classes live
+beside those two and are re-exported here, so a reader of a budget
+imports them from this module as before.
+"Test timeouts: the tiers this repository sets" in
 ``docs/developers-guide.md`` sets out all three with their inputs.
 """
 
@@ -36,7 +39,11 @@ import re
 import string
 import typing as typ
 
-from nextest_units import SECOND as _SECOND
+from nextest_totals import NextestConfigurationError as NextestConfigurationError
+from nextest_totals import TimeoutBudgetError as TimeoutBudgetError
+from nextest_totals import Total as _Total
+from nextest_totals import UnboundedTestError as UnboundedTestError
+from nextest_totals import u64 as _u64
 from nextest_units import UNITS as _UNITS
 from nextest_units import Scaling as _Scaling
 from nextest_units import Unit as _Unit
@@ -104,40 +111,26 @@ _DURATION_TOKEN: typ.Final[re.Pattern[str]] = re.compile(
 #: one: ``" 0 "`` is not this case and nextest refuses it.
 _BARE_ZERO: typ.Final[str] = "0"
 
-#: The largest value humantime's parser can hold. Its accumulators and
-#: its intermediate products are all ``u64``, checked at every step,
-#: and Python's integers are not, so the checks are made explicitly
-#: here. Without them the reader accepts fourteen of the differential's
-#: range inputs that nextest refuses at startup.
-_U64_MAX: typ.Final[int] = 2**64 - 1
 
+def _match_pair(duration: str, text: str, position: int) -> re.Match[str]:
+    """Return the next value-and-unit pair, or refuse the text.
 
-class TimeoutBudgetError(ValueError):
-    """Raised when a configured budget cannot be read as a bound."""
+    A query: it reads the text and accumulates nothing. The caller
+    drives the position from the match it is given, so the walk over
+    the text and the arithmetic over the total stay apart.
 
+    Returns
+    -------
+    re.Match[str]
+        The pair beginning at ``position``, whose ``end`` is where the
+        next pair begins.
 
-class NextestConfigurationError(TimeoutBudgetError):
-    """Raised when the configuration cannot be read at all.
-
-    Separate from a budget that bounds nothing. A file that is not TOML,
-    or one declaring no ``slow-timeout`` anywhere, is a configuration
-    this contract cannot reason about rather than one whose tiers are in
-    the wrong order.
+    Raises
+    ------
+    NextestConfigurationError
+        If no value-and-unit pair begins there, as humantime refuses
+        the same text.
     """
-
-
-class UnboundedTestError(TimeoutBudgetError):
-    """Raised when a ``slow-timeout`` terminates no test.
-
-    ``terminate-after`` is optional, and without it nextest marks a test
-    slow and lets it run on, so the configuration parses, reads as
-    deliberate, and bounds nothing. Reporting that as a period-long
-    budget would put a number on the tier that is missing.
-    """
-
-
-def _read_pair(duration: str, text: str, position: int, total: _Total) -> int:
-    """Add one value-and-unit pair to the total, and return where it ends."""
     match = _DURATION_TOKEN.match(text, position)
     if match is None:
         message = (
@@ -146,6 +139,11 @@ def _read_pair(duration: str, text: str, position: int, total: _Total) -> int:
             f"followed by a unit, or a bare {_BARE_ZERO!r}"
         )
         raise NextestConfigurationError(message)
+    return match
+
+
+def _read_pair(duration: str, match: re.Match[str], total: _Total) -> None:
+    """Add one matched value-and-unit pair to the total."""
     unit = _UNITS.get(match["unit"])
     if unit is None:
         message = (
@@ -160,7 +158,6 @@ def _read_pair(duration: str, text: str, position: int, total: _Total) -> int:
     _add_scaled(duration, total, whole, unit.whole)
     if match["fraction"] is not None:
         _add_fraction(duration, total, match["fraction"], unit)
-    return match.end()
 
 
 def _add_scaled(duration: str, total: _Total, value: int, scaling: _Scaling) -> None:
@@ -174,33 +171,6 @@ def _add_landed(duration: str, total: _Total, amount: int, scaling: _Scaling) ->
         total.add(duration, amount, 0)
     else:
         total.add(duration, 0, amount)
-
-
-def _u64(duration: str, value: int) -> int:
-    """Return a value humantime could hold, or refuse it as it does.
-
-    Every multiplication and addition in its parser is checked against
-    this bound, and Python's integers are not, so each of those steps
-    passes through here.
-
-    Returns
-    -------
-    int
-        The value, unchanged, when humantime could hold it.
-
-    Raises
-    ------
-    NextestConfigurationError
-        If the value exceeds what a 64-bit unsigned integer holds, as
-        every one of humantime's own checked steps would.
-    """
-    if value > _U64_MAX:
-        message = (
-            f"unrecognized nextest duration {duration!r}: humantime "
-            f"accumulates in 64-bit integers and this exceeds their range"
-        )
-        raise NextestConfigurationError(message)
-    return value
 
 
 def _digits(matched: str) -> str:
@@ -272,7 +242,7 @@ def _add_fraction(duration: str, total: _Total, matched: str, unit: _Unit) -> No
     ... # doctest: +ELLIPSIS
     Traceback (most recent call last):
     ...
-    nextest_durations.NextestConfigurationError: ...'1.001h'...
+    nextest_totals.NextestConfigurationError: ...'1.001h'...
     """
     scaling = unit.fraction
     if scaling is None:
@@ -294,70 +264,6 @@ def _add_fraction(duration: str, total: _Total, matched: str, unit: _Unit) -> No
         )
         raise NextestConfigurationError(message)
     _add_landed(duration, total, scaled // denominator, scaling)
-
-
-class _Total:
-    """The running total humantime keeps: whole seconds and nanoseconds.
-
-    Both are 64-bit unsigned there and every step is checked, so this
-    carries the pair rather than a single count of nanoseconds. The two
-    are not the same claim. ``18446744073709551615ns`` twice over names
-    about 36.9 billion seconds, some 1,169 years, which is nowhere near
-    the seconds ceiling, and humantime refuses it all the same because
-    the second value overflows the nanosecond accumulator before it is
-    carried. A reader checking only an accumulated total finds that
-    comfortably in range and accepts it.
-
-    Examples
-    --------
-    >>> total = _Total()
-    >>> total.add("1s 1s", 1, 0)
-    >>> total.add("1s 1s", 1, 0)
-    >>> total.as_seconds()
-    2.0
-    """
-
-    def __init__(self) -> None:
-        self.seconds = 0
-        self.nanoseconds = 0
-
-    def add(self, duration: str, seconds: int, nanoseconds: int) -> None:
-        """Add one part, refusing what humantime's checks would refuse.
-
-        Every sum and every carry goes through ``_u64``, which raises
-        where humantime's own checked step would, so a part that does
-        not fit is refused here rather than accumulated.
-        """
-        nanos = _u64(duration, self.nanoseconds + nanoseconds)
-        running = _u64(duration, self.seconds + seconds)
-        # humantime carries in two places, not one. Its parser
-        # normalizes on a strict `>`, so a nanosecond part of exactly
-        # one second survives the loop untouched and reaches
-        # `Duration::new`, which carries it on `>=` and aborts the
-        # process rather than erroring when that carry overflows.
-        # nextest cannot run either way, so a refusal here answers
-        # both. The two were written out separately here at first and
-        # the strict one proved unreachable: collapsing them changed
-        # no answer over the differential's seventy-one inputs, and an
-        # unfalsifiable guard is worse than none. This single `>=` is
-        # what the evidence supports, and it is what makes
-        # `0.5s 0.5s` one second while
-        # `18446744073709551615s 500ms 500ms` is refused.
-        if nanos >= _SECOND:
-            running = _u64(duration, running + nanos // _SECOND)
-            nanos %= _SECOND
-        self.seconds = running
-        self.nanoseconds = nanos
-
-    def as_seconds(self) -> float:
-        """Return the total in seconds.
-
-        Returns
-        -------
-        float
-            Whole seconds and the nanosecond part together.
-        """
-        return self.seconds + self.nanoseconds / _SECOND
 
 
 def seconds(duration: str) -> float:
@@ -396,5 +302,7 @@ def seconds(duration: str) -> float:
     total = _Total()
     position = 0
     while position < len(text):
-        position = _read_pair(duration, text, position, total)
+        match = _match_pair(duration, text, position)
+        _read_pair(duration, match, total)
+        position = match.end()
     return total.as_seconds()
