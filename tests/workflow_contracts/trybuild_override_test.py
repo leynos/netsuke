@@ -25,6 +25,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
+from rust_source_reading import code_only
 from workflow_loading import REPO_ROOT
 
 TESTS_DIR = REPO_ROOT / "tests"
@@ -37,29 +38,19 @@ TRYBUILD_CONSTRUCTION = re.compile(r"\bTestCases::new\(")
 
 #: Whitespace around a path separator or before a call's parenthesis. Rust
 #: permits it and this repository's formatter removes it, so the reader
-#: normalises rather than depending on the formatter having run.
+#: normalizes rather than depending on the formatter having run.
 _SPACED_SYNTAX = re.compile(r"\s*(::)\s*|\s+(\()")
 
 
 def _constructs_trybuild(text: str) -> bool:
-    """Return whether the source constructs a trybuild harness.
-
-    Returns
-    -------
-    bool
-        True when the source constructs a `TestCases` harness.
-
-    Examples
-    --------
-    >>> _constructs_trybuild("let t = trybuild::TestCases::new();")
-    True
-    >>> _constructs_trybuild("//! This replaced a `trybuild` harness.")
-    False
-    """
-    normalised = _SPACED_SYNTAX.sub(
-        lambda found: found.group(1) or found.group(2), text
+    """Return whether the Rust source constructs a trybuild harness."""
+    # Comments and literals first: a paragraph explaining why a harness was
+    # removed writes the construction it removed, and a search of raw source
+    # cannot tell that sentence from the harness.
+    normalized = _SPACED_SYNTAX.sub(
+        lambda found: found.group(1) or found.group(2), code_only(text)
     )
-    return TRYBUILD_CONSTRUCTION.search(normalised) is not None
+    return TRYBUILD_CONSTRUCTION.search(normalized) is not None
 
 
 def _trybuild_targets() -> list[str]:
@@ -144,6 +135,55 @@ def test_every_trybuild_target_has_an_allowance_of_its_own() -> None:
         pytest.param("use trybuild::TestCases;", False, id="imported-but-unused"),
         pytest.param("// trybuild::TestCases::new", False, id="named-without-a-call"),
         pytest.param(
+            "// let t = trybuild::TestCases::new();",
+            False,
+            id="a-commented-out-construction",
+        ),
+        pytest.param(
+            "/* let t = trybuild::TestCases::new(); */",
+            False,
+            id="a-block-commented-construction",
+        ),
+        # Rust nests block comments, so the inner `*/` closes the inner one and
+        # the code after the outer one is code. A reader that stopped at the
+        # first `*/` would blank a construction; one that never stopped would
+        # keep the construction it should have blanked.
+        pytest.param(
+            "/* a /* nested */ x */ let t = trybuild::TestCases::new();",
+            True,
+            id="code-after-a-nested-block-comment",
+        ),
+        pytest.param(
+            "/* a /* nested */ trybuild::TestCases::new() */",
+            False,
+            id="a-construction-inside-a-nested-block-comment",
+        ),
+        pytest.param(
+            "/* unterminated trybuild::TestCases::new()",
+            False,
+            id="an-unterminated-block-comment",
+        ),
+        pytest.param(
+            'let note = "trybuild::TestCases::new()";',
+            False,
+            id="a-construction-inside-a-string",
+        ),
+        pytest.param(
+            'let note = r#"a " and trybuild::TestCases::new()"#;',
+            False,
+            id="a-construction-inside-a-raw-string",
+        ),
+        pytest.param(
+            "let quote = '\"'; let t = trybuild::TestCases::new();",
+            True,
+            id="a-quote-character-does-not-open-a-string",
+        ),
+        pytest.param(
+            "fn f<'a>(x: &'a str) { let t = trybuild::TestCases::new(); }",
+            True,
+            id="a-lifetime-is-not-a-character-literal",
+        ),
+        pytest.param(
             "let cases = OtherTestCases::new();", False, id="a-different-type"
         ),
     ],
@@ -153,7 +193,7 @@ def test_discovery_reads_construction_rather_than_mention(
 ) -> None:
     """The discrimination the rule rests on, driven directly.
 
-    This repository declares no trybuild target, so parametrised over its own
+    This repository declares no trybuild target, so parameterized over its own
     files the reader agrees with the tree whether it reads construction,
     mention, or nothing at all. These cases are what separate the three.
     """
