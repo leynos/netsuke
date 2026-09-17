@@ -37,7 +37,15 @@ jobs:
     # (run 33804092672, every later step null, no log). The sampler below
     # measures the peak so the next run either confirms the escalation or
     # returns the job to `-2`.
-    runs-on: ubicloud-standard-4-ubuntu-2404
+    # A pull request from a fork cannot obtain a Ubicloud runner, so the
+    # fork arm falls back to a GitHub-hosted one. On a push the pull
+    # request context is null, so this lane takes the Ubicloud arm without
+    # a second condition. Keep the continuation at this indent: a deeper
+    # one keeps its break inside the folded scalar and puts a newline in
+    # the expression, which GitHub evaluates anyway.
+    runs-on: >-
+      ${{ github.event.pull_request.head.repo.fork
+      && 'ubuntu-latest' || 'ubicloud-standard-4-ubuntu-2404' }}
     timeout-minutes: 60
     permissions:
       contents: read
@@ -326,7 +334,15 @@ jobs:
     # Runs on every trigger, dispatch included. A dispatch cannot publish a
     # generation, since the save gates on a push to `main`, so all it can do
     # here is measure a warm restore, which is the one the exit gate needs.
-    runs-on: ubicloud-standard-2-ubuntu-2404
+    # A pull request from a fork cannot obtain a Ubicloud runner, so the
+    # fork arm falls back to a GitHub-hosted one. On a push the pull
+    # request context is null, so this lane takes the Ubicloud arm without
+    # a second condition. Keep the continuation at this indent: a deeper
+    # one keeps its break inside the folded scalar and puts a newline in
+    # the expression, which GitHub evaluates anyway.
+    runs-on: >-
+      ${{ github.event.pull_request.head.repo.fork
+      && 'ubuntu-latest' || 'ubicloud-standard-2-ubuntu-2404' }}
     timeout-minutes: 20
     permissions:
       contents: read

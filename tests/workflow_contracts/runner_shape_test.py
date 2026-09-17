@@ -11,6 +11,7 @@ Run via ``make test-workflow-contracts``.
 
 import pytest
 import yaml
+from fork_fallback import owned_runner
 from runner_placement_invariants import (
     INSTRUMENTED_BUILD_JOBS,
     LANE_VCPUS,
@@ -126,7 +127,9 @@ def test_worker_counts_match_the_lane_vcpu_count(
     """Keep compilation and test workers within the placed shape's vCPUs."""
     workflow = load_workflow(WORKFLOW_DIR / workflow_name)
     job = workflow_job(workflow, job_name)
-    runner = str(job.get("runs-on"))
+    # The owned arm, not the declaration: a fork's run is GitHub-hosted and its
+    # shape is not what these worker bounds are derived from.
+    runner = owned_runner(job.get("runs-on"))
     assert runner in LANE_VCPUS, (
         f"{workflow_name} job {job_name} runs on {runner!r}, whose vCPU count "
         "this suite does not know; add it to LANE_VCPUS"

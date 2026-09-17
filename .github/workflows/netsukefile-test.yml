@@ -12,7 +12,15 @@ jobs:
     # The deliberate Ubuntu 22.04 compatibility lane. Ubicloud's default image
     # is 24.04, so the `-ubuntu-2204` label pins the older glibc this job
     # exists to exercise, and every cache key below carries that image.
-    runs-on: ubicloud-standard-2-ubuntu-2204
+    # A pull request from a fork cannot obtain a Ubicloud runner, so the
+    # fork arm falls back to a GitHub-hosted one. On a push the pull
+    # request context is null, so this lane takes the Ubicloud arm without
+    # a second condition. Keep the continuation at this indent: a deeper
+    # one keeps its break inside the folded scalar and puts a newline in
+    # the expression, which GitHub evaluates anyway.
+    runs-on: >-
+      ${{ github.event.pull_request.head.repo.fork
+      && 'ubuntu-latest' || 'ubicloud-standard-2-ubuntu-2204' }}
     timeout-minutes: 45
     permissions:
       contents: read
