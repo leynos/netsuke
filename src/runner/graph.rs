@@ -47,18 +47,8 @@ pub(super) fn handle_graph(
     );
     let manifest_path = resolve_manifest_path(cli)?;
     ensure_manifest_exists_or_error(cli, reporter, &manifest_path)?;
-    let policy = cli
-        .network_policy()
-        .context(localization::message(keys::RUNNER_CONTEXT_NETWORK_POLICY))?;
-    let budget_limits = cli.manifest_budget_limits()?;
-    let env_access_policy = cli.env_access_policy();
-    let manifest = load_manifest_with_stage_reporting(
-        &manifest_path,
-        policy,
-        env_access_policy,
-        budget_limits,
-        reporter,
-    )?;
+    let inputs = generation::ManifestLoadInputs::from_cli(cli)?;
+    let manifest = load_manifest_with_stage_reporting(&manifest_path, &inputs, reporter)?;
     report_pipeline_stage(reporter, PipelineStage::IrGenerationValidation, None);
     let graph = generation::build_graph(&manifest)?;
     let view = GraphView::from_build_graph(&graph);
