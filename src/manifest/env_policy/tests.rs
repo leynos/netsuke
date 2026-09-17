@@ -48,6 +48,42 @@ fn blocklist_without_allowlist_blocks_only_matching_name() {
     );
 }
 
+/// Reject near-miss names that share a prefix with an allow entry.
+///
+/// A prefix or pattern matcher would pass every other case in this file, so
+/// these near misses are what hold the exact-match rule in place.
+#[rstest]
+fn allowlist_rejects_near_miss_names() {
+    let policy = EnvAccessPolicy::default().allow_var("CI");
+
+    assert!(
+        policy.evaluate("CI_EXTRA").is_err(),
+        "a prefix-extended name must not inherit the allow entry"
+    );
+    assert!(
+        policy.evaluate("C").is_err(),
+        "a prefix-truncated name must not inherit the allow entry"
+    );
+}
+
+/// Leave near-miss names unblocked while no allowlist is active.
+///
+/// Blocklist-only matching must stay exact in both directions: a wider block
+/// would deny an unrelated credential-adjacent name the operator never named.
+#[rstest]
+fn blocklist_without_allowlist_exempts_near_miss_names() {
+    let policy = EnvAccessPolicy::default().block_var("GITHUB_TOKEN");
+
+    assert!(
+        policy.evaluate("GITHUB_TOKEN_EXTRA").is_ok(),
+        "a prefix-extended name must not inherit the block entry"
+    );
+    assert!(
+        policy.evaluate("TOKEN").is_ok(),
+        "a suffix of the blocked name must not inherit the block entry"
+    );
+}
+
 /// Give an exact block rule precedence over an exact allow rule.
 #[rstest]
 fn blocklist_overrides_allowlist() {

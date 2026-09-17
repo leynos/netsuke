@@ -257,6 +257,50 @@ fn run_generate_subcommand_writes_file() -> Result<()> {
     Ok(())
 }
 
+/// The `generate` path must honour the environment policy from the CLI.
+///
+/// `graph` and `generate` resolve the policy at separate call sites, so the
+/// graph coverage in `runner_graph_tests.rs` does not guard this one. A
+/// regression that dropped the policy here would still render a manifest that
+/// reads a blocked variable.
+#[test]
+fn run_generate_rejects_environment_variable_blocked_by_cli_policy() -> Result<()> {
+    const VARIABLE_NAME: &str = "NETSUKE_TEST_ENV";
+    let temp = tempfile::tempdir().context("create temp dir for policy generate test")?;
+    let manifest_path = temp.path().join("Netsukefile");
+    std::fs::copy("tests/data/jinja_env.yml", &manifest_path)
+        .with_context(|| format!("copy jinja_env.yml to {}", manifest_path.display()))?;
+    let output_path = temp.path().join("blocked.ninja");
+    let cli = Cli {
+        file: utf8_path_buf(&manifest_path)?,
+        directory: Some(utf8_path_buf(temp.path())?),
+        command: Some(Commands::Generate {
+            output: Some(output_path.clone()),
+        }),
+        env_block_var: vec![String::from(VARIABLE_NAME)],
+        ..Cli::default()
+    };
+
+    let Err(err) = run(&cli, output_prefs::resolve(None)) else {
+        bail!("expected generate to reject a blocked environment lookup");
+    };
+    let diagnostic = format!("{err:#}");
+    let expected = localization::message(keys::MANIFEST_ENV_BLOCKED).to_string();
+    ensure!(
+        diagnostic.contains(&expected),
+        "generate should preserve the bounded blocked diagnostic, got: {diagnostic}"
+    );
+    ensure!(
+        !diagnostic.contains(VARIABLE_NAME),
+        "generate must not disclose the blocked environment variable name"
+    );
+    ensure!(
+        !output_path.exists(),
+        "a blocked lookup must fail before any Ninja output is written"
+    );
+    Ok(())
+}
+
 #[test]
 fn run_generate_subcommand_accepts_relative_manifest_path() -> Result<()> {
     let (temp, _manifest_path) = create_test_manifest()?;
