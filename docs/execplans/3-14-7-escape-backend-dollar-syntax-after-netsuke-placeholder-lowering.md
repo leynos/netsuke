@@ -411,8 +411,9 @@ Stop and escalate rather than improvising when any of these is reached.
 The 2026-08-28 correction is complete. The real-Ninja property removes exactly
 one final CRLF or LF record terminator, preserving trailing command whitespace,
 and the shared path validator again rejects the EP-M3 metacharacter set in both
-ordinary and dyndep emission, with spaces escaped as a `$` followed by a space.
-The current deterministic suite and CodeRabbit review passed with no concerns.
+ordinary and dyndep emission, with spaces escaped as a `$` followed by a space,
+and the same rule applies to a source path as to a target path. The current
+deterministic suite and CodeRabbit review passed with no concerns.
 
 Delivered as designed. Commands and scripts retain ordinary shell dollars in
 the backend-neutral IR; the typed Ninja writer doubles only residual dollars
@@ -684,8 +685,11 @@ a typed error naming the offending path. The escaped space is the one
 Ninja-special character that is encoded rather than diagnosed.
 
 - Method: `rstest` cases over paths containing `$`, a space, a colon, `|`, and
-  control characters. The `$`, colon, `|`, and control-character cases must
-  fail; the space case must generate and then survive Ninja's lexer unchanged.
+  control characters, exercised in each position the task emits a path — the
+  ordinary `build` line, the `default` line, and the dyndep sidecar. The `$`,
+  colon, `|`, and control-character cases must fail in every position; the
+  space case must generate in every position and then survive Ninja's lexer
+  unchanged.
 - Rationale: without this, EP-M2 makes the command and the dependency edge
   disagree for a path like `input$1`, so Ninja reports one dependency while the
   command reads another. `tests/command_escaping_tests.rs:55` already uses such
@@ -730,18 +734,25 @@ child-process environment control.
 
 Scalar `command:` rows:
 
-| Row | Recipe                                    | Expected Ninja text             | Expected expansion   | Shell effect                                                                                                 |
-| --- | ----------------------------------------- | ------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------ |
-| A1  | `echo $NETSUKE_TEST_SENTINEL > out`       | `$$NETSUKE_TEST_SENTINEL`       | verbatim             | `out` is `sentinel-value`                                                                                    |
-| A2  | `echo ${NETSUKE_TEST_SENTINEL:-fb} > out` | `$${NETSUKE_TEST_SENTINEL:-fb}` | verbatim             | set gives `sentinel-value`; unset gives `fb`. Today the file does not parse.                                 |
-| A3  | `echo $RUSTFLAGS-$PATH`                   | both doubled                    | verbatim             | both survive                                                                                                 |
-| A4  | `echo $input > out`                       | `$$input`                       | verbatim             | empty; guards the word-boundary check at `src/ir/cmd_interpolate.rs:154` and proves escaping did not skip it |
-| A5  | `cat $in > $out`, plain paths             | no `$` at all                   | `cat in > out`       | copies; proves escaping runs after lowering                                                                  |
-| A6  | `cat $in > $out`, source `a$b.c`          | quoted path, `$` doubled        | quoted path verbatim | composition of `shell_quote::Sh` with the escaper                                                            |
-| A7  | `echo $$`                                 | `$$$$`                          | `echo $$`            | prints a process identifier                                                                                  |
-| A8  | `echo hi`                                 | byte-identical to today         | `echo hi`            | control row; must pass before and after                                                                      |
+| Row | Recipe                                             | Expected Ninja text             | Expected expansion | Shell effect                                                                                                 |
+| --- | -------------------------------------------------- | ------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------ |
+| A1  | `echo $NETSUKE_TEST_SENTINEL > out`                | `$$NETSUKE_TEST_SENTINEL`       | verbatim           | `out` is `sentinel-value`                                                                                    |
+| A2  | `echo ${NETSUKE_TEST_SENTINEL:-fb} > out`          | `$${NETSUKE_TEST_SENTINEL:-fb}` | verbatim           | set gives `sentinel-value`; unset gives `fb`. Today the file does not parse.                                 |
+| A3  | `echo $RUSTFLAGS-$PATH`                            | both doubled                    | verbatim           | both survive                                                                                                 |
+| A4  | `echo $input > out`                                | `$$input`                       | verbatim           | empty; guards the word-boundary check at `src/ir/cmd_interpolate.rs:154` and proves escaping did not skip it |
+| A5  | `cat $in > $out`, plain paths                      | no `$` at all                   | `cat in > out`     | copies; proves escaping runs after lowering                                                                  |
+| A6  | `cat $in > $out`, source `a$b.c`                   | generation fails                | EP-M3 typed error  | the source path holds a dollar, so EP-M3 refuses the edge; see A9 for the doubling this row cannot reach     |
+| A9  | `cat $in > $out`, plain paths, `$` in command text | command text doubled            | `cat in > out`     | divides A6's two concerns: dollar doubling lives in the command text, not in a path                          |
+| A7  | `echo $$`                                          | `$$$$`                          | `echo $$`          | prints a process identifier                                                                                  |
+| A8  | `echo hi`                                          | byte-identical to today         | `echo hi`          | control row; must pass before and after                                                                      |
 
 *Table 1: Scalar command regression matrix.*
+
+Row A6 carries the EP-M3 source-path refusal rather than a successful emission,
+because EP-M3 validates a source path exactly as it validates a target path: a
+dollar in either fails generation with the typed error. The doubling A6
+originally demonstrated belongs to command text, which A9 covers with a
+dollar-free path so that the two concerns do not share one row.
 
 Script `script:` rows:
 

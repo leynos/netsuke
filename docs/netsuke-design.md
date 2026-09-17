@@ -599,7 +599,11 @@ file format when it emits `build.ninja`.
 
 Netsuke should add four complementary capabilities.
 
-#### Backend dollar escaping
+#### Backend dollar escaping (implemented)
+
+The rest of this section is prospective: the three capabilities that follow it
+describe intended work, not shipped behaviour. This subsection alone records
+what is now implemented.
 
 After Netsuke has resolved its own placeholders (`{{ ins }}` and `{{ outs }}`)
 and before writing a Ninja file, the Ninja backend escapes every remaining

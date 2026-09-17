@@ -37,7 +37,9 @@ Netsuke uses a private typed conversion at the Ninja writer boundary:
   newline, carriage-return, and NUL control characters.
 - Only the completed `NinjaValue` is written as a Ninja `command` binding;
   descriptions, `depfile`, `deps`, and `pool` are escaped at their Ninja
-  emission boundary and reject newline, carriage-return, and NUL characters.
+  emission boundary, doubling a literal dollar in each, and reject newline,
+  carriage-return, and NUL characters. A `depfile` of `$out.d` therefore emits
+  `$$out.d` and names a literal file rather than a Ninja variable.
 - Build-edge paths remain separate values. A literal space is escaped as a `$`
   followed by a space, Ninja's own path escape, so whitespace-containing
   outputs stay valid. A pipe, newline, carriage return, or NUL is rejected
