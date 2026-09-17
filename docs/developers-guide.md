@@ -5084,6 +5084,30 @@ signature again. Pinning both is what lets a behavioural test drive `which` and
 `tests/stdlib_which_pathext_tests.rs`, which is gated to Windows because
 `PATHEXT` governs resolution only there.
 
+#### `which` search-domain contract
+
+`CwdMode` keeps flat PATH lookup, workspace-root lookup, and recursive
+workspace discovery distinct. `Auto` searches only PATH entries; an empty or
+unset PATH has no search directories. `Always` prepends only the workspace
+root/current directory to the PATH pass. `Never` excludes the workspace root
+and empty PATH components. `WorkspaceRecursive` performs the same flat pass as
+`Auto`, then recursively walks the workspace only after that pass misses.
+
+Recursive discovery crosses into checkout-controlled files. It therefore
+requires the explicit `workspace-recursive` value and remains subject to the
+`NETSUKE_WHICH_WORKSPACE` kill-switch. `WhichResolver` includes the selected
+mode and captured switch state in its cache identity, so entries from search
+domains with different trust boundaries cannot collide. The complete contract
+is recorded in
+[ADR-024](adr-024-require-explicit-recursive-workspace-which-search.md) and the
+[executable-discovery design](netsuke-design.md#executable-discovery-filter-which).
+
+Tests that inject `EnvSnapshot::capture_with_env` must use
+`env::mock_env_for_capture`. The strict builder declares every documented read:
+PATH and `NETSUKE_WHICH_WORKSPACE` on every platform, plus `PATHEXT` on
+Windows. Exact `.once()` expectations intentionally fail when capture gains an
+undeclared environment dependency.
+
 That gating has a cost worth stating: the Windows-gated suite runs only on
 `build-test-windows`, so keep host-independent rules — normalization, the
 fallback — in the `#[cfg(any(windows, test))]` unit tests that every host

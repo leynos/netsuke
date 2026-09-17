@@ -22,7 +22,7 @@ const SWITCH: &str = "NETSUKE_WHICH_WORKSPACE";
 const MANIFEST: &str = concat!(
     "netsuke_version: \"1.0.0\"\n",
     "targets:\n",
-    "  - name: \"probe-{{ command_available('netsuke_workspace_probe') }}.txt\"\n",
+    "  - name: \"probe-{{ command_available('netsuke_workspace_probe', cwd_mode='workspace-recursive') }}.txt\"\n",
     "    command: \"true\"\n",
 );
 

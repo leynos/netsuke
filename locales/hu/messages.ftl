@@ -348,14 +348,15 @@ stdlib.time.label.nanoseconds = nanomásodperc
 
 # A which segédfüggvény diagnosztikája.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] a(z) „{ $command }” parancs nem található { $count } PATH-bejegyzés ellenőrzése után. Előnézet: { $preview }
-stdlib.which.not_found.hint.cwd_auto = A PATH üres szakaszait a rendszer figyelmen kívül hagyja; a munkakönyvtár bevonásához használja a cwd_mode="auto" beállítást.
-stdlib.which.not_found.hint.cwd_always = Az aktuális könyvtár bevonásához állítsa be a cwd_mode="always" értéket.
+stdlib.which.not_found.hint.cwd_auto = Az auto mód csak a PATH változóban kifejezetten megadott könyvtárakban keres.
+stdlib.which.not_found.hint.cwd_always = Az always mód a PATH változóban megadott könyvtárak előtt csak az aktuális könyvtárban keres.
+stdlib.which.not_found.hint.workspace = A munkaterület-fában való rekurzív kereséshez használja a cwd_mode="workspace-recursive" beállítást.
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] a(z) „{ $command }” parancs itt: „{ $path }” hiányzik, vagy nem futtatható.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <üres>
 stdlib.which.path_entry.non_utf8 = A(z) { $index }. PATH-bejegyzés nem UTF-8 karaktereket tartalmaz; a Netsuke UTF-8 útvonalakat igényel.
 stdlib.which.command.empty = A which nem üres karakterláncot igényel.
-stdlib.which.cwd_mode.invalid = A cwd_mode értéke „auto”, „always” vagy „never” lehet, de ez érkezett: „{ $mode }”.
+stdlib.which.cwd_mode.invalid = A cwd_mode értéke 'auto', 'always', 'never' vagy 'workspace-recursive' kell legyen; a kapott érték: '{ $mode }'.
 stdlib.which.cwd.resolve_failed = Az aktuális könyvtárat nem sikerült meghatározni: { $details }.
 stdlib.which.cwd.non_utf8 = Az aktuális könyvtár nem UTF-8 részeket tartalmaz.
 stdlib.which.canonicalize_failed = A(z) „{ $path }” kanonizálása sikertelen: { $details }.

@@ -348,14 +348,15 @@ stdlib.time.label.nanoseconds = nano-dhiogan
 
 # Breithneachadh a' chuidiche which.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] cha deach an àithne “{ $command }” a lorg às dèidh { $count } innteart PATH a sgrùdadh. Ro-shealladh: { $preview }
-stdlib.which.not_found.hint.cwd_auto = Thèid earrannan falamh de PATH a leigeil seachad; cleachd cwd_mode="auto" gus am pasgan obrach a ghabhail a-steach.
-stdlib.which.not_found.hint.cwd_always = Suidhich cwd_mode="always" gus am pasgan làithreach a ghabhail a-steach.
+stdlib.which.not_found.hint.cwd_auto = Cha bhith am modh auto a’ lorg ach ann an clàran a tha ainmichte gu soilleir ann am PATH.
+stdlib.which.not_found.hint.cwd_always = Bidh am modh always a’ lorg sa chlàr làithreach an toiseach, agus an uair sin ann an clàran ainmichte ann am PATH.
+stdlib.which.not_found.hint.workspace = Gus craobh an àite-obrach a lorg gu h-ath-chùrsach, cleachd cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] tha an àithne “{ $command }” aig “{ $path }” a dhìth no chan eil i so-ruithe.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <falamh>
 stdlib.which.path_entry.non_utf8 = Tha caractaran nach eil nan UTF-8 ann an innteart àireamh { $index } de PATH; tha Netsuke ag iarraidh slighean UTF-8.
 stdlib.which.command.empty = Tha which ag iarraidh sreang nach eil falamh.
-stdlib.which.cwd_mode.invalid = Feumaidh cwd_mode a bhith na “auto”, “always” no “never”, ach fhuaireadh “{ $mode }”.
+stdlib.which.cwd_mode.invalid = Feumaidh cwd_mode a bhith 'auto', 'always', 'never', no 'workspace-recursive'; fhuaras '{ $mode }'.
 stdlib.which.cwd.resolve_failed = Cha b' urrainnear am pasgan làithreach a dhearbhadh: { $details }.
 stdlib.which.cwd.non_utf8 = Tha pàirtean anns a' phasgan làithreach nach eil nan UTF-8.
 stdlib.which.canonicalize_failed = Cha b' urrainnear “{ $path }” a bhun-riaghailteachadh: { $details }.

@@ -348,14 +348,15 @@ stdlib.time.label.nanoseconds = नैनोसेकंड
 
 # which सहायक के निदान।
 stdlib.which.not_found = [netsuke::jinja::which::not_found] PATH की { $count } प्रविष्टियाँ जाँचने पर भी आदेश “{ $command }” नहीं मिला। झलक: { $preview }
-stdlib.which.not_found.hint.cwd_auto = PATH के रिक्त खंड अनदेखे रहते हैं; कार्य निर्देशिका सम्मिलित करने हेतु cwd_mode="auto" लें।
-stdlib.which.not_found.hint.cwd_always = वर्तमान निर्देशिका सम्मिलित करने हेतु cwd_mode="always" निर्धारित करें।
+stdlib.which.not_found.hint.cwd_auto = auto मोड केवल PATH में स्पष्ट रूप से नामित निर्देशिकाओं में खोजता है।
+stdlib.which.not_found.hint.cwd_always = always मोड पहले वर्तमान निर्देशिका में और फिर PATH में स्पष्ट रूप से नामित निर्देशिकाओं में खोजता है।
+stdlib.which.not_found.hint.workspace = कार्यस्थान वृक्ष में पुनरावर्ती खोज के लिए cwd_mode="workspace-recursive" का उपयोग करें।
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] “{ $path }” पर आदेश “{ $command }” अनुपस्थित है अथवा निष्पादनीय नहीं है।
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <रिक्त>
 stdlib.which.path_entry.non_utf8 = PATH की { $index }वीं प्रविष्टि में ऐसे वर्ण हैं जो UTF-8 नहीं हैं; Netsuke को UTF-8 पथ चाहिए।
 stdlib.which.command.empty = which को अरिक्त स्ट्रिंग चाहिए।
-stdlib.which.cwd_mode.invalid = cwd_mode “auto”, “always” अथवा “never” होना चाहिए, किंतु “{ $mode }” मिला।
+stdlib.which.cwd_mode.invalid = cwd_mode 'auto', 'always', 'never' या 'workspace-recursive' होना चाहिए; '{ $mode }' मिला।
 stdlib.which.cwd.resolve_failed = वर्तमान निर्देशिका निर्धारित नहीं की जा सकी: { $details }।
 stdlib.which.cwd.non_utf8 = वर्तमान निर्देशिका में ऐसे अंश हैं जो UTF-8 नहीं हैं।
 stdlib.which.canonicalize_failed = “{ $path }” का मानकीकरण नहीं हो सका: { $details }।
