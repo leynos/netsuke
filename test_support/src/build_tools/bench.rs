@@ -20,12 +20,12 @@ pub const BASELINE_MTIME: i64 = 1_600_000_000;
 
 /// Target-directory slug for the LLVM baseline variant.
 pub const DEFAULT_SLUG: &str = "default";
-/// Target-directory slug for the repository default: Cranelift and `mold`.
-pub const CRANELIFT_SLUG: &str = "cranelift";
+/// Target-directory slug for the repository default: the `mold` linker.
+pub const MOLD_SLUG: &str = "mold";
 /// Target-directory slug for the default plus the parallel `rustc` frontend.
-pub const CRANELIFT_THREADS_SLUG: &str = "cranelift-threads";
+pub const MOLD_THREADS_SLUG: &str = "mold-threads";
 /// Every variant slug, in the order the benchmark measures them.
-pub const BENCH_SLUGS: [&str; 3] = [DEFAULT_SLUG, CRANELIFT_SLUG, CRANELIFT_THREADS_SLUG];
+pub const BENCH_SLUGS: [&str; 3] = [DEFAULT_SLUG, MOLD_SLUG, MOLD_THREADS_SLUG];
 
 /// Create the touch file with [`BASELINE_MTIME`], returning that timestamp.
 ///

@@ -38,10 +38,6 @@ KANI_EXCLUDES = (
 EXPECTED_WITH = {
     "exclude-globs": ",".join(KANI_EXCLUDES),
     "extra-args": "--all-features",
-    # cargo-mutants compiles on the dev profile, which `.cargo/config.toml`
-    # puts on the Cranelift backend. The shared workflow's only provisioning
-    # channel is this input, so without it every mutant fails to build.
-    "setup-commands": "make install-build-tools",
 }
 
 

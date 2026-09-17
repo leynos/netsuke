@@ -93,13 +93,12 @@ fn installs_and_records_the_verification_when_the_checksum_matches() -> Result<(
             .any(|call| call == &format!("toolchain install {toolchain} --profile minimal")),
         "should install the pinned toolchain, recorded `{rustup:?}`"
     );
+    // No component is added. The standard names no codegen backend, so an
+    // installer that started fetching one would be provisioning something no
+    // build asks for.
     ensure!(
-        rustup.iter().any(|call| {
-            call == &format!(
-                "component add rustc-codegen-cranelift-preview --toolchain {toolchain}"
-            )
-        }),
-        "should add the Cranelift component to the pinned toolchain, recorded `{rustup:?}`"
+        !rustup.iter().any(|call| call.starts_with("component add")),
+        "the installer should add no rustup component, recorded `{rustup:?}`"
     );
     Ok(())
 }
@@ -207,7 +206,7 @@ fn refuses_to_install_an_unverifiable_artefact(#[case] failure: ChecksumFailure)
 #[test]
 fn falls_back_to_the_committed_pins_when_no_overrides_are_given() -> Result<()> {
     let sandbox = Sandbox::new()?;
-    sandbox.write_rustup(&pinned_toolchain()?, true)?;
+    sandbox.write_rustup(&pinned_toolchain()?)?;
     let committed_version = pinned_mold_version()?;
     let release = FakeRelease::publish(&sandbox, &committed_version)?;
 
@@ -314,7 +313,7 @@ proptest! {
 fn benchmark_emits_a_markdown_table_for_every_variant() -> Result<()> {
     let sandbox = Sandbox::new()?;
     sandbox.write_mold(&sandbox.prefix().join("bin"), &pinned_mold_version()?)?;
-    sandbox.write_rustup(&pinned_toolchain()?, true)?;
+    sandbox.write_rustup(&pinned_toolchain()?)?;
     let cargo = sandbox.write_fake(&sandbox.bin(), "cargo", "exit 0")?;
     let touch_file = sandbox.home().join("bench-touch");
     sandbox.write_file(&touch_file, "")?;
@@ -340,7 +339,7 @@ fn benchmark_emits_a_markdown_table_for_every_variant() -> Result<()> {
     );
     let rows: Vec<&str> = stdout
         .lines()
-        .filter(|line| line.starts_with("| Default") || line.starts_with("| Cranelift"))
+        .filter(|line| line.starts_with("| Default") || line.starts_with("| `mold`"))
         .collect();
     ensure!(
         rows.len() == 3,
@@ -359,7 +358,7 @@ fn benchmark_emits_a_markdown_table_for_every_variant() -> Result<()> {
 #[test]
 fn install_target_forwards_the_prefix_pins_and_release_url() -> Result<()> {
     let sandbox = Sandbox::new()?;
-    sandbox.write_rustup(&pinned_toolchain()?, true)?;
+    sandbox.write_rustup(&pinned_toolchain()?)?;
     let release = FakeRelease::publish(&sandbox, TEST_MOLD_VERSION)?;
     let version_pin = release.write_version_pin(&sandbox)?;
     let checksums = release.write_checksums(&sandbox, release.sha256())?;

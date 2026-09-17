@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Install the pinned toolchain for the opt-in mold + Cranelift local build path.
+# Install the build tools the repository's standard needs.
 #
 # Downloads the pinned mold release, verifies it against tools/mold/SHA256SUMS,
-# unpacks it under $BUILD_TOOLS_PREFIX (default ~/.local), then installs the pinned
-# nightly toolchain and its Cranelift codegen backend. Nothing here touches the
-# release, packaging, coverage, or formal-verification toolchains.
+# unpacks it under $BUILD_TOOLS_PREFIX (default ~/.local), then installs the
+# pinned nightly toolchain. Nothing here touches the release, packaging,
+# coverage, or formal-verification toolchains.
 
 set -euo pipefail
 
@@ -95,19 +95,16 @@ install_mold() {
   note "put $BUILD_TOOLS_PREFIX/bin first on PATH when not using the make targets"
 }
 
-# Install the pinned nightly and its Cranelift backend component. Uses the
-# minimal profile: this toolchain exists to supply a codegen backend, not to
-# replace the repository's stable toolchain.
-install_cranelift() {
+# Install the pinned nightly. Uses the minimal profile: this is the toolchain
+# `rust-toolchain.toml` already selects, installed eagerly so a missing one is
+# reported here rather than mid-build.
+install_toolchain() {
   local toolchain=$1
   command -v rustup >/dev/null 2>&1 ||
     fail 'rustup not found on PATH; install it from https://rustup.rs'
   note "installing toolchain $toolchain"
   rustup toolchain install "$toolchain" --profile minimal ||
     fail "failed to install toolchain $toolchain"
-  note "installing $CRANELIFT_COMPONENT for $toolchain"
-  rustup component add "$CRANELIFT_COMPONENT" --toolchain "$toolchain" ||
-    fail "failed to install $CRANELIFT_COMPONENT for $toolchain"
 }
 
 # Install both halves. The linker step runs first so a checksum failure aborts
@@ -119,9 +116,9 @@ main() {
   # otherwise reach the installer as an empty string and be built into a
   # download URL.
   mold_pin=$(mold_version) || return 1
-  toolchain_pin=$(cranelift_toolchain) || return 1
+  toolchain_pin=$(pinned_toolchain) || return 1
   install_mold "$mold_pin"
-  install_cranelift "$toolchain_pin"
+  install_toolchain "$toolchain_pin"
   note 'ready; verify with: make check-build-tools'
 }
 

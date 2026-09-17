@@ -228,7 +228,7 @@ fn the_makefile_passes_no_standard_flag_the_configuration_omits(
 #[case("lint-clippy")]
 fn a_failed_gate_invokes_cargo_not_at_all(#[case] target: &str) -> Result<()> {
     let sandbox = Sandbox::new()?;
-    sandbox.write_rustup(&pinned_toolchain()?, true)?;
+    sandbox.write_rustup(&pinned_toolchain()?)?;
     // A usable cargo is present and recording; only mold is missing.
     let cargo = RecordingCargo::install(&sandbox)?;
 
@@ -266,7 +266,7 @@ fn a_failed_gate_invokes_cargo_not_at_all(#[case] target: &str) -> Result<()> {
 #[case("test-nextest")]
 fn a_drifting_mold_invokes_cargo_not_at_all(#[case] target: &str) -> Result<()> {
     let sandbox = Sandbox::new()?;
-    sandbox.write_rustup(&pinned_toolchain()?, true)?;
+    sandbox.write_rustup(&pinned_toolchain()?)?;
     sandbox.write_mold(&sandbox.prefix().join("bin"), "99.0.0")?;
     let cargo = RecordingCargo::install(&sandbox)?;
 
@@ -296,13 +296,13 @@ fn a_drifting_mold_invokes_cargo_not_at_all(#[case] target: &str) -> Result<()> 
     Ok(())
 }
 
-/// The release build is deliberately *not* gated: it uses neither Cranelift nor
-/// `mold`, so requiring them would make packaging depend on tools it never
-/// invokes.
+/// The release build is deliberately *not* gated: it uses neither `mold` nor
+/// the parallel frontend, so requiring them would make packaging depend on
+/// tools it never invokes.
 #[test]
 fn the_release_build_runs_without_the_capability_check() -> Result<()> {
     let sandbox = Sandbox::new()?;
-    sandbox.write_rustup(&pinned_toolchain()?, true)?;
+    sandbox.write_rustup(&pinned_toolchain()?)?;
     let cargo = RecordingCargo::install(&sandbox)?;
 
     let invocation = MakeInvocation::new("release")

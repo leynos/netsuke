@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Fast capability check for the opt-in mold + Cranelift local build path.
+# Fast capability check for the repository's build standard.
 #
-# Runs before `make dev-build` and `make dev-test` so a missing tool produces an
-# actionable installation hint rather than an opaque codegen-backend or linker
-# failure deep inside a Cargo invocation. Exits non-zero when a required
-# component is absent, unusable, or does not match its pin.
+# Runs before every build target so a missing tool produces an actionable
+# installation hint rather than an opaque linker failure deep inside a Cargo
+# invocation. Exits non-zero when a required component is absent, unusable, or
+# does not match its pin.
 
 set -euo pipefail
 
@@ -50,10 +50,10 @@ check_mold() {
   note "mold $installed at $resolved"
 }
 
-# Report on the toolchain half of the prerequisites: rustup itself, the pinned
-# nightly, and the Cranelift backend component. Any absence is fatal, because
-# there is no meaningful fallback for a missing codegen backend.
-check_cranelift() {
+# Report on the toolchain half of the prerequisites: rustup itself and the
+# pinned nightly. Any absence is fatal: the standard's parallel frontend is a
+# nightly-only flag, and the tree borrow-checks only under that pin's Polonius.
+check_toolchain() {
   local toolchain=$1
   if ! command -v rustup >/dev/null 2>&1; then
     note 'rustup not found on PATH; it is required to select the pinned nightly'
@@ -65,12 +65,7 @@ check_cranelift() {
     note 'install it with: make install-build-tools'
     return 1
   fi
-  if ! has_cranelift_component "$toolchain"; then
-    note "$CRANELIFT_COMPONENT is not installed for $toolchain"
-    note 'install it with: make install-build-tools'
-    return 1
-  fi
-  note "$CRANELIFT_COMPONENT available on $toolchain"
+  note "toolchain $toolchain available"
 }
 
 # Run both checks unconditionally so a developer sees every missing piece in one
@@ -82,9 +77,9 @@ main() {
   # straight into a check would continue with an empty pin and report a
   # nonsensical drift. An assignment propagates the status, so this stops.
   mold_pin=$(mold_version) || return 1
-  toolchain_pin=$(cranelift_toolchain) || return 1
+  toolchain_pin=$(pinned_toolchain) || return 1
   check_mold "$mold_pin" || status=1
-  check_cranelift "$toolchain_pin" || status=1
+  check_toolchain "$toolchain_pin" || status=1
   [ "$status" -eq 0 ] || note 'capability check failed; see the messages above'
   return "$status"
 }

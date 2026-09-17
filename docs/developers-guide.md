@@ -2310,22 +2310,26 @@ module diagnostic. Update the fixtures whenever the build-script slice changes.
 
 ## The build standard
 
-The [`mold`] linker, the Cranelift `rustc` codegen backend, and the parallel
-`rustc` frontend (`-Zthreads=8`) are the **defaults** for development, test,
-lint, and typecheck builds. They are committed to `.cargo/config.toml`, which
-Cargo auto-discovers, so a bare `cargo build` in the repository gets them as
-well as every Make target. Release and coverage builds are excluded, and the
-exclusions are enforced rather than assumed; see *Exclusions* below.
+The [`mold`] linker and the parallel `rustc` frontend (`-Zthreads=8`) are the
+**defaults** for development, test, lint, and typecheck builds. They are
+committed to `.cargo/config.toml`, which Cargo auto-discovers, so a bare
+`cargo build` in the repository gets them as well as every Make target. Release
+and coverage builds are excluded, and the exclusions are enforced rather than
+assumed; see *Exclusions* below.
+
+The Cranelift codegen backend is deliberately **not** part of the standard, and
+a contract refuses one. See *Why Cranelift is not part of the standard* below
+for the evidence.
 
 [`mold`]: https://github.com/rui314/mold
 
 The canonical commands are:
 
 ```bash
-make install-build-tools   # install the pinned mold release and Cranelift backend
-make check-build-tools     # verify the prerequisites are present
-make build              # debug binary on the standard
-make test               # the full gate on the standard
+make install-build-tools  # install the pinned mold release and the toolchain
+make check-build-tools    # verify the prerequisites are present
+make build                # debug binary on the standard
+make test                 # the full gate on the standard
 ```
 
 `make build`, `make test-nextest`, `make doctest`, `make lint-clippy`,
@@ -2336,11 +2340,11 @@ error. There is no separate accelerated target: `make build`, `make test`,
 `make lint`, and `make typecheck` are the build targets, and every one of them
 runs on the standard.
 
-Every lane in continuous integration that compiles on the dev profile runs
-`make install-build-tools` before its first build, including both Windows jobs
-and the mutation run, which passes the same command through the shared
-workflow's `setup-commands` input. A contract test asserts that command lane by
-lane.
+Every lane in continuous integration whose builds take the linker flag runs
+`make install-build-tools` before its first build. The Windows jobs do not:
+`mold` is Linux-only, so the `cfg` gate leaves the flag inert there and an
+install step would provision nothing. A contract test asserts that command lane
+by lane, and names the Windows omission as intended rather than missing.
 
 `CARGO_LOCKED` defaults to empty. Set `CARGO_LOCKED=--locked` to enable
 repository lockfile verification.
@@ -2364,22 +2368,27 @@ directions: a flag the Makefile passes but the configuration omits fails one
 test, and a flag named in `[build] rustflags` but missing from the Linux table
 fails another. Do not consolidate them.
 
-Whether a build was actually accelerated is checkable after the fact, not only
-inferable from the command line:
+Whether a build actually linked with `mold` is checkable after the fact, not
+only inferable from the command line:
 
 ```console
-$ readelf -p .comment target/debug/netsuke | grep cranelift
-  rustc version 1.100.0-nightly (c54751567 2026-08-22) with cranelift 0.134.0
+$ strings target/debug/netsuke | grep '^mold '
+mold 2.41.0 (7c4c0addcb833120bf41cc3db7b2652694e0d814; compatible with GNU ld)
 ```
+
+The linker writes its own version into the artefact, so a build that silently
+fell back to the platform linker carries no such line. That is worth checking
+after any change to how `RUSTFLAGS` is composed, because the fallback is
+otherwise completely silent.
 
 ### Toolchain contract
 
 Two pins fix the linker; the toolchain is not pinned separately. Change the
 pins together, never individually.
 
-The scripts locate these files relative to their own path, so `make dev-*`, a
-direct `scripts/check-build-tools.sh`, and a run from any working directory all
-resolve the same committed pins. Setting `MOLD_VERSION_FILE`,
+The scripts locate these files relative to their own path, so the Make targets,
+a direct `scripts/check-build-tools.sh`, and a run from any working directory
+all resolve the same committed pins. Setting `MOLD_VERSION_FILE`,
 `MOLD_SHA256SUMS_FILE`, or `RUST_TOOLCHAIN_FILE` overrides the corresponding
 default; the tests use that to point the scripts at fixtures. Either way a
 missing or empty file is reported as `build-tools: missing version pin: <path>`
@@ -2396,7 +2405,7 @@ rather than silently becoming an empty version.
   that is absent from this file or whose checksum does not match.
 
 `make install-build-tools` unpacks `mold` under `~/.local` by default; override
-the location with `BUILD_TOOLS_PREFIX`. Every `dev-*` recipe prepends
+the location with `BUILD_TOOLS_PREFIX`. The Makefile prepends
 `$(BUILD_TOOLS_PREFIX)/bin` to `PATH`, so an overridden prefix is the one
 actually selected — `-fuse-ld=mold` resolves by `PATH` order, and the Makefile
 otherwise puts `~/.local/bin` first unconditionally. Invoking the scripts
@@ -2416,8 +2425,8 @@ tarball, verifies its checksum, unpacks it into the install prefix, and reports
 the `PATH` requirement; on other platforms it skips the linker entirely and
 falls back to the platform default. Both branches then converge on the
 toolchain half, which reads the pinned nightly, fails early if `rustup` is
-absent, and otherwise installs the toolchain and the Cranelift backend
-component before printing a readiness message.
+absent, and otherwise installs the toolchain before printing a readiness
+message.
 
 ```mermaid
 flowchart TD
@@ -2443,31 +2452,29 @@ flowchart TD
 ```
 
 **Figure**: `make install-build-tools` control flow. The `is_linux` branch is
-what keeps macOS and Windows on the platform linker while still installing
-Cranelift, and `verify_mold_archive` is the point at which an artefact absent
+what keeps macOS and Windows on the platform linker while still installing the
+toolchain, and `verify_mold_archive` is the point at which an artefact absent
 from `tools/mold/SHA256SUMS`, or one whose checksum does not match, aborts the
 installation. The final node only reports the `PATH` requirement for direct
-script invocation; the `dev-*` recipes prepend `$(BUILD_TOOLS_PREFIX)/bin`
-themselves.
+script invocation; the Makefile prepends `$(BUILD_TOOLS_PREFIX)/bin` themselves.
 
 ### Ownership boundary
 
 The configuration lives in `.cargo/config.toml`, the file Cargo auto-discovers.
-That placement is the mechanism: the standard applies to every dev-profile
-build in the repository whether or not it went through a Make target, which is
-what makes it a default rather than an opt-in.
+That placement is the mechanism: the standard applies to every build in the
+repository whether or not it went through a Make target, which is what makes it
+a default rather than an opt-in.
 
-The file carries four settings and nothing else:
+The file carries two settings and nothing else:
 
-- the `codegen-backend` unstable flag, which nightly Cargo needs before a
-  profile may name a backend;
-- `codegen-backend = "cranelift"` on the `dev` profile, which `test` inherits;
-- `codegen-backend = "llvm"` on the `release` profile, which `bench` inherits.
-  Stated rather than left to the default, because an explicit value is what the
-  exclusion contract reads: deleting it fails a test instead of quietly handing
-  a shipped artefact to whichever backend the file last named;
-- `-Zthreads=8` in `[build] rustflags`, repeated in a
-  `cfg(target_os = "linux")` table beside `-Clink-arg=-fuse-ld=mold`.
+- `-Zthreads=8` in `[build] rustflags`;
+- the same flag repeated in a `cfg(target_os = "linux")` table, beside
+  `-Clink-arg=-fuse-ld=mold`. The repetition is required, not redundant: see
+  *Why the flags are written down twice* above.
+
+It names no codegen backend, for any profile, and a contract refuses one. That
+is a refusal rather than an omission; see *Why Cranelift is not part of the
+standard* below.
 
 Adding anything else to that file applies it to release and coverage builds
 too. A setting that is only safe for the development loop does not belong
@@ -2484,22 +2491,66 @@ file among others to keep the directive from returning.
 Two build shapes are excluded from the standard, and each exclusion works by a
 different mechanism.
 
-**Release and packaging.** `[profile.release]` names `llvm`, so the backend is
-settled by the configuration itself. The linker and the frontend are not: a
-`[target.*]` table applies to every profile, so `make release` assigns
-`RUSTFLAGS` — to the caller's inherited value, or to nothing — because
-*assigning it at all* is what displaces the configuration's tables. A recipe
-that left the variable unset would ship an artefact built with the parallel
-frontend and `mold`. On CI the release lanes are already covered, because
-`setup-rust` exports `RUSTFLAGS` for the whole job.
+**Release and packaging.** A `[target.*]` table applies to every profile, so
+`make release` assigns `RUSTFLAGS` — to the caller's inherited value, or to
+nothing — because *assigning it at all* is what displaces the configuration's
+tables. A recipe that left the variable unset would ship an artefact built with
+the parallel frontend and `mold`. On CI the release lanes are already covered,
+because `setup-rust` exports `RUSTFLAGS` for the whole job.
 
-**Coverage.** `cargo llvm-cov` measures through LLVM source-based
-instrumentation, which Cranelift does not emit, so an instrumented build on
-Cranelift yields no coverage at all rather than merely a slower run. Both
-coverage steps set `CARGO_PROFILE_DEV_CODEGEN_BACKEND=llvm`, and neither passes
-`-Zthreads`: a build whose output is a measurement is a reproducibility claim.
-`tests/workflow_contracts/build_standard_wiring_test.py` asserts both, and
-fails if either flag is handed back.
+**Coverage.** A build whose output is a measurement is a reproducibility claim,
+so it takes neither the parallel frontend nor the linker change. Both coverage
+steps assign `RUSTFLAGS` at the step itself rather than inheriting it from the
+toolchain action, so the exclusion is visible where it applies and a contract
+has something to read. `tests/workflow_contracts/build_standard_wiring_test.py`
+asserts the assignment and, separately, that no excluded flag appears; the two
+fail to different edits.
+
+### Why Cranelift is not part of the standard
+
+The Cranelift codegen backend is the obvious third member of this set, and it
+is deliberately absent. It cannot initiate a panic. A panic raised in a
+Cranelift-compiled frame aborts the process instead of unwinding:
+
+```text
+fatal runtime error: failed to initiate panic, error 5, aborting
+```
+
+Error 5 is the unwinder reaching the end of the stack without finding a
+handler. This reproduces in a crate with no dependencies at all:
+
+```rust
+#[test]
+fn spawned_thread_panic_unwinds() {
+    let handle = std::thread::spawn(|| panic!("boom"));
+    assert!(handle.join().is_err());
+}
+```
+
+`std::panic::catch_unwind` on the main thread fails the same way, so the reach
+is every test that panics on failure, every `#[should_panic]`, and a debug
+binary that would abort with 134 where it now exits 101.
+
+What was ruled out, each by its own run: it is not the linker, because it
+aborts with the platform linker too; not the parallel frontend, because LLVM
+with `-Zthreads=8` passes; not a compiler-cache wrapper, because it aborts with
+`RUSTC_WRAPPER` unset; and not a missing flag, because
+`-Cforce-unwind-tables=yes` and an explicit `-Cpanic=unwind` both still abort.
+It is not the pinned toolchain either: the same crate aborts on the newest
+upstream nightly, where the LLVM control passes.
+
+Scoping it to a profile does not rescue it.
+`[profile.test] codegen-backend = "llvm"` makes the suite pass, but reading the
+compiler invocations of a clean `cargo test` under that setting shows every
+crate built on LLVM, dependencies included. `cargo check` and Clippy generate
+no code, so `make typecheck` and `make lint` would gain nothing either. That
+leaves `make build` as the only beneficiary — the one artefact that would then
+abort on a panic and so behave differently from the binary the tests exercise.
+
+`tests/build_tools_cargo_config_tests.rs` therefore refuses a `codegen-backend`
+key under any profile. Re-test on a toolchain bump with the crate above before
+relaxing it; the environment override `CARGO_PROFILE_DEV_CODEGEN_BACKEND`
+remains available for a single scoped experiment.
 
 ### Composition rules
 
@@ -2526,15 +2577,20 @@ fails if either flag is handed back.
   two shapes the standard must not reach, and each is held out by a different
   mechanism.
 - **Formal verification.** Kani manages its own supporting nightly toolchain
-  during `cargo kani setup`, and drives `rustc` through `kani-compiler` rather
-  than through the profile's backend. Reading the compiler invocations a
-  `cargo kani` run produces shows neither `-Zcodegen-backend` nor `-Zthreads`
-  reaching `kani-compiler`, so the harnesses need no override and none is
-  added; CI's `kani-smoke` job runs `make kani-ir` on every pull request, which
-  is where that continues to be checked. Verus drives its own toolchain the
-  same way. If a proof tool ever does inherit the backend, the remedy is
-  `CARGO_PROFILE_DEV_CODEGEN_BACKEND=llvm` scoped to that target, not a change
-  to the shared configuration.
+  during `cargo kani setup`, and drives `rustc` through `kani-compiler`.
+  Reading the compiler invocations a `cargo kani` run produces shows
+  `-Zthreads` never reaching `kani-compiler`, so the harnesses need no override
+  and none is added; CI's `kani-smoke` job runs `make kani-ir` on every pull
+  request, which is where that continues to be checked. Verus drives its own
+  toolchain the same way. If a proof tool ever does inherit a flag it cannot
+  take, the remedy is an override scoped to that one target with the reason
+  recorded, not a change to the shared configuration.
+- **Dylint and Whitaker.** `make lint-whitaker` execs `cargo dylint`, which
+  re-invokes Cargo under Whitaker's own pinned nightly with a driver as
+  `RUSTC_WORKSPACE_WRAPPER`. That older Cargo reads this configuration without
+  complaint, and dylint drives `cargo check`, so nothing here reaches code
+  generation. It would only need revisiting if dylint moved to a
+  codegen-producing command.
 - **Test runner.** The standard is applied at the Cargo level, through
   `RUSTFLAGS` and the profile, rather than at the runner level, which is why it
   composes with nextest unchanged; `make test-nextest` is governed by the same
@@ -2543,7 +2599,7 @@ fails if either flag is handed back.
   concurrency, so a Cargo-shaped `-j` would silently become a thread count.
 - **rust-analyzer.** No rust-analyzer configuration is committed, so the
   language server picks up `.cargo/config.toml` like any other Cargo caller and
-  builds on Cranelift. Give it a separate target directory to avoid thrashing
+  takes the standard. Give it a separate target directory to avoid thrashing
   the cache shared with `make test`.
 - **Polonius.** The analysis comes from the pinned nightly (ADR-006), so the
   configuration needs no Polonius-specific cooperation and must not add a
@@ -2556,20 +2612,16 @@ fails if either flag is handed back.
   `make install-build-tools` skips the linker installation, the
   `cfg(target_os = "linux")` gate keeps the link argument inert, the Makefile
   omits it from the composed `RUSTFLAGS`, and `make check-build-tools` prints
-  the fallback to the platform linker explicitly. Cranelift still applies: the
-  pinned nightly publishes `rustc-codegen-cranelift-preview` for
-  `x86_64-pc-windows-msvc` and `aarch64-apple-darwin` as well as for Linux. A
-  profile setting cannot be gated behind a `cfg`, so if a platform ever loses
-  the component the remedy is a job-scoped
-  `CARGO_PROFILE_DEV_CODEGEN_BACKEND=llvm` with the failure quoted as its
-  reason, not a silent fallback.
+  the fallback to the platform linker explicitly. The parallel frontend still
+  applies on every platform, being a compiler flag rather than a tool that has
+  to be installed.
 - **Unsupported architecture.** `make install-build-tools` fails with a clear
   message rather than guessing when `uname -m` is not one of the architectures
   recorded in `tools/mold/SHA256SUMS`.
 - **Missing tools.** `make check-build-tools` names the absent component —
-  `mold`, `rustup`, the pinned toolchain, or the Cranelift backend — and points
-  at `make install-build-tools`. It exits non-zero, so `make build`,
-  `make test`, `make lint`, and `make typecheck` stop before Cargo runs.
+  `mold`, `rustup`, or the pinned toolchain — and points at
+  `make install-build-tools`. It exits non-zero, so `make build`, `make test`,
+  `make lint`, and `make typecheck` stop before Cargo runs.
 
 ### Testing the tooling
 
@@ -2591,11 +2643,11 @@ network, and no real `mold`, `rustup`, or Cargo — so they run as part of
   release build assigns `RUSTFLAGS` and carries neither flag, and that a failed
   capability check reaches zero Cargo invocations.
 - `tests/build_tools_cargo_config_tests.rs`: the committed `.cargo/config.toml`.
-  That both `rustflags` sources repeat the shared flags, that only the `dev` and
-  `release` profiles name a backend and each names the right one, and that
-  Cargo itself resolves the keys — `cargo config get` reports Cargo's own view,
-  so a key nested under the wrong table shows up as a missing value rather than
-  parsing cleanly and being ignored.
+  That both `rustflags` sources repeat the shared flags, that no profile names
+  a codegen backend, and that Cargo itself resolves the keys —
+  `cargo config get` reports Cargo's own view, so a key nested under the wrong
+  table shows up as a missing value rather than parsing cleanly and being
+  ignored.
 - `tests/build_tools_bench_tests.rs`: `make bench-build`. Per-variant target
   directories, the clean/incremental cycle, and all three variant rows.
 - `tests/build_tools_bench_lock_tests.rs`: the benchmark's exclusion lock. That
@@ -2647,8 +2699,8 @@ The fixtures live in `test_support::build_tools`:
 - `test_support::build_tools::scenario` builds on the fixtures above to assemble
   two starting points. `BuildScenario` is a sandbox where
   `make check-build-tools` passes — pinned `mold` on the install prefix, a
-  `rustup` reporting the Cranelift component, and a `RecordingCargo` installed
-  — and is shared by the Make-target and benchmark suites.
+  `rustup` reporting the pinned toolchain, and a `RecordingCargo` installed —
+  and is shared by the Make-target and benchmark suites.
   `BuildScenario::run(target)` returns the single Cargo invocation a target
   must produce. The scenario is shared by both suites so each can inspect that
   invocation without relying on process-global state. `InstallerScenario` is a

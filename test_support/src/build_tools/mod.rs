@@ -35,8 +35,8 @@ mod scenario;
 mod staging;
 
 pub use bench::{
-    BASELINE_MTIME, BENCH_SLUGS, BenchFixture, CRANELIFT_SLUG, CRANELIFT_THREADS_SLUG,
-    DEFAULT_SLUG, write_with_old_mtime,
+    BASELINE_MTIME, BENCH_SLUGS, BenchFixture, DEFAULT_SLUG, MOLD_SLUG, MOLD_THREADS_SLUG,
+    write_with_old_mtime,
 };
 pub use cargo_log::{CargoInvocation, RecordingCargo, TargetState};
 pub use make::MakeInvocation;

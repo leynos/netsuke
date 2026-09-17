@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared helpers for the opt-in mold + Cranelift local build acceleration.
+# Shared helpers for the build tools the repository's standard needs.
 #
 # Sourced by scripts/install-build-tools.sh and scripts/check-build-tools.sh so both
 # resolve the pinned versions and emit diagnostics identically. Every message is
@@ -29,9 +29,6 @@ RUST_TOOLCHAIN_FILE="${RUST_TOOLCHAIN_FILE:-$BUILD_TOOLS_REPO_ROOT/rust-toolchai
 # `check-build-tools` and `-fuse-ld=mold`. Invoking these scripts outside `make`
 # means arranging that PATH order separately.
 BUILD_TOOLS_PREFIX="${BUILD_TOOLS_PREFIX:-$HOME/.local}"
-
-# shellcheck disable=SC2034 # consumed by the scripts that source this file.
-CRANELIFT_COMPONENT='rustc-codegen-cranelift-preview'
 
 # Emit a diagnostic. Always stderr, so a caller may capture a helper's stdout
 # without the diagnostics contaminating the captured value.
@@ -75,11 +72,11 @@ mold_version() { read_pin "$MOLD_VERSION_FILE"; }
 
 # The repository's toolchain, read from `rust-toolchain.toml`.
 #
-# Deliberately the same toolchain the ordinary gates use, not a second pin.
-# The tree borrow-checks only under Polonius, which that dated nightly enables
-# by default (ADR-006), so a separate accelerated nightly could let the fast loop
-# and the gate disagree about which borrows are legal.
-cranelift_toolchain() {
+# Deliberately the same toolchain the ordinary gates use, not a second pin. The
+# tree borrow-checks only under Polonius, which that dated nightly enables by
+# default (ADR-006), and the parallel frontend the standard uses is nightly-only
+# besides.
+pinned_toolchain() {
   local file=$RUST_TOOLCHAIN_FILE value
   [ -f "$file" ] || fail "missing version pin: $file"
   value=$(awk -F'"' '/^[[:space:]]*channel[[:space:]]*=/ { print $2; exit }' "$file")
@@ -112,10 +109,3 @@ installed_mold_version() {
   printf '%s' "$output" | awk 'NR == 1 { print $2 }'
 }
 
-# Whether the Cranelift backend is installed for the given toolchain. rustup
-# reports the component with a host-triple suffix, so match on the prefix.
-has_cranelift_component() {
-  local toolchain=$1
-  rustup component list --installed --toolchain "$toolchain" 2>/dev/null |
-    grep -q '^rustc-codegen-cranelift'
-}

@@ -1,34 +1,26 @@
 # Repository-wide Cargo defaults for the development build standard.
 #
-# Cranelift, the mold linker and the parallel rustc frontend are the defaults
-# for every development, test, lint and typecheck build. Release and coverage
-# builds are excluded: release artefacts need the supported LLVM backend and the
-# platform linker, and `cargo llvm-cov` needs LLVM source-based instrumentation,
-# which Cranelift does not emit.
+# The mold linker and the parallel `rustc` frontend are the defaults for every
+# development, test, lint and typecheck build. Cargo auto-discovers this file,
+# so a bare `cargo build` gets them too; there is no opt-in path and no slower
+# alternative to choose.
 #
-# See "Local build acceleration" in docs/developers-guide.md for the exclusion
-# mechanism and the contracts that hold the rustflags sources equal.
-
-[unstable]
-codegen-backend = true
-
-# The `test` and `bench` profiles inherit `dev` and `release` respectively, so
-# naming these two profiles covers every build Cargo performs.
-[profile.dev]
-codegen-backend = "cranelift"
-
-# Stated rather than left to the default: an explicit value is what the release
-# exclusion contract reads, so deleting it fails a test rather than silently
-# handing a shipped artefact to whichever backend the config last named.
-[profile.release]
-codegen-backend = "llvm"
+# Release and coverage builds are excluded. Both are held out by assigning
+# `RUSTFLAGS`, which displaces every `rustflags` table below; see "The build
+# standard" in docs/developers-guide.md for the mechanism and the contracts.
+#
+# No codegen backend is named here, and none may be. The Cranelift backend
+# cannot initiate a panic on any nightly tested, aborting the process instead of
+# unwinding, which makes it unusable for a profile any test or binary runs on.
+# The guide records the evidence; a contract refuses a backend key so that
+# re-adding one has to go through that evidence first.
 
 # Cargo selects a single rustflags source rather than merging them: a matching
 # `[target.*]` table replaces `[build] rustflags` outright, and an externally
 # set `RUSTFLAGS` replaces both. Every flag that must survive therefore has to
 # be repeated in each source, including the `RUSTFLAGS` the Makefile composes
-# for the gate targets. tests/workflow_contracts/build_tools_rustflags_test.py
-# holds the sources equal.
+# for the gate targets. tests/build_tools_cargo_config_tests.rs and
+# tests/makefile_test_target/rustflags.rs hold the sources equal.
 [build]
 rustflags = ["-Zthreads=8"]
 
