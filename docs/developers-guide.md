@@ -750,7 +750,7 @@ Table: CI lane runner shapes and concurrency settings.
 #### The fork arm on the pull-request lanes
 
 A pull request from a fork cannot obtain a Ubicloud runner, so the three lanes
-that serve pull requests, `build-test`, `kani-smoke` and `netsukefile`, name
+that serve pull requests, `build-test`, `kani-smoke`, and `netsukefile`, name
 their runner through an expression rather than a label:
 
 ```yaml
@@ -807,7 +807,7 @@ fallback whose shape the worker bounds deliberately do not govern.
 Keep the continuation at the same indent as the first line. A more-indented
 line inside a folded scalar keeps its break, so the expression arrives with a
 newline inside it. GitHub evaluates it anyway and the lane runs, which is why a
-green run is not evidence that the declaration is well formed;
+green run is not evidence that the declaration is well-formed;
 `test_no_runs_on_declaration_carries_a_line_break` is what reads it.
 
 `build-test` and `coverage-upload` are the two instrumented lanes and both run
