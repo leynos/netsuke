@@ -6901,8 +6901,76 @@ cannot express: there is no step below a nanosecond, so `0.5ns` is refused
 outright; and for hours and longer the division is over whole seconds, so
 `0.123h` is refused where `0.123s` is exact. Reading those as floats gave 5e-10
 and 442.8, numbers the runner would never have started with, and the ordering
-would then have been asserted over a budget nextest rejects. The reader works
-in integer nanoseconds throughout and converts to seconds once, at the end.
+would then have been asserted over a budget nextest rejects.
+
+The reader is measured against the estate's humantime differential, a set of
+seventy-two inputs with humantime 2.3.0's verdict and value for each, run by
+feeding them to a probe crate pinning that version and comparing. Verdict and
+value both count: a reader that accepts the right set and scales a unit wrongly
+has not passed. It read twenty-two disagreements against that set and now reads
+none. Every one was in the same direction, accepting a duration nextest refuses
+at startup, and they fell into three families.
+
+The first is the character classes, and it is why neither `\s` nor `\d` appears
+in the grammar. Python's `\s` is Rust's `char::is_whitespace` plus U+001C to
+U+001F, the file, group, record, and unit separators, and `str.strip` and
+`str.split` carry the same four-character excess. A reader spelling its class
+that way skips those four wherever it skips a space, so `1\x1cs` read as one
+second and `45m\x1f` as forty-five minutes. Python's `\d` matches every Unicode
+decimal digit where humantime matches `'0'..='9'`, so `1٠s`, an
+ordinary-looking number with one Arabic-Indic character in it, read as ten
+seconds. Both classes are enumerated in `nextest_durations.py`, the trim takes
+the same set, and `nextest_duration_test.py` pins each class against Python's
+in both directions over the first 0x11000 code points, so a change in either
+language's notion of whitespace or of a digit fails there rather than in a
+runner.
+
+The second is the 64-bit range. humantime accumulates in `u64` and checks every
+product and every sum; Python's integers do neither, so `18446744073709551616s`
+and `584542046091y` were read as numbers. `nextest_totals.u64` makes each of
+those checks explicit.
+
+The third is the carry, and it is why the total is a pair rather than a count
+of nanoseconds. humantime keeps whole seconds and a nanosecond part, both
+`u64`, and a value can be refused for overflowing the nanosecond part while its
+total sits far inside the seconds range: `18446744073709551615ns` twice over is
+about 1,169 years, nowhere near the ceiling, and is refused all the same. It
+also declines to normalize a nanosecond part of exactly one second, leaving
+that to the conversion which follows, which carries it and aborts when the
+carry overflows. One mechanism, two answers: `0.5s 0.5s` is one second while
+`18446744073709551615s 500ms 500ms` is refused. A reader made merely stricter,
+refusing every carry, fails the first, so both are in the contract.
+
+humantime carries in two places, its `add_current` on a strict `>` and the
+`Duration::new` that ends the same function on `>=`, and the port was first
+written with both. The strict one is unreachable from outside, and by
+construction rather than by luck: every part passes through `add_current`, and
+each call of it finishes by carrying an exact second, so the running total
+offered to the next part never holds one. Collapsing the two changed no answer
+over any of the inputs, so the strict one went, on the grounds that a guard
+nothing can falsify is worse than no guard at all. What survives is the `>=`.
+
+Where a reader would go wrong is in deferring that carry to the end of the
+parse instead. `1000000000ns 18446744073709551615ns` is the input that shows
+it: taken together the two parts overflow the nanosecond accumulator, and a
+reader holding the first as a nanosecond part until the end refuses the
+sequence. humantime reads it as 18446744074.709551615 seconds, measured with
+the pinned probe, because the first part is already a whole second by the time
+the second arrives. It is in the contract for that reason.
+
+That input was the differential's seventy-first blind spot and is now its
+seventy-second input, added to the estate set on 2026-09-17. The shape it
+catches is a port of `add_current` transcribed line for line, with
+`Duration::new` taken once at the end of the parse rather than at the end of
+every part: that reader scores zero against the older seventy-one and refuses a
+duration nextest runs. Note the direction. Every other fault this reader has
+had accepted what the runner refuses; this one refuses what the runner accepts.
+
+Order is part of the claim, and one input of the set shows it.
+`18446744073709551615ns 1ns` is read only because the first part is carried
+into seconds before the second arrives; summed the other way round the
+nanosecond accumulator overflows and the whole duration is refused, which would
+be this contract refusing a configuration nextest runs quite happily.
 
 The port's scope is narrow and deliberately so. `nextest_durations` owns one
 thing: turning the text of a nextest duration into seconds exactly as
@@ -6911,7 +6979,14 @@ workflow-contract helper, not a repository-wide duration parser. Its call-sites
 are `nextest_budgets.py`, which reads `.config/nextest.toml` budgets,
 `timeout_ordering_test.py`, and the two test modules that drive the reading
 directly. Nothing outside `tests/workflow_contracts` imports it, and nothing
-inside should grow a second duration reader beside it.
+inside should grow a second duration reader beside it. humantime's unit table
+sits beside it in `nextest_units.py`, and humantime's accumulator in
+`nextest_totals.py`, both split off to keep every module inside the 400-line
+limit. The seams are alike: the table is what each unit is called and what it
+is worth, the accumulator is the 64-bit range and the carry, and the reader is
+the grammar that drives both. The three error classes live with the
+accumulator, because every check there raises one, and `nextest_durations`
+re-exports them, so callers import them from the reader as they always did.
 
 It composes one way round. `nextest_durations` knows nothing of TOML, of
 workflows, or of what a budget means; callers hand it text and receive seconds
