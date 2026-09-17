@@ -167,6 +167,9 @@ operator, user, and contributor references are easier to find.
   PATH-only default and its manifest trust boundary.
 - [ADR-025](adr-025-main-owned-coverage-publication.md): Local pull-request
   coverage ratcheting with persistent coverage data owned by `main`.
+- [ADR-026](adr-026-manifest-environment-access-policy.md):
+  Exact-name manifest environment policy evaluated before the reader, with
+  project allow entries quarantined below the operator ceiling.
 
 ## Proposals
 

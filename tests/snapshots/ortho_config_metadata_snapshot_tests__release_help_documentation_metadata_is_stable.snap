@@ -1,6 +1,5 @@
 ---
 source: tests/ortho_config_metadata_snapshot_tests.rs
-assertion_line: 143
 expression: metadata_snapshot()
 ---
 ir_version: "1.1"
