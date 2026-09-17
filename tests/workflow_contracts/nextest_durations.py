@@ -22,7 +22,7 @@ same fault as refusing what it accepts: the contract would assert an
 ordering over a budget the runner never started with.
 
 Every disagreement this reader has had with humantime has been in that
-direction. The estate differential measures it over seventy-one
+direction. The estate differential measures it over seventy-two
 inputs; this reader read twenty-two against that set before the work
 below and reads none after. The three families, each answered in a
 different place: the character classes, because Python's

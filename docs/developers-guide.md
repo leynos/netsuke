@@ -6904,7 +6904,7 @@ and 442.8, numbers the runner would never have started with, and the ordering
 would then have been asserted over a budget nextest rejects.
 
 The reader is measured against the estate's humantime differential, a set of
-seventy-one inputs with humantime 2.3.0's verdict and value for each, run by
+seventy-two inputs with humantime 2.3.0's verdict and value for each, run by
 feeding them to a probe crate pinning that version and comparing. Verdict and
 value both count: a reader that accepts the right set and scales a unit wrongly
 has not passed. It read twenty-two disagreements against that set and now reads
@@ -6947,9 +6947,8 @@ written with both. The strict one is unreachable from outside, and by
 construction rather than by luck: every part passes through `add_current`, and
 each call of it finishes by carrying an exact second, so the running total
 offered to the next part never holds one. Collapsing the two changed no answer
-over any of the seventy-one inputs, so the strict one went, on the grounds that
-a guard nothing can falsify is worse than no guard at all. What survives is the
-`>=`.
+over any of the inputs, so the strict one went, on the grounds that a guard
+nothing can falsify is worse than no guard at all. What survives is the `>=`.
 
 Where a reader would go wrong is in deferring that carry to the end of the
 parse instead. `1000000000ns 18446744073709551615ns` is the input that shows
@@ -6957,11 +6956,17 @@ it: taken together the two parts overflow the nanosecond accumulator, and a
 reader holding the first as a nanosecond part until the end refuses the
 sequence. humantime reads it as 18446744074.709551615 seconds, measured with
 the pinned probe, because the first part is already a whole second by the time
-the second arrives. It is in the contract for that reason. The input is not one
-of the differential's seventy-one, which do not discriminate the two placements
-of the carry.
+the second arrives. It is in the contract for that reason.
 
-Order is part of the claim, and one input of the seventy-one shows it.
+That input was the differential's seventy-first blind spot and is now its
+seventy-second input, added to the estate set on 2026-09-17. The shape it
+catches is a port of `add_current` transcribed line for line, with
+`Duration::new` taken once at the end of the parse rather than at the end of
+every part: that reader scores zero against the older seventy-one and refuses a
+duration nextest runs. Note the direction. Every other fault this reader has
+had accepted what the runner refuses; this one refuses what the runner accepts.
+
+Order is part of the claim, and one input of the set shows it.
 `18446744073709551615ns 1ns` is read only because the first part is carried
 into seconds before the second arrives; summed the other way round the
 nanosecond accumulator overflows and the whole duration is refused, which would

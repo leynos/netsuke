@@ -124,7 +124,7 @@ class Total:
         # carrying an exact second, so the running total humantime
         # offers the next part never holds one. The two were written
         # out separately here at first and collapsing them changed no
-        # answer over the differential's seventy-one inputs; an
+        # answer over any of the differential's inputs; an
         # unfalsifiable guard is worse than none. `1000000000ns
         # 18446744073709551615ns` is the input that would tell them
         # apart if the carry were deferred to the end of the parse:

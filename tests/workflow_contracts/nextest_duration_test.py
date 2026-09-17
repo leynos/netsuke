@@ -366,8 +366,8 @@ def test_a_duration_at_humantimes_limit_is_read(duration: str, expected: float) 
     is carried into seconds before the second arrives: taken the other
     way round the nanosecond accumulator overflows and the whole
     duration is refused, which is a refusal of a configuration nextest
-    would have run. It is the one input of the seventy-one that tells
-    the two orders apart.
+    would have run. It is the one input of the set that tells the two
+    orders apart.
 
     The last of them pins where the carry happens. humantime's
     ``add_current`` normalizes on a strict ``>``, so a nanosecond part
@@ -378,7 +378,9 @@ def test_a_duration_at_humantimes_limit_is_read(duration: str, expected: float) 
     two parts together overflow the nanosecond accumulator; humantime
     reads it as 18446744074.709551615 seconds, measured with the
     pinned probe, because the first is already a whole second by the
-    time the second arrives.
+    time the second arrives. It joined the estate differential as its
+    seventy-second input on 2026-09-17, because the other
+    seventy-one do not ask the question.
     """
     assert seconds(duration) == pytest.approx(expected), (
         f"{duration!r} is inside humantime's range and must still be read"
