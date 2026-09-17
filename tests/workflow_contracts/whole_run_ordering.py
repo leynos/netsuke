@@ -21,11 +21,12 @@ from timeout_budgets import COLD_BUILD_ALLOWANCE_SECONDS
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
+    import fractions
 
     from coverage_lanes import CoverageLane
 
 
-def watchdog_required_for(config_text: str) -> float | None:
+def watchdog_required_for(config_text: str) -> fractions.Fraction | None:
     """Return the watchdog a configured whole-run budget demands, or None."""
     # Three terms. The whole-run budget is what nextest may spend once
     # tests begin; the termination allowance is what it may spend
@@ -55,7 +56,7 @@ def whole_run_ordering_faults(
     return faults
 
 
-def _per_test_faults(config_text: str, whole_run: float) -> list[str]:
+def _per_test_faults(config_text: str, whole_run: fractions.Fraction) -> list[str]:
     """Return the fault, if any, in the whole run against one test."""
     largest = largest_test_allowance(config_text)
     if whole_run > largest:
@@ -69,7 +70,9 @@ def _per_test_faults(config_text: str, whole_run: float) -> list[str]:
 
 
 def _lane_faults(
-    lanes: cabc.Iterable[CoverageLane], whole_run: float, required: float
+    lanes: cabc.Iterable[CoverageLane],
+    whole_run: fractions.Fraction,
+    required: fractions.Fraction,
 ) -> list[str]:
     """Return one fault per lane whose watchdog cannot cover the run."""
     faults = []

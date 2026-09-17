@@ -12,6 +12,7 @@ lockfile of the pinned cargo-nextest release resolves, by running its
 parser rather than by reading about it.
 """
 
+import fractions
 import re
 import typing as typ
 
@@ -28,7 +29,12 @@ from nextest_durations import (
 
 #: The four units the repository's own configuration uses, with their
 #: lengths, for the scaling property below.
-UNITS: typ.Final[dict[str, float]] = {"ms": 0.001, "s": 1.0, "m": 60.0, "h": 3600.0}
+UNITS: typ.Final[dict[str, fractions.Fraction]] = {
+    "ms": fractions.Fraction(1, 1_000),
+    "s": fractions.Fraction(1),
+    "m": fractions.Fraction(60),
+    "h": fractions.Fraction(3_600),
+}
 
 whole_numbers = st.integers(min_value=1, max_value=10_000)
 units = st.sampled_from(sorted(UNITS))
@@ -89,8 +95,14 @@ def test_each_unit_converts_exactly(duration: str, expected: float) -> None:
 
 @given(value=whole_numbers, unit=units)
 def test_every_unit_scales_its_value(value: int, unit: str) -> None:
-    """A duration is its number times the length of its unit."""
-    assert seconds(f"{value}{unit}") == pytest.approx(value * UNITS[unit]), (
+    """A duration is its number times the length of its unit.
+
+    Compared exactly rather than approximately. Both sides are exact
+    now, so a tolerance would only be able to hide a disagreement: a
+    millisecond's length is a thousandth, which no float holds, and
+    ``pytest.approx`` would accept a reader that had rounded it.
+    """
+    assert seconds(f"{value}{unit}") == value * UNITS[unit], (
         f"{value}{unit} must scale by the length of its unit"
     )
 

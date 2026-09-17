@@ -6,6 +6,7 @@ which resolves a variable across the step, job and workflow scopes, so
 no module outgrows the 400-line limit the Python lint gate enforces.
 """
 
+import fractions
 import typing as typ
 
 from lane_environment import WatchdogValueError, nextest_profile_of, watchdog_of
@@ -27,10 +28,11 @@ class CoverageLane(typ.NamedTuple):
         The job the step belongs to.
     step : str
         The step's declared name.
-    watchdog : float or None
-        The watchdog budget in seconds, or None when the job sets none
+    watchdog : fractions.Fraction or None
+        The watchdog budget in seconds exactly, or None when the job
+        sets none
         and so inherits the action's 1,800 s default.
-    job_timeout : float or None
+    job_timeout : fractions.Fraction or None
         The job's ``timeout-minutes`` in seconds, or None when it
         declares none and so inherits GitHub's six-hour default.
     condition : tuple[object, object]
@@ -47,8 +49,8 @@ class CoverageLane(typ.NamedTuple):
     workflow: str
     job: str
     step: str
-    watchdog: float | None
-    job_timeout: float | None
+    watchdog: fractions.Fraction | None
+    job_timeout: fractions.Fraction | None
     condition: tuple[object, object] = (None, None)
     nextest_profile: str | None = None
 
@@ -169,7 +171,12 @@ def _lanes_in_job(
         message = f"{workflow}:{job_name}: {error}"
         raise WatchdogValueError(message) from error
     raw_timeout = job.get("timeout-minutes")
-    timeout = None if raw_timeout is None else float(raw_timeout) * 60.0
+    # Read from the text and multiplied exactly. This ceiling is
+    # compared against a sum of watchdog budgets and two allowances, so
+    # a float here would discard the exactness the other terms carry;
+    # the minute-to-second conversion is itself a term of that
+    # comparison rather than a display detail.
+    timeout = None if raw_timeout is None else fractions.Fraction(str(raw_timeout)) * 60
     return [
         CoverageLane(
             workflow=workflow,

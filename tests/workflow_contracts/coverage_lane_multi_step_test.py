@@ -14,6 +14,7 @@ so that it does not.
 Run via ``make test-workflow-contracts``.
 """
 
+import fractions
 import typing as typ
 
 import pytest
@@ -125,15 +126,15 @@ def test_two_coverage_steps_in_one_job_are_judged_together() -> None:
             workflow="ci.yml",
             job="build-test",
             step="cover one",
-            watchdog=1800.0,
-            job_timeout=60 * 60.0,
+            watchdog=fractions.Fraction(1800),
+            job_timeout=fractions.Fraction(60 * 60),
         ),
         CoverageLane(
             workflow="ci.yml",
             job="build-test",
             step="cover two",
-            watchdog=2700.0,
-            job_timeout=60 * 60.0,
+            watchdog=fractions.Fraction(2700),
+            job_timeout=fractions.Fraction(60 * 60),
         ),
     )
 

@@ -18,6 +18,7 @@ See "Test timeouts: the tiers this repository sets" in
 """
 
 import tomllib
+import typing as typ
 from itertools import starmap
 
 from nextest_durations import (
@@ -30,6 +31,9 @@ from timeout_budgets import (
     NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS,
     TERMINATION_SAFETY_MARGIN_SECONDS,
 )
+
+if typ.TYPE_CHECKING:
+    import fractions
 
 
 #: One value-and-unit pair of a humantime duration. nextest parses its
@@ -176,7 +180,7 @@ def _multiplier_of(path: str, multiplier: object) -> int:
     raise NextestConfigurationError(message)
 
 
-def _budget_of(path: str, value: object) -> float:
+def _budget_of(path: str, value: object) -> fractions.Fraction:
     """Return the per-test budget one ``slow-timeout`` declares.
 
     Parameters
@@ -188,8 +192,8 @@ def _budget_of(path: str, value: object) -> float:
 
     Returns
     -------
-    float
-        The budget in seconds.
+    fractions.Fraction
+        The budget in seconds, exactly.
 
     Raises
     ------
@@ -229,7 +233,7 @@ def _budget_of(path: str, value: object) -> float:
     return seconds(period) * _multiplier_of(path, multiplier)
 
 
-def largest_test_allowance(config_text: str) -> float:
+def largest_test_allowance(config_text: str) -> fractions.Fraction:
     """Return the longest a single test may run, in seconds.
 
     nextest warns once per ``period`` and terminates after
@@ -245,8 +249,8 @@ def largest_test_allowance(config_text: str) -> float:
 
     Returns
     -------
-    float
-        The longest per-test budget.
+    fractions.Fraction
+        The longest per-test budget, exactly.
 
     A ``slow-timeout`` that names no ``terminate-after`` raises
     :class:`UnboundedTestError` from :func:`_budget_of` rather than
@@ -294,7 +298,7 @@ def bounds_a_single_test(config_text: str, profile: str = "default") -> bool:
     return isinstance(table, dict) and table.get("terminate-after") is not None
 
 
-def grace_period(config_text: str) -> float:
+def grace_period(config_text: str) -> fractions.Fraction:
     """Return the longest grace period the configuration names, in seconds.
 
     Read from the configuration rather than fixed, so a profile that
@@ -308,7 +312,7 @@ def grace_period(config_text: str) -> float:
 
     Returns
     -------
-    float
+    fractions.Fraction
         The largest configured grace period, or nextest's default.
     """
     periods = [
@@ -320,7 +324,7 @@ def grace_period(config_text: str) -> float:
     return max(periods, default=NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS)
 
 
-def termination_allowance(config_text: str) -> float:
+def termination_allowance(config_text: str) -> fractions.Fraction:
     """Return the time nextest may take to stop the run, in seconds.
 
     Two terms, not one. Hitting the whole-run budget starts nextest's
@@ -340,13 +344,17 @@ def termination_allowance(config_text: str) -> float:
 
     Returns
     -------
-    float
-        The grace period plus the safety margin.
+    fractions.Fraction
+        The grace period plus the safety margin, exactly. Both terms
+        are exact so that the sum is: a float in either would convert
+        the whole of it back silently.
     """
     return grace_period(config_text) + TERMINATION_SAFETY_MARGIN_SECONDS
 
 
-def global_timeout(config_text: str, profile: str = CAPPED_PROFILE) -> float | None:
+def global_timeout(
+    config_text: str, profile: str = CAPPED_PROFILE
+) -> fractions.Fraction | None:
     """Return one profile's whole-run budget, or None when it sets none.
 
     Read from the named profile's own table alone. nextest's profiles
@@ -367,7 +375,7 @@ def global_timeout(config_text: str, profile: str = CAPPED_PROFILE) -> float | N
 
     Returns
     -------
-    float or None
+    fractions.Fraction or None
         The whole-run budget in seconds, or None when that profile
         declares none.
 

@@ -6972,12 +6972,60 @@ into seconds before the second arrives; summed the other way round the
 nanosecond accumulator overflows and the whole duration is refused, which would
 be this contract refusing a configuration nextest runs quite happily.
 
+### The tiers are compared exactly, not approximately
+
+Every tier comparison is a sum, and a sum is exact only if every term is. One
+`float` among them converts the whole of it back, and the conversion is silent.
+So `seconds` returns a `fractions.Fraction`, and so does everything the
+comparisons add to it: the watchdog budget read from a workflow, the job
+ceiling converted from `timeout-minutes`, and the five allowances and margins
+declared in `timeout_budgets.py`.
+
+The reason is the range. humantime reaches 2**64 seconds and a double holds 53
+bits of significand, so above 2**53 it cannot represent two budgets a second
+apart. `18446744073709551614s` and `18446744073709551615s` are both inputs in
+the estate differential and both convert to the same double, so an ordering
+assertion between them compares equal and passes whichever way round it is
+written. The nanosecond end makes the same point: a tenth of a second has no
+exact double, so a budget assembled from tenths and one written as a decimal
+would differ by a rounding error rather than by anything anyone configured.
+
+A float is still what a reader wants to see in a message, so `display_seconds`
+returns one. The two are behind different names on purpose: a caller chooses
+which it wants rather than getting the lossy one by default.
+
+None of this can be demonstrated on the budgets this repository configures.
+They are minutes and seconds, nowhere near either end, and they never will be
+otherwise, so a contract resting on the real files would pass with every term a
+float. `timeout_exactness_test.py` therefore drives the three compositions the
+ordering contract evaluates at two to the sixtieth, where neighbouring doubles
+are 256 seconds apart and a one-second difference is lost outright rather than
+only on one side of a tie. Each case asserts the collapse alongside the
+ordering, so a case that stopped exercising the loss fails rather than passing
+quietly, and one further case asserts that the values actually in force arrive
+exact, so a float reintroduced on the live path is caught without waiting for a
+budget nobody will set.
+
+Each of the eight terms was reverted to a float in turn and every one failed a
+case naming it. Two of them, the outside-work allowance and the ceiling margin,
+are added by the same function and fail the same ordering case, which is why
+the constants are also asserted one by one under their own names: the report
+then says which of the two moved.
+
+The watchdog reading is the one place a float still appears, and deliberately.
+`Fraction` has no notion of `nan` or `inf` and raises on both, which would turn
+a workflow interpolating an expression to `inf` into unreadable text rather
+than the named refusal that case deserves. So the text is parsed as a float,
+checked for finiteness and sign, and then converted from the text rather than
+from the float, which keeps a tenth exactly a tenth. Nothing is compared
+against the float on the way through.
+
 The port's scope is narrow and deliberately so. `nextest_durations` owns one
 thing: turning the text of a nextest duration into seconds exactly as
 `humantime` would, and refusing what `humantime` refuses. It is a
 workflow-contract helper, not a repository-wide duration parser. Its call-sites
 are `nextest_budgets.py`, which reads `.config/nextest.toml` budgets,
-`timeout_ordering_test.py`, and the two test modules that drive the reading
+`timeout_ordering_test.py`, and the three test modules that drive the reading
 directly. Nothing outside `tests/workflow_contracts` imports it, and nothing
 inside should grow a second duration reader beside it. humantime's unit table
 sits beside it in `nextest_units.py`, and humantime's accumulator in
