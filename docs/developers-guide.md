@@ -747,6 +747,43 @@ Table: CI lane runner shapes and concurrency settings.
 | `ci-windows.yml` `lint-windows`       | `windows-latest`                  | `BUILD_JOBS=-j 4`, `NEXTEST_BUILD_JOBS=--build-jobs 4`, `NEXTEST_TEST_JOBS=-j 4` |
 | `ci-windows.yml` `build-test-windows` | `windows-latest`                  | `BUILD_JOBS=-j 4`, `NEXTEST_BUILD_JOBS=--build-jobs 4`, `NEXTEST_TEST_JOBS=-j 4` |
 
+#### The fork arm on the pull-request lanes
+
+A pull request from a fork cannot obtain a Ubicloud runner, so the three lanes
+that serve pull requests, `build-test`, `kani-smoke` and `netsukefile`, name
+their runner through an expression rather than a label:
+
+```yaml
+runs-on: >-
+  ${{ github.event.pull_request.head.repo.fork
+  && 'ubuntu-latest' || 'ubicloud-standard-4-ubuntu-2404' }}
+```
+
+Without the arm the lane never starts on a fork's pull request, and the branch
+ruleset waits on a required check that will not report. It presents as a pull
+request stuck on a pending check rather than as a placement fault.
+
+Two of those lanes also serve `push`. No second condition is needed: on a push
+the pull-request context is null, so the expression takes the Ubicloud arm.
+
+Every other Ubicloud lane keeps its plain label, and the contract asserts that
+too, so the expression does not spread by imitation. `coverage-upload` is push
+and dispatch only. Both jobs in `coverage-pr-submit.yml` trigger on
+`workflow_run`, which runs in this repository's context whatever the
+originating pull request was, so no fork ever selects their runner.
+`release.yml` `build-linux` is called rather than triggered.
+
+The table above records the runner this repository's own branches get. Every
+rule that sizes a lane reads that arm, through `owned_runner` in
+`tests/workflow_contracts/fork_fallback.py`: a fork's run is a GitHub-hosted
+fallback whose shape the worker bounds deliberately do not govern.
+
+Keep the continuation at the same indent as the first line. A more-indented
+line inside a folded scalar keeps its break, so the expression arrives with a
+newline inside it. GitHub evaluates it anyway and the lane runs, which is why a
+green run is not evidence that the declaration is well formed;
+`test_no_runs_on_declaration_carries_a_line_break` is what reads it.
+
 `build-test` and `coverage-upload` are the two instrumented lanes and both run
 on `ubicloud-standard-4-ubuntu-2404`, declaring `LINUX_LANE_VCPUS: '4'`. The
 merge gate sets `BUILD_JOBS: -j 4`, `CARGO_BUILD_JOBS: '4'` and
