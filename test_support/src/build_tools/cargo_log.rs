@@ -64,6 +64,10 @@ impl RecordingCargo {
                 "  printf 'path\\t%s\\n' \"${{PATH:-}}\"\n",
                 "  printf 'rustflags\\t%s\\n' \"${{RUSTFLAGS-}}\"\n",
                 "  printf 'rustflags_set\\t%s\\n' \"${{RUSTFLAGS+yes}}\"\n",
+                "  printf 'wrapper\\t%s\\n' \"${{RUSTC_WRAPPER-}}\"\n",
+                "  printf 'wrapper_set\\t%s\\n' \"${{RUSTC_WRAPPER+yes}}\"\n",
+                "  printf 'workspace_wrapper\\t%s\\n' \"${{RUSTC_WORKSPACE_WRAPPER-}}\"\n",
+                "  printf 'workspace_wrapper_set\\t%s\\n' \"${{RUSTC_WORKSPACE_WRAPPER+yes}}\"\n",
                 "  printf 'build_dir\\t%s\\n' \"${{CARGO_BUILD_BUILD_DIR:-}}\"\n",
                 "  printf 'target_dir\\t%s\\n' \"$target_dir\"\n",
                 "  printf 'target_state\\t%s\\n' \"$target_state\"\n",
@@ -150,6 +154,20 @@ pub struct CargoInvocation {
     /// displaces the configuration file's `rustflags` tables, so the release
     /// recipe's correctness turns on which of the two it produced.
     rustflags: Option<String>,
+    /// `RUSTC_WRAPPER` as the invocation saw it, or `None` when it was unset.
+    ///
+    /// Unset and empty differ here for the same reason they do for
+    /// `RUSTFLAGS`. A developer's shell commonly exports a compiler wrapper
+    /// that chains to `sccache`, and an inherited wrapper turns a benchmark's
+    /// clean pass into a cache read. Only an assignment to the empty string
+    /// displaces it, so which of the two the recipe produced is the fact worth
+    /// recording.
+    wrapper: Option<String>,
+    /// `RUSTC_WORKSPACE_WRAPPER` as the invocation saw it, `None` when unset.
+    ///
+    /// Recorded separately because Cargo honours it independently: clearing
+    /// only `RUSTC_WRAPPER` still leaves the workspace's own crates wrapped.
+    workspace_wrapper: Option<String>,
     /// The `CARGO_TARGET_DIR` value, empty when unset.
     target_dir: String,
     /// Whether the target directory existed at invocation start.
@@ -200,11 +218,20 @@ impl CargoInvocation {
             )
         };
 
-        let rustflags = if take("rustflags_set")?.is_empty() {
-            None
-        } else {
-            Some(take("rustflags")?)
+        // Each pair is a value and the marker that says whether it was
+        // assigned at all; an empty value with no marker means "unset", which
+        // is a different fact from "assigned to nothing".
+        let optional = |value: &str, marker: &str| -> Result<Option<String>> {
+            if take(marker)?.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(take(value)?))
+            }
         };
+
+        let rustflags = optional("rustflags", "rustflags_set")?;
+        let wrapper = optional("wrapper", "wrapper_set")?;
+        let workspace_wrapper = optional("workspace_wrapper", "workspace_wrapper_set")?;
 
         Ok(Self {
             arguments: take("arguments")?
@@ -215,6 +242,8 @@ impl CargoInvocation {
             path: take("path")?,
             build_dir: take("build_dir")?,
             rustflags,
+            wrapper,
+            workspace_wrapper,
             target_dir,
             target_state,
             touch_mtime,
@@ -278,6 +307,28 @@ impl CargoInvocation {
     #[must_use]
     pub fn rustflags(&self) -> Option<&str> {
         self.rustflags.as_deref()
+    }
+
+    /// `RUSTC_WRAPPER` as the invocation saw it, `None` when never assigned.
+    #[must_use]
+    pub fn wrapper(&self) -> Option<&str> {
+        self.wrapper.as_deref()
+    }
+
+    /// `RUSTC_WORKSPACE_WRAPPER` as seen, `None` when never assigned.
+    #[must_use]
+    pub fn workspace_wrapper(&self) -> Option<&str> {
+        self.workspace_wrapper.as_deref()
+    }
+
+    /// Whether both compiler wrappers were assigned and empty.
+    ///
+    /// This is the measurable form of "the build really compiled". An
+    /// inherited wrapper that chains to a compilation cache makes a clean
+    /// build a cache read, which looks exactly like a fast compiler.
+    #[must_use]
+    pub fn wrappers_cleared(&self) -> bool {
+        self.wrapper.as_deref() == Some("") && self.workspace_wrapper.as_deref() == Some("")
     }
 
     /// Whether every flag in `flags` appears in the recorded `RUSTFLAGS`.

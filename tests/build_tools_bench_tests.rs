@@ -426,6 +426,23 @@ impl<'a> BenchVariant<'a> {
                 "`{label}` should run under `{toolchain}`, got `{}`",
                 pass.toolchain()
             );
+            // Both compiler wrappers assigned and empty, for the same reason
+            // RUSTFLAGS is assigned rather than inherited. A developer shell
+            // on a shared host commonly exports a wrapper chaining to
+            // `sccache`; with one in force the first clean pass fills the
+            // cache and the rest read it back, so the table times cache
+            // retrieval and the row order decides the winner. Unset is not
+            // good enough as an expectation: only an assignment displaces an
+            // exported value, and `RUSTC_WORKSPACE_WRAPPER` is honoured
+            // separately, so clearing one alone still wraps the workspace's
+            // own crates.
+            ensure!(
+                pass.wrappers_cleared(),
+                "`{label}` should clear both compiler wrappers, got RUSTC_WRAPPER={:?} \
+                 RUSTC_WORKSPACE_WRAPPER={:?}",
+                pass.wrapper(),
+                pass.workspace_wrapper()
+            );
         }
 
         ensure!(
