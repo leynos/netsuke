@@ -2,7 +2,7 @@
 
 ## Status
 
-Superseded by [ADR-024](adr-024-main-owned-coverage-publication.md).
+Superseded by [ADR-025](adr-025-main-owned-coverage-publication.md).
 
 ## Date
 
@@ -292,3 +292,37 @@ The operative boundary is unchanged: the artefact still crosses as hostile
 data, the credential still reaches only the guarded submission step, and the
 publication path still uses the originating workflow-run ID as its external
 correlation and idempotency key.
+
+## Addendum — 2026-09-17: supersession by ADR-025
+
+This record is superseded by
+[ADR-025](adr-025-main-owned-coverage-publication.md). The status line above
+records that outcome; this addendum records why it happened, so the change is
+not an unlogged retroactive edit to a decision that was accepted and acted on.
+
+The decision here isolated the CodeScene credential, and it did that part
+correctly. It could not make the check report on the right commit, because the
+trusted consumer necessarily ran outside pull-request context: it checked out
+`main` and therefore evaluated the default-branch commit rather than the
+pull-request head. A verdict about the wrong commit is not worth a privileged
+transport, and no refinement of the artefact validation removes that limitation.
+
+The replacement keeps enforcement where the question is actually answerable.
+Pull-request CI runs the shared coverage action with its ratchet enabled and
+adds no publication step of its own, so the credential never enters a
+pull-request-controlled job and there is no untrusted artefact to validate.
+`coverage-main.yml` remains the sole writer of the ratchet baseline and the
+sole CodeScene uploader, which gives CodeScene one report for the branch and
+commit it analyses.
+
+Everything this record established about the threat remains in force and is the
+reason the credential must never return to pull-request-controlled execution.
+What is retired is the `workflow_run` consumer and its supporting machinery:
+`coverage-pr-submit.yml`, the `.github/scripts/coverage_pr_*` modules, the
+custom `CodeScene coverage` Check Run and its publisher port, the checkout
+credential opt-out that only that design required, and the
+`tests/workflow_contracts/trust_boundary_*` and `coverage_pr_*` contracts. The
+hostile-artefact validators survive as standalone maintenance tools with no
+active consumer. The pull-request coverage boundary is now enforced by
+`tests/workflow_contracts/ci_coverage_wiring_test.py`, which forbids the
+publication surface structurally rather than by the retired names.

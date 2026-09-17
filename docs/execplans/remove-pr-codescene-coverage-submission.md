@@ -134,38 +134,64 @@ modules, and their owned contracts have been removed. The main coverage
 workflow remains the only CodeScene uploader and the only ratchet-baseline
 writer.
 
-ADR-024 records the replacement architecture and supersedes ADR-022. The
+ADR-025 records the replacement architecture and supersedes ADR-022. The
 developer guide now separates repository behaviour from CodeScene's external
 analysis schedule and unavailable-data policy. The active ruleset did not
 require the retired custom check, so no GitHub configuration change was
 necessary.
 
-All focused and repository gates passed. The final change used 25 tracked
-paths, exactly the plan's scope tolerance, without changing shared actions,
-dependencies, Rust behaviour, or coverage thresholds.
+All focused and repository gates passed. The change ran to 30 tracked paths —
+39 additions and 3,618 deletions, so the great majority of it is removal —
+without changing shared actions, dependencies, Rust behaviour, or coverage
+thresholds. The plan's scope tolerance was 25; the extra paths are the review
+follow-up that strengthened the pull-request boundary contract after the first
+push, and they are recorded in the revision note below rather than folded
+silently into the original count.
+
+The superseding record it introduced is ADR-025, not ADR-024. ADR-024 was
+claimed by main's recursive-workspace-search decision before this branch
+rebased, and this branch renumbered rather than colliding.
+
+Two review findings were dispositioned rather than implemented. The request to
+add an artefact-publication opt-out to `generate-coverage` and re-pin the
+callers landed in a different repository whose own tests assert the archive
+step's behaviour; ADR-025 now records the residual artefact instead, and the
+repository contract forbids the netsuke-owned publication surface structurally.
+The request to index this plan in `docs/contents.md` was declined because that
+file indexes the `execplans/` directory and links no individual plan, so adding
+one would break the established convention.
 
 ## Context and orientation
 
-`.github/workflows/ci.yml` generates `lcov.info` for pull requests and invokes
-the shared coverage action with the ratchet enabled. It currently uploads that
-file as the `pr-coverage-lcov` artefact.
+This section states the topology this plan started from. The outcomes above
+describe what replaced it, and each claim below is marked with its disposition
+so the two sections cannot be read as disagreeing.
 
-`.github/workflows/coverage-pr-submit.yml` is a privileged `workflow_run`
-consumer. It downloads and validates the untrusted artefact, runs
-`cs-coverage check` with `CS_ACCESS_TOKEN`, and publishes a custom
+`.github/workflows/ci.yml` generates `lcov.info` for pull requests and invokes
+the shared coverage action with the ratchet enabled. At the time of writing it
+uploaded that file as the `pr-coverage-lcov` artefact; that step was removed,
+and the pull-request job now adds no publication step of its own. The pinned
+`generate-coverage` revision still archives the report under its own
+unconditional `Archive coverage` step, which takes no opt-out. ADR-025 records
+that residual artefact and why no repository contract can observe it.
+
+`.github/workflows/coverage-pr-submit.yml` was a privileged `workflow_run`
+consumer. It downloaded and validated the untrusted artefact, ran
+`cs-coverage check` with `CS_ACCESS_TOKEN`, and published a custom
 `CodeScene coverage` Check Run through modules under `.github/scripts/`.
-Because the trusted workflow checks out `main`, the CodeScene CLI does not have
-pull-request context.
+Because the trusted workflow checked out `main`, the CodeScene CLI did not have
+pull-request context. The workflow and its modules were deleted.
 
 `.github/workflows/coverage-main.yml` runs after pushes to `main`, generates
 the same coverage shape, advances the shared ratchet baseline, and uploads the
-report to CodeScene. This is the topology to retain.
+report to CodeScene. This is the topology to retain, and it is unchanged.
 
-`docs/adr-022-pr-coverage-trust-boundary.md` records the boundary being retired.
-`docs/developers-guide.md` describes its operation. Tests under
-`tests/workflow_contracts/` load the workflow, validate its security
-properties, and assign its job to a runner class. Those owned surfaces must be
-updated together.
+`docs/adr-022-pr-coverage-trust-boundary.md` records the boundary that was
+retired; it now carries a status of superseded and a dated addendum recording
+the supersession. `docs/developers-guide.md` describes the replacement
+operation. Tests under `tests/workflow_contracts/` load the workflows, enforce
+the publication boundary, and assign jobs to runner classes; those owned
+surfaces were updated together, as this plan required.
 
 ## Conformance basis
 
@@ -311,14 +337,18 @@ Run all commands from
    with a file-based imperative message, push `code-coverage-failure`, and open
    a draft pull request against `main`.
 
-Expected focused evidence after implementation resembles:
+Focused evidence recorded after implementation:
 
 ```plaintext
-tests/workflow_contracts/... passed
+make test-workflow-contracts: 533 passed, 2 skipped
 PR coverage ratchet: present
 PR CodeScene submission: absent
 main CodeScene upload: present
 ```
+
+The count above is from the post-rebase revision, which also carries main's
+additional workflow contracts. The pre-rebase run reported 456 passed, 3
+skipped.
 
 ## Validation and acceptance
 
@@ -382,3 +412,32 @@ evidence.
 
 2026-09-16: Marked the plan in progress after explicit approval. The planned
 scope and verification obligations are unchanged.
+
+2026-09-16: Implemented, gated, and pushed as draft pull request #724, then
+marked complete.
+
+2026-09-17: Completed the review follow-up. Rebased onto `origin/main`
+(`6c2b2c4b` to `c32efb8d`), which advanced underneath the branch and landed
+main's own ADR-024. The only conflict was a two-sided append in
+`docs/contents.md`; both entries were kept, and the superseding record was
+renumbered to ADR-025 in a dedicated commit rather than resolved silently
+inside the conflicted one.
+
+The pull-request coverage contract was strengthened to match the boundary by
+structure rather than by the retired `Upload PR coverage artefact` step and
+`coverage-pr-submit.yml` names. The same module now drives its detectors
+against synthetic workflow text, so a detector that stopped matching fails the
+suite instead of passing it by finding nothing. Each detector was separately
+proved to fire by injecting a renamed publisher, a raw-text credential
+reference, and a resurrected `workflow_run` consumer under a new file name.
+
+ADR-022 gained a dated addendum recording the supersession and its rationale;
+ADR-025's decision, consequences, and verification text were corrected, since
+its original claim that pull-request CI uploads no artefact was false for the
+pinned shared action; and this plan's context, conformance, and verification
+text were brought in line with the repository as it stands.
+
+Validation on the rebased revision: `make test-workflow-contracts` 533 passed,
+2 skipped; `make check-fmt`, `make lint`, `make typecheck`, and `make test` run
+at the commit gate; the semantic post-rebase audit found every target-only path
+byte-identical, every deletion intended, and no reconstructed duplication.

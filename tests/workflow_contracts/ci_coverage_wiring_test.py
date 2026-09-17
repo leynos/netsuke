@@ -291,9 +291,9 @@ jobs:
     assert _publishes_the_coverage_report(steps_in_all_jobs(renamed)[0]), (
         "a renamed publisher must still be detected by its action and path"
     )
-    assert coverage_surface_offenders(
-        "synthetic.yml", renamed, renamed_text
-    ), "a renamed publisher must produce an offender"
+    assert coverage_surface_offenders("synthetic.yml", renamed, renamed_text), (
+        "a renamed publisher must produce an offender"
+    )
 
     codescene, codescene_text = _synthetic_document(
         """

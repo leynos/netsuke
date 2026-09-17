@@ -1460,7 +1460,7 @@ validation remain consistent across the workflows under test.
 ### Coverage ratchet and CodeScene publication
 
 The accepted architecture is recorded in
-[ADR-024](adr-024-main-owned-coverage-publication.md), which supersedes the
+[ADR-025](adr-025-main-owned-coverage-publication.md), which supersedes the
 trusted pull-request submission design in
 [ADR-022](adr-022-pr-coverage-trust-boundary.md).
 

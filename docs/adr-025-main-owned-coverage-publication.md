@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 024: Keep PR coverage local
+# Architectural decision record (ADR) 025: Keep PR coverage local
 
 ## Status
 
@@ -25,8 +25,13 @@ that report belongs to `main` after each merge.
 ## Decision
 
 Pull-request CI generates `lcov.info` and enables the shared coverage action's
-ratchet check. It does not upload the report as a GitHub artefact, invoke the
-CodeScene CLI, receive `CS_ACCESS_TOKEN`, or publish a CodeScene Check Run.
+ratchet check. It adds no coverage-publication step of its own: it does not
+invoke the CodeScene CLI, receive `CS_ACCESS_TOKEN`, or publish a CodeScene
+Check Run. The pinned `generate-coverage` revision still archives the report it
+generated under its own `Archive coverage` step, which runs unconditionally and
+takes no opt-out, so the report does remain a short-lived run artefact. That
+archive is a property of the shared action rather than a publication this
+repository requests, and it crosses no credential.
 
 The `coverage-main.yml` workflow remains the sole owner of persistent coverage
 state. On pushes to `main`, it runs the same coverage workload, advances the
@@ -59,12 +64,27 @@ modelled by repository workflows.
   it cannot give a pull request a verdict derived from the wrong commit.
 - The historical hostile-artefact validators remain standalone maintenance
   tools; no active workflow downloads pull-request coverage.
+- The run artefact the shared action archives is readable by any step in the
+  pull-request job that can read the workspace. It is not a trust boundary this
+  repository relies on, because nothing downstream consumes it: the credential
+  never enters a pull-request job, and no submission path reads the artefact.
+  Removing it would require a `generate-coverage` input that the pinned
+  revision does not offer.
 - This decision supersedes ADR-022. Its threat analysis remains the reason a
   CodeScene credential must never return to pull-request-controlled execution.
 
 ## Verification
 
 Workflow contract tests require the pull-request coverage step to keep ratchet
-mode enabled, forbid the coverage artefact upload, require the privileged
-submission workflow to remain absent, and verify that the main workflow uploads
-the LCOV report generated earlier in the same job.
+mode enabled, and forbid every pull-request-triggered workflow — and any
+`workflow_run` consumer under any file name — from publishing the report through
+`actions/upload-artifact`, invoking the CodeScene coverage action, or
+referencing `CS_ACCESS_TOKEN` in its parsed values or its raw text. The
+detectors are matched by structure rather than by the retired step and file
+names, and are driven against synthetic workflow text so a detector that
+stopped matching cannot pass by finding nothing. A further test verifies that
+the main workflow uploads the LCOV report generated earlier in the same job.
+
+What these tests do not cover is the archive step inside the pinned shared
+action. A repository contract cannot observe a step it does not declare, so the
+residual artefact named above is recorded here rather than enforced.
