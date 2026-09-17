@@ -7,10 +7,11 @@ authoritative report to CodeScene. These tests pin both halves of that split.
 
 The negative half is matched structurally rather than by retired name: a
 renamed step, a differently spelled artefact path, or a resurrected privileged
-consumer must still fail. The detectors are driven against synthetic workflow
-text as well, so a detector that stopped matching cannot make the repository
-assertion pass by finding nothing. Shared parsing helpers live in
-``workflow_loading.py``.
+consumer must still fail. Both pull-request triggers are read, because
+`pull_request_target` runs in the base repository's context and can read its
+secrets. The detectors are driven against synthetic workflow text as well, so a
+detector that stopped matching cannot make the repository assertion pass by
+finding nothing. Shared parsing helpers live in ``workflow_loading.py``.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -49,6 +50,12 @@ CREDENTIAL_ENVIRONMENT_KEY = "CS_ACCESS_TOKEN"
 COVERAGE_REPORT_PATH = "lcov.info"
 
 PULL_REQUEST_TRIGGER = "pull_request"
+
+#: The variant that runs in the base repository's context and therefore *can*
+#: read its secrets, unlike `pull_request`. A coverage step here would be
+#: worse than one in an ordinary pull-request job, not equivalent to it.
+PULL_REQUEST_TARGET_TRIGGER = "pull_request_target"
+
 SUBMISSION_TRIGGER = "workflow_run"
 
 
@@ -89,14 +96,15 @@ def declares_trigger(document: dict[str, object], trigger: str) -> bool:
         True when the workflow declares the trigger in any of the scalar,
         sequence, or mapping forms ``on:`` accepts.
     """
-    triggers = document.get("on")
-    if isinstance(triggers, str):
-        return triggers == trigger
-    if isinstance(triggers, list):
-        return trigger in triggers
-    if isinstance(triggers, dict):
-        return trigger in triggers
-    return False
+    match document.get("on"):
+        case str() as declared:
+            return declared == trigger
+        case list() as sequence:
+            return trigger in sequence
+        case dict() as mapping:
+            return trigger in mapping
+        case _:
+            return False
 
 
 def steps_in_all_jobs(document: dict[str, object]) -> list[dict[str, object]]:
@@ -126,15 +134,18 @@ def steps_in_all_jobs(document: dict[str, object]) -> list[dict[str, object]]:
 
 def _iter_strings(value: object) -> cabc.Iterator[str]:
     """Yield every string nested anywhere in a parsed YAML value."""
-    if isinstance(value, str):
-        yield value
-    elif isinstance(value, dict):
-        for key, item in value.items():
-            yield from _iter_strings(key)
-            yield from _iter_strings(item)
-    elif isinstance(value, list):
-        for item in value:
-            yield from _iter_strings(item)
+    match value:
+        case str() as text:
+            yield text
+        case dict() as mapping:
+            for key, item in mapping.items():
+                yield from _iter_strings(key)
+                yield from _iter_strings(item)
+        case list() as sequence:
+            for item in sequence:
+                yield from _iter_strings(item)
+        case _:
+            return
 
 
 def _publishes_the_coverage_report(step: dict[str, object]) -> bool:
@@ -191,12 +202,25 @@ def coverage_surface_offenders(
 
 
 def _pull_request_workflows() -> list[tuple[str, dict[str, object], str]]:
-    """Return name, document, and raw text for every PR-triggered workflow."""
+    """Return name, document, and raw text for every PR-reachable workflow.
+
+    Both pull-request triggers are read. `pull_request_target` runs in the base
+    repository's context and can read its secrets, so a coverage step there
+    would be the more serious variant of the same violation rather than an
+    unrelated one.
+
+    Returns
+    -------
+    list[tuple[str, dict[str, object], str]]
+        One entry per PR-reachable workflow, in file-name order, as the file
+        name, its parsed document, and its raw text.
+    """
     documents = all_workflow_documents(WORKFLOWS_DIRECTORY)
     return [
         (name, document, (WORKFLOWS_DIRECTORY / name).read_text(encoding="utf-8"))
         for name, document in sorted(documents.items())
         if declares_trigger(document, PULL_REQUEST_TRIGGER)
+        or declares_trigger(document, PULL_REQUEST_TARGET_TRIGGER)
     ]
 
 
@@ -237,6 +261,13 @@ def test_no_pull_request_workflow_touches_the_coverage_publication_surface() -> 
     assert workflows, (
         "no pull-request-triggered workflow was read, so this contract would "
         "pass without examining anything"
+    )
+    assert any(
+        declares_trigger(document, PULL_REQUEST_TARGET_TRIGGER)
+        for _, document, _ in workflows
+    ), (
+        "no pull_request_target workflow was read, so the variant that can read "
+        "base-repository secrets would escape this contract"
     )
     offenders = [
         offender
@@ -329,6 +360,37 @@ jobs:
     ), "a credential reference must be detected in raw text alone"
 
 
+def test_the_prong_reads_every_pull_request_trigger_the_parser_accepts() -> None:
+    """Read both PR triggers, in each spelling `on:` accepts.
+
+    `declares_trigger` decides which workflows the prong examines, so a form it
+    failed to read would leave that whole workflow unexamined. Both triggers
+    are checked because the base-repository variant is the more serious one to
+    miss. The scalar, sequence, and mapping spellings are each parsed from real
+    YAML text rather than hand-built, so this also holds the reader's error
+    resolution of the `on` key.
+    """
+    for trigger in (PULL_REQUEST_TRIGGER, PULL_REQUEST_TARGET_TRIGGER):
+        for source in (
+            f"on: {trigger}\n",
+            f"on: [{trigger}]\n",
+            f"on:\n  {trigger}:\n",
+        ):
+            document, _text = _synthetic_document(source + "jobs: {}\n")
+            assert declares_trigger(document, trigger), (
+                f"{trigger} written as {source.strip()!r} must be read"
+            )
+
+    # A near miss must not be read as its longer relative. `pull_request`
+    # is a prefix of `pull_request_target`, and a substring test would
+    # accept one for the other.
+    for source in ("on: pull_request\n", "on: [pull_request]\n"):
+        document, _text = _synthetic_document(source + "jobs: {}\n")
+        assert not declares_trigger(document, PULL_REQUEST_TARGET_TRIGGER), (
+            f"{source.strip()!r} must not read as {PULL_REQUEST_TARGET_TRIGGER}"
+        )
+
+
 def test_a_clean_synthetic_workflow_produces_no_offenders() -> None:
     """Keep the detectors from firing on a workflow inside the boundary."""
     clean, clean_text = _synthetic_document(
@@ -345,7 +407,9 @@ jobs:
         run: sccache --show-stats
 """
     )
-    assert not coverage_surface_offenders("synthetic.yml", clean, clean_text)
+    assert not coverage_surface_offenders("synthetic.yml", clean, clean_text), (
+        "a workflow inside the boundary must produce no offender"
+    )
 
 
 def test_main_coverage_upload_reads_the_generated_lcov_report() -> None:

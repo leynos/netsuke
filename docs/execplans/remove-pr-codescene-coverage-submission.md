@@ -340,7 +340,7 @@ Run all commands from
 Focused evidence recorded after implementation:
 
 ```plaintext
-make test-workflow-contracts: 533 passed, 2 skipped
+make test-workflow-contracts: 534 passed, 2 skipped
 PR coverage ratchet: present
 PR CodeScene submission: absent
 main CodeScene upload: present
@@ -429,7 +429,10 @@ structure rather than by the retired `Upload PR coverage artefact` step and
 against synthetic workflow text, so a detector that stopped matching fails the
 suite instead of passing it by finding nothing. Each detector was separately
 proved to fire by injecting a renamed publisher, a raw-text credential
-reference, and a resurrected `workflow_run` consumer under a new file name.
+reference, a resurrected `workflow_run` consumer under a new file name, and a
+credential reference inside an existing `pull_request_target` workflow. The
+prong reads both pull-request triggers, because `pull_request_target` runs in
+the base repository's context and can read its secrets.
 
 ADR-022 gained a dated addendum recording the supersession and its rationale;
 ADR-025's decision, consequences, and verification text were corrected, since
@@ -437,7 +440,7 @@ its original claim that pull-request CI uploads no artefact was false for the
 pinned shared action; and this plan's context, conformance, and verification
 text were brought in line with the repository as it stands.
 
-Validation on the rebased revision: `make test-workflow-contracts` 533 passed,
+Validation on the rebased revision: `make test-workflow-contracts` 534 passed,
 2 skipped; `make check-fmt`, `make lint`, `make typecheck`, and `make test` run
 at the commit gate; the semantic post-rebase audit found every target-only path
 byte-identical, every deletion intended, and no reconstructed duplication.
