@@ -1245,7 +1245,31 @@ keeps target descriptions out of the generated Ninja file. Documentation
 citations moved: users' guide 1152-1153 to 1208-1209, design §2.6 499-508 to
 507-516, design §5.4 2041-2049 to 2059-2067, the `description = CC $out`
 snippet 2054-2058 to 2072-2076, the backtick contract 257 to 265, and the
-developers' guide anchor 199 to 266.
+developers' guide anchor 199 to 266. One assertable claim in this plan was
+already false against the shipped code before this rebase and is recorded here.
+
+I3's method asserted that `escape_ninja_value` "consumes a `ShellText`", and the
+`Interfaces and dependencies` snippet declared
+`fn escape_ninja_value(text: ShellText)`. The shipped signature takes
+`text: &ShellText` (`src/ninja_gen_escape.rs:54`). The consuming form was real
+when written: `642a4764` declared it by value, and this plan's own
+post-implementation review reopened the plan over exactly that point and
+recorded the correction at `2026-08-27`. Main then reverted it. `c8a7c9fa`
+(#607) removed `let ShellText(contents) = text;`, changed the parameter to
+`&ShellText`, and added `NinjaValue::from_encoded` so the PowerShell renderer
+could construct a value whose payload Ninja cannot parse. The earlier
+`Surprises & discoveries` entry about `needless_pass_by_value` and the
+`2026-08-27` revision entry about "the non-reference API required by I3" both
+describe code that no longer exists. I3's structural claim is therefore
+narrower than stated: the guarantee now rests on two constructors rather than
+one.
+
+This was out of scope for the refinement set — it is a statement about code,
+not about the path and metadata contract this branch reconciles — so this
+change records it rather than editing I3's obligation text or the interface
+snippet. Correcting it means either restoring the consuming signature with a
+reason for narrowing the PowerShell path, or narrowing the stated I3 claim;
+that is a decision for a subsequent change.
 
 Why it matters. Decision `D-METADATA` now matches the writer: metadata remains
 backend-neutral in the IR, then receives Ninja escaping only at emission. The
