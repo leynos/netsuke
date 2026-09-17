@@ -6,6 +6,12 @@ invoke the CodeScene coverage action, or carry the CodeScene credential; those
 belong to `coverage-main.yml`, which is the only writer of persistent coverage
 state.
 
+The coverage action archives the report it generated under a step of its own,
+so declining that archive is part of the same boundary: a caller that reaches
+the action without the opt-out has published the report whether or not the
+workflow declares an artefacts step. That rule is checked here rather than in
+the workflow, because the action's own step is not the caller's to see.
+
 These predicates read parsed workflow values and raw text rather than files, so
 ``ci_coverage_wiring_test`` can hold every pull-request-triggered workflow, and
 any ``workflow_run`` consumer, to the boundary, and can drive shapes the
@@ -35,6 +41,12 @@ UPLOAD_COVERAGE_ACTION: typ.Final[str] = CODESCENE_COVERAGE_ACTION
 #: The generic artefact action. A pull request must not carry the report to it
 #: under any step name.
 PUBLISH_ARTEFACT_ACTION: typ.Final[str] = "actions/upload-artifact"
+
+#: The input that suppresses the coverage action's own archive step, and the
+#: value that suppresses it. A pull-request-reachable caller must set both, or
+#: the action publishes the report this boundary exists to keep local.
+PUBLICATION_OPT_OUT_INPUT: typ.Final[str] = "publish-artefact"
+PUBLICATION_OPT_OUT_VALUE: typ.Final[str] = "false"
 
 #: The credential the CodeScene upload reads. It must not appear in a workflow
 #: a pull request can reach, in a parsed value or anywhere in the raw text.
@@ -166,6 +178,30 @@ def publishes_the_coverage_report(step: dict[str, object]) -> bool:
     return COVERAGE_REPORT_PATH in str(with_["path"])
 
 
+def declines_the_generated_report_archive(step: dict[str, object]) -> bool:
+    """Return whether a step tells the coverage action not to archive.
+
+    Parameters
+    ----------
+    step : dict[str, object]
+        One parsed workflow step.
+
+    Returns
+    -------
+    bool
+        True when the step invokes the coverage action and passes the
+        publication opt-out. The value is compared as the string the action
+        itself compares against, so ``false``, not a falsy stand-in, is what
+        suppresses the upload.
+    """
+    if action_of(step) != GENERATE_COVERAGE_ACTION:
+        return False
+    with_ = step.get("with")
+    if not isinstance(with_, dict):
+        return False
+    return with_.get(PUBLICATION_OPT_OUT_INPUT) == PUBLICATION_OPT_OUT_VALUE
+
+
 def coverage_surface_offenders(
     name: str, document: dict[str, object], raw_text: str
 ) -> list[str]:
@@ -193,6 +229,14 @@ def coverage_surface_offenders(
         for index, step in enumerate(steps)
         if publishes_the_coverage_report(step)
     ]
+    offenders.extend(
+        f"{name}: step {index} invokes the coverage action without declining "
+        f"its own archive ({PUBLICATION_OPT_OUT_INPUT}: "
+        f"{PUBLICATION_OPT_OUT_VALUE})"
+        for index, step in enumerate(steps)
+        if action_of(step) == GENERATE_COVERAGE_ACTION
+        and not declines_the_generated_report_archive(step)
+    )
     offenders.extend(
         f"{name}: step {index} invokes the CodeScene coverage action"
         for index, step in enumerate(steps)

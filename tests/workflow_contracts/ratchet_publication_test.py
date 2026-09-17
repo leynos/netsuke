@@ -21,6 +21,13 @@ This repository needs no opt-in. Both workflows run on pushes to ``main``,
 which is the trigger the action's guard names, so neither sets
 ``publish-baseline``.
 
+The same revision carries the publication opt-out, so this is also where the
+two lanes are held apart on it: the pull-request lane declines the action's own
+archive, and the trunk lane keeps the default so it still publishes the report
+CodeScene reads. Setting it in the wrong lane would either publish a
+pull-request report or stop the trunk upload, and neither is visible from a
+green run.
+
 Run via ``make test-workflow-contracts``.
 """
 
@@ -38,16 +45,31 @@ from workflow_loading import (
 if typ.TYPE_CHECKING:
     from pathlib import Path
 
-#: The revision that guards the baseline save on a push to refs/heads/main.
+#: The revision that guards the baseline save on a push to refs/heads/main and
+#: carries the publication opt-out the pull-request lane passes. The guarantee
+#: arrived in a particular revision, so a bump has to update this constant and
+#: make someone confirm the new one still keeps a pull request from publishing.
 GENERATE_COVERAGE: typ.Final[str] = (
     "leynos/shared-actions/.github/actions/generate-coverage@"
-    "77ea10341249024e22ec5d9069e3caa7596e0d4f"
+    "a5765019912a8ab6882b12db049c7cde635f3a85"
+)
+
+#: The input that suppresses the action's own archive step. A pull-request
+#: caller sets it; the trunk caller must not, or CodeScene is sent nothing.
+PUBLICATION_OPT_OUT_INPUT: typ.Final[str] = "publish-artefact"
+
+#: The job that measures a pull request and the job that publishes the trunk
+#: report. Only the first declines the archive.
+PULL_REQUEST_JOB: typ.Final[tuple[Path, str]] = (CI_WORKFLOW_PATH, "build-test")
+TRUNK_JOB: typ.Final[tuple[Path, str]] = (
+    COVERAGE_MAIN_WORKFLOW_PATH,
+    "coverage-upload",
 )
 
 #: Every job invoking the shared coverage action, and the workflow declaring it.
 COVERAGE_JOBS: typ.Final[tuple[tuple[Path, str], ...]] = (
-    (CI_WORKFLOW_PATH, "build-test"),
-    (COVERAGE_MAIN_WORKFLOW_PATH, "coverage-upload"),
+    PULL_REQUEST_JOB,
+    TRUNK_JOB,
 )
 
 
@@ -64,6 +86,14 @@ def _coverage_step(workflow_path: Path, job_name: str) -> dict[str, object]:
         f"exactly once, found {len(matches)}"
     )
     return matches[0]
+
+
+def _inputs(workflow_path: Path, job_name: str) -> dict[str, object]:
+    """Return one coverage step's ``with`` block."""
+    return require_mapping(
+        _coverage_step(workflow_path, job_name).get("with"),
+        f"{workflow_path.name}:{job_name} coverage step inputs",
+    )
 
 
 @pytest.mark.parametrize(("workflow_path", "job_name"), COVERAGE_JOBS)
@@ -91,10 +121,7 @@ def test_no_caller_opts_out_of_the_guard(workflow_path: Path, job_name: str) -> 
     exists to remove. Neither workflow needs it: both run on pushes to
     ``main``, which is what the guard admits.
     """
-    step = _coverage_step(workflow_path, job_name)
-    inputs = require_mapping(
-        step.get("with"), f"{workflow_path.name}:{job_name} coverage step inputs"
-    )
+    inputs = _inputs(workflow_path, job_name)
 
     assert inputs.get("with-ratchet") == "true", (
         f"{workflow_path.name}:{job_name} must enable the ratchet, or the "
@@ -123,4 +150,30 @@ def test_the_trunk_push_trigger_stays_on_main(
     assert push.get("branches") == ["main"], (
         f"{workflow_path.name} must trigger on pushes to main only, got "
         f"{push.get('branches')!r}"
+    )
+
+
+def test_the_pull_request_lane_declines_the_archive_the_trunk_lane_keeps() -> None:
+    """Split the two lanes on the action's own archive step.
+
+    The action archives the report it generated unless the caller passes the
+    opt-out, and that step belongs to the action rather than to either
+    workflow, so no scan of this repository's steps can see it. Both
+    directions matter: a pull-request lane that omitted the opt-out would
+    publish the report the local boundary exists to keep local, and a trunk
+    lane that passed it would leave CodeScene with no report to read.
+    """
+    pull_request_inputs = _inputs(*PULL_REQUEST_JOB)
+    assert pull_request_inputs.get(PUBLICATION_OPT_OUT_INPUT) == "false", (
+        f"the pull-request lane must pass "
+        f"{PUBLICATION_OPT_OUT_INPUT}=false, got "
+        f"{pull_request_inputs.get(PUBLICATION_OPT_OUT_INPUT)!r}; the coverage "
+        f"action otherwise archives the report it generated"
+    )
+
+    trunk_inputs = _inputs(*TRUNK_JOB)
+    assert PUBLICATION_OPT_OUT_INPUT not in trunk_inputs, (
+        f"the trunk lane sets {PUBLICATION_OPT_OUT_INPUT}="
+        f"{trunk_inputs.get(PUBLICATION_OPT_OUT_INPUT)!r}; that suppresses the "
+        f"only upload CodeScene reads"
     )

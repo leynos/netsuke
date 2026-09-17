@@ -21,6 +21,8 @@ from ci_coverage_wiring_invariants import (
     COVERAGE_REPORT_PATH,
     CREDENTIAL_ENVIRONMENT_KEY,
     GENERATE_COVERAGE_ACTION,
+    PUBLICATION_OPT_OUT_INPUT,
+    PUBLICATION_OPT_OUT_VALUE,
     PUBLISH_ARTEFACT_ACTION,
     PULL_REQUEST_TARGET_TRIGGER,
     PULL_REQUEST_TRIGGER,
@@ -254,12 +256,98 @@ jobs:
         uses: {GENERATE_COVERAGE_ACTION}@abc123
         with:
           with-ratchet: 'true'
+          {PUBLICATION_OPT_OUT_INPUT}: '{PUBLICATION_OPT_OUT_VALUE}'
       - name: Show sccache statistics
         run: sccache --show-stats
 """
     )
     assert not coverage_surface_offenders("synthetic.yml", clean, clean_text), (
         "a workflow inside the boundary must produce no offender"
+    )
+
+
+def test_the_pull_request_lane_declines_the_actions_own_archive() -> None:
+    """Require the PR lane to opt out of the coverage action's archive step.
+
+    The action archives the report it generated under a step of its own, and a
+    composite action offers no other way to withhold it. Because that step
+    belongs to the action rather than the workflow, no scanner over this
+    repository's steps can see it: the boundary is only observable as the opt
+    out the caller passes. Without this assertion the prohibition above holds
+    while the report is still published on every pull request.
+    """
+    coverage_step = named_step(job_steps(load_workflow(), "build-test"), COVERAGE_STEP)
+    _assert_with_inputs(
+        coverage_step,
+        COVERAGE_STEP,
+        {PUBLICATION_OPT_OUT_INPUT: PUBLICATION_OPT_OUT_VALUE},
+    )
+
+
+def test_the_detector_reports_a_coverage_call_that_keeps_the_archive() -> None:
+    """Fail closed when the opt out is absent, misspelled, or on another step.
+
+    The rejections are the ways a caller reaches the archive while looking as
+    though it had opted out: omitting the input, supplying a value the action
+    does not compare against, and opting out on one coverage step while a
+    second still archives.
+    """
+    omitting, omitting_text = _synthetic_document(
+        f"""
+on: pull_request
+jobs:
+  build-test:
+    steps:
+      - name: Test and Measure Coverage
+        uses: {GENERATE_COVERAGE_ACTION}@abc123
+        with:
+          with-ratchet: 'true'
+"""
+    )
+    assert coverage_surface_offenders("synthetic.yml", omitting, omitting_text), (
+        "a coverage call that omits the opt out must be reported"
+    )
+
+    for value in ("true", "False", "no", ""):
+        wrong, wrong_text = _synthetic_document(
+            f"""
+on: pull_request
+jobs:
+  build-test:
+    steps:
+      - name: Test and Measure Coverage
+        uses: {GENERATE_COVERAGE_ACTION}@abc123
+        with:
+          {PUBLICATION_OPT_OUT_INPUT}: '{value}'
+"""
+        )
+        assert coverage_surface_offenders("synthetic.yml", wrong, wrong_text), (
+            f"{PUBLICATION_OPT_OUT_INPUT}: {value!r} must not read as an opt out; "
+            "the action compares against its own spelling"
+        )
+
+    # The opt out is a property of the step that archives, so a workflow is not
+    # clean merely because some step carries it. A detector that read the
+    # workflow as a whole would pass this while the second call published.
+    partly, partly_text = _synthetic_document(
+        f"""
+on: pull_request
+jobs:
+  build-test:
+    steps:
+      - name: Test and Measure Coverage
+        uses: {GENERATE_COVERAGE_ACTION}@abc123
+        with:
+          {PUBLICATION_OPT_OUT_INPUT}: '{PUBLICATION_OPT_OUT_VALUE}'
+      - name: Measure Python Coverage
+        uses: {GENERATE_COVERAGE_ACTION}@abc123
+        with:
+          with-ratchet: 'true'
+"""
+    )
+    offenders = coverage_surface_offenders("synthetic.yml", partly, partly_text)
+    assert len(offenders) == 1, (
+        f"exactly the second coverage call must be reported, got {offenders!r}"
     )
 
 
