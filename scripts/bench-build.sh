@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Benchmark the three debug build shapes: the LLVM baseline, the repository's
-# Cranelift plus `mold` default, and that default with the parallel `rustc`
-# frontend added.
+# Benchmark the three debug build shapes: the platform-linker baseline, the
+# repository's `mold` default, and that default with the parallel `rustc`
+# frontend added. Separating the linker from the frontend is the point: they
+# pay off at different points in the build, so one row for both would hide
+# which of them is earning its keep.
 #
 # Each variant is measured twice: a clean build from an empty target directory,
 # and an incremental rebuild after touching the binary's entry point. Variants
@@ -11,8 +13,8 @@
 #
 # The variants are selected by environment override rather than by a Cargo
 # configuration fragment. `.cargo/config.toml` is the committed default, so the
-# baseline is expressed by overriding it back to LLVM and displacing its
-# `rustflags`, and the two accelerated rows differ only by one flag.
+# baseline is expressed by displacing its `rustflags` entirely, and the two
+# accelerated rows differ only by one flag.
 
 set -euo pipefail
 
@@ -161,7 +163,7 @@ report() {
 # page cache created by an accelerated run.
 main() {
   local toolchain linker_flag=''
-  toolchain=$(cranelift_toolchain)
+  toolchain=$(pinned_toolchain)
   # `mold` is Linux-only, so elsewhere the accelerated rows differ from the
   # baseline by the backend and the frontend alone. Saying so in the log keeps
   # a macOS table from being read as a linker comparison.
@@ -175,23 +177,22 @@ main() {
   # state untouched.
   acquire_bench_lock
 
-  # Assigning RUSTFLAGS at all displaces every `rustflags` table in
-  # `.cargo/config.toml`, and the profile override takes the backend back to
-  # LLVM. Together those restore the pre-standard build exactly.
-  measure_variant default 'Default (LLVM, platform linker)' \
-    env RUSTUP_TOOLCHAIN="$toolchain" \
-    CARGO_PROFILE_DEV_CODEGEN_BACKEND=llvm RUSTFLAGS='' \
+  # Assigning RUSTFLAGS at all, even to nothing, displaces every `rustflags`
+  # table in `.cargo/config.toml`, which is what restores the pre-standard
+  # build exactly.
+  measure_variant default 'Default (platform linker)' \
+    env RUSTUP_TOOLCHAIN="$toolchain" RUSTFLAGS='' \
     "$CARGO" build --bin "$BENCH_BIN"
 
   # The labels are backticked because the developers' guide embeds this table
   # verbatim, and the repository spelling gate reads a bare "mold" as "mould".
   # shellcheck disable=SC2016 # the backticks are Markdown, not a subshell.
-  measure_variant cranelift 'Cranelift, `mold`' \
+  measure_variant mold '`mold`' \
     env RUSTUP_TOOLCHAIN="$toolchain" RUSTFLAGS="$linker_flag" \
     "$CARGO" build --bin "$BENCH_BIN"
 
   # shellcheck disable=SC2016 # the backticks are Markdown, not a subshell.
-  measure_variant cranelift-threads 'Cranelift, `mold`, parallel frontend' \
+  measure_variant mold-threads '`mold`, parallel frontend' \
     env RUSTUP_TOOLCHAIN="$toolchain" \
     RUSTFLAGS="$STANDARD_THREADS_FLAG${linker_flag:+ $linker_flag}" \
     "$CARGO" build --bin "$BENCH_BIN"

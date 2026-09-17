@@ -19,9 +19,9 @@ use proptest::proptest;
 use proptest::test_runner::FileFailurePersistence;
 use rstest::rstest;
 use test_support::build_tools::{
-    BENCH_SLUGS, BenchFixture, BuildScenario, CRANELIFT_SLUG, CRANELIFT_THREADS_SLUG,
-    CargoInvocation, DEFAULT_SLUG, MakeInvocation, Sandbox, TargetState, combined,
-    pinned_toolchain, real_utility, write_with_old_mtime,
+    BENCH_SLUGS, BenchFixture, BuildScenario, CargoInvocation, DEFAULT_SLUG, MOLD_SLUG,
+    MOLD_THREADS_SLUG, MakeInvocation, Sandbox, TargetState, combined, pinned_toolchain,
+    real_utility, write_with_old_mtime,
 };
 
 /// The flags each variant must hand Cargo through `RUSTFLAGS`.
@@ -32,9 +32,9 @@ use test_support::build_tools::{
 /// empty", not "unset".
 const VARIANT_FLAGS: [(&str, &[&str]); 3] = [
     (DEFAULT_SLUG, &[]),
-    (CRANELIFT_SLUG, &["-Clink-arg=-fuse-ld=mold"]),
+    (MOLD_SLUG, &["-Clink-arg=-fuse-ld=mold"]),
     (
-        CRANELIFT_THREADS_SLUG,
+        MOLD_THREADS_SLUG,
         &["-Zthreads=8", "-Clink-arg=-fuse-ld=mold"],
     ),
 ];
@@ -58,12 +58,12 @@ fn check_benchmark_invocations(invocations: &[CargoInvocation], baseline_mtime: 
         "passes should come in pairs, got {} spare",
         rest.len()
     );
-    let [baseline, cranelift, cranelift_threads] = pairs else {
+    let [baseline, mold, mold_threads] = pairs else {
         bail!("expected one pair per variant, got {}", pairs.len());
     };
     let variants: Vec<BenchVariant<'_>> = VARIANT_FLAGS
         .iter()
-        .zip([baseline, cranelift, cranelift_threads])
+        .zip([baseline, mold, mold_threads])
         .map(|((label, flags), pair)| BenchVariant::from_pair(label, pair, flags))
         .collect();
     let toolchain = pinned_toolchain()?;
@@ -165,7 +165,7 @@ proptest! {
     #[test]
     fn the_benchmark_wipes_whatever_each_variant_started_from(
         default_pre in pre_state_strategy(),
-        cranelift_pre in pre_state_strategy(),
+        mold_pre in pre_state_strategy(),
     ) {
         let fail = |error: anyhow::Error| TestCaseError::fail(error.to_string());
         let scenario = BuildScenario::prepare().map_err(fail)?;
@@ -174,7 +174,7 @@ proptest! {
         let touch_file = sandbox.home().join("bench-touch");
         write_with_old_mtime(sandbox, &touch_file).map_err(fail)?;
         let bench_root = sandbox.home().join("bench");
-        for (slug, pre) in BENCH_SLUGS.into_iter().zip([default_pre, cranelift_pre, cranelift_pre]) {
+        for (slug, pre) in BENCH_SLUGS.into_iter().zip([default_pre, mold_pre, mold_pre]) {
             pre.stage(sandbox, &bench_root.join(slug)).map_err(fail)?;
         }
 
@@ -187,7 +187,7 @@ proptest! {
             output.status.success(),
             "bench-build should succeed from {:?}/{:?}, got `{}`",
             default_pre,
-            cranelift_pre,
+            mold_pre,
             combined(&output)
         );
 
@@ -202,7 +202,7 @@ proptest! {
             expected,
             "each variant should measure a clean then an incremental pass, from {:?}/{:?}",
             default_pre,
-            cranelift_pre
+            mold_pre
         );
     }
 }
@@ -355,9 +355,9 @@ fn bench_target_emits_every_variant_row() -> Result<()> {
         combined(&output)
     );
     for variant in [
-        "| Default (LLVM, platform linker) |",
-        "| Cranelift, `mold` |",
-        "| Cranelift, `mold`, parallel frontend |",
+        "| Default (platform linker) |",
+        "| `mold` |",
+        "| `mold`, parallel frontend |",
     ] {
         ensure!(
             stdout.contains(variant),
@@ -374,8 +374,7 @@ struct BenchVariant<'a> {
     clean: &'a CargoInvocation,
     incremental: &'a CargoInvocation,
     /// The flags this variant must hand Cargo, which is the only thing that
-    /// distinguishes one row from another now that all three share a backend
-    /// configuration file.
+    /// distinguishes one row from another.
     flags: &'a [&'a str],
 }
 

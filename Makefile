@@ -45,12 +45,12 @@ KANI_FLAGS ?=
 KANI_INSTALL_FLAGS ?=
 KANI_CHECK_FLAGS ?=
 KANI_VERSION_FILE ?= tools/kani/VERSION
-# The development build standard: the Cranelift codegen backend, the `mold`
-# linker, and the parallel `rustc` frontend are the defaults for development,
-# test, lint, and typecheck builds. `.cargo/config.toml` carries them so a bare
-# `cargo` invocation gets them too; release and coverage builds are excluded
-# there and below. The toolchain is not pinned separately — the standard uses
-# the repository's own nightly from `rust-toolchain.toml`.
+# The development build standard: the `mold` linker and the parallel `rustc`
+# frontend are the defaults for development, test, lint, and typecheck builds.
+# `.cargo/config.toml` carries them so a bare `cargo` invocation gets them too;
+# release and coverage builds are excluded there and below. The toolchain is not
+# pinned separately — the standard uses the repository's own nightly from
+# `rust-toolchain.toml`.
 MOLD_VERSION_FILE ?= tools/mold/VERSION
 MOLD_SHA256SUMS_FILE ?= tools/mold/SHA256SUMS
 BUILD_TOOLS_PREFIX ?= $(HOME)/.local
@@ -81,7 +81,7 @@ DEBUG_RUSTFLAGS = RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }$(STANDARD_RUSTFLAGS)"
 # Release builds take neither the parallel frontend nor `mold`: assigning
 # `RUSTFLAGS` at all, even to an empty inherited value, displaces the
 # configuration file's `rustflags` tables, which is the whole mechanism. The
-# backend is held to LLVM by `[profile.release]` in `.cargo/config.toml`.
+# configuration names no codegen backend at all, so nothing else is needed.
 RELEASE_RUSTFLAGS = RUSTFLAGS="$${RUSTFLAGS-}"
 # Command name, resolved by the recipe shell from the curated PATH, which
 # carries `$HOME/.bun/bin` where the global markdownlint install lands.
@@ -396,10 +396,10 @@ verus: ## Run the Verus proof entry point
 formal-pr: ## Run pull-request formal-verification checks
 	$(MAKE) kani-check
 
-install-build-tools: ## Install the pinned mold linker and Cranelift backend
+install-build-tools: ## Install the pinned mold linker and the pinned toolchain
 	@scripts/install-build-tools.sh
 
-check-build-tools: ## Check the mold and Cranelift local build prerequisites
+check-build-tools: ## Check the mold linker and toolchain prerequisites
 	@scripts/check-build-tools.sh
 
 bench-build: check-build-tools ## Time clean and incremental debug builds for all three paths

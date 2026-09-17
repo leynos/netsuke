@@ -18,7 +18,7 @@ use test_support::build_tools::{
 fn healthy_sandbox() -> Result<Sandbox> {
     let sandbox = Sandbox::new()?;
     sandbox.write_mold(&sandbox.prefix().join("bin"), &pinned_mold_version()?)?;
-    sandbox.write_rustup(&pinned_toolchain()?, true)?;
+    sandbox.write_rustup(&pinned_toolchain()?)?;
     Ok(sandbox)
 }
 
@@ -43,14 +43,14 @@ fn reports_resolved_path_and_version_when_prerequisites_are_met() -> Result<()> 
 /// On a host without `mold`, the check reports the platform-linker fallback and
 /// still passes.
 ///
-/// The documented promise is that macOS and Windows keep Cranelift and lose
-/// only the linker. Faking `uname` is what makes that testable from Linux —
+/// The documented promise is that macOS and Windows lose only the linker and
+/// keep the rest. Faking `uname` is what makes that testable from Linux —
 /// otherwise the branch is reachable only on hardware CI does not have, which
 /// is exactly where an untested fallback rots.
 #[test]
 fn a_non_linux_host_skips_mold_and_still_passes() -> Result<()> {
     let sandbox = Sandbox::new()?;
-    sandbox.write_rustup(&pinned_toolchain()?, true)?;
+    sandbox.write_rustup(&pinned_toolchain()?)?;
     // No mold anywhere: the point is that its absence stops mattering.
     sandbox.write_fake(&sandbox.bin(), "uname", "echo Darwin")?;
 
@@ -66,8 +66,8 @@ fn a_non_linux_host_skips_mold_and_still_passes() -> Result<()> {
         "should name the fallback and the host, got `{text}`"
     );
     ensure!(
-        text.contains("rustc-codegen-cranelift-preview"),
-        "Cranelift should still be required off Linux, got `{text}`"
+        text.contains("toolchain") && text.contains(&pinned_toolchain()?),
+        "the toolchain should still be required off Linux, got `{text}`"
     );
     Ok(())
 }
@@ -77,7 +77,7 @@ fn a_non_linux_host_skips_mold_and_still_passes() -> Result<()> {
 #[test]
 fn a_non_linux_host_skips_the_mold_install() -> Result<()> {
     let sandbox = Sandbox::new()?;
-    sandbox.write_rustup(&pinned_toolchain()?, true)?;
+    sandbox.write_rustup(&pinned_toolchain()?)?;
     sandbox.write_fake(&sandbox.bin(), "uname", "echo Darwin")?;
     // A URL that would fail loudly if the download were ever attempted.
     let output = sandbox.script_with(
@@ -113,7 +113,7 @@ fn a_non_linux_host_skips_the_mold_install() -> Result<()> {
 #[test]
 fn overridden_prefix_wins_over_a_mold_in_the_default_location() -> Result<()> {
     let sandbox = Sandbox::new()?;
-    sandbox.write_rustup(&pinned_toolchain()?, true)?;
+    sandbox.write_rustup(&pinned_toolchain()?)?;
     // A decoy in the location the Makefile's export would otherwise favour.
     sandbox.write_mold(&sandbox.home().join(".local/bin"), "0.0.0-decoy")?;
     sandbox.write_mold(&sandbox.prefix().join("bin"), &pinned_mold_version()?)?;
@@ -139,7 +139,7 @@ fn overridden_prefix_wins_over_a_mold_in_the_default_location() -> Result<()> {
 #[test]
 fn rejects_a_version_drift_from_the_pin() -> Result<()> {
     let sandbox = Sandbox::new()?;
-    sandbox.write_rustup(&pinned_toolchain()?, true)?;
+    sandbox.write_rustup(&pinned_toolchain()?)?;
     sandbox.write_mold(&sandbox.prefix().join("bin"), "99.0.0")?;
 
     let output = sandbox.make("check-build-tools")?;
@@ -167,7 +167,7 @@ struct FailureCase {
 }
 
 fn without_mold(sandbox: &Sandbox) -> Result<()> {
-    sandbox.write_rustup(&pinned_toolchain()?, true)?;
+    sandbox.write_rustup(&pinned_toolchain()?)?;
     Ok(())
 }
 
@@ -175,7 +175,7 @@ fn without_mold(sandbox: &Sandbox) -> Result<()> {
 /// incapable of reporting a version.
 fn with_unrunnable_mold(sandbox: &Sandbox) -> Result<()> {
     sandbox.write_fake(&sandbox.prefix().join("bin"), "mold", "exit 1")?;
-    sandbox.write_rustup(&pinned_toolchain()?, true)?;
+    sandbox.write_rustup(&pinned_toolchain()?)?;
     Ok(())
 }
 
@@ -186,13 +186,7 @@ fn without_rustup(sandbox: &Sandbox) -> Result<()> {
 
 fn without_pinned_toolchain(sandbox: &Sandbox) -> Result<()> {
     sandbox.write_mold(&sandbox.prefix().join("bin"), &pinned_mold_version()?)?;
-    sandbox.write_rustup("nightly-1970-01-01", true)?;
-    Ok(())
-}
-
-fn without_cranelift_component(sandbox: &Sandbox) -> Result<()> {
-    sandbox.write_mold(&sandbox.prefix().join("bin"), &pinned_mold_version()?)?;
-    sandbox.write_rustup(&pinned_toolchain()?, false)?;
+    sandbox.write_rustup("nightly-1970-01-01")?;
     Ok(())
 }
 
@@ -206,9 +200,6 @@ fn without_cranelift_component(sandbox: &Sandbox) -> Result<()> {
 )]
 #[case::toolchain_absent(
     FailureCase { arrange: without_pinned_toolchain, expected: "is not installed" }
-)]
-#[case::component_absent(
-    FailureCase { arrange: without_cranelift_component, expected: "is not installed for" }
 )]
 fn unusable_prerequisites_fail_with_an_actionable_message(#[case] case: FailureCase) -> Result<()> {
     let sandbox = Sandbox::new()?;
@@ -242,7 +233,7 @@ fn unusable_prerequisites_fail_with_an_actionable_message(#[case] case: FailureC
 #[case("typecheck")]
 fn build_targets_stop_when_the_check_fails(#[case] target: &str) -> Result<()> {
     let sandbox = Sandbox::new()?;
-    sandbox.write_rustup(&pinned_toolchain()?, true)?;
+    sandbox.write_rustup(&pinned_toolchain()?)?;
     // No mold anywhere, and no cargo in the sandbox either: if the recipe ran,
     // the failure would name cargo rather than the capability check.
     let output = sandbox.make(target)?;

@@ -1,9 +1,9 @@
 //! Contracts for the committed `.cargo/config.toml`.
 //!
-//! The recipes are covered by `build_tools_make_target_tests`; this suite is about
-//! the file Cargo auto-discovers, which is what makes the build standard the
-//! default for a bare `cargo` invocation rather than something a Make target
-//! has to opt into.
+//! The recipes are covered by `build_tools_make_target_tests`; this suite is
+//! about the file Cargo auto-discovers, which is what makes the build standard
+//! the default for a bare `cargo` invocation rather than something a Make
+//! target has to opt into.
 #![cfg(all(unix, target_os = "linux"))]
 
 use anyhow::{Context, Result, ensure};
@@ -55,24 +55,14 @@ fn the_configuration_repeats_every_shared_flag_in_both_rustflags_sources() -> Re
 /// Ask Cargo what the configuration means, rather than only what it contains.
 ///
 /// Parsing the TOML proves the file is well-formed; it cannot prove Cargo
-/// accepts the key paths. A backend nested under the wrong table, or a
-/// misspelled key, parses perfectly and is then silently ignored. `cargo config
-/// get` reports Cargo's own resolved view, so a misplaced key shows up as a
-/// missing value instead of passing unnoticed. No `--config` argument is
-/// passed: auto-discovery is the mechanism under test.
+/// accepts the key paths. A misspelled key parses perfectly and is then
+/// silently ignored. `cargo config get` reports Cargo's own resolved view, so a
+/// misplaced key shows up as a missing value instead of passing unnoticed. No
+/// `--config` argument is passed: auto-discovery is the mechanism under test.
 ///
 /// The Linux entry is queried through its parent table: `config get` cannot
 /// address a key whose name is a quoted `cfg` expression.
 #[rstest]
-#[case::dev_profile_backend(
-    "profile.dev.codegen-backend",
-    "profile.dev.codegen-backend = \"cranelift\""
-)]
-#[case::release_profile_backend(
-    "profile.release.codegen-backend",
-    "profile.release.codegen-backend = \"llvm\""
-)]
-#[case::unstable_flag("unstable.codegen-backend", "unstable.codegen-backend = true")]
 #[case::build_rustflags("build.rustflags", "-Zthreads=8")]
 #[case::linux_rustflags("target", "-Clink-arg=-fuse-ld=mold")]
 fn cargo_resolves_the_committed_configuration_to_the_intended_settings(
@@ -98,40 +88,41 @@ fn cargo_resolves_the_committed_configuration_to_the_intended_settings(
     Ok(())
 }
 
-/// Only the two profiles Cargo's other profiles inherit from may name a
-/// backend, and each must name the right one: `test` inherits `dev` and `bench`
-/// inherits `release`, so those two settings decide every build in the
-/// workspace.
+/// The configuration must name no codegen backend, for any profile.
+///
+/// This is a refusal rather than an omission, and it is deliberate. The
+/// Cranelift backend cannot initiate a panic on any nightly tested: a panic
+/// raised in a Cranelift-compiled frame aborts the process with "failed to
+/// initiate panic, error 5" instead of unwinding, which takes down every
+/// failing test, every `#[should_panic]`, and every `catch_unwind`. A profile
+/// key here applies to every build in the repository, so adding one back has to
+/// go through the evidence in the developers' guide rather than through a
+/// one-line edit that looks like a speed-up.
 #[test]
-fn only_the_dev_and_release_profiles_select_a_backend() -> Result<()> {
+fn the_configuration_names_no_codegen_backend() -> Result<()> {
     let config: toml::Value = toml::from_str(&cargo_config()?)?;
-    let profiles = config
-        .get("profile")
-        .and_then(toml::Value::as_table)
-        .context("the configuration must configure a profile")?;
 
-    for (name, table) in profiles {
-        let backend = table.get("codegen-backend").and_then(toml::Value::as_str);
-        let expected = match name.as_str() {
-            "dev" => Some("cranelift"),
-            "release" => Some("llvm"),
-            _ => None,
-        };
-        ensure!(
-            backend == expected,
-            "profile `{name}` should select {expected:?}, got {backend:?}"
-        );
+    if let Some(profiles) = config.get("profile").and_then(toml::Value::as_table) {
+        for (name, table) in profiles {
+            ensure!(
+                table.get("codegen-backend").is_none(),
+                "profile `{name}` names a codegen backend; see \"The build standard\" in \
+                 docs/developers-guide.md before adding one"
+            );
+        }
     }
-    ensure!(
-        profiles.contains_key("dev") && profiles.contains_key("release"),
-        "both the dev and release profiles must state a backend explicitly"
-    );
     ensure!(
         config
             .get("unstable")
             .and_then(|table| table.get("codegen-backend"))
-            == Some(&toml::Value::Boolean(true)),
-        "the configuration must enable the codegen-backend unstable flag"
+            .is_none(),
+        "the configuration must not enable the codegen-backend unstable flag"
+    );
+    // The environment override is the documented escape hatch for a single
+    // target, so the file must not need it either.
+    ensure!(
+        !cargo_config()?.contains("CARGO_PROFILE_DEV_CODEGEN_BACKEND"),
+        "the configuration should not reference the backend override"
     );
     Ok(())
 }

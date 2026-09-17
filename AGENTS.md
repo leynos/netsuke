@@ -558,28 +558,28 @@ collaboration.
 
 ## Build standard
 
-The Cranelift codegen backend, the `mold` linker, and the parallel `rustc`
-frontend (`-Zthreads=8`) are the **defaults** for development, test, lint, and
-typecheck builds. They are committed to `.cargo/config.toml`, which Cargo
-auto-discovers, so a bare `cargo build` gets them too.
+The `mold` linker and the parallel `rustc` frontend (`-Zthreads=8`) are the
+**defaults** for development, test, lint, and typecheck builds. They are
+committed to `.cargo/config.toml`, which Cargo auto-discovers, so a bare
+`cargo build` gets them too. The Cranelift codegen backend is deliberately not
+part of the standard and a contract refuses one; the developers' guide records
+why.
 
-Run `make install-build-tools` to install the pinned nightly's
-`rustc-codegen-cranelift-preview` component and, on Linux, the pinned `mold`
-release. `make check-build-tools` preflights those prerequisites, and is a
-prerequisite of `make build`, `make test`, `make lint`, and `make typecheck`,
-so a missing tool reports an installation hint before Cargo runs. Linux hosts
-use `mold`; macOS and Windows keep their platform linker, which the
-`cfg(target_os = "linux")` gate in the configuration expresses.
+Run `make install-build-tools` to install the pinned nightly and, on Linux, the
+pinned `mold` release. `make check-build-tools` preflights those prerequisites,
+and is a prerequisite of `make build`, `make test`, `make lint`, and
+`make typecheck`, so a missing tool reports an installation hint before Cargo
+runs. Linux hosts use `mold`; macOS and Windows keep their platform linker,
+which the `cfg(target_os = "linux")` gate in the configuration expresses.
 
 Two build shapes are excluded and must stay excluded:
 
-- **Release and packaging.** `[profile.release]` names `llvm`, and the release
-  recipe assigns `RUSTFLAGS` so the configuration's `rustflags` tables do not
-  apply. A shipped artefact is built on the supported backend and the platform
-  linker.
-- **Coverage.** `cargo llvm-cov` needs LLVM source-based instrumentation, which
-  Cranelift does not emit. The coverage steps set
-  `CARGO_PROFILE_DEV_CODEGEN_BACKEND=llvm` and carry no `-Zthreads`.
+- **Release and packaging.** The release recipe assigns `RUSTFLAGS` so the
+  configuration's `rustflags` tables do not apply. A shipped artefact is built
+  on the platform linker and a single-threaded frontend.
+- **Coverage.** A build whose output is a measurement is a reproducibility
+  claim. The coverage steps assign `RUSTFLAGS` at the step itself and carry
+  neither `-Zthreads` nor the linker flag.
 
 Cargo picks a single `rustflags` source rather than merging them: a matching
 `[target.*]` table replaces `[build] rustflags`, and an externally set

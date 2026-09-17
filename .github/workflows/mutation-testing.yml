@@ -39,8 +39,3 @@ jobs:
       # Match the CI baseline (`make test` runs --all-features) so
       # feature-gated tests (legacy-digests) run against mutants.
       extra-args: "--all-features"
-      # cargo-mutants builds on the dev profile, which `.cargo/config.toml`
-      # puts on the Cranelift backend, so the component has to be present or
-      # every mutant fails to compile. The installer adds the pinned `mold`
-      # in the same command.
-      setup-commands: "make install-build-tools"

@@ -43,7 +43,7 @@ fn falls_back_to_the_committed_pins_when_no_overrides_are_given() -> Result<()> 
     // mold goes on the sandbox PATH directly: only the Make recipes prepend the
     // install prefix, and this case invokes the script itself.
     sandbox.write_mold(&sandbox.bin(), &pinned_mold_version()?)?;
-    sandbox.write_rustup(&pinned_toolchain()?, true)?;
+    sandbox.write_rustup(&pinned_toolchain()?)?;
 
     let output = sandbox.script_with("check-build-tools.sh", PinOverrides::Omitted, &[])?;
     let text = combined(&output);
@@ -70,7 +70,7 @@ fn falls_back_to_the_committed_pins_when_no_overrides_are_given() -> Result<()> 
 fn default_pins_are_the_committed_ones_not_an_empty_fallback() -> Result<()> {
     let sandbox = Sandbox::new()?;
     sandbox.write_mold(&sandbox.bin(), "99.0.0")?;
-    sandbox.write_rustup(&pinned_toolchain()?, true)?;
+    sandbox.write_rustup(&pinned_toolchain()?)?;
 
     let output = sandbox.script_with("check-build-tools.sh", PinOverrides::Omitted, &[])?;
     let text = combined(&output);
@@ -98,7 +98,7 @@ fn an_explicit_pin_override_wins_over_the_committed_default() -> Result<()> {
     sandbox.write_mold(&sandbox.bin(), &pinned_mold_version()?)?;
     // rustup knows only the committed toolchain, so the run can fail only if
     // the override displaced the default.
-    sandbox.write_rustup(&pinned_toolchain()?, true)?;
+    sandbox.write_rustup(&pinned_toolchain()?)?;
 
     let output = sandbox.script_with(
         "check-build-tools.sh",
@@ -124,7 +124,7 @@ fn an_explicit_pin_override_wins_over_the_committed_default() -> Result<()> {
 fn a_missing_pin_file_reports_the_actionable_diagnostic() -> Result<()> {
     let sandbox = Sandbox::new()?;
     sandbox.write_mold(&sandbox.bin(), &pinned_mold_version()?)?;
-    sandbox.write_rustup(&pinned_toolchain()?, true)?;
+    sandbox.write_rustup(&pinned_toolchain()?)?;
     let missing = sandbox.home().join("absent/MOLD_VERSION");
 
     let output = sandbox.script_with(
@@ -158,7 +158,7 @@ fn a_malformed_version_pin_is_refused_not_rewritten(
 ) -> Result<()> {
     let sandbox = Sandbox::new()?;
     sandbox.write_mold(&sandbox.bin(), &pinned_mold_version()?)?;
-    sandbox.write_rustup(&pinned_toolchain()?, true)?;
+    sandbox.write_rustup(&pinned_toolchain()?)?;
     let pin = sandbox.home().join("MOLD_VERSION");
     sandbox.write_file(&pin, contents)?;
 
@@ -186,7 +186,7 @@ fn a_malformed_version_pin_is_refused_not_rewritten(
 fn boundary_whitespace_around_a_pin_is_trimmed(#[case] contents: &str) -> Result<()> {
     let sandbox = Sandbox::new()?;
     sandbox.write_mold(&sandbox.bin(), "2.41.0")?;
-    sandbox.write_rustup(&pinned_toolchain()?, true)?;
+    sandbox.write_rustup(&pinned_toolchain()?)?;
     let pin = sandbox.home().join("MOLD_VERSION");
     sandbox.write_file(&pin, contents)?;
 

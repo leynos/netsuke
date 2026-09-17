@@ -159,8 +159,7 @@ impl Sandbox {
         )
     }
 
-    /// A `rustup` reporting the given toolchain and, optionally, the Cranelift
-    /// component as installed.
+    /// A `rustup` reporting the given toolchain as installed.
     ///
     /// Every invocation is appended to [`rustup_log`](Self::rustup_log), so a
     /// test can assert which toolchain commands the installer actually issued
@@ -169,24 +168,17 @@ impl Sandbox {
     /// # Errors
     ///
     /// Returns an error if the fake rustup executable cannot be written.
-    pub fn write_rustup(&self, toolchain: &str, has_cranelift: bool) -> Result<Utf8PathBuf> {
-        let component = if has_cranelift {
-            "rustc-codegen-cranelift-x86_64-unknown-linux-gnu"
-        } else {
-            "rustfmt-x86_64-unknown-linux-gnu"
-        };
+    pub fn write_rustup(&self, toolchain: &str) -> Result<Utf8PathBuf> {
         let body = format!(
             concat!(
                 "printf '%s\\n' \"$*\" >> '{log}'\n",
                 "case \"$1 $2\" in\n",
                 "  'toolchain list') echo '{toolchain}-x86_64-unknown-linux-gnu' ;;\n",
-                "  'component list') echo '{component}' ;;\n",
                 "  *) exit 0 ;;\n",
                 "esac"
             ),
             log = self.rustup_log(),
             toolchain = toolchain,
-            component = component,
         );
         self.write_fake(&self.bin(), "rustup", &body)
     }

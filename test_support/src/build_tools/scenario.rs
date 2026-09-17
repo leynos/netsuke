@@ -65,7 +65,7 @@ pub struct InstallerScenario {
 }
 
 impl InstallerScenario {
-    /// Publish a release and make the Cranelift toolchain appear installed, so
+    /// Publish a release and make the pinned toolchain appear installed, so
     /// only the linker half of the installer is under test.
     ///
     /// # Errors
@@ -73,7 +73,7 @@ impl InstallerScenario {
     /// Returns an error if the installer scenario cannot be prepared.
     pub fn prepare() -> Result<Self> {
         let sandbox = Sandbox::new()?;
-        sandbox.write_rustup(&pinned_toolchain()?, true)?;
+        sandbox.write_rustup(&pinned_toolchain()?)?;
         let release = FakeRelease::publish(&sandbox, TEST_MOLD_VERSION)?;
         Ok(Self { sandbox, release })
     }
@@ -139,7 +139,7 @@ impl BuildScenario {
     pub fn prepare() -> Result<Self> {
         let sandbox = Sandbox::new()?;
         sandbox.write_mold(&sandbox.prefix().join("bin"), &pinned_mold_version()?)?;
-        sandbox.write_rustup(&pinned_toolchain()?, true)?;
+        sandbox.write_rustup(&pinned_toolchain()?)?;
         let cargo = RecordingCargo::install(&sandbox)?;
         Ok(Self { sandbox, cargo })
     }

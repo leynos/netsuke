@@ -146,9 +146,9 @@ jobs:
       - name: Reset sccache statistics
         run: sccache --zero-stats
       - name: Install the build standard
-        # Cranelift and the pinned `mold` are the repository's defaults, and
-        # `check-build-tools` gates every build target on them, so this runs before
-        # the first compile rather than as a convenience.
+        # The pinned `mold` is the repository's default linker and
+        # `check-build-tools` gates every build target on it, so this runs
+        # before the first compile rather than as a convenience.
         run: make install-build-tools
       - name: Show rustc version
         run: |
@@ -263,14 +263,13 @@ jobs:
         # `coverage-upload` runs the same set over the same commit.
         if: github.event_name == 'pull_request'
         env:
-          # One of the two exclusions from the build standard. Cranelift emits
-          # no LLVM source-based instrumentation, so an instrumented build on it
-          # produces no coverage at all; the parallel frontend is excluded
-          # alongside it because a measured build is a reproducibility claim.
-          # This step does not run through `make`, so it states the warning
-          # policy the gate recipes would otherwise compose, and assigning
-          # RUSTFLAGS is also what displaces `.cargo/config.toml`'s tables.
-          CARGO_PROFILE_DEV_CODEGEN_BACKEND: llvm
+          # One of the two exclusions from the build standard. A build whose
+          # output is a measurement is a reproducibility claim, so it takes
+          # neither the parallel frontend nor the linker change. Assigning
+          # RUSTFLAGS is the whole mechanism: it displaces every `rustflags`
+          # table in `.cargo/config.toml`. Stated here rather than inherited
+          # from `setup-rust`, so the exclusion is visible at the step it
+          # applies to and a contract has something to read.
           RUSTFLAGS: -D warnings
         uses: leynos/shared-actions/.github/actions/generate-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
         with:
