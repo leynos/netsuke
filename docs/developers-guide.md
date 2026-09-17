@@ -6923,6 +6923,27 @@ rest, so deleting the base allowance while leaving the Windows override behind
 would still report a 420 s largest budget while every test the override does
 not match ran with no bound at all.
 
+### Trybuild targets, and the list that rots apart
+
+A per-test `terminate-after` and a name-based override list are a pair that
+drifts. The list is written once against the names of the day and is never
+re-derived, and neither a passing run nor a green gate notices a target that
+has fallen out of it, because the cost only appears on a cold cache. A trybuild
+target builds a scratch crate against this workspace's dependency graph, so it
+is the cost that overruns first.
+
+`tests/workflow_contracts/trybuild_override_test.py` discovers the targets from
+the tree rather than listing them, and requires each to be named in an
+override. This repository has none today, and the contract pins that: an empty
+set is not a reason to omit the rule, it is the state the rule must notice
+leaving. A harness added tomorrow inherits the 300 s base allowance, which is
+sized for a test that compiles nothing.
+
+The discovery reads what a file constructs, not what it mentions.
+`tests/sha2_migration_guard_tests.rs` documents at length why a trybuild
+harness was removed during the Polonius migration, and a text match would
+report it as a target that exists.
+
 The lane reading takes its documents as a parameter, defaulting to the
 repository's own workflows. Reading the filesystem happens at one named
 boundary rather than inside the derivations, which is what makes the synthetic
