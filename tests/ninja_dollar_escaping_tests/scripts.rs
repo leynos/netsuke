@@ -2,6 +2,8 @@
 
 use super::*;
 
+/// Verify that script placeholders run against their real input and output paths.
+#[cfg(unix)]
 #[rstest]
 fn script_placeholders_execute_against_real_paths() -> Result<()> {
     assert_script_output(

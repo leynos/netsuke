@@ -360,7 +360,6 @@ fn script_default_reaches_the_child_shell(
     Ok(())
 }
 
-/// Verify that script placeholders run against their real input and output paths.
-#[cfg(unix)]
+/// Script recipe cases, gated per test where they need a POSIX child shell.
 #[path = "ninja_dollar_escaping_tests/scripts.rs"]
 mod scripts;
