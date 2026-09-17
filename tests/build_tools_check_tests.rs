@@ -99,10 +99,15 @@ fn a_non_linux_host_skips_the_mold_install() -> Result<()> {
         !text.contains("downloading"),
         "no download should be attempted off Linux, got `{text}`"
     );
+    // The command, not merely that rustup was reached: the toolchain half
+    // exists to put the pinned nightly on the machine, and a run that called
+    // rustup for anything else would satisfy a looser assertion while leaving
+    // the host without the toolchain the standard needs.
     let rustup = sandbox.rustup_invocations()?;
+    let expected = format!("toolchain install {}", pinned_toolchain()?);
     ensure!(
-        rustup.iter().any(|call| call.starts_with("component add")),
-        "the toolchain half should still run, recorded `{rustup:?}`"
+        rustup.iter().any(|call| call.starts_with(&expected)),
+        "the toolchain half should still run `{expected}`, recorded `{rustup:?}`"
     );
     Ok(())
 }

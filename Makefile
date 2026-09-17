@@ -66,8 +66,8 @@ export BUILD_TOOLS_PREFIX
 # warnings, and CI's `setup-rust` exports the same value for a whole job, so
 # without restating the flags here the gates would silently fall back to the
 # platform linker and a single-threaded frontend while still reporting success.
-# tests/workflow_contracts/build_tools_rustflags_test.py holds this variable equal
-# to the configuration file; changing one without the other fails that test.
+# tests/makefile_test_target/rustflags.rs holds these variables equal to the
+# configuration file; changing one without the other fails that test.
 STANDARD_THREADS_FLAG ?= -Zthreads=8
 STANDARD_MOLD_FLAG ?= -Clink-arg=-fuse-ld=mold
 # `mold` ships for Linux only. macOS and Windows keep their platform linker,
