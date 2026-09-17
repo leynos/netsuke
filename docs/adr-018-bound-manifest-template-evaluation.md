@@ -186,6 +186,42 @@ tracked in [#720](https://github.com/leynos/netsuke/issues/720).
 Broader allocator accounting and process isolation are separate concerns from
 this output-buffer work. Neither is delivered by this ADR correction.
 
+## Addendum C: Verified MiniJinja 2.24.0 API constraints (2026-09-17)
+
+The finding behind Addendum A is correct about the mechanism: `invoke_macro`
+calls `Value::call`, and MiniJinja materializes the complete macro result before
+`charge_macro_output` measures it. Capping that result before materialization
+is not achievable against the pinned MiniJinja 2.24.0 using only its public API.
+
+- `Value::call` accepts only `&State` and `&[Value]`; it takes no writer, and
+  no `call_to` or `call_with_output` variant exists in the crate.
+- Every `Output` constructor is crate-private: `new`, `null`,
+  `begin_capture`, `end_capture`, and `retarget`. The only public constructor,
+  `machinery::make_string_output`, is behind `unstable_machinery`, which
+  netsuke does not enable. `Cargo.toml` declares
+  `features = ["fuel", "loader"]`, and `--all-features` cannot enable a
+  dependency's feature.
+- Enabling that feature would not close the route either: `Vm::eval_macro`
+  needs a `macro_id`, a `closure`, and a matching `&State`, none of which are
+  publicly obtainable.
+- `Template::render_captured_to` installs its writer on the top-level
+  `Output` of the outer template. A macro invoked as an expression compiles to
+  `Instruction::CallObject`, which dispatches to `args[0].call(...)` and so
+  never receives that `out`.
+
+The macro body writes into an engine-local `String` and returns it as a
+`Value`; netsuke's `let rendered: String = rendered_value.into()` then formats
+that result again through `impl From<Value> for String`, so the output is
+materialized twice and the reviewer's phrasing understates that cost. Fuel
+cannot bound the growth either, because capture and macro instructions are
+charged zero fuel.
+
+Addendum B's deferral to [#720](https://github.com/leynos/netsuke/issues/720)
+therefore stands unchanged. This addendum reinforces Addenda A and B rather
+than contradicting them, and does not claim the guarantee is satisfied. It also
+cannot confirm from local evidence that MiniJinja 3.0.0-alpha.1 repairs the
+gap: the local registry cache holds only 2.19.0, 2.21.0, and 2.24.0 sources.
+
 ## References
 
 - [#651](https://github.com/leynos/netsuke/issues/651) and
@@ -196,6 +232,10 @@ this output-buffer work. Neither is delivered by this ADR correction.
 - [#720](https://github.com/leynos/netsuke/issues/720): deferred internal
   macro and capture output-budget remediation.
 - [MiniJinja 2.24.0 changelog](https://github.com/mitsuhiko/minijinja/blob/2.24.0/CHANGELOG.md).
+- [MiniJinja 2.24.0 `Value::call`](https://github.com/mitsuhiko/minijinja/blob/2.24.0/minijinja/src/value/mod.rs).
+- [MiniJinja 2.24.0 output/capture buffers](https://github.com/mitsuhiko/minijinja/blob/2.24.0/minijinja/src/output.rs).
+- [MiniJinja 2.24.0 macro buffering](https://github.com/mitsuhiko/minijinja/blob/2.24.0/minijinja/src/vm/macro_object.rs).
+- [MiniJinja 2.24.0 macro evaluation](https://github.com/mitsuhiko/minijinja/blob/2.24.0/minijinja/src/vm/mod.rs).
 - [MiniJinja 3.0.0-alpha.1 macro buffering](https://github.com/mitsuhiko/minijinja/blob/3.0.0-alpha.1/minijinja/src/vm/macro_object.rs).
 - [MiniJinja 3.0.0-alpha.1 output/capture buffers](https://github.com/mitsuhiko/minijinja/blob/3.0.0-alpha.1/minijinja/src/output.rs).
 - [MiniJinja 3.0.0-alpha.1 changelog](https://github.com/mitsuhiko/minijinja/blob/3.0.0-alpha.1/CHANGELOG.md).

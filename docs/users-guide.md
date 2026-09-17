@@ -1284,6 +1284,13 @@ per-evaluation fuel limit. Successful expressions, macro calls, and renders
 refund unused fuel to the aggregate manifest allowance; exhausted evaluations
 do not.
 
+These budgets reduce, rather than eliminate, resource-exhaustion exposure. Byte
+limits are enforced before the buffer Netsuke controls accepts output, but
+`MiniJinja` materializes a macro result before its size can be checked, so a
+macro can allocate above the per-value ceiling before the limit is reported.
+That residual gap and its deferral are recorded in
+[ADR-018](adr-018-bound-manifest-template-evaluation.md).
+
 The configuration keys are `manifest_evaluation_fuel`, `manifest_fuel`,
 `manifest_rendered_value_bytes`, `manifest_rendered_manifest_bytes`,
 `manifest_source_bytes`, `manifest_foreach_cardinality`, and
