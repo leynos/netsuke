@@ -39,8 +39,10 @@ if typ.TYPE_CHECKING:  # pragma: no cover - typing only
 #: pull request down one arm while the declaration still looked right.
 FORK_GUARD: typ.Final[str] = "github.event.pull_request.head.repo.fork"
 
-#: The runner a fork's pull request falls back to. The point of the arm is that
-#: it names a runner GitHub hosts, so this is the only value it may take.
+#: The runner a fork's pull request falls back to, for a lane that pins no
+#: particular image. The point of the arm is that it names a runner GitHub
+#: hosts, and `ubuntu-latest` is the one that tracks whatever the estate builds
+#: on by default.
 FORK_FALLBACK_RUNNER: typ.Final[str] = "ubuntu-latest"
 
 #: The prefix every Ubicloud label carries. The owned arm must name one: an
@@ -203,31 +205,51 @@ def owned_runner(declaration: object) -> str:
 #: `coverage-pr-submit` is not here on purpose. Its jobs trigger on
 #: `workflow_run`, which runs in this repository's context whatever the
 #: originating pull request was, so no fork ever selects their runner.
-FORK_FALLBACK_KEYS = (
-    "ci.build-test",
-    "ci.kani-smoke",
-    "netsukefile-test.netsukefile",
-)
+#:
+#: Each key names the hosted runner its own fork arm must take, because a lane
+#: that exists to exercise one image is not served by the current one.
+#: `netsukefile` is the deliberate Ubuntu 22.04 compatibility lane: its comment
+#: says so, its `NETSUKE_RUNNER_IMAGE` stays `ubuntu2204`, and every cache key
+#: it writes carries that image. Falling back to `ubuntu-latest` would run a
+#: fork's pull request against a newer glibc, so the one regression the lane
+#: exists to catch would pass the required check and appear after merge.
+FORK_FALLBACK_RUNNERS: typ.Final[dict[str, str]] = {
+    "ci.build-test": FORK_FALLBACK_RUNNER,
+    "ci.kani-smoke": FORK_FALLBACK_RUNNER,
+    "netsukefile-test.netsukefile": "ubuntu-22.04",
+}
+
+#: The lanes a fork's pull request can reach, derived from the mapping above so
+#: the set and the expected labels cannot drift apart.
+FORK_FALLBACK_KEYS = tuple(FORK_FALLBACK_RUNNERS)
 
 
-def _is_well_formed_fallback(placement: Placement | None) -> bool:
-    """Return whether a reading is the placement a pull-request lane needs.
+def _is_well_formed_fallback(placement: Placement | None, expected_fork: str) -> bool:
+    """Return whether a reading is the placement this lane needs.
 
     Four things have to hold and each fails differently. There is no placement
     at all. It branches on a sibling field that parses and evaluates just the
-    same. Its fork arm names a runner a fork cannot use, or one of the wrong
-    platform. Its owned arm is not Ubicloud, which takes the lane off the
-    measured shape while still looking like a fallback.
+    same. Its fork arm names a runner a fork cannot use, one of the wrong
+    platform, or one of the wrong image for a lane that pins an image. Its
+    owned arm is not Ubicloud, which takes the lane off the measured shape
+    while still looking like a fallback.
+
+    Parameters
+    ----------
+    placement
+        The reading, or None when the declaration is not a placement.
+    expected_fork
+        The hosted runner this lane's fork arm must name.
 
     Returns
     -------
     bool
-        True when the reading is the prescribed placement.
+        True when the reading is the prescribed placement for this lane.
     """
     return (
         placement is not None
         and placement.guard == FORK_GUARD
-        and placement.fork == FORK_FALLBACK_RUNNER
+        and placement.fork == expected_fork
         and placement.owned.startswith(UBICLOUD_PREFIX)
     )
 
@@ -265,6 +287,8 @@ def fork_fallback_offences(declarations: cabc.Mapping[str, object]) -> list[str]
     ['ci.build-test']
     >>> fork_fallback_offences({"coverage-main.coverage-upload": ok})
     ['coverage-main.coverage-upload']
+    >>> fork_fallback_offences({"netsukefile-test.netsukefile": ok})
+    ['netsukefile-test.netsukefile']
     """
     offences: list[str] = []
     for key, declaration in declarations.items():
@@ -273,6 +297,6 @@ def fork_fallback_offences(declarations: cabc.Mapping[str, object]) -> list[str]
             if placement is not None:
                 offences.append(key)
             continue
-        if not _is_well_formed_fallback(placement):
+        if not _is_well_formed_fallback(placement, FORK_FALLBACK_RUNNERS[key]):
             offences.append(key)
     return offences

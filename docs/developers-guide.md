@@ -766,6 +766,17 @@ request stuck on a pending check rather than as a placement fault.
 Two of those lanes also serve `push`. No second condition is needed: on a push
 the pull-request context is null, so the expression takes the Ubicloud arm.
 
+The fork arm is pinned per lane rather than shared, and `FORK_FALLBACK_RUNNERS`
+in `tests/workflow_contracts/fork_fallback.py` records which label each takes.
+`build-test` and `kani-smoke` fall back to `ubuntu-latest`; `netsukefile` falls
+back to `ubuntu-22.04`, because that lane exists for Ubuntu 22.04's older glibc
+and keeps `NETSUKE_RUNNER_IMAGE: ubuntu2204`. A fork's pull request sent to
+`ubuntu-latest` would run on a newer image, so the one regression the lane
+exists to catch would pass the required check and appear only after merge. The
+mapping is proved by a mutation that sends `netsukefile` to `ubuntu-latest`:
+hosted, Linux, and the right answer for every other lane, so nothing but a
+per-lane expectation separates it.
+
 Every other Ubicloud lane keeps its plain label, and the contract asserts that
 too, so the expression does not spread by imitation. `coverage-upload` is push
 and dispatch only. Both jobs in `coverage-pr-submit.yml` trigger on

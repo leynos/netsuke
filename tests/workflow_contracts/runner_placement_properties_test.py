@@ -50,6 +50,7 @@ FORK_FALLBACK_MUTATIONS = (
     "wrong-fork-runner",
     "hosted-on-both-arms",
     "arm-where-no-fork-reaches",
+    "wrong-fork-image",
     "line-break",
 )
 SEQUENCE_KINDS = ("ninja", "windows")
