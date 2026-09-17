@@ -74,6 +74,12 @@ Netsuke uses a private typed conversion at the Ninja writer boundary:
   escape for it. Other Ninja-special characters are rejected rather than
   supported by partial escaping; expanding the accepted path grammar is
   separate work.
+- A manifest description that contained a Ninja variable reference no longer
+  expands. `description: CC $out` now emits `CC $$out`, so Ninja prints the
+  literal text `CC $out` instead of the output path. The metadata decision
+  provides no replacement for that expansion, so dynamic metadata is not
+  currently supported; lowering `$in` and `$out` into descriptions remains
+  follow-up work, as does populating `Action.depfile` for the `$out.d` idiom.
 - CI sets `NETSUKE_REQUIRE_NINJA=1`, so real-Ninja coverage fails rather than
   skipping when the executable is absent.
 - Kani and Verus are not used for this change. The boundary is a finite string

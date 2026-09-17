@@ -620,7 +620,12 @@ separate boundary: a literal space is escaped as a `$` followed by a space,
 Ninja's own path escape, while values containing a pipe or a control character
 are rejected because Ninja's path grammar cannot represent them. A dollar or a
 colon is likewise rejected, even though Ninja can escape both; Netsuke has not
-adopted that part of the grammar. ADR 014 records the boundary and its
+adopted that part of the grammar.
+
+Metadata follows the same emission-boundary rule. A `description`, `depfile`,
+`deps`, or `pool` keeps its backend-neutral IR text, and the Ninja writer
+escapes only the emitted binding, doubling a literal dollar and rejecting
+newline, carriage-return, and NUL. ADR 014 records the boundary and its
 migration consequences.
 
 #### Structured environment mapping

@@ -211,12 +211,14 @@ Stop and escalate rather than improvising when any of these is reached.
   spawning Ninja. The B2 test supplies `in` and confirms that the executed
   script writes `in` to `out`.
 
-- Observation: Clippy does not infer that reading `text.0` makes the I3
-  conversion's by-value parameter semantically consumed. Evidence: `make lint`
-  reported `needless_pass_by_value` against the required consuming signature.
-  Impact: destructure `ShellText` immediately at the conversion boundary. This
-  makes the string move explicit to both the compiler and readers while
-  preserving the non-reference API required by I3.
+- Observation (superseded): Clippy does not infer that reading `text.0` makes
+  the I3 conversion's by-value parameter semantically consumed. Evidence:
+  `make lint` reported `needless_pass_by_value` against the consuming signature
+  then in place. Impact: destructure `ShellText` immediately at the conversion
+  boundary. Main later reverted that signature to a borrow, so the
+  destructuring and the `needless_pass_by_value` exception both describe code
+  that no longer exists; see the 2026-08-27 revision entry and the correction
+  recorded at `2026-09-17`.
 
 - Observation: the existing debug-only `shlex` guard rejected a valid script
   containing a heredoc and an apostrophe in a comment after script placeholder
@@ -625,9 +627,13 @@ without error.
 
 **I3 — applied exactly once.** The escape is applied once, structurally.
 
-- Method: type system, not test. `NinjaValue` has a private field, lives in
-  `src/ninja_gen_escape.rs`, and is constructible only by `escape_ninja_value`,
-  which consumes a `ShellText`. `ShellText` does not implement `Display`.
+- Method: type system, not test. `NinjaValue` has a private field and lives in
+  `src/ninja_gen_escape.rs`; `escape_ninja_value` borrows a `ShellText` and
+  returns it. `ShellText` does not implement `Display`, so shell text cannot be
+  formatted into a binding. A second constructor, `NinjaValue::from_encoded`,
+  serves the PowerShell renderer, whose encoded payload must not be parsed by
+  Ninja. It validates nothing itself, so the guarantee rests on the escape
+  boundary rather than on `NinjaValue` having a single constructor.
 - Rationale: `escape_ninja_value` is deliberately **not** idempotent —
   escaping `$` twice correctly yields `$$$$`. Writing an idempotence test would
   enshrine a bug. Expressing "exactly once" as a compile-time property is
@@ -710,11 +716,12 @@ is verified.
 
 Kani and Verus are excluded, with reasons, in `Decision log`. There is no
 concurrency, protocol, or temporal property here, so no state-machine model
-checking. The Ninja-boundary escaping of descriptions and `depfile` is in scope
-under the revised `D-METADATA` decision and must be covered by emission and
-integration tests, including rejection of newline, carriage-return, and NUL
-characters. This plan does not verify Ninja's own lexical implementation; those
-rules remain an external axiom exercised through the real binary.
+checking. The Ninja-boundary escaping of `description`, `depfile`, `deps`, and
+`pool` is in scope under the revised `D-METADATA` decision and must be covered
+by emission and integration tests, including rejection of newline,
+carriage-return, and NUL characters. This plan does not verify Ninja's own
+lexical implementation; those rules remain an external axiom exercised through
+the real binary.
 
 ## Plan of work
 
@@ -870,16 +877,18 @@ record the path-emission and description scope boundaries there.
 Add a subsection to `docs/developers-guide.md` under "Command and recipe
 lowering" (line 266) documenting the `ShellText`/`NinjaValue` seam: what each
 type means, that `ShellText` must not implement `Display`, that
-`escape_ninja_value` is the only constructor of `NinjaValue`, and that new
-emission sites must go through it. Per `AGENTS.md`, record the new
-abstraction's scope and re-use policy there.
+`escape_ninja_value` is the only route from shell text to `NinjaValue` (the
+PowerShell renderer's `NinjaValue::from_encoded` takes an already-encoded
+payload instead), and that new emission sites must go through one of these two
+routes. Per `AGENTS.md`, record the new abstraction's scope and re-use policy
+there.
 
 Add `docs/adr-014-backend-text-escaping-seam.md` following
 `docs/documentation-style-guide.md:421-498`, covering the layering decision,
 the fallible constructor, the rejection of Kani and Verus, and the scope
-boundary including description and `depfile` escaping at the Ninja emission
-boundary. Reference it from `docs/netsuke-design.md` §2.6 and index it in
-`docs/contents.md`.
+boundary including `description`, `depfile`, `deps`, and `pool` escaping at the
+Ninja emission boundary. Reference it from `docs/netsuke-design.md` §2.6 and
+index it in `docs/contents.md`.
 
 Add one `rstest-bdd` scenario to `tests/features/ninja.feature` phrased as a
 user-visible outcome — a recipe observing a shell variable — with steps in
@@ -1090,16 +1099,23 @@ pub(super) struct ShellText(String);
 
 /// Text safe to place on the right-hand side of a Ninja `key = value` binding.
 ///
-/// Constructible only through [`escape_ninja_value`], so the escape is applied
-/// exactly once. Deliberately the only one of the two types with a `Display`
+/// The POSIX-compatible renderers construct this type through
+/// [`escape_ninja_value`], so the escape is applied exactly once. The
+/// PowerShell renderer uses [`NinjaValue::from_encoded`] for a payload Ninja
+/// must not parse. Deliberately the only one of the two types with a `Display`
 /// implementation.
 pub(super) struct NinjaValue(String);
+
+impl NinjaValue {
+    /// Construct a value already safe for Ninja's binding grammar.
+    pub(super) const fn from_encoded(value: String) -> Self;
+}
 
 /// Escape `text` for the Ninja file format.
 ///
 /// Doubles every literal `$` and rejects control characters, which would
 /// otherwise inject build-file syntax.
-pub(super) fn escape_ninja_value(text: ShellText) -> Result<NinjaValue, NinjaGenError>;
+pub(super) fn escape_ninja_value(text: &ShellText) -> Result<NinjaValue, NinjaGenError>;
 ```
 
 `ShellText` must not implement `Display`; if it did,
@@ -1246,7 +1262,8 @@ citations moved: users' guide 1152-1153 to 1208-1209, design §2.6 499-508 to
 507-516, design §5.4 2041-2049 to 2059-2067, the `description = CC $out`
 snippet 2054-2058 to 2072-2076, the backtick contract 257 to 265, and the
 developers' guide anchor 199 to 266. One assertable claim in this plan was
-already false against the shipped code before this rebase and is recorded here.
+already false against the shipped code before this rebase; it is described here
+and corrected at `2026-09-17`.
 
 I3's method asserted that `escape_ninja_value` "consumes a `ShellText`", and the
 `Interfaces and dependencies` snippet declared
@@ -1264,12 +1281,10 @@ describe code that no longer exists. I3's structural claim is therefore
 narrower than stated: the guarantee now rests on two constructors rather than
 one.
 
-This was out of scope for the refinement set — it is a statement about code,
-not about the path and metadata contract this branch reconciles — so this
-change records it rather than editing I3's obligation text or the interface
-snippet. Correcting it means either restoring the consuming signature with a
-reason for narrowing the PowerShell path, or narrowing the stated I3 claim;
-that is a decision for a subsequent change.
+This revision entry first recorded the discrepancy without correcting it, on
+the grounds that it is a statement about code rather than about the path and
+metadata contract this branch reconciles. The `2026-09-17` entry below records
+the follow-up that corrected it.
 
 Why it matters. Decision `D-METADATA` now matches the writer: metadata remains
 backend-neutral in the IR, then receives Ninja escaping only at emission. The
@@ -1375,3 +1390,15 @@ control characters. Deterministic validation passed `make check-fmt`,
 checks passed, the Windows `build-test-windows` job confirmed CRLF handling and
 the BDD environment scenario, and gate-first `coderabbit review --agent`
 reported zero findings. The ExecPlan is complete.
+
+2026-09-17 — the plan was reviewed independently of the RFC proposal that had
+carried an earlier copy of its refinements, and four documentation corrections
+were applied. The path and metadata contract now reads consistently: the
+`Verification plan` names all four escaped metadata fields rather than two, the
+ADR and design documents state the metadata scope, and the ADR records that a
+description no longer expands a Ninja variable. Separately, the discrepancy from
+`2026-08-17` is now corrected rather than merely recorded: I3's method, the
+`Interfaces and dependencies` snippet, the `Concrete steps` instruction, and
+the superseded `Surprises & discoveries` entry state the shipped
+two-constructor invariant. The implementation is unchanged by all four
+corrections; only the documents follow the code.

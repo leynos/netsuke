@@ -1885,6 +1885,10 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   `$out.d` is written as `$$out.d` and Ninja reads the literal name rather than
   a variable reference. Generation rejects newline, carriage-return, and NUL
   characters in those fields.
+- Because that dollar is a literal, a description does not expand Ninja
+  variables. A description of `CC $out` prints `CC $out`, not the output path.
+  Dynamic metadata has no replacement mechanism yet; a description that names
+  its output is follow-up work.
 - **Migration:** replace the historical manifest spelling `$$PATH` with
   `$PATH`. On POSIX and Bash routes, `$$` is the shell's process identifier;
   PowerShell interprets `$$` as its automatic variable containing the last
