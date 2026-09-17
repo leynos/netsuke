@@ -27,17 +27,18 @@ that report belongs to `main` after each merge.
 Pull-request CI generates `lcov.info` and enables the shared coverage action's
 ratchet check. It adds no coverage-publication step of its own: it does not
 invoke the CodeScene CLI, receive `CS_ACCESS_TOKEN`, or publish a CodeScene
-Check Run. The pinned `generate-coverage` revision still archives the report it
-generated under its own `Archive coverage` step, which runs unconditionally and
-takes no opt-out, so the report does remain a short-lived run artefact. That
-archive is a property of the shared action rather than a publication this
-repository requests, and it crosses no credential.
+Check Run. It also passes the action's `publish-artefact: 'false'` input, which
+suppresses the action's own `Archive coverage` step, so the report is not
+archived at all. That opt-out is an input this repository sets rather than a
+publication it requests, and no credential crosses with it: the report stays on
+the runner that measured it.
 
 The `coverage-main.yml` workflow remains the sole owner of persistent coverage
 state. On pushes to `main`, it runs the same coverage workload, advances the
-ratchet baseline, and uploads the resulting LCOV report to CodeScene. Its
-manual dispatch remains a read-only warm-run diagnostic and does not replace
-the ratchet baseline.
+ratchet baseline, and uploads the resulting LCOV report to CodeScene. It leaves
+`publish-artefact` unset, so the action keeps its default and archives the
+report that upload reads. Its manual dispatch remains a read-only warm-run
+diagnostic and does not replace the ratchet baseline.
 
 CodeScene's project-analysis schedule and its policy for displaying a coverage
 gate when data is unavailable are project settings. They are deliberately not
@@ -64,12 +65,12 @@ modelled by repository workflows.
   it cannot give a pull request a verdict derived from the wrong commit.
 - The historical hostile-artefact validators remain standalone maintenance
   tools; no active workflow downloads pull-request coverage.
-- The run artefact the shared action archives is readable by any step in the
-  pull-request job that can read the workspace. It is not a trust boundary this
-  repository relies on, because nothing downstream consumes it: the credential
-  never enters a pull-request job, and no submission path reads the artefact.
-  Removing it would require a `generate-coverage` input that the pinned
-  revision does not offer.
+- The report the shared action generates is not archived on a pull request,
+  because that lane passes `publish-artefact: 'false'`. Had it been archived,
+  it would be readable by any step in the pull-request job that can read the
+  workspace. That is not a trust boundary this repository relies on, because
+  nothing downstream consumes it: the credential never enters a pull-request
+  job, and no submission path reads the report.
 - This decision supersedes ADR-022. Its threat analysis remains the reason a
   CodeScene credential must never return to pull-request-controlled execution.
 
@@ -85,6 +86,10 @@ names, and are driven against synthetic workflow text so a detector that
 stopped matching cannot pass by finding nothing. A further test verifies that
 the main workflow uploads the LCOV report generated earlier in the same job.
 
-What these tests do not cover is the archive step inside the pinned shared
-action. A repository contract cannot observe a step it does not declare, so the
-residual artefact named above is recorded here rather than enforced.
+The archive step lives inside the pinned shared action, so no scan of this
+repository's steps can see it. The contract therefore observes it the only way
+it can: the pull-request coverage call must pass the publication opt-out, and a
+detector fails any coverage call that omits it or supplies a value the action
+does not compare against. A further test holds the two lanes apart, requiring
+the pull-request lane to decline the archive and forbidding the main workflow
+from passing the input that would suppress the upload CodeScene reads.

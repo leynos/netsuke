@@ -973,11 +973,13 @@ gate work on a GitHub-hosted runner (leynos/shared-actions#446); and restores
 the cache service variables that `mozilla-actions/sccache-action` overwrites.
 
 `generate-coverage` is deliberately ahead, at
-`77ea10341249024e22ec5d9069e3caa7596e0d4f`. From that revision the ratchet
-baseline is published only on a push to `refs/heads/main`; before it every run
-that reached the save step published, so each pull request advanced the
-baseline it was then measured against, and a warm-run dispatch of
-`coverage-main.yml` replaced the generation it was measuring. A contract in
+`a5765019912a8ab6882b12db049c7cde635f3a85`. From an earlier revision the
+ratchet baseline is published only on a push to `refs/heads/main`; before that
+every run that reached the save step published, so each pull request advanced
+the baseline it was then measured against, and a warm-run dispatch of
+`coverage-main.yml` replaced the generation it was measuring. The revision
+above adds the `publish-artefact` input the pull-request lane uses to suppress
+the action's own archive. A contract in
 `tests/workflow_contracts/ratchet_publication_test.py` asserts that pin by
 value, so a bump that moved it backwards would fail rather than quietly
 returning the old behaviour.
@@ -1468,7 +1470,9 @@ Pull-request CI generates `lcov.info` and runs the shared coverage action with
 ratchet mode enabled. The ratchet compares changed-line coverage with the
 baseline written from `main`. Pull requests do not upload the report as an
 artefact, receive `CS_ACCESS_TOKEN`, invoke CodeScene, or create a CodeScene
-Check Run.
+Check Run. The pull-request lane also tells the action not to archive its own
+report, by passing `publish-artefact: 'false'`; the main workflow leaves that
+input unset, so the archive its upload reads is still produced.
 
 The `coverage-main.yml` workflow owns persistent coverage data. A push to
 `main` runs the same coverage workload, advances the ratchet baseline, and
@@ -1483,11 +1487,12 @@ analyses that commit; re-running a pull-request workflow is neither a baseline
 refresh nor a substitute for that analysis.
 
 Workflow contract tests keep the boundary explicit: the pull-request coverage
-step must retain ratchet mode, the artefact upload and privileged submission
-workflow must remain absent, and the main workflow must upload the report
-generated earlier in its job. The standalone hostile-artefact validators under
-`scripts/` remain available for maintenance use, but no active workflow
-downloads pull-request coverage.
+step must retain ratchet mode and pass the publication opt-out, the artefact
+upload and privileged submission workflow must remain absent, and the main
+workflow must upload the report generated earlier in its job without setting
+that opt-out. The standalone hostile-artefact validators under `scripts/`
+remain available for maintenance use, but no active workflow downloads
+pull-request coverage.
 
 `make test` runs the non-doctest suite through
 [cargo-nextest](https://nexte.st/) and the doctests separately. CI pins the

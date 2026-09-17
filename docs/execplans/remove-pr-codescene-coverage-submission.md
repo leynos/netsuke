@@ -152,14 +152,16 @@ The superseding record it introduced is ADR-025, not ADR-024. ADR-024 was
 claimed by main's recursive-workspace-search decision before this branch
 rebased, and this branch renumbered rather than colliding.
 
-Two review findings were dispositioned rather than implemented. The request to
-add an artefact-publication opt-out to `generate-coverage` and re-pin the
-callers landed in a different repository whose own tests assert the archive
-step's behaviour; ADR-025 now records the residual artefact instead, and the
-repository contract forbids the netsuke-owned publication surface structurally.
-The request to index this plan in `docs/contents.md` was declined because that
-file indexes the `execplans/` directory and links no individual plan, so adding
-one would break the established convention.
+Two review findings were dispositioned at the time. The request to add an
+artefact-publication opt-out to `generate-coverage` and re-pin the callers
+landed in a different repository whose own tests assert the archive step's
+behaviour. That work has since been completed: the opt-out was added to the
+shared action, both callers were re-pinned to the merged revision, and the
+workflow contract now asserts it in both directions, so ADR-025 records an
+enforced boundary rather than a residual artefact. The request to index this
+plan in `docs/contents.md` was declined because that file indexes the
+`execplans/` directory and links no individual plan, so adding one would break
+the established convention.
 
 ## Context and orientation
 
@@ -170,10 +172,10 @@ so the two sections cannot be read as disagreeing.
 `.github/workflows/ci.yml` generates `lcov.info` for pull requests and invokes
 the shared coverage action with the ratchet enabled. At the time of writing it
 uploaded that file as the `pr-coverage-lcov` artefact; that step was removed,
-and the pull-request job now adds no publication step of its own. The pinned
-`generate-coverage` revision still archives the report under its own
-unconditional `Archive coverage` step, which takes no opt-out. ADR-025 records
-that residual artefact and why no repository contract can observe it.
+and the pull-request job now adds no publication step of its own. The
+pull-request call passes the action's `publish-artefact: 'false'` input, which
+suppresses the action's own `Archive coverage` step, so the job archives
+nothing. ADR-025 records that boundary and the contract that holds it.
 
 `.github/workflows/coverage-pr-submit.yml` was a privileged `workflow_run`
 consumer. It downloaded and validated the untrusted artefact, ran
@@ -209,6 +211,7 @@ Trace links:
 
 ```plaintext
 ARCH-PR-LOCAL -> EP-M1 -> workflow contract: PR ratchet present and PR artefact absent
+ARCH-PR-LOCAL -> EP-M1 -> workflow contract: PR lane passes the publication opt-out
 ARCH-MAIN-AUTHORITATIVE -> EP-M1 -> workflow contract: main ratchet and upload present
 ARCH-NO-PR-CODESCENE -> EP-M1 -> repository search: no PR CodeScene submission workflow
 ARCH-DOCUMENTED-REVERSAL -> EP-M2 -> superseding ADR and developer guide
@@ -223,16 +226,19 @@ so deterministic structural tests are proportionate and exhaustive over the
 owned YAML documents.
 
 - Obligation: `ARCH-PR-LOCAL`. Pull-request CI generates coverage with the
-  ratchet enabled and does not upload `pr-coverage-lcov` or call CodeScene.
-  Method: deterministic workflow-contract test. Rationale: the relevant
-  workflow has a finite step list and explicit action inputs. Domain: every
-  step in the PR `build-test` job and every workflow path. Artefact: the
-  relevant module under `tests/workflow_contracts/` selected after repository
-  inspection. Evidence: the focused pytest command fails before deletion
-  because the artefact step and trusted workflow exist, then passes after
-  implementation. Non-vacuity: the test also asserts the positive witness that
-  `Test and Measure Coverage` remains present with `with-ratchet: 'true'`; a
-  fixture mutation that restores the artefact step must fail.
+  ratchet enabled, does not upload `pr-coverage-lcov` or call CodeScene, and
+  passes `publish-artefact: 'false'` to the coverage action. Method:
+  deterministic workflow-contract test. Rationale: the relevant workflow has a
+  finite step list and explicit action inputs. Domain: every step in the PR
+  `build-test` job and every workflow path. Artefact: the relevant module under
+  `tests/workflow_contracts/` selected after repository inspection. Evidence:
+  the focused pytest command fails before deletion because the artefact step
+  and trusted workflow exist, then passes after implementation. Non-vacuity:
+  the test also asserts the positive witness that `Test and Measure Coverage`
+  remains present with `with-ratchet: 'true'`; a fixture mutation that restores
+  the artefact step must fail. A detector fails any coverage call that omits
+  the opt-out, and a further test requires the pull-request lane to pass it
+  while the trunk lane leaves it unset.
 - Obligation: `ARCH-MAIN-AUTHORITATIVE`. The main workflow retains the same
   test selection, ratchet enablement, push trigger, and CodeScene upload.
   Method: deterministic workflow-contract test using the parsed workflow.
@@ -444,3 +450,14 @@ Validation on the rebased revision: `make test-workflow-contracts` 534 passed,
 2 skipped; `make check-fmt`, `make lint`, `make typecheck`, and `make test` run
 at the commit gate; the semantic post-rebase audit found every target-only path
 byte-identical, every deletion intended, and no reconstructed duplication.
+
+2026-09-17: Completed the artefact-publication opt-out in a separate
+repository. The shared `generate-coverage` action gained an optional
+`publish-artefact` input, defaulting to `true`, whose value now gates its
+`Archive coverage` step, and both netsuke callers were re-pinned to the merged
+revision. The pull-request lane passes `publish-artefact: 'false'`, so nothing
+is archived on a pull request; the trunk lane leaves the input unset, so its
+archive and the upload CodeScene reads continue. The workflow-contract tests
+were extended to assert both directions, and the earlier text in this plan and
+in ADR-025, which stated that the archive was unconditional and unobservable by
+any repository contract, was corrected.
