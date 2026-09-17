@@ -16,6 +16,7 @@ repository's 400-line file cap. It contains no tests of its own.
 from fork_fallback import (
     FORK_FALLBACK_KEYS,
     FORK_FALLBACK_RUNNER,
+    FORK_FALLBACK_RUNNERS,
     FORK_GUARD,
 )
 from runner_placement_invariants import (
@@ -217,7 +218,7 @@ def valid_fork_fallback_declarations() -> dict[str, str]:
     """
     return {
         key: (
-            _declaration(FORK_GUARD, FORK_FALLBACK_RUNNER, runner)
+            _declaration(FORK_GUARD, FORK_FALLBACK_RUNNERS[key], runner)
             if key in FORK_FALLBACK_KEYS
             else runner
         )
@@ -234,14 +235,14 @@ def _apply_guard_swapped_mutation(declarations: dict[str, str], key: str) -> Non
     """Branch on a sibling field that parses and evaluates just as well."""
     sibling = FORK_GUARD.rsplit(".", 1)[0] + ".private"
     declarations[key] = _declaration(
-        sibling, FORK_FALLBACK_RUNNER, REQUIRED_RUNNER_ASSIGNMENTS[key]
+        sibling, FORK_FALLBACK_RUNNERS[key], REQUIRED_RUNNER_ASSIGNMENTS[key]
     )
 
 
 def _apply_arms_swapped_mutation(declarations: dict[str, str], key: str) -> None:
     """Send the fork to Ubicloud, which is the runner it cannot obtain."""
     declarations[key] = _declaration(
-        FORK_GUARD, REQUIRED_RUNNER_ASSIGNMENTS[key], FORK_FALLBACK_RUNNER
+        FORK_GUARD, REQUIRED_RUNNER_ASSIGNMENTS[key], FORK_FALLBACK_RUNNERS[key]
     )
 
 
@@ -261,7 +262,7 @@ def _apply_wrong_fork_runner_mutation(declarations: dict[str, str], key: str) ->
 def _apply_hosted_on_both_arms_mutation(declarations: dict[str, str], key: str) -> None:
     """Fall back on both arms, so the lane quietly stops using Ubicloud."""
     declarations[key] = _declaration(
-        FORK_GUARD, FORK_FALLBACK_RUNNER, FORK_FALLBACK_RUNNER
+        FORK_GUARD, FORK_FALLBACK_RUNNERS[key], FORK_FALLBACK_RUNNERS[key]
     )
 
 
@@ -275,10 +276,25 @@ def _apply_arm_where_no_fork_reaches_mutation(
     )
 
 
+def _apply_wrong_fork_image_mutation(declarations: dict[str, str], key: str) -> None:
+    """Send the compatibility lane's fork to the current hosted image.
+
+    `ubuntu-latest` is hosted, is Linux, and is the right answer for every
+    other lane, so the platform check and the owned-arm check both pass. Only a
+    per-lane expectation separates it from `ubuntu-22.04`. Without this case
+    the mapping is dead: one shared constant reads identically over every lane
+    the repository actually declares.
+    """
+    target = "netsukefile-test.netsukefile"
+    declarations[target] = _declaration(
+        FORK_GUARD, FORK_FALLBACK_RUNNER, REQUIRED_RUNNER_ASSIGNMENTS[target]
+    )
+
+
 def _apply_line_break_mutation(declarations: dict[str, str], key: str) -> None:
     """Indent the continuation deeper, which keeps the break in the value."""
     declarations[key] = _declaration(
-        FORK_GUARD, FORK_FALLBACK_RUNNER, REQUIRED_RUNNER_ASSIGNMENTS[key]
+        FORK_GUARD, FORK_FALLBACK_RUNNERS[key], REQUIRED_RUNNER_ASSIGNMENTS[key]
     ).replace(" && ", "\n&& ", 1)
 
 
@@ -290,6 +306,7 @@ _FORK_FALLBACK_MUTATIONS = {
     "wrong-fork-runner": _apply_wrong_fork_runner_mutation,
     "hosted-on-both-arms": _apply_hosted_on_both_arms_mutation,
     "arm-where-no-fork-reaches": _apply_arm_where_no_fork_reaches_mutation,
+    "wrong-fork-image": _apply_wrong_fork_image_mutation,
     "line-break": _apply_line_break_mutation,
 }
 
