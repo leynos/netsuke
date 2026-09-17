@@ -48,21 +48,9 @@ HUGE_SECONDS: typ.Final[int] = 2**60
 
 
 def _workflow(watchdog: int, timeout_minutes: int) -> dict[str, dict[str, object]]:
-    """Return one document declaring a single coverage job.
-
-    Parameters
-    ----------
-    watchdog : int
-        The watchdog budget in seconds, set at job level as both of this
-        repository's workflows set it.
-    timeout_minutes : int
-        The job's ``timeout-minutes``.
-
-    Returns
-    -------
-    dict[str, dict[str, object]]
-        A document map as ``coverage_lanes_of`` takes.
-    """
+    """Return one document declaring a single coverage job."""
+    # The watchdog sits at job level because both of this repository's
+    # workflows declare it there.
     return {
         "ci.yml": {
             "jobs": {
@@ -77,36 +65,14 @@ def _workflow(watchdog: int, timeout_minutes: int) -> dict[str, dict[str, object
 
 
 def _watchdog_read(watchdog: int) -> fractions.Fraction:
-    """Return the watchdog budget the lane reader takes from a document.
-
-    Parameters
-    ----------
-    watchdog : int
-        The value to declare.
-
-    Returns
-    -------
-    fractions.Fraction
-        What the reader made of it.
-    """
+    """Return the watchdog budget the lane reader takes from a document."""
     (lane,) = coverage_lanes_of(_workflow(watchdog, timeout_minutes=65))
     assert lane.watchdog is not None, "the job declares a watchdog at job level"
     return lane.watchdog
 
 
 def _job_ceiling_read(timeout_minutes: int) -> fractions.Fraction:
-    """Return the job ceiling the lane reader takes from a document.
-
-    Parameters
-    ----------
-    timeout_minutes : int
-        The ``timeout-minutes`` to declare.
-
-    Returns
-    -------
-    fractions.Fraction
-        The ceiling in seconds.
-    """
+    """Return the job ceiling in seconds, converted from its minutes."""
     (lane,) = coverage_lanes_of(_workflow(1800, timeout_minutes=timeout_minutes))
     assert lane.job_timeout is not None, "the job declares timeout-minutes"
     return lane.job_timeout
@@ -115,22 +81,11 @@ def _job_ceiling_read(timeout_minutes: int) -> fractions.Fraction:
 def _assert_orders_strictly(
     larger: fractions.Fraction, smaller: fractions.Fraction, what: str
 ) -> None:
-    """Assert an exact ordering, and that a float would have lost it.
-
-    The second assertion is what keeps the first honest. These cases
-    exist to catch a term reverting to a float, so a case whose two
-    inputs stopped colliding as floats would pass without exercising
-    anything, and would go on passing after the defect returned.
-
-    Parameters
-    ----------
-    larger : fractions.Fraction
-        The greater of the two readings.
-    smaller : fractions.Fraction
-        The lesser.
-    what : str
-        What is being ordered, for the message.
-    """
+    """Assert an exact ordering, and that a float would have lost it."""
+    # The second assertion keeps the first honest. These cases exist to
+    # catch a term reverting to a float, so one whose two inputs stopped
+    # colliding as floats would pass without exercising anything, and
+    # would go on passing after the defect returned.
     assert larger > smaller, f"{what} must order strictly"
     # RUF069 is right in general and wrong here: comparing two floats
     # for equality is the assertion, not an oversight. These two must
@@ -204,22 +159,10 @@ def test_the_job_ceiling_arithmetic_stays_exact() -> None:
 
 
 def _config(whole_run: int, *, grace: bool = True) -> str:
-    """Return a configuration declaring one profile's tiers.
-
-    Parameters
-    ----------
-    whole_run : int
-        The ``global-timeout`` in seconds.
-    grace : bool
-        Whether the profile declares a ``grace-period``. Without one
-        nextest's own default applies, and that default is a term of the
-        allowance like any other, so both spellings are driven.
-
-    Returns
-    -------
-    str
-        The configuration text.
-    """
+    """Return a configuration declaring one profile's tiers."""
+    # Both spellings of the grace period are driven: without a declared
+    # one nextest's default applies, and that default is a term of the
+    # allowance like any other.
     declared = ', grace-period = "5s"' if grace else ""
     return (
         "[profile.default]\n"
@@ -256,25 +199,10 @@ def test_the_termination_allowance_stays_exact() -> None:
 
 
 def _watchdog_floor(whole_run: int, *, grace: bool = True) -> fractions.Fraction:
-    """Return the watchdog floor the ordering contract derives.
-
-    This is the expression ``whole_run_ordering.watchdog_required_for``
-    evaluates, rebuilt here from its parts so that a term reverting to a
-    float fails against the composition rather than against a helper.
-
-    Parameters
-    ----------
-    whole_run : int
-        The whole-run budget in seconds.
-    grace : bool
-        Whether the profile declares a ``grace-period``.
-
-    Returns
-    -------
-    fractions.Fraction
-        The smallest watchdog covering the whole run, nextest's
-        termination procedure and a cold build.
-    """
+    """Return the watchdog floor the ordering contract derives."""
+    # The expression `whole_run_ordering.watchdog_required_for`
+    # evaluates, rebuilt from its parts so that a term reverting to a
+    # float fails against the composition rather than against a helper.
     config_text = _config(whole_run, grace=grace)
     budget = global_timeout(config_text, profile="default")
     assert budget is not None, "the profile declares a global-timeout"

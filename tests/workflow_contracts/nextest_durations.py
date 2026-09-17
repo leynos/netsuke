@@ -323,10 +323,17 @@ def display_seconds(duration: str) -> float:
     the two behind different names means a caller chooses which it
     wants rather than getting the lossy one by default.
 
+    Parameters
+    ----------
+    duration : str
+        A duration as nextest spells it, such as ``"60s"``.
+
     Returns
     -------
     float
-        The duration in seconds, rounded to what a float can hold.
+        The duration in seconds, rounded to what a float can hold. The
+        text is read by :func:`seconds`, so a duration nextest would
+        refuse is refused here in the same way.
 
     Examples
     --------

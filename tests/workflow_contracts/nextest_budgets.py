@@ -21,11 +21,7 @@ import tomllib
 import typing as typ
 from itertools import starmap
 
-from nextest_durations import (
-    NextestConfigurationError,
-    UnboundedTestError,
-    seconds,
-)
+from nextest_durations import NextestConfigurationError, UnboundedTestError, seconds
 from timeout_budgets import (
     CAPPED_PROFILE,
     NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS,
@@ -335,7 +331,8 @@ def termination_allowance(config_text: str) -> fractions.Fraction:
     the second is a fixed margin for the teardown and report writing
     that follow it. A single floor over the two would absorb every grace
     period below the margin, so raising one would look free until the
-    run it cancelled.
+    run it cancelled. Both terms are exact so that the sum is: a float
+    in either would convert the whole of it back, silently.
 
     Parameters
     ----------
@@ -345,9 +342,7 @@ def termination_allowance(config_text: str) -> fractions.Fraction:
     Returns
     -------
     fractions.Fraction
-        The grace period plus the safety margin, exactly. Both terms
-        are exact so that the sum is: a float in either would convert
-        the whole of it back silently.
+        The grace period plus the safety margin, exactly.
     """
     return grace_period(config_text) + TERMINATION_SAFETY_MARGIN_SECONDS
 
