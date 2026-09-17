@@ -1,11 +1,12 @@
 """Contract tests keeping the Python toolchain pins in sync.
 
-The Makefile pins the Ruff and ty releases its gates run under, and
-``.github/workflows/ci.yml`` re-declares the same pins as workflow ``env``
-values (Make's ``?=`` assignments yield to the environment, so the workflow
-values control CI). A drifted pair silently runs different rule sets locally
-and in CI, which surfaces as version-skew lint failures far from the edit
-that caused them.
+The Makefile pins the Ruff, Interrogate, and ty releases its gates run under.
+``.github/workflows/ci.yml`` re-declares the Ruff and ty pins as workflow
+``env`` values (Make's ``?=`` assignments yield to the environment, so the
+workflow values control CI). Interrogate runs through the same Makefile target
+in both environments. A drifted pair silently runs different rule sets locally
+and in CI, which surfaces as version-skew lint failures far from the edit that
+caused them.
 
 These tests parse both files and assert the pins agree, without asserting
 any specific version: bumping a pin is routine, and must simply happen in
@@ -16,7 +17,13 @@ the build-and-package workflow default.
 Run via ``make test-workflow-contracts``.
 """
 
+import os
 import re
+import shlex
+
+# This contract invokes `make` through a controlled command shim.
+# ruff: ignore[suspicious-subprocess-import] - the boundary is under test.
+import subprocess
 import typing as typ
 
 import pytest
@@ -25,6 +32,7 @@ from workflow_loading import (
     MAKEFILE_PATH,
     PACKAGE_WORKFLOW_PATH,
     RELEASE_WORKFLOW_PATH,
+    REPO_ROOT,
     load_workflow,
     require_mapping,
 )
@@ -32,8 +40,50 @@ from workflow_loading import (
 if typ.TYPE_CHECKING:
     from pathlib import Path
 
+    from cmd_mox import CmdMox
+
+#: Exercise Makefile commands without resolving their third-party tools.
+pytest_plugins: tuple[str, ...] = ("cmd_mox.pytest_plugin",)
+
 #: Pins that must agree between the Makefile and the CI workflow env block.
 SYNCED_PINS = ("RUFF_VERSION", "TY_VERSION", "PYTHON_BASELINE")
+
+#: Python sources whose dedicated coverage policy excludes them from Interrogate.
+INTERROGATE_EXCLUDED_FILES: tuple[str, ...] = (
+    "scripts/generate_typos_config.py",
+    "scripts/typos_rollout_check.py",
+    "scripts/typos_rollout.py",
+    "scripts/typos_rollout_cache.py",
+    "scripts/typos_rollout_http.py",
+    "scripts/tests/conftest.py",
+    "scripts/tests/test_typos_rollout.py",
+    "scripts/tests/test_typos_rollout_check.py",
+    "scripts/tests/test_typos_rollout_hardening.py",
+    "scripts/tests/test_typos_rollout_refresh.py",
+    "scripts/tests/typos_rollout_test_support.py",
+)
+
+#: Repository-owned Python roots that the quality targets must scan.
+PYTHON_SOURCES: tuple[str, ...] = (
+    ".github/scripts",
+    "scripts",
+    "tests/workflow_contracts",
+)
+
+#: Parsed shell tokens for the pinned Interrogate Makefile command.
+INTERROGATE_COMMAND: tuple[str, ...] = (
+    "$(UV_ENV)",
+    "$(UV)",
+    "tool",
+    "run",
+    "--python",
+    "$(PYTHON_BASELINE)",
+    "--from",
+    "interrogate==$(INTERROGATE_VERSION)",
+    "interrogate",
+    "--fail-under",
+    "100",
+)
 
 
 def _makefile_variable(name: str) -> str:
@@ -77,9 +127,9 @@ def test_ci_env_pin_matches_makefile_default(name: str) -> None:
     )
 
 
-@pytest.mark.parametrize("name", ["RUFF_VERSION", "TY_VERSION"])
+@pytest.mark.parametrize("name", ["RUFF_VERSION", "INTERROGATE_VERSION", "TY_VERSION"])
 def test_tool_pins_are_exact_versions(name: str) -> None:
-    """The Ruff and ty pins are exact dotted versions, not ranges or 'latest'."""
+    """The Ruff, Interrogate, and ty pins are exact dotted versions."""
     value = _makefile_variable(name)
     assert re.fullmatch(r"\d+\.\d+\.\d+", value), (
         f"{name} must pin an exact X.Y.Z release so local runs and CI "
@@ -190,6 +240,66 @@ def _makefile_target(target: str) -> tuple[list[str], str]:
     return prerequisites, match.group(2)
 
 
+def _makefile_command(name: str) -> list[str]:
+    """Return one continued Makefile command assignment as shell tokens."""
+    text = MAKEFILE_PATH.read_text(encoding="utf-8")
+    match = re.search(
+        rf"^{re.escape(name)} = ((?:[^\n]*\\\n)*[^\n]+)$",
+        text,
+        flags=re.MULTILINE,
+    )
+    assert match is not None, f"the Makefile must define the {name} command"
+    command = match.group(1).replace("\\\n", " ")
+    return shlex.split(command)
+
+
+def _mocked_command(cmd_mox: CmdMox, name: str) -> str:
+    """Return a CmdMox shim path for a Makefile command variable."""
+    shim_dir = cmd_mox.environment.shim_dir
+    assert shim_dir is not None, "CmdMox must create its command shim directory"
+    shim_name = f"{name}.cmd" if os.name == "nt" else name
+    return str(shim_dir / shim_name)
+
+
+def _run_python_lint(cmd_mox: CmdMox) -> subprocess.CompletedProcess[str]:
+    """Run ``lint-python`` through the controlled uv command shim."""
+    # The command and its arguments are fixed test values; no untrusted input
+    # reaches the child process.
+    # ruff: ignore[subprocess-without-shell-equals-true] - shell is False.
+    return subprocess.run(
+        [  # ruff: ignore[start-process-with-partial-path] - CmdMox controls the test command path.
+            "make",
+            f"UV={_mocked_command(cmd_mox, 'uv')}",
+            "lint-python",
+        ],
+        check=False,
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+    )
+
+
+def _interrogate_invocation(baseline: str, version: str) -> list[str]:
+    """Return the expanded Interrogate arguments required by ``lint-python``."""
+    return [
+        "tool",
+        "run",
+        "--python",
+        baseline,
+        "--from",
+        f"interrogate=={version}",
+        "interrogate",
+        "--fail-under",
+        "100",
+        *(
+            argument
+            for path in INTERROGATE_EXCLUDED_FILES
+            for argument in ("--exclude", path)
+        ),
+        *PYTHON_SOURCES,
+    ]
+
+
 def test_python_quality_targets_preserve_their_dependency_graph() -> None:
     """The Rust umbrella gates depend on their corresponding Python gates."""
     lint_prerequisites, _ = _makefile_target("lint")
@@ -211,6 +321,7 @@ def test_python_quality_targets_run_the_pinned_local_commands() -> None:
             "$(PYLINT) $(PYLINT_TARGETS)",
             "$(DF12_PYLINT) $(PYLINT_TARGETS)",
             "$(AMBRLEAKS) $(PYTHON_SOURCES)",
+            "$(INTERROGATE) $(INTERROGATE_EXCLUDES) $(PYTHON_SOURCES)",
         ),
         "typecheck-python": (
             "ty check --python-version $(PYTHON_BASELINE)",
@@ -226,3 +337,64 @@ def test_python_quality_targets_run_the_pinned_local_commands() -> None:
             f"{target} must preserve its pinned Python command wiring; "
             f"missing {missing!r} from {recipe!r}"
         )
+
+
+def test_interrogate_pin_is_the_selected_release() -> None:
+    """Interrogate remains pinned to the issue-selected 1.7.0 release."""
+    assert _makefile_variable("INTERROGATE_VERSION") == "1.7.0", (
+        "INTERROGATE_VERSION must remain pinned to interrogate 1.7.0"
+    )
+
+
+def test_interrogate_command_uses_the_pinned_baseline_and_release() -> None:
+    """Interrogate selects the baseline interpreter and exact pinned package."""
+    assert _makefile_command("INTERROGATE") == list(INTERROGATE_COMMAND), (
+        "INTERROGATE must select the baseline, pinned package, executable, "
+        "and 100% threshold"
+    )
+
+
+@pytest.mark.parametrize(
+    ("platform_name", "expected_suffix"), [("nt", ".cmd"), ("posix", "")]
+)
+def test_mocked_command_uses_the_platform_launcher_suffix(
+    cmd_mox: CmdMox,
+    monkeypatch: pytest.MonkeyPatch,
+    platform_name: str,
+    expected_suffix: str,
+) -> None:
+    """The controlled Make command selects CmdMox's platform launcher."""
+    monkeypatch.setattr(os, "name", platform_name)
+
+    command = _mocked_command(cmd_mox, "uv")
+
+    assert command.endswith(f"uv{expected_suffix}"), (
+        f"{platform_name} must select the CmdMox uv launcher suffix "
+        f"{expected_suffix!r}, got {command!r}"
+    )
+
+
+def test_lint_python_runs_interrogate_over_the_documented_scope(
+    cmd_mox: CmdMox,
+) -> None:
+    """The lint boundary expands the Interrogate baseline, exclusions, and scope."""
+    uv = cmd_mox.spy("uv").returns(exit_code=0)
+
+    result = _run_python_lint(cmd_mox)
+
+    assert result.returncode == 0, (
+        f"the controlled lint-python command must succeed; stderr was: {result.stderr}"
+    )
+    interrogate_calls = [
+        invocation.args
+        for invocation in uv.invocations
+        if invocation.args[:2] == ["tool", "run"] and "interrogate" in invocation.args
+    ]
+    expected = _interrogate_invocation(
+        _makefile_variable("PYTHON_BASELINE"),
+        _makefile_variable("INTERROGATE_VERSION"),
+    )
+    assert interrogate_calls == [expected], (
+        "lint-python must pass Interrogate its baseline, pin, threshold, "
+        "spelling exclusions, and owned source scope"
+    )

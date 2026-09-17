@@ -1,16 +1,13 @@
 """Adapt Cargo and Rustdoc commands for the documentation-coverage gate.
 
-This module owns process invocation and Rustdoc's generated coverage artefact.
-``doc_coverage_runner`` owns repository policy and target selection, while the
-command-line entry point owns argument parsing, reporting, and exit codes.
+This module owns process invocation and Rustdoc coverage artefacts; the runner owns
+policy and target selection, while the CLI owns parsing, reporting, and exit codes.
 """
 
 import dataclasses as dc
 import json
 import os
 import pathlib
-
-# Driving Cargo and Rustdoc as child processes is this module's whole purpose.
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the boundary is deliberate.
 
 from doc_coverage_model import Coverage, DocTarget
@@ -22,8 +19,12 @@ _COUNT_INVARIANT = "counts must be non-negative integers with with_docs <= total
 class CargoAdapter:
     """Adapt one explicit Cargo executable to coverage measurements.
 
-    The runner depends on this narrow interface instead of process globals, so
-    its target selection and aggregation can be tested without subprocesses.
+    This interface enables subprocess-free target selection and aggregation.
+
+    Parameters
+    ----------
+    executable : str
+        Explicit Cargo executable used for adapter subprocesses.
     """
 
     executable: str
@@ -45,6 +46,7 @@ class CoveragePayloadShapeError(TypeError):
     """Report that Rustdoc emitted a coverage payload other than an object."""
 
     def __init__(self) -> None:
+        """Initialise the error for a non-object coverage payload."""
         super().__init__("expected an object")
 
 
@@ -52,6 +54,7 @@ class CoverageEntryShapeError(ValueError):
     """Report a Rustdoc coverage entry missing a required count."""
 
     def __init__(self) -> None:
+        """Initialise the error for a malformed coverage entry."""
         super().__init__("entry must provide total and with_docs")
 
 
@@ -59,6 +62,7 @@ class CoverageCountError(ValueError):
     """Report a Rustdoc coverage count that violates the count invariants."""
 
     def __init__(self) -> None:
+        """Initialise the error for an invalid coverage count."""
         super().__init__(_COUNT_INVARIANT)
 
 
@@ -66,6 +70,15 @@ class CoverageOutputError(RuntimeError):
     """Report that Rustdoc produced no usable coverage JSON for a target."""
 
     def __init__(self, target: DocTarget, detail: str) -> None:
+        """Initialise the error with the affected target and diagnostic detail.
+
+        Parameters
+        ----------
+        target : DocTarget
+            Cargo target for which Rustdoc emitted no coverage JSON.
+        detail : str
+            Diagnostic detail explaining why coverage JSON was unavailable.
+        """
         super().__init__(
             f"cargo rustdoc for {target.package} {target.kind}"
             f" ({target.name or 'lib'}) did not emit coverage JSON: {detail}"
@@ -161,13 +174,8 @@ def aggregate_coverage_payload(per_file: object) -> Coverage:
     Raises
     ------
     CoveragePayloadShapeError
-        If Rustdoc's payload is not an object.
-
-    Notes
-    -----
-    Per-entry validation is delegated to :func:`coverage_from_entry`, so
-    :class:`CoverageEntryShapeError` and :class:`CoverageCountError` propagate
-    from here whenever an entry violates a coverage-count invariant.
+        If Rustdoc's payload is not an object. Entry shape and count errors
+        propagate from :func:`coverage_from_entry`.
     """
     match per_file:
         case dict() as entries:
@@ -197,8 +205,7 @@ def coverage_from_entry(entry: object) -> Coverage:
     CoverageEntryShapeError
         If the entry is not an object carrying both required counts.
     CoverageCountError
-        If a count is not a non-negative integer, or documented items exceed
-        total items.
+        If a count is invalid or documented items exceed the total.
     """
     match entry:
         case {"total": raw_total, "with_docs": raw_with_docs}:
@@ -227,8 +234,7 @@ def coverage_count(count: object) -> int:
     Raises
     ------
     CoverageCountError
-        If the value is not an integer count, including JSON booleans and
-        non-finite floats, or if it is negative.
+        If the value is invalid, negative, non-finite, or a JSON boolean.
     """
     match count:
         # JSON booleans decode to ``bool``, which is an ``int`` subclass, so
