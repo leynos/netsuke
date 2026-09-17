@@ -19,7 +19,7 @@ use anyhow::{Context, Result, bail, ensure};
 use environment::{expand_env, manifest_env_reader};
 use netsuke::{
     ast::{Recipe, StringOrList, Target},
-    manifest,
+    manifest::{self, ManifestBudgetLimits},
     stdlib::NetworkPolicy,
 };
 use rstest_bdd_macros::{given, then, when};
@@ -83,10 +83,11 @@ fn parse_manifest_inner(world: &TestWorld, path: &ManifestPath) {
         path.as_str().to_owned()
     };
     let env_reader = manifest_env_reader(world);
-    let outcome = manifest::from_path_with_policy_and_env(
+    let outcome = manifest::from_path_with_policy_and_env_and_limits(
         &manifest_path,
         NetworkPolicy::default(),
         &env_reader,
+        world.manifest_budget_limits.get().unwrap_or_default(),
         None,
     )
     .map_err(|e| display_error_chain(e.as_ref()));
@@ -122,6 +123,19 @@ fn set_env_var_step(world: &TestWorld, key: EnvVarKey, value: EnvVarValue) -> Re
 #[given("the environment variable {key:string} is unset")]
 fn unset_env_var_step(world: &TestWorld, key: EnvVarKey) -> Result<()> {
     shared_mutate_env_var(world, key, None)
+}
+
+#[given("the manifest budget uses small test limits")]
+fn configure_manifest_budget(world: &TestWorld) {
+    world.manifest_budget_limits.set(ManifestBudgetLimits {
+        evaluation_fuel: 64,
+        manifest_fuel: 256,
+        rendered_value_bytes: 16,
+        rendered_manifest_bytes: 128,
+        source_bytes: 1_024,
+        foreach_cardinality: 2,
+        expanded_entries: 4,
+    });
 }
 
 #[expect(

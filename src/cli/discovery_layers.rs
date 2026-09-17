@@ -19,7 +19,7 @@ use super::diagnostics::{
     BoundedConfigPath, ProjectLayerDeduplication, debug_optional_config_path_from_fields,
 };
 use super::paths::{PathNormalizer, comparison_key, project_scope_file};
-use super::project_policy::scope_primary_project_layer;
+use super::project_policy::scope_project_chain;
 pub(super) use super::project_policy::{
     ScopedFileLayer, retain_layers_and_resolve_json, scope_selected_primary_layer,
 };
@@ -146,10 +146,10 @@ pub(super) fn collect_file_layers_with_normalizer_and_trace(
         })
     });
     let project_trace_path = BoundedConfigPath::from_path(project_file.as_deref());
-    if let Some(index) = project_index {
+    if let Some(index) = project_index.filter(|index| *index + 1 == file_layers.value.len()) {
         return (
             Some(ProjectScopeTrace::Included(project_trace_path)),
-            Ok(scope_primary_project_layer(file_layers.value, index)),
+            Ok(scope_project_chain(file_layers.value, index)),
         );
     }
 
@@ -184,7 +184,9 @@ fn merge_project_scope_layers(
         // A shared file reached by both roots has two authorities. Retain both
         // occurrences so project quarantine cannot consume an operator grant,
         // and an operator occurrence cannot suppress a project restriction.
-        let appended_layer_count = if project_index.is_some() {
+        let project_is_root =
+            project_index.is_some_and(|index| index + 1 == discovered_layer_count);
+        let appended_layer_count = if project_is_root {
             0
         } else {
             project_layer_count
@@ -207,18 +209,7 @@ fn merge_project_scope_layers(
                 deduplication: Some(deduplication),
             })
         };
-        let layers = if let Some(index) = project_index {
-            scope_primary_project_layer(discovered_layers, index)
-        } else {
-            discovered_layers
-                .into_iter()
-                .map(ScopedFileLayer::operator)
-                .chain(scope_primary_project_layer(
-                    project_layers,
-                    project_layer_count.saturating_sub(1),
-                ))
-                .collect()
-        };
+        let layers = scope_merged_layers(discovered_layers, project_layers, project_index);
         (trace, layers)
     });
     match result {
@@ -226,6 +217,28 @@ fn merge_project_scope_layers(
         Err(err) => (Some(error_trace), Err(err)),
     }
 }
+
+/// Assign authority to merged discovery roots without discarding shared occurrences.
+///
+/// Only the project-scope merge calls this helper. A project file inherited by
+/// an operator root retains its occurrence before the separate project chain.
+fn scope_merged_layers(
+    discovered_layers: Vec<MergeLayer<'static>>,
+    project_layers: Vec<MergeLayer<'static>>,
+    project_index: Option<usize>,
+) -> Vec<ScopedFileLayer> {
+    let project_is_root = project_index.is_some_and(|index| index + 1 == discovered_layers.len());
+    if let Some(index) = project_index.filter(|_| project_is_root) {
+        return scope_project_chain(discovered_layers, index);
+    }
+    let primary_index = project_layers.len().saturating_sub(1);
+    discovered_layers
+        .into_iter()
+        .map(ScopedFileLayer::operator)
+        .chain(scope_project_chain(project_layers, primary_index))
+        .collect()
+}
+
 /// Load the project-scope layers rooted at `project_file`, if one was found.
 ///
 /// # Errors

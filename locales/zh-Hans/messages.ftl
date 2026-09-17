@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = 启用默认拒绝时仍然允许的主机名�
 cli.flag.fetch_block_host.help = 始终阻止的主机名，即使在别处被允许。
 cli.flag.fetch_default_deny.help = 默认拒绝所有主机；只放行声明的允许列表。
 cli.flag.trust_project_fetch_policy.help = 允许项目配置扩大 fetch 策略的授权范围。
+
+cli.flag.manifest_evaluation_fuel.help = 限制每次清单评估的 MiniJinja 指令数。
+cli.flag.manifest_fuel.help = 限制单个清单中的 MiniJinja 指令总数。
+cli.flag.manifest_rendered_value_bytes.help = 限制渲染到单个清单值中的字节数。
+cli.flag.manifest_rendered_manifest_bytes.help = 限制渲染到单个清单中的总字节数。
+cli.flag.manifest_source_bytes.help = 限制每个清单消耗的模板和宏源字节数。
+cli.flag.manifest_foreach_cardinality.help = 限制单次 foreach 展开处理的值数量。
+cli.flag.manifest_expanded_entries.help = 限制从单个清单展开的目标和操作数量。
 cli.flag.json.help = 输出机器可读的 JSON。
 cli.flag.no_input.help = 绝不读取交互式输入。
 cli.flag.color.help = 彩色输出策略（auto、always、never）。
@@ -425,3 +433,4 @@ example.errors_found = { $count ->
     [0] 未发现错误。
    *[other] 发现 { $count } 个错误。
 }
+manifest.budget.exceeded = 清单资源预算在 { $stage } 阶段达到 { $limit } 后耗尽。

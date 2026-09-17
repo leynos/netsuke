@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = Enwau gwesteiwyr a ganiateir pan fo'r gwrthod r
 cli.flag.fetch_block_host.help = Enwau gwesteiwyr a rwystrir bob amser, hyd yn oed os caniateir hwy mewn man arall.
 cli.flag.fetch_default_deny.help = Gwrthod pob gwesteiwr yn rhagosodedig; caniatáu'r rhestr a ddatganwyd yn unig.
 cli.flag.trust_project_fetch_policy.help = Caniatáu i ffurfweddiad y prosiect ehangu caniatadau polisi fetch.
+
+cli.flag.manifest_evaluation_fuel.help = Cyfyngu ar gyfarwyddiadau MiniJinja ar gyfer pob gwerthusiad maniffest.
+cli.flag.manifest_fuel.help = Cyfyngu ar gyfarwyddiadau MiniJinja ar draws un maniffest.
+cli.flag.manifest_rendered_value_bytes.help = Cyfyngu ar y beitiau a roddir mewn un gwerth maniffest.
+cli.flag.manifest_rendered_manifest_bytes.help = Cyfyngu ar gyfanswm y beitiau a roddir ar draws un maniffest.
+cli.flag.manifest_source_bytes.help = Cyfyngu ar feintiau beit ffynhonnell templedi a macros a ddefnyddir fesul maniffest.
+cli.flag.manifest_foreach_cardinality.help = Cyfyngu ar y gwerthoedd a brosesir gan un ehangiad foreach.
+cli.flag.manifest_expanded_entries.help = Cyfyngu ar y targedau a'r gweithredoedd a ehangir o un maniffest.
 cli.flag.json.help = Allbynnu JSON y gall pheiriant ei ddarllen.
 cli.flag.no_input.help = Peidio byth â darllen mewnbwn rhyngweithiol.
 cli.flag.color.help = Polisi allbwn lliw (auto, always, never).
@@ -436,3 +444,4 @@ example.errors_found = { $count ->
     [many] Cafwyd hyd i { $count } gwall.
    *[other] Cafwyd hyd i { $count } gwall.
 }
+manifest.budget.exceeded = Daeth cyllideb adnoddau'r maniffest i ben yn ystod { $stage } ar ôl cyrraedd { $limit }.

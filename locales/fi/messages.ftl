@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = Sallitut isäntänimet, kun oletusesto on käyt
 cli.flag.fetch_block_host.help = Isäntänimet, jotka estetään aina, vaikka ne sallittaisiin muualla.
 cli.flag.fetch_default_deny.help = Estä kaikki isännät oletuksena; salli vain määritelty luettelo.
 cli.flag.trust_project_fetch_policy.help = Salli projektin määritysten laajentaa fetch-käytännön myönnettyjä oikeuksia.
+
+cli.flag.manifest_evaluation_fuel.help = Rajoita MiniJinjan ohjeiden määrää kussakin manifestin arvioinnissa.
+cli.flag.manifest_fuel.help = Rajoita MiniJinjan ohjeiden määrää yhden manifestin aikana.
+cli.flag.manifest_rendered_value_bytes.help = Rajoita yhteen manifestiarvoon tuotettujen tavujen määrää.
+cli.flag.manifest_rendered_manifest_bytes.help = Rajoita yhden manifestin aikana tuotettujen tavujen kokonaismäärää.
+cli.flag.manifest_source_bytes.help = Rajoita manifestikohtaisesti kulutettujen malline- ja makrolähteiden tavujen määrää.
+cli.flag.manifest_foreach_cardinality.help = Rajoita yhden foreach-laajennuksen käsittelemien arvojen määrää.
+cli.flag.manifest_expanded_entries.help = Rajoita yhdestä manifestista laajennettujen kohteiden ja toimintojen määrää.
 cli.flag.json.help = Tuota koneluettavaa JSON-tulostetta.
 cli.flag.no_input.help = Älä koskaan lue vuorovaikutteista syötettä.
 cli.flag.color.help = Väritulosteen käytäntö (auto, always, never).
@@ -430,3 +438,4 @@ example.errors_found = { $count ->
     [one] Löytyi { $count } virhe.
    *[other] Löytyi { $count } virhettä.
 }
+manifest.budget.exceeded = Manifestin resurssibudjetti loppui vaiheen { $stage } aikana, kun saavutettiin { $limit }.

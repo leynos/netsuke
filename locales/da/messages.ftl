@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = Værtsnavne, der tillades, når standardafvisni
 cli.flag.fetch_block_host.help = Værtsnavne, der altid blokeres, også hvis de er tilladt andetsteds.
 cli.flag.fetch_default_deny.help = Afvis alle værter som standard; tillad kun den erklærede liste.
 cli.flag.trust_project_fetch_policy.help = Tillad projektkonfigurationen at udvide tilladelserne i fetch-politikken.
+
+cli.flag.manifest_evaluation_fuel.help = Begræns MiniJinja-instruktioner for hver manifest-evaluering.
+cli.flag.manifest_fuel.help = Begræns MiniJinja-instruktioner i ét manifest.
+cli.flag.manifest_rendered_value_bytes.help = Begræns antallet af bytes, der gengives i én manifestværdi.
+cli.flag.manifest_rendered_manifest_bytes.help = Begræns det samlede antal bytes, der gengives i ét manifest.
+cli.flag.manifest_source_bytes.help = Begræns bytes fra skabelon- og makrokilde, der forbruges pr. manifest.
+cli.flag.manifest_foreach_cardinality.help = Begræns værdier, der behandles af én foreach-udvidelse.
+cli.flag.manifest_expanded_entries.help = Begræns mål og handlinger, der udvides fra ét manifest.
 cli.flag.json.help = Udskriv maskinlæsbart JSON.
 cli.flag.no_input.help = Læs aldrig interaktivt input.
 cli.flag.color.help = Politik for farvet output (auto, always, never).
@@ -428,3 +436,4 @@ example.errors_found = { $count ->
     [one] { $count } fejl fundet.
    *[other] { $count } fejl fundet.
 }
+manifest.budget.exceeded = Manifestets ressourcebudget blev opbrugt under { $stage } efter at have nået { $limit }.

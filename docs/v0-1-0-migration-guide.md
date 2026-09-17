@@ -62,6 +62,22 @@ impact
 | Fetch redirects              | Every redirect destination is now evaluated against the network policy before it is requested, so a redirect can no longer reach a host, scheme, or address the policy refuses. Chains stop after five redirects, a repeated destination is refused as a loop, and URL credentials are removed when the origin changes.                               | [Users' guide](users-guide.md#network-fetch-policy) and [ADR-023](adr-023-revalidate-fetch-redirects.md) |
 | File-reading filters         | The `contents`, `linecount`, `hash`, and `digest` filters now read under one 8 MiB default byte budget; a symlink final component is rejected unless `follow_symlinks=true` opts in, while FIFOs and devices are rejected outright, and per-call `max_bytes` can only narrow the budget.                                                              | [Configure file reading limits](users-guide.md#configure-file-reading-limits)                            |
 
+## Bound manifest evaluation
+
+The v0.1.0 release applies resource limits while Netsuke parses, expands, and
+renders a manifest, including in `help targets` queries. The defaults are
+1,000,000 instructions per evaluation, 100,000,000 instructions per manifest, 1
+MiB per rendered value, 16 MiB of rendered output, 4 MiB of template source,
+10,000 `foreach` values, and 50,000 expanded entries.
+
+The limits use the existing configuration precedence. Operators can set or
+narrow them through trusted configuration, environment variables, or CLI flags;
+project configuration and its `extends` chain may narrow an established limit
+but cannot widen it. Invalid or non-positive values now fail configuration
+loading. See the [resource budgets](users-guide.md#resource-budgets) section
+for the complete key, environment-variable, and flag reference, along with the
+failure diagnostic.
+
 ## Nothing to change for existing callers
 
 The convenience wrappers keep their child-process behaviour: the child inherits

@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = Tên máy chủ được phép khi bật chế 
 cli.flag.fetch_block_host.help = Tên máy chủ luôn bị chặn, kể cả khi được phép ở nơi khác.
 cli.flag.fetch_default_deny.help = Mặc định từ chối mọi máy chủ; chỉ cho phép danh sách đã khai báo.
 cli.flag.trust_project_fetch_policy.help = Cho phép cấu hình dự án mở rộng các quyền được cấp trong chính sách fetch.
+
+cli.flag.manifest_evaluation_fuel.help = Giới hạn số lệnh MiniJinja cho mỗi lần đánh giá manifest.
+cli.flag.manifest_fuel.help = Giới hạn số lệnh MiniJinja trong một manifest.
+cli.flag.manifest_rendered_value_bytes.help = Giới hạn số byte được render vào một giá trị manifest.
+cli.flag.manifest_rendered_manifest_bytes.help = Giới hạn tổng số byte được render trong một manifest.
+cli.flag.manifest_source_bytes.help = Giới hạn số byte mã nguồn template và macro được sử dụng cho mỗi manifest.
+cli.flag.manifest_foreach_cardinality.help = Giới hạn số giá trị được xử lý bởi một lần mở rộng foreach.
+cli.flag.manifest_expanded_entries.help = Giới hạn số mục tiêu và hành động được mở rộng từ một manifest.
 cli.flag.json.help = Xuất dữ liệu JSON máy đọc được.
 cli.flag.no_input.help = Không bao giờ đọc dữ liệu nhập tương tác.
 cli.flag.color.help = Chính sách xuất màu (auto, always, never).
@@ -426,3 +434,4 @@ example.errors_found = { $count ->
     [0] Không tìm thấy lỗi nào.
    *[other] Tìm thấy { $count } lỗi.
 }
+manifest.budget.exceeded = Đã dùng hết ngân sách tài nguyên của manifest trong { $stage } sau khi đạt { $limit }.

@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = डिफ़ॉल्ट अस्वीकृ�
 cli.flag.fetch_block_host.help = वे होस्ट नाम जो सदैव अवरुद्ध रहते हैं, भले ही अन्यत्र अनुमत हों।
 cli.flag.fetch_default_deny.help = डिफ़ॉल्ट रूप से सभी होस्ट अस्वीकार करें; केवल घोषित सूची को अनुमति दें।
 cli.flag.trust_project_fetch_policy.help = प्रोजेक्ट कॉन्फ़िगरेशन को fetch नीति की अनुमतियाँ बढ़ाने की अनुमति दें।
+
+cli.flag.manifest_evaluation_fuel.help = हर मैनिफ़ेस्ट मूल्यांकन के लिए MiniJinja निर्देशों की सीमा तय करें।
+cli.flag.manifest_fuel.help = एक मैनिफ़ेस्ट में MiniJinja निर्देशों की सीमा तय करें।
+cli.flag.manifest_rendered_value_bytes.help = एक मैनिफ़ेस्ट मान में रेंडर किए गए बाइट्स की सीमा तय करें।
+cli.flag.manifest_rendered_manifest_bytes.help = एक मैनिफ़ेस्ट में रेंडर किए गए कुल बाइट्स की सीमा तय करें।
+cli.flag.manifest_source_bytes.help = प्रत्येक मैनिफ़ेस्ट के लिए उपयोग किए गए टेम्पलेट और मैक्रो स्रोत बाइट्स की सीमा तय करें।
+cli.flag.manifest_foreach_cardinality.help = एक foreach विस्तार द्वारा संसाधित मानों की सीमा तय करें।
+cli.flag.manifest_expanded_entries.help = एक मैनिफ़ेस्ट से विस्तारित लक्ष्यों और कार्रवाइयों की सीमा तय करें।
 cli.flag.json.help = मशीन-पठनीय JSON निर्गत करें।
 cli.flag.no_input.help = संवादात्मक इनपुट कभी न पढ़ें।
 cli.flag.color.help = रंगीन निर्गम की नीति (auto, always, never)।
@@ -431,3 +439,4 @@ example.errors_found = { $count ->
     [one] { $count } त्रुटि मिली।
    *[other] { $count } त्रुटियाँ मिलीं।
 }
+manifest.budget.exceeded = { $stage } के दौरान { $limit } तक पहुँचने के बाद मैनिफ़ेस्ट का संसाधन बजट समाप्त हो गया।

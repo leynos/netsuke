@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = Nomes de host permitidos quando a negação pad
 cli.flag.fetch_block_host.help = Nomes de host sempre bloqueados, mesmo que permitidos em outro lugar.
 cli.flag.fetch_default_deny.help = Negar todos os hosts por padrão; permitir apenas a lista declarada.
 cli.flag.trust_project_fetch_policy.help = Permitir que a configuração do projeto amplie as permissões da política de fetch.
+
+cli.flag.manifest_evaluation_fuel.help = Limite o número de instruções MiniJinja para cada avaliação do manifesto.
+cli.flag.manifest_fuel.help = Limite o número de instruções MiniJinja em um manifesto.
+cli.flag.manifest_rendered_value_bytes.help = Limite o número de bytes renderizados em um valor do manifesto.
+cli.flag.manifest_rendered_manifest_bytes.help = Limite o total de bytes renderizados em um manifesto.
+cli.flag.manifest_source_bytes.help = Limite os bytes de origem de modelos e macros consumidos por manifesto.
+cli.flag.manifest_foreach_cardinality.help = Limite o número de valores processados por uma expansão foreach.
+cli.flag.manifest_expanded_entries.help = Limite o número de alvos e ações expandidos de um manifesto.
 cli.flag.json.help = Emitir saída JSON legível por máquina.
 cli.flag.no_input.help = Nunca ler entrada interativa.
 cli.flag.color.help = Política de cor na saída (auto, always, never).
@@ -430,3 +438,4 @@ example.errors_found = { $count ->
     [one] { $count } erro encontrado.
    *[other] { $count } erros encontrados.
 }
+manifest.budget.exceeded = O orçamento de recursos do manifesto foi esgotado durante { $stage } após atingir { $limit }.

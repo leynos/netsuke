@@ -1,8 +1,9 @@
-//! Preserve primary-project provenance and quarantine fetch-policy fields.
+//! Preserve project-chain provenance and quarantine fetch-policy and budget fields.
 //!
 //! Validates each untrusted request before the generic merge removes it from
 //! the project layer, preserving configuration errors rather than treating
-//! malformed policy values as absent values.
+//! malformed policy values as absent values. Fetch grants are primary-scoped;
+//! budget restrictions apply throughout an automatically discovered project chain.
 
 use ortho_config::{MergeLayer, OrthoError, OrthoResult};
 use serde::de::DeserializeOwned;
@@ -11,9 +12,9 @@ use std::path::Path;
 use std::sync::Arc;
 
 use super::super::validation::validation_error;
-use super::ProjectFetchPolicyRequest;
 use super::json::json_from_value;
 use super::paths::{PathNormalizer, comparison_key, project_scope_file};
+use super::{ProjectFetchPolicyRequest, ProjectManifestBudgetRequest};
 
 /// Identify whether a loaded file is the primary project configuration.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -30,6 +31,8 @@ pub(super) struct ScopedFileLayer {
     pub(super) layer: MergeLayer<'static>,
     /// Authority inherited from the root that loaded this occurrence.
     scope: FileScope,
+    /// Whether this occurrence belongs to the automatically discovered project chain.
+    project_budget: bool,
 }
 
 impl ScopedFileLayer {
@@ -38,6 +41,7 @@ impl ScopedFileLayer {
         Self {
             layer,
             scope: FileScope::Operator,
+            project_budget: false,
         }
     }
 }
@@ -57,6 +61,24 @@ pub(super) fn scope_primary_project_layer(
             } else {
                 FileScope::Operator
             },
+            project_budget: false,
+        })
+        .collect()
+}
+
+/// Retain budget authority across one automatically discovered project chain.
+///
+/// Chain boundaries are available when discovery returns its first root or
+/// appends the project root. Fetch-policy quarantine remains primary-only.
+pub(super) fn scope_project_chain(
+    layers: Vec<MergeLayer<'static>>,
+    project_index: usize,
+) -> Vec<ScopedFileLayer> {
+    scope_primary_project_layer(layers, project_index)
+        .into_iter()
+        .map(|mut layer| {
+            layer.project_budget = true;
+            layer
         })
         .collect()
 }
@@ -91,6 +113,8 @@ pub(super) struct ResolvedFileLayers {
     pub(super) json_preference: bool,
     /// Quarantined request from the primary project layer, when present.
     pub(super) project_request: Option<ProjectFetchPolicyRequest>,
+    /// Quarantined manifest-budget restrictions from project layers.
+    pub(super) project_budget_request: ProjectManifestBudgetRequest,
     /// Original typed errors that prevent the generic merge from succeeding.
     pub(super) errors: Vec<Arc<OrthoError>>,
 }
@@ -104,23 +128,99 @@ pub(super) fn retain_layers_and_resolve_json(layers: Vec<ScopedFileLayer>) -> Re
         json_preference: super::Cli::default().json,
         ..ResolvedFileLayers::default()
     };
-    for ScopedFileLayer { layer, scope } in layers {
+    for ScopedFileLayer {
+        layer,
+        scope,
+        project_budget,
+    } in layers
+    {
         let path = layer.path().map(ToOwned::to_owned);
         let mut value = layer.into_value();
         if let Some(json) = json_from_value(&value) {
             resolved.json_preference = json;
         }
+        if project_budget {
+            quarantine_manifest_budget(&mut value, &mut resolved);
+        }
         if scope == FileScope::Project {
-            match take_project_fetch_policy_request(&mut value) {
-                Ok(request) => resolved.project_request = Some(request),
-                Err(error) => resolved.errors.push(error),
-            }
+            quarantine_fetch_policy(&mut value, &mut resolved);
         }
         resolved
             .layers
             .push(MergeLayer::file(Cow::Owned(value), path));
     }
     resolved
+}
+
+/// Retain a project-chain budget request or its deferred validation error.
+///
+/// Discovery calls this only for project-budget occurrences so generic merging
+/// cannot widen operator ceilings, while later JSON preferences remain readable.
+fn quarantine_manifest_budget(value: &mut serde_json::Value, resolved: &mut ResolvedFileLayers) {
+    match take_project_manifest_budget_request(value) {
+        Ok(request) => resolved.project_budget_request.narrow_with(&request),
+        Err(error) => resolved.errors.push(error),
+    }
+}
+
+/// Retain a primary-project fetch request or its deferred validation error.
+///
+/// Keep this primary-only operation separate from whole-chain budget quarantine
+/// to preserve their different authority boundaries during discovery.
+fn quarantine_fetch_policy(value: &mut serde_json::Value, resolved: &mut ResolvedFileLayers) {
+    match take_project_fetch_policy_request(value) {
+        Ok(request) => resolved.project_request = Some(request),
+        Err(error) => resolved.errors.push(error),
+    }
+}
+
+/// Validate and quarantine manifest limits before generic configuration merging.
+fn take_project_manifest_budget_request(
+    value: &mut serde_json::Value,
+) -> OrthoResult<ProjectManifestBudgetRequest> {
+    let Some(fields) = value.as_object_mut() else {
+        return Ok(ProjectManifestBudgetRequest::default());
+    };
+    let request = ProjectManifestBudgetRequest {
+        evaluation_fuel: parse_project_policy_field(fields, "manifest_evaluation_fuel")?,
+        manifest_fuel: parse_project_policy_field(fields, "manifest_fuel")?,
+        rendered_value_bytes: parse_project_policy_field(fields, "manifest_rendered_value_bytes")?,
+        rendered_manifest_bytes: parse_project_policy_field(
+            fields,
+            "manifest_rendered_manifest_bytes",
+        )?,
+        source_bytes: parse_project_policy_field(fields, "manifest_source_bytes")?,
+        foreach_cardinality: parse_project_policy_field(fields, "manifest_foreach_cardinality")?,
+        expanded_entries: parse_project_policy_field(fields, "manifest_expanded_entries")?,
+    };
+    for field in [
+        "manifest_evaluation_fuel",
+        "manifest_fuel",
+        "manifest_rendered_value_bytes",
+        "manifest_rendered_manifest_bytes",
+        "manifest_source_bytes",
+        "manifest_foreach_cardinality",
+        "manifest_expanded_entries",
+    ] {
+        if fields
+            .get(field)
+            .is_some_and(|candidate| candidate.as_u64() == Some(0))
+        {
+            return Err(validation_error(field, "must be greater than zero"));
+        }
+    }
+    for field in [
+        "manifest_evaluation_fuel",
+        "manifest_fuel",
+        "manifest_rendered_value_bytes",
+        "manifest_rendered_manifest_bytes",
+        "manifest_source_bytes",
+        "manifest_foreach_cardinality",
+        "manifest_expanded_entries",
+    ] {
+        fields.remove(field);
+    }
+    Ok(request)
 }
 
 /// Capture and remove project fetch-policy grants from one JSON layer.

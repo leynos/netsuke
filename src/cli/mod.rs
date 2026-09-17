@@ -19,6 +19,7 @@ mod discovery;
 mod environment;
 mod fetch_policy;
 mod help;
+mod manifest_budget_policy;
 mod merge;
 mod merge_apply;
 mod merge_input;

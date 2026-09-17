@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = نام میزبان‌هایی که هنگام 
 cli.flag.fetch_block_host.help = نام میزبان‌هایی که همیشه مسدودند، حتی اگر جای دیگری مجاز باشند.
 cli.flag.fetch_default_deny.help = ردّ همهٔ میزبان‌ها به‌صورت پیش‌فرض؛ تنها فهرست اعلام‌شده مجاز است.
 cli.flag.trust_project_fetch_policy.help = اجازه دهید پیکربندی پروژه مجوزهای سیاست fetch را گسترش دهد.
+
+cli.flag.manifest_evaluation_fuel.help = ‏محدود کردن دستورهای MiniJinja برای هر ارزیابی مانیفست.
+cli.flag.manifest_fuel.help = ‏محدود کردن دستورهای MiniJinja در یک مانیفست.
+cli.flag.manifest_rendered_value_bytes.help = ‏محدود کردن بایت‌های رندرشده در یک مقدار مانیفست.
+cli.flag.manifest_rendered_manifest_bytes.help = ‏محدود کردن مجموع بایت‌های رندرشده در یک مانیفست.
+cli.flag.manifest_source_bytes.help = ‏محدود کردن بایت‌های منبع قالب و ماکروهای مصرف‌شده برای هر مانیفست.
+cli.flag.manifest_foreach_cardinality.help = ‏محدود کردن مقادیر پردازش‌شده در یک گسترش foreach.
+cli.flag.manifest_expanded_entries.help = ‏محدود کردن هدف‌ها و کنش‌های گسترش‌یافته از یک مانیفست.
 cli.flag.json.help = خروجی JSON خوانا برای ماشین تولید کن.
 cli.flag.no_input.help = هرگز ورودی تعاملی نخوان.
 cli.flag.color.help = سیاست خروجی رنگی (auto، always، never).
@@ -428,3 +436,4 @@ example.errors_found = { $count ->
     [one] ‏{ $count } خطا یافت شد.
    *[other] ‏{ $count } خطا یافت شد.
 }
+manifest.budget.exceeded = ‏بودجهٔ منابع مانیفست هنگام { $stage } پس از رسیدن به { $limit } به پایان رسید.

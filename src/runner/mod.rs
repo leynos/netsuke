@@ -112,6 +112,7 @@ impl Default for BuildTargets<'_> {
 /// Returns an error if manifest generation or the Ninja process fails.
 pub fn run(cli: &Cli, prefs: OutputPrefs) -> Result<()> {
     run_with_ninja_program_resolver(cli, prefs, None, process::resolve_ninja_program)
+        .map_err(error::promote_manifest_budget)
 }
 
 /// Execute parsed commands with a Ninja executable selected by the caller.
@@ -121,6 +122,7 @@ pub fn run(cli: &Cli, prefs: OutputPrefs) -> Result<()> {
 /// Returns an error if manifest generation or the selected Ninja process fails.
 pub fn run_with_ninja_program(cli: &Cli, prefs: OutputPrefs, program: &Utf8Path) -> Result<()> {
     run_with_ninja_program_resolver(cli, prefs, Some(program), || program.to_owned())
+        .map_err(error::promote_manifest_budget)
 }
 
 /// Dispatch a command after resolving Ninja only for commands that require it.
@@ -345,10 +347,16 @@ fn stage_reporting_callback(
 pub(super) fn load_manifest_with_stage_reporting(
     manifest_path: &Utf8PathBuf,
     policy: crate::stdlib::NetworkPolicy,
+    budget_limits: manifest::ManifestBudgetLimits,
     reporter: &dyn StatusReporter,
 ) -> Result<crate::ast::NetsukeManifest> {
     let mut on_stage = stage_reporting_callback(reporter);
-    generation::load_manifest_for_build(manifest_path, policy, Some(&mut on_stage))
+    generation::load_manifest_for_build_with_limits(
+        manifest_path,
+        policy,
+        budget_limits,
+        Some(&mut on_stage),
+    )
 }
 
 #[cfg(test)]

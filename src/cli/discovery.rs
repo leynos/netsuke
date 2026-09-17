@@ -12,6 +12,10 @@ use std::sync::Arc;
 use super::command::Cli;
 use crate::host_pattern::HostPattern;
 
+#[path = "discovery_budget_request.rs"]
+mod budget_request;
+pub(crate) use budget_request::ProjectManifestBudgetRequest;
+
 #[path = "discovery_environment.rs"]
 mod environment;
 pub use environment::{EnvProvider, StdEnvProvider};
@@ -93,6 +97,8 @@ pub struct DiscoveredLayers {
     json_preference: bool,
     /// Restriction request quarantined from the primary project layer.
     project_fetch_policy_request: Option<ProjectFetchPolicyRequest>,
+    /// Manifest-budget restrictions quarantined before generic merging.
+    project_manifest_budget_request: ProjectManifestBudgetRequest,
     /// Loading errors deferred beside the layers that may still be usable.
     errors: Vec<Arc<ortho_config::OrthoError>>,
     /// Bounded trace for composition boundaries to emit after the merge.
@@ -123,8 +129,14 @@ impl DiscoveredLayers {
         Vec<MergeLayer<'static>>,
         Vec<Arc<ortho_config::OrthoError>>,
         Option<ProjectFetchPolicyRequest>,
+        ProjectManifestBudgetRequest,
     ) {
-        (self.layers, self.errors, self.project_fetch_policy_request)
+        (
+            self.layers,
+            self.errors,
+            self.project_fetch_policy_request,
+            self.project_manifest_budget_request,
+        )
     }
 }
 
@@ -186,6 +198,7 @@ fn discover_file_layers_with_normalizer(
                 layers: resolved.layers,
                 json_preference: resolved.json_preference,
                 project_fetch_policy_request: resolved.project_request,
+                project_manifest_budget_request: resolved.project_budget_request,
                 errors: resolved.errors,
                 diagnostics,
             }
@@ -194,6 +207,7 @@ fn discover_file_layers_with_normalizer(
             layers: Vec::new(),
             json_preference: Cli::default().json,
             project_fetch_policy_request: None,
+            project_manifest_budget_request: ProjectManifestBudgetRequest::default(),
             errors: vec![error],
             diagnostics,
         },
@@ -360,3 +374,7 @@ mod config_path_precedence_tests;
 #[cfg(test)]
 #[path = "discovery_unit_tests.rs"]
 mod unit_tests;
+
+#[cfg(test)]
+#[path = "discovery_budget_tests.rs"]
+mod budget_tests;

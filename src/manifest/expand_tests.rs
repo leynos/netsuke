@@ -22,6 +22,9 @@ mod description_cases;
 #[path = "expand_test_cases/foreach_property_cases.rs"]
 mod foreach_property_cases;
 
+#[path = "expand_test_cases/foreach_laziness_cases.rs"]
+mod foreach_laziness_cases;
+
 #[path = "expand_test_cases/structure_cases.rs"]
 mod structure_cases;
 

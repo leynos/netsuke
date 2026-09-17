@@ -144,6 +144,8 @@ operator, user, and contributor references are easier to find.
 - [ADR-017](adr-017-require-utf8-ninja-invocation-paths.md):
   UTF-8 Ninja invocation-path boundary decision record, with early diagnostics
   for unsupported build-file and working-directory encodings.
+- [adr-018-bound-manifest-template-evaluation.md](adr-018-bound-manifest-template-evaluation.md):
+  Manifest evaluation resource budget decision record.
 - [ADR-018](adr-018-terminate-ninja-options-before-build-target-operands.md):
   Ninja target operand-boundary decision record, preventing forwarded targets
   from being parsed as Ninja options.

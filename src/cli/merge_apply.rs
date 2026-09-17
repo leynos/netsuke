@@ -21,6 +21,13 @@ pub(super) fn apply_config(parsed: &Cli, config: CliConfig) -> Cli {
         fetch_block_host: config.fetch_block_host,
         fetch_default_deny: config.fetch_default_deny,
         trust_project_fetch_policy: config.trust_project_fetch_policy,
+        manifest_evaluation_fuel: config.manifest_evaluation_fuel,
+        manifest_fuel: config.manifest_fuel,
+        manifest_rendered_value_bytes: config.manifest_rendered_value_bytes,
+        manifest_rendered_manifest_bytes: config.manifest_rendered_manifest_bytes,
+        manifest_source_bytes: config.manifest_source_bytes,
+        manifest_foreach_cardinality: config.manifest_foreach_cardinality,
+        manifest_expanded_entries: config.manifest_expanded_entries,
         json: config.json,
         interaction: InteractionArgs {
             no_input: config.no_input.is_enabled(),
@@ -37,13 +44,9 @@ pub(super) fn apply_config(parsed: &Cli, config: CliConfig) -> Cli {
 /// Resolve effective build defaults from root and subcommand target settings.
 fn resolved_build_config(config: &CliConfig) -> BuildConfig {
     let mut build = config.cmds.build.clone();
-    if build.targets.is_empty() {
-        build.targets.clone_from(&config.default_targets);
-    } else if !config.default_targets.is_empty() {
-        let mut targets = config.default_targets.clone();
-        targets.extend(build.targets);
-        build.targets = targets;
-    }
+    let mut targets = config.default_targets.clone();
+    targets.extend(build.targets);
+    build.targets = targets;
     build
 }
 

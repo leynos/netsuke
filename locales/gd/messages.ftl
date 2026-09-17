@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = Ainmean òstairean a tha ceadaichte nuair a tha
 cli.flag.fetch_block_host.help = Ainmean òstairean a thèid a bhacadh an-còmhnaidh, ged a bhiodh iad ceadaichte an àite eile.
 cli.flag.fetch_default_deny.help = Diùlt a h-uile òstair mar bhun-roghainn; na ceadaich ach an liosta a chaidh ainmeachadh.
 cli.flag.trust_project_fetch_policy.help = Leig le rèiteachadh a’ phròiseict ceadan poileasaidh fetch a leudachadh.
+
+cli.flag.manifest_evaluation_fuel.help = Cuir crìoch air stiùiridhean MiniJinja airson gach measadh air foirm-liosta.
+cli.flag.manifest_fuel.help = Cuir crìoch air stiùiridhean MiniJinja thar aon fhoirm-liosta.
+cli.flag.manifest_rendered_value_bytes.help = Cuir crìoch air na beitean a chuirear ann an aon luach foirm-liosta.
+cli.flag.manifest_rendered_manifest_bytes.help = Cuir crìoch air na beitean iomlan a chuirear thar aon fhoirm-liosta.
+cli.flag.manifest_source_bytes.help = Cuir crìoch air beitean tùs nan teamplaidean agus macros a thèid an cleachdadh gach foirm-liosta.
+cli.flag.manifest_foreach_cardinality.help = Cuir crìoch air na luachan a làimhsicheas aon leudachadh foreach.
+cli.flag.manifest_expanded_entries.help = Cuir crìoch air na targaidean agus gnìomhan a leudaichear à aon fhoirm-liosta.
 cli.flag.json.help = Cuir a-mach JSON a leughas inneal.
 cli.flag.no_input.help = Na leugh cur-a-steach eadar-ghnìomhach idir.
 cli.flag.color.help = Poileasaidh an às-chuir dhathte (auto, always, never).
@@ -433,3 +441,4 @@ example.errors_found = { $count ->
     [few] Chaidh { $count } mearachdan a lorg.
    *[other] Chaidh { $count } mearachd a lorg.
 }
+manifest.budget.exceeded = Dh’fhalbh buidseat ghoireasan na foirm-liosta rè { $stage } às dèidh { $limit } a ruigsinn.
