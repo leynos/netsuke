@@ -33,7 +33,7 @@ the ordinary case. It matters because the same policy is load-bearing for all
 four filters, and a check-then-open race is exactly the defect the Unix path
 was built to avoid.
 
-## Decision Drivers
+## Decision drivers
 
 - The Windows default path must reject a symlink, mount point (junction), and
   any other prohibited reparse point without relying on a separate pre-open
@@ -116,7 +116,7 @@ Take no code change and record the residual risk. Rejected: the repository
 would keep a check-then-open window in a security-relevant policy when a
 same-handle alternative is available through an already-vendored dependency.
 
-## Decision Outcome
+## Decision outcome
 
 Adopt Option B.
 
@@ -153,7 +153,7 @@ is therefore no interval between the decision and the read in which the
 filesystem object can change identity. This is the same argument the Unix path
 relies on, where `O_NOFOLLOW` is a property of the one `open` call.
 
-## Known Risks and Limitations
+## Known risks and limitations
 
 - `FILE_FLAG_BACKUP_SEMANTICS` is required to open a directory, which the
   regular-file check must be able to do in order to reject directories with the
@@ -168,7 +168,7 @@ relies on, where `O_NOFOLLOW` is a property of the one `open` call.
 - The Unix path is untouched. `apply_unix_open_flags` and `restore_blocking`
   keep their current behaviour byte for byte.
 
-## Architectural Rationale
+## Architectural rationale
 
 The change keeps the policy boundary where the design already puts it. All four
 filters still enter through one `open_file_checked`, which still resolves a
