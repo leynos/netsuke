@@ -18,13 +18,29 @@
 /// attributes reports an item-level `allow` of the policy lint wherever it
 /// sits, but nothing else reports a crate that has silenced the reporter. See
 /// "Enforcing the environment mandate" in the developers' guide.
-const FORBIDDEN_ALLOW_LINTS: [&str; 6] = [
+///
+/// The last two entries close a second way in, measured rather than assumed.
+/// Clippy keeps the old spelling of a renamed lint, and a renamed name still
+/// selects the lint it was renamed to, so `clippy::disallowed_method` — an
+/// alias of the policy lint — silences the policy exactly as the current name
+/// does. Ordinarily that is harmless, because the rename is reported and
+/// `renamed_and_removed_lints` is denied, so the alias is an error rather than
+/// a suppression. Allowing that lint as well hides the rename, and the alias
+/// then silences the policy in silence: measured at exit 0 where the same file
+/// without the attribute exits 101. Banning the enabler closes the whole class
+/// of alias evasions, since no alias suppresses anything while the rename that
+/// names it is still reported; banning the alias too keeps the pair honest if
+/// a future Clippy stops reporting renames. Neither name is in the scoped
+/// exemption, which covers only the two guard lints.
+const FORBIDDEN_ALLOW_LINTS: [&str; 8] = [
     "clippy::disallowed_methods",
     "clippy::style",
     "clippy::all",
     "warnings",
     "clippy::allow_attributes",
     "clippy::allow_attributes_without_reason",
+    "clippy::disallowed_method",
+    "renamed_and_removed_lints",
 ];
 
 /// Paths permitted to suppress the two guard lints, and which of those they may.

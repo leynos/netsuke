@@ -4463,6 +4463,20 @@ group silences the policy just as naming the lint does; `clippy::all` sits
 above it, and `warnings` above that. The two guard lints are included because
 silencing the reporter is the one suppression nothing else would report.
 
+The set also bans a second route in, which is worth stating because it is not
+obvious. Clippy keeps the old spelling of a renamed lint, and a renamed name
+still selects the lint it was renamed to, so `clippy::disallowed_method` — the
+alias of the policy lint — silences the policy exactly as the current name
+does. On its own that is harmless: `renamed_and_removed_lints` is denied in
+`[workspace.lints.rust]`, so the rename is reported and the alias is an error
+rather than a suppression. Allow that lint as well and the rename goes
+unreported, and the alias suppresses the policy in silence — measured at exit
+0, where the same file without the attribute exits 101. Two entries close it:
+`renamed_and_removed_lints`, because no alias suppresses anything while the
+rename naming it is still reported, and `clippy::disallowed_method` itself, so
+the pair stays honest if a future Clippy stops reporting renames. The scoped
+exemption below covers neither.
+
 Three files are exempt, and only for those two guard lints:
 `src/runner/error.rs`, `src/manifest/diagnostics/mod.rs`, and
 `src/manifest/diagnostics/yaml.rs`. Each isolates `thiserror`/`miette` derive
