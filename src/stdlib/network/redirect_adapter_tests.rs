@@ -143,14 +143,38 @@ fn every_rejection_renders_a_redacted_diagnostic() -> Result<()> {
     Ok(())
 }
 
-/// Redaction keeps the location and drops the credentials.
+/// Redaction keeps the location and drops credentials, query, and fragment.
 #[rstest]
 fn redacted_urls_keep_only_the_location() -> Result<()> {
-    let redacted = redacted_url(&parse_url(CREDENTIALED_CURRENT)?);
-    ensure!(
-        redacted == "http://allowed.example/start",
-        "redaction should keep only the location, got {redacted}",
-    );
+    let cases = [
+        (CREDENTIALED_CURRENT, "http://allowed.example/start"),
+        (
+            "http://redirect-user:redirect-secret@allowed.example/start?token=abc123",
+            "http://allowed.example/start",
+        ),
+        (
+            "http://redirect-user:redirect-secret@allowed.example/start#frag",
+            "http://allowed.example/start",
+        ),
+        (
+            "http://redirect-user:redirect-secret@allowed.example/start?token=abc123#frag",
+            "http://allowed.example/start",
+        ),
+    ];
+
+    for (raw, expected) in cases {
+        let redacted = redacted_url(&parse_url(raw)?);
+        ensure!(
+            redacted == expected,
+            "redaction should keep only the location, got {redacted} for {raw}",
+        );
+        for leaked in ["redirect-user", "redirect-secret", "token=abc123", "#frag"] {
+            ensure!(
+                !redacted.contains(leaked),
+                "redaction must not disclose {leaked}: {redacted}",
+            );
+        }
+    }
     Ok(())
 }
 

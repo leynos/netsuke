@@ -229,6 +229,62 @@ fn fetch_rejects_redirect_loops() -> Result<()> {
     Ok(())
 }
 
+/// Verify a redirect response with no `Location` header fails without a retry.
+///
+/// The adapter owns the header parse, so an absent header is diagnosed there
+/// rather than by the chain. The fixture answers once; a second request would
+/// find no queued response, so a stopped chain is what proves the fetch did not
+/// try another hop.
+#[rstest]
+fn fetch_rejects_redirect_without_a_location_header() -> Result<()> {
+    let (url, requests, server) =
+        match http::spawn_http_server_responses([HttpResponse::new(302, "")]) {
+            Ok(server) => server,
+            Err(err) if err.kind() == io::ErrorKind::PermissionDenied => return Ok(()),
+            Err(err) => bail!("spawn headerless redirector: {err}"),
+        };
+
+    let err = render_fetch(NetworkPolicy::default().allow_scheme("http")?, &url)
+        .expect_err("a redirect without a Location header should fail");
+    join_server(server, "headerless redirector")?;
+    ensure!(
+        err.to_string()
+            .contains("did not include a Location header"),
+        "expected missing-header error: {err}"
+    );
+    ensure!(
+        requests.load(std::sync::atomic::Ordering::Relaxed) == 1,
+        "a missing Location header should stop after the first request",
+    );
+    Ok(())
+}
+
+/// Verify a redirect response with an unparsable `Location` fails the same way.
+#[rstest]
+fn fetch_rejects_redirect_with_an_invalid_location_header() -> Result<()> {
+    let (url, requests, server) =
+        match http::spawn_http_server_responses([
+            HttpResponse::new(302, "").with_header("Location", "http://[::1")
+        ]) {
+            Ok(server) => server,
+            Err(err) if err.kind() == io::ErrorKind::PermissionDenied => return Ok(()),
+            Err(err) => bail!("spawn invalid-location redirector: {err}"),
+        };
+
+    let err = render_fetch(NetworkPolicy::default().allow_scheme("http")?, &url)
+        .expect_err("a redirect with an unparsable Location should fail");
+    join_server(server, "invalid-location redirector")?;
+    ensure!(
+        err.to_string().contains("Invalid redirect location"),
+        "expected invalid-location error: {err}",
+    );
+    ensure!(
+        requests.load(std::sync::atomic::Ordering::Relaxed) == 1,
+        "an unparsable Location should stop after the first request",
+    );
+    Ok(())
+}
+
 /// Verify a redirect chain exceeding the limit fails before opening another hop.
 #[rstest]
 fn fetch_rejects_redirect_chains_beyond_the_limit() -> Result<()> {

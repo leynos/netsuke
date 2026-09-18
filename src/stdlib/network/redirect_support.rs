@@ -100,10 +100,17 @@ fn invalid_location_error(current_url: &Url, details: &str) -> Error {
     )
 }
 
-/// Render `url` without userinfo for diagnostics.
+/// Render `url` without userinfo, query, or fragment for diagnostics.
+///
+/// A query string often carries a token or a signature and a fragment may carry
+/// state, so neither belongs in user-facing text. Both are cleared inside the
+/// same success branch as the userinfo, which keeps the cannot-be-a-base
+/// fallback unchanged.
 pub(super) fn redacted_url(url: &Url) -> String {
     let mut redacted = url.clone();
     if redacted.set_username("").is_ok() && redacted.set_password(None).is_ok() {
+        redacted.set_query(None);
+        redacted.set_fragment(None);
         redacted.to_string()
     } else {
         String::from("<redacted URL>")
