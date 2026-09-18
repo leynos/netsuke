@@ -18,8 +18,16 @@
 //! The parent `makefile_test_target` module supplies the repository-file and
 //! recipe-lookup helpers.
 
-use super::{read_repo_file, target_recipe};
-use anyhow::{Context, Result, ensure};
+use super::read_repo_file;
+// The recipe lookup and the shell expansion it feeds are Unix-only, so the
+// import is too: an unconditional one is an unused-import error on Windows.
+#[cfg(unix)]
+use super::target_recipe;
+use anyhow::{Result, ensure};
+// Every `context` call sits in a Unix-only helper, so the trait import is
+// gated with them.
+#[cfg(unix)]
+use anyhow::Context;
 #[cfg(unix)]
 use assert_cmd::Command;
 use camino::Utf8Path;
@@ -44,9 +52,23 @@ struct RustflagsVariable {
     name: &'static str,
     /// Whether the composed value denies warnings. The gate targets do; a
     /// plain build must not, or `make build` silently becomes a gate.
+    ///
+    /// Read only by the shell-expansion test, which needs a real shell and so
+    /// runs on Unix alone. The field stays on every platform because the table
+    /// below is one list, not one per platform.
+    #[cfg_attr(
+        not(unix),
+        expect(dead_code, reason = "read only by the Unix-only expansion test")
+    )]
     denies_warnings: bool,
     /// Whether the composed value carries the build standard's flags. The
     /// release exclusion turns on this being false.
+    ///
+    /// Read only by the shell-expansion test, as above.
+    #[cfg_attr(
+        not(unix),
+        expect(dead_code, reason = "read only by the Unix-only expansion test")
+    )]
     carries_standard: bool,
 }
 
@@ -139,6 +161,9 @@ fn shell_expression(name: &str) -> Result<String> {
 /// Read from the committed configuration, not restated: a flag the Makefile
 /// composes must be one the configuration also names, or a bare `cargo build`
 /// would not get it.
+///
+/// Only the shell-expansion tests read this, and those are Unix-only.
+#[cfg(unix)]
 fn standard_flags() -> Result<Vec<String>> {
     let config: toml::Value =
         toml::from_str(&read_repo_file(Utf8Path::new(".cargo/config.toml"))?)?;
