@@ -170,6 +170,9 @@ operator, user, and contributor references are easier to find.
 - [ADR-026](adr-026-manifest-environment-access-policy.md):
   Exact-name manifest environment policy evaluated before the reader, with
   project allow entries quarantined below the operator ceiling.
+- [ADR-027](adr-027-command-placeholder-contract.md): Command placeholder set
+  per recipe kind, the backtick-handling boundary, and the scope of the `shlex`
+  acceptance guard, with retained-legacy status for the `script:`-only forms.
 - [ADR-028](adr-028-defer-split-build-dir-harness-trim.md): Deferred trim of
   the split-build-dir harness test, with the serialized-lane measurements that
   made the figure unstable and the ten-run gate that reopens the question.

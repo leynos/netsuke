@@ -2830,6 +2830,12 @@ parse produce an IR error before an action is hashed. Ninja generation then
 receives fully expanded command text and is responsible only for preserving the
 scalar form or constructing the list-entry shell boundaries.
 
+[ADR-027](adr-027-command-placeholder-contract.md) settles which parts of this
+behaviour are promises: the marker invariant is contractual, the odd-backtick
+parity check is a conservative check that may widen without that being a
+breaking change, and the `shlex` accepted set is not a stability commitment. The
+`script:`-only `$in` and `$out` forms are retained legacy behaviour.
+
 ### 6.4 Automatic Security as a "Friendliness" Feature
 
 The concept of being "friendlier" than `make` extends beyond syntactic sugar to
