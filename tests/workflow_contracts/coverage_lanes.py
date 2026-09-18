@@ -132,6 +132,48 @@ def _coverage_steps(job: dict[str, typ.Any]) -> list[dict[str, typ.Any]]:
     ]
 
 
+def _watchdog_windows(step: dict[str, typ.Any]) -> int:
+    """Return how many cargo watchdog windows one coverage step arms.
+
+    The shared action runs `cargo llvm-cov nextest` and, when its
+    `doctests` input asks for it, an uninstrumented `cargo test --doc`
+    after that. Each invocation arms the watchdog separately, so such a
+    step can spend the whole budget twice where a step setting no input
+    spends it once. Counting one window for both would leave the second
+    uncounted in the ceiling arithmetic below, which is the sizing fault
+    issue 715 records.
+
+    The input is compared to the one spelling this repository writes,
+    ``'true'``, which is also the value the input pin in
+    ``test_execution_coverage_test`` holds both coverage producers to.
+    The action's own reader accepts more spellings than that -- ``1``,
+    ``yes`` and ``on`` are truthy to it as well -- so a step written
+    with one of those would run the doctest pass and read here as a
+    single window. That is a gap this reading accepts rather than paper
+    over, because widening it would make the count depend on a boolean
+    grammar the pin does not enforce; a producer adding a coverage step
+    in another spelling fails that pin first.
+
+    The input is read defensively, as every environment scope is: a
+    workflow that spells `with` as something other than a mapping, or
+    omits it, arms the single window the action always runs.
+
+    Parameters
+    ----------
+    step : dict[str, typ.Any]
+        The coverage step.
+
+    Returns
+    -------
+    int
+        One window, or two when the step asks for the doctest pass.
+    """
+    inputs = step.get("with")
+    if not isinstance(inputs, dict):
+        return 1
+    return 2 if inputs.get("doctests") == "true" else 1
+
+
 def _lanes_in_job(
     workflow: str,
     document: dict[str, typ.Any],
@@ -154,7 +196,11 @@ def _lanes_in_job(
     Returns
     -------
     list[CoverageLane]
-        One entry per coverage step in the job.
+        One entry per watchdog window a coverage step arms: two for a
+        step asking the action for the doctest pass, one otherwise. The
+        two entries share every field, because they are one step; what
+        differs is the second `cargo` invocation the job's ceiling has
+        to contain.
 
     Raises
     ------
@@ -188,6 +234,9 @@ def _lanes_in_job(
             nextest_profile=nextest_profile_of(document, job, step),
         )
         for index, step in enumerate(steps)
+        # Repeated rather than built twice: the windows of one step are
+        # that step's single coordinate, one per `cargo` invocation.
+        for _ in range(_watchdog_windows(step))
     ]
 
 

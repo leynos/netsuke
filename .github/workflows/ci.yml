@@ -38,7 +38,15 @@ jobs:
     # measures the peak so the next run either confirms the escalation or
     # returns the job to `-2`.
     runs-on: ubicloud-standard-4-ubuntu-2404
-    timeout-minutes: 60
+    # Ninety minutes, not sixty. The coverage step below passes
+    # `doctests: 'true'`, so the shared action runs `cargo llvm-cov nextest`
+    # and then an uninstrumented `cargo test --doc`, each arming the 1,800 s
+    # cargo watchdog of its own. The ceiling has to contain both windows, the
+    # work outside them and the margin above that sum, which is 5,400 s; a
+    # sixty-minute ceiling would cancel the job at the moment the watchdog
+    # would have reported the overrun. See "Test timeouts: the tiers this
+    # repository sets" in docs/developers-guide.md.
+    timeout-minutes: 90
     permissions:
       contents: read
     env:
