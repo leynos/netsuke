@@ -2913,7 +2913,8 @@ Linux runner. Both platforms still assert the packaged file list. See
 
 [windows-test-budget]: #windows-budget-for-the-isolated-cargo-build-tests
 [fixture-constraints]: #what-a-fixture-crate-replacement-would-have-to-preserve
-[serialized-value]: #the-nested-cargo-build-serialization-and-what-it-does-to-the-figure
+[serialized-value]:
+  #the-nested-cargo-build-serialization-and-what-it-does-to-the-figure
 
 `tests/workflow_contracts/test_execution_coverage_test.py` holds all of this:
 the coverage inputs, the denied warnings, the doctest pass and its position,
