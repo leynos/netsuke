@@ -87,10 +87,10 @@ success-output = "immediate"
 # above, which serializes it with the other build-capable child Cargo tests, so
 # it holds the group's single slot and every member behind it waits. Trimming
 # it therefore returns its group occupancy rather than its exclusive tail:
-# 152s, 149s and 113s on the three Windows runs after the group landed, against
-# the 85s above, which was measured before it. The last of those is below the
-# test's own 124.7s duration because a trim there leaves non-group work as the
-# run's next binding constraint. The repository has still
+# 152s, 149s, 113s and 95s on the four Windows runs after the group landed,
+# against the 85s above, which was measured before it. The last two are below
+# the test's own 124.7s and 115.7s durations because a trim there leaves
+# non-group work as the run's next binding constraint. The repository has still
 # decided not to spend the fidelity risk yet, and the trim remains a candidate
 # for tightening or deletion at the ten-run revisit gate that the developers'
 # guide defines under "Deferring the split-build-dir harness trim"; that

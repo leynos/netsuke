@@ -3093,7 +3093,7 @@ link**. Every other member is blocked while it holds the single slot, and the
 chain cannot finish until it releases it. Removing it therefore returns its
 whole group occupancy, not just its exclusive tail.
 
-Measured on the three Windows runs after the group landed, from the same
+Measured on the four Windows runs after the group landed, from the same
 `build-test-windows` job logs:
 
 Table: the harness test as a serialized group member, after the group landed.
@@ -3103,26 +3103,30 @@ Table: the harness test as a serialized group member, after the group landed.
 | 35266003414 | 152.0s        | 162.4s                        | 152.0s       |
 | 35266979317 | 149.0s        | 178.3s                        | 149.0s       |
 | 35272793454 | 124.7s        | 134.9s                        | 113.4s       |
+| 35400200137 | 115.7s        | 154.1s                        | 95.0s        |
 
 The rightmost column is the whole-run saving: the run's own end, less whichever
 of the trimmed group chain and the last non-group test finishes later. It is
-113s to 152s, against the 85s the uncontended reading gave. In none of the
-three runs is the harness the last test to finish — the group's cheap tail
-members trail it by under seven seconds — but a trim returns its occupancy
-rather than its exclusive tail, because the tail cannot start until the slot
-frees: in the first two runs the figure is that occupancy exactly, and in the
-third it is 113s rather than 125s only because unrelated non-group work becomes
-the run's next binding constraint once the harness is gone.
+95s to 152s, against the 85s the uncontended reading gave. In none of the four
+runs is the harness the last test to finish — the group's cheap tail members
+trail it by under seven seconds — but a trim returns its occupancy rather than
+its exclusive tail, because the tail cannot start until the slot frees: in the
+first two runs the figure is that occupancy exactly, and in the last two it
+falls short of it — 113s against 125s, and 95s against 116s — because unrelated
+non-group work becomes the run's next binding constraint once the harness is
+gone.
 
 The decision recorded above still stands, and this is a change to the evidence
 for it, not to the decision: the trim remains deferred, and it remains a
 question about fidelity rather than about seconds. What changes is that the
 number is again large enough to be worth arguing about, so the revisit gate
 below is now the thing that settles it rather than a formality. Two cautions
-belong with the table. Three Windows runs under the group is a small sample,
-and the group's own scheduling — not the test alone — produces the chain ends,
-so the figures above are readings of a serialized system rather than isolated
-measurements of the test.
+belong with the table. Four Windows runs under the group is a small sample, and
+it is not a uniform one: the first three are trunk pushes and the fourth is a
+pull-request lane, which starts from a different tree state. The group's own
+scheduling — not the test alone — produces the chain ends, so the figures above
+are readings of a serialized system rather than isolated measurements of the
+test.
 
 Anything that removes this test from the lane also removes the group's heaviest
 member, which shortens the chain for every other member behind it. A
@@ -3134,7 +3138,7 @@ makes the group entry necessary in the first place.
 **Revisit gate.** This defers the trim; it does not close it. Wait until ten
 runs of the split Windows lane exist under the serialization group, so the
 harness test's share of the `build-test-windows` job is known under the shape
-that now exists rather than estimated from three runs. The gate was written
+that now exists rather than estimated from four runs. The gate was written
 against the uncontended reading and the criterion has moved with the evidence:
 with the group in place the test holds a serial slot, so the question is no
 longer whether its exclusive tail has settled below 85s — it plainly has not —
