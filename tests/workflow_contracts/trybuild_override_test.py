@@ -22,13 +22,12 @@ Run via ``make test-workflow-contracts``.
 
 import re
 import tomllib
-from pathlib import Path
 
 import pytest
+from cargo_test_targets import PACKAGE_NAME, target_sources
 from rust_source_reading import code_only
 from workflow_loading import REPO_ROOT
 
-TESTS_DIR = REPO_ROOT / "tests"
 NEXTEST_CONFIG = REPO_ROOT / ".config" / "nextest.toml"
 
 #: A construction of the harness, not a mention of the crate. The crate may be
@@ -70,9 +69,12 @@ def _filter_covers(filter_text: str, target: str) -> bool:
     """Return whether one override filter selects `target`'s binary exactly."""
     if _NEGATION.search(filter_text):
         return False
-    stem = Path(target).stem
+    # A `binary_id` is `package::binary` and is compared whole. Accepting its
+    # last segment alone would let an identically named target in another
+    # package of the workspace stand in for this one, which is the same
+    # containment defect the exact selector exists to close.
     return any(
-        stem in {selector, selector.rsplit("::", 1)[-1]}
+        selector in {target, f"{PACKAGE_NAME}::{target}"}
         for selector in _BINARY_SELECTOR.findall(filter_text)
     )
 
@@ -80,9 +82,12 @@ def _filter_covers(filter_text: str, target: str) -> bool:
 def _trybuild_targets() -> list[str]:
     """Return every integration-test target that constructs a trybuild harness."""
     return sorted(
-        path.relative_to(REPO_ROOT).as_posix()
-        for path in TESTS_DIR.rglob("*.rs")
-        if _constructs_trybuild(path.read_text(encoding="utf-8"))
+        name
+        for name, sources in target_sources().items()
+        if any(
+            _constructs_trybuild(source.read_text(encoding="utf-8"))
+            for source in sources
+        )
     )
 
 
@@ -161,29 +166,32 @@ def test_every_trybuild_target_has_an_allowance_of_its_own() -> None:
 @pytest.mark.parametrize(
     ("filter_text", "target", "covers"),
     [
-        pytest.param("binary(=ui)", "tests/ui.rs", True, id="an-exact-binary"),
-        pytest.param(
-            "binary_id(=netsuke::ui)", "tests/ui.rs", True, id="an-exact-binary-id"
-        ),
-        pytest.param(
-            "binary(=ui) | test(=other)", "tests/ui.rs", True, id="one-arm-of-a-union"
-        ),
-        pytest.param("binary(ui)", "tests/ui.rs", False, id="a-substring-binary"),
-        pytest.param("not binary(=ui)", "tests/ui.rs", False, id="a-negated-selector"),
-        pytest.param(
-            "!binary(=ui)", "tests/ui.rs", False, id="a-negated-selector-in-symbols"
-        ),
+        pytest.param("binary(=ui)", "ui", True, id="an-exact-binary"),
+        pytest.param("binary_id(=netsuke::ui)", "ui", True, id="an-exact-binary-id"),
+        pytest.param("binary(=ui) | test(=other)", "ui", True, id="one-arm-of-a-union"),
+        pytest.param("binary(ui)", "ui", False, id="a-substring-binary"),
+        pytest.param("not binary(=ui)", "ui", False, id="a-negated-selector"),
+        pytest.param("!binary(=ui)", "ui", False, id="a-negated-selector-in-symbols"),
         pytest.param(
             "test(=harness_compiles_under_a_split_build_dir)",
-            "tests/ui.rs",
+            "ui",
             False,
-            id="a-test-name-that-contains-the-stem",
+            id="a-test-name-that-contains-the-name",
         ),
         pytest.param(
             "binary(=user_interface)",
-            "tests/ui.rs",
+            "ui",
             False,
-            id="a-binary-whose-name-contains-the-stem",
+            id="a-binary-whose-name-contains-the-name",
+        ),
+        # A `binary_id` names its package too. Accepting the last segment alone
+        # would let a same-named target in another package of the workspace
+        # stand in for this one.
+        pytest.param(
+            "binary_id(=other_package::ui)",
+            "ui",
+            False,
+            id="the-same-name-in-another-package",
         ),
     ],
 )
