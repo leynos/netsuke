@@ -18,8 +18,13 @@ mod env;
 mod lookup;
 mod options;
 mod resolve_error;
+mod telemetry;
 mod workspace_switch;
 pub(crate) use lookup::{WORKSPACE_SKIP_DIRS, WorkspaceSkipList};
+pub use telemetry::{
+    RESOLVE_ERROR_CATEGORY_VALUES, WHICH_CACHE_OUTCOME_VALUES, WHICH_CACHE_TOTAL,
+    WHICH_CWD_MODE_VALUES, WHICH_RESOLUTION_OUTCOME_VALUES, WHICH_RESOLUTION_TOTAL,
+};
 
 pub(crate) use cache::WhichResolver;
 pub(crate) use options::WhichOptions;

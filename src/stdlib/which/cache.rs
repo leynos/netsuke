@@ -5,21 +5,19 @@ use super::{
     lookup::{WorkspaceSkipList, lookup},
     options::WhichOptions,
     resolve_error::ResolveError,
+    telemetry::{
+        cwd_mode_label, record_cache_outcome, record_resolution_error, record_resolution_found,
+    },
 };
 use camino::Utf8PathBuf;
 use lru::LruCache;
-use metrics::{counter, describe_counter};
 use std::{
     collections::hash_map::DefaultHasher,
     ffi::OsString,
     hash::{Hash, Hasher},
-    sync::{Arc, Mutex, MutexGuard, Once},
+    sync::{Arc, Mutex, MutexGuard},
 };
 use tracing::field;
-/// Name of the counter tallying cache outcomes labelled hit, miss, or bypass.
-const WHICH_CACHE_TOTAL: &str = "netsuke_stdlib_which_cache_total";
-/// Name of the counter tallying resolution outcomes labelled found, `not_found`, or error.
-const WHICH_RESOLUTION_TOTAL: &str = "netsuke_stdlib_which_resolution_total";
 /// Shared resolver that caches `which` lookups under an LRU bound.
 #[derive(Clone, Debug)]
 pub(crate) struct WhichResolver {
@@ -42,7 +40,6 @@ impl WhichResolver {
     /// argument grows the signature every time a new environment seam is
     /// added.
     pub(crate) fn new(config: WhichConfig) -> Self {
-        describe_metrics();
         let WhichConfig {
             cwd_override,
             path_override,
@@ -60,13 +57,19 @@ impl WhichResolver {
     }
     /// Resolve `command` to executable paths, consulting the cache unless `fresh`.
     /// Capture and lookup failures are recorded as metrics before being returned.
+    ///
+    /// The span and both counters carry the requested `cwd_mode`, so a
+    /// resolution can be attributed to the search domain that produced it
+    /// without recording the command or any path.
     pub(crate) fn resolve(
         &self,
         command: &str,
         options: &WhichOptions,
     ) -> Result<Vec<Utf8PathBuf>, ResolveError> {
+        let cwd_mode = cwd_mode_label(options.cwd_mode);
         let span = tracing::trace_span!(
             "stdlib.which.resolve",
+            cwd_mode,
             cache_outcome = field::Empty,
             result = field::Empty,
             error_category = field::Empty,
@@ -79,31 +82,29 @@ impl WhichResolver {
         ) {
             Ok(env) => env,
             Err(err) => {
-                record_resolution_error(&span, &err);
+                record_resolution_error(&span, cwd_mode, &err);
                 return Err(err);
             }
         };
         let key = CacheKey::new(command, &env, options, &self.workspace_skips);
         if options.fresh {
-            record_cache_outcome(&span, "bypass");
+            record_cache_outcome(&span, cwd_mode, "bypass");
         } else if let Some(cached) = self.try_cache(&key) {
-            record_cache_outcome(&span, "hit");
-            span.record("result", "found");
-            counter!(WHICH_RESOLUTION_TOTAL, "outcome" => "found").increment(1);
+            record_cache_outcome(&span, cwd_mode, "hit");
+            record_resolution_found(&span, cwd_mode);
             return Ok(cached);
         } else {
-            record_cache_outcome(&span, "miss");
+            record_cache_outcome(&span, cwd_mode, "miss");
         }
         let matches = match lookup(command, &env, options, &self.workspace_skips) {
             Ok(matches) => matches,
             Err(err) => {
-                record_resolution_error(&span, &err);
+                record_resolution_error(&span, cwd_mode, &err);
                 return Err(err);
             }
         };
         self.store(key, matches.clone());
-        span.record("result", "found");
-        counter!(WHICH_RESOLUTION_TOTAL, "outcome" => "found").increment(1);
+        record_resolution_found(&span, cwd_mode);
         Ok(matches)
     }
     // POLONIUS-REFUSED(lock-boundary): the hit is cloned out of the LRU
@@ -127,50 +128,6 @@ impl WhichResolver {
             Err(poisoned) => poisoned.into_inner(),
         }
     }
-}
-/// Describe the resolver's counters once per process.
-fn describe_metrics() {
-    static DESCRIBE: Once = Once::new();
-    DESCRIBE.call_once(|| {
-        describe_counter!(
-            WHICH_CACHE_TOTAL,
-            "Counts which resolver cache outcomes labelled as hit, miss, or bypass."
-        );
-        describe_counter!(
-            WHICH_RESOLUTION_TOTAL,
-            "Counts which resolver outcomes labelled as found, not_found, or error."
-        );
-    });
-}
-/// Record a cache outcome on the span and its counter.
-fn record_cache_outcome(span: &tracing::Span, outcome: &'static str) {
-    span.record("cache_outcome", outcome);
-    counter!(WHICH_CACHE_TOTAL, "outcome" => outcome).increment(1);
-}
-/// Record a resolution failure's outcome and error category as metrics.
-fn record_resolution_error(span: &tracing::Span, error: &ResolveError) {
-    let category = error.category();
-    let outcome = if matches!(
-        error,
-        ResolveError::NotFound { .. } | ResolveError::DirectNotFound { .. }
-    ) {
-        "not_found"
-    } else {
-        "error"
-    };
-    span.record("result", outcome);
-    span.record("error_category", category);
-    tracing::debug!(
-        outcome,
-        error_category = category,
-        "which resolver finished with non-success result",
-    );
-    counter!(
-        WHICH_RESOLUTION_TOTAL,
-        "outcome" => outcome,
-        "category" => category,
-    )
-    .increment(1);
 }
 /// Matches stored in the cache for one key.
 #[derive(Clone, Debug)]

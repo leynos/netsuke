@@ -5,7 +5,14 @@ use std::{fmt, io};
 use camino::{Utf8Path, Utf8PathBuf};
 use walkdir;
 
-use super::options::CwdMode;
+use super::{
+    options::CwdMode,
+    telemetry::{
+        CATEGORY_ARGS, CATEGORY_CANONICALIZE, CATEGORY_CANONICALIZE_NON_UTF8,
+        CATEGORY_CWD_NON_UTF8, CATEGORY_CWD_RESOLVE, CATEGORY_DIRECT_NOT_FOUND,
+        CATEGORY_IS_EXECUTABLE, CATEGORY_NOT_FOUND, CATEGORY_WALKDIR, CATEGORY_WORKSPACE_NON_UTF8,
+    },
+};
 
 /// Typed errors raised while resolving a command with `which`.
 #[derive(Debug)]
@@ -80,18 +87,24 @@ impl ResolveError {
     }
 
     /// Return the stable low-cardinality category used by logs and metrics.
+    ///
+    /// Each arm names a constant in [`super::telemetry`] rather than a string
+    /// literal, so the bounded `category` label vocabulary and the value this
+    /// returns cannot drift apart: the module's
+    /// [`super::telemetry::RESOLVE_ERROR_CATEGORY_VALUES`] is exactly the set
+    /// of values reachable here.
     pub(super) const fn category(&self) -> &'static str {
         match self {
-            Self::NotFound { .. } => "not_found",
-            Self::DirectNotFound { .. } => "direct_not_found",
-            Self::Args { .. } => "args",
-            Self::Canonicalize { .. } => "canonicalize",
-            Self::IsExecutable { .. } => "is_executable",
-            Self::CanonicalizeNonUtf8 => "canonicalize_non_utf8",
-            Self::WorkspaceNonUtf8 { .. } => "workspace_non_utf8",
-            Self::WalkDir { .. } => "walkdir",
-            Self::CwdResolve { .. } => "cwd_resolve",
-            Self::CwdNonUtf8 => "cwd_non_utf8",
+            Self::NotFound { .. } => CATEGORY_NOT_FOUND,
+            Self::DirectNotFound { .. } => CATEGORY_DIRECT_NOT_FOUND,
+            Self::Args { .. } => CATEGORY_ARGS,
+            Self::Canonicalize { .. } => CATEGORY_CANONICALIZE,
+            Self::IsExecutable { .. } => CATEGORY_IS_EXECUTABLE,
+            Self::CanonicalizeNonUtf8 => CATEGORY_CANONICALIZE_NON_UTF8,
+            Self::WorkspaceNonUtf8 { .. } => CATEGORY_WORKSPACE_NON_UTF8,
+            Self::WalkDir { .. } => CATEGORY_WALKDIR,
+            Self::CwdResolve { .. } => CATEGORY_CWD_RESOLVE,
+            Self::CwdNonUtf8 => CATEGORY_CWD_NON_UTF8,
         }
     }
 }
