@@ -153,7 +153,9 @@ fn every_execplan_header_status_is_within_the_closed_set() -> Result<()> {
 /// Verify the style guide still defines the vocabulary the tests enforce.
 ///
 /// Without this, the suite could keep passing against a set the guide no
-/// longer states — the tests would be checking a rule nobody publishes.
+/// longer states — the tests would be checking a rule nobody publishes. The
+/// check runs both ways: a value the tests require but the guide omits fails,
+/// and so does a value the guide documents but the tests would reject.
 #[test]
 fn the_style_guide_defines_every_accepted_status_value() -> Result<()> {
     let root = repo_root()?;
@@ -164,9 +166,18 @@ fn the_style_guide_defines_every_accepted_status_value() -> Result<()> {
         .split("### ExecPlan")
         .nth(1)
         .context("the style guide should carry an `### ExecPlan` section")?;
-    let section = after_heading.split("\n## ").next().unwrap_or(after_heading);
+    // Bound the section at the next heading of either level. A `## ` split
+    // alone would carry a sibling `### ` subsection's table into the scan, and
+    // the rows there would then read as documented statuses.
+    let section = after_heading
+        .split("\n## ")
+        .next()
+        .and_then(|body| body.split("\n### ").next())
+        .unwrap_or(after_heading);
 
-    let documented: BTreeSet<&str> = table_rows(section).collect();
+    // The table's first row is its header, which names the column rather than
+    // a status, so the documented values are the rows beneath it.
+    let documented: BTreeSet<&str> = table_rows(section).skip(1).collect();
     let missing: BTreeSet<&str> = STATUS_VALUES
         .iter()
         .copied()
@@ -176,6 +187,17 @@ fn the_style_guide_defines_every_accepted_status_value() -> Result<()> {
         missing.is_empty(),
         "the style guide's ExecPlan section should document every accepted status; \
          missing: {missing:?}"
+    );
+
+    let extra: BTreeSet<&str> = documented
+        .iter()
+        .copied()
+        .filter(|value| !STATUS_VALUES.contains(value))
+        .collect();
+    ensure!(
+        extra.is_empty(),
+        "the style guide's ExecPlan section should document no status the tests \
+         reject; extra: {extra:?}"
     );
     Ok(())
 }
@@ -206,6 +228,7 @@ mod tests {
     //! narrow cause rather than as an unexplained contract failure.
 
     use super::*;
+    use rstest::rstest;
 
     #[test]
     fn header_lines_stop_at_the_first_section() -> Result<()> {
@@ -232,24 +255,14 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn header_status_rejects_a_missing_field() -> Result<()> {
-        let source = "# Title\n\n## Purpose\n";
+    #[rstest]
+    #[case::missing("# Title\n\n## Purpose\n")]
+    #[case::duplicated("# Title\n\nStatus: COMPLETE\nStatus: IN PROGRESS\n\n## Purpose\n")]
+    fn header_status_rejects_a_malformed_field(#[case] source: &str) -> Result<()> {
         let outcome = header_status(source);
         ensure!(
             outcome.is_err(),
-            "a plan with no status field should be rejected, found {outcome:?}"
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn header_status_rejects_a_duplicated_field() -> Result<()> {
-        let source = "# Title\n\nStatus: COMPLETE\nStatus: IN PROGRESS\n\n## Purpose\n";
-        let outcome = header_status(source);
-        ensure!(
-            outcome.is_err(),
-            "a plan carrying two status fields should be rejected, found {outcome:?}"
+            "a header without exactly one status field should be rejected, found {outcome:?}"
         );
         Ok(())
     }

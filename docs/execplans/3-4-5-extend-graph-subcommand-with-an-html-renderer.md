@@ -6,7 +6,8 @@ and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
-Stages A–D completed 2026-05-26; Stage E completed 2026-06-03.
+Stages A–D completed 2026-05-26; Stage E completed 2026-06-03; Stage F
+completed 2026-06-07.
 
 ## Purpose / big picture
 
