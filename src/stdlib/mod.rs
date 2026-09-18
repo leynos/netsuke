@@ -31,6 +31,10 @@ pub use network::{
 pub use path::{FILE_READ_FILTER_VALUES, FILE_READ_OUTCOME_VALUES, FILE_READ_TOTAL};
 pub(crate) use register::{is_manifest_query_disabled_error, register_manifest_query};
 pub use register::{register, register_with_config, value_from_bytes};
+pub use which::{
+    RESOLVE_ERROR_CATEGORY_VALUES, WHICH_CACHE_OUTCOME_VALUES, WHICH_CACHE_TOTAL,
+    WHICH_CWD_MODE_VALUES, WHICH_RESOLUTION_OUTCOME_VALUES, WHICH_RESOLUTION_TOTAL,
+};
 
 use std::{
     sync::Arc,
