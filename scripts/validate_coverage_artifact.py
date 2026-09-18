@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Validate an untrusted LCOV coverage artefact before secret-bearing upload.
+"""Inspect an untrusted LCOV coverage artefact as standalone maintenance.
 
-The pull-request workflow writes ``lcov.info`` and uploads it as an artefact.
-The trusted submission workflow treats the downloaded directory as hostile
-data: this command accepts exactly one regular UTF-8 LCOV file, constrains its
-size, and parses only recognised LCOV records. It never executes, imports, or
-resolves the coverage paths recorded in that data.
+This command accepts exactly one regular UTF-8 LCOV file from a supplied
+artefact directory, constrains its size, and parses only recognised LCOV
+records. It never executes, imports, or resolves the coverage paths recorded in
+that data.
 """
 
 import argparse
@@ -45,7 +44,7 @@ class ValidationIssue(enum.Enum):
     ----------
     SYMLINK_DIRECTORY
         The supplied artefact directory is itself a symbolic link, so its
-        resolved location is not controlled by the trusted workflow.
+        resolved location is outside the directory selected for inspection.
     NON_DIRECTORY
         The supplied artefact path is not a directory.
     UNEXPECTED_MEMBERS
@@ -92,7 +91,7 @@ class ValidationIssue(enum.Enum):
 
 
 class ValidationError(Exception):
-    """Describe hostile artefact data that cannot reach CodeScene.
+    """Describe hostile artefact data rejected during inspection.
 
     Parameters
     ----------
@@ -105,8 +104,8 @@ class ValidationError(Exception):
     Raises
     ------
     ValidationError
-        Raised by the validator whenever hostile artefact data must not
-        reach the secret-bearing submission step.
+        Raised whenever the supplied artefact violates the inspection
+        contract.
 
     Examples
     --------

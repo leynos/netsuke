@@ -77,13 +77,9 @@ def _python_shell_jobs() -> list[tuple[str, str, list[dict[str, object]]]]:
 
 
 #: Jobs that run ``shell: python`` but cannot provision an interpreter under
-#: the current trust contracts. ``report-excluded-fork`` is held by
-#: ``trust_boundary_test.py`` to ``checks: write`` alone and to telemetry
-#: steps that bracket the publication, which leaves no room for the checkout
-#: and setup-uv steps this contract requires. Every other invariant here still
-#: applies to it. Removing a job from this set is the intended path once its
-#: trust contract admits the provisioning steps.
-UNPROVISIONED_JOBS = frozenset({("coverage-pr-submit.yml", "report-excluded-fork")})
+#: their trust contracts. Keep the typed empty set so a future exception must
+#: be explicit and the stale-exemption contract below remains active.
+UNPROVISIONED_JOBS: frozenset[tuple[str, str]] = frozenset()
 
 PYTHON_SHELL_JOBS = _python_shell_jobs()
 JOB_IDS = [f"{workflow}:{job}" for workflow, job, _ in PYTHON_SHELL_JOBS]
@@ -101,13 +97,6 @@ def _first_index(steps: list[dict[str, object]], key: str, needle: str) -> int:
         if str(step.get(key, "")).startswith(needle):
             return index
     return -1
-
-
-def test_the_trusted_coverage_workflow_is_covered() -> None:
-    """The contract is live: the workflow that motivated it still runs Python."""
-    assert "coverage-pr-submit.yml:submit-coverage" in PROVISIONED_IDS, (
-        f"expected the trusted coverage job among {PROVISIONED_IDS!r}"
-    )
 
 
 def test_unprovisioned_jobs_still_exist_and_run_python() -> None:

@@ -249,7 +249,7 @@ jobs:
         # `rustflags` input. Pull requests only; on the trunk
         # `coverage-upload` runs the same set over the same commit.
         if: github.event_name == 'pull_request'
-        uses: leynos/shared-actions/.github/actions/generate-coverage@77ea10341249024e22ec5d9069e3caa7596e0d4f
+        uses: leynos/shared-actions/.github/actions/generate-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
         with:
           language: rust
           output-path: lcov.info
@@ -265,15 +265,13 @@ jobs:
           # Compare changed-line coverage against the baseline written by
           # coverage-main.yml (caches saved on main are readable by every PR).
           with-ratchet: 'true'
-      - name: Upload PR coverage artefact
-        if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        # v7.0.1
-        with:
-          name: pr-coverage-lcov
-          path: lcov.info
-          retention-days: 3
-          if-no-files-found: error
+          # This lane measures and compares; it does not publish. The action
+          # archives the report it generated under a step of its own, which no
+          # scanner over this file's steps can see, so declining that archive
+          # is the only way this boundary is observable here. The report stays
+          # on the runner for the ratchet and leaves with the instrumented tree
+          # below. `coverage-main.yml` keeps the action's default and uploads.
+          publish-artefact: 'false'
       - name: Show sccache statistics
         if: always()
         run: |

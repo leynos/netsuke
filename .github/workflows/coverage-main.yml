@@ -1,11 +1,10 @@
 ---
 name: Coverage (main)
 
-# CodeScene accepts `cs-coverage upload` only for analysed branches, so
-# main-branch coverage is uploaded here on push; pull requests run the
-# changed-line gate (`cs-coverage check`) in ci.yml instead. This
-# workflow also advances the coverage ratchet baseline: caches saved on
-# main are readable by every pull-request run, so the baseline written
+# Main owns both persistent coverage outputs: the CodeScene upload and the
+# ratchet baseline. Pull requests generate coverage only for their local
+# ratchet check; they neither publish the report nor contact CodeScene. Caches
+# saved on main are readable by every pull-request run, so the baseline written
 # here is the one PR ratchet checks compare against.
 
 on:
@@ -206,7 +205,7 @@ jobs:
       - name: Reset sccache statistics
         run: sccache --zero-stats
       - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@77ea10341249024e22ec5d9069e3caa7596e0d4f
+        uses: leynos/shared-actions/.github/actions/generate-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
         with:
           language: rust
           output-path: lcov.info
@@ -218,6 +217,10 @@ jobs:
           all-targets: 'true'
           doctests: 'true'
           with-ratchet: 'true'
+          # `publish-artefact` is deliberately left unset, so the action keeps
+          # its default and archives the report this lane uploads to CodeScene.
+          # Setting it here, as the pull-request lane does, would leave
+          # CodeScene with no report to read.
       - name: Show sccache statistics
         # Zero compile requests here would mean the instrumented build never
         # reached the compiler cache, which is a failed integration rather
