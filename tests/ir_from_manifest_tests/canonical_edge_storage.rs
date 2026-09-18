@@ -63,9 +63,19 @@ fn multi_output_target_uses_linear_canonical_storage() -> Result<()> {
     let statement = build_statements
         .first()
         .context("expected Ninja build statement")?;
+    let generated_outputs = statement
+        .strip_prefix("build ")
+        .and_then(|line| line.split_once(':'))
+        .map(|(output_list, _)| output_list.split_ascii_whitespace().collect::<Vec<_>>())
+        .context("expected Ninja build statement outputs before ':'")?;
+    let expected_outputs = canonical
+        .explicit_outputs
+        .iter()
+        .map(|output| output.as_str())
+        .collect::<Vec<_>>();
     ensure!(
-        statement.contains("out/0000") && statement.contains("out/4095"),
-        "the Ninja build statement must contain every explicit output"
+        generated_outputs == expected_outputs,
+        "the Ninja build statement must list every explicit output in order"
     );
     Ok(())
 }

@@ -12,7 +12,7 @@ use crate::localization::{self, keys};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::Serialize;
 #[cfg(not(kani))]
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::ast::Recipe;
 
@@ -78,18 +78,6 @@ impl BuildGraph {
         self.insert_canonical_edge(edge)
     }
 
-    /// Store `edge` through the fallible canonical insertion API.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`IrGenError::DuplicateOutput`] without changing the arena or
-    /// output index when an explicit or implicit output collides with another
-    /// alias on the edge or in this graph.
-    #[cfg(not(kani))]
-    pub fn try_insert_edge(&mut self, edge: BuildEdge) -> Result<EdgeId, IrGenError> {
-        self.insert_edge(edge)
-    }
-
     /// Store one canonical edge and index its output aliases.
     fn insert_canonical_edge(&mut self, edge: BuildEdge) -> EdgeId {
         let edge_id = EdgeId(self.edges.len());
@@ -113,13 +101,25 @@ impl BuildGraph {
     }
 
     /// Index every bounded output alias owned by the canonical edge at `edge_id`.
+    ///
+    /// The bounded path keys compare one byte at a time, so an alias longer
+    /// than one byte would enter the index yet never match a lookup. Reject it
+    /// here rather than let a harness silently prove nothing.
     #[cfg(kani)]
     fn index_output_aliases(&mut self, edge_id: EdgeId) {
         if let Some(stored_edge) = self.edges.get(edge_id.0) {
             for output in &stored_edge.explicit_outputs {
+                assert!(
+                    output.as_str().len() == 1,
+                    "Kani path keys are one-byte identifiers",
+                );
                 self.targets.insert(output.clone(), edge_id);
             }
             for output in &stored_edge.implicit_outputs {
+                assert!(
+                    output.as_str().len() == 1,
+                    "Kani path keys are one-byte identifiers",
+                );
                 self.targets.insert(output.clone(), edge_id);
             }
         }
@@ -216,16 +216,16 @@ impl BuildGraph {
     }
 
     /// Return the first output alias that would duplicate an alias in `edge`.
+    ///
+    /// A hash set keeps the scan linear in the edge's own output count; a
+    /// vector would make a single wide edge quadratic.
     #[cfg(not(kani))]
     fn duplicate_output<'edge>(&self, edge: &'edge BuildEdge) -> Option<&'edge Utf8PathBuf> {
-        let mut seen = Vec::new();
-        for output in edge.explicit_outputs.iter().chain(&edge.implicit_outputs) {
-            if self.targets.contains_key(output) || seen.contains(&output) {
-                return Some(output);
-            }
-            seen.push(output);
-        }
-        None
+        let mut seen: HashSet<&Utf8PathBuf> = HashSet::new();
+        edge.explicit_outputs
+            .iter()
+            .chain(&edge.implicit_outputs)
+            .find(|&output| self.targets.contains_key(output) || !seen.insert(output))
     }
 }
 

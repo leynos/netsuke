@@ -2168,7 +2168,11 @@ Rust
 
 use std::collections::HashMap;
 use camino::Utf8PathBuf;
-use netsuke::ir::EdgeArena;
+#[cfg(kani)]
+pub type EdgeArena<T> = IrVec<T>;
+
+#[cfg(not(kani))]
+pub type EdgeArena<T> = Vec<T>;
 
 pub struct EdgeId(usize);
 

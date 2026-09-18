@@ -137,7 +137,7 @@ fn build_graph_rejects_duplicate_aliases_before_mutation() {
         always: false,
     };
 
-    let result = graph.try_insert_edge(edge);
+    let result = graph.insert_edge(edge);
 
     assert!(matches!(result, Err(IrGenError::DuplicateOutput { .. })));
     assert_eq!(graph.edge_count(), 0);

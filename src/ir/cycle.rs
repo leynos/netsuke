@@ -8,7 +8,7 @@
 //! `order_only_deps` are intentionally excluded from traversal.
 //!
 //! Traversal state is owned by the private [`CycleDetector`] struct in the
-//! sibling `cycle_detector` module; the iteration walks every output alias in
+//! sibling `detector` module; the iteration walks every output alias in
 //! the index and resolves its canonical edge through the arena. Detected
 //! cycles are normalized by [`support::canonicalize_cycle`] to produce deterministic
 //! error messages regardless of traversal order.  Consumed by
