@@ -383,7 +383,7 @@ Stop and escalate rather than improvising when any of these is reached.
   carriage-return, and NUL. These fields are backend values at emission time,
   so literal dollars must not become Ninja variable references. The completed
   action and metadata paths now share this explicit contract. Date/Author:
-  2026-08-24, implementation agent.
+  2026-08-24 (original decision; revised 2026-08-28), implementation agent.
 
 - Decision: no Kani harness and no Verus proof for this change.
   Rationale: the introduced function is a pure, total string map with no
@@ -685,7 +685,7 @@ the generated file, and the inner shell observes the real paths.
   through the command validator.
 
 **I7 — path emission is total or diagnosed.** Every path written into a `build`
-or `default` line contains no Ninja-special character, contains only literal
+or `default` line contains no Ninja-special character, or contains only literal
 spaces that are escaped as a `$` followed by a space, or fails generation with
 a typed error naming the offending path. The escaped space is the one
 Ninja-special character that is encoded rather than diagnosed.
