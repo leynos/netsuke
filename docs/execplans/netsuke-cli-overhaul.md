@@ -4,7 +4,10 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: IN PROGRESS (roadmap fidelity review)
+Status: IN PROGRESS
+
+The plan is drafted and partially delivered; a roadmap fidelity review is
+outstanding, and the remaining stages are recorded in `Progress`.
 
 ## Purpose / big picture
 

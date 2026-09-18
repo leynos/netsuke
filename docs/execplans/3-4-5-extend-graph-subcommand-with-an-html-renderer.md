@@ -4,7 +4,10 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: COMPLETE (Stages A–D 2026-05-26; Stage E 2026-06-03).
+Status: COMPLETE
+
+Stages A–D completed 2026-05-26; Stage E completed 2026-06-03; Stage F
+completed 2026-06-07.
 
 ## Purpose / big picture
 

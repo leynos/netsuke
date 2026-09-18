@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 Revision 2.26. See `Revision note` at the foot of this document.
 
@@ -1371,11 +1371,12 @@ outside this local completion boundary and must be reported separately by CI.
 
 - Observation:
   `docs/execplans/4-2-1-kani-harnesses-for-manifest-to-ir-safety-checks.md`
-  carries `Status: READY FOR REVIEW` although its own Progress and Outcomes
-  sections, the roadmap checkmarks, and the committed harnesses all show the
+  carried `Status: READY FOR REVIEW` although its own Progress and Outcomes
+  sections, the roadmap checkmarks, and the committed harnesses all showed the
   work complete. Impact: none here, but do not treat execplan status fields as
-  a source of truth. The field is stale in that file and uses at least five
-  different vocabularies across the directory. Tracked as issue #586.
+  a source of truth. The field was stale in that file and used at least five
+  different vocabularies across the directory. Tracked as issue #586; the
+  header has since been corrected to `COMPLETE` and the directory normalized.
 
 - Observation: the fallback marker matcher remains reachable when Kani explores
   a sigil candidate, and `try_match_token` counts a 27-character marker with
@@ -1913,5 +1914,13 @@ pending.
 **Revision 2.26 (2026-09-03).** Focused yamllint validation under the reported
 120-column policy passed, with only unrelated document-start and truthy
 warnings. `make check-fmt` and `make lint` also passed. The mutation workflow's
-comment-spacing and line-length failures are resolved. Status remains
-`IN PROGRESS`.
+comment-spacing and line-length failures are resolved.
+
+**Revision 2.27 (2026-09-16, issue #586).** The header moved from `IN PROGRESS`
+to `COMPLETE` and the closing sentence of Revision 2.26 was dropped, because
+that sentence had gone stale. Commit `6c646f1c` (PR #564, merged 2026-09-03)
+flipped roadmap 4.2.3 to `[x]`, so the work was already delivered when Revision
+2.26 was written; its "Status remains `IN PROGRESS`" line outlived its truth.
+Under the authority order in the documentation style guide the roadmap checkbox
+and this plan's `Progress` and Outcomes sections outrank the header, so the
+stale artefact was the header, not the roadmap.
