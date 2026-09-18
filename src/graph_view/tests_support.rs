@@ -68,10 +68,8 @@ pub(super) fn add_edge(graph: &mut BuildGraph, fixture: EdgeFixture<'_>) {
         phony: fixture.phony,
         always: fixture.always,
     };
-    for out in &edge.explicit_outputs {
-        graph.targets.insert(out.clone(), edge.clone());
-    }
-    for out in &edge.implicit_outputs {
-        graph.targets.insert(out.clone(), edge.clone());
-    }
+    assert!(
+        graph.insert_edge(edge).is_ok(),
+        "test graph output aliases must be unique",
+    );
 }

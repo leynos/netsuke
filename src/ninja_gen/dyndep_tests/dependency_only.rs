@@ -22,9 +22,8 @@ fn dependency_only_serial_bundle_uses_phony_without_a_recipe() -> Result<()> {
             restat: false,
         },
     );
-    graph.targets.insert(
-        Utf8PathBuf::from("all"),
-        BuildEdge {
+    graph
+        .insert_edge(BuildEdge {
             action_id: "aggregate".into(),
             inputs: Vec::new(),
             implicit_deps: vec!["check-fmt".into(), "lint".into()],
@@ -34,8 +33,8 @@ fn dependency_only_serial_bundle_uses_phony_without_a_recipe() -> Result<()> {
             order_only_deps: Vec::new(),
             phony: true,
             always: false,
-        },
-    );
+        })
+        .expect("test graph output aliases must be unique");
 
     let bundle = generate_bundle(&graph)?;
     ensure!(

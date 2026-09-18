@@ -55,7 +55,7 @@ fn counting_value(source: &CountingSequence) -> Value {
 
 /// A `foreach` must stop at the cardinality check instead of collecting every
 /// value first: the production counter records how far iteration actually ran,
-/// so a materialising implementation produces the whole sequence.
+/// so a materializing implementation produces the whole sequence.
 #[test]
 fn foreach_stops_consuming_before_the_cardinality_limit() -> Result<()> {
     const TOTAL: usize = 100_000;

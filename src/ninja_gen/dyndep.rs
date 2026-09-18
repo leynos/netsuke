@@ -29,9 +29,7 @@
 //! };
 //! let mut graph = BuildGraph::default();
 //! graph.actions.insert("a".into(), action);
-//! graph.targets.insert(
-//!     Utf8PathBuf::from("all"),
-//!     BuildEdge {
+//! graph.insert_edge(BuildEdge {
 //!         action_id: "a".into(),
 //!         inputs: Vec::new(),
 //!         implicit_deps: vec![
@@ -44,8 +42,7 @@
 //!         order_only_deps: Vec::new(),
 //!         phony: false,
 //!         always: false,
-//!     },
-//! );
+//! }).expect("test graph output aliases must be unique");
 //! let bundle = generate_bundle(&graph).expect("generate bundle");
 //! assert!(bundle.build_file().contains("ninja_required_version = 1.10"));
 //! assert_eq!(bundle.dyndep_files().len(), 2);
@@ -157,15 +154,10 @@ fn render_edges(
     out: &mut String,
     stages: &mut SerialStages,
 ) -> Result<(), NinjaGenError> {
-    let mut edges: Vec<_> = graph.targets.values().collect();
+    let mut edges: Vec<_> = graph.edges().collect();
     edges.sort_by_key(|a| path_key(&a.explicit_outputs));
-    let mut seen: HashSet<String> = HashSet::new();
 
     for edge in edges {
-        let key = path_key(&edge.explicit_outputs);
-        if !seen.insert(key) {
-            continue;
-        }
         render_edge(graph, edge, out, stages)?;
     }
     Ok(())
@@ -344,7 +336,7 @@ fn sidecar_digest(content: &str) -> String {
 /// Reject user outputs or dependencies that collide with the reserved
 /// serial-ordering state namespace.
 pub(crate) fn reject_reserved_paths(graph: &BuildGraph) -> Result<(), NinjaGenError> {
-    for edge in graph.targets.values() {
+    for edge in graph.edges() {
         for path in edge
             .explicit_outputs
             .iter()

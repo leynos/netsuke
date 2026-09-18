@@ -16,7 +16,7 @@ use crate::recipe_shell::RecipeShell;
 
 use super::{
     cycle::{self, CycleDetectionReport},
-    graph::{Action, BuildEdge, BuildGraph, DependencyOrder, IrGenError, IrHashMap},
+    graph::{BuildEdge, BuildGraph, DependencyOrder, IrGenError, IrHashMap},
 };
 
 #[path = "from_manifest_support.rs"]
@@ -76,8 +76,7 @@ impl BuildGraph {
         Self::process_rules(manifest, &mut rule_map);
         Self::process_targets(
             manifest,
-            &mut graph.actions,
-            &mut graph.targets,
+            &mut graph,
             TargetLoweringContext {
                 rule_map: &rule_map,
                 shell,
@@ -108,7 +107,7 @@ impl BuildGraph {
     /// Rule-backed targets resolve a single template first; command and script
     /// targets interpolate their command directly. Each resolved action is
     /// registered once under its content hash, and the resulting edge is
-    /// attached to every explicit output.
+    /// stored once and indexed by every explicit output.
     ///
     /// # Errors
     ///
@@ -118,8 +117,7 @@ impl BuildGraph {
     /// interpolation fails.
     fn process_targets(
         manifest: &NetsukeManifest,
-        actions: &mut IrHashMap<String, Action>,
-        targets: &mut IrHashMap<Utf8PathBuf, BuildEdge>,
+        graph: &mut Self,
         context: TargetLoweringContext<'_>,
     ) -> Result<(), IrGenError> {
         for target in manifest.actions.iter().chain(&manifest.targets) {
@@ -130,7 +128,7 @@ impl BuildGraph {
                 implicit_deps_count = implicit_deps.len(),
                 "populating implicit dependencies for target",
             );
-            if let Some(error) = duplicate_output_error(&outputs, targets) {
+            if let Some(error) = duplicate_output_error(&outputs, graph) {
                 return Err(error);
             }
 
@@ -142,7 +140,7 @@ impl BuildGraph {
                     // descriptions remain the sole source of Ninja progress
                     // text.
                     register_action(
-                        actions,
+                        &mut graph.actions,
                         tmpl.recipe.clone(),
                         tmpl.description.as_deref(),
                         ActionBindings {
@@ -153,7 +151,7 @@ impl BuildGraph {
                     )?
                 }
                 Recipe::Command { .. } | Recipe::Script { .. } => register_action(
-                    actions,
+                    &mut graph.actions,
                     target.recipe.clone(),
                     None,
                     ActionBindings {
@@ -176,7 +174,10 @@ impl BuildGraph {
                 always: target.always,
             };
 
-            insert_edge_for_outputs(targets, edge);
+            #[cfg(not(kani))]
+            insert_edge_for_outputs(graph, edge)?;
+            #[cfg(kani)]
+            insert_edge_for_outputs(graph, edge);
         }
         Ok(())
     }
@@ -199,7 +200,7 @@ impl BuildGraph {
         let CycleDetectionReport {
             cycle,
             missing_dependencies,
-        } = cycle::analyse(&self.targets);
+        } = cycle::analyse(self);
 
         if let Some(detected_cycle) = cycle {
             let message = localization::message(keys::IR_CIRCULAR_DEPENDENCY)

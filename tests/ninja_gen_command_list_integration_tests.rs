@@ -39,7 +39,7 @@ fn run_command_list(
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("chain".into(), action);
-    graph.targets.insert(target.clone(), edge);
+    graph.insert_edge(edge)?;
     graph.default_targets.push(target);
 
     let ninja = generate(&graph)?;

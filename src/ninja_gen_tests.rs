@@ -91,7 +91,9 @@ fn generate_simple_ninja() -> Result<()> {
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("a".into(), action);
-    graph.targets.insert(Utf8PathBuf::from("out"), edge);
+    graph
+        .insert_edge(edge)
+        .expect("test graph output aliases must be unique");
     graph.default_targets.push(Utf8PathBuf::from("out"));
 
     let ninja = generate_posix(&graph)?;
@@ -125,8 +127,8 @@ fn string_generation_apis_reject_reserved_paths() -> Result<()> {
     let mut graph = BuildGraph::default();
     graph.actions.insert("reserved".into(), action);
     graph
-        .targets
-        .insert(Utf8PathBuf::from(".netsuke/dyndep/reserved"), edge);
+        .insert_edge(edge)
+        .expect("test graph output aliases must be unique");
 
     let generate_error = generate(&graph)
         .err()
@@ -224,7 +226,9 @@ fn generate_script_ninja_round_trips() -> Result<()> {
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("a".into(), action);
-    graph.targets.insert(Utf8PathBuf::from("out"), edge);
+    graph
+        .insert_edge(edge)
+        .expect("test graph output aliases must be unique");
 
     let ninja = generate_posix(&graph)?;
     ensure!(ninja.contains("rule a"));
@@ -257,7 +261,9 @@ fn generate_command_list_ninja_joins_a_fail_fast_chain() -> Result<()> {
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("a".into(), action);
-    graph.targets.insert(Utf8PathBuf::from("out"), edge);
+    graph
+        .insert_edge(edge)
+        .expect("test graph output aliases must be unique");
 
     let ninja = generate_posix(&graph)?;
     ensure!(

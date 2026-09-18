@@ -7,12 +7,12 @@
 //! rebuilds but are not passed to `{{ ins }}`. Consumed by [`crate::ninja_gen`]
 //! for Ninja file emission and by [`super::cycle`] for cycle detection.
 
-use crate::localization::LocalizedMessage;
-use camino::Utf8PathBuf;
+#[cfg(not(kani))]
+use crate::localization::{self, keys};
+use camino::{Utf8Path, Utf8PathBuf};
 use serde::Serialize;
 #[cfg(not(kani))]
-use std::collections::HashMap;
-use thiserror::Error;
+use std::collections::{HashMap, HashSet};
 
 use crate::ast::Recipe;
 
@@ -21,21 +21,208 @@ use crate::ast::Recipe;
 mod kani_map;
 
 #[cfg(kani)]
-pub use kani_map::IrHashMap;
+pub use kani_map::{IrHashMap, IrVec};
 
 /// Map used by the IR graph.
 #[cfg(not(kani))]
 pub type IrHashMap<K, V> = HashMap<K, V>;
+
+/// Arena used to own canonical build edges.
+#[cfg(kani)]
+pub type EdgeArena<T> = IrVec<T>;
+
+/// Arena used to own canonical build edges.
+#[cfg(not(kani))]
+pub type EdgeArena<T> = Vec<T>;
 
 /// The complete, static build graph.
 #[derive(Debug, Default, Clone)]
 pub struct BuildGraph {
     /// All unique actions in the build keyed by a stable hash.
     pub actions: IrHashMap<String, Action>,
-    /// All target files to be built keyed by output path.
-    pub targets: IrHashMap<Utf8PathBuf, BuildEdge>,
+    /// Canonical build edges, each owned exactly once.
+    edges: EdgeArena<BuildEdge>,
+    /// Output aliases indexed to their canonical producing edge.
+    targets: IrHashMap<Utf8PathBuf, EdgeId>,
     /// Targets built when no explicit target is requested.
     pub default_targets: Vec<Utf8PathBuf>,
+}
+
+/// Identifies one canonical [`BuildEdge`] in a [`BuildGraph`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct EdgeId(usize);
+
+impl BuildGraph {
+    /// Store `edge` once when every output alias is unique before mutation.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IrGenError::DuplicateOutput`] without changing the arena or
+    /// output index when an explicit or implicit output collides with another
+    /// alias on the edge or in this graph.
+    #[cfg(not(kani))]
+    pub fn insert_edge(&mut self, edge: BuildEdge) -> Result<EdgeId, IrGenError> {
+        if let Some(output) = self.duplicate_output(&edge) {
+            return Err(IrGenError::DuplicateOutput {
+                message: localization::message(keys::IR_DUPLICATE_OUTPUTS)
+                    .with_arg("outputs", output.as_str()),
+                outputs: vec![output.as_str().to_owned()],
+            });
+        }
+        Ok(self.insert_canonical_edge(edge))
+    }
+
+    /// Store `edge` once in Kani's bounded graph model.
+    #[cfg(kani)]
+    pub fn insert_edge(&mut self, edge: BuildEdge) -> EdgeId {
+        self.insert_canonical_edge(edge)
+    }
+
+    /// Store one canonical edge and index its output aliases.
+    fn insert_canonical_edge(&mut self, edge: BuildEdge) -> EdgeId {
+        let edge_id = EdgeId(self.edges.len());
+        self.edges.push(edge);
+        self.index_output_aliases(edge_id);
+        edge_id
+    }
+
+    /// Index every output alias owned by the canonical edge at `edge_id`.
+    ///
+    /// Explicit and implicit outputs are walked with two plain slice loops
+    /// rather than a chained iterator; the chained form stalled CBMC in the
+    /// `kani-ir` cycle harnesses, where two loops verify in seconds.
+    fn index_output_aliases(&mut self, edge_id: EdgeId) {
+        if let Some(stored_edge) = self.edges.get(edge_id.0) {
+            for output in &stored_edge.explicit_outputs {
+                Self::index_output(&mut self.targets, output, edge_id);
+            }
+            for output in &stored_edge.implicit_outputs {
+                Self::index_output(&mut self.targets, output, edge_id);
+            }
+        }
+    }
+
+    /// Index one output alias under `edge_id` in the graph's output index.
+    ///
+    /// The bounded path keys compare one byte at a time, so under Kani an
+    /// alias longer than one byte would enter the index yet never match a
+    /// lookup. Reject it there rather than let a harness silently prove
+    /// nothing; production lookups are unbounded and need no such guard.
+    fn index_output(
+        targets: &mut IrHashMap<Utf8PathBuf, EdgeId>,
+        output: &Utf8PathBuf,
+        edge_id: EdgeId,
+    ) {
+        #[cfg(kani)]
+        assert!(
+            output.as_str().len() == 1,
+            "Kani path keys are one-byte identifiers",
+        );
+        targets.insert(output.clone(), edge_id);
+    }
+
+    /// Return the number of canonical build edges in the arena.
+    #[must_use]
+    pub const fn edge_count(&self) -> usize {
+        self.edges.len()
+    }
+
+    /// Return the number of output aliases in the index.
+    #[must_use]
+    pub fn output_count(&self) -> usize {
+        self.targets.len()
+    }
+
+    /// Return the bounded output index for Kani lowering harnesses.
+    #[cfg(kani)]
+    pub(super) fn output_index(&self) -> &IrHashMap<Utf8PathBuf, EdgeId> {
+        &self.targets
+    }
+
+    /// Return the canonical edge identity for `output`, when indexed.
+    #[cfg(not(kani))]
+    #[must_use]
+    pub fn edge_id_for_output(&self, output: &Utf8Path) -> Option<EdgeId> {
+        self.targets.get(output).copied()
+    }
+
+    /// Return the canonical edge identity for `output` in Kani's path model.
+    #[cfg(kani)]
+    #[must_use]
+    pub fn edge_id_for_output(&self, output: &Utf8Path) -> Option<EdgeId> {
+        self.targets
+            .get_key_value_path(output)
+            .map(|(_, edge_id)| *edge_id)
+    }
+
+    /// Replace the edge for `output` while preserving its output aliases.
+    ///
+    /// Returns `false` when `output` is absent, the arena is inconsistent, or
+    /// `replacement` would change either explicit or implicit output aliases.
+    pub fn replace_edge_for_output(&mut self, output: &Utf8Path, replacement: BuildEdge) -> bool {
+        let Some(edge_id) = self.edge_id_for_output(output) else {
+            return false;
+        };
+        let Some(existing) = self.edges.get_mut(edge_id.0) else {
+            return false;
+        };
+        if existing.explicit_outputs != replacement.explicit_outputs
+            || existing.implicit_outputs != replacement.implicit_outputs
+        {
+            return false;
+        }
+        *existing = replacement;
+        true
+    }
+
+    /// Resolve `output` to its canonical stored key and producing edge.
+    #[cfg(not(kani))]
+    #[must_use]
+    pub fn target_for_output(&self, output: &Utf8Path) -> Option<(&Utf8Path, &BuildEdge)> {
+        self.targets
+            .get_key_value(output)
+            .and_then(|(stored_output, edge_id)| {
+                self.edges
+                    .get(edge_id.0)
+                    .map(|edge| (stored_output.as_path(), edge))
+            })
+    }
+
+    /// Resolve `output` through Kani's bounded path-key model.
+    #[cfg(kani)]
+    #[must_use]
+    pub fn target_for_output(&self, output: &Utf8Path) -> Option<(&Utf8Path, &BuildEdge)> {
+        self.targets
+            .get_key_value_path(output)
+            .and_then(|(stored_output, edge_id)| {
+                self.edges
+                    .get(edge_id.0)
+                    .map(|edge| (stored_output.as_path(), edge))
+            })
+    }
+
+    /// Iterate the graph's canonical build edges in arena insertion order.
+    pub fn edges(&self) -> impl Iterator<Item = &BuildEdge> {
+        self.edges.iter()
+    }
+
+    /// Iterate every explicit or implicit output alias in the output index.
+    pub fn output_paths(&self) -> impl Iterator<Item = &Utf8PathBuf> {
+        self.targets.keys()
+    }
+
+    /// Return the first output alias that would duplicate an alias in `edge`.
+    ///
+    /// A hash set keeps the scan linear in the edge's own output count; a
+    /// vector would make a single wide edge quadratic.
+    #[cfg(not(kani))]
+    fn duplicate_output<'edge>(&self, edge: &'edge BuildEdge) -> Option<&'edge Utf8PathBuf> {
+        let mut seen: HashSet<&Utf8PathBuf> = HashSet::new();
+        edge.explicit_outputs
+            .iter()
+            .chain(&edge.implicit_outputs)
+            .find(|&output| self.targets.contains_key(output) || !seen.insert(output))
+    }
 }
 
 /// Dependency scheduling policy carried by the domain build graph.
@@ -107,225 +294,7 @@ pub struct BuildEdge {
     pub always: bool,
 }
 
-/// Errors produced during IR generation.
-///
-/// Each variant documents a distinct validation failure encountered while
-/// constructing the intermediate representation from a manifest.
-///
-/// # Examples
-///
-/// ```
-/// use netsuke::ir::IrGenError;
-/// use netsuke::localization::{self, keys};
-/// use serde::ser::Error as _;
-///
-/// fn describe(err: IrGenError) -> String {
-///     match err {
-///         IrGenError::EmptyRule { target_name, .. } => {
-///             format!("{target_name} missing rule")
-///         },
-///         other => other.to_string(),
-///     }
-/// }
-///
-/// assert_eq!(
-///     describe(IrGenError::EmptyRule {
-///         target_name: "app".into(),
-///         message: localization::message(keys::IR_EMPTY_RULE),
-///     }),
-///     "app missing rule"
-/// );
-/// ```
-#[derive(Debug, Error)]
-pub enum IrGenError {
-    /// Raised when a directly deserialized manifest violates recipe rules.
-    #[error("{message}")]
-    InvalidManifest {
-        /// Stable schema diagnostic identifying the violated recipe rule.
-        message: &'static str,
-    },
+#[path = "graph_error.rs"]
+mod graph_error;
 
-    /// Raised when a target references a rule that is not defined in the
-    /// manifest.
-    ///
-    /// ```
-    /// use netsuke::ir::IrGenError;
-    /// use netsuke::localization::{self, keys};
-    /// use serde::ser::Error as _;
-    ///
-    /// let err = IrGenError::RuleNotFound {
-    ///     target_name: "app".into(),
-    ///     rule_name: "compile".into(),
-    ///     message: localization::message(keys::IR_RULE_NOT_FOUND),
-    /// };
-    /// assert!(matches!(
-    ///     err,
-    ///     IrGenError::RuleNotFound { rule_name, .. }
-    ///         if rule_name == "compile"
-    /// ));
-    /// ```
-    #[error("{message}")]
-    RuleNotFound {
-        /// Name of the target referencing the missing rule.
-        target_name: String,
-        /// Rule identifier that was not declared.
-        rule_name: String,
-        /// Localized error message.
-        message: LocalizedMessage,
-    },
-
-    /// Triggered when multiple rule names are supplied for a single target.
-    ///
-    /// ```
-    /// use netsuke::ir::IrGenError;
-    /// use netsuke::localization::{self, keys};
-    /// use serde::ser::Error as _;
-    ///
-    /// let err = IrGenError::MultipleRules {
-    ///     target_name: "lib".into(),
-    ///     rules: vec!["c".into(), "cpp".into()],
-    ///     message: localization::message(keys::IR_MULTIPLE_RULES),
-    /// };
-    /// if let IrGenError::MultipleRules { rules, .. } = err {
-    ///     assert_eq!(
-    ///         rules,
-    ///         vec!["c".to_owned(), "cpp".to_owned()]
-    ///     );
-    /// }
-    /// ```
-    #[error("{message}")]
-    MultipleRules {
-        /// Name of the target that specified conflicting rules.
-        target_name: String,
-        /// Set of rule identifiers provided simultaneously.
-        rules: Vec<String>,
-        /// Localized error message.
-        message: LocalizedMessage,
-    },
-
-    /// Returned when a target declares no rule at all.
-    ///
-    /// ```
-    /// use netsuke::ir::IrGenError;
-    /// use netsuke::localization::{self, keys};
-    /// use serde::ser::Error as _;
-    ///
-    /// let err = IrGenError::EmptyRule {
-    ///     target_name: "docs".into(),
-    ///     message: localization::message(keys::IR_EMPTY_RULE).with_arg("target", "docs"),
-    /// };
-    /// if let IrGenError::EmptyRule { target_name, .. } = err {
-    ///     assert_eq!(target_name, "docs");
-    /// }
-    /// ```
-    #[error("{message}")]
-    EmptyRule {
-        /// Target lacking an associated rule.
-        target_name: String,
-        /// Localized error message.
-        message: LocalizedMessage,
-    },
-
-    /// Indicates that more than one build edge produces the same output file.
-    ///
-    /// ```
-    /// use netsuke::ir::IrGenError;
-    /// use netsuke::localization::{self, keys};
-    /// use serde::ser::Error as _;
-    ///
-    /// let err = IrGenError::DuplicateOutput {
-    ///     outputs: vec!["obj.o".into()],
-    ///     message: localization::message(keys::IR_DUPLICATE_OUTPUTS),
-    /// };
-    /// if let IrGenError::DuplicateOutput { outputs, .. } = err {
-    ///     assert_eq!(
-    ///         outputs,
-    ///         vec!["obj.o".to_owned()]
-    ///     );
-    /// }
-    /// ```
-    #[error("{message}")]
-    DuplicateOutput {
-        /// Outputs produced by more than one build edge.
-        outputs: Vec<String>,
-        /// Localized error message.
-        message: LocalizedMessage,
-    },
-
-    /// Emitted when a cycle exists in the target graph.
-    ///
-    /// ```
-    /// use camino::Utf8PathBuf;
-    /// use netsuke::ir::IrGenError;
-    /// use netsuke::localization::{self, keys};
-    /// use serde::ser::Error as _;
-    ///
-    /// let err = IrGenError::CircularDependency {
-    ///     cycle: vec![Utf8PathBuf::from("a"), Utf8PathBuf::from("a")],
-    ///     missing_dependencies: Vec::new(),
-    ///     message: localization::message(keys::IR_CIRCULAR_DEPENDENCY),
-    /// };
-    /// if let IrGenError::CircularDependency { cycle, .. } = err {
-    ///     assert_eq!(
-    ///         cycle,
-    ///         vec![Utf8PathBuf::from("a"), Utf8PathBuf::from("a")]
-    ///     );
-    /// }
-    /// ```
-    #[error("{message}")]
-    CircularDependency {
-        /// Sequence of outputs that forms the dependency cycle.
-        cycle: Vec<Utf8PathBuf>,
-        /// Dependencies that could not be resolved during analysis.
-        missing_dependencies: Vec<(Utf8PathBuf, Utf8PathBuf)>,
-        /// Localized error message.
-        message: LocalizedMessage,
-    },
-
-    /// Wraps failures encountered while serialising an action to JSON.
-    ///
-    /// ```
-    /// use netsuke::ir::IrGenError;
-    /// use netsuke::localization::{self, keys};
-    /// use serde::ser::Error as _;
-    ///
-    /// let source = serde_json::Error::custom("invalid action");
-    /// let err = IrGenError::ActionSerialisation {
-    ///     source,
-    ///     message: localization::message(keys::IR_ACTION_SERIALISATION),
-    /// };
-    /// assert!(err.to_string().contains("invalid action"));
-    /// ```
-    #[error("{message}: {source}")]
-    ActionSerialisation {
-        /// Underlying serialisation error.
-        #[source]
-        source: serde_json::Error,
-        /// Localized error message.
-        message: LocalizedMessage,
-    },
-
-    /// Raised when command interpolation yields an invalid shell snippet.
-    ///
-    /// ```
-    /// use netsuke::ir::IrGenError;
-    /// use netsuke::localization::{self, keys};
-    /// use serde::ser::Error as _;
-    ///
-    /// let err = IrGenError::InvalidCommand {
-    ///     command: "echo $in".into(),
-    ///     snippet: "echo $in".into(),
-    ///     message: localization::message(keys::IR_INVALID_COMMAND).with_arg("snippet", "echo $in"),
-    /// };
-    /// assert!(matches!(err, IrGenError::InvalidCommand { command, .. } if command == "echo $in"));
-    /// ```
-    #[error("{message}")]
-    InvalidCommand {
-        /// Original command string provided in the manifest.
-        command: String,
-        /// Rendered snippet that failed validation.
-        snippet: String,
-        /// Localized error message.
-        message: LocalizedMessage,
-    },
-}
+pub use graph_error::IrGenError;

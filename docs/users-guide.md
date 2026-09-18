@@ -951,6 +951,21 @@ are ignored, matching the existing accessible reporter contract; applications
 can observe them through the bounded timing sink telemetry emitted by their
 configured metrics and tracing backends.
 
+### Use the canonical build graph
+
+`BuildGraph` stores each logical build edge once. Every output alias, explicit
+or implicit, resolves through the graph's output index to that one edge, so a
+multi-output target is not copied once per output.
+
+Callers add edges with `BuildGraph::insert_edge`, which rejects a duplicate
+output with `IrGenError::DuplicateOutput` before mutating the graph. Callers
+read edges with `edges()` and resolve a path with `edge_id_for_output` or
+`target_for_output`.
+
+Code that previously read or wrote the graph's target map directly must move to
+those methods. Like every Rust API named in this section, this surface is
+unstable and carries no stability promise.
+
 ## Use the template standard library
 
 Netsuke registers focused path, collection, command, network, and time helpers

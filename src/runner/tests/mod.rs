@@ -228,9 +228,8 @@ fn build_graph_preserves_graph_error_context() -> Result<()> {
 #[test]
 fn ninja_text_propagates_typed_generation_errors() {
     let mut graph = BuildGraph::default();
-    graph.targets.insert(
-        Utf8PathBuf::from("hello"),
-        BuildEdge {
+    graph
+        .insert_edge(BuildEdge {
             action_id: "missing".into(),
             inputs: Vec::new(),
             implicit_deps: Vec::new(),
@@ -240,8 +239,8 @@ fn ninja_text_propagates_typed_generation_errors() {
             order_only_deps: Vec::new(),
             phony: false,
             always: false,
-        },
-    );
+        })
+        .expect("test graph output aliases must be unique");
 
     let error = generation::ninja_text_for_shell(&graph, RecipeShell::host_default())
         .expect_err("missing action should fail generation");

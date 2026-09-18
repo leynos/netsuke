@@ -8,10 +8,9 @@
 //!
 //! They also pin the `RUSTFLAGS` contract shared by every recipe that sets the
 //! variable. Each such recipe adds `-D warnings` and prepends any value the
-//! caller already exported rather than discarding it. `kani-full`,
-//! `bench-config-load`, and the binary-build recipe deliberately set nothing:
-//! Kani compiles third-party crates the workspace lint policy does not govern,
-//! and neither a benchmark nor a plain binary build is a lint gate.
+//! caller already exported rather than discarding it. `bench-config-load` and
+//! the binary-build recipe deliberately set nothing because neither is a lint
+//! gate.
 //!
 //! The `RUSTFLAGS` tests extract each assignment from the Makefile and expand
 //! it in a shell. They assert on the flags that expansion yields rather than

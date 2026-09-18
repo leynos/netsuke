@@ -4,9 +4,11 @@
 //! traversal, including cycle detection, stack cleanup, and determinism.
 
 use proptest::prelude::*;
-use std::collections::HashMap;
 
-use super::{BuildEdge, CycleDetector, analyse, canonicalize_cycle, canonicalize_cycle_by};
+use super::super::graph::{BuildEdge, BuildGraph};
+use super::analyse;
+use super::detector::CycleDetector;
+use super::support::{canonicalize_cycle, canonicalize_cycle_by};
 
 #[path = "cycle_analyse_tests.rs"]
 mod analyse_tests;
@@ -89,25 +91,33 @@ fn check_canonicalize_cycle(input: &[camino::Utf8PathBuf], expected: &[camino::U
 
 /// Build a target graph containing two disjoint two-node cycles:
 /// p ↔ q and x ↔ y.
-fn two_disjoint_cycles() -> HashMap<camino::Utf8PathBuf, BuildEdge> {
-    let mut targets = HashMap::new();
-    targets.insert(
-        path("p"),
-        EdgeBuilder::new(path("p")).input(path("q")).build(),
+fn two_disjoint_cycles() -> BuildGraph {
+    let mut graph = BuildGraph::default();
+    assert!(
+        graph
+            .insert_edge(EdgeBuilder::new(path("p")).input(path("q")).build())
+            .is_ok(),
+        "test graph output aliases must be unique",
     );
-    targets.insert(
-        path("q"),
-        EdgeBuilder::new(path("q")).input(path("p")).build(),
+    assert!(
+        graph
+            .insert_edge(EdgeBuilder::new(path("q")).input(path("p")).build())
+            .is_ok(),
+        "test graph output aliases must be unique",
     );
-    targets.insert(
-        path("x"),
-        EdgeBuilder::new(path("x")).input(path("y")).build(),
+    assert!(
+        graph
+            .insert_edge(EdgeBuilder::new(path("x")).input(path("y")).build())
+            .is_ok(),
+        "test graph output aliases must be unique",
     );
-    targets.insert(
-        path("y"),
-        EdgeBuilder::new(path("y")).input(path("x")).build(),
+    assert!(
+        graph
+            .insert_edge(EdgeBuilder::new(path("y")).input(path("x")).build())
+            .is_ok(),
+        "test graph output aliases must be unique",
     );
-    targets
+    graph
 }
 
 proptest! {
@@ -237,18 +247,16 @@ fn find_cycle_detects_one_of_multiple_disjoint_cycles() -> Result<(), String> {
 /// Repeated detection on the same detector resets stale traversal state.
 #[test]
 fn cycle_detector_repeated_detect_resets_traversal_state() {
-    let mut targets = HashMap::new();
-    targets.insert(
-        path("a"),
-        EdgeBuilder::new(path("a")).input(path("b")).build(),
-    );
-    targets.insert(
-        path("b"),
-        EdgeBuilder::new(path("b")).input(path("a")).build(),
-    );
+    let mut graph = BuildGraph::default();
+    graph
+        .insert_edge(EdgeBuilder::new(path("a")).input(path("b")).build())
+        .expect("test graph output aliases must be unique");
+    graph
+        .insert_edge(EdgeBuilder::new(path("b")).input(path("a")).build())
+        .expect("test graph output aliases must be unique");
 
     let expected = vec![path("a"), path("b"), path("a")];
-    let mut detector = CycleDetector::new(&targets);
+    let mut detector = CycleDetector::new(&graph);
 
     assert_eq!(detector.detect(), Some(expected.clone()));
     assert_eq!(detector.detect(), Some(expected));
@@ -260,37 +268,38 @@ fn sequential_nodes(count: usize) -> Vec<camino::Utf8PathBuf> {
 }
 
 /// Build an acyclic chain: n0 → n1 → … → n(count-1) (no back-edges).
-fn make_acyclic_chain(
-    nodes: &[camino::Utf8PathBuf],
-) -> HashMap<camino::Utf8PathBuf, super::super::BuildEdge> {
-    let mut targets = HashMap::new();
+fn make_acyclic_chain(nodes: &[camino::Utf8PathBuf]) -> BuildGraph {
+    let mut graph = BuildGraph::default();
     let mut iter = nodes.iter().peekable();
     while let Some(name) = iter.next() {
         let mut builder = EdgeBuilder::new(name.clone());
         if let Some(next) = iter.peek() {
             builder = builder.input((*next).clone());
         }
-        targets.insert(name.clone(), builder.build());
+        assert!(
+            graph.insert_edge(builder.build()).is_ok(),
+            "test graph output aliases must be unique",
+        );
     }
-    targets
+    graph
 }
 
 /// Build a cycle graph from the provided node names, starting at node index 0.
 ///
 /// Each node depends on the next name in the slice, and the last node depends
 /// on the first, preserving the input order as the cycle order.
-fn make_cycle_graph(
-    nodes: &[camino::Utf8PathBuf],
-) -> HashMap<camino::Utf8PathBuf, super::super::BuildEdge> {
-    let mut targets = HashMap::new();
+fn make_cycle_graph(nodes: &[camino::Utf8PathBuf]) -> BuildGraph {
+    let mut graph = BuildGraph::default();
     let deps = nodes.iter().cycle().skip(1).take(nodes.len());
     for (name, dep) in nodes.iter().zip(deps) {
-        targets.insert(
-            name.clone(),
-            EdgeBuilder::new(name.clone()).input(dep.clone()).build(),
+        assert!(
+            graph
+                .insert_edge(EdgeBuilder::new(name.clone()).input(dep.clone()).build())
+                .is_ok(),
+            "test graph output aliases must be unique",
         );
     }
-    targets
+    graph
 }
 
 proptest! {

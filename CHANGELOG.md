@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Changed
+
+- **Breaking:** store each logical build edge once, indexed by output alias to
+  an `EdgeId`; `BuildGraph::targets` is no longer public, so Rust callers must
+  resolve outputs through the graph accessors
+  ([#652](https://github.com/leynos/netsuke/issues/652))
+
 ### Fixed
 
 - Support beta-to-beta and beta-to-final Windows MSI replacement through WiX

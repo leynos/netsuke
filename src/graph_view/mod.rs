@@ -101,7 +101,7 @@ impl GraphView {
         let mut node_metadata: BTreeMap<Utf8PathBuf, NodeMetadata> = BTreeMap::new();
         let mut edges: BTreeSet<EdgeView> = BTreeSet::new();
 
-        for edge in &edges_seen {
+        for edge in edges_seen {
             register_outputs(graph, edge, &mut registry, &mut node_metadata);
             EdgeRegistrar {
                 edge,
@@ -179,19 +179,9 @@ impl NodePathRegistry {
     }
 }
 
-/// Deduplicate the build edges referenced by [`BuildGraph::targets`].
-///
-/// `BuildGraph::targets` maps every output path back to a (cloned) `BuildEdge`,
-/// so iterating values produces duplicates. We dedup by the lexically-sorted
-/// tuple of explicit outputs, which uniquely identifies a build statement.
-fn collect_unique_edges(graph: &BuildGraph) -> Vec<BuildEdge> {
-    let mut by_key: BTreeMap<Vec<Utf8PathBuf>, BuildEdge> = BTreeMap::new();
-    for edge in graph.targets.values() {
-        let mut key = edge.explicit_outputs.clone();
-        key.sort();
-        by_key.entry(key).or_insert_with(|| edge.clone());
-    }
-    by_key.into_values().collect()
+/// Return the canonical edges owned by [`BuildGraph`].
+fn collect_unique_edges(graph: &BuildGraph) -> impl Iterator<Item = &BuildEdge> {
+    graph.edges()
 }
 
 /// Record every output of `edge` as a target node with its action metadata.

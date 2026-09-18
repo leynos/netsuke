@@ -18,7 +18,6 @@ use crate::ir::{BuildEdge, BuildGraph};
 use crate::localization::{self, keys};
 use camino::Utf8PathBuf;
 use itertools::Itertools;
-use std::collections::HashSet;
 use std::fmt::Write;
 
 mod explicit_shell;
@@ -79,14 +78,14 @@ pub(crate) use display_edge::DisplayEdge;
 ///     description: None, depfile: None, deps_format: None,
 ///     pool: None, restat: false
 /// });
-/// graph.targets.insert(Utf8PathBuf::from("out"), BuildEdge {
+/// graph.insert_edge(BuildEdge {
 ///     action_id: "a".into(), inputs: Vec::new(),
 ///     implicit_deps: Vec::new(),
 ///     dependency_order: netsuke::ir::DependencyOrder::Parallel,
 ///     explicit_outputs: vec![Utf8PathBuf::from("out")],
 ///     implicit_outputs: Vec::new(), order_only_deps: Vec::new(),
 ///     phony: false, always: false
-/// });
+/// }).expect("test graph output aliases must be unique");
 /// # let result: Result<(), netsuke::ninja_gen::NinjaGenError> = (|| {
 /// let text = netsuke::ninja_gen::generate(&graph)?;
 /// assert!(text.contains("rule a"));
@@ -122,14 +121,14 @@ pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 ///     description: None, depfile: None, deps_format: None,
 ///     pool: None, restat: false
 /// });
-/// graph.targets.insert(Utf8PathBuf::from("out"), BuildEdge {
+/// graph.insert_edge(BuildEdge {
 ///     action_id: "a".into(), inputs: Vec::new(),
 ///     implicit_deps: Vec::new(),
 ///     dependency_order: netsuke::ir::DependencyOrder::Parallel,
 ///     explicit_outputs: vec![Utf8PathBuf::from("out")],
 ///     implicit_outputs: Vec::new(), order_only_deps: Vec::new(),
 ///     phony: false, always: false
-/// });
+/// }).expect("test graph output aliases must be unique");
 /// let mut out = String::new();
 /// # let result: Result<(), netsuke::ninja_gen::NinjaGenError> = (|| {
 /// netsuke::ninja_gen::generate_into(&graph, &mut out)?;
@@ -170,14 +169,9 @@ pub(crate) fn generate_into_with_shell<W: Write>(
         });
     }
     write_action_rules(graph, out, shell)?;
-    let mut edges: Vec<_> = graph.targets.values().collect();
+    let mut edges: Vec<_> = graph.edges().collect();
     edges.sort_by_key(|a| path_key(&a.explicit_outputs));
-    let mut seen = HashSet::new();
     for edge in edges {
-        let key = path_key(&edge.explicit_outputs);
-        if !seen.insert(key.clone()) {
-            continue;
-        }
         let action =
             graph
                 .actions
@@ -246,7 +240,7 @@ pub(crate) fn path_key(paths: &[Utf8PathBuf]) -> String {
 }
 /// Whether the graph contains an edge whose serial list needs dyndep gates.
 pub(crate) fn graph_requires_dyndep(graph: &BuildGraph) -> bool {
-    graph.targets.values().any(edge_requires_gates)
+    graph.edges().any(edge_requires_gates)
 }
 
 /// Whether one edge's serial dependency list needs staged dyndep gates.
