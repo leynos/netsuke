@@ -12,6 +12,8 @@ compile steps.
 Run via ``make test-workflow-contracts``.
 """
 
+import re
+
 import pytest
 from cache_contract_data import (
     ACTION_DIR,
@@ -133,6 +135,86 @@ def test_the_credential_export_runs_on_the_owned_arm_alone(
     )
 
 
+#: An active `core.exportVariable('NAME', <value>)` call, with its value up to
+#: the closing parenthesis. Matched as a call rather than by the name appearing
+#: somewhere in the script: a commented-out export, a log line or a dead branch
+#: keeps every identifier while exporting nothing, and the action would then
+#: leave sccache on local disk with this contract still green.
+#:
+#: Only whitespace may precede the call, which is what rejects a commented-out
+#: one: `//` is not whitespace. Comments are not stripped from the script
+#: first, because a value may contain `//` -- an address is the obvious case --
+#: and stripping would cut the call in half. A trailing comment is allowed
+#: after the call instead.
+_EXPORT_CALL = re.compile(
+    r"^[^\S\n]*core\.exportVariable\(\s*'(?P<name>[^']+)'\s*,"
+    r"\s*(?P<value>.+?)\s*\)\s*;?[^\S\n]*(?://.*)?$",
+    re.MULTILINE,
+)
+
+
+def _exported_variables(script: str) -> dict[str, str]:
+    """Return each variable the script actively exports, mapped to its value."""
+    return {found["name"]: found["value"] for found in _EXPORT_CALL.finditer(script)}
+
+
+@pytest.mark.parametrize(
+    ("script", "expected"),
+    [
+        pytest.param(
+            "core.exportVariable('A', process.env.A || '');",
+            {"A": "process.env.A || ''"},
+            id="a-plain-call",
+        ),
+        pytest.param(
+            "  core.exportVariable('A', '');",
+            {"A": "''"},
+            id="an-indented-call",
+        ),
+        pytest.param(
+            "core.exportVariable('A', '') // why\n",
+            {"A": "''"},
+            id="a-call-with-a-trailing-comment",
+        ),
+        pytest.param(
+            "// core.exportVariable('A', 'x');",
+            {},
+            id="a-commented-out-call",
+        ),
+        pytest.param(
+            "  //core.exportVariable('A', 'x');",
+            {},
+            id="a-commented-out-call-without-a-space",
+        ),
+        pytest.param(
+            "core.info(`exporting ACTIONS_CACHE_URL`);",
+            {},
+            id="a-log-line-naming-the-variable",
+        ),
+        pytest.param(
+            "core.exportVariable('A', 'https://example.test/path');",
+            {"A": "'https://example.test/path'"},
+            id="a-value-containing-a-double-slash",
+        ),
+    ],
+)
+def test_only_an_active_call_counts_as_an_export(
+    script: str, expected: dict[str, str]
+) -> None:
+    """The reader is driven here, because the action exercises one shape only.
+
+    The action's script carries three calls of a single form, so every case
+    that separates an export from a mention of one has to be written out. The
+    address case is the reason comments are not stripped before matching: a
+    value may contain `//`, and cutting the line at it would discard the
+    closing parenthesis and read an active export as absent.
+    """
+    assert _exported_variables(script) == expected, (
+        f"{script!r} must read as {expected!r}; a name that appears without "
+        f"an active call is a mention, and an active call is an export"
+    )
+
+
 def test_the_export_names_the_proxy_endpoint_not_the_results_service() -> None:
     """Require the export to point sccache at the endpoint Ubicloud serves.
 
@@ -147,16 +229,26 @@ def test_the_export_names_the_proxy_endpoint_not_the_results_service() -> None:
     script = str(
         require_mapping(steps[0].get("with"), "export inputs").get("script", "")
     )
+    exported = _exported_variables(script)
     required = {
         "ACTIONS_CACHE_URL": "publish the proxy address sccache should use",
         "ACTIONS_RUNTIME_TOKEN": "publish the token that address requires",
-        "ACTIONS_CACHE_SERVICE_V2', ''": (
+        "ACTIONS_CACHE_SERVICE_V2": (
             "clear the v2 switch, which routes past the proxy"
         ),
     }
-    missing = [reason for token, reason in required.items() if token not in script]
+    missing = [reason for name, reason in required.items() if name not in exported]
     assert not missing, f"the export must {'; '.join(missing)}"
-    assert "ACTIONS_RESULTS_URL" not in script, (
+    assert exported["ACTIONS_CACHE_SERVICE_V2"] == "''", (
+        "the v2 switch must be cleared rather than set; sccache treats any "
+        f"value as 'use v2', and this exports {exported['ACTIONS_CACHE_SERVICE_V2']}"
+    )
+    for name in ("ACTIONS_CACHE_URL", "ACTIONS_RUNTIME_TOKEN"):
+        assert f"process.env.{name}" in exported[name], (
+            f"{name} must be exported from the runner's own value, not from a "
+            f"literal; it exports {exported[name]}"
+        )
+    assert "ACTIONS_RESULTS_URL" not in exported, (
         "the export must not publish the v2 results service address, which is "
         "what sent 92 sccache objects to GitHub instead of Ubicloud"
     )
