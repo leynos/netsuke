@@ -8,6 +8,8 @@ cache ownership, and oversubscribed worker counts.
 Run via ``make test-workflow-contracts``.
 """
 
+import typing as typ
+
 import pytest
 from fork_fallback import FORK_FALLBACK_KEYS, fork_fallback_offences
 from hypothesis import example, given, settings
@@ -42,6 +44,16 @@ RUNNER_MUTATIONS = (
     "swapped-platforms",
     "intel-macos-replaced",
 )
+#: The lane each mutation makes invalid, where that is not the selected one.
+#: Both of these rewrite a lane of their own rather than the one under test:
+#: the coverage lane is the only one no fork can reach, and `netsukefile` is
+#: the only one whose fork arm is pinned to an image rather than to
+#: `ubuntu-latest`.
+_MUTATION_TARGETS: typ.Final[dict[str, str]] = {
+    "arm-where-no-fork-reaches": "coverage-main.coverage-upload",
+    "wrong-fork-image": "netsukefile-test.netsukefile",
+}
+
 FORK_FALLBACK_MUTATIONS = (
     "valid",
     "arm-dropped",
@@ -368,6 +380,11 @@ def test_generated_placements_reject_every_wrong_fork_arm(
     key = FORK_FALLBACK_KEYS[selected]
     declarations = mutate_fork_fallback_declarations(mutation, key)
     offences = fork_fallback_offences(declarations)
-    assert (not offences) is (mutation == "valid"), (
-        f"mutation={mutation!r}, key={key!r}, offences={offences!r}"
+    # The exact set, not merely a non-empty one. A reading that reported some
+    # other lane would satisfy "an invalid mutation is refused" while saying
+    # nothing true about the lane the mutation touched, and a fix aimed at the
+    # reported lane would leave the real one wrong.
+    expected = [] if mutation == "valid" else [_MUTATION_TARGETS.get(mutation, key)]
+    assert offences == expected, (
+        f"mutation={mutation!r}, key={key!r}: expected {expected!r}, got {offences!r}"
     )
