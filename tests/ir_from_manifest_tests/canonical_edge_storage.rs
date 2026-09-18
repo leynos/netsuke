@@ -7,18 +7,11 @@ use netsuke::{
     manifest, ninja_gen,
 };
 
-/// Store one multi-output target in one canonical edge and many output aliases.
-#[test]
-fn multi_output_target_uses_linear_canonical_storage() -> Result<()> {
-    const OUTPUT_COUNT: usize = 4_096;
-    let outputs = (0..OUTPUT_COUNT)
-        .map(|index| format!("out/{index:04}"))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let manifest = manifest::from_str(&format!(
-        "netsuke_version: '1.0.0'\ntargets:\n  - name: [{outputs}]\n    command: echo {{{{ outs }}}}\n"
-    ))?;
-    let graph = BuildGraph::from_manifest(&manifest)?;
+/// Verify that every output alias resolves to one canonical edge.
+fn assert_canonical_output_aliases(
+    graph: &BuildGraph,
+    output_count: usize,
+) -> Result<&netsuke::ir::BuildEdge> {
     let canonical = graph.edges().next().context("expected canonical edge")?;
     let first_output = canonical
         .explicit_outputs
@@ -30,17 +23,18 @@ fn multi_output_target_uses_linear_canonical_storage() -> Result<()> {
 
     ensure!(graph.edge_count() == 1, "one target must own one edge");
     ensure!(
-        canonical.explicit_outputs.len() == OUTPUT_COUNT,
+        canonical.explicit_outputs.len() == output_count,
         "canonical edge should retain every explicit output"
     );
     ensure!(
-        graph.output_count() == OUTPUT_COUNT,
+        graph.output_count() == output_count,
         "every explicit output should remain an output alias"
     );
     ensure!(
-        canonical.explicit_outputs.len() + graph.output_count() == OUTPUT_COUNT * 2,
+        canonical.explicit_outputs.len() + graph.output_count() == output_count * 2,
         "the edge vector and output index must grow linearly"
     );
+
     for output in &canonical.explicit_outputs {
         ensure!(
             graph.edge_id_for_output(output.as_path()) == Some(canonical_edge_id),
@@ -54,6 +48,23 @@ fn multi_output_target_uses_linear_canonical_storage() -> Result<()> {
             "every output must resolve to the canonical edge"
         );
     }
+
+    Ok(canonical)
+}
+
+/// Store one multi-output target in one canonical edge and many output aliases.
+#[test]
+fn multi_output_target_uses_linear_canonical_storage() -> Result<()> {
+    const OUTPUT_COUNT: usize = 4_096;
+    let outputs = (0..OUTPUT_COUNT)
+        .map(|index| format!("out/{index:04}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let manifest = manifest::from_str(&format!(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: [{outputs}]\n    command: echo {{{{ outs }}}}\n"
+    ))?;
+    let graph = BuildGraph::from_manifest(&manifest)?;
+    let canonical = assert_canonical_output_aliases(&graph, OUTPUT_COUNT)?;
 
     let ninja = ninja_gen::generate(&graph)?;
     let build_statements = ninja
