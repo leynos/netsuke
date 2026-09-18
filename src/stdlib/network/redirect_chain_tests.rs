@@ -204,7 +204,9 @@ fn revisited_target_is_refused_as_a_loop(chain_setup: Result<ChainSetup>) -> Res
     let mut chain = RedirectChain::new(&base, &policy);
 
     let first = resolve_against(&chain, "/once")?;
-    chain.advance(first).expect("the first hop should be accepted");
+    chain
+        .advance(first)
+        .expect("the first hop should be accepted");
     let repeat = resolve_against(&chain, "/once")?;
     let refused = chain
         .advance(repeat)

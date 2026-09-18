@@ -79,7 +79,8 @@ fn unusable_headers_report_their_own_failure(
 /// Each header failure is counted under its own closed telemetry category.
 #[rstest]
 fn every_location_failure_has_a_distinct_closed_category() {
-    let reasons = [LocationFailure::Missing, LocationFailure::Unparsable].map(LocationFailure::reason);
+    let reasons =
+        [LocationFailure::Missing, LocationFailure::Unparsable].map(LocationFailure::reason);
     let unique = reasons.iter().copied().collect::<BTreeSet<_>>();
 
     assert_eq!(

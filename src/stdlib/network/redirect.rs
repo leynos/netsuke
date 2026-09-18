@@ -28,9 +28,9 @@ use super::{NetworkPolicy, network_policy_rejection_reason};
 #[path = "redirect_support.rs"]
 mod support;
 
-use support::{fetch_failed_error, location_failure_error, rejection_error};
 #[cfg(test)]
 use support::redacted_url;
+use support::{fetch_failed_error, location_failure_error, rejection_error};
 
 /// Wall-clock budget for one whole redirect chain, shared by every hop.
 ///
@@ -78,21 +78,35 @@ pub(super) fn dispatch_request(
             return Ok(response);
         }
 
-        let target = match resolve_location(&chain, response.header("Location")) {
-            Ok(target) => target,
-            Err(failure) => {
-                let refused_hop = chain.hops().saturating_add(1);
-                return Err(report_location_failure(&chain, failure, refused_hop));
-            }
-        };
-        match chain.advance(target) {
-            Ok(transition) => record_followed_redirect(transition.hop),
-            Err(rejection) => {
-                let refused_hop = chain.hops().saturating_add(1);
-                return Err(report_refused_redirect(&rejection, refused_hop));
-            }
-        }
+        let hop = follow_redirect(&mut chain, &response)?;
+        record_followed_redirect(hop);
     }
+}
+
+/// Resolve one redirect response and judge it, recording any refusal.
+///
+/// The two ways a redirect can fail — a header the adapter cannot resolve and a
+/// target the chain refuses — both end here, so the dispatch loop has a single
+/// failure path and every refusal is reported in the same shape. An absent
+/// header and an unresolvable value are distinct failures only in the reason
+/// and message they carry.
+///
+/// # Errors
+///
+/// Returns the localized diagnostic for an unusable `Location` header, or for
+/// the refusal the chain reported, after recording each in telemetry and the
+/// log.
+fn follow_redirect(
+    chain: &mut RedirectChain<'_>,
+    response: &ureq::Response,
+) -> Result<usize, Error> {
+    let target = resolve_location(chain, response.header("Location")).map_err(|failure| {
+        report_location_failure(chain, failure, chain.hops().saturating_add(1))
+    })?;
+    chain
+        .advance(target)
+        .map(|transition| transition.hop)
+        .map_err(|rejection| report_refused_redirect(&rejection, chain.hops().saturating_add(1)))
 }
 
 /// Resolve the raw `Location` header into the target the chain will judge.

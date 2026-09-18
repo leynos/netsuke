@@ -24,8 +24,8 @@ use super::*;
 
 /// Re-exported for [`location`], which reaches the recorder helpers this way.
 pub(super) use super::super::tests_support::{collect_samples, counter_totals};
-use minijinja::ErrorKind;
 use crate::snapshot_test_support::snapshot_settings;
+use minijinja::ErrorKind;
 
 /// Credentialed URL used as the current URL of a refused redirect.
 const CREDENTIALED_CURRENT: &str = "http://redirect-user:redirect-secret@allowed.example/start";
