@@ -206,12 +206,22 @@ def test_makefile_runs_both_github_actions_linters() -> None:
     assert "github-actions-lint: ## Validate GitHub Actions workflows" in makefile, (
         "the Makefile must document the `github-actions-lint` target"
     )
-    assert recipe == [
-        "$(YAMLLINT) --config-file .yamllint.yml .github/workflows",
-        "$(ACTIONLINT)",
-    ], (
+    assert recipe[0] == "$(YAMLLINT) --config-file .yamllint.yml .github/workflows", (
         "the `github-actions-lint` recipe must run yamllint with the "
-        "repository policy before actionlint"
+        "repository policy first"
+    )
+    assert recipe[-1] == "$(ACTIONLINT)", (
+        "the `github-actions-lint` recipe must still run actionlint, after "
+        "yamllint and the preflight that guards it"
+    )
+    preflight = "\n".join(recipe[1:-1])
+    assert 'command -v "$$ACTIONLINT"' in preflight, (
+        "the recipe must resolve actionlint in the recipe shell, which receives "
+        "the Makefile's curated PATH, rather than while Make parses the file"
+    )
+    assert "$$GO_BIN/actionlint" in preflight, (
+        "the preflight must name the Go tool directory as the location a "
+        "`go install` writes actionlint to"
     )
 
 
