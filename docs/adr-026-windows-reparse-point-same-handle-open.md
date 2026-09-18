@@ -50,8 +50,9 @@ built to avoid.
 ### Functional requirements
 
 - A final component that is a reparse point is rejected by the default policy on
-  Windows, whether it is a file symlink, a directory symlink, a junction, or a
-  volume mount point.
+  Windows, whether it is a file symlink, a directory symlink, a junction, a
+  volume mount point, or any other tag such as a deduplication or cloud
+  placeholder.
 - A final component that is not a regular file is rejected on every platform.
 - `follow_symlinks=true` continues to resolve a link to its target and read it.
 
@@ -127,12 +128,16 @@ rejects the opened handle when either
 - the handle's `file_attributes()` carries `FILE_ATTRIBUTE_REPARSE_POINT`, or
 - the handle's metadata reports anything other than a regular file.
 
-The first test rejects **every** reparse tag, not only the name-surrogate tags
-that `std` reports as symlinks. Junctions and volume mount points carry
-`IO_REPARSE_TAG_MOUNT_POINT`, which is not a name surrogate, so a check phrased
-in terms of "is a symlink" would have missed exactly the file types this change
-exists to reject. Testing the attribute bit instead makes the policy express
-"reject all reparse points" directly.
+The first test rejects **every** reparse tag, not only the ones `std` reports
+as symlinks. `FileType::is_symlink` is a test on the tag *value*: it is true
+only for name-surrogate tags (bit 29 set), which covers file symlinks,
+directory symlinks, junctions, and volume mount points — but is false for
+every other tag, such as a deduplication or cloud placeholder. For those, an
+open that follows the point succeeds and returns the target's handle, while a
+check phrased as "is this a symlink" sees nothing to refuse. Testing the
+attribute bit asks "is this a reparse point at all", which is the policy the
+callers actually want, and it needs no knowledge of which tags a future
+Windows release may mint.
 
 `reject_windows_symlink` is deleted; its pre-open `symlink_metadata` call is
 gone, and nothing replaces it.

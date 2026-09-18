@@ -1517,8 +1517,10 @@ Implementation notes:
   handle, so special files are rejected without a check-then-open window. On
   Windows the default policy asks the open itself not to traverse a reparse
   point and then refuses the opened handle when it carries
-  `FILE_ATTRIBUTE_REPARSE_POINT`; that rejects symlinks, junctions, and volume
-  mount points alike, and the judgement and the read share one handle. See
+  `FILE_ATTRIBUTE_REPARSE_POINT`; that refuses symlinks, junctions, volume
+  mount points, and every other tag alike, because the test is on the
+  attribute bit rather than on the tag value. The judgement and the read share
+  one handle. See
   [ADR-026](adr-026-windows-reparse-point-same-handle-open.md).
 - An over-budget read fails with `stdlib.path.contents.file_too_large`, which
   quotes the path and the byte limit. An opened object that is not a regular
