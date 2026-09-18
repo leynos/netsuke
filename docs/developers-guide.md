@@ -5695,16 +5695,31 @@ and the `fcntl_getfl`/`fcntl_setfl` calls come from `rustix::fs::OFlags` and
 `rustix::fs`, a production dependency (1.0.8, `fs` feature, per `Cargo.toml`)
 used for this Unix flag handling. Once the opened handle is confirmed to be a
 regular file, `restore_blocking` clears `O_NONBLOCK`. The regular-file check
-runs on the opened handle, so devices and FIFOs are rejected race-free. Windows
-has no `O_NOFOLLOW` through cap-std, so `reject_windows_symlink` checks
-`symlink_metadata` before the open; that check is not race-free and is tracked
-as issue #703.
+runs on the opened handle, so devices and FIFOs are rejected race-free.
+
+Windows has no `O_NOFOLLOW` through cap-std, but `windows_reparse` reaches the
+same guarantee through `cap_std`'s Windows-only `OpenOptionsExt::custom_flags`,
+which is OR-ed into the `dwFlagsAndAttributes` argument of the open.
+`apply_open_flags` sets `FILE_FLAG_OPEN_REPARSE_POINT` while symlinks are not
+followed, so the open does not traverse a reparse point and the returned handle
+refers to the point itself, and it always sets `FILE_FLAG_BACKUP_SEMANTICS` so a
+directory can be opened and then rejected by the shared regular-file check
+rather than by the open failing. The decision is then taken from that same
+handle: `reject_reparse_point` reads `file_attributes()` — populated from
+`BY_HANDLE_FILE_INFORMATION` on the open handle — and refuses anything carrying
+`FILE_ATTRIBUTE_REPARSE_POINT`. Testing the attribute bit rather than the tag
+rejects junctions and volume mount points too, which `std` does not report as
+symlinks because `IO_REPARSE_TAG_MOUNT_POINT` is not a name surrogate. Because
+the judgement and the read share one handle, there is no check-then-open window
+between them; see
+[ADR-026](adr-026-windows-reparse-point-same-handle-open.md).
 
 Two diagnostics come out of the boundary. `bounded_read.rs` raises
 `file_too_large_error`, which quotes the path and the limit that was exceeded;
 `fs_utils.rs` raises `not_regular_file_error`, which quotes only the path and
-is what rejects an opened FIFO or device (and a Windows symlink). On Unix a
-symlink refused by `O_NOFOLLOW` instead surfaces through the mapped open error.
+is what rejects an opened FIFO or device (and, on Windows, a reparse point that
+`reject_reparse_point` refuses). On Unix a symlink refused by `O_NOFOLLOW`
+instead surfaces through the mapped open error.
 All of them, like the invalid-UTF-8 diagnostic that `contents` and `linecount`
 raise for undecodable input, are MiniJinja `InvalidOperation` errors. See
 [Digest rendering](#digest-rendering) for the hashing loop that consumes this

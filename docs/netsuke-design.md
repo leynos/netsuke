@@ -1515,14 +1515,17 @@ Implementation notes:
   final component. Blocking mode is restored once the opened object is
   confirmed to be a regular file, and the regular-file check runs on the opened
   handle, so special files are rejected without a check-then-open window. On
-  Windows cap-std exposes no `O_NOFOLLOW`, so the pre-open `symlink_metadata`
-  check is the platform's best available guard; it is not race-free, and that
-  residual risk is tracked separately (issue #703).
+  Windows the default policy asks the open itself not to traverse a reparse
+  point and then refuses the opened handle when it carries
+  `FILE_ATTRIBUTE_REPARSE_POINT`; that rejects symlinks, junctions, and volume
+  mount points alike, and the judgement and the read share one handle. See
+  [ADR-026](adr-026-windows-reparse-point-same-handle-open.md).
 - An over-budget read fails with `stdlib.path.contents.file_too_large`, which
   quotes the path and the byte limit. An opened object that is not a regular
-  file (a FIFO, device, or a Windows symlink refused ahead of the open) fails
-  with `stdlib.path.contents.not_regular_file`, which quotes the path alone. A
-  Unix symlink refused by `O_NOFOLLOW` surfaces as the mapped open error for
+  file (a FIFO, a device, or a Windows reparse point refused on the opened
+  handle) fails with `stdlib.path.contents.not_regular_file`, which quotes the
+  path alone. A Unix symlink refused by `O_NOFOLLOW` surfaces as the mapped
+  open error for
   the action (the `stdlib.path.io.failed` family) instead of the regular-file
   diagnostic, because the refusal happens while opening. `linecount` validates
   UTF-8 incrementally as it counts, so a file that is not text is rejected
