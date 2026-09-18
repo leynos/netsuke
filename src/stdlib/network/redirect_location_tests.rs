@@ -10,7 +10,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Result, bail, ensure};
 use metrics_util::debugging::DebuggingRecorder;
 use rstest::rstest;
 use test_support::{
@@ -132,10 +132,9 @@ fn location_failures_are_counted_and_logged_with_four_fields() -> Result<()> {
         "a header failure must be counted under its closed reason: {totals:?}",
     );
 
-    let event = samples
-        .iter()
-        .find(|event| event.contains("fetch redirect refused"))
-        .context("a header failure must be logged")?;
+    let [event] = samples.as_slice() else {
+        bail!("a header failure must emit exactly one warning: {samples:?}");
+    };
     for field in [
         "operation=\"fetch\"",
         "redirect_outcome=\"rejected\"",
@@ -147,10 +146,25 @@ fn location_failures_are_counted_and_logged_with_four_fields() -> Result<()> {
             "the refusal event must carry {field}: {event}",
         );
     }
+    // Pinning the field *names* is what enforces ADR-023's four-field bound: a
+    // check for the URL's value alone would still pass if the event named the
+    // response in a field of its own.
+    for field in ["location=", "url=", "host=", "userinfo="] {
+        ensure!(
+            !event.contains(field),
+            "the refusal event must not carry {field}: {event}",
+        );
+    }
     ensure!(
         !event.contains("allowed.example"),
         "the refusal event must not name the URL: {event}",
     );
+    for secret in SECRETS {
+        ensure!(
+            !event.contains(secret),
+            "the refusal event must not disclose {secret}: {event}",
+        );
+    }
     Ok(())
 }
 
