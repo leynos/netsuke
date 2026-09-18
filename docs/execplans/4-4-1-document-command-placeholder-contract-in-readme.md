@@ -1298,6 +1298,30 @@ reads naturally.
 
 ## Progress
 
+### EP-M1 — complete (`3594b568`)
+
+The ADR, its index entry, and the design-document cross-reference are written,
+formatted, gated, and pushed. `make check-fmt` reported
+`143 files left unchanged`; `make markdownlint` reported `0 error(s)` over 143
+files. The `typos-config-builder gate` step inside `make markdownlint` printed
+`refreshed: typos.toml` but left the working tree clean —
+`git status --porcelain` showed only the three intended changes, so no
+generated spelling configuration drifted into the commit.
+
+The branch was rebased onto `origin/main` after the plan's revision-2 commits
+had been pushed, so the three plan commits on the remote are the pre-rebase
+versions. `git patch-id --stable` confirms all three are content-identical to
+their rebased counterparts (`d535a8e4`, `f37a00e8`, `f443c1bd` in both sets),
+so the force-with-lease push that followed was a pure lineage change, not a
+rewrite of reviewed content.
+
+Also updated out of band, per the task instruction: PR 699's title lost its
+literal `Plan:` prefix and now reads *Document the command placeholder contract
+in the README (4.4.1)*, and the Lody session was renamed to match with
+`lody session rename --title`.
+
+### Stage A — complete
+
 Stage A (settle the contract) is **complete**. The branch was rebased onto
 `origin/main` at `0ba6672f` before any implementation, and all three facts were
 re-verified against the rebased tree. Citation drift against revision 2, for
@@ -1328,8 +1352,9 @@ the record:
 - `tests/documentation_examples_tests.rs`: `EXPECTED_EXAMPLE_IDS` `readme-`
   block at :54-58, registry test at :143.
 
-- [ ] EP-M1 — ADR-027 written, indexed, and referenced from the design
-      document.
+- [x] EP-M1 — ADR-027 written, indexed, and referenced from the design
+      document. Landed as `3594b568`. `make check-fmt` and `make markdownlint`
+      pass. Awaiting the milestone CodeRabbit pass.
 - [ ] EP-M2 — `docs/developers-guide.md`, `docs/users-guide.md`,
       `docs/formal-verification-methods-in-netsuke.md`, and any inaccurate doc
       comment corrected. Precedes the README deliberately.
