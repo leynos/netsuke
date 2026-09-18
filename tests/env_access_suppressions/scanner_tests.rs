@@ -196,6 +196,46 @@ three";
     Ok(())
 }
 
+/// The old spelling of the policy lint still selects it, so it is banned too.
+#[test]
+fn the_renamed_spelling_of_the_policy_lint_is_reported() -> Result<()> {
+    let source = "#![allow(clippy::disallowed_method, reason = \"escape hatch probe\")]\n";
+    let findings = scan_source("src/lib.rs", source);
+
+    ensure!(
+        findings
+            == [(
+                String::from("src/lib.rs"),
+                String::from("clippy::disallowed_method")
+            )],
+        "expected the renamed spelling to be reported, got {findings:?}"
+    );
+    Ok(())
+}
+
+/// The enabler that hides the rename is the ingredient that makes it silent.
+#[test]
+fn the_rename_enabler_is_reported_alongside_the_alias() -> Result<()> {
+    let source = "#![allow(\n    renamed_and_removed_lints,\n    clippy::disallowed_method,\n    reason = \"escape hatch probe\"\n)]\n";
+    let findings = scan_source("src/lib.rs", source);
+
+    ensure!(
+        findings
+            == [
+                (
+                    String::from("src/lib.rs"),
+                    String::from("renamed_and_removed_lints")
+                ),
+                (
+                    String::from("src/lib.rs"),
+                    String::from("clippy::disallowed_method")
+                )
+            ],
+        "expected both halves of the aliased suppression to be reported, got {findings:?}"
+    );
+    Ok(())
+}
+
 /// A lifetime is not an unterminated char literal that blanks the code after it.
 #[test]
 fn a_lifetime_does_not_blank_the_attribute_that_follows() -> Result<()> {
