@@ -108,23 +108,34 @@ fn blank_string_or_advance(bytes: &[u8], masked: &mut [u8], start: usize) -> usi
 
 /// Blank a string body, returning the index just past its terminator.
 ///
-/// A raw string ends at the first `"` followed by as many `#` as opened it, so
-/// a quote inside it does not end the scan early. Any other string honours a
-/// backslash escape, so an escaped quote does not end it early either. The
-/// closing delimiter is left in place, since only the contents are quoted text.
+/// The two spellings end differently, so each is read by its own scan: a raw
+/// string ends at the first `"` followed by as many `#` as opened it, while any
+/// other string honours a backslash escape. The closing delimiter is left in
+/// place either way, since only the contents are quoted text.
 fn blank_string(bytes: &[u8], masked: &mut [u8], quote: usize, raw: Option<usize>) -> usize {
-    let mut index = quote + 1;
-    if let Some(hashes) = raw {
-        while let Some(byte) = bytes.get(index) {
-            if *byte == b'"' && closes_raw_string(bytes, index, hashes) {
-                return index + hashes + 1;
-            }
-            blank_byte(masked, index);
-            index += 1;
-        }
-        return index;
+    match raw {
+        Some(hashes) => blank_raw_string(bytes, masked, quote, hashes),
+        None => blank_escaped_string(bytes, masked, quote),
     }
+}
+
+/// Blank a raw string's body, returning the index just past its terminator.
+fn blank_raw_string(bytes: &[u8], masked: &mut [u8], quote: usize, hashes: usize) -> usize {
+    let mut index = quote + 1;
+    while let Some(byte) = bytes.get(index) {
+        if *byte == b'"' && closes_raw_string(bytes, index, hashes) {
+            return index + hashes + 1;
+        }
+        blank_byte(masked, index);
+        index += 1;
+    }
+    index
+}
+
+/// Blank an escaped string's body, returning the index just past its terminator.
+fn blank_escaped_string(bytes: &[u8], masked: &mut [u8], quote: usize) -> usize {
     let mut escaped = false;
+    let mut index = quote + 1;
     while let Some(byte) = bytes.get(index) {
         if escaped {
             escaped = false;
