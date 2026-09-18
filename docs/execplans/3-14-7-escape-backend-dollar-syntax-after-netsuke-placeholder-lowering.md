@@ -122,9 +122,9 @@ Stop and escalate rather than improvising when any of these is reached.
    dependency is `input` while the command reads `input$1`. Severity: high.
    Likelihood: medium — `tests/command_escaping_tests.rs:55` already uses
    `input$1` as a fixture path. Mitigation: milestone EP-M3 makes path emission
-   fallible and rejects `$`, space, colon, and control characters with a typed
-   error, so the inconsistency becomes a clear diagnostic instead of a corrupt
-   build file.
+   fallible and rejects `$`, colon, `|`, and control characters with a typed
+   error, and escapes a literal space as a `$` followed by a space, so the
+   inconsistency becomes a clear diagnostic instead of a corrupt build file.
 
 4. Risk: a scalar `command:` containing a newline currently writes raw Ninja
    syntax into the generated file. `shlex::split` treats `\n` as whitespace and
@@ -211,12 +211,14 @@ Stop and escalate rather than improvising when any of these is reached.
   spawning Ninja. The B2 test supplies `in` and confirms that the executed
   script writes `in` to `out`.
 
-- Observation: Clippy does not infer that reading `text.0` makes the I3
-  conversion's by-value parameter semantically consumed. Evidence: `make lint`
-  reported `needless_pass_by_value` against the required consuming signature.
-  Impact: destructure `ShellText` immediately at the conversion boundary. This
-  makes the string move explicit to both the compiler and readers while
-  preserving the non-reference API required by I3.
+- Observation (superseded): Clippy does not infer that reading `text.0` makes
+  the I3 conversion's by-value parameter semantically consumed. Evidence:
+  `make lint` reported `needless_pass_by_value` against the consuming signature
+  then in place. Impact: destructure `ShellText` immediately at the conversion
+  boundary. Main later reverted that signature to a borrow, so the
+  destructuring and the `needless_pass_by_value` exception both describe code
+  that no longer exists; see the 2026-08-27 revision entry and the correction
+  recorded at `2026-09-17`.
 
 - Observation: the existing debug-only `shlex` guard rejected a valid script
   containing a heredoc and an apostrophe in a comment after script placeholder
@@ -351,7 +353,7 @@ Stop and escalate rather than improvising when any of these is reached.
   backtick contract while preventing a silent empty shell expansion after the
   backend escapes dollar signs. Date/Author: 2026-08-24, implementation agent.
 
-- Decision `D-METADATA`: **NEEDS APPROVAL before EP-M2.** Whether to escape
+- Superseded decision `D-METADATA` (2026-08-17): whether to escape
   `description`, `depfile`, `deps`, and `pool` in addition to command and
   script text. Analysis: the roadmap bullet and `docs/netsuke-design.md` §§2.6
   and 5.4 all scope the change to "command and script text". Descriptions are
@@ -375,12 +377,13 @@ Stop and escalate rather than improvising when any of these is reached.
   `NinjaValue` constructor still rejects control characters in these fields.
   Date/Author: 2026-08-17, planning agent.
 
-- Decision `D-METADATA`: revised during the 2026-08-28 review repair. Escape
-  descriptions, `depfile`, `deps`, and `pool` at their Ninja emission boundary,
-  while retaining rejection of newline, carriage-return, and NUL. These fields
-  are backend values at emission time, so literal dollars must not become Ninja
-  variable references. The completed action and metadata paths now share this
-  explicit contract. Date/Author: 2026-08-24, implementation agent.
+- Decision `D-METADATA`: revised during the 2026-08-28 review repair and now
+  authoritative. Escape descriptions, `depfile`, `deps`, and `pool` at their
+  Ninja emission boundary, while retaining rejection of newline,
+  carriage-return, and NUL. These fields are backend values at emission time,
+  so literal dollars must not become Ninja variable references. The completed
+  action and metadata paths now share this explicit contract. Date/Author:
+  2026-08-24 (original decision; revised 2026-08-28), implementation agent.
 
 - Decision: no Kani harness and no Verus proof for this change.
   Rationale: the introduced function is a pure, total string map with no
@@ -409,9 +412,10 @@ Stop and escalate rather than improvising when any of these is reached.
 
 The 2026-08-28 correction is complete. The real-Ninja property removes exactly
 one final CRLF or LF record terminator, preserving trailing command whitespace,
-and the shared path validator again rejects the EP-M3 set in both ordinary and
-dyndep emission. The current deterministic suite and CodeRabbit review passed
-with no concerns.
+and the shared path validator again rejects the EP-M3 metacharacter set in both
+ordinary and dyndep emission, with spaces escaped as a `$` followed by a space,
+and the same rule applies to a source path as to a target path. The current
+deterministic suite and CodeRabbit review passed with no concerns.
 
 Delivered as designed. Commands and scripts retain ordinary shell dollars in
 the backend-neutral IR; the typed Ninja writer doubles only residual dollars
@@ -623,9 +627,13 @@ without error.
 
 **I3 — applied exactly once.** The escape is applied once, structurally.
 
-- Method: type system, not test. `NinjaValue` has a private field, lives in
-  `src/ninja_gen_escape.rs`, and is constructible only by `escape_ninja_value`,
-  which consumes a `ShellText`. `ShellText` does not implement `Display`.
+- Method: type system, not test. `NinjaValue` has a private field and lives in
+  `src/ninja_gen_escape.rs`; `escape_ninja_value` borrows a `ShellText` and
+  returns it. `ShellText` does not implement `Display`, so shell text cannot be
+  formatted into a binding. A second constructor, `NinjaValue::from_encoded`,
+  serves the PowerShell renderer, whose encoded payload must not be parsed by
+  Ninja. It validates nothing itself, so the guarantee rests on the escape
+  boundary rather than on `NinjaValue` having a single constructor.
 - Rationale: `escape_ninja_value` is deliberately **not** idempotent —
   escaping `$` twice correctly yields `$$$$`. Writing an idempotence test would
   enshrine a bug. Expressing "exactly once" as a compile-time property is
@@ -677,10 +685,17 @@ the generated file, and the inner shell observes the real paths.
   through the command validator.
 
 **I7 — path emission is total or diagnosed.** Every path written into a `build`
-or `default` line either contains no Ninja-special character, or generation
-fails with a typed error naming the offending path.
+or `default` line contains no Ninja-special character, or contains only literal
+spaces that are escaped as a `$` followed by a space, or fails generation with
+a typed error naming the offending path. The escaped space is the one
+Ninja-special character that is encoded rather than diagnosed.
 
-- Method: `rstest` cases over paths containing `$`, a space, and a colon.
+- Method: `rstest` cases over paths containing `$`, a space, a colon, `|`, and
+  control characters, exercised in each position the task emits a path — the
+  ordinary `build` line, the `default` line, and the dyndep sidecar. The `$`,
+  colon, `|`, and control-character cases must fail in every position; the
+  space case must generate in every position and then survive Ninja's lexer
+  unchanged.
 - Rationale: without this, EP-M2 makes the command and the dependency edge
   disagree for a path like `input$1`, so Ninja reports one dependency while the
   command reads another. `tests/command_escaping_tests.rs:55` already uses such
@@ -701,9 +716,12 @@ is verified.
 
 Kani and Verus are excluded, with reasons, in `Decision log`. There is no
 concurrency, protocol, or temporal property here, so no state-machine model
-checking. Descriptions and `depfile` are out of scope pending decision
-`D-METADATA`; if that decision changes, this section and the matrix must be
-revised before implementation continues.
+checking. The Ninja-boundary escaping of `description`, `depfile`, `deps`, and
+`pool` is in scope under the revised `D-METADATA` decision and must be covered
+by emission and integration tests, including rejection of newline,
+carriage-return, and NUL characters. This plan does not verify Ninja's own
+lexical implementation; those rules remain an external axiom exercised through
+the real binary.
 
 ## Plan of work
 
@@ -723,16 +741,25 @@ child-process environment control.
 
 Scalar `command:` rows:
 
-| Row | Recipe                                    | Expected Ninja text       | Expected expansion   | Shell effect                                                                                                 |
-| --- | ----------------------------------------- | ------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------ |
-| A1  | `echo $NETSUKE_TEST_SENTINEL > out`       | `$$NETSUKE_TEST_SENTINEL` | verbatim             | `out` is `sentinel-value`                                                                                    |
-| A2  | `echo ${NETSUKE_TEST_SENTINEL:-fb} > out` | `$${…:-fb}`               | verbatim             | set gives `sentinel-value`; unset gives `fb`. Today the file does not parse.                                 |
-| A3  | `echo $RUSTFLAGS-$PATH`                   | both doubled              | verbatim             | both survive                                                                                                 |
-| A4  | `echo $input > out`                       | `$$input`                 | verbatim             | empty; guards the word-boundary check at `src/ir/cmd_interpolate.rs:154` and proves escaping did not skip it |
-| A5  | `cat $in > $out`, plain paths             | no `$` at all             | `cat in > out`       | copies; proves escaping runs after lowering                                                                  |
-| A6  | `cat $in > $out`, source `a$b.c`          | quoted path, `$` doubled  | quoted path verbatim | composition of `shell_quote::Sh` with the escaper                                                            |
-| A7  | `echo $$`                                 | `$$$$`                    | `echo $$`            | prints a process identifier                                                                                  |
-| A8  | `echo hi`                                 | byte-identical to today   | `echo hi`            | control row; must pass before and after                                                                      |
+| Row | Recipe                                             | Expected Ninja text             | Expected expansion | Shell effect                                                                                                 |
+| --- | -------------------------------------------------- | ------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------ |
+| A1  | `echo $NETSUKE_TEST_SENTINEL > out`                | `$$NETSUKE_TEST_SENTINEL`       | verbatim           | `out` is `sentinel-value`                                                                                    |
+| A2  | `echo ${NETSUKE_TEST_SENTINEL:-fb} > out`          | `$${NETSUKE_TEST_SENTINEL:-fb}` | verbatim           | set gives `sentinel-value`; unset gives `fb`. Today the file does not parse.                                 |
+| A3  | `echo $RUSTFLAGS-$PATH`                            | both doubled                    | verbatim           | both survive                                                                                                 |
+| A4  | `echo $input > out`                                | `$$input`                       | verbatim           | empty; guards the word-boundary check at `src/ir/cmd_interpolate.rs:154` and proves escaping did not skip it |
+| A5  | `cat $in > $out`, plain paths                      | no `$` at all                   | `cat in > out`     | copies; proves escaping runs after lowering                                                                  |
+| A6  | `cat $in > $out`, source `a$b.c`                   | generation fails                | EP-M3 typed error  | the source path holds a dollar, so EP-M3 refuses the edge; see A9 for the doubling this row cannot reach     |
+| A9  | `cat $in > $out`, plain paths, `$` in command text | command text doubled            | `cat in > out`     | divides A6's two concerns: dollar doubling lives in the command text, not in a path                          |
+| A7  | `echo $$`                                          | `$$$$`                          | `echo $$`          | prints a process identifier                                                                                  |
+| A8  | `echo hi`                                          | byte-identical to today         | `echo hi`          | control row; must pass before and after                                                                      |
+
+*Table 1: Scalar command regression matrix.*
+
+Row A6 carries the EP-M3 source-path refusal rather than a successful emission,
+because EP-M3 validates a source path exactly as it validates a target path: a
+dollar in either fails generation with the typed error. The doubling A6
+originally demonstrated belongs to command text, which A9 covers with a
+dollar-free path so that the two concerns do not share one row.
 
 Script `script:` rows:
 
@@ -744,6 +771,8 @@ Script `script:` rows:
 | B4  | `` echo `basename $out` ``                    | interaction of backtick preservation with escaping; behaviour follows decision `D-BACKTICK`    |
 | B5  | a heredoc plus an apostrophe inside a comment | must still generate; proves scripts did not get routed through the shlex validator             |
 
+*Table 2: Script regression matrix.*
+
 Command-list rows:
 
 | Row | Entries                                 | Obligation                                                                                                     |
@@ -754,11 +783,15 @@ Command-list rows:
 | C4  | `tests/data/multi_command.yml`          | snapshot byte-identical                                                                                        |
 | C5  | `["echo $in", "echo $out"]`             | already lowered; assert no `$` survives                                                                        |
 
+*Table 3: Command-list regression matrix.*
+
 Injection rows: a scalar command containing `\n`, and one containing `\r`, must
 produce a typed error rather than a generated file (obligation I5).
 
-Path rows: a build edge whose output path contains `$`, one containing a space,
-one containing a colon, and one ordinary path (obligation I7).
+Path rows: build edges whose output paths contain `$`, a colon, `|`, or a
+control character are rejected; one containing a space is escaped as a `$`
+followed by a space and emitted unchanged after Ninja's lexer; and one ordinary
+path emits unchanged (obligation I7).
 
 Also in this stage: widen the vacuous generator at
 `src/ninja_gen_property_tests.rs:177` from `echo [a-z]{1,12}` to the
@@ -816,8 +849,9 @@ pass. Commit.
 
 Introduce a fallible path check in the emission path used by `join`
 (`src/ninja_gen.rs:166-168`), `DisplayEdge` (lines 305-330), and the `default`
-line (line 159). Reject `$`, space, colon, and control characters with a typed
-`NinjaGenError` naming the offending path. Because `Display` cannot fail
+line (line 159). Reject `$`, colon, `|`, and control characters with a typed
+`NinjaGenError` naming the offending path, and escape a literal space as a `$`
+followed by a space per Ninja's path grammar. Because `Display` cannot fail
 usefully, the validation must run in `generate_into` before formatting rather
 than inside a `Display` implementation.
 
@@ -843,15 +877,18 @@ record the path-emission and description scope boundaries there.
 Add a subsection to `docs/developers-guide.md` under "Command and recipe
 lowering" (line 266) documenting the `ShellText`/`NinjaValue` seam: what each
 type means, that `ShellText` must not implement `Display`, that
-`escape_ninja_value` is the only constructor of `NinjaValue`, and that new
-emission sites must go through it. Per `AGENTS.md`, record the new
-abstraction's scope and re-use policy there.
+`escape_ninja_value` is the only route from shell text to `NinjaValue` (the
+PowerShell renderer's `NinjaValue::from_encoded` takes an already-encoded
+payload instead), and that new emission sites must go through one of these two
+routes. Per `AGENTS.md`, record the new abstraction's scope and re-use policy
+there.
 
 Add `docs/adr-014-backend-text-escaping-seam.md` following
 `docs/documentation-style-guide.md:421-498`, covering the layering decision,
 the fallible constructor, the rejection of Kani and Verus, and the scope
-boundary excluding descriptions and `depfile`. Reference it from
-`docs/netsuke-design.md` §2.6 and index it in `docs/contents.md`.
+boundary including `description`, `depfile`, `deps`, and `pool` escaping at the
+Ninja emission boundary. Reference it from `docs/netsuke-design.md` §2.6 and
+index it in `docs/contents.md`.
 
 Add one `rstest-bdd` scenario to `tests/features/ninja.feature` phrased as a
 user-visible outcome — a recipe observing a shell variable — with steps in
@@ -890,10 +927,12 @@ write `$$` is superseded; documented in EP-M4.
 **EP-M3** — path emission is total or diagnosed. Requirements: `DD-5.4`.
 Acceptance: obligation I7. Conformance: confirm no build edge can now emit a
 path the command disagrees with. Recovery: revert. Remaining gaps: full path
-escaping (dollar-space and `$:`) remains future work; this milestone converts
-corruption into a diagnostic rather than adding the escaping. Compatibility: a
-manifest with a `$` in a path now fails loudly instead of building the wrong
-thing; that is the intended change and belongs in the users' guide.
+escaping for the rejected metacharacters (`$`, `:`, `|`) remains future work;
+this milestone escapes a literal space as a `$` followed by a space and
+converts the rest into a diagnostic rather than adding the escaping.
+Compatibility: a manifest with a `$` in a path now fails loudly instead of
+building the wrong thing, while a whitespace-containing path keeps working;
+both belong in the users' guide.
 
 **EP-M4** — documentation, ADR, and roadmap current. Requirements: all.
 Acceptance: Markdown gates pass; every claim in the users' guide matches
@@ -908,8 +947,9 @@ interfaces.
 
 Follow-up work deliberately left out of scope, to be proposed as separate
 tasks: lowering `$in`/`$out` into descriptions before any description-specific
-processing, and full Ninja path escaping using dollar-space and `$:` rather
-than rejection.
+processing, and full Ninja path escaping for `$`, `:`, and `|` rather than
+rejection. Literal spaces are already escaped as a `$` followed by a space and
+are not part of that follow-up.
 
 ## Concrete steps
 
@@ -1059,16 +1099,23 @@ pub(super) struct ShellText(String);
 
 /// Text safe to place on the right-hand side of a Ninja `key = value` binding.
 ///
-/// Constructible only through [`escape_ninja_value`], so the escape is applied
-/// exactly once. Deliberately the only one of the two types with a `Display`
+/// The POSIX-compatible renderers construct this type through
+/// [`escape_ninja_value`], so the escape is applied exactly once. The
+/// PowerShell renderer uses [`NinjaValue::from_encoded`] for a payload Ninja
+/// must not parse. Deliberately the only one of the two types with a `Display`
 /// implementation.
 pub(super) struct NinjaValue(String);
+
+impl NinjaValue {
+    /// Construct a value already safe for Ninja's binding grammar.
+    pub(super) const fn from_encoded(value: String) -> Self;
+}
 
 /// Escape `text` for the Ninja file format.
 ///
 /// Doubles every literal `$` and rejects control characters, which would
 /// otherwise inject build-file syntax.
-pub(super) fn escape_ninja_value(text: ShellText) -> Result<NinjaValue, NinjaGenError>;
+pub(super) fn escape_ninja_value(text: &ShellText) -> Result<NinjaValue, NinjaGenError>;
 ```
 
 `ShellText` must not implement `Display`; if it did,
@@ -1214,7 +1261,30 @@ keeps target descriptions out of the generated Ninja file. Documentation
 citations moved: users' guide 1152-1153 to 1208-1209, design §2.6 499-508 to
 507-516, design §5.4 2041-2049 to 2059-2067, the `description = CC $out`
 snippet 2054-2058 to 2072-2076, the backtick contract 257 to 265, and the
-developers' guide anchor 199 to 266.
+developers' guide anchor 199 to 266. One assertable claim in this plan was
+already false against the shipped code before this rebase; it is described here
+and corrected at `2026-09-17`.
+
+I3's method asserted that `escape_ninja_value` "consumes a `ShellText`", and the
+`Interfaces and dependencies` snippet declared
+`fn escape_ninja_value(text: ShellText)`. The shipped signature takes
+`text: &ShellText` (`src/ninja_gen_escape.rs:54`). The consuming form was real
+when written: `642a4764` declared it by value, and this plan's own
+post-implementation review reopened the plan over exactly that point and
+recorded the correction at `2026-08-27`. Main then reverted it. `c8a7c9fa`
+(#607) removed `let ShellText(contents) = text;`, changed the parameter to
+`&ShellText`, and added `NinjaValue::from_encoded` so the PowerShell renderer
+could construct a value whose payload Ninja cannot parse. The earlier
+`Surprises & discoveries` entry about `needless_pass_by_value` and the
+`2026-08-27` revision entry about "the non-reference API required by I3" both
+describe code that no longer exists. I3's structural claim is therefore
+narrower than stated: the guarantee now rests on two constructors rather than
+one.
+
+This revision entry first recorded the discrepancy without correcting it, on
+the grounds that it is a statement about code rather than about the path and
+metadata contract this branch reconciles. The `2026-09-17` entry below records
+the follow-up that corrected it.
 
 Why it matters. Decision `D-METADATA` now matches the writer: metadata remains
 backend-neutral in the IR, then receives Ninja escaping only at emission. The
@@ -1229,9 +1299,9 @@ plan is `IN PROGRESS` while this review repair is validated.
 property now removes only one final CRLF or LF terminator, rather than trimming
 command text. This preserves trailing spaces and exposes every other output
 difference. During the same reconciliation, the shared path validator was
-restored to the approved EP-M3 policy: reject dollar, space, colon, pipe, and
-control characters across ordinary build lines, defaults, and dyndep sidecars.
-The rebase had retained main's path escaping despite the ExecPlan, ADR-014, and
+restored to the approved EP-M3 policy for dollar, colon, pipe, and control
+characters across ordinary build lines, defaults, and dyndep sidecars. The
+rebase had retained main's path escaping despite the ExecPlan, ADR-014, and
 developers' guide requiring rejection. The revised matrix covers the three
 Ninja metacharacters in every emitted field. Status is `IN PROGRESS` until the
 focused and complete gates and CodeRabbit review pass.
@@ -1320,3 +1390,15 @@ control characters. Deterministic validation passed `make check-fmt`,
 checks passed, the Windows `build-test-windows` job confirmed CRLF handling and
 the BDD environment scenario, and gate-first `coderabbit review --agent`
 reported zero findings. The ExecPlan is complete.
+
+2026-09-17 — the plan was reviewed independently of the RFC proposal that had
+carried an earlier copy of its refinements, and four documentation corrections
+were applied. The path and metadata contract now reads consistently: the
+`Verification plan` names all four escaped metadata fields rather than two, the
+ADR and design documents state the metadata scope, and the ADR records that a
+description no longer expands a Ninja variable. Separately, the discrepancy from
+`2026-08-17` is now corrected rather than merely recorded: I3's method, the
+`Interfaces and dependencies` snippet, the `Concrete steps` instruction, and
+the superseded `Surprises & discoveries` entry state the shipped
+two-constructor invariant. The implementation is unchanged by all four
+corrections; only the documents follow the code.

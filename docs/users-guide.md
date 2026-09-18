@@ -1876,10 +1876,19 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   command-substitution marker sites rather than risking a context escape.
   PowerShell uses backticks as its native escape syntax, so they do not
   suppress marker interpolation.
-- Build and default-target paths reject `$`, spaces, colons, `|`, and control
-  characters because Ninja cannot represent them without ambiguity. Generation
-  also rejects newline, carriage-return, and NUL characters in emitted metadata
-  such as descriptions, `depfile`, `deps`, and `pool`.
+- Build and default-target paths escape a literal space as a `$` followed by a
+  space, Ninja's own path escape. They reject `|` and control characters, which
+  Ninja's path grammar cannot represent, and also reject `$` and colon, which
+  Ninja can escape but Netsuke does not yet accept.
+- Emitted metadata is escaped separately from paths. A literal dollar in a
+  description, `depfile`, `deps`, or `pool` is doubled, so a `depfile` of
+  `$out.d` is written as `$$out.d` and Ninja reads the literal name rather than
+  a variable reference. Generation rejects newline, carriage-return, and NUL
+  characters in those fields.
+- Because that dollar is a literal, a description does not expand Ninja
+  variables. A description of `CC $out` prints `CC $out`, not the output path.
+  Dynamic metadata has no replacement mechanism yet; a description that names
+  its output is follow-up work.
 - **Migration:** replace the historical manifest spelling `$$PATH` with
   `$PATH`. On POSIX and Bash routes, `$$` is the shell's process identifier;
   PowerShell interprets `$$` as its automatic variable containing the last

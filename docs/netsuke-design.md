@@ -599,7 +599,11 @@ file format when it emits `build.ninja`.
 
 Netsuke should add four complementary capabilities.
 
-#### Backend dollar escaping
+#### Backend dollar escaping (implemented)
+
+The rest of this section is prospective: the three capabilities that follow it
+describe intended work, not shipped behaviour. This subsection alone records
+what is now implemented.
 
 After Netsuke has resolved its own placeholders (`{{ ins }}` and `{{ outs }}`)
 and before writing a Ninja file, the Ninja backend escapes every remaining
@@ -612,9 +616,17 @@ command or script text with no Ninja-specific escaping. The backend conversion
 accepts only completed shell text and returns an opaque Ninja-value type, which
 makes applying the conversion before placeholder lowering or applying it twice
 an invalid internal call rather than a convention left to review. Paths use a
-separate boundary: values containing Ninja-special syntax (`$`, spaces, colons,
-or control characters) are rejected rather than emitted ambiguously. ADR 014
-records the boundary and its migration consequences.
+separate boundary: a literal space is escaped as a `$` followed by a space,
+Ninja's own path escape, while values containing a pipe or a control character
+are rejected because Ninja's path grammar cannot represent them. A dollar or a
+colon is likewise rejected, even though Ninja can escape both; Netsuke has not
+adopted that part of the grammar.
+
+Metadata follows the same emission-boundary rule. A `description`, `depfile`,
+`deps`, or `pool` keeps its backend-neutral IR text, and the Ninja writer
+escapes only the emitted binding, doubling a literal dollar and rejecting
+newline, carriage-return, and NUL. ADR 014 records the boundary and its
+migration consequences.
 
 #### Structured environment mapping
 
