@@ -12,8 +12,8 @@ Accepted.
 
 The four file-reading filters — `contents`, `linecount`, `hash`, and `digest` —
 share one safety policy, enforced once in
-`src/stdlib/path/fs_utils.rs::open_file_checked`. That function decides what may
-be opened and then reads only through the handle it opened.
+`src/stdlib/path/fs_utils.rs::open_file_checked`. That function decides what
+may be opened and then reads only through the handle it opened.
 
 On Unix the decision and the read share one open. `apply_unix_open_flags` adds
 `O_NOFOLLOW` to the open itself when the default policy is in force, so the
@@ -21,17 +21,17 @@ kernel refuses a symlink final component as part of the same call that produces
 the handle. There is no window between the check and the read.
 
 The Windows implementation had no equivalent. `reject_windows_symlink` ran a
-`symlink_metadata` call *before* the open and then opened the path as a separate
-step. Those two operations are not atomic: a final component that is a regular
-file at check time can be replaced before the open, so a caller able to write to
-the containing directory can win the race and have the read follow a prohibited
-reparse point. The pre-open check was the platform's best available guard, but
-it was never race-free.
+`symlink_metadata` call *before* the open and then opened the path as a
+separate step. Those two operations are not atomic: a final component that is a
+regular file at check time can be replaced before the open, so a caller able to
+write to the containing directory can win the race and have the read follow a
+prohibited reparse point. The pre-open check was the platform's best available
+guard, but it was never race-free.
 
 The gap is a hardening concern rather than a regression, and it does not defeat
 the ordinary case. It matters because the same policy is load-bearing for all
-four filters, and a check-then-open race is exactly the defect the Unix path was
-built to avoid.
+four filters, and a check-then-open race is exactly the defect the Unix path
+was built to avoid.
 
 ## Decision Drivers
 
@@ -100,9 +100,9 @@ through the `cap_std::fs_utf8` re-exports the module uses.
 
 The Windows no-follow branch therefore sets
 `FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS` on an ordinary
-`parent.handle.open_with(...)` call, and then reads `file_attributes()` from the
-resulting handle. The open and the judgement share one handle, exactly as the
-Unix path does.
+`parent.handle.open_with(...)` call, and then reads `file_attributes()` from
+the resulting handle. The open and the judgement share one handle, exactly as
+the Unix path does.
 
 This route is notable for what it does *not* need: no `unsafe`, no new
 dependency, no lint relaxation, and no dylint exclusion. It is also the same
@@ -131,13 +131,13 @@ rejects the opened handle when either
 The first test rejects **every** reparse tag, not only the ones `std` reports
 as symlinks. `FileType::is_symlink` is a test on the tag *value*: it is true
 only for name-surrogate tags (bit 29 set), which covers file symlinks,
-directory symlinks, junctions, and volume mount points — but is false for
-every other tag, such as a deduplication or cloud placeholder. For those, an
-open that follows the point succeeds and returns the target's handle, while a
-check phrased as "is this a symlink" sees nothing to refuse. Testing the
-attribute bit asks "is this a reparse point at all", which is the policy the
-callers actually want, and it needs no knowledge of which tags a future
-Windows release may mint.
+directory symlinks, junctions, and volume mount points — but is false for every
+other tag, such as a deduplication or cloud placeholder. For those, an open
+that follows the point succeeds and returns the target's handle, while a check
+phrased as "is this a symlink" sees nothing to refuse. Testing the attribute
+bit asks "is this a reparse point at all", which is the policy the callers
+actually want, and it needs no knowledge of which tags a future Windows release
+may mint.
 
 `reject_windows_symlink` is deleted; its pre-open `symlink_metadata` call is
 gone, and nothing replaces it.
@@ -146,8 +146,8 @@ gone, and nothing replaces it.
 
 The two facts the policy needs — "is this a reparse point?" and "is this a
 regular file?" — are both read from the handle that was opened, and that same
-handle is what the caller then reads bytes from. Windows resolves the path once,
-when the handle is created; subsequent queries on the handle cannot be
+handle is what the caller then reads bytes from. Windows resolves the path
+once, when the handle is created; subsequent queries on the handle cannot be
 redirected by a concurrent rename or replace in the containing directory. There
 is therefore no interval between the decision and the read in which the
 filesystem object can change identity. This is the same argument the Unix path
@@ -163,8 +163,8 @@ relies on, where `O_NOFOLLOW` is a property of the one `open` call.
   rejected identically everywhere.
 - Reparse points outside the final component are out of scope. A symlinked or
   junctioned parent directory is resolved when the parent handle is opened by
-  `parent_dir`, which is the pre-existing behaviour on both platforms and is not
-  changed here.
+  `parent_dir`, which is the pre-existing behaviour on both platforms and is
+  not changed here.
 - The Unix path is untouched. `apply_unix_open_flags` and `restore_blocking`
   keep their current behaviour byte for byte.
 
