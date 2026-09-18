@@ -2913,6 +2913,7 @@ Linux runner. Both platforms still assert the packaged file list. See
 
 [windows-test-budget]: #windows-budget-for-the-isolated-cargo-build-tests
 [fixture-constraints]: #what-a-fixture-crate-replacement-would-have-to-preserve
+[serialized-value]: #the-nested-cargo-build-serialization-and-what-it-does-to-the-figure
 
 `tests/workflow_contracts/test_execution_coverage_test.py` holds all of this:
 the coverage inputs, the denied warnings, the doctest pass and its position,
@@ -3016,13 +3017,20 @@ The 420s budget is therefore sized against the older, contended distribution
 and is deliberately conservative while the new shape has three samples. It is a
 candidate for tightening, or for deletion, once the revisit gate below is met.
 
+Those three samples predate the serialization group described below, which
+lands the harness test in a group of one-at-a-time build-capable tests. Under
+that group the test is a serial link rather than a slow finisher, and the trim
+is worth more than the 85s this table supports. The
+[serialization subsection][serialized-value] holds the later measurements.
+
 #### Deferring the split-build-dir harness trim
 
 The repository has decided **not** to trim
-`harness_compiles_under_a_split_build_dir` yet. Trimming it to near zero is
-worth about 85s now rather than the 156s an earlier reading implied, and that
-smaller number is the whole reason the decision was to wait rather than to
-build.
+`harness_compiles_under_a_split_build_dir` yet. When the decision was taken the
+trim was worth about 85s rather than the 156s an earlier reading implied, and
+that smaller number was the whole reason to wait rather than to build. A
+serialization group added to `.config/nextest.toml` afterwards changed the
+arithmetic; the [subsection below][serialized-value] records the new value.
 
 The 156s came from the contended distribution. Before #687 the two
 isolated-Cargo tests ran concurrently, each with four compile jobs on a
@@ -3066,13 +3074,71 @@ rejected on its own evidence rather than on preference:
   the `#[once]` fixture with `E0460`, so its build cannot reuse the lane's
   artefacts or the other test's.
 
+#### The nested-Cargo-build serialization, and what it does to the figure
+
+A later change to `.config/nextest.toml` — `nested-cargo-builds`, a
+`[test-groups]` entry with `max-threads = 1` — puts this test in a group with
+the other fourteen tests that spawn a build-capable child Cargo command, so
+only one of them runs at a time. It landed for the coverage lane's benefit:
+four nextest workers each starting a four-job child Cargo build on a four-vCPU
+runner is what the group exists to prevent. The Windows lane runs `make test`
+with no `NEXTEST_PROFILE`, so it selects `[profile.default]` and inherits the
+same group.
+
+That changes the figure this section was written around, and not in the
+direction the deferral assumed. The 85s was measured on three runs from
+2026-09-07; the group landed on 2026-09-17, so those samples predate it. Under
+the group the test is no longer merely a slow finisher: it is a **serial
+link**. Every other member is blocked while it holds the single slot, and the
+chain cannot finish until it releases it. Removing it therefore returns its
+whole group occupancy, not just its exclusive tail.
+
+Measured on the three Windows runs after the group landed, from the same
+`build-test-windows` job logs:
+
+Table: the harness test as a serialized group member, after the group landed.
+
+| Run         | Test duration | Chain end without it | Trim returns |
+| ----------- | ------------- | -------------------- | ------------ |
+| 35266003414 | 152.0s        | 162.4s               | 152.0s       |
+| 35266979317 | 149.0s        | 178.3s               | 149.0s       |
+| 35272793454 | 124.7s        | 134.9s               | 113.4s       |
+
+The last column is the whole-run saving: the run's own end, less where the run
+would end with the harness's occupancy removed from the group chain. It is 113s
+to 152s, against the 85s the uncontended reading gave. In two of the three runs
+the harness is not the last test to finish — the group's cheap tail members are
+— but trimming it still returns its occupancy, because the tail cannot start
+until the slot frees.
+
+The decision recorded above still stands, and this is a change to the evidence
+for it, not to the decision: the trim remains deferred, and it remains a
+question about fidelity rather than about seconds. What changes is that the
+number is again large enough to be worth arguing about, so the revisit gate
+below is now the thing that settles it rather than a formality. Two cautions
+belong with the table. Three Windows runs under the group is a small sample,
+and the group's own scheduling — not the test alone — produces the chain ends,
+so the figures above are readings of a serialized system rather than isolated
+measurements of the test.
+
+Anything that removes this test from the lane also removes the group's heaviest
+member, which shortens the chain for every other member behind it. A
+replacement that is cheap but still build-capable would return most of the
+figure; one that stops spawning a child Cargo build at all would be lighter
+still, and would lose the [response-file pressure][fixture-constraints] that
+makes the group entry necessary in the first place.
+
 **Revisit gate.** This defers the trim; it does not close it. Wait until ten
-runs of the split Windows lane exist, so the harness test's share of the
-`build-test-windows` job is known under the new shape rather than estimated
-from three runs. If its tail has settled below the 85s measured here, or if
-`Test` has stopped being the lane's critical path, the trim is not worth the
-fidelity risk and the work closes without it. Any replacement built at that
-point inherits the constraints in
+runs of the split Windows lane exist under the serialization group, so the
+harness test's share of the `build-test-windows` job is known under the shape
+that now exists rather than estimated from three runs. The gate was written
+against the uncontended reading and the criterion has moved with the evidence:
+with the group in place the test holds a serial slot, so the question is no
+longer whether its exclusive tail has settled below 85s — it plainly has not —
+but whether the run still ends when it ends. If the group chain stops being
+what bounds the run, or if `Test` stops being the lane's critical path, the
+trim is not worth the fidelity risk and the work closes without it. Any
+replacement built at that point inherits the constraints in
 [what a fixture-crate replacement would have to preserve][fixture-constraints].
 
 Four references sit behind the figures above:

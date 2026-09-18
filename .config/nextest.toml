@@ -76,18 +76,26 @@ success-output = "immediate"
 # is deliberately conservative while the new shape has three samples.
 #
 # Trimming the test is worth about 85s, not the 156s that figure implied
-# before the second build left. What a trim returns is the test's exclusive
-# tail, the period after every other test has reported, measured at 62.3s,
-# 87.2s and 85.5s on the three runs after that change, where 156s was the
-# implied value of trimming both tests while they contended. The lane fell
-# from a 1468s median to about 848s across the three changes, so 85s is
-# roughly ten percent of what remains. The repository has decided not to spend
-# the fidelity risk on that number yet: the trim is a candidate for tightening
-# or deletion at the ten-run revisit gate that the developers' guide defines
-# under "Deferring the split-build-dir harness trim". That section also records
-# the alternatives already measured and rejected — `cargo check` for
-# `cargo build`, warming the compiler cache, and sharing a target directory —
-# and the constraints a fixture-crate replacement would have to preserve.
+# before the second build left, on the uncontended reading those three runs
+# support: what a trim returns there is the test's exclusive tail, the period
+# after every other test has reported, measured at 62.3s, 87.2s and 85.5s,
+# where 156s was the implied value of trimming both tests while they
+# contended. The lane fell from a 1468s median to about 848s across the three
+# changes, so 85s is roughly ten percent of what remains.
+#
+# That figure has since moved. This test is a member of `nested-cargo-builds`
+# above, which serializes it with the other build-capable child Cargo tests, so
+# it holds the group's single slot and every member behind it waits. Trimming
+# it therefore returns its whole group occupancy rather than its exclusive
+# tail: 113s, 149s and 152s on the three Windows runs after the group landed,
+# against the 85s above, which was measured before it. The repository has still
+# decided not to spend the fidelity risk yet, and the trim remains a candidate
+# for tightening or deletion at the ten-run revisit gate that the developers'
+# guide defines under "Deferring the split-build-dir harness trim"; that
+# section carries the serialized measurements, the alternatives already
+# measured and rejected — `cargo check` for `cargo build`, warming the compiler
+# cache, and sharing a target directory — and the constraints a fixture-crate
+# replacement would have to preserve.
 #
 # Windows only. On Ubicloud both tests finish in a fraction of the budget, and
 # widening the timeout there would blunt the hang detection this file exists to
