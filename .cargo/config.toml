@@ -9,11 +9,13 @@
 # `RUSTFLAGS`, which displaces every `rustflags` table below; see "The build
 # standard" in docs/developers-guide.md for the mechanism and the contracts.
 #
-# No codegen backend is named here, and none may be. The Cranelift backend
-# cannot initiate a panic on any nightly tested, aborting the process instead of
-# unwinding, which makes it unusable for a profile any test or binary runs on.
-# The guide records the evidence; a contract refuses a backend key so that
-# re-adding one has to go through that evidence first.
+# No codegen backend is named here, and none may be. A panic compiled by the
+# Cranelift backend does not find the unwind handler it should: `catch_unwind`
+# fails to catch and a panic on a spawned thread aborts the process, while a
+# bare `#[should_panic]` still passes. That makes the backend unusable for a
+# profile any test or binary runs on. The guide records the measurement and the
+# command; a contract refuses a backend key so that re-adding one has to go
+# through that evidence first.
 
 # Cargo selects a single rustflags source rather than merging them: a matching
 # `[target.*]` table replaces `[build] rustflags` outright, and an externally

@@ -2552,27 +2552,68 @@ fail to different edits.
 ### Why Cranelift is not part of the standard
 
 The Cranelift codegen backend is the obvious third member of this set, and it
-is deliberately absent. It cannot initiate a panic. A panic raised in a
-Cranelift-compiled frame aborts the process instead of unwinding:
+is deliberately absent. A Cranelift-compiled panic does not find the unwind
+handler it should. The wording matters, because a probe that only checks
+whether a panic unwinds at all reads as a pass: what fails is every handler
+other than the outermost one.
 
-```text
-fatal runtime error: failed to initiate panic, error 5, aborting
-```
-
-Error 5 is the unwinder reaching the end of the stack without finding a
-handler. This reproduces in a crate with no dependencies at all:
+Measured on 2026-09-18 on `nightly-2026-08-23`, whose Cranelift is
+`librustc_codegen_cranelift-1.100.0-nightly.so`, in a crate with no
+dependencies at all, with `[profile.dev] codegen-backend = "cranelift"` and the
+standard's `-Zthreads=8` and `mold` flags:
 
 ```rust
+/// A panic raised on the main thread, caught by `catch_unwind`.
+#[test]
+fn main_thread_catch_unwind() {
+    let caught = std::panic::catch_unwind(|| panic!("boom"));
+    assert!(caught.is_err(), "catch_unwind should report the panic");
+}
+
+/// A panic raised on a thread this test spawned.
 #[test]
 fn spawned_thread_panic_unwinds() {
     let handle = std::thread::spawn(|| panic!("boom"));
     assert!(handle.join().is_err());
 }
+
+/// A panic raised on the test's own thread, caught by libtest.
+#[test]
+#[should_panic(expected = "boom")]
+fn should_panic_attribute() {
+    panic!("boom");
+}
 ```
 
-`std::panic::catch_unwind` on the main thread fails the same way, so the reach
-is every test that panics on failure, every `#[should_panic]`, and a debug
-binary that would abort with 134 where it now exits 101.
+```sh
+cargo test --lib -- --nocapture --test-threads=1
+```
+
+| Case                      | Cranelift                  | LLVM control |
+| ------------------------- | -------------------------- | ------------ |
+| `#[should_panic]`         | passes                     | passes       |
+| `catch_unwind`            | does not catch; test fails | passes       |
+| Panic on a spawned thread | aborts the process         | passes       |
+
+The control is the same crate and the same flags with the backend key removed;
+it passes all three, so the backend is the cause and neither the linker nor the
+parallel frontend is.
+
+The `#[should_panic]` row is why the reason has to be stated this narrowly. It
+passes because libtest's own outermost handler catches the panic, and nothing
+between the panic and that handler has to work for it to do so. `catch_unwind`
+sits between, and the unwinder walks straight past it. A spawned thread has no
+handler above it at all, so the unwinder reaches the end of the stack:
+
+```text
+fatal runtime error: failed to initiate panic, error 5, aborting
+```
+
+Error 5 is exactly that, the end of the stack with no handler found, and the
+process leaves on SIGABRT. The reach is therefore every `catch_unwind` in the
+tree, every test that asserts a spawned thread panicked, and a debug binary
+that would abort with 134 where it now exits 101 — but not, on this nightly, a
+bare `#[should_panic]`.
 
 What was ruled out, each by its own run: it is not the linker, because it
 aborts with the platform linker too; not the parallel frontend, because LLVM
