@@ -28,6 +28,7 @@ from coverage_lanes import coverage_lanes_of
 from nextest_budgets import global_timeout, termination_allowance
 from nextest_durations import seconds
 from timeout_budgets import (
+    CAPPED_PROFILE,
     CEILING_MARGIN_SECONDS,
     COLD_BUILD_ALLOWANCE_SECONDS,
     COVERAGE_ACTION,
@@ -37,6 +38,7 @@ from timeout_budgets import (
     WATCHDOG_VARIABLE,
     required_ceiling,
 )
+from whole_run_ordering import watchdog_required_for
 
 #: A magnitude whose neighbouring floats are 256 seconds apart, so a
 #: one-second difference is lost outright rather than only sometimes.
@@ -158,14 +160,26 @@ def test_the_job_ceiling_arithmetic_stays_exact() -> None:
     )
 
 
-def _config(whole_run: int, *, grace: bool = True) -> str:
-    """Return a configuration declaring one profile's tiers."""
+def _config(whole_run: int, *, grace: bool = True, profile: str = "default") -> str:
+    """Return a configuration declaring one profile's tiers.
+
+    The profile is a parameter because the readers disagree about which
+    one they mean. ``global_timeout`` defaults to the profile CI selects,
+    while a caller naming ``default`` is reading the table nextest
+    inherits from. A case driving the one through a configuration
+    declaring the other finds no budget at all.
+
+    Returns
+    -------
+    str
+        The configuration text, declaring the named profile alone.
+    """
     # Both spellings of the grace period are driven: without a declared
     # one nextest's default applies, and that default is a term of the
     # allowance like any other.
     declared = ', grace-period = "5s"' if grace else ""
     return (
-        "[profile.default]\n"
+        f"[profile.{profile}]\n"
         f'global-timeout = "{whole_run}s"\n'
         f'slow-timeout = {{ period = "60s", terminate-after = 1{declared} }}\n'
     )
@@ -199,14 +213,61 @@ def test_the_termination_allowance_stays_exact() -> None:
 
 
 def _watchdog_floor(whole_run: int, *, grace: bool = True) -> fractions.Fraction:
-    """Return the watchdog floor the ordering contract derives."""
-    # The expression `whole_run_ordering.watchdog_required_for`
-    # evaluates, rebuilt from its parts so that a term reverting to a
-    # float fails against the composition rather than against a helper.
+    """Return the watchdog floor, rebuilt from the terms it sums.
+
+    Deliberately not a call to ``watchdog_required_for``. Rebuilding the
+    sum means a term reverting to a float fails against the term rather
+    than against the function, so the report names which input lost its
+    exactness. ``test_the_watchdog_floor_function_stays_exact`` drives
+    the function itself, which is what the ordering contract calls, and
+    is what catches a cast applied inside it rather than to one of its
+    inputs.
+
+    Returns
+    -------
+    fractions.Fraction
+        The whole-run budget, the termination allowance and the cold
+        build allowance, summed exactly.
+    """
     config_text = _config(whole_run, grace=grace)
     budget = global_timeout(config_text, profile="default")
     assert budget is not None, "the profile declares a global-timeout"
     return budget + termination_allowance(config_text) + COLD_BUILD_ALLOWANCE_SECONDS
+
+
+def _watchdog_floor_of(whole_run: int) -> fractions.Fraction:
+    """Return what ``watchdog_required_for`` derives for one configuration.
+
+    The configuration declares the profile CI selects, because that is
+    the one the function reads. Declaring ``default`` instead yields no
+    budget and the function returns None, which is the shape of a case
+    that asserts nothing rather than one that fails.
+
+    Returns
+    -------
+    fractions.Fraction
+        The watchdog floor the function derives for that configuration.
+    """
+    floor = watchdog_required_for(_config(whole_run, profile=CAPPED_PROFILE))
+    assert floor is not None, "the profile declares a global-timeout"
+    return floor
+
+
+def test_the_watchdog_floor_function_stays_exact() -> None:
+    """``watchdog_required_for`` itself keeps a second a float would lose.
+
+    The composition cases below rebuild this sum from its terms, which
+    localises a lossy input but leaves the function the ordering
+    contract actually calls unexercised at a magnitude that can see the
+    loss. A ``float`` applied inside ``watchdog_required_for``, to its
+    result or to any term as it is added, would therefore pass every
+    other case here. This one refuses it.
+    """
+    _assert_orders_strictly(
+        _watchdog_floor_of(HUGE_SECONDS + 1),
+        _watchdog_floor_of(HUGE_SECONDS),
+        "watchdog floors one second apart, through the public function",
+    )
 
 
 @pytest.mark.parametrize(
