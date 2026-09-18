@@ -3078,12 +3078,12 @@ rejected on its own evidence rather than on preference:
 
 A later change to `.config/nextest.toml` — `nested-cargo-builds`, a
 `[test-groups]` entry with `max-threads = 1` — puts this test in a group with
-the other fourteen tests that spawn a build-capable child Cargo command, so
-only one of them runs at a time. It landed for the coverage lane's benefit:
-four nextest workers each starting a four-job child Cargo build on a four-vCPU
-runner is what the group exists to prevent. The Windows lane runs `make test`
-with no `NEXTEST_PROFILE`, so it selects `[profile.default]` and inherits the
-same group.
+the other tests that spawn a build-capable child Cargo command, so only one of
+them runs at a time. It landed for the coverage lane's benefit: four nextest
+workers each starting a four-job child Cargo build on a four-vCPU runner is
+what the group exists to prevent. The Windows lane runs `make test` with no
+`NEXTEST_PROFILE`, so it selects `[profile.default]` and inherits the same
+group.
 
 That changes the figure this section was written around, and not in the
 direction the deferral assumed. The 85s was measured on three runs from
