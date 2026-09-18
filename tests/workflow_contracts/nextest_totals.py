@@ -14,6 +14,7 @@ one, and the arithmetic must not import the reader to do it.
 still imports them from there.
 """
 
+import fractions
 import typing as typ
 
 from nextest_units import SECOND as _SECOND
@@ -95,6 +96,8 @@ class Total:
     >>> total.add("1s 1s", 1, 0)
     >>> total.add("1s 1s", 1, 0)
     >>> total.as_seconds()
+    Fraction(2, 1)
+    >>> float(total.as_seconds())
     2.0
     """
 
@@ -141,12 +144,29 @@ class Total:
         self.seconds = running
         self.nanoseconds = nanos
 
-    def as_seconds(self) -> float:
-        """Return the total in seconds.
+    def as_seconds(self) -> fractions.Fraction:
+        """Return the total in seconds, exactly.
+
+        A ``Fraction`` rather than a ``float`` because these values are
+        compared with each other rather than merely printed. humantime's
+        range reaches 2**64 seconds and a float carries 53 bits of
+        significand, so above 2**53 it cannot hold two budgets that
+        differ by a second: ``18446744073709551614s`` and
+        ``18446744073709551615s`` are both inputs in the differential
+        this reader is measured against, and both convert to the same
+        float. An ordering assertion between them would compare equal
+        and pass whichever way round it was written.
+
+        The nanosecond part makes the same point at the other end.
+        ``0.1s`` has no exact float, so a budget assembled from tenths
+        and one written as a decimal would differ by a rounding error
+        rather than by anything anyone configured.
 
         Returns
         -------
-        float
-            Whole seconds and the nanosecond part together.
+        fractions.Fraction
+            Whole seconds and the nanosecond part together, exactly.
         """
-        return self.seconds + self.nanoseconds / _SECOND
+        return fractions.Fraction(self.seconds) + fractions.Fraction(
+            self.nanoseconds, _SECOND
+        )

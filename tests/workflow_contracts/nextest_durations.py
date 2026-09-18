@@ -35,6 +35,7 @@ imports them from this module as before.
 ``docs/developers-guide.md`` sets out all three with their inputs.
 """
 
+import fractions
 import re
 import string
 import typing as typ
@@ -233,7 +234,7 @@ def _add_fraction(duration: str, total: _Total, matched: str, unit: _Unit) -> No
     >>> total = _Total()
     >>> _add_fraction("1.5m", total, "5", _UNITS["m"])
     >>> total.as_seconds()
-    30.0
+    Fraction(30, 1)
 
     A thousandth of an hour does not, because the division there is
     over whole seconds and 3.6 is not one:
@@ -266,8 +267,8 @@ def _add_fraction(duration: str, total: _Total, matched: str, unit: _Unit) -> No
     _add_landed(duration, total, scaled // denominator, scaling)
 
 
-def seconds(duration: str) -> float:
-    """Convert a nextest duration to seconds.
+def seconds(duration: str) -> fractions.Fraction:
+    """Convert a nextest duration to seconds, exactly.
 
     Parameters
     ----------
@@ -276,8 +277,12 @@ def seconds(duration: str) -> float:
 
     Returns
     -------
-    float
-        The duration in seconds.
+    fractions.Fraction
+        The duration in seconds, exactly. Exact because these values
+        are compared with one another: see :meth:`nextest_totals.Total.
+        as_seconds` for the two magnitudes at which a float stops
+        telling two budgets apart. Use :func:`display_seconds` when the
+        number is going into a message rather than into a comparison.
 
     Raises
     ------
@@ -287,14 +292,14 @@ def seconds(duration: str) -> float:
     Examples
     --------
     >>> seconds("45m")
-    2700.0
+    Fraction(2700, 1)
     >>> seconds("2h 30m")
-    9000.0
+    Fraction(9000, 1)
     >>> seconds("0.5s 0.5s")
-    1.0
+    Fraction(1, 1)
     """
     if duration == _BARE_ZERO:
-        return 0.0
+        return fractions.Fraction(0)
     text = duration.strip(_SPACE_CHARS)
     if not text:
         message = f"unrecognized nextest duration {duration!r}: it is empty"
@@ -306,3 +311,35 @@ def seconds(duration: str) -> float:
         _read_pair(duration, match, total)
         position = match.end()
     return total.as_seconds()
+
+
+def display_seconds(duration: str) -> float:
+    """Convert a duration to seconds as a float, for a message.
+
+    Lossy on purpose, and named apart from :func:`seconds` on purpose.
+    A float is what a reader wants to see in an assertion message; it
+    is not what a comparison should be made on, because above 2**53
+    seconds it cannot tell two budgets a second apart apart. Keeping
+    the two behind different names means a caller chooses which it
+    wants rather than getting the lossy one by default.
+
+    Parameters
+    ----------
+    duration : str
+        A duration as nextest spells it, such as ``"60s"``.
+
+    Returns
+    -------
+    float
+        The duration in seconds, rounded to what a float can hold. The
+        text is read by :func:`seconds`, so a duration nextest would
+        refuse is refused here in the same way.
+
+    Examples
+    --------
+    >>> display_seconds("45m")
+    2700.0
+    >>> display_seconds("1.5h")
+    5400.0
+    """
+    return float(seconds(duration))

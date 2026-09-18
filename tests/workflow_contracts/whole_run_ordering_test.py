@@ -13,6 +13,7 @@ override, or any declaration at all, against the real tree alone.
 Run via ``make test-workflow-contracts``.
 """
 
+import fractions
 import typing as typ
 
 import pytest
@@ -52,14 +53,14 @@ def _config(global_timeout: str | None = None) -> str:
     )
 
 
-def _lane(watchdog: float | None) -> CoverageLane:
+def _lane(watchdog: fractions.Fraction | None) -> CoverageLane:
     """Return one coverage lane carrying a watchdog and nothing else."""
     return CoverageLane(
         workflow="ci.yml",
         job="build-test",
         step="Test and Measure Coverage",
         watchdog=watchdog,
-        job_timeout=100 * 60.0,
+        job_timeout=fractions.Fraction(100 * 60),
     )
 
 
@@ -71,7 +72,9 @@ def test_a_configuration_with_no_whole_run_budget_has_no_fault() -> None:
     reports that: ``timeout_ordering_test`` asserts the key's presence
     separately, and this repository's own file now sets one.
     """
-    assert not whole_run_ordering_faults(_config(), [_lane(4200.0)]), (
+    assert not whole_run_ordering_faults(
+        _config(), [_lane(fractions.Fraction(4200))]
+    ), (
         "a configuration setting no global-timeout has no tier three, so the "
         "rule must report nothing rather than fail an incomplete file"
     )
@@ -102,7 +105,9 @@ def test_a_whole_run_below_the_per_test_allowance_is_a_fault() -> None:
     makes the per-test tier unreachable while every value in the file
     still reads as deliberate.
     """
-    faults = whole_run_ordering_faults(_config("300s"), [_lane(100_000.0)])
+    faults = whole_run_ordering_faults(
+        _config("300s"), [_lane(fractions.Fraction(100_000))]
+    )
 
     assert len(faults) == 1, faults
     assert "largest per-test allowance" in faults[0], (
@@ -116,7 +121,9 @@ def test_a_whole_run_equal_to_the_per_test_allowance_is_a_fault() -> None:
     A rule written with `>=` passes this case and fails nothing else, so
     the strictness of the comparison is stated rather than implied.
     """
-    faults = whole_run_ordering_faults(_config("600s"), [_lane(100_000.0)])
+    faults = whole_run_ordering_faults(
+        _config("600s"), [_lane(fractions.Fraction(100_000))]
+    )
 
     assert len(faults) == 1, faults
     assert "largest per-test allowance" in faults[0], (
@@ -135,7 +142,7 @@ def test_a_watchdog_below_the_requirement_is_a_fault() -> None:
     required = watchdog_required_for(config)
     assert required is not None, "a configured global-timeout yields a requirement"
 
-    faults = whole_run_ordering_faults(config, [_lane(required - 1.0)])
+    faults = whole_run_ordering_faults(config, [_lane(required - 1)])
 
     assert len(faults) == 1, faults
     assert "below the" in faults[0], (
@@ -180,7 +187,9 @@ def test_every_lane_at_fault_is_reported() -> None:
     """
     config = _config("40m")
 
-    faults = whole_run_ordering_faults(config, [_lane(1.0), _lane(2.0)])
+    faults = whole_run_ordering_faults(
+        config, [_lane(fractions.Fraction(1)), _lane(fractions.Fraction(2))]
+    )
 
     assert len(faults) == 2, faults
 

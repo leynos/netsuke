@@ -11,7 +11,11 @@ See "Test timeouts: the tiers this repository sets" in
 ``docs/developers-guide.md``.
 """
 
+import fractions
 import typing as typ
+
+if typ.TYPE_CHECKING:
+    import collections.abc as cabc
 
 from workflow_loading import REPO_ROOT
 
@@ -37,6 +41,14 @@ NEXTEST_PROFILE_VARIABLE: typ.Final[str] = "NEXTEST_PROFILE"
 #: in `docs/developers-guide.md`.
 CAPPED_PROFILE: typ.Final[str] = "ci"
 
+# Every constant below is a term of a tier comparison, so each is an
+# exact `Fraction` rather than a `float`. A sum is exact only if every
+# term is, and one float among them converts the whole sum back
+# silently: at the magnitudes humantime admits, that turns an ordering
+# between two budgets a second apart into a comparison of equals. The
+# values themselves are whole numbers of seconds and always will be;
+# the type is about what they are added to, not about what they are.
+
 #: Everything in a coverage job that is not the `cargo` invocation the
 #: watchdog bounds: checkout, toolchain setup, cache restore, linting, and
 #: whatever follows the coverage step. The job timer covers it; the
@@ -49,7 +61,9 @@ CAPPED_PROFILE: typ.Final[str] = "ci"
 #: of `coverage-main.yml` it was 119 s on run 33411190301. Fifteen minutes
 #: covers the worse of those with 252 s to spare, and none of those runs
 #: was genuinely cold.
-OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS: typ.Final[float] = 15 * 60.0
+OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS: typ.Final[fractions.Fraction] = fractions.Fraction(
+    15 * 60
+)
 
 #: Build time inside the `cargo` invocation, before nextest starts its own
 #: clock. The watchdog covers it as well as the whole-run budget, so the
@@ -61,23 +75,57 @@ OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS: typ.Final[float] = 15 * 60.0
 #: and every one of those runs recompiled the dependency graph from
 #: scratch. All of them read a warm sccache, so ten minutes is the
 #: allowance for the case none of them measured, an empty one.
-COLD_BUILD_ALLOWANCE_SECONDS: typ.Final[float] = 10 * 60.0
+COLD_BUILD_ALLOWANCE_SECONDS: typ.Final[fractions.Fraction] = fractions.Fraction(
+    10 * 60
+)
 
 #: How far a ceiling must sit above the sum it contains, rather than
 #: merely reaching it. A ceiling equal to that sum cancels the job at
 #: the moment the watchdog would have reported the overrun, and the
 #: report is the only thing that makes an overrun actionable.
-CEILING_MARGIN_SECONDS: typ.Final[float] = 15 * 60.0
+CEILING_MARGIN_SECONDS: typ.Final[fractions.Fraction] = fractions.Fraction(15 * 60)
 
 #: What nextest allows a test between `SIGTERM` and `SIGKILL` when the
 #: configuration names no `grace-period`, as this one does not.
-NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS: typ.Final[float] = 10.0
+NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS: typ.Final[fractions.Fraction] = (
+    fractions.Fraction(10)
+)
 
 #: Added to that grace period to cover the teardown and report writing
 #: that follow it. A separate term rather than a floor over the two, so
 #: raising a grace period raises the requirement instead of vanishing
 #: into it.
-TERMINATION_SAFETY_MARGIN_SECONDS: typ.Final[float] = 60.0
+TERMINATION_SAFETY_MARGIN_SECONDS: typ.Final[fractions.Fraction] = fractions.Fraction(
+    60
+)
 
 NEXTEST_CONFIG = REPO_ROOT / ".config" / "nextest.toml"
 WORKFLOWS_DIRECTORY = REPO_ROOT / ".github" / "workflows"
+
+
+def required_ceiling(
+    budgets: cabc.Sequence[fractions.Fraction],
+) -> fractions.Fraction:
+    """Return the smallest acceptable ceiling for one job, in seconds.
+
+    Three terms. Each coverage step may legitimately spend its whole
+    watchdog, so the sum is the floor. The measured work outside those
+    windows is added because the job timer covers it and the watchdogs
+    do not. The margin is added because a ceiling equal to that sum
+    cancels the job at the moment the watchdog would have reported the
+    overrun, and the report is the only thing that makes an overrun
+    actionable.
+
+    Parameters
+    ----------
+    budgets : cabc.Sequence[fractions.Fraction]
+        One watchdog budget per coverage step in the job.
+
+    Returns
+    -------
+    fractions.Fraction
+        The smallest acceptable ceiling, in seconds, exactly. The sum
+        is exact only if every term is, which is why the two allowances
+        it adds are exact as well.
+    """
+    return sum(budgets) + OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS + CEILING_MARGIN_SECONDS

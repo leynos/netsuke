@@ -9,6 +9,7 @@ can be described at all: this repository has none of them.
 Run via ``make test-workflow-contracts``.
 """
 
+import fractions
 import typing as typ
 
 import pytest
@@ -167,14 +168,21 @@ def test_the_required_ceiling_sums_the_watchdogs_and_adds_the_margin() -> None:
     the margin changes nothing observable. Both terms are therefore
     driven with controlled numbers.
     """
-    assert required_ceiling([1800.0, 2700.0]) == pytest.approx(
-        4500.0 + OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS + CEILING_MARGIN_SECONDS
+    assert required_ceiling([
+        fractions.Fraction(1800),
+        fractions.Fraction(2700),
+    ]) == fractions.Fraction(4500) + OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS + (
+        CEILING_MARGIN_SECONDS
     ), "two steps need the sum of their budgets, not the larger of them"
-    assert required_ceiling([1800.0]) == pytest.approx(
-        1800.0 + OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS + CEILING_MARGIN_SECONDS
+    assert (
+        required_ceiling([fractions.Fraction(1800)])
+        == fractions.Fraction(1800)
+        + OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS
+        + CEILING_MARGIN_SECONDS
     ), "one step needs its own budget, the allowance and the margin"
-    assert required_ceiling([]) == pytest.approx(
-        OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS + CEILING_MARGIN_SECONDS
+    assert (
+        required_ceiling([])
+        == OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS + CEILING_MARGIN_SECONDS
     ), "the margin is a term of its own, not a fraction of the others"
 
 

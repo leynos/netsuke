@@ -54,12 +54,9 @@ from timeout_budgets import (
     OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS,
     TERMINATION_SAFETY_MARGIN_SECONDS,
     WATCHDOG_VARIABLE,
+    required_ceiling,
 )
 from whole_run_ordering import whole_run_ordering_faults
-
-if typ.TYPE_CHECKING:
-    import collections.abc as cabc
-
 
 #: The condition each coverage lane legitimately carries, keyed by
 #: workflow and job, as the step's ``if`` and its job's.
@@ -169,30 +166,6 @@ def _budgets_per_job(
     for lane in coverage_lanes:
         grouped.setdefault((lane.workflow, lane.job), []).append(lane)
     return grouped
-
-
-def required_ceiling(budgets: cabc.Sequence[float]) -> float:
-    """Return the smallest acceptable ceiling for one job, in seconds.
-
-    Three terms. Each coverage step may legitimately spend its whole
-    watchdog, so the sum is the floor. The measured work outside those
-    windows is added because the job timer covers it and the watchdogs
-    do not. The margin is added because a ceiling equal to that sum
-    cancels the job at the moment the watchdog would have reported the
-    overrun, and the report is the only thing that makes an overrun
-    actionable.
-
-    Parameters
-    ----------
-    budgets : cabc.Sequence[float]
-        One watchdog budget per coverage step in the job.
-
-    Returns
-    -------
-    float
-        The smallest acceptable ceiling, in seconds.
-    """
-    return sum(budgets) + OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS + CEILING_MARGIN_SECONDS
 
 
 def test_the_job_ceiling_covers_every_watchdog_and_the_work_around_them(

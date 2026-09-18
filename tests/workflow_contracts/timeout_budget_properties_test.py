@@ -12,6 +12,7 @@ configuration would put the ordering assertions against a budget nextest
 never applies, and they would pass.
 """
 
+import fractions
 import typing as typ
 
 import pytest
@@ -33,7 +34,12 @@ from timeout_budgets import (
 )
 
 #: The units nextest accepts, with their length in seconds.
-UNITS: typ.Final[dict[str, float]] = {"ms": 0.001, "s": 1.0, "m": 60.0, "h": 3600.0}
+UNITS: typ.Final[dict[str, fractions.Fraction]] = {
+    "ms": fractions.Fraction(1, 1_000),
+    "s": fractions.Fraction(1),
+    "m": fractions.Fraction(60),
+    "h": fractions.Fraction(3_600),
+}
 
 COVERAGE_STEP: typ.Final[str] = (
     "leynos/shared-actions/.github/actions/generate-coverage@abc123"
@@ -116,7 +122,10 @@ def test_the_largest_budget_is_the_largest_product(
         )
     )
     expected = max(value * UNITS[unit] * times for value, unit, times in budgets)
-    assert largest_test_allowance(config) == pytest.approx(expected), (
+    # Exact, not approximate: every term here is exact, and a tolerance
+    # would accept a reading that had lost a millisecond's thousandth
+    # to a float on the way through.
+    assert largest_test_allowance(config) == expected, (
         "the largest budget is the largest period times its own multiplier"
     )
 
@@ -239,11 +248,11 @@ def test_the_termination_allowance_tracks_the_largest_grace_period(
         )
     )
     largest = max(value * UNITS[unit] for value, unit in periods)
-    assert grace_period(config) == pytest.approx(largest), (
+    assert grace_period(config) == largest, (
         "the largest configured grace period governs"
     )
-    assert termination_allowance(config) == pytest.approx(
-        largest + TERMINATION_SAFETY_MARGIN_SECONDS
+    assert (
+        termination_allowance(config) == largest + TERMINATION_SAFETY_MARGIN_SECONDS
     ), "the allowance is the grace period plus the margin, not the larger"
 
 
@@ -262,9 +271,9 @@ def test_an_unconfigured_grace_period_falls_back_to_nextest_s_default(
         ),
         profile=profile,
     )
-    assert grace_period(config) == pytest.approx(
-        NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS
-    ), "an absent grace period must fall back to nextest's default"
+    assert grace_period(config) == NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS, (
+        "an absent grace period must fall back to nextest's default"
+    )
 
 
 @pytest.mark.parametrize(

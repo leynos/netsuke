@@ -12,6 +12,7 @@ neither module outgrows the 400-line limit the Python lint gate
 enforces.
 """
 
+import fractions
 import math
 import typing as typ
 
@@ -22,7 +23,7 @@ def watchdog_of(
     document: dict[str, typ.Any],
     job: dict[str, typ.Any],
     step: dict[str, typ.Any],
-) -> float | None:
+) -> fractions.Fraction | None:
     """Return the watchdog budget in force for one step.
 
     All three levels are read, innermost first, as GitHub resolves them.
@@ -143,7 +144,7 @@ class WatchdogValueError(ValueError):
     """
 
 
-def _budget_from(raw: object) -> float | None:
+def _budget_from(raw: object) -> fractions.Fraction | None:
     """Return the resolved watchdog budget, or None when none is set.
 
     This reads the one declaration :func:`_declared_in_scope` chose, so
@@ -166,8 +167,11 @@ def _budget_from(raw: object) -> float | None:
 
     Returns
     -------
-    float or None
-        The budget in seconds, or None when the source sets none.
+    fractions.Fraction or None
+        The budget in seconds exactly, or None when the source sets
+        none. Exact because it is compared against a sum of budgets
+        read from three files, and one float among those terms loses
+        the whole comparison silently.
 
     Raises
     ------
@@ -180,6 +184,12 @@ def _budget_from(raw: object) -> float | None:
     text = str(raw).strip()
     if not text:
         return None
+    # Parsed as a float first and converted afterwards. `Fraction` has
+    # no notion of `nan` or `inf`: it raises on both, which would make
+    # them unreadable text rather than the named refusal below, and a
+    # workflow interpolating an expression to `inf` is exactly the case
+    # that refusal exists to name. The float here is a parser, not a
+    # value: nothing is compared against it before it becomes exact.
     try:
         seconds = float(text)
     except ValueError as error:
@@ -198,4 +208,4 @@ def _budget_from(raw: object) -> float | None:
             f"ceiling arithmetic and failing there"
         )
         raise WatchdogValueError(message)
-    return seconds
+    return fractions.Fraction(text)
