@@ -3098,18 +3098,21 @@ Measured on the three Windows runs after the group landed, from the same
 
 Table: the harness test as a serialized group member, after the group landed.
 
-| Run         | Test duration | Chain end without it | Trim returns |
-| ----------- | ------------- | -------------------- | ------------ |
-| 35266003414 | 152.0s        | 162.4s               | 152.0s       |
-| 35266979317 | 149.0s        | 178.3s               | 149.0s       |
-| 35272793454 | 124.7s        | 134.9s               | 113.4s       |
+| Run         | Test duration | Group chain end, trim applied | Trim returns |
+| ----------- | ------------- | ----------------------------- | ------------ |
+| 35266003414 | 152.0s        | 162.4s                        | 152.0s       |
+| 35266979317 | 149.0s        | 178.3s                        | 149.0s       |
+| 35272793454 | 124.7s        | 134.9s                        | 113.4s       |
 
-The last column is the whole-run saving: the run's own end, less where the run
-would end with the harness's occupancy removed from the group chain. It is 113s
-to 152s, against the 85s the uncontended reading gave. In two of the three runs
-the harness is not the last test to finish — the group's cheap tail members are
-— but trimming it still returns its occupancy, because the tail cannot start
-until the slot frees.
+The rightmost column is the whole-run saving: the run's own end, less whichever
+of the trimmed group chain and the last non-group test finishes later. It is
+113s to 152s, against the 85s the uncontended reading gave. In none of the
+three runs is the harness the last test to finish — the group's cheap tail
+members trail it by under seven seconds — but a trim returns its occupancy
+rather than its exclusive tail, because the tail cannot start until the slot
+frees: in the first two runs the figure is that occupancy exactly, and in the
+third it is 113s rather than 125s only because unrelated non-group work becomes
+the run's next binding constraint once the harness is gone.
 
 The decision recorded above still stands, and this is a change to the evidence
 for it, not to the decision: the trim remains deferred, and it remains a
