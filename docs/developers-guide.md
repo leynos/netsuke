@@ -3012,9 +3012,76 @@ Table: Windows durations before and after the verification build moved.
 | `Test` step                                      | 471s            | 260s            | 368s            |
 
 The 420s budget is therefore sized against the older, contended distribution
-and is deliberately conservative while the new shape has two samples. It is a
-candidate for tightening, or for deletion, once ten runs have accumulated under
-it.
+and is deliberately conservative while the new shape has three samples. It is a
+candidate for tightening, or for deletion, once the revisit gate below is met.
+
+#### Deferring the split-build-dir harness trim
+
+The repository has decided **not** to trim
+`harness_compiles_under_a_split_build_dir` yet. Trimming it to near zero is
+worth about 85s now rather than the 156s an earlier reading implied, and that
+smaller number is the whole reason the decision was to wait rather than to
+build.
+
+The 156s came from the contended distribution. Before #687 the two
+isolated-Cargo tests ran concurrently, each with four compile jobs on a
+four-vCPU runner, so each roughly halved the other, and 156s was the implied
+value of trimming both of them. Once
+`packaged_manifest_retains_build_script_sources` left the Windows lane, as the
+table above records, this test got faster without being touched and what a trim
+could return fell with it.
+
+What a trim returns is the test's **exclusive tail**, the period after every
+other test has reported, rather than its total duration, because the remaining
+tests fill the run either way. Measured on the three runs after #687 — the pair
+the table above draws on, plus the third under the new shape:
+
+Table: the split-build harness's duration and exclusive tail after #687.
+
+| Run         | Test duration | Exclusive tail |
+| ----------- | ------------- | -------------- |
+| 34075197897 | 125.3s        | 62.3s          |
+| 34079222917 | 170.6s        | 87.2s          |
+| 34080385050 | 170.7s        | 85.5s          |
+
+The figure to plan against is therefore about 85s, not 156s, and nobody should
+start this work expecting the larger one. For scale, the whole Windows lane
+fell from a 1468s median to about 848s across #687, #690 and #691, so 85s is
+roughly ten percent of what remains.
+
+Three alternatives were measured before the decision to defer, and each was
+rejected on its own evidence rather than on preference:
+
+- **`cargo check` instead of `cargo build`.** Timed cold at `-j 4` on a 32-core
+  host: 114s against 102s, twelve percent. It also writes nothing into the
+  target directory, so the uplift the regression exists to catch stops
+  happening and the test passes vacuously.
+- **Warming the lane's compiler cache.** The cache already reaches the spawned
+  build, because `ci-windows.yml` sets `RUSTC_WRAPPER` at job scope and the
+  test adds to the child environment rather than clearing it. Warming it is
+  worth about three percent: 281.0s on the cold run against a 271.9s warm
+  median.
+- **Sharing a target directory.** The test needs private roots to avoid racing
+  the `#[once]` fixture with `E0460`, so its build cannot reuse the lane's
+  artefacts or the other test's.
+
+**Revisit gate.** This defers the trim; it does not close it. Wait until ten
+runs of the split Windows lane exist, so the harness test's share of the
+`build-test-windows` job is known under the new shape rather than estimated
+from three runs. If its tail has settled below the 85s measured here, or if
+`Test` has stopped being the lane's critical path, the trim is not worth the
+fidelity risk and the work closes without it. Any replacement built at that
+point inherits the constraints in
+[what a fixture-crate replacement would have to preserve](#what-a-fixture-crate-replacement-would-have-to-preserve).
+
+Four references sit behind the figures above:
+[#673](https://github.com/leynos/netsuke/issues/673) measured the lane,
+[#687](https://github.com/leynos/netsuke/pull/687) relocated the packaging
+verification build and so changed this test's cost,
+[#690](https://github.com/leynos/netsuke/pull/690) folded the native-recipe
+smoke job into the gate job, and
+[#691](https://github.com/leynos/netsuke/issues/691) split the Windows lints
+from the tests.
 
 ### How this relates to the isolation utilities
 
@@ -4465,7 +4532,48 @@ That private build is why this test is the most expensive one on the Windows
 gate: `test_support` depends on `netsuke-build`, so a private root means
 compiling that crate and roughly 350 dependencies from scratch. Its measured
 budget is recorded in
-[Windows budget for the isolated-Cargo-build tests][windows-test-budget].
+[Windows budget for the isolated-Cargo-build tests][windows-test-budget], which
+also records the
+[decision to defer a trim](#deferring-the-split-build-dir-harness-trim) and the
+gate at which that decision is revisited.
+
+#### What a fixture-crate replacement would have to preserve
+
+If the trim is taken up after that gate, the obvious shape is a minimal fixture
+crate built under the split layout in place of `test_support`. It needs at
+least one dependency, so that dependency rlibs land in the split build
+directory while the fixture's own uplifted rlib lands in the target directory.
+That is precisely the arrangement the regression exists to catch: a single
+derived `-L dependency=` directory that missed the dependencies entirely. This
+section records what such a replacement must carry; nothing here is built while
+the trim is deferred.
+
+**The fidelity argument.** The current test is a regression test for a defect
+that was found once, and its subject is the real `test_support` build. Swapping
+that subject for a stand-in weakens the test unless the argument for the swap
+is explicit, in a doc comment beside the test, about exactly which regression
+it still guards and what it no longer covers. A one-dependency fixture does
+exercise the split-directory derivation — dependency artefacts in the build
+directory, uplifted artefacts in the target directory — but it no longer covers
+that derivation against the real crate's roughly 350-dependency scale, nor
+against the proc-macro and dynamic-library artefacts described above. Those are
+what makes the directory enumeration non-trivial, and the comment must say so
+rather than let the coverage drop silently.
+
+**The Windows response-file pressure.** `TestSupportRlib::compile` passes its
+arguments through a `rustc` response file, and the reason is a Windows command
+line limit rather than a style choice. Cargo 1.99 gives every crate its own
+artefact directory, so the `-L dependency=` set holds one entry per dependency;
+this test adds long temporary roots on top of that. Passed directly, the result
+exceeds the Windows `CreateProcess` command-line limit and the spawn fails with
+`Os { code: 206 }` before `rustc` runs at all. A fixture crate with one
+dependency produces far fewer directories and would stop exercising that
+pressure, which is a measurable loss of coverage however cheap the fixture
+becomes. So a replacement must either generate enough search paths to keep the
+`@file` path genuinely exercised, or move the response-file contract into its
+own dedicated test. Either way the doc comment above the replacement must say
+which of the two it does, because the failure it guards is Windows-specific and
+cannot be reproduced on most local hosts.
 
 ### Manifest `env()` reader
 
