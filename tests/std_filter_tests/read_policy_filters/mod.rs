@@ -138,6 +138,43 @@ pub(super) fn require_real_symlink(root: &Utf8Path, link: &Utf8Path) -> Result<(
     Ok(())
 }
 
+/// Assert that `link` really is a reparse point, failing setup when it is not.
+///
+/// This is the Windows counterpart of [`require_real_symlink`]. `mklink /J`
+/// can silently produce something other than a junction — on a filesystem
+/// without reparse-point support it fails, and a fixture that degraded to a
+/// plain empty directory would still render, inverting the assertion: the
+/// default policy rejects the files all four filters read, so a directory
+/// would make every case pass for the wrong reason. The attribute is read
+/// without following the link, so the check cannot be satisfied by the target.
+///
+/// A special-file policy test must create the requested file type or skip
+/// because that file type is unavailable; it must not substitute one.
+#[cfg(windows)]
+pub(super) fn require_real_junction(root: &Utf8Path, link: &Utf8Path) -> Result<()> {
+    use cap_std::fs::MetadataExt as _;
+
+    /// `FILE_ATTRIBUTE_REPARSE_POINT`: the entry carries a reparse tag, which
+    /// is what distinguishes a junction from the plain directory it points at.
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
+
+    let dir = Dir::open_ambient_dir(root, ambient_authority())
+        .with_context(|| format!("open workspace root {root} to stat the junction fixture"))?;
+    let name = link
+        .file_name()
+        .with_context(|| format!("junction fixture {link} has no file name"))?;
+    let metadata = dir
+        .symlink_metadata(Utf8Path::new(name))
+        .with_context(|| format!("stat junction fixture {link}"))?;
+    ensure!(
+        metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0,
+        "fixture {link} is not a reparse point; the reparse-point policy cannot be \
+         exercised without one, and substituting a plain directory would invert \
+         the assertions"
+    );
+    Ok(())
+}
+
 /// Write `contents` to `name` inside `root`, returning the fixture's path.
 pub(super) fn write_fixture(
     root: &Utf8Path,
