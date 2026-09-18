@@ -160,7 +160,10 @@ fn closes_raw_string(bytes: &[u8], index: usize, hashes: usize) -> bool {
 /// A prefix counts only where it stands as a token of its own, so an identifier
 /// ending in `r` does not turn the string after it into a raw one. The hash
 /// count is `Some` for a raw string and `None` for one that honours escapes,
-/// including a byte string such as `b"..."`, which escapes like any other.
+/// including a byte string such as `b"..."`, which escapes like any other: a
+/// raw string closes at the first `"` followed by its opening hashes, so
+/// reading `b"a \" b"` as raw would end it at the escaped quote and blank
+/// whatever followed it, hiding an attribute from the scan.
 fn string_quote(bytes: &[u8], start: usize) -> Option<(usize, Option<usize>)> {
     let byte = *bytes.get(start)?;
     if byte == b'"' {
@@ -169,12 +172,33 @@ fn string_quote(bytes: &[u8], start: usize) -> Option<(usize, Option<usize>)> {
     if start > 0 && bytes.get(start - 1).is_some_and(|it| is_ident_byte(*it)) {
         return None;
     }
-    let prefix = match (byte, bytes.get(start + 1).copied()) {
-        (b'b' | b'c', Some(b'r')) => 2,
-        (b'b' | b'c', Some(b'"')) | (b'r', _) => 1,
-        _ => return None,
-    };
-    let mut index = start + prefix;
+    let (prefix, raw) = string_prefix(byte, bytes.get(start + 1).copied())?;
+    let body = start + prefix;
+    if raw {
+        return raw_string_quote(bytes, body);
+    }
+    (bytes.get(body) == Some(&b'"')).then_some((body, None))
+}
+
+/// Return the prefix length of the string opening at `start` and whether it is raw.
+const fn string_prefix(byte: u8, next: Option<u8>) -> Option<(usize, bool)> {
+    match (byte, next) {
+        // `br"..."` and `cr"..."` are raw; the `r` is the prefix's last byte.
+        (b'b' | b'c', Some(b'r')) => Some((2, true)),
+        // `b"..."` and `c"..."` escape like any other string.
+        (b'b' | b'c', Some(b'"')) => Some((1, false)),
+        // A bare `r` opens a raw string; any other byte opens none.
+        (b'r', _) => Some((1, true)),
+        _ => None,
+    }
+}
+
+/// Return the quote offset and hash count of the raw string opening at `quote`.
+///
+/// A raw string carries any number of hashes, including none, so the body is
+/// located by counting them rather than by assuming at least one.
+fn raw_string_quote(bytes: &[u8], quote: usize) -> Option<(usize, Option<usize>)> {
+    let mut index = quote;
     let mut hashes = 0_usize;
     while bytes.get(index) == Some(&b'#') {
         hashes += 1;
