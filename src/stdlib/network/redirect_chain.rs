@@ -108,12 +108,12 @@ impl<'policy> RedirectChain<'policy> {
     ///
     /// # Errors
     ///
-    /// Returns a [`RedirectRejection`] when credentials cannot be stripped for
-    /// a cross-origin hop, when the chain already accepted
-    /// [`FETCH_REDIRECT_LIMIT`] redirects, when the target repeats an earlier
-    /// one, or when the configured policy refuses the target. The checks run in
-    /// that order, so the policy check is the last word before the caller
-    /// dispatches the request.
+    /// Returns a [`RedirectRejection`] when the chain has already accepted
+    /// [`FETCH_REDIRECT_LIMIT`] redirects, when credentials cannot be stripped
+    /// for a cross-origin hop, when the target repeats an earlier one, or when
+    /// the configured policy refuses the target. The checks run in exactly that
+    /// order, so the policy check is the last word before the caller dispatches
+    /// the request.
     pub(super) fn advance(
         &mut self,
         mut target: Url,
