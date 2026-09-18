@@ -10,7 +10,10 @@ use mockable::{DefaultEnv, Env};
 
 use crate::localization::{self, keys};
 
-use super::EnvAccessPolicy;
+use super::{
+    EnvAccessPolicy,
+    env_telemetry::{self, record_env_lookup},
+};
 
 /// Manifest-owned failure returned by an [`EnvReader`].
 ///
@@ -122,6 +125,11 @@ pub(super) fn disabled_env_reader() -> EnvReader {
 /// both: it is manifest-controlled and unbounded, and environment variable
 /// names routinely identify credentials. The Jinja error's template location
 /// tells the author which `env()` call failed.
+///
+/// Every lookup is also counted once through
+/// [`env_telemetry::record_env_lookup`], so an operator can measure the
+/// blocked rate the access policy produces. The counter carries only the
+/// bounded outcome, never the name or the value.
 pub(super) fn env_var_with(
     name: &str,
     policy: &EnvAccessPolicy,
@@ -129,27 +137,36 @@ pub(super) fn env_var_with(
 ) -> Result<String, Error> {
     if policy.evaluate(name).is_err() {
         tracing::debug!(failure_kind = "blocked", "manifest env lookup failed");
-        return Err(Error::new(
-            ErrorKind::InvalidOperation,
-            localization::message(keys::MANIFEST_ENV_BLOCKED).to_string(),
-        ));
+        return record_env_lookup(
+            env_telemetry::OUTCOME_BLOCKED,
+            Err(Error::new(
+                ErrorKind::InvalidOperation,
+                localization::message(keys::MANIFEST_ENV_BLOCKED).to_string(),
+            )),
+        );
     }
 
     match read_env(name) {
-        Ok(value) => Ok(value),
+        Ok(value) => record_env_lookup(env_telemetry::OUTCOME_SUCCESS, Ok(value)),
         Err(EnvReadError::NotPresent) => {
             tracing::debug!(failure_kind = "not_present", "manifest env lookup failed");
-            Err(Error::new(
-                ErrorKind::UndefinedError,
-                localization::message(keys::MANIFEST_ENV_MISSING).to_string(),
-            ))
+            record_env_lookup(
+                env_telemetry::OUTCOME_NOT_PRESENT,
+                Err(Error::new(
+                    ErrorKind::UndefinedError,
+                    localization::message(keys::MANIFEST_ENV_MISSING).to_string(),
+                )),
+            )
         }
         Err(EnvReadError::NotUnicode) => {
             tracing::debug!(failure_kind = "not_unicode", "manifest env lookup failed");
-            Err(Error::new(
-                ErrorKind::InvalidOperation,
-                localization::message(keys::MANIFEST_ENV_INVALID_UTF8).to_string(),
-            ))
+            record_env_lookup(
+                env_telemetry::OUTCOME_NOT_UNICODE,
+                Err(Error::new(
+                    ErrorKind::InvalidOperation,
+                    localization::message(keys::MANIFEST_ENV_INVALID_UTF8).to_string(),
+                )),
+            )
         }
     }
 }

@@ -20,6 +20,7 @@ use netsuke::{
         DISCOVERY_DURATION, DISCOVERY_OUTCOME_VALUES, DISCOVERY_TOTAL,
         PATH_VALIDATION_REASON_VALUES, PATH_VALIDATION_SOURCE_VALUES, PATH_VALIDATION_TOTAL,
     },
+    manifest::{ENV_LOOKUP_OUTCOME_VALUES, ENV_LOOKUP_TOTAL},
     runner::{
         BASH_PREFLIGHT_TOTAL, LEGACY_RECIPE_EXECUTION_DURATION, LEGACY_RECIPE_EXECUTIONS_TOTAL,
         NINJA_STATUS_OVERSIZED_LINES_TOTAL, RECIPE_SHELL_RESOLUTIONS_TOTAL,
@@ -125,6 +126,7 @@ impl ConfigMetricsRecorder {
                 | FILTERED_ACTIONS_TOTAL
                 | OMITTED_FILTERED_ENTRIES_TOTAL
                 | FILE_READ_TOTAL
+                | ENV_LOOKUP_TOTAL
                 | MANIFEST_STRUCTURES_TOTAL
                 | NINJA_STATUS_OVERSIZED_LINES_TOTAL
         )
@@ -189,6 +191,7 @@ impl ConfigMetricsRecorder {
                     ("outcome", &FILE_READ_OUTCOME_VALUES),
                 ],
             ),
+            ENV_LOOKUP_TOTAL => exact_labels(key, &[(OUTCOME_LABEL, &ENV_LOOKUP_OUTCOME_VALUES)]),
             _ => false,
         }
     }

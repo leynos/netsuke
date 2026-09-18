@@ -252,6 +252,8 @@ pub(crate) fn from_str_with_limits(
     )
 }
 mod env_reader;
+mod env_telemetry;
+pub use env_telemetry::{ENV_LOOKUP_OUTCOME_VALUES, ENV_LOOKUP_TOTAL};
 #[cfg(test)]
 mod tests;
 mod workspace;

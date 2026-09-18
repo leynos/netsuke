@@ -5739,6 +5739,41 @@ emitted series and the bounded debug event, while
 the two bounded series and rejects out-of-vocabulary `filter` and `outcome`
 values and a series missing a label.
 
+### Manifest environment-lookup telemetry
+
+`src/manifest/env_telemetry.rs` owns telemetry for the `env()` lookup boundary.
+`env_var_with` in `src/manifest/env_reader.rs` is the only place an `env()`
+call reaches: it evaluates the access policy, reads through the injected
+reader, and maps failures to Jinja errors, so it also hands each result to
+`record_env_lookup`, which returns that result unchanged and counts the lookup
+exactly once whatever the outcome.
+
+The counter is `netsuke_manifest_env_lookups_total`, with one `outcome` label
+drawn from the closed set `success`, `blocked`, `not_present`, and
+`not_unicode`, exposed as the module constant `ENV_LOOKUP_OUTCOME_VALUES` and
+re-exported through `netsuke::manifest`. Nothing else is recorded: the variable
+name and its value are absent by construction, because environment variable
+names routinely identify credentials and a rendered value can carry secret
+material. The blocked outcome is the reason the series exists; denying a lookup
+is new behaviour that previously could not occur, and the accompanying
+`tracing` event is neither aggregated nor retained by the application recorder.
+
+The counter description is registered once per process behind a `Once`. The
+application recorder in `src/observability_recorder.rs` admits the series:
+`ENV_LOOKUP_TOTAL` is listed in `accepts_name` and matched in
+`accepts_counter_registration` against exactly that one label set, so the
+counter survives into the process snapshot rather than being discarded as a
+noop handle, while any other label name, label count, or out-of-vocabulary
+value is rejected.
+
+Tests sit beside the boundary: `src/manifest/tests/env_telemetry.rs` drives
+`env_var_with` against a local debugging recorder and asserts each outcome
+reaches exactly one bounded series, while
+`recorder_retains_bounded_env_lookup_series` in
+`src/observability_recorder_tests.rs` proves the production recorder retains
+the four bounded series and rejects an out-of-vocabulary outcome, an extra
+label, and a series missing its label.
+
 ## Digest rendering
 
 `src/hex.rs` (`netsuke::hex`) is the single owner of lowercase hexadecimal

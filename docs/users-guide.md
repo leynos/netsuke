@@ -1468,6 +1468,22 @@ rules, actions, targets, and defaults. Manifest text, paths, recipe contents,
 variable values, macro bodies, and descriptions are never recorded, because
 rendered manifest values can carry secret material interpolated through `env()`.
 
+#### Manifest environment-lookup metrics
+
+Loading a manifest counts every `env()` lookup in one bounded series:
+
+- `netsuke_manifest_env_lookups_total` — a counter with a single `outcome`
+  label that counts each `env()` lookup. `outcome` is `success` when the
+  variable resolved, `blocked` when the
+  [environment access policy](#control-manifest-environment-access) denied the
+  name, `not_present` when the variable is absent, and `not_unicode` when its
+  value is not valid UTF-8.
+
+The `blocked` outcome is what makes an effective policy measurable: it is the
+rate at which the policy is refusing manifest access. Variable names and their
+values never appear in the label, because environment variable names routinely
+identify credentials.
+
 The annotated [sample configuration](sample-netsuke.toml) lists every key. A
 small project configuration looks like this:
 

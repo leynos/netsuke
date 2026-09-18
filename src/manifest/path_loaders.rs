@@ -30,7 +30,7 @@ pub fn from_path(path: impl AsRef<Path>) -> Result<NetsukeManifest> {
 ///
 /// # Errors
 ///
-/// Return an error when the file cannot be read or rendered.
+/// Return an error when the manifest cannot be read, rendered, or parsed.
 ///
 /// # Examples
 ///
