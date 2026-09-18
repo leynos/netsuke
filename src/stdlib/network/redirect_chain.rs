@@ -1,11 +1,12 @@
 //! Transport-independent decisions for one policy-checked fetch redirect chain.
 //!
-//! The adapter in [`super::redirect`] owns the HTTP client, the telemetry, and
-//! the localized diagnostics. This module owns the decisions those concerns
-//! wrap: hop accounting, loop detection, cross-origin credential stripping,
-//! and the per-hop network-policy evaluation. Nothing here performs I/O or
-//! builds user-facing text, so unit and property tests drive exactly the
-//! transitions the adapter would.
+//! The adapter in [`super::redirect`] owns the HTTP client, the telemetry, the
+//! `Location` header parse, and the localized diagnostics. This module owns the
+//! decisions those concerns wrap: hop accounting, loop detection, cross-origin
+//! credential stripping, and the per-hop network-policy evaluation. Every target
+//! it sees has already been resolved, and nothing here performs I/O or builds
+//! user-facing text, so unit and property tests drive exactly the transitions
+//! the adapter would.
 
 use std::collections::BTreeSet;
 
@@ -26,18 +27,13 @@ pub(super) struct RedirectTransition {
 }
 
 /// Reason a redirect response did not advance the chain.
+///
+/// Every variant reports a *redirect decision*: what the chain concluded about
+/// an already-resolved target. Reading and resolving the `Location` header is
+/// transport work, so an absent or unparsable header is an adapter diagnostic
+/// rather than a variant here.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum RedirectRejection {
-    /// The redirect response carried no `Location` header.
-    LocationMissing {
-        /// URL whose response omitted the header.
-        current_url: Url,
-    },
-    /// The `Location` value could not be resolved against the current URL.
-    LocationInvalid {
-        /// URL the unresolvable location was joined to.
-        current_url: Url,
-    },
     /// Credentials could not be removed before a cross-origin hop.
     CredentialsNotRemovable {
         /// URL whose credentials could not be removed.
@@ -104,37 +100,32 @@ impl<'policy> RedirectChain<'policy> {
         self.hops
     }
 
-    /// Resolve, redact, track, and authorize the next redirect target.
+    /// Redact, track, and authorize an already-resolved redirect target.
+    ///
+    /// The caller resolves the `Location` header into `target` first, because
+    /// reading a header is transport work. Everything below decides whether
+    /// that target may be requested.
     ///
     /// # Errors
     ///
-    /// Returns a [`RedirectRejection`] when the response carries no location,
-    /// when the location cannot be resolved, when credentials cannot be
-    /// stripped for a cross-origin hop, when the chain already accepted
+    /// Returns a [`RedirectRejection`] when credentials cannot be stripped for
+    /// a cross-origin hop, when the chain already accepted
     /// [`FETCH_REDIRECT_LIMIT`] redirects, when the target repeats an earlier
-    /// one, or when the configured policy refuses the target.
+    /// one, or when the configured policy refuses the target. The checks run in
+    /// that order, so the policy check is the last word before the caller
+    /// dispatches the request.
     pub(super) fn advance(
         &mut self,
-        location: Option<&str>,
+        mut target: Url,
     ) -> Result<RedirectTransition, RedirectRejection> {
-        let Some(raw_location) = location else {
-            return Err(RedirectRejection::LocationMissing {
-                current_url: self.current_url.clone(),
-            });
-        };
-        let mut next_url = self.current_url.join(raw_location).map_err(|_err| {
-            RedirectRejection::LocationInvalid {
-                current_url: self.current_url.clone(),
-            }
-        })?;
-        self.reject_excessive_redirects(&next_url)?;
-        redact_cross_origin_userinfo(&self.current_url, &mut next_url)?;
-        self.reject_redirect_loop(&next_url)?;
-        self.evaluate_target(&next_url)?;
-        self.current_url = next_url.clone();
+        self.reject_excessive_redirects(&target)?;
+        redact_cross_origin_userinfo(&self.current_url, &mut target)?;
+        self.reject_redirect_loop(&target)?;
+        self.evaluate_target(&target)?;
+        self.current_url = target.clone();
         self.hops = self.hops.saturating_add(1);
         Ok(RedirectTransition {
-            next_url,
+            next_url: target,
             hop: self.hops,
         })
     }

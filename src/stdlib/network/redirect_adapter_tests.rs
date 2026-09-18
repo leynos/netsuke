@@ -1,10 +1,11 @@
-//! Unit tests for the redirect adapter's diagnostics and chain budget.
+//! Unit tests for the redirect adapter's diagnostics, header parse, and budget.
 //!
-//! The adapter owns everything the pure chain cannot: the localized message a
-//! rejection becomes, the closed telemetry category it is counted under, and
-//! the single deadline every hop draws from. These cases pin all three without
-//! a socket, so a change to the wording, the vocabulary, or the budget is
-//! caught here rather than in a fixture that only sees one chain.
+//! The adapter owns everything the pure chain cannot: the `Location` header
+//! parse, the localized message a refusal becomes, the closed telemetry
+//! category it is counted under, and the single deadline every hop draws from.
+//! These cases pin all four without a socket, so a change to the wording, the
+//! vocabulary, the header handling, or the budget is caught here rather than in
+//! a fixture that only sees one chain.
 
 use std::collections::BTreeSet;
 
@@ -20,6 +21,10 @@ use tracing_subscriber::filter::LevelFilter;
 
 use super::super::redirect_chain::FETCH_REDIRECT_LIMIT;
 use super::*;
+
+/// Re-exported for [`location`], which reaches the recorder helpers this way.
+pub(super) use super::super::tests_support::{collect_samples, counter_totals};
+use minijinja::ErrorKind;
 use crate::snapshot_test_support::snapshot_settings;
 
 /// Credentialed URL used as the current URL of a refused redirect.
@@ -41,10 +46,13 @@ fn parse_url(raw: &str) -> Result<Url> {
     Url::parse(raw).with_context(|| format!("test URL should parse: {raw}"))
 }
 
-/// Build every rejection variant from credentialed URLs.
+/// Build every chain rejection variant from credentialed URLs.
 ///
 /// Each case is paired with a fragment that only its own localized diagnostic
 /// carries, so a rejection reported through the wrong message fails the test.
+///
+/// The two `Location` header failures are deliberately absent: they are not
+/// chain rejections, and they have their own cases below.
 ///
 /// # Errors
 ///
@@ -59,18 +67,6 @@ fn every_rejection() -> Result<Vec<RejectionCase>> {
     let limit = format!("Redirect limit of {FETCH_REDIRECT_LIMIT} exceeded");
 
     Ok(vec![
-        (
-            RedirectRejection::LocationMissing {
-                current_url: current.clone(),
-            },
-            String::from("did not include a Location header"),
-        ),
-        (
-            RedirectRejection::LocationInvalid {
-                current_url: current.clone(),
-            },
-            String::from("Invalid redirect location"),
-        ),
         (
             RedirectRejection::CredentialsNotRemovable {
                 current_url: current.clone(),
@@ -231,6 +227,41 @@ fn every_rejection_diagnostic_is_snapshotted(en_localizer: EnLocalizer) -> Resul
         let rendered = normalize_fluent_isolates(&rejection_error(&rejection).to_string());
         snapshot_settings("network_redirect").bind(|| {
             assert_snapshot!(failure_category(&rejection), rendered);
+        });
+    }
+    Ok(())
+}
+
+/// Keep the `Location` header cases below the module cap.
+///
+/// The header parse is the one adapter concern the pure chain cannot reach, so
+/// its cases live together. They still run as part of `redirect`'s tests: the
+/// child reaches the adapter through `super::*`, exactly as this parent does.
+#[path = "redirect_location_tests.rs"]
+mod location;
+
+/// Both header failures are snapshotted under their closed category.
+///
+/// The rendered text is what the user sees, so the whole normalized message is
+/// pinned rather than a substring, and each snapshot is named for the closed
+/// telemetry reason it is counted under.
+///
+/// This case lives here rather than in the `location` child because insta
+/// derives a snapshot's filename from the module path that asserted it. The two
+/// files under `src/snapshots/network_redirect/` keep the names they have
+/// always had, so the assertions stay in `redirect`'s own test module.
+#[rstest]
+fn location_failure_diagnostics_are_snapshotted(en_localizer: EnLocalizer) -> Result<()> {
+    let _localizer = en_localizer;
+    let current = parse_url(CREDENTIALED_CURRENT)?;
+    let policy = NetworkPolicy::default();
+    let chain = RedirectChain::new(&current, &policy);
+
+    for failure in [LocationFailure::Missing, LocationFailure::Unparsable] {
+        let rendered =
+            normalize_fluent_isolates(&report_location_failure(&chain, failure, 1).to_string());
+        snapshot_settings("network_redirect").bind(|| {
+            assert_snapshot!(failure.reason(), rendered);
         });
     }
     Ok(())
