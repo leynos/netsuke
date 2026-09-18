@@ -4417,6 +4417,52 @@ Three dispositions are in use:
 Scope an expectation as tightly as the site allows — a function where one call
 is involved, a module only where the whole file is pending migration.
 
+#### The suppression contract that backs the rule
+
+`expect`-not-`allow` is a convention the compiler enforces only on the outer
+form. `clippy::allow_attributes` does not fire on an *inner* attribute, so
+
+```rust
+#![allow(clippy::disallowed_methods, reason = "escape hatch probe")]
+```
+
+at the top of a file switches the environment-access policy off for everything
+below it and passes `make lint` with every other contract green: `clippy.toml`
+still lists the methods, the workspace still denies the lint, and the lint
+target still runs across the workspace. Each of those asserts a true statement
+about a different thing, and none observes that a source has opted out.
+
+`tests/env_access_suppressions.rs` closes that gap. It reads the compiled
+sources — `src`, `build_l10n_audit`, `test_support/src`, and `build.rs` — and
+fails when an `#[allow(...)]` or `#![allow(...)]` attribute names a lint that
+carries the policy. It reads the attribute as source text, because that is what
+an attribute is: there is no execution to model, and the assertion is exactly
+"this text does not appear in an `allow` attribute". The scan recognizes an
+attribute only where a line begins with one, so prose that quotes the attribute
+— including this section, and the mutation records that quote the form they
+prohibit — is not a finding. It reads the attribute to its matching
+parenthesis, so one `rustfmt` has wrapped across several lines is read whole
+rather than truncated.
+
+The banned set follows the lint hierarchy rather than spelling one name.
+`disallowed_methods` is declared in Clippy's `style` group, so allowing that
+group silences the policy just as naming the lint does; `clippy::all` sits
+above it, and `warnings` above that. The two guard lints are included because
+silencing the reporter is the one suppression nothing else would report.
+
+Three files are exempt, and only for those two guard lints:
+`src/runner/error.rs`, `src/manifest/diagnostics/mod.rs`, and
+`src/manifest/diagnostics/yaml.rs`. Each isolates `thiserror`/`miette` derive
+expansions where `unused_assignments` fires on some Rust versions and not
+others. `#[expect]` fails when the lint does not fire and
+`unfulfilled_lint_expectations` cannot itself be expected, so the module must
+carry an `allow` — which the guard lints then reject, leaving the module no way
+to state the suppression they require it to state. The exemption is scoped to
+those lints on those paths: an `allow` of `clippy::disallowed_methods`,
+`clippy::style`, or `warnings` is a finding there too. Remove an entry from
+`SCOPED_ALLOWLIST` when its workaround goes, or the exemption outlives its
+reason. See <https://github.com/rust-lang/rust/issues/130021>.
+
 ### `LocaleLocalizer`
 
 `test_support::localizer::locale_localizer` installs a test locale under
