@@ -1263,8 +1263,11 @@ fields present only in the winner remain available.
 Fetch-policy fields are the security-sensitive exception to this ordinary
 precedence. Only the exact primary project file is a project request, so its
 grants remain below operator policy unless the operator enables
-`trust_project_fetch_policy`. Files loaded through `extends` retain ordinary
-file-layer semantics.
+`trust_project_fetch_policy`. Primary-project environment allow rules are also
+an exception: `env_allow_var` entries from the primary project file are removed
+before policy composition rather than merged, so they cannot widen the
+allowlist or activate default-deny. Files loaded through `extends` retain
+ordinary file-layer semantics.
 
 An explicit selector bypasses automatic discovery. Selectors are checked in
 this order:

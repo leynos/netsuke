@@ -1,6 +1,6 @@
 //! Localization keys for CLI flags, keyed by Clap argument identifier.
 //!
-//! Keeping this lookup table separate from [`super::cli_l10n`] keeps the
+//! Keeping this lookup table separate from [`crate::cli_l10n`] keeps the
 //! localization module within the repository's module-size boundary. The table
 //! is a flat argument-identifier-to-key mapping that grows by one row whenever
 //! a flag is added, so it has no shared logic with the surrounding

@@ -18,7 +18,8 @@ use std::path::Path;
 ///
 /// # Errors
 ///
-/// Returns an error if the file cannot be read or the YAML fails to parse.
+/// Returns an error if the file cannot be read, the template cannot be
+/// rendered, or the YAML cannot be parsed.
 pub fn from_path(path: impl AsRef<Path>) -> Result<NetsukeManifest> {
     from_path_with_policy(path, NetworkPolicy::default(), None)
 }

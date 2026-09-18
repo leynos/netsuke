@@ -4470,13 +4470,16 @@ may appear in that diagnostic or trace.
 #### Ownership and permitted call sites
 
 - The caller owns the reader. `from_str` constructs `process_env_reader()`
-  and `from_str_with_env` borrows the caller's reader. The explicit loaders
-  build a `ManifestEnvironment` around that borrow and the selected policy;
-  `from_str_named` then clones the reader into the registered closure, so the
-  closure co-owns the `Arc` alongside the caller. `from_str_named` remains the
-  only place the `env()` function is registered. In production nothing else
-  constructs a reader; tests build their own with `Arc::new`, which is the
-  point of the seam.
+  and `from_str_with_env` borrows the caller's reader. The path loaders that
+  take only a reader, such as `from_path_with_policy_and_env`, build a
+  `ManifestEnvironment` around that borrow and `EnvAccessPolicy::default()`,
+  which is permissive for compatibility; the environment-aware entry points
+  such as `from_path_with_policy_and_environment` carry the caller's policy
+  instead. `from_str_named` then clones the reader into the registered closure,
+  so the closure co-owns the `Arc` alongside the caller. `from_str_named`
+  remains the only place the `env()` function is registered. In production
+  nothing else constructs a reader; tests build their own with `Arc::new`,
+  which is the point of the seam.
 - `process_env_reader()` is the sole production supplier and the only place
   `std::env::var` appears in the module.
 - The two test layers cover different things, and both are needed:
