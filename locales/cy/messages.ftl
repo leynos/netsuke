@@ -138,6 +138,7 @@ manifest.yaml.hint.invalid_token = Mae'r tocyn YAML yn annilys neu'n annisgwyl.
 manifest.yaml.hint.escape = Diangwch y slaesau ôl neu dynnwch y dilyniannau dianc annilys.
 manifest.env.missing = Nid yw newidyn amgylchedd gofynnol wedi'i osod.
 manifest.env.invalid_utf8 = Mae newidyn amgylchedd yn cynnwys UTF-8 annilys.
+manifest.env.blocked = Mae mynediad at newidyn amgylchedd wedi'i rwystro.
 manifest.vars.not_object = Rhaid i `vars` y maniffest fod yn fap neu'n wrthrych.
 manifest.vars.reserved_name = Mae'r allwedd `vars` '{ $name }' yn y maniffest wedi'i chadw ar gyfer cynorthwyydd templed mewnol; ailenwch y newidyn.
 manifest.read_failed = Methwyd â darllen y maniffest o { $path }.
@@ -445,3 +446,6 @@ example.errors_found = { $count ->
    *[other] Cafwyd hyd i { $count } gwall.
 }
 manifest.budget.exceeded = Daeth cyllideb adnoddau'r maniffest i ben yn ystod { $stage } ar ôl cyrraedd { $limit }.
+
+cli.flag.env_allow_var.help = Newidyn amgylchedd a ganiateir i gynorthwyydd env() y maniffest.
+cli.flag.env_block_var.help = Newidyn amgylchedd a rwystir i gynorthwyydd env() y maniffest.

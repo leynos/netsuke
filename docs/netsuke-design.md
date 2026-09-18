@@ -1277,9 +1277,17 @@ providing a secure bridge to the underlying system.
   the single `env()` registration site. This allows build configurations to be
   influenced by the external environment (e.g., `PATH`, `CC`). It returns an
   error if the variable is undefined and no `default` is provided, or if the
-  variable contains invalid UTF-8. The `default` argument is planned; the
-  current implementation only accepts the variable name. The planned
-  manifest-level `env` block in
+  variable contains invalid UTF-8.
+  [ADR-026](adr-026-manifest-environment-access-policy.md) bounds this port with
+  `manifest::EnvAccessPolicy`, an exact-name allow and block policy the
+  operator configures through `env_allow_var` and `env_block_var`; the policy
+  is evaluated at the `env()` registration boundary before the reader runs, so
+  a denied name never obtains a process value. Each lookup, including a
+  refusal, is counted once on the bounded `netsuke_manifest_env_lookups_total`
+  series recorded by [ADR-009](adr-009-bounded-redacted-manifest-telemetry.md),
+  which carries only the `outcome` label and never the name or its value. The
+  `default` argument is planned; the current implementation only accepts the
+  variable name. The planned manifest-level `env` block in
   [§2.6](#26-planned-recipe-ergonomics-and-execution-feedback) controls the
   environment Netsuke applies when actions run.
 

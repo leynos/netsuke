@@ -137,6 +137,7 @@ manifest.yaml.hint.invalid_token = YAML 记号无效或出乎意料。
 manifest.yaml.hint.escape = 请转义反斜杠，或删除无效的转义序列。
 manifest.env.missing = 未设置必需的环境变量。
 manifest.env.invalid_utf8 = 环境变量包含无效的 UTF-8。
+manifest.env.blocked = 对环境变量的访问已被阻止。
 manifest.vars.not_object = 清单的 `vars` 必须是映射或对象。
 manifest.vars.reserved_name = 清单的 `vars` 键 '{ $name }' 已保留给内置模板辅助函数；请重命名该变量。
 manifest.read_failed = 无法读取 { $path } 处的清单。
@@ -434,3 +435,6 @@ example.errors_found = { $count ->
    *[other] 发现 { $count } 个错误。
 }
 manifest.budget.exceeded = 清单资源预算在 { $stage } 阶段达到 { $limit } 后耗尽。
+
+cli.flag.env_allow_var.help = 允许清单 env() 助手使用的环境变量。
+cli.flag.env_block_var.help = 清单 env() 助手阻止使用的环境变量。

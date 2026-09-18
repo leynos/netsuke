@@ -176,3 +176,25 @@ and `default_count`. They do not carry manifest text, paths, recipe contents,
 variable values, macro bodies, or descriptions. This boundary preserves
 structural observability while preventing rendered values, including secrets
 interpolated through `env()`, from crossing into tracing or metrics.
+
+## Addendum — 2026-09-18: Manifest environment-lookup boundary
+
+The manifest `env()` port now counts every lookup at the registered call
+boundary in `src/manifest/env_reader.rs::env_var_with`, so a refusal by the
+access policy recorded in
+[ADR-026](adr-026-manifest-environment-access-policy.md) is measurable as well
+as observable.
+
+`src/manifest/env_telemetry.rs::record_env_lookup` returns the lookup result
+unchanged and increments `netsuke_manifest_env_lookups_total`, labelled by the
+closed `outcome` vocabulary `success`, `blocked`, `not_present`, and
+`not_unicode`. The `describe_counter!` registration is guarded by
+`std::sync::Once`, and the application recorder admits exactly that one-label
+series, so no other label name, label count, or out-of-vocabulary value is
+retained.
+
+The counter carries only the bounded outcome. The requested variable name and
+the value it resolved to are absent by construction, because environment
+variable names routinely identify credentials and a permitted value can carry
+secret material. The accompanying `tracing` event records the same bounded
+`failure_kind` field, so neither surface can disclose either.

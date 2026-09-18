@@ -137,6 +137,7 @@ manifest.yaml.hint.invalid_token = YAML 記號無效或出乎意料。
 manifest.yaml.hint.escape = 請逸出反斜線，或移除無效的逸出序列。
 manifest.env.missing = 未設定必要的環境變數。
 manifest.env.invalid_utf8 = 環境變數含有無效的 UTF-8。
+manifest.env.blocked = 對環境變數的存取已遭封鎖。
 manifest.vars.not_object = 資訊清單的 `vars` 必須是對應或物件。
 manifest.vars.reserved_name = 清單的 `vars` 鍵 '{ $name }' 已保留給內建範本輔助函式；請重新命名該變數。
 manifest.read_failed = 無法讀取 { $path } 的資訊清單。
@@ -434,3 +435,6 @@ example.errors_found = { $count ->
    *[other] 發現 { $count } 個錯誤。
 }
 manifest.budget.exceeded = 資訊清單資源預算在 { $stage } 階段達到 { $limit } 後耗盡。
+
+cli.flag.env_allow_var.help = 資訊清單 env() 輔助程式允許使用的環境變數。
+cli.flag.env_block_var.help = 資訊清單 env() 輔助程式封鎖使用的環境變數。

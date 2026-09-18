@@ -10,6 +10,8 @@ use ortho_config::{OrthoConfig, OrthoResult, PostMergeContext, PostMergeHook};
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
 
+#[path = "config_validation.rs"]
+mod config_validation;
 #[path = "manifest_budget_config.rs"]
 mod manifest_budget_config;
 #[path = "no_input.rs"]
@@ -17,6 +19,7 @@ mod no_input;
 pub use no_input::NoInput;
 #[path = "policy_definitions.rs"]
 pub(super) mod policy_definitions;
+use config_validation::{validate_jobs, validate_manifest_path, validate_non_interactive};
 use manifest_budget_config::{
     DEFAULT_MANIFEST_EVALUATION_FUEL, DEFAULT_MANIFEST_EXPANDED_ENTRIES,
     DEFAULT_MANIFEST_FOREACH_CARDINALITY, DEFAULT_MANIFEST_FUEL, DEFAULT_MANIFEST_RENDERED_BYTES,
@@ -191,6 +194,16 @@ pub struct CliConfig {
     #[serde(default)]
     pub fetch_allow_scheme: Vec<String>,
 
+    /// Environment variables permitted for the manifest `env()` helper.
+    #[ortho_config(merge_strategy = "append")]
+    #[serde(default)]
+    pub env_allow_var: Vec<String>,
+
+    /// Environment variables always blocked for the manifest `env()` helper.
+    #[ortho_config(merge_strategy = "append")]
+    #[serde(default)]
+    pub env_block_var: Vec<String>,
+
     /// Hostnames permitted when default deny is enabled.
     #[ortho_config(merge_strategy = "append")]
     #[serde(default)]
@@ -280,6 +293,8 @@ impl Default for CliConfig {
             verbose: false,
             locale: None,
             fetch_allow_scheme: Vec::new(),
+            env_allow_var: Vec::new(),
+            env_block_var: Vec::new(),
             fetch_allow_host: Vec::new(),
             fetch_block_host: Vec::new(),
             fetch_default_deny: false,
@@ -311,17 +326,6 @@ impl CliConfig {
     }
 }
 
-/// Maximum number of parallel build jobs accepted by the CLI.
-const MAX_JOBS: usize = super::validation::MAX_JOBS;
-
-/// Fixed reason reported when merged configuration enables interactive input.
-pub(crate) const NO_INPUT_VALIDATION_REASON: &str =
-    "no_input = false is unsupported because Netsuke has no interactive mode";
-/// Return whether `jobs` falls outside the accepted range.
-const fn jobs_out_of_bounds(jobs: usize) -> bool {
-    jobs == 0 || jobs > MAX_JOBS
-}
-
 impl PostMergeHook for CliConfig {
     fn post_merge(&mut self, _ctx: &PostMergeContext) -> OrthoResult<()> {
         validate_manifest_path(self)?;
@@ -337,57 +341,13 @@ fn default_manifest_path() -> Utf8PathBuf {
     Utf8PathBuf::from("Netsukefile")
 }
 
-/// Verify that the merged manifest path remains valid UTF-8.
+/// Fixed reason reported when merged configuration enables interactive input.
 ///
-/// The `Utf8PathBuf` field makes this invariant structural for file and
-/// environment layers. The final validation keeps the post-merge seam
-/// explicit, so any future untyped source is rejected at configuration
-/// composition rather than later during runner setup.
-///
-/// # Errors
-///
-/// Returns a validation error when the merged manifest path is not UTF-8.
-fn validate_manifest_path(config: &CliConfig) -> OrthoResult<()> {
-    if config.file.as_std_path().to_str().is_some() {
-        Ok(())
-    } else {
-        Err(validation_error("file", "manifest path is not valid UTF-8"))
-    }
-}
-
-/// Validate that non-interactive mode stays enabled after merging.
-///
-/// Netsuke has no interactive mode, so a merged `no_input = false` is
-/// unsupported and rejected by the post-merge hook.
-///
-/// # Errors
-///
-/// Returns a validation error when `no_input` resolves to false.
-fn validate_non_interactive(config: &CliConfig) -> OrthoResult<()> {
-    if config.no_input.is_enabled() {
-        Ok(())
-    } else {
-        Err(validation_error("no_input", NO_INPUT_VALIDATION_REASON))
-    }
-}
-
-/// Validate that the merged job count falls within the supported range.
-///
-/// # Errors
-///
-/// Returns a validation error when `jobs` is zero or greater than `MAX_JOBS`.
-fn validate_jobs(config: &CliConfig) -> OrthoResult<()> {
-    let Some(jobs) = config.jobs else {
-        return Ok(());
-    };
-    if jobs_out_of_bounds(jobs) {
-        return Err(validation_error(
-            "jobs",
-            &format!("jobs = {jobs} is out of range; must be between 1 and {MAX_JOBS}"),
-        ));
-    }
-    Ok(())
-}
+/// Defined here rather than in [`config_validation`] because
+/// `merge_observability` maps the rejected `no_input` key to this text without
+/// depending on the validation slice.
+pub(crate) const NO_INPUT_VALIDATION_REASON: &str =
+    "no_input = false is unsupported because Netsuke has no interactive mode";
 #[cfg(test)]
 #[path = "config_tests.rs"]
 mod tests;

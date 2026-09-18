@@ -138,6 +138,7 @@ manifest.yaml.hint.invalid_token = Tha an t-samhla YAML mì-dhligheach no gun d�
 manifest.yaml.hint.escape = Teich na slaisean-cùil no thoir air falbh na sreathan teichidh mì-dhligheach.
 manifest.env.missing = Chan eil caochladair àrainneachd riatanach air a shuidheachadh.
 manifest.env.invalid_utf8 = Tha UTF-8 mì-dhligheach ann an caochladair àrainneachd.
+manifest.env.blocked = Tha inntrigeadh do chaochladair àrainneachd air a bhacadh.
 manifest.vars.not_object = Feumaidh `vars` an fhoirm-liosta a bhith na mhapadh no na oibseact.
 manifest.vars.reserved_name = Tha an iuchair `vars` '{ $name }' sa mhanifest glèidhte do chuidiche teamplaid na broinn; thoir ainm ùr air a' chaochladair.
 manifest.read_failed = Cha b' urrainnear am foirm-liosta a leughadh o { $path }.
@@ -442,3 +443,6 @@ example.errors_found = { $count ->
    *[other] Chaidh { $count } mearachd a lorg.
 }
 manifest.budget.exceeded = Dh’fhalbh buidseat ghoireasan na foirm-liosta rè { $stage } às dèidh { $limit } a ruigsinn.
+
+cli.flag.env_allow_var.help = Caochladair àrainneachd ceadaichte do chuidiche env() a’ mhanaifeist.
+cli.flag.env_block_var.help = Caochladair àrainneachd toirmisgte do chuidiche env() a’ mhanaifeist.

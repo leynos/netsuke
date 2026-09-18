@@ -29,6 +29,7 @@ fn write_project_policy(dir: &Dir, field: &str) -> Result<()> {
 #[case::default_deny("fetch_default_deny")]
 #[case::allow_scheme("fetch_allow_scheme")]
 #[case::allow_host("fetch_allow_host")]
+#[case::env_allow_var("env_allow_var")]
 #[case::project_trust("trust_project_fetch_policy")]
 fn malformed_project_policy_preserves_json_and_validation_error(
     #[case] field: &str,

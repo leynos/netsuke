@@ -48,12 +48,8 @@ pub(super) fn generate_ninja_with_shell(
     let manifest_path = path_helpers::resolve_manifest_path(cli)?;
     path_helpers::ensure_manifest_exists_or_error(cli, reporter, &manifest_path)?;
 
-    let policy = cli
-        .network_policy()
-        .context(localization::message(keys::RUNNER_CONTEXT_NETWORK_POLICY))?;
-    let budget_limits = cli.manifest_budget_limits()?;
-    let manifest =
-        load_manifest_with_stage_reporting(&manifest_path, policy, budget_limits, reporter)?;
+    let inputs = generation::ManifestLoadInputs::from_cli(cli)?;
+    let manifest = load_manifest_with_stage_reporting(&manifest_path, &inputs, reporter)?;
     record_manifest_structure(&manifest);
 
     report_pipeline_stage(reporter, PipelineStage::IrGenerationValidation, None);

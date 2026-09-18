@@ -138,6 +138,7 @@ manifest.yaml.hint.invalid_token = YAML टोकन अमान्य अथ�
 manifest.yaml.hint.escape = बैकस्लैश को एस्केप करें अथवा अमान्य एस्केप अनुक्रम हटाएँ।
 manifest.env.missing = एक आवश्यक परिवेश चर निर्धारित नहीं है।
 manifest.env.invalid_utf8 = एक परिवेश चर में अमान्य UTF-8 है।
+manifest.env.blocked = किसी परिवेश चर तक पहुँच अवरुद्ध है।
 manifest.vars.not_object = मैनिफ़ेस्ट का `vars` प्रतिचित्रण अथवा वस्तु होना चाहिए।
 manifest.vars.reserved_name = मैनिफ़ेस्ट की `vars` कुंजी '{ $name }' अंतर्निहित टेम्पलेट सहायक के लिए आरक्षित है; चर का नाम बदलें।
 manifest.read_failed = { $path } से मैनिफ़ेस्ट नहीं पढ़ा जा सका।
@@ -440,3 +441,6 @@ example.errors_found = { $count ->
    *[other] { $count } त्रुटियाँ मिलीं।
 }
 manifest.budget.exceeded = { $stage } के दौरान { $limit } तक पहुँचने के बाद मैनिफ़ेस्ट का संसाधन बजट समाप्त हो गया।
+
+cli.flag.env_allow_var.help = मैनिफ़ेस्ट env() सहायक के लिए अनुमत परिवेश चर।
+cli.flag.env_block_var.help = मैनिफ़ेस्ट env() सहायक के लिए अवरुद्ध परिवेश चर।

@@ -12,6 +12,7 @@ mod workspace;
 mod workspace_property;
 
 mod env_function;
+mod env_telemetry;
 mod expansion_telemetry;
 mod glob_security;
 mod glob_telemetry;

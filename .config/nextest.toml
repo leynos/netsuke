@@ -33,7 +33,7 @@ test-group = "nested-cargo-builds"
 success-output = "immediate"
 
 [[profile.default.overrides]]
-filter = 'test(=command_env_embedder_fixture_compiles) | test(=policy_from_str_embedder_fixture_compiles_without_clap) | test(=command_list_public_api_fixture_compiles) | test(=ir_gen_error_public_api_fixture_compiles) | test(=legacy_recipe_telemetry_public_api_fixture_compiles) | test(=config_cached_discovery_embedder_fixture_compiles) | test(=verbose_timing_reporter_embedder_fixture_compiles)'
+filter = 'test(=command_env_embedder_fixture_compiles) | test(=manifest_environment_embedder_fixture_compiles) | test(=policy_from_str_embedder_fixture_compiles_without_clap) | test(=command_list_public_api_fixture_compiles) | test(=ir_gen_error_public_api_fixture_compiles) | test(=legacy_recipe_telemetry_public_api_fixture_compiles) | test(=config_cached_discovery_embedder_fixture_compiles) | test(=verbose_timing_reporter_embedder_fixture_compiles)'
 test-group = "nested-cargo-builds"
 success-output = "immediate"
 

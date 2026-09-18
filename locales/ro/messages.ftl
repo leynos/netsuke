@@ -138,6 +138,7 @@ manifest.yaml.hint.invalid_token = Simbolul YAML este nevalid sau neașteptat.
 manifest.yaml.hint.escape = Aplicați escape barelor oblice inverse sau eliminați secvențele de escape nevalide.
 manifest.env.missing = O variabilă de mediu obligatorie nu este setată.
 manifest.env.invalid_utf8 = O variabilă de mediu conține UTF-8 nevalid.
+manifest.env.blocked = Accesul la o variabilă de mediu este blocat.
 manifest.vars.not_object = Câmpul `vars` al manifestului trebuie să fie o mapare sau un obiect.
 manifest.vars.reserved_name = Cheia `vars` '{ $name }' din manifest este rezervată pentru o funcție ajutătoare de șabloane integrată; redenumiți variabila.
 manifest.read_failed = Manifestul din { $path } nu a putut fi citit.
@@ -441,3 +442,6 @@ example.errors_found = { $count ->
    *[other] S-au găsit { $count } de erori.
 }
 manifest.budget.exceeded = Bugetul de resurse al manifestului s-a epuizat în timpul etapei { $stage }, după atingerea limitei { $limit }.
+
+cli.flag.env_allow_var.help = Variabilă de mediu permisă pentru ajutorul env() al manifestului.
+cli.flag.env_block_var.help = Variabilă de mediu blocată pentru ajutorul env() al manifestului.

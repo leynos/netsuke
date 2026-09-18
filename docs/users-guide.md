@@ -1278,8 +1278,11 @@ fields present only in the winner remain available.
 Fetch-policy fields are the security-sensitive exception to this ordinary
 precedence. Only the exact primary project file is a project request, so its
 grants remain below operator policy unless the operator enables
-`trust_project_fetch_policy`. Files loaded through `extends` retain ordinary
-file-layer semantics.
+`trust_project_fetch_policy`. Primary-project environment allow rules are also
+an exception: `env_allow_var` entries from the primary project file are removed
+before policy composition rather than merged, so they cannot widen the
+allowlist or activate default-deny. Files loaded through `extends` retain
+ordinary file-layer semantics.
 
 An explicit selector bypasses automatic discovery. Selectors are checked in
 this order:
@@ -1479,6 +1482,22 @@ The summary records only fixed integer collection counts: variables, macros,
 rules, actions, targets, and defaults. Manifest text, paths, recipe contents,
 variable values, macro bodies, and descriptions are never recorded, because
 rendered manifest values can carry secret material interpolated through `env()`.
+
+#### Manifest environment-lookup metrics
+
+Loading a manifest counts every `env()` lookup in one bounded series:
+
+- `netsuke_manifest_env_lookups_total` — a counter with a single `outcome`
+  label that counts each `env()` lookup. `outcome` is `success` when the
+  variable resolved, `blocked` when the
+  [environment access policy](#control-manifest-environment-access) denied the
+  name, `not_present` when the variable is absent, and `not_unicode` when its
+  value is not valid UTF-8.
+
+The `blocked` outcome is what makes an effective policy measurable: it is the
+rate at which the policy is refusing manifest access. Variable names and their
+values never appear in the label, because environment variable names routinely
+identify credentials.
 
 The annotated [sample configuration](sample-netsuke.toml) lists every key. A
 small project configuration looks like this:
@@ -1749,6 +1768,54 @@ self-authorize.
 Host patterns may contain wildcards such as `*.example.com`. A block rule wins
 over an allow rule. `--fetch-default-deny` permits only explicitly allowed
 hosts.
+
+## Control manifest environment access
+
+The Jinja `env()` helper can read process environment variables while rendering
+a manifest. Configure exact variable names with `env_allow_var` and
+`env_block_var` as arrays in a Netsuke configuration layer:
+
+<!-- tested-example: guide-manifest-environment-policy -->
+
+```toml
+env_allow_var = ["CI", "PACKAGE_REGISTRY_TOKEN"]
+env_block_var = ["AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN"]
+```
+
+The environment equivalents contain serialized JSON arrays, rather than bare
+variable names:
+
+<!-- tested-example: guide-manifest-environment-policy-env -->
+
+```sh
+NETSUKE_ENV_ALLOW_VAR='["CI","PACKAGE_REGISTRY_TOKEN"]'
+NETSUKE_ENV_BLOCK_VAR='["AWS_SECRET_ACCESS_KEY","GITHUB_TOKEN"]'
+```
+
+CLI flags take one exact name and may be repeated:
+
+<!-- tested-example: guide-manifest-environment-policy-cli -->
+
+```sh
+netsuke --env-allow-var CI --env-allow-var PACKAGE_REGISTRY_TOKEN \
+    --env-block-var AWS_SECRET_ACCESS_KEY --env-block-var GITHUB_TOKEN
+```
+
+With neither effective list configured, `env()` remains default-allow for
+compatibility. Adding at least one effective `env_allow_var` entry makes the
+allowlist restrictive: only listed names may resolve. An `env_block_var` list
+without an allowlist blocks only its listed names. A blocklist entry always
+overrides an allowlist entry. Every entry is one exact variable name; this
+policy has no glob or pattern matching. Primary-project `env_allow_var` entries
+are removed before policy composition, so a manifest cannot grant itself access
+to inherited environment variables or activate default-deny alone.
+Primary-project `env_block_var` entries remain cumulative because they can only
+restrict access. Configuration loaded through `extends` retains ordinary
+file-layer precedence.
+
+This policy reduces secret ingress into rendered manifest fields. It does not
+make rendered manifest contents safe to log: allowed values still require the
+existing output and logging discipline.
 
 Exact and wildcard host matching ignores one terminal DNS dot: `example.com`
 matches `example.com.`, and `*.example.com` matches `sub.example.com.`. The

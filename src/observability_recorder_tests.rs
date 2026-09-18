@@ -33,6 +33,10 @@ mod manifest_structure_tests;
 #[path = "observability_recorder_ninja_status_tests.rs"]
 mod ninja_status_tests;
 
+/// Cover the bounded manifest environment-lookup counter series separately.
+#[path = "observability_recorder_env_lookup_tests.rs"]
+mod env_lookup_tests;
+
 /// Define the rejected label variants for recipe-shell resolution metrics.
 const INVALID_RECIPE_SHELL_RESOLUTION_SERIES: [MetricLabels; 3] = [
     [

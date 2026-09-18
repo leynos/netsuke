@@ -9,17 +9,21 @@
 //!
 //! [`load_manifest`] is the read-only query step: it rejects template helpers
 //! that can access the environment, filesystem, network, clock, or shell.
-//! [`load_manifest_for_build`] is deliberately separate because command
-//! execution needs the full, effectful manifest stdlib.
+//! [`load_manifest_for_build_with_limits`] is deliberately separate because
+//! command execution needs the full, effectful manifest stdlib.
 
 use anyhow::{Context, Result};
 use camino::Utf8Path;
 
 use crate::ast::NetsukeManifest;
+use crate::cli::Cli;
 use crate::ir::{BuildGraph, IrGenError};
 use crate::localization::{self, keys};
-use crate::stdlib::NetworkPolicy;
 use crate::{manifest, ninja_gen};
+use crate::{
+    manifest::{EnvAccessPolicy, ManifestEnvironment},
+    stdlib::NetworkPolicy,
+};
 
 /// Optional observer for manifest-loading stages.
 ///
@@ -27,6 +31,39 @@ use crate::{manifest, ninja_gen};
 /// [`manifest::ManifestLoadStage`] values into their own reporting; passing
 /// `None` keeps the pipeline free of side effects.
 pub(super) type StageObserver<'a> = Option<&'a mut dyn FnMut(manifest::ManifestLoadStage)>;
+
+/// Trusted configuration bounding one build manifest load.
+///
+/// Bundles the network grant, environment grant, and resource ceilings that
+/// trusted configuration resolved before loading. Grouping them keeps the
+/// loader seams explicit while holding the parameter list to the workspace
+/// ceiling, as `manifest::ManifestParse` does for the parse path.
+pub(crate) struct ManifestLoadInputs {
+    /// Network grant ceiling applied to fetch helpers.
+    pub(super) network_policy: NetworkPolicy,
+    /// Environment grant ceiling evaluated before each `env()` read.
+    pub(super) env_access_policy: EnvAccessPolicy,
+    /// Resource ceilings applied to manifest evaluation.
+    pub(super) budget_limits: manifest::ManifestBudgetLimits,
+}
+
+impl ManifestLoadInputs {
+    /// Resolve the trusted configuration bounding one build manifest load.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the merged network policy or the merged resource
+    /// ceilings are invalid.
+    pub(super) fn from_cli(cli: &Cli) -> Result<Self> {
+        Ok(Self {
+            network_policy: cli
+                .network_policy()
+                .context(localization::message(keys::RUNNER_CONTEXT_NETWORK_POLICY))?,
+            env_access_policy: cli.env_access_policy(),
+            budget_limits: cli.manifest_budget_limits()?,
+        })
+    }
+}
 
 /// Load and render the Netsuke manifest at `path` without effectful helpers.
 ///
@@ -61,18 +98,50 @@ pub(super) fn load_manifest_with_limits(
         })
 }
 
-/// Load a build manifest with explicit resource ceilings.
+/// Load and render a manifest with the full, effectful build stdlib.
+///
+/// This loader is only for command execution. Templates may use configured
+/// network, cache, environment, filesystem, clock, and shell helpers.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let inputs = ManifestLoadInputs {
+///     network_policy: NetworkPolicy::default(),
+///     env_access_policy: EnvAccessPolicy::default(),
+///     budget_limits: manifest::ManifestBudgetLimits::default(),
+/// };
+/// let manifest = load_manifest_for_build_with_limits(
+///     Utf8Path::new("Netsukefile"),
+///     &inputs,
+///     None,
+/// )?;
+/// // `manifest` may use build-time template helpers before `build_graph`.
+/// ```
+///
+/// The access policy is evaluated before the process environment is read, so a
+/// blocked `env()` call cannot disclose a host value.
+///
+/// # Errors
+///
+/// Returns an error when the manifest cannot be read, parsed, or rendered.
 pub(super) fn load_manifest_for_build_with_limits(
     path: &Utf8Path,
-    policy: NetworkPolicy,
-    budget_limits: manifest::ManifestBudgetLimits,
+    inputs: &ManifestLoadInputs,
     on_stage: StageObserver<'_>,
 ) -> Result<NetsukeManifest> {
-    manifest::from_path_with_policy_and_limits(path.as_std_path(), policy, budget_limits, on_stage)
-        .with_context(|| {
-            localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST)
-                .with_arg("path", path.as_str())
-        })
+    let env_reader = manifest::process_env_reader();
+    let environment = ManifestEnvironment::new(&env_reader, inputs.env_access_policy.clone());
+    manifest::from_path_with_policy_and_environment_and_limits(
+        path.as_std_path(),
+        inputs.network_policy.clone(),
+        &environment,
+        inputs.budget_limits,
+        on_stage,
+    )
+    .with_context(|| {
+        localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST).with_arg("path", path.as_str())
+    })
 }
 
 /// Translate a manifest into the build graph intermediate representation.

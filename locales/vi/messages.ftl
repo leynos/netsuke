@@ -138,6 +138,7 @@ manifest.yaml.hint.invalid_token = Thẻ từ YAML không hợp lệ hoặc bấ
 manifest.yaml.hint.escape = Hãy thoát dấu gạch chéo ngược hoặc bỏ các chuỗi thoát không hợp lệ.
 manifest.env.missing = Một biến môi trường bắt buộc chưa được đặt.
 manifest.env.invalid_utf8 = Một biến môi trường chứa UTF-8 không hợp lệ.
+manifest.env.blocked = Quyền truy cập vào biến môi trường đã bị chặn.
 manifest.vars.not_object = Trường `vars` của tệp kê khai phải là ánh xạ hoặc đối tượng.
 manifest.vars.reserved_name = Khóa `vars` '{ $name }' của tệp kê khai được dành riêng cho hàm trợ giúp mẫu tích hợp; hãy đổi tên biến.
 manifest.read_failed = Không đọc được tệp kê khai tại { $path }.
@@ -435,3 +436,6 @@ example.errors_found = { $count ->
    *[other] Tìm thấy { $count } lỗi.
 }
 manifest.budget.exceeded = Đã dùng hết ngân sách tài nguyên của manifest trong { $stage } sau khi đạt { $limit }.
+
+cli.flag.env_allow_var.help = Biến môi trường mà hàm trợ giúp env() của tệp kê khai được phép sử dụng.
+cli.flag.env_block_var.help = Biến môi trường mà hàm trợ giúp env() của tệp kê khai không được phép sử dụng.

@@ -138,6 +138,7 @@ manifest.yaml.hint.invalid_token = نشانهٔ YAML نامعتبر یا ناب�
 manifest.yaml.hint.escape = ممیزهای وارونه را بگریزانید یا دنباله‌های گریز نامعتبر را بردارید.
 manifest.env.missing = یک متغیر محیطی الزامی تنظیم نشده است.
 manifest.env.invalid_utf8 = یک متغیر محیطی دربردارندهٔ UTF-8 نامعتبر است.
+manifest.env.blocked = دسترسی به یک متغیر محیطی مسدود شده است.
 manifest.vars.not_object = ‏`vars` در مانیفست باید نگاشت یا شیء باشد.
 manifest.vars.reserved_name = کلید `vars` با نام '{ $name }' در مانیفست برای یک کمک‌کننده داخلی قالب رزرو شده است؛ نام متغیر را تغییر دهید.
 manifest.read_failed = خواندن مانیفست از { $path } ممکن نشد.
@@ -437,3 +438,6 @@ example.errors_found = { $count ->
    *[other] ‏{ $count } خطا یافت شد.
 }
 manifest.budget.exceeded = ‏بودجهٔ منابع مانیفست هنگام { $stage } پس از رسیدن به { $limit } به پایان رسید.
+
+cli.flag.env_allow_var.help = متغیر محیطی مجاز برای دستیار env() مانیفست.
+cli.flag.env_block_var.help = متغیر محیطی مسدودشده برای دستیار env() مانیفست.

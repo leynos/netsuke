@@ -138,6 +138,7 @@ manifest.yaml.hint.invalid_token = YAML のトークンが無効か、予期し�
 manifest.yaml.hint.escape = 逆斜線をエスケープするか、無効なエスケープ列を取り除いてください。
 manifest.env.missing = 必須の環境変数が設定されていません。
 manifest.env.invalid_utf8 = 環境変数に無効な UTF-8 が含まれています。
+manifest.env.blocked = 環境変数へのアクセスはブロックされています。
 manifest.vars.not_object = マニフェストの `vars` はマップまたはオブジェクトでなければなりません。
 manifest.vars.reserved_name = マニフェストの `vars` キー '{ $name }' は組み込みのテンプレートヘルパー用に予約されています。変数名を変更してください。
 manifest.read_failed = { $path } のマニフェストを読み取れませんでした。
@@ -435,3 +436,6 @@ example.errors_found = { $count ->
    *[other] { $count } 件のエラーが見つかりました。
 }
 manifest.budget.exceeded = { $stage } 中にマニフェストのリソース予算を使い果たしました（{ $limit } に達しました）。
+
+cli.flag.env_allow_var.help = マニフェストの env() ヘルパーで許可する環境変数。
+cli.flag.env_block_var.help = マニフェストの env() ヘルパーでブロックする環境変数。

@@ -6,10 +6,10 @@
 //! network requests, cache writes, or command execution.
 
 use super::{
-    EnvReader, ExpansionReportObserver, ManifestBudgetLimits, ManifestLoadStage, ManifestName,
-    ManifestParse, NetsukeManifest, StdlibConfig, StdlibRegistration,
-    env_reader::disabled_env_reader, from_str_named, loading::trace_expansion_report, notify_stage,
-    workspace::open_manifest_workspace,
+    EnvAccessPolicy, ExpansionReportObserver, ManifestBudgetLimits, ManifestEnvironment,
+    ManifestLoadStage, ManifestName, ManifestParse, NetsukeManifest, StdlibConfig,
+    StdlibRegistration, env_reader::disabled_env_reader, from_str_named,
+    loading::trace_expansion_report, notify_stage, workspace::open_manifest_workspace,
 };
 use crate::{localization, localization::keys, stdlib::NetworkPolicy};
 use anyhow::{Context, Result};
@@ -36,30 +36,32 @@ pub(crate) fn from_path_for_manifest_query_with_limits(
     on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
 ) -> Result<NetsukeManifest> {
     let env_reader = disabled_env_reader();
+    let environment = ManifestEnvironment::new(&env_reader, EnvAccessPolicy::default());
     from_path_with_registration(ManifestLoadRequest {
         path: path.as_ref(),
-        env_reader: &env_reader,
+        environment: &environment,
         budget_limits,
         on_stage,
         mode: ManifestLoadMode::ManifestQuery,
     })
 }
 
-/// Load a full manifest with explicit policy and resource ceilings.
+/// Load a full manifest with explicit policy, environment inputs, and
+/// resource ceilings.
 #[expect(
     clippy::too_many_arguments,
     reason = "This compatibility entry point keeps the established policy, environment, budget, and stage-observer seams explicit."
 )]
-pub(super) fn from_path_with_policy_and_env_and_limits(
+pub(super) fn from_path_with_policy_and_environment_and_limits(
     path: impl AsRef<Path>,
     policy: NetworkPolicy,
-    env_reader: &EnvReader,
+    environment: &ManifestEnvironment<'_>,
     budget_limits: ManifestBudgetLimits,
     on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
 ) -> Result<NetsukeManifest> {
     from_path_with_registration(ManifestLoadRequest {
         path: path.as_ref(),
-        env_reader,
+        environment,
         budget_limits,
         on_stage,
         mode: ManifestLoadMode::Full(policy),
@@ -78,8 +80,8 @@ enum ManifestLoadMode {
 struct ManifestLoadRequest<'path, 'env, 'stage> {
     /// Identifies the manifest file on the capability-scoped workspace boundary.
     path: &'path Path,
-    /// Reads environment variables through the caller-selected boundary.
-    env_reader: &'env EnvReader,
+    /// Reads environment variables and carries the policy for `env()` lookups.
+    environment: &'env ManifestEnvironment<'env>,
     /// Supplies immutable resource ceilings for this parse.
     budget_limits: ManifestBudgetLimits,
     /// Observes load phases without changing parsing behaviour.
@@ -122,7 +124,8 @@ fn from_path_with_registration(
         ManifestParse {
             name: &name,
             stdlib_registration: Some(stdlib_registration),
-            env_reader: request.env_reader,
+            env_reader: request.environment.reader(),
+            env_access_policy: request.environment.access_policy(),
             manifest_root,
             expansion_report_observer,
             budget_limits: request.budget_limits,

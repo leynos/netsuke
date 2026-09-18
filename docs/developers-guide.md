@@ -4441,15 +4441,49 @@ one explicitly, so a test can drive the **real registration path** — the same
 `Environment`, the same `add_function("env", ..)` call — without touching the
 process.
 
+`manifest::EnvAccessPolicy` is the manifest-domain policy for this port. It
+stores exact variable names in separate allow and block collections. An empty
+allowlist is default-allow; a non-empty allowlist activates default-deny, and
+block entries take precedence over allow entries. Names are compared using the
+host environment's semantics: case-sensitive on other platforms and
+case-insensitive on Windows. The policy has no glob or pattern matching.
+
+`manifest::ManifestEnvironment<'a>` bundles the caller-owned `EnvReader` with
+the owned `EnvAccessPolicy` used for one manifest load. The on-disk loader's
+process-backed compatibility wrapper constructs the process reader and a
+policy, while `from_path_with_policy_and_env` retains the explicit reader
+surface. `from_path_with_policy_and_environment` is the explicit bundle-based
+entry point; use it when the reader and policy must travel together. The
+string-loading `from_str_with_env_and_policy` variant exposes the same
+composition for callers that already hold an input string.
+
+The CLI composition root builds `EnvAccessPolicy` from the effective merged
+`env_allow_var` and `env_block_var` fields, then passes it into manifest
+loading. Primary-project allow entries are quarantined before this composition
+so an untrusted manifest cannot grant itself access or activate default-deny;
+primary-project block entries remain cumulative because they only restrict
+access.
+
+Policy enforcement belongs at the registered `env()` call boundary. The closure
+evaluates the requested name before invoking `EnvReader`, so a blocked lookup
+cannot obtain a process value. It returns the fixed, localized
+`manifest.env.blocked` diagnostic and emits only the bounded
+`failure_kind="blocked"` trace field. Neither the requested name nor its value
+may appear in that diagnostic or trace.
+
 #### Ownership and permitted call sites
 
 - The caller owns the reader. `from_str` constructs `process_env_reader()`
-  and `from_str_with_env` borrows the caller's reader; both pass it to
-  `from_str_named`, which receives it as `&EnvReader` and `Arc::clone`s it into
-  the registered closure, so the closure co-owns the `Arc` alongside the caller.
-  `from_str_named` remains the only place the `env()` function is registered.
-  In production nothing else constructs a reader; tests build their own with
-  `Arc::new`, which is the point of the seam.
+  and `from_str_with_env` borrows the caller's reader. The path loaders that
+  take only a reader, such as `from_path_with_policy_and_env`, build a
+  `ManifestEnvironment` around that borrow and `EnvAccessPolicy::default()`,
+  which is permissive for compatibility; the environment-aware entry points
+  such as `from_path_with_policy_and_environment` carry the caller's policy
+  instead. `from_str_named` then clones the reader into the registered closure,
+  so the closure co-owns the `Arc` alongside the caller. `from_str_named`
+  remains the only place the `env()` function is registered. In production
+  nothing else constructs a reader; tests build their own with `Arc::new`,
+  which is the point of the seam.
 - `process_env_reader()` is the sole production supplier and the only place
   `std::env::var` appears in the module.
 - The two test layers cover different things, and both are needed:
@@ -5708,6 +5742,41 @@ emitted series and the bounded debug event, while
 `src/observability_recorder_tests.rs` proves the production recorder retains
 the two bounded series and rejects out-of-vocabulary `filter` and `outcome`
 values and a series missing a label.
+
+### Manifest environment-lookup telemetry
+
+`src/manifest/env_telemetry.rs` owns telemetry for the `env()` lookup boundary.
+`env_var_with` in `src/manifest/env_reader.rs` is the only place an `env()`
+call reaches: it evaluates the access policy, reads through the injected
+reader, and maps failures to Jinja errors, so it also hands each result to
+`record_env_lookup`, which returns that result unchanged and counts the lookup
+exactly once whatever the outcome.
+
+The counter is `netsuke_manifest_env_lookups_total`, with one `outcome` label
+drawn from the closed set `success`, `blocked`, `not_present`, and
+`not_unicode`, exposed as the module constant `ENV_LOOKUP_OUTCOME_VALUES` and
+re-exported through `netsuke::manifest`. Nothing else is recorded: the variable
+name and its value are absent by construction, because environment variable
+names routinely identify credentials and a rendered value can carry secret
+material. The blocked outcome is the reason the series exists; denying a lookup
+is new behaviour that previously could not occur, and the accompanying
+`tracing` event is neither aggregated nor retained by the application recorder.
+
+The counter description is registered once per process behind a `Once`. The
+application recorder in `src/observability_recorder.rs` admits the series:
+`ENV_LOOKUP_TOTAL` is listed in `accepts_name` and matched in
+`accepts_counter_registration` against exactly that one label set, so the
+counter survives into the process snapshot rather than being discarded as a
+noop handle, while any other label name, label count, or out-of-vocabulary
+value is rejected.
+
+Tests sit beside the boundary: `src/manifest/tests/env_telemetry.rs` drives
+`env_var_with` against a local debugging recorder and asserts each outcome
+reaches exactly one bounded series, while
+`recorder_retains_bounded_env_lookup_series` in
+`src/observability_recorder_tests.rs` proves the production recorder retains
+the four bounded series and rejects an out-of-vocabulary outcome, an extra
+label, and a series missing its label.
 
 ## Digest rendering
 
