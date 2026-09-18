@@ -6,9 +6,15 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
-Revision 1. See `Revision note` at the foot of this document.
+Revision 3. See `Revision note` at the foot of this document. The plan was
+approved and implementation began on 2026-09-19; the branch was first rebased
+onto `origin/main` at `0ba6672f`, which moved the ADR ceiling from 020 to 026
+and renumbered this plan's ADR to **027** (PR 621 holds an unmerged, stale
+`adr-021` filename). Several line citations in revision 2 are stale after that
+rebase; every one this plan depends on has been re-verified and re-cited in
+`Progress`.
 
 ## Purpose / big picture
 
@@ -38,7 +44,7 @@ After this change:
   repository's documented-example harness, so the README cannot silently drift
   away from the implementation.
 - A new Architectural Decision Record,
-  `docs/adr-021-command-placeholder-contract.md`, records the three settled
+  `docs/adr-027-command-placeholder-contract.md`, records the three settled
   contract decisions and their rationale, and the design document points at it.
 - Three documents that currently misstate the contract are corrected —
   `docs/developers-guide.md`, `docs/users-guide.md`, and
@@ -313,9 +319,9 @@ Trace links:
 
 ```plaintext
 RM-4.4.1.a -> EP-M3 -> README.md "Security and command interpolation"
-RM-4.4.1.b / FV-CPC-Q1 -> D1 -> EP-M1 (ADR-021 §Placeholders) -> EP-M3 -> tests::readme_security::documented_safe_placeholder_manifest_builds
-RM-4.4.1.c / FV-CPC-Q2 -> D2 -> EP-M1 (ADR-021 §Backticks)   -> EP-M3 -> tests::readme_security::documented_backtick_manifest_is_rejected
-RM-4.4.1.d / FV-CPC-Q3 -> D3 -> EP-M1 (ADR-021 §shlex guard) -> EP-M3 -> tests::readme_security::documented_backtick_manifest_is_rejected
+RM-4.4.1.b / FV-CPC-Q1 -> D1 -> EP-M1 (ADR-027 §Placeholders) -> EP-M3 -> tests::readme_security::documented_safe_placeholder_manifest_builds
+RM-4.4.1.c / FV-CPC-Q2 -> D2 -> EP-M1 (ADR-027 §Backticks)   -> EP-M3 -> tests::readme_security::documented_backtick_manifest_is_rejected
+RM-4.4.1.d / FV-CPC-Q3 -> D3 -> EP-M1 (ADR-027 §shlex guard) -> EP-M3 -> tests::readme_security::documented_backtick_manifest_is_rejected
 RM-4.4.1.b / Fact A    -> OBL-RECIPE-KIND -> tests::readme_security::placeholder_rewriting_differs_by_recipe_kind
 Fact A     -> EP-M2 -> docs/developers-guide.md "Command interpolation contract"
 Fact A     -> EP-M2 -> docs/users-guide.md "Review the safety boundary" (:1697, :1713)
@@ -373,7 +379,7 @@ workaround.
    README to contradict it would be. Do not delete guidance, and do not soften
    a warning.
 9. **Do not edit historical documents.** No file under `docs/archive/`, no
-   `docs/adr-0*.md` other than the new ADR-021, and no completed execplan. A
+   `docs/adr-0*.md` other than the new ADR-027, and no completed execplan. A
    merged execplan records the repository at its own moment; the stale
    `IN PROGRESS` header on the 4.2.3 plan is flagged, not fixed.
 
@@ -383,7 +389,7 @@ Stop and escalate when any threshold is reached. Do not work around them.
 
 - **Scope.** More than eighteen files changed, or more than 1200 net added
   lines across the whole plan. The expected set is sixteen paths: `README.md`;
-  the six translations; `docs/adr-021-command-placeholder-contract.md`;
+  the six translations; `docs/adr-027-command-placeholder-contract.md`;
   `docs/contents.md`; `docs/developers-guide.md`;
   `docs/formal-verification-methods-in-netsuke.md`; `docs/users-guide.md`;
   `docs/repository-layout.md`; `docs/roadmap.md`;
@@ -705,7 +711,7 @@ new evidence.
 
 ### EP-M1 — settled contract, recorded
 
-- Outcome: `docs/adr-021-command-placeholder-contract.md` exists and records
+- Outcome: `docs/adr-027-command-placeholder-contract.md` exists and records
   decisions `D1`, `D2`, and `D3`. `docs/contents.md` lists it under
   `## Decision records`. `docs/netsuke-design.md` references it from the
   command-lowering discussion near line 2616. No other file changes.
@@ -745,7 +751,7 @@ contradiction window entirely.
     placeholder contract*) and `:64-66` (§*Kani for command interpolation*),
     both of which say literal `$in` and `$out` "remain shell variables"
     unqualified. Also record in §*Command placeholder contract* that
-    `FV-CPC-Q1` through `FV-CPC-Q3` are now answered, pointing at ADR-021, and
+    `FV-CPC-Q1` through `FV-CPC-Q3` are now answered, pointing at ADR-027, and
     correct the `[^8]` footnote path from `src/ir/cmd_interpolate.rs` to
     `src/ir/cmd_interpolate/mod.rs`.
 
@@ -796,7 +802,7 @@ contradiction window entirely.
 - Conformance check: every claim traces to a cited line or a new test; the
   live hazard appears before the placeholder table, not after it; the sentence
   "a backtick pair you wrote is executed by the shell" appears above the first
-  fence; `D1`-`D3` in ADR-021 and the README prose agree word-for-word on the
+  fence; `D1`-`D3` in ADR-027 and the README prose agree word-for-word on the
   three contested points; the section carries a pre-1.0 stability caveat
   because it sits above the release-status hedge.
 - Recovery: revert the commit. `README.md` and the two test files are the only
@@ -828,7 +834,7 @@ contradiction window entirely.
 
 - Outcome: `docs/roadmap.md` item 4.4.1 and its four sub-items are marked
   `[x]`, with a short completion note in the repository's established style
-  recording that the contract was settled in ADR-021 and that translations
+  recording that the contract was settled in ADR-027 and that translations
   landed. All gates pass on the full branch.
 - Requirements discharged: `RM-4.4.1`.
 - Acceptance evidence: the full gate sequence in `Concrete steps` step 10,
@@ -851,7 +857,7 @@ wrong, stop — a `Constraints` item 2 conflict.
 
 Then settle the three questions. These answers were revised at the
 `logisphere-design-review` checkpoint; the wording below is what the README and
-ADR-021 must say.
+ADR-027 must say.
 
 - **`D1` (answers `FV-CPC-Q1`).** `{{ ins }}` and `{{ outs }}` are the
   supported placeholders, in both `command:` and `script:` recipes. In
@@ -983,7 +989,7 @@ come first.
 7. **Stability and further reading.** A pre-1.0 caveat, because this section
    sits *above* `## Release and development status` and would otherwise make
    promises before the reader meets the hedge at `README.md:179-186`. Then
-   pointers to `docs/users-guide.md#review-the-safety-boundary` and ADR-021.
+   pointers to `docs/users-guide.md#review-the-safety-boundary` and ADR-027.
 
 Keep the split with the users' guide deliberate. The README owns the
 placeholder contract and the non-guarantees; the users' guide keeps shell-route
@@ -1041,7 +1047,7 @@ Run everything from the repository root,
    Expect `20`. If it is higher, use the next number and update every reference
    in this plan.
 
-4. Write `docs/adr-021-command-placeholder-contract.md`, add its entry to
+4. Write `docs/adr-027-command-placeholder-contract.md`, add its entry to
    `docs/contents.md` under `## Decision records` immediately above the ADR-020
    entry, and add the design-document reference. Commit as EP-M1.
 
@@ -1278,7 +1284,7 @@ Also add one bullet to `docs/repository-layout.md` near lines 60-65 recording
 that a change to any README section must be mirrored in the six translations.
 Nothing records this obligation today.
 
-New document `docs/adr-021-command-placeholder-contract.md`. Its required
+New document `docs/adr-027-command-placeholder-contract.md`. Its required
 sections, in the order `docs/documentation-style-guide.md:374-384` mandates,
 are **Status**, **Date**, and **Context and Problem Statement**. Add the
 conditional sections **Decision Drivers**, **Options Considered**, and
@@ -1292,7 +1298,37 @@ reads naturally.
 
 ## Progress
 
-- [ ] EP-M1 — ADR-021 written, indexed, and referenced from the design
+Stage A (settle the contract) is **complete**. The branch was rebased onto
+`origin/main` at `0ba6672f` before any implementation, and all three facts were
+re-verified against the rebased tree. Citation drift against revision 2, for
+the record:
+
+- `src/ir/cmd_interpolate/mod.rs`: `quote_double_quoted_path` :154,
+  `has_unmatched_backticks` :172-174 (still `rem_euclid(2) != 0`),
+  `interpolate_command_with_bindings` :189, `interpolate_script_with_bindings`
+  :207, `invalid_command_error` :215, `is_valid_command_for_shell` :226-231
+  (PowerShell early-return at :227, `shlex::split` at :230),
+  `find_substitution` :261, `find_script_substitution` :269,
+  `try_match_dollar_placeholder` :278.
+- `src/ir/cmd_interpolate/substitution.rs`: `append_protected_character` :364.
+- `src/ir/cmd_interpolate/script_substitution.rs`:
+  `append_substitution_or_character` :222, backtick/`$()` rejection at :232.
+- `src/ninja_gen/mod.rs`: `assert_shell_command` :283-290,
+  `script_shell_text` :343-356.
+- `locales/en-GB/messages.ftl`: `ir.invalid_command` at :188.
+- `Cargo.toml`: `shlex = "2.0.1"` at :139; `shell-quote` at :137-138.
+- `docs/roadmap.md`: item 4.4.1 at :589.
+- `docs/formal-verification-methods-in-netsuke.md`: §Kani for command
+  interpolation at :62, §Command placeholder contract at :263, stale `[^8]`
+  path at :332.
+- `docs/developers-guide.md`: §Command interpolation contract at :3362.
+- `docs/users-guide.md`: §Review the safety boundary at :1901.
+- `docs/netsuke-design.md`: the Fact A sentence at :290-291, §6.3 at :2800.
+- `docs/contents.md`: `## Decision records` at :88, ADR-026 entry at :170.
+- `tests/documentation_examples_tests.rs`: `EXPECTED_EXAMPLE_IDS` `readme-`
+  block at :54-58, registry test at :143.
+
+- [ ] EP-M1 — ADR-027 written, indexed, and referenced from the design
       document.
 - [ ] EP-M2 — `docs/developers-guide.md`, `docs/users-guide.md`,
       `docs/formal-verification-methods-in-netsuke.md`, and any inaccurate doc
@@ -1392,6 +1428,27 @@ reads naturally.
   but for a tool whose function is executing shell strings this is a genuine
   gap worth its own roadmap item. Recorded here so it is not lost.
 
+- Observation: the branch was 29 commits behind `origin/main` when
+  implementation began, and the plan's ADR ceiling had moved. Evidence:
+  `git rev-list --left-right --count origin/main...HEAD` reported `29 3`; the
+  highest existing ADR on main is 026
+  (`docs/adr-026-manifest-environment-access-policy.md`), not 020. Impact:
+  `Concrete steps` step 3 correctly anticipated this and told the implementer
+  to use the next free number, so the plan's ADR became **027**. A rebase onto
+  `origin/main` at `0ba6672f` was performed before any file this plan touches
+  was written, which also moved most line citations; all are re-recorded in
+  `Progress`. PR 621, an unmerged and conflicted branch, still holds a file
+  named `docs/adr-021-manifest-linting-under-netsuke-check.md`; taking 021
+  would collide on merge, which is a second reason to skip it.
+
+- Observation: `tests/execplan_status_contract_tests.rs`, cited in a prior
+  session's notes as enforcing the ExecPlan status vocabulary, does not exist at
+  `origin/main` `0ba6672f`. Evidence:
+  `ls tests/execplan_status_contract_tests.rs` fails. Impact: none for this
+  plan, whose header stays inside the closed set (`DRAFT`, now `IN PROGRESS`),
+  but a header value outside that set would not be caught by a test on this
+  revision.
+
 ## Decision log
 
 - Decision `D1`: the supported placeholder set is `{{ ins }}` and `{{ outs }}`
@@ -1472,7 +1529,7 @@ reads naturally.
   (`src/ir/cmd_interpolate/mod.rs:214-222`) calls `localization::message(...)`
   and stores a pre-rendered, locale-resolved human string inside the domain
   error. That is presentation resolved within domain policy against ambient
-  state. It does not justify a port here, but ADR-021 must not cite this module
+  state. It does not justify a port here, but ADR-027 must not cite this module
   as an exemplar of a clean domain boundary. Date/Author: 2026-09-09, planning
   agent; caveat added at design review.
 
@@ -1535,6 +1592,19 @@ reads naturally.
   than a footnote — and that would be a code change outside this item.
   Date/Author: 2026-09-09, design review. Awaiting approval.
 
+- Decision `D-REBASE-FIRST`: the branch was rebased onto `origin/main` at
+  `0ba6672f` before implementation began, and the plan's ADR was renumbered
+  from 021 to 027. Rationale: `origin/main` had moved 29 commits, including
+  1696 changed lines in `docs/developers-guide.md` and 748 in
+  `docs/roadmap.md` — the two files EP-M2 and EP-M5 edit — so landing first and
+  rebasing later would have produced a conflict-laden, hard-to-review diff and
+  a stale set of citations in the ADR. Both `README.md` and
+  `src/ir/cmd_interpolate/` are untouched on main, so every fact this plan
+  rests on survived the rebase intact; only line numbers moved.
+  `Concrete steps` step 3 anticipated the ADR collision and prescribed the next
+  free number, so 027 follows the plan rather than deviating from it.
+  Date/Author: 2026-09-19, implementing agent.
+
 - Decision `D-4-2-3-STATUS`: the 4.2.3 execplan's stale `IN PROGRESS` header is
   flagged and left unedited. Rationale: a merged execplan is a historical
   document, and the substantive prerequisite is verifiably met. Editing another
@@ -1549,7 +1619,7 @@ Before setting this plan to `COMPLETE`, reconcile each entry in
 `Surprises & discoveries` against the artefacts in `Conformance basis`: confirm
 that EP-M2 corrected the Fact A misstatements in both documents and the `[^8]`
 footnote, that `docs/formal-verification-methods-in-netsuke.md` records
-`FV-CPC-Q1` through `FV-CPC-Q3` as answered with a pointer to ADR-021, and that
+`FV-CPC-Q1` through `FV-CPC-Q3` as answered with a pointer to ADR-027, and that
 the 4.2.3 status discrepancy is either resolved elsewhere or recorded as
 knowingly deferred.
 
@@ -1581,10 +1651,21 @@ Reference material gathered during planning, for the writer's use:
   `quote` family cannot portably escape control characters, and versions before
   1.3.0 failed to quote `{` and `\xa0`. Netsuke quotes with `shell-quote`, not
   `shlex`, so the advisory does not apply to Netsuke's quoting path — but it is
-  worth citing in ADR-021 as evidence for why `D3` declines to make the
+  worth citing in ADR-027 as evidence for why `D3` declines to make the
   accepted set a stability commitment.
 
 ## Revision note
+
+Revision 3 (2026-09-19). Implementation begin. The plan was approved and work
+started under `Status: IN PROGRESS`. Before any implementation the branch was
+rebased onto `origin/main` at `0ba6672f`; because that moved the ADR ceiling
+from 020 to 026, `docs/adr-021-command-placeholder-contract.md` became
+`docs/adr-027-command-placeholder-contract.md` and every reference in this plan
+was updated. Stage A re-verified Facts A, B, and C against the rebased tree and
+confirmed all three; the citations revision 2 carried were refreshed for the
+new line numbers and are recorded in `Progress`. No decision, obligation,
+milestone, or tolerance changed. `Surprises & discoveries` gained the rebase
+and ADR-collision observations, and `Decision log` gained `D-REBASE-FIRST`.
 
 Revision 2 (2026-09-09). Incorporates a six-lens `logisphere-design-review`
 pass. Blocking changes: EP-M2 (document corrections) now precedes the README
