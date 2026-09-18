@@ -2394,11 +2394,11 @@ default; the tests use that to point the scripts at fixtures. Either way a
 missing or empty file is reported as `build-tools: missing version pin: <path>`
 rather than silently becoming an empty version.
 
-- `rust-toolchain.toml` supplies the toolchain. the build standard deliberately
+- `rust-toolchain.toml` supplies the toolchain. The build standard deliberately
   shares the repository's own dated nightly rather than pinning a second one,
-  keeping the accelerated loop and the gates on the same toolchain. The
-  `make install-build-tools` target adds `rustc-codegen-cranelift-preview` to
-  that toolchain.
+  keeping the accelerated loop and the gates on the same toolchain.
+  `make install-build-tools` installs that toolchain and adds no component to
+  it: the standard needs none, because it names no codegen backend.
 - `tools/mold/VERSION` holds the `mold` release tag.
 - `tools/mold/SHA256SUMS` holds the SHA-256 checksum of each supported `mold`
   release artefact. `make install-build-tools` refuses to install an artefact
@@ -2440,13 +2440,12 @@ flowchart TD
   H --> I["tar extract into BUILD_TOOLS_PREFIX"]
   I --> J["Report BUILD_TOOLS_PREFIX/bin PATH requirement"]
 
-  E --> K["cranelift_toolchain"]
+  E --> K["install_toolchain"]
   J --> K
   K --> L{"rustup on PATH?"}
   L -- No --> M["fail: install rustup"]
   L -- Yes --> N["rustup toolchain install pinned nightly --profile minimal"]
-  N --> O["rustup component add rustc-codegen-cranelift-preview"]
-  O --> P["Print ready; verify with make check-build-tools"]
+  N --> P["Print ready; verify with make check-build-tools"]
   M --> Q["Exit"]
   P --> Q
 ```
@@ -2456,7 +2455,7 @@ what keeps macOS and Windows on the platform linker while still installing the
 toolchain, and `verify_mold_archive` is the point at which an artefact absent
 from `tools/mold/SHA256SUMS`, or one whose checksum does not match, aborts the
 installation. The final node only reports the `PATH` requirement for direct
-script invocation; the Makefile prepends `$(BUILD_TOOLS_PREFIX)/bin` themselves.
+script invocation; the Makefile prepends `$(BUILD_TOOLS_PREFIX)/bin` itself.
 
 ### Ownership boundary
 
@@ -2625,13 +2624,17 @@ remains available for a single scoped experiment.
 
 ### Testing the tooling
 
-Seven suites cover the tooling's observable behaviour. All are hermetic — no
+Eight suites cover the tooling's observable behaviour. All are hermetic — no
 network, and no real `mold`, `rustup`, or Cargo — so they run as part of
 `make test` on any Linux host.
 
 - `tests/build_tools_check_tests.rs`: the capability gate. Which diagnostic each
-  failure mode emits, exit status, pin resolution, and refusal of a malformed
-  pin.
+  failure mode emits, exit status, and the non-Linux path, where the linker is
+  skipped and the toolchain half still runs `rustup toolchain install`.
+- `tests/build_tools_pin_tests.rs`: pin resolution. Which file each pin is read
+  from, that boundary whitespace is trimmed, that an explicit override wins,
+  that the committed pins are the fallback rather than an empty string, and
+  that a malformed pin is refused rather than rewritten.
 - `tests/build_tools_install_tests.rs`: the installer's happy path and its
   refusals, `make install-build-tools` forwarding, and the benchmark script's
   Markdown output.
@@ -2649,7 +2652,9 @@ network, and no real `mold`, `rustup`, or Cargo — so they run as part of
   table shows up as a missing value rather than parsing cleanly and being
   ignored.
 - `tests/build_tools_bench_tests.rs`: `make bench-build`. Per-variant target
-  directories, the clean/incremental cycle, and all three variant rows.
+  directories, the clean/incremental cycle, all three variant rows, and that
+  every pass clears both compiler wrappers so a measurement cannot be a cache
+  read.
 - `tests/build_tools_bench_lock_tests.rs`: the benchmark's exclusion lock. That
   a held lock rejects a second run before it mutates anything, that the lock is
   released however a run ends, and that a later run can take it after an
@@ -2754,12 +2759,26 @@ assertion spans the application-facing sandbox or Makefile contract.
 
 ### Benchmark evidence
 
-`make bench-build` measures both paths with one repeatable command. It builds
-the `netsuke` binary from an empty target directory, touches `src/main.rs`, and
-rebuilds. Each variant uses its own target directory under `target/bench/`, so
-neither warms the other's cache nor disturbs the working `target/` tree. The
-timer reads `EPOCHREALTIME`, so this target needs Bash 5.0 or newer; it fails
-with a named prerequisite on older shells rather than reporting zeroes.
+`make bench-build` measures three build shapes with one repeatable command: the
+platform-linker baseline, the repository's `mold` default, and that default
+with the parallel frontend added. The linker and the frontend get a row each
+because they pay off at different points in a build, and one row for both would
+hide which of them is earning its keep. Each variant builds the `netsuke`
+binary from an empty target directory, touches `src/main.rs`, and rebuilds.
+Each uses its own target directory under `target/bench/`, so none warms
+another's cache nor disturbs the working `target/` tree. The timer reads
+`EPOCHREALTIME`, so this target needs Bash 5.0 or newer; it fails with a named
+prerequisite on older shells rather than reporting zeroes.
+
+Every measured build runs with `RUSTC_WRAPPER` and `RUSTC_WORKSPACE_WRAPPER`
+assigned empty. This is not tidiness. A developer shell commonly exports a
+compiler wrapper chaining to `sccache`, and with one in force a variant's first
+clean pass fills the cache while every later pass reads it back, so the table
+times cache retrieval under variant labels and the row order decides the
+winner. The flags are part of the cache key, so the variants warm each other
+unevenly and nothing in the output reveals it. Both variables are named because
+Cargo honours them independently, and both are *assigned* rather than unset,
+because only an assignment displaces an exported value.
 
 `BENCH_ROOT` and `BENCH_TOUCH_FILE` default to the shared `target/bench`
 directory and the tracked `src/main.rs`, so two runs in one checkout would
@@ -2773,12 +2792,29 @@ run ends, including on interrupt. To benchmark two things at once, override
 `BENCH_ROOT`, so distinct roots do not contend. If a killed run ever leaves the
 directory behind, remove it.
 
-Results below were recorded on a 24-core x86_64 Linux host, with both variants
-on the repository's then-pinned `nightly-2026-06-25` supplying Cranelift
-0.132.0, and `mold` 2.41.0. Regenerate the table verbatim with
-`make bench-build`. Absolute figures move with machine load, so the ratio
-between the two rows is the durable signal, not the seconds; the run below is
-representative of three consecutive runs that agreed to within 0.4 s.
+No table is recorded here yet, and the reason is worth keeping. The figures
+this section used to carry were taken before the wrapper defect above was
+found, so they timed a mixture of compilation and cache retrieval. The attempt
+to replace them on 2026-09-17 ran on a shared host whose load went from 0.7 to
+117 during the round: across three runs the same variant's clean build ranged
+from 37 s to 154 s, and reversing the row order reversed the verdict twice. A
+number produced under those conditions is not a slower or faster reading of the
+truth; it is a reading of the host.
+
+A run worth recording therefore needs all of: a host doing nothing else, the
+load average quoted beside the table, and at least two runs in opposite variant
+orders that agree. Regenerate with `make bench-build` and paste the table
+verbatim. Until then, treat the standard as justified by what it does rather
+than by a figure — `mold` and the parallel frontend cost nothing at runtime and
+are trivially reversible — and measure your own workload before concluding the
+acceleration is or is not worth the setup.
+
+Two limits bound whatever that run reports. The benchmark builds only
+`--bin netsuke`, the smallest useful target, so it under-represents what
+`make test` sees, where every test binary's link is also on the linker. And the
+incremental row rebuilds a single crate and links once, which on any host is a
+couple of seconds dominated by that link, so it discriminates far less between
+variants than the clean row does.
 
 `make bench-glob-expansion` measures `glob_paths("**/*.txt", Some(base))`
 against its equivalent absolute, unbased pattern. Its deterministic fixture is
@@ -2787,23 +2823,6 @@ the benchmark measures expansion rather than fixture construction or an
 optimized-away query. Use it when changing glob-base preparation, path
 rebasing, or separator formatting; compare the two cases on the same machine,
 not their absolute timings across hosts.
-
-| Variant                         | Clean build (s) | Incremental build (s) |
-| ------------------------------- | --------------- | --------------------- |
-| Default (LLVM, platform linker) | 11.6            | 0.8                   |
-| dev-fast (Cranelift, `mold`)    | 10.7            | 0.6                   |
-
-Table: Debug build wall-clock time for the default and accelerated paths.
-
-Be realistic about the size of this: roughly 8% off a clean build and a quarter
-off an incremental one, which on this host is a few hundred milliseconds. Two
-things bound it. Both variants now share one nightly, so the comparison
-isolates Cranelift and `mold` rather than also capturing a toolchain change —
-earlier figures in this document did not, and overstated the gain. And the
-benchmark builds only `--bin netsuke`, the smallest useful target, so it
-under-represents what `make test` sees, where the backend has every test
-binary's codegen to save on. Measure the actual workload before concluding the
-acceleration is or is not worth the setup.
 
 ## Formal-verification tooling
 
