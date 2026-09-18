@@ -6,7 +6,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 ## Purpose / big picture
 
@@ -40,7 +40,7 @@ of this plan.
   complete shell word; putting it inside `"..."` would insert its quote
   characters literally and corrupt the value. This is a precondition of the
   filter, not a stylistic choice, and it is documented as such.
-- The recipe uses `;`, not `&&`. `docs/users-guide.md:337-338` states that
+- The recipe uses `;`, not `&&`. `docs/users-guide.md:333-339` states that
   Netsuke's Windows contract is Windows PowerShell, "not a PowerShell Core
   (`pwsh`) contract", and Windows PowerShell 5.1 has no `&&` operator. A
   flagship example that cannot run on the platform whose dialect machinery this
@@ -84,10 +84,11 @@ a template language; a *filter* is written `value | name(arguments)` and a
 There are three registration surfaces, all reachable from
 `src/manifest/mod.rs::from_str_named` (lines 107-178):
 
-1. `src/manifest/mod.rs:131-138` registers `env` and `glob` directly on the
+1. `src/manifest/mod.rs:137-139` registers `env` and `glob` directly on the
    `minijinja::Environment`. These two names are manifest-loader-owned, not
    part of the standard library, and are listed in `RESERVED_VAR_NAMES`
-   (`src/manifest/mod.rs:197`) so a manifest `vars:` entry cannot shadow them.
+   (`src/manifest/mod.rs:191-198`) so a manifest `vars:` entry cannot shadow
+   them.
 2. `src/stdlib/register.rs::register_with_config` (line 101) wires the full
    standard library: file tests, path filters, collection filters, time
    functions, network functions, command wrappers, and the `which` family.
@@ -97,7 +98,7 @@ There are three registration surfaces, all reachable from
    re-registers each one with a stub that always fails
    (`register_always_disabled_query_helpers`, line 172, and
    `register_host_dependent_query_helpers`, line 213). `env` is one of those
-   stubs, at `src/stdlib/register.rs:173-176`.
+   stubs, at `src/stdlib/register.rs:181-184`.
 
 There is **no test asserting parity** between surfaces 2 and 3. Adding a helper
 to one and forgetting the other is caught only by review. This plan adds
@@ -106,7 +107,7 @@ out of scope.
 
 ### How `env()` works today
 
-`src/manifest/mod.rs:129-133`:
+`src/manifest/mod.rs:134-139`:
 
 ```rust
 let reader = Arc::clone(env_reader);
@@ -116,13 +117,16 @@ jinja.add_function("env", move |var_name: String| {
 ```
 
 `EnvReader` is `Arc<dyn Fn(&str) -> Result<String, EnvReadError> + Send + Sync>`
-(`src/manifest/env_reader.rs:56`). It exists because Netsuke forbids reading
+(`src/manifest/env_reader.rs:61`). It exists because Netsuke forbids reading
 `std::env::var` outside a thin injected seam; see
 `docs/adr-008-environment-seam-taxonomy.md`, which names this exact site as the
 canonical `Arc`-closure seam (the `Arc` is required because MiniJinja's
 `add_function` demands `Send + Sync`).
 
-`env_var_with` (`src/manifest/env_reader.rs:90-111`) maps the two failure modes:
+`env_var_with` (`src/manifest/env_reader.rs:133-172`) maps the failure modes.
+There are now **three**, not two: since commit `0ba6672f` the ADR-026 access
+policy is evaluated first, so a blocked name is a fourth outcome alongside the
+two `EnvReadError` variants, and the reader is never called for it.
 
 ```rust
 Err(EnvReadError::NotPresent) => {
@@ -142,7 +146,7 @@ Err(EnvReadError::NotUnicode) => {
 ```
 
 Neither message names the variable, deliberately: the doc comment at
-`src/manifest/env_reader.rs:83-89` explains that variable names "routinely
+`src/manifest/env_reader.rs:121-127` explains that variable names "routinely
 identify credentials". Two `insta` snapshots pin the rendered strings exactly,
 at `tests/manifest_env_tests.rs:108-122`:
 
@@ -183,16 +187,16 @@ On Windows, Netsuke wraps every recipe as
 `powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass
 -EncodedCommand <base64>`
 (`src/ninja_gen_recipe_shell.rs:16-17`). It never uses `cmd.exe`.
-`docs/users-guide.md:330-348` ("Windows legacy recipe contract") states this
+`docs/users-guide.md:331-399` ("Windows legacy recipe contract") states this
 normatively. On Unix the command is emitted bare for Ninja to run through its
 own POSIX path.
 
 A Windows user may set `NETSUKE_WINDOWS_SHELL=bash` to select an explicit Bash
 compatibility runtime (`src/runner/recipe_shell.rs:24-58`). The runner resolves
-this once, before dispatch (`src/runner/mod.rs:149`), and threads the result
-through `ExecutionContext.graph_generation.recipe_shell` into IR lowering
-(`src/runner/generation.rs:109`) and Ninja generation
-(`src/runner/generation.rs:132`).
+this once, before dispatch (`src/runner/mod.rs:130-160`), and threads the
+result through `ExecutionContext.graph_generation.recipe_shell` into IR lowering
+(`src/runner/generation.rs:41-66`) and Ninja generation
+(`src/runner/generation.rs:128-145`).
 
 Consequently, POSIX `sh` quoting is correct for `RecipeShell::Posix` and
 `RecipeShell::Bash`, and **wrong** for `RecipeShell::PowerShell`.
@@ -221,7 +225,7 @@ right matters, because the plan's central promise is that it adds none.
    This is the semantics the new template helpers need, and **this one encoder
    is the only one this plan extracts.**
 
-2. `PathSubstitutions::new` (`src/ir/cmd_interpolate/mod.rs:81-103`) builds a
+2. `PathSubstitutions::new` (`src/ir/cmd_interpolate/mod.rs:82-103`) builds a
    `single_quoted` variant by `path.replace('\'', "'\"'\"'")`, for a
    placeholder appearing inside existing single quotes.
 
@@ -250,9 +254,9 @@ call sites convert.
 
 ### What the documentation currently promises
 
-`docs/netsuke-design.md` §4.4 (lines 1233-1307) specifies
+`docs/netsuke-design.md` §4.4 (lines 1263-1346) specifies
 `env(var_name, default: Option<String>)` and says the `default` argument is
-"planned". §4.5 (lines 1309-1334) specifies three unimplemented filters:
+"planned". §4.5 (lines 1347-1373) specifies three unimplemented filters:
 
 - `| shell_escape`: "takes a string or list and escapes it for safe inclusion
   as a single argument in a shell command … a non-negotiable security feature".
@@ -262,9 +266,9 @@ call sites convert.
   It supports patterns such as constructing `RUSTFLAGS` from an optional user
   override without handwritten shell tests."
 
-`docs/users-guide.md:490` says "The `shell_escape` filter described in older
-drafts is not implemented in beta3."
-`docs/stdlib-yaml-and-jinja-guide.md:318-320` says `env(name)` has "no
+`docs/users-guide.md:489-491` says "The `shell_escape` filter described in
+older drafts is not implemented in beta3."
+`docs/stdlib-yaml-and-jinja-guide.md:341-343` says `env(name)` has "no
 default-value argument".
 
 `docs/rfcs/0006-ansible-inspired-template-standard-library.md:1393-1409`
@@ -275,7 +279,7 @@ supersedes the `shell_escape` name:
 > 3.14.8 exists to resolve. That task remains the owner and ships first; this
 > RFC contributes only the canonical name and the `dialect` argument.
 
-`docs/netsuke-design.md:650-658` already writes the target ergonomics into an
+`docs/netsuke-design.md:681-690` already writes the target ergonomics into an
 illustrative manifest:
 
 ```yaml
@@ -364,25 +368,39 @@ artefacts are:
 
 | Identifier      | Artefact                                                     | Revision anchor      |
 | --------------- | ------------------------------------------------------------ | -------------------- |
-| `RM-3.14.8`     | `docs/roadmap.md` lines 282-295                              | at commit `81d44f89` |
-| `RM-6.8.3`      | `docs/roadmap.md` lines 1103-1110                            | at commit `81d44f89` |
-| `DD-4.4`        | `docs/netsuke-design.md` §4.4, lines 1233-1307               | at commit `81d44f89` |
-| `DD-4.5`        | `docs/netsuke-design.md` §4.5, lines 1309-1334               | at commit `81d44f89` |
-| `DD-2.6`        | `docs/netsuke-design.md` §2.6, lines 630-700                 | at commit `81d44f89` |
-| `RFC-0006-8.9`  | `docs/rfcs/0006-…md` lines 1393-1409                         | at commit `81d44f89` |
-| `RFC-0006-13.3` | `docs/rfcs/0006-…md` line 1834                               | at commit `81d44f89` |
+| `RM-3.14.8`     | `docs/roadmap.md` lines 343-356                              | at commit `0ba6672f` |
+| `RM-6.8.3`      | `docs/roadmap.md` lines 1162-1169                            | at commit `0ba6672f` |
+| `DD-4.4`        | `docs/netsuke-design.md` §4.4, lines 1263-1346               | at commit `0ba6672f` |
+| `DD-4.5`        | `docs/netsuke-design.md` §4.5, lines 1347-1373               | at commit `0ba6672f` |
+| `DD-2.6`        | `docs/netsuke-design.md` §2.6, lines 593-740                 | at commit `0ba6672f` |
+| `RFC-0006-8.9`  | `docs/rfcs/0006-…md` lines 1393-1409                         | at commit `0ba6672f` |
+| `RFC-0006-13.3` | `docs/rfcs/0006-…md` line 1834                               | at commit `0ba6672f` |
 | `ADR-008`       | `docs/adr-008-environment-seam-taxonomy.md`                  | Accepted 2026-08-06  |
 | `ADR-014`       | `docs/adr-014-backend-text-escaping-seam.md`                 | Accepted             |
-| `UG-WIN`        | `docs/users-guide.md:330-348` Windows legacy recipe contract | at commit `81d44f89` |
+| `ADR-026`       | `docs/adr-026-manifest-environment-access-policy.md`         | Accepted 2026-09-17  |
+| `UG-WIN`        | `docs/users-guide.md:331-399` Windows legacy recipe contract | at commit `0ba6672f` |
+
+The anchors were re-taken against commit `0ba6672f` after the branch rebased
+onto `origin/main`. The pre-rebase anchors (`81d44f89`) have moved: `RM-3.14.8`
+was at 282-295, `RM-6.8.3` at 1103-1110, `DD-4.4` at 1233-1307, `DD-4.5` at
+1309-1334, `DD-2.6` at 630-700, and `UG-WIN` at 330-348. `RFC-0006-8.9` and
+`RFC-0006-13.3` did not move. Every citation in this plan that names a document
+line number is therefore in the `0ba6672f` frame; a citation whose file has
+since grown is a pointer, not a claim, and the section heading is authoritative.
+
+`ADR-026` is a new upstream artefact for this plan. It bounds the `env()` port
+that EP-M1 extends and is the governing decision for `EnvAccessPolicy`.
 
 Predecessors `2.2.4` (archived,
 `docs/archive/roadmap-completed-foundations.md:125`) and `3.14.4`
-(`docs/roadmap.md:246`) are both complete, so `RM-3.14.8` is unblocked.
+(`docs/roadmap.md:307`) are both complete, so `RM-3.14.8` is unblocked.
 
 Trace chain:
 
 ```plaintext
-RM-3.14.8 -> DD-4.4 -> EP-M1 -> tests::manifest_env::env_default_cases
+RM-3.14.8 -> DD-4.4 + ADR-026 -> EP-M1
+    -> tests::manifest_env::env_default_cases
+    (constraint 12: a blocked name is not an absence and takes no default)
 RM-3.14.8 -> DD-4.5 (compact) -> EP-M2 -> tests::std_filter::compact_property
 RM-3.14.8 -> DD-4.5 (shell_escape) + RFC-0006-8.9 -> EP-M3, EP-M4
     -> tests::shell_quote::sh_roundtrip_property
@@ -390,7 +408,7 @@ RM-3.14.8 -> DD-4.5 (shell_join) -> EP-M4 -> tests::shell_join::shlex_roundtrip
 UG-WIN + ADR-014 -> EP-M3, EP-M4 -> tests::shell_quote::dialect_follows_recipe_shell
 RM-3.14.8 (RUSTFLAGS) -> DD-2.6 -> EP-M5
     -> tests::documentation_examples::stdlib-optional-rustflags-manifest
-RM-6.8.3 -> EP-M3 (name and dialect adopted early) -> ADR-021
+RM-6.8.3 -> EP-M3 (name and dialect adopted early) -> ADR-027
 ```
 
 ## Constraints
@@ -437,6 +455,20 @@ These are hard invariants. Violating one requires escalation, not a workaround.
 11. Changes under `locales/**` are never "docs-only" for gating purposes. The
     localization audit runs in `build.rs`, so a gate that skips the Rust build
     for a translation-only diff would skip the audit that protects it.
+12. `env(name, default=…)` must not weaken the ADR-026 access policy. A name
+    the policy blocks fails, with or without a `default`. A `default` is
+    substituted for *absence* only, and a policy denial is not an absence. This
+    constraint was added during post-rebase reconciliation: the plan's original
+    `env_var_with` signature had no policy parameter, so the interaction did not
+    exist when the plan was written, and a naive implementation would map
+    `NotPresent` to the fallback before consulting the policy. A blocked name
+    must also stay absent from every diagnostic and from the substituted value.
+13. Every new metric series must be admitted by `ConfigMetricsRecorder` in
+    `src/observability_recorder.rs` — both its `matches!` name list and its
+    `exact_labels` vocabulary — or it is silently dropped as a noop handle.
+    This is the same class of failure as constraint 6's missing catalogue
+    entry, but it fails *quietly*: the build, the lint, and the tests all pass
+    while the counter records nothing. See EP-M5's counters step.
 
 ## Tolerances (exception triggers)
 
@@ -520,22 +552,30 @@ Stop and escalate — do not improvise — when any of these is reached.
   the disabled `env` stub still reports "disabled", not an argument-count
   error, when called with `default=`.
 
-- **R9 — Collision with in-flight budget work.** The remote branch
-  `issue-651-add-resource-budgets-to-manifest-template-evaluation` restructures
-  the exact files this plan edits: `src/manifest/mod.rs` (196 lines changed),
-  `src/manifest/query.rs` (76), `src/manifest/render.rs` (181); it splits
-  `src/manifest/expand.rs` into a directory module and adds
+- **R9 — Collision with in-flight budget work. Resolved as a convergence.**
+  The remote branch
+  `issue-651-add-resource-budgets-to-manifest-template-evaluation` restructured
+  the exact files this plan edits: `src/manifest/mod.rs`,
+  `src/manifest/query.rs`, `src/manifest/render.rs`; it split
+  `src/manifest/expand.rs` into a directory module and added
   `src/manifest/registration.rs` with the same four members this plan extracts.
-  Severity: medium. Likelihood: high. Mitigation: name the new module
-  `src/manifest/registration.rs` and give it exactly that member set, so the
-  branches converge rather than conflict. Rebase onto `origin/main` immediately
-  before requesting review; if issue-651 has landed by then, add the `env`/
-  `glob` registrations to the existing module instead of creating one. That
-  branch also supplies the ceilings (`evaluation_fuel`, `rendered_value_bytes`,
-  `foreach_cardinality`) that would bound a pathological `shell_join`.
-  `shell_join` and `compact` are unbounded by design here; any length ceiling
-  is issue-651's responsibility, not this plan's, and the plan says so rather
-  than leaving the omission ambiguous.
+  **That branch has now landed on `origin/main` at commit `0ba6672f`, together
+  with the environment-policy and resource-ceiling work (ADR-026).**
+  `src/manifest/registration.rs` exists and already carries exactly the planned
+  member set — `RESERVED_VAR_NAMES`, `localize_recipe_error`,
+  `register_manifest_vars`, `manifest_structure_error` — so the extraction step
+  is a no-op and the plan's choice of module name and member set was correct.
+  What remains is to move the `env` and `glob` registrations from
+  `src/manifest/mod.rs` into that module. Severity: low (was medium).
+  Likelihood: certain (was high). Mitigation: EP-M1 now *extends* the existing
+  module rather than creating it. A second consequence is recorded in
+  `Surprises & discoveries`: the landed branch supplies the manifest-load seam
+  (`ManifestLoadInputs`, `ManifestEnvironment`, `EnvAccessPolicy`) that EP-M4
+  must thread the resolved shell through, rather than a parallel one.
+  `shell_join` and `compact` are unbounded by design here; the landed budget
+  ceilings (`evaluation_fuel`, `rendered_value_bytes`, `foreach_cardinality`)
+  now bound a pathological `shell_join` in general terms, but no per-filter
+  length ceiling is added by this plan.
 - **R10 — `env(default=)` converts a loud failure into a silent one.** Today a
   missing variable fails the build immediately; afterwards a manifest can
   silently take a default, so a continuous-integration job whose `RUSTFLAGS`
@@ -543,7 +583,7 @@ Stop and escalate — do not improvise — when any of these is reached.
   Severity: medium. Likelihood: medium. Mitigation: emit
   `tracing::debug!(fallback_used = true, ...)` on the substitution path, naming
   neither variable nor value, matching the existing failure-path logging and
-  the redaction rule at `src/manifest/env_reader.rs:83-89`. Roadmap 3.14.11
+  the redaction rule at `src/manifest/env_reader.rs:121-127`. Roadmap 3.14.11
   sets the precedent that a manifest-time decision changing build behaviour
   belongs in verbose diagnostics. Document in the user guide that `default=''`
   trades fail-fast for tolerance, and that a value which must be present should
@@ -572,8 +612,8 @@ Stop and escalate — do not improvise — when any of these is reached.
 
 - **Decision D1**: Ship the helper as `shell_quote`, not `shell_escape`, and
   rewrite every `shell_escape` reference in `docs/netsuke-design.md` §4.5,
-  `docs/users-guide.md:490`, `docs/netsuke-design.md:686-689`, and
-  `docs/netsuke-design.md:3664-3667` to name `shell_quote`. Rationale:
+  `docs/users-guide.md:489-491`, `docs/netsuke-design.md:687-688`, and
+  `docs/netsuke-design.md:3876-3877` to name `shell_quote`. Rationale:
   `RFC-0006-13.3` states that roadmap 3.14.8 "owns the shell-quoting capability
   and ships first" and that the RFC "contributes the canonical name
   `shell_quote` and the `dialect` argument; the roadmap task should adopt them
@@ -588,7 +628,7 @@ Stop and escalate — do not improvise — when any of these is reached.
   to `sh`. Rationale: `RFC-0006-8.9` says "`dialect` currently accepts only
   `sh`, matching the single `shell-quote` feature Netsuke enables." That
   premise is false in the code as it stands. `UG-WIN` and
-  `src/recipe_shell.rs:19-26` establish that the default Windows recipe
+  `src/recipe_shell.rs:18-27` establish that the default Windows recipe
   interpreter is Windows PowerShell, and
   `src/ir/cmd_interpolate/mod.rs:137-150` already implements a second,
   non-`shell-quote` dialect for exactly that case. Shipping an `sh`-only filter
@@ -655,7 +695,7 @@ Stop and escalate — do not improvise — when any of these is reached.
   stubs. Rationale: they are pure **with respect to the supplied dialect**. The
   first draft claimed they "read no environment state", which is false: with
   `dialect` omitted they resolve through `RecipeShell::host_default()`, itself
-  `cfg!(windows)` (`src/recipe_shell.rs:20-26`), and after EP-M4 from
+  `cfg!(windows)` (`src/recipe_shell.rs:18-27`), and after EP-M4 from
   `NETSUKE_WINDOWS_SHELL`. So `{{ 'a b' | shell_quote }}` on the query surface
   discloses the host OS family. That is an accepted residual — the family is
   already inferable from the binary and from `netsuke --version` — but
@@ -664,8 +704,8 @@ Stop and escalate — do not improvise — when any of these is reached.
   explicit `dialect`, the filters read nothing at all. `compact` is
   unconditionally pure and lands automatically, because
   `collections::register_filters` is already called by both surfaces
-  (`src/stdlib/register.rs:158` and `:169`). Date/Author: 2026-09-09, corrected
-  after structural review.
+  (`src/stdlib/register.rs:156-164` and `:169`). Date/Author: 2026-09-09,
+  corrected after structural review.
 - **Decision D7**: `ortho_config` is not used. See "Applicability of
   `ortho_config`" above. Date/Author: 2026-09-08, planning session.
 
@@ -745,7 +785,7 @@ repeated, because a security property requires an attacker and no document in
 this repository names one.
 
 **The attacker is not the manifest author.**
-`docs/stdlib-yaml-and-jinja-guide.md:89,296,374` is unambiguous that
+`docs/stdlib-yaml-and-jinja-guide.md:89,319,383` is unambiguous that
 host-observing helpers belong only in trusted manifests. An author who wants
 arbitrary execution writes `command: rm -rf /`. `shell_quote` defends against
 nothing there.
@@ -778,7 +818,7 @@ other six channels, which today have nothing.
   writer boundary.
 - For `dialect='powershell'` on a non-Windows host, one class weaker: the
   guarantee rests on a handwritten inverse model until the Windows job runs.
-  ADR-021 must say so in those words.
+  ADR-027 must say so in those words.
 - **It is opt-in and silent when omitted.** Nothing detects
   `command: cc {{ glob(...) | join(' ') }}` and warns. A control that works
   only when the author remembers it is a primitive, not a control.
@@ -787,7 +827,7 @@ other six channels, which today have nothing.
   `user_flags`. The guide must not let an author believe that quoting one
   substitution makes a recipe safe.
 
-The claim to write in ADR-021 and in "Validation and acceptance", replacing any
+The claim to write in ADR-027 and in "Validation and acceptance", replacing any
 unqualified repetition of `DD-4.5`:
 
 > `shell_quote` and `shell_join` are safe primitives, not enforced controls.
@@ -877,13 +917,13 @@ one of `Posix`/`Bash` arbitrarily and its doc comment could not be truthful.
 
 ### `src/stdlib/recipe_text/` (new)
 
-Not `src/stdlib/shell/`. `src/stdlib/command/` already registers a template
-filter literally named `shell` (`src/stdlib/command/mod.rs:81-111`) and already
-contains a `quote.rs`. A sibling `shell/` module holding `shell_quote` would
-invert the naming at both ends: a contributor grepping `stdlib/shell` for the
-`shell` filter would find text quoting, and grepping `stdlib/command` for
-`shell_quote` would find `cmd.exe` quoting. Name the module for what it
-produces.
+Not `src/shell_word.rs` and `src/stdlib/recipe_text/`. `src/stdlib/command/`
+already registers a template filter literally named `shell`
+(`src/stdlib/command/mod.rs:81-111`) and already contains a `quote.rs`. A
+sibling `shell/` module holding `shell_quote` would invert the naming at both
+ends: a contributor grepping `stdlib/shell` for the `shell` filter would find
+text quoting, and grepping `stdlib/command` for `shell_quote` would find
+`cmd.exe` quoting. Name the module for what it produces.
 
 In the same milestone, rename `src/stdlib/command/quote.rs` to
 `child_argument.rs` and its `quote` function to `quote_child_argument`. Both are
@@ -1049,9 +1089,9 @@ in one place rather than pushing it out to every caller.
   harmless — but it must be pinned by an assertion in
   `tests/stdlib_manifest_query_tests.rs` and recorded in
   `docs/developers-guide.md`, not discovered later. The alternative — hoisting
-  `resolve_recipe_shell()` above the early return at `src/runner/mod.rs:145` —
-  would make `netsuke help targets` fail on a Windows host with a malformed
-  `NETSUKE_WINDOWS_SHELL`, which is a worse trade.
+  `resolve_recipe_shell()` above the early return at
+  `src/runner/mod.rs:130-160` — would make `netsuke help targets` fail on a
+  Windows host with a malformed `NETSUKE_WINDOWS_SHELL`, which is a worse trade.
 
 - The disabled `env` stub changes to:
 
@@ -1064,20 +1104,26 @@ in one place rather than pushing it out to every caller.
   );
   ```
 
-### `src/manifest/mod.rs` — and a file-size problem to solve first
+### `src/manifest/mod.rs` — the extraction has already landed
 
-**`src/manifest/mod.rs` is exactly 400 lines today.** Constraint 8 caps files
-at 400, so EP-M1 has zero headroom and its first edit breaches the cap.
+**The extraction this plan's first draft scheduled as a prerequisite has
+already happened on `origin/main`.** `src/manifest/registration.rs` exists at
+`0ba6672f` with exactly the four planned members (`RESERVED_VAR_NAMES`,
+`localize_recipe_error`, `register_manifest_vars`, `manifest_structure_error`),
+and `src/manifest/mod.rs` has fallen from exactly 400 lines — the constraint-8
+cap, with zero headroom — to 259. The plan's choice of module name and member
+set was correct, and R9's collision became a convergence. EP-M1 step 1 is
+therefore deleted: there is nothing to extract, only a module to extend.
 
-Extract first, then edit. Move `RESERVED_VAR_NAMES`, `localize_recipe_error`,
-`register_manifest_vars`, and `manifest_structure_error` into a new
-`src/manifest/registration.rs`, then add the `env` and `glob` registrations
-there too. Use exactly that module name and that member set: the in-flight
-branch `issue-651-add-resource-budgets-to-manifest-template-evaluation` already
-creates `src/manifest/registration.rs` with the same four members, so matching
-it turns a near-certain rebase conflict into a clean merge. See R9.
+Constraint 8 is still live, so the headroom matters. Test it before editing
+rather than trusting this paragraph:
+`wc -l src/manifest/mod.rs src/manifest/registration.rs` and
+`wc -l src/manifest/render.rs` — the last is now **exactly 400**, so it has no
+headroom at all and EP-M4 must not add a line to it.
 
-The registration itself, in `src/manifest/registration.rs`:
+Move the `env` and `glob` registrations out of `src/manifest/mod.rs` and into
+`src/manifest/registration.rs` as part of EP-M1. The registration itself, in
+`src/manifest/registration.rs`:
 
 ```rust
 let reader = Arc::clone(env_reader);
@@ -1104,6 +1150,14 @@ fn env_default_from_kwargs(kwargs: &Kwargs) -> Result<Option<String>, Error>;
 
 ### `src/manifest/env_reader.rs`
 
+The landed signature at `0ba6672f` is
+`env_var_with(name: &str, policy: &EnvAccessPolicy, read_env)`, which evaluates
+the ADR-026 access policy *before* reading. EP-M1 adds the `fallback` parameter
+and must keep the policy evaluation first: a blocked name must not reach the
+reader even when a `default` is supplied, or `default=` becomes a policy
+bypass. Preserve the policy argument's position and the existing
+`ManifestEnvironment` bundle; see R9.
+
 ```rust
 /// Read one environment variable, substituting `fallback` only for absence.
 ///
@@ -1112,17 +1166,19 @@ fn env_default_from_kwargs(kwargs: &Kwargs) -> Result<Option<String>, Error>;
 /// Returns an `UndefinedError` when the variable is absent and `fallback` is
 /// `None`, and an `InvalidOperation` error when the value is not valid UTF-8 —
 /// the latter regardless of `fallback`, because a present-but-undecodable value
-/// is a configuration fault, not an absence.
+/// is a configuration fault, not an absence. A name the access policy blocks
+/// fails before the reader is called, with or without a `fallback`.
 pub(super) fn env_var_with_default(
     name: &str,
+    policy: &EnvAccessPolicy,
     fallback: Option<String>,
     read_env: impl FnOnce(&str) -> Result<String, EnvReadError>,
 ) -> Result<String, Error>;
 ```
 
 On the substitution path it emits, mirroring the existing failure-path logging
-at `src/manifest/env_reader.rs:92,101` and naming neither the variable nor the
-value:
+at `src/manifest/env_reader.rs:139,152,162` and naming neither the variable nor
+the value:
 
 ```rust
 tracing::debug!(fallback_used = true, "manifest env lookup substituted default");
@@ -1132,8 +1188,28 @@ Without it, a continuous-integration job whose `RUSTFLAGS` export silently
 stops propagating goes from failing fast to building the wrong artefact with no
 record anywhere that a default was taken. See R10.
 
-`env_var_with` is **removed**, not kept as an alias (constraint 7); its two
-existing call sites become `env_var_with_default(name, None, read_env)`.
+`env_var_with` is **renamed**, not kept as an alias (constraint 7). Note the
+change from the plan's original wording: the landed function already takes the
+policy, so this is a three-argument-to-four-argument edit in place, and the
+argument count crosses `clippy.toml`'s `too-many-arguments-threshold = 4` only
+if a fifth is added. Prefer threading a small struct over adding a fifth
+argument.
+
+### `src/manifest/env_telemetry.rs`
+
+New on `origin/main` and relevant to EP-M1. It owns the single telemetry point
+for every `env()` lookup, `record_env_lookup(outcome, result)`, with the closed
+outcome vocabulary `success`/`blocked`/`not_present`/`not_unicode` exported as
+`ENV_LOOKUP_OUTCOME_VALUES` for the application recorder's admission check.
+
+A substituted default is **not** a fifth outcome and must not become one: the
+lookup genuinely succeeded, and `success` is what an operator counting
+substitutions wants to *add to*, not replace. Whether EP-M5's
+`netsuke_manifest_env_default_substituted_total` counter is worth its keep is a
+question for EP-M1 to answer with evidence, since the `tracing::debug!` above
+already records the event. If it ships, it is admitted through
+`src/observability_recorder.rs`'s `accepts_name` and
+`accepts_counter_registration` (see the counters section under EP-M5).
 
 ### New localization keys
 
@@ -1367,7 +1443,8 @@ predicate.
   list (`bash`, `cmd`, `zsh`, `pwsh`).
 - Rationale: the domain is finite and small; exhaustive enumeration is the
   strongest available evidence.
-- Artefact: `src/stdlib/shell/dialect.rs` `#[cfg(test)] mod tests`.
+- Artefact: `src/shell_word.rs`'s `#[cfg(test)] mod tests`
+  `#[cfg(test)] mod tests`.
 - Non-vacuity: the near-miss list guarantees the "enumerates exactly" assertion
   can fail; `bash` in particular is the name D3 deliberately rejects.
 
@@ -1591,7 +1668,7 @@ the implementation to match a guess.
 Read, in order: this plan's "Context and orientation"; `AGENTS.md`;
 `docs/adr-008-environment-seam-taxonomy.md`; `docs/netsuke-design.md` §§2.6,
 4.4, 4.5; `docs/rfcs/0006-ansible-inspired-template-standard-library.md` §§8.9
-and 13; `docs/users-guide.md:330-348` and `:458-495`;
+and 13; `docs/users-guide.md:331-399` and `:458-495`;
 `docs/stdlib-yaml-and-jinja-guide.md` in full;
 `docs/rust-testing-with-rstest-fixtures.md`; `docs/rstest-bdd-users-guide.md`;
 `docs/rust-doctest-dry-guide.md`;
@@ -1614,19 +1691,27 @@ Load these skills before writing code: `rust-router` (then whichever single
 follow-on it routes to — most likely `rust-types-and-apis` for the
 `ShellDialect` surface and `rust-errors` for the policy error),
 `rust-unit-testing`, `proptest`, `hexagonal-architecture`,
-`arch-decision-records` (for ADR-021), `en-gb-oxendict`, and `commit-message`.
+`arch-decision-records` (for ADR-027), `en-gb-oxendict`, and `commit-message`.
 
 Then confirm three facts against the working tree, because the plan depends on
 them:
 
 1. `grep -n "shell_escape\|shell_join\|compact" -r src/` returns nothing that is
-   a Jinja helper.
-2. `ls docs/adr-02*.md` shows `adr-020` as the highest, and
+   a Jinja helper. **Checked at `0ba6672f`: confirmed.** The only hits are
+   unrelated identifiers.
+2. `ls docs/adr-*.md | sort | tail -1` shows the highest ADR number, and
    `git ls-remote --heads origin` plus
    `git ls-tree -r --name-only origin/<branch> -- docs/` for each in-flight
-   branch shows no `adr-021`. If 021 is taken, use the next free number and
-   update every reference in this plan.
-3. `cargo tree -i shell-quote` shows the `sh` feature only.
+   branch shows no collision with the number this plan picks. **Checked at
+   `0ba6672f`: `adr-026` is now the highest, so the planned `adr-021` was
+   already taken twice over — by the upstream fetch-policy ADR and by five
+   later ones. This plan's ADR is renumbered to `adr-027` and every reference
+   updated.** Re-check at rebase time: the numbering history in this repository
+   includes several genuine collisions, so the number is a claim to verify, not
+   a constant.
+3. `cargo tree -i shell-quote` shows the `sh` feature only. **Checked at
+   `0ba6672f`: confirmed** via `Cargo.toml:137`
+   (`default-features = false, features = ["sh"]`).
 
 Go/no-go: if any of the three is false, stop and escalate.
 
@@ -1653,44 +1738,58 @@ deprecated entry point: the crate is pre-1.0, has no external consumers, and
 every caller is in-tree, so each interface is updated together with all of its
 callers (see constraint 7).
 
-### EP-M1 — extract `src/manifest/registration.rs`, then `env(name, default=...)`
+### EP-M1 — extend `src/manifest/registration.rs`, then `env(name, default=...)`
 
-- Identifier and outcome: manifest helper registration lives in its own module;
-  `env` accepts an optional `default` keyword argument, type-checked rather
-  than stringified; the manifest-query stub accepts the same shape; both
-  existing diagnostics are unchanged.
-- Requirements: `RM-3.14.8` bullet 1, `DD-4.4`.
-- **Do the extraction first.** `src/manifest/mod.rs` is exactly 400 lines, and
-  constraint 8 caps files at 400, so the first edit would breach it. Move
-  `RESERVED_VAR_NAMES`, `localize_recipe_error`, `register_manifest_vars`, and
-  `manifest_structure_error` into `src/manifest/registration.rs`, then move the
-  `env` and `glob` registrations there too. Commit that as a pure move with no
-  behaviour change and green gates, so the rename is reviewable on its own. Use
-  exactly that module name and member set; see R9.
+- Identifier and outcome: the `env` and `glob` registrations live in
+  `src/manifest/registration.rs`; `env` accepts an optional `default` keyword
+  argument, type-checked rather than stringified; the manifest-query stub
+  accepts the same shape; both existing diagnostics are unchanged; a blocked
+  name still fails before the reader is called.
+- Requirements: `RM-3.14.8` bullet 1, `DD-4.4`, `ADR-026`.
+- **The extraction is already done.** Re-verified at `0ba6672f`:
+  `src/manifest/registration.rs` exists with the four planned members, and
+  `src/manifest/mod.rs` is 259 lines. Do not create the module and do not
+  re-move the four members. The first action is to move the `env` and `glob`
+  registrations from `src/manifest/mod.rs` into that module, committing them as
+  a pure move with no behaviour change and green gates so the relocation is
+  reviewable on its own. Re-run
+  `wc -l src/manifest/mod.rs src/manifest/registration.rs` first and confirm
+  the shape still holds; this branch is not the only writer. See R9.
 - Red: add the `OBL-ENV-DEFAULT` cases to `tests/manifest_env_tests.rs` and the
   unit cases to `src/manifest/tests/env_function.rs`, plus the non-string and
-  undefined `default` cases from D4 and the positional case from AXIOM-4. Run
+  undefined `default` cases from D4 and the positional case from AXIOM-4. Add a
+  case proving a **blocked** name is still blocked when `default` is supplied —
+  this is the ADR-026 interaction the first draft did not consider, and it is
+  the one behaviour a naive implementation would get wrong by mapping absence
+  to the fallback before consulting the policy. Run
   `cargo nextest run --test manifest_env_tests` and observe failures citing an
   unexpected keyword argument.
-- Green: rename `env_var_with` to `env_var_with_default` with the `fallback`
-  parameter and the `tracing::debug!(fallback_used = true, ...)` line (R10); add
-  `env_default_from_kwargs` reading `Option<Value>` per D4; update the
-  registration to take `Kwargs`; update the disabled stub at
-  `src/stdlib/register.rs:173-176`. Add the `manifest.env.args_error` and
+- Green: rename `env_var_with` to `env_var_with_default`, adding the `fallback`
+  parameter **after** the existing `policy` parameter and keeping the policy
+  evaluation first; add the `tracing::debug!(fallback_used = true, ...)` line
+  (R10); add `env_default_from_kwargs` reading `Option<Value>` per D4; update
+  the registration to take `Kwargs`; update the disabled stub at
+  `src/stdlib/register.rs:181-184`. Add the `manifest.env.args_error` and
   `manifest.env.default_not_string` keys to all 35 catalogues. Add the
   `OBL-QUERY-SURFACE` `env` case to `tests/stdlib_manifest_query_tests.rs`.
 - Refactor: keep `env_var_with_default` under 40 lines; extract the fallback
-  decision into a named predicate if the match grows a third arm.
+  decision into a named predicate if the match grows a third arm. Watch
+  `clippy.toml`'s `too-many-arguments-threshold = 4` — prefer a small struct to
+  a fifth parameter.
 - Acceptance evidence: `cargo build` succeeds, proving the localization audit
   passes; `cargo nextest run --test manifest_env_tests` passes; the two `insta`
   inline snapshots pass **without** `INSTA_FORCE_UPDATE`; `git status --short`
-  shows no `.snap` change; `wc -l src/manifest/mod.rs` reports under 400.
+  shows no `.snap` change;
+  `wc -l src/manifest/mod.rs src/manifest/registration.rs` both report under
+  400.
 - Conformance check: `DD-4.4`'s "It returns an error if the variable is
   undefined and no `default` is provided, or if the variable contains invalid
   UTF-8" is satisfied exactly; RFC 0006 §6.6's no-silent-coercion rule is
-  satisfied; no new dependency; trace links current.
+  satisfied; ADR-026's ordering is preserved, which subsumes constraint 1's
+  snapshot requirement because the blocked diagnostic never changes; no new
+  dependency; trace links current.
 - Recovery: two commits, revert either independently; `env()` returns to its
-  one-argument form.
+  one-argument form and the registrations return to `src/manifest/mod.rs`.
 - Remaining gaps: documentation of `default=` (EP-M5).
 - Compatibility decision: none required.
 
@@ -1722,21 +1821,25 @@ callers (see constraint 7).
 ### EP-M3 — shared recipe-shell quoting seam
 
 - Identifier and outcome: a single `quote_word` implementation exists in
-  `src/recipe_shell/quoting.rs`; `quote_path` delegates to it; `ShellDialect`
-  and `StdlibConfig::with_recipe_shell` exist; generated Ninja is unchanged.
-  This milestone registers **no** new template helper — it is a pure structural
+  `src/shell_word.rs`; `quote_path` delegates to it; `ShellDialect` and
+  `StdlibConfig::with_recipe_shell` exist; generated Ninja is unchanged. This
+  milestone registers **no** new template helper — it is a pure structural
   plateau, safe to stop at.
 - Requirements: `RM-6.8.3`'s "no second quoting implementation is introduced";
   `ADR-014`.
-- Red: add `OBL-DIALECT-TOTAL` tests in `src/stdlib/shell/dialect.rs`; run the
-  OBL-NINJA-STABLE non-vacuity check (deliberately break `quote_word`, observe
-  a named snapshot fail, revert) and record the snapshot name.
-- Green: promote `src/recipe_shell.rs` to `src/recipe_shell/mod.rs`; add
-  `quoting.rs` with the body moved from `quote_path`; reduce `quote_path` to a
-  delegating call; add `src/stdlib/shell/dialect.rs`; add the `recipe_shell`
-  field and builder to `StdlibConfig`.
-- Refactor: update the `//!` comment on `src/recipe_shell/mod.rs` to state its
-  new responsibility and its position below IR, Ninja, and the standard library.
+- Red: add the `OBL-DIALECT-TOTAL` tests to `src/shell_word.rs`'s
+  `#[cfg(test)] mod tests`; run the OBL-NINJA-STABLE non-vacuity check
+  (deliberately break `quote_word`, observe a named snapshot fail, revert) and
+  record the snapshot name.
+- Green: add `src/shell_word.rs` with the body moved from `quote_path`, plus
+  `ShellDialect` and `is_recipe_admissible`; reduce `quote_path` to a
+  delegating call; add `RecipeShell::dialect()`; add the `dialect` field and
+  `with_recipe_shell` builder to `StdlibConfig`. `src/recipe_shell.rs` **stays
+  a single file** — the reviewed boundary deliberately keeps the encoder out of
+  it so the module remains data-only. Do not promote it to a directory.
+- Refactor: update the `//!` comment on `src/shell_word.rs` to state its
+  position: a leaf below IR, Ninja, and the standard library, which both
+  `src/ir/` and `src/stdlib/` may depend on.
 - Acceptance evidence: `make test` passes;
   `git status --short src/snapshots tests/snapshots` prints nothing.
 - Conformance check: exactly one recipe-shell quoting implementation remains;
@@ -1779,10 +1882,10 @@ See R11 and constraint 10. The two are therefore one milestone.
   `src/stdlib/command/quote.rs` to `child_argument.rs`; wire
   `recipe_text::register_filters` into both `register_read_only_helpers` and
   `register_query_helpers`; thread
-  `ExecutionContext.graph_generation.recipe_shell` from `src/runner/mod.rs:149`
-  through the manifest-generation path into the `StdlibConfig` built in
-  `src/manifest/query.rs`; add the `clippy.toml` entry and its two
-  `#[expect(...)]` sites; add the shell message keys to
+  `ExecutionContext.graph_generation.recipe_shell` from
+  `src/runner/mod.rs:130-160` through the manifest-generation path into the
+  `StdlibConfig` built in `src/manifest/query.rs`; add the `clippy.toml` entry
+  and its two `#[expect(...)]` sites; add the shell message keys to
   `src/localization/keys.rs` and to all 35 catalogues.
 - Refactor: if a manifest-loading function would exceed four parameters, group
   them into a named struct per `AGENTS.md`. Keep every new file well under 400
@@ -1815,28 +1918,37 @@ See R11 and constraint 10. The two are therefore one milestone.
 
 - Identifier and outcome: every document that described these helpers as
   planned or unimplemented now describes what ships, a worked `RUSTFLAGS`
-  example is executed by the test suite, ADR-021 records D1-D3, and the roadmap
+  example is executed by the test suite, ADR-027 records D1-D3, and the roadmap
   entry is ticked.
 - Requirements: all of `RM-3.14.8`; `RM-3.14.8` bullet 4 specifically.
 - Work:
-  1. Write `docs/adr-021-canonical-recipe-shell-quoting-surface.md` following
+  1. Write `docs/adr-027-canonical-recipe-shell-quoting-surface.md` following
      the Y-Statement shape of `docs/adr-008-environment-seam-taxonomy.md`
      (`# Architecture decision record (ADR): …`, then `## Status`, `## Date`,
      `## Context and problem statement`, `## Decision`, `## Consequences`).
-     Record D1, D2, and D3 with their evidence. Add it to `docs/contents.md`.
+     Record D1, D2, and D3 with their evidence. Add it to `docs/contents.md`
+     after `ADR-026` (`docs/contents.md:170-172`), matching the existing
+     one-line-per-entry shape. Re-check the number first, because this plan has
+     already lost its ADR number once to drift: at `0ba6672f` the highest
+     listed ADR was `adr-026`, and the repository has a history of collisions.
   2. `docs/netsuke-design.md` §4.4: replace "The `default` argument is planned;
      the current implementation only accepts the variable name" with the shipped
      contract, including the empty-string rule and the non-UTF-8 rule.
   3. `docs/netsuke-design.md` §4.5: rename `shell_escape` to `shell_quote`,
      record the two-dialect set and the host-default rule, drop "planned" from
-     `shell_join` and `compact`, and link ADR-021.
-  4. `docs/netsuke-design.md:686-689` and `:3664-3667`: rename `shell_escape`.
-  5. `docs/users-guide.md:490`: replace the "not implemented in beta3" sentence
+     `shell_join` and `compact`, and link ADR-027.
+  4. `docs/netsuke-design.md:687-688` and `:3876-3877`: rename `shell_escape`.
+     Re-locate the second by content, not by number: it is the "Implement the
+     full suite of custom Jinja functions (`glob`, `env`, etc.) and filters
+     (`shell_escape`)" task bullet in the implementation roadmap, which sits
+     far below the sections this plan's other citations come from.
+  5. `docs/users-guide.md:489-491`: replace the "not implemented in beta3"
+     sentence
      with a description of `shell_quote`, its default dialect, and the pointer
      to `docs/stdlib-yaml-and-jinja-guide.md`. Cross-reference
-     `docs/users-guide.md:330-348` so a Windows reader understands why the
+     `docs/users-guide.md:331-399` so a Windows reader understands why the
      default differs.
-  6. `docs/users-guide.md:774-775`: replace the sentence beginning "Beta3 does
+  6. `docs/users-guide.md:781-782`: replace the sentence beginning "Beta3 does
      not accept a default argument" with the shipped `env(name, default=…)`
      contract, including the empty-string and non-UTF-8 rules.
   7. `docs/stdlib-yaml-and-jinja-guide.md`: add `compact` to "Transform
@@ -1861,6 +1973,28 @@ See R11 and constraint 10. The two are therefore one milestone.
       carries manifest content, a variable name, or a value. The first makes
       the population exposed to R11 and D10 visible in aggregate; the second
       makes R10 visible. Describe both with `describe_counter!`.
+
+      Neither counter will be exported unless it is also admitted by
+      `src/observability_recorder.rs` — add both names to the `matches!` list
+      in `accepts_name` and both label sets to `accepts_counter_registration`.
+      This is constraint 13, and it fails **silently**: an unadmitted series
+      returns a `Counter::noop` handle, so the build, the lint, and every test
+      pass while the counter records nothing. The existing
+      `ENV_LOOKUP_TOTAL => exact_labels(key, &[(OUTCOME_LABEL,
+      &ENV_LOOKUP_OUTCOME_VALUES)])` arm at
+      `src/observability_recorder.rs:194` is the shape to copy, and
+      `src/observability_recorder.rs`'s own tests assert that the admitted
+      vocabulary and the emitting vocabulary agree — extend them.
+
+      For `netsuke_manifest_env_default_substituted_total`, first check whether
+      the series earns its keep at all. `env_telemetry::record_env_lookup`
+      already counts every lookup as `success`, the `success` count minus the
+      call count is not observable, and the `tracing::debug!` from EP-M1
+      already records each substitution. A counter that no dashboard can
+      distinguish from "no substitutions happened" is noise. If it ships, say
+      in one sentence what an operator learns from it that the `success`
+      series and the debug event do not already say; if that sentence cannot be
+      written, drop the counter and record the decision.
   8b. Write the precise guide contract for each helper, not a summary. At
       minimum: `shell_quote` renders one string as exactly one word for the
       named shell, and for `dialect='sh'` a POSIX shell splitting the output
@@ -1878,7 +2012,7 @@ See R11 and constraint 10. The two are therefore one milestone.
       filters with no function form, and that both are correct **only in
       unquoted argv position**.
   9. `docs/developers-guide.md`: extend the quoting-paths paragraph at lines
-     445-458 to name the new fourth path — `src/recipe_shell/quoting.rs` as the
+     445-458 to name the new fourth path — `src/shell_word.rs` as the
      single recipe-shell word quoter used by both `quote_path` and the
      `shell_quote`/`shell_join` filters — and state that
      `src/stdlib/command/quote.rs` and `shell_single_quote` remain distinct.
@@ -1890,16 +2024,17 @@ See R11 and constraint 10. The two are therefore one milestone.
      order while `Kwargs` is for independent named options and any enumerated
      value set expected to widen; and the deliberate query-surface dialect
      divergence.
-  10. `docs/repository-layout.md`: add `src/stdlib/shell/` and note the
-      `src/recipe_shell/` promotion.
+  10. `docs/repository-layout.md`: add `src/shell_word.rs` and
+      `src/stdlib/recipe_text/`, and record the `quote.rs` →
+      `child_argument.rs` rename under `src/stdlib/command/`.
   11. `docs/rfcs/0006-ansible-inspired-template-standard-library.md` §§8.9 and
       13.3: record the amended dialect set and note that 3.14.8 delivered it.
       Keep the edit to those two locations (R3).
   12. `CHANGELOG.md`: one entry under the unreleased heading, following the
       Common Changelog style already used in the file.
-  13. `docs/roadmap.md:282-295`: tick 3.14.8 and all four sub-bullets; rewrite
+  13. `docs/roadmap.md:343-356`: tick 3.14.8 and all four sub-bullets; rewrite
       the trailing `Note:` to describe what shipped. Add a one-line note to
-      `RM-6.8.3` (lines 1103-1110) recording that 3.14.8 delivered the canonical
+      `RM-6.8.3` (lines 1162-1169) recording that 3.14.8 delivered the canonical
       name and the dialect argument, and that only the wider RFC 0006 dialect
       set remains. Do **not** tick 6.8.3.
 - Acceptance evidence: `make markdownlint`, `make nixie`, `make check-fmt`, and
@@ -1982,7 +2117,7 @@ Quality criteria — what "done" means:
   OBL-NINJA-STABLE, OBL-NO-ESCAPE, and OBL-QUERY-SURFACE are each discharged,
   with their negative controls observed failing at least once and recorded in
   `Artefacts and notes`. AXIOM-2's residual gap on non-Windows hosts is stated
-  in ADR-021.
+  in ADR-027.
 - **Lint and typecheck**: `make check-fmt`, `make typecheck`, `make lint`, and
   `make doc-coverage` all exit zero. `make markdownlint` and `make nixie` pass.
 - **Performance**: no benchmark threshold applies.
@@ -1992,7 +2127,7 @@ Quality criteria — what "done" means:
 - **Security**: `shell_quote`'s soundness is the security property, and
   OBL-SH-ROUNDTRIP plus OBL-ONE-WORD are its evidence. Confirm that no new
   message text includes an environment variable name or value, matching the
-  deliberate omission at `src/manifest/env_reader.rs:83-89`.
+  deliberate omission at `src/manifest/env_reader.rs:121-127`.
 
 Behavioural acceptance, verifiable by hand. Note that the interpolation sits in
 **unquoted** position — this is the precondition, and the first draft of this
@@ -2087,19 +2222,38 @@ catalogue has the key; there is no partial state to clean up.
       three module boundaries, fixed the acceptance transcript's
       double-quoted-context defect, added the threat model, and fused the
       former EP-M4 and EP-M5 to close R11.
-- [ ] Plan approved by the requester.
+- [x] (2026-09-19) Plan approved: the requester directed implementation to
+      proceed, with CodeRabbit review after each milestone and a commit per
+      milestone.
+- [x] (2026-09-19) Branch rebased onto `origin/main` (`0ba6672f`, previously
+      `81d44f89`). Clean, with no conflicts: all eight branch commits touch only
+      this ExecPlan file.
+- [x] (2026-09-19) Post-rebase reconciliation. Found and recorded six things
+      upstream had already landed that this plan scheduled, depended on, or
+      assumed pending: the `src/manifest/registration.rs` extraction (R9
+      resolved as convergence, not collision), ADR-026 with the
+      `EnvAccessPolicy`/`ManifestEnvironment` seam, `ManifestLoadInputs` and
+      the resource-ceiling budgets, the `netsuke_manifest_env_lookups_total`
+      bounded telemetry series, and a shifted document-line frame. Consequences
+      applied: the plan's ADR is renumbered `021` → `027`; every
+      `Conformance basis` anchor is re-taken against `0ba6672f`; EP-M1's
+      extract step is deleted and replaced by an extend step;
+      `env_var_with_default` gains the policy parameter so `default=` cannot
+      bypass ADR-026; Stage A's three go/no-go checks are re-checked and
+      recorded; and `src/manifest/render.rs` is flagged as being exactly at the
+      400-line cap, with `src/manifest/mod.rs` freed from it.
 - [ ] EP-M1 `env(name, default=...)`.
 - [ ] EP-M2 `compact`.
 - [ ] EP-M3 shared recipe-shell quoting seam.
 - [ ] EP-M4 `shell_quote` and `shell_join`.
-- [ ] EP-M5 documentation, ADR-021, roadmap tick.
+- [ ] EP-M5 documentation, ADR-027, roadmap tick.
 
 ## Surprises & discoveries
 
 - Observation: Netsuke runs Windows recipes under Windows PowerShell, not
   `cmd.exe`, and `src/ir/cmd_interpolate/mod.rs` already implements a second
-  quoting dialect for it. Evidence: `src/recipe_shell.rs:19-26`,
-  `src/ninja_gen_recipe_shell.rs:16-17`, `docs/users-guide.md:330-348`,
+  quoting dialect for it. Evidence: `src/recipe_shell.rs:18-27`,
+  `src/ninja_gen_recipe_shell.rs:16-17`, `docs/users-guide.md:331-399`,
   `src/ir/cmd_interpolate/mod.rs:137-150`. Impact: invalidates `RFC-0006-8.9`'s
   premise that `sh` is the only dialect Netsuke can quote for; drives D2 and
   the fusion of filter registration with runner plumbing in EP-M4.
@@ -2118,7 +2272,7 @@ catalogue has the key; there is no partial state to clean up.
   drives R1 and the "run `cargo build` first" step in EP-M4.
 - Observation: there is no parity test between `register_with_config` and
   `register_manifest_query`; the disabled `env` stub's arity is maintained by
-  hand. Evidence: `src/stdlib/register.rs:173-176`; no enumeration test found.
+  hand. Evidence: `src/stdlib/register.rs:181-184`; no enumeration test found.
   Impact: drives R8 and OBL-QUERY-SURFACE. A general parity test is worth a
   future roadmap item but is out of scope here.
 - Observation: `shell-quote`'s `Sh` encoder emits *fragmented* quoting, and it
@@ -2141,7 +2295,7 @@ catalogue has the key; there is no partial state to clean up.
   isolation. Impact: drives OBL-CONTEXT, the corrected transcripts, and the
   guide precondition. It also explains why `{{ ins }}`/`{{ outs }}` are handled
   by a shell-context tracker rather than a filter — the tracker is the stronger
-  mechanism, and ADR-021 should name it as the intended successor.
+  mechanism, and ADR-027 should name it as the intended successor.
 - Observation: `Value::try_iter()` is not a sequence check.
   Evidence: `minijinja-2.24.0/src/value/mod.rs::try_iter` returns an empty
   iterator for `None` and `Undefined`, characters for a string, and an object's
@@ -2169,12 +2323,77 @@ catalogue has the key; there is no partial state to clean up.
   `tests/documentation_examples_tests.rs:18-61,143`. Impact: the `RUSTFLAGS`
   documentation is real acceptance evidence, not prose.
 
+The four observations below were recorded on 2026-09-19, while reconciling this
+plan against `origin/main` after rebasing onto commit `0ba6672f` (previously
+`81d44f89`). They are grouped because they share one cause: upstream landed
+roughly twenty-nine commits of environment-policy, budget, and observability
+work that this plan had assumed was still pending.
+
+- Observation: `src/manifest/registration.rs` **already exists on `main`** with
+  exactly the four members this plan scheduled to extract —
+  `RESERVED_VAR_NAMES`, `localize_recipe_error`, `register_manifest_vars`,
+  `manifest_structure_error` — at 65 lines. Evidence:
+  `src/manifest/registration.rs`; `src/manifest/mod.rs` fell from exactly 400
+  lines to 259. Impact: R9's collision is a convergence, the plan's choice of
+  module name and member set was correct, and EP-M1's first step changes from
+  "extract these four things" to "extend this module with the `env` and `glob`
+  registrations, which are still inline in `src/manifest/mod.rs`". Confidence:
+  verified.
+- Observation: `env_var_with` no longer matches the signature this plan's
+  interface section specified. It is now
+  `env_var_with(name, policy: &EnvAccessPolicy, read_env)`: the ADR-026 access
+  policy is evaluated **before** the reader is called, and a blocked name never
+  reaches it. Evidence: `src/manifest/env_reader.rs`, and the regression test
+  `blocked_lookup_omits_name_and_value_from_every_diagnostic_surface`, which
+  asserts `!reader_was_called`. Impact: EP-M1 must add `fallback` *without*
+  displacing the policy, or `env('SECRET', default='')` becomes a way to
+  sidestep an operator's block. The plan previously said nothing about this
+  interaction, which is exactly the kind of silence a new default-argument
+  feature would have exploited. Confidence: verified.
+- Observation: every `env()` lookup already reaches a single telemetry
+  boundary, `env_telemetry::record_env_lookup`, with a closed four-value
+  outcome vocabulary exported for the application recorder's admission check.
+  Evidence: `src/manifest/env_telemetry.rs`; `src/observability_recorder.rs`,
+  `ENV_LOOKUP_TOTAL =>
+  exact_labels(key, &[(OUTCOME_LABEL, &ENV_LOOKUP_OUTCOME_VALUES)])`.
+  Impact: a substituted default must **not** add a fifth outcome — the lookup
+  did succeed — so the substitution is observable through the existing
+  `success` series plus the `tracing::debug!` event. Whether a separate counter
+  earns its keep is left to EP-M1 as an evidence question rather than assumed.
+  Confidence: verified.
+- Observation: the runner's manifest-loading seam this plan's EP-M4 needs is
+  `ManifestLoadInputs { network_policy, env_access_policy, budget_limits }` with
+  `from_cli(&Cli)`, consumed by
+  `load_manifest_for_build_with_limits(path, inputs, on_stage)`, which builds a
+  `ManifestEnvironment` internally. Evidence: `src/runner/generation.rs`;
+  `src/runner/mod.rs` resolves `recipe_shell` immediately before constructing
+  the graph-generation context; the six-rung `from_path_*` ladder in
+  `src/manifest/path_loaders.rs` is the public surface. Impact: EP-M4 threads
+  the resolved shell through an existing struct rather than inventing a
+  parallel seam, which shrinks the change but adds a parameter-list hazard —
+  `ManifestLoadInputs` is `pub(crate)` with `pub(super)` fields, and
+  `from_path_with_policy_and_environment_and_limits` already carries
+  `#[expect(clippy::too_many_arguments)]` against `clippy.toml`'s
+  `too-many-arguments-threshold`, which is 4. Adding a fifth parameter to that
+  ladder requires a second `#[expect]` with a reason, or a regrouping.
+  Confidence: verified.
+- Observation: `src/manifest/render.rs` is now **exactly 400 lines**, the
+  constraint-8 cap, so it has zero headroom, while `src/manifest/mod.rs`
+  dropped to 259. `src/stdlib/config/mod.rs` is at 383 and
+  `src/stdlib/register.rs` at 393 — both close to the cap. Evidence: `wc -l` on
+  each. Impact: EP-M4 must add the `dialect` field to `StdlibConfig` and the
+  two filter registrations without growing `render.rs` at all, and must reclaim
+  lines in `config/mod.rs` and `register.rs` before adding to them. Measured,
+  not estimated: re-run `wc -l` at EP-M4 rather than trusting this count, since
+  the same twenty-nine commits that moved these numbers will keep moving them.
+  Confidence: verified at `0ba6672f`.
+
 ## Outcomes & retrospective
 
 To be completed at EP-M5. Before setting this plan to `COMPLETE`, reconcile
 every discovery against the `Conformance basis`:
 
-- D2 is a deviation from `RFC-0006-8.9`. It must be recorded in ADR-021 and the
+- D2 is a deviation from `RFC-0006-8.9`. It must be recorded in ADR-027 and the
   RFC amended, or the plan stays `BLOCKED`.
 - `RM-6.8.3` is materially reduced by D1 and D2. Record the reduction as a note
   on that roadmap entry; do not tick it, because its `dialect` value set is
@@ -2242,3 +2461,36 @@ To be filled during implementation. Required entries:
   EP-M1 gains a preparatory extraction because `src/manifest/mod.rs` is exactly
   at the 400-line cap. Milestone count fell from six to five. The plan still
   awaits approval; no implementation has begun.
+- 2026-09-19: reconciled against `origin/main` after rebasing onto `0ba6672f`.
+
+  **What changed.** Upstream had landed roughly twenty-nine commits of
+  environment-policy, budget, and observability work that this plan either
+  scheduled itself or assumed was pending. Six concrete corrections follow. (1)
+  The plan's ADR is renumbered `021` → `027`: `adr-021` was taken by the
+  upstream fetch-policy ADR, and five further ADRs landed on top of it, so
+  `adr-026` is now the highest. (2) `src/manifest/registration.rs` **already
+  exists** with exactly the four members this plan scheduled to extract, so R9
+  became a convergence rather than a collision and EP-M1's extraction step is
+  replaced by an extension step. (3) `env_var_with` already takes an
+  `&EnvAccessPolicy` evaluated before the reader, so constraint 12 was added
+  and EP-M1's signature and test plan now cover the blocked-with-default case —
+  a hole the original draft could not have seen. (4) Every `env()` lookup
+  already reaches a single telemetry boundary, so EP-M1 must not invent a fifth
+  outcome vocabulary and EP-M5's new counter is conditional on saying what it
+  adds. (5) Constraint 13 was added because a new metric series is silently
+  dropped unless `src/observability_recorder.rs` admits it — a failure mode
+  this plan had no rule for. (6) Every document-line and source-line citation
+  was re-taken against `0ba6672f`; the `Conformance basis` table records the
+  old and new anchors so a reader can tell drift from error. Three pre-existing
+  internal inconsistencies in the milestone text were also fixed while
+  reconciling, all of them pre-review drafts that the reviewed interface
+  section had already superseded: EP-M3 named `src/recipe_shell/quoting.rs` and
+  a `src/recipe_shell/` promotion where the reviewed boundary requires a
+  `src/shell_word.rs` leaf and keeps `recipe_shell.rs` a data-only single file;
+  and EP-M3 and EP-M5 named `src/stdlib/shell/` where the reviewed boundary
+  names `src/stdlib/recipe_text/`.
+
+  **Effect on remaining work.** EP-M1 is smaller (no extraction) but carries
+  one new cross-cutting requirement (constraint 12). EP-M3 and EP-M4 are
+  unchanged in size. The milestone count is unchanged at five. No code has been
+  written; the only repository change so far is the rebase and this document.
