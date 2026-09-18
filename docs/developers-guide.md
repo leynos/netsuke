@@ -6471,6 +6471,55 @@ which Cargo builds as its own integration-test target; Proptest therefore
 persists its failing seeds to `env_path_property_tests.proptest-regressions`
 beside it. The named cases sit in `tests/env_path_tests.rs`.
 
+## Canonical build-edge storage
+
+`BuildGraph` in `src/ir/graph.rs`, re-exported through `src/ir/mod.rs`, stores
+each logical build edge once. `src/ir/graph.rs` holds the authoritative live
+contract. The fields are `pub actions: IrHashMap<String, Action>`, a private
+`edges: EdgeArena<BuildEdge>` arena, a private
+`targets: IrHashMap<Utf8PathBuf, EdgeId>` output index, and
+`pub default_targets: Vec<Utf8PathBuf>`. Both aliases live in the same module:
+`IrHashMap` is `HashMap` in production and a bounded model under Kani, while
+`EdgeArena<T>` is `Vec<T>` in production and `IrVec<T>` under Kani.
+
+`EdgeId(usize)` is the stable identity of one canonical edge: an index into the
+arena. The type is `pub`, but its field is private, so callers obtain one only
+from `insert_edge` or `edge_id_for_output` and otherwise compare or copy it.
+Every explicit and implicit output alias is indexed to the same `EdgeId`, so a
+multi-output target does not duplicate the edge per output.
+
+This is a public-surface change: the map was once a public field from output
+path to `BuildEdge`, and it is now private behind the `EdgeId` index.
+`insert_edge` is the only supported insertion path. Code that read or wrote
+that map directly must use `edges()`, `edge_id_for_output`,
+`target_for_output`, or `output_paths()` instead, and code that inserted into
+it must call `insert_edge` and handle the returned
+`IrGenError::DuplicateOutput`.
+
+`insert_edge` validates before mutating: it returns
+`Err(IrGenError::DuplicateOutput)` and leaves the arena and the index unchanged
+when an explicit or implicit output collides with an alias already on the edge
+or already in the graph. The private `duplicate_output` pre-pass keeps the
+mutation all-or-nothing. Under `#[cfg(kani)]` `insert_edge` is infallible and
+returns an `EdgeId` directly, because the bounded model has no duplicate path.
+
+Callers iterate canonical edges with `edges()`, which yields `&BuildEdge` in
+arena insertion order. An alias resolves with
+`edge_id_for_output(&Utf8Path) -> Option<EdgeId>` for the identity alone, or
+`target_for_output(&Utf8Path) -> Option<(&Utf8Path, &BuildEdge)>` for the
+stored key and the producing edge; `output_paths()` iterates every alias key.
+The private `insert_canonical_edge` pushes into the arena and then calls
+`index_output_aliases`. The Kani and non-Kani lookups stay separate: the Kani
+variants match bounded path keys through `IrHashMap::get_key_value_path`, and
+`index_output` asserts a one-byte key under `#[cfg(kani)]` because those keys
+compare one byte at a time. `src/ninja_gen` iterates `graph.edges()` — for
+example `render_edges` in `src/ninja_gen/dyndep.rs`, plus `path_syntax.rs` and
+`mod.rs` — and `src/ir/cycle*` resolves dependencies through the output index.
+
+This guide is not the API reference: the unstable Rust API is recorded here for
+callers who use it anyway, and the [users' guide](users-guide.md) carries the
+caller-facing description.
+
 ## IR cycle detection
 
 ### Module: `ir::cycle`

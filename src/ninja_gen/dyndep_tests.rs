@@ -394,3 +394,6 @@ fn pipe_in_path_is_rejected_before_generation() -> Result<()> {
 
 #[path = "dyndep_tests/dependency_only.rs"]
 mod dependency_only;
+
+#[path = "dyndep_tests/multi_output.rs"]
+mod multi_output;
