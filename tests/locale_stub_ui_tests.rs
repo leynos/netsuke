@@ -84,6 +84,24 @@ fn stub_env_builders_compile_under_the_same_harness(
 /// the collected `-L dependency=` set has to span the split for the control
 /// fixture to compile. This pins the regression where a single derived
 /// directory missed the dependencies entirely.
+///
+/// The subject is the real `test_support` build, not a fixture crate, and that
+/// is deliberate: it is what carries both the dependency artefacts and the
+/// uplifted one that the split-directory derivation has to tell apart. The
+/// cost of building it here is recorded, with the decision to defer trimming
+/// it, under "Deferring the split-build-dir harness trim" in
+/// docs/developers-guide.md; that section also states the fidelity argument
+/// any fixture-crate replacement would owe and the response-file pressure it
+/// would have to keep.
+///
+/// It is also what keeps the Windows response-file path exercised. The long
+/// `-L dependency=` set this build produces, plus the long temporary roots the
+/// test adds, is why `TestSupportRlib::compile` sends its arguments through a
+/// `rustc` response file at all rather than a command line. A fixture crate
+/// with one dependency would produce far fewer directories and stop
+/// exercising that, so any replacement must either generate enough search
+/// paths to keep the pressure or move the response-file contract into its own
+/// dedicated test.
 #[rstest]
 fn harness_compiles_under_a_split_build_dir() -> io::Result<()> {
     let subscriber = tracing_subscriber::fmt().with_test_writer().finish();
