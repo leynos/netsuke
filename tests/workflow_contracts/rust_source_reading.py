@@ -95,19 +95,20 @@ def _skip_raw(text: str, start: int, hashes: int) -> int:
     return len(text) if end == -1 else end + len(closing)
 
 
-def _raw_opening(text: str, index: int) -> tuple[int, int] | None:
-    """Return the body start and hash count of a raw string opening here.
+#: The prefixes a raw string may carry before its `r`. Rust 2024 adds the raw
+#: C string `cr#"..."#`, whose inner quote closes nothing without the matching
+#: hashes; a scanner that refused the `c` read the opening quote as an ordinary
+#: string delimiter and exposed the rest of the literal as code.
+_RAW_PREFIXES: typ.Final[tuple[str, ...]] = ("b", "c")
 
-    Returns
-    -------
-    tuple[int, int] or None
-        The index of the body's first character and the number of hashes that
-        must precede the closing quote, or None when `index` does not begin
-        `r"`, `r#"`, `br"` or `br#"`. That is the common case: `r` and `b` are
-        ordinary identifier characters.
-    """
+
+def _raw_opening(text: str, index: int) -> tuple[int, int] | None:
+    """Return the body start and hash count of a raw string opening here."""
+    # None is the common case: `r`, `b` and `c` are ordinary identifier
+    # characters, and the caller's `_identifier_before` guard is what keeps a
+    # prefix inside a longer name from opening a literal.
     cursor = index
-    if text.startswith("b", cursor):
+    if text.startswith(_RAW_PREFIXES, cursor):
         cursor += 1
     if not text.startswith("r", cursor):
         return None
@@ -122,19 +123,11 @@ def _raw_opening(text: str, index: int) -> tuple[int, int] | None:
 
 
 def _is_char_literal(text: str, index: int) -> int | None:
-    """Return the index past a character literal, or `None` for a lifetime.
-
-    A lone `'` is how Rust writes a lifetime, and `'static` is not an unclosed
-    literal. The two are told apart by looking for a closing quote within the
-    widest literal Rust accepts; beyond that the quote is a lifetime and the
-    text after it is code.
-
-    Returns
-    -------
-    int or None
-        The index just past the closing quote, or None when no quote closes
-        within that width, which makes the opening quote a lifetime.
-    """
+    """Return the index past a character literal, or `None` for a lifetime."""
+    # A lone `'` is how Rust writes a lifetime, and `'static` is not an
+    # unclosed literal. The two are told apart by looking for a closing quote
+    # within the widest literal Rust accepts; beyond that the quote is a
+    # lifetime and the text after it is the code it looks like.
     index += 1
     if text.startswith("\\", index):
         index += 2

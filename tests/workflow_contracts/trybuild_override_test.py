@@ -266,6 +266,26 @@ def test_coverage_needs_an_exact_selector_that_is_not_negated(
             False,
             id="a-construction-inside-a-raw-string",
         ),
+        # Rust 2024's raw C string. The inner quote closes nothing without the
+        # matching hashes, so a scanner that refused the `c` read that quote as
+        # an ordinary delimiter and exposed the rest of the literal as code.
+        pytest.param(
+            'let note = cr#"a " and trybuild::TestCases::new()"#;',
+            False,
+            id="a-construction-inside-a-raw-c-string",
+        ),
+        pytest.param(
+            'let note = c"trybuild::TestCases::new()";',
+            False,
+            id="a-construction-inside-a-c-string",
+        ),
+        # The prefix letters are ordinary identifier characters, so a name
+        # ending in one must not open a literal.
+        pytest.param(
+            "let cr = 1; let t = trybuild::TestCases::new();",
+            True,
+            id="a-name-that-looks-like-a-prefix",
+        ),
         pytest.param(
             "let quote = '\"'; let t = trybuild::TestCases::new();",
             True,
