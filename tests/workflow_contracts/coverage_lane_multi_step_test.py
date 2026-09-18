@@ -246,3 +246,132 @@ def test_two_unnamed_coverage_steps_share_a_coordinate() -> None:
     assert found == expected, (
         f"both lanes must survive the grouping, in document order; got {found}"
     )
+
+
+def _doctests_workflow(doctests: object) -> dict[str, dict[str, object]]:
+    """Return a workflow whose one coverage step sets the doctests input.
+
+    Parameters
+    ----------
+    doctests : object
+        The value to pass as the action's `doctests` input.
+
+    Returns
+    -------
+    dict
+        A document with a single `build-test` job of one coverage step.
+    """
+    return {
+        "jobs": {
+            "build-test": {
+                "timeout-minutes": 90,
+                "env": {WATCHDOG_VARIABLE: 1800},
+                "steps": [
+                    {
+                        "name": "cover",
+                        "uses": COVERAGE_STEP,
+                        "with": {"doctests": doctests},
+                    }
+                ],
+            }
+        }
+    }
+
+
+def test_a_doctests_step_arms_the_watchdog_twice() -> None:
+    """One step, two `cargo` invocations, two watchdog windows.
+
+    The shared action runs `cargo llvm-cov nextest` and then an
+    uninstrumented `cargo test --doc` when its `doctests` input asks for
+    it, and each invocation arms the watchdog separately. Reading one
+    lane for such a step understates what the job's ceiling has to
+    contain by a whole watchdog window, which is the sizing fault issue
+    715 records. Both lanes carry the same coordinate, because they are
+    one step: what the second one adds is the second window.
+    """
+    lanes = coverage_lanes_of({"ci.yml": _doctests_workflow("true")})
+
+    assert [lane.step for lane in lanes] == ["cover", "cover"], (
+        f"a doctests step arms two windows, and both belong to its one "
+        f"coordinate; got {[lane.step for lane in lanes]}"
+    )
+    assert all(lane.watchdog == pytest.approx(1800.0) for lane in lanes), (
+        f"both windows run under the same resolved watchdog, got "
+        f"{[lane.watchdog for lane in lanes]}"
+    )
+    first, second = lanes
+    assert first == second, (
+        f"the two windows of one step share every field, so a contract "
+        f"reading them apart still finds one step; got {first} and {second}"
+    )
+
+
+@pytest.mark.parametrize(
+    "doctests",
+    [
+        pytest.param(None, id="no-input-declared"),
+        pytest.param("false", id="declined"),
+        pytest.param("1", id="truthy-to-the-action-but-not-read-here"),
+        pytest.param(True, id="a-yaml-boolean"),
+    ],
+)
+def test_a_step_that_declines_the_doctests_arms_one_window(
+    doctests: object,
+) -> None:
+    """Only the one spelling this repository writes counts here.
+
+    A step that omits the input, sets `false`, or sets a YAML boolean
+    runs the instrumented pass alone and reads as one window. The
+    `'1'` case is the documented gap rather than a claim about the
+    action: `1` is truthy to the action's own reader, so such a step
+    would run the doctest pass and this reading would understate its
+    windows. The value is held to `'true'` by the input pin in
+    `test_execution_coverage_test`, so the gap needs a producer written
+    in another spelling to matter at all, and that producer fails the
+    pin before it reaches here.
+    """
+    # Annotated because the input mapping is added to the step below,
+    # after the list literal has been typed; inferring `dict[str, str]`
+    # from the literal alone rejects the nested mapping.
+    steps: list[dict[str, object]] = [{"name": "cover", "uses": COVERAGE_STEP}]
+    if doctests is not None:
+        steps[0]["with"] = {"doctests": doctests}
+    workflow = {"jobs": {"build-test": {"timeout-minutes": 90, "steps": steps}}}
+
+    lanes = coverage_lanes_of({"ci.yml": workflow})
+
+    assert len(lanes) == 1, (
+        f"`doctests: {doctests!r}` does not run the doctest pass, so the step "
+        f"arms one watchdog window; got {len(lanes)} lanes"
+    )
+
+
+def test_two_windows_from_one_doctests_step_reach_the_ceiling_arithmetic() -> None:
+    """The ceiling of the job holding such a step must cover both.
+
+    Two windows of the same 1,800 s watchdog, the measured work outside
+    them and the margin above that sum is 5,400 s, so the ninety-minute
+    ceiling this repository sets has 3,600 s of slack and the sixty
+    minutes it used to set, falling short of the required. A contract
+    reading one window would have called the sixty minutes sufficient.
+    """
+    lanes = coverage_lanes_of({"ci.yml": _doctests_workflow("true")})
+
+    grouped = _budgets_per_job(lanes)
+    assert list(grouped) == [("ci.yml", "build-test")], (
+        f"both windows belong to the one job whose ceiling contains them; got "
+        f"{list(grouped)}"
+    )
+    budgets = [
+        lane.watchdog for lane in grouped["ci.yml", "build-test"] if lane.watchdog
+    ]
+    required = required_ceiling(budgets)
+
+    assert required == fractions.Fraction(2 * 1800 + 900 + 900), (
+        f"two 1,800 s windows, fifteen minutes of work outside them and the "
+        f"fifteen-minute margin are 5,400 s; got {required:.0f}s"
+    )
+    assert required > fractions.Fraction(60 * 60), (
+        "a sixty-minute ceiling cannot contain two 1,800 s windows, the work "
+        "outside them and the margin; one window made it look sufficient"
+    )
