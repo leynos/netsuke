@@ -5924,10 +5924,11 @@ rather than by the open failing. The decision is then taken from that same
 handle: `reject_reparse_point` reads `file_attributes()` — populated from
 `BY_HANDLE_FILE_INFORMATION` on the open handle — and refuses anything carrying
 `FILE_ATTRIBUTE_REPARSE_POINT`. Testing the attribute bit rather than the tag
-rejects junctions and volume mount points too, which `std` does not report as
-symlinks because `IO_REPARSE_TAG_MOUNT_POINT` is not a name surrogate. Because
-the judgement and the read share one handle, there is no check-then-open window
-between them; see
+rejects every reparse point, including tags `std` does not report as symlinks:
+`FileType::is_symlink` is true only for name-surrogate tags, so a
+deduplication or cloud placeholder would slip past a symlink-shaped check and
+be followed. Because the judgement and the read share one handle, there is no
+check-then-open window between them; see
 [ADR-026](adr-026-windows-reparse-point-same-handle-open.md).
 
 Two diagnostics come out of the boundary. `bounded_read.rs` raises
