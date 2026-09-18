@@ -99,6 +99,15 @@ success-output = "immediate"
 # budget and the test's own allowance meet.
 slow-timeout = { period = "60s", terminate-after = 10 }
 
+[[profile.default.overrides]]
+# The RFC 0006 coverage contract (obligation COV-4 in
+# docs/execplans/6-1-1-split-rfc-0006-set-into-focused-child-rfcs-and-task.md).
+# This test's whole point is the line it prints: how many capability groups are
+# still unwritten. A half-finished split passes every other coverage check, so
+# a stall is only visible if the count reaches the terminal on a green run.
+filter = 'test(/^coverage_map_status_is_reported($|::)/)'
+success-output = "immediate"
+
 [profile.ci]
 # The CI-only profile. It exists solely to carry the whole-run budget, and
 # inherits everything else from `default`, including that profile's
