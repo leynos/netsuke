@@ -1980,10 +1980,15 @@ Implementation details:
   [ADR-023](adr-023-revalidate-fetch-redirects.md).
 
 For screen readers: `fetch` dispatches the current hop until it receives a
-non-redirect response. For a redirect, it resolves the location and rejects a
-missing or invalid location. It then rejects a target that fails policy, has
-already appeared in the chain, or would exceed the five-hop limit; only an
-allowed unseen target becomes the next current hop.
+non-redirect response. For a redirect, the adapter resolves the `Location`
+header and rejects a missing or invalid location before the chain sees a
+target. The chain then rejects a target that fails policy, has already appeared
+in the chain, or would exceed the five-hop limit; only an allowed unseen target
+becomes the next current hop. The header parse is the adapter's, not the
+chain's: a `Location` header is an HTTP response fact, so the chain receives
+only an already-resolved target.
+[ADR-023](adr-023-revalidate-fetch-redirects.md) records the boundary and its
+addendum.
 
 ```mermaid
 stateDiagram-v2
