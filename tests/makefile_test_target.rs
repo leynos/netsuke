@@ -26,7 +26,8 @@ mod makefile;
 
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
-use makefile::{phony_targets, read_repo_file, target_prerequisites, target_recipe};
+use makefile::{parse_rule, phony_targets, read_repo_file, target_prerequisites, target_recipe};
+use std::collections::BTreeSet;
 use toml::Value;
 
 /// Every Make target that invokes `cargo nextest run`, and so shares the
@@ -36,7 +37,46 @@ use toml::Value;
 /// accelerated local loop. A contributor sets the bounds once and expects them
 /// honoured wherever nextest runs, so both targets are held to the same rule
 /// rather than only the one CI exercises.
+///
+/// The list is not trusted on its own.
+/// [`behavioural_nextest_targets_forward_both_worker_bounds`] discovers the
+/// targets that actually invoke the runner and fails when the two disagree, so
+/// a new recipe joins the contract or breaks the build.
 const NEXTEST_TARGETS: [&str; 2] = ["test-nextest", "dev-test"];
+
+/// True when `line` is a tab-indented recipe line that invokes the nextest
+/// runner.
+///
+/// Factored out of [`nextest_invoking_targets`] so its `if` keeps two predicate
+/// branches: the `let` in a let-chain counts towards the
+/// `conditional_max_n_branches` limit, so an inline three-clause condition
+/// trades a clippy `collapsible_if` failure for a Whitaker one.
+fn invokes_nextest(line: &str) -> bool {
+    line.starts_with('\t') && line.contains("nextest run")
+}
+
+/// Every Make target whose recipe invokes `cargo nextest run`.
+///
+/// Walks the file once, remembering the most recent rule header, so a recipe is
+/// attributed to the target that declares it. Only tab-indented lines count,
+/// which keeps a variable assignment mentioning the runner from being mistaken
+/// for a recipe.
+fn nextest_invoking_targets(makefile: &str) -> BTreeSet<String> {
+    let mut targets = BTreeSet::new();
+    let mut current_rule: Option<&str> = None;
+    for line in makefile.lines() {
+        if let Some((name, _)) = parse_rule(line) {
+            current_rule = Some(name);
+            continue;
+        }
+        if invokes_nextest(line)
+            && let Some(name) = current_rule
+        {
+            targets.insert(name.to_owned());
+        }
+    }
+    targets
+}
 
 /// Verify both nextest worker bounds are arguments to the `nextest run` call.
 ///
@@ -75,17 +115,61 @@ fn ensure_worker_bounds_reach_nextest(target: &str, recipe: &str) -> Result<()> 
 /// The agreement between `test-nextest` and `dev-test` is the point: they run
 /// the same runner, so a bound honoured by one and dropped by the other is a
 /// silent divergence for anyone comparing a green gate against a red local run.
-/// Driving the check from [`NEXTEST_TARGETS`] means adding a third target
-/// widens the contract rather than escaping it.
+///
+/// [`NEXTEST_TARGETS`] is checked against the targets the file actually
+/// invokes, in both directions, before the bounds are asserted. Checking only
+/// the declared list would let a new `nextest run` recipe omit both bounds and
+/// still pass; checking only the discovered set would let a stale entry linger
+/// after its recipe disappears. The two must name exactly the same targets.
 #[test]
 fn behavioural_nextest_targets_forward_both_worker_bounds() -> Result<()> {
     let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
+
+    let discovered = nextest_invoking_targets(&makefile);
+    let declared: BTreeSet<String> = NEXTEST_TARGETS.iter().map(ToString::to_string).collect();
+    ensure!(
+        discovered == declared,
+        "NEXTEST_TARGETS must name every target invoking `nextest run`; \
+         invoking but undeclared: {:?}; declared but not invoking: {:?}",
+        discovered.difference(&declared).collect::<Vec<_>>(),
+        declared.difference(&discovered).collect::<Vec<_>>()
+    );
+
     for target in NEXTEST_TARGETS {
         let recipe = target_recipe(&makefile, target)
             .with_context(|| format!("Makefile should declare a {target} target"))?;
         ensure_worker_bounds_reach_nextest(target, &recipe)?;
     }
     Ok(())
+}
+
+/// The discovery helper sees each target's own recipe, not its neighbours'.
+///
+/// A guard that attributed a recipe to the wrong target could still return the
+/// right *count* on the real Makefile, so the failure mode it must rule out is
+/// checked directly: a target whose recipe omits the runner stays out of the
+/// set even when the surrounding recipes invoke it, and a rule name is never
+/// taken from a variable assignment that merely mentions the runner.
+#[test]
+fn unit_nextest_discovery_attributes_recipes_to_their_own_target() {
+    let makefile = concat!(
+        "alpha:\n\tcargo nextest run --workspace\n",
+        "beta:\n\tcargo build\n",
+        "gamma: alpha\n\tcargo nextest run --workspace\n",
+        "delta:\n\tcargo build\n",
+        "VAR := mentions nextest run but is not a recipe\n",
+        ".PHONY: alpha beta gamma delta\n",
+    );
+    let discovered = nextest_invoking_targets(makefile);
+    assert_eq!(
+        discovered,
+        BTreeSet::from(["alpha".to_owned(), "gamma".to_owned()]),
+        "only alpha and gamma invoke the runner from a recipe line"
+    );
+    assert!(
+        !discovered.contains("VAR"),
+        "a variable assignment mentioning the runner is not a recipe"
+    );
 }
 
 /// Verify that `make test` orders the nextest pass before the doctest pass.
