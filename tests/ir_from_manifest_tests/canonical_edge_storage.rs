@@ -1,7 +1,11 @@
 //! Structural tests for canonical multi-output build-edge storage.
 
-use anyhow::{Context, Result, ensure};
-use netsuke::{ir::BuildGraph, manifest, ninja_gen};
+use anyhow::{Context, Result, bail, ensure};
+use camino::Utf8PathBuf;
+use netsuke::{
+    ir::{BuildGraph, IrGenError},
+    manifest, ninja_gen,
+};
 
 /// Store one multi-output target in one canonical edge and many output aliases.
 #[test]
@@ -76,6 +80,30 @@ fn multi_output_target_uses_linear_canonical_storage() -> Result<()> {
     ensure!(
         generated_outputs == expected_outputs,
         "the Ninja build statement must list every explicit output in order"
+    );
+    Ok(())
+}
+
+/// Resolve a dependency that names a non-first output alias of one edge.
+///
+/// Cycle detection and missing-dependency reporting both resolve a dependency
+/// path through the output index. Indexing only the first alias would mistake
+/// `second` for an external file, so the manifest below would lower cleanly
+/// instead of reporting the cycle that runs through it.
+#[test]
+fn non_first_output_alias_resolves_for_cycle_detection() -> Result<()> {
+    let manifest = manifest::from_str(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: [first, second]\n    sources: downstream\n    command: echo\n  - name: downstream\n    sources: second\n    command: echo\n",
+    )?;
+    let error = BuildGraph::from_manifest(&manifest)
+        .err()
+        .context("a cycle through the second alias must fail lowering")?;
+    let IrGenError::CircularDependency { cycle, .. } = error else {
+        bail!("expected a circular dependency, got {error}");
+    };
+    ensure!(
+        cycle.contains(&Utf8PathBuf::from("second")),
+        "the reported cycle must name the second alias: {cycle:?}"
     );
     Ok(())
 }

@@ -6480,10 +6480,9 @@ graph. It delegates depth-first traversal to the private sibling
 `src/ir/cycle_detector.rs` and path lookup/canonicalization helpers to
 `src/ir/cycle_support.rs`.
 
-**Entry point:**
-`analyse(targets: &HashMap<Utf8PathBuf, BuildEdge>) -> CycleDetectionReport`
+**Entry point:** `analyse(graph: &BuildGraph) -> CycleDetectionReport`
 
-Accepts the target map produced by IR lowering and returns a
+Accepts the canonical `BuildGraph` produced by IR lowering and returns a
 `CycleDetectionReport` containing:
 
 - `cycle: Option<Vec<Utf8PathBuf>>` — the first dependency cycle found, in
@@ -6498,8 +6497,8 @@ Traversal state is managed by the private `CycleDetector` struct, which owns
 the DFS recursion stack and per-node `VisitState` map. The API surface for
 callers within the `ir` module is:
 
-- `CycleDetector::new(targets)` — borrows the target map for the lifetime of
-  the traversal.
+- `CycleDetector::new(graph)` — borrows the graph for the lifetime of the
+  traversal.
 - `CycleDetector::detect()` — iterates over all nodes in sorted order and
   returns the first detected cycle, or `None`.
 

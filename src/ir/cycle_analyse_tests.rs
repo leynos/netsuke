@@ -5,7 +5,7 @@
 
 use proptest::prelude::*;
 
-use super::super::super::graph::BuildGraph;
+use super::super::super::graph::{BuildEdge, BuildGraph};
 use super::super::support::canonicalize_cycle;
 use super::{
     EdgeBuilder, analyse, make_acyclic_chain, make_cycle, make_cycle_graph, path, sequential_nodes,
@@ -105,6 +105,49 @@ fn analyse_returns_missing_dependencies_for_acyclic_graph() {
         report.missing_dependencies,
         vec![(path("a"), path("missing"))],
         "acyclic graph must report unresolved dependencies",
+    );
+}
+
+/// `analyse` resolves a dependency that names a non-first output alias.
+///
+/// The index owns every alias of a multi-output edge. A lookup that only saw
+/// the first alias would report `second` as an unresolved dependency instead
+/// of resolving it to the edge that produces it.
+#[test]
+fn analyse_resolves_non_first_output_alias_as_dependency() {
+    let mut graph = BuildGraph::default();
+    let producer = BuildEdge {
+        action_id: "id".into(),
+        inputs: Vec::new(),
+        implicit_deps: Vec::new(),
+        dependency_order: crate::ir::DependencyOrder::Parallel,
+        explicit_outputs: vec![path("first"), path("second")],
+        implicit_outputs: Vec::new(),
+        order_only_deps: Vec::new(),
+        phony: false,
+        always: false,
+    };
+    graph
+        .insert_edge(producer)
+        .expect("test graph output aliases must be unique");
+    graph
+        .insert_edge(
+            EdgeBuilder::new(path("consumer"))
+                .input(path("second"))
+                .build(),
+        )
+        .expect("test graph output aliases must be unique");
+
+    let report = analyse(&graph);
+
+    assert!(
+        report.cycle.is_none(),
+        "acyclic graph must produce no cycle"
+    );
+    assert!(
+        report.missing_dependencies.is_empty(),
+        "the second alias must resolve to its producing edge, not be missing: {:?}",
+        report.missing_dependencies,
     );
 }
 

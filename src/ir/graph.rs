@@ -87,42 +87,38 @@ impl BuildGraph {
     }
 
     /// Index every output alias owned by the canonical edge at `edge_id`.
-    #[cfg(not(kani))]
+    ///
+    /// Explicit and implicit outputs are walked with two plain slice loops
+    /// rather than a chained iterator; the chained form stalled CBMC in the
+    /// `kani-ir` cycle harnesses, where two loops verify in seconds.
     fn index_output_aliases(&mut self, edge_id: EdgeId) {
         if let Some(stored_edge) = self.edges.get(edge_id.0) {
-            for output in stored_edge
-                .explicit_outputs
-                .iter()
-                .chain(&stored_edge.implicit_outputs)
-            {
-                self.targets.insert(output.clone(), edge_id);
+            for output in &stored_edge.explicit_outputs {
+                Self::index_output(&mut self.targets, output, edge_id);
+            }
+            for output in &stored_edge.implicit_outputs {
+                Self::index_output(&mut self.targets, output, edge_id);
             }
         }
     }
 
-    /// Index every bounded output alias owned by the canonical edge at `edge_id`.
+    /// Index one output alias under `edge_id` in the graph's output index.
     ///
-    /// The bounded path keys compare one byte at a time, so an alias longer
-    /// than one byte would enter the index yet never match a lookup. Reject it
-    /// here rather than let a harness silently prove nothing.
-    #[cfg(kani)]
-    fn index_output_aliases(&mut self, edge_id: EdgeId) {
-        if let Some(stored_edge) = self.edges.get(edge_id.0) {
-            for output in &stored_edge.explicit_outputs {
-                assert!(
-                    output.as_str().len() == 1,
-                    "Kani path keys are one-byte identifiers",
-                );
-                self.targets.insert(output.clone(), edge_id);
-            }
-            for output in &stored_edge.implicit_outputs {
-                assert!(
-                    output.as_str().len() == 1,
-                    "Kani path keys are one-byte identifiers",
-                );
-                self.targets.insert(output.clone(), edge_id);
-            }
-        }
+    /// The bounded path keys compare one byte at a time, so under Kani an
+    /// alias longer than one byte would enter the index yet never match a
+    /// lookup. Reject it there rather than let a harness silently prove
+    /// nothing; production lookups are unbounded and need no such guard.
+    fn index_output(
+        targets: &mut IrHashMap<Utf8PathBuf, EdgeId>,
+        output: &Utf8PathBuf,
+        edge_id: EdgeId,
+    ) {
+        #[cfg(kani)]
+        assert!(
+            output.as_str().len() == 1,
+            "Kani path keys are one-byte identifiers",
+        );
+        targets.insert(output.clone(), edge_id);
     }
 
     /// Return the number of canonical build edges in the arena.

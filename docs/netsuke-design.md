@@ -2467,14 +2467,16 @@ structures to the Ninja file syntax.
    `ir::Action.deps_format`, allowing this rule writer to emit Ninja's
    `depfile` and `deps` attributes without overloading target prerequisites.
 
-3. **Write Build Edges:** Iterate through the `graph.targets` map. For each
-   `ir::BuildEdge`, write a corresponding Ninja `build` statement. This
-   involves formatting the lists of explicit outputs, implicit outputs, inputs,
-   implicit dependencies, and order-only dependencies using the correct Ninja
-   syntax (`:`, `|`, and `||`).[^7] Use Ninja's built-in `phony` rule when
-   `phony` is `true`. For an `always` edge, either generate a `phony` build
-   with no outputs or emit a dummy output marked `restat = 1` and depend on a
-   permanently dirty target so the command runs on each invocation.
+3. **Write Build Edges:** Iterate the canonical arena edges returned by
+   `BuildGraph::edges()`. For each `ir::BuildEdge`, write a corresponding Ninja
+   `build` statement. A multi-output edge is emitted as a single `build`
+   statement carrying all of its output aliases. This involves formatting the
+   lists of explicit outputs, implicit outputs, inputs, implicit dependencies,
+   and order-only dependencies using the correct Ninja syntax (`:`, `|`, and
+   `||`).[^7] Use Ninja's built-in `phony` rule when `phony` is `true`. For an
+   `always` edge, either generate a `phony` build with no outputs or emit a
+   dummy output marked `restat = 1` and depend on a permanently dirty target so
+   the command runs on each invocation.
 
    Code snippet
 
