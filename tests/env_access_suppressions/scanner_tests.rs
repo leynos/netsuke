@@ -159,6 +159,43 @@ fn attribute_inside_a_raw_string_is_not_reported() -> Result<()> {
     Ok(())
 }
 
+/// An escaped quote in a byte string does not hide the attribute after it.
+#[test]
+fn an_escaped_quote_in_a_byte_string_does_not_hide_a_later_attribute() -> Result<()> {
+    let source = r#"fn probe() { let sample = b"a \" b"; }
+#[allow(clippy::disallowed_methods, reason = "escape hatch probe")]
+fn probe2() {}
+"#;
+    let findings = scan_source("src/lib.rs", source);
+
+    ensure!(
+        findings
+            == [(
+                String::from("src/lib.rs"),
+                String::from("clippy::disallowed_methods")
+            )],
+        "expected the byte string to close at its own terminator and the attribute after it \
+         to be reported, got {findings:?}"
+    );
+    Ok(())
+}
+
+/// An attribute-looking line inside a byte string is quoted text, not code.
+#[test]
+fn attribute_inside_a_byte_string_is_not_reported() -> Result<()> {
+    let source = r#"const SAMPLE: &[u8] = b"one \" two
+#[allow(warnings, reason = \"sample\")]
+three";
+"#;
+    let findings = scan_source("src/lib.rs", source);
+
+    ensure!(
+        findings.is_empty(),
+        "expected an attribute quoted inside a byte string to pass, got {findings:?}"
+    );
+    Ok(())
+}
+
 /// A lifetime is not an unterminated char literal that blanks the code after it.
 #[test]
 fn a_lifetime_does_not_blank_the_attribute_that_follows() -> Result<()> {

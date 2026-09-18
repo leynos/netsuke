@@ -40,13 +40,23 @@ use scanner::scan_source;
 
 /// Roots, relative to the workspace root, whose Rust sources the crate compiles.
 ///
-/// `tests` is included because `cargo clippy --workspace --all-targets` lints
-/// integration-test targets and the modules they wire in, exactly as it lints
-/// the library, so an inner attribute there silences the policy for the whole
-/// test binary. Measured: with an integration target that reads the
-/// environment, the target fails to compile without the attribute and compiles
-/// clean with it. Leaving `tests` out would hand the evasion a second home.
-const COMPILED_SOURCE_ROOTS: [&str; 4] = ["src", "build_l10n_audit", "test_support/src", "tests"];
+/// The list is the roots the workspace lints rather than the ones a convention
+/// calls source. `tests` is included because `cargo clippy --workspace
+/// --all-targets` lints integration-test targets and the modules they wire in,
+/// exactly as it lints the library, so an inner attribute there silences the
+/// policy for the whole test binary. Measured: with an integration target that
+/// reads the environment, the target fails to compile without the attribute and
+/// compiles clean with it. Leaving `tests` out would hand the evasion a second
+/// home. `benches` is included for the same reason: a benchmark target is
+/// compiled and linted like any other, so its own environment reads are
+/// governed by the same policy.
+const COMPILED_SOURCE_ROOTS: [&str; 5] = [
+    "src",
+    "build_l10n_audit",
+    "test_support/src",
+    "tests",
+    "benches",
+];
 
 /// Compiled sources that sit outside every [`COMPILED_SOURCE_ROOTS`] root.
 ///
