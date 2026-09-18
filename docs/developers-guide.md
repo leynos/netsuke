@@ -5918,16 +5918,16 @@ same guarantee through `cap_std`'s Windows-only `OpenOptionsExt::custom_flags`,
 which is OR-ed into the `dwFlagsAndAttributes` argument of the open.
 `apply_open_flags` sets `FILE_FLAG_OPEN_REPARSE_POINT` while symlinks are not
 followed, so the open does not traverse a reparse point and the returned handle
-refers to the point itself, and it always sets `FILE_FLAG_BACKUP_SEMANTICS` so a
-directory can be opened and then rejected by the shared regular-file check
+refers to the point itself, and it always sets `FILE_FLAG_BACKUP_SEMANTICS` so
+a directory can be opened and then rejected by the shared regular-file check
 rather than by the open failing. The decision is then taken from that same
 handle: `reject_reparse_point` reads `file_attributes()` — populated from
 `BY_HANDLE_FILE_INFORMATION` on the open handle — and refuses anything carrying
 `FILE_ATTRIBUTE_REPARSE_POINT`. Testing the attribute bit rather than the tag
 rejects every reparse point, including tags `std` does not report as symlinks:
-`FileType::is_symlink` is true only for name-surrogate tags, so a
-deduplication or cloud placeholder would slip past a symlink-shaped check and
-be followed. Because the judgement and the read share one handle, there is no
+`FileType::is_symlink` is true only for name-surrogate tags, so a deduplication
+or cloud placeholder would slip past a symlink-shaped check and be followed.
+Because the judgement and the read share one handle, there is no
 check-then-open window between them; see
 [ADR-026](adr-026-windows-reparse-point-same-handle-open.md).
 
@@ -5936,9 +5936,9 @@ Two diagnostics come out of the boundary. `bounded_read.rs` raises
 `fs_utils.rs` raises `not_regular_file_error`, which quotes only the path and
 is what rejects an opened FIFO or device (and, on Windows, a reparse point that
 `reject_reparse_point` refuses). On Unix a symlink refused by `O_NOFOLLOW`
-instead surfaces through the mapped open error.
-All of them, like the invalid-UTF-8 diagnostic that `contents` and `linecount`
-raise for undecodable input, are MiniJinja `InvalidOperation` errors. See
+instead surfaces through the mapped open error. All of them, like the
+invalid-UTF-8 diagnostic that `contents` and `linecount` raise for undecodable
+input, are MiniJinja `InvalidOperation` errors. See
 [Digest rendering](#digest-rendering) for the hashing loop that consumes this
 boundary.
 
