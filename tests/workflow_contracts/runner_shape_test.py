@@ -39,13 +39,7 @@ def _workflow_env(workflow: dict[str, object]) -> dict[str, object]:
 
 
 def _all_jobs() -> list[tuple[str, str, dict[str, object]]]:
-    """Return every job in every workflow, with the file that declares it.
-
-    Returns
-    -------
-    list of tuple
-        Workflow file name, job identifier and the job's mapping.
-    """
+    """Return every job in every workflow, with the file that declares it."""
     found: list[tuple[str, str, dict[str, object]]] = []
     for path in sorted([*WORKFLOW_DIR.glob("*.yml"), *WORKFLOW_DIR.glob("*.yaml")]):
         jobs = load_workflow(path).get("jobs")
@@ -75,17 +69,10 @@ def is_self_hosted_label(label: str) -> bool:
 
 
 def _selected_labels(declaration: object) -> list[str]:
-    """Return the labels one `runs-on` value can select.
-
-    Both arms of a conditional count: a job that falls back for forks may run
-    on either, and reading only the declaration would take the whole
-    expression for one unrecognized label.
-
-    Returns
-    -------
-    list[str]
-        Every label the value can select, empty when it names none.
-    """
+    """Return the labels one `runs-on` value can select."""
+    # Both arms of a conditional count: a job that falls back for forks may
+    # run on either, and reading only the declaration would take the whole
+    # expression for one unrecognized label.
     placement = read_placement(declaration)
     if placement is not None:
         return [placement.fork, placement.owned]
@@ -99,16 +86,9 @@ def _selected_labels(declaration: object) -> list[str]:
 
 
 def _matrix_runners(job: dict[str, object]) -> set[str]:
-    """Return every runner a job's matrix selects through a `runner` entry.
-
-    The macOS lanes choose their image this way, and a label smuggled into a
-    matrix is still a label in use.
-
-    Returns
-    -------
-    set[str]
-        The runner values the matrix includes, empty when it declares none.
-    """
+    """Return every runner a job's matrix selects through a `runner` entry."""
+    # The macOS lanes choose their image this way, and a label smuggled into a
+    # matrix is still a label in use.
     strategy = job.get("strategy")
     matrix = strategy.get("matrix") if isinstance(strategy, dict) else None
     includes = (matrix or {}).get("include") or []
@@ -120,16 +100,9 @@ def _matrix_runners(job: dict[str, object]) -> set[str]:
 
 
 def _self_hosted_labels_in_use() -> set[str]:
-    """Return every label the workflows select that GitHub does not host.
-
-    A matrix `runner` value counts too, because the macOS lanes select their
-    image that way and a label smuggled into a matrix is still one in use.
-
-    Returns
-    -------
-    set[str]
-        The self-hosted labels the workflows select.
-    """
+    """Return every label the workflows select that GitHub does not host."""
+    # A matrix `runner` value counts too, because the macOS lanes select their
+    # image that way and a label smuggled into a matrix is still one in use.
     found: set[str] = set()
     for _, _, job in _all_jobs():
         found.update(_selected_labels(job.get("runs-on")))
