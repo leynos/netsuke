@@ -7,7 +7,7 @@
 use std::io;
 
 use camino::{Utf8Path, Utf8PathBuf};
-#[cfg(any(unix, windows))]
+#[cfg(unix)]
 use cap_std::fs_utf8::OpenOptionsExt;
 use cap_std::{
     ambient_authority, fs,
