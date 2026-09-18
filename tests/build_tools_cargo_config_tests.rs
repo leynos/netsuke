@@ -90,13 +90,15 @@ fn cargo_resolves_the_committed_configuration_to_the_intended_settings(
 
 /// The configuration must name no codegen backend, for any profile.
 ///
-/// This is a refusal rather than an omission, and it is deliberate. The
-/// Cranelift backend cannot initiate a panic on any nightly tested: a panic
-/// raised in a Cranelift-compiled frame aborts the process with "failed to
-/// initiate panic, error 5" instead of unwinding, which takes down every
-/// failing test, every `#[should_panic]`, and every `catch_unwind`. A profile
-/// key here applies to every build in the repository, so adding one back has to
-/// go through the evidence in the developers' guide rather than through a
+/// This is a refusal rather than an omission, and it is deliberate. A panic
+/// compiled by the Cranelift backend does not find the unwind handler it
+/// should: measured on `nightly-2026-08-23`, `catch_unwind` fails to catch,
+/// and a panic on a spawned thread runs off the end of the stack and aborts
+/// with "failed to initiate panic, error 5". A bare `#[should_panic]` passes,
+/// because libtest's outermost handler needs nothing in between to work, which
+/// is why a probe limited to that case reads as a pass. A profile key here
+/// applies to every build in the repository, so adding one back has to go
+/// through the evidence in the developers' guide rather than through a
 /// one-line edit that looks like a speed-up.
 #[test]
 fn the_configuration_names_no_codegen_backend() -> Result<()> {
