@@ -2912,6 +2912,7 @@ Linux runner. Both platforms still assert the packaged file list. See
 [Windows budget for the isolated-Cargo-build tests][windows-test-budget].
 
 [windows-test-budget]: #windows-budget-for-the-isolated-cargo-build-tests
+[fixture-constraints]: #what-a-fixture-crate-replacement-would-have-to-preserve
 
 `tests/workflow_contracts/test_execution_coverage_test.py` holds all of this:
 the coverage inputs, the denied warnings, the doctest pass and its position,
@@ -3072,7 +3073,7 @@ from three runs. If its tail has settled below the 85s measured here, or if
 `Test` has stopped being the lane's critical path, the trim is not worth the
 fidelity risk and the work closes without it. Any replacement built at that
 point inherits the constraints in
-[what a fixture-crate replacement would have to preserve](#what-a-fixture-crate-replacement-would-have-to-preserve).
+[what a fixture-crate replacement would have to preserve][fixture-constraints].
 
 Four references sit behind the figures above:
 [#673](https://github.com/leynos/netsuke/issues/673) measured the lane,
