@@ -4347,22 +4347,25 @@ target still runs across the workspace. Each of those asserts a true statement
 about a different thing, and none observes that a source has opted out.
 
 `tests/env_access_suppressions.rs` closes that gap. It reads the compiled
-sources — `src`, `build_l10n_audit`, `test_support/src`, and `build.rs` — and
-fails when an `#[allow(...)]` or `#![allow(...)]` attribute names a lint that
-carries the policy. It reads the attribute as source text, because that is what
-an attribute is: there is no execution to model, and the assertion is exactly
-"this text does not appear in an `allow` attribute". An attribute nested in a
-`cfg_attr` is read too, since that is the same suppression written one token
-differently. The scan first blanks comments and string and character literals,
-because that is where quoted text lives; it then recognizes an attribute only
-where a line begins with one, so prose that quotes the attribute — including
-this section, and the mutation records that quote the form they prohibit — is
-not a finding. It reads the attribute to its matching parenthesis, so one
-`rustfmt` has wrapped across several lines is read whole rather than truncated.
-The scanner lives beside the contract in `tests/env_access_suppressions/`
-(`scanner.rs`, `mask.rs`, `policy.rs`), and its self-tests in
-`scanner_tests.rs` pin each shape it must report and each innocent source it
-must not.
+sources — `src`, `build_l10n_audit`, `test_support/src`, `tests`, and
+`build.rs` — and fails when an `#[allow(...)]` or `#![allow(...)]` attribute
+names a lint that carries the policy. `tests` is in scope because
+`--all-targets` lints integration-test targets and the modules they wire in
+exactly as it lints the library, so an inner attribute there silences the
+policy for a whole test binary just the same. It reads the attribute as source
+text, because that is what an attribute is: there is no execution to model, and
+the assertion is exactly "this text does not appear in an `allow` attribute".
+An attribute nested in a `cfg_attr` is read too, since that is the same
+suppression written one token differently. The scan first blanks comments and
+string and character literals, because that is where quoted text lives; it then
+recognizes an attribute only where a line begins with one, so prose that quotes
+the attribute — including this section, and the mutation records that quote the
+form they prohibit — is not a finding. It reads the attribute to its matching
+parenthesis, so one `rustfmt` has wrapped across several lines is read whole
+rather than truncated. The scanner lives beside the contract in
+`tests/env_access_suppressions/` (`scanner.rs`, `mask.rs`, `policy.rs`), and
+its self-tests in `scanner_tests.rs` pin each shape it must report and each
+innocent source it must not.
 
 The banned set follows the lint hierarchy rather than spelling one name.
 `disallowed_methods` is declared in Clippy's `style` group, so allowing that
