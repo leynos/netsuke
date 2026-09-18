@@ -99,6 +99,19 @@ pub(super) fn reject_reparse_point(metadata: &Metadata, path: &Utf8Path) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
+    use camino::Utf8PathBuf;
+    #[cfg(windows)]
+    use cap_std::{ambient_authority, fs_utf8::Dir};
+    #[cfg(windows)]
+    use tempfile::tempdir;
+
+    /// Name of the junction the handle tests create.
+    #[cfg(windows)]
+    const LINK: &str = "junc";
+    /// Name of the directory that junction points at.
+    #[cfg(windows)]
+    const TARGET: &str = "junction_target";
 
     /// The default policy must ask the open not to traverse a reparse point,
     /// and both policies must permit a directory open so the shared
@@ -189,6 +202,111 @@ mod tests {
         assert!(
             !is_prohibited_reparse_point(FILE_ATTRIBUTE_ARCHIVE),
             "an ordinary file must not be refused"
+        );
+    }
+
+    /// Create the workspace the handle tests share, returning its temporary
+    /// directory, the capability handle, and the link and target paths.
+    ///
+    /// The `TempDir` is returned so the caller keeps it alive: dropping it
+    /// removes the tree, and the junction with it.
+    #[cfg(windows)]
+    fn junction_fixture() -> (tempfile::TempDir, Dir, Utf8PathBuf, Utf8PathBuf) {
+        use std::os::windows::process::CommandExt as _;
+        use std::process::Command;
+
+        let temp = tempdir().expect("create the junction fixture workspace");
+        let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+            .expect("fixture workspace path is valid UTF-8");
+        let dir = Dir::open_ambient_dir(&root, ambient_authority())
+            .expect("open the fixture workspace as a capability");
+        dir.create_dir(TARGET)
+            .expect("create the junction fixture target directory");
+        let link = root.join(LINK);
+        let target = root.join(TARGET);
+        assert!(
+            !link.as_str().contains('"') && !target.as_str().contains('"'),
+            "workspace path contains a quote and cannot be passed to cmd"
+        );
+
+        // `mklink` is a `cmd` built-in, so it is reachable only through
+        // `cmd /C`. `raw_arg` passes the line verbatim because `cmd` parses it
+        // itself, rather than by the C runtime's argument-quoting rules.
+        let output = Command::new("cmd")
+            .arg("/C")
+            .raw_arg(format!(r#"mklink /J "{link}" "{target}""#))
+            .output()
+            .expect("run 'cmd /C mklink /J' for the junction fixture");
+        assert!(
+            output.status.success(),
+            "create junction fixture {link} -> {target}: cmd exited with {}: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+        (temp, dir, link, target)
+    }
+
+    /// The default policy's handle *is* the reparse point, and the opt-in
+    /// policy's handle is the directory it points at.
+    ///
+    /// This is the property that makes the same-handle judgement possible, and
+    /// the only test that fails if `FILE_FLAG_OPEN_REPARSE_POINT` stops being
+    /// passed: without it both opens return the target directory, whose
+    /// attributes carry no reparse bit, and `reject_reparse_point` would wave
+    /// the junction through. The integration test cannot detect that, because
+    /// `std` reports a junction as a symlink, so `metadata.is_file()` refuses
+    /// the directory anyway. The distinction only shows on the handle.
+    ///
+    /// A junction is used rather than a symlink because it needs no privilege,
+    /// and it is created with `mklink /J` before the directory is opened
+    /// through `cap_std`. Every step is a genuine filesystem operation; none
+    /// of it substitutes an ordinary file for the reparse point under test.
+    #[cfg(windows)]
+    #[test]
+    fn the_default_handle_is_the_junction_and_the_opt_in_handle_is_its_target() {
+        let (_temp, dir, link, target) = junction_fixture();
+
+        // The default policy: the handle must be the reparse point itself.
+        let mut refusing_options = OpenOptions::new();
+        refusing_options.read(true);
+        apply_open_flags(&mut refusing_options, false);
+        let refusing_handle = dir
+            .open_with(Utf8Path::new(LINK), &refusing_options)
+            .expect("the default policy must be able to open the junction itself");
+        let refusing_metadata = refusing_handle
+            .metadata()
+            .expect("read metadata from the default-policy handle");
+        assert!(
+            is_prohibited_reparse_point(refusing_metadata.file_attributes()),
+            "the default handle must be the reparse point, so the policy has \
+             something to refuse; a handle to the target directory means \
+             FILE_FLAG_OPEN_REPARSE_POINT was not passed"
+        );
+        assert!(
+            reject_reparse_point(&refusing_metadata, &link).is_err(),
+            "the default policy must refuse the junction it just opened"
+        );
+
+        // The opt-in policy: the handle must be the target directory, which is
+        // what makes the opt-in a genuine follow rather than a second refusal.
+        let mut following_options = OpenOptions::new();
+        following_options.read(true);
+        apply_open_flags(&mut following_options, true);
+        let following_handle = dir
+            .open_with(Utf8Path::new(LINK), &following_options)
+            .expect("the opt-in policy must be able to open through the junction");
+        let following_metadata = following_handle
+            .metadata()
+            .expect("read metadata from the opt-in handle");
+        assert!(
+            !is_prohibited_reparse_point(following_metadata.file_attributes()),
+            "the opt-in handle must be the target directory, not the reparse \
+             point; a handle carrying the reparse bit means the flag was \
+             applied under the opt-in policy too"
+        );
+        assert!(
+            reject_reparse_point(&following_metadata, &target).is_ok(),
+            "the opt-in policy must not refuse the target it resolved"
         );
     }
 }
