@@ -13,18 +13,25 @@
 
 ### Number allocation
 
-No RFC has been merged to `main` yet, so the `docs/rfcs/` sequence is defined
-entirely by in-flight branches. This RFC takes `0006` and treats the numbers
-below it as reserved, per the "gaps are acceptable when numbers are reserved,
-drafted on another branch, or intentionally skipped" rule in
+Numbers `0001` to `0012` are merged to `main` and are therefore taken. This RFC
+takes `0006`, treats the numbers below it as reserved, and reserves `0013` to
+`0020` for the capability child RFCs section 14.13 allocates, per the "gaps are
+acceptable when numbers are reserved, drafted on another branch, or
+intentionally skipped" rule in
 [the documentation style guide](../documentation-style-guide.md).
 
-| Numbers      | Reserved for                                                                                                | Current state                                                                                                                      |
-| ------------ | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| 0001         | Structured command blocks, plus the two amendments                                                          | Drafted in [#573](https://github.com/leynos/netsuke/pull/573) and superseded by [#600](https://github.com/leynos/netsuke/pull/600) |
-| 0002 to 0004 | Manifest composition: repository-relative includes, versioned local bundles, digest-pinned external bundles | Drafted in [#600](https://github.com/leynos/netsuke/pull/600)                                                                      |
-| 0005         | Release integrity and admission                                                                             | Proposed in [#556](https://github.com/leynos/netsuke/pull/556)                                                                     |
-| 0006         | This RFC                                                                                                    | Proposed                                                                                                                           |
+| Numbers      | Reserved for                                                                                                | Current state                                                |
+| ------------ | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| 0001         | Structured command blocks                                                                                   | Merged in [#573](https://github.com/leynos/netsuke/pull/573) |
+| 0002 to 0004 | Manifest composition: repository-relative includes, versioned local bundles, digest-pinned external bundles | Merged in [#600](https://github.com/leynos/netsuke/pull/600) |
+| 0005         | Release integrity and admission                                                                             | Merged in [#556](https://github.com/leynos/netsuke/pull/556) |
+| 0006         | This RFC                                                                                                    | Proposed                                                     |
+| 0007         | Netsukefile testing framework                                                                               | Merged in [#566](https://github.com/leynos/netsuke/pull/566) |
+| 0008         | Repository-wide code-health contracts and fuzzing                                                           | Merged in [#556](https://github.com/leynos/netsuke/pull/556) |
+| 0009 to 0010 | Structured-command amendments: per-command working directories, and runtime bindings and secure tempdirs    | Merged in [#600](https://github.com/leynos/netsuke/pull/600) |
+| 0011         | Allow-listed structured command shells                                                                      | Merged in [#653](https://github.com/leynos/netsuke/pull/653) |
+| 0012         | Netsukefile property testing                                                                                | Merged in [#654](https://github.com/leynos/netsuke/pull/654) |
+| 0013 to 0020 | Capability child RFCs this RFC's accepted set is split into                                                 | Reserved here; allocated in section 14.13                    |
 
 _Table 1: RFC sequence reservations across in-flight branches._
 
@@ -48,7 +55,7 @@ existing Netsuke surface, and a delivery sequence of ten focused slices.
 
 This RFC specifies behaviour only. It contains no implementation, and it is not
 itself a request to merge one large standard-library change. Accepted groups
-become focused child issues after v0.1.0 final.
+become focused child RFCs after v0.1.0 final.
 
 ## 2. Problem
 
@@ -194,12 +201,12 @@ the third has since been closed.
   - A generic plugin or lookup dispatcher. See section 10.5.
   - Any change to the v0.1.0 release scope.
   - Any change to the existing `hash` contract. See section 11.1.
-  - Implementation. This RFC specifies behaviour; child issues implement it.
+  - Implementation. This RFC specifies behaviour; child RFCs implement it.
 
 ## 5. Licensing and provenance boundary
 
 Ansible is licensed GPL-3.0-or-later. Netsuke is licensed ISC. The following
-rules are normative for every child issue arising from this RFC.
+rules are normative for every child RFC arising from this RFC.
 
 1. Names, concepts, documented signatures, and independently verified
    observable behaviour may be borrowed.
@@ -224,8 +231,8 @@ and
 
 ## 6. Cross-cutting contract
 
-This section is normative. A child issue that does not satisfy every clause
-below for every helper it adds is not complete.
+This section is normative. A child RFC that does not satisfy every clause below
+for every helper it adds is not complete.
 
 ### 6.1. Purity classes
 
@@ -424,8 +431,7 @@ Netsuke registers exactly **one** name per capability.
 
 ### 6.11. Documentation and testing obligations
 
-Each accepted helper requires all of the following before its child issue
-closes.
+Each accepted helper requires all of the following before its child RFC closes.
 
 1. An entry in `docs/stdlib-yaml-and-jinja-guide.md` giving its signature,
    purity label, prose contract, edge cases, and an example, in the format the
@@ -650,7 +656,7 @@ are optional keyword arguments; arguments shown without one are required.
 
 ### 8.1. Structured data interchange
 
-All six helpers in this group are pure. They exist so that manifests can
+All five helpers in this group are pure. They exist so that manifests can
 consume compiler metadata, package manifests, and generated configuration
 fragments without a subprocess.
 
@@ -1099,10 +1105,12 @@ the existing `basename` and `dirname` filters, which keep their present
 host-native behaviour when it is omitted, so no shipped manifest changes
 meaning.
 
-Every helper in this group is **pure and lexical**. None touches the
-filesystem, none resolves symbolic links, and none grants authority. Normalizing
-`../../etc/passwd` produces text, not access; containment remains the
-capability layer's responsibility, per section 6.4.
+Every helper in this group except `expandvars` is **pure and lexical**. None
+touches the filesystem, none resolves symbolic links, and none grants
+authority. Normalizing `../../etc/passwd` produces text, not access;
+containment remains the capability layer's responsibility, per section 6.4.
+`expandvars` is the one environment-observing helper in this RFC, and section
+14.7 separates it from the lexical helpers for that reason.
 
 #### `parts | path_join(dialect='host')`
 
@@ -1868,7 +1876,7 @@ re-verifies rather than assuming.
 ## 14. Delivery slices and sequencing
 
 This RFC is deliberately not one implementation change. Each slice below
-becomes a focused child issue that can ship, be reviewed, and be reverted
+becomes a focused child RFC that can ship, be reviewed, and be reverted
 independently, and each carries the full cross-cutting contract from section 6
 rather than saying only "match Ansible".
 
@@ -2019,6 +2027,46 @@ Every slice must satisfy all of the following before it merges:
 - green `make check-fmt`, `make lint`, `make doc-coverage`, `make test`,
   `make markdownlint`, and `make nixie` on the merge commit.
 
+### 14.13. Coverage map
+
+Each row below allocates one capability group to one focused child RFC, which
+carries the full cross-cutting contract from section 6 for the helpers it owns.
+The rows partition the accepted set: every helper section 8 specifies —
+including `basename`, `dirname`, and `glob`, which gain an option rather than
+being introduced — appears in exactly one row, and no row claims a helper
+section 8 does not specify. Delivery is tracked by the roadmap step each row
+names, per roadmap task 6.1.1.
+
+The `Owns` column is a grammar rather than a list, so the allocation cannot
+drift from section 8 as it is edited:
+
+- `` `8.6` `` claims every helper section 8.6 specifies;
+- `` `8.6` except `expandvars` `` claims all of them but the named one;
+- `` `8.7` only `abs` `` claims the named one alone; and
+- clauses separated by `;` are unioned.
+
+The `Status` column reads `unwritten` while the child RFC does not exist and
+carries a relative link to it once it does. A repository test asserts that the
+two agree, that the rows partition the accepted set, that no rejected or
+deferred name reaches a child registry, and that no helper in this map is
+missing from the roadmap step that owns it. The convention and its amendment
+procedure are recorded in
+[ADR-021](../adr-021-focused-child-rfcs-for-survey-rfcs.md).
+
+| Child RFC | Title                                           | Owns                                        | Optioned              | Roadmap step | Status    |
+| --------- | ----------------------------------------------- | ------------------------------------------- | --------------------- | ------------ | --------- |
+| `0013`    | Structured data interchange helpers             | `8.1`                                       | —                     | 6.2          | unwritten |
+| `0014`    | Mapping and sequence transform helpers          | `8.2`                                       | —                     | 6.3          | unwritten |
+| `0015`    | Ordered collection algebra and truth predicates | `8.3`; `8.8`                                | —                     | 6.4          | unwritten |
+| `0016`    | Pattern and version predicates                  | `8.4`; `8.5`                                | —                     | 6.5          | unwritten |
+| `0017`    | Lexical path composition                        | `8.6` except `expandvars`; `8.7` only `abs` | `basename`; `dirname` | 6.6          | unwritten |
+| `0018`    | Host-state predicates and environment expansion | `8.7` except `abs`; `8.6` only `expandvars` | `glob`                | 6.7          | unwritten |
+| `0019`    | Encoding, identity, and formatting helpers      | `8.9`                                       | —                     | 6.8          | unwritten |
+| `0020`    | Date and time conversion helpers                | `8.10`                                      | —                     | 6.9          | unwritten |
+
+_Table 16: Allocation of the accepted set to focused child RFCs and roadmap
+steps._
+
 ## 15. Alternatives considered
 
 ### 15.1. Adopt the Ansible surface wholesale, names and all
@@ -2102,12 +2150,14 @@ Windows host needs when generating paths for a Unix target.
    `strftime` are pure. Roadmap item 7.1.1 supplied it: `now()` reads through a
    `ClockProvider` held by `StdlibConfig`, classified in the
    [ADR-008](../adr-008-environment-seam-taxonomy.md) addendum for 2026-09-11.
+   The seam is answered there rather than here, and RFC 0020 — which owns
+   `to_datetime` and `strftime` — neither needs it nor depends on 7.1.1.
 
 ## 17. Recommendation
 
 Adopt this RFC as the specification for Netsuke's Ansible-inspired
 standard-library expansion, and schedule the slices in section 14 as focused
-child issues after v0.1.0 final.
+child RFCs after v0.1.0 final.
 
 The case for adopting rather than deferring is that the gaps in section 2 are
 not stylistic. Each one currently resolves to `shell()`, and each such

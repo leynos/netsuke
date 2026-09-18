@@ -66,6 +66,9 @@ operator, user, and contributor references are easier to find.
   Survey of the ansible-core Jinja standard library, with an explicit
   disposition for every candidate helper and Netsuke-native contracts for the
   accepted set.
+- [rfcs/0013-structured-data-interchange-helpers.md](rfcs/0013-structured-data-interchange-helpers.md):
+  First focused child of RFC 0006: the JSON and YAML interchange helpers and
+  the cross-cutting contract discharged for them.
 - [rfcs/0007-netsukefile-testing-framework.md](rfcs/0007-netsukefile-testing-framework.md):
   Proposed Netsukefile testing framework: the `netsuke test` command, the YAML
   test dialect, and its mocking model.
