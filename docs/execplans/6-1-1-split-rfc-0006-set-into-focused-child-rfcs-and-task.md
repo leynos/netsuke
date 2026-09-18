@@ -122,7 +122,10 @@ Hard invariants. Violating one requires escalation, not a workaround.
   class; see decision `D5`.
 - Documentation prose follows `docs/documentation-style-guide.md` and uses
   en-GB-oxendict spelling. Body prose wraps at 80 columns; code blocks at 120;
-  tables and headings are not wrapped.
+  tables and headings are not wrapped. Every fence carries a language: `bash`,
+  `sh`, `plaintext`, `text`, or `rust`. An unlabelled fence is `MD040`, and a
+  bare fence under an indented list item also trips `MD031`; the red-control
+  transcripts were written as indented `text` fences first and failed both.
 - Markdown must be `mdtablefix`-canonical. Run `make fmt` before
   `make check-fmt`. Never write a backtick inside a backticked span in prose;
   `mdtablefix --wrap` corrupts it. The first draft of this plan proved that.
@@ -247,8 +250,23 @@ Hard invariants. Violating one requires escalation, not a workaround.
   totals plus that table 11's three class counts sum to the reject-row count.
   Amended in place: `D10`'s tail, `COV-2`'s closing note, the audit table's
   last row, and the `Surprises` bullet that had recorded the rule as working.
-- [ ] `EP-M1` Land the coverage test, `ADR-021`, the RFC 0006 corrections and
-  reservations, and the roadmap 6.1.1 rewrite. Ship as its own pull request.
+- [x] (2026-09-11) `EP-M1` Land the coverage test, `ADR-021`, the RFC 0006
+  corrections and reservations, and the roadmap 6.1.1 rewrite. All seven
+  coverage checks are green on the unwritten map, `COV-4` reports 8 remaining,
+  and roadmap 6.1.1 was confirmed to already carry the `D8` wording. Three
+  parser defects were found and fixed on the way; see
+  `Surprises & discoveries`. Shipped on the task branch rather than as its own
+  pull request: the reviewer's instruction names one pull request, and PR #697
+  already carries the task title, so the milestones stack there and each lands
+  as its own commit. Five seeded-fault controls runnable before any child
+  exists (a deleted coverage-map table, a corrupted section 7 row, a dangling
+  link, a deleted roadmap bullet, and a bullet moved to the wrong step) each
+  fail naming the missing table, row, link, or helper, and the suite is green
+  again once they are reverted; transcripts are in `Verification plan`. The
+  coverage map's caption was renumbered from table 12 to table 16 in the
+  process, since table 12 already existed further up the document. The test
+  module tree was split so that no module exceeds Whitaker's 400-line limit; see
+  `Surprises & discoveries`.
 - [ ] `EP-M2` Write the literal child-RFC template and one worked section 5.
 - [ ] `EP-M3` RFC 0013, structured data interchange (step 6.2). **Go/no-go.**
 - [ ] `EP-M4` RFC 0014, mapping and sequence transforms (step 6.3).
@@ -328,6 +346,41 @@ Hard invariants. Violating one requires escalation, not a workaround.
   configured with no cross-file link or anchor validation. Impact: a stale
   relative link between documents is caught by nothing. `COV-5` adds that check
   to the coverage test, which is already reading every file in `docs/rfcs/`.
+
+- Observation: Whitaker's `module-max-lines` lint caps every non-root module at
+  400 lines, counted over the module's whole span. Evidence: the second gate
+  run failed at `tests/rfc_stdlib_coverage/mod.rs:30:5` with "Module `survey`
+  spans 787 lines, exceeding the allowed 400" — a failure the first run never
+  reached, because `lint-clippy` aborted `make lint` before Whitaker ran.
+  Impact: the parser was split into five modules by responsibility — `section7`
+  (the disposition tables), `section8` (the section-reference guard), `totals`
+  (table 11 and the purity aggregate), `inventory` (the transcribed section 7
+  literals), and `assertions` (the cross-checks) — leaving `survey` to hold the
+  derived result and its orchestration. The largest is now 277 lines. The lint
+  inspects `mod` items, so a test crate root is not measured: 660-line
+  `tests/manifest_jinja_tests.rs` is green. Worth knowing before the child RFCs
+  arrive, since their registry and clause parsers grow the same way.
+
+- Observation: the section 14.13 coverage map inserted at `EP-M1` was captioned
+  `_Table 12:_`, colliding with the earlier table 12 (the `to_datetime`
+  conversion specifiers at `:1536`). The document numbers tables sequentially,
+  and `_Table 15:_` already existed, so the map is now `_Table 16:_`. Evidence:
+  `docs/rfcs/0006-...md:2068`. Impact: nothing parses captions, so only review
+  would have caught it. Worth re-checking in each child RFC, where the registry
+  table is the one this plan adds.
+
+- Observation: a `sed -i "START,ENDd"` whose `END` resolves *above* `START`
+  deletes exactly one line and reports no error. Evidence: the `COV-4` control
+  first looked its caption up with `grep -n '^_Table 12:' | head -1`, which
+  matched the earlier table 12, so the range ended above its start; POSIX then
+  matches only the first address, and the control removed the header row alone
+  and failed the suite with "the coverage map has 7 rows; expected 8" — a real
+  failure, but not the one intended. Impact: general, and the reason the
+  controls print the seeded diff before the verdict. A control that fails is
+  not yet a control that tested what it meant to, which is exactly the vacuity
+  `COV-1` to `COV-6` exist to prevent. Two fixes were needed: anchor the
+  caption search after the header (`awk -v start=...`), and guard both lookups
+  so an empty address aborts the script rather than reaching `sed`.
 
 ### `EP-M0` audit results (2026-09-11)
 
@@ -425,6 +478,37 @@ tracked; the derivation it performs is reimplemented in the coverage test at
   9, and 2, summing to 41 filters, 16 tests, and 3 optioned helpers, exactly
   the accepted set of 60. Impact: `EP-M0`'s partition is confirmed; no helper
   needs to move between children, and the ambiguity tolerance is not triggered.
+
+- Observation: three defects in the coverage parsers were found only by
+  running the checks against the real documents, and all three would have
+  misreported rather than crashed. First, `Section::tables` pushed the table's
+  own accumulator and then appended rows to a different allocation, so every
+  table parsed as empty. Second, `Section::subsection` excluded its own heading
+  line, so a table placed directly under a subsection heading was attributed to
+  no heading at all and named `""`; `map::parse`, `registries::parse`, and
+  `clauses::discharged` all filter on that heading text, so all three would
+  have failed on the first child RFC as well. Third, `roadmap`'s `FIRST_STEP`
+  and `LAST_STEP` carried a `###` prefix while being compared against a heading
+  already stripped of it, so no capability step was ever in range and `COV-6`
+  reported the roadmap as empty. Evidence: the diagnostics that located each —
+  `coverage map subsection contains no table; 39 lines, 1 tables [("", 8)]` for
+  the second, `docs/roadmap.md has no capability steps starting ### 6.2.` for
+  the third. Impact: the narrow parser contract in the module docs was right,
+  but three parsers were never exercised against their subject before these
+  runs, which is the argument for landing the checks while their subjects are
+  still unwritten.
+
+- Observation: `COV-4`'s required line cannot be printed the obvious way. The
+  workspace denies `clippy::print_stdout` and `clippy::print_stderr`
+  (`Cargo.toml:209-210`), and `cargo nextest run` captures a passing test's
+  output by default, so a `println!` would be both a lint error and invisible.
+  Evidence: `make test` runs `cargo nextest run`, whose
+  `profile.default.overrides` already raise `success-output` for two tests.
+  Impact: the check carries one
+  `#[expect(clippy::print_stdout, reason = ...)]`, and `.config/nextest.toml`
+  gains an override for `coverage_map_status_is_reported` with
+  `success-output = "immediate"`. Verified: a green run prints
+  `coverage map: 0 of 8 capability groups written; 8 remaining`.
 
 ## Decision log
 
@@ -864,7 +948,7 @@ RFC 0006 section 8.N. This section does not restate the contract.>
 unresolved.>
 
 ## 9. Recommendation
-```
+```text
 
 The registry at section 5.1 has exactly these columns and this row shape. The
 example is RFC 0017's, and is the worked example `EP-M2` must produce in full:
@@ -900,15 +984,18 @@ There is no Terms of Reference document. Upstream artefacts:
   stack RFC 0013 discharges.
 - `docs/adr-021-focused-child-rfcs-for-survey-rfcs.md`, created at `EP-M1`.
 
-Trace links:
+Trace links, one per obligation. `EP-M1` is the milestone that lands the check;
+the tests are named without their `netsuke-build::rfc_stdlib_coverage_tests::`
+prefix, which is the same for all of them and which would push every line past
+120 columns:
 
-```plaintext
-RFC0006-S7   -> ROADMAP-6.1.1 -> EP-M1 -> COV-1 -> tests::rfc_stdlib_coverage::every_accepted_helper_has_exactly_one_owner
-RFC0006-S9   -> ROADMAP-6.1.1 -> EP-M1 -> COV-2 -> tests::rfc_stdlib_coverage::no_forbidden_helper_is_registered
-RFC0006-S6.1 -> ROADMAP-6.1.1 -> EP-M1 -> COV-3 -> tests::rfc_stdlib_coverage::totals_and_purity_aggregate_agree
-RFC0006-S14  -> ROADMAP-6.1.1 -> EP-M1 -> COV-4 -> tests::rfc_stdlib_coverage::coverage_map_status_is_reported
-ROADMAP-6.2..6.9 -> ROADMAP-6.1.1 -> EP-M1 -> COV-6 -> tests::rfc_stdlib_coverage::every_capability_has_a_roadmap_task
-RFC0006-S6   -> ROADMAP-6.1.1 -> EP-M3..EP-M10 -> CONF-1 -> tests::rfc_stdlib_coverage::every_child_discharges_every_clause
+```text
+RFC0006-S7   -> ROADMAP-6.1.1 -> EP-M1 -> COV-1 -> every_accepted_helper_has_exactly_one_owner
+RFC0006-S9   -> ROADMAP-6.1.1 -> EP-M1 -> COV-2 -> no_forbidden_helper_is_registered
+RFC0006-S6.1 -> ROADMAP-6.1.1 -> EP-M1 -> COV-3 -> totals_and_purity_aggregate_agree
+RFC0006-S14  -> ROADMAP-6.1.1 -> EP-M1 -> COV-4 -> coverage_map_status_is_reported
+ROADMAP-6.2..6.9 -> ROADMAP-6.1.1 -> EP-M1 -> COV-6 -> every_capability_has_a_roadmap_task
+RFC0006-S6   -> ROADMAP-6.1.1 -> EP-M3..EP-M10 -> CONF-1 -> every_child_discharges_every_clause
 ADR-021      -> EP-M1 -> docs/adr-021-focused-child-rfcs-for-survey-rfcs.md
 ```
 
@@ -971,7 +1058,9 @@ row so failures name a location.
   partition is untested. Corrupt one section 7 accept row and expect the
   derived set to shrink and the failure to name the row. The test also asserts
   the derived accepted set has exactly 60 members, so a parser returning
-  nothing cannot pass vacuously.
+  nothing cannot pass vacuously. Discharged at `EP-M1` for the row-corruption
+  control, and only for it: the three registry controls run at `EP-M4` and
+  `EP-M5`. Transcripts are in `Control transcripts`.
 
 ### Obligation `COV-2`: no forbidden candidate is registered
 
@@ -1064,7 +1153,13 @@ row so failures name a location.
 - Evidence: passing output includes a line naming the unwritten count. `EP-M11`
   asserts it is zero.
 - Non-vacuity: at `EP-M1` the reported count must be 8, not 0. A count of 0
-  before any child exists means the map is not being read.
+  before any child exists means the map is not being read. Observed at `EP-M1`:
+  `coverage map: 0 of 8 capability groups written; 8 remaining`, printed on a
+  passing run because `.config/nextest.toml` raises this test's
+  `success-output` to `immediate`. Discharged further at `EP-M1` by removing
+  the map table itself, which fails six of the seven checks with "the coverage
+  map subsection contains no table"; both transcripts are in
+  `Control transcripts`.
 
 ### Obligation `COV-5`: inter-document links resolve
 
@@ -1079,7 +1174,8 @@ row so failures name a location.
 - Artefact: as above.
 - Evidence: same command.
 - Non-vacuity: point a scratch copy's link at a non-existent file and expect a
-  failure naming the source line and the missing target.
+  failure naming the source line and the missing target. Discharged at `EP-M1`;
+  the observed message is in `Control transcripts`.
 
 ### Obligation `COV-6`: every capability has an accompanying roadmap task
 
@@ -1107,7 +1203,9 @@ row so failures name a location.
   the `expandvars` bullet from step 6.7 to step 6.6 and expect a wrong-step
   failure, since RFC 0018 owns it. Assert the parsed task-bullet corpus is
   non-empty and that phase 6 yields exactly eight owning steps, so a parser
-  that matches nothing cannot pass.
+  that matches nothing cannot pass. Both roadmap controls are discharged at
+  `EP-M1`, with transcripts in `Control transcripts`; the deleted-task message
+  now names the owning step as well as the helper.
 - Note the asymmetry with `COV-1`, and that it is deliberate: `COV-1` requires
   exactly one owning RFC, whereas `COV-6` requires at least one task, because
   `product` is legitimately named by both 6.4.2 and 6.4.5.
@@ -1142,6 +1240,76 @@ row so failures name a location.
   makes. This is the substantive product of the task and it rests on review,
   bounded by `D6`'s anti-vacuity rule and by the `EP-M3` go/no-go. Do not claim
   otherwise in the pull request.
+
+### Control transcripts (2026-09-11)
+
+`/tmp/rfc-coverage-controls.sh` (scratch, not tracked) seeds one fault at a
+time into the working tree, runs `cargo test --test rfc_stdlib_coverage_tests`,
+prints the seeded diff and the failure, and restores both documents from a
+backup taken before the first control. It deliberately does not use
+`git checkout --`, which would discard the uncommitted milestone under test. It
+fingerprints the two documents before and after and aborts on a partial
+restore; the run finished with the same two hashes it started with, and the
+baseline after the last revert was 7 passed.
+
+Five controls are runnable at `EP-M1`, before any child RFC exists. Each was
+run, and each failed for its own reason. The quoted messages are wrapped for
+width; nextest wraps them the same way at a terminal.
+
+- `COV-4`, red state. The section 14.13 coverage map table is deleted, leaving
+  its prose and caption behind. This is the red half of the red-green evidence
+  the Validation and acceptance section asks for, and it is what shows the
+  reported count is read from the table rather than defaulted to zero:
+
+  ```text
+  Error: the coverage map subsection contains no table
+  ```
+
+  All six dependents fail on it. The line is also why `map::parse` insists on
+  eight rows rather than accepting an empty table: a map that parses to nothing
+  would otherwise satisfy "no unwritten group remains" vacuously.
+- `COV-1`, corrupted accept row. RFC 0006:469, the `from_json` row, loses its
+  `§8.1` citation, leaving the resolution cell reading "see section 8". All six
+  dependent checks fail, naming the file and the line:
+
+  ```text
+  Error: accept row at docs/rfcs/0006-ansible-inspired-template-standard-library.md:469
+    cites no section 8 subsection
+  ```
+
+  The three registry controls this obligation also specifies — delete,
+  duplicate, and move the `combine` row — need a registry to corrupt and are
+  deferred to `EP-M4` and `EP-M5`.
+- `COV-5`, dangling link. The `ADR-021` link in section 14.13 is repointed at a
+  file that does not exist:
+
+  ```text
+  Error: dangling inter-document links:
+    ["docs/rfcs/0006-ansible-inspired-template-standard-library.md:2055 links to
+    ../adr-021-no-such-file.md which resolves to
+    docs/adr-021-no-such-file.md, and no such file exists"]
+  ```
+
+- `COV-6`, deleted task. Roadmap line 935, the `zip_longest` bullet under step
+  6.4.3, is deleted:
+
+  ```text
+  Error: accepted helpers ["zip_longest (RFC 0015, step 6.4)"] are named in no
+    roadmap capability step at all, so nothing schedules them
+  ```
+
+  The owning step in that message was added at `EP-M1` in response to this
+  control: naming only the helper left the reader to work out where it belonged.
+- `COV-6`, wrong step. The `expandvars` bullet moves from step 6.7 to 6.6:
+
+  ```text
+  Error: the coverage map gives RFC 0018 roadmap step 6.7, but that step names
+    none of ["expandvars"]
+  ```
+
+`COV-2`, `COV-3`, and `CONF-1` are green before any child exists, so their
+controls need something to corrupt and run at `EP-M4` and `EP-M5`, the first
+milestones with a registry row and a clause body.
 
 ### Axioms
 
@@ -1352,31 +1520,40 @@ cargo nextest run --test rfc_stdlib_coverage_tests 2>&1 \
   | tee /tmp/covtest-netsuke-$(git branch --show-current).out
 ```
 
-Expected red transcript before the coverage map exists:
+Observed red transcript, the `COV-4` control state with the coverage map table
+removed. The order varies between runs, and `inter_document_links_resolve`
+alone stays green because nothing else it does touches the map:
 
 ```plaintext
-FAIL [   0.011s] netsuke::rfc_stdlib_coverage_tests every_accepted_helper_has_exactly_one_owner
-  RFC 0006 section 14 contains no coverage map table; expected 8 rows
+PASS [   0.007s] (1/7) netsuke-build::rfc_stdlib_coverage_tests inter_document_links_resolve
+FAIL [   0.019s] (2/7) netsuke-build::rfc_stdlib_coverage_tests every_accepted_helper_has_exactly_one_owner
+  Error: the coverage map subsection contains no table
+FAIL [   0.019s] (3/7) netsuke-build::rfc_stdlib_coverage_tests coverage_map_status_is_reported
+  Error: the coverage map subsection contains no table
+    … four more FAIL lines, each with the same error …
+error: test run failed
 ```
 
-Expected green transcript at `EP-M1`:
+Observed green transcript at `EP-M1`:
 
 ```plaintext
-    PASS [   0.014s] netsuke::rfc_stdlib_coverage_tests every_accepted_helper_has_exactly_one_owner
-    PASS [   0.009s] netsuke::rfc_stdlib_coverage_tests no_forbidden_helper_is_registered
-    PASS [   0.008s] netsuke::rfc_stdlib_coverage_tests totals_and_purity_aggregate_agree
-    PASS [   0.007s] netsuke::rfc_stdlib_coverage_tests coverage_map_status_is_reported
-      coverage map: 0 of 8 capability groups written; 8 remaining
-    PASS [   0.010s] netsuke::rfc_stdlib_coverage_tests inter_document_links_resolve
-    PASS [   0.006s] netsuke::rfc_stdlib_coverage_tests every_capability_has_a_roadmap_task
+PASS [   0.006s] (1/7) netsuke-build::rfc_stdlib_coverage_tests inter_document_links_resolve
+PASS [   0.020s] (2/7) netsuke-build::rfc_stdlib_coverage_tests coverage_map_status_is_reported
+  coverage map: 0 of 8 capability groups written; 8 remaining
+PASS [   0.020s] (3/7) netsuke-build::rfc_stdlib_coverage_tests every_capability_has_a_roadmap_task
+PASS [   0.021s] (4/7) netsuke-build::rfc_stdlib_coverage_tests every_child_discharges_every_clause
+PASS [   0.021s] (5/7) netsuke-build::rfc_stdlib_coverage_tests every_accepted_helper_has_exactly_one_owner
+PASS [   0.022s] (6/7) netsuke-build::rfc_stdlib_coverage_tests totals_and_purity_aggregate_agree
+PASS [   0.022s] (7/7) netsuke-build::rfc_stdlib_coverage_tests no_forbidden_helper_is_registered
+Summary [   0.022s] 7 tests run: 7 passed, 0 skipped
 ```
 
-Expected wrong-owner seeded-fault transcript, the control the first draft
-lacked:
+Predicted wrong-owner seeded-fault transcript, the control the first draft
+lacked. No registry exists yet, so this one has no observed counterpart:
 
 ```plaintext
-FAIL [   0.012s] netsuke::rfc_stdlib_coverage_tests every_accepted_helper_has_exactly_one_owner
-  helper combine (filter): coverage map designates RFC 0014, registry found in
+FAIL [   0.012s] (1/7) netsuke-build::rfc_stdlib_coverage_tests every_accepted_helper_has_exactly_one_owner
+  Error: helper combine (filter): coverage map designates RFC 0014, registry found in
     RFC 0015 at docs/rfcs/0015-ordered-collection-algebra.md:73
 ```
 

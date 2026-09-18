@@ -148,6 +148,9 @@ operator, user, and contributor references are easier to find.
 - [ADR-019](adr-019-structured-command-shell-selection.md): Allow-listed
   structured-command shell selection, trusted configuration authority,
   resolution, lowering, diagnostics, and safety boundaries.
+- [ADR-021](adr-021-focused-child-rfcs-for-survey-rfcs.md): Focused child RFCs
+  for survey RFCs, the coverage map that allocates the accepted set, and the
+  amendment procedure for changing an allocation.
 
 ## Proposals
 
