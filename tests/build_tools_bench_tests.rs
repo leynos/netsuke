@@ -75,7 +75,7 @@ fn check_benchmark_invocations(invocations: &[CargoInvocation], baseline_mtime: 
     // sharing a directory would warm each other's cache and understate the
     // second, which a check against the baseline would not catch.
     for (index, variant) in variants.iter().enumerate() {
-        for other in &variants[index + 1..] {
+        for other in variants.iter().skip(index + 1) {
             ensure!(
                 variant.target_dir() != other.target_dir(),
                 "variants must not share a target directory, got `{}` and `{}`",
