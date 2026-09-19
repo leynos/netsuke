@@ -41,14 +41,18 @@ REPOSITORY_VARIABLE_EXPRESSION: typ.Final[re.Pattern[str]] = re.compile(
 PERMITTED_VARIABLE_NAME: typ.Final[str] = "NETSUKE_SCCACHE_LOCAL_DIR"
 
 
-def unbound_variable_references(step: dict[str, object]) -> list[str]:
+def unbound_variable_references(step: cabc.Mapping[str, object]) -> list[str]:
     """Return every ``vars.`` reference in a step but the permitted one.
 
     Parameters
     ----------
     step
         One parsed workflow step. Every string it holds is scanned, so a
-        reference in ``if``, ``env``, or ``with`` is found alike.
+        reference in ``if``, ``env``, or ``with`` is found alike. The parameter
+        is a `Mapping` rather than a `dict` because the scan only reads, and a
+        mapping's value type is covariant: a literal like ``{"if": "..."}``
+        infers ``dict[str, str]``, which is not a `dict[str, object]` but is a
+        ``Mapping[str, object]``.
 
     Returns
     -------

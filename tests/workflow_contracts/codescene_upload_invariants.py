@@ -161,14 +161,16 @@ def upload_contract_offenders(
     coverage = step_named(steps, COVERAGE_STEP)
     validation = step_named(steps, REPORT_VALIDATION_STEP)
     upload = step_named(steps, CODESCENE_UPLOAD_STEP)
-    ordered = (coverage, validation, upload)
-    if any(step is None for step in ordered):
+    # Spelled as three separate tests rather than `any(step is None ...)`: the
+    # guard has to narrow each name to a step for the calls below, which a
+    # predicate over a tuple cannot do.
+    if coverage is None or validation is None or upload is None:
         missing = [
             name
-            for name, step in zip(
-                (COVERAGE_STEP, REPORT_VALIDATION_STEP, CODESCENE_UPLOAD_STEP),
-                ordered,
-                strict=True,
+            for name, step in (
+                (COVERAGE_STEP, coverage),
+                (REPORT_VALIDATION_STEP, validation),
+                (CODESCENE_UPLOAD_STEP, upload),
             )
             if step is None
         ]
