@@ -4435,6 +4435,16 @@ is written at init time and no later call could unpin it. Note that
 `GIT_TEMPLATE_DIR` outranks it, measured, so the empty `--template` argument is
 the form that works for a contributor with that variable set.
 
+A fifth route does not go through a file at all: `GIT_DIR` repoints git at
+another repository's metadata, so `check-ignore` answers from there. Measured
+at a false pass, with the hostile repository's `info/exclude` holding `*` while
+the honest answer for an unignored name was "not ignored". Both `git` calls
+clear `GIT_DIR`, `GIT_WORK_TREE`, and `GIT_COMMON_DIR`. This one needed a
+mutation to verify rather than a green suite, because a false pass is also a
+pass: a name absent from `.gitignore` is added to the skip list, and the test
+must fail naming it even under that environment, which it does only with the
+pin in place.
+
 It reads the attribute as source text, because that is what an attribute is:
 there is no execution to model, and the assertion is exactly "this text does
 not appear in an `allow` attribute". An attribute nested in a `cfg_attr` is
