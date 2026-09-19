@@ -147,7 +147,8 @@ def required_ceiling(
     Parameters
     ----------
     budgets : cabc.Sequence[fractions.Fraction]
-        One watchdog budget per coverage step in the job.
+        One watchdog budget per window the job's coverage steps arm, so
+        two for a step asking the action for the doctest pass.
 
     Returns
     -------

@@ -251,11 +251,6 @@ def test_two_unnamed_coverage_steps_share_a_coordinate() -> None:
 def _doctests_workflow(doctests: object) -> dict[str, dict[str, object]]:
     """Return a workflow whose one coverage step sets the doctests input.
 
-    Parameters
-    ----------
-    doctests : object
-        The value to pass as the action's `doctests` input.
-
     Returns
     -------
     dict
