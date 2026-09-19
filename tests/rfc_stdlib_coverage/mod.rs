@@ -22,6 +22,10 @@
 //! because the vocabulary contains `abs` against `is_abs`, `quote` against
 //! `shell_quote`, `hash` against `text_hash`, and `subset` against
 //! `issubset`.
+//!
+//! Fenced code blocks are opaque to every scan. A child RFC's section 5 carries
+//! example blocks — Jinja snippets, diagnostic text, shell — and a `#`, a `|`,
+//! or a backticked name inside one is example content rather than structure.
 
 mod assertions;
 mod checks;
@@ -29,6 +33,7 @@ mod clauses;
 mod inventory;
 mod links;
 mod map;
+mod markdown;
 mod registries;
 mod roadmap;
 mod section7;
@@ -42,6 +47,9 @@ pub use checks::{
     inter_document_links_resolve, no_forbidden_helper_is_registered,
     totals_and_purity_aggregate_agree,
 };
+// Private, but reachable as `super::…` from every child module, which is how
+// `section8` gets at `Fences` and `heading_depth`.
+use markdown::{Fences, heading_depth, is_separator, row_cells, table_heading};
 
 use std::collections::BTreeSet;
 
@@ -202,6 +210,10 @@ impl<'a> Section<'a> {
     ///
     /// The heading must match on its full text, so `14.1. Slice` cannot
     /// accidentally select `14.10. Slice`.
+    ///
+    /// Note that `heading` is matched verbatim, so a caller whose heading also
+    /// appears inside a fenced block still lands on the real one: the fences only
+    /// blind the *end* scan, leaving the start anchored where it always was.
     fn subsection(&self, heading: &str) -> Option<Self> {
         let start = self.lines.iter().position(|line| line.trim() == heading)?;
         let depth = heading_depth(self.lines.get(start)?)?;
@@ -209,7 +221,11 @@ impl<'a> Section<'a> {
         let end = rest
             .get(1..)?
             .iter()
-            .position(|line| heading_depth(line).is_some_and(|d| d <= depth))
+            .scan(Fences::default(), |fences, line| {
+                let fenced = fences.mark(line);
+                Some((fenced, line))
+            })
+            .position(|(fenced, line)| !fenced && heading_depth(line).is_some_and(|d| d <= depth))
             .map_or(rest.len(), |offset| offset + 1);
         Some(Self {
             first_line: self.first_line + start,
@@ -223,11 +239,20 @@ impl<'a> Section<'a> {
     /// The header row is dropped and the `|---|` separator skipped, so each
     /// returned row is a data row. A table ends at the first line that is not a
     /// table row, which is what keeps two adjacent subtables distinct.
+    ///
+    /// Fenced lines are skipped in both roles. A `|` line inside a fence is
+    /// example content, and a `#` line inside a fence is a comment — in a Jinja
+    /// or shell snippet, both are ordinary text and neither is structure.
     fn tables(&self) -> Vec<(String, Vec<RawRow>)> {
         let mut tables: Vec<(String, Vec<RawRow>)> = Vec::new();
+        let mut fences = Fences::default();
         let mut heading = String::new();
         let mut body = false;
         for (offset, line) in self.lines.iter().enumerate() {
+            if fences.mark(line) {
+                body = false;
+                continue;
+            }
             let number = self.first_line + offset;
             if let Some(text) = table_heading(line) {
                 heading = text;
@@ -260,41 +285,6 @@ impl<'a> Section<'a> {
             .filter(|(_, rows)| !rows.is_empty())
             .collect()
     }
-}
-
-/// The heading text of `line`, if it is a heading.
-fn table_heading(line: &str) -> Option<String> {
-    heading_depth(line)?;
-    Some(line.trim().trim_start_matches('#').trim().to_owned())
-}
-
-/// The trimmed cells of `line`, if it is a Markdown table row.
-///
-/// A line that is only `|` yields no cells rather than an empty slice, so a
-/// stray pipe cannot be mistaken for a one-column row.
-fn row_cells(line: &str) -> Option<Vec<String>> {
-    let inner = line.trim().strip_prefix('|')?.strip_suffix('|')?;
-    Some(
-        inner
-            .split('|')
-            .map(|cell| cell.trim().to_owned())
-            .collect(),
-    )
-}
-
-/// The Markdown heading depth of `line`, if it is a heading.
-pub(super) fn heading_depth(line: &str) -> Option<usize> {
-    let hashes = line.len() - line.trim_start_matches('#').len();
-    let rest = line.get(hashes..)?.trim_start();
-    (hashes > 0 && !rest.is_empty()).then_some(hashes)
-}
-
-/// Whether a row is the `|---|---|` separator under a table header.
-pub(super) fn is_separator(cells: &[String]) -> bool {
-    !cells.is_empty()
-        && cells.iter().all(|cell| {
-            !cell.is_empty() && cell.chars().all(|ch| ch == '-' || ch == ':' || ch == ' ')
-        })
 }
 
 /// One Markdown table row, with the line it was read from.

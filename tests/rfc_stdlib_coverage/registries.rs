@@ -97,13 +97,25 @@ impl Registry {
             .collect()
     }
 
-    /// The registered names with the given purity class.
-    pub(super) fn with_purity(&self, purity: Purity) -> usize {
-        self.rows.iter().filter(|row| row.purity == purity).count()
+    /// The `New` rows with the given purity class.
+    ///
+    /// The registration kind is part of the query rather than a caller-side
+    /// filter, because the only purity count anyone asks for is section 6.1's
+    /// aggregate, and that ranges over the 57 proposed helpers. The `OptionAdded`
+    /// rows are excluded: they are existing helpers being extended, none of them
+    /// helped make up section 6.1's 52/4/1, and the three together would turn a
+    /// correct document's aggregate into 54/5/1. Making that the accessor's
+    /// contract means a future caller cannot get the wrong answer by forgetting
+    /// the filter.
+    pub(super) fn new_with_purity(&self, purity: Purity) -> usize {
+        self.rows
+            .iter()
+            .filter(|row| row.purity == purity && row.registration == Registration::New)
+            .count()
     }
 
     /// The registered names with the given registration kind.
-    pub(super) fn with_registration(&self, registration: super::Registration) -> usize {
+    pub(super) fn with_registration(&self, registration: Registration) -> usize {
         self.rows
             .iter()
             .filter(|row| row.registration == registration)

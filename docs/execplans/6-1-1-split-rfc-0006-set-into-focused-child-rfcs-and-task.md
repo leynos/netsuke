@@ -267,6 +267,15 @@ Hard invariants. Violating one requires escalation, not a workaround.
   process, since table 12 already existed further up the document. The test
   module tree was split so that no module exceeds Whitaker's 400-line limit; see
   `Surprises & discoveries`.
+- [x] (2026-09-19) `EP-M1` second CodeRabbit pass, four findings, all actioned.
+  Two were latent defects rather than style: the parser was fence-blind, and
+  the purity aggregate did not apply the `New`-row scoping its own comment
+  described. Both are proven by evidence and covered by the fence control; see
+  `Surprises & discoveries`. The other two were the stale `child issue` quote in
+  `clauses.rs` and RFC 0006 table 1's `0006` row, which recorded the RFC's
+  `Status` in a column whose every other row records a merge state — the merge
+  claim was accurate, and the row now states the merge like its neighbours,
+  with a sentence under the table separating the two facts.
 - [ ] `EP-M2` Write the literal child-RFC template and one worked section 5.
 - [ ] `EP-M3` RFC 0013, structured data interchange (step 6.2). **Go/no-go.**
 - [ ] `EP-M4` RFC 0014, mapping and sequence transforms (step 6.3).
@@ -381,6 +390,67 @@ Hard invariants. Violating one requires escalation, not a workaround.
   `COV-1` to `COV-6` exist to prevent. Two fixes were needed: anchor the
   caption search after the header (`awk -v start=...`), and guard both lookups
   so an empty address aborts the script rather than reaching `sed`.
+
+- Observation: the **first written version of this parser was fence-blind**, and
+  the failure is the silent kind. A fenced `# not a heading` line inside RFC
+  0006 section 8.9 read as a depth-1 heading, ended the subsection at the
+  fence, and left `strftime` and `to_datetime` — specified further down section
+  8.10 — looking like helpers with no contract. Six of the seven checks failed,
+  and the message named the two helpers, not the code block. Evidence: the
+  fence control transcript in `Verification plan`; the red run is reproducible
+  by re-running `/tmp/rfc-fence-control.sh` against a checkout of `885edb93`.
+  Impact: this was the one control that had to be *written* to be believed,
+  because it was raised as a CodeRabbit review finding marked "trivial" and its
+  severity is anything but. Every child RFC this plan goes on to write carries
+  example fences in section 5, so the fault was one document edit away from
+  being live. Three scans shared the root cause — `Section::tables`,
+  `Section::subsection`, and `section8::subsection_lines` — and all three now
+  consult one `Fences` cursor, extracted with the rest of the Markdown lexical
+  layer into `markdown.rs`. The post-fix run of the same control leaves the
+  suite at 7 passed.
+
+- Observation: the plan's own COV-3 scoping note was right and the code did not
+  implement it. The purity aggregate must range over the 57 **proposed**
+  helpers; the registries carry all 60 accepted ones. Filtering on purity alone
+  yields 54/5/1 against section 6.1's 52/4/1 and would have failed a correct
+  document at `EP-M11`, the first milestone where all eight registries exist.
+  Evidence: `with_purity` had exactly three call sites, none filtering on
+  registration kind, and the optioned rows include the filesystem-observing
+  `glob`. Impact: the fix is at the accessor rather than the call site —
+  `new_with_purity` carries the registration filter in its contract, so a
+  future caller cannot get the wrong answer by forgetting it. Also raised by
+  CodeRabbit and also latent: the check is guarded by `written == rows.len()`,
+  so it cannot fire before every child exists.
+
+- Observation: Whitaker's `conditional_max_n_branches` counts a match **guard**
+  as branches, and the limit is 2. Evidence: the first `Fences` implementation
+  guarded its closing arm with
+  `opened == character && run >= opened_run && info.trim().is_empty()` and
+  failed at `markdown.rs:91` with "Collapse the match guard to 2 branches or
+  fewer". Clippy passed the same expression, and so did `make test` and
+  `make typecheck`; the violation is dylint-only, which is why it surfaced at
+  `make lint` alone. Impact: the guard was not rewritten as a flatter `if`,
+  which would have lost the "closing fence carries no info string" rule — the
+  natural cheat is to drop a condition and the branch count falls with it.
+  Instead the three conditions became two predicates, `Delimiter::closes` and
+  `Delimiter::is_closing_run`. Eleven hand-run probes over `/tmp` copies
+  confirm the CommonMark semantics survive: info strings, longer and shorter
+  closing runs, tilde-versus-backtick nesting, inline code spans, indented
+  fences, and unterminated blocks. When a child RFC's parser grows a similar
+  guard, expect this lint, and split a condition into a named predicate rather
+  than deleting it.
+
+- Observation: `make fmt` cannot be pointed at one file, and `mdtablefix` has
+  no check-only mode. Evidence: `check-markdown-format.sh` stages copies and
+  compares, precisely because the tool always writes; `MD_FILES_FIND` in the
+  Makefile covers the whole corpus. Impact: after a hand-written prose edit the
+  scoped invocation is
+  `mdtablefix --in-place --wrap --renumber --breaks --ellipsis --fences <file>…`,
+  with the flags copied from `mdformat-all` and the checker. Running
+  `make fmt` instead would reformat unrelated documents and bury the milestone
+  diff. Both files edited at `EP-M1`'s second review were pure paragraph
+  rewrapping — zero table-pipe changes — which the checker's failure message
+  alone does not tell you.
 
 ### `EP-M0` audit results (2026-09-11)
 
@@ -1289,7 +1359,7 @@ fingerprints the two documents before and after and aborts on a partial
 restore; the run finished with the same two hashes it started with, and the
 baseline after the last revert was 7 passed.
 
-Five controls are runnable at `EP-M1`, before any child RFC exists. Each was
+Six controls are runnable at `EP-M1`, before any child RFC exists. Each was
 run, and each failed for its own reason. The quoted messages are wrapped for
 width; nextest wraps them the same way at a terminal.
 
@@ -1343,6 +1413,31 @@ width; nextest wraps them the same way at a terminal.
   Error: the coverage map gives RFC 0018 roadmap step 6.7, but that step names
     none of ["expandvars"]
   ```
+
+- Fence blindness, run separately by `/tmp/rfc-fence-control.sh`. A fenced
+  `text` block carrying a `# not a heading` line and a `{{ a | b }}` example is
+  inserted directly after the section 8.9 heading in RFC 0006. Before the fix
+  this failed **six of the seven checks**, and the diagnostic misattributed the
+  cause: the fenced `#` line read as a depth-1 heading, truncated section 8.9
+  at the fence, and left its helpers looking unspecified:
+
+  ```text
+  test every_child_discharges_every_clause ... FAILED
+  test every_capability_has_a_roadmap_task ... FAILED
+  test coverage_map_status_is_reported ... FAILED
+  test every_accepted_helper_has_exactly_one_owner ... FAILED
+  test totals_and_purity_aggregate_agree ... FAILED
+  test no_forbidden_helper_is_registered ... FAILED
+  Error: accepted helpers ["strftime", "to_datetime"] name no RFC 0006 section 8
+    subsection, so they have no contract to implement
+  ```
+
+  The two named helpers are exactly those section 8.10 specifies; nothing in
+  the message points at the code block that actually broke the parse. This is
+  the most dangerous control in the set, because the fault is one a child RFC
+  will legitimately contain: every child's section 5 carries example fences.
+  After the fix the same seeded fault leaves the suite at 7 passed. The control
+  restores the document from a backup and verifies its sha256 before and after.
 
 `COV-2`, `COV-3`, and `CONF-1` are green before any child exists, so their
 controls need something to corrupt and run at `EP-M4` and `EP-M5`, the first
