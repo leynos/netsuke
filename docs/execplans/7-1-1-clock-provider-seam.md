@@ -1623,10 +1623,22 @@ above, which are disposable.
   mean dismissing a review or approving on the bot's behalf, which this plan
   does not do. The four required checks (`build-test`, `kani-smoke`,
   `netsukefile`, `release / metadata`) are all `SUCCESS` on `74822cc2`, and the
-  walkthrough's Observability row still renders as a warning because the
-  comment has not been re-edited. The dispositions above are therefore
-  complete; the decision is not mine to make, and the designated owner retains
-  it.
+  walkthrough's Observability row still renders as a warning.
+
+  The reason first recorded for that row — that the walkthrough had not been
+  re-edited — is wrong, and is corrected here on the same principle the rest of
+  this plan applies to CodeRabbit's rows. The comment's `updated_at` moved to
+  `2026-09-19T17:25:12Z`, after CodeRabbit's confirmation, so it *was* touched;
+  what did not happen is any change to what it says. Three captures of the body
+  taken after that edit (17:55, 18:51, 20:06) are byte-identical to the live
+  body, so the touch was content-preserving and left the row standing. The
+  distinction matters because "the table is stale" and "the table was refreshed
+  and the finding still stands" call for different responses, and only the
+  first would justify asking for another pass. Flipping the row is CodeRabbit's
+  to do; ticking its Ignore checkbox or dismissing the review to force the
+  table green is not something this plan does. The dispositions above are
+  therefore complete; the decision is not mine to make, and the designated
+  owner retains it.
 
   One property of this branch is worth naming, because it produced a loop I had
   to break deliberately. Recording "CI is green at head H" is itself a commit,
