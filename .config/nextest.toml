@@ -71,9 +71,10 @@ success-output = "immediate"
 # increasing each test's elapsed time: the two ran concurrently, each with four
 # compile jobs on a four-vCPU runner, and each roughly halved the other. With
 # the second build gone from the Windows lane, this test took 125.3s, 170.6s
-# and 170.7s on the three runs that followed, rather than the 274.7s median
-# above. 420s is therefore sized against the older, contended distribution and
-# is deliberately conservative while the new shape has three samples.
+# and 170.7s on runs 34075197897, 34079222917 and 34080385050, rather than the
+# 274.7s median above. 420s is therefore sized against the older, contended
+# distribution and is deliberately conservative while the new shape has three
+# samples.
 #
 # Trimming the test is worth about 85s, not the 156s that figure implied
 # before the second build left, on the uncontended reading those three runs
