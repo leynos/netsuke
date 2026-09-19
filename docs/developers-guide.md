@@ -7304,7 +7304,7 @@ Every tier comparison is a sum, and a sum is exact only if every term is. One
 `float` among them converts the whole of it back, and the conversion is silent.
 So `seconds` returns a `fractions.Fraction`, and so does everything the
 comparisons add to it: the watchdog budget read from a workflow, the job
-ceiling converted from `timeout-minutes`, and the five allowances and margins
+ceiling converted from `timeout-minutes`, and the six allowances and margins
 declared in `timeout_budgets.py`.
 
 The reason is the range. humantime reaches 2**64 seconds and a double holds 53
@@ -7332,7 +7332,7 @@ quietly, and one further case asserts that the values actually in force arrive
 exact, so a float reintroduced on the live path is caught without waiting for a
 budget nobody will set.
 
-Each of the eight terms was reverted to a float in turn and every one failed a
+Each of the nine terms was reverted to a float in turn and every one failed a
 case naming it. Two of them, the outside-work allowance and the ceiling margin,
 are added by the same function and fail the same ordering case, which is why
 the constants are also asserted one by one under their own names: the report
