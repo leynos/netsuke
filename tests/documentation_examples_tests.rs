@@ -20,6 +20,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-binstall-install",
     "guide-boolean-string-interpolation",
     "guide-cli-usage",
+    "guide-clock-snippet",
     "guide-command-available-manifest",
     "guide-command-list",
     "guide-complete-manifest",
@@ -81,6 +82,26 @@ fn env_reader_snippet_mirrors_the_doctest() -> Result<()> {
         ensure!(
             example.body.contains(needle),
             "the env-reader snippet should mention {needle}"
+        );
+    }
+    Ok(())
+}
+/// The guide's clock snippet must stay in step with the API it mirrors.
+///
+/// The snippet is Rust and is executed as the doctest on `with_clock`; this
+/// pins the guide copy to the same entry points so the two cannot drift
+/// silently.
+#[test]
+fn clock_snippet_mirrors_the_doctest() -> Result<()> {
+    let example = documented_example("guide-clock-snippet")?;
+    ensure!(
+        example.language == "rust",
+        "the clock snippet should be a Rust fence"
+    );
+    for needle in ["with_clock", "fixed_clock", "StdlibConfig"] {
+        ensure!(
+            example.body.contains(needle),
+            "the clock snippet should mention {needle}"
         );
     }
     Ok(())
