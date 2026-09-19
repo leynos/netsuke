@@ -4458,25 +4458,38 @@ read too, since that is the same suppression written one token differently. The
 scan first blanks comments and string and character literals, because that is
 where quoted text lives — a byte or C string escapes like any other, so its
 body ends at an unescaped quote, and reading one as raw would end it early at
-an escaped quote and blank the code after it; it then recognizes an attribute
-only where a line begins with one, so prose that quotes the attribute —
-including this section, and the mutation records that quote the form they
-prohibit — is not a finding. It reads the attribute to its matching
-parenthesis, so one that `rustfmt` has wrapped across several lines is read
-whole rather than truncated. The scanner lives beside the contract in
-`tests/env_access_suppressions/` (`scanner.rs`, `mask.rs`, `policy.rs`), and
-its self-tests in `scanner_tests.rs` pin each shape it must report and each
-innocent source it must not.
+an escaped quote and blank the code after it. Masking is what keeps the scan
+off prose that quotes an attribute, including this section and the mutation
+records that quote the form they prohibit: a quoted attribute never reaches the
+matcher at all, whatever line it sits on. It then matches an attribute by its
+tokens — `#`, an optional `!`, `[`, a name, `(` — with whitespace permitted
+between them, and reads it to its matching parenthesis, so one that `rustfmt`
+has wrapped across several lines is read whole rather than truncated. The
+scanner lives beside the contract in `tests/env_access_suppressions/`
+(`scanner.rs`, `mask.rs`, `policy.rs`), and its self-tests in
+`scanner_tests.rs` and `spelling_tests.rs` pin each shape it must report and
+each innocent source it must not.
 
-The line anchor is deliberate, and the shapes it declines to read are the ones
-nothing needs it to read. An attribute written mid-line after a `;` cannot
-suppress anything there: `mod inner; #![allow(...)]` on one line is rejected as
-"an inner attribute is not permitted in this context", so it is an error rather
-than a hole. The mid-line *outer* form does compile, and is covered twice over —
-`rustfmt` moves it onto its own line, which `make check-fmt` enforces, and
-`clippy::allow_attributes` rejects it whether or not it has been moved. Reading
-only at the start of a line therefore misses no reachable suppression, and it
-is what keeps the scan off prose that quotes an attribute without being one.
+Matching tokens rather than lines is the one design decision here that was
+reached the hard way, and it is worth recording why the obvious alternative
+fails. The scan once anchored at the start of a line, reasoning that `rustfmt`
+normalizes an attribute's spelling and `make check-fmt` enforces that, so a
+spelling the anchor declined to read could not reach the compiler. **That
+reasoning is false.** `#[rustfmt::skip]` freezes the very spelling `rustfmt`
+would otherwise normalize, so a line anchor can be held open indefinitely and
+each of these compiles, silences the policy outright (`clippy` exits 0 where
+the same file without the attribute exits 101), and passed the anchored scan:
+`#[allow` with its `(` on a later line; a newline between `#[allow(` and the
+lint list; a newline between the `#` and the `[`; `r#allow(...)` or
+`r#clippy::disallowed_methods`, raw identifiers denoting exactly what the
+unprefixed names denote; `clippy :: disallowed_methods`, with spaces around the
+path separator; and the deprecated bare `disallowed_methods` beside its
+enabler. A layout gate is not a proof about spelling — it normalizes what it is
+shown, and a skip attribute is a request to be shown nothing — so the matcher
+tolerates the whitespace and reads the raw prefix instead of trusting a gate to
+have removed them. Every shape in that list is pinned by a test in
+`spelling_tests.rs`, each measured against a real probe file before it was
+written down.
 
 The banned set follows the lint hierarchy rather than spelling one name.
 `disallowed_methods` is declared in Clippy's `style` group, so allowing that
@@ -4492,11 +4505,14 @@ does. On its own that is harmless: `renamed_and_removed_lints` is denied in
 `[workspace.lints.rust]`, so the rename is reported and the alias is an error
 rather than a suppression. Allow that lint as well and the rename goes
 unreported, and the alias suppresses the policy in silence — measured at exit
-0, where the same file without the attribute exits 101. Two entries close it:
-`renamed_and_removed_lints`, because no alias suppresses anything while the
-rename naming it is still reported, and `clippy::disallowed_method` itself, so
-the pair stays honest if a future Clippy stops reporting renames. The scoped
-exemption below covers neither.
+0, where the same file without the attribute exits 101. The deprecated bare
+`disallowed_methods` is the same alias under its shorter name and behaves
+identically. Four entries close the class: `renamed_and_removed_lints`, because
+no alias suppresses anything while the rename naming it is still reported;
+`clippy::disallowed_method` and the bare `disallowed_methods`, so the pair
+stays honest if a future Clippy stops reporting renames; and `unknown_lints`,
+which hides the report that makes a misspelled or removed name an error rather
+than a silent no-op. The scoped exemption below covers none of them.
 
 Three files are exempt, and only for those two guard lints:
 `src/runner/error.rs`, `src/manifest/diagnostics/mod.rs`, and

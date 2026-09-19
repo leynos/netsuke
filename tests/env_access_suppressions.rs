@@ -281,3 +281,6 @@ fn every_rust_source_in_the_workspace_is_scanned() -> Result<()> {
 
 #[path = "env_access_suppressions/scanner_tests.rs"]
 mod scanner_tests;
+
+#[path = "env_access_suppressions/spelling_tests.rs"]
+mod spelling_tests;
