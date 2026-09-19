@@ -256,8 +256,8 @@ they share is stated at the end.
 
 **Native Windows CI compiles and lints every Windows-gated line, tests
 included.** `Windows / lint-windows` runs `make lint-clippy`, which expands to
-`cargo clippy --workspace --all-targets --all-features -- -D warnings`, and then
-Whitaker's dylint suite over the same target and feature selection.
+`cargo clippy --workspace --all-targets --all-features -- -D warnings`, and
+then Whitaker's dylint suite over the same target and feature selection.
 `--all-targets` pulls in the library's `cfg(test)` module and the integration
 test targets, so `windows_reparse.rs`, `windows_reparse_tests.rs`, and the
 junction fixture in `file_type_tests.rs` are all compiled on Windows itself,
