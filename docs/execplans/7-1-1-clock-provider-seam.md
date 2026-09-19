@@ -1587,6 +1587,23 @@ above, which are disposable.
   inline reply to the guides-lifecycle finding, and a pre-merge reconciliation
   for the Observability row, each citing `f81f2f98` and quoting the table row
   live at the time of posting rather than from memory.
+- [x] Post-completion: CI is green on the published head `74822cc2` — the
+  `f81f2f98` push plus its docs-only follow-up. All four required checks pass:
+  `build-test` and `kani-smoke` (CI run `35454416505`), `netsukefile`
+  (`35454416354`), `release / metadata` (`35454416662`). The one red job is
+  `Windows / build-test-windows`, which is not a required check and fails for
+  the pre-existing reason already recorded above: `os error 10053` on the
+  loopback race in `stdlib::network::redirect`. That pre-existence was
+  re-verified rather than assumed — the identical test and identical error text
+  appear on `main` at `ef7ed760` (run `35437324950`) and on branch commits
+  `dbd90956` and `bb1d7f9b`. The branch's change surface contains no
+  `src/stdlib/network/` files, so the failure cannot be this branch's. One
+  correction worth recording: briefing the monitor, I described this job as
+  failing in `git submodule` before project code runs, which is **wrong** — the
+  `submodule` lines are ordinary post-job cleanup from a *successful* checkout,
+  and the real failure is at the test step. The conclusion survived the
+  corrected premise, which is exactly why the premise had to be checked instead
+  of inherited; a right answer for the wrong reason is not evidence.
 
 ## Surprises & discoveries
 
