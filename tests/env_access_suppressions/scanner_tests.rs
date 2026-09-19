@@ -97,7 +97,9 @@ use rstest::rstest;
     "macro_rules! probe_macro {\n    () => {\n        #![allow(clippy::disallowed_methods, reason = \"escape hatch probe\")]\n    };\n}\n",
     &["clippy::disallowed_methods"]
 )]
-// A name reached through the path `allow` is not the `allow` attribute.
+// A guard lint named off an exempt path is a finding. Nothing else reports a
+// crate that has silenced the reporter, so the scan is the only thing standing
+// between this attribute and a silenced `allow_attributes`.
 #[case::path_segment_named_allow(
     "src/lib.rs",
     "#![allow(clippy::allow_attributes, reason = \"escape hatch probe\")]\n",
