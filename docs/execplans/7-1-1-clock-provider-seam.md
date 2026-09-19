@@ -1456,9 +1456,9 @@ above, which are disposable.
   the maintainer on 2026-09-19 and recorded as this plan's one conformance
   exception in D14. The delivery is not scope-conformant to the plan.
 - [x] Post-completion: rebased onto `origin/main` (`a273fad3`) and the clock
-  seam extracted from `src/stdlib/config/mod.rs` into a sibling `config/clock.rs`,
-  clearing a `module_max_lines` failure that only the merge tree exhibited —
-  the episode is D15 and `Artefacts and notes` entry 17.
+  seam extracted from `src/stdlib/config/mod.rs` into a sibling
+  `config/clock.rs`, clearing a `module_max_lines` failure that only the merge
+  tree exhibited — the episode is D15 and `Artefacts and notes` entry 17.
 
 ## Surprises & discoveries
 
@@ -1715,26 +1715,26 @@ Recorded during planning; extend during implementation.
 - Observation: CI lints the pull request's *merge tree*, so a lint breach can
   exist that neither parent exhibits and that no local run over the branch can
   reproduce. Evidence: pushing `8056a4da` turned CI red in both `build-test`
-  (step "Lint") and `Windows / lint-windows` with `error: Module config spans
-  421 lines, exceeding the allowed 400.` at `src/stdlib/mod.rs:12:5`, under
-  `-D module-max-lines` implied by `-D warnings`. The branch's own
-  `src/` was byte-identical to the last green head (`e401f4d7` apart from the
-  exec plan), so the lint target was the GitHub merge ref:
-  `src/stdlib/config/mod.rs` measures 351 lines at the base `3348cc0a`, 383 on
-  `origin/main` after `5c19b8c8`, 389 on the branch, and **421 in
-  `refs/pull/696/merge`** — each parent passes the 400-line cap alone and only
-  the combination exceeds it, because Whitaker's `module_max_lines` counts the
-  whole file behind a file-backed module and the merge is purely additive
-  (351 + 32 + 38 = 421). Impact: "green locally, red in CI" was not a
-  flake and not a stale-runner artefact; it is structural. `git merge-tree
-  --write-tree origin/main HEAD` prints the merged tree's root as an object ID,
-  so the exact lint input is obtainable without a scratch checkout —
-  `git cat-file blob <root>:src/stdlib/config/mod.rs | wc -l` reproduced the
-  421 from the CI log. The fix was to shrink this branch's contribution to the
-  shared file: the clock seam moved into a sibling `config/clock.rs` (the
-  grouping `which.rs` documents), taking the merged file to 387 lines. The
-  durable lesson is to measure the merge tree, not the branch, whenever a
-  touched file sits near a whole-file threshold.
+  (step "Lint") and `Windows / lint-windows` with
+  `error: Module config spans 421 lines, exceeding the allowed 400.` at
+  `src/stdlib/mod.rs:12:5`, under `-D module-max-lines` implied by
+  `-D warnings`. The branch's own `src/` was byte-identical to the last green
+  head (`e401f4d7` apart from the exec plan), so the lint target was the GitHub
+  merge ref: `src/stdlib/config/mod.rs` measures 351 lines at the base
+  `3348cc0a`, 383 on `origin/main` after `5c19b8c8`, 389 on the branch, and
+  **421 in `refs/pull/696/merge`** — each parent passes the 400-line cap alone
+  and only the combination exceeds it, because Whitaker's `module_max_lines`
+  counts the whole file behind a file-backed module and the merge is purely
+  additive (351 + 32 + 38 = 421). Impact: "green locally, red in CI" was not a
+  flake and not a stale-runner artefact; it is structural.
+  `git merge-tree --write-tree origin/main HEAD` prints the merged tree's root
+  as an object ID, so the exact lint input is obtainable without a scratch
+  checkout — `git cat-file blob <root>:src/stdlib/config/mod.rs | wc -l`
+  reproduced the 421 from the CI log. The fix was to shrink this branch's
+  contribution to the shared file: the clock seam moved into a sibling
+  `config/clock.rs` (the grouping `which.rs` documents), taking the merged file
+  to 387 lines. The durable lesson is to measure the merge tree, not the
+  branch, whenever a touched file sits near a whole-file threshold.
 
 ## Decision log
 
@@ -1953,8 +1953,8 @@ Recorded during planning; extend during implementation.
   with 716 net across 23 files even if this living exec plan (2,520 lines) is
   excluded entirely. The non-plan remainder moved from 696 to 708 at the
   `configure_stdlib` extraction (+12 net of real code) and to 716 with the
-  clock-seam extraction into `config/clock.rs` (+42 added, with nothing
-  removed elsewhere because the move relocated code rather than deleting it);
+  clock-seam extraction into `config/clock.rs` (+42 added, with nothing removed
+  elsewhere because the move relocated code rather than deleting it);
   plan-maintenance commits leave it untouched, so the non-plan figure is the
   one to quote when the plan's own growth is held to one side. The totals rise
   with each such commit because the plan is inside the diff.
@@ -1980,18 +1980,17 @@ Recorded during planning; extend during implementation.
   they are not a citation a later reader can rely on — only the figures are.
 
   *Attribution of the 3,236 net lines at the current head* (so a later reader
-  can audit rather than take this on trust): exec plan 2,520; production
-  `src/` 480 net (547 added, 67 removed), which is `clock.rs` 150,
-  `clock_tests.rs` 260 and `config/clock.rs` 42 as new files, the
-  `tests.rs`/`tests_support.rs` split 10 net after a 58-line move, and the
-  18-line balance from the `mod.rs` files and `register.rs`; tests 163 net (177
-  added, 14 removed); governing docs 62 net outside the plan; the recorded
-  `proptest` regression seed 11. The pre-rebase attribution of 3,039 was exec
-  plan 2,331, `src/` 472, tests 163, docs 62 and the seed 11; the shift is the
-  extraction (`config/clock.rs` plus the re-export) and the plan's own growth.
-  Every row above is a snapshot: each plan-maintenance commit raises the total
-  by its own length, so a later reader should re-measure rather than re-quote
-  these figures.
+  can audit rather than take this on trust): exec plan 2,520; production `src/`
+  480 net (547 added, 67 removed), which is `clock.rs` 150, `clock_tests.rs`
+  260 and `config/clock.rs` 42 as new files, the `tests.rs`/`tests_support.rs`
+  split 10 net after a 58-line move, and the 18-line balance from the `mod.rs`
+  files and `register.rs`; tests 163 net (177 added, 14 removed); governing
+  docs 62 net outside the plan; the recorded `proptest` regression seed 11. The
+  pre-rebase attribution of 3,039 was exec plan 2,331, `src/` 472, tests 163,
+  docs 62 and the seed 11; the shift is the extraction (`config/clock.rs` plus
+  the re-export) and the plan's own growth. Every row above is a snapshot: each
+  plan-maintenance commit raises the total by its own length, so a later reader
+  should re-measure rather than re-quote these figures.
 
   *Assessment against the tolerance's own reasoning.* The tolerance says a
   substantial overrun "means the design was wrong". That inference does not
@@ -2035,11 +2034,11 @@ Recorded during planning; extend during implementation.
   gives for existing ("Grouping them by feature keeps `config/mod.rs` to the
   shared configuration surface rather than one module per layer"). The only
   changes are a `mod clock;` declaration, a narrowed import, and the moved
-  block with its doctest intact; the field, its default, the registration
-  path, and the public signatures are unchanged. Result: the merged file drops
-  to 387 lines, all three local gates pass at `f994800c`, and CI returns to
-  green with `mergeStateStatus: CLEAN`. Date/Author: 2026-09-19,
-  post-completion, in response to the CI failure on `8056a4da`.
+  block with its doctest intact; the field, its default, the registration path,
+  and the public signatures are unchanged. Result: the merged file drops to 387
+  lines, all three local gates pass at `f994800c`, and CI returns to green with
+  `mergeStateStatus: CLEAN`. Date/Author: 2026-09-19, post-completion, in
+  response to the CI failure on `8056a4da`.
 
 ## Outcomes & retrospective
 
