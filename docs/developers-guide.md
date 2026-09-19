@@ -4405,10 +4405,10 @@ The machine's git configuration is a third place an answer can come from, and
 it is switched off for the same reason. A global ignore file naming one of
 these directories would make the test pass while the repository said nothing
 about the name — the original defect wearing a different hat, and just as
-invisible. Both spellings are disabled, `core.excludesFile` and
-`core.excludesPath`, because git consults one or the other; measured, a global
-file listing `.ruff_cache` turns a correct refusal into a pass without the pair
-and leaves it a refusal with them.
+invisible. `core.excludesFile=/dev/null` covers both spellings a global ignore
+can take: it overrides a configured path and also suppresses the default
+`~/.config/git/ignore`, measured with that default present and no path
+configured.
 
 It reads the attribute as source text, because that is what an attribute is:
 there is no execution to model, and the assertion is exactly "this text does
