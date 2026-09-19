@@ -1973,9 +1973,11 @@ Recorded during planning; extend during implementation.
   *Note on commit identifiers.* The identifiers above name commits as they
   stand on the rebased branch. The rebase rewrote every branch commit, so the
   original pre-rebase identifiers (`9042fe66`, `3fdd8260`, `02caf3ee`,
-  `e401f4d7`, `e1568a1b`, `8056a4da`) now exist only as unreachable objects;
+  `e401f4d7`, `e1568a1b`, `8056a4da`) are no longer reachable from any branch;
   the numbers they carried are preserved in the table because they are the
-  measurements those heads produced.
+  measurements those heads produced. They still resolve in this checkout
+  because the reflog names them, but a pruning `git gc` would drop them, so
+  they are not a citation a later reader can rely on — only the figures are.
 
   *Attribution of the 3,236 net lines at the current head* (so a later reader
   can audit rather than take this on trust): exec plan 2,520; production
