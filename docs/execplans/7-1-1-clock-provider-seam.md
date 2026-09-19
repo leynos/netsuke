@@ -1521,6 +1521,28 @@ above, which are disposable.
   is the command queued. This is a posted *request*, not a completed review:
   the commit CodeRabbit actually inspects must be read back afterwards, because
   the comment body does not pin a revision.
+- [x] Post-completion: re-targeted onto the current `origin/main` tip
+  (`79545e12`, the 19-update GitHub-actions group bump) after the first rebase
+  had landed at `07248a34`. The boundary for this re-target is the merge base
+  `07248a34`, not the earlier `a273fad3`: `merge-base 8de3c963 origin/main` is
+  `a273fad3`, so the earlier boundary was correct *for the commit series that
+  existed then*, while `a273fad3..99f242de` counts 44 because four inherited
+  `main` commits (`024a9014` among them) had entered the range since. The
+  branch-owned series above `07248a34` is 40 commits. Replay was byte-for-byte
+  identity-preserving — 40 commits, every one `=`, no merges, no conflicts, net
+  diff unchanged at 27 files / 3603 insertions / 161 deletions,
+  `git diff --check` clean. `Cargo.toml` and `Cargo.lock` are byte-identical to
+  `origin/main`, so there was nothing to regenerate. The new commit is a
+  workflows-and-contract-test delta with **zero** file overlap with this
+  branch's 27 files, and `make test` is `test-nextest doctest` — Rust only — so
+  the delta lies outside this branch's gate surface. It does not touch the
+  Windows job's line anchors: `build-test-windows` is still at
+  `.github/workflows/ci-windows.yml:217` and `runs-on: windows-latest` at 223,
+  so the Windows diagnosis recorded above stands. Weave again did not
+  participate: the driver is registered globally but `git check-attr merge`
+  reports `unspecified` for every branch-owned path, the global attributes file
+  is unset, and there is no tracked `.gitattributes` and no
+  `$GIT_DIR/info/attributes`.
 
 ## Surprises & discoveries
 
