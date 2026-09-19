@@ -6,8 +6,8 @@
 
 use mockable::{DefaultEnv, Env};
 use std::{
-    fmt, io,
-    net::{SocketAddr, TcpListener, TcpStream},
+    io,
+    net::{SocketAddr, TcpStream},
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -17,14 +17,17 @@ use std::{
 };
 
 mod accept;
+mod env;
 mod request;
 mod response;
 mod server;
+mod spawn;
 
 use self::accept::{AcceptWait, accept_connection};
+use self::env::duration_from_env;
 pub use self::request::RequestLog;
-pub use self::response::HttpResponse;
-use self::server::{FixtureLedger, run_http_server};
+pub use self::response::{HttpResponse, RawHttpResponse};
+use self::spawn::{spawn_fixture_server, spawn_raw_fixture_server};
 
 /// Override for the timeout in milliseconds within which a client must connect.
 pub(crate) const ENV_HTTP_ACCEPT_TIMEOUT_MS: &str = "NETSUKE_TEST_HTTP_ACCEPT_TIMEOUT_MS";
@@ -32,14 +35,6 @@ pub(crate) const ENV_HTTP_ACCEPT_TIMEOUT_MS: &str = "NETSUKE_TEST_HTTP_ACCEPT_TI
 pub(crate) const ENV_HTTP_READ_TIMEOUT_MS: &str = "NETSUKE_TEST_HTTP_READ_TIMEOUT_MS";
 /// Override for the polling interval in milliseconds used while waiting.
 pub(crate) const ENV_HTTP_POLL_INTERVAL_MS: &str = "NETSUKE_TEST_HTTP_POLL_INTERVAL_MS";
-
-#[cfg(test)]
-use std::{cell::RefCell, thread_local};
-
-#[cfg(test)]
-thread_local! {
-    static DURATION_WARNINGS: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
-}
 
 /// Configuration for HTTP fixtures, including timeouts used during polling.
 #[derive(Debug, Clone)]
@@ -279,97 +274,55 @@ pub fn spawn_http_server_expecting_no_requests(
     Ok((url, log, server))
 }
 
-/// Spawn an HTTP server using `config`, emitting responses in sequence.
+/// Spawn an HTTP server that emits each raw response in sequence.
 ///
-/// Returns the bound URL, the shared request count, the request log, and the
-/// server handle. The public wrappers above reshape this tuple for their
-/// callers, so every fixture shares one server implementation.
-fn spawn_fixture_server(
-    responses: impl IntoIterator<Item = HttpResponse>,
-    config: HttpServerConfig,
-) -> io::Result<(String, Arc<AtomicUsize>, RequestLog, HttpServer)> {
-    let response_sequence = responses.into_iter().collect::<Vec<_>>();
-    let listener = TcpListener::bind(("127.0.0.1", 0))?;
-    listener.set_nonblocking(true)?;
-    let addr = listener.local_addr()?;
-    let url = format!("http://{addr}");
-    let requests = Arc::new(AtomicUsize::new(0));
-    let server_requests = Arc::clone(&requests);
-    let log = RequestLog::default();
-    let server_log = log.clone();
-    let shutdown = Arc::new(AtomicBool::new(false));
-    let server_shutdown = Arc::clone(&shutdown);
-    let handle = thread::Builder::new()
-        .name("netsuke-http-fixture".into())
-        .spawn(move || {
-            run_http_server(
-                &listener,
-                &response_sequence,
-                &config,
-                &FixtureLedger::new(&server_requests, &server_log, &server_shutdown),
-            );
-        })?;
-    Ok((
-        url,
-        requests,
-        log,
-        HttpServer {
-            handle: Some(handle),
-            addr,
-            shutdown,
-        },
-    ))
-}
-
-/// Read `var` as whole milliseconds, falling back to `default` when unset or
-/// unparsable.
-fn duration_from_env(env: &impl Env, var: &str, default: Duration) -> Duration {
-    env.raw(var).map_or(default, |value| {
-        let trimmed = value.trim();
-        match trimmed.parse::<u64>() {
-            Ok(ms) => Duration::from_millis(ms),
-            Err(err) => {
-                log_duration_parse_error(var, trimmed.len(), &err);
-                default
-            }
-        }
-    })
-}
-
-/// Report an unparsable duration override without echoing its value.
+/// # Raw responses
 ///
-/// The value is redacted: an environment variable's contents are outside this
-/// crate's control, and logging them verbatim would put whatever the caller
-/// exported into the log. `err` already names the bounded parse failure, and
-/// `value_len` distinguishes an empty override from a malformed one, which is
-/// all the diagnosis this fixture needs.
-fn log_duration_parse_error(var: &str, value_len: usize, err: &dyn fmt::Display) {
-    #[cfg(test)]
-    {
-        record_duration_warning(format!(
-            "ignoring invalid {var}: {err} (value redacted, {value_len} bytes)"
-        ));
-    }
-
-    #[cfg(not(test))]
-    {
-        tracing::warn!(
-            variable = var,
-            value_len,
-            error = %err,
-            "ignoring invalid fixture duration"
-        );
-    }
+/// The bytes in `responses` are written to the client verbatim, so a caller
+/// can emit a status line no HTTP client should accept. This exists because
+/// the structured fixtures cannot: [`HttpResponse::new`] takes a status code,
+/// so a response whose status line is malformed is not expressible at all,
+/// and a test about a client's failure to parse one has to own the bytes.
+///
+/// The returned URL carries `redirect-user:redirect-secret` credentials, so a
+/// test can drive a credentialed fetch — whose URL redaction is asserted
+/// elsewhere — against malformed bytes rather than against a live host.
+///
+/// Every raw response is sent over the same fixture machinery as a structured
+/// one: the same bounded accept, the same bounded request read, the same
+/// accounting and shutdown. The request is drained before the bytes go out,
+/// and the write half is then shut down rather than the socket closed, so the
+/// response is delivered whole instead of racing a platform-dependent
+/// transport abort. See `server::serve_raw_response` for the full reasoning.
+///
+/// # Errors
+///
+/// Returns an [`io::Error`] if the listener cannot be bound, switched to
+/// non-blocking mode, queried for its local address, or if the fixture thread
+/// fails to spawn. As with the structured fixtures, later I/O failures inside
+/// the fixture thread panic it rather than returning.
+pub fn spawn_http_server_raw_responses(
+    responses: impl IntoIterator<Item = RawHttpResponse>,
+) -> io::Result<(String, RequestLog, HttpServer)> {
+    let (url, _requests, log, server) = spawn_raw_fixture_server(
+        responses,
+        HttpServerConfig::from_env().accepting_until_shutdown(),
+    )?;
+    Ok((url, log, server))
 }
 
-#[cfg(test)]
-fn record_duration_warning(message: String) {
-    DURATION_WARNINGS.with(|warnings| warnings.borrow_mut().push(message));
-}
-
-#[cfg(test)]
-fn take_duration_warnings() -> Vec<String> {
-    DURATION_WARNINGS.with(|warnings| warnings.borrow_mut().drain(..).collect())
+/// Spawn an HTTP server that emits one raw response.
+///
+/// The singular form of [`spawn_http_server_raw_responses`], for the common
+/// case of a test that drives exactly one hop against malformed bytes.
+///
+/// # Errors
+///
+/// Propagates failures while starting the fixture server.
+pub fn spawn_http_server_raw_response(
+    response: RawHttpResponse,
+) -> io::Result<(String, RequestLog, HttpServer)> {
+    spawn_http_server_raw_responses([response])
 }
 
 #[cfg(test)]

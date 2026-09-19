@@ -6,7 +6,8 @@
 //! module.
 
 use super::{
-    AcceptWait, HttpResponse, HttpServerConfig, accept_connection, response::render_response,
+    AcceptWait, HttpResponse, HttpServerConfig, RawHttpResponse, accept_connection,
+    response::render_response,
 };
 
 use std::{
@@ -56,10 +57,7 @@ fn response_server_counts_each_client_request() -> anyhow::Result<()> {
 
 /// Send one minimal HTTP request to the fixture at `url`.
 fn send_request(url: &str) -> anyhow::Result<()> {
-    let address = url
-        .strip_prefix("http://")
-        .ok_or_else(|| anyhow::anyhow!("fixture URL must use HTTP: {url}"))?;
-    let mut stream = TcpStream::connect(address)?;
+    let mut stream = connect_fixture(url)?;
     stream.write_all(b"GET / HTTP/1.1\r\nHost: fixture\r\nConnection: close\r\n\r\n")?;
     let mut response = String::new();
     stream.read_to_string(&mut response)?;
@@ -68,6 +66,21 @@ fn send_request(url: &str) -> anyhow::Result<()> {
         "fixture response should begin with an HTTP status line",
     );
     Ok(())
+}
+
+/// Connect to the loopback address in a fixture `url`.
+///
+/// The raw fixture advertises a URL carrying credentials, which a client must
+/// not send as part of the authority, so they are stripped here. The
+/// structured fixture advertises none, and takes the same path.
+fn connect_fixture(url: &str) -> anyhow::Result<TcpStream> {
+    let authority = url
+        .strip_prefix("http://")
+        .ok_or_else(|| anyhow::anyhow!("fixture URL must use HTTP: {url}"))?;
+    let address = authority
+        .rsplit_once('@')
+        .map_or(authority, |(_userinfo, host)| host);
+    Ok(TcpStream::connect(address)?)
 }
 
 #[test]
@@ -207,6 +220,93 @@ fn expect_no_requests_fixture_waits_past_the_accept_timeout() -> anyhow::Result<
         log.lines(),
     );
     Ok(())
+}
+
+/// A raw response reaches the client byte for byte, framed by a half-close.
+///
+/// This is the fixture contract the redirect error tests rest on, and it is
+/// asserted here rather than only through those tests because the failure it
+/// guards against is silent: a fixture that wrote the bytes and then closed
+/// the socket outright could still pass a client-side test on Linux, while
+/// aborting the connection on Windows. Reading to EOF is what proves the
+/// response was framed — the read terminates on the shutdown, not on a reset —
+/// and the exact-byte comparison is what proves nothing was rewritten in
+/// flight. The raw bytes are deliberately something no real server should
+/// send, because that is the only input the fixture exists to serve.
+#[test]
+fn raw_response_fixture_delivers_the_exact_bytes_it_was_given() -> anyhow::Result<()> {
+    let malformed = b"HTTP/1.1 banana OK\r\nContent-Length: 0\r\n\r\n";
+    let (url, log, server) =
+        super::spawn_http_server_raw_response(RawHttpResponse::new(malformed))?;
+    anyhow::ensure!(
+        url.contains("redirect-user:redirect-secret@"),
+        "the raw fixture URL should carry credentials: {url}",
+    );
+
+    let received = send_request_and_read_to_eof(&url)?;
+    server
+        .join()
+        .map_err(|err| anyhow::anyhow!("fixture server panicked: {err:?}"))?;
+
+    anyhow::ensure!(
+        received == malformed,
+        "the fixture should deliver the bytes it was given, got {:?}",
+        String::from_utf8_lossy(&received),
+    );
+    anyhow::ensure!(
+        log.lines() == vec!["GET / HTTP/1.1".to_owned()],
+        "the raw fixture should record the request it answered: {:?}",
+        log.lines(),
+    );
+    Ok(())
+}
+
+/// The raw fixture tolerates exactly one shutdown failure: the peer's absence.
+///
+/// Pinned as a predicate rather than through a live reset, because the window
+/// between the fixture writing its response and shutting down its write half
+/// cannot be lost on purpose from the test side without a sleep, and a
+/// sleep-based assertion here would reintroduce the very platform-dependent
+/// race this fixture exists to remove. The predicate is the whole of the
+/// decision — which transport outcomes the fixture may absorb silently — so
+/// asserting it directly is asserting the behaviour.
+///
+/// The negative cases matter as much as the positive ones: widening this set
+/// would let a fixture that genuinely failed to frame a response report success,
+/// which is the silent failure the half-close contract guards against.
+#[test]
+fn only_a_departed_peer_is_tolerated_when_framing_a_raw_response() {
+    use std::io::{Error, ErrorKind};
+
+    for kind in [
+        ErrorKind::NotConnected,
+        ErrorKind::ConnectionReset,
+        ErrorKind::ConnectionAborted,
+    ] {
+        assert!(
+            super::server::peer_is_gone(&Error::from(kind)),
+            "{kind:?} is the peer having left, and must not fail the fixture",
+        );
+    }
+
+    for kind in [ErrorKind::BrokenPipe, ErrorKind::TimedOut, ErrorKind::Other] {
+        assert!(
+            !super::server::peer_is_gone(&Error::from(kind)),
+            "{kind:?} is not the peer having left, and must still fail the fixture",
+        );
+    }
+}
+
+/// Send one minimal HTTP request and read the response back to EOF.
+///
+/// Unlike [`send_request`], this returns the bytes rather than asserting a
+/// status line, because the caller is testing responses that have none.
+fn send_request_and_read_to_eof(url: &str) -> anyhow::Result<Vec<u8>> {
+    let mut stream = connect_fixture(url)?;
+    stream.write_all(b"GET / HTTP/1.1\r\nHost: fixture\r\nConnection: close\r\n\r\n")?;
+    let mut received = Vec::new();
+    stream.read_to_end(&mut received)?;
+    Ok(received)
 }
 
 /// The no-request fixture still records a request it receives.

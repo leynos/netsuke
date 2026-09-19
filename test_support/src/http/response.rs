@@ -1,4 +1,9 @@
 //! HTTP response shapes emitted by the local test fixture.
+//!
+//! Two shapes are emitted. [`HttpResponse`] describes a valid structured
+//! response, which is what most fixtures want; [`RawHttpResponse`] carries the
+//! bytes themselves, for tests about what a client does when the bytes on the
+//! wire are not a response any server should send.
 
 use std::{io, io::Write, net::TcpStream};
 
@@ -32,6 +37,36 @@ impl HttpResponse {
     }
 }
 
+/// Describe one response emitted by the local HTTP fixture as raw bytes.
+///
+/// [`HttpResponse`] is the fixture's normal shape: it renders a valid
+/// response, so every field it accepts is one a real server could send. A test
+/// about what a client does when the bytes on the wire are *not* valid — a
+/// status line no client can parse, a truncated header block — cannot be
+/// expressed that way, because the constructor refuses the very input the test
+/// needs. This type carries the bytes instead, and imposes nothing on them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RawHttpResponse {
+    /// Bytes written to the client verbatim, in this order.
+    bytes: Vec<u8>,
+}
+
+impl RawHttpResponse {
+    /// Create a response that writes `bytes` to the client verbatim.
+    #[must_use]
+    pub fn new(bytes: impl Into<Vec<u8>>) -> Self {
+        Self {
+            bytes: bytes.into(),
+        }
+    }
+
+    /// Return the bytes this response writes to the client.
+    #[must_use]
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+}
+
 /// Write `response` to `stream` as a complete HTTP/1.1 response.
 ///
 /// # Errors
@@ -57,6 +92,18 @@ pub(super) fn render_response(response: &HttpResponse) -> String {
         response.body.len(),
         response.body
     )
+}
+
+/// Write `response`'s bytes to `stream` verbatim.
+///
+/// # Errors
+///
+/// Returns an error when the bytes cannot be written to the stream.
+pub(super) fn write_raw_response(
+    stream: &mut TcpStream,
+    response: &RawHttpResponse,
+) -> io::Result<()> {
+    stream.write_all(&response.bytes)
 }
 
 /// Return the standard reason phrase for fixture status codes.
