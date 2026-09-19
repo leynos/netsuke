@@ -234,7 +234,7 @@ impl<'a> Series<'a> {
 
     /// Whether `entry` is this series.
     fn matches(&self, entry: &SnapshotEntry) -> bool {
-        if !self.is_resolution_counter(entry) {
+        if !Self::is_resolution_counter(entry) {
             return false;
         }
         let labels = LabelSet::of(entry);
@@ -249,8 +249,10 @@ impl<'a> Series<'a> {
     ///
     /// A success and a failure series differ only in their labels, so this is
     /// what keeps a case from matching some other metric's counter that
-    /// happened to carry the labels it expected.
-    fn is_resolution_counter(&self, entry: &SnapshotEntry) -> bool {
+    /// happened to carry the labels it expected. The question is about the
+    /// entry rather than about any expectation, so it is an associated
+    /// function: there is nothing on `self` for it to read.
+    fn is_resolution_counter(entry: &SnapshotEntry) -> bool {
         entry.0.kind() == MetricKind::Counter && entry.0.key().name() == WHICH_RESOLUTION_TOTAL
     }
 
