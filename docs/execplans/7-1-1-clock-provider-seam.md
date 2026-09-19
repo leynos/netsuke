@@ -2514,6 +2514,26 @@ To be populated during implementation. Required entries:
     the split the merged file is 387 lines, and `make check-fmt`, `make lint`,
     and `make typecheck` were all green at `f994800c` over the committed bytes.
 
+18. A gate must be reproduced with the gate's *own* invocation. While rewriting
+    this plan, `mdtablefix --in-place <file>` was run without the flag set the
+    Makefile passes, and the result was pushed; `make check-fmt` then failed in
+    both `build-test` and `Windows / lint-windows` with
+
+    ```plaintext
+    docs/execplans/7-1-1-clock-provider-seam.md +41 -42
+    1 file would be reformatted, 141 files left unchanged.
+    ```
+
+    `mdtablefix`'s wrap width depends on `--wrap` being present, so the bare
+    form rewraps to a different column than CI enforces, and a local
+    `mdtablefix --check <file>` — also bare — reports the file as already
+    canonical when the CI invocation does not. The tell was that `--check
+    --git --include-untracked --wrap --renumber --breaks --ellipsis --fences`
+    disagreed with the plain `--check <file>` over the same bytes; the fix is
+    to copy the command out of `Makefile:314` rather than reconstruct it from
+    memory. This is the same class of error as the stale-evidence lesson
+    recorded below: a green reading that was never the reading the gate takes.
+
 One lesson about evidence discipline, recorded because it cost a re-run: gate
 logs are named per branch, so a second run over the same branch silently
 overwrites the first run's transcript. Evidence is only as fresh as the HEAD it
