@@ -8,8 +8,8 @@
 //! line of code. An attribute is then recognized only where a line begins with
 //! one, so prose that quotes the attribute — the developers' guide, a mutation
 //! record, a snapshot of a diagnostic — is not a finding. Finally the attribute
-//! is read to its matching parenthesis, so one `rustfmt` has wrapped across
-//! several lines is read whole rather than truncated.
+//! is read to its matching parenthesis, so one that `rustfmt` has wrapped
+//! across several lines is read whole rather than truncated.
 //!
 //! An `allow` nested in a `cfg_attr` is read too. It is the same suppression
 //! written one token differently, and `clippy::allow_attributes` does not fire
@@ -68,7 +68,7 @@ fn marker(trimmed: &str) -> Option<(&str, &'static str, AttributeKind)> {
 
 /// Read the parenthesized body of the attribute whose `(` sits at `open`.
 ///
-/// Scanning tracks parenthesis depth so an attribute `rustfmt` has wrapped
+/// Scanning tracks parenthesis depth so an attribute that `rustfmt` has wrapped
 /// across several lines is read whole. Parentheses inside a double-quoted
 /// string are stepped over, and a backslash escape is honoured, so a `)` inside
 /// a `reason` string does not end the scan early. Both are already unreachable
