@@ -64,10 +64,12 @@ output and some leaf files so the long-lived structure remains visible.
   follow [the localization glossary](localization-glossary.md) and are exempt
   from the en-GB-oxendict spelling gate via `typos.local.toml`.
 - `.cargo/`: Cargo configuration Cargo auto-discovers, holding the repository's
-  build standard: the codegen backend each profile selects and the `rustflags`
-  every build takes. It reaches release and coverage builds too, so a setting
-  that is only safe for the development loop does not belong here; see
-  [developers' guide](developers-guide.md).
+  build standard: the `rustflags` every build takes — the parallel `rustc`
+  frontend, plus the `mold` linker under a Linux-only `cfg` table. It names no
+  codegen backend, and a contract refuses one. Because it reaches release and
+  coverage builds too, those two shapes are excluded by assigning `RUSTFLAGS`
+  at the point they run; a setting that is only safe for the development loop
+  does not belong here. See [developers' guide](developers-guide.md).
 - `.github/actions/`: Reusable GitHub Actions used by workflow definitions.
 - `.github/workflows/`: Continuous Integration (CI), release, packaging, and
   repository automation workflows.

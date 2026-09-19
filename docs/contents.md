@@ -170,6 +170,10 @@ operator, user, and contributor references are easier to find.
 - [ADR-026](adr-026-manifest-environment-access-policy.md):
   Exact-name manifest environment policy evaluated before the reader, with
   project allow entries quarantined below the operator ceiling.
+- [ADR-029](adr-029-mold-and-parallel-frontend-as-build-defaults.md):
+  `mold` and the parallel `rustc` front end as the committed default build,
+  with the release and coverage exclusions, the Cranelift refusal, and the
+  toolchain-versus-tools boundary.
 
 ## Proposals
 

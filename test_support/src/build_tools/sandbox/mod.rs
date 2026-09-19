@@ -309,57 +309,7 @@ pub fn combined(output: &Output) -> String {
     )
 }
 
-/// Read a `tools/` version pin, so tests agree with the repository rather than
-/// hard-coding a value that drifts on the next bump.
-fn read_pin(path: &str) -> Result<String> {
-    Ok(fs::read_to_string(path)
-        .with_context(|| format!("read {path}"))?
-        .trim()
-        .to_owned())
-}
-
-/// The committed Cargo configuration's path, relative to the repository root.
-///
-/// Cargo auto-discovers this file, which is what makes the build standard the
-/// default rather than something a target has to opt into.
-pub const CARGO_CONFIG_PATH: &str = ".cargo/config.toml";
-
-/// The committed Cargo configuration's contents, so a test can assert on what
-/// every build actually applies rather than only on a recipe's command line.
-///
-/// # Errors
-///
-/// Returns an error if the checked-in Cargo configuration cannot be read.
-pub fn cargo_config() -> Result<String> {
-    fs::read_to_string(CARGO_CONFIG_PATH).with_context(|| format!("read {CARGO_CONFIG_PATH}"))
-}
-
-/// The repository's pinned mold release tag.
-///
-/// # Errors
-///
-/// Returns an error if the pinned Mold version cannot be read.
-pub fn pinned_mold_version() -> Result<String> {
-    read_pin("tools/mold/VERSION")
-}
-
-/// The repository's toolchain, read from `rust-toolchain.toml`.
-///
-/// the build standard deliberately shares it rather than pinning a second nightly, so the
-/// accelerated loop and the gates borrow-check identically; the pinned nightly
-/// is what enables Polonius.
-///
-/// # Errors
-///
-/// Returns an error if the pinned Rust toolchain cannot be read.
-pub fn pinned_toolchain() -> Result<String> {
-    let contents = read_pin("rust-toolchain.toml")?;
-    contents
-        .lines()
-        .find_map(|line| {
-            let rest = line.trim().strip_prefix("channel")?;
-            let value = rest.trim_start().strip_prefix('=')?;
-            Some(value.trim().trim_matches('"').to_owned())
-        })
-        .context("rust-toolchain.toml should declare a channel")
-}
+mod pins;
+pub use pins::{
+    CARGO_CONFIG_PATH, cargo_config, pinned_mold_version, pinned_toolchain, standard_flags,
+};

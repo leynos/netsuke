@@ -7,21 +7,30 @@ uninstrumented one would have been, so these checks pin its flags, pin the
 doctest pass that `cargo llvm-cov nextest` cannot perform, and reject a second
 Linux job quietly reintroducing `cargo nextest` or `cargo test`.
 
+The Makefile reading those checks lean on lives in ``makefile_recipes.py``, so
+this module states the coverage contract and that one owns the file access.
+
 Run via ``make test-workflow-contracts``.
 """
 
 import re
+import typing as typ
 
+import makefile_recipes
 import pytest
 from cache_contract_data import WORKFLOW_DIR
+from makefile_recipes import load_makefile, makefile_recipe
+from makefile_variables import expand_makefile_variables, makefile_definitions
 from workflow_loading import (
-    MAKEFILE_PATH,
     job_steps,
     load_workflow,
     named_step,
     require_mapping,
     workflow_job,
 )
+
+if typ.TYPE_CHECKING:
+    from pathlib import Path
 
 #: Inputs that make the coverage run as broad as `make test` was. Without
 #: `all-features` the `legacy-digests` tests in `src/stdlib/path/hash_utils.rs`
@@ -60,63 +69,63 @@ FORBIDDEN_TEST_COMMANDS = (
 )
 
 
-def _expand_makefile_variables(text: str) -> str:
-    """Substitute one level of ``$(NAME)`` references from the Makefile.
+def test_definitions_are_substituted_one_level_and_unknown_names_left_alone() -> None:
+    """Check the pure expansion against supplied definitions, with no file read.
 
-    The gate recipes compose their flags through a shared variable rather than
-    spelling them out, so a contract reading the recipe text alone would report
-    the warning policy as absent when it is merely named indirectly. One level
-    is enough for the recipes here and keeps the substitution obvious; a
-    reference the Makefile does not define is left as written, so a typo shows
-    up as a failed assertion rather than as a silent empty expansion.
-
-    Returns
-    -------
-    str
-        ``text`` with each defined ``$(NAME)`` replaced by its value.
+    The helper is deliberately a plain substitution so that its behaviour can
+    be pinned here, and so a recipe's flag is never asserted against a value
+    that came from somewhere the test did not name.
     """
-    makefile = MAKEFILE_PATH.read_text(encoding="utf-8")
-    definitions = dict(
-        re.findall(r"^([A-Z][A-Z0-9_]*) \??= (.*)$", makefile, flags=re.MULTILINE)
+    definitions = {"GATE_RUSTFLAGS": 'RUSTFLAGS="$(RUSTFLAGS:+$RUSTFLAGS )-D warnings"'}
+    text = "$(GATE_RUSTFLAGS) $(CARGO) nextest run $(UNDEFINED)"
+
+    expanded = expand_makefile_variables(text, definitions)
+
+    assert expanded == (
+        'RUSTFLAGS="$(RUSTFLAGS:+$RUSTFLAGS )-D warnings" '
+        "$(CARGO) nextest run $(UNDEFINED)"
+    ), "one level only: nested references survive for the shell or Make to resolve"
+    assert expand_makefile_variables("nothing to do", {}) == "nothing to do", (
+        "text naming no variable must pass through untouched"
     )
-    return re.sub(
-        r"\$\(([A-Z][A-Z0-9_]*)\)",
-        lambda match: definitions.get(match.group(1), match.group(0)),
-        text,
-    )
+    assert makefile_definitions("FOO ?= bar\nBAZ = qux\nnot a definition\n") == {
+        "FOO": "bar",
+        "BAZ": "qux",
+    }, "both assignment spellings count, and prose does not"
 
 
-def _makefile_recipe(target: str) -> str:
-    """Return the recipe lines of a Makefile target.
+def test_the_loader_reports_an_unreadable_makefile_with_its_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Fail the loader test, not the assertion, when the Makefile is unreadable.
 
-    Parameters
-    ----------
-    target
-        Makefile target whose recipe is wanted.
+    The pure helpers take text, so the fallible read is the whole of the
+    boundary, and this is where it owes the caller a diagnosis. A missing file
+    and undecodable bytes are the two ways in; the second is the one worth
+    driving, because it is what a UTF-8 read of a file written by a non-UTF-8
+    editor looks like.
 
-    Returns
-    -------
-    str
-        The recipe's lines, joined by newlines.
+    Both readers are driven, not just :func:`load_makefile`: the recipe reader
+    reaches the same path, and a contract that only exercised the loader would
+    report the recipe reader's own read as covered while it failed with a bare
+    ``OSError`` beside an assertion about a gate's flags.
     """
-    lines = MAKEFILE_PATH.read_text(encoding="utf-8").splitlines()
-    start = next(
-        (
-            index
-            for index, line in enumerate(lines)
-            if line.startswith(f"{target}:") or line.startswith(f"{target} ")
-        ),
-        None,
-    )
-    if start is None:
-        pytest.fail(f"the Makefile must declare a {target!r} target")
-    recipe: list[str] = []
-    for line in lines[start + 1 :]:
-        if line.startswith("\t"):
-            recipe.append(line)
-        elif line.strip():
-            break
-    return "\n".join(recipe)
+    # Patch the reader's own module: that is where the path is looked up, and a
+    # patch against this module's namespace would silently do nothing.
+    broken = tmp_path / "Makefile"
+    broken.write_bytes(b"\xff\xfe not utf-8")
+    monkeypatch.setattr(makefile_recipes, "MAKEFILE_PATH", broken)
+    with pytest.raises(pytest.fail.Exception, match="could not read"):
+        load_makefile()
+    with pytest.raises(pytest.fail.Exception, match="could not read"):
+        makefile_recipe("test-nextest")
+
+    missing = tmp_path / "absent" / "Makefile"
+    monkeypatch.setattr(makefile_recipes, "MAKEFILE_PATH", missing)
+    with pytest.raises(pytest.fail.Exception, match="could not read"):
+        load_makefile()
+    with pytest.raises(pytest.fail.Exception, match="could not read"):
+        makefile_recipe("test-nextest")
 
 
 @pytest.mark.parametrize(
@@ -183,14 +192,15 @@ def test_the_local_test_target_still_runs_both_passes() -> None:
     `make test`, so the target must still compose both passes with the same
     breadth.
     """
-    makefile = MAKEFILE_PATH.read_text(encoding="utf-8")
+    makefile = load_makefile()
     assert "test: test-nextest doctest" in makefile, (
         "`make test` must compose the nextest and doctest passes"
     )
-    nextest = _expand_makefile_variables(_makefile_recipe("test-nextest"))
+    definitions = makefile_definitions(makefile)
+    nextest = expand_makefile_variables(makefile_recipe("test-nextest"), definitions)
     for flag in ("--workspace", "--all-targets", "--all-features"):
         assert flag in nextest, f"the local nextest pass must pass {flag}"
-    doctest = _expand_makefile_variables(_makefile_recipe("doctest"))
+    doctest = expand_makefile_variables(makefile_recipe("doctest"), definitions)
     for flag in ("--workspace", "--doc", "--all-features"):
         assert flag in doctest, f"the local doctest pass must pass {flag}"
     for recipe, label in ((nextest, "nextest"), (doctest, "doctest")):

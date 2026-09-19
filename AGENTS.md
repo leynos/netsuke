@@ -190,7 +190,7 @@ directive anywhere.
     CI-pinned version. `--git --include-untracked` selects the tracked and
     untracked Markdown files Git does not ignore, and `--check` exits `1` when
     any of them would be reformatted.
-  - `make lint` executes:
+  - On Linux, `make lint` executes:
 
     ```sh
     RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold" \
@@ -202,10 +202,14 @@ directive anywhere.
     actionlint
     ```
 
-    The Makefile composes that `RUSTFLAGS` value from one variable, and the
-    linker flag is dropped on non-Linux hosts. The flags are restated there
-    rather than left to `.cargo/config.toml` because an assigned `RUSTFLAGS`
-    replaces every `rustflags` table in that file; see *Build standard* below.
+    The Makefile composes that `RUSTFLAGS` value from one variable.
+    `-Clink-arg=-fuse-ld=mold` is Linux-only, so every sample in this section
+    drops it elsewhere — macOS and Windows use their platform linker and the
+    value ends `-D warnings -Zthreads=8`. Only that one flag is platform-gated;
+    `-Zthreads=8` and `-D warnings` apply everywhere. The flags are restated in
+    the Makefile rather than left to `.cargo/config.toml` because an assigned
+    `RUSTFLAGS` replaces every `rustflags` table in that file; see *Build
+    standard* below.
 
     linting every target with all features enabled, denying all Clippy
     warnings, running the Whitaker Dylint suite (see
@@ -231,7 +235,7 @@ directive anywhere.
     otherwise `$HOME/go/bin`; override `GO_BIN` to point at a different
     directory, or pass `ACTIONLINT=/path/to/actionlint` to name the binary
     directly, as CI does.
-  - `make test` executes:
+  - On Linux, `make test` executes:
 
     ```sh
     RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold" \
@@ -239,6 +243,9 @@ directive anywhere.
     RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold" \
     cargo test --workspace --doc --all-features
     ```
+
+    The platform caveat stated under `make lint` applies unchanged: the linker
+    flag is Linux-only and the rest of the value is not.
 
     running every unit, integration, and behavioural test through
     [cargo-nextest](https://nexte.st/), then the doctests separately because

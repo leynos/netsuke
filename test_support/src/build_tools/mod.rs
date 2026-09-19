@@ -35,8 +35,8 @@ mod scenario;
 mod staging;
 
 pub use bench::{
-    BASELINE_MTIME, BENCH_SLUGS, BenchFixture, DEFAULT_SLUG, MOLD_SLUG, MOLD_THREADS_SLUG,
-    write_with_old_mtime,
+    BASELINE_MTIME, BENCH_REPEATS, BENCH_SLUGS, BenchFixture, DEFAULT_SLUG, MOLD_SLUG,
+    MOLD_THREADS_SLUG, write_with_old_mtime,
 };
 pub use cargo_log::{CargoInvocation, RecordingCargo, TargetState};
 pub use make::MakeInvocation;
@@ -56,7 +56,7 @@ pub use release::FakeRelease;
 pub use sandbox::real_utility_with_env;
 pub use sandbox::{
     CARGO_CONFIG_PATH, PinOverrides, Sandbox, cargo_config, combined, pinned_mold_version,
-    pinned_toolchain, real_utility,
+    pinned_toolchain, real_utility, standard_flags,
 };
 pub use scenario::{
     BuildScenario, InstallerFixture, InstallerScenario, TEST_MOLD_VERSION, WRONG_SHA256,

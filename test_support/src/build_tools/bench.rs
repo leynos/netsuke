@@ -24,8 +24,21 @@ pub const DEFAULT_SLUG: &str = "default";
 pub const MOLD_SLUG: &str = "mold";
 /// Target-directory slug for the default plus the parallel `rustc` frontend.
 pub const MOLD_THREADS_SLUG: &str = "mold-threads";
-/// Every variant slug, in the order the benchmark measures them.
+/// Every variant slug the benchmark can measure.
+///
+/// Unordered, and deliberately so: the benchmark shuffles the variants afresh
+/// for each sample, because separate target directories isolate build artefacts
+/// but not shared host state. Position here means nothing.
 pub const BENCH_SLUGS: [&str; 3] = [DEFAULT_SLUG, MOLD_SLUG, MOLD_THREADS_SLUG];
+
+/// How many times the benchmark measures each variant unless `BENCH_REPEATS`
+/// overrides it.
+///
+/// Mirrored here so the tests can assert on the default run's shape without
+/// restating the number in two places. A run that overrides the variable
+/// measures more, never fewer, so an assertion built on this is a floor rather
+/// than an equality — see the count check in the benchmark’s own tests.
+pub const BENCH_REPEATS: usize = 2;
 
 /// Create the touch file with [`BASELINE_MTIME`], returning that timestamp.
 ///

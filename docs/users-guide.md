@@ -98,6 +98,26 @@ cd netsuke
 cargo install --path .
 ```
 
+That command runs inside the checkout, so it inherits the repository's build
+standard: the parallel `rustc` frontend, and on Linux the `mold` linker. A
+`cargo install --path .` therefore needs the same two prerequisites as
+`make build`:
+
+- the pinned nightly from `rust-toolchain.toml`, which `rustup` provisions
+  automatically because the file is present;
+- `mold`, on Linux only, reachable through `PATH` or gcc's own search
+  directories. `make install-build-tools` installs the pinned release; a
+  distribution `mold` also works for a local install, though the development
+  gates additionally check the version against `tools/mold/VERSION`.
+
+The linker is named explicitly rather than left to gcc's default, so a Linux
+host without `mold` fails the link rather than quietly falling back. Build on
+macOS or Windows, or remove `.cargo/config.toml` before installing, if you want
+the platform linker instead. A registry install —
+`cargo install netsuke-build` — builds from packaged source, where neither the
+configuration file nor `rust-toolchain.toml` applies, so it needs neither
+prerequisite; see the crates.io command earlier in this section.
+
 ### Complete Windows setup
 
 The MSI does not add its installation directory to `PATH`. Add it to the

@@ -11,7 +11,8 @@
 use anyhow::{Result, ensure};
 use rstest::rstest;
 use test_support::build_tools::{
-    PinOverrides, Sandbox, combined, pinned_mold_version, pinned_toolchain,
+    MakeInvocation, PinOverrides, RecordingCargo, Sandbox, combined, pinned_mold_version,
+    pinned_toolchain,
 };
 
 /// A sandbox with everything present and matching the pins.
@@ -229,19 +230,42 @@ fn unusable_prerequisites_fail_with_an_actionable_message(#[case] case: FailureC
     Ok(())
 }
 
-/// The build and gate targets depend on the check, so a missing prerequisite
-/// must stop them before Cargo is invoked.
+/// The build, gate, and benchmark targets depend on the check, so a missing
+/// prerequisite must stop them before anything is invoked.
+///
+/// Two binaries are probed, not one, because they fail to different edits.
+/// Cargo is what a benchmarking run is made of, so a `bench-build` that reached
+/// it would report times for a tree compiled without the standard — the exact
+/// comparison the benchmark exists to make. `whitaker` is a separate binary
+/// again: a `lint-whitaker` that ran it anyway would publish Dylint's verdict
+/// on a differently compiled tree. Neither is reachable in the sandbox except
+/// through the recipe, so a marker from either is proof that it ran.
+///
+/// Both are installed rather than left absent. Inferring "it did not run" from
+/// an empty `PATH` would also hold for a recipe that invoked the binary and
+/// swallowed the failure, which is a different and much worse bug.
 #[rstest]
 #[case("build")]
 #[case("test-nextest")]
 #[case("lint-clippy")]
+#[case("lint-whitaker")]
 #[case("typecheck")]
+#[case("bench-build")]
 fn build_targets_stop_when_the_check_fails(#[case] target: &str) -> Result<()> {
     let sandbox = Sandbox::new()?;
     sandbox.write_rustup(&pinned_toolchain()?)?;
-    // No mold anywhere, and no cargo in the sandbox either: if the recipe ran,
-    // the failure would name cargo rather than the capability check.
-    let output = sandbox.make(target)?;
+    // No mold anywhere, which is the only fault; everything else the recipes
+    // need is present and recording.
+    let cargo = RecordingCargo::install(&sandbox)?;
+    let whitaker_marker = sandbox.home().join("whitaker-ran");
+    sandbox.write_fake(
+        &sandbox.bin(),
+        "whitaker",
+        &format!(": > '{whitaker_marker}'"),
+    )?;
+
+    let invocation = MakeInvocation::new(target).variable("CARGO", cargo.executable());
+    let output = sandbox.run_make(&invocation)?;
     let text = combined(&output);
 
     ensure!(
@@ -251,6 +275,16 @@ fn build_targets_stop_when_the_check_fails(#[case] target: &str) -> Result<()> {
     ensure!(
         text.contains("mold not found on PATH"),
         "`{target}` should fail in the capability check, got `{text}`"
+    );
+    let recorded = cargo.invocations()?;
+    ensure!(
+        recorded.is_empty(),
+        "`{target}` should not reach Cargo, recorded {} invocation(s)",
+        recorded.len()
+    );
+    ensure!(
+        !whitaker_marker.as_std_path().exists(),
+        "`{target}` should not reach whitaker"
     );
     Ok(())
 }
