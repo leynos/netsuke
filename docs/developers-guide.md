@@ -3604,7 +3604,7 @@ the duration parse that reads them. Its accessors are `pub(super)`, so the
 fixture's own loops can ask it for a deadline or a poll interval while nothing
 outside the fixture can configure one. `config_tests.rs` is its `#[path]`
 child, declared here beside the code it covers. `raw_tests.rs` is declared by
-`mod.rs` instead, because it covers both response paths rather than a single
+`mod.rs` instead because it covers both response paths rather than a single
 sibling module.
 
 ### `src/ir/cmd_interpolate_property_support.rs`
