@@ -17,12 +17,15 @@ use std::{
 };
 
 mod accept;
+mod raw;
 mod request;
 mod response;
 mod server;
 
 use self::accept::{AcceptWait, accept_connection};
+pub use self::raw::RawHttpResponse;
 pub use self::request::RequestLog;
+use self::response::FixtureResponse;
 pub use self::response::HttpResponse;
 use self::server::{FixtureLedger, run_http_server};
 
@@ -279,16 +282,50 @@ pub fn spawn_http_server_expecting_no_requests(
     Ok((url, log, server))
 }
 
+/// Spawn a single-use HTTP server that returns raw bytes for the first request.
+///
+/// The payload is emitted verbatim and the response is completed with the same
+/// write-side shutdown every other fixture uses, so a test of a client's parse
+/// failures sees the bytes it wrote rather than a connection the fixture's own
+/// teardown aborted. Use this instead of standing a bare listener in a test: a
+/// listener that closes without that shutdown races the client, and on Windows
+/// the client then reports an aborted connection in place of the fault the
+/// payload was written to provoke.
+///
+/// The fixture still reads a complete request before it answers, so the client's
+/// request bytes are consumed rather than left to force a reset. The request
+/// counter is returned so a case can assert the malformed response was actually
+/// solicited.
+///
+/// # Configuration
+/// Timeouts are loaded from the environment via
+/// [`HttpServerConfig::from_env`], as for [`spawn_http_server`].
+///
+/// # Errors
+/// Propagates failures while starting the fixture server.
+pub fn spawn_raw_http_server(
+    response: RawHttpResponse,
+) -> io::Result<(String, Arc<AtomicUsize>, HttpServer)> {
+    let (url, requests, _log, server) =
+        spawn_fixture_server([response], HttpServerConfig::from_env())?;
+    Ok((url, requests, server))
+}
+
 /// Spawn an HTTP server using `config`, emitting responses in sequence.
 ///
 /// Returns the bound URL, the shared request count, the request log, and the
 /// server handle. The public wrappers above reshape this tuple for their
-/// callers, so every fixture shares one server implementation.
+/// callers, so every fixture shares one server implementation, and the responses
+/// are stored behind [`FixtureResponse`] so a wrapper may configure either a
+/// checked rendering or a raw payload without a second implementation.
 fn spawn_fixture_server(
-    responses: impl IntoIterator<Item = HttpResponse>,
+    responses: impl IntoIterator<Item = impl FixtureResponse + 'static>,
     config: HttpServerConfig,
 ) -> io::Result<(String, Arc<AtomicUsize>, RequestLog, HttpServer)> {
-    let response_sequence = responses.into_iter().collect::<Vec<_>>();
+    let response_sequence = responses
+        .into_iter()
+        .map(|response| Box::new(response) as Box<dyn FixtureResponse + Send>)
+        .collect::<Vec<_>>();
     let listener = TcpListener::bind(("127.0.0.1", 0))?;
     listener.set_nonblocking(true)?;
     let addr = listener.local_addr()?;
@@ -374,5 +411,8 @@ fn take_duration_warnings() -> Vec<String> {
 
 #[cfg(test)]
 mod config_tests;
+#[cfg(test)]
+#[path = "raw_tests.rs"]
+mod raw_tests;
 #[cfg(test)]
 mod tests;

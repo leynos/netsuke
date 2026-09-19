@@ -1,8 +1,50 @@
 //! HTTP response shapes emitted by the local test fixture.
+//!
+//! [`HttpResponse`] is the checked payload: it renders a well-formed response
+//! from a status, headers, and a body, and is what most fixtures need. A test of
+//! a client's parse failures wants bytes no client accepts, which this type
+//! deliberately cannot express; that payload lives in
+//! [`raw`](super::raw) instead.
 
-use std::{io, io::Write, net::TcpStream};
+use std::{io, net::TcpStream};
+
+use super::raw::{FinishResponse, RawHttpResponse, finish_response};
+
+/// One payload the fixture can serve, checked or raw.
+///
+/// The server stores its configured responses behind this trait so that a
+/// sequence mixing a checked rendering with deliberately malformed bytes needs
+/// no second server implementation. The sequence moves to the fixture thread, so
+/// the trait is `Send`; it is crate-private and sealed in practice, since only
+/// [`HttpResponse`] and [`RawHttpResponse`] implement it.
+pub(super) trait FixtureResponse: Send {
+    /// Write this payload to `stream` and complete the response.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the payload cannot be written or its write-side
+    /// shutdown fails.
+    fn write_to(&self, stream: &mut TcpStream) -> io::Result<()>;
+}
+
+impl FixtureResponse for HttpResponse {
+    fn write_to(&self, stream: &mut TcpStream) -> io::Result<()> {
+        finish_response(stream, self)
+    }
+}
+
+impl FixtureResponse for RawHttpResponse {
+    fn write_to(&self, stream: &mut TcpStream) -> io::Result<()> {
+        finish_response(stream, self)
+    }
+}
 
 /// Describe one response emitted by the local HTTP fixture.
+///
+/// Every instance renders as a well-formed HTTP/1.1 response. A case that needs
+/// bytes the client is meant to reject uses
+/// [`RawHttpResponse`](super::RawHttpResponse) instead of trying to express them
+/// here, so this type's guarantee holds by construction.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HttpResponse {
     /// HTTP status code returned to the client.
@@ -32,13 +74,11 @@ impl HttpResponse {
     }
 }
 
-/// Write `response` to `stream` as a complete HTTP/1.1 response.
-///
-/// # Errors
-///
-/// Returns an error when the response cannot be written to the stream.
-pub(super) fn write_response(stream: &mut TcpStream, response: &HttpResponse) -> io::Result<()> {
-    stream.write_all(render_response(response).as_bytes())
+impl FinishResponse for HttpResponse {
+    /// Append the checked response rendered as a complete HTTP/1.1 response.
+    fn append_to(&self, bytes: &mut Vec<u8>) {
+        bytes.extend_from_slice(render_response(self).as_bytes());
+    }
 }
 
 /// Render `response` as a complete HTTP/1.1 response.

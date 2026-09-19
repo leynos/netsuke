@@ -6,8 +6,8 @@ use std::{
 };
 
 use super::{
-    HttpResponse, HttpServerConfig, RequestLog, accept_connection, request::read_request_line,
-    response,
+    HttpServerConfig, RequestLog, accept_connection, request::read_request_line,
+    response::FixtureResponse,
 };
 
 /// What one fixture run records about the requests it answers, and the state it
@@ -55,12 +55,14 @@ enum FixtureProgress {
 /// Serve the configured responses in request order until one is not requested.
 pub(super) fn run_http_server(
     listener: &TcpListener,
-    responses: &[HttpResponse],
+    responses: &[Box<dyn FixtureResponse + Send>],
     config: &HttpServerConfig,
     ledger: &FixtureLedger<'_>,
 ) {
     for response in responses {
-        if serve_fixture_response(listener, response, config, ledger) == FixtureProgress::Shutdown {
+        if serve_fixture_response(listener, response.as_ref(), config, ledger)
+            == FixtureProgress::Shutdown
+        {
             return;
         }
     }
@@ -79,7 +81,7 @@ pub(super) fn run_http_server(
 #[must_use]
 fn serve_fixture_response(
     listener: &TcpListener,
-    response: &HttpResponse,
+    response: &dyn FixtureResponse,
     config: &HttpServerConfig,
     ledger: &FixtureLedger<'_>,
 ) -> FixtureProgress {
@@ -126,12 +128,15 @@ fn configure_fixture_stream(stream: &TcpStream) {
 }
 
 /// Write one configured response to a fixture client stream.
+///
+/// Both the checked and the raw payload complete through the same contract, so
+/// the response is followed by a write-side shutdown whichever was configured.
 #[expect(
     clippy::panic,
     reason = "test HTTP helper should fail fast when response writing fails"
 )]
-fn write_fixture_response(stream: &mut TcpStream, response: &HttpResponse) {
-    if let Err(err) = response::write_response(stream, response) {
+fn write_fixture_response(stream: &mut TcpStream, response: &dyn FixtureResponse) {
+    if let Err(err) = response.write_to(stream) {
         panic!("failed to write fixture response: {err}");
     }
 }
