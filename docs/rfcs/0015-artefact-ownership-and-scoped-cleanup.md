@@ -50,11 +50,11 @@ actions:
       clean_owned: [build-output]
 ```
 
-`path` names exactly one workspace-relative object. `kind` is `file` by default;
-recursive ownership requires explicit `directory`. A directory declaration
-claims the entire subtree, including existing and subsequently created children.
-The preview must say this plainly. It is unsuitable for a directory shared with
-source files or another owner's mutable state.
+`path` names exactly one workspace-relative object. `kind` is `file` by
+default; recursive ownership requires explicit `directory`. A directory
+declaration claims the entire subtree, including existing and subsequently
+created children. The preview must say this plainly. It is unsuitable for a
+directory shared with source files or another owner's mutable state.
 
 A producer can identify a report without changing whether the action runs:
 
@@ -95,20 +95,22 @@ version; declare one or use disjoint exact files.
 
 A `produces` reference identifies one producer. Reject multiple producers for
 the same artefact unless an existing explicit target contract already supplies
-one shared producer. An explicit artefact may refer to an existing target output
-only when both identify that same producer and compatible object type. It
-augments metadata; it must not create a second Ninja producer edge.
+one shared producer. An explicit artefact may refer to an existing target
+output only when both identify that same producer and compatible object type.
+It augments metadata; it must not create a second Ninja producer edge.
 
 Verify declared required outputs after successful production. Missing outputs
 are producer failures, not success. Failure may leave partial owned outputs;
-record the failure but retain those outputs for inspection and explicit cleanup.
-Do not automatically remove them or reuse them as successful build evidence.
+record the failure but retain those outputs for inspection and explicit
+cleanup. Do not automatically remove them or reuse them as successful build
+evidence.
 
 Declarations without a producer remain useful for externally generated,
-explicitly disposable paths. Inspection must distinguish declared ownership from
-observed successful production. Neither status attests that the author chose a
-safe directory. No producer receipt is required merely to remove a declared
-legacy build directory, but declaration, bounded preview, and authorization are.
+explicitly disposable paths. Inspection must distinguish declared ownership
+from observed successful production. Neither status attests that the author
+chose a safe directory. No producer receipt is required merely to remove a
+declared legacy build directory, but declaration, bounded preview, and
+authorization are.
 
 This does not introduce remote artefact delivery, a content-addressed store, or
 a provenance attestation system. Roadmap phase 5 retains its delivery boundary.
@@ -120,11 +122,11 @@ command union. The list is nonempty, order-insensitive after name resolution,
 and duplicate references normalize to one selection. Unknown references fail.
 The operation may name artefacts only; it never accepts raw shell paths.
 
-Extend the existing `clean` command with repeatable `--artefact NAME` selection.
-Register the extension in canonical CLI metadata before implementing it. Without
-that option, preserve existing Ninja-output cleanup. With explicit artefact
-selection, clean only the selected ownership roots; do not implicitly add every
-Ninja output, environment, cache, or runtime directory.
+Extend the existing `clean` command with repeatable `--artefact NAME`
+selection. Register the extension in canonical CLI metadata before implementing
+it. Without that option, preserve existing Ninja-output cleanup. With explicit
+artefact selection, clean only the selected ownership roots; do not implicitly
+add every Ninja output, environment, cache, or runtime directory.
 
 These proposed commands demonstrate preview and explicit noninteractive consent:
 
@@ -136,16 +138,16 @@ netsuke clean --artefact build-output --force --no-input
 Both command and recipe forms use the same planner, validator, deleter, and
 structured results. Use the existing mutation metadata for `--dry-run`,
 `--force`, and `--no-input`; do not invent a cleanup-specific confirmation
-framework. An interactive run can request confirmation after displaying scope. A
-noninteractive destructive run without explicit consent fails before deletion.
+framework. An interactive run can request confirmation after displaying scope.
+A noninteractive destructive run without explicit consent fails before deletion.
 `--force` skips confirmation, not validation, ownership conflicts, or bounds.
 
 A dry-run is a read-only plan, not a reusable authorization token. Execution
 resolves and validates scope again, and must not consume a stale user-supplied
 list as trusted filesystem authority. The preview lists normalized roots,
 recursive ownership, existing objects, missing objects, retained siblings, and
-any rejected scope. It must not truncate away selected objects and then claim to
-show a complete destructive plan: exceeding bounds fails the plan.
+any rejected scope. It must not truncate away selected objects and then claim
+to show a complete destructive plan: exceeding bounds fails the plan.
 
 ## 6. Filesystem safety contract
 
@@ -168,29 +170,30 @@ capability at deletion. Reject unsupported mount, junction, or filesystem cases
 rather than fall back to lexical `starts_with` checks or ambient `rm -rf`.
 
 Use handle-relative traversal and deletion with platform-specific identity
-checks. A path checked before enumeration is not automatically safe at deletion.
-Detect replacement of selected roots and parents, and stop affected work. No
-claim of race freedom is acceptable until adversarial replacement tests pass on
-each supported platform; unavailable guarantees must produce explicit refusal.
-Hard-linked file removal unlinks the selected directory entry, never truncates
-the shared underlying file.
+checks. A path checked before enumeration is not automatically safe at
+deletion. Detect replacement of selected roots and parents, and stop affected
+work. No claim of race freedom is acceptable until adversarial replacement
+tests pass on each supported platform; unavailable guarantees must produce
+explicit refusal. Hard-linked file removal unlinks the selected directory
+entry, never truncates the shared underlying file.
 
-Enforce operator-capped entry, depth, byte, and elapsed-time limits. Perform the
-bounded admission pass before the first deletion; exceeding a bound there causes
-zero deletions. Recheck while deleting because the tree may change. Delete files
-before directories in a stable order. Already-missing objects are successful
-no-ops. Permission, replacement, or interruption errors may follow partial
-progress; report exact removed, retained, and failed objects. Cleanup is not an
-atomic transaction and must never report rollback that it did not perform.
+Enforce operator-capped entry, depth, byte, and elapsed-time limits. Perform
+the bounded admission pass before the first deletion; exceeding a bound there
+causes zero deletions. Recheck while deleting because the tree may change.
+Delete files before directories in a stable order. Already-missing objects are
+successful no-ops. Permission, replacement, or interruption errors may follow
+partial progress; report exact removed, retained, and failed objects. Cleanup
+is not an atomic transaction and must never report rollback that it did not
+perform.
 
 ## 7. Interaction with states, concurrency, and replay
 
 A separately declared environment artefact may name the same normalized path as
 a [managed state][states]; the resource registry identifies that association.
-Ownership remains optional for state use. When an environment is
-selected for cleanup, acquire its integrity lease and invalidate its readiness
-records before any deletion, including failure paths. Probe success from before
-cleanup cannot establish subsequent readiness.
+Ownership remains optional for state use. When an environment is selected for
+cleanup, acquire its integrity lease and invalidate its readiness records
+before any deletion, including failure paths. Probe success from before cleanup
+cannot establish subsequent readiness.
 
 Reject a selected build closure that both cleans and produces or consumes the
 same declared resource. A Ninja pool would serialize access but would not
@@ -199,10 +202,10 @@ remedy. Coordinated state leases protect cooperating invocations; unrelated
 external programs remain outside the guarantee.
 
 Pure artefact cleanup also needs an exclusive lease over each selected root,
-ordered canonically. Producers participating in ownership use the same lease. It
-must share the state-resource identity boundary rather than introduce a second
-incompatible lock system. The lightweight artefact-only path cannot require
-authoring a state declaration.
+ordered canonically. Producers participating in ownership use the same lease.
+It must share the state-resource identity boundary rather than introduce a
+second incompatible lock system. The lightweight artefact-only path cannot
+require authoring a state declaration.
 
 Persist ownership definitions and provenance in the versioned action plan, not
 captured directory listings. Replay obtains fresh capabilities and enumerates
@@ -236,8 +239,8 @@ trees remains an explicit author decision shown in preview.
 A mandatory out-of-tree store would change onboarding and project layout.
 Inferring ownership from redirections or tool names would be unreliable.
 Wrapping `rm -rf` would provide neither platform consistency nor a capability
-boundary. Requiring an artefact declaration for every existing target would make
-an optional benefit contagious.
+boundary. Requiring an artefact declaration for every existing target would
+make an optional benefit contagious.
 
 Before implementation, ratify the supported-platform deletion primitives,
 resource-lease identity, ownership/source conflict rules, and concrete operator
@@ -247,9 +250,9 @@ prerequisites for a useful exact-path cleanup operation.
 
 ## 10. Recommendation
 
-Start with exact files and explicitly owned directory trees, one bounded cleanup
-implementation, and transparent scope. Preserve ordinary recipes and existing
-cleaning while giving annotated outputs stronger, testable guarantees.
+Start with exact files and explicitly owned directory trees, one bounded
+cleanup implementation, and transparent scope. Preserve ordinary recipes and
+existing cleaning while giving annotated outputs stronger, testable guarantees.
 
 [roadmap]: ../roadmap-progressive-enhancement.md#24-owned-artefacts-and-bounded-cleanup
 [maturity]: 0017-progressive-enhancement-and-maturity-policies.md

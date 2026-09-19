@@ -51,13 +51,13 @@ These requirements apply to every RFC in this proposal set:
   aggregates. An unannotated aggregate may depend on an annotated action.
 - Unused state or context declarations never cause runtime probes, installation,
   network access, or resource acquisition. Existing template-time capability
-  behaviour remains governed by its own policy; these additions introduce no new
-  inspection-time execution.
+  behaviour remains governed by its own policy; these additions introduce no
+  new inspection-time execution.
 - Ordinary variables remain supported. No heuristic promotes `uv sync` to a
   state, a redirection to an ownership claim, or a Cargo command to a pool.
 - The straightforward command escape hatch remains available under the default
-  policy. A selected stricter policy may reject it with a local explanation, but
-  a plugin must not be the only way to execute an unusual tool.
+  policy. A selected stricter policy may reject it with a local explanation,
+  but a plugin must not be the only way to execute an unusual tool.
 - New opt-in schemas must validate correctly. Optional adoption is not
   permission to ignore malformed typed inputs, unsafe paths, or unknown state
   operations.
@@ -78,10 +78,10 @@ envelope.
 
 [RFC 0013][states] supplies preparation contracts, [RFC 0014][inputs] supplies
 input contracts, [RFC 0015][artefacts] supplies ownership, and
-[RFC 0016][contention] supplies pool-backed contention. Named execution contexts
-remain a compatible extension point, not a sixth prerequisite hidden in these
-five RFCs. The maturity schema may add a context rule only after that separate
-surface has an accepted definition and an implementation.
+[RFC 0016][contention] supplies pool-backed contention. Named execution
+contexts remain a compatible extension point, not a sixth prerequisite hidden
+in these five RFCs. The maturity schema may add a context rule only after that
+separate surface has an accepted definition and an implementation.
 
 Do not repurpose RFC 0008's repository health tiers or RFC 0005's release
 admission policy as user-manifest maturity. Their purposes, trust sources, and
@@ -103,10 +103,10 @@ maturity:
 ```
 
 The default is an empty rule list. There is no default warning about missing
-annotations. Every rule contains `id`, `severity`, and an explicit `select` list
-of action/target identities. Initial severities are `off`, `warn`, and `error`.
-Exact names keep the first scope contract small; bounded patterns can follow
-only with a reviewed match and namespace contract.
+annotations. Every rule contains `id`, `severity`, and an explicit `select`
+list of action/target identities. Initial severities are `off`, `warn`, and
+`error`. Exact names keep the first scope contract small; bounded patterns can
+follow only with a reviewed match and namespace contract.
 
 Unknown rules, duplicate rule/subject combinations, unknown selectors, and
 unsupported severities fail validation. A policy cannot claim enforcement of a
@@ -121,13 +121,13 @@ regular expressions. Evaluation uses resolved declarations and provenance.
 
 The initial rules have deliberately narrow, checkable meanings:
 
-| Rule | Required evidence on selected nodes |
-| --- | --- |
-| `structured-commands` | Every resolved executable recipe unit is structured; legacy shell strings fail coverage. Explicit structured shell selection is not a claim of direct-argv safety. |
-| `typed-inputs` | Each explicitly named configuration subject in `subjects` resolves to a typed input contract, not only an untyped variable. Internal variables are not automatically public inputs. |
-| `owned-cleanup` | A selected cleanup action contains explicit `clean_owned` operations or nonexecuting aggregation only; arbitrary executable deletion recipes cannot satisfy the declaration contract. |
-| `verified-states` | Each state named in `subjects` has a `require_state` or `ensure_state` operation before its first non-state command unit; a probe in a different action is insufficient. |
-| `contention-declared` | Each selected executable edge resolves an explicit valid contention class. Dependency-only aggregates are not executable subjects. |
+| Rule                  | Required evidence on selected nodes                                                                                                                                                   |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `structured-commands` | Every resolved executable recipe unit is structured; legacy shell strings fail coverage. Explicit structured shell selection is not a claim of direct-argv safety.                    |
+| `typed-inputs`        | Each explicitly named configuration subject in `subjects` resolves to a typed input contract, not only an untyped variable. Internal variables are not automatically public inputs.   |
+| `owned-cleanup`       | A selected cleanup action contains explicit `clean_owned` operations or nonexecuting aggregation only; arbitrary executable deletion recipes cannot satisfy the declaration contract. |
+| `verified-states`     | Each state named in `subjects` has a `require_state` or `ensure_state` operation before its first non-state command unit; a probe in a different action is insufficient.              |
+| `contention-declared` | Each selected executable edge resolves an explicit valid contention class. Dependency-only aggregates are not executable subjects.                                                    |
 
 Table 1: Initial declaration-coverage rules, not whole-program safety proofs.
 
@@ -147,11 +147,12 @@ reproducibility, correct cleanup ownership, or safe untrusted-code execution.
 
 ## 6. Scope and non-contagion
 
-Resolve policy against the selected build closure, retaining distinct definition
-and invocation provenance. A rule selecting `publish` applies when that node
-will execute; it does not make an unrelated `hello.txt` build fail coverage.
-Global syntax and reference errors remain errors even outside the closure.
-`netsuke check` can inspect the whole manifest and report each explicit scope.
+Resolve policy against the selected build closure, retaining distinct
+definition and invocation provenance. A rule selecting `publish` applies when
+that node will execute; it does not make an unrelated `hello.txt` build fail
+coverage. Global syntax and reference errors remain errors even outside the
+closure. `netsuke check` can inspect the whole manifest and report each
+explicit scope.
 
 Aggregate selection must not implicitly make every dependency strict. If a
 future closure selector is added, its spelling must be explicit and inspection
@@ -171,11 +172,11 @@ Use the existing configuration provenance and trusted operator boundary. An
 automatically discovered project file, imported bundle, or explicitly chosen
 `--config` file is not thereby trusted to weaken operator policy.
 
-For overlapping rule/subject scopes, combine severity monotonically: `off < warn
-< error`. Project and bundle declarations can strengthen but cannot lower an
-operator floor. Expand and normalize scopes before combining them so renaming a
-selector or splitting a rule cannot hide an overlap. Constraints specific to a
-rule also combine without widening allowed behaviour.
+For overlapping rule/subject scopes, combine severity monotonically:
+`off < warn < error`. Project and bundle declarations can strengthen but cannot
+lower an operator floor. Expand and normalize scopes before combining them so
+renaming a selector or splitting a rule cannot hide an overlap. Constraints
+specific to a rule also combine without widening allowed behaviour.
 
 Profiles may select reviewed policy sets using the existing profile machinery.
 Record the policy source and effective rule set; merely choosing a development
@@ -187,27 +188,27 @@ capability boundary.
 The initial release needs no universal `strict` preset. A future preset must
 have a versioned, enumerable rule set and cannot gain new blocking rules on an
 unrelated software upgrade. Report-only adoption precedes error enforcement.
-Narrow exceptions require an independently reviewed future contract; do not ship
-a blanket suppression file that silently makes strict mode meaningless.
+Narrow exceptions require an independently reviewed future contract; do not
+ship a blanket suppression file that silently makes strict mode meaningless.
 
 ## 8. Evaluation and diagnostics
 
-Run declaration coverage through the semantic linter's typed inventory. Separate
-pure policy evaluation from manifest loading, capability observation, and runner
-effects. Evaluate applicable errors before starting any selected user action.
-Inspection and dry-run do not execute state probes to satisfy a maturity rule;
-they check declaration evidence only.
+Run declaration coverage through the semantic linter's typed inventory.
+Separate pure policy evaluation from manifest loading, capability observation,
+and runner effects. Evaluate applicable errors before starting any selected
+user action. Inspection and dry-run do not execute state probes to satisfy a
+maturity rule; they check declaration evidence only.
 
 A warning reports a gap without changing a successful command's exit status. An
 error uses the existing validation/policy failure class and stops execution.
 Human and JSON output include rule ID, severity, selected subject, definition
 span, policy-source span, and one local remedy. Reuse Fluent localization,
-structured-result envelopes, and redaction metadata; do not leak input values or
-probe output in diagnostics or metric labels.
+structured-result envelopes, and redaction metadata; do not leak input values
+or probe output in diagnostics or metric labels.
 
 `context --json` describes supported rules and effective settings through the
-existing metadata surface. `check --json` reports findings. Neither depends on a
-new `explain` command, whose separate roadmap evaluation remains unresolved.
+existing metadata surface. `check --json` reports findings. Neither depends on
+a new `explain` command, whose separate roadmap evaluation remains unresolved.
 Supported basic manifests must have no new maturity messages under default
 settings, including verbose warnings that imply untyped usage is deprecated.
 
@@ -219,9 +220,10 @@ execution behaviour before and after every feature. Compare observed child
 arguments and filesystem effects, not just apparent YAML similarity.
 
 Add one-feature-only examples: a typed worker input without a context, a state
-without typed inputs, one cleanup root without a state, and one pool on a legacy
-command. Combine annotated and unannotated actions under an ordinary aggregate.
-Assert that unrelated invocation starts no probes and creates no state records.
+without typed inputs, one cleanup root without a state, and one pool on a
+legacy command. Combine annotated and unannotated actions under an ordinary
+aggregate. Assert that unrelated invocation starts no probes and creates no
+state records.
 
 Property-test severity monotonicity, scope composition, order independence,
 namespace resolution, and inability to weaken operator constraints. End-to-end
@@ -230,18 +232,18 @@ versus error exits, selected versus whole-manifest checks, and generated-plan
 replay under the applicable trusted policy.
 
 Document and measure onboarding separately from the Cuprum migration. The
-quickstart may not gain required declarations. Each enhancement must demonstrate
-its local benefit and explicitly identify any remaining shell helper; moving
-boilerplate to an unreviewed imaginary bundle does not count as simplification.
-Do not claim a usability improvement from line count alone.
+quickstart may not gain required declarations. Each enhancement must
+demonstrate its local benefit and explicitly identify any remaining shell
+helper; moving boilerplate to an unreviewed imaginary bundle does not count as
+simplification. Do not claim a usability improvement from line count alone.
 
 ## 10. Alternatives and outstanding decisions
 
-Mandatory maturity levels would make advanced features contagious. Automatically
-promoting projects by size or feature count would alter semantics unexpectedly.
-A global strict mode with an evolving implicit rule list would make upgrades
-break otherwise unchanged manifests. Separate validators per feature would
-duplicate source handling and reporting.
+Mandatory maturity levels would make advanced features contagious.
+Automatically promoting projects by size or feature count would alter semantics
+unexpectedly. A global strict mode with an evolving implicit rule list would
+make upgrades break otherwise unchanged manifests. Separate validators per
+feature would duplicate source handling and reporting.
 
 Ratify policy-source placement within the shared configuration contract,
 selected-closure inspection metadata, and the semantic linter's reusable
