@@ -172,13 +172,17 @@ Polonius, the pin is the whole mechanism — do not add a `-Znext-solver`
 directive anywhere.
 
 - Run `make check-fmt`, `make lint`, `make doc-coverage`, and `make test`
-  before committing. When the change touches a workflow, a workflow-contract
-  suite under `tests/workflow_contracts/`, or the coverage artefact validators
-  under `scripts/`, also run `make test-workflow-contracts`: `make test` runs
-  the Rust suite only, and `make lint` lints the Python sources without
-  executing them, so those suites are otherwise unrun. These targets wrap the
-  following commands, so contributors understand the exact behaviour and policy
-  enforced:
+  before committing. `make test` runs the Rust suite only, and `make lint`
+  lints the Python sources without executing them, so neither runs the Python
+  suites below. When the change touches a workflow or a workflow-contract suite
+  under `tests/workflow_contracts/`, also run `make test-workflow-contracts`.
+  When it touches the coverage artefact validators under `scripts/`, also run
+  `make test-coverage-artifact`; `validate-coverage-artifact` is an
+  operator-run validator rather than a test, and needs a downloaded artefact
+  directory, so it is not part of this set. No one of these targets runs
+  another: `make test-workflow-contracts` does not run either coverage-artefact
+  target. These targets wrap the following commands, so contributors understand
+  the exact behaviour and policy enforced:
   - `make check-fmt` executes:
 
     ```sh

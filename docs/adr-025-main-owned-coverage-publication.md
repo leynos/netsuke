@@ -104,11 +104,14 @@ at fault. The lane therefore stages `lcov.info` into a directory of its own and
 runs `scripts/validate_coverage_artifact.py` over it — the validator that
 already owns the LCOV contract for a hostile report, is exercised by
 `make test-coverage-artifact`, and executes nothing in the file it reads. The
-step's position is part of the contract: it must follow the step that writes
-the report, precede the upload that sends it, and precede
-`Show sccache statistics`, which
-`tests/workflow_contracts/sccache_contract_test.py` requires to follow every
-compile step in the lane. A named workflow contract test,
+step's position is part of the contract, and is asserted as such: it must
+follow the step that writes the report, precede the upload that sends it, and
+precede `Show sccache statistics`. The last of those is a requirement
+`tests/workflow_contracts/sccache_contract_test.py` places on the lane — it
+requires `Show sccache statistics` to follow every compile step, so a step
+inserted after the last compile and before that report would break the
+compiler-cache observability contract rather than merely reorder the lane. A
+named workflow contract test,
 `tests/workflow_contracts/codescene_upload_contract_test.py`, backed by the
 predicates in `tests/workflow_contracts/codescene_upload_invariants.py`, holds
 the lane to that ordering, to the input names the generator and the upload
