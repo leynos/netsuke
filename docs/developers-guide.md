@@ -553,17 +553,26 @@ that restates it is a build that can silently drop it. A contract test
 every checkout consumer — plain Cargo invocations, rust-analyzer, Clippy, and
 Whitaker — without any Cargo configuration. `cargo kani setup` is a separate
 boundary: Kani 0.67.0 installs and uses its bundled `nightly-2025-11-21`
-toolchain rather than the checkout toolchain. The repository has no
-`.cargo/config.toml`; carrying the flag was that file's only purpose, and it
-was deleted when the pin moved past 2026-08-04.
+toolchain rather than the checkout toolchain. `.cargo/config.toml` carried the
+Polonius flag until the pin moved past 2026-08-04; that file was deleted then
+and has since returned for the build standard alone, so look to *The build
+standard* above for what it holds now.
 
-Makefile recipes still set `RUSTFLAGS`, but only to deny warnings. Each builds
-the value as `RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings"`; the
-`$${RUSTFLAGS:+$$RUSTFLAGS }` expansion prepends any `RUSTFLAGS` already set by
-the caller (for example a CI wrapper), so those flags survive rather than being
-silently discarded. `make kani-full` and the binary-build recipe set no
-`RUSTFLAGS` at all: Kani compiles third-party crates the workspace lint policy
-does not govern, and a plain binary build is not a lint gate.
+Makefile recipes set `RUSTFLAGS` through a small set of named variables rather
+than spelling a value out, and the variable a recipe composes states its policy.
+`GATE_RUSTFLAGS` appends `-D warnings` and the standard's flags, and every
+lint or test gate takes it. `DEBUG_RUSTFLAGS` takes the standard but leaves the
+caller's warning policy alone, so `make build` is not a gate. `KANI_RUSTFLAGS`
+denies warnings but takes none of the standard: Kani drives `rustc` through
+`kani-compiler` on its own bundled toolchain, where neither flag applies.
+`RELEASE_RUSTFLAGS` assigns an empty inherited value, which is what holds the
+config file's `rustflags` tables off a shipped artefact; see *Exclusions* under
+*The build standard*. Every one of them builds its value as
+`RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }…"`, whose `$${RUSTFLAGS:+$$RUSTFLAGS }`
+expansion prepends any `RUSTFLAGS` already set by the caller (for example a CI
+wrapper), so those flags survive rather than being silently discarded.
+`tests/makefile_test_target/rustflags.rs` holds all four to that composition
+and to their individual policies.
 
 [ADR-006](adr-006-adopt-polonius-nightly-toolchain.md) records the policy
 decision, and the [polonius migration notes](polonius.md) track every site

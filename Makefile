@@ -83,6 +83,11 @@ DEBUG_RUSTFLAGS = RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }$(STANDARD_RUSTFLAGS)"
 # configuration file's `rustflags` tables, which is the whole mechanism. The
 # configuration names no codegen backend at all, so nothing else is needed.
 RELEASE_RUSTFLAGS = RUSTFLAGS="$${RUSTFLAGS-}"
+# Kani denies warnings like the gates, but takes none of the standard: it drives
+# `rustc` through `kani-compiler` on its own bundled toolchain, so the parallel
+# frontend and `mold` would neither apply nor be honoured there. Inherited flags
+# still survive, since `cargo kani` appends this value to its own.
+KANI_RUSTFLAGS = RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings"
 # Command name, resolved by the recipe shell from the curated PATH, which
 # carries `$HOME/.bun/bin` where the global markdownlint install lands.
 MDLINT ?= markdownlint-cli2
@@ -377,7 +382,7 @@ kani-check: ## Check the installed Kani verifier version
 	@$(PROVER_TOOLS) kani check-version --kani-command "$(KANI)" $(KANI_CHECK_FLAGS) || { status=$$?; printf 'prover-tools: target=kani-check failed exit=%s\n' "$$status" >&2; exit "$$status"; }
 
 kani-full: ## Run the full Kani verification suite
-	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(KANI) $(KANI_FLAGS)
+	$(KANI_RUSTFLAGS) $(KANI) $(KANI_FLAGS)
 
 kani-ir: kani-full ## Run the IR Kani verification suite
 
