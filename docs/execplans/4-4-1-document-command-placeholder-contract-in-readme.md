@@ -1064,20 +1064,38 @@ Run everything from the repository root,
 5. Correct the three internal documents and any inaccurate doc comment, then
    confirm no unqualified claim survives outside historical documents. Commit
    as EP-M2. This precedes the README so the repository is never in a state
-   where two normative documents disagree.
+   where two normative documents disagree. **Done** — see `Progress`.
+
+   The verification grep must be line-wrap-agnostic, because the claim that
+   matters in `docs/users-guide.md` wraps mid-phrase. Plain `grep` cannot match
+   across lines and silently misses it, which is the trap that let the
+   misstatement survive revision 1. Use `rg -U`:
 
    ```sh
-   grep -rn -e 'only Netsuke markers' -e 'remain unchanged' \
-            -e 'remain shell variables' -e 'remain literal shell variables' \
-            README.md docs/*.md src/ir/cmd_interpolate/ \
-     | grep -v '^docs/adr-' | grep -v '^docs/archive/'
+   rg -n -U --glob 'docs/*.md' \
+      -e 'only\s+Netsuke\s+markers' \
+      -e '\$in.{0,80}remain\s+shell\s+variables' \
+      README.md docs/ \
+     | rg -v '^docs/(adr-|archive/|execplans/)'
    ```
 
-   Every surviving hit must be qualified by recipe kind, or be
-   `docs/netsuke-design.md:290-291`, which is already correct and must not be
-   changed. Revision 1's grep (`'literal .\$in\|\$in. and .\$out. remain'`)
-   matched neither `docs/users-guide.md:1697`, whose claim wraps across a line
-   break, nor the developers-guide phrasing, and it did hit
+   Run from the repository root. The `--glob` restricts the `docs/` walk to
+   top-level documents, and the trailing filter drops the decision records,
+   archived plans, and execplans, none of which this plan may edit. The only
+   expected survivors are statements about `$ins` and `$outs`, which really are
+   literal shell variables in both recipe kinds. Every hit about `$in` or
+   `$out` must be qualified by recipe kind, except
+   `docs/netsuke-design.md:290-291`, which already states Fact A correctly and
+   must **not** be changed — it is the canonical wording the others converge on.
+
+   For the record, the original wording of this step was
+   `grep -rn -e 'only Netsuke markers' -e 'remain unchanged' -e 'remain shell
+   variables' -e 'remain literal shell variables'`.
+   Three things were wrong with it. It cannot match `docs/users-guide.md`'s
+   claim, which wraps across a line break. Its `remain unchanged` pattern is
+   far too broad, matching unrelated prose about schema and snapshot stability
+   in `docs/roadmap.md` and `docs/developers-guide.md`. And revision 1's
+   narrower variant (`'literal .\$in\|\$in. and .\$out. remain'`) hit
    `docs/adr-004-…:165`, which must not be edited.
 
 6. Add `tests/readme_security_tests.rs` and the three identifiers to
@@ -1366,12 +1384,64 @@ the record:
 - `tests/documentation_examples_tests.rs`: `EXPECTED_EXAMPLE_IDS` `readme-`
   block at :54-58, registry test at :143.
 
+### EP-M2 — complete
+
+Four documents corrected, one doc comment fixed, no code touched.
+
+The four corrections are the ones `Concrete steps` step 5 names, plus the doc
+comment. `docs/developers-guide.md` gained the per-recipe-kind placeholder set
+and an ADR-027 link in §*Command interpolation contract* (~:3363) and a
+corrected lowering-stages bullet (~:392). `docs/users-guide.md` split the
+"Write shell dollar expressions normally" bullet into three, so `{{ ins }}`,
+`$in`-in-`script:`, and the POSIX quoting context each get their own paragraph
+(~:1950), and the migration bullet now says the short forms resolve only in
+`script:` (~:1983). `docs/formal-verification-methods-in-netsuke.md` corrected
+both the Kani section (~:64) and the contract section (~:265), the latter now
+carrying a **Settled** paragraph that answers `FV-CPC-Q1` through `FV-CPC-Q3`
+and points at ADR-027, plus the `[^8]` path fix to
+`src/ir/cmd_interpolate/mod.rs` (~:346). The doc comment on
+`src/ir/cmd_interpolate/mod.rs` now names `$in`/`$out` as script-only and says
+which forms are literal in which recipe kind.
+
+The step-5 verification grep returns **no survivors at all**, which is stronger
+than the plan predicted. The plan's `Acceptance evidence` anticipated surviving
+hits for `$ins` and `$outs`, on the reasoning that those really are literal
+shell variables in both recipe kinds. The reason they no longer survive is that
+the corrected prose in all three documents now names `$in`/`$out` and the
+recipe kind in the same sentence, and `$ins`/`$outs` alongside them, so the
+multiline `rg -U` pattern `\$in.{0,80}remain\s+shell\s+variables` no longer
+matches — the words are still true, they are just no longer adjacent in that
+order. This is not a weakened check; the pattern is unchanged from the plan.
+
+Gate evidence, run sequentially through `scrutineer` with each gate teed to
+`/tmp/<gate>-<branch>-epm2.out`: `make check-fmt` PASS
+(`143 files left unchanged`), `make markdownlint` PASS (`0 error(s)`, 143
+files, spelling included), `make typecheck` PASS, `make lint` PASS with
+`PATH="$HOME/go/bin:$PATH"` (*cargo doc*, *cargo clippy -D warnings*, both
+Whitaker passes, Python lint, `yamllint`, `actionlint`), `make test` PASS
+(`3188 tests run: 3188 passed, 5 skipped`, plus 82/2/39 doctests), `make nixie`
+PASS. `scrutineer` additionally hashed the five modified files before and after
+the gate run and found them byte-identical, so no gate reformatted the tree.
+
+One formatting repair was needed after the first `mdtablefix` pass. The rewrap
+split a bold span across a line break in `docs/developers-guide.md`, rendering
+``**`script:`-only**`` as a stray `**` at end of line followed by
+`` `script:`-only** `` on the next. Reworded to drop the bold entirely rather
+than fight the wrapper. Recorded because it is the second time in this plan that
+`mdtablefix --wrap` has damaged emphasis, and it is the reason the file is
+worth reading back after each automated rewrap rather than trusting exit 0.
+
+`docs/netsuke-design.md:290-291` was deliberately **not** edited, per the plan:
+it is the canonical wording the other three converge on.
+
 - [x] EP-M1 — ADR-027 written, indexed, and referenced from the design
       document. Landed as `3594b568`. `make check-fmt` and `make markdownlint`
       pass. Awaiting the milestone CodeRabbit pass.
-- [ ] EP-M2 — `docs/developers-guide.md`, `docs/users-guide.md`,
+- [x] EP-M2 — `docs/developers-guide.md`, `docs/users-guide.md`,
       `docs/formal-verification-methods-in-netsuke.md`, and any inaccurate doc
-      comment corrected. Precedes the README deliberately.
+      comment corrected. Precedes the README deliberately. All six gates pass;
+      the step-5 grep returns *no* survivors at all.
+
 - [ ] EP-M3 — README section and three executable examples; red observed
       before green; three negative controls recorded after the commit.
 - [ ] EP-M4 — six translated READMEs regain structural parity;
