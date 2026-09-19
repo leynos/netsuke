@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = Aplicați escape barelor oblice inverse sau elimina�
 manifest.env.missing = O variabilă de mediu obligatorie nu este setată.
 manifest.env.invalid_utf8 = O variabilă de mediu conține UTF-8 nevalid.
 manifest.env.blocked = Accesul la o variabilă de mediu este blocat.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Valoarea default din env trebuie să fie un șir de caractere, s-a primit { $kind }.
 manifest.vars.not_object = Câmpul `vars` al manifestului trebuie să fie o mapare sau un obiect.
 manifest.vars.reserved_name = Cheia `vars` '{ $name }' din manifest este rezervată pentru o funcție ajutătoare de șabloane integrată; redenumiți variabila.
 manifest.read_failed = Manifestul din { $path } nu a putut fi citit.
@@ -340,6 +342,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Algoritm de dispersie neacceptat
 
 # Diagnostice ale ajutoarelor pentru colecții.
 stdlib.collections.flatten.expected_sequence = flatten aștepta elemente dintr-o secvență, dar a găsit { $kind }.
+stdlib.collections.compact.not_sequence = compact aștepta o secvență, dar a găsit { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by necesită un atribut care nu este gol.
 stdlib.collections.group_by.unresolved = group_by nu a putut găsi „{ $attr }” pe un element de tipul { $kind }.
 

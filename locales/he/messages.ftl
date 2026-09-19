@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = בצעו מילוט ללוכסנים אחוריים 
 manifest.env.missing = משתנה סביבה נדרש אינו מוגדר.
 manifest.env.invalid_utf8 = משתנה סביבה מכיל UTF-8 לא תקין.
 manifest.env.blocked = הגישה למשתנה סביבה חסומה.
+manifest.env.args_error = ‏[netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = הערך default של env חייב להיות מחרוזת, התקבל { $kind }.
 manifest.vars.not_object = השדה `vars` של המניפסט חייב להיות מיפוי או אובייקט.
 manifest.vars.reserved_name = מפתח `vars` בשם '{ $name }' במניפסט שמור לפונקציית עזר מובנית של תבניות; שנה את שם המשתנה.
 manifest.read_failed = לא ניתן היה לקרוא את המניפסט מ‑{ $path }.
@@ -340,6 +342,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = אלגוריתם גיבוב שא
 
 # אבחון עוזרי האוספים.
 stdlib.collections.flatten.expected_sequence = ‏flatten ציפה לפריטים של סדרה אך מצא { $kind }.
+stdlib.collections.compact.not_sequence = ‏compact ציפה לסדרה אך מצא { $kind }.
 stdlib.collections.group_by.empty_attribute = ‏group_by מחייב תכונה שאינה ריקה.
 stdlib.collections.group_by.unresolved = ‏group_by לא הצליח לאתר את „{ $attr }” בפריט מסוג { $kind }.
 

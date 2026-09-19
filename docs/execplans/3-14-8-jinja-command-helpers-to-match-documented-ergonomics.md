@@ -667,8 +667,6 @@ Stop and escalate — do not improvise — when any of these is reached.
   ```rust
   let fallback = match kwargs.get::<Option<Value>>("default")? {
       None => None,
-      Some(value) if value.is_none() => None,
-      Some(value) if value.is_undefined() => return Err(undefined_default_error()),
       Some(value) => Some(
           value
               .as_str()
@@ -678,13 +676,23 @@ Stop and escalate — do not improvise — when any of these is reached.
   };
   ```
 
+  The original draft of this decision carried a third arm,
+  `Some(value) if value.is_undefined() => return Err(undefined_default_error())`.
+  That arm is **unreachable**, and was removed during EP-M1.
+  `impl ArgType for Option<T>` maps absent, `none`, *and* undefined alike onto
+  `Ok(None)` (`minijinja-2.24.0/src/value/argtypes.rs:530-544`), so by the time
+  the match runs, an undefined `default` is indistinguishable from an omitted
+  one. The distinction is harmless — all three mean "no fallback" — but the
+  two-arm form is what ships.
+
   `default=none` remains equivalent to omitting `default`, because `env`'s
   fallback is an absence substitution rather than a value slot; that is the one
   place RFC 0006's null rule is deliberately not followed, and the user guide
-  says so. Undefined and non-string values are errors. This costs one message
-  key the first draft claimed to save. Buying a silent-coercion defect for
+  says so. A defined non-string value is an error. This costs one message key
+  the first draft claimed to save. Buying a silent-coercion defect for
   thirty-five lines of translation was a bad trade. Date/Author: 2026-09-09,
-  revised after contract review.
+  revised after contract review; the undefined arm removed 2026-09-19 during
+  EP-M1.
 - **Decision D5**: `compact` drops `none`, undefined, and the empty string, and
   keeps `0`, `false`, `[]`, and `{}`. Rationale: `DD-4.5` says exactly "removes
   empty strings and null values while preserving order". Dropping
@@ -1639,10 +1647,37 @@ rather than creating a new one.
     When I render the stdlib template "{{ 'x' | shell_quote('sh') }}" without context
     Then the stdlib error contains "netsuke::jinja::shell::args"
 
-  Scenario: env rejects a non-string default rather than stringifying it
-    Given a stdlib workspace
-    When I render the stdlib template "{{ env('NETSUKE_ABSENT', default=['a']) }}" without context
-    Then the stdlib error contains "netsuke::jinja::env::args"
+```
+
+The `env` scenarios go to `tests/features/manifest.feature` instead, against
+three new fixtures under `tests/data/`. The correction is forced by the harness:
+`tests/bdd/steps/stdlib/rendering.rs:101` calls `stdlib::register_with_config`
+only, and `env` belongs to the *manifest* loader
+(`src/manifest/registration.rs`), not to the stdlib — the stdlib's `env` is the
+disabled stub. A `{{ env(...) }}` scenario written under
+`When I render the stdlib template …` would fail with an unknown-function error
+and prove nothing about the manifest. Confirmed during EP-M1 by running the
+scenario both ways.
+
+```gherkin
+  Scenario: An absent environment variable falls back to its default
+    Given the environment variable "NETSUKE_UNDEFINED_ENV" is unset
+    And the manifest file "tests/data/jinja_env_default.yml" is parsed
+    When the manifest is checked
+    Then the first target command is "echo fallback"
+
+  Scenario: A present environment variable ignores its default
+    Given the environment variable "NETSUKE_TEST_ENV" is set to "world"
+    And the manifest file "tests/data/jinja_env_present_with_default.yml" is parsed
+    When the manifest is checked
+    Then the first target command is "echo world"
+
+  Scenario: A non-string default is rejected rather than stringified
+    Given the environment variable "NETSUKE_TEST_ENV" is set to "world"
+    And the manifest file "tests/data/jinja_env_default_non_string.yml" is parsed
+    When the parsing result is checked
+    Then parsing the manifest fails
+    And the error message contains "netsuke::jinja::env::args"
 ```
 
 The expected `sh` strings above are **verified**, not guessed. They are the
@@ -1804,8 +1839,13 @@ callers (see constraint 7).
   `tests/features/stdlib.feature`. Observe the unknown-filter failure.
 - Green: implement `compact_filter` in `src/stdlib/collections.rs` beside
   `uniq_filter` and `flatten_filter`, and register it in `register_filters`.
-  Non-sequence input errors through `values.try_iter()?`, exactly as `uniq`
-  does, so no new message key is needed.
+  Non-sequence input is rejected by `ValueKind`, per D8 — **not** through
+  `values.try_iter()?`, which the earlier draft of this milestone wrongly
+  proposed and D8 falsifies. Accept only `ValueKind::Seq` and
+  `ValueKind::Iterable`; raise `STDLIB_COLLECTIONS_COMPACT_NOT_SEQUENCE` for
+  everything else, including `Map`, `String`, `None`, and `Undefined`. That key
+  is already in all 35 catalogues (added with EP-M1), so no catalogue work
+  remains here.
 - Refactor: if `src/stdlib/collections.rs` passes 400 lines, split it into a
   directory module as described under "Interfaces and dependencies".
 - Acceptance evidence: `cargo nextest run -E 'test(compact)'` passes; the naive
@@ -2242,7 +2282,26 @@ catalogue has the key; there is no partial state to clean up.
       bypass ADR-026; Stage A's three go/no-go checks are re-checked and
       recorded; and `src/manifest/render.rs` is flagged as being exactly at the
       400-line cap, with `src/manifest/mod.rs` freed from it.
-- [ ] EP-M1 `env(name, default=...)`.
+- [x] (2026-09-19) EP-M1 extraction committed as a pure move (`16c3cfe6`) with
+      green gates: `register_env_function` and `register_glob_function` now
+      live in `src/manifest/registration.rs`, and `src/manifest/mod.rs` fell
+      from 259 to 252 lines.
+- [ ] EP-M1 `env(name, default=...)`. Red tests and both new localization key
+      sets are in place; `env_var_with_default`, `env_default_from_kwargs`, the
+      registration, and the query-surface stub are implemented and green; the
+      three `manifest.feature` scenarios and their fixtures are added and pass.
+      Post-implementation gate triage: the first `make lint` run surfaced four
+      findings, all resolved — `doc_markdown` and `option_if_let_else` in
+      `src/manifest/registration.rs`, a `single_match_else` /
+      `option_if_let_else` *contradiction* on one site in
+      `src/manifest/env_reader.rs` (resolved by extracting
+      `substitute_fallback`), `too_many_arguments` and a second `doc_markdown`
+      in `tests/manifest_env_tests.rs`, and a Whitaker
+      `no_expect_outside_tests` in `src/manifest/tests/env_function.rs`, whose
+      shared `assert_resolution` helper was reduced to a comparable
+      `Resolved` enum so no `expect` sits outside a `#[test]` body. `make lint`
+      is now green. Remaining: the full gate run, the milestone commit, and the
+      CodeRabbit pass.
 - [ ] EP-M2 `compact`.
 - [ ] EP-M3 shared recipe-shell quoting seam.
 - [ ] EP-M4 `shell_quote` and `shell_join`.
@@ -2250,6 +2309,40 @@ catalogue has the key; there is no partial state to clean up.
 
 ## Surprises & discoveries
 
+- Observation: **D4's `is_undefined` arm is unreachable, so the shipped
+  `env_default_from_kwargs` is a two-arm match, not the three-arm sketch.**
+  `impl ArgType for Option<T>` maps absent, `none`, *and* undefined onto
+  `Ok(None)`, so a guard for undefined can never fire once the read is
+  `Option<Value>`. Evidence: `minijinja-2.24.0/src/value/argtypes.rs:530-544`:
+  `Some(value) => if value.is_undefined() || value.is_none() { Ok(None) } else
+  { T::from_value(Some(value)).map(Some) }`.
+  Impact: `manifest.env.args_error` is reachable only for a *defined,
+  non-string* `default`; the plan's `undefined_default_error` helper is deleted
+  rather than implemented, and `manifest.env.default_not_string` carries the
+  whole type-check. The distinction is harmless in practice —
+  undefined/none/absent all mean "no fallback" — but the plan text asserted
+  otherwise, so it is corrected here. Confidence: verified from the vendored
+  source and by the red tests' own
+  `explicit_none_default_is_equivalent_to_omitting_it` case.
+- Observation: the disabled `env` stub is reached only through a `when`
+  clause, not through a `description`. A query-surface `env()` call in a target
+  *description* fails at the manifest render with
+  `Failed to load manifest at …` on the `message` field and the actual
+  `env is disabled …` text buried in `causes`; the description path reports the
+  outer context, not the helper. Evidence: `netsuke --json help targets` on a
+  manifest whose description calls `env` emits
+  `"message": "Failed to load manifest at …"` with
+  `causes: [ …,
+  "render target description", "invalid operation: env is disabled …"]`.
+  Impact: `tests/stdlib_manifest_query_tests.rs` asserts on `/causes`, not on
+  `/message`, or the "disabled, not an argument error" contract would be
+  unchecked. This is also why the check runs a real process: the diagnostic
+  shape is a CLI concern.
+- Observation: `cargo nextest run --test <name>` does **not** select an
+  integration-test binary in this workspace; the binary is named
+  `netsuke-build::<name>`, so the selector is
+  `-E 'binary(stdlib_manifest_query_tests)'`. Impact: the red transcripts in
+  "Artefacts and notes" record the working invocation, not the plan's.
 - Observation: Netsuke runs Windows recipes under Windows PowerShell, not
   `cmd.exe`, and `src/ir/cmd_interpolate/mod.rs` already implements a second
   quoting dialect for it. Evidence: `src/recipe_shell.rs:18-27`,
@@ -2388,6 +2481,34 @@ work that this plan had assumed was still pending.
   the same twenty-nine commits that moved these numbers will keep moving them.
   Confidence: verified at `0ba6672f`.
 
+The two observations below were recorded on 2026-09-19 during EP-M1's
+post-implementation lint triage. Both are properties of the gate toolchain
+rather than of this feature, but both cost real time to diagnose, so they are
+recorded for whoever hits them next.
+
+- Observation: `clippy::single_match_else` and `clippy::option_if_let_else` can
+  fire on the **same** `match` under `-D warnings`, leaving no rewrite that
+  satisfies both — `option_if_let_else` demands `map_or_else`, and the closure
+  shape it demands then trips `single_match_else`. Evidence: the original
+  `env_var_with_default`, whose `NotPresent` arm reported two events and whose
+  other arm logged one line, failed both lints at once. Impact: the escape is
+  structural, not stylistic — extracting the two-event arm into
+  `substitute_fallback(fallback: Option<String>) -> Result<String, Error>` and
+  calling it from the outer match gives each lint a shape it accepts.
+  Confidence: verified by `make lint` going green with no `#[expect]` added.
+- Observation: Whitaker's `no_expect_outside_tests` keys off the **nearest
+  enclosing function**, not the file's test-ness. An *asserting* helper in a
+  `#[cfg(test)]` module is not a test, even when called only from `#[test]`
+  bodies. Evidence: `src/manifest/tests/env_function.rs:60`,
+  `assert_resolution` at its pre-fix revision, called from
+  `default_substitutes_for_absence_only` and
+  `empty_fallback_satisfies_an_absent_variable`. Impact: such a helper must
+  compare values rather than unwrap them. Reducing the outcome to a local
+  `Resolved` enum — `Value(String)` and `Failure(ErrorKind)` — both satisfies
+  the lint and *improves* the failure message, because the assertion now prints
+  the observed and wanted pair rather than a bare `expect` panic line.
+  Confidence: verified.
+
 ## Outcomes & retrospective
 
 To be completed at EP-M5. Before setting this plan to `COMPLETE`, reconcile
@@ -2410,6 +2531,46 @@ every discovery against the `Conformance basis`:
 To be filled during implementation. Required entries:
 
 1. The `red` transcript for EP-M1 showing the unknown-keyword failure.
+
+   **Entry 1 — EP-M1 red (2026-09-19).** Recorded before any production change,
+   against the post-extraction tree with only the two new localization keys and
+   the new tests in place. The invocation is
+   `cargo nextest run -E 'binary(manifest_env_tests)'`; the `--test` form does
+   not select an integration binary here (the binary is
+   `netsuke-build::manifest_env_tests`).
+
+   ```text
+   FAIL [   0.031s] netsuke-build::manifest_env_tests template_default_substitutes_for_absence::case_absent_uses_default
+   FAIL [   0.028s] netsuke-build::manifest_env_tests explicit_none_default_is_equivalent_to_omitting_it
+   FAIL [   0.041s] netsuke-build::manifest_env_tests a_non_string_default_is_rejected::case_1_number
+   FAIL [   0.036s] netsuke-build::manifest_env_tests a_non_string_default_is_rejected::case_2_boolean
+   FAIL [   0.033s] netsuke-build::manifest_env_tests a_non_string_default_is_rejected::case_3_sequence
+   FAIL [   0.039s] netsuke-build::manifest_env_tests a_non_string_default_is_rejected::case_4_mapping
+   FAIL [   0.025s] netsuke-build::manifest_env_tests a_blocked_lookup_still_fails_when_a_default_is_supplied
+   FAIL [   0.019s] netsuke-build::manifest_env_tests a_positional_second_argument_is_rejected
+   FAIL [   0.033s] netsuke-build::manifest_env_tests an_unknown_keyword_argument_is_rejected
+   ```
+
+   The failure text is the intended one — the keyword is not recognized, which
+   is exactly the arity defect the milestone removes:
+
+   ```text
+   unexpected error: Failed to load manifest at <path>: invalid operation:
+   unknown keyword argument 'default' (in <string>:1)
+   ```
+
+   After the implementation the same selection reports
+   `24 tests run: 24 passed, 0 skipped`. Note that
+   `an_unknown_keyword_argument_is_rejected` stays green in both runs: it uses
+   a *deliberate* typo (`defualt=`), so it is a regression guard on
+   `assert_all_used`, not a red test for `default=`.
+
+   **Entry 1b — the query-surface half.**
+   `tests/stdlib_manifest_query_tests.rs` was red for a different reason: the
+   disabled `env` stub still took one argument, so `env('X', default='y')` on
+   the query surface died with a detail-free `too many arguments` instead of
+   the disabled marker. That is the exact failure mode the file's doc comment
+   describes, and it was observed before the stub was widened to `Kwargs`.
 2. The name of the snapshot that failed during the OBL-NINJA-STABLE
    non-vacuity check, and the transcript showing it passing again after revert.
 3. The transcript of each negative control failing as designed
@@ -2423,6 +2584,44 @@ To be filled during implementation. Required entries:
 ## Revision note
 
 - 2026-09-08: initial draft.
+- 2026-09-19: EP-M1 implementation recorded. The `env` and `glob` registrations
+  moved to `src/manifest/registration.rs` as a pure move (`16c3cfe6`);
+  `env_var_with` became `env_var_with_default` with the `fallback` parameter
+  placed *after* the policy parameter so ADR-026 still evaluates first and a
+  blocked name never reaches the reader; `env_default_from_kwargs` reads
+  `Option<Value>` and rejects a defined non-string; the disabled query stub
+  widened to `Kwargs`; `manifest.env.args_error` and
+  `manifest.env.default_not_string` added to all 35 catalogues; three
+  `manifest.feature` scenarios and fixtures added. D4's `is_undefined` arm is
+  deleted as unreachable — see `Surprises & discoveries`. The behavioural
+  specification's `env` scenario moved from `stdlib.feature` to
+  `manifest.feature`, because `env` is a manifest-loader helper and the stdlib
+  harness never registers it.
+- 2026-09-19: EP-M1's post-implementation lint triage recorded.
+
+  **What changed.** Four deterministic findings from the first `make lint`
+  after the feature went green, all now resolved: `doc_markdown` on `MiniJinja`
+  and `option_if_let_else` in `src/manifest/registration.rs`; a
+  `single_match_else`/`option_if_let_else` contradiction on one `match` in
+  `src/manifest/env_reader.rs`; `too_many_arguments` (5/4) and a second
+  `doc_markdown` in `tests/manifest_env_tests.rs`; and Whitaker's
+  `no_expect_outside_tests` on the shared `assert_resolution` helper in
+  `src/manifest/tests/env_function.rs`.
+
+  **Why it changed the shape of the work.** It did not change any behaviour or
+  any planned interface; the two structural extractions (`substitute_fallback`,
+  `default_as_string`) and the `Resolved` enum in the test helper are internal.
+  Two of the fixes, however, are recorded as observations because they are
+  non-obvious properties of the gate toolchain: the two clippy lints that
+  contradict each other on one site, and Whitaker keys on the nearest enclosing
+  function rather than the file.
+
+  **Effect on remaining work.** None on scope. The lesson that transfers is
+  that a helper extracting a two-event arm from a `match` is the shape both
+  clippy lints accept, and that asserting test helpers must compare rather than
+  unwrap. Both are now known before EP-M3 and EP-M4 add more helpers of exactly
+  these kinds — EP-M3 adds `quote_word` and `is_recipe_admissible`, and EP-M4
+  adds a property-test module.
 - 2026-09-09: revised after a six-lens community-of-experts design review.
 
   **What changed.** Three MiniJinja behaviours the draft asserted were

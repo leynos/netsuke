@@ -111,6 +111,25 @@ Feature: Manifest Parsing
     When the parsing result is checked
     Then parsing the manifest fails
 
+  Scenario: An absent environment variable falls back to its default
+    Given the environment variable "NETSUKE_UNDEFINED_ENV" is unset
+    And the manifest file "tests/data/jinja_env_default.yml" is parsed
+    When the manifest is checked
+    Then the first target command is "echo fallback"
+
+  Scenario: A present environment variable ignores its default
+    Given the environment variable "NETSUKE_TEST_ENV" is set to "world"
+    And the manifest file "tests/data/jinja_env_present_with_default.yml" is parsed
+    When the manifest is checked
+    Then the first target command is "echo world"
+
+  Scenario: A non-string default is rejected rather than stringified
+    Given the environment variable "NETSUKE_TEST_ENV" is set to "world"
+    And the manifest file "tests/data/jinja_env_default_non_string.yml" is parsed
+    When the parsing result is checked
+    Then parsing the manifest fails
+    And the error message contains "netsuke::jinja::env::args"
+
   Scenario: Parsing fails when a macro is missing its signature
     Given the manifest file "tests/data/jinja_macro_invalid.yml" is parsed
     When the parsing result is checked

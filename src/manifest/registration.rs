@@ -8,7 +8,7 @@
 
 use super::{
     EnvAccessPolicy, EnvReader, ManifestError, ManifestName, ManifestValue,
-    env_reader::env_var_with,
+    env_reader::env_var_with_default,
     glob::{GlobBaseCache, expand_manifest_template_glob},
     map_data_error,
 };
@@ -17,7 +17,10 @@ use crate::{
     localization::{self, keys},
 };
 use camino::Utf8PathBuf;
-use minijinja::{Environment, value::Value};
+use minijinja::{
+    Environment, Error, ErrorKind,
+    value::{Kwargs, Value, ValueKind},
+};
 use serde::de::Error as _;
 use std::sync::Arc;
 
@@ -35,9 +38,63 @@ pub(super) fn register_env_function(
 ) {
     let reader = Arc::clone(env_reader);
     let policy_for_env_lookup = env_access_policy.clone();
-    jinja.add_function("env", move |var_name: String| {
-        env_var_with(&var_name, &policy_for_env_lookup, |key| reader(key))
+    jinja.add_function("env", move |var_name: String, kwargs: Kwargs| {
+        let fallback = env_default_from_kwargs(&kwargs)?;
+        kwargs.assert_all_used()?;
+        env_var_with_default(&var_name, &policy_for_env_lookup, fallback, |key| {
+            reader(key)
+        })
     });
+}
+
+/// Read the optional `default` keyword argument as a string.
+///
+/// Reads `Option<Value>` rather than `Option<String>` because `MiniJinja`'s
+/// `Option<String>` conversion silently stringifies numbers, booleans,
+/// sequences, and mappings — `1` becomes `"1"`, `true` becomes the
+/// Python-shaped `"True"` — and that text lands straight in a shell recipe.
+/// RFC 0006 §6.6 requires a string helper to reject those instead.
+///
+/// # Errors
+///
+/// Returns an error for a defined, non-string `default`. An explicit `none` is
+/// equivalent to omitting the argument, and undefined cannot be distinguished
+/// from absent: `impl ArgType for Option<T>` maps all three onto `None`, so the
+/// two-arm match below is exhaustive in practice.
+fn env_default_from_kwargs(kwargs: &Kwargs) -> Result<Option<String>, Error> {
+    kwargs
+        .get::<Option<Value>>("default")?
+        .map_or_else(|| Ok(None), |value| default_as_string(&value))
+}
+
+/// Convert a defined `default` into its string form, rejecting other kinds.
+fn default_as_string(value: &Value) -> Result<Option<String>, Error> {
+    value
+        .as_str()
+        .map(str::to_owned)
+        .map(Some)
+        .ok_or_else(|| default_not_string_error(value.kind()))
+}
+
+/// Build the `env()` error for a `default` that is not a string.
+fn default_not_string_error(kind: ValueKind) -> Error {
+    Error::new(
+        ErrorKind::InvalidOperation,
+        env_args_message(
+            localization::message(keys::MANIFEST_ENV_DEFAULT_NOT_STRING)
+                .with_arg("kind", kind.to_string()),
+        ),
+    )
+}
+
+/// Prefix an `env()` argument detail with its machine-readable code.
+///
+/// The code lives in the Fluent text rather than the English wording, so the
+/// diagnostic stays greppable in every locale.
+fn env_args_message(detail: impl std::fmt::Display) -> String {
+    localization::message(keys::MANIFEST_ENV_ARGS_ERROR)
+        .with_arg("details", detail.to_string())
+        .to_string()
 }
 
 /// Expose the `glob()` helper, anchored at the manifest workspace root.
