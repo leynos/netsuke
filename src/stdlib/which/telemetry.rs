@@ -84,6 +84,16 @@ pub const WHICH_RESOLUTION_OUTCOME_VALUES: [&str; 3] = [
     RESOLUTION_OUTCOME_ERROR,
 ];
 
+/// The outcome that carries no `error_category`, and so takes two labels.
+///
+/// The complement of [`WHICH_RESOLUTION_FAILURE_OUTCOME_VALUES`]. Declaring it
+/// as a vocabulary of its own rather than reusing
+/// [`WHICH_RESOLUTION_OUTCOME_VALUES`] lets the application recorder admit the
+/// two-label shape precisely: a failure recorded without its category is a bug
+/// elsewhere, not telemetry to export, and naming the full outcome set here
+/// would admit exactly that.
+pub const WHICH_RESOLUTION_SUCCESS_OUTCOME_VALUES: [&str; 1] = [RESOLUTION_OUTCOME_FOUND];
+
 /// The outcomes that carry an `error_category`, and so take three labels.
 ///
 /// A resolution records a category only when it fails, so the three-label

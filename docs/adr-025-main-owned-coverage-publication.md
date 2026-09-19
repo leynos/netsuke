@@ -103,10 +103,13 @@ refused there, in another system and later, without naming the step or the file
 at fault. The lane therefore stages `lcov.info` into a directory of its own and
 runs `scripts/validate_coverage_artifact.py` over it — the validator that
 already owns the LCOV contract for a hostile report, is exercised by
-`make test-coverage-artifact`, and executes nothing in the file it reads. The
-step's position is part of the contract, and is asserted as such: it must
-follow the step that writes the report, precede the upload that sends it, and
-precede `Show sccache statistics`. The last of those is a requirement
+`make test-coverage-artifact`, and executes nothing in the file it reads. Both
+halves are required: staging a directory and never copying the report into it
+would leave the validator reading an empty directory, so the contract test
+fails a step that names one without filling it. The step's position is part of
+the contract, and is asserted as such: it must follow the step that writes the
+report, precede the upload that sends it, and precede
+`Show sccache statistics`. The last of those is a requirement
 `tests/workflow_contracts/sccache_contract_test.py` places on the lane — it
 requires `Show sccache statistics` to follow every compile step, so a step
 inserted after the last compile and before that report would break the
@@ -114,10 +117,13 @@ compiler-cache observability contract rather than merely reorder the lane. A
 named workflow contract test,
 `tests/workflow_contracts/codescene_upload_contract_test.py`, backed by the
 predicates in `tests/workflow_contracts/codescene_upload_invariants.py`, holds
-the lane to that ordering, to the input names the generator and the upload
+the lane to that ordering, to the validator being run over a directory the step
+also filled with the report, to the input names the generator and the upload
 agree on, to the format they agree on, to the credential being both carried and
-gated on, and to any checksum input staying unset. It drives those predicates
-against synthetic workflow text as well as the repository file, so a detector
-that stopped matching cannot pass by finding nothing. The upload reads the
-workspace rather than an archive, so the three steps it depends on are matched
-by their structure rather than by the file they happen to share.
+gated on — by name, as an identifier in the namespace the `if` is evaluated
+against, rather than by a substring that a longer, unset name would satisfy —
+and to any checksum input staying unset. It drives those predicates against
+synthetic workflow text as well as the repository file, so a detector that
+stopped matching cannot pass by finding nothing. The upload reads the workspace
+rather than an archive, so the three steps it depends on are matched by their
+structure rather than by the file they happen to share.
