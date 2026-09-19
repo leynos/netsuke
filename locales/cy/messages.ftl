@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = Diangwch y slaesau ôl neu dynnwch y dilyniannau dia
 manifest.env.missing = Nid yw newidyn amgylchedd gofynnol wedi'i osod.
 manifest.env.invalid_utf8 = Mae newidyn amgylchedd yn cynnwys UTF-8 annilys.
 manifest.env.blocked = Mae mynediad at newidyn amgylchedd wedi'i rwystro.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Rhaid i default env fod yn llinyn, derbyniwyd { $kind }.
 manifest.vars.not_object = Rhaid i `vars` y maniffest fod yn fap neu'n wrthrych.
 manifest.vars.reserved_name = Mae'r allwedd `vars` '{ $name }' yn y maniffest wedi'i chadw ar gyfer cynorthwyydd templed mewnol; ailenwch y newidyn.
 manifest.read_failed = Methwyd â darllen y maniffest o { $path }.
@@ -340,6 +342,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Algorithm stwnsio nas cefnogir: 
 
 # Diagnosteg cynorthwywyr y casgliadau.
 stdlib.collections.flatten.expected_sequence = Roedd flatten yn disgwyl eitemau dilyniant ond cafodd { $kind }.
+stdlib.collections.compact.not_sequence = Mae compact yn disgwyl dilyniant ond cafodd { $kind }.
 stdlib.collections.group_by.empty_attribute = Mae group_by angen priodoledd nad yw'n wag.
 stdlib.collections.group_by.unresolved = Methodd group_by â chanfod ‘{ $attr }’ ar eitem o'r math { $kind }.
 

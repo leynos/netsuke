@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = Escape omvendte skråstreger, eller fjern ugyldige e
 manifest.env.missing = En påkrævet miljøvariabel er ikke sat.
 manifest.env.invalid_utf8 = En miljøvariabel indeholder ugyldig UTF-8.
 manifest.env.blocked = Adgang til en miljøvariabel er blokeret.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = default i env skal være en streng, modtog { $kind }.
 manifest.vars.not_object = Manifestets `vars` skal være en tilknytning eller et objekt.
 manifest.vars.reserved_name = Manifestets `vars`-nøgle '{ $name }' er reserveret til en indbygget skabelonhjælper; omdøb variablen.
 manifest.read_failed = Manifestet i { $path } kunne ikke læses.
@@ -340,6 +342,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Hash-algoritmen "{ $algorithm }"
 
 # Diagnostik for samlingshjælpere.
 stdlib.collections.flatten.expected_sequence = flatten forventede elementer fra en følge, men fandt { $kind }.
+stdlib.collections.compact.not_sequence = compact forventede en følge, men fik { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by kræver en attribut, der ikke er tom.
 stdlib.collections.group_by.unresolved = group_by kunne ikke slå "{ $attr }" op på et element af typen { $kind }.
 

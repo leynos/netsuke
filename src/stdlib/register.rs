@@ -179,9 +179,12 @@ fn register_disabled_query_helpers(env: &mut Environment<'_>) {
 
 /// Register helpers that are never safe while rendering discovery metadata.
 fn register_always_disabled_query_helpers(env: &mut Environment<'_>) {
-    env.add_function("env", |_variable: String| -> Result<String, Error> {
-        Err(manifest_query_operation_error("env"))
-    });
+    env.add_function(
+        "env",
+        |_variable: String, _kwargs: Kwargs| -> Result<String, Error> {
+            Err(manifest_query_operation_error("env"))
+        },
+    );
     env.add_function("glob", |_pattern: String| -> Result<Value, Error> {
         Err(manifest_query_operation_error("glob"))
     });

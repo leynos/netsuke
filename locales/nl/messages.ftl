@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = Escape de backslashes of verwijder ongeldige escaper
 manifest.env.missing = Een vereiste omgevingsvariabele is niet ingesteld.
 manifest.env.invalid_utf8 = Een omgevingsvariabele bevat ongeldige UTF-8.
 manifest.env.blocked = Toegang tot een omgevingsvariabele is geblokkeerd.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = De default van env moet een tekenreeks zijn, ontvangen { $kind }.
 manifest.vars.not_object = De `vars` van het manifest moet een toewijzing of object zijn.
 manifest.vars.reserved_name = De `vars`-sleutel '{ $name }' in het manifest is gereserveerd voor een ingebouwde sjabloonfunctie; hernoem de variabele.
 manifest.read_failed = Het manifest in { $path } kon niet worden gelezen.
@@ -340,6 +342,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Het hash-algoritme ‘{ $algorit
 
 # Diagnostiek van de verzamelinghelpers.
 stdlib.collections.flatten.expected_sequence = flatten verwachtte items uit een reeks, maar vond { $kind }.
+stdlib.collections.compact.not_sequence = compact verwachtte een reeks, maar vond { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by vereist een attribuut dat niet leeg is.
 stdlib.collections.group_by.unresolved = group_by kon ‘{ $attr }’ niet vinden op een item van het type { $kind }.
 

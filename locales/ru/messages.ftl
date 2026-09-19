@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = Экранируйте обратные косые �
 manifest.env.missing = Обязательная переменная окружения не задана.
 manifest.env.invalid_utf8 = Переменная окружения содержит некорректный UTF-8.
 manifest.env.blocked = Доступ к переменной окружения заблокирован.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Значение default в env должно быть строкой, получено { $kind }.
 manifest.vars.not_object = Поле `vars` манифеста должно быть отображением или объектом.
 manifest.vars.reserved_name = Ключ `vars` '{ $name }' в манифесте зарезервирован для встроенной вспомогательной функции шаблонов; переименуйте переменную.
 manifest.read_failed = Не удалось прочитать манифест по пути { $path }.
@@ -340,6 +342,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Неподдерживаемый
 
 # Диагностика помощников для коллекций.
 stdlib.collections.flatten.expected_sequence = flatten ожидал элементы последовательности, но обнаружил { $kind }.
+stdlib.collections.compact.not_sequence = compact ожидал последовательность, но обнаружил { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by требует непустой атрибут.
 stdlib.collections.group_by.unresolved = group_by не смог найти «{ $attr }» у элемента типа { $kind }.
 

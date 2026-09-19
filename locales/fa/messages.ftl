@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = ممیزهای وارونه را بگریزانید 
 manifest.env.missing = یک متغیر محیطی الزامی تنظیم نشده است.
 manifest.env.invalid_utf8 = یک متغیر محیطی دربردارندهٔ UTF-8 نامعتبر است.
 manifest.env.blocked = دسترسی به یک متغیر محیطی مسدود شده است.
+manifest.env.args_error = ‏[netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = مقدار default در env باید رشته باشد، اما { $kind } دریافت شد.
 manifest.vars.not_object = ‏`vars` در مانیفست باید نگاشت یا شیء باشد.
 manifest.vars.reserved_name = کلید `vars` با نام '{ $name }' در مانیفست برای یک کمک‌کننده داخلی قالب رزرو شده است؛ نام متغیر را تغییر دهید.
 manifest.read_failed = خواندن مانیفست از { $path } ممکن نشد.
@@ -340,6 +342,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = الگوریتم درهم‌سا
 
 # تشخیص‌های یاورهای گردایه‌ها.
 stdlib.collections.flatten.expected_sequence = ‏flatten عضوهای یک دنباله را انتظار داشت اما { $kind } یافت.
+stdlib.collections.compact.not_sequence = ‏compact یک دنباله را انتظار داشت اما { $kind } یافت.
 stdlib.collections.group_by.empty_attribute = ‏group_by به ویژگی‌ای ناتهی نیاز دارد.
 stdlib.collections.group_by.unresolved = ‏group_by نتوانست «{ $attr }» را روی عضوی از گونهٔ { $kind } بیابد.
 

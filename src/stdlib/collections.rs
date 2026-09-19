@@ -10,11 +10,12 @@ use minijinja::{
 
 use crate::localization::{self, keys};
 
-/// Register the collection filters (`uniq`, `flatten`, `group_by`) on an
-/// environment.
+/// Register the collection filters (`uniq`, `flatten`, `compact`, `group_by`)
+/// on an environment.
 pub(crate) fn register_filters(env: &mut Environment<'_>) {
     env.add_filter("uniq", |values: Value| uniq_filter(&values));
     env.add_filter("flatten", |values: Value| flatten_filter(&values));
+    env.add_filter("compact", |values: Value| compact_filter(&values));
     env.add_filter("group_by", |values: Value, attr: String| {
         group_by_filter(&values, &attr)
     });
@@ -94,6 +95,38 @@ fn uniq_filter(values: &Value) -> Result<Value, Error> {
 
     let items: Vec<_> = uniques.into_iter().collect();
     Ok(Value::from_serialize(items))
+}
+
+/// Report whether a member is dropped by `compact`.
+///
+/// Only `none`, undefined, and the empty string are blank. `0`, `false`, `[]`,
+/// `{}`, and a whitespace-only string are values and are retained; naming the
+/// predicate keeps that asymmetry visible to the next reader.
+fn is_blank(value: &Value) -> bool {
+    value.is_none() || value.is_undefined() || value.as_str().is_some_and(str::is_empty)
+}
+
+/// Drop blank members from a sequence, preserving order.
+///
+/// # Errors
+///
+/// Returns an error naming the received kind when the subject is not a
+/// sequence. See decision D8: `Value::try_iter()` is not a sequence check — it
+/// accepts a map (yielding its keys) and a string (yielding its characters), so
+/// `{{ my_map | compact }}` would quietly return the map's keys.
+fn compact_filter(values: &Value) -> Result<Value, Error> {
+    let kind = values.kind();
+    if !matches!(kind, ValueKind::Seq | ValueKind::Iterable) {
+        return Err(Error::new(
+            ErrorKind::InvalidOperation,
+            localization::message(keys::STDLIB_COLLECTIONS_COMPACT_NOT_SEQUENCE)
+                .with_arg("kind", kind.to_string())
+                .to_string(),
+        ));
+    }
+
+    let kept: Vec<Value> = values.try_iter()?.filter(|item| !is_blank(item)).collect();
+    Ok(Value::from_serialize(kept))
 }
 
 /// Flatten nested sequences within `values` into a single flat sequence.
