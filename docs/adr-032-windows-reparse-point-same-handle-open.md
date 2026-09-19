@@ -166,13 +166,34 @@ relies on, where `O_NOFOLLOW` is a property of the one `open` call.
   `parent_dir`, which is the pre-existing behaviour on both platforms and is
   not changed here.
 - A junction cannot be *traversed* through a capability at all, under either
-  policy. `mklink /J` records an absolute target, and `cap_std`'s resolver
-  refuses to follow a reparse point whose destination leaves the capability,
-  reporting `escape_attempt()` as `PermissionDenied`. The opt-in policy's
-  follow is therefore exercised by the file-symlink opt-in test, which uses a
-  relative target; the default policy's refusal of a junction needs no
-  traversal, because `FILE_FLAG_OPEN_REPARSE_POINT` returns the reparse point
-  itself.
+  policy: the refusal is part of resolving the link, which happens before the
+  open policy is consulted. `mklink /J` records an absolute target, and the
+  resolver rejects an absolute link destination outright, reporting
+  `escape_attempt()` as `PermissionDenied`.
+- The trigger is **absoluteness of the link target, not escape from the
+  capability**. An earlier draft of this record said "a destination that leaves
+  the capability", which is the wrong mechanism and misdescribes what an
+  operator can rely on. The resolver never compares the resolved path against
+  the capability root, so it cannot tell an absolute target that stays inside
+  from one that does not. Both are refused. Verified two ways:
+
+  - On Unix the kernel does this in `openat2` with `RESOLVE_BENEATH`, which
+    rejects any absolute link target, and `EXDEV` maps to `escape_attempt()`.
+    A probe on Linux confirmed it directly: two symlinks pointing at the *same
+    file inside* the capability, one written relatively and one absolutely,
+    with the opt-in policy in force — the relative link opened and the absolute
+    link was refused with "a path led outside of the filesystem". Same file,
+    same containment, different result; only the spelling of the target
+    differed. The Windows claim rests on the resolver's shared
+    `PrefixOrRootDir => escape_attempt()` arm, which is reached for a link
+    destination containing a prefix or root component, and cannot be
+    exercised on Linux.
+  - Consequence for tests and docs: a junction is refused under *either*
+    policy, so it can never demonstrate a successful opt-in follow. The opt-in
+    policy's follow is exercised by the file-symlink opt-in test, which uses a
+    relative target; the default policy's refusal of a junction needs no
+    traversal, because `FILE_FLAG_OPEN_REPARSE_POINT` returns the reparse point
+    itself.
 - The Unix path is untouched. `apply_unix_open_flags` and `restore_blocking`
   keep their current behaviour byte for byte.
 

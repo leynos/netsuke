@@ -242,9 +242,11 @@ fn junction_fixture() -> Result<Option<JunctionFixture>> {
 /// under test.
 ///
 /// The handle is taken through the ambient authority rather than through the
-/// capability. `mklink /J` records an absolute target, and `cap_std` refuses to
-/// resolve a reparse point whose destination leaves the capability —
-/// `escape_attempt()`, reported as `PermissionDenied`. The default policy never
+/// capability. `mklink /J` records an absolute target, and `cap_std`'s resolver
+/// refuses an absolute link destination outright — `escape_attempt()`, reported
+/// as `PermissionDenied`. The trigger is the target's *absoluteness*, not its
+/// escaping the capability, so a junction is unresolvable under either policy
+/// and can never demonstrate the opt-in's follow. The default policy never
 /// resolves it, because `FILE_FLAG_OPEN_REPARSE_POINT` makes the open return the
 /// reparse point itself, so the difference between the policies is visible
 /// exactly where it matters: on the handle the policy will judge. The opt-in
