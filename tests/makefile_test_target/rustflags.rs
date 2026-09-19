@@ -1,11 +1,11 @@
 //! Contract model for the Makefile variables that assign `RUSTFLAGS`.
 //!
-//! No recipe spells the value out any more: each composes one of three Make
-//! variables, so the variables are what this module contracts. That indirection
-//! is exactly the hazard a text-walking contract can be blind to, so the
-//! completeness test has two halves — every `RUSTFLAGS="` in the file must be
-//! one of the contracted variables, and every recipe that sets `RUSTFLAGS` must
-//! do so through one of them. Neither half alone would notice a recipe that
+//! No recipe spells the value out any more: each composes one of a small set of
+//! Make variables, so the variables are what this module contracts. That
+//! indirection is exactly the hazard a text-walking contract can be blind to, so
+//! the completeness test has two halves — every `RUSTFLAGS="` in the file must
+//! be one of the contracted variables, and every recipe that sets `RUSTFLAGS`
+//! must do so through one of them. Neither half alone would notice a recipe that
 //! quietly went back to composing its own.
 //!
 //! Make expands the variables, because one of them uses a Make function this
@@ -73,7 +73,11 @@ struct RustflagsVariable {
 }
 
 /// Every Make variable that assigns `RUSTFLAGS`.
-const RUSTFLAGS_VARIABLES: [RustflagsVariable; 3] = [
+///
+/// The four are distinguished by two independent policies, and the tests below
+/// assert each policy rather than the variable's name, so a variable whose
+/// definition drifts from its row fails even when the name is unchanged.
+const RUSTFLAGS_VARIABLES: [RustflagsVariable; 4] = [
     RustflagsVariable {
         name: "GATE_RUSTFLAGS",
         denies_warnings: true,
@@ -87,6 +91,13 @@ const RUSTFLAGS_VARIABLES: [RustflagsVariable; 3] = [
     RustflagsVariable {
         name: "RELEASE_RUSTFLAGS",
         denies_warnings: false,
+        carries_standard: false,
+    },
+    // Kani denies warnings but takes none of the standard: it compiles through
+    // `kani-compiler` on its own bundled toolchain, where neither flag applies.
+    RustflagsVariable {
+        name: "KANI_RUSTFLAGS",
+        denies_warnings: true,
         carries_standard: false,
     },
 ];
