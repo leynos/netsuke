@@ -95,8 +95,36 @@ NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS: typ.Final[fractions.Fraction] = (
 #: that follow it. A separate term rather than a floor over the two, so
 #: raising a grace period raises the requirement instead of vanishing
 #: into it.
+#:
+#: This covers what nextest does after a *cancellation*. It is not the
+#: report-phase term below, which covers what `cargo llvm-cov` does
+#: after a *normal* nextest run; the two are different phases of
+#: different programs and neither subsumes the other.
 TERMINATION_SAFETY_MARGIN_SECONDS: typ.Final[fractions.Fraction] = fractions.Fraction(
     60
+)
+
+#: What `cargo llvm-cov` spends after nextest's clock stops, merging
+#: the profile data it collected and writing the report out. An
+#: instrumented run does not end when nextest says it does: on run
+#: 34914144521 nextest started its clock at 00:52:41 and reported
+#: 452.422 s, so its clock stopped at 01:00:13, and `Finished report
+#: saved to lcov.info` was printed at 01:04:47 -- 274 s later. The two
+#: next-longest runs measured 91 s and 86 s the same way.
+#:
+#: The watchdog has to cover this phase, because it runs inside the same
+#: `cargo` invocation the watchdog bounds and the watchdog is still on
+#: the clock throughout. The whole-run budget does not cover it: that
+#: budget bounds nextest alone, and nextest has already stopped. So a
+#: watchdog requirement derived from a `global-timeout` carries this
+#: term, while `required_ceiling` does not.
+#:
+#: This is not `TERMINATION_SAFETY_MARGIN_SECONDS`. That one covers
+#: nextest's own teardown and report after a *cancellation*; this one
+#: covers a different program's work after a *normal* finish. A run can
+#: do one, the other, or both, so neither term subsumes the other.
+REPORT_PHASE_ALLOWANCE_SECONDS: typ.Final[fractions.Fraction] = fractions.Fraction(
+    5 * 60
 )
 
 NEXTEST_CONFIG = REPO_ROOT / ".config" / "nextest.toml"

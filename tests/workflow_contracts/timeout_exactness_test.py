@@ -34,6 +34,7 @@ from timeout_budgets import (
     COVERAGE_ACTION,
     NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS,
     OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS,
+    REPORT_PHASE_ALLOWANCE_SECONDS,
     TERMINATION_SAFETY_MARGIN_SECONDS,
     WATCHDOG_VARIABLE,
     required_ceiling,
@@ -226,13 +227,18 @@ def _watchdog_floor(whole_run: int, *, grace: bool = True) -> fractions.Fraction
     Returns
     -------
     fractions.Fraction
-        The whole-run budget, the termination allowance and the cold
-        build allowance, summed exactly.
+        The whole-run budget, the termination allowance, the cold build
+        allowance and the report-phase allowance, summed exactly.
     """
     config_text = _config(whole_run, grace=grace)
     budget = global_timeout(config_text, profile="default")
     assert budget is not None, "the profile declares a global-timeout"
-    return budget + termination_allowance(config_text) + COLD_BUILD_ALLOWANCE_SECONDS
+    return (
+        budget
+        + termination_allowance(config_text)
+        + COLD_BUILD_ALLOWANCE_SECONDS
+        + REPORT_PHASE_ALLOWANCE_SECONDS
+    )
 
 
 def _watchdog_floor_of(whole_run: int) -> fractions.Fraction:
@@ -278,9 +284,9 @@ def test_the_watchdog_floor_function_stays_exact() -> None:
     ],
 )
 def test_the_watchdog_floor_stays_exact(*, grace: bool) -> None:
-    """The third composition: the whole run, the allowance, the cold build.
+    """The third composition: the whole run, the allowance, the build, the report.
 
-    Three terms, two of them constants. Either constant being a float
+    Four terms, three of them constants. Any constant being a float
     makes the floor a float even though the whole-run budget reaching it
     is exact, and a watchdog a second below the run it must cover would
     then compare equal to one that covers it.
@@ -330,6 +336,7 @@ def test_every_constant_the_compositions_add_is_exact() -> None:
         ("OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS", OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS),
         ("CEILING_MARGIN_SECONDS", CEILING_MARGIN_SECONDS),
         ("COLD_BUILD_ALLOWANCE_SECONDS", COLD_BUILD_ALLOWANCE_SECONDS),
+        ("REPORT_PHASE_ALLOWANCE_SECONDS", REPORT_PHASE_ALLOWANCE_SECONDS),
         ("TERMINATION_SAFETY_MARGIN_SECONDS", TERMINATION_SAFETY_MARGIN_SECONDS),
         (
             "NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS",
