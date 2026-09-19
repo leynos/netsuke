@@ -2374,6 +2374,12 @@ The Cranelift codegen backend is deliberately **not** part of the standard, and
 a contract refuses one. See *Why Cranelift is not part of the standard* below
 for the evidence.
 
+The decision, the exclusions it carries, and the evidence behind the Cranelift
+refusal are recorded in
+[ADR-029](adr-029-mold-and-parallel-frontend-as-build-defaults.md). This
+section is the working reference; that record is why the standard takes this
+shape.
+
 [`mold`]: https://github.com/rui314/mold
 
 The canonical commands are:
@@ -2864,6 +2870,12 @@ another's cache nor disturbs the working `target/` tree. The timer reads
 `EPOCHREALTIME`, so this target needs Bash 5.0 or newer; it fails with a named
 prerequisite on older shells rather than reporting zeroes.
 
+`mold` is Linux-only, so the benchmark drops its row elsewhere. On a non-Linux
+host the threaded row keeps the parallel frontend and loses the linker flag,
+and its caption reads "Platform linker, parallel frontend" so the table never
+names a linker change it did not make. The capability check tolerates a
+non-Linux host rather than aborting, which is what makes this path reachable.
+
 Every measured build runs with `RUSTC_WRAPPER` and `RUSTC_WORKSPACE_WRAPPER`
 assigned empty. This is not tidiness. A developer shell commonly exports a
 compiler wrapper chaining to `sccache`, and with one in force a variant's first
@@ -2873,6 +2885,17 @@ winner. The flags are part of the cache key, so the variants warm each other
 unevenly and nothing in the output reveals it. Both variables are named because
 Cargo honours them independently, and both are *assigned* rather than unset,
 because only an assignment displaces an exported value.
+
+`CARGO_ENCODED_RUSTFLAGS` is *removed* instead — `env -u`, not an empty
+assignment. Cargo consults it before `RUSTFLAGS` and uses the first source it
+finds, so an inherited value would leave every variant compiling with the same
+flags while the table still showed three rows, and an empty encoded list is
+still a source that would displace every variant's own `RUSTFLAGS`. Only
+removing the variable leaves `RUSTFLAGS` to decide the build. A developer with
+that variable exported — `cargo nextest` sets it, as do some wrapper setups —
+would otherwise get a table that compares nothing. Removing it is an extension
+to `env` rather than POSIX, but it is present in both GNU coreutils and the BSD
+`env` the benchmark can reach on macOS.
 
 `BENCH_ROOT` and `BENCH_TOUCH_FILE` default to the shared `target/bench`
 directory and the tracked `src/main.rs`, so two runs in one checkout would
@@ -2886,6 +2909,20 @@ run ends, including on interrupt. To benchmark two things at once, override
 `BENCH_ROOT`, so distinct roots do not contend. If a killed run ever leaves the
 directory behind, remove it.
 
+The variants are measured in a shuffled order, redrawn for each of
+`BENCH_REPEATS` samples (`2` by default). Separate target directories isolate
+build artefacts and nothing else: page-cache warmth and other tenants on a
+shared host are not isolated by any directory, and they are where the ordering
+bias lives. Drawing a fresh order per sample spreads that bias across the
+variants instead of pinning it to whichever ran first, and repeating turns it
+into visible spread rather than one number. The script prints `order sample N:`
+for each draw and `order measured:` for the run as a whole, because a shuffle
+is not reconstructible after the fact — without the record, a table disagreeing
+with an earlier one cannot be told apart from a run that measured the variants
+in a different order, which is the exact confusion the shuffle exists to
+remove. Paste that record with any table you record, so the next reader can
+tell which it was.
+
 No table is recorded here yet, and the reason is worth keeping. The figures
 this section used to carry were taken before the wrapper defect above was
 found, so they timed a mixture of compilation and cache retrieval. The attempt
@@ -2896,12 +2933,12 @@ number produced under those conditions is not a slower or faster reading of the
 truth; it is a reading of the host.
 
 A run worth recording therefore needs all of: a host doing nothing else, the
-load average quoted beside the table, and at least two runs in opposite variant
-orders that agree. Regenerate with `make bench-build` and paste the table
-verbatim. Until then, treat the standard as justified by what it does rather
-than by a figure — `mold` and the parallel frontend cost nothing at runtime and
-are trivially reversible — and measure your own workload before concluding the
-acceleration is or is not worth the setup.
+load average quoted beside the table, and samples that agree. Regenerate with
+`make bench-build` and paste the table verbatim. Until then, treat the standard
+as justified by what it does rather than by a figure — `mold` and the parallel
+frontend cost nothing at runtime and are trivially reversible — and measure a
+representative workload before concluding the acceleration is or is not worth
+the setup.
 
 Two limits bound whatever that run reports. The benchmark builds only
 `--bin netsuke`, the smallest useful target, so it under-represents what

@@ -8,7 +8,7 @@ use anyhow::{Context, Result, ensure};
 use rstest::{fixture, rstest};
 use test_support::build_tools::{
     BuildScenario, CARGO_CONFIG_PATH, CargoInvocation, MakeInvocation, RecordingCargo, Sandbox,
-    cargo_config, combined, pinned_mold_version, pinned_toolchain,
+    combined, pinned_mold_version, pinned_toolchain, standard_flags,
 };
 
 /// A binary name no build tree can already contain, so the file rule's recipe
@@ -45,23 +45,6 @@ fn run_target(scenario: &BuildScenario, target: &str) -> Result<Vec<CargoInvocat
         "make {target} should invoke Cargo at least once"
     );
     Ok(recorded)
-}
-
-/// The flags the standard applies on this platform, read from the committed
-/// configuration so the test cannot restate the Makefile's own answer.
-fn standard_flags() -> Result<Vec<String>> {
-    let config: toml::Value = toml::from_str(&cargo_config()?)?;
-    let flags = config
-        .get("target")
-        .and_then(|table| table.get(r#"cfg(target_os = "linux")"#))
-        .and_then(|table| table.get("rustflags"))
-        .and_then(toml::Value::as_array)
-        .context("the configuration must gate rustflags behind the Linux cfg")?;
-    Ok(flags
-        .iter()
-        .filter_map(toml::Value::as_str)
-        .map(str::to_owned)
-        .collect())
 }
 
 /// Every gate target must hand Cargo the standard's flags through `RUSTFLAGS`.

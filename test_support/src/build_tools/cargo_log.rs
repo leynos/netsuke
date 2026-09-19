@@ -68,6 +68,8 @@ impl RecordingCargo {
                 "  printf 'wrapper_set\\t%s\\n' \"${{RUSTC_WRAPPER+yes}}\"\n",
                 "  printf 'workspace_wrapper\\t%s\\n' \"${{RUSTC_WORKSPACE_WRAPPER-}}\"\n",
                 "  printf 'workspace_wrapper_set\\t%s\\n' \"${{RUSTC_WORKSPACE_WRAPPER+yes}}\"\n",
+                "  printf 'encoded_rustflags\\t%s\\n' \"${{CARGO_ENCODED_RUSTFLAGS-}}\"\n",
+                "  printf 'encoded_rustflags_set\\t%s\\n' \"${{CARGO_ENCODED_RUSTFLAGS+yes}}\"\n",
                 "  printf 'build_dir\\t%s\\n' \"${{CARGO_BUILD_BUILD_DIR:-}}\"\n",
                 "  printf 'target_dir\\t%s\\n' \"$target_dir\"\n",
                 "  printf 'target_state\\t%s\\n' \"$target_state\"\n",
@@ -168,6 +170,15 @@ pub struct CargoInvocation {
     /// Recorded separately because Cargo honours it independently: clearing
     /// only `RUSTC_WRAPPER` still leaves the workspace's own crates wrapped.
     workspace_wrapper: Option<String>,
+    /// `CARGO_ENCODED_RUSTFLAGS` as the invocation saw it, `None` when unset.
+    ///
+    /// Unset and empty are not interchangeable, which is why this records
+    /// which one happened rather than just the value. Cargo reads the encoded
+    /// variable before `RUSTFLAGS` and takes the first source it finds, so an
+    /// *empty* one is not a no-op: it is still a source, and it displaces every
+    /// variant's own flags. Only removing the variable leaves `RUSTFLAGS` to
+    /// decide the build.
+    encoded_rustflags: Option<String>,
     /// The `CARGO_TARGET_DIR` value, empty when unset.
     target_dir: String,
     /// Whether the target directory existed at invocation start.
@@ -232,6 +243,7 @@ impl CargoInvocation {
         let rustflags = optional("rustflags", "rustflags_set")?;
         let wrapper = optional("wrapper", "wrapper_set")?;
         let workspace_wrapper = optional("workspace_wrapper", "workspace_wrapper_set")?;
+        let encoded_rustflags = optional("encoded_rustflags", "encoded_rustflags_set")?;
 
         Ok(Self {
             arguments: take("arguments")?
@@ -244,6 +256,7 @@ impl CargoInvocation {
             rustflags,
             wrapper,
             workspace_wrapper,
+            encoded_rustflags,
             target_dir,
             target_state,
             touch_mtime,
@@ -329,6 +342,12 @@ impl CargoInvocation {
     #[must_use]
     pub fn wrappers_cleared(&self) -> bool {
         self.wrapper.as_deref() == Some("") && self.workspace_wrapper.as_deref() == Some("")
+    }
+
+    /// `CARGO_ENCODED_RUSTFLAGS` as seen, `None` when unset.
+    #[must_use]
+    pub fn encoded_rustflags(&self) -> Option<&str> {
+        self.encoded_rustflags.as_deref()
     }
 
     /// Whether every flag in `flags` appears in the recorded `RUSTFLAGS`.

@@ -16,8 +16,8 @@ use proptest::prelude::*;
 use proptest::proptest;
 use rstest::rstest;
 use test_support::build_tools::{
-    FakeRelease, InstallerFixture, InstallerScenario, MakeInvocation, PinOverrides, Sandbox,
-    TEST_MOLD_VERSION, WRONG_SHA256, combined, pinned_mold_version, pinned_toolchain,
+    BENCH_REPEATS, FakeRelease, InstallerFixture, InstallerScenario, MakeInvocation, PinOverrides,
+    Sandbox, TEST_MOLD_VERSION, WRONG_SHA256, combined, pinned_mold_version, pinned_toolchain,
 };
 
 /// Inputs whose checksum file fails verification in the given way.
@@ -341,9 +341,16 @@ fn benchmark_emits_a_markdown_table_for_every_variant() -> Result<()> {
         .lines()
         .filter(|line| line.starts_with("| Default") || line.starts_with("| `mold`"))
         .collect();
+    // One row per variant *per repeat*: the benchmark measures every variant
+    // `BENCH_REPEATS` times in a freshly shuffled order so that page-cache
+    // warmth spreads across the variants instead of pinning to whichever ran
+    // first, and each measurement is reported rather than folded into the last.
+    // Asserting a bare `3` would pass only until the repeat count changed, and
+    // would then be asserting the old count rather than the invariant.
+    let expected_rows = 3 * BENCH_REPEATS;
     ensure!(
-        rows.len() == 3,
-        "should report one row per variant, got `{stdout}`"
+        rows.len() == expected_rows,
+        "should report {expected_rows} rows, one per variant per repeat, got `{stdout}`"
     );
     for row in rows {
         let measurements = row.split('|').map(str::trim).filter(|cell| is_timing(cell));

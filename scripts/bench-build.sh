@@ -37,8 +37,13 @@ BENCH_ROOT=${BENCH_ROOT:-target/bench}
 BENCH_BIN=${BENCH_BIN:-netsuke}
 BENCH_TOUCH_FILE=${BENCH_TOUCH_FILE:-src/main.rs}
 BENCH_LOCK_DIR=${BENCH_LOCK_DIR:-$BENCH_ROOT.lock}
+# How many times each variant is measured. One sample cannot separate a variant
+# from the host, and shared state that no target directory isolates — page-cache
+# warmth, other load — is exactly what the ordering bias lives in.
+BENCH_REPEATS=${BENCH_REPEATS:-2}
 
-# Populated as "<label>|<clean seconds>|<incremental seconds>" rows.
+# Populated as "<label>|<clean seconds>|<incremental seconds>" rows, in the
+# order the samples were measured.
 results=()
 
 # The benchmark touches BENCH_TOUCH_FILE to make the second pass incremental,
@@ -116,31 +121,85 @@ time_command() {
   LC_ALL=C awk -v start="$start" -v end="$end" 'BEGIN { printf "%.1f", end - start }'
 }
 
-# Prefix applied to every measured build. Each variant already assigns
-# `RUSTFLAGS`; these two are assigned here because they are the difference
-# between compiling and retrieving.
+# The environment every measured build runs under.
+#
+# Each variant already assigns `RUSTFLAGS`; these three are the difference
+# between compiling, retrieving, and measuring a different build entirely.
 #
 # A developer shell on a shared host commonly exports a `RUSTC_WRAPPER` that
 # chains to `sccache`. With one in force a variant's first clean pass populates
 # the cache and every later pass reads it back, so the table reports cache
 # retrieval times under variant labels and the ordering of the rows decides the
 # result. Worse, the flags are part of the cache key, so the variants warm each
-# other unevenly and the bias is invisible. Both variables are assigned empty
-# rather than unset: Cargo honours `RUSTC_WORKSPACE_WRAPPER` independently, so
-# clearing one alone still leaves the workspace's own crates wrapped.
+# other unevenly and the bias is invisible. Both wrapper variables are assigned
+# empty rather than unset: Cargo honours `RUSTC_WORKSPACE_WRAPPER`
+# independently, so clearing one alone still leaves the workspace's own crates
+# wrapped.
+#
+# `CARGO_ENCODED_RUSTFLAGS` is removed rather than assigned. Cargo checks it
+# before `RUSTFLAGS` and uses the first source it finds, so an inherited value
+# would let every variant compile with the same flags while the table still
+# showed three different rows — the comparison would be void, and nothing in
+# the output would say so. Assigning it empty would not do: an empty encoded
+# list is still a source, and would displace every variant's own `RUSTFLAGS`.
 #
 # Measured 2026-09-17 on a 32-core host: with the wrapper inherited, the same
 # variant's clean build ranged from 37 s to 154 s across three runs, and the
 # ordering of the rows reversed the verdict twice.
-bench_env=(RUSTC_WRAPPER='' RUSTC_WORKSPACE_WRAPPER='')
+bench_env=(-u CARGO_ENCODED_RUSTFLAGS RUSTC_WRAPPER='' RUSTC_WORKSPACE_WRAPPER='')
 
-# Usage: measure_variant <slug> <label> <command...>
-# The slug names the variant's private target directory; the label is the table
-# caption for that row.
+# The variants, as "<slug>|<label>|<RUSTFLAGS>" rows.
+#
+# A single table rather than a call site per variant, because the only thing
+# that distinguishes one row from another is its `RUSTFLAGS`: the build command
+# is identical for all of them, so a variant whose flags drifted is the whole of
+# the bug this can have. Keeping the flags beside the slug also lets a test
+# compare the two without re-deriving either.
+#
+# Assigning `RUSTFLAGS` at all, even to nothing, displaces every `rustflags`
+# table in `.cargo/config.toml`, which is what makes the baseline row the
+# pre-standard build exactly. `$STANDARD_MOLD_FLAG` and the threaded row's
+# suffix are filled in by `main`, which is also where a non-Linux host drops the
+# mold row: an empty linker flag there would make it a second measurement of the
+# baseline under a caption claiming otherwise.
+#
+# The labels are backticked because the developers' guide embeds this table
+# verbatim, and the repository spelling gate reads a bare "mold" as "mould".
+# shellcheck disable=SC2016 # the backticks are Markdown, not a subshell.
+variants=(
+  'default|Default (platform linker)|'
+  'mold|`mold`|@MOLD@'
+  'mold-threads|`mold`, parallel frontend|@THREADS@@MOLD_SUFFIX@'
+)
+
+# Print one field of the variant named by `slug`.
+#
+# Deliberately a lookup rather than parallel arrays indexed by position: the
+# shuffle reorders the slugs, so anything positional would have to be permuted
+# in step and would silently mis-attribute a label the moment the two lists
+# disagreed.
+variant_field() {
+  local want=$1 field=$2 entry
+  for entry in "${variants[@]}"; do
+    IFS='|' read -r slug label flags <<<"$entry"
+    [ "$slug" = "$want" ] || continue
+    case $field in
+      label) printf '%s' "$label" ;;
+      flags) printf '%s' "$flags" ;;
+      *) fail "unknown variant field: $field" ;;
+    esac
+    return 0
+  done
+  fail "no variant named: $want"
+}
+
+# Usage: measure_variant <slug> <toolchain>
+# The slug names the variant's private target directory and selects its flags.
 measure_variant() {
-  local slug=$1 label=$2
-  local clean incremental
-  shift 2
+  local slug=$1 toolchain=$2
+  local label flags clean incremental
+  label=$(variant_field "$slug" label)
+  flags=$(variant_field "$slug" flags)
   export CARGO_TARGET_DIR="$BENCH_ROOT/$slug"
   # Cargo can be told to keep intermediates outside the target directory. If a
   # caller has done that, every variant shares one build directory, the `rm -rf`
@@ -151,7 +210,9 @@ measure_variant() {
 
   note "measuring $label (clean)"
   rm -rf "$CARGO_TARGET_DIR"
-  clean=$(time_command env "${bench_env[@]}" "$@")
+  clean=$(time_command env "${bench_env[@]}" \
+    RUSTUP_TOOLCHAIN="$toolchain" RUSTFLAGS="$flags" \
+    "$CARGO" build --bin "$BENCH_BIN")
 
   note "measuring $label (incremental)"
   if [ -z "$BENCH_TOUCH_STAMP" ]; then
@@ -159,7 +220,9 @@ measure_variant() {
     touch -r "$BENCH_TOUCH_FILE" "$BENCH_TOUCH_STAMP"
   fi
   touch "$BENCH_TOUCH_FILE"
-  incremental=$(time_command env "${bench_env[@]}" "$@")
+  incremental=$(time_command env "${bench_env[@]}" \
+    RUSTUP_TOOLCHAIN="$toolchain" RUSTFLAGS="$flags" \
+    "$CARGO" build --bin "$BENCH_BIN")
 
   unset CARGO_TARGET_DIR
   results+=("$label|$clean|$incremental")
@@ -177,43 +240,79 @@ report() {
   done
 }
 
-# Measure the LLVM baseline first so its numbers are not attributed to a warm
-# page cache created by an accelerated run.
+# A permutation of the variant slugs, as space-separated words.
+#
+# The order is shuffled rather than fixed, and repeated, because separate target
+# directories isolate build artefacts and nothing else. Page-cache warmth and
+# other tenants on a shared host are not isolated by any directory, and they are
+# where the ordering bias lives: the recorded 2026-09-17 attempt reversed its
+# verdict twice when the rows were reversed. Drawing a fresh order per sample
+# spreads that bias across the variants instead of pinning it to one, and
+# repeating makes it visible as spread rather than hidden in a single number.
+#
+# A Fisher-Yates draw from `$RANDOM`, which is fine here and would not be for
+# anything security-relevant. `shuf` is not portable to macOS, where this
+# benchmark is reachable because the capability check tolerates a non-Linux
+# host; bash is already required for `EPOCHREALTIME`.
+permuted_slugs() {
+  local -a order=("$@")
+  local index swap pick
+  for ((index = ${#order[@]} - 1; index > 0; index--)); do
+    pick=$((RANDOM % (index + 1)))
+    swap=${order[index]}
+    order[index]=${order[pick]}
+    order[pick]=$swap
+  done
+  printf '%s ' "${order[@]}"
+}
+
+# Measure every variant `BENCH_REPEATS` times, in a freshly shuffled order each
+# time, and print the table followed by the record of what was actually run.
+#
+# The executed order is printed rather than implied, because the shuffle is not
+# reconstructible after the fact. Without it, a table whose rows disagree with
+# an earlier run cannot be told apart from one whose variant order differed —
+# which is the exact confusion this rework exists to remove.
 main() {
-  local toolchain linker_flag=''
+  local slug sample selection
+  local -a measured=() slugs=()
+  local toolchain
   toolchain=$(pinned_toolchain)
-  # `mold` is Linux-only, so elsewhere the accelerated rows differ from the
-  # baseline by the backend and the frontend alone. Saying so in the log keeps
-  # a macOS table from being read as a linker comparison.
+
+  # A non-Linux host loses the linker row entirely and keeps the other two, so
+  # the threaded row's caption names the frontend as what it varies.
   if is_linux; then
-    linker_flag=$STANDARD_MOLD_FLAG
+    variants[1]=${variants[1]//@MOLD@/$STANDARD_MOLD_FLAG}
+    variants[2]=${variants[2]//@THREADS@/$STANDARD_THREADS_FLAG}
+    variants[2]=${variants[2]//@MOLD_SUFFIX@/ $STANDARD_MOLD_FLAG}
   else
-    note "mold is Linux-only; measuring on $(uname -s) without a linker change"
+    variants[2]=${variants[2]//@THREADS@/$STANDARD_THREADS_FLAG}
+    variants[2]=${variants[2]//@MOLD_SUFFIX@/}
+    variants[2]=${variants[2]//\`mold\`, parallel frontend/Platform linker, parallel frontend}
+    unset 'variants[1]'
+    # Re-index, so the shuffle ranges over what is left rather than over a hole.
+    variants=("${variants[@]}")
+    note "mold is Linux-only; measuring on $(uname -s) without a linker change, so the mold row is omitted and the threaded row varies the frontend alone"
   fi
+
+  local entry
+  for entry in "${variants[@]}"; do
+    slugs+=("${entry%%|*}")
+  done
 
   # Before the first `rm -rf` or `touch`, so a rejected run leaves the holder's
   # state untouched.
   acquire_bench_lock
 
-  # Assigning RUSTFLAGS at all, even to nothing, displaces every `rustflags`
-  # table in `.cargo/config.toml`, which is what restores the pre-standard
-  # build exactly.
-  measure_variant default 'Default (platform linker)' \
-    env RUSTUP_TOOLCHAIN="$toolchain" RUSTFLAGS='' \
-    "$CARGO" build --bin "$BENCH_BIN"
-
-  # The labels are backticked because the developers' guide embeds this table
-  # verbatim, and the repository spelling gate reads a bare "mold" as "mould".
-  # shellcheck disable=SC2016 # the backticks are Markdown, not a subshell.
-  measure_variant mold '`mold`' \
-    env RUSTUP_TOOLCHAIN="$toolchain" RUSTFLAGS="$linker_flag" \
-    "$CARGO" build --bin "$BENCH_BIN"
-
-  # shellcheck disable=SC2016 # the backticks are Markdown, not a subshell.
-  measure_variant mold-threads '`mold`, parallel frontend' \
-    env RUSTUP_TOOLCHAIN="$toolchain" \
-    RUSTFLAGS="$STANDARD_THREADS_FLAG${linker_flag:+ $linker_flag}" \
-    "$CARGO" build --bin "$BENCH_BIN"
+  for ((sample = 0; sample < BENCH_REPEATS; sample++)); do
+    selection=$(permuted_slugs "${slugs[@]}")
+    printf 'order sample %s: %s\n' "$((sample + 1))" "$selection"
+    for slug in $selection; do
+      measure_variant "$slug" "$toolchain"
+      measured+=("$slug")
+    done
+  done
+  printf 'order measured: %s\n' "${measured[*]}"
 
   report
 }

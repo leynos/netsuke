@@ -12,15 +12,15 @@
 
 #![cfg(all(unix, target_os = "linux"))]
 
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
 use proptest::prelude::*;
 use proptest::proptest;
 use proptest::test_runner::FileFailurePersistence;
 use rstest::rstest;
 use test_support::build_tools::{
-    BENCH_SLUGS, BenchFixture, BuildScenario, CargoInvocation, DEFAULT_SLUG, MOLD_SLUG,
-    MOLD_THREADS_SLUG, MakeInvocation, Sandbox, TargetState, combined, pinned_toolchain,
+    BENCH_REPEATS, BENCH_SLUGS, BenchFixture, BuildScenario, CargoInvocation, DEFAULT_SLUG,
+    MOLD_SLUG, MOLD_THREADS_SLUG, MakeInvocation, Sandbox, TargetState, combined, pinned_toolchain,
     real_utility, write_with_old_mtime,
 };
 
@@ -39,66 +39,112 @@ const VARIANT_FLAGS: [(&str, &[&str]); 3] = [
     ),
 ];
 
-/// Check the recorded passes: their count and pairing, each variant's own
-/// contract, that the variants measured separately, and where each pass sits
+/// Check the recorded passes: their membership and pairing, each variant's own
+/// contract, that variants measured separately, and where each pass sits
 /// relative to the touch.
+///
+/// Nothing here depends on the order the variants ran in. The benchmark
+/// shuffles them per sample precisely because a fixed order confounds the
+/// variant with shared host state, so an assertion that pinned the order would
+/// re-impose the defect the shuffle exists to remove. What must hold instead is
+/// that every slug appears `2 * BENCH_REPEATS` times, and that each appearance
+/// is a clean pass followed by an incremental one.
 fn check_benchmark_invocations(invocations: &[CargoInvocation], baseline_mtime: i64) -> Result<()> {
-    // Six builds: clean and incremental, for each of the three variants.
+    // Two builds — clean then incremental — for each variant in each sample.
     ensure!(
-        invocations.len() == 2 * BENCH_SLUGS.len(),
-        "should measure two builds per variant, recorded {}",
+        invocations.len() == 2 * BENCH_SLUGS.len() * BENCH_REPEATS,
+        "should measure two builds per variant per sample, recorded {}",
         invocations.len()
     );
 
-    // The benchmark measures the baseline first, then the two accelerated
-    // variants, each as a clean pass followed by an incremental pass.
     let (pairs, rest) = invocations.as_chunks::<2>();
     ensure!(
         rest.is_empty(),
         "passes should come in pairs, got {} spare",
         rest.len()
     );
-    let [baseline, mold, mold_threads] = pairs else {
-        bail!("expected one pair per variant, got {}", pairs.len());
-    };
-    let variants: Vec<BenchVariant<'_>> = VARIANT_FLAGS
-        .iter()
-        .zip([baseline, mold, mold_threads])
-        .map(|((label, flags), pair)| BenchVariant::from_pair(label, pair, flags))
-        .collect();
+
     let toolchain = pinned_toolchain()?;
+    let variants: Vec<BenchVariant<'_>> = pairs
+        .iter()
+        .map(|pair| {
+            // Drop the sample index the slug carries, so a variant measured in
+            // two samples is checked against one expectation rather than
+            // needing a row per sample.
+            let (_, slug) = pair[0].target_dir().rsplit_once('/').with_context(|| {
+                format!(
+                    "pass should run in a variant directory, got `{}`",
+                    pair[0].target_dir()
+                )
+            })?;
+            let (label, flags) = VARIANT_FLAGS
+                .iter()
+                .find(|(known, _)| *known == slug)
+                .with_context(|| format!("`{slug}` is not a benchmarked variant"))?;
+            Ok(BenchVariant::from_pair(label, pair, flags))
+        })
+        .collect::<Result<Vec<_>>>()?;
+
     for variant in &variants {
         variant.check(&toolchain)?;
     }
 
+    // Every variant must be measured the same number of times. Otherwise a
+    // shuffle could drop one from a sample and the table would still look
+    // plausible while comparing unequal evidence.
+    for slug in BENCH_SLUGS {
+        let seen = variants
+            .iter()
+            .filter(|variant| variant.label == slug)
+            .count();
+        ensure!(
+            seen == BENCH_REPEATS,
+            "`{slug}` should be measured {BENCH_REPEATS} time(s), found {seen}"
+        );
+    }
+
     // Pairwise rather than against the first alone: two accelerated variants
     // sharing a directory would warm each other's cache and understate the
-    // second, which a check against the baseline would not catch.
+    // second, which a check against the baseline would not catch. Compared
+    // across samples too, so an accidental per-sample directory cannot hide.
     for (index, variant) in variants.iter().enumerate() {
         for other in variants.iter().skip(index + 1) {
             ensure!(
-                variant.target_dir() != other.target_dir(),
-                "variants must not share a target directory, got `{}` and `{}`",
-                variant.target_dir(),
-                other.target_dir()
+                variant.target_dir() != other.target_dir() || variant.label == other.label,
+                "`{}` and `{}` share a directory, got `{}`",
+                variant.label,
+                other.label,
+                variant.target_dir()
             );
         }
     }
 
-    check_touch_ordering(invocations, baseline_mtime)
+    // `first()` rather than an index: the pair count was asserted above, but an
+    // indexing panic here would report a slice bound rather than the missing
+    // measurement the assertion is about.
+    let first = pairs
+        .first()
+        .context("the run should record at least one pair")?;
+    check_touch_ordering(first, invocations, baseline_mtime)
 }
 
-/// Only the very first pass runs before any touch; each variant touches the
-/// file between its own two passes, so every later pass must see a newer
-/// timestamp. Comparing against a backdated baseline rather than between passes
-/// keeps this free of filesystem timestamp granularity.
-fn check_touch_ordering(invocations: &[CargoInvocation], baseline_mtime: i64) -> Result<()> {
-    let first = invocations.first().context("expected a recorded pass")?;
+/// Only the first pass of the whole run precedes any touch; the benchmark
+/// touches the file between every variant's two passes, so every later pass
+/// must see a newer timestamp. Comparing against a backdated baseline rather
+/// than between passes keeps this free of filesystem timestamp granularity.
+fn check_touch_ordering(
+    first_pair: &[CargoInvocation],
+    invocations: &[CargoInvocation],
+    baseline_mtime: i64,
+) -> Result<()> {
+    let first = first_pair.first().context("expected a recorded pass")?;
     ensure!(
         first.touch_mtime() == Some(baseline_mtime),
-        "the first clean pass should precede any touch, got {:?}",
+        "the run's first clean pass should precede any touch, got {:?}",
         first.touch_mtime()
     );
+    // Every pass after the run's very first follows a touch: the incremental
+    // pass of the opening variant, and both passes of every variant after it.
     for (index, pass) in invocations.iter().enumerate().skip(1) {
         ensure!(
             pass.touch_mtime()
@@ -192,15 +238,29 @@ proptest! {
         );
 
         let invocations = scenario.cargo().invocations().map_err(fail)?;
-        let states: Vec<TargetState> = invocations.iter().map(CargoInvocation::target_state).collect();
-        let expected: Vec<TargetState> = BENCH_SLUGS
+        // Every pass after a variant's clean one must find its directory in
+        // place. Asserted as a property of the sequence rather than against a
+        // fixed list, because the benchmark shuffles the variants per sample
+        // and the order is not the contract — the clean/incremental pairing is.
+        // A pair's members share a directory, so their states must differ.
+        let states: Vec<TargetState> = invocations
             .iter()
-            .flat_map(|_| [TargetState::Absent, TargetState::Present])
+            .map(CargoInvocation::target_state)
             .collect();
+        for (index, pair) in states.as_chunks::<2>().0.iter().enumerate() {
+            prop_assert_eq!(
+                *pair,
+                [TargetState::Absent, TargetState::Present],
+                "pair {} should be a clean pass then an incremental one, from {:?}/{:?}",
+                index,
+                default_pre,
+                mold_pre
+            );
+        }
         prop_assert_eq!(
-            states,
-            expected,
-            "each variant should measure a clean then an incremental pass, from {:?}/{:?}",
+            states.len(),
+            2 * BENCH_SLUGS.len() * BENCH_REPEATS,
+            "every variant should be measured in every sample, from {:?}/{:?}",
             default_pre,
             mold_pre
         );
@@ -368,6 +428,42 @@ fn bench_target_emits_every_variant_row() -> Result<()> {
     check_benchmark_invocations(&scenario.cargo().invocations()?, fixture.baseline_mtime)
 }
 
+/// An inherited `CARGO_ENCODED_RUSTFLAGS` must not reach a single measured build.
+///
+/// The sandbox clears the environment, so `BenchVariant::check`'s assertion that
+/// the variable is unset would hold even for a script that never removed it —
+/// there would be nothing to remove. This is the case that gives that assertion
+/// its teeth: the harness exports a hostile value and the run must strip it.
+///
+/// It has to be stripped rather than emptied. Cargo reads the encoded variable
+/// before `RUSTFLAGS` and takes the first source it finds, so an inherited value
+/// survives as every variant compiling identically while the table reports three
+/// different rows. A developer with `CARGO_ENCODED_RUSTFLAGS` exported — which
+/// `cargo nextest` and sccache wrappers both set — would see a benchmark that
+/// looked perfectly plausible and compared nothing.
+#[test]
+fn an_inherited_encoded_rustflags_never_reaches_a_measured_build() -> Result<()> {
+    let scenario = BuildScenario::prepare()?;
+    let fixture = BenchFixture::prepare(&scenario)?;
+
+    let invocation = MakeInvocation::new("bench-build")
+        .variable("CARGO", scenario.cargo().executable())
+        .environment("BENCH_ROOT", &fixture.root)
+        .environment("BENCH_TOUCH_FILE", &fixture.touch_file)
+        .environment("CARGO_ENCODED_RUSTFLAGS", "-Dinherited=should-not-apply");
+    let output = scenario.sandbox().run_make(&invocation)?;
+
+    ensure!(
+        output.status.success(),
+        "make bench-build should succeed, got `{}`",
+        combined(&output)
+    );
+    // The whole run is checked, not just the variable: stripping the encoded
+    // value must not have been achieved by dropping the variants' own flags too,
+    // which would satisfy the absence assertion on its own.
+    check_benchmark_invocations(&scenario.cargo().invocations()?, fixture.baseline_mtime)
+}
+
 /// One variant's pair of recorded builds: the clean pass then the incremental.
 struct BenchVariant<'a> {
     label: &'a str,
@@ -442,6 +538,15 @@ impl<'a> BenchVariant<'a> {
                  RUSTC_WORKSPACE_WRAPPER={:?}",
                 pass.wrapper(),
                 pass.workspace_wrapper()
+            );
+            // Unset, not merely empty. Cargo reads the encoded variable before
+            // `RUSTFLAGS`, so an empty one would still displace every variant's
+            // flags — the rows would all compile identically while the table
+            // reported three different builds.
+            ensure!(
+                pass.encoded_rustflags().is_none(),
+                "`{label}` must remove CARGO_ENCODED_RUSTFLAGS, found {:?}",
+                pass.encoded_rustflags()
             );
         }
 

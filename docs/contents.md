@@ -173,6 +173,10 @@ operator, user, and contributor references are easier to find.
 - [ADR-028](adr-028-defer-split-build-dir-harness-trim.md): Deferred trim of
   the split-build-dir harness test, with the serialized-lane measurements that
   made the figure unstable and the ten-run gate that reopens the question.
+- [ADR-029](adr-029-mold-and-parallel-frontend-as-build-defaults.md):
+  `mold` and the parallel `rustc` front end as the committed default build,
+  with the release and coverage exclusions, the Cranelift refusal, and the
+  toolchain-versus-tools boundary.
 - [ADR-032](adr-032-windows-reparse-point-same-handle-open.md): Windows final
   component validation through a same-handle reparse-point open.
 - [ADR-033](adr-033-record-split-build-cargo-messages.md): Recorded Cargo

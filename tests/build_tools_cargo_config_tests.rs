@@ -88,7 +88,8 @@ fn cargo_resolves_the_committed_configuration_to_the_intended_settings(
     Ok(())
 }
 
-/// The configuration must name no codegen backend, for any profile.
+/// The configuration must name no codegen backend, by any of the routes open
+/// to it.
 ///
 /// This is a refusal rather than an omission, and it is deliberate. A panic
 /// compiled by the Cranelift backend does not find the unwind handler it
@@ -100,19 +101,28 @@ fn cargo_resolves_the_committed_configuration_to_the_intended_settings(
 /// applies to every build in the repository, so adding one back has to go
 /// through the evidence in the developers' guide rather than through a
 /// one-line edit that looks like a speed-up.
+///
+/// Three routes, because closing one alone leaves the other two open: a direct
+/// `codegen-backend` key on a profile, a package override beneath one, and
+/// `-Zcodegen-backend=` inside the `rustflags` the standard applies. The last
+/// would be a backend change that never mentions the word "profile" at all.
 #[test]
 fn the_configuration_names_no_codegen_backend() -> Result<()> {
     let config: toml::Value = toml::from_str(&cargo_config()?)?;
 
-    if let Some(profiles) = config.get("profile").and_then(toml::Value::as_table) {
-        for (name, table) in profiles {
-            ensure!(
-                table.get("codegen-backend").is_none(),
-                "profile `{name}` names a codegen backend; see \"The build standard\" in \
-                 docs/developers-guide.md before adding one"
-            );
-        }
-    }
+    let profiles = first_profile_codegen_backend(&config);
+    ensure!(
+        profiles.is_none(),
+        "profile `{}` names a codegen backend; see \"The build standard\" in \
+         docs/developers-guide.md before adding one",
+        profiles.unwrap_or_default()
+    );
+    let flags = rustflags_carrying_backend(&config);
+    ensure!(
+        flags.is_empty(),
+        "rustflags name a codegen backend with `{flags:?}`; see \"The build standard\" in \
+         docs/developers-guide.md before adding one"
+    );
     ensure!(
         config
             .get("unstable")
@@ -127,4 +137,144 @@ fn the_configuration_names_no_codegen_backend() -> Result<()> {
         "the configuration should not reference the backend override"
     );
     Ok(())
+}
+
+/// Returns the name of the first profile or package override that names a
+/// codegen backend, if any.
+///
+/// Only the two key paths Cargo documents are consulted: `codegen-backend`
+/// directly on a profile, and `codegen-backend` on an entry beneath a
+/// profile's `package` table. Walking every nested table instead would let an
+/// unrelated key that happens to share the name — a Cargo feature named
+/// `codegen-backend`, say — be reported as a backend selection, which is a
+/// false positive in the one test that must not have one.
+///
+/// `profile` may also nest `package` beneath `package`, which Cargo does not
+/// document and this does not look for; a backend named that deep would be
+/// invisible to Cargo too.
+fn first_profile_codegen_backend(config: &toml::Value) -> Option<String> {
+    let profiles = config.get("profile")?.as_table()?;
+    for (name, table) in profiles {
+        if table.get("codegen-backend").is_some() {
+            return Some(name.clone());
+        }
+        let Some(overrides) = table.get("package").and_then(toml::Value::as_table) else {
+            continue;
+        };
+        for (spec, override_table) in overrides {
+            if override_table.get("codegen-backend").is_some() {
+                return Some(format!("{name}.package.{spec}"));
+            }
+        }
+    }
+    None
+}
+
+/// Neither route a backend can be named by is closed while the other is open.
+///
+/// Driven with synthetic documents rather than the committed file, because the
+/// committed file is the one that must contain no backend: a test that could
+/// only ask it that question would report a pass whether or not the helpers
+/// can tell the two apart. Cargo refuses to load a configuration that names
+/// one, so these helpers are also the only place the detection can be
+/// exercised at all.
+#[test]
+fn unit_a_named_codegen_backend_is_detected_by_either_route() -> Result<()> {
+    let clean: toml::Value = toml::from_str("[build]\nrustflags = [\"-Zthreads=8\"]\n")?;
+    ensure!(
+        first_profile_codegen_backend(&clean).is_none()
+            && rustflags_carrying_backend(&clean).is_empty(),
+        "a configuration naming no backend should report none"
+    );
+
+    let direct: toml::Value = toml::from_str("[profile.dev]\ncodegen-backend = \"cranelift\"\n")?;
+    ensure!(
+        first_profile_codegen_backend(&direct).as_deref() == Some("dev"),
+        "a profile key should be reported by its profile's name"
+    );
+
+    let nested: toml::Value =
+        toml::from_str("[profile.release.package.\"*\"]\ncodegen-backend = \"cranelift\"\n")?;
+    ensure!(
+        first_profile_codegen_backend(&nested).as_deref() == Some("release.package.*"),
+        "a package override should be reported by the path that reaches it"
+    );
+
+    let flags: toml::Value = toml::from_str(
+        "[target.'cfg(target_os = \"linux\")']\nrustflags = [\"-Zcodegen-backend=cranelift\"]\n",
+    )?;
+    let found = rustflags_carrying_backend(&flags);
+    // `first()` rather than an index: the pair count is asserted first, so a
+    // mismatch reports the whole reading, and an indexing panic here would
+    // report a slice bound instead of the flag that was found.
+    ensure!(
+        found.len() == 1,
+        "exactly one rustflags source should name a backend, got {found:?}"
+    );
+    let (source, flag) = found.first().context("one source was reported")?;
+    ensure!(
+        flag == "-Zcodegen-backend=cranelift",
+        "a backend selected from rustflags should be reported with its flag, got {flag:?}"
+    );
+    ensure!(
+        source.contains("linux"),
+        "the flag lives in the Linux table, so that is the source to report, got {source:?}"
+    );
+    Ok(())
+}
+
+/// A profile key is reported only where Cargo documents it.
+///
+/// The word is not reserved: a `[features]` entry or an unrelated nested table
+/// may carry it, and reporting one of those as a backend selection would make
+/// this the test that fails on a change that is fine. The check walks the two
+/// key paths Cargo defines and stops there.
+#[test]
+fn unit_an_unrelated_codegen_backend_key_is_not_reported() -> Result<()> {
+    let decoy: toml::Value = toml::from_str(
+        "[features]\ncodegen-backend = [\"dep:something\"]\n\
+         [profile.dev.package.netsuke-build]\nopt-level = 3\n",
+    )?;
+    ensure!(
+        first_profile_codegen_backend(&decoy).is_none(),
+        "only the two documented key paths are backend selections"
+    );
+    Ok(())
+}
+
+/// Returns every `rustflags` source that names a codegen backend, with the
+/// flag it used.
+///
+/// A backend can be selected without a profile key at all, by putting
+/// `-Zcodegen-backend=` into the flags every build already applies — which is
+/// exactly where the standard's own flags live, so the check has to reach
+/// there. Both sources are inspected: the Linux table and `[build]`, since
+/// whichever matches is the one Cargo uses on that platform.
+fn rustflags_carrying_backend(config: &toml::Value) -> Vec<(String, String)> {
+    let sources = [
+        ("build".to_owned(), config.get("build")),
+        (
+            r#"target.cfg(target_os = "linux")"#.to_owned(),
+            config
+                .get("target")
+                .and_then(|table| table.get(r#"cfg(target_os = "linux")"#)),
+        ),
+    ];
+    let mut offenders = Vec::new();
+    for (name, table) in sources {
+        // The closure binding is distinct from the loop's `table` on purpose:
+        // `source` is the whole table, and this closure reaches one level in.
+        let Some(flags) = table
+            .and_then(|source| source.get("rustflags"))
+            .and_then(toml::Value::as_array)
+        else {
+            continue;
+        };
+        for flag in flags.iter().filter_map(toml::Value::as_str) {
+            if flag.contains("codegen-backend") {
+                offenders.push((name.clone(), flag.to_owned()));
+            }
+        }
+    }
+    offenders
 }
