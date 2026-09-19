@@ -1,16 +1,20 @@
-# Architectural decision record (ADR) 027: Defer replacing the split-build-dir harness test
+# Architectural decision record (ADR) 028: Defer replacing the split-build-dir harness test
 
 ## Status
 
-Accepted. The trim of `harness_compiles_under_a_split_build_dir` is deferred,
-not closed: the Windows lane keeps the real `test_support` build and its 420s
-budget, and the question reopens at the ten-run revisit gate below.
+Accepted.
 
 ## Date
 
-2026-09-17, with the measurements behind it taken through 2026-09-18.
+2026-09-19.
 
 ## Context and problem statement
+
+The decision this record captures was taken on 2026-09-17, when the
+`nested-cargo-builds` serialization group landed and changed what a trim could
+return. The measurements it rests on were taken up to 2026-09-18, and the
+sections below say where each figure came from rather than dating the record by
+it.
 
 `harness_compiles_under_a_split_build_dir` is the regression test for the
 Windows `CreateProcessW` command-line limit. It forces a split layout with its
@@ -134,6 +138,9 @@ _Table 1: Comparison of the measured options._
 `harness_compiles_under_a_split_build_dir` yet. The test keeps its real
 `test_support` subject and its 420s budget, and the trimming question reopens
 at the revisit gate below rather than on a schedule.
+
+The trim is deferred, not closed. The Windows lane keeps the real
+`test_support` build, and the question reopens when the gate is met.
 
 ## Rationale
 

@@ -91,8 +91,8 @@ fn stub_env_builders_compile_under_the_same_harness(
 /// cost of building it here is recorded in
 /// docs/developers-guide.md, and the decision to defer trimming it, the gate
 /// that reopens the question, and the fidelity argument any fixture-crate
-/// replacement would owe are in ADR-027
-/// (docs/adr-027-defer-split-build-dir-harness-trim.md).
+/// replacement would owe are in ADR-028
+/// (docs/adr-028-defer-split-build-dir-harness-trim.md).
 ///
 /// This test is a member of the `nested-cargo-builds` nextest group, so on
 /// Windows it holds that group's single slot: every other build-capable test

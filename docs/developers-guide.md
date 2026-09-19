@@ -2913,7 +2913,7 @@ Linux runner. Both platforms still assert the packaged file list. See
 
 [windows-test-budget]: #windows-budget-for-the-isolated-cargo-build-tests
 [fixture-constraints]: #what-a-fixture-crate-replacement-would-have-to-preserve
-[adr-027-trim]: adr-027-defer-split-build-dir-harness-trim.md
+[adr-028-trim]: adr-028-defer-split-build-dir-harness-trim.md
 
 `tests/workflow_contracts/test_execution_coverage_test.py` holds all of this:
 the coverage inputs, the denied warnings, the doctest pass and its position,
@@ -3015,7 +3015,7 @@ Table: Windows durations before and after the verification build moved.
 
 The 420s budget is therefore sized against the older, contended distribution
 and is deliberately conservative while the new shape has three samples. It is a
-candidate for tightening, or for deletion, once the [ADR-027][adr-027-trim]
+candidate for tightening, or for deletion, once the [ADR-028][adr-028-trim]
 revisit gate is met.
 
 Those three samples predate the serialization group described below, which
@@ -3050,7 +3050,7 @@ contrast, is one-directional: the coverage a fixture crate would drop is
 exactly the coverage that fails only on Windows, where it is least likely to be
 noticed.
 
-[ADR-027][adr-027-trim] holds the decision itself: the measurements, the rule
+[ADR-028][adr-028-trim] holds the decision itself: the measurements, the rule
 that a trim can never return more than the test's own duration, the
 alternatives already measured and rejected (`cargo check` for `cargo build`,
 warming the compiler cache, and sharing a target directory), and the ten-run
@@ -4510,13 +4510,13 @@ gate: `test_support` depends on `netsuke-build`, so a private root means
 compiling that crate and roughly 350 dependencies from scratch. Its measured
 budget is recorded in
 [Windows budget for the isolated-Cargo-build tests][windows-test-budget]. The
-[decision to defer a trim][adr-027-trim] and the gate at which it is revisited
-are recorded in ADR-027.
+[decision to defer a trim][adr-028-trim] and the gate at which it is revisited
+are recorded in ADR-028.
 
 #### What a fixture-crate replacement would have to preserve
 
 This section is the constraint list for a future attempt, not a plan. The
-decision to defer, and the gate that reopens it, are in [ADR-027][adr-027-trim]
+decision to defer, and the gate that reopens it, are in [ADR-028][adr-028-trim]
 ; nothing here is built while the trim is deferred.
 
 If the trim is taken up after that gate, the obvious shape is a minimal fixture
