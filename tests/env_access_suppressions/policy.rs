@@ -19,27 +19,32 @@
 /// sits, but nothing else reports a crate that has silenced the reporter. See
 /// "Enforcing the environment mandate" in the developers' guide.
 ///
-/// The last four entries close a second way in, measured rather than assumed.
+/// The last three entries close a second way in, measured rather than assumed.
 /// Clippy keeps the old spelling of a renamed lint, and a renamed name still
 /// selects the lint it was renamed to, so `clippy::disallowed_method` — an
 /// alias of the policy lint — silences the policy exactly as the current name
 /// does. The same is true of the bare `disallowed_methods`, the name the lint
-/// carried in a set of toolchain versions and still accepts with the rename
-/// report allowed. Ordinarily this is harmless, because the rename is reported
-/// and `renamed_and_removed_lints` is denied, so an alias is an error rather
-/// than a suppression. Allowing that lint as well hides the rename, and the
-/// alias then silences the policy in silence: measured at exit 0 where the same
-/// file without the attribute exits 101. Banning the enabler closes the whole
-/// class of alias evasions, since no alias suppresses anything while the rename
-/// that names it is still reported; banning each alias too keeps the pair
-/// honest if a future Clippy stops reporting renames. `unknown_lints` is banned
-/// for the same reason from the other direction: it is denied in
-/// `[workspace.lints.rust]`, so an unrecognized name in an attribute is an
-/// error rather than a silent no-op, and allowing `unknown_lints` hides that
-/// report — which is what an `allow` of a misspelled or removed name would need
-/// in order to pass unnoticed. None of the four is in the scoped exemption,
-/// which covers only the two guard lints.
-const FORBIDDEN_ALLOW_LINTS: [&str; 10] = [
+/// carried in a set of toolchain versions and still accepts. Ordinarily this is
+/// harmless, because the rename is reported and `renamed_and_removed_lints` is
+/// denied, so an alias is an error rather than a suppression. Allowing that
+/// lint as well hides the rename, and the alias then silences the policy in
+/// silence: measured at exit 0 where the same file without the attribute exits
+/// 101. Banning the enabler closes the whole class of alias evasions, since no
+/// alias suppresses anything while the rename that names it is still reported;
+/// banning each alias too keeps the pair honest if a future Clippy stops
+/// reporting renames.
+///
+/// `unknown_lints` is deliberately *not* in the set, and the reason is worth
+/// stating because it looks like it belongs. It hides the report that an
+/// attribute names a lint that does not exist, which sounds like the rename
+/// mechanism above. It was measured and it is not: a misspelled name is a no-op
+/// whether or not the report is allowed, so suppressing `unknown_lints` cannot
+/// silence the policy, and `#![allow(unknown_lints, disallowed_methods)]`
+/// without the rename enabler still exits 101. Banning a name that cannot
+/// suppress anything would be a rule the code cannot justify. The workspace
+/// still denies `unknown_lints`, so a misspelled name remains an error at the
+/// lint level, which is where that concern belongs.
+const FORBIDDEN_ALLOW_LINTS: [&str; 9] = [
     "clippy::disallowed_methods",
     "clippy::style",
     "clippy::all",
@@ -48,7 +53,6 @@ const FORBIDDEN_ALLOW_LINTS: [&str; 10] = [
     "clippy::allow_attributes_without_reason",
     "clippy::disallowed_method",
     "renamed_and_removed_lints",
-    "unknown_lints",
     "disallowed_methods",
 ];
 

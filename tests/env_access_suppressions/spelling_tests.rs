@@ -104,12 +104,12 @@ fn spaces_around_the_path_separator_are_reported() -> Result<()> {
     Ok(())
 }
 
-/// The deprecated bare name still selects the lint, so it is banned too.
+/// The deprecated bare name is an alias, and is reported beside its enabler.
 ///
-/// Measured: with the rename report allowed alongside it, the bare name
-/// silences the policy at `clippy` exit 0. Banning the enabler closes the class;
-/// banning the bare name keeps the pair honest the way the path-qualified alias
-/// is kept honest.
+/// Measured twice: beside `renamed_and_removed_lints` the bare name silences
+/// the policy at `clippy` exit 0, and without it the same attribute exits 101.
+/// So it is the enabler that closes the class and the alias that keeps the pair
+/// honest, exactly as with the path-qualified spelling.
 #[test]
 fn the_deprecated_bare_name_is_reported_with_its_enabler() -> Result<()> {
     let source = "#![allow(renamed_and_removed_lints, disallowed_methods, reason = \"escape hatch probe\")]\n";
@@ -122,6 +122,25 @@ fn the_deprecated_bare_name_is_reported_with_its_enabler() -> Result<()> {
                 finding("src/lib.rs", "disallowed_methods")
             ],
         "expected both the enabler and the bare name to be reported, got {findings:?}"
+    );
+    Ok(())
+}
+
+/// `unknown_lints` cannot suppress the policy, so it is not banned.
+///
+/// It looks as though it belongs in the set — it hides the report that a name
+/// does not exist — but measurement says a misspelled name is a no-op either
+/// way, so allowing the report silences nothing. A rule the code cannot justify
+/// is worse than an absent one; this test is what keeps the entry from being
+/// added back on the strength of a plausible-sounding rationale.
+#[test]
+fn the_unknown_lint_enabler_is_not_a_finding_on_its_own() -> Result<()> {
+    let source = "#![allow(unknown_lints, reason = \"escape hatch probe\")]\n";
+    let findings = scan_source("src/lib.rs", source);
+
+    ensure!(
+        findings.is_empty(),
+        "expected the unknown-lint enabler to pass on its own, got {findings:?}"
     );
     Ok(())
 }
