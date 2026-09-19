@@ -4389,21 +4389,28 @@ reached the hard way, and it is worth recording why the obvious alternative
 fails. The scan once anchored at the start of a line, reasoning that `rustfmt`
 normalizes an attribute's spelling and `make check-fmt` enforces that, so a
 spelling the anchor declined to read could not reach the compiler. **That
-reasoning is false.** `#[rustfmt::skip]` freezes the very spelling `rustfmt`
-would otherwise normalize, so a line anchor can be held open indefinitely and
-each of these compiles, silences the policy outright (`clippy` exits 0 where
-the same file without the attribute exits 101), and passed the anchored scan:
-`#[allow` with its `(` on a later line; a newline between `#[allow(` and the
-lint list; a newline between the `#` and the `[`; `r#allow(...)` or
-`r#clippy::disallowed_methods`, raw identifiers denoting exactly what the
-unprefixed names denote; `clippy :: disallowed_methods`, with spaces around the
-path separator; and the deprecated bare `disallowed_methods` beside its
-enabler. A layout gate is not a proof about spelling — it normalizes what it is
-shown, and a skip attribute is a request to be shown nothing — so the matcher
-tolerates the whitespace and reads the raw prefix instead of trusting a gate to
-have removed them. Every shape in that list is pinned by a test in
-`spelling_tests.rs`, each measured against a real probe file before it was
-written down.
+reasoning is false.** Each of these compiles, silences the policy outright
+(`clippy` exits 0 where the same file without the attribute exits 101), and
+passed the anchored scan, and every one is pinned by a test in
+`spelling_tests.rs` against a real probe file:
+
+- `#[rustfmt::skip]` freezing a split marker: `#[allow` with its `(` on a later
+  line, a newline between `#[allow(` and the lint list, a newline between the
+  `#` and the `[`, or spaces around the `::` of the path. `rustfmt` would
+  normally join or normalize all of these, which is the premise that failed —
+  but a skip attribute is a request to be shown nothing, so the gate passes a
+  spelling it never inspected.
+- `r#allow(...)` and `r#clippy::disallowed_methods`, raw identifiers denoting
+  exactly what the unprefixed names denote. These need no skip attribute at
+  all: `rustfmt` leaves them byte-for-byte as written, so they were reachable
+  on a clean `make check-fmt` run and are the more dangerous of the two groups.
+- the deprecated bare `disallowed_methods` beside its enabler, likewise
+  untouched by `rustfmt`.
+
+A layout gate is not a proof about spelling — it normalizes what it is shown,
+and it is not shown what a skip attribute covers — so the matcher tolerates
+whitespace between tokens and reads the raw prefix instead of trusting a gate
+to have removed them.
 
 The banned set follows the lint hierarchy rather than spelling one name.
 `disallowed_methods` is declared in Clippy's `style` group, so allowing that
