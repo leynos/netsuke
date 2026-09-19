@@ -1943,11 +1943,11 @@ Recorded during planning; extend during implementation.
   before this branch was rebased a second time, and every base agrees on the
   conclusion:
 
-  | Base / head | Files | Additions | Deletions | Net   | Net excl. plan |
-  | ----------- | ----- | --------- | --------- | ----- | -------------- |
-  | `3348cc0a` / `02caf3ee` | 23 | 3,127 | 133 | 2,994 | 708 |
-  | `3348cc0a` / `e401f4d7` | 23 | 3,172 | 133 | 3,039 | 708 |
-  | `a273fad3` / `f994800c` | 24 | 3,280 | 133 | 3,147 | 716 |
+  | Base / head             | Files | Additions | Deletions | Net   | Net excl. plan |
+  | ----------------------- | ----- | --------- | --------- | ----- | -------------- |
+  | `3348cc0a` / `02caf3ee` | 23    | 3,127     | 133       | 2,994 | 708            |
+  | `3348cc0a` / `e401f4d7` | 23    | 3,172     | 133       | 3,039 | 708            |
+  | `a273fad3` / `f994800c` | 24    | 3,280     | 133       | 3,147 | 716            |
 
   Both limbs fire at every head: more than 20 files, and net far above 600 —
   with 716 net across 23 files even if this living exec plan (2,431 lines) is
