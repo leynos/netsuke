@@ -126,7 +126,7 @@ fn evaluate_manifest(
         .map_err(|exhaustion| exhaustion.into_error(minijinja::ErrorKind::InvalidOperation))?;
     let mut doc: ManifestValue =
         serde_saphyr::from_str(yaml).map_err(|e| ManifestError::Parse {
-            source: map_yaml_error(e, &ManifestSource::from(yaml), name),
+            source: map_yaml_error(&e, &ManifestSource::from(yaml), name),
             message: localization::message(keys::MANIFEST_PARSE),
         })?;
     let mut jinja = Environment::new();
