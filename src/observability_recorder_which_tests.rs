@@ -234,23 +234,79 @@ impl<'a> Series<'a> {
 
     /// Whether `entry` is this series.
     fn matches(&self, entry: &SnapshotEntry) -> bool {
-        if entry.0.kind() != MetricKind::Counter || entry.0.key().name() != WHICH_RESOLUTION_TOTAL {
+        if !self.is_resolution_counter(entry) {
             return false;
         }
-        let labels: Vec<&metrics::Label> = entry.0.key().labels().collect();
-        let named = |key: &str, value: &str| {
-            labels
-                .iter()
-                .any(|label| label.key() == key && label.value() == value)
-        };
-        labels.len() == self.label_count()
-            && named("cwd_mode", self.cwd_mode)
-            && named("outcome", self.outcome)
-            && self.category.map_or_else(
-                || !labels.iter().any(|label| label.key() == "category"),
-                |value| named("category", value),
-            )
-            && matches!(entry.3, DebugValue::Counter(observed) if observed == self.count)
+        let labels = LabelSet::of(entry);
+        labels.label_count() == self.label_count()
+            && labels.has("cwd_mode", self.cwd_mode)
+            && labels.has("outcome", self.outcome)
+            && self.category_matches(&labels)
+            && self.count_matches(entry)
+    }
+
+    /// Whether `entry` is a counter under the resolution metric's own name.
+    ///
+    /// A success and a failure series differ only in their labels, so this is
+    /// what keeps a case from matching some other metric's counter that
+    /// happened to carry the labels it expected.
+    fn is_resolution_counter(&self, entry: &SnapshotEntry) -> bool {
+        entry.0.kind() == MetricKind::Counter && entry.0.key().name() == WHICH_RESOLUTION_TOTAL
+    }
+
+    /// Whether `labels` carry the category this shape expects.
+    ///
+    /// A success is identified as much by the *absence* of a category as by
+    /// the presence of the right one: a failure category left on a success
+    /// series would otherwise satisfy the label count and go unremarked.
+    fn category_matches(&self, labels: &LabelSet<'_>) -> bool {
+        self.category.map_or_else(
+            || !labels.names("category"),
+            |value| labels.has("category", value),
+        )
+    }
+
+    /// Whether `entry` retained the counter value this shape expects.
+    fn count_matches(&self, entry: &SnapshotEntry) -> bool {
+        matches!(entry.3, DebugValue::Counter(observed) if observed == self.count)
+    }
+}
+
+/// The labels one retained series carries, borrowed from its metric key.
+///
+/// A series is identified by its label *set* rather than by any single label,
+/// so every assertion in this file asks the same two questions of one: whether
+/// it carries a given pair, and how many pairs it carries in total. Answering
+/// them here keeps that shape in one place instead of repeating the scan at
+/// each call site, and keeps each caller down to the one decision it is about.
+struct LabelSet<'a> {
+    /// The series' labels, borrowed from the key they were read off.
+    labels: Vec<&'a metrics::Label>,
+}
+
+impl<'a> LabelSet<'a> {
+    /// Read the labels off a retained entry.
+    fn of(entry: &'a SnapshotEntry) -> Self {
+        Self {
+            labels: entry.0.key().labels().collect(),
+        }
+    }
+
+    /// Whether the series carries `key` with exactly `value`.
+    fn has(&self, key: &str, value: &str) -> bool {
+        self.labels
+            .iter()
+            .any(|label| label.key() == key && label.value() == value)
+    }
+
+    /// Whether the series carries `key` under any value at all.
+    fn names(&self, key: &str) -> bool {
+        self.labels.iter().any(|label| label.key() == key)
+    }
+
+    /// How many labels the series carries.
+    fn label_count(&self) -> usize {
+        self.labels.len()
     }
 }
 
@@ -265,22 +321,25 @@ fn assert_which_counter(snapshot: &[SnapshotEntry], expected: &Series<'_>) {
 /// Assert one retained `which` cache counter has `cwd_mode` and `outcome`.
 fn assert_cache_counter(snapshot: &[SnapshotEntry], cwd_mode: &str, outcome: &str, expected: u64) {
     assert!(
-        snapshot.iter().any(|entry| {
-            entry.0.kind() == MetricKind::Counter
-                && entry.0.key().name() == WHICH_CACHE_TOTAL
-                && entry.0.key().labels().count() == 2
-                && entry
-                    .0
-                    .key()
-                    .labels()
-                    .any(|label| label.key() == "cwd_mode" && label.value() == cwd_mode)
-                && entry
-                    .0
-                    .key()
-                    .labels()
-                    .any(|label| label.key() == "outcome" && label.value() == outcome)
-                && matches!(entry.3, DebugValue::Counter(observed) if observed == expected)
-        }),
+        snapshot
+            .iter()
+            .any(|entry| is_cache_counter(entry, cwd_mode, outcome, expected)),
         "expected a retained {WHICH_CACHE_TOTAL} series for {cwd_mode}/{outcome}={expected}: {snapshot:?}"
     );
+}
+
+/// Whether `entry` is the cache series for `cwd_mode`/`outcome` and `expected`.
+///
+/// The pair is asserted as a *set of two*, not as two independent memberships:
+/// a series carrying the right pair plus anything else has a shape the
+/// recorder's allowlist does not admit, so matching it here would let a case
+/// pass over a series the recorder should have refused.
+fn is_cache_counter(entry: &SnapshotEntry, cwd_mode: &str, outcome: &str, expected: u64) -> bool {
+    let labels = LabelSet::of(entry);
+    entry.0.kind() == MetricKind::Counter
+        && entry.0.key().name() == WHICH_CACHE_TOTAL
+        && labels.label_count() == 2
+        && labels.has("cwd_mode", cwd_mode)
+        && labels.has("outcome", outcome)
+        && matches!(entry.3, DebugValue::Counter(observed) if observed == expected)
 }
