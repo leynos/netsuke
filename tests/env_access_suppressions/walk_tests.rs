@@ -7,7 +7,7 @@
 //! today is exactly the shape that would go unnoticed if the test read the real
 //! tree.
 
-use super::{collect_all_sources, is_scanned};
+use super::{MACHINE_LOCAL_DIRECTORIES, collect_all_sources, is_scanned};
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
@@ -101,4 +101,44 @@ fn a_machine_local_name_is_skipped_at_any_depth() -> Result<()> {
          got {found:?}"
     );
     Ok(())
+}
+
+/// Fail if the walk skips a name git would happily track.
+///
+/// The skip is justified by an appeal to `.gitignore`: a name git will not
+/// track is not one a compiled source can live under, so skipping it cannot
+/// hide anything. That appeal is only sound while it is *true* for every name in
+/// the list, and it was not — `.netsuke` was skipped while `git check-ignore`
+/// declined it, so a `.rs` file placed there would have been tracked, compiled,
+/// skipped by the walk, and reported by nobody. That is the precise silent
+/// non-coverage this invariant exists to prevent, and it arrived through the
+/// list rather than through the walk.
+///
+/// `.git` is the one legitimate exception: git refuses to track anything
+/// beneath it whatever the ignore files say, so the appeal still holds even
+/// though `check-ignore` reports it as unignored. It is named here rather than
+/// excluded by a pattern, so a future name added to the list without an ignore
+/// rule is caught rather than grandfathered in.
+#[test]
+fn every_skipped_name_is_one_git_would_not_track() {
+    let root = std::env::var("CARGO_MANIFEST_DIR").expect("the manifest directory should be set");
+    let not_tracked = |name: &str| {
+        let status = std::process::Command::new("git")
+            .args(["check-ignore", "-q", &format!("{name}/probe.rs")])
+            .current_dir(&root)
+            .status()
+            .expect("git check-ignore should run");
+        status.success()
+    };
+    let unexplained: Vec<&str> = MACHINE_LOCAL_DIRECTORIES
+        .iter()
+        .copied()
+        .filter(|name| *name != ".git" && !not_tracked(name))
+        .collect();
+    assert!(
+        unexplained.is_empty(),
+        "these names are skipped by the walk but git would track a source under them, \
+         so the walk would hide it rather than report it; add each to `.gitignore` (its \
+         sibling caches are already there) or reconsider the skip: {unexplained:?}"
+    );
 }
