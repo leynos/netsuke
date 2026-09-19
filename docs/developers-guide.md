@@ -4506,13 +4506,23 @@ does. On its own that is harmless: `renamed_and_removed_lints` is denied in
 rather than a suppression. Allow that lint as well and the rename goes
 unreported, and the alias suppresses the policy in silence — measured at exit
 0, where the same file without the attribute exits 101. The deprecated bare
-`disallowed_methods` is the same alias under its shorter name and behaves
-identically. Four entries close the class: `renamed_and_removed_lints`, because
-no alias suppresses anything while the rename naming it is still reported;
-`clippy::disallowed_method` and the bare `disallowed_methods`, so the pair
-stays honest if a future Clippy stops reporting renames; and `unknown_lints`,
-which hides the report that makes a misspelled or removed name an error rather
-than a silent no-op. The scoped exemption below covers none of them.
+`disallowed_methods` is the same alias under its shorter name, and measurement
+says it behaves identically: it silences the policy beside the enabler, and
+errors without it. Three entries close the class: `renamed_and_removed_lints`,
+because no alias suppresses anything while the rename naming it is still
+reported, plus `clippy::disallowed_method` and the bare `disallowed_methods`,
+so the pair stays honest if a future Clippy stops reporting renames.
+
+`unknown_lints` is deliberately *not* banned, though it looks as if it should
+be: it hides the report that a name does not exist, which reads like the rename
+mechanism above. It was measured and it is not one. A misspelled lint name is a
+no-op whether or not the report is allowed, so suppressing `unknown_lints`
+cannot silence the policy — `#![allow(unknown_lints, disallowed_methods)]`
+without the rename enabler still exits 101 — and banning a name that cannot
+suppress anything would be a rule the code cannot justify. The workspace denies
+`unknown_lints` anyway, which is where that concern belongs. The lesson is the
+one this section keeps relearning: measure the mechanism before writing the
+rule, and do not add a name because it looks like it belongs.
 
 Three files are exempt, and only for those two guard lints:
 `src/runner/error.rs`, `src/manifest/diagnostics/mod.rs`, and
