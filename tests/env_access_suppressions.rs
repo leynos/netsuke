@@ -119,7 +119,7 @@ fn is_rust_source(name: &str) -> bool {
 /// Append every Rust source the coverage invariant governs, in no set order.
 ///
 /// The walk descends everything except two kinds of entry, and neither is
-/// hand-written source: `target`, which the compiler writes rather than reads,
+/// handwritten source: `target`, which the compiler writes rather than reads,
 /// and dot-prefixed names, which hold tooling state and machine-local caches.
 /// Skipping the caches is not just economy — a gate that read them would turn
 /// on what a cache happens to contain on one machine, and this one must not.
