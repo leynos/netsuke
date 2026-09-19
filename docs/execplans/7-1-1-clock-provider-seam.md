@@ -2727,3 +2727,44 @@ was taken at, and this plan's EP-M3 evidence went stale twice — once when the
 EP-M4 commits landed, and again when the spelling fix touched
 `src/stdlib/time/clock.rs`. Re-running is cheap; asserting that a green result
 still applies is not the same as knowing it.
+
+1. A local `make test` timeout is not automatically a defect, and the way to
+    tell the two apart is to measure rather than to repeat the first guess. The
+    `-8` gate run on `14651fc0` failed on exactly one test:
+    `harness_compiles_under_a_split_build_dir` timed out at the 300 s per-test
+    allowance, with 3245 of 3250 passing and neither the other three gates nor
+    any test in the change surface implicated. My first explanation was
+    contention, and I stated it with more confidence than the evidence carried:
+    the test had passed at 157.9 s and 184.4 s in the two preceding runs, other
+    worktrees were building concurrently, and the load average was 12-24 on a
+    6-core host. Two isolated re-runs at load 9.3 and 7.0 both timed out as
+    well, which falsifies a mechanism that needs *heavy* load — so the guess was
+    wrong even though the conclusion it reached was right, and repeating it
+    would have been repeating an unverified claim.
+
+    The useful measurement was to raise the ceiling and read the real figure:
+    `--config 'profile.default.slow-timeout.terminate-after=20'` ran the test to
+    completion in **292.1 s**, of which 291.6 s was its nested
+    `cargo build test_support`. The test is not slow-but-failing; it is
+    slow-but-passing, sitting close to a 300 s allowance by construction.
+    `docs/developers-guide.md` already documents this: the test spawns its own
+    `cargo` into private `CARGO_TARGET_DIR` and `CARGO_BUILD_BUILD_DIR`
+    tempdirs, so it pays a cold dependency build every run and queues behind the
+    package-cache lock of every other build on the host, and the guide records a
+    measurement of **688.6 s** for that same nested build under contention,
+    against "seconds unloaded".
+
+    Three things make this environmental rather than this branch's: the guide
+    documents the effect at more than twice the allowance; `build-test`
+    succeeded in CI on `8de3c963` with this test inside it, on the same commit
+    whose Linux timeout I had just reproduced locally four times; and the
+    test's own file and `.config/nextest.toml` are untouched by this branch.
+    What I had wrong in the first pass was the *reason*, not the disposition:
+    the mechanism the guide describes is a cold build behind a shared
+    package-cache lock, which bites at moderate load because a single blocked
+    nested `cargo` is enough, not only under a load average of 20.
+
+    The lesson worth keeping is the one this plan keeps rediscovering: record
+    the measurement, not the story about it. "It is flaky under load" is a
+    hypothesis with a testable mechanism, and here the mechanism as I first
+    stated it was refuted by the very experiment that supported its conclusion.
