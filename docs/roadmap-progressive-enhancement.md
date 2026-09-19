@@ -26,25 +26,27 @@ new named execution contexts, and a universal strict mode are not prerequisites.
   shallow-end compatibility and opt-in policy composition.
 
 RFC 0001 and phases 12 to 14 retain ownership of command parsing, argv,
-execution, process cleanup, capability-scoped paths, and persisted action plans.
-Phase 11 retains trusted shell selection. Phases 16 to 19 retain include and
-bundle composition. Phase 5 and OrthoConfig retain generic profile, schema,
+execution, process cleanup, capability-scoped paths, and persisted action
+plans. Phase 11 retains trusted shell selection. Phases 16 to 19 retain include
+and bundle composition. Phase 5 and OrthoConfig retain generic profile, schema,
 metadata, redaction, and result machinery. The semantic linter tracked by issue
-#592 retains the reusable manifest-analysis boundary. No new task may duplicate
-those implementations merely to avoid an explicit integration dependency.
+`#592` retains the reusable manifest-analysis boundary. No new task may
+duplicate those implementations merely to avoid an explicit integration
+dependency.
 
-New public grammar is proposed, not shipped: RFC 0014 proposes `--input
-NAME=VALUE` on manifest-compiling commands; RFC 0015 proposes `clean --artefact
-NAME`. Register both with the canonical vocabulary and metadata before delivery.
-Use existing `check`, `context --json`, `--dry-run`, `--force`, and `--no-input`
-contracts. Do not introduce an unreviewed `explain` command or new exit-code
-system.
+New public grammar is proposed, not shipped: RFC 0014 proposes
+`--input NAME=VALUE` on manifest-compiling commands; RFC 0015 proposes
+`clean --artefact NAME`. Register both with the canonical vocabulary and
+metadata before delivery. Use existing `check`, `context --json`, `--dry-run`,
+`--force`, and `--no-input` contracts. Do not introduce an unreviewed `explain`
+command or new exit-code system.
 
 Every implementation task includes relevant unit and behavioural tests. Use
 Proptest for normalization and algebraic invariants, bounded Kani harnesses for
-pure transition logic where useful, and subprocess end-to-end tests for process,
-filesystem, locking, and backend boundaries. Reuse installed or cached tooling;
-this roadmap does not require new source-built proof tools for ordinary gates.
+pure transition logic where useful, and subprocess end-to-end tests for
+process, filesystem, locking, and backend boundaries. Reuse installed or cached
+tooling; this roadmap does not require new source-built proof tools for
+ordinary gates.
 
 ## 20. Preserve the shallow end before adding contracts
 
@@ -166,8 +168,8 @@ unrelated task configuration unchanged.
 
 ## 22. Named contention without a second scheduler
 
-Hypothesis: one optional contention annotation can control shared build pressure
-without confusing dependency order or subprocess worker limits.
+Hypothesis: one optional contention annotation can control shared build
+pressure without confusing dependency order or subprocess worker limits.
 
 ### 22.1. Resolve one class per executable edge
 
@@ -282,8 +284,8 @@ without requiring a provider implementation or a Nagios service.
 
 ### 23.4. Validate state value in a real migration
 
-Outcome: the canary removes redundant setup while retaining intentionally strict
-preconditions, and default builds pay no state-management cost.
+Outcome: the canary removes redundant setup while retaining intentionally
+strict preconditions, and default builds pay no state-management cost.
 
 - [ ] 23.4.1. Add the Cuprum preparation and extension-guard canaries. Requires
   23.2.2 and 23.3.2.
@@ -398,8 +400,8 @@ findings, with no command-text guessing or competing parser.
 
 ### 25.2. Compose enforcement without weakening trusted constraints
 
-Outcome: profile and import layering cannot make a project-owned warning replace
-an operator error or hide a rule through scope rewriting.
+Outcome: profile and import layering cannot make a project-owned warning
+replace an operator error or hide a rule through scope rewriting.
 
 - [ ] 25.2.1. Add opt-in policy declarations and trust-aware severity merging.
   Requires 25.1.1 and the existing configuration provenance boundary.

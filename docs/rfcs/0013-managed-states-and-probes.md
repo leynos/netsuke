@@ -16,8 +16,8 @@ optional preparation recipe. Built-in probes serve the normal case; external
 functional checks support project-specific conditions without a provider plugin
 or a Nagios installation.
 
-A plain `command: uv sync` remains valid. Adding a state is worthwhile only when
-an author needs an explicit precondition, validated reuse, or a shared
+A plain `command: uv sync` remains valid. Adding a state is worthwhile only
+when an author needs an explicit precondition, validated reuse, or a shared
 preparation contract. No context, typed input, ownership declaration, maturity
 policy, or bundle is compulsory. [RFC 0017][maturity] owns this shallow-end
 compatibility requirement.
@@ -26,18 +26,19 @@ compatibility requirement.
 
 A directory timestamp cannot establish that a virtual environment contains the
 requested interpreter and packages. A successful previous installation cannot
-establish that an external service still works. Conversely, a test that requires
-an already-installed extension must not silently build it.
+establish that an external service still works. Conversely, a test that
+requires an already-installed extension must not silently build it.
 
-[RFC 0001][commands] owns structured execution; its working-directory, temporary
-resource, and shell amendments remain authoritative. This RFC adds execution
-units to that runner, not a template-time subprocess facility. Cargo, uv, and
-other ecosystem tools retain dependency resolution and incremental compilation.
+[RFC 0001][commands] owns structured execution; its working-directory,
+temporary resource, and shell amendments remain authoritative. This RFC adds
+execution units to that runner, not a template-time subprocess facility. Cargo,
+uv, and other ecosystem tools retain dependency resolution and incremental
+compilation.
 
 ## 3. Progressive authoring
 
-The following proposed fragment uses a built-in presence probe. It promises only
-that `build` is a directory, not that its contents form a valid build:
+The following proposed fragment uses a built-in presence probe. It promises
+only that `build` is a directory, not that its contents form a valid build:
 
 ```yaml
 states:
@@ -57,8 +58,8 @@ actions:
 `probe: builtin` boilerplate. Initial kinds are `directory`, `file`, and
 `python-venv`. The first two check the declared object type without following
 symlinks. They make no content-freshness claim. `python-venv` checks the actual
-interpreter, its environment prefix, and any declared interpreter constraint; it
-must not advertise package-set verification that it does not implement.
+interpreter, its environment prefix, and any declared interpreter constraint;
+it must not advertise package-set verification that it does not implement.
 
 A richer proposed fragment keeps a functional check separate from preparation:
 
@@ -85,15 +86,15 @@ actions:
 
 Here the built-in environment checks still run. The external check adds a
 condition; it cannot bypass the built-in checks or forge preparation identity.
-The script is project-owned runtime code, not an example of shipped tooling. Its
-declared condition must cover any package expectations on which consumers rely.
-A lockfile digest records preparation inputs, not current installation
+The script is project-owned runtime code, not an example of shipped tooling.
+Its declared condition must cover any package expectations on which consumers
+rely. A lockfile digest records preparation inputs, not current installation
 integrity.
 
-`kind: custom` supports conditions without a suitable built-in kind. It requires
-an explicit external probe and cannot acquire stronger verification claims than
-that probe supplies. A custom state may omit `path` when it observes a service;
-that does not authorize network access or remote mutation.
+`kind: custom` supports conditions without a suitable built-in kind. It
+requires an explicit external probe and cannot acquire stronger verification
+claims than that probe supplies. A custom state may omit `path` when it
+observes a service; that does not authorize network access or remote mutation.
 
 ## 4. State definition and identity
 
@@ -167,48 +168,48 @@ identity mismatch and a functional failure retain distinct reason codes.
 
 The optional `nagios` protocol uses the conventional plugin exit statuses[^1]:
 
-| Exit | Probe result | Default state-operation behaviour |
-| --- | --- | --- |
-| 0 | `ready` | Continue only if every other condition passes. |
-| 1 | `degraded` | Stop without repair; explicit acceptance may continue. |
-| 2 | `not_ready` | An ensure may prepare once; a requirement never prepares. |
-| 3 | `unknown` | Stop without repair. |
+| Exit | Probe result | Default state-operation behaviour                         |
+| ---- | ------------ | --------------------------------------------------------- |
+| 0    | `ready`      | Continue only if every other condition passes.            |
+| 1    | `degraded`   | Stop without repair; explicit acceptance may continue.    |
+| 2    | `not_ready`  | An ensure may prepare once; a requirement never prepares. |
+| 3    | `unknown`    | Stop without repair.                                      |
 
 Table 1: Nagios-style statuses and their Netsuke interpretation.
 
 Other exits, signals, spawn failure, timeout, malformed output encoding, and
 output-budget exhaustion produce `unknown` with a distinct execution reason. A
-process's exit status is authoritative; a success-looking message cannot convert
-a failing exit into readiness. The first stdout line supplies a human summary.
-Remaining stdout and stderr are bounded diagnostic data. A `|` suffix may be
-retained as uninterpreted performance data, but it never controls state,
+process's exit status is authoritative; a success-looking message cannot
+convert a failing exit into readiness. The first stdout line supplies a human
+summary. Remaining stdout and stderr are bounded diagnostic data. A `|` suffix
+may be retained as uninterpreted performance data, but it never controls state,
 identity, scheduling, or authorization. No metric parser or Nagios daemon is
 required.
 
 Proposed defaults are a ten-second wall-clock deadline and 64 KiB combined
 stdout/stderr. Optional `probe.timeout_seconds` and `probe.max_output_bytes`
 are positive integers; trusted operator limits cap requested bounds. Drain both
-streams
-concurrently, enforce limits during collection, and terminate and reap the owned
-process tree on timeout, cancellation, or excess output. No shell redirection or
-unbounded capture is necessary. A probe cannot change command-local runtime
-bindings in the consuming action.
+streams concurrently, enforce limits during collection, and terminate and reap
+the owned process tree on timeout, cancellation, or excess output. No shell
+redirection or unbounded capture is necessary. A probe cannot change
+command-local runtime bindings in the consuming action.
 
 Only ordinary structured invocation fields needed for a functional check are
 accepted inside `probe.external`: `invoke`, `env`, `cwd`, and allowed `shell`
 selection. Reject pipelines, stream files, runtime capture, nested state
-operations, and cleanup there. Explicit named-shell probes remain possible under
-RFC 0011; direct invocation is the default. Probe return codes are not Netsuke's
-public CLI exit codes: the existing structured-result mapping owns that
-translation.
+operations, and cleanup there. Explicit named-shell probes remain possible
+under RFC 0011; direct invocation is the default. Probe return codes are not
+Netsuke's public CLI exit codes: the existing structured-result mapping owns
+that translation.
 
-Probes should be observational and idempotent, but executing arbitrary code does
-not prove either property. The runner must not claim a read-only or network
-sandbox that it does not supply. An operator can forbid external probes or
-restrict their executable identities. Project configuration and bundle content
-cannot weaken those restrictions. Lack of authorization is an error, not a
-reason to bypass the probe. Do not run probes or preparation merely to render
-help, inspect context, check a manifest, generate a graph, or preview work.
+Probes should be observational and idempotent, but executing arbitrary code
+does not prove either property. The runner must not claim a read-only or
+network sandbox that it does not supply. An operator can forbid external probes
+or restrict their executable identities. Project configuration and bundle
+content cannot weaken those restrictions. Lack of authorization is an error,
+not a reason to bypass the probe. Do not run probes or preparation merely to
+render help, inspect context, check a manifest, generate a graph, or preview
+work.
 
 ## 7. Execution settings and security
 
@@ -220,8 +221,8 @@ resolve them through the same command plan rather than a state-private resolver.
 Probe and preparation commands may intentionally use different tools. Record
 both effective settings and diagnose accidental environment-root mismatches; do
 not replace an unavailable requested interpreter with an ambient one. External
-code has the same trust implications as a build recipe. State annotations do not
-make an untrusted checkout safe to execute.
+code has the same trust implications as a build recipe. State annotations do
+not make an untrusted checkout safe to execute.
 
 Redact probe arguments and output through the shared diagnostic policy, bound
 messages, and escape terminal control sequences. Do not export raw probe output
@@ -230,13 +231,13 @@ seams, not process-global mutation or a separate configuration reader.
 
 ## 8. Scheduling, mutation, and durable records
 
-Keep state operations inside ordinary Ninja-scheduled action edges. They are not
-graph-discovery operations, and their results cannot change manifest-time
+Keep state operations inside ordinary Ninja-scheduled action edges. They are
+not graph-discovery operations, and their results cannot change manifest-time
 conditions or add undeclared dependencies. The action-plan codec must represent
 them explicitly and reject unknown versions during replay.
 
-State evidence is not itself a Ninja output. A state-using action must either be
-an always-run action or explicitly opt into always-run execution; reject an
+State evidence is not itself a Ninja output. A state-using action must either
+be an always-run action or explicitly opt into always-run execution; reject an
 incremental file target with state operations until a separate
 runtime-validation contract can guarantee that its checks actually run. This
 avoids silently skipping a readiness check because an unrelated output is up to
@@ -244,11 +245,11 @@ date.
 
 For managed mutable paths, acquire a workspace-scoped advisory lease for every
 state referenced by an action before its first command, in canonical resource
-order, and retain the leases through the last consumer in that action. These are
-integrity locks for cooperating invocations, not a replacement scheduler. Bound
-acquisition and never acquire a lease while recursively invoking Netsuke. Reject
-different state identities claiming the same mutable path within one selected
-build closure; isolated paths are the first-version remedy.
+order, and retain the leases through the last consumer in that action. These
+are integrity locks for cooperating invocations, not a replacement scheduler.
+Bound acquisition and never acquire a lease while recursively invoking Netsuke.
+Reject different state identities claiming the same mutable path within one
+selected build closure; isolated paths are the first-version remedy.
 
 A standalone preparation action does not hold a lease for its dependants.
 Consumers therefore need their own `require_state` or `ensure_state` operation.
@@ -265,9 +266,10 @@ pretend to serialize access.
 Store records in a versioned, bounded runtime namespace separate from dyndep
 sidecars. Publish records atomically only after verification. Interrupted
 preparation leaves no success record; partial resources remain unverified and
-may need explicit remediation. Cleanup invalidates records under the same lease.
-Do not automatically remove an environment after failure or run undeclared
-teardown commands. Artefact ownership is a separate optional contract.
+may need explicit remediation. Cleanup invalidates records under the same
+lease. Do not automatically remove an environment after failure or run
+undeclared teardown commands. Artefact ownership is a separate optional
+contract.
 
 ## 9. Verification and acceptance
 
@@ -287,15 +289,16 @@ processes, and interrupt between preparation and record publication. A normal
 hello-world build must start zero probes and create no state records.
 
 The Cuprum canary must preserve its restricted extension-test selection and
-verify that `require_state` reports a missing extension without running Maturin.
-Measure setup reduction without counting a stale probe result as a cache hit.
+verify that `require_state` reports a missing extension without running
+Maturin. Measure setup reduction without counting a stale probe result as a
+cache hit.
 
 ## 10. Alternatives, migration, and outstanding decisions
 
 Timestamp-only stamps are insufficient for live readiness. A mandatory Nix-like
 store would require a different workflow and is out of scope. External checks
-alone would force every project to reinvent common checks; built-ins alone would
-force plugin development for ordinary functional conditions.
+alone would force every project to reinvent common checks; built-ins alone
+would force plugin development for ordinary functional conditions.
 
 Adoption is per action. Existing commands and environment management remain
 supported, and no package installer becomes a prerequisite for unrelated work.
@@ -318,4 +321,5 @@ readiness, preparation evidence, and artefact ownership distinct.
 [maturity]: 0017-progressive-enhancement-and-maturity-policies.md
 [commands]: 0001-structured-command-blocks.md
 [contention]: 0016-named-contention-classes.md
-[^1]: [Nagios plugin development guidelines](https://nagios-plugins.org/doc/guidelines.html), plugin return codes.
+[^1]: [Nagios plugin development guidelines](https://nagios-plugins.org/doc/guidelines.html),
+      plugin return codes.

@@ -10,28 +10,28 @@
 
 ## 1. Summary
 
-Allow an action to name a contention class when it should share a bounded number
-of concurrent execution slots with other actions. Lower that declaration to
-Ninja pools. Keep Ninja as the scheduler, preserve dependencies as ordering and
-data requirements, and leave unannotated actions unchanged.
+Allow an action to name a contention class when it should share a bounded
+number of concurrent execution slots with other actions. Lower that declaration
+to Ninja pools. Keep Ninja as the scheduler, preserve dependencies as ordering
+and data requirements, and leave unannotated actions unchanged.
 
-A simple build needs no resource model. One class and one scalar annotation must
-suffice to prevent two cooperating native-build actions from overlapping. No
-toolchain, state, context, ownership declaration, or typed input is required.
+A simple build needs no resource model. One class and one scalar annotation
+must suffice to prevent two cooperating native-build actions from overlapping.
+No toolchain, state, context, ownership declaration, or typed input is required.
 
 ## 2. Problem and existing capabilities
 
-Repositories use serial aggregates and independent worker flags to manage shared
-caches and expensive native builds. Ordering requirements, contention, and
-subprocess parallelism are different concepts. Serializing an aggregate can
+Repositories use serial aggregates and independent worker flags to manage
+shared caches and expensive native builds. Ordering requirements, contention,
+and subprocess parallelism are different concepts. Serializing an aggregate can
 unnecessarily block independent work while failing to constrain unrelated
 actions that use the same resource.
 
-The current intermediate representation (IR) already has `Action.pool`. This RFC
-supplies the declaration, resolution, bounds, provenance, and backend contract
-around that existing concept, not a second resource scheduler. Ninja pools limit
-concurrent edges and remain subject to Ninja's global job limit.[^1] They do not
-limit the number of threads spawned by one edge.
+The current intermediate representation (IR) already has `Action.pool`. This
+RFC supplies the declaration, resolution, bounds, provenance, and backend
+contract around that existing concept, not a second resource scheduler. Ninja
+pools limit concurrent edges and remain subject to Ninja's global job
+limit.[^1] They do not limit the number of threads spawned by one edge.
 
 ## 3. Progressive authoring
 
@@ -61,8 +61,8 @@ worker-count calculation or platform-detection preamble.
 
 `contention_classes` maps names to definitions containing `capacity`. An
 executable action or target may set one scalar `contention` reference. Literal
-capacities work independently; typed input expressions may be added through [RFC
-0014][inputs] without making that feature a prerequisite.
+capacities work independently; typed input expressions may be added through
+[RFC 0014][inputs] without making that feature a prerequisite.
 
 Reject zero, negative, fractional, Boolean, unbounded, and out-of-range
 capacities. Unknown fields, duplicate declarations, missing references, and
@@ -87,9 +87,9 @@ on a consumer neither constrains its prerequisites nor changes their order.
 
 Resolve public names to stable internal class identities before backend
 emission. Emit one Ninja pool per used class and attach its identity to the
-corresponding executable edges. Unused classes emit no pool or runtime work. The
-complete multi-command action holds one edge slot until it finishes or fails;
-releasing slots between commands would weaken the declared contract.
+corresponding executable edges. Unused classes emit no pool or runtime work.
+The complete multi-command action holds one edge slot until it finishes or
+fails; releasing slots between commands would weaken the declared contract.
 
 A class changes eligibility for concurrent dispatch, not the dependency graph's
 meaning. It does not add dependencies, deduplicate actions, guarantee fairness,
@@ -109,15 +109,15 @@ silently discard either console behaviour or contention limits.
 Serialize resolved class definitions and references in generated plans and
 include scheduling metadata in the existing graph/plan identity. Reject unknown
 persisted variants or missing pool definitions before replay. Backends without
-pool support must report the unsupported guarantee rather than ignore it. No API
-may pass an unchecked public class name straight into Ninja source.
+pool support must report the unsupported guarantee rather than ignore it. No
+API may pass an unchecked public class name straight into Ninja source.
 
 ## 6. Scope, worker budgets, and state integration
 
 The concurrency guarantee applies to one Ninja invocation. Two independent
-Netsuke invocations do not share a pool. A depth-one class also does not stop an
-external Cargo process from using the same directory. Document the guarantee in
-human and structured inspection, not only in this RFC.
+Netsuke invocations do not share a pool. A depth-one class also does not stop
+an external Cargo process from using the same directory. Document the guarantee
+in human and structured inspection, not only in this RFC.
 
 Internal workers remain separate. A class with capacity one may still launch
 many compiler or test threads. Tool adapters can consume typed worker inputs,
@@ -172,22 +172,22 @@ boundary: pools alone do not claim process-wide mutual exclusion.
 
 ## 9. Alternatives and outstanding decisions
 
-Serial dependencies encode order, not reusable contention policy. A lock command
-inside every recipe repeats infrastructure and hides it from scheduling. A
-generalized multi-resource scheduler would duplicate Ninja and create a much
-larger correctness burden. Mandatory resource budgets would undermine the
-shallow end without necessarily controlling subprocesses.
+Serial dependencies encode order, not reusable contention policy. A lock
+command inside every recipe repeats infrastructure and hides it from
+scheduling. A generalized multi-resource scheduler would duplicate Ninja and
+create a much larger correctness burden. Mandatory resource budgets would
+undermine the shallow end without necessarily controlling subprocesses.
 
-Ratify the operator ceiling field, class-name lowering, console interaction, and
-any rule-default semantics before implementing the public grammar. Reserve
+Ratify the operator ceiling field, class-name lowering, console interaction,
+and any rule-default semantics before implementing the public grammar. Reserve
 multi-resource allocation and cross-host scheduling for separate evidence-led
 proposals. Ordinary native compilation limits must not depend on those features.
 
 ## 10. Recommendation
 
 Expose a deliberately small public contract over Ninja pools, with one optional
-class per executable edge and explicit scope. Keep dependencies, internal worker
-counts, and cross-invocation integrity locks separate.
+class per executable edge and explicit scope. Keep dependencies, internal
+worker counts, and cross-invocation integrity locks separate.
 
 [roadmap]: ../roadmap-progressive-enhancement.md#22-named-contention-without-a-second-scheduler
 [inputs]: 0014-typed-task-inputs.md

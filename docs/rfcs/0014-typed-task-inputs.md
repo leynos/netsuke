@@ -10,15 +10,17 @@
 
 ## 1. Summary
 
-Add an optional `inputs` mapping for validated, discoverable task configuration.
-Ordinary `vars` remain valid and keep their current semantics. An author can
-promote one externally meaningful value without annotating every variable,
-rewriting every command, adopting bundles, or declaring an execution context.
+Add an optional `inputs` mapping for validated, discoverable task
+configuration. Ordinary `vars` remain valid and keep their current semantics.
+An author can promote one externally meaningful value without annotating every
+variable, rewriting every command, adopting bundles, or declaring an execution
+context.
 
 Use the same type vocabulary, value validation, and redaction contract as
-[RFC 0003's bundle parameters][bundles]. Do not create a rival parameter system.
-The [maturity-policy RFC][maturity] permits explicit organizations or projects
-to require selected contracts; it does not turn annotations into a default gate.
+[RFC 0003's bundle parameters][bundles]. Do not create a rival parameter
+system. The [maturity-policy RFC][maturity] permits explicit organizations or
+projects to require selected contracts; it does not turn annotations into a
+default gate.
 
 ## 2. Problem and current boundaries
 
@@ -62,10 +64,11 @@ actions:
       invoke: pytest -n {{ inputs.workers }}
 ```
 
-Changing `workers` to `inputs.workers` makes the promotion explicit. There is no
-implicit alias, mutation of `vars`, or requirement to annotate unrelated values.
-Structured invocation is recommended for dynamic arguments, but adopting an
-input does not silently convert a legacy shell string into direct execution.
+Changing `workers` to `inputs.workers` makes the promotion explicit. There is
+no implicit alias, mutation of `vars`, or requirement to annotate unrelated
+values. Structured invocation is recommended for dynamic arguments, but
+adopting an input does not silently convert a legacy shell string into direct
+execution.
 
 ## 4. Definition and value model
 
@@ -76,26 +79,27 @@ there is no competing `argv` or `enum` type in the initial grammar.
 
 A definition contains required `type`, optional `default`, `description`, and
 `expose`, plus applicable constraints. No default means required. `minimum` and
-`maximum` constrain integers; `choices` contains a nonempty, duplicate-free list
-of values of the declared scalar type. Reject inverted ranges, mismatched
+`maximum` constrain integers; `choices` contains a nonempty, duplicate-free
+list of values of the declared scalar type. Reject inverted ranges, mismatched
 constraints, unknown fields, and defaults that violate their own contract.
 
 Definitions and defaults are literal data, like bundle descriptors, not Jinja
 programs. Computed internal values belong in ordinary `vars` after input
-resolution. No executable, clock, filesystem, or network default expressions are
-necessary. Required but unused root inputs still fail definition resolution;
-authoring an optional facility must not introduce an unrelated required input.
+resolution. No executable, clock, filesystem, or network default expressions
+are necessary. Required but unused root inputs still fail definition
+resolution; authoring an optional facility must not introduce an unrelated
+required input.
 
 Use the existing supported integer range and reject out-of-range values. A
-Boolean is not an integer; `1.0` is not silently accepted as `1`. Strings remain
-strings, including empty strings. Null is not an omitted optional value unless a
-future shared nullable-type contract explicitly introduces it.
+Boolean is not an integer; `1.0` is not silently accepted as `1`. Strings
+remain strings, including empty strings. Null is not an omitted optional value
+unless a future shared nullable-type contract explicitly introduces it.
 
 `path` is a typed path value, not a filesystem capability or permission grant.
 Validation checks encoding and lexical shape without creating files. A consumer
-that opens, executes, or deletes the path applies its own workspace and operator
-capability constraints at use time. Collections are homogeneous, bounded, and
-validated element by element; sequence order is significant.
+that opens, executes, or deletes the path applies its own workspace and
+operator capability constraints at use time. Collections are homogeneous,
+bounded, and validated element by element; sequence order is significant.
 
 `inputs` is immutable during manifest expansion. Introducing this reserved
 namespace must preserve manifests that do not opt into the new schema. When an
@@ -118,18 +122,18 @@ CLI parsing is type-directed, not shell splitting or arbitrary YAML evaluation:
 - Sequences and mappings accept JSON of the declared shape, with bounded size
   and explicit duplicate-key rejection.
 
-Reject unknown names and duplicate CLI occurrences. Do not interpret an input as
-an executable shell fragment. Direct argv interpolation must preserve spaces,
-metacharacters, empty elements, and sequence boundaries. The shell still owns
-interpretation inside an explicitly selected shell recipe.
+Reject unknown names and duplicate CLI occurrences. Do not interpret an input
+as an executable shell fragment. Direct argv interpolation must preserve
+spaces, metacharacters, empty elements, and sequence boundaries. The shell
+still owns interpretation inside an explicitly selected shell recipe.
 
 Precedence, highest first, is explicit CLI input, explicitly selected profile
-input, resolved configuration input, then manifest default. Existing OrthoConfig
-rules determine precedence within configuration sources; this RFC does not
-reorder system, user, project, and explicitly selected configuration files. The
-profile integration task must reconcile its own overlay order with this contract
-before implementation. No automatically inferred environment variables supply
-task inputs in the first version.
+input, resolved configuration input, then manifest default. Existing
+OrthoConfig rules determine precedence within configuration sources; this RFC
+does not reorder system, user, project, and explicitly selected configuration
+files. The profile integration task must reconcile its own overlay order with
+this contract before implementation. No automatically inferred environment
+variables supply task inputs in the first version.
 
 Validate the effective value once, retaining the winning source and bounded
 shadowed-source provenance. Duplicate declarations and malformed source data
@@ -147,15 +151,15 @@ their resolved values: replay never re-reads a different ambient profile.
 
 Includes follow RFC 0002's duplicate and provenance rules. The initial root
 `inputs` mapping supplies the root interface. Included fragments can reference
-it within their established scope; they cannot silently overwrite definitions. A
-bundle receives explicit values through `with` and exposes them internally as
+it within their established scope; they cannot silently overwrite definitions.
+A bundle receives explicit values through `with` and exposes them internally as
 `bundle.params`, not the importer's whole `inputs` object.
 
-Extract or reuse one feature-owned normalized parameter contract for root inputs
-and bundle parameters. Share parsing, validation, scalar normalization,
-constraint diagnostics, and redaction. Bundle selection, locks, private exports,
-and namespace resolution remain composition's responsibility. Root input support
-must not wait for external acquisition or require any bundle.
+Extract or reuse one feature-owned normalized parameter contract for root
+inputs and bundle parameters. Share parsing, validation, scalar normalization,
+constraint diagnostics, and redaction. Bundle selection, locks, private
+exports, and namespace resolution remain composition's responsibility. Root
+input support must not wait for external acquisition or require any bundle.
 
 Resolved values used by an action or state contribute to its existing
 fingerprint. Preserve collection order and canonicalize mapping-key order. Do
@@ -171,10 +175,10 @@ that a tool-specific flag bag respects the declared policy.
 ## 7. Diagnostics, redaction, and limits
 
 Follow RFC 0003: values are redacted by default. Only the exact declaration
-`expose: non-secret` permits ordinary inspection of a value, subject to stronger
-operator policy. Show the name, expected type, constraint, source location, and
-remedy without echoing a rejected secret-looking value. Human output, JSON,
-verbose output, snapshots, and telemetry share that boundary.
+`expose: non-secret` permits ordinary inspection of a value, subject to
+stronger operator policy. Show the name, expected type, constraint, source
+location, and remedy without echoing a rejected secret-looking value. Human
+output, JSON, verbose output, snapshots, and telemetry share that boundary.
 
 Redaction is not secret storage. This RFC does not introduce a secret type or
 promise confidentiality for values deliberately passed as process arguments or
@@ -200,9 +204,9 @@ constraints, required values, unknown names, hostile argv elements, Windows
 paths, and collection-order preservation. Property-test source precedence,
 normalization stability, and redaction of rejected values.
 
-Integration tests must cover profile selection, generated-plan replay, namespace
-privacy, environment-independent defaults, and values passed across an
-include/bundle boundary. Check one-variable promotion in a real command and
+Integration tests must cover profile selection, generated-plan replay,
+namespace privacy, environment-independent defaults, and values passed across
+an include/bundle boundary. Check one-variable promotion in a real command and
 retain the unmodified hello-world fixture. Compare actual child argv, not just
 rendered YAML. Add examples and metadata through the existing documentation and
 schema pipelines, without a parallel input-help renderer.
