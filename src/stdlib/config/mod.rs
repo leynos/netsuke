@@ -1,6 +1,7 @@
 //! Configuration types and defaults for wiring the stdlib into `MiniJinja`.
 
 mod ambient;
+mod clock;
 mod which;
 
 use super::config_types::HomeDirectory;
@@ -9,12 +10,7 @@ pub use super::config_types::{
     DEFAULT_FETCH_CACHE_DIR, DEFAULT_FETCH_MAX_RESPONSE_BYTES, DEFAULT_FILE_MAX_READ_BYTES,
     DEFAULT_WHICH_CACHE_CAPACITY, FileConfig, NetworkConfig,
 };
-use super::{
-    command,
-    network::NetworkPolicy,
-    time::{ClockProvider, WallClock},
-    which::WORKSPACE_SKIP_DIRS,
-};
+use super::{command, network::NetworkPolicy, time::WallClock, which::WORKSPACE_SKIP_DIRS};
 use crate::localization::{self, keys};
 use anyhow::{anyhow, bail, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -277,39 +273,9 @@ impl StdlibConfig {
         self
     }
 
-    /// Replace the wall-clock source backing `now()`.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use minijinja::Environment;
-    /// use netsuke::stdlib::{self, StdlibConfig, fixed_clock};
-    /// use time::macros::datetime;
-    ///
-    /// let instant = datetime!(2026-06-08 12:00:00 UTC);
-    /// let config = StdlibConfig::from_current_dir()
-    ///     .expect("open workspace")
-    ///     .with_clock(fixed_clock(instant));
-    ///
-    /// let mut env = Environment::new();
-    /// stdlib::register_with_config(&mut env, config).expect("register stdlib");
-    /// let rendered = env.render_str("{{ now() }}", ()).expect("render");
-    /// assert_eq!(rendered, "2026-06-08T12:00:00Z");
-    /// ```
-    #[must_use]
-    pub fn with_clock(mut self, provider: ClockProvider) -> Self {
-        self.clock = WallClock::new(provider);
-        self
-    }
-
     /// Return the configured home directory source.
     pub(crate) const fn home_directory(&self) -> &HomeDirectory {
         &self.home_directory
-    }
-
-    /// Return the wall-clock source backing the `now()` helper.
-    pub(crate) const fn clock(&self) -> &WallClock {
-        &self.clock
     }
 
     /// The configured fetch cache directory relative to the workspace root.
