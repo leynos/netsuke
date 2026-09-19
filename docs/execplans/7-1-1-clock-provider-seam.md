@@ -1571,6 +1571,22 @@ above, which are disposable.
   reports `unspecified` for every branch-owned path, the global attributes file
   is unset, and there is no tracked `.gitattributes` and no
   `$GIT_DIR/info/attributes`.
+- [x] Post-completion: re-target published. Force-pushed with lease bound to
+  the previously recorded remote head `8de3c963`
+  (`--force-with-lease=7-1-1-clock-provider-seam:8de3c963…`), which advanced
+  the branch to `f81f2f98` on base `79545e12`. The lease was bound to the
+  read-back value rather than refreshed blindly, so a concurrent rewrite of the
+  branch would have failed the push instead of being overwritten. Gate state at
+  that head: `check-fmt`, `markdownlint`, `typecheck` and `lint` all exit 0;
+  `make test` is 3245/3250 with the single timeout that entry 21 and issue 732
+  cover. The `lint` re-run is the one that matters most, because the
+  `panic_in_result_fn` error recorded at `14651fc0` is only confirmed fixed by
+  running the gate at a head that contains the fix — the earlier `-8` log
+  predates it. The push triggered a fresh CI run on `f81f2f98`; its verdict is
+  not claimed here. Both review replies were then posted on this head: an
+  inline reply to the guides-lifecycle finding, and a pre-merge reconciliation
+  for the Observability row, each citing `f81f2f98` and quoting the table row
+  live at the time of posting rather than from memory.
 
 ## Surprises & discoveries
 
