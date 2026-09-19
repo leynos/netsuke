@@ -114,6 +114,35 @@ use rstest::rstest;
      }\n",
     &[]
 )]
+// A `warn` of the policy lint is not read, and this row is what pins that the
+// omission is deliberate. It lowers the lint from the workspace's `deny` to
+// `warn` — bare `cargo clippy` exits 0 — but every lint target passes
+// `-D warnings`, which re-promotes it: measured at exit 101 under the gate's
+// flags. Reporting a shape that cannot pass a gate would be a rule the code
+// cannot justify, the same reasoning that leaves `unknown_lints` out of the
+// banned set.
+#[case::warn_of_the_policy_lint_alone(
+    "#![warn(clippy::disallowed_methods)]\n",
+    &[]
+)]
+// ... and the same holds for the item-level and `cfg_attr`-wrapped spellings,
+// so the omission is about the `warn` marker rather than one layout.
+#[case::warn_wrapped_in_a_cfg_attr(
+    "#![cfg_attr(all(), warn(clippy::disallowed_methods))]\n",
+    &[]
+)]
+// The pair that *does* escape the gate's flags, and the reason `warnings`
+// stays in the banned set. The `warn` lowers the policy lint to `warn`, which
+// is what puts it *into* the `warnings` group — the group is the set of lints
+// currently at `warn`, not a parent of the hierarchy — and the `allow` then
+// suppresses that group. Measured at exit 0 under `RUSTFLAGS=-D warnings`, in
+// either order, where neither half escapes alone. The scan catches it on the
+// `allow` half, which is the only half it can see.
+#[case::warn_of_the_policy_lint_beside_allow_warnings(
+    "#![warn(clippy::disallowed_methods)]\n\
+     #![allow(warnings, reason = \"escape hatch probe\")]\n",
+    &["warnings"]
+)]
 fn the_scan_reads_each_spelling_the_same_way(
     #[case] source: &str,
     #[case] expected_lints: &[&str],

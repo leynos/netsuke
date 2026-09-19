@@ -10,8 +10,32 @@
 /// allowing a parent of the policy lint silences it just as naming it does.
 /// `disallowed_methods` is declared in Clippy's `style` group, and `clippy::all`
 /// sits above that; both were measured to suppress the policy outright under
-/// this repository's configuration. `warnings` is the level above them and the
-/// blanket spelling a reader reaches for first.
+/// this repository's configuration, `-D warnings` included.
+///
+/// `warnings` is banned too, but *not* because it sits above them — it does not.
+/// The `warnings` group is the set of lints currently at `warn`, and Cargo
+/// passes `[workspace.lints]` as command-line denies, so the policy lint is at
+/// `deny` and therefore *outside* the group: `#![allow(warnings)]` on its own
+/// leaves the policy lint firing, measured at exit 101 both bare and under the
+/// gate's flags. Three measurements say it still belongs in the set. It
+/// silences every warn-level lint under the gate, a file with four diagnostics
+/// compiling clean; it silences `unfulfilled_lint_expectations`, which is the
+/// self-removal mechanism `clippy.toml` relies on when it says the backlog
+/// "removes itself instead of rotting"; and it is one half of the only measured
+/// way to defeat the gate's own flags, described below.
+///
+/// That combination is worth stating precisely, because neither half is an
+/// evasion alone and the pair is. `#![warn(clippy::disallowed_methods)]` lowers
+/// the policy lint from `deny` to `warn`, which *puts it into the `warnings`
+/// group*; `#![allow(warnings)]` then suppresses it. Measured at exit 0 under
+/// `RUSTFLAGS=-D warnings`, in either order. A `warn` of the policy lint alone
+/// is re-promoted by `-D warnings` and exits 101, and the `allow` alone cannot
+/// reach the lint; only together do they escape. The ban below is what closes
+/// it — the scanner reports the `allow(warnings)` half — and it is the reason
+/// this entry is load-bearing rather than decorative. Should the lint target
+/// ever stop passing `-D warnings`, the `warn` family must be re-measured
+/// before the ban list is trusted: the re-promotion is the only thing holding
+/// that side of the pair.
 ///
 /// The two guard lints are what make the seam taxonomy's `expect`-not-`allow`
 /// rule enforceable, and they are cheap to protect: a scan that reads the

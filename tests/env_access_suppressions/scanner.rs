@@ -45,6 +45,30 @@
 //! The lesson is recorded here because it is the reason the code looks the way
 //! it does: a layout gate is not a proof about spelling. It normalizes what it
 //! is shown, and a skip attribute is a request to be shown nothing.
+//!
+//! # Why `warn` is not read
+//!
+//! A reviewer's natural next question is why the matcher accepts `allow` and
+//! `cfg_attr` but not `warn`, so the answer is measured rather than asserted. A
+//! `warn` of the policy lint *does* lower it from the workspace's `deny` to
+//! `warn` — bare `cargo clippy` exits 0 where the same file exits 101 — so it
+//! is a real suppression and not a no-op. It is not a *silent* one: every lint
+//! and test target passes `-D warnings` (`Makefile:206` among others), and that
+//! re-promotes the lint to an error. Twelve spellings were probed — inner and
+//! outer, `cfg_attr`-wrapped, the group and alias names, and the guard-lint
+//! forms — and every one exits 101 under the gate's flags while the bare run
+//! silences the same file. Reporting a shape that cannot pass a gate would be a
+//! rule the code cannot justify, which is the same reasoning that leaves
+//! `unknown_lints` out of the banned set.
+//!
+//! The exception is a `warn` of the policy lint seated beside an
+//! `allow(warnings)`, and it is the one measured way past the gate's flags. The
+//! `warn` lowers the policy lint to `warn`, which is what puts it *into* the
+//! `warnings` group — the group is the set of lints currently at `warn`, not a
+//! parent of the hierarchy — and the `allow` then suppresses that group: exit 0
+//! under `-D warnings`, in either order. Neither half escapes alone. The scan
+//! reports this pair, because the `allow` half is what it matches and
+//! `warnings` is in the banned set.
 
 use super::mask::mask_non_code;
 use super::policy::{is_offence, named_lints};

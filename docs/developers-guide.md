@@ -4424,9 +4424,41 @@ to have removed them.
 
 The banned set follows the lint hierarchy rather than spelling one name.
 `disallowed_methods` is declared in Clippy's `style` group, so allowing that
-group silences the policy just as naming the lint does; `clippy::all` sits
-above it, and `warnings` above that. The two guard lints are included because
-silencing the reporter is the one suppression nothing else would report.
+group silences the policy just as naming the lint does, and `clippy::all` sits
+above it; both were measured at exit 0 under the gate's own flags. `warnings`
+is banned as well, but not because it sits above them — it does not. The
+`warnings` group is the set of lints *currently at* `warn`, and Cargo passes
+`[workspace.lints]` as command-line denies, so the policy lint is at `deny` and
+outside the group: `#![allow(warnings)]` alone leaves it firing, measured at
+exit 101 bare and gated. It stays in the set because it silences every
+warn-level lint under the gate, because it silences
+`unfulfilled_lint_expectations` — the self-removal mechanism `clippy.toml`
+relies on when it says the backlog "removes itself instead of rotting" — and
+because it is half of the only measured way past the gate's flags. The two
+guard lints are included because silencing the reporter is the one suppression
+nothing else would report.
+
+A `warn` attribute is deliberately *not* matched, and the reason is measured
+rather than assumed, because it is the obvious next question. A `warn` of the
+policy lint does lower it — bare `cargo clippy` exits 0 where the same file
+exits 101 — so it is a real suppression and not a no-op. It is not a *silent*
+one: every lint and test target passes `-D warnings`, which re-promotes the
+lint to an error and exits 101. Twelve spellings were probed (inner and outer,
+`cfg_attr`-wrapped, group and alias names, the guard-lint forms) and every one
+is caught by the gate while the bare run silences the same file. Reporting a
+shape that cannot pass a gate would be a rule the code cannot justify, which is
+the reasoning that also leaves `unknown_lints` out.
+
+The one exception is the shape that pairs the two, and it is worth stating
+because it is what makes the `warnings` entry load-bearing rather than
+decorative. `#![warn(clippy::disallowed_methods)]` lowers the policy lint to
+`warn`, which is precisely what puts it *into* the `warnings` group;
+`#![allow(warnings)]` then suppresses that group. Measured at exit 0 under
+`RUSTFLAGS=-D warnings`, in either order, where neither half escapes alone. The
+scan catches it on the `allow` half, because that is the only half it matches.
+Should the lint target ever stop passing `-D warnings`, re-measure the `warn`
+family before trusting this reasoning: the re-promotion is the only thing
+holding that side of the pair.
 
 The set also bans a second route in, which is worth stating because it is not
 obvious. Clippy keeps the old spelling of a renamed lint, and a renamed name
