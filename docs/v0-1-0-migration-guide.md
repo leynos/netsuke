@@ -527,11 +527,11 @@ instead of racing a real clock.
 
 The addition is opt-in. The default remains the ambient host clock, which
 `system_clock()` names explicitly, so existing templates and manifests are
-unaffected, and the provider is consulted on every `now()` call rather than
-captured at registration. Readings are normalized to UTC before the helper's
-`offset=` argument re-expresses the same instant in the requested offset.
-Manifest-query evaluation still refuses `now()`, so the seam does not widen
-what a query may call.
+unaffected. Registration captures the adapter that holds the provider, and each
+`now()` call invokes it to read the instant afresh. Readings are normalized to
+UTC before the helper's `offset=` argument re-expresses the same instant in the
+requested offset. Manifest-query evaluation still refuses `now()`, so the seam
+does not widen what a query may call.
 
 See the [users' guide](users-guide.md#inject-the-clock-for-deterministic-tests)
 for the worked example.

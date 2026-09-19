@@ -993,11 +993,11 @@ host clock, so existing templates and manifests are unaffected.
 - `ClockInstant` re-exports the provider's timestamp type, so a caller can name
   that type without adding its own `time` dependency.
 
-The provider is consulted on every `now()` call rather than captured at
-registration, so a provider that yields a different instant on each call is
-observed by successive `now()` evaluations. Readings are normalized to UTC, and
-an explicit `offset=` argument re-expresses the same instant in the requested
-offset rather than changing it.
+Registration captures the adapter that holds the provider, and each `now()`
+call invokes it to read the instant afresh, so a provider that yields a
+different instant on each call is observed by successive `now()` evaluations.
+Readings are normalized to UTC, and an explicit `offset=` argument re-expresses
+the same instant in the requested offset rather than changing it.
 
 Manifest-query registration still refuses `now()`, so the seam does not widen
 what a manifest query may evaluate.
