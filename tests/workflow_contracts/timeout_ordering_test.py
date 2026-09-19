@@ -71,7 +71,9 @@ from whole_run_ordering import whole_run_ordering_faults
 #: ground, so its coverage step is conditional on the pull request.
 #: Keyed by workflow, job and step, because a job may run the coverage
 #: action twice and the steps need not carry the same condition; keying
-#: by job alone let the second overwrite the first.
+#: by job alone let the second overwrite the first. The entry pins a step
+#: rather than a lane: a step passing `doctests: 'true'` arms two
+#: watchdog windows, and both of them carry this one condition.
 REQUIRED_CONDITIONS: typ.Final[dict[tuple[str, str, str], tuple[object, object]]] = {
     ("ci.yml", "build-test", "Test and Measure Coverage"): (
         "github.event_name == 'pull_request'",
@@ -103,7 +105,9 @@ def coverage_lanes() -> tuple[CoverageLane, ...]:
     Returns
     -------
     tuple[CoverageLane, ...]
-        One entry per coverage step.
+        One entry per watchdog window a coverage step arms. A step
+        asking the action for the doctest pass yields two, which is what
+        the ceiling arithmetic above has to contain.
     """
     return coverage_lanes_of()
 
@@ -264,9 +268,10 @@ def test_the_termination_allowance_is_the_grace_period_plus_the_margin() -> None
     A single floor over the grace period and the margin would absorb
     every grace period below the margin, so adding one of thirty seconds
     to this configuration would demand nothing more of the watchdog above
-    it. The ordering assertion that uses this reading has 230 s of slack
-    against the real tree, so it would pass on either reading; the test
-    of the reading itself is what stands behind the two terms.
+    it. The ordering assertion that uses this reading has 50 s of slack
+    against the real tree -- the 1,800 s watchdog against a 1,750 s
+    requirement -- so it would pass on either reading; the test of the
+    reading itself is what stands behind the two terms.
     """
     assert termination_allowance("") == pytest.approx(
         NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS + TERMINATION_SAFETY_MARGIN_SECONDS
@@ -348,8 +353,11 @@ def test_each_coverage_lane_carries_the_condition_it_is_meant_to(
     job may run the coverage action twice and the two steps need not
     carry the same condition; keyed by job alone, the second overwrote
     the first. An unnamed step takes its job's name, so a coordinate can
-    still hold two lanes, and each therefore carries the sequence found
-    there rather than one condition: a pinned entry stands for one lane.
+    hold two lanes from two steps, and each therefore carries the
+    sequence found there rather than one condition. A pinned entry is a
+    step rather than a lane, so a step arming two watchdog windows
+    appears twice at its coordinate and both appearances are held to the
+    condition pinned here.
     """
     found = conditions_by_coordinate(coverage_lanes)
     assert set(found) == set(REQUIRED_CONDITIONS), (
@@ -359,13 +367,14 @@ def test_each_coverage_lane_carries_the_condition_it_is_meant_to(
         f"entry here is a lane whose condition nobody has judged"
     )
     wrong = {
-        coordinate: ((expected,), found[coordinate])
+        coordinate: (expected, found[coordinate])
         for coordinate, expected in REQUIRED_CONDITIONS.items()
-        if found[coordinate] != (expected,)
+        if any(condition != expected for condition in found[coordinate])
     }
     assert not wrong, (
         f"these coverage lanes do not carry the conditions the developers' "
         f"guide records, as expected versus found: {wrong}; a lane that is "
-        f"skipped runs no cargo, so its watchdog never arms, and a coordinate "
-        f"holding two lanes is two steps nobody has told apart"
+        f"skipped runs no cargo, so its watchdog never arms. Every lane at a "
+        f"coordinate is held to the pinned condition, because the windows one "
+        f"step arms are that step's windows and a step is skipped whole"
     )

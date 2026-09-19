@@ -38,7 +38,9 @@ def coverage_lanes() -> tuple[CoverageLane, ...]:
     Returns
     -------
     tuple[CoverageLane, ...]
-        One entry per coverage step.
+        One entry per watchdog window a coverage step arms. A step
+        asking the action for the doctest pass yields two, and both
+        select the same profile.
     """
     return coverage_lanes_of()
 

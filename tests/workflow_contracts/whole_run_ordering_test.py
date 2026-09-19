@@ -19,7 +19,11 @@ import typing as typ
 import pytest
 from coverage_lanes import CoverageLane
 from nextest_budgets import bounds_a_single_test
-from timeout_budgets import CAPPED_PROFILE, COLD_BUILD_ALLOWANCE_SECONDS
+from timeout_budgets import (
+    CAPPED_PROFILE,
+    COLD_BUILD_ALLOWANCE_SECONDS,
+    REPORT_PHASE_ALLOWANCE_SECONDS,
+)
 from whole_run_ordering import watchdog_required_for, whole_run_ordering_faults
 
 #: A default profile bounding one test at 600 s: ten warning periods of
@@ -83,18 +87,27 @@ def test_a_configuration_with_no_whole_run_budget_has_no_fault() -> None:
     )
 
 
-def test_the_required_watchdog_carries_all_three_terms() -> None:
-    """The whole run, the termination allowance, and a cold build.
+def test_the_required_watchdog_carries_all_four_terms() -> None:
+    """The whole run, the termination allowance, a cold build, the report.
 
     Dropping any one leaves a watchdog that pre-empts the tier below it,
     and each term is small enough beside the others that a rule missing
     one still looks plausible.
+
+    The last two are the pair most easily conflated: one covers what
+    nextest spends stopping a *cancelled* run, the other what `cargo
+    llvm-cov` spends after a *normal* one, and a rule carrying either in
+    place of both would still look complete.
     """
     required = watchdog_required_for(_config("40m"))
 
-    assert required == pytest.approx(40 * 60.0 + 70.0 + COLD_BUILD_ALLOWANCE_SECONDS), (
+    assert required == pytest.approx(
+        40 * 60.0 + 70.0 + COLD_BUILD_ALLOWANCE_SECONDS + REPORT_PHASE_ALLOWANCE_SECONDS
+    ), (
         "the requirement is the whole run, plus nextest's default grace "
-        "period and the safety margin, plus the cold-build allowance"
+        "period and the safety margin, plus the cold-build allowance, plus "
+        "the report-phase allowance `cargo llvm-cov` needs after nextest's "
+        "clock stops"
     )
 
 

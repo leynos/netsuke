@@ -927,10 +927,10 @@ all 2,790 tests passed, taking about 512 seconds at 19.42% sccache hits, and
 the watchdog killed cargo 88 seconds later during report generation.
 
 The value is roughly three times the observed cold cost and still far inside
-each job's `timeout-minutes` of 60, so a genuine hang is caught long before the
-runner is abandoned. Keep the two lanes equal: `build-test` runs the same
-action on pull requests and meets the same wall whenever its store is cold,
-which is the case a green trunk run hides.
+each job's `timeout-minutes`, which is 90 on both instrumented lanes, so a
+genuine hang is caught long before the runner is abandoned. Keep the two lanes
+equal: `build-test` runs the same action on pull requests and meets the same
+wall whenever its store is cold, which is the case a green trunk run hides.
 `tests/workflow_contracts/test_execution_coverage_test.py` holds both to the
 same value, parametrized over `COVERAGE_PRODUCERS`, so a producer added there
 is covered without being listed again. The upstream default is reported as
@@ -6809,19 +6809,33 @@ paths, configuration values, or error text as metric labels.
 
 ## Test timeouts: the tiers this repository sets
 
-Four independent timers can end a test run, and the canonical statement of how
-they must be ordered lives in the `generate-coverage` README in
-[`leynos/shared-actions`](https://github.com/leynos/shared-actions/blob/main/.github/actions/generate-coverage/README.md).
-All four are set here.
+Four independent timers can end a test run. The canonical statement of the
+ordering between them lives in `leynos/shared-actions`' users' guide, under
+"Test timeouts: four tiers, outermost last"
+([`docs/users-guide.md`](https://github.com/leynos/shared-actions/blob/main/docs/users-guide.md#test-timeouts-four-tiers-outermost-last)),
+and the `generate-coverage` README's guidance points there rather than
+restating it, so that a second copy cannot drift from the contract that
+enforces it. That guide does not yet carry the report-phase term or the second
+watchdog window a `doctests: 'true'` step arms, so for the coverage contract
+the arithmetic below is the statement of record, and it is the one to read
+until both readings are fed back upstream.
+
+All four tiers are set here.
 
 | Tier                     | What it bounds                     | Where it is set                               | Current value                                              |
 | ------------------------ | ---------------------------------- | --------------------------------------------- | ---------------------------------------------------------- |
 | Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s (60 s x 5); 420 s (60 s x 7) for one test on Windows |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 900 s (15 m) in CI; unset locally                          |
-| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,800 s (30 m)                                             |
-| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 60 m                                                       |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 780 s (13 m) in CI; unset locally                          |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,800 s (30 m), armed twice per coverage step              |
+| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 90 m                                                       |
 
-*Table: the timers that can end a run, innermost first.*
+*Table: the timers that can end a run, innermost first. The watchdog is one
+tier but not one window: the coverage step here passes `doctests: 'true'`, so
+the shared action runs `cargo llvm-cov nextest` and then an uninstrumented
+`cargo test --doc`, each arming the watchdog separately. Issue 715 moved two of
+the four: `global-timeout` fell so the watchdog still covers the sum it starts,
+and the ceiling rose to 90 m to contain both windows. The per-test allowance
+and the watchdog's 1,800 s keep the values they already had.*
 
 ### The per-test budget is a product, not a period
 
@@ -6832,9 +6846,9 @@ alone would report a 60 s allowance where the real figure is 300 s on Linux and
 that reading, and the contract asserts it explicitly rather than leaving it
 implied.
 
-### The whole-run budget, and how 15 minutes was arrived at
+### The whole-run budget, and how 13 minutes was arrived at
 
-`[profile.ci]` sets `global-timeout = "15m"`. Until it was set the watchdog was
+`[profile.ci]` sets `global-timeout = "13m"`. Until it was set the watchdog was
 doing tier two's job as well as its own, because a run whose tests each stay
 inside their allowance can still exceed the watchdog between them, and the
 failure then names `cargo` rather than the run.
@@ -6887,57 +6901,71 @@ in `.config/nextest.toml` bounds it and its own cargo watchdog does.
 
 The value was measured, not assumed. The sample is the last 59 runs of each
 workflow as of 2026-09-15, and for the ten longest coverage steps in each lane
-the step's log was read to separate the build from the test run.
+the step's log was read to separate the build, the test run, and the report
+phase that follows it.
 
-| Lane                                  | Longest build | Longest test run | Run         |
-| ------------------------------------- | ------------- | ---------------- | ----------- |
-| `ci.yml` `build-test`                 | 208 s         | 452 s            | 34914144521 |
-| `coverage-main.yml` `coverage-upload` | 242 s         | 320 s            | 34920593593 |
+| Lane                                  | Longest build | Longest test run | Longest report phase | Run         |
+| ------------------------------------- | ------------- | ---------------- | -------------------- | ----------- |
+| `ci.yml` `build-test`                 | 208 s         | 452 s            | 274 s                | 34914144521 |
+| `coverage-main.yml` `coverage-upload` | 242 s         | 320 s            | 86 s                 | 34920593593 |
 
-*Table: the two phases inside one coverage step. The build is timed from
+*Table: the three phases inside one coverage step. The build is timed from
 `cargo llvm-cov`'s first line to nextest's "Starting N tests"; the test run is
-nextest's own reported figure, which is what `global-timeout` bounds. The trunk
-lane's longest build and longest test run fall on different runs; its longest
-test run is 320 s on run 34240220630.*
+nextest's own reported figure, which is what `global-timeout` bounds; and the
+report phase is what `cargo llvm-cov` spends after that clock stops, merging
+profile data and writing `lcov.info`. The next-longest report phases measured
+91 s on `ci.yml` run 34897199699 and 86 s again on `ci.yml` run 34920593593.
+The trunk lane's longest build and longest test run fall on different runs; its
+longest test run is 320 s on run 34240220630.*
 
-Fifteen minutes clears the longest test run in the sample by 448 s. It also has
-to sit between its neighbours, and does:
+Thirteen minutes clears the longest test run in the sample by 328 s. It also
+has to sit between its neighbours, and does:
 
 ```text
 global-timeout > largest per-test allowance
-900 s          > 420 s
+780 s          > 420 s
 
-watchdog      >= global-timeout + termination + cold build
-1,800 s       >= 900 s + 70 s + 600 s = 1,570 s
+watchdog      >= global-timeout + termination + cold build + report
+1,800 s       >= 780 s + 70 s + 600 s + 300 s = 1,750 s
 ```
 
 The termination allowance is the largest `grace-period` the configuration sets,
 or nextest's 10 s default where it sets none, as here, plus a 60 s safety
 margin. The cold-build allowance is 600 s against a 242 s worst measured build,
 because every run in the sample had a warm compiler cache and so none of them
-measured the case the allowance is for.
+measured the case the allowance is for. The report allowance is 300 s against
+the 274 s worst measured phase, for the same reason: the sample's runs measured
+a warm profile merge and the allowance is for the case none of them reached.
 
-So the watchdog covers the budget with 230 s to spare and does not move, and
-the job ceiling above it does not move either. A larger budget would have moved
-both: the largest this watchdog can cover is 1,130 s, and the estate's
+The report phase is a separate term from the termination margin, and neither
+subsumes the other. The termination margin covers what nextest does after a
+*cancellation* -- the teardown and report writing that follow its grace period.
+The report allowance covers a different program's work after a *normal* finish.
+A run can do one, the other, or both.
+
+Thirteen minutes is the largest whole number of minutes the watchdog can carry.
+The non-budget terms sum to 970 s, so the largest coverable budget is 830 s; 14
+m needs 1,810 s and 15 m needs 1,870 s, both above the watchdog. The estate's
 fifteen-minute margin carried above the worst measured run, rather than made
-the budget itself, gives 1,352 s. That needs a watchdog above 1,800 s and then
-a ceiling above 60 minutes, and the gain is a longer wait for a legible
-failure, so the tighter budget was chosen.
+the budget itself, gives 1,352 s, which needs a watchdog above 1,800 s and then
+a ceiling above 90 minutes; the gain would be a longer wait for a legible
+failure, so the tighter budget is kept.
 
 Its purpose is that failure's legibility rather than the saving: a run that
 overruns now ends with nextest naming the run, inside a watchdog that still has
 room to report it.
 
-One term inside the watchdog is not named above. `cargo llvm-cov` merges the
-profile data and writes `lcov.info` after nextest's clock stops, measured as
-274 s on run 34914144521 and 86 s to 91 s on the next two longest runs. So the
-230 s of spare is not spare in the worst case: a cold build, a whole-run budget
-spent in full and that report together exceed the watchdog. Each term is a
-conservative allowance rather than a prediction, and no run has stacked them,
-but the model should carry the term.
-[Issue 715](https://github.com/leynos/netsuke/issues/715) holds that sizing,
-and the canonical model it would change.
+[Issue 715](https://github.com/leynos/netsuke/issues/715) carried two sizing
+faults into this budget, and both are now fixed here. The first was the report
+phase, which the watchdog's four-term sum above now holds. The second was
+cardinality: the model counted one watchdog window per coverage step, and a
+step passing `doctests: 'true'` arms two. Both readings were measured here and
+neither is stated upstream: `leynos/shared-actions` holds the canonical
+ordering and will need the report phase and the second window written into its
+own users' guide and `generate-coverage` README, which is a change to make in
+that repository rather than this one. Until it lands, this guide's arithmetic
+and the shared users' guide disagree by one report term and one window, and
+this repository's contract is the stricter of the two.
 
 ### The clocks do not start together
 
@@ -6973,18 +7001,32 @@ sample carried a coverage step and no nextest output at all, so a sample of
 failures can measure nothing.
 
 The widest gap is 648 s, so the contract allows 15 minutes, 252 s above it.
-That makes the requirement 1,800 s + 900 s = 45 minutes, and both lanes have 15
-minutes of slack above it. None of those runs was genuinely cold; one run is
-the coldest seen so far, not a measurement of the cold case.
+Adding a 15-minute margin above the sum it contains gives the requirement:
 
-That requirement counts one watchdog window per coverage step, and a step holds
-two. Both lanes pass the action's `doctests` input, so an uninstrumented
-`cargo test --doc` follows the instrumented run inside the same step, and the
-log prints `cargo watchdog budget: 1800.0s` for each. Two windows make the
-requirement 5,400 s, above the 60-minute ceiling both jobs set. The doctest
-pass measured 134 s on the longest run, so nothing fails today; the sizing is
-what is wrong, and [issue 715](https://github.com/leynos/netsuke/issues/715)
-holds it.
+```text
+ceiling >= 2 x 1,800 s + 900 s + 900 s
+        = 5,400 s (90 minutes)
+```
+
+The first term is counted twice because both lanes pass the action's `doctests`
+input, so an uninstrumented `cargo test --doc` follows the instrumented run
+inside the same step and each invocation arms the watchdog separately; the log
+prints `cargo watchdog budget: 1800.0s` once per window, twice over on every
+run measured. The second term is the 900 s of measured work outside those
+windows and the third is the estate's fifteen-minute margin carried above the
+sum rather than made part of it.
+
+Both jobs therefore set `timeout-minutes: 90`. The 60 minutes they used to set
+fell 1,800 s short of the two-window requirement -- exactly one watchdog
+window's worth -- so the ceiling would have cancelled those jobs at the moment
+the second window's watchdog would have reported its overrun. That is the shape
+of [`wildside` #486](https://github.com/leynos/wildside/issues/486), where a
+ceiling equal to the watchdog it contained cancelled the job at the moment the
+watchdog would have reported it: the report is the only thing that makes an
+overrun actionable, and a cancellation discards it. The doctest pass measured
+134 s on the longest run, so no run has actually reached either limit; the
+sizing was what was wrong. None of those runs was genuinely cold either, and
+one run is the coldest seen so far, not a measurement of the cold case.
 
 ### The workflow-contract gate collects docstring examples
 
@@ -7032,11 +7074,12 @@ watchdog's resolution across all three environment scopes.
 
 Four modules sit behind that contract, split by what they read.
 `tests/workflow_contracts/coverage_lanes.py` traverses the workflows: it finds
-the coverage steps and returns one lane per step, with its job's ceiling and
-condition, the watchdog in force, and the nextest profile it selects.
-`tests/workflow_contracts/lane_environment.py` resolves those last two out of
-the step, job and workflow environments, in that order, since it is the same
-walk for both: `watchdog_of` returns a budget in seconds and
+the coverage steps and returns one lane per watchdog window, so a step passing
+`doctests: 'true'` yields two lanes sharing one coordinate, each carrying its
+job's ceiling and condition, the watchdog in force, and the nextest profile it
+selects. `tests/workflow_contracts/lane_environment.py` resolves those last two
+out of the step, job and workflow environments, in that order, since it is the
+same walk for both: `watchdog_of` returns a budget in seconds and
 `nextest_profile_of` a profile name, each reporting a blank as nothing set, and
 `WatchdogValueError` separates a watchdog the action cannot read from one no
 scope declares. `tests/workflow_contracts/nextest_budgets.py` holds the nextest
@@ -7181,7 +7224,7 @@ Every tier comparison is a sum, and a sum is exact only if every term is. One
 `float` among them converts the whole of it back, and the conversion is silent.
 So `seconds` returns a `fractions.Fraction`, and so does everything the
 comparisons add to it: the watchdog budget read from a workflow, the job
-ceiling converted from `timeout-minutes`, and the five allowances and margins
+ceiling converted from `timeout-minutes`, and the six allowances and margins
 declared in `timeout_budgets.py`.
 
 The reason is the range. humantime reaches 2**64 seconds and a double holds 53
@@ -7209,7 +7252,7 @@ quietly, and one further case asserts that the values actually in force arrive
 exact, so a float reintroduced on the live path is caught without waiting for a
 budget nobody will set.
 
-Each of the eight terms was reverted to a float in turn and every one failed a
+Each of the nine terms was reverted to a float in turn and every one failed a
 case naming it. Two of them, the outside-work allowance and the ceiling margin,
 are added by the same function and fail the same ordering case, which is why
 the constants are also asserted one by one under their own names: the report
@@ -7276,19 +7319,31 @@ is not. `ci.yml` also runs on pushes, which the trunk lane covers, so its
 coverage step is conditional on the pull request; that condition is pinned
 rather than tolerated.
 
-The ceiling is judged per job rather than per step. A lane is one coverage
-step, and the ceiling belongs to the job, so the lanes are summed before the
-comparison: judging each separately against the same ceiling asks only that it
-clear the largest budget, which is the requirement a job running the action
-once happens to satisfy and a job running it twice does not. Both jobs here run
-it once, so the two readings agree today and the tree cannot tell them apart;
-the sum is asserted against controlled lanes instead.
+The ceiling is judged per job rather than per lane. A lane is one watchdog
+window, and the ceiling belongs to the job, so the job's lanes are summed
+before the comparison: judging each separately against the same ceiling asks
+only that it clear the largest budget, which is the requirement a job arming
+one window happens to satisfy and a job arming two does not. Both jobs here arm
+two, and each ninety-minute ceiling sits exactly at the two-window requirement,
+so summing and taking the largest both pass on this tree and it cannot tell the
+two readings apart; the sum is asserted against controlled lanes instead.
 
 The requirement also carries fifteen minutes above that sum rather than merely
 reaching it, because a ceiling equal to the sum it contains cancels the job at
 the moment the watchdog would have reported the overrun, and the report is the
-only thing that makes an overrun actionable. Both ceilings already clear it, so
-neither moved.
+only thing that makes an overrun actionable. Both ceilings have moved to ninety
+minutes under that reading: the sixty they used to set fell one whole watchdog
+window short of the two-window requirement.
+
+The ceiling counts windows, not steps, so a step passing `doctests: 'true'`
+contributes two budgets to the sum. `_watchdog_windows` reads that input from
+the step's `with` mapping -- defensively, as every environment scope is, so a
+workflow spelling `with` as something other than a mapping reads as the single
+window the action always runs. It counts the one spelling this repository
+writes, `'true'`, which the input pin in `test_execution_coverage_test` holds
+both coverage producers to; `coverage_lane_multi_step_test.py` drives the
+declined spellings and the two-window arithmetic end to end, and asserts the
+required ceiling is 5,400 s for such a step.
 
 The termination allowance between the whole-run budget and the watchdog is two
 terms, not one: the largest `grace-period` the configuration sets, or nextest's
@@ -7298,6 +7353,16 @@ margin covers the process teardown and report writing that follow it. The
 reading has a test of its own as well, because the repository sets no grace
 period and so cannot tell a reading that adds the two terms from one that takes
 the larger.
+
+The report phase is a third term and is not one of those two. It covers what
+`cargo llvm-cov` does after a *normal* nextest run -- merging profile data and
+writing the report -- where the termination margin covers nextest's own
+teardown after a *cancellation*. A run can do one, the other, or both, so
+`REPORT_PHASE_ALLOWANCE_SECONDS` is added to the watchdog requirement rather
+than maxed with the margin. It is deliberately absent from `required_ceiling`:
+the report phase runs inside the watchdog's window, after nextest's clock has
+stopped, so the ceiling above contains it through the watchdog rather than
+beside it.
 
 The ordering rule itself is `whole_run_ordering.whole_run_ordering_faults`,
 which takes a configuration and a set of lanes and returns every way the two
@@ -7320,7 +7385,7 @@ accepting an override or a bare duration.
 
 `tests/workflow_contracts/whole_run_value_test.py` pins the budget's value as
 well as its place in the order. The ordering holds for everything between the
-420 s largest per-test allowance and the 1,130 s the watchdog can cover, so the
+420 s largest per-test allowance and the 830 s the watchdog can cover, so the
 budget could drift to a value nobody chose with every comparison still passing,
 and the sample above would then describe a figure the file no longer sets.
 

@@ -17,7 +17,7 @@ from nextest_budgets import (
     largest_test_allowance,
     termination_allowance,
 )
-from timeout_budgets import COLD_BUILD_ALLOWANCE_SECONDS
+from timeout_budgets import COLD_BUILD_ALLOWANCE_SECONDS, REPORT_PHASE_ALLOWANCE_SECONDS
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -28,15 +28,23 @@ if typ.TYPE_CHECKING:
 
 def watchdog_required_for(config_text: str) -> fractions.Fraction | None:
     """Return the watchdog a configured whole-run budget demands, or None."""
-    # Three terms. The whole-run budget is what nextest may spend once
+    # Four terms. The whole-run budget is what nextest may spend once
     # tests begin; the termination allowance is what it may spend
     # stopping them; the cold-build allowance is what `cargo` spends
     # before nextest's clock starts at all, which the watchdog covers
-    # and the whole-run budget does not.
+    # and the whole-run budget does not; and the report-phase allowance
+    # is what `cargo llvm-cov` spends after nextest's clock stops
+    # merging profile data and writing `lcov.info`, which the watchdog
+    # likewise covers and the whole-run budget does not.
     whole_run = global_timeout(config_text)
     if whole_run is None:
         return None
-    return whole_run + termination_allowance(config_text) + COLD_BUILD_ALLOWANCE_SECONDS
+    return (
+        whole_run
+        + termination_allowance(config_text)
+        + COLD_BUILD_ALLOWANCE_SECONDS
+        + REPORT_PHASE_ALLOWANCE_SECONDS
+    )
 
 
 def whole_run_ordering_faults(
@@ -83,7 +91,8 @@ def _lane_faults(
             faults.append(
                 f"{lane} sets a {lane.watchdog:.0f}s watchdog, below the "
                 f"{required:.0f}s needed to cover the {whole_run:.0f}s whole-run "
-                f"budget, nextest's termination procedure, and a cold build; "
-                f"cargo would be killed before nextest could report the overrun"
+                f"budget, nextest's termination procedure, a cold build, and "
+                f"the report phase that follows it; cargo would be killed "
+                f"before nextest could report the overrun"
             )
     return faults
