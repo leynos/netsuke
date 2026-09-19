@@ -2346,33 +2346,37 @@ catalogue has the key; there is no partial state to clean up.
       plus doctests), and `nixie` — and the tree was confirmed unmutated by
       comparing `git status --short` and `git rev-parse HEAD` either side of the
       run.
-- [ ] EP-M2 `compact`. Code and tests complete and green in isolation; the
-      full commit gate set and the commit itself are still pending at this
-      writing.
-      Selections already run and passing: `test(compact)` across three binaries
-      (11 of 14 in the negative-control run, 3 failing by design) and the whole
-      `std_filter_tests` binary, 130/130. The `stdlib_manifest_query_tests`
-      binary passes 4/4, including
+- [x] EP-M2 `compact`. Committed as `683a166b`, the first fully green milestone
+      of this plan: all seven gates pass (check-fmt, lint with all four
+      sub-targets, typecheck, markdownlint, doc-coverage 98.80%, test 3225/3225
+      plus doctests, and nixie 143 diagrams), with `git status --short` empty on
+      both sides of the run. Targeted selections: `std_filter_tests` 130/130 and
+      `stdlib_manifest_query_tests` 4/4, the latter including
       `query_surface_renders_its_permitted_helpers`, whose new `compact` table
-      row is the conformance check the milestone calls for. Logs:
+      row is the conformance check the milestone asks for. Logs:
       `/tmp/nextest-std-filter-3-14-8-…out`,
-      `/tmp/nextest-query-surface-3-14-8-…out`.
-      Implemented and green in the working tree, **not yet
-      committed** (M `src/stdlib/collections.rs`, M `tests/features/stdlib.feature`,
-      M `tests/std_filter_tests.rs`, M `tests/stdlib_manifest_query_tests.rs`,
-      D `tests/std_filter_tests/collection_filters.rs`, plus the untracked
-      `tests/std_filter_tests/collection_filters/` directory). Restart notes:
-      the registration change must be made in `register_filters`, not beside the
-      private filter bodies, because `src/stdlib/mod.rs`'s `register_helpers`
-      calls `collections::register_filters` for both surfaces and a registration
-      placed outside it reaches only the surface being edited; and
-      The blank predicate must treat undefined as blank as well as `none`,
-      retaining `0`, `false` and whitespace — so a test asserting Python-style
-      `join` output must expect `False`, not `false`, and the `bool` kind name is
-      `"bool"`, not `"boolean"`. The file split under
+      `/tmp/nextest-query-surface-3-14-8-…out`, and the gate logs under
+      `/tmp/<gate>-netsuke-3-14-8-jinja-….out`. Restart notes, all of which
+      cost time to rediscover. The registration
+      belongs in `register_filters`, not beside the private filter bodies,
+      because `src/stdlib/register.rs` calls `collections::register_filters`
+      from both `register_read_only_helpers` and `register_query_helpers`; a
+      registration placed outside it reaches only the surface being edited. The
+      blank predicate must treat undefined as blank as well as `none` while
+      retaining `0`, `false`, and whitespace — so a test asserting Python-style
+      `join` output must expect `False`, not `false`, and `ValueKind`'s spelling
+      of the boolean kind is `"bool"`, not `"boolean"`. The split under
       `tests/std_filter_tests/collection_filters/` was forced by AGENTS.md's
-      400-line cap rather than by the plan's refactor step: the flat file reached
-      473 lines once the new cases landed.
+      400-line cap, not by the plan's refactor step: the flat file reached 473
+      lines once the new cases landed, against 212 at HEAD. `compact_property`'s
+      `FileFailurePersistence::Direct` path is
+      `tests/std_filter_tests.proptest-regressions`, which does not yet exist
+      because nothing has failed; that is expected, not a missing file. The
+      deterministic witness case deliberately omits the whitespace-only member
+      the property generates, because `join` renders `" "` indistinguishably
+      from `""` and an unedited expectation would have been validated against a
+      run in which it passed for the wrong reason; the property carries that
+      case instead.
 - [ ] EP-M3 shared recipe-shell quoting seam.
 - [ ] EP-M4 `shell_quote` and `shell_join`.
 - [ ] EP-M5 documentation, ADR-027, roadmap tick.
