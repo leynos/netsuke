@@ -5403,9 +5403,13 @@ userinfo-stripping helper. The `dispatch_hop` warning also carries a closed
 `error_category` drawn from exactly `http_status`, `connection`, `timeout`,
 `io`, `protocol`, `invalid_url`, and `other`. `http_status` marks an
 unsuccessful HTTP response, `connection` a DNS, connect, or proxy failure,
-`timeout` an I/O failure whose source is a timeout, `io` any other I/O failure,
-`protocol` a malformed status line or header, `invalid_url` a URL the client
-could not use, and `other` anything not otherwise classified.
+`timeout` a timeout the client raised or a timed-out I/O failure, `io` any other
+I/O failure, `protocol` a malformed status line or header, `invalid_url` a URL
+the client could not use, and `other` anything not otherwise classified. The
+client reports a refused or reset connection as a plain I/O failure, so the I/O
+terminal is classified by `io::ErrorKind`: `ConnectionRefused`,
+`ConnectionReset`, and `ConnectionAborted` map to `connection`, `TimedOut` to
+`timeout`, and every other kind to `io`.
 
 Every refused redirect is logged, not only a policy rejection, because the
 counter alone cannot show which hop of which fetch was refused. Each event
