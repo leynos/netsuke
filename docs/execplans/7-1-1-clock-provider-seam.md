@@ -1463,10 +1463,15 @@ above, which are disposable.
   second CI failure (`make check-fmt`, from running `mdtablefix` without the
   Makefile's flag set) fixed and recorded as entry 18. Both jobs back to green
   at `de0a9ed9` with `mergeStateStatus: CLEAN`.
-- [ ] Post-completion, in progress: the "User-Facing Documentation" warning is
-  being actioned — a users' guide section for `with_clock` and a matching
-  row/section in the v0.1.0 migration guide, following the #578/#666/#669
-  precedent that an additive public Rust API gets both.
+- [x] Post-completion: the "User-Facing Documentation" warning actioned — a
+  users' guide section for `with_clock` and a matching row and section in the
+  v0.1.0 migration guide, following the #578/#666/#669 precedent that an
+  additive public Rust API gets both. The guide fence is registered in
+  `EXPECTED_EXAMPLE_IDS` as `guide-clock-snippet` and pinned to the doctest's
+  entry points by `clock_snippet_mirrors_the_doctest`, so the prose copy cannot
+  drift from the executable one. Landed as `c422727d`; all five gates green on
+  that commit, with the anchor doctest on `StdlibConfig::with_clock` and the
+  new pinning test both observed passing in the `make test` log.
 
 ## Surprises & discoveries
 
