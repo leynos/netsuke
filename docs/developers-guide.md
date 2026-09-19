@@ -6895,13 +6895,18 @@ paths, configuration values, or error text as metric labels.
 
 ## Test timeouts: the tiers this repository sets
 
-Four independent timers can end a test run, and the canonical statement of how
-they must be ordered lives in `leynos/shared-actions`' users' guide, under
+Four independent timers can end a test run. The canonical statement of the
+ordering between them lives in `leynos/shared-actions`' users' guide, under
 "Test timeouts: four tiers, outermost last"
-([`docs/users-guide.md`](https://github.com/leynos/shared-actions/blob/main/docs/users-guide.md#test-timeouts-four-tiers-outermost-last)).
-The `generate-coverage` README's guidance points there rather than restating
-it, so that a second copy cannot drift from the contract that enforces it. All
-four tiers are set here.
+([`docs/users-guide.md`](https://github.com/leynos/shared-actions/blob/main/docs/users-guide.md#test-timeouts-four-tiers-outermost-last)),
+and the `generate-coverage` README's guidance points there rather than
+restating it, so that a second copy cannot drift from the contract that
+enforces it. That guide does not yet carry the report-phase term or the second
+watchdog window a `doctests: 'true'` step arms, so for the coverage contract
+the arithmetic below is the statement of record, and it is the one to read
+until both readings are fed back upstream.
+
+All four tiers are set here.
 
 | Tier                     | What it bounds                     | Where it is set                               | Current value                                              |
 | ------------------------ | ---------------------------------- | --------------------------------------------- | ---------------------------------------------------------- |
@@ -7040,12 +7045,13 @@ room to report it.
 faults into this budget, and both are now fixed here. The first was the report
 phase, which the watchdog's four-term sum above now holds. The second was
 cardinality: the model counted one watchdog window per coverage step, and a
-step passing `doctests: 'true'` arms two. Both readings are recorded in
-`leynos/shared-actions`, which is where the canonical model lives, and neither
-has been fed back there yet -- that is a change to make in that repository, not
-this one. Until it lands, this guide's arithmetic and the shared users' guide
-disagree by one report term and one window, and this repository's contract is
-the stricter of the two.
+step passing `doctests: 'true'` arms two. Both readings were measured here and
+neither is stated upstream: `leynos/shared-actions` holds the canonical
+ordering and will need the report phase and the second window written into its
+own users' guide and `generate-coverage` README, which is a change to make in
+that repository rather than this one. Until it lands, this guide's arithmetic
+and the shared users' guide disagree by one report term and one window, and
+this repository's contract is the stricter of the two.
 
 ### The clocks do not start together
 
