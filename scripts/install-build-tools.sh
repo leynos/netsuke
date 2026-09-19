@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# Install the pinned toolchain for the opt-in mold + Cranelift local build path.
+# Install the build tools the repository's standard needs.
 #
 # Downloads the pinned mold release, verifies it against tools/mold/SHA256SUMS,
-# unpacks it under $DEV_FAST_PREFIX (default ~/.local), then installs the pinned
-# nightly toolchain and its Cranelift codegen backend. Nothing here touches the
-# release, packaging, coverage, or formal-verification toolchains.
+# unpacks it under $BUILD_TOOLS_PREFIX (default ~/.local), then installs the
+# pinned nightly toolchain. Nothing here touches the release, packaging,
+# coverage, or formal-verification toolchains.
 
 set -euo pipefail
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-# shellcheck source=scripts/dev-fast-common.sh
-. "$script_dir/dev-fast-common.sh"
+# shellcheck source=scripts/build-tools-common.sh
+. "$script_dir/build-tools-common.sh"
 
 MOLD_RELEASE_BASE_URL=${MOLD_RELEASE_BASE_URL:-https://github.com/rui314/mold/releases/download}
 
@@ -25,12 +25,12 @@ CURL_STALL_SECONDS=${CURL_STALL_SECONDS:-60}
 # Naming a function instead means the path is only ever a variable, expanded at
 # removal time and never re-parsed. It is script-scope rather than local because
 # the trap fires after `install_mold` has returned.
-DEV_FAST_WORKDIR=
+BUILD_TOOLS_WORKDIR=
 
 remove_workdir() {
-  [ -n "$DEV_FAST_WORKDIR" ] || return 0
-  rm -rf -- "$DEV_FAST_WORKDIR"
-  DEV_FAST_WORKDIR=
+  [ -n "$BUILD_TOOLS_WORKDIR" ] || return 0
+  rm -rf -- "$BUILD_TOOLS_WORKDIR"
+  BUILD_TOOLS_WORKDIR=
 }
 
 trap remove_workdir EXIT
@@ -67,13 +67,13 @@ install_mold() {
   name="mold-$version-$arch-linux.tar.gz"
   url="$MOLD_RELEASE_BASE_URL/v$version/$name"
 
-  DEV_FAST_WORKDIR=$(mktemp -d)
-  workdir=$DEV_FAST_WORKDIR
+  BUILD_TOOLS_WORKDIR=$(mktemp -d)
+  workdir=$BUILD_TOOLS_WORKDIR
 
   note "downloading $url"
   # Bound both the handshake and the transfer. Without these a server that
   # accepts the connection and then stalls leaves `curl` waiting indefinitely,
-  # so the failure path below is never reached and `make install-dev-fast`
+  # so the failure path below is never reached and `make install-build-tools`
   # simply hangs. The transfer bound is a stall detector rather than a deadline:
   # a plain `--max-time` would punish a slow-but-progressing link, whereas
   # `--speed-limit`/`--speed-time` only fire when throughput actually dies.
@@ -86,28 +86,25 @@ install_mold() {
 
   # The tarball root is mold-<version>-<arch>-linux/{bin,lib,libexec}; strip it
   # so the tree merges into the prefix and `bin/ld.mold` lands on PATH.
-  mkdir -p "$DEV_FAST_PREFIX"
-  tar --extract --gzip --strip-components=1 --directory "$DEV_FAST_PREFIX" --file "$workdir/$name" ||
-    fail "failed to unpack $name into $DEV_FAST_PREFIX"
-  note "installed mold $version into $DEV_FAST_PREFIX"
+  mkdir -p "$BUILD_TOOLS_PREFIX"
+  tar --extract --gzip --strip-components=1 --directory "$BUILD_TOOLS_PREFIX" --file "$workdir/$name" ||
+    fail "failed to unpack $name into $BUILD_TOOLS_PREFIX"
+  note "installed mold $version into $BUILD_TOOLS_PREFIX"
   # The `make dev-*` recipes prepend this prefix to PATH themselves; the hint
   # matters only when the scripts are invoked directly.
-  note "put $DEV_FAST_PREFIX/bin first on PATH when not using the make targets"
+  note "put $BUILD_TOOLS_PREFIX/bin first on PATH when not using the make targets"
 }
 
-# Install the pinned nightly and its Cranelift backend component. Uses the
-# minimal profile: this toolchain exists to supply a codegen backend, not to
-# replace the repository's stable toolchain.
-install_cranelift() {
+# Install the pinned nightly. Uses the minimal profile: this is the toolchain
+# `rust-toolchain.toml` already selects, installed eagerly so a missing one is
+# reported here rather than mid-build.
+install_toolchain() {
   local toolchain=$1
   command -v rustup >/dev/null 2>&1 ||
     fail 'rustup not found on PATH; install it from https://rustup.rs'
   note "installing toolchain $toolchain"
   rustup toolchain install "$toolchain" --profile minimal ||
     fail "failed to install toolchain $toolchain"
-  note "installing $CRANELIFT_COMPONENT for $toolchain"
-  rustup component add "$CRANELIFT_COMPONENT" --toolchain "$toolchain" ||
-    fail "failed to install $CRANELIFT_COMPONENT for $toolchain"
 }
 
 # Install both halves. The linker step runs first so a checksum failure aborts
@@ -119,10 +116,10 @@ main() {
   # otherwise reach the installer as an empty string and be built into a
   # download URL.
   mold_pin=$(mold_version) || return 1
-  toolchain_pin=$(cranelift_toolchain) || return 1
+  toolchain_pin=$(pinned_toolchain) || return 1
   install_mold "$mold_pin"
-  install_cranelift "$toolchain_pin"
-  note 'ready; verify with: make dev-fast-check'
+  install_toolchain "$toolchain_pin"
+  note 'ready; verify with: make check-build-tools'
 }
 
 main "$@"

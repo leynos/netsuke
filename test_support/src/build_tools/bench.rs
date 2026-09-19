@@ -18,10 +18,27 @@ use super::{BuildScenario, Sandbox};
 /// granularity.
 pub const BASELINE_MTIME: i64 = 1_600_000_000;
 
-/// Target-directory slugs the benchmark uses, one per variant.
+/// Target-directory slug for the LLVM baseline variant.
 pub const DEFAULT_SLUG: &str = "default";
-/// Stable benchmark scenario identifier used in generated paths and commands.
-pub const DEV_FAST_SLUG: &str = "dev-fast";
+/// Target-directory slug for the repository default: the `mold` linker.
+pub const MOLD_SLUG: &str = "mold";
+/// Target-directory slug for the default plus the parallel `rustc` frontend.
+pub const MOLD_THREADS_SLUG: &str = "mold-threads";
+/// Every variant slug the benchmark can measure.
+///
+/// Unordered, and deliberately so: the benchmark shuffles the variants afresh
+/// for each sample, because separate target directories isolate build artefacts
+/// but not shared host state. Position here means nothing.
+pub const BENCH_SLUGS: [&str; 3] = [DEFAULT_SLUG, MOLD_SLUG, MOLD_THREADS_SLUG];
+
+/// How many times the benchmark measures each variant unless `BENCH_REPEATS`
+/// overrides it.
+///
+/// Mirrored here so the tests can assert on the default run's shape without
+/// restating the number in two places. A run that overrides the variable
+/// measures more, never fewer, so an assertion built on this is a floor rather
+/// than an equality — see the count check in the benchmark’s own tests.
+pub const BENCH_REPEATS: usize = 2;
 
 /// Create the touch file with [`BASELINE_MTIME`], returning that timestamp.
 ///
@@ -66,7 +83,7 @@ impl BenchFixture {
         let baseline_mtime = write_with_old_mtime(sandbox, &touch_file)?;
 
         let root = sandbox.home().join("bench");
-        for slug in [DEFAULT_SLUG, DEV_FAST_SLUG] {
+        for slug in BENCH_SLUGS {
             sandbox.create_dir(&root.join(slug))?;
         }
         Ok(Self {

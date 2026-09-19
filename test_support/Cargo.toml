@@ -24,5 +24,8 @@ thiserror = "1"
 assert_cmd = "2.0.0"
 netsuke = { package = "netsuke-build", path = ".." }
 rstest = "0.26.1"
+# The shared `standard_flags` reader parses `.cargo/config.toml` so both
+# contract suites compare against the committed file rather than a restatement.
+toml = "0.8"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt"] }

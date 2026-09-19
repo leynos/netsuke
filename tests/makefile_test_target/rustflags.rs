@@ -1,289 +1,202 @@
-//! Contract model for Makefile recipes that set `RUSTFLAGS`.
+//! Contract model for the Makefile variables that assign `RUSTFLAGS`.
 //!
-//! Each recipe line that assigns `RUSTFLAGS` is described by a
-//! [`RustflagsCase`] naming its target and the substring selecting the line.
-//! The module extracts the double-quoted assignment from the recipe and (on
-//! Unix) expands it in a real shell — without running the recipe's command —
-//! so the tests assert what Cargo would actually receive: inherited caller
-//! flags preserved, and `-D warnings` applied. Every recipe that sets
-//! `RUSTFLAGS` at all does so to deny warnings while conditionally preserving
-//! an inherited value, so both contracts are asserted unconditionally; a
-//! recipe needing a different policy would fail these assertions rather than
-//! slip through. A completeness test walks the Makefile and fails when any
-//! `RUSTFLAGS`-setting line lacks a case, so new recipes join the contract or
-//! break the build. The parent `makefile_test_target` module supplies the
-//! repository-file and recipe-lookup helpers.
+//! No recipe spells the value out any more: each composes one of a small set of
+//! Make variables, so the variables are what this module contracts. That
+//! indirection is exactly the hazard a text-walking contract can be blind to, so
+//! the completeness test has two halves — every `RUSTFLAGS="` in the file must
+//! be one of the contracted variables, and every recipe that sets `RUSTFLAGS`
+//! must do so through one of them. Neither half alone would notice a recipe that
+//! quietly went back to composing its own.
+//!
+//! What each variable then *expands* to is checked in the [`expansion`]
+//! submodule, which asks Make and then a shell. This module holds the model both
+//! halves share: the table of variables with the policy each row carries, and
+//! the reading that pulls an assignment out of a line.
+//!
+//! The parent `makefile_test_target` module supplies the repository-file and
+//! recipe-lookup helpers.
 
-use super::{read_repo_file, target_recipe};
-use anyhow::{Context, Result, ensure};
+use super::read_repo_file;
+// The recipe lookup is Unix-only, so the import is too: an unconditional one is
+// an unused-import error on Windows.
 #[cfg(unix)]
-use assert_cmd::Command;
+use super::target_recipe;
+use anyhow::{Result, ensure};
+// Every `context` call sits in the Unix-only gate-recipe test, so the trait
+// import is gated with it.
+#[cfg(unix)]
+use anyhow::Context;
 use camino::Utf8Path;
 use std::collections::BTreeSet;
 
-/// The prefix introducing a quoted `RUSTFLAGS` assignment in a recipe.
+/// The prefix introducing a quoted `RUSTFLAGS` assignment.
 const RUSTFLAGS_PREFIX: &str = "RUSTFLAGS=\"";
 
-/// A value a caller might already have exported before invoking `make`.
-#[cfg(unix)]
-const CALLER_RUSTFLAGS: &str = "-C target-cpu=native";
-
-#[cfg(unix)]
-const DENY_WARNINGS: &str = "-D warnings";
-/// A recipe line that overrides `RUSTFLAGS`, and the contract it must meet.
+/// A Make variable holding a `RUSTFLAGS` assignment, and the policy it carries.
 #[derive(Clone, Copy, Debug)]
-struct RustflagsCase {
-    /// The Make target owning the recipe.
-    target: &'static str,
-    /// Substring selecting the recipe line.
-    line_marker: &'static str,
+struct RustflagsVariable {
+    /// The Make variable's name.
+    name: &'static str,
+    /// Whether the composed value denies warnings. The gate targets do; a
+    /// plain build must not, or `make build` silently becomes a gate.
+    ///
+    /// Read only by the shell-expansion test in the `expansion` submodule, which
+    /// needs a real shell and so runs on Unix alone. The field stays on every
+    /// platform because the table below is one list, not one per platform.
+    #[cfg_attr(
+        not(unix),
+        expect(dead_code, reason = "read only by the Unix-only expansion test")
+    )]
+    denies_warnings: bool,
+    /// Whether the composed value carries the build standard's flags. The
+    /// release exclusion turns on this being false.
+    ///
+    /// Read only by the shell-expansion test, as above.
+    #[cfg_attr(
+        not(unix),
+        expect(dead_code, reason = "read only by the Unix-only expansion test")
+    )]
+    carries_standard: bool,
 }
 
-impl RustflagsCase {
-    const fn test_nextest() -> Self {
-        Self {
-            target: "test-nextest",
-            line_marker: "nextest run",
-        }
-    }
-
-    const fn doctest() -> Self {
-        Self {
-            target: "doctest",
-            line_marker: "--doc",
-        }
-    }
-
-    const fn lint_rustdoc() -> Self {
-        Self {
-            target: "lint-clippy",
-            line_marker: "doc --workspace",
-        }
-    }
-
-    const fn lint_clippy() -> Self {
-        Self {
-            target: "lint-clippy",
-            line_marker: "clippy",
-        }
-    }
-
-    const fn lint_whitaker() -> Self {
-        Self {
-            target: "lint-whitaker",
-            line_marker: "$(WHITAKER)",
-        }
-    }
-
-    const fn lint_whitaker_test_support() -> Self {
-        Self {
-            target: "lint-whitaker",
-            line_marker: "cd test_support",
-        }
-    }
-
-    const fn typecheck() -> Self {
-        Self {
-            target: "typecheck",
-            line_marker: "check",
-        }
-    }
-
-    const fn kani_full() -> Self {
-        Self {
-            target: "kani-full",
-            line_marker: "$(KANI) $(KANI_FLAGS)",
-        }
-    }
-}
-
-/// Every `RUSTFLAGS`-setting recipe line under contract.
-const RUSTFLAGS_CASES: [RustflagsCase; 8] = [
-    RustflagsCase::test_nextest(),
-    RustflagsCase::doctest(),
-    RustflagsCase::lint_rustdoc(),
-    RustflagsCase::lint_clippy(),
-    RustflagsCase::lint_whitaker(),
-    RustflagsCase::lint_whitaker_test_support(),
-    RustflagsCase::typecheck(),
-    RustflagsCase::kani_full(),
+/// Every Make variable that assigns `RUSTFLAGS`.
+///
+/// The four are distinguished by two independent policies, and the tests below
+/// assert each policy rather than the variable's name, so a variable whose
+/// definition drifts from its row fails even when the name is unchanged.
+const RUSTFLAGS_VARIABLES: [RustflagsVariable; 4] = [
+    RustflagsVariable {
+        name: "GATE_RUSTFLAGS",
+        denies_warnings: true,
+        carries_standard: true,
+    },
+    RustflagsVariable {
+        name: "DEBUG_RUSTFLAGS",
+        denies_warnings: false,
+        carries_standard: true,
+    },
+    RustflagsVariable {
+        name: "RELEASE_RUSTFLAGS",
+        denies_warnings: false,
+        carries_standard: false,
+    },
+    // Kani denies warnings but takes none of the standard: it compiles through
+    // `kani-compiler` on its own bundled toolchain, where neither flag applies.
+    RustflagsVariable {
+        name: "KANI_RUSTFLAGS",
+        denies_warnings: true,
+        carries_standard: false,
+    },
 ];
-/// Extracts the double-quoted `RUSTFLAGS` assignment from a recipe line.
+
+/// Extracts the double-quoted `RUSTFLAGS` assignment from a line.
 ///
 /// `RUSTDOCFLAGS="…"` does not contain `RUSTFLAGS="`, so a line setting both
 /// still yields the `RUSTFLAGS` value.
 fn rustflags_assignment(line: &str) -> Option<&str> {
     let start = line.find(RUSTFLAGS_PREFIX)? + RUSTFLAGS_PREFIX.len();
     let rest = line.get(start..)?;
-    let end = rest.find('"')?;
+    let end = rest.rfind('"')?;
     rest.get(..end)
 }
 
-/// Returns the recipe line `case` selects.
-fn recipe_line(makefile: &str, case: RustflagsCase) -> Result<String> {
-    let recipe = target_recipe(makefile, case.target)
-        .with_context(|| format!("Makefile should declare a {} target", case.target))?;
-    recipe
-        .lines()
-        .find(|line| line.contains(RUSTFLAGS_PREFIX) && line.contains(case.line_marker))
-        .map(str::trim)
-        .map(ToOwned::to_owned)
-        .with_context(|| {
-            format!(
-                "{} should set RUSTFLAGS on a line matching {:?}",
-                case.target, case.line_marker
-            )
-        })
-}
-
-/// Returns `case`'s `RUSTFLAGS` assignment as a shell expression.
-///
-/// Make's `$$` escape is reduced to the single `$` the shell receives. No
-/// assignment may name a Make variable, since this test cannot resolve one.
-fn shell_expression(makefile: &str, case: RustflagsCase) -> Result<String> {
-    let line = recipe_line(makefile, case)?;
-    let assignment = rustflags_assignment(&line).with_context(|| {
-        format!(
-            "{} should assign a double-quoted RUSTFLAGS value",
-            case.target
-        )
-    })?;
-    let resolved = assignment.replace("$$", "$");
-    ensure!(
-        !resolved.contains("$("),
-        "{}: RUSTFLAGS assignment {resolved:?} names a Make variable this test cannot resolve",
-        case.target
-    );
-    Ok(resolved)
-}
-
-/// Expands `expression` in a shell, exporting `inherited` as `RUSTFLAGS`.
-///
-/// Only the assignment is expanded; the command the recipe would run is never
-/// executed, so no test here invokes Cargo, Kani, nextest, or Dylint.
-#[cfg(unix)]
-fn expand(expression: &str, inherited: Option<&str>) -> Result<String> {
-    ensure!(
-        !expression.contains('"') && !expression.contains('`'),
-        "the expansion helper cannot safely embed {expression:?}"
-    );
-    let mut command = Command::new("sh");
-    command
-        .arg("-c")
-        .arg(format!("printf '%s' \"{expression}\""))
-        .env_remove("RUSTFLAGS");
-    if let Some(value) = inherited {
-        command.env("RUSTFLAGS", value);
-    }
-
-    let output = command
-        .output()
-        .with_context(|| format!("expand {expression:?} with sh"))?;
-    ensure!(
-        output.status.success(),
-        "sh should expand {expression:?}: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8(output.stdout).context("expanded RUSTFLAGS should be UTF-8")
-}
-
 #[test]
-fn unit_extracts_the_rustflags_assignment_from_a_recipe_line() {
+fn unit_extracts_the_rustflags_assignment_from_a_line() {
     assert_eq!(
-        rustflags_assignment(r#"	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) x"#),
-        Some(r"$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings")
+        rustflags_assignment(r#"RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings""#),
+        Some(r"${RUSTFLAGS:+$RUSTFLAGS }-D warnings")
     );
     // A line setting RUSTDOCFLAGS first still yields the RUSTFLAGS value.
     assert_eq!(
-        rustflags_assignment(r#"	RUSTDOCFLAGS="-D warnings" RUSTFLAGS="$${RUSTFLAGS-} -Z" x"#),
-        Some(r"$${RUSTFLAGS-} -Z")
+        rustflags_assignment(r#"RUSTDOCFLAGS="-D warnings" RUSTFLAGS="${RUSTFLAGS-} -Z""#),
+        Some(r"${RUSTFLAGS-} -Z")
     );
-    assert_eq!(rustflags_assignment("\tcargo build"), None);
+    assert_eq!(rustflags_assignment("cargo build"), None);
 }
 
 #[test]
-fn unit_rejects_escaped_shell_command_substitution() {
-    let makefile = concat!("unsafe-recipe:\n", "\tRUSTFLAGS=\"$$(date)\" echo unsafe\n",);
-    let case = RustflagsCase {
-        target: "unsafe-recipe",
-        line_marker: "echo unsafe",
-    };
-
-    assert!(
-        shell_expression(makefile, case).is_err(),
-        "escaped shell command substitution should be rejected"
-    );
-}
-
-#[cfg(unix)]
-#[test]
-fn behavioural_rustflags_recipes_preserve_inherited_flags() -> Result<()> {
-    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
-    for case in RUSTFLAGS_CASES {
-        let expanded = expand(&shell_expression(&makefile, case)?, Some(CALLER_RUSTFLAGS))?;
-
-        ensure!(
-            expanded.contains(CALLER_RUSTFLAGS),
-            "{} inherited-RUSTFLAGS contract should hold, expanded to {expanded:?}",
-            case.target
-        );
-        ensure!(
-            expanded.contains(DENY_WARNINGS),
-            "{} should deny warnings, expanded to {expanded:?}",
-            case.target
-        );
-    }
-    Ok(())
-}
-
-#[cfg(unix)]
-#[test]
-fn behavioural_rustflags_recipes_are_well_formed_without_inherited_flags() -> Result<()> {
-    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
-    for case in RUSTFLAGS_CASES {
-        let expression = shell_expression(&makefile, case)?;
-        let expanded = expand(&expression, None)?;
-
-        ensure!(
-            !expanded.contains(CALLER_RUSTFLAGS),
-            "{} should not invent flags the caller never set, expanded to {expanded:?}",
-            case.target
-        );
-        // `${VAR:+VAR }` contributes its separator only alongside a value, so
-        // an unset RUSTFLAGS must not leave a leading space.
-        ensure!(
-            !expanded.starts_with(' '),
-            "{} should not emit a leading separator when RUSTFLAGS is unset, \
-             expanded to {expanded:?}",
-            case.target
-        );
-    }
-    Ok(())
-}
-
-#[test]
-fn behavioural_every_rustflags_recipe_line_is_under_contract() -> Result<()> {
+fn behavioural_every_rustflags_assignment_is_a_contracted_variable() -> Result<()> {
     let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
     let declared: BTreeSet<String> = makefile
         .lines()
-        .filter(|line| line.starts_with('\t') && line.contains(RUSTFLAGS_PREFIX))
+        .filter(|line| line.contains(RUSTFLAGS_PREFIX))
         .map(|line| line.trim().to_owned())
         .collect();
-    let covered: BTreeSet<String> = RUSTFLAGS_CASES
+    let names: Vec<&str> = RUSTFLAGS_VARIABLES
         .iter()
-        .map(|case| recipe_line(&makefile, *case))
-        .collect::<Result<_>>()?;
+        .map(|variable| variable.name)
+        .collect();
 
-    let uncovered: Vec<&String> = declared.difference(&covered).collect();
+    for line in &declared {
+        ensure!(
+            names.iter().any(|name| line.starts_with(name)),
+            "every RUSTFLAGS assignment must be one of {names:?}; found {line:?}"
+        );
+    }
     ensure!(
-        uncovered.is_empty(),
-        "every recipe setting RUSTFLAGS needs a RustflagsCase; uncovered: {uncovered:#?}"
-    );
-    ensure!(
-        covered.len() == RUSTFLAGS_CASES.len(),
-        "each RustflagsCase should select a distinct recipe line, {} cases selected {} lines",
-        RUSTFLAGS_CASES.len(),
-        covered.len()
+        declared.len() == RUSTFLAGS_VARIABLES.len(),
+        "expected one assignment per contracted variable, found {declared:#?}"
     );
     Ok(())
 }
+
+#[test]
+fn behavioural_every_recipe_sets_rustflags_through_a_contracted_variable() -> Result<()> {
+    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
+    // The two halves catch different edits. The assignment test above would
+    // still pass if a recipe stopped referencing any variable and simply
+    // dropped the flags; this one would still pass if a variable's definition
+    // were rewritten. Only together do they hold the composition.
+    let offenders: Vec<&str> = makefile
+        .lines()
+        .filter(|line| line.starts_with('\t') && line.contains("RUSTFLAGS"))
+        .filter(|line| {
+            !RUSTFLAGS_VARIABLES
+                .iter()
+                .any(|variable| line.contains(&format!("$({})", variable.name)))
+        })
+        .collect();
+    ensure!(
+        offenders.is_empty(),
+        "every recipe setting RUSTFLAGS must compose a contracted variable; found {offenders:#?}"
+    );
+
+    for variable in RUSTFLAGS_VARIABLES {
+        let reference = format!("$({})", variable.name);
+        ensure!(
+            makefile
+                .lines()
+                .any(|line| line.starts_with('\t') && line.contains(&reference)),
+            "{} is defined but no recipe composes it",
+            variable.name
+        );
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn behavioural_the_gate_variable_reaches_every_gate_recipe() -> Result<()> {
+    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
+    for target in [
+        "test-nextest",
+        "doctest",
+        "lint-clippy",
+        "lint-whitaker",
+        "typecheck",
+    ] {
+        let recipe = target_recipe(&makefile, target)
+            .with_context(|| format!("Makefile should declare a {target} target"))?;
+        ensure!(
+            recipe.contains("$(GATE_RUSTFLAGS)"),
+            "{target} should compose GATE_RUSTFLAGS, found {recipe:?}"
+        );
+    }
+    Ok(())
+}
+
+// Declared last, as in `test_support/src/fs.rs`: the module's own model reads
+// first, and the submodule carries the machinery that needs a real shell.
+#[cfg(unix)]
+#[path = "rustflags_expansion.rs"]
+mod expansion;

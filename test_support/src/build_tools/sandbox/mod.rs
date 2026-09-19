@@ -1,4 +1,4 @@
-//! A hermetic `PATH` and `HOME` for exercising the `dev-fast` targets.
+//! A hermetic `PATH` and `HOME` for exercising the build-tools targets.
 //!
 //! See the parent module for why the sandbox is built from nothing rather
 //! than by prepending fakes to the ambient `PATH`.
@@ -64,7 +64,7 @@ impl Sandbox {
     ///
     /// ```rust,no_run
     /// use mockable::DefaultEnv;
-    /// use test_support::dev_fast::Sandbox;
+    /// use test_support::build_tools::Sandbox;
     ///
     /// let sandbox = Sandbox::with_env(&DefaultEnv).expect("create utility sandbox");
     /// assert!(sandbox.bin().is_absolute());
@@ -99,7 +99,7 @@ impl Sandbox {
         self.root.join("home")
     }
 
-    /// An install prefix that starts out empty; `DEV_FAST_PREFIX` points here.
+    /// An install prefix that starts out empty; `BUILD_TOOLS_PREFIX` points here.
     #[must_use]
     pub fn prefix(&self) -> Utf8PathBuf {
         self.root.join("prefix")
@@ -159,8 +159,7 @@ impl Sandbox {
         )
     }
 
-    /// A `rustup` reporting the given toolchain and, optionally, the Cranelift
-    /// component as installed.
+    /// A `rustup` reporting the given toolchain as installed.
     ///
     /// Every invocation is appended to [`rustup_log`](Self::rustup_log), so a
     /// test can assert which toolchain commands the installer actually issued
@@ -169,24 +168,17 @@ impl Sandbox {
     /// # Errors
     ///
     /// Returns an error if the fake rustup executable cannot be written.
-    pub fn write_rustup(&self, toolchain: &str, has_cranelift: bool) -> Result<Utf8PathBuf> {
-        let component = if has_cranelift {
-            "rustc-codegen-cranelift-x86_64-unknown-linux-gnu"
-        } else {
-            "rustfmt-x86_64-unknown-linux-gnu"
-        };
+    pub fn write_rustup(&self, toolchain: &str) -> Result<Utf8PathBuf> {
         let body = format!(
             concat!(
                 "printf '%s\\n' \"$*\" >> '{log}'\n",
                 "case \"$1 $2\" in\n",
                 "  'toolchain list') echo '{toolchain}-x86_64-unknown-linux-gnu' ;;\n",
-                "  'component list') echo '{component}' ;;\n",
                 "  *) exit 0 ;;\n",
                 "esac"
             ),
             log = self.rustup_log(),
             toolchain = toolchain,
-            component = component,
         );
         self.write_fake(&self.bin(), "rustup", &body)
     }
@@ -253,9 +245,7 @@ impl Sandbox {
         env: &[(&str, String)],
     ) -> Result<Output> {
         let mut command = self.base_command(&self.bin().join("bash"));
-        command
-            .env("DEV_FAST_PREFIX", self.prefix().as_std_path())
-            .env("DEV_FAST_CONFIG", "tools/dev-fast/config.toml");
+        command.env("BUILD_TOOLS_PREFIX", self.prefix().as_std_path());
         if matches!(pins, PinOverrides::Supplied) {
             command
                 .env("MOLD_VERSION_FILE", "tools/mold/VERSION")
@@ -294,7 +284,7 @@ impl Sandbox {
             .arg("--no-print-directory")
             .arg("-f")
             .arg("Makefile")
-            .arg(format!("DEV_FAST_PREFIX={}", self.prefix()));
+            .arg(format!("BUILD_TOOLS_PREFIX={}", self.prefix()));
         for (name, value) in invocation.environment_entries() {
             command.env(name, value);
         }
@@ -319,54 +309,7 @@ pub fn combined(output: &Output) -> String {
     )
 }
 
-/// Read a `tools/` version pin, so tests agree with the repository rather than
-/// hard-coding a value that drifts on the next bump.
-fn read_pin(path: &str) -> Result<String> {
-    Ok(fs::read_to_string(path)
-        .with_context(|| format!("read {path}"))?
-        .trim()
-        .to_owned())
-}
-
-/// The committed Cargo fragment's path, relative to the repository root.
-pub const DEV_FAST_CONFIG_PATH: &str = "tools/dev-fast/config.toml";
-
-/// The committed Cargo fragment's contents, so a test can assert on what the
-/// `dev-*` recipes actually apply rather than only on the path they pass.
-///
-/// # Errors
-///
-/// Returns an error if the checked-in dev-fast configuration cannot be read.
-pub fn dev_fast_config() -> Result<String> {
-    fs::read_to_string(DEV_FAST_CONFIG_PATH).with_context(|| format!("read {DEV_FAST_CONFIG_PATH}"))
-}
-
-/// The repository's pinned mold release tag.
-///
-/// # Errors
-///
-/// Returns an error if the pinned Mold version cannot be read.
-pub fn pinned_mold_version() -> Result<String> {
-    read_pin("tools/mold/VERSION")
-}
-
-/// The repository's toolchain, read from `rust-toolchain.toml`.
-///
-/// dev-fast deliberately shares it rather than pinning a second nightly, so the
-/// accelerated loop and the gates borrow-check identically; the pinned nightly
-/// is what enables Polonius.
-///
-/// # Errors
-///
-/// Returns an error if the pinned Rust toolchain cannot be read.
-pub fn pinned_toolchain() -> Result<String> {
-    let contents = read_pin("rust-toolchain.toml")?;
-    contents
-        .lines()
-        .find_map(|line| {
-            let rest = line.trim().strip_prefix("channel")?;
-            let value = rest.trim_start().strip_prefix('=')?;
-            Some(value.trim().trim_matches('"').to_owned())
-        })
-        .context("rust-toolchain.toml should declare a channel")
-}
+mod pins;
+pub use pins::{
+    CARGO_CONFIG_PATH, cargo_config, pinned_mold_version, pinned_toolchain, standard_flags,
+};

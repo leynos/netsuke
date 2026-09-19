@@ -137,6 +137,11 @@ jobs:
           tool: nextest@${{ env.NEXTEST_VERSION }}
       - name: Reset sccache statistics
         run: sccache --zero-stats
+      - name: Install the build standard
+        # The pinned `mold` is the repository's default linker and
+        # `check-build-tools` gates every build target on it, so this runs
+        # before the first compile rather than as a convenience.
+        run: make install-build-tools
       - name: Show rustc version
         run: |
           rustup show
@@ -249,6 +254,15 @@ jobs:
         # `rustflags` input. Pull requests only; on the trunk
         # `coverage-upload` runs the same set over the same commit.
         if: github.event_name == 'pull_request'
+        env:
+          # One of the two exclusions from the build standard. A build whose
+          # output is a measurement is a reproducibility claim, so it takes
+          # neither the parallel frontend nor the linker change. Assigning
+          # RUSTFLAGS is the whole mechanism: it displaces every `rustflags`
+          # table in `.cargo/config.toml`. Stated here rather than inherited
+          # from `setup-rust`, so the exclusion is visible at the step it
+          # applies to and a contract has something to read.
+          RUSTFLAGS: -D warnings
         uses: leynos/shared-actions/.github/actions/generate-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
         with:
           language: rust

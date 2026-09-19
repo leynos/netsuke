@@ -16,7 +16,7 @@
 use proptest::prelude::*;
 use proptest::proptest;
 use proptest::test_runner::FileFailurePersistence;
-use test_support::dev_fast::{InstallerScenario, WRONG_SHA256, combined};
+use test_support::build_tools::{InstallerScenario, WRONG_SHA256, combined};
 
 /// How one recorded digest relates to the artefact's real one.
 #[derive(Copy, Clone, Debug)]
@@ -124,7 +124,7 @@ proptest! {
         // in an integration-test crate, so recorded seeds were neither
         // written nor replayed — the file on disk was inert.
         failure_persistence: Some(Box::new(FileFailurePersistence::Direct(
-            "tests/dev_fast_checksum_tests.proptest-regressions",
+            "tests/build_tools_checksum_tests.proptest-regressions",
         ))),
         ..ProptestConfig::default()
     })]
@@ -157,7 +157,7 @@ proptest! {
 
         let output = scenario
             .sandbox()
-            .script("install-dev-fast.sh", &fixture.script_env())
+            .script("install-build-tools.sh", &fixture.script_env())
             .map_err(|error| TestCaseError::fail(error.to_string()))?;
 
         let expected = model_installs(&rows);

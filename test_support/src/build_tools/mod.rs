@@ -1,7 +1,7 @@
-//! Test scaffolding for the opt-in `dev-fast` build-acceleration tooling.
+//! Test scaffolding for the build-standard tooling.
 //!
-//! The `make dev-*` targets and their backing scripts probe `PATH` for `mold`
-//! and `rustup`, download a pinned release, and shell out to Cargo. Testing
+//! The capability check, installer and benchmark probe `PATH` for `mold` and
+//! `rustup`, download a pinned release, and shell out to Cargo. Testing
 //! them needs three things this module provides:
 //!
 //! - [`Sandbox`], a `PATH` and `HOME` built from nothing, so a case can express
@@ -17,7 +17,7 @@
 //! variable overrides and environment so tests exercise the real recipes rather
 //! than reimplementing them.
 //!
-//! Scope: these helpers exist for the `dev-fast` target tests. They spawn child
+//! Scope: these helpers exist for the build-tools target tests. They spawn child
 //! processes with a bespoke environment and never mutate the parent's, so they
 //! qualify for the subprocess-isolation exemption to the ban on in-process
 //! environment mutation (`AGENTS.md`). That exemption is written around
@@ -34,7 +34,10 @@ mod sandbox;
 mod scenario;
 mod staging;
 
-pub use bench::{BASELINE_MTIME, BenchFixture, DEFAULT_SLUG, DEV_FAST_SLUG, write_with_old_mtime};
+pub use bench::{
+    BASELINE_MTIME, BENCH_REPEATS, BENCH_SLUGS, BenchFixture, DEFAULT_SLUG, MOLD_SLUG,
+    MOLD_THREADS_SLUG, write_with_old_mtime,
+};
 pub use cargo_log::{CargoInvocation, RecordingCargo, TargetState};
 pub use make::MakeInvocation;
 pub use release::FakeRelease;
@@ -52,8 +55,8 @@ pub use release::FakeRelease;
 /// environment.
 pub use sandbox::real_utility_with_env;
 pub use sandbox::{
-    DEV_FAST_CONFIG_PATH, PinOverrides, Sandbox, combined, dev_fast_config, pinned_mold_version,
-    pinned_toolchain, real_utility,
+    CARGO_CONFIG_PATH, PinOverrides, Sandbox, cargo_config, combined, pinned_mold_version,
+    pinned_toolchain, real_utility, standard_flags,
 };
 pub use scenario::{
     BuildScenario, InstallerFixture, InstallerScenario, TEST_MOLD_VERSION, WRONG_SHA256,

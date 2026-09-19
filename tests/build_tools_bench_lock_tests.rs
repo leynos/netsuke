@@ -11,7 +11,7 @@
 
 use anyhow::{Result, ensure};
 use rstest::rstest;
-use test_support::dev_fast::{BenchFixture, BuildScenario, MakeInvocation, combined};
+use test_support::build_tools::{BenchFixture, BuildScenario, MakeInvocation, combined};
 
 /// Build the standard benchmark invocation for a staged fixture.
 fn bench_invocation(scenario: &BuildScenario, fixture: &BenchFixture) -> MakeInvocation {
@@ -105,7 +105,7 @@ fn the_lock_is_released_however_the_run_ends(#[case] succeeds: bool) -> Result<(
         sandbox.write_fake(
             &sandbox.bin(),
             "cargo",
-            "case \"$*\" in *--config*) exit 1 ;; *) exit 0 ;; esac",
+            "[ -z \"${RUSTFLAGS:-}\" ] || exit 1\nexit 0",
         )?;
     }
 
@@ -140,7 +140,8 @@ fn a_later_run_succeeds_after_an_earlier_one_aborts() -> Result<()> {
         "cargo",
         &format!(
             "[ -e '{marker}' ] && exit 0\n\
-             case \"$*\" in *--config*) : >'{marker}'; exit 1 ;; *) exit 0 ;; esac"
+             [ -z \"${{RUSTFLAGS:-}}\" ] || {{ : >'{marker}'; exit 1; }}\n\
+             exit 0"
         ),
     )?;
     let first = sandbox.run_make(&bench_invocation(&scenario, &fixture))?;

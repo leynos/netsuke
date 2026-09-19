@@ -4,7 +4,7 @@ Two invariants in ``.github/workflows/ci.yml`` are load-bearing but easy to
 lose to an innocuous edit, and both fail in ways that are slow and confusing
 to diagnose from a red run:
 
-* The hermetic dev-fast sandbox probes ``awk`` through a capability-backed
+* The hermetic build-tools sandbox probes ``awk`` through a capability-backed
   directory handle, which deliberately cannot follow a symlink that escapes
   its containing directory. Ubuntu ships ``awk`` as exactly such a symlink,
   so the job installs ``gawk`` and copies it to a regular executable on the

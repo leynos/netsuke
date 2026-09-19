@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Shared helpers for the opt-in mold + Cranelift local build acceleration.
+# Shared helpers for the build tools the repository's standard needs.
 #
-# Sourced by scripts/install-dev-fast.sh and scripts/dev-fast-check.sh so both
+# Sourced by scripts/install-build-tools.sh and scripts/check-build-tools.sh so both
 # resolve the pinned versions and emit diagnostics identically. Every message is
-# prefixed `dev-fast:` and written to stderr, matching the `prover-tools:`
+# prefixed `build-tools:` and written to stderr, matching the `prover-tools:`
 # convention used by the Kani and Verus targets.
 
 set -euo pipefail
@@ -12,35 +12,32 @@ set -euo pipefail
 # so the entry points run correctly when invoked directly and not only through
 # the `make dev-*` recipes that used to supply every pin path. `BASH_SOURCE[0]`
 # is this file even when sourced, which is what makes the derivation reliable.
-DEV_FAST_HELPER_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-DEV_FAST_REPO_ROOT=$(cd -- "$DEV_FAST_HELPER_DIR/.." && pwd)
+BUILD_TOOLS_HELPER_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+BUILD_TOOLS_REPO_ROOT=$(cd -- "$BUILD_TOOLS_HELPER_DIR/.." && pwd)
 
 # Pin files default to their committed locations. An explicit override still
 # wins, which is what lets the tests point the scripts at fixtures. `read_pin`
 # validates whichever path is selected, so a missing or empty file is reported
 # the same way whether it came from a default or an override.
-MOLD_VERSION_FILE="${MOLD_VERSION_FILE:-$DEV_FAST_REPO_ROOT/tools/mold/VERSION}"
-MOLD_SHA256SUMS_FILE="${MOLD_SHA256SUMS_FILE:-$DEV_FAST_REPO_ROOT/tools/mold/SHA256SUMS}"
-RUST_TOOLCHAIN_FILE="${RUST_TOOLCHAIN_FILE:-$DEV_FAST_REPO_ROOT/rust-toolchain.toml}"
+MOLD_VERSION_FILE="${MOLD_VERSION_FILE:-$BUILD_TOOLS_REPO_ROOT/tools/mold/VERSION}"
+MOLD_SHA256SUMS_FILE="${MOLD_SHA256SUMS_FILE:-$BUILD_TOOLS_REPO_ROOT/tools/mold/SHA256SUMS}"
+RUST_TOOLCHAIN_FILE="${RUST_TOOLCHAIN_FILE:-$BUILD_TOOLS_REPO_ROOT/rust-toolchain.toml}"
 
 # Prefix for the mold installation tree. The `dev-*` recipes prepend this
 # prefix's `bin/` to PATH -- this exact prefix, not a hard-coded ~/.local -- so
-# an overridden DEV_FAST_PREFIX is the one that wins PATH resolution for both
-# `dev-fast-check` and `-fuse-ld=mold`. Invoking these scripts outside `make`
+# an overridden BUILD_TOOLS_PREFIX is the one that wins PATH resolution for both
+# `check-build-tools` and `-fuse-ld=mold`. Invoking these scripts outside `make`
 # means arranging that PATH order separately.
-DEV_FAST_PREFIX="${DEV_FAST_PREFIX:-$HOME/.local}"
-
-# shellcheck disable=SC2034 # consumed by the scripts that source this file.
-CRANELIFT_COMPONENT='rustc-codegen-cranelift-preview'
+BUILD_TOOLS_PREFIX="${BUILD_TOOLS_PREFIX:-$HOME/.local}"
 
 # Emit a diagnostic. Always stderr, so a caller may capture a helper's stdout
 # without the diagnostics contaminating the captured value.
-note() { printf 'dev-fast: %s\n' "$*" >&2; }
+note() { printf 'build-tools: %s\n' "$*" >&2; }
 
 # Emit a diagnostic and abort. Used for conditions no caller can recover from,
 # such as a missing pin file or an unverifiable download.
 fail() {
-  printf 'dev-fast: %s\n' "$*" >&2
+  printf 'build-tools: %s\n' "$*" >&2
   exit 1
 }
 
@@ -75,11 +72,11 @@ mold_version() { read_pin "$MOLD_VERSION_FILE"; }
 
 # The repository's toolchain, read from `rust-toolchain.toml`.
 #
-# Deliberately the same toolchain the ordinary gates use, not a second pin.
-# The tree borrow-checks only under Polonius, which that dated nightly enables
-# by default (ADR-006), so a separate dev-fast nightly could let the fast loop
-# and the gate disagree about which borrows are legal.
-cranelift_toolchain() {
+# Deliberately the same toolchain the ordinary gates use, not a second pin. The
+# tree borrow-checks only under Polonius, which that dated nightly enables by
+# default (ADR-006), and the parallel frontend the standard uses is nightly-only
+# besides.
+pinned_toolchain() {
   local file=$RUST_TOOLCHAIN_FILE value
   [ -f "$file" ] || fail "missing version pin: $file"
   value=$(awk -F'"' '/^[[:space:]]*channel[[:space:]]*=/ { print $2; exit }' "$file")
@@ -112,10 +109,3 @@ installed_mold_version() {
   printf '%s' "$output" | awk 'NR == 1 { print $2 }'
 }
 
-# Whether the Cranelift backend is installed for the given toolchain. rustup
-# reports the component with a host-triple suffix, so match on the prefix.
-has_cranelift_component() {
-  local toolchain=$1
-  rustup component list --installed --toolchain "$toolchain" 2>/dev/null |
-    grep -q '^rustc-codegen-cranelift'
-}

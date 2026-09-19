@@ -1,7 +1,7 @@
-//! Starting points that more than one `dev-fast` test suite needs.
+//! Starting points that more than one build-tools test suite needs.
 //!
 //! Scope: these describe a *sandbox already in a known state*, not assertions
-//! about it. [`BuildScenario`] is a sandbox where `dev-fast-check` passes;
+//! about it. [`BuildScenario`] is a sandbox where `check-build-tools` passes;
 //! [`InstallerScenario`] is one where a fake release is published and the
 //! toolchain half is already satisfied, so a test can concentrate on the
 //! linker half.
@@ -45,7 +45,7 @@ pub struct InstallerFixture {
 }
 
 impl InstallerFixture {
-    /// Environment overrides for a direct `install-dev-fast.sh` invocation.
+    /// Environment overrides for a direct `install-build-tools.sh` invocation.
     #[must_use]
     pub fn script_env(&self) -> Vec<(&'static str, String)> {
         vec![
@@ -65,7 +65,7 @@ pub struct InstallerScenario {
 }
 
 impl InstallerScenario {
-    /// Publish a release and make the Cranelift toolchain appear installed, so
+    /// Publish a release and make the pinned toolchain appear installed, so
     /// only the linker half of the installer is under test.
     ///
     /// # Errors
@@ -73,7 +73,7 @@ impl InstallerScenario {
     /// Returns an error if the installer scenario cannot be prepared.
     pub fn prepare() -> Result<Self> {
         let sandbox = Sandbox::new()?;
-        sandbox.write_rustup(&pinned_toolchain()?, true)?;
+        sandbox.write_rustup(&pinned_toolchain()?)?;
         let release = FakeRelease::publish(&sandbox, TEST_MOLD_VERSION)?;
         Ok(Self { sandbox, release })
     }
@@ -131,7 +131,7 @@ pub struct BuildScenario {
 }
 
 impl BuildScenario {
-    /// Stage a sandbox in which `dev-fast-check` passes.
+    /// Stage a sandbox in which `check-build-tools` passes.
     ///
     /// # Errors
     ///
@@ -139,7 +139,7 @@ impl BuildScenario {
     pub fn prepare() -> Result<Self> {
         let sandbox = Sandbox::new()?;
         sandbox.write_mold(&sandbox.prefix().join("bin"), &pinned_mold_version()?)?;
-        sandbox.write_rustup(&pinned_toolchain()?, true)?;
+        sandbox.write_rustup(&pinned_toolchain()?)?;
         let cargo = RecordingCargo::install(&sandbox)?;
         Ok(Self { sandbox, cargo })
     }
