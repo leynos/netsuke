@@ -208,10 +208,17 @@ mod tests {
     /// Create the workspace the handle tests share, returning its temporary
     /// directory, the capability handle, and the link and target paths.
     ///
+    /// `None` means this host has no `cmd.exe` to reach `mklink` through, so
+    /// the fixture cannot be built; the caller reports that as a skip rather
+    /// than a failure, exactly as `fallible::junction_fixture` does in the
+    /// integration suite. A junction needs no privilege, so a missing
+    /// `cmd.exe` is the only unavailability that is a skip — every other
+    /// failure is a real fault, and stays an assertion.
+    ///
     /// The `TempDir` is returned so the caller keeps it alive: dropping it
     /// removes the tree, and the junction with it.
     #[cfg(windows)]
-    fn junction_fixture() -> (tempfile::TempDir, Dir, Utf8PathBuf, Utf8PathBuf) {
+    fn junction_fixture() -> Option<(tempfile::TempDir, Dir, Utf8PathBuf, Utf8PathBuf)> {
         use std::os::windows::process::CommandExt as _;
         use std::process::Command;
 
@@ -232,18 +239,24 @@ mod tests {
         // `mklink` is a `cmd` built-in, so it is reachable only through
         // `cmd /C`. `raw_arg` passes the line verbatim because `cmd` parses it
         // itself, rather than by the C runtime's argument-quoting rules.
-        let output = Command::new("cmd")
+        let output = match Command::new("cmd")
             .arg("/C")
             .raw_arg(format!(r#"mklink /J "{link}" "{target}""#))
             .output()
-            .expect("run 'cmd /C mklink /J' for the junction fixture");
+        {
+            // No `cmd.exe` on this host, so `mklink` is unreachable: the
+            // fixture cannot be built, and the caller reports a skip.
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return None,
+            // Every other spawn error is a real fault, not unavailability.
+            other => other.expect("run 'cmd /C mklink /J' for the junction fixture"),
+        };
         assert!(
             output.status.success(),
             "create junction fixture {link} -> {target}: cmd exited with {}: {}",
             output.status,
             String::from_utf8_lossy(&output.stderr).trim()
         );
-        (temp, dir, link, target)
+        Some((temp, dir, link, target))
     }
 
     /// The default policy's handle *is* the reparse point, and the opt-in
@@ -263,8 +276,19 @@ mod tests {
     /// of it substitutes an ordinary file for the reparse point under test.
     #[cfg(windows)]
     #[test]
+    #[expect(
+        clippy::print_stderr,
+        reason = "test harness: an unavailable fixture must be visible in the captured test output instead of passing silently"
+    )]
     fn the_default_handle_is_the_junction_and_the_opt_in_handle_is_its_target() {
-        let (_temp, dir, link, target) = junction_fixture();
+        let Some((_temp, dir, link, target)) = junction_fixture() else {
+            // No `cmd.exe` on this host, so `mklink` is unreachable and the
+            // junction cannot be built. Say so rather than passing silently: a
+            // green run that quietly skipped its subject would hide the same
+            // regression on a host that can build one.
+            eprintln!("skipped: this host has no cmd.exe to create a junction fixture");
+            return;
+        };
 
         // The default policy: the handle must be the reparse point itself.
         let mut refusing_options = OpenOptions::new();
