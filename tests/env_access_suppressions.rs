@@ -83,6 +83,22 @@ const STANDALONE_COMPILED_SOURCES: [&str; 1] = ["build.rs"];
 
 /// Append every `.rs` source beneath `directory`, with its contents, in order.
 ///
+/// [`MACHINE_LOCAL_DIRECTORIES`] is skipped by name, at whatever depth it
+/// appears, exactly as the coverage walk below skips it. A scanned root is a
+/// directory a contributor edits, but a cache inside one is still a cache: the
+/// entry names are relative to a machine, so a `.uv-cache` under `tests/` holds
+/// third-party or generated sources that are not repository content. Reading
+/// them would make the verdict depend on which tools had run — a vendored crate
+/// that suppressed the policy would fail the gate on one machine and pass on
+/// another — and the failure would be near-impossible to diagnose, because such
+/// a path is git-ignored, so it appears in no diff and in no `git status`.
+///
+/// Skipping here does not open a hole, because this walk is not what decides
+/// which sources are governed: [`is_scanned`] does. A machine-local name is one
+/// the repository ignores, so a source under it is not one this gate is
+/// answerable for, and the walk's self-test fails if that ever stops holding
+/// for a name in the list.
+///
 /// An absent directory is an empty one rather than an error. A root that does
 /// not exist holds no sources, so there is nothing here to miss, and the
 /// coverage invariant is what keeps that from becoming a hole: the walk below
@@ -108,6 +124,9 @@ fn collect_rust_sources(
         let name = entry
             .file_name()
             .with_context(|| format!("read an entry name in `{directory}`"))?;
+        if MACHINE_LOCAL_DIRECTORIES.contains(&name.as_str()) {
+            continue;
+        }
         let path = format!("{directory}/{name}");
         let file_type = entry
             .file_type()

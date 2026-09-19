@@ -13,7 +13,9 @@
 //! the repository's rules — nested tools write ignore files of their own — so
 //! asking it would make the answer depend on which tools had run.
 
-use super::{MACHINE_LOCAL_DIRECTORIES, collect_all_sources, is_scanned};
+use super::{
+    MACHINE_LOCAL_DIRECTORIES, collect_all_sources, collect_rust_sources, is_scanned,
+};
 use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
@@ -145,7 +147,8 @@ fn a_machine_local_name_is_skipped_at_any_depth() -> Result<()> {
 /// turned out not to exist as a git key at all.
 ///
 /// A template directory is a fourth, and it is closed at `git init` above
-/// rather than here, because the file it seeds is written before this runs.
+/// rather than here, because the `info/exclude` it seeds is written before this
+/// runs and no later call could unpin it.
 ///
 /// `.git` is the one legitimate exception: git refuses to track anything
 /// beneath it whatever the ignore files say, so the appeal still holds even
@@ -174,10 +177,16 @@ fn every_skipped_name_is_one_git_would_not_track() -> Result<()> {
     // template, and it is the only form that does: `GIT_TEMPLATE_DIR` outranks
     // a `-c init.templateDir=` given to the same command, measured, so a
     // contributor with that variable set would otherwise see the false pass
-    // survive. The flag belongs here rather than on `check-ignore`, because the
-    // file is written at init time, and because a template can seed
-    // `.git/config` as well — which is also why this and not a config pin is
-    // the thing that closes it.
+    // survive.
+    //
+    // The flag belongs here rather than on `check-ignore` because
+    // `info/exclude` is written at *init* time, so there is no later call that
+    // could unpin it. That is the whole of its job, and it is worth stating
+    // narrowly: a template can seed `.git/config` too, but the helper's own
+    // `-c core.excludesFile=` already neutralizes an ignore file configured
+    // there — measured with a template seeding only `.git/config`, unpinned and
+    // pinned both leaving the name unignored. An earlier version of this
+    // comment claimed the config half as well and was wrong about it.
     let init = std::process::Command::new("git")
         .args(["init", "--quiet", "--template="])
         .current_dir(scratch_path)
@@ -200,6 +209,71 @@ fn every_skipped_name_is_one_git_would_not_track() -> Result<()> {
          not ignore them, so git would track a source under them and the walk would hide \
          it rather than report it; add each to `.gitignore` beside its sibling caches, or \
          reconsider the skip: {unexplained:?}"
+    );
+    Ok(())
+}
+
+/// Fail if a cache inside a scanned root is read rather than skipped.
+///
+/// The scan descends a root list, and a scan is not a walk of the repository:
+/// a root covers nested directory names too, so the roots shipped without any
+/// skip rule and a `.uv-cache` under `tests/` would have been read. That is how
+/// the scan and this walk came apart — the walk has always skipped by name, so
+/// the cache was invisible to it and ungoverned by it, while the scan read it.
+/// Measured before the fix: a vendored source carrying the banned `allow` under
+/// `tests/.uv-cache/` failed the scan contract, which is red on a machine where
+/// a tool had run and green on a fresh clone, with the offending path in no
+/// diff and in no `git status` because the name is git-ignored. A verdict that
+/// depends on a machine is worse than no verdict, so the two walks must agree.
+///
+/// The tree is synthetic for the usual reason: the disagreement needs a cache
+/// inside a scanned root, and the repository has none today, which is the shape
+/// that would otherwise go unnoticed until a contributor's tooling created one.
+#[test]
+fn a_cache_inside_a_scanned_root_is_skipped_by_the_scan() -> Result<()> {
+    let scratch = tempdir().context("create a scratch directory for the walk")?;
+    let scratch_path = Utf8Path::from_path(scratch.path())
+        .context("a temporary directory path should be valid UTF-8")?;
+    let root = Dir::open_ambient_dir(scratch_path, ambient_authority())
+        .context("open the scratch directory")?;
+    for directory in ["tests/.uv-cache", "tests/nested/target", "tests"] {
+        root.create_dir_all(directory)
+            .with_context(|| format!("create `{directory}`"))?;
+    }
+    root.write("tests/.uv-cache/vendored.rs", b"fn vendored() {}\n")
+        .context("write the cached source")?;
+    root.write("tests/nested/target/generated.rs", b"fn generated() {}\n")
+        .context("write the nested generated source")?;
+    root.write("tests/kept.rs", b"fn kept() {}\n")
+        .context("write the kept source")?;
+
+    let mut scanned = Vec::new();
+    collect_rust_sources(&root, "tests", &mut scanned)?;
+    let mut scanned: Vec<&str> = scanned.iter().map(|(path, _)| path.as_str()).collect();
+    scanned.sort();
+
+    let mut walked = Vec::new();
+    collect_all_sources(&root, ".", &mut walked)?;
+    walked.sort();
+
+    // `collect_rust_sources` is the function the scan actually reads through, so
+    // this is the assertion the missing skip failed. Asserting on
+    // `collect_all_sources` alone would not have caught it: that walk has always
+    // skipped by name, so it was the one behaving correctly.
+    ensure!(
+        scanned == ["tests/kept.rs"],
+        "the scan must skip a machine-local name inside a scanned root, at any \
+         depth, or its verdict depends on which tools have run on this machine; \
+         got {scanned:?}"
+    );
+    // And the two walks agree, which is the property that keeps the coverage
+    // invariant meaningful: it reports a source as ungoverned only when the scan
+    // really would not read it.
+    ensure!(
+        walked == scanned,
+        "the scan and the workspace walk must agree on what is governed, or the \
+         coverage invariant excuses a source the scan reads or reports one it \
+         does not; scan {scanned:?}, walk {walked:?}"
     );
     Ok(())
 }
