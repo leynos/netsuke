@@ -1919,10 +1919,12 @@ Recorded during planning; extend during implementation.
 
   Both limbs fire at either head: 23 > 20 files, and 2,994 > 600 net — with 708
   net even if this living exec plan (2,286 or 2,331 lines, by head) is excluded
-  entirely. The non-plan remainder is **invariant at 708 net across 22 files**
-  under plan-maintenance commits, which is the figure to quote when the plan's
-  own growth is held to one side; the totals rise with each such commit because
-  the plan is inside the diff.
+  entirely. The non-plan remainder is **708 net across 22 files** at both
+  tabulated heads, where it moved from 696 at the `configure_stdlib` extraction
+  (`e1568a1b`, +12 net of real code), and plan-maintenance commits leave it
+  untouched; 708 is therefore the figure to quote when the plan's own growth is
+  held to one side. The totals rise with each such commit because the plan is
+  inside the diff.
 
   *When it fired.* The net-lines limb fired on this plan's **own first commit**
   (`9042fe66`, the draft exec plan, 1,581 net in one file) — the threshold was
