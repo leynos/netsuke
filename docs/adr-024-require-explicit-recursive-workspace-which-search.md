@@ -64,3 +64,34 @@ walker after its flat `PATH` pass misses.
 - Resolver design:
   [Executable discovery filter](netsuke-design.md#executable-discovery-filter-which)
 - User contract: [users' guide](users-guide.md)
+
+## Addendum — 2026-09-19: Bounded search-domain telemetry
+
+The resolver now reports which search domain a resolution used. The four modes
+previously produced indistinguishable series, so an operator could not tell
+whether `workspace-recursive` had been requested, or whether recursive lookup
+contributed to an outcome at all.
+
+The label is `cwd_mode`, drawn from the closed set `auto`, `always`, `never`,
+and `workspace_recursive`. That vocabulary is a telemetry spelling rather than
+the template spelling: a manifest writes `workspace-recursive`, and the label is
+`workspace_recursive`.
+
+The label is carried on the existing `netsuke_stdlib_which_cache_total` and
+`netsuke_stdlib_which_resolution_total` counters, and on the
+`stdlib.which.resolve` span. The cache and resolver metric names are unchanged.
+The change is additive at the label level, but it is a deliberate compatibility
+change to the series shape, so a scraper that assumed a fixed label set for
+these two counters must be updated.
+
+Redaction rules are unchanged. No command name, path, workspace name, `PATH`
+value, `PATHEXT` value, or other environment value is recorded on any span,
+event, or metric label. Only the mode, the outcome, and the bounded error
+category leave the process. Resolver behaviour and its search semantics are
+unchanged by this addendum, and the four `CwdMode` contracts recorded above
+still hold.
+
+The contract lives in `src/stdlib/which/telemetry.rs`, which owns both counter
+names and every label vocabulary; the implementation is in
+`src/stdlib/which/cache.rs`, and the recorder admission rule is in
+`src/observability_recorder.rs`.
