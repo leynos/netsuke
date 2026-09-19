@@ -6,7 +6,7 @@
 //! needs platform-specific `OsString` surgery, and the AGENTS.md testing
 //! mandate forbids in-process mutation regardless.
 
-use crate::manifest::{EnvAccessPolicy, EnvReadError, env_var_with};
+use crate::manifest::{EnvAccessPolicy, EnvReadError, env_reader::env_var_with};
 use minijinja::ErrorKind;
 use rstest::rstest;
 
