@@ -1,4 +1,9 @@
 //! Tests for injected environment access through the manifest `env()` helper.
+//!
+//! The `default` keyword argument's own cases are split across
+//! `tests/manifest_env_tests/` so no file exceeds the repository's 400-line
+//! limit; this file keeps the shared rendering helpers, the access-policy
+//! coverage, and the diagnostic snapshots.
 
 use anyhow::{Context, Result, anyhow, ensure};
 use netsuke::{
@@ -151,77 +156,6 @@ fn injected_values_render(#[case] value: &str, #[case] expected: &str) -> Result
     Ok(())
 }
 
-/// Render `env('PROFILE' …)` with `argument` appended, and return the command.
-fn rendered_command_with_default(
-    value: Result<String, EnvReadError>,
-    argument: &str,
-) -> Result<String> {
-    let yaml = manifest_yaml(&format!(
-        "targets:\n  - name: hello\n    command: \"echo {{{{ env('PROFILE'{argument}) }}}}\"\n"
-    ));
-    let manifest = manifest::from_str_with_env_and_policy(
-        &yaml,
-        &reader_yielding(value),
-        &EnvAccessPolicy::default(),
-    )?;
-    let target = manifest
-        .targets
-        .first()
-        .context("manifest should contain a target")?;
-    let Recipe::Command { command } = &target.recipe else {
-        return Err(anyhow!("expected command recipe, got {:?}", target.recipe));
-    };
-    command
-        .as_single()
-        .map(str::to_owned)
-        .context("command should be a scalar")
-}
-
-/// Render an arbitrary manifest template under the default policy.
-fn rendered_command_with_argument(template: &str) -> Result<String> {
-    let yaml = manifest_yaml(&format!(
-        "targets:\n  - name: hello\n    command: \"{template}\"\n"
-    ));
-    let manifest = manifest::from_str_with_env_and_policy(
-        &yaml,
-        &reader_yielding(Ok(String::from("value"))),
-        &EnvAccessPolicy::default(),
-    )?;
-    let target = manifest
-        .targets
-        .first()
-        .context("manifest should contain a target")?;
-    let Recipe::Command { command } = &target.recipe else {
-        return Err(anyhow!("expected command recipe, got {:?}", target.recipe));
-    };
-    command
-        .as_single()
-        .map(str::to_owned)
-        .context("command should be a scalar")
-}
-
-/// `OBL-ENV-DEFAULT` at the template layer: what `default` accepts.
-///
-/// The reader is genuinely consulted in every row, so a row proving the default
-/// was returned also proves the lookup happened; an implementation that ignored
-/// the reader and returned `default` unconditionally would fail the
-/// `present_ignores_default` row.
-#[rstest]
-#[case::present_ignores_default(
-    Ok(String::from("present")),
-    ", default='fallback'",
-    "echo present"
-)]
-#[case::absent_uses_default(Err(EnvReadError::NotPresent), ", default='fallback'", "echo fallback")]
-fn template_default_substitutes_for_absence(
-    #[case] value: Result<String, EnvReadError>,
-    #[case] argument: &str,
-    #[case] expected: &str,
-) -> Result<()> {
-    ensure!(rendered_command_with_default(value, argument)? == expected);
-    Ok(())
-}
-
 /// The helper must receive the name the template asked for.
 #[rstest]
 fn the_template_variable_name_reaches_the_reader() -> Result<()> {
@@ -257,117 +191,6 @@ fn lookup_failures_are_diagnostic(
         error
             .chain()
             .any(|cause| cause.to_string().to_lowercase().contains(expected)),
-        "unexpected error: {error:#}"
-    );
-    Ok(())
-}
-
-/// A non-UTF-8 value fails even when a valid `default` is supplied.
-///
-/// A present-but-undecodable value is a configuration fault, not an absence, so
-/// the default must not paper over it. This is the one case where the plan's
-/// own rule and a naive "read then fall back" implementation disagree.
-#[test]
-fn non_utf8_value_is_not_replaced_by_the_default() -> Result<()> {
-    let error =
-        rendered_command_with_default(Err(EnvReadError::NotUnicode), ", default='fallback'")
-            .expect_err("a non-UTF-8 value must fail even with a default");
-    ensure!(
-        error
-            .chain()
-            .any(|cause| cause.to_string().to_lowercase().contains("invalid utf-8")),
-        "unexpected error: {error:#}"
-    );
-    Ok(())
-}
-
-/// `default=none` is the absence of a default, not a default of the text "none".
-///
-/// The *rendered diagnostic* is compared, not just the error kind: constraint 1
-/// freezes this wording, so an implementation that routed `none` down the
-/// non-string branch would fail here even if it also failed the parse.
-#[test]
-fn explicit_none_default_is_equivalent_to_omitting_it() -> Result<()> {
-    let with_none = rendered_command_with_default(Err(EnvReadError::NotPresent), ", default=none")
-        .expect_err("an absent variable with default=none must still fail");
-    let without = rendered_command(Err(EnvReadError::NotPresent))
-        .expect_err("an absent variable with no default must fail");
-    let with_none_lookup = environment_diagnostic(&with_none)
-        .context("default=none should produce the missing-variable diagnostic")?;
-    let without_lookup = environment_diagnostic(&without)
-        .context("an omitted default should produce the missing-variable diagnostic")?;
-    ensure!(
-        with_none_lookup == without_lookup,
-        "default=none should fail with the unchanged message an omitted default gives, got \
-         {with_none_lookup:?} and {without_lookup:?}"
-    );
-    Ok(())
-}
-
-/// The localized environment message inside a manifest diagnostic, normalized.
-fn environment_diagnostic(error: &anyhow::Error) -> Option<String> {
-    let message = error
-        .chain()
-        .map(ToString::to_string)
-        .find(|message| message.contains("environment variable"))?;
-    Some(normalize_fluent_isolates(&message))
-}
-
-/// `default` is a keyword argument, so a bare second positional argument fails.
-///
-/// `MiniJinja` reports a positional overflow as a `TooManyArguments` with **no
-/// detail**, naming neither the function nor the keyword it expected; that is
-/// what makes this a rejection test rather than a guidance test. The template
-/// author still gets a template location from the outer error.
-#[test]
-fn a_positional_second_argument_is_rejected() -> Result<()> {
-    let error = rendered_command_with_argument("echo {{ env('PROFILE', 'fallback') }}")
-        .expect_err("a positional second argument must be rejected");
-    ensure!(
-        error
-            .chain()
-            .any(|cause| cause.to_string().contains("too many arguments")),
-        "unexpected error: {error:#}"
-    );
-    Ok(())
-}
-
-/// An unknown keyword argument is rejected, naming the key.
-#[test]
-fn an_unknown_keyword_argument_is_rejected() -> Result<()> {
-    let error = rendered_command_with_argument("echo {{ env('PROFILE', defualt='x') }}")
-        .expect_err("an unknown keyword argument must be rejected");
-    ensure!(
-        error
-            .chain()
-            .any(|cause| cause.to_string().contains("defualt")),
-        "the diagnostic should name the offending keyword, got {error:#}"
-    );
-    Ok(())
-}
-
-/// `default` must be a string.
-///
-/// `Kwargs::get::<Option<String>>` would silently stringify every one of these
-/// — `1` to `"1"`, `true` to the Python-shaped `"True"`, a sequence to a JSON
-/// fragment — and paste the result into a shell recipe. `Option<Value>` plus an
-/// explicit `as_str` check is what makes the coercion impossible; RFC 0006 §6.6
-/// forbids it.
-#[rstest]
-#[case::number("1")]
-#[case::boolean("true")]
-#[case::sequence("['a','b']")]
-#[case::mapping("{'a': 1}")]
-fn a_non_string_default_is_rejected(#[case] literal: &str) -> Result<()> {
-    let error = rendered_command_with_default(
-        Err(EnvReadError::NotPresent),
-        &format!(", default={literal}"),
-    )
-    .expect_err("a non-string default must be rejected");
-    ensure!(
-        error
-            .chain()
-            .any(|cause| cause.to_string().contains("must be a string")),
         "unexpected error: {error:#}"
     );
     Ok(())
@@ -418,3 +241,6 @@ fn blocked_lookup_diagnostic_snapshot(en_localizer: EnLocalizer) -> Result<()> {
     insta::assert_snapshot!(normalized_message, @"invalid operation: Access to an environment variable is blocked. (in <string>:1)");
     Ok(())
 }
+
+#[path = "manifest_env_tests/default_argument.rs"]
+mod default_argument;
