@@ -6,7 +6,7 @@ Accepted.
 
 ## Date
 
-2026-09-19.
+2026-09-19
 
 ## Context and problem statement
 
