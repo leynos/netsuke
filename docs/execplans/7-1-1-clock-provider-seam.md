@@ -1962,19 +1962,25 @@ Recorded during planning; extend during implementation.
   | `3348cc0a` / `e401f4d7` | 23    | 3,172     | 133       | 3,039 | 708            |
   | `a273fad3` / `25960909` | 24    | 3,369     | 133       | 3,236 | 716            |
   | `a273fad3` / `ed674fc9` | 27    | 3,491     | 133       | 3,358 | 802            |
+  | `a273fad3` / `fc39b269` | 27    | 3,504     | 133       | 3,371 | 802            |
+
+  Each row is measured *at* the head it names, not after it, and a later
+  plan-only commit moves the total by exactly its own length and the remainder
+  not at all — which is why the remainder, and not the total, is the figure a
+  later reader should compare against the tolerance.
 
   Both limbs fire at every head: more than 20 files, and net far above 600 —
   with 802 net across 26 files besides the plan even if this living exec plan
-  (2,556 lines) is excluded entirely. The non-plan remainder moved from 696 to
-  708 at the `configure_stdlib` extraction (+12 net of real code), to 716 with
-  the clock-seam extraction into `config/clock.rs` (+42 added, with nothing
-  removed elsewhere because the move relocated code rather than deleting it),
-  and to 802 with the documentation fix the first CodeRabbit pass asked for
-  (+86: the users'-guide section, the migration-guide row and section, and the
-  registry entry plus pinning test that hold the guide fence to the doctest);
-  plan-maintenance commits leave it untouched, so the non-plan figure is the
-  one to quote when the plan's own growth is held to one side. The totals rise
-  with each such commit because the plan is inside the diff.
+  (2,569 lines at `fc39b269`) is excluded entirely. The non-plan remainder
+  moved from 696 to 708 at the `configure_stdlib` extraction (+12 net of real
+  code), to 716 with the clock-seam extraction into `config/clock.rs` (+42
+  added, with nothing removed elsewhere because the move relocated code rather
+  than deleting it), and to 802 with the documentation fix the first CodeRabbit
+  pass asked for (+86: the users'-guide section, the migration-guide row and
+  section, and the registry entry plus pinning test that hold the guide fence
+  to the doctest); plan-maintenance commits leave it untouched, so the non-plan
+  figure is the one to quote when the plan's own growth is held to one side.
+  The totals rise with each such commit because the plan is inside the diff.
 
   *When it fired.* The net-lines limb fired on this plan's **own first commit**
   (the draft exec plan, 1,581 net in one file) — the threshold was exceeded
@@ -1997,24 +2003,24 @@ Recorded during planning; extend during implementation.
   they are not a citation a later reader can rely on — only the figures are.
 
   *Attribution of the 3,358 net lines measured at `ed674fc9`* (so a later
-  reader can audit rather than take this on trust): exec plan 2,556; production
-  `src/` 480 net (547 added, 67 removed), which is `clock.rs` 150,
-  `clock_tests.rs` 260 and `config/clock.rs` 42 as new files, the `tests.rs`/
-  `tests_support.rs` split 10 net after a 58-line move, and the 18-line balance
-  from the `mod.rs` files and `register.rs`; tests 184 net (198 added, 14
-  removed); governing docs 127 net outside the plan, of which the guide and
-  migration-guide pairs are 65; the recorded `proptest` regression seed 11. The
-  pre-rebase attribution of 3,039 was exec plan 2,331, `src/` 472, tests 163,
-  docs 62 and the seed 11; the shift is the extraction (`config/clock.rs` plus
-  the re-export), the required documentation, and the plan's own growth. Every
-  row above is a snapshot, and the snapshots are not interchangeable: each
-  plan-maintenance commit raises the total by its own length while leaving the
-  non-plan remainder fixed, so the remainder is the durable quantity and every
-  total is a lower bound that grows as this section is maintained. A later
-  reader should re-measure rather than re-quote; the conclusion does not move,
-  because the non-plan remainder alone exceeds the 600-line limb by more than a
-  third (802 against 600) with the file count likewise over (26 against 20)
-  even excluding this plan entirely.
+  reader can audit rather than take this on trust): exec plan 2,556 at that
+  head, 2,569 at `fc39b269`; production `src/` 480 net (547 added, 67 removed),
+  which is `clock.rs` 150, `clock_tests.rs` 260 and `config/clock.rs` 42 as new
+  files, the `tests.rs`/ `tests_support.rs` split 10 net after a 58-line move,
+  and the 18-line balance from the `mod.rs` files and `register.rs`; tests 184
+  net (198 added, 14 removed); governing docs 127 net outside the plan, of
+  which the guide and migration-guide pairs are 65; the recorded `proptest`
+  regression seed 11. The pre-rebase attribution of 3,039 was exec plan 2,331,
+  `src/` 472, tests 163, docs 62 and the seed 11; the shift is the extraction
+  (`config/clock.rs` plus the re-export), the required documentation, and the
+  plan's own growth. Every row above is a snapshot, and the snapshots are not
+  interchangeable: each plan-maintenance commit raises the total by its own
+  length while leaving the non-plan remainder fixed, so the remainder is the
+  durable quantity and every total is a lower bound that grows as this section
+  is maintained. A later reader should re-measure rather than re-quote; the
+  conclusion does not move, because the non-plan remainder alone exceeds the
+  600-line limb by more than a third (802 against 600) with the file count
+  likewise over (26 against 20) even excluding this plan entirely.
 
   *Assessment against the tolerance's own reasoning.* The tolerance says a
   substantial overrun "means the design was wrong". That inference does not
@@ -2106,8 +2112,8 @@ Upstream changes and deviations, all recorded above or in
 - **Conformance exception — scope (D14).** The pull request exceeds both limbs
   of this plan's scope tolerance. It did so from its earliest measured head,
   and it still does at the head that carries this record: 27 changed files
-  against a limit of 20, and 3,358 net added lines against a limit of 600 (802
-  net even with this exec plan's 2,556 lines excluded). Escalated and accepted
+  against a limit of 20, and 3,371 net added lines against a limit of 600 (802
+  net even with this exec plan's 2,569 lines excluded). Escalated and accepted
   by the maintainer on 2026-09-19; the full attribution and assessment are in
   D14. This delivery is therefore **not fully conformant to this plan**: every
   other tolerance held, but this one did not, and it is recorded as an accepted
