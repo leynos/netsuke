@@ -94,12 +94,11 @@ success-output = "immediate"
 # was the exclusive tail under an uncontended lane that no longer exists. The
 # repository has still decided not to spend the fidelity risk yet, and the trim
 # remains a candidate for tightening or deletion at the ten-run revisit gate
-# that the developers' guide defines under "Deferring the split-build-dir
-# harness trim"; that section carries the serialized
-# measurements, the alternatives already measured and rejected — `cargo check`
-# for `cargo build`, warming the compiler cache, and sharing a target
-# directory — and the constraints a fixture-crate replacement would have to
-# preserve.
+# that ADR-027 defines; that record carries the serialized measurements, the
+# alternatives already measured and rejected — `cargo check` for `cargo
+# build`, warming the compiler cache, and sharing a target directory — and the
+# ten-run gate. The developers' guide carries the constraints a fixture-crate
+# replacement would have to preserve.
 #
 # Windows only. On Ubicloud both tests finish in a fraction of the budget, and
 # widening the timeout there would blunt the hang detection this file exists to
