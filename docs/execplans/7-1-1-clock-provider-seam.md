@@ -1514,6 +1514,13 @@ above, which are disposable.
   10:09Z, `main` (`ef7ed760`, 10:24Z) included. The required `build-test` check
   is a *different* job and passes, as do `kani-smoke`, `netsukefile` and
   `release / metadata`.
+- [ ] Post-completion: a full review requested on `bb1d7f9b` and **pending** as
+  queue entry `cfcb03b5`, quoted at roughly 22 minutes. The branch is under
+  CodeRabbit's auto-pause ("active development"), and the walkthrough states
+  that `@coderabbitai review` triggers a single review despite the pause, which
+  is the command queued. This is a posted *request*, not a completed review:
+  the commit CodeRabbit actually inspects must be read back afterwards, because
+  the comment body does not pin a revision.
 
 ## Surprises & discoveries
 
