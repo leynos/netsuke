@@ -251,7 +251,6 @@ jobs:
       - name: Install sccache
         uses: >-
           taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375
-        # v2.85.3
         with:
           tool: sccache@0.16.0
           fallback: none
@@ -295,7 +294,6 @@ jobs:
           persist-credentials: false
       - name: Install Python for admission timings
         uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
-        # v8.3.2
         with:
           python-version: '3.14'
           enable-cache: false
@@ -388,7 +386,6 @@ jobs:
         # baseline the repository's Python tooling targets, rather than
         # whichever `python3` the runner image happens to ship.
         uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
-        # v8.3.2
         with:
           python-version: '3.14'
           # The hoist script is stdlib-only and runs with --no-project, so a

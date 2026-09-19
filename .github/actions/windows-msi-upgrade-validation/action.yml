@@ -43,7 +43,7 @@ runs:
 
     - name: Build beta1 MSI fixture
       id: package_beta1
-      uses: leynos/shared-actions/.github/actions/windows-package@e041cb75c35c3524201a32d5e57c87408fbd5874
+      uses: leynos/shared-actions/.github/actions/windows-package@a5765019912a8ab6882b12db049c7cde635f3a85
       env:
         NETSUKE_RELEASE_RANK: ${{ env.MSI_VALIDATION_BETA1_RANK }}
       with:
@@ -62,7 +62,7 @@ runs:
 
     - name: Build beta2 MSI fixture
       id: package_beta2
-      uses: leynos/shared-actions/.github/actions/windows-package@e041cb75c35c3524201a32d5e57c87408fbd5874
+      uses: leynos/shared-actions/.github/actions/windows-package@a5765019912a8ab6882b12db049c7cde635f3a85
       env:
         NETSUKE_RELEASE_RANK: ${{ env.MSI_VALIDATION_BETA2_RANK }}
       with:
@@ -81,7 +81,7 @@ runs:
 
     - name: Build final MSI fixture
       id: package_final
-      uses: leynos/shared-actions/.github/actions/windows-package@e041cb75c35c3524201a32d5e57c87408fbd5874
+      uses: leynos/shared-actions/.github/actions/windows-package@a5765019912a8ab6882b12db049c7cde635f3a85
       env:
         NETSUKE_RELEASE_RANK: ${{ env.MSI_VALIDATION_FINAL_RANK }}
       with:
