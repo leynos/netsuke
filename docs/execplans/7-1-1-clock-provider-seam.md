@@ -1628,6 +1628,23 @@ above, which are disposable.
   complete; the decision is not mine to make, and the designated owner retains
   it.
 
+  One property of this branch is worth naming, because it produced a loop I had
+  to break deliberately. Recording "CI is green at head H" is itself a commit,
+  and that commit moves the head, invalidating the verdict it records. The plan
+  file is not a passive record here: `build-test` runs `make check-fmt`,
+  markdownlint over `**/*.md`, `make spelling`, and the workspace test suite,
+  and `tests/execplan_status_contract_tests.rs` reads `docs/execplans/` — so an
+  edit to this document is an *input* to the same required checks whose result
+  the edit reports. Three pushes went on rediscovering this, each re-triggering
+  the checks it had just confirmed. The resolution is not to keep re-verifying
+  but to accept that the plan's last commit cannot be covered by a green run it
+  describes, and to name the head that was verified rather than implying the
+  newest one is. The verified head of record is `6eacd07b`: `netsukefile` and
+  `release / metadata` both `success`, and in the `CI` run the required
+  `build-test` and `kani-smoke` both `success`. The caveat is that a
+  `pull_request` run builds a synthetic merge of head into `main`, so `headSha`
+  identifies the PR head rather than proving that commit was built in isolation.
+
 ## Surprises & discoveries
 
 Recorded during planning; extend during implementation.
