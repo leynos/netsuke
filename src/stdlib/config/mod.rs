@@ -1,6 +1,7 @@
 //! Configuration types and defaults for wiring the stdlib into `MiniJinja`.
 
 mod ambient;
+mod clock;
 mod which;
 
 use super::config_types::HomeDirectory;
@@ -9,7 +10,7 @@ pub use super::config_types::{
     DEFAULT_FETCH_CACHE_DIR, DEFAULT_FETCH_MAX_RESPONSE_BYTES, DEFAULT_FILE_MAX_READ_BYTES,
     DEFAULT_WHICH_CACHE_CAPACITY, FileConfig, NetworkConfig,
 };
-use super::{command, network::NetworkPolicy, which::WORKSPACE_SKIP_DIRS};
+use super::{command, network::NetworkPolicy, time::WallClock, which::WORKSPACE_SKIP_DIRS};
 use crate::localization::{self, keys};
 use anyhow::{anyhow, bail, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -47,6 +48,8 @@ pub struct StdlibConfig {
     command_path_override: Option<OsString>,
     /// Home directory source used by the `expanduser` filter.
     home_directory: HomeDirectory,
+    /// Wall-clock source backing the `now()` helper.
+    clock: WallClock,
 }
 
 impl StdlibConfig {
@@ -93,6 +96,7 @@ impl StdlibConfig {
             pathext_override: None,
             command_path_override: None,
             home_directory: HomeDirectory::Ambient,
+            clock: WallClock::default(),
         })
     }
 
