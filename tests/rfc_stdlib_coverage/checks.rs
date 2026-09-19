@@ -156,17 +156,17 @@ pub fn totals_and_purity_aggregate_agree(repo: &Repo) -> Result<()> {
         let pure: usize = world
             .registries
             .iter()
-            .map(|registry| registry.with_purity(registries::Purity::Pure))
+            .map(|registry| registry.new_with_purity(registries::Purity::Pure))
             .sum();
         let filesystem: usize = world
             .registries
             .iter()
-            .map(|registry| registry.with_purity(registries::Purity::Filesystem))
+            .map(|registry| registry.new_with_purity(registries::Purity::Filesystem))
             .sum();
         let environment: usize = world
             .registries
             .iter()
-            .map(|registry| registry.with_purity(registries::Purity::Environment))
+            .map(|registry| registry.new_with_purity(registries::Purity::Environment))
             .sum();
         let (want_pure, want_filesystem, want_environment) = world.survey.purity;
         ensure!(

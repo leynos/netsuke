@@ -25,7 +25,7 @@ intentionally skipped" rule in
 | 0001         | Structured command blocks                                                                                   | Merged in [#573](https://github.com/leynos/netsuke/pull/573) |
 | 0002 to 0004 | Manifest composition: repository-relative includes, versioned local bundles, digest-pinned external bundles | Merged in [#600](https://github.com/leynos/netsuke/pull/600) |
 | 0005         | Release integrity and admission                                                                             | Merged in [#556](https://github.com/leynos/netsuke/pull/556) |
-| 0006         | This RFC                                                                                                    | Proposed                                                     |
+| 0006         | This RFC                                                                                                    | Merged in [#602](https://github.com/leynos/netsuke/pull/602) |
 | 0007         | Netsukefile testing framework                                                                               | Merged in [#566](https://github.com/leynos/netsuke/pull/566) |
 | 0008         | Repository-wide code-health contracts and fuzzing                                                           | Merged in [#556](https://github.com/leynos/netsuke/pull/556) |
 | 0009 to 0010 | Structured-command amendments: per-command working directories, and runtime bindings and secure tempdirs    | Merged in [#600](https://github.com/leynos/netsuke/pull/600) |
@@ -34,6 +34,12 @@ intentionally skipped" rule in
 | 0013 to 0020 | Capability child RFCs this RFC's accepted set is split into                                                 | Reserved here; allocated in section 14.13                    |
 
 _Table 1: RFC sequence reservations across in-flight branches._
+
+Every row of table 1 records a merge state, and `Proposed` is not one: it is the
+`Status` this RFC's own preamble carries, and every merged RFC in the corpus
+carries it too — a merged RFC's status stays `Proposed` until its capability
+has shipped. `0006` is therefore merged and `Proposed`, and the row states the
+merge because that is the fact the column is about.
 
 ## 1. Summary
 
