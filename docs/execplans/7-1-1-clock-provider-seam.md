@@ -345,7 +345,8 @@ Stop and escalate — do not improvise — when any threshold is reached.
 
 - **Scope.** More than 20 files changed, or more than 600 net lines added
   across the whole change. This is a small, well-understood seam; substantial
-  overrun means the design was wrong.
+  overrun means the design was wrong. Fired post-completion: the escalation and
+  its acceptance are recorded in D14, not renegotiated here.
 - **Interface.** Any change to a *public* signature other than the three
   additions this plan sanctions (`stdlib::ClockProvider`,
   `stdlib::ClockInstant`, `stdlib::system_clock`, `stdlib::fixed_clock`, and
@@ -1451,6 +1452,9 @@ above, which are disposable.
   merge driver bypassed, then extracted `configure_stdlib` from the BDD render
   helper in response to a CodeScene finding — evidence in `Artefacts and notes`
   entries 12 and 13.
+- [x] Post-completion: the scope tolerance fired and was escalated; accepted by
+  the maintainer on 2026-09-19 and recorded as this plan's one conformance
+  exception in D14. The delivery is not scope-conformant to the plan.
 
 ## Surprises & discoveries
 
@@ -1899,6 +1903,65 @@ Recorded during planning; extend during implementation.
   later reader is not surprised. Date/Author: 2026-09-08, planning; added after
   design review.
 
+- **D14 — Scope tolerance: escalated and accepted, not silently breached; the
+  PR is not scope-conformant.** Decided: accept the deviation, record it as an
+  escalation rather than a waiver, and stop claiming the delivery is fully
+  conformant to this plan. This is the one conformance exception against an
+  otherwise-complete plan, and it stands as an exception.
+
+  *Measured scope*, reported by GitHub for #696 against base `3348cc0a` and
+  reproduced locally with `git diff --numstat`:
+
+  | Head       | Files | Additions | Deletions | Net   | Net excl. plan |
+  | ---------- | ----- | --------- | --------- | ----- | -------------- |
+  | `02caf3ee` | 23    | 3,127     | 133       | 2,994 | 708            |
+  | `e401f4d7` | 23    | 3,172     | 133       | 3,039 | 708            |
+
+  Both limbs fire at either head: 23 > 20 files, and 2,994 > 600 net — with 708
+  net even if this living exec plan (2,286 or 2,331 lines, by head) is excluded
+  entirely. The non-plan remainder is **invariant at 708 net across 22 files**
+  under plan-maintenance commits, which is the figure to quote when the plan's
+  own growth is held to one side; the totals rise with each such commit because
+  the plan is inside the diff.
+
+  *When it fired.* The net-lines limb fired on this plan's **own first commit**
+  (`9042fe66`, the draft exec plan, 1,581 net in one file) — the threshold was
+  exceeded before any production code existed. The file-count limb fired at
+  `3fdd8260` (21 files). Neither was noticed at the time, because the tolerance
+  was written to guard a *code* change and its principal consumer turned out to
+  be the execution record documenting that change. That is the process lesson:
+  a scope tolerance that counts every changed file and line will fire on the
+  plan itself unless the plan's own artefacts are excluded by construction.
+
+  *Attribution of the 3,039 net lines* (so a later reader can audit rather than
+  take this on trust): exec plan 2,331; tests 163; production `src/` 472 (of
+  which `clock.rs` 150, `clock_tests.rs` 260, the `tests.rs`/
+  `tests_support.rs` split 10 net after a 260-line move); governing docs 62;
+  the recorded `proptest` regression seed 11.
+
+  *Assessment against the tolerance's own reasoning.* The tolerance says a
+  substantial overrun "means the design was wrong". That inference does not
+  hold here, and the evidence is the shape of the overrun rather than an appeal
+  to intent: the production seam is 150 net lines with a 39-line config delta,
+  and the excess is dominated by the execution record plus the coverage the
+  plan's own verification requirements mandated (OBL-1 through OBL-7, the
+  six-mutation exercise, the two test layers D7 makes mandatory, and the BDD
+  scenarios). The requirement to keep this plan current *is* the source of the
+  largest single file. No roadmap requirement went unmet and no obligation was
+  discharged by volume: the seam's interface stayed inside the `Interface`
+  tolerance (D13's five sanctioned additions, no `StdlibConfig::new` change),
+  `Cargo.toml` gained nothing, and all gates are green. Severity: low for
+  correctness, medium for process — the exception is recorded so it cannot be
+  misread as conformance.
+
+  *Accepted by:* the maintainer, on 2026-09-19, on the explicit instruction to
+  record it as an escalation and accepted deviation. If the disposition is ever
+  revisited, the honest options are to split the execution record out of the
+  deliverable and upload it as a PR attachment, or to amend the tolerance so
+  that plan artefacts are excluded from its count — not to describe the
+  delivery as within tolerance. Date/Author: 2026-09-19, post-completion, after
+  review.
+
 ## Outcomes & retrospective
 
 Complete. The stdlib `now()` helper reads its instant through an injected
@@ -1938,6 +2001,14 @@ Reconciliation against the conformance basis:
 Upstream changes and deviations, all recorded above or in
 `Surprises & discoveries`:
 
+- **Conformance exception — scope (D14).** The pull request exceeds both limbs
+  of this plan's scope tolerance: 23 changed files against a limit of 20, and
+  3,039 net added lines against a limit of 600 (708 net even with this exec
+  plan's 2,331 lines excluded). Escalated and accepted by the maintainer on
+  2026-09-19; the full attribution and assessment are in D14. This delivery is
+  therefore **not fully conformant to this plan**: every other tolerance held,
+  but this one did not, and it is recorded as an accepted deviation rather than
+  a waiver.
 - The ADR-008 addendum is dated 2026-09-11 rather than the plan's
   `2026-09-08`, matching the file's convention of dating each entry when it is
   written.
@@ -2321,6 +2392,33 @@ To be populated during implementation. Required entries:
     of a dependency is indistinguishable, at a glance, from one derived from
     the code. The cheapest discriminator is the lock file plus an executed
     assertion, not a careful reading of the diff.
+
+16. The scope tolerance was escalated and accepted post-completion (D14). The
+    per-head numbers are tabulated in D14; they were reported by GitHub and
+    independently reproduced from the local graph. Reproduce with:
+
+    ```plaintext
+    gh api repos/leynos/netsuke/pulls/696 \
+      --jq '{changed_files, additions, deletions, head: .head.sha, base: .base.sha}'
+    git diff --numstat 3348cc0a..HEAD
+    ```
+
+    The figure that survives the most favourable reading is **708 net across 22
+    files**, with this plan's own lines excluded — the net-lines limb fired at
+    this plan's first commit (`9042fe66`, 1,581 net), the file-count limb at
+    `3fdd8260` (21 files); neither was caught then, because the tolerance was
+    written to bound a code change and its largest consumer proved to be the
+    record of that change.
+
+    The escalation was raised by the maintainer rather than by the gates, which
+    is the durable point: nothing in `make check-fmt`, `make test`,
+    `make typecheck`, `make lint`, `make doc-coverage`, `make markdownlint`, or
+    `make nixie` reads a plan's `Tolerances` section, so a breach is invisible
+    to machine verification and depends on a human or an agent re-reading the
+    plan against the PR. Both limbs had been breached for days before the
+    review that surfaced them — eleven from the first commit (`9042fe66`, dated
+    2026-09-08) to this escalation (2026-09-19), eight from the file-count
+    breach (`3fdd8260`, 2026-09-11).
 
 One lesson about evidence discipline, recorded because it cost a re-run: gate
 logs are named per branch, so a second run over the same branch silently
