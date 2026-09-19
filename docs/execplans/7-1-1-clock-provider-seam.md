@@ -2768,3 +2768,26 @@ still applies is not the same as knowing it.
     the measurement, not the story about it. "It is flaky under load" is a
     hypothesis with a testable mechanism, and here the mechanism as I first
     stated it was refuted by the very experiment that supported its conclusion.
+
+    The timeout is also already tracked, and the tracker names this very test.
+    [Issue 732](https://github.com/leynos/netsuke/issues/732), "Nested fixture
+    builds recompile the workspace on every test run", was opened on 2026-09-18
+    and states the consequence directly: the fixture harnesses' inability to
+    reuse the gate's compilation "is what puts these tests near the 300 s
+    per-test allowance". It identifies two causes — the nested build takes
+    default features where `make test-nextest` passes `--all-features`, so the
+    fingerprints differ and the workspace is compiled twice; and this test
+    points both `CARGO_TARGET_DIR` and `CARGO_BUILD_BUILD_DIR` at private
+    tempdirs, so it can never reuse anything at all. The issue carries its own
+    measurement: 65.8 s for the first nested build after the gate's own build on
+    an idle 32-core host, against 9.3 s for the same test on a second run.
+
+    That is the right disposition for this branch's local failure — a live,
+    pre-existing issue that already describes the mechanism, so there is nothing
+    to file and nothing to fix here. `docs/developers-guide.md` sizes the whole
+    timeout tier system deliberately and links its own related gap to issue 715,
+    so raising the allowance is a change to a documented contract with its own
+    arithmetic, not a fix to be smuggled in beside a clock seam. The branch's
+    obligation is to show the failure is not its own, which the CI `build-test`
+    pass on `8de3c963` does: the same test ran inside that job and the job
+    succeeded.
