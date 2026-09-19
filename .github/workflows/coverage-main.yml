@@ -222,10 +222,10 @@ jobs:
           # Setting it here, as the pull-request lane does, would leave
           # CodeScene with no report to read.
       - name: Validate the report before submitting it
-        # The generation action reports success for an empty or truncated
-        # report, and the upload asserts only that the file exists. A report
-        # that reaches CodeScene in that state is refused there, hours later
-        # and in another system: the check run reports "No valid coverage
+        # The upload asserts only that the file exists, not that it holds a
+        # usable report. A report that is empty, truncated, or otherwise
+        # malformed therefore reaches CodeScene and is refused there, hours
+        # later and in another system: the check run reports "No valid coverage
         # report found in the build pipeline" against a commit whose logs say
         # every step passed, which names neither the step nor the file at
         # fault. This narrows that to the run that produced it.
@@ -244,6 +244,9 @@ jobs:
         # every compile step.
         run: |
           set -euo pipefail
+          # Read the baseline rather than copying the number, the way
+          # AGENTS.md does for NEXTEST_VERSION. This lane declares no
+          # PYTHON_BASELINE of its own, and the one source is the Makefile.
           baseline="$(
             sed -n 's/^PYTHON_BASELINE[[:space:]]*?=[[:space:]]*\([^[:space:]]*\).*/\1/p' \
               Makefile | head -n 1
@@ -251,9 +254,10 @@ jobs:
           test -n "${baseline}"
           staged="$(mktemp --directory)"
           cp -- lcov.info "${staged}/lcov.info"
-          # `uv` is on PATH from the generation action's own setup step, which
-          # also exports UV_PYTHON_INSTALL_DIR, so the interpreter resolves to
-          # the same baseline the rest of the repository's Python uses.
+          # `uv` is on PATH because the generation action installs it: its
+          # first steps run `astral-sh/setup-uv` and then `uv run` throughout.
+          # `uv` fetches the baseline interpreter on demand, so no separate
+          # setup-python step is needed here.
           uv run --no-project --python "${baseline}" \
             scripts/validate_coverage_artifact.py --artifact-dir "${staged}"
       - name: Show sccache statistics
