@@ -1604,6 +1604,29 @@ above, which are disposable.
   and the real failure is at the test step. The conclusion survived the
   corrected premise, which is exactly why the premise had to be checked instead
   of inherited; a right answer for the wrong reason is not evidence.
+- [x] Post-completion: the review surfaces reconciled at the published head,
+  with the remaining decision left where it belongs. CodeRabbit's review
+  `5256390041` on `f81f2f98` returned `COMMENTED` with an empty body, and its
+  separate answer to the pre-merge reconciliation states that static inspection
+  **confirms** the implementation: `source_label()` is a closed two-value
+  result, `Debug` reuses it so the two labels cannot diverge, the event precedes
+  `register_functions` and carries neither instant nor provider output, and
+  the test covers both provenances and rejects leakage of the fixed instant. It
+  closes with "Mark the observability warning as resolved… Do not create a
+  follow-up issue. Do not perform further code work for this warning." Both
+  review threads are `isResolved: true`, and the `comenq` queue is empty.
+
+  Two facts are recorded separately rather than merged, because they are not
+  the same fact. The `CHANGES_REQUESTED` review decision **persists**, and it
+  is anchored to `8de3c963`, which is no longer an ancestor of the branch. That
+  anchor is stale, but a stale anchor is not an approval: clearing it would
+  mean dismissing a review or approving on the bot's behalf, which this plan
+  does not do. The four required checks (`build-test`, `kani-smoke`,
+  `netsukefile`, `release / metadata`) are all `SUCCESS` on `74822cc2`, and the
+  walkthrough's Observability row still renders as a warning because the
+  comment has not been re-edited. The dispositions above are therefore
+  complete; the decision is not mine to make, and the designated owner retains
+  it.
 
 ## Surprises & discoveries
 
