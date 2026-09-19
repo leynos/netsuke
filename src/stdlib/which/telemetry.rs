@@ -60,22 +60,22 @@ pub const WHICH_CWD_MODE_VALUES: [&str; 4] = [
 ];
 
 /// The bounded `outcome` recorded when the resolver answered from its cache.
-const CACHE_OUTCOME_HIT: &str = "hit";
+pub(super) const CACHE_OUTCOME_HIT: &str = "hit";
 /// The bounded `outcome` recorded when the cache held no entry for the key.
-const CACHE_OUTCOME_MISS: &str = "miss";
+pub(super) const CACHE_OUTCOME_MISS: &str = "miss";
 /// The bounded `outcome` recorded when the caller bypassed the cache.
-const CACHE_OUTCOME_BYPASS: &str = "bypass";
+pub(super) const CACHE_OUTCOME_BYPASS: &str = "bypass";
 
 /// The closed `outcome` vocabulary admitted on [`WHICH_CACHE_TOTAL`].
 pub const WHICH_CACHE_OUTCOME_VALUES: [&str; 3] =
     [CACHE_OUTCOME_HIT, CACHE_OUTCOME_MISS, CACHE_OUTCOME_BYPASS];
 
 /// The bounded `outcome` recorded when a resolution produced matches.
-const RESOLUTION_OUTCOME_FOUND: &str = "found";
+pub(super) const RESOLUTION_OUTCOME_FOUND: &str = "found";
 /// The bounded `outcome` recorded when no executable was discovered.
-const RESOLUTION_OUTCOME_NOT_FOUND: &str = "not_found";
+pub(super) const RESOLUTION_OUTCOME_NOT_FOUND: &str = "not_found";
 /// The bounded `outcome` recorded when the resolution failed for another reason.
-const RESOLUTION_OUTCOME_ERROR: &str = "error";
+pub(super) const RESOLUTION_OUTCOME_ERROR: &str = "error";
 
 /// The closed `outcome` vocabulary admitted on [`WHICH_RESOLUTION_TOTAL`].
 pub const WHICH_RESOLUTION_OUTCOME_VALUES: [&str; 3] = [
@@ -83,6 +83,15 @@ pub const WHICH_RESOLUTION_OUTCOME_VALUES: [&str; 3] = [
     RESOLUTION_OUTCOME_NOT_FOUND,
     RESOLUTION_OUTCOME_ERROR,
 ];
+
+/// The outcomes that carry an `error_category`, and so take three labels.
+///
+/// A resolution records a category only when it fails, so the three-label
+/// series are exactly these two outcomes. Declaring the subset lets the
+/// application recorder admit each label shape precisely — a `found` series
+/// carrying a category is a bug elsewhere, not telemetry to export.
+pub const WHICH_RESOLUTION_FAILURE_OUTCOME_VALUES: [&str; 2] =
+    [RESOLUTION_OUTCOME_NOT_FOUND, RESOLUTION_OUTCOME_ERROR];
 
 /// The bounded `category` recorded for a PATH search miss.
 pub const CATEGORY_NOT_FOUND: &str = "not_found";
