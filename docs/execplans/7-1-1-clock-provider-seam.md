@@ -881,10 +881,6 @@ In a new file `src/stdlib/time/clock.rs`:
 
 use std::{fmt, sync::Arc};
 
-use time::OffsetDateTime;
-
-use std::{fmt, sync::Arc};
-
 use time::{OffsetDateTime, UtcOffset};
 
 /// Re-exported so an external caller can name a provider's return type
@@ -1419,15 +1415,21 @@ Every step is re-runnable. The `make` gates are read-only with respect to
 tracked files except `make fmt`, which rewrites formatting deterministically —
 running it twice changes nothing the second time.
 
-No step is destructive. There is no migration, no persisted format, and no data
-to back up. Recovery at any point is `git revert` of the milestone commit or
-`git reset --hard` to the previous milestone; each milestone is a coherent,
-gate-passing plateau.
+No step destroys anything that cannot be rebuilt from Git. There is no
+migration, no persisted format, and no data to back up. Recovery at any point is
+`git revert` of the milestone commit or `git reset --hard` to the previous
+milestone; each milestone is a coherent, gate-passing plateau. Both commands
+discard uncommitted tracked edits, which is why the exercise below is confined
+to a scratch commit.
 
 The mutation exercise in `Validation and acceptance` is the only step that
-deliberately breaks the tree. Perform it on a scratch commit and discard it with
-`git reset --hard`; never push it. If interrupted mid-exercise, `git status`
-will show the mutation, and `git checkout -- <file>` restores it.
+deliberately breaks the tree, and it does edit tracked source. Run it on a
+scratch commit that you are willing to lose — never on a head you intend to
+keep, and never push it. Discard it with `git reset --hard`, which drops all
+uncommitted changes in the worktree, not just the mutation. If interrupted
+mid-exercise, `git status` will show the mutation, and `git checkout -- <file>`
+restores that one file. If any uncommitted work you care about is present,
+commit it first, or run the exercise in a separate scratch worktree.
 
 Working-tree cleanliness: this plan adds no build artefacts, no temporary files
 inside the repository, and no `/tmp` output other than the gate logs named
@@ -1820,6 +1822,19 @@ Recorded during planning; extend during implementation.
   disagrees, the correct response is to add the users' guide entry when 7.2
   exposes `given.clock.now` to authors, not now. Date/Author: 2026-09-08,
   planning.
+
+  **Superseded, post-completion.** The first CodeRabbit review raised this as a
+  "User-Facing Documentation" warning, and it was upheld: `with_clock` is an
+  additive *public Rust API*, and the repository's convention (#578, #666,
+  #669) is that such an addition gets both a users' guide section and a
+  migration-guide entry. The rationale above reasons only about *manifest
+  authors*, which is why it under-read the requirement — the audience for
+  `with_clock` is Rust callers embedding the stdlib, not template writers. The
+  guide now carries a section and a worked fence, and the migration guide a row
+  and section; the fence is registered as `guide-clock-snippet` and pinned to
+  the `with_clock` doctest by `clock_snippet_mirrors_the_doctest`. The sentence
+  at line 1178 is untouched and still true. Date/Author: 2026-09-19,
+  post-completion, after review.
 
 - **D5 — Keep the existing tolerance-based ambient assertions.**
   Decided: `now_defaults_to_utc` (3-second tolerance) and the BDD step

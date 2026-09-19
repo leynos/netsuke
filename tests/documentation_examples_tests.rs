@@ -69,46 +69,50 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "stdlib-yaml-syntax-manifest",
 ];
 
+/// Assert that a guide snippet is a Rust fence naming the given API entry points.
+///
+/// Several guide snippets duplicate an executable doctest, and pinning the copy
+/// to the same identifiers is what keeps the two from drifting silently. The
+/// label names the snippet so a failure reads in the guide's own vocabulary.
+fn assert_snippet_names(example_id: &str, label: &str, needles: &[&str]) -> Result<()> {
+    let example = documented_example(example_id)?;
+    ensure!(
+        example.language == "rust",
+        "the {label} snippet should be a Rust fence"
+    );
+    for needle in needles {
+        ensure!(
+            example.body.contains(needle),
+            "the {label} snippet should mention {needle}"
+        );
+    }
+    Ok(())
+}
+
 /// The guide's env-reader snippet must stay in step with the API it mirrors.
 ///
-/// The snippet is Rust and is executed as the doctest on `from_str_with_env`;
-/// this pins the guide copy to the same entry points so the two cannot drift
-/// silently.
+/// The snippet is Rust and is executed as the doctest on `from_str_with_env`.
 #[test]
 fn env_reader_snippet_mirrors_the_doctest() -> Result<()> {
-    let example = documented_example("guide-env-reader-snippet")?;
-    ensure!(
-        example.language == "rust",
-        "the env-reader snippet should be a Rust fence"
-    );
-    for needle in ["from_str_with_env", "EnvReader", "env('PROFILE')"] {
-        ensure!(
-            example.body.contains(needle),
-            "the env-reader snippet should mention {needle}"
-        );
-    }
-    Ok(())
+    assert_snippet_names(
+        "guide-env-reader-snippet",
+        "env-reader",
+        &["from_str_with_env", "EnvReader", "env('PROFILE')"],
+    )
 }
+
 /// The guide's clock snippet must stay in step with the API it mirrors.
 ///
-/// The snippet is Rust and is executed as the doctest on `with_clock`; this
-/// pins the guide copy to the same entry points so the two cannot drift
-/// silently.
+/// The snippet is Rust and is executed as the doctest on `with_clock`.
 #[test]
 fn clock_snippet_mirrors_the_doctest() -> Result<()> {
-    let example = documented_example("guide-clock-snippet")?;
-    ensure!(
-        example.language == "rust",
-        "the clock snippet should be a Rust fence"
-    );
-    for needle in ["with_clock", "fixed_clock", "StdlibConfig"] {
-        ensure!(
-            example.body.contains(needle),
-            "the clock snippet should mention {needle}"
-        );
-    }
-    Ok(())
+    assert_snippet_names(
+        "guide-clock-snippet",
+        "clock",
+        &["with_clock", "fixed_clock", "StdlibConfig"],
+    )
 }
+
 /// The guide's Ninja-request snippet must name the API it documents.
 ///
 /// The snippet is the only place the guide constructs the request bundles, so
@@ -116,24 +120,17 @@ fn clock_snippet_mirrors_the_doctest() -> Result<()> {
 /// crate no longer exports.
 #[test]
 fn ninja_request_snippet_names_both_request_types() -> Result<()> {
-    let example = documented_example("guide-ninja-request-snippet")?;
-    ensure!(
-        example.language == "rust",
-        "the Ninja-request snippet should be a Rust fence"
-    );
-    for needle in [
-        "NinjaBuildRequest",
-        "NinjaToolRequest",
-        "run_ninja_with",
-        "run_ninja_tool_with",
-        "CommandEnv::inherit",
-    ] {
-        ensure!(
-            example.body.contains(needle),
-            "the Ninja-request snippet should mention {needle}"
-        );
-    }
-    Ok(())
+    assert_snippet_names(
+        "guide-ninja-request-snippet",
+        "Ninja-request",
+        &[
+            "NinjaBuildRequest",
+            "NinjaToolRequest",
+            "run_ninja_with",
+            "run_ninja_tool_with",
+            "CommandEnv::inherit",
+        ],
+    )
 }
 
 fn assert_default_edges_exist(ninja: &str, context: &str) -> Result<()> {
