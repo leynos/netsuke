@@ -1947,10 +1947,10 @@ Recorded during planning; extend during implementation.
   | ----------------------- | ----- | --------- | --------- | ----- | -------------- |
   | `3348cc0a` / `02caf3ee` | 23    | 3,127     | 133       | 2,994 | 708            |
   | `3348cc0a` / `e401f4d7` | 23    | 3,172     | 133       | 3,039 | 708            |
-  | `a273fad3` / `f994800c` | 24    | 3,280     | 133       | 3,147 | 716            |
+  | `a273fad3` / `25960909` | 24    | 3,369     | 133       | 3,236 | 716            |
 
   Both limbs fire at every head: more than 20 files, and net far above 600 —
-  with 716 net across 23 files even if this living exec plan (2,431 lines) is
+  with 716 net across 23 files even if this living exec plan (2,520 lines) is
   excluded entirely. The non-plan remainder moved from 696 to 708 at the
   `configure_stdlib` extraction (+12 net of real code) and to 716 with the
   clock-seam extraction into `config/clock.rs` (+42 added, with nothing
@@ -1977,17 +1977,19 @@ Recorded during planning; extend during implementation.
   the numbers they carried are preserved in the table because they are the
   measurements those heads produced.
 
-  *Attribution of the 3,147 net lines at the current head* (so a later reader
-  can audit rather than take this on trust): exec plan 2,431; production
+  *Attribution of the 3,236 net lines at the current head* (so a later reader
+  can audit rather than take this on trust): exec plan 2,520; production
   `src/` 480 net (547 added, 67 removed), which is `clock.rs` 150,
   `clock_tests.rs` 260 and `config/clock.rs` 42 as new files, the
   `tests.rs`/`tests_support.rs` split 10 net after a 58-line move, and the
-  18-line balance from the `mod.rs` files and `register.rs`; tests 163 net
-  (177 added, 14 removed); governing docs 62 net outside the plan; the recorded
-  `proptest` regression seed 11. The pre-rebase
-  attribution of 3,039 was exec plan 2,331, `src/` 472, tests 163, docs 62 and
-  the seed 11; the shift is the extraction (`config/clock.rs` plus the
-  re-export) and the plan's own growth.
+  18-line balance from the `mod.rs` files and `register.rs`; tests 163 net (177
+  added, 14 removed); governing docs 62 net outside the plan; the recorded
+  `proptest` regression seed 11. The pre-rebase attribution of 3,039 was exec
+  plan 2,331, `src/` 472, tests 163, docs 62 and the seed 11; the shift is the
+  extraction (`config/clock.rs` plus the re-export) and the plan's own growth.
+  Every row above is a snapshot: each plan-maintenance commit raises the total
+  by its own length, so a later reader should re-measure rather than re-quote
+  these figures.
 
   *Assessment against the tolerance's own reasoning.* The tolerance says a
   substantial overrun "means the design was wrong". That inference does not
