@@ -1459,6 +1459,14 @@ above, which are disposable.
   seam extracted from `src/stdlib/config/mod.rs` into a sibling
   `config/clock.rs`, clearing a `module_max_lines` failure that only the merge
   tree exhibited — the episode is D15 and `Artefacts and notes` entry 17.
+- [x] Post-completion: D14's figures re-anchored to the rebased branch, and a
+  second CI failure (`make check-fmt`, from running `mdtablefix` without the
+  Makefile's flag set) fixed and recorded as entry 18. Both jobs back to green
+  at `de0a9ed9` with `mergeStateStatus: CLEAN`.
+- [ ] Post-completion, in progress: the "User-Facing Documentation" warning is
+  being actioned — a users' guide section for `with_clock` and a matching
+  row/section in the v0.1.0 migration guide, following the #578/#666/#669
+  precedent that an additive public Rust API gets both.
 
 ## Surprises & discoveries
 
