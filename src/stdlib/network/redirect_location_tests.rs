@@ -38,7 +38,7 @@ fn resolvable_headers_become_absolute_targets(
     #[case] header: &str,
     #[case] expected: &str,
 ) -> Result<()> {
-    let current = parse_url(CREDENTIALED_CURRENT)?;
+    let current = credentialed_current_url()?;
     let policy = NetworkPolicy::default();
     let chain = RedirectChain::new(&current, &policy);
 
@@ -62,7 +62,7 @@ fn unusable_headers_report_their_own_failure(
     #[case] header: Option<&str>,
     #[case] expected: LocationFailure,
 ) -> Result<()> {
-    let current = parse_url(CREDENTIALED_CURRENT)?;
+    let current = credentialed_current_url()?;
     let policy = NetworkPolicy::default();
     let chain = RedirectChain::new(&current, &policy);
 
@@ -102,7 +102,7 @@ fn every_location_failure_has_a_distinct_closed_category() {
 /// reason, so a refusal and a bad header carry the same four bounded fields.
 #[rstest]
 fn location_failures_are_counted_and_logged_with_four_fields() -> Result<()> {
-    let current = parse_url(CREDENTIALED_CURRENT)?;
+    let current = credentialed_current_url()?;
     let policy = NetworkPolicy::default();
     let chain = RedirectChain::new(&current, &policy);
     let recorder = DebuggingRecorder::new();
@@ -172,7 +172,7 @@ fn location_failures_are_counted_and_logged_with_four_fields() -> Result<()> {
 #[rstest]
 fn location_failures_render_a_redacted_diagnostic(en_localizer: EnLocalizer) -> Result<()> {
     let _localizer = en_localizer;
-    let current = parse_url(CREDENTIALED_CURRENT)?;
+    let current = credentialed_current_url()?;
     let policy = NetworkPolicy::default();
     let chain = RedirectChain::new(&current, &policy);
     let expected = [

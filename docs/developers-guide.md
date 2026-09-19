@@ -3533,6 +3533,58 @@ It exercises the `-C` directory argument contract through the public factory
 only. Keep fixture assertions here and production test-helper behaviour in
 `check_ninja.rs`; this split keeps the public helper below the 400-line cap.
 
+### `test_support/src/http/raw.rs`
+
+The raw-response payload for the local HTTP fixture. `HttpResponse` composes a
+response: a status line, a header block ending in a blank line, and a
+`Content-Length` that matches the body it carries. It does not validate the
+status or header values a caller supplies, so it is not a guard against a
+status that is not three digits or a value containing a line break.
+`RawHttpResponse` is the stronger separation: it emits bytes verbatim, so a
+case can present a status line, header block, or framing no client accepts. The
+two are separate types rather than one type with an escape hatch, so a case
+that means to send malformed bytes cannot reach the composed path by accident.
+Both implement the crate-private `FinishResponse` trait, which carries the
+bytes, and `finish_response` performs the write and the write-side shutdown for
+either. That trait exists so the two payloads share one completion contract; it
+is not an extension point, and `raw`'s surface is crate-private except for
+`RawHttpResponse` itself.
+
+Completion is the reason this module exists. `finish_response` writes the whole
+payload and then calls `shutdown(Shutdown::Write)`. Dropping the stream instead
+closes both directions at once, and a server that closes while the client's
+request bytes are still unread makes the platform answer with a reset, which
+discards the response the client had not yet consumed. The client then reports
+a transport failure, on Windows Winsock `WSAECONNABORTED` (10053), in place of
+the wire-level fault the payload was written to provoke. Shutting down write
+alone sends the end of the response as a FIN while the read side stays open to
+drain the request, so the client sees exactly the configured bytes. This is
+also why a test must not stand a bare `TcpListener` in place of the fixture:
+such a listener closes without that shutdown and races the client, which is how
+`stdlib::network::redirect::error_tests::protocol_failures_are_classified_from_a_live_response`
+came to fail on Windows after the `ureq` 3 bump. The fixture still reads the
+request's header block before it answers, so the request bytes are consumed
+rather than left to force a reset. A request *body* is deliberately not
+consumed: the fixture answers on the header block alone, so it is for bodyless
+requests, which is what every fixture case sends.
+
+The `#[cfg(test)] rendered_exchange` helper drives one request through the same
+completion path a real client sees and returns both the client's bytes and the
+request bytes the fixture consumed. It reads exactly and against no deadline,
+so the fixture's lifecycle tests infer nothing from elapsed time.
+
+`RawHttpResponse` is composed with `spawn_raw_http_server`, which follows the
+same accept, read, and shutdown contract as the checked wrappers and returns
+the same `(String, Arc<AtomicUsize>, HttpServer)` tuple so a case can assert
+the malformed response was actually solicited. Keep a raw payload for a
+deliberately malformed response; use `HttpResponse` for a valid one that merely
+needs an unusual status.
+
+`test_support/src/http/raw_tests.rs` is the fixture's own test-gated `#[path]`
+child, declared by `mod.rs`. It pins the bytes each path emits, the end of the
+connection after them, and the fixture's consumption of the request, and it
+belongs to this fixture rather than to any production module.
+
 ### `test_support/src/http/accept.rs`
 
 Connection acceptance for the local HTTP fixture, split out of
@@ -3542,6 +3594,17 @@ non-blocking listener safe, and the accept loop itself. The parent module
 declares it `mod accept;`, and its surface is `pub(super)`, so nothing outside
 the fixture can reach it. The wait policy stays in `HttpServerConfig`; this
 module only carries the wait out.
+
+### `test_support/src/http/config.rs`
+
+Timeout configuration for the local HTTP fixture, split out of
+`test_support/src/http/mod.rs` for the same 400-line reason as `accept.rs`. It
+owns `HttpServerConfig`, the three `NETSUKE_TEST_HTTP_*` override names, and
+the duration parse that reads them. Its accessors are `pub(super)`, so the
+fixture's own loops can ask it for a deadline or a poll interval while nothing
+outside the fixture can configure one. `config_tests.rs` is its `#[path]` child
+and stays declared here rather than in `mod.rs`, exactly as `raw_tests.rs`
+belongs to `raw.rs`.
 
 ### `src/ir/cmd_interpolate_property_support.rs`
 
@@ -3998,6 +4061,16 @@ received. The last two return the same `(String, RequestLog, HttpServer)` tuple:
 `spawn_http_server_recording` records the request line of every request the
 fixture answers, while `spawn_http_server_expecting_no_requests` records any
 request it receives for a hop or target that must receive none.
+
+`spawn_raw_http_server` is the one entry point that does not take an
+`HttpResponse`. It serves a `RawHttpResponse`, whose bytes the fixture emits
+verbatim, for a case that needs a response no client accepts, such as a
+malformed status line to pin how a client classifies a parse failure. Use the
+checked `HttpResponse` for a valid response that merely needs an unusual
+status, and keep a raw payload for a deliberately malformed one. See
+`test_support/src/http/raw.rs` above for the payload type, the completion
+contract both paths share, and why a bare `TcpListener` must not be used in
+place of this fixture.
 
 `RequestLog` is a shared handle over those recorded lines in arrival order.
 `lines` returns a snapshot of them, and `len` and `is_empty` report how many
