@@ -1,8 +1,8 @@
-# RFC 0017: Progressive enhancement and maturity policies
+# RFC 0025: Progressive enhancement and maturity policies
 
 ## Preamble
 
-- **RFC number:** 0017
+- **RFC number:** 0025
 - **Status:** Proposed
 - **Created:** 2026-09-19
 - **Scope:** Shallow-end compatibility and opt-in contract enforcement
@@ -76,9 +76,9 @@ maturity-rule selection and trust-aware enforcement over that analysis; it must
 not establish a competing linter, parser, configuration loader, or JSON
 envelope.
 
-[RFC 0013][states] supplies preparation contracts, [RFC 0014][inputs] supplies
-input contracts, [RFC 0015][artefacts] supplies ownership, and
-[RFC 0016][contention] supplies pool-backed contention. Named execution
+[RFC 0021][states] supplies preparation contracts, [RFC 0022][inputs] supplies
+input contracts, [RFC 0023][artefacts] supplies ownership, and
+[RFC 0024][contention] supplies pool-backed contention. Named execution
 contexts remain a compatible extension point, not a sixth prerequisite hidden
 in these five RFCs. The maturity schema may add a context rule only after that
 separate surface has an accepted definition and an implementation.
@@ -258,7 +258,7 @@ with stronger policies controlled by the appropriate authority rather than
 imposed on every Netsuke user.
 
 [roadmap]: ../roadmap-progressive-enhancement.md
-[states]: 0013-managed-states-and-probes.md
-[inputs]: 0014-typed-task-inputs.md
-[artefacts]: 0015-artefact-ownership-and-scoped-cleanup.md
-[contention]: 0016-named-contention-classes.md
+[states]: 0021-managed-states-and-probes.md
+[inputs]: 0022-typed-task-inputs.md
+[artefacts]: 0023-artefact-ownership-and-scoped-cleanup.md
+[contention]: 0024-named-contention-classes.md

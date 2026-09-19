@@ -1,8 +1,8 @@
-# RFC 0013: Managed states and functional probes
+# RFC 0021: Managed states and functional probes
 
 ## Preamble
 
-- **RFC number:** 0013
+- **RFC number:** 0021
 - **Status:** Proposed
 - **Created:** 2026-09-19
 - **Scope:** Optional preparation contracts, not a new build scheduler
@@ -19,7 +19,7 @@ or a Nagios installation.
 A plain `command: uv sync` remains valid. Adding a state is worthwhile only
 when an author needs an explicit precondition, validated reuse, or a shared
 preparation contract. No context, typed input, ownership declaration, maturity
-policy, or bundle is compulsory. [RFC 0017][maturity] owns this shallow-end
+policy, or bundle is compulsory. [RFC 0025][maturity] owns this shallow-end
 compatibility requirement.
 
 ## 2. Problem and existing boundaries
@@ -257,7 +257,7 @@ Shared preparation may be skipped after fresh validation, but readiness cannot
 be memoized across another action's mutation. Unmanaged commands and other
 programs do not participate; the guarantee must say so explicitly.
 
-Named contention classes in [RFC 0016][contention] can reduce contention before
+Named contention classes in [RFC 0024][contention] can reduce contention before
 action dispatch. They do not replace state leases across invocations. Shared
 state identity and filesystem alias handling must use existing capability
 anchors; ambiguous aliases or unsupported locking filesystems fail rather than
@@ -318,8 +318,8 @@ functional checks with the same result algebra and process boundary. Keep
 readiness, preparation evidence, and artefact ownership distinct.
 
 [roadmap]: ../roadmap-progressive-enhancement.md#23-verified-preparation-without-mandatory-environments
-[maturity]: 0017-progressive-enhancement-and-maturity-policies.md
+[maturity]: 0025-progressive-enhancement-and-maturity-policies.md
 [commands]: 0001-structured-command-blocks.md
-[contention]: 0016-named-contention-classes.md
+[contention]: 0024-named-contention-classes.md
 [^1]: [Nagios plugin development guidelines](https://nagios-plugins.org/doc/guidelines.html),
       plugin return codes.

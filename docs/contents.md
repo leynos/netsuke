@@ -80,15 +80,15 @@ operator, user, and contributor references are easier to find.
   fuzzing](rfcs/0008-code-health.md): Proposed workflow-policy validation, gate
   self-consistency, health-signal ownership, and scheduled coverage-guided
   fuzzing.
-- [RFC 0013: Managed states and functional probes][rfc-0013]: Optional
+- [RFC 0021: Managed states and functional probes][rfc-0021]: Optional
   preparation contracts, default built-in checks, and bounded external probes.
-- [RFC 0014: Optional typed task inputs][rfc-0014]: Gradual input annotation,
+- [RFC 0022: Optional typed task inputs][rfc-0022]: Gradual input annotation,
   shared bundle-parameter validation, and explicit source provenance.
-- [RFC 0015: Artefact ownership and scoped cleanup][rfc-0015]: Exact output
+- [RFC 0023: Artefact ownership and scoped cleanup][rfc-0023]: Exact output
   ownership, bounded previews, and capability-scoped deletion.
-- [RFC 0016: Named contention classes][rfc-0016]: Optional per-edge limits
+- [RFC 0024: Named contention classes][rfc-0024]: Optional per-edge limits
   lowered to Ninja pools, with explicit invocation-only scope.
-- [RFC 0017: Progressive enhancement and maturity policies][rfc-0017]:
+- [RFC 0025: Progressive enhancement and maturity policies][rfc-0025]:
   Shallow-end compatibility and opt-in, scoped, trust-aware enforcement.
 
 [rfc-0009]: rfcs/0009-structured-command-working-directories.md
@@ -97,11 +97,11 @@ operator, user, and contributor references are easier to find.
 [rfc-0002]: rfcs/0002-repository-relative-includes.md
 [rfc-0004]: rfcs/0004-digest-pinned-external-bundles.md
 [rfc-0011]: rfcs/0011-allow-listed-structured-command-shells.md
-[rfc-0013]: rfcs/0013-managed-states-and-probes.md
-[rfc-0014]: rfcs/0014-typed-task-inputs.md
-[rfc-0015]: rfcs/0015-artefact-ownership-and-scoped-cleanup.md
-[rfc-0016]: rfcs/0016-named-contention-classes.md
-[rfc-0017]: rfcs/0017-progressive-enhancement-and-maturity-policies.md
+[rfc-0021]: rfcs/0021-managed-states-and-probes.md
+[rfc-0022]: rfcs/0022-typed-task-inputs.md
+[rfc-0023]: rfcs/0023-artefact-ownership-and-scoped-cleanup.md
+[rfc-0024]: rfcs/0024-named-contention-classes.md
+[rfc-0025]: rfcs/0025-progressive-enhancement-and-maturity-policies.md
 
 ## Decision records
 
