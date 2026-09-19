@@ -951,9 +951,11 @@ It registers exactly two filters:
 - `value | shell_quote(dialect=<name>)`
 - `values | shell_join(dialect=<name>)`
 
-Both read `dialect` with `kwargs.get::<Option<String>>("dialect")?`, fall back
-to `default`, and finish with `kwargs.assert_all_used()?`, matching the
-ordering in `src/stdlib/which/mod.rs:82-92`.
+Both read `dialect` with `kwargs.get::<Option<Value>>("dialect")?` and
+type-check it as a string, per D4 — the `Option<String>` read would stringify a
+non-string rather than raise. They then fall back to `default`, and finish with
+`kwargs.assert_all_used()?`, matching the ordering in
+`src/stdlib/which/mod.rs:82-92`.
 
 Both call the shared admissibility predicate before encoding — see the next
 subsection — and then `shell_word::quote_word`. `shell_join` joins the encoded
@@ -1135,24 +1137,29 @@ Move the `env` and `glob` registrations out of `src/manifest/mod.rs` and into
 
 ```rust
 let reader = Arc::clone(env_reader);
+let policy_for_env_lookup = env_access_policy.clone();
 jinja.add_function("env", move |var_name: String, kwargs: Kwargs| {
     let fallback = env_default_from_kwargs(&kwargs)?;
     kwargs.assert_all_used()?;
-    env_var_with_default(&var_name, fallback, |key| reader(key))
+    env_var_with_default(&var_name, &policy_for_env_lookup, fallback, |key| {
+        reader(key)
+    })
 });
 ```
 
 ```rust
 /// Read the optional `default` keyword argument as a string.
 ///
-/// Reads `Option<Value>` rather than `Option<String>` because MiniJinja's
+/// Reads `Option<Value>` rather than `Option<String>` because `MiniJinja`'s
 /// `Option<String>` conversion silently stringifies numbers, booleans,
 /// sequences, and mappings. See decision D4.
 ///
 /// # Errors
 ///
-/// Returns an error for an undefined or non-string `default`. An explicit
-/// `none` is equivalent to omitting the argument.
+/// Returns an error for a defined, non-string `default`. An explicit `none`
+/// is equivalent to omitting the argument, as is an undefined value: the
+/// `Option<Value>` read maps absent, `none`, and undefined alike onto `None`,
+/// so no branch can distinguish them. See D4's EP-M1 note.
 fn env_default_from_kwargs(kwargs: &Kwargs) -> Result<Option<String>, Error>;
 ```
 
@@ -1424,13 +1431,17 @@ predicate.
   `d` when absent, raises `UndefinedError` with the unchanged message when
   absent and `d` is omitted or `none`, and raises `InvalidOperation` with the
   unchanged message when the value is not UTF-8 *even when `d` is supplied*.
-- Method: parameterized `rstest` over the finite five-case partition, plus the
-  two existing `insta` snapshots re-run unchanged.
+- Method: parameterized `rstest` over the finite partition, plus the two
+  existing `insta` snapshots re-run unchanged.
 - Rationale: the domain is a genuinely finite partition of reader outcomes
   crossed with default presence; enumeration is exhaustive.
 - Domain: `{present-nonempty, present-empty, absent, not-unicode}` ×
-  `{no default, default=none, default='fallback'}`, minus the impossible
-  combinations — 12 cases, all enumerated.
+  `{no default, default='fallback'}` — 8 cases, all enumerated at the
+  `env_var_with_default` seam in `src/manifest/tests/env_function.rs`. The
+  third default state, `default=none`, is *not* a distinct arm there: the
+  `Option<Value>` read collapses it onto "no default" before the seam sees it
+  (D4), so it is enumerated once at the template layer instead, by
+  `explicit_none_default_is_equivalent_to_omitting_it`.
 - Artefact: `tests/manifest_env_tests.rs` and
   `src/manifest/tests/env_function.rs`.
 - Non-vacuity: the reader is an injected closure that records the key it was
@@ -1442,17 +1453,15 @@ predicate.
 **OBL-DIALECT-TOTAL** — dialect selection is total and its error is truthful.
 
 - Obligation: every `RecipeShell` variant maps to exactly one `ShellDialect`;
-  every name in `ShellDialect::ACCEPTED` parses; every other name fails with an
-  error naming the rejected value and enumerating exactly
-  `ShellDialect::ACCEPTED`.
+  every name in `ShellDialect::ALL` parses; every other name fails with an
+  error naming the rejected value and enumerating exactly `ShellDialect::ALL`.
 - Method: exhaustive parameterized test over the three-variant `RecipeShell`
-  and the two-element `ACCEPTED` list, plus a test asserting the rendered error
-  text contains every element of `ACCEPTED` and nothing else from a near-miss
-  list (`bash`, `cmd`, `zsh`, `pwsh`).
+  and the two-element `ALL` list, plus a test asserting the rendered error text
+  contains every element of `ALL` and nothing else from a near-miss list
+  (`bash`, `cmd`, `zsh`, `pwsh`).
 - Rationale: the domain is finite and small; exhaustive enumeration is the
   strongest available evidence.
-- Artefact: `src/shell_word.rs`'s `#[cfg(test)] mod tests`
-  `#[cfg(test)] mod tests`.
+- Artefact: `src/shell_word.rs`'s `#[cfg(test)] mod tests`.
 - Non-vacuity: the near-miss list guarantees the "enumerates exactly" assertion
   can fail; `bash` in particular is the name D3 deliberately rejects.
 
@@ -2230,9 +2239,7 @@ sh -c 'printf "%s\n" "RUSTFLAGS=-D'"'"' warnings'"'"'"'
 
 These expectations were derived from `shell-quote-0.7.2` and checked against a
 real `/bin/sh`; see the note under the behavioural specification for the two
-counter-intuitive rules that produce them. real `/bin/sh`; see the note under
-the behavioural specification for the two counter-intuitive rules that produce
-them.
+counter-intuitive rules that produce them.
 
 ## Idempotence and recovery
 
@@ -2286,7 +2293,7 @@ catalogue has the key; there is no partial state to clean up.
       green gates: `register_env_function` and `register_glob_function` now
       live in `src/manifest/registration.rs`, and `src/manifest/mod.rs` fell
       from 259 to 252 lines.
-- [ ] EP-M1 `env(name, default=...)`. Red tests and both new localization key
+- [x] EP-M1 `env(name, default=...)`. Red tests and both new localization key
       sets are in place; `env_var_with_default`, `env_default_from_kwargs`, the
       registration, and the query-surface stub are implemented and green; the
       three `manifest.feature` scenarios and their fixtures are added and pass.
@@ -2300,8 +2307,39 @@ catalogue has the key; there is no partial state to clean up.
       `no_expect_outside_tests` in `src/manifest/tests/env_function.rs`, whose
       shared `assert_resolution` helper was reduced to a comparable
       `Resolved` enum so no `expect` sits outside a `#[test]` body. `make lint`
-      is now green. Remaining: the full gate run, the milestone commit, and the
-      CodeRabbit pass.
+      is now green. Committed as `5d66db48` after a full green gate run.
+- [x] EP-M1a (post-review): CodeRabbit's `--agent` pass on `5d66db48` returned
+      13 unique findings. Seven were real plan-document drift and are now
+      fixed: a stale three-argument `env_var_with_default` sketch, a stale
+      "undefined or non-string" doc line contradicted by D4's own EP-M1 note, a
+      `dialect` sketch still reading `Option<String>` where D4 revised it to
+      `Option<Value>`, `ShellDialect::ACCEPTED` named where the plan declares
+      `ALL` (three sites), a five-case partition described against a four-case
+      outcome set, and two literal cut-and-paste duplications. Two were real
+      code findings, both fixed: `tests/manifest_env_tests.rs` was 420 lines
+      against AGENTS.md's explicit 400-line cap, so the `default`-argument cases
+      moved to `tests/manifest_env_tests/default_argument.rs` behind a `#[path]`
+      declaration (the split halves are 246 and 189 lines), and the fallback
+      path had no telemetry coverage, so
+      `a_substituted_fallback_counts_one_success_series` was added to
+      `src/manifest/tests/env_telemetry.rs` and proved non-vacuous by a negative
+      control. The remaining four findings — translation wording in the `nl`,
+      `nb`, `id`, and `it` catalogues — were rejected as hallucinations: the
+      text each finding quotes appears in **no** catalogue, in any locale.
+      The split then caused two *new* clippy findings, both because lifting code
+      out of a `#[test]` body also lifts it out of `clippy.toml`'s
+      `allow-expect-in-tests` exemption: `needless_pass_by_value` on
+      `render_first_command`'s reader parameter, and `expect_used` on the shared
+      `ensure_template_is_rejected`. Both were fixed structurally rather than by
+      adding `#[expect]` — the reader is now taken by reference, and the helper
+      returns the error via a `let … else`, matching the sibling module's own
+      style. See `Surprises & discoveries` for the general lesson. With the
+      round's edits applied, all seven commit gates pass again — `check-fmt`,
+      `lint` (all four sub-targets, this time including `github-actions-lint`),
+      `typecheck`, `markdownlint`, `doc-coverage` (98.80%), `test` (3213/3213
+      plus doctests), and `nixie` — and the tree was confirmed unmutated by
+      comparing `git status --short` and `git rev-parse HEAD` either side of the
+      run.
 - [ ] EP-M2 `compact`.
 - [ ] EP-M3 shared recipe-shell quoting seam.
 - [ ] EP-M4 `shell_quote` and `shell_join`.
@@ -2508,6 +2546,20 @@ recorded for whoever hits them next.
   the lint and *improves* the failure message, because the assertion now prints
   the observed and wanted pair rather than a bare `expect` panic line.
   Confidence: verified.
+- Observation: splitting a test file for the 400-line cap can **create** lint
+  findings that the unsplit file did not have. `clippy.toml` sets
+  `allow-expect-in-tests = true`, so `expect_used` is exempted by *enclosing
+  function context*: the same call is allowed inline in a `#[test]` body and
+  denied one frame away in a helper that body calls. Evidence: the split of
+  `tests/manifest_env_tests.rs` moved one `expect_err` into a shared
+  `ensure_template_is_rejected`, and clippy then flagged that line while
+  leaving four identical `expect_err` calls in `#[test]` bodies in the *same
+  file* unflagged; it also flagged `needless_pass_by_value` on a helper the
+  split had just extracted. Impact: a mechanical split is not lint-neutral.
+  Budget a lint run after one, and prefer a structural fix — take the parameter
+  by reference, return the error and let the caller branch via `let … else` —
+  over sprinkling `#[expect]`, which `clippy.toml` deliberately steers toward
+  so that migrated sites re-warn once. Confidence: verified.
 
 ## Outcomes & retrospective
 
@@ -2580,10 +2632,57 @@ To be filled during implementation. Required entries:
    the BDD expectations and the "Validation and acceptance" transcript.
 5. `git status --short src/snapshots tests/snapshots` showing no output at each
    milestone boundary.
+6. The CodeRabbit pass at each milestone.
+
+   **Entry 6 — EP-M1 CodeRabbit pass (2026-09-19).** Run by `scrutineer` as
+   `coderabbit review --agent` against `5d66db48`. It completed without rate
+   limiting: 18 raw findings over 49 files, 5 of them exact duplicates, so 13
+   unique. **The PR channel is not the same channel**: PR #702 is a draft, and
+   CodeRabbit posts nothing to a draft, so all 13 findings exist only in the
+   agent output — a reviewer looking at the PR would see the CodeRabbit check
+   pass with "Review skipped: draft pull request" and no findings at all.
+
+   Disposition: 7 plan-document fixes and 2 code fixes applied (see EP-M1a in
+   `Progress`); 4 rejected.
+
+   The 4 rejected findings were translation-wording complaints against the `nl`,
+   `nb`, `id`, and `it` catalogues. Each quoted specific text as being present
+   *and* as being the suggested replacement, and the quoted present text exists
+   in no catalogue in any locale:
+
+   ```text
+   nl  "maar er werd { $kind } ontvangen"      -> not found in locales/
+   nb  "men den mottatte typen var { $kind }"  -> not found in locales/
+   id  "tetapi yang diterima adalah { $kind }" -> not found in locales/
+   it  "ma il tipo ricevuto è { $kind }"       -> not found in locales/
+   ```
+
+   The actual lines are
+   `De default van env moet een tekenreeks zijn, ontvangen { $kind }.` (nl),
+   `default i env må være en streng, mottok { $kind }.` (nb),
+   `default pada env harus berupa untai, menerima { $kind }.` (id), and
+   `Il default di env deve essere una stringa, ricevuto { $kind }.` (it) — each
+   a faithful rendering of the en-US source's own terse detached participle.
+   That only 4 of 35 catalogues were flagged, and that all four suggested
+   rewrites add words the source does not carry, both point to evaluator
+   variance rather than a consistent rule. Rejected and recorded here so the
+   decision is auditable rather than silent.
+
+   Two further findings were **not** acted on, deliberately. CodeScene flags
+   `tests/manifest_env_tests.rs` for duplication between
+   `a_positional_second_argument_is_rejected` and
+   `an_unknown_keyword_argument_is_rejected`; the split into
+   `default_argument.rs` shared their bodies through
+   `ensure_template_is_rejected`, which addresses it. And CodeRabbit notes no
+   parity test exists between `register_with_config` and
+   `register_manifest_query`; the plan already records that as a future roadmap
+   item and out of scope here (see `Surprises & discoveries`).
 
 ## Revision note
 
 - 2026-09-08: initial draft.
+- 2026-09-19: EP-M1 CodeRabbit review applied (see `Artefacts and notes` entry 6
+  for the full disposition and the four rejected findings).
 - 2026-09-19: EP-M1 implementation recorded. The `env` and `glob` registrations
   moved to `src/manifest/registration.rs` as a pure move (`16c3cfe6`);
   `env_var_with` became `env_var_with_default` with the `fallback` parameter
