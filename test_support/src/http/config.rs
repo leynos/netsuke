@@ -128,10 +128,14 @@ impl Default for HttpServerConfig {
 /// Read `var` as whole milliseconds, falling back to `default` when unset or
 /// unparsable.
 ///
-/// An override is taken at face value, however large, and `Instant::now() +
-/// duration` saturates rather than panicking at the far end of `u64`
-/// milliseconds, so no overflow check is needed on the way to a deadline. The
-/// fixture is also reachable only from tests, which set these to milliseconds.
+/// An override is taken at face value, however large, and no check on the way to
+/// a deadline is needed, because there is no value this can reject. A `u64`
+/// millisecond count is at most about 1.8e16 seconds, and `Instant` on every
+/// target this crate builds for carries at least a signed 64-bit seconds field
+/// — roughly 9.2e18 — so `Instant::now() + Duration::from_millis(u64::MAX)`
+/// neither overflows nor saturates. `checked_add` agrees: it returns `Some` for
+/// `u64::MAX` milliseconds, so guarding the deadline with it would be dead
+/// branch that no input can reach.
 pub(super) fn duration_from_env(env: &impl Env, var: &str, default: Duration) -> Duration {
     env.raw(var).map_or(default, |value| {
         let trimmed = value.trim();
