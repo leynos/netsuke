@@ -60,6 +60,14 @@ Feature: Template stdlib filters
     When I render template "{{ [['a'], 'b'] | flatten }}" at stdlib path "file"
     Then the stdlib error contains "Flatten expected sequence items"
 
+  Scenario: compact drops empty strings and nulls but keeps falsy values
+    When I render template "{{ ['a', '', none, 0, false, 'b'] | compact | join(',') }}" at stdlib path "file"
+    Then the stdlib output equals "a,0,False,b"
+
+  Scenario: compact reports errors for non-sequences
+    When I render template "{{ 'abc' | compact }}" at stdlib path "file"
+    Then the stdlib error contains "compact expects a sequence"
+
   Scenario: group_by clusters items by attribute
     When I render template "{{ ([{'name': 'one', 'kind': 'tool'}, {'name': 'two', 'kind': 'tool'}, {'name': 'three', 'kind': 'material'}] | group_by('kind')).tool | length }}" at stdlib path "file"
     Then the stdlib output equals "2"

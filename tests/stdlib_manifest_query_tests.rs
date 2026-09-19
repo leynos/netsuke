@@ -171,16 +171,20 @@ fn the_full_stdlib_renders_the_same_env_call() -> Result<()> {
 
 /// Helpers the query surface deliberately permits must render there.
 ///
-/// `compact` arrives with EP-M2 and the shell helpers with EP-M4; naming the
-/// currently permitted set here keeps the obligation honest as the surface
-/// grows, since a helper added to only one registration path is exactly the
-/// drift this contract exists to catch.
+/// The shell helpers arrive with EP-M4; naming the currently permitted set
+/// here keeps the obligation honest as the surface grows, since a helper added
+/// to only one registration path is exactly the drift this contract exists to
+/// catch.
 #[test]
 fn query_surface_renders_its_permitted_helpers() -> Result<()> {
     for (template, expected) in [
         ("{{ ['b', 'a'] | sort | join(',') }}", "a,b"),
         ("{{ 'a b' | upper }}", "A B"),
         ("{{ ['a', 'a'] | unique | join(',') }}", "a"),
+        // `compact` is registered by the shared `collections::register_filters`,
+        // so it reaches this surface without a second registration; this case
+        // is what holds that claim to account.
+        ("{{ ['a', '', none, 0] | compact | join(',') }}", "a,0"),
     ] {
         let run = run_query(template)?;
         ensure!(

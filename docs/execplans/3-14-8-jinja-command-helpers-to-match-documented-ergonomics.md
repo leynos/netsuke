@@ -1305,8 +1305,12 @@ a real shell while the policy obligation stays a cheap total function.
   an open question; this plan uses it only as a *test oracle*, alongside the
   real-shell round trip, never as the sole evidence.
 - **AXIOM-4 (corrected)**: MiniJinja's `Kwargs::get::<Option<Value>>` yields
-  `None` for an absent key and a `Value` otherwise, distinguishing an explicit
-  `none` and an explicit undefined by `Value::is_none`/`is_undefined`;
+  `None` for an absent key, for an explicit `none`, and for an explicit
+  undefined — all three collapse to "no value" — and yields `Some(value)` only
+  for a **defined** argument. There is therefore no way to tell an absent key
+  from an explicit `none` after the read, which is why no `is_none`/
+  `is_undefined` guard can fire on the returned `Value` (see D4 and the
+  `Surprises & discoveries` entry for the vendored-source evidence);
   `assert_all_used` rejects unconsumed *keyword* arguments with a message
   containing "unknown keyword argument". A trailing **positional** argument is
   different: it yields a bare `TooManyArguments` with **no detail**, naming
@@ -1927,7 +1931,9 @@ See R11 and constraint 10. The two are therefore one milestone.
   builds a `StdlibConfig` with `.with_recipe_shell(RecipeShell::Bash)` and
   asserts `sh` quoting, asserting at the **runner** seam so it is not
   tautological. Observe compilation failure, then unknown-filter failures.
-- Green: add `src/shell_word.rs`; add `src/stdlib/recipe_text/`; rename
+- Green: reuse the `src/shell_word.rs` module and shared quoting seam created
+  by EP-M3 — EP-M4 adds the filters and the runner plumbing, it does not create
+  that module; add `src/stdlib/recipe_text/`; rename
   `src/stdlib/command/quote.rs` to `child_argument.rs`; wire
   `recipe_text::register_filters` into both `register_read_only_helpers` and
   `register_query_helpers`; thread
@@ -1971,7 +1977,7 @@ See R11 and constraint 10. The two are therefore one milestone.
   entry is ticked.
 - Requirements: all of `RM-3.14.8`; `RM-3.14.8` bullet 4 specifically.
 - Work:
-  1. Write `docs/adr-027-canonical-recipe-shell-quoting-surface.md` following
+   1. Write `docs/adr-027-canonical-recipe-shell-quoting-surface.md` following
      the Y-Statement shape of `docs/adr-008-environment-seam-taxonomy.md`
      (`# Architecture decision record (ADR): …`, then `## Status`, `## Date`,
      `## Context and problem statement`, `## Decision`, `## Consequences`).
@@ -1980,27 +1986,27 @@ See R11 and constraint 10. The two are therefore one milestone.
      one-line-per-entry shape. Re-check the number first, because this plan has
      already lost its ADR number once to drift: at `0ba6672f` the highest
      listed ADR was `adr-026`, and the repository has a history of collisions.
-  2. `docs/netsuke-design.md` §4.4: replace "The `default` argument is planned;
+   2. `docs/netsuke-design.md` §4.4: replace "The `default` argument is planned;
      the current implementation only accepts the variable name" with the shipped
      contract, including the empty-string rule and the non-UTF-8 rule.
-  3. `docs/netsuke-design.md` §4.5: rename `shell_escape` to `shell_quote`,
+   3. `docs/netsuke-design.md` §4.5: rename `shell_escape` to `shell_quote`,
      record the two-dialect set and the host-default rule, drop "planned" from
      `shell_join` and `compact`, and link ADR-027.
-  4. `docs/netsuke-design.md:687-688` and `:3876-3877`: rename `shell_escape`.
+   4. `docs/netsuke-design.md:687-688` and `:3876-3877`: rename `shell_escape`.
      Re-locate the second by content, not by number: it is the "Implement the
      full suite of custom Jinja functions (`glob`, `env`, etc.) and filters
      (`shell_escape`)" task bullet in the implementation roadmap, which sits
      far below the sections this plan's other citations come from.
-  5. `docs/users-guide.md:489-491`: replace the "not implemented in beta3"
+   5. `docs/users-guide.md:489-491`: replace the "not implemented in beta3"
      sentence
      with a description of `shell_quote`, its default dialect, and the pointer
      to `docs/stdlib-yaml-and-jinja-guide.md`. Cross-reference
      `docs/users-guide.md:331-399` so a Windows reader understands why the
      default differs.
-  6. `docs/users-guide.md:781-782`: replace the sentence beginning "Beta3 does
+   6. `docs/users-guide.md:781-782`: replace the sentence beginning "Beta3 does
      not accept a default argument" with the shipped `env(name, default=…)`
      contract, including the empty-string and non-UTF-8 rules.
-  7. `docs/stdlib-yaml-and-jinja-guide.md`: add `compact` to "Transform
+   7. `docs/stdlib-yaml-and-jinja-guide.md`: add `compact` to "Transform
      collections"; add a new "Build shell recipe text" section documenting
      `shell_quote` and `shell_join` with their dialect rules and purity; update
      the `env(name)` bullet at lines 318-320. Add the tested example:
@@ -2011,56 +2017,56 @@ See R11 and constraint 10. The two are therefore one milestone.
 
      carrying the `RUSTFLAGS` manifest from "Purpose / big picture", with an
      explicit `dialect='sh'` so it is host-independent (R4).
-  8. Register `stdlib-optional-rustflags-manifest` in `EXPECTED_EXAMPLE_IDS`
+   8. Register `stdlib-optional-rustflags-manifest` in `EXPECTED_EXAMPLE_IDS`
      (`tests/documentation_examples_tests.rs:18-61`, alphabetical) and add it as
      a `#[case]` to `documented_manifest_generates_ninja`.
-  8a. Add two bounded, label-safe counters beside the existing manifest
-      instrumentation, following `docs/adr-009-bounded-redacted-manifest-telemetry.md`:
-      `netsuke_manifest_shell_quote_dialect_total{dialect, source}` where
-      `source` is `explicit` or `default` (a four-combination label space), and
-      `netsuke_manifest_env_default_substituted_total` with no labels. Neither
-      carries manifest content, a variable name, or a value. The first makes
-      the population exposed to R11 and D10 visible in aggregate; the second
-      makes R10 visible. Describe both with `describe_counter!`.
+   9. Add two bounded, label-safe counters beside the existing manifest
+     instrumentation, following `docs/adr-009-bounded-redacted-manifest-telemetry.md`:
+     `netsuke_manifest_shell_quote_dialect_total{dialect, source}` where
+     `source` is `explicit` or `default` (a four-combination label space), and
+     `netsuke_manifest_env_default_substituted_total` with no labels. Neither
+     carries manifest content, a variable name, or a value. The first makes
+     the population exposed to R11 and D10 visible in aggregate; the second
+     makes R10 visible. Describe both with `describe_counter!`.
 
-      Neither counter will be exported unless it is also admitted by
-      `src/observability_recorder.rs` — add both names to the `matches!` list
-      in `accepts_name` and both label sets to `accepts_counter_registration`.
-      This is constraint 13, and it fails **silently**: an unadmitted series
-      returns a `Counter::noop` handle, so the build, the lint, and every test
-      pass while the counter records nothing. The existing
-      `ENV_LOOKUP_TOTAL => exact_labels(key, &[(OUTCOME_LABEL,
-      &ENV_LOOKUP_OUTCOME_VALUES)])` arm at
-      `src/observability_recorder.rs:194` is the shape to copy, and
-      `src/observability_recorder.rs`'s own tests assert that the admitted
-      vocabulary and the emitting vocabulary agree — extend them.
+     Neither counter will be exported unless it is also admitted by
+     `src/observability_recorder.rs` — add both names to the `matches!` list
+     in `accepts_name` and both label sets to `accepts_counter_registration`.
+     This is constraint 13, and it fails **silently**: an unadmitted series
+     returns a `Counter::noop` handle, so the build, the lint, and every test
+     pass while the counter records nothing. The existing
+     `ENV_LOOKUP_TOTAL => exact_labels(key, &[(OUTCOME_LABEL,
+     &ENV_LOOKUP_OUTCOME_VALUES)])` arm at
+     `src/observability_recorder.rs:194` is the shape to copy, and
+     `src/observability_recorder.rs`'s own tests assert that the admitted
+     vocabulary and the emitting vocabulary agree — extend them.
 
-      For `netsuke_manifest_env_default_substituted_total`, first check whether
-      the series earns its keep at all. `env_telemetry::record_env_lookup`
-      already counts every lookup as `success`, the `success` count minus the
-      call count is not observable, and the `tracing::debug!` from EP-M1
-      already records each substitution. A counter that no dashboard can
-      distinguish from "no substitutions happened" is noise. If it ships, say
-      in one sentence what an operator learns from it that the `success`
-      series and the debug event do not already say; if that sentence cannot be
-      written, drop the counter and record the decision.
-  8b. Write the precise guide contract for each helper, not a summary. At
-      minimum: `shell_quote` renders one string as exactly one word for the
-      named shell, and for `dialect='sh'` a POSIX shell splitting the output
-      produces exactly one field byte-identical to the input; the empty string
-      renders as `''`, not as nothing; the subject must be a string, and
-      numbers, booleans, sequences, mappings, `none`, and undefined are errors;
-      tab, escape, and non-ASCII text are preserved, while NUL, carriage
-      return, and line feed are rejected. `shell_join` never drops an element,
-      so `['']` renders as one empty word — that is why `compact` and
-      `shell_join` are separate helpers — it does not flatten a nested list,
-      and its separator is exactly one space. `compact` drops `none`,
-      undefined, and the empty string only: `0`, `false`, `[]`, `{}`, and a
-      whitespace-only string are retained, which is what distinguishes it from
-      MiniJinja's `select`. State that `shell_quote` and `shell_join` are
-      filters with no function form, and that both are correct **only in
-      unquoted argv position**.
-  9. `docs/developers-guide.md`: extend the quoting-paths paragraph at lines
+     For `netsuke_manifest_env_default_substituted_total`, first check whether
+     the series earns its keep at all. `env_telemetry::record_env_lookup`
+     already counts every lookup as `success`, the `success` count minus the
+     call count is not observable, and the `tracing::debug!` from EP-M1
+     already records each substitution. A counter that no dashboard can
+     distinguish from "no substitutions happened" is noise. If it ships, say
+     in one sentence what an operator learns from it that the `success`
+     series and the debug event do not already say; if that sentence cannot be
+     written, drop the counter and record the decision.
+   10. Write the precise guide contract for each helper, not a summary. At
+     minimum: `shell_quote` renders one string as exactly one word for the
+     named shell, and for `dialect='sh'` a POSIX shell splitting the output
+     produces exactly one field byte-identical to the input; the empty string
+     renders as `''`, not as nothing; the subject must be a string, and
+     numbers, booleans, sequences, mappings, `none`, and undefined are errors;
+     tab, escape, and non-ASCII text are preserved, while NUL, carriage
+     return, and line feed are rejected. `shell_join` never drops an element,
+     so `['']` renders as one empty word — that is why `compact` and
+     `shell_join` are separate helpers — it does not flatten a nested list,
+     and its separator is exactly one space. `compact` drops `none`,
+     undefined, and the empty string only: `0`, `false`, `[]`, `{}`, and a
+     whitespace-only string are retained, which is what distinguishes it from
+     MiniJinja's `select`. State that `shell_quote` and `shell_join` are
+     filters with no function form, and that both are correct **only in
+     unquoted argv position**.
+   11. `docs/developers-guide.md`: extend the quoting-paths paragraph at lines
      445-458 to name the new fourth path — `src/shell_word.rs` as the
      single recipe-shell word quoter used by both `quote_path` and the
      `shell_quote`/`shell_join` filters — and state that
@@ -2073,19 +2079,19 @@ See R11 and constraint 10. The two are therefore one milestone.
      order while `Kwargs` is for independent named options and any enumerated
      value set expected to widen; and the deliberate query-surface dialect
      divergence.
-  10. `docs/repository-layout.md`: add `src/shell_word.rs` and
-      `src/stdlib/recipe_text/`, and record the `quote.rs` →
-      `child_argument.rs` rename under `src/stdlib/command/`.
-  11. `docs/rfcs/0006-ansible-inspired-template-standard-library.md` §§8.9 and
-      13.3: record the amended dialect set and note that 3.14.8 delivered it.
-      Keep the edit to those two locations (R3).
-  12. `CHANGELOG.md`: one entry under the unreleased heading, following the
-      Common Changelog style already used in the file.
-  13. `docs/roadmap.md:343-356`: tick 3.14.8 and all four sub-bullets; rewrite
-      the trailing `Note:` to describe what shipped. Add a one-line note to
-      `RM-6.8.3` (lines 1162-1169) recording that 3.14.8 delivered the canonical
-      name and the dialect argument, and that only the wider RFC 0006 dialect
-      set remains. Do **not** tick 6.8.3.
+   12. `docs/repository-layout.md`: add `src/shell_word.rs` and
+     `src/stdlib/recipe_text/`, and record the `quote.rs` →
+     `child_argument.rs` rename under `src/stdlib/command/`.
+   13. `docs/rfcs/0006-ansible-inspired-template-standard-library.md` §§8.9 and
+     13.3: record the amended dialect set and note that 3.14.8 delivered it.
+     Keep the edit to those two locations (R3).
+   14. `CHANGELOG.md`: one entry under the unreleased heading, following the
+     Common Changelog style already used in the file.
+   15. `docs/roadmap.md:343-356`: tick 3.14.8 and all four sub-bullets; rewrite
+     the trailing `Note:` to describe what shipped. Add a one-line note to
+     `RM-6.8.3` (lines 1162-1169) recording that 3.14.8 delivered the canonical
+     name and the dialect argument, and that only the wider RFC 0006 dialect
+     set remains. Do **not** tick 6.8.3.
 - Acceptance evidence: `make markdownlint`, `make nixie`, `make check-fmt`, and
   `make test` all pass; `cargo nextest run --test documentation_examples_tests`
   passes, proving the `RUSTFLAGS` manifest generates valid Ninja.
@@ -2340,7 +2346,33 @@ catalogue has the key; there is no partial state to clean up.
       plus doctests), and `nixie` — and the tree was confirmed unmutated by
       comparing `git status --short` and `git rev-parse HEAD` either side of the
       run.
-- [ ] EP-M2 `compact`.
+- [ ] EP-M2 `compact`. Code and tests complete and green in isolation; the
+      full commit gate set and the commit itself are still pending at this
+      writing.
+      Selections already run and passing: `test(compact)` across three binaries
+      (11 of 14 in the negative-control run, 3 failing by design) and the whole
+      `std_filter_tests` binary, 130/130. The `stdlib_manifest_query_tests`
+      binary passes 4/4, including
+      `query_surface_renders_its_permitted_helpers`, whose new `compact` table
+      row is the conformance check the milestone calls for. Logs:
+      `/tmp/nextest-std-filter-3-14-8-…out`,
+      `/tmp/nextest-query-surface-3-14-8-…out`.
+      Implemented and green in the working tree, **not yet
+      committed** (M `src/stdlib/collections.rs`, M `tests/features/stdlib.feature`,
+      M `tests/std_filter_tests.rs`, M `tests/stdlib_manifest_query_tests.rs`,
+      D `tests/std_filter_tests/collection_filters.rs`, plus the untracked
+      `tests/std_filter_tests/collection_filters/` directory). Restart notes:
+      the registration change must be made in `register_filters`, not beside the
+      private filter bodies, because `src/stdlib/mod.rs`'s `register_helpers`
+      calls `collections::register_filters` for both surfaces and a registration
+      placed outside it reaches only the surface being edited; and
+      The blank predicate must treat undefined as blank as well as `none`,
+      retaining `0`, `false` and whitespace — so a test asserting Python-style
+      `join` output must expect `False`, not `false`, and the `bool` kind name is
+      `"bool"`, not `"boolean"`. The file split under
+      `tests/std_filter_tests/collection_filters/` was forced by AGENTS.md's
+      400-line cap rather than by the plan's refactor step: the flat file reached
+      473 lines once the new cases landed.
 - [ ] EP-M3 shared recipe-shell quoting seam.
 - [ ] EP-M4 `shell_quote` and `shell_join`.
 - [ ] EP-M5 documentation, ADR-027, roadmap tick.
@@ -2623,6 +2655,28 @@ To be filled during implementation. Required entries:
    the query surface died with a detail-free `too many arguments` instead of
    the disabled marker. That is the exact failure mode the file's doc comment
    describes, and it was observed before the stub was widened to `Kwargs`.
+
+   **Entry 3a — the EP-M2 negative control, naive truthiness (2026-09-19).**
+   `is_blank` was temporarily replaced with `!value.is_true()`, making
+   `compact` drop every falsy member, and the EP-M2 selection re-run. Three
+   tests failed, which is what makes the witness case and the property
+   load-bearing rather than decorative — a truthiness implementation would
+   otherwise pass both:
+
+   ```text
+   FAIL std_filter_tests::collection_filters::compact_property::compact_is_order_preserving_and_idempotent
+   FAIL std_filter_tests::collection_filters::compact_drops_witness_case_blanks_only
+        Error: compact must drop only none, undefined and the empty string, but rendered x
+   FAIL bdd_tests::features_scenarios::stdlib_compact_drops_empty_strings_and_nulls_but_keeps_falsy_values
+        expected stdlib output 'a,0,False,b', got 'a,b'
+   Summary: 14 tests run: 11 passed, 3 failed
+   ```
+
+   The BDD failure is the sharpest of the three: `'a,b'` is exactly the
+   signature of the naive implementation eating `0` and `false`, and it is
+   visible in the user-facing scenario rather than only in a unit test. The
+   other two EP-M2 controls listed in this entry belong to later milestones and
+   are not yet run.
 2. The name of the snapshot that failed during the OBL-NINJA-STABLE
    non-vacuity check, and the transcript showing it passing again after revert.
 3. The transcript of each negative control failing as designed
@@ -2678,9 +2732,124 @@ To be filled during implementation. Required entries:
    `register_manifest_query`; the plan already records that as a future roadmap
    item and out of scope here (see `Surprises & discoveries`).
 
+   **Entry 6 (continued) — EP-M1 confirmation pass (2026-09-19, 06:44).** After
+   the EP-M1a fixes landed as commit `d2c6f573`, the review was re-run and
+   returned 16 fresh findings. Provenance matters here and is easy to get
+   wrong: the pass reviewed the tree *as it stood at 06:44*, which is
+   `d2c6f573` plus the uncommitted plan edits — no EP-M2 code existed yet (the
+   first EP-M2 file was written at 08:16). It is therefore a second look at
+   EP-M1's localization and at the EP-M1a plan fixes, **not** a review of
+   `compact`. Disposition: 3 plan fixes applied, 9 findings rejected, all of
+   them below.
+
+   Two of its results are worth carrying forward. First, it independently
+   re-derived the localization findings EP-M1 had already rejected: 8 of the 16
+   are wording complaints against `pl`, `ru`, `de`, `es-419`, `da`, `el`, and
+   `cy` — the same `{ $kind }`-inflection and untranslated-`default`
+   objections, on catalogues untouched since. That a second pass on an
+   unchanged file reproduces the same objections while a reviewer-visible PR
+   shows nothing (the PR is a draft, so CodeRabbit posts no comments) is the
+   reason each rejection is written down rather than simply dismissed: a third
+   pass will raise them again, and the answer should not have to be
+   rediscovered. Second, three of its plan findings — AXIOM-4 contradicting D4,
+   EP-M4 re-adding `src/shell_word.rs`, and the invalid `8a`/`8b` markers —
+   were real defects in the plan text that the EP-M1 pass had not surfaced, so
+   the confirmation pass earned its cost.
+
+   It also produced the one finding rejected as outright false. Finding 9
+   reports an unmatched single quote in the `RUSTFLAGS` acceptance transcript
+   at line 2220, claiming the quoting is unbalanced and that a matching
+   word-count command carries the same defect. Both are balanced, and running
+   them settles it. The first is `set -- -D' warnings -C target-cpu'=native''`;
+   the shell strips the quotes and the inner `sh` receives
+   `<-D warnings -C target-cpu=native>`, reporting one positional parameter —
+   which is the plan's whole claim. The second is the *deliberately defective*
+   contrast case the paragraph uses to warn the reader off double-quoting, and
+   its quotes pair up too: it passes `sh -n` and prints exactly
+   `RUSTFLAGS=-D' warnings'`, the corrupt value it is warning about. Reading
+   balanced quoting as an imbalance is the finding's error; neither command is
+   changed:
+
+   ```text
+   $ sh -c "set -- -D' warnings -C target-cpu'=native''; echo \$#"
+   1
+   $ sh -c 'printf "%s\n" "RUSTFLAGS=-D'"'"' warnings'"'"'"'
+   RUSTFLAGS=-D' warnings'
+   ```
+
+   The transcript's quoting is deliberately awkward because it transcribes a
+   value that must survive two shells; simplifying it to satisfy a reader the
+   transcript's own `sh -n` check already contradicts would make the document
+   *less* faithful to the command that ran.
+
+   **Applied in this pass (3).** Findings 10 and 15 are the same defect twice:
+   substeps `8a` and `8b` in EP-M5's `- Work:` list use `.`-less markers that
+   no Markdown ordered list recognizes. Renumbered to `9.` and `10.`, cascading
+   the trailing items to `11`–`15`. Findings 11 and 13 are likewise one defect:
+   EP-M4's Green step told the implementer to add `src/shell_word.rs`, which
+   EP-M3 already creates in the immediately preceding milestone. Replaced with
+   the instruction to reuse the EP-M3 module and seam. Findings 12 and 16 are
+   the same defect again, and the most substantive of the three: AXIOM-4 claimed
+   `Kwargs::get::<Option<Value>>` could distinguish an explicit `none` from a
+   defined value through `Value::is_none`/`is_undefined`. It cannot — absent,
+   `none`, and undefined all map to `Ok(None)`, as D4 already said at lines
+   679–686 and as the `Surprises & discoveries` entry above records. The axiom
+   contradicted the plan's own decision log; AXIOM-4 now states the collapse
+   and points at D4.
+
+   **Locales (8 findings, all rejected).** Findings 1, 2, 7, and 14 ask for
+   grammatical recasting of `{ $kind }` in `pl`, `ru`, and `el`; findings 3, 4,
+   5, and 8 ask for `default` to be replaced by a native term in `de`, `es-419`,
+   `da`, and `cy`. Both requests are declined, and the evidence is not a
+   matter of taste.
+
+   For `default`: the token is untranslated in **all 35 catalogues**, including
+   the `en-US` source itself, which reads
+   `env default must be a string, received { $kind }.` The word names the
+   manifest helper's own keyword — `env(name, default=…)` — which users type
+   literally, and `docs/translators-guide.md` makes that the policy: "Leave
+   Netsuke's own identifiers untranslated — users type them." The same guide
+   names `env`'s sibling identifiers (`foreach`, `when`, `vars`, `cwd_mode`,
+   `with_suffix`, `group_by`) as covered by that rule. Replacing the token in
+   four catalogues would also desynchronize them from the other 31 for no
+   reader's benefit, since a user who mistypes `default=` gets an error naming
+   `default=`.
+
+   ```text
+   cs  Hodnota default v env musí být řetězec, obdrženo { $kind }.
+   ru  Значение default в env должно быть строкой, получено { $kind }.
+   de  Der default von env muss eine Zeichenkette sein, empfangen wurde { $kind }.
+   cy  Rhaid i default env fod yn llinyn, derbyniwyd { $kind }.
+   ```
+
+   For the `{ $kind }` placement in `el` and `pl`: the pattern is the existing
+   house idiom, not a new one. `stdlib.collections.flatten.expected_sequence`
+   has shipped the identical construction in the same catalogues since before
+   this plan existed — `el` reads
+   `Το flatten περίμενε στοιχεία ακολουθίας αλλά βρήκε { $kind }.` for
+   `flatten`, and the new `compact` line reads
+   `Το compact περιμένει ακολουθία αλλά βρήκε { $kind }.`. `pl` ends both with
+   `napotkał { $kind }`. Inflecting a whole-catalogue idiom to satisfy a
+   one-message preference would make `compact` disagree with `flatten` sitting
+   directly above it in the same file.
+
+   The shape is worth naming: of 16 findings, 12 were three defects reported
+   twice each, and the localization group repeats one evaluator preference
+   across seven locales. As with EP-M1's four rejected translation findings,
+   each rejected item is recorded so the decision is auditable rather than
+   silent.
+
 ## Revision note
 
 - 2026-09-08: initial draft.
+- 2026-09-19: EP-M1 confirmation CodeRabbit pass cleared (see
+  `Artefacts and notes` entry 6, continued). Three real plan defects fixed —
+  AXIOM-4 restated so it agrees with D4, the duplicated `add src/shell_word.rs`
+  removed from EP-M4's Green step, and EP-M5's invalid `8a`/`8b` list markers
+  renumbered. One plan finding rejected as formally false and eight
+  localization findings rejected under the translators-guide identifier rule.
+  The pass ran against `d2c6f573` plus uncommitted plan edits and therefore
+  reviewed no EP-M2 code.
 - 2026-09-19: EP-M1 CodeRabbit review applied (see `Artefacts and notes` entry 6
   for the full disposition and the four rejected findings).
 - 2026-09-19: EP-M1 implementation recorded. The `env` and `glob` registrations
