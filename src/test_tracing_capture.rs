@@ -308,8 +308,15 @@ mod tests {
                 tracing::trace_span!("collect_diag_file_layers", outcome = tracing::field::Empty,);
             discovery.record("outcome", "success");
             // A value supplied at creation never reaches `on_record`, so the
-            // layer has to capture `on_new_span` as well to see this one.
-            let other = tracing::trace_span!("other_span", at_creation = "visible");
+            // layer has to capture `on_new_span` as well to see this one. The
+            // recorded field is declared `Empty` first: `record` resolves its
+            // name against the span's declared set and drops a name the span
+            // never declared, which would leave `on_record` unexercised.
+            let other = tracing::trace_span!(
+                "other_span",
+                at_creation = "visible",
+                later = tracing::field::Empty,
+            );
             other.record("later", "also_visible");
             let unset = tracing::trace_span!("unset_span", never_set = tracing::field::Empty);
             let _guard = unset.enter();
