@@ -62,3 +62,43 @@ fn a_source_under_a_dot_directory_is_walked_and_reported() -> Result<()> {
     );
     Ok(())
 }
+
+/// Fail if a skipped name is only skipped at the workspace root.
+///
+/// The skip is keyed on the entry name rather than on a workspace-relative
+/// path, because that is the rule `.gitignore` states: its patterns carry no
+/// leading slash, so `target/` and `memories/` are ignored at every depth. The
+/// distinction is not cosmetic — a walk that skipped `target` only at the root
+/// would descend a nested one, and if a nested `target` ever held a generated
+/// `.rs` file the gate would turn on the compiler's output, which is the thing
+/// it must not do. The tree is synthetic so the assertion does not depend on
+/// the repository happening to have no nested cache today.
+#[test]
+fn a_machine_local_name_is_skipped_at_any_depth() -> Result<()> {
+    let scratch = tempdir().context("create a scratch directory for the walk")?;
+    let scratch_path = Utf8Path::from_path(scratch.path())
+        .context("a temporary directory path should be valid UTF-8")?;
+    let root = Dir::open_ambient_dir(scratch_path, ambient_authority())
+        .context("open the scratch directory")?;
+    for directory in ["tools/memories", "vendor/target", "src"] {
+        root.create_dir_all(directory)
+            .with_context(|| format!("create `{directory}`"))?;
+    }
+    root.write("tools/memories/probe.rs", b"fn probe() {}\n")
+        .context("write the nested memories source")?;
+    root.write("vendor/target/generated.rs", b"fn generated() {}\n")
+        .context("write the nested target source")?;
+    root.write("src/kept.rs", b"fn kept() {}\n")
+        .context("write the kept source")?;
+
+    let mut found = Vec::new();
+    collect_all_sources(&root, ".", &mut found)?;
+    found.sort();
+
+    ensure!(
+        found == ["src/kept.rs"],
+        "the skip is by entry name, so a nested machine-local directory is skipped too; \
+         got {found:?}"
+    );
+    Ok(())
+}
