@@ -2912,6 +2912,8 @@ Linux runner. Both platforms still assert the packaged file list. See
 [Windows budget for the isolated-Cargo-build tests][windows-test-budget].
 
 [windows-test-budget]: #windows-budget-for-the-isolated-cargo-build-tests
+[fixture-constraints]: #what-a-fixture-crate-replacement-would-have-to-preserve
+[adr-028-trim]: adr-028-defer-split-build-dir-harness-trim.md
 
 `tests/workflow_contracts/test_execution_coverage_test.py` holds all of this:
 the coverage inputs, the denied warnings, the doctest pass and its position,
@@ -2999,22 +3001,64 @@ budget, which clears the measured 312.9s worst case by 34%.
 
 Removing the second Cargo build sped this one up as well. The two used to run
 concurrently, each with four compile jobs on a four-vCPU runner, so each
-roughly halved the other. Measured on runs 34075197897 and 34079222917, the
-first two under the new shape:
+roughly halved the other. Measured on runs 34075197897, 34079222917 and
+34080385050, the first three under the new shape:
 
 Table: Windows durations before and after the verification build moved.
 
-| Measure                                          | Before (median) | Run 34075197897 | Run 34079222917 |
-| ------------------------------------------------ | --------------- | --------------- | --------------- |
-| `harness_compiles_under_a_split_build_dir`       | 274.7s          | 125.3s          | 170.6s          |
-| `packaged_manifest_retains_build_script_sources` | 244.0s          | 4.2s            | 7.6s            |
-| nextest run phase                                | 365s            | 185.5s          | 258.0s          |
-| `Test` step                                      | 471s            | 260s            | 368s            |
+| Measure                                          | Before (median) | Run 34075197897 | Run 34079222917 | Run 34080385050 |
+| ------------------------------------------------ | --------------- | --------------- | --------------- | --------------- |
+| `harness_compiles_under_a_split_build_dir`       | 274.7s          | 125.3s          | 170.6s          | 170.7s          |
+| `packaged_manifest_retains_build_script_sources` | 244.0s          | 4.2s            | 7.6s            | 6.8s            |
+| nextest run phase                                | 365s            | 185.5s          | 258.0s          | 253.8s          |
+| `Test` step                                      | 471s            | 260s            | 368s            | 358s            |
 
 The 420s budget is therefore sized against the older, contended distribution
-and is deliberately conservative while the new shape has two samples. It is a
-candidate for tightening, or for deletion, once ten runs have accumulated under
-it.
+and is deliberately conservative while the new shape has three samples. It is a
+candidate for tightening, or for deletion, once the [ADR-028][adr-028-trim]
+revisit gate is met.
+
+Those three samples predate the serialization group described below, which
+lands the harness test in a group of one-at-a-time build-capable tests. Under
+that group the test is a serial link rather than a slow finisher, and the trim
+is worth more than the 85s this table supports.
+
+#### Deferring the split-build-dir harness trim
+
+The repository has decided **not** to trim
+`harness_compiles_under_a_split_build_dir` yet. The test keeps its real
+`test_support` subject and its 420s budget.
+
+A later change to `.config/nextest.toml` — `nested-cargo-builds`, a
+`[test-groups]` entry with `max-threads = 1` — put this test in a group with
+the other tests that spawn a build-capable child Cargo command, so only one of
+them runs at a time. It landed for the coverage lane's benefit: four nextest
+workers each starting a four-job child Cargo build on a four-vCPU runner is
+what the group exists to prevent. The Windows lane runs `make test` with no
+`NEXTEST_PROFILE`, so it selects `[profile.default]` and inherits the same
+group. Under it the test is a serial link rather than a slow finisher, and a
+trim returns its whole group occupancy rather than only the exclusive tail the
+85s above measures. That raises the ceiling on the saving to the test's own
+duration, and it makes the saving track the test's own cost rather than an
+uncontended lane's tail.
+
+The decision does not change with the number, and it is not the number that
+settles it. The figure has moved twice already, both times because the lane
+changed rather than the test, so a decision taken against it would be a
+decision taken against the lane's current shape. The fidelity risk, by
+contrast, is one-directional: the coverage a fixture crate would drop is
+exactly the coverage that fails only on Windows, where it is least likely to be
+noticed.
+
+[ADR-028][adr-028-trim] holds the decision itself: the measurements, the rule
+that a trim can never return more than the test's own duration, the
+alternatives already measured and rejected (`cargo check` for `cargo build`,
+warming the compiler cache, and sharing a target directory), and the ten-run
+revisit gate. Read it before reopening the question or changing the Windows
+shape of this lane. Any replacement built after that gate inherits the
+constraints in
+[what a fixture-crate replacement would have to preserve][fixture-constraints]
+below.
 
 ### How this relates to the isolation utilities
 
@@ -4465,7 +4509,51 @@ That private build is why this test is the most expensive one on the Windows
 gate: `test_support` depends on `netsuke-build`, so a private root means
 compiling that crate and roughly 350 dependencies from scratch. Its measured
 budget is recorded in
-[Windows budget for the isolated-Cargo-build tests][windows-test-budget].
+[Windows budget for the isolated-Cargo-build tests][windows-test-budget]. The
+[decision to defer a trim][adr-028-trim] and the gate at which it is revisited
+are recorded in ADR-028.
+
+#### What a fixture-crate replacement would have to preserve
+
+This section is the constraint list for a future attempt, not a plan. The
+decision to defer, and the gate that reopens it, are in [ADR-028][adr-028-trim]
+; nothing here is built while the trim is deferred.
+
+If the trim is taken up after that gate, the obvious shape is a minimal fixture
+crate built under the split layout in place of `test_support`. It needs at
+least one dependency, so that dependency rlibs land in the split build
+directory while the fixture's own uplifted rlib lands in the target directory.
+That is precisely the arrangement the regression exists to catch: a single
+derived `-L dependency=` directory that missed the dependencies entirely. This
+section records what such a replacement must carry; nothing here is built while
+the trim is deferred.
+
+**The fidelity argument.** The current test is a regression test for a defect
+that was found once, and its subject is the real `test_support` build. Swapping
+that subject for a stand-in weakens the test unless the argument for the swap
+is explicit, in a doc comment beside the test, about exactly which regression
+it still guards and what it no longer covers. A one-dependency fixture does
+exercise the split-directory derivation — dependency artefacts in the build
+directory, uplifted artefacts in the target directory — but it no longer covers
+that derivation against the real crate's roughly 350-dependency scale, nor
+against the proc-macro and dynamic-library artefacts described above. Those are
+what makes the directory enumeration non-trivial, and the comment must say so
+rather than let the coverage drop silently.
+
+**The Windows response-file pressure.** `TestSupportRlib::compile` passes its
+arguments through a `rustc` response file, and the reason is a Windows command
+line limit rather than a style choice. Cargo 1.99 gives every crate its own
+artefact directory, so the `-L dependency=` set holds one entry per dependency;
+this test adds long temporary roots on top of that. Passed directly, the result
+exceeds the Windows `CreateProcess` command-line limit and the spawn fails with
+`Os { code: 206 }` before `rustc` runs at all. A fixture crate with one
+dependency produces far fewer directories and would stop exercising that
+pressure, which is a measurable loss of coverage however cheap the fixture
+becomes. So a replacement must either generate enough search paths to keep the
+`@file` path genuinely exercised, or move the response-file contract into its
+own dedicated test. Either way the doc comment above the replacement must say
+which of the two it does, because the failure it guards is Windows-specific and
+cannot be reproduced on most local hosts.
 
 ### Manifest `env()` reader
 

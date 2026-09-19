@@ -67,13 +67,39 @@ success-output = "immediate"
 # default budget with room to spare: 4.2s and 7.6s on runs 34075197897 and
 # 34079222917, against a 244.0s median before.
 #
-# Removing that second Cargo build also unblocked this one. The two used to run
-# concurrently, each with four compile jobs on a four-vCPU runner, and each
-# roughly halved the other; on those same two runs this test took 125.3s and
-# 170.6s rather than the 274.7s median above. 420s is therefore sized against
-# the older, contended distribution and is deliberately conservative while the
-# new shape has two samples. It is a candidate for tightening, or for deletion,
-# once ten runs have accumulated under it.
+# Removing that second Cargo build also unblocked this one. Contention had been
+# increasing each test's elapsed time: the two ran concurrently, each with four
+# compile jobs on a four-vCPU runner, and each roughly halved the other. With
+# the second build gone from the Windows lane, this test took 125.3s, 170.6s
+# and 170.7s on runs 34075197897, 34079222917 and 34080385050, rather than the
+# 274.7s median above. 420s is therefore sized against the older, contended
+# distribution and is deliberately conservative while the new shape has three
+# samples.
+#
+# Trimming the test is worth about 85s, not the 156s that figure implied
+# before the second build left, on the uncontended reading those three runs
+# support: what a trim returns there is the test's exclusive tail, the period
+# after every other test has reported, measured at 62.3s, 87.2s and 85.5s,
+# where 156s was the implied value of trimming both tests while they
+# contended. The lane fell from a 1468s median to about 848s across the three
+# changes, so 85s is roughly ten percent of what remains.
+#
+# That figure has since moved. This test is a member of `nested-cargo-builds`
+# above, which serializes it with the other build-capable child Cargo tests, so
+# it holds the group's single slot and every member behind it waits. Trimming
+# it therefore returns its group occupancy rather than its exclusive tail, and
+# the test's own duration caps that figure, because the duration is the
+# occupancy it gives back. The trim returns exactly the duration whenever the
+# shortened group chain still bounds the run. The Windows runs sampled on
+# 2026-09-18 put the figure between 95s and 163s, against the 85s above, which
+# was the exclusive tail under an uncontended lane that no longer exists. The
+# repository has still decided not to spend the fidelity risk yet, and the trim
+# remains a candidate for tightening or deletion at the ten-run revisit gate
+# that ADR-028 defines; that record carries the serialized measurements, the
+# alternatives already measured and rejected — `cargo check` for `cargo
+# build`, warming the compiler cache, and sharing a target directory — and the
+# ten-run gate. The developers' guide carries the constraints a fixture-crate
+# replacement would have to preserve.
 #
 # Windows only. On Ubicloud both tests finish in a fraction of the budget, and
 # widening the timeout there would blunt the hang detection this file exists to
