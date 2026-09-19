@@ -88,11 +88,11 @@ fn stub_env_builders_compile_under_the_same_harness(
 /// The subject is the real `test_support` build, not a fixture crate, and that
 /// is deliberate: it is what carries both the dependency artefacts and the
 /// uplifted one that the split-directory derivation has to tell apart. The
-/// cost of building it here is recorded, with the decision to defer trimming
-/// it, under "Deferring the split-build-dir harness trim" in
-/// docs/developers-guide.md; that section also states the fidelity argument
-/// any fixture-crate replacement would owe and the response-file pressure it
-/// would have to keep.
+/// cost of building it here is recorded in
+/// docs/developers-guide.md, and the decision to defer trimming it, the gate
+/// that reopens the question, and the fidelity argument any fixture-crate
+/// replacement would owe are in ADR-027
+/// (docs/adr-027-defer-split-build-dir-harness-trim.md).
 ///
 /// This test is a member of the `nested-cargo-builds` nextest group, so on
 /// Windows it holds that group's single slot: every other build-capable test
