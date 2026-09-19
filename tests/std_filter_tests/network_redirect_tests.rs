@@ -234,24 +234,23 @@ fn fetch_rejects_redirect_loops() -> Result<()> {
 /// The adapter owns the header parse, so an unusable `Location` is diagnosed
 /// there rather than by the chain. Both header failures stop at the first
 /// response, which is what the request count proves: the fixture answers once,
-/// so a second request would find no queued response. `name` identifies the
-/// fixture in the spawn error and a denied bind skips the case.
+/// so a second request would find no queued response. A denied bind skips the
+/// case.
 fn assert_single_response_failure(
     responses: impl IntoIterator<Item = HttpResponse>,
-    name: &str,
     expected: &str,
 ) -> Result<()> {
     let (url, requests, server) = match http::spawn_http_server_responses(responses) {
         Ok(server) => server,
         Err(err) if err.kind() == io::ErrorKind::PermissionDenied => return Ok(()),
-        Err(err) => bail!("spawn {name}: {err}"),
+        Err(err) => bail!("spawn redirect fixture: {err}"),
     };
 
     let err = match render_fetch(NetworkPolicy::default().allow_scheme("http")?, &url) {
         Ok(rendered) => bail!("an unusable Location unexpectedly rendered: {rendered:?}"),
         Err(err) => err,
     };
-    join_server(server, name)?;
+    join_server(server, "redirect fixture")?;
     ensure!(
         err.to_string().contains(expected),
         "expected '{expected}', got: {err}",
@@ -268,7 +267,6 @@ fn assert_single_response_failure(
 fn fetch_rejects_redirect_without_a_location_header() -> Result<()> {
     assert_single_response_failure(
         [HttpResponse::new(302, "")],
-        "headerless redirector",
         "did not include a Location header",
     )
 }
@@ -278,7 +276,6 @@ fn fetch_rejects_redirect_without_a_location_header() -> Result<()> {
 fn fetch_rejects_redirect_with_an_invalid_location_header() -> Result<()> {
     assert_single_response_failure(
         [HttpResponse::new(302, "").with_header("Location", "http://[::1")],
-        "invalid-location redirector",
         "Invalid redirect location",
     )
 }
