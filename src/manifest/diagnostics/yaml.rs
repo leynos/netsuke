@@ -21,8 +21,38 @@ use super::{ManifestName, ManifestSource};
 use crate::localization::{self, LocalizedMessage, keys};
 use crate::manifest::hints::YAML_HINTS;
 use miette::{Diagnostic, NamedSource, SourceSpan};
-use serde_saphyr::{Error as YamlError, Location};
+use serde_saphyr::{Error as YamlError, Location, SnippetMode};
 use thiserror::Error;
+
+/// Netsuke-owned summary of a `serde_saphyr` parse error.
+///
+/// A `serde_saphyr::Error` renders its `Display` output with an annotated
+/// source snippet embedded. Netsuke already carries structured source, span,
+/// and label fields, so serialising the raw error would duplicate the excerpt
+/// and tie the diagnostic JSON payload to an upstream presentation detail.
+/// This wrapper stores only the normalized, snippet-free summary, and holds no
+/// reference to the original error so it cannot re-enter the source chain.
+#[derive(Debug, Error)]
+#[error("{message}")]
+struct YamlErrorSummary {
+    /// Normalized parse summary without source excerpts.
+    message: String,
+}
+
+/// Render a `serde_saphyr` error without its annotated source snippet.
+///
+/// The default `Display` implementation embeds a source excerpt whose exact
+/// shape is an upstream presentation choice. Rendering through
+/// [`SnippetMode::Off`] yields a plain, location-suffixed summary that is
+/// stable across `serde-saphyr` releases.
+fn render_yaml_error_summary(err: &YamlError) -> String {
+    let formatter = serde_saphyr::DefaultMessageFormatter;
+    let options = serde_saphyr::render_options! {
+        formatter: &formatter,
+        snippets: SnippetMode::Off,
+    };
+    err.render_with_options(options)
+}
 
 /// Convert a `serde_saphyr` location to a byte index within the source.
 fn location_to_index(src: &ManifestSource, loc: Location) -> usize {
@@ -98,9 +128,9 @@ struct YamlDiagnostic {
     /// Optional localized hint, such as the tab-indentation suggestion.
     #[help]
     help: Option<LocalizedMessage>,
-    /// Underlying `serde_saphyr` error.
+    /// Normalized summary of the underlying `serde_saphyr` error.
     #[source]
-    source: YamlError,
+    source: YamlErrorSummary,
     /// Localized parse summary.
     message: LocalizedMessage,
 }
@@ -117,7 +147,11 @@ fn has_tab_indent(src: &ManifestSource, location: Option<Location>) -> bool {
         .any(|c| c == '\t')
 }
 
-/// Return a localized hint for the error, preferring the tab-indent suggestion.
+/// Return a localized hint for a normalized parser summary, preferring the
+/// tab-indent suggestion.
+///
+/// The inbound summary is the snippet-free rendering, which carries the same
+/// parser prose the hint needles are matched against.
 fn hint_for(
     err_str: &str,
     src: &ManifestSource,
@@ -138,9 +172,15 @@ fn hint_for(
 /// The diagnostic includes the offending span when `serde_saphyr` reports byte
 /// offsets, and attempts to attach contextual hints for common mistakes such as
 /// tab indentation.
+///
+/// The parser's own summary is normalized through the snippet-free renderer so
+/// that Netsuke's diagnostic JSON stays a function of its structured fields
+/// rather than of an upstream rendering format. Only the location and the
+/// summary are carried into the diagnostic; the raw error is not retained, so
+/// the caller keeps ownership of it.
 #[must_use]
 pub fn map_yaml_error(
-    err: YamlError,
+    err: &YamlError,
     src: &ManifestSource,
     name: &ManifestName,
 ) -> Box<dyn Diagnostic + Send + Sync + 'static> {
@@ -148,19 +188,19 @@ pub fn map_yaml_error(
     let (line, col, span) = loc.map_or((1, 1, None), |l| {
         (l.line(), l.column(), Some(to_span(src, l)))
     });
-    let err_str = err.to_string();
-    let hint = hint_for(&err_str, src, loc);
+    let summary = render_yaml_error_summary(err);
+    let hint = hint_for(&summary, src, loc);
     let message = localization::message(keys::MANIFEST_YAML_PARSE)
         .with_arg("line", line)
         .with_arg("column", col)
-        .with_arg("details", err_str);
+        .with_arg("details", &summary);
 
     Box::new(YamlDiagnostic {
         src: NamedSource::new(name.as_ref(), src.as_ref().to_owned()),
         span,
         label: localization::message(keys::MANIFEST_YAML_LABEL),
         help: hint,
-        source: err,
+        source: YamlErrorSummary { message: summary },
         message,
     })
 }
@@ -191,7 +231,7 @@ mod tests {
             ));
         };
         let name = ManifestName::from("test");
-        let diag = map_yaml_error(err, &src, &name);
+        let diag = map_yaml_error(&err, &src, &name);
         let yaml_diag = (&*diag as &(dyn StdError + 'static))
             .downcast_ref::<YamlDiagnostic>()
             .ok_or_else(|| anyhow!("expected YAML diagnostic"))?;
@@ -211,17 +251,58 @@ mod tests {
         let err = serde_saphyr::Error::Eof {
             location: serde_saphyr::Location::UNKNOWN,
         };
-        let details = err.to_string();
+        let details = render_yaml_error_summary(&err);
         let name = ManifestName::from("test");
-        let diag = map_yaml_error(err, &src, &name);
+        let diag = map_yaml_error(&err, &src, &name);
         let expected = localization::message(keys::MANIFEST_YAML_PARSE)
             .with_arg("line", 1)
             .with_arg("column", 1)
-            .with_arg("details", details)
+            .with_arg("details", &details)
             .to_string();
         ensure!(
             diag.to_string() == expected,
             "diagnostic should default to line 1 column 1"
+        );
+        Ok(())
+    }
+
+    /// Regression test: an upstream `serde-saphyr` formatter change must not
+    /// leak an annotated source excerpt into Netsuke's parser summary.
+    ///
+    /// `serde-saphyr` 1.2.0 renders `Display` with an embedded snippet. The
+    /// diagnostic must use the normalized, snippet-free summary instead, so
+    /// that the JSON `causes` field stays a compact parser reason and does not
+    /// duplicate the source excerpt Netsuke already reports structurally.
+    #[test]
+    fn map_yaml_error_summary_omits_source_snippet() -> Result<()> {
+        let src = ManifestSource::from("targets:\n\t- name: test\n");
+        let Err(err) = serde_saphyr::from_str::<crate::manifest::ManifestValue>(src.as_ref())
+        else {
+            return Err(anyhow!(
+                "expected YAML parse error for source {:?}",
+                src.as_str()
+            ));
+        };
+        let name = ManifestName::from("test");
+        let diag = map_yaml_error(&err, &src, &name);
+        let yaml_diag = (&*diag as &(dyn StdError + 'static))
+            .downcast_ref::<YamlDiagnostic>()
+            .ok_or_else(|| anyhow!("expected YAML diagnostic"))?;
+        let summary = yaml_diag.source.to_string();
+
+        ensure!(
+            summary.contains("tabs disallowed within this context"),
+            "summary should retain the parser reason: {summary}"
+        );
+        for forbidden in ["\n -->", "<input>:", "\t- name: test"] {
+            ensure!(
+                !summary.contains(forbidden),
+                "summary should omit {forbidden:?}: {summary}"
+            );
+        }
+        ensure!(
+            !summary.contains('\n'),
+            "summary should be a single line: {summary}"
         );
         Ok(())
     }
@@ -234,7 +315,7 @@ mod tests {
             return Err(anyhow!("expected parse error for carriage-return input"));
         };
         let name = ManifestName::from("test");
-        let diag = map_yaml_error(err, &src, &name);
+        let diag = map_yaml_error(&err, &src, &name);
         let yaml_diag = (&*diag as &(dyn StdError + 'static))
             .downcast_ref::<YamlDiagnostic>()
             .ok_or_else(|| anyhow!("expected YAML diagnostic"))?;
