@@ -41,11 +41,13 @@ Four failures motivate the shape rather than any particular spelling of it:
 
 These predicates read parsed workflow values rather than files, so
 ``codescene_upload_contract_test`` can hold the repository's own trunk lane to
-the contract and drive shapes the repository does not have. Two of the rules
+the contract and drive shapes the repository does not have. Three of the rules
 they rest on describe no particular lane, so they live apart: the scan for
 ``vars.`` references the last bullet depends on is general to any step
-(``workflow_variable_scan``), and so are finding a named step and checking
-that it calls the right action at an immutable pin (``lane_steps``).
+(``workflow_variable_scan``), finding a named step and checking that it calls
+the right action at an immutable pin is what every lane contract does first
+(``lane_steps``), and the credential the upload is handed is a rule about the
+secret rather than about the report (``codescene_credential_invariants``).
 
 Run via ``make test-workflow-contracts``.
 """
@@ -59,8 +61,9 @@ from ci_coverage_wiring_invariants import (
     PUBLICATION_OPT_OUT_INPUT,
     UPLOAD_COVERAGE_ACTION,
 )
+from codescene_credential_invariants import credential_offenders
 from lane_steps import action_reference_of, inputs_of, step_named
-from workflow_variable_scan import expression_references, unbound_variable_references
+from workflow_variable_scan import unbound_variable_references
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -93,22 +96,6 @@ UPLOAD_PATH_INPUT: typ.Final[str] = "path"
 #: still names `lcov` would be parsed as the wrong shape.
 COVERAGE_FORMAT_INPUT: typ.Final[str] = "format"
 COVERAGE_FORMAT_VALUE: typ.Final[str] = "lcov"
-
-#: The credential the upload reads. The step must be gated on it rather than
-#: running with an empty value, and the value must come from a secret.
-CREDENTIAL_ENVIRONMENT_KEY: typ.Final[str] = "CS_ACCESS_TOKEN"
-CREDENTIAL_INPUT: typ.Final[str] = "access-token"
-
-#: The expression namespace a credential must be read from. Spelling the
-#: prefix rather than the whole expression keeps the check independent of the
-#: credential's name and of the whitespace inside the braces.
-CREDENTIAL_SOURCE_PREFIX: typ.Final[str] = "secrets."
-
-#: The namespace the upload's `if` gate must read the credential from. The
-#: condition is evaluated against `env`, so this is the namespace that proves
-#: the step is gated on the variable it exported rather than on any same-named
-#: value from elsewhere.
-CREDENTIAL_GATE_NAMESPACE: typ.Final[str] = "env"
 
 #: Checksum inputs the pinned upload action accepts, and the input name a
 #: future revision renames them to. Every one of them is listed so a
@@ -216,7 +203,7 @@ def upload_contract_offenders(
     offenders.extend(_validation_offenders(validation))
     offenders.extend(_path_offenders(coverage, upload))
     offenders.extend(_checksum_offenders(upload))
-    offenders.extend(_credential_offenders(upload))
+    offenders.extend(credential_offenders(upload, inputs_of(upload)))
     offenders.extend(_archive_offenders(coverage, upload))
     return offenders
 
@@ -364,101 +351,6 @@ def _checksum_offenders(upload: dict[str, object]) -> list[str]:
         for name in CHECKSUM_INPUTS
         if name in submitted
     ]
-
-
-def _credential_offenders(upload: dict[str, object]) -> list[str]:
-    """Return every fault in how the upload step receives its credential.
-
-    Three faults are distinguishable and each has its own consequence. A
-    credential the step does not carry in its own environment cannot be gated
-    on, because the ``if`` condition is evaluated against ``env``. A
-    credential that is not read from a secret is one this repository does not
-    own. A step that is not gated at all runs with an empty token whenever the
-    secret is absent, which is every run from a fork or from a repository that
-    has not set it, and turns a missing optional secret into a failed trunk
-    run.
-
-    The credential reaches the action through an expression rather than a
-    literal, which is what makes the ``if`` gate mean anything: the step
-    evaluates the same value the action is handed. The expression may name the
-    secret directly or read the environment variable the step exported it to,
-    so the test is that the credential is named, not how it is spelled.
-
-    Returns
-    -------
-    list[str]
-        One entry per fault, empty when the step both holds the credential and
-        gates on it.
-    """
-    environment = upload.get("env")
-    declared = (
-        environment.get(CREDENTIAL_ENVIRONMENT_KEY)
-        if isinstance(environment, dict)
-        else None
-    )
-    submitted = inputs_of(upload)
-    token = submitted.get(CREDENTIAL_INPUT)
-    condition = upload.get("if")
-
-    offenders: list[str] = []
-    if not (isinstance(declared, str) and CREDENTIAL_SOURCE_PREFIX in declared):
-        offenders.append(
-            f"{CODESCENE_UPLOAD_STEP!r} must declare "
-            f"env.{CREDENTIAL_ENVIRONMENT_KEY} from a github secret, got "
-            f"{declared!r}"
-        )
-    if not _names_credential(token):
-        offenders.append(
-            f"{CODESCENE_UPLOAD_STEP!r} must pass {CREDENTIAL_INPUT} the "
-            f"{CREDENTIAL_ENVIRONMENT_KEY} it gated on, got {token!r}"
-        )
-    if not _names_credential(condition, namespace=CREDENTIAL_GATE_NAMESPACE, bare=True):
-        offenders.append(
-            f"{CODESCENE_UPLOAD_STEP!r} must be conditional on "
-            f"{CREDENTIAL_ENVIRONMENT_KEY} being present, got {condition!r}; an "
-            f"ungated step fails the trunk run over a missing optional secret"
-        )
-    return offenders
-
-
-def _names_credential(
-    value: object, namespace: str | None = None, *, bare: bool = False
-) -> bool:
-    """Return whether ``value`` names the credential in an expression.
-
-    The credential is named by an identifier, not by a substring of the text
-    around it. A check for containment accepts ``${{ env.NOT_CS_ACCESS_TOKEN }}``,
-    whose value is empty in exactly the way the missing secret is: the gate
-    would then compare ``'' != ''``, the step would not run, and the contract
-    would have passed over a lane that never submits anything.
-
-    Parameters
-    ----------
-    value
-        The candidate, which is a ``str`` only when the step declared one.
-    namespace
-        The namespace the reference must use, or `None` to accept any. A gate
-        is evaluated against ``env``, so requiring that namespace keeps the
-        step conditional on the environment variable it actually exported
-        rather than on some same-named value from another namespace.
-    bare
-        Whether the value is itself an expression. Passed through to
-        `expression_references`; a step's ``if`` is evaluated as an expression
-        without the delimiters, so its value is scanned whole.
-
-    Returns
-    -------
-    bool
-        `True` when some identifier in the value is the credential under an
-        accepted namespace.
-    """
-    if not isinstance(value, str):
-        return False
-    return any(
-        name == CREDENTIAL_ENVIRONMENT_KEY
-        and (namespace is None or reference_namespace == namespace)
-        for reference_namespace, name in expression_references(value, bare=bare)
-    )
 
 
 def _archive_offenders(

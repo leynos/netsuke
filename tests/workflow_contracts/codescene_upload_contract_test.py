@@ -15,125 +15,42 @@ and only on the trunk, where the result is already merged. Measured from the
 outside the same fault looks like a CodeScene check that waits for a report and
 then gives up hours later, which names neither the step nor the input at fault.
 
-The predicates under test live in ``codescene_upload_invariants.py`` and the
-shared parsing helpers in ``workflow_loading.py``. Following the sibling
-suites, the detectors are also driven against synthetic workflow text: a
-detector that stopped matching would otherwise let the repository assertion
-pass by finding nothing to object to.
+The predicates under test live in ``codescene_upload_invariants.py`` and in
+``codescene_credential_invariants.py``, which owns the rules about the secret
+the lane is handed, and the shared parsing helpers in ``workflow_loading.py``.
+Following the sibling suites, the detectors are also driven against synthetic
+workflow text: a detector that stopped matching would otherwise let the
+repository assertion pass by finding nothing to object to.
 
 Run via ``make test-workflow-contracts``.
 """
 
-import copy
-import typing as typ
-
 import pytest
 from ci_coverage_wiring_invariants import (
-    COVERAGE_REPORT_PATH,
     GENERATE_COVERAGE_ACTION,
     UPLOAD_COVERAGE_ACTION,
+)
+from codescene_credential_invariants import (
+    CREDENTIAL_ENVIRONMENT_KEY,
+    CREDENTIAL_INPUT,
 )
 from codescene_upload_invariants import (
     CHECKSUM_INPUTS,
     CODESCENE_UPLOAD_STEP,
     COVERAGE_FORMAT_INPUT,
-    COVERAGE_FORMAT_VALUE,
     COVERAGE_STEP,
-    CREDENTIAL_ENVIRONMENT_KEY,
-    CREDENTIAL_INPUT,
     OUTPUT_PATH_INPUT,
     PUBLICATION_OPT_OUT_INPUT,
     REPORT_VALIDATION_STEP,
-    REPORT_VALIDATOR_SCRIPT,
     UPLOAD_PATH_INPUT,
     upload_contract_offenders,
 )
-from lane_steps import step_named
-from workflow_loading import (
-    COVERAGE_MAIN_WORKFLOW_PATH,
-    job_steps,
-    load_workflow,
-    parse_workflow_text,
+from codescene_upload_lane_data import (
+    clean_steps,
+    inputs_of,
+    step_of,
+    trunk_steps,
 )
-
-if typ.TYPE_CHECKING:
-    import collections.abc as cabc
-
-TRUNK_JOB = "coverage-upload"
-
-#: A full 40-character lowercase commit SHA, standing in for whatever
-#: revision the dependency updater last pinned. The contract checks the
-#: reference's identity and the pin's *shape*, never the revision, so any
-#: value of that shape exercises the rule the repository actually enforces.
-FIXTURE_PIN = "0" * 40
-
-#: A lane satisfying every clause of the contract. The negative cases below
-#: load it, vary one field, and assert the offender that results; a template
-#: that was itself non-compliant would make each of them pass for the wrong
-#: reason, so `test_the_clean_lane_template_produces_no_offenders` holds it.
-CLEAN_LANE = f"""
-jobs:
-  {TRUNK_JOB}:
-    steps:
-      - name: {COVERAGE_STEP}
-        uses: {GENERATE_COVERAGE_ACTION}@{FIXTURE_PIN}
-        with:
-          language: rust
-          {OUTPUT_PATH_INPUT}: {COVERAGE_REPORT_PATH}
-          {COVERAGE_FORMAT_INPUT}: {COVERAGE_FORMAT_VALUE}
-      - name: {REPORT_VALIDATION_STEP}
-        run: |
-          staged="$(mktemp --directory)"
-          cp -- {COVERAGE_REPORT_PATH} "${{staged}}/{COVERAGE_REPORT_PATH}"
-          uv run --no-project --python 3.14 \
-            {REPORT_VALIDATOR_SCRIPT} --artifact-dir "${{staged}}"
-      - name: {CODESCENE_UPLOAD_STEP}
-        if: env.{CREDENTIAL_ENVIRONMENT_KEY} != ''
-        env:
-          {CREDENTIAL_ENVIRONMENT_KEY}: ${{{{ secrets.{CREDENTIAL_ENVIRONMENT_KEY} }}}}
-        uses: {UPLOAD_COVERAGE_ACTION}@{FIXTURE_PIN}
-        with:
-          {UPLOAD_PATH_INPUT}: {COVERAGE_REPORT_PATH}
-          {COVERAGE_FORMAT_INPUT}: {COVERAGE_FORMAT_VALUE}
-          {CREDENTIAL_INPUT}: ${{{{ env.{CREDENTIAL_ENVIRONMENT_KEY} }}}}
-"""
-
-
-def trunk_steps() -> list[dict[str, object]]:
-    """Return the trunk lane's parsed steps, in declaration order."""
-    return job_steps(load_workflow(COVERAGE_MAIN_WORKFLOW_PATH), TRUNK_JOB)
-
-
-def clean_steps() -> list[dict[str, object]]:
-    """Return a fresh copy of the clean lane's steps.
-
-    Parsed from workflow text through the shared loader rather than assembled
-    as a Python literal, so the cases below exercise the same value resolution
-    the repository file does. Copied so a case that mutates a step cannot reach
-    the next case's baseline.
-
-    Returns
-    -------
-    list[dict[str, object]]
-        The parsed steps, owned by the caller.
-    """
-    document = parse_workflow_text(CLEAN_LANE, "synthetic workflow")
-    assert isinstance(document, dict), "synthetic workflow must parse to a mapping"
-    return copy.deepcopy(job_steps(document, TRUNK_JOB))
-
-
-def _inputs(step: dict[str, object]) -> dict[str, object]:
-    """Return a step's ``with`` block, which the clean lane always declares."""
-    with_ = step.get("with")
-    assert isinstance(with_, dict), "the clean lane declares the step's inputs"
-    return with_
-
-
-def _step(steps: cabc.Sequence[dict[str, object]], name: str) -> dict[str, object]:
-    """Return the uniquely named step of a lane, which the clean lane has."""
-    found = step_named(steps, name)
-    assert found is not None, f"the lane must declare {name!r}"
-    return found
 
 
 def test_the_clean_lane_template_produces_no_offenders() -> None:
@@ -159,7 +76,7 @@ def test_the_detectors_report_a_lane_whose_steps_are_renamed(step_name: str) -> 
     what it is about, and the whole contract would pass over an empty set.
     """
     steps = clean_steps()
-    _step(steps, step_name)["name"] = f"{step_name} (renamed)"
+    step_of(steps, step_name)["name"] = f"{step_name} (renamed)"
     assert upload_contract_offenders(steps), (
         f"renaming {step_name!r} must be reported as a missing step"
     )
@@ -176,14 +93,14 @@ def test_the_detectors_report_a_reordered_lane(step_name: str) -> None:
     after the upload is a check the upload never waited for.
     """
     steps = clean_steps()
-    moved = steps.pop(steps.index(_step(steps, step_name)))
+    moved = steps.pop(steps.index(step_of(steps, step_name)))
     match step_name:
         case _ if step_name == REPORT_VALIDATION_STEP:
             # Move it to the front, before the report is written.
             steps.insert(0, moved)
         case _ if step_name == CODESCENE_UPLOAD_STEP:
             # Move the upload ahead of the check that is meant to gate it.
-            steps.insert(steps.index(_step(steps, REPORT_VALIDATION_STEP)), moved)
+            steps.insert(steps.index(step_of(steps, REPORT_VALIDATION_STEP)), moved)
         case _:
             # Move the generation after the step that reads its output.
             steps.append(moved)
@@ -229,7 +146,7 @@ def test_the_detectors_report_a_validation_step_that_checks_nothing(
     and none of it touches the artefact.
     """
     steps = clean_steps()
-    _step(steps, REPORT_VALIDATION_STEP)["run"] = replacement
+    step_of(steps, REPORT_VALIDATION_STEP)["run"] = replacement
     offenders = [
         offender
         for offender in upload_contract_offenders(steps)
@@ -258,7 +175,7 @@ def test_the_detectors_report_a_path_or_format_disagreement(
 ) -> None:
     """Fail a lane whose two steps disagree about what was produced."""
     steps = clean_steps()
-    _inputs(_step(steps, step_name))[input_name] = replacement
+    inputs_of(step_of(steps, step_name))[input_name] = replacement
     assert upload_contract_offenders(steps), (
         f"{step_name!r} passing {input_name}={replacement!r} must be reported: "
         f"the report is written and read through different inputs"
@@ -278,7 +195,7 @@ def test_the_detectors_report_a_reintroduced_checksum_input(
     fail the trunk upload.
     """
     steps = clean_steps()
-    _inputs(_step(steps, CODESCENE_UPLOAD_STEP))[checksum_input] = "abc123"
+    inputs_of(step_of(steps, CODESCENE_UPLOAD_STEP))[checksum_input] = "abc123"
     assert upload_contract_offenders(steps), (
         f"{checksum_input!r} must be reported on the upload step"
     )
@@ -296,14 +213,14 @@ def test_the_detectors_report_an_upload_that_cannot_be_gated_on() -> None:
     def mutated(field: str, replacement: object) -> list[dict[str, object]]:
         """Return the clean lane with one credential field varied."""
         steps = clean_steps()
-        upload = _step(steps, CODESCENE_UPLOAD_STEP)
+        upload = step_of(steps, CODESCENE_UPLOAD_STEP)
         match field:
             case "if":
                 upload["if"] = replacement
             case "env":
                 upload.pop("env", None)
             case _:
-                _inputs(upload)[CREDENTIAL_INPUT] = replacement
+                inputs_of(upload)[CREDENTIAL_INPUT] = replacement
         return steps
 
     cases: list[tuple[str, object]] = [
@@ -348,7 +265,7 @@ def test_the_detectors_report_a_lane_that_suppresses_its_own_upload(
     intent the action does not implement.
     """
     steps = clean_steps()
-    _inputs(_step(steps, step_name))[PUBLICATION_OPT_OUT_INPUT] = "false"
+    inputs_of(step_of(steps, step_name))[PUBLICATION_OPT_OUT_INPUT] = "false"
     assert upload_contract_offenders(steps), (
         f"{PUBLICATION_OPT_OUT_INPUT} on {step_name!r} must be reported"
     )
@@ -363,7 +280,9 @@ def test_the_detectors_report_a_variable_the_repository_does_not_declare() -> No
     it verified the installer.
     """
     steps = clean_steps()
-    _step(steps, CODESCENE_UPLOAD_STEP)["if"] = "${{ vars.CODESCENE_CLI_SHA256 != '' }}"
+    step_of(steps, CODESCENE_UPLOAD_STEP)["if"] = (
+        "${{ vars.CODESCENE_CLI_SHA256 != '' }}"
+    )
     assert upload_contract_offenders(steps), (
         "a gate on an undeclared repository variable must be reported; it "
         "would never open"
@@ -397,7 +316,7 @@ def test_the_detectors_report_an_unpinned_action_reference(
         if step_name == COVERAGE_STEP
         else UPLOAD_COVERAGE_ACTION
     )
-    _step(steps, step_name)["uses"] = f"{action}@{pin}" if pin else action
+    step_of(steps, step_name)["uses"] = f"{action}@{pin}" if pin else action
     assert upload_contract_offenders(steps), (
         f"{step_name!r} pinned to {fault} must be reported"
     )
