@@ -30,7 +30,7 @@ use netsuke::{
         FILE_READ_FILTER_VALUES, FILE_READ_OUTCOME_VALUES, FILE_READ_TOTAL,
         RESOLVE_ERROR_CATEGORY_VALUES, WHICH_CACHE_OUTCOME_VALUES, WHICH_CACHE_TOTAL,
         WHICH_CWD_MODE_VALUES, WHICH_RESOLUTION_FAILURE_OUTCOME_VALUES,
-        WHICH_RESOLUTION_OUTCOME_VALUES, WHICH_RESOLUTION_TOTAL,
+        WHICH_RESOLUTION_SUCCESS_OUTCOME_VALUES, WHICH_RESOLUTION_TOTAL,
     },
 };
 
@@ -265,8 +265,11 @@ impl ConfigMetricsRecorder {
 /// repository's function-length bound. The resolution counter is admitted
 /// under two shapes because a failure carries an `error_category` and a
 /// success does not, so the counter's series are not all one shape. Each
-/// shape names its own outcome set: a `found` series carrying a category is
-/// refused rather than exported, because no call site can produce one.
+/// shape names its own outcome set — the success vocabulary and the failure
+/// vocabulary are disjoint complements — so neither admits the other's
+/// outcomes: a `found` series carrying a category and a failure recorded
+/// without one are both refused rather than exported, because no call site
+/// can produce either.
 fn accepts_which_registration(key: &Key) -> bool {
     match key.name() {
         WHICH_CACHE_TOTAL => exact_labels(
@@ -281,7 +284,7 @@ fn accepts_which_registration(key: &Key) -> bool {
             &[
                 &[
                     (CWD_MODE_LABEL, &WHICH_CWD_MODE_VALUES),
-                    (OUTCOME_LABEL, &WHICH_RESOLUTION_OUTCOME_VALUES),
+                    (OUTCOME_LABEL, &WHICH_RESOLUTION_SUCCESS_OUTCOME_VALUES),
                 ],
                 &[
                     (CWD_MODE_LABEL, &WHICH_CWD_MODE_VALUES),

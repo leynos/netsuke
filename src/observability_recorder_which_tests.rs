@@ -114,6 +114,11 @@ fn record_mixed_resolution_series() {
     .increment(1);
     // The success shape with no `cwd_mode` at all.
     counter!(WHICH_RESOLUTION_TOTAL, "outcome" => "found").increment(1);
+    // A failure recorded without its category. The two-label shape admits only
+    // `found`, so this cannot be mistaken for a success series: the outcome is
+    // not in that vocabulary and there is no `category` to reach the other.
+    counter!(WHICH_RESOLUTION_TOTAL, "cwd_mode" => "auto", "outcome" => "not_found").increment(1);
+    counter!(WHICH_RESOLUTION_TOTAL, "cwd_mode" => "never", "outcome" => "error").increment(1);
 }
 
 /// Admit the resolution counter under both of its label shapes.
@@ -121,6 +126,10 @@ fn record_mixed_resolution_series() {
 /// A success carries `cwd_mode` and `outcome`; a failure adds `category`. The
 /// counter is therefore the one series whose label count is not fixed, and
 /// both shapes have to be admitted for its failures to reach the snapshot.
+///
+/// Each shape admits only its own outcomes. A `found` series carrying a
+/// category and a failure written without one are both refused, so the two
+/// shapes are complements rather than one being a superset of the other.
 #[test]
 fn recorder_retains_both_bounded_which_resolution_shapes() {
     let recorder = ConfigMetricsRecorder::new();

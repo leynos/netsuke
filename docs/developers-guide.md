@@ -1607,8 +1607,10 @@ The trunk lane validates the report as data before it uploads it.
 `coverage-main.yml` stages `lcov.info` into a directory of its own and runs
 `scripts/validate_coverage_artifact.py` over that directory, because the
 generation action reports success for an empty report and the upload checks
-only that the file exists. The step must sit after the report is written and
-before the upload that sends it. It must also sit before
+only that the file exists. Naming the directory is not enough on its own: the
+step must also copy the report into it, because a directory that is staged and
+never filled holds nothing the validator can read. The step must sit after the
+report is written and before the upload that sends it. It must also sit before
 `Show sccache statistics`: `tests/workflow_contracts/sccache_contract_test.py`
 requires that step to follow every compile step in the lane, so a check parked
 between the last compile and the statistics report would break the
@@ -1621,9 +1623,13 @@ Workflow contract tests keep the boundary explicit: the pull-request coverage
 step must retain ratchet mode and pass the publication opt-out, the artefact
 upload and privileged submission workflow must remain absent, and the main
 workflow must upload the report generated earlier in its job without setting
-that opt-out. The hostile-artefact validators under `scripts/` remain available
-for maintenance use, and the trunk lane now runs the outer one over the report
-it generated itself; no active workflow downloads pull-request coverage.
+that opt-out. They also hold the upload's `if` gate to naming the credential as
+an identifier — read from the `env` namespace the condition is evaluated
+against, so a longer unset name such as `NOT_CS_ACCESS_TOKEN` cannot satisfy it
+by containment. The hostile-artefact validators under `scripts/` remain
+available for maintenance use, and the trunk lane now runs the outer one over
+the report it generated itself; no active workflow downloads pull-request
+coverage.
 
 The workflows those prohibitions read are a closure, not a trigger list. A
 workflow declaring only `workflow_call` runs on a pull request whenever a
@@ -6291,9 +6297,14 @@ single-sourcing the vocabulary.
 That makes the resolution counter the one series whose label count is not
 fixed: two labels on success, three on failure.
 `WHICH_RESOLUTION_FAILURE_OUTCOME_VALUES` names the two outcomes that
-legitimately carry a category, so the application recorder admits each shape
-exactly; a `found` series carrying a category is refused rather than exported,
-because no call site can produce one.
+legitimately carry a category, and `WHICH_RESOLUTION_SUCCESS_OUTCOME_VALUES`
+names the one that legitimately does not, so the application recorder admits
+each shape exactly. The two vocabularies are disjoint complements rather than
+one being a subset of the other, and that is deliberate: a `found` series
+carrying a category and a failure recorded without one are both refused rather
+than exported, because no call site can produce either. Naming the full outcome
+set on the success shape would have admitted the second of those, since a
+two-label `not_found` series would then match it.
 
 The resolver records the same bounded facts on the `stdlib.which.resolve` span
 and emits one debug event when a resolution fails. No command name, no
