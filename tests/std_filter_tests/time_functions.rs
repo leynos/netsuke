@@ -123,18 +123,15 @@ fn registration_reports_the_clock_source(
     #[case] inject: bool,
     #[case] expected: &str,
 ) -> Result<()> {
-    let captured = with_test_subscriber(LevelFilter::DEBUG, |events| {
+    let captured = with_test_subscriber(LevelFilter::DEBUG, |events| -> Result<Vec<String>> {
         let installed = if inject {
             fallible::stdlib_env_with_clock(fixed_clock(datetime!(2026-06-08 12:00:00 UTC)))
         } else {
             fallible::stdlib_env()
         };
-        assert!(
-            installed.is_ok(),
-            "registration should succeed: {installed:?}"
-        );
-        events.snapshot()
-    });
+        installed.context("registration should succeed")?;
+        Ok(events.snapshot())
+    })?;
 
     let registration_events: Vec<&String> = captured
         .iter()
