@@ -148,6 +148,14 @@ fn a_machine_local_name_is_skipped_at_any_depth() -> Result<()> {
 /// rather than here, because the `info/exclude` it seeds is written before this
 /// runs and no later call could unpin it.
 ///
+/// Git's own environment variables are a fifth, and they are the one route that
+/// does not go through a file. `GIT_DIR` repoints git at another repository's
+/// metadata, so `check-ignore` answers from that repository instead of the
+/// scratch one: measured at a false pass, where the hostile repository's
+/// `info/exclude` held `*` and the honest answer was "not ignored". Both calls
+/// clear `GIT_DIR`, `GIT_WORK_TREE`, and `GIT_COMMON_DIR`, which is why the
+/// helper below removes them as well as the caller above.
+///
 /// `.git` is the one legitimate exception: git refuses to track anything
 /// beneath it whatever the ignore files say, so the appeal still holds even
 /// though `check-ignore` reports it as unignored. It is named here rather than
@@ -187,6 +195,9 @@ fn every_skipped_name_is_one_git_would_not_track() -> Result<()> {
     // comment claimed the config half as well and was wrong about it.
     let init = std::process::Command::new("git")
         .args(["init", "--quiet", "--template="])
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_COMMON_DIR")
         .current_dir(scratch_path)
         .status()
         .context("run git init in the scratch repository")?;
@@ -300,6 +311,9 @@ fn is_ignored(root: &Utf8Path, name: &str) -> Result<bool> {
             "-q",
             &format!("{name}/probe.rs"),
         ])
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_COMMON_DIR")
         .current_dir(root)
         .status()
         .context("run git check-ignore")?;
