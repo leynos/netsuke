@@ -1982,13 +1982,13 @@ Implementation details:
 For screen readers: `fetch` dispatches the current hop until it receives a
 non-redirect response. For a redirect, the adapter resolves the `Location`
 header and rejects a missing or invalid location before the chain sees a
-target. The chain then rejects a target that fails policy, has already appeared
-in the chain, or would exceed the five-hop limit; only an allowed unseen target
-becomes the next current hop. The header parse is the adapter's, not the
-chain's: a `Location` header is an HTTP response fact, so the chain receives
-only an already-resolved target.
-[ADR-023](adr-023-revalidate-fetch-redirects.md) records the boundary and its
-addendum.
+target. The chain then applies four checks in order: the five-hop limit,
+cross-origin credential removal, the loop check, and policy evaluation. A
+target that fails any check is rejected; only one that passes all four becomes
+the next current hop. The header parse is the adapter's, not the chain's: a
+`Location` header is an HTTP response fact, so the chain receives only an
+already-resolved target. [ADR-023](adr-023-revalidate-fetch-redirects.md)
+records the boundary and its addendum.
 
 ```mermaid
 stateDiagram-v2
@@ -1996,11 +1996,15 @@ stateDiagram-v2
     CurrentHop --> FinalResponse: non-redirect response
     CurrentHop --> ResolveLocation: redirect response
     ResolveLocation --> Reject: missing or invalid Location
-    ResolveLocation --> CheckTarget: resolved target
-    CheckTarget --> Reject: NetworkPolicy rejects
-    CheckTarget --> Reject: repeated target
-    CheckTarget --> Reject: five-hop limit reached
-    CheckTarget --> CurrentHop: allowed unseen target
+    ResolveLocation --> CheckHopLimit: resolved target
+    CheckHopLimit --> Reject: five-hop limit reached
+    CheckHopLimit --> RemoveCredentials: within the limit
+    RemoveCredentials --> Reject: credentials not removable
+    RemoveCredentials --> CheckLoop: credentials removed or same-origin
+    CheckLoop --> Reject: repeated target
+    CheckLoop --> CheckPolicy: unseen target
+    CheckPolicy --> Reject: NetworkPolicy rejects
+    CheckPolicy --> CurrentHop: allowed unseen target
     FinalResponse --> [*]
     Reject --> [*]
 ```
