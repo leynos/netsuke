@@ -79,12 +79,14 @@ use rstest::rstest;
     "#![allow(renamed_and_removed_lints, disallowed_methods, reason = \"escape hatch probe\")]\n",
     &["renamed_and_removed_lints", "disallowed_methods"]
 )]
-// `unknown_lints` cannot suppress the policy, so it is not banned. It looks as
+// `unknown_lints` cannot suppress anything, so it is not banned. It looks as
 // though it belongs in the set — it hides the report that a name does not exist
 // — but measurement says a misspelled name is a no-op either way, so allowing
 // the report silences nothing. A rule the code cannot justify is worse than an
 // absent one; this row is what keeps the entry from being added back on the
-// strength of a plausible-sounding rationale.
+// strength of a plausible-sounding rationale. The test is "silences nothing",
+// not "does not reach the policy lint": the latter would also excuse the two
+// guard lints and `clippy::restriction`, all of which do silence something.
 #[case::unknown_lints_enabler_alone(
     "#![allow(unknown_lints, reason = \"escape hatch probe\")]\n",
     &[]

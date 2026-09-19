@@ -4491,10 +4491,19 @@ The machine's git configuration is a third place an answer can come from, and
 it is switched off for the same reason. A global ignore file naming one of
 these directories would make the test pass while the repository said nothing
 about the name — the original defect wearing a different hat, and just as
-invisible. `core.excludesFile=/dev/null` covers both spellings a global ignore
+invisible. An empty `core.excludesFile` covers both spellings a global ignore
 can take: it overrides a configured path and also suppresses the default
-`~/.config/git/ignore`, measured with that default present and no path
-configured.
+`~/.config/git/ignore`, measured against both. The value is empty rather than a
+device path, since the test also runs on the Windows lane.
+
+A template directory is a fourth, and it is closed at `git init` instead:
+`--template=` keeps a template from seeding the scratch repository's
+`info/exclude`, which `check-ignore` would otherwise read. The flag has to be
+there rather than on the `check-ignore` call, because the file is written at
+init time, and because a template can seed `.git/config` as well. Note that
+`-c init.templateDir=` on the same command does *not* close it:
+`GIT_TEMPLATE_DIR` outranks it, measured, so the empty `--template` argument is
+the form that works for a contributor with that variable set.
 
 It reads the attribute as source text, because that is what an attribute is:
 there is no execution to model, and the assertion is exactly "this text does
@@ -4559,6 +4568,21 @@ instead of rotting" — and because it is half of the only measured way past the
 gate's flags. The two guard lints are included because silencing the reporter
 is the one suppression nothing else would report.
 
+That second job sets the membership rule, and it is not "can this reach the
+policy lint". `clippy::restriction` is in the set although it cannot reach the
+policy lint at all — `disallowed_methods` sits in `all` and `style`, and
+allowing `restriction` leaves the policy lint firing at exit 101. It is in the
+set because it is the *group* of both guard lints, so a single crate-level
+`#![allow(clippy::restriction, reason = "…")]` silences them together and an
+item-level bare `allow` further down then passes unreported: measured at exit 0
+where the same file without the crate attribute exits 101. That is the escape
+hatch this module exists to close, since `allow_attributes` does not fire on
+the inner form, and `blanket_clippy_restriction_lints` — denied in the
+workspace — does not cover the attribute route either, firing only on a
+group-level `-W clippy::restriction` and reporting nothing for an attribute
+naming the group. So the rule is: a name is banned when a measurement shows it
+silencing something this module protects, and that is decided per name.
+
 A `warn` attribute is deliberately *not* matched, and the reason is measured
 rather than assumed, because it is the obvious next question. A `warn` of the
 policy lint does lower it — bare `cargo clippy` exits 0 where the same file
@@ -4607,6 +4631,15 @@ suppress anything would be a rule the code cannot justify. The workspace denies
 `unknown_lints` anyway, which is where that concern belongs. The lesson is the
 one this section keeps relearning: measure the mechanism before writing the
 rule, and do not add a name because it looks like it belongs.
+
+The measurement has to be applied to the name and not to the category, or the
+rule cuts the other way and takes out entries it should keep. "Cannot suppress
+anything" is the test — not "cannot suppress the policy lint", which would also
+excuse the two guard lints and `clippy::restriction`, all three of which
+silence something. Reading the rule as the second form is what kept
+`restriction` out of the set for a round of review, and it would have been a
+real hole: it is the group of the guard lints, and nothing else reports a crate
+that has silenced the reporter.
 
 Three files are exempt, and only for those two guard lints:
 `src/runner/error.rs`, `src/manifest/diagnostics/mod.rs`, and

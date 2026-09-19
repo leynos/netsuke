@@ -58,8 +58,10 @@
 //! outer, `cfg_attr`-wrapped, the group and alias names, and the guard-lint
 //! forms — and every one exits 101 under the gate's flags while the bare run
 //! silences the same file. Reporting a shape that cannot pass a gate would be a
-//! rule the code cannot justify, which is the same reasoning that leaves
-//! `unknown_lints` out of the banned set.
+//! rule the code cannot justify. Whether a name belongs in the banned set is
+//! decided per name by what it can reach, not by which category it looks like it
+//! belongs to — the criterion [`policy`](super::policy) states and the one that
+//! admits `clippy::restriction` while leaving `unknown_lints` out.
 //!
 //! The exception is a `warn` of the policy lint seated beside an
 //! `allow(warnings)`, and it is the one measured way past the gate's flags. The
