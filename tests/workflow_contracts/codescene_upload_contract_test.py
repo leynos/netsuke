@@ -25,6 +25,8 @@ repository assertion pass by finding nothing to object to.
 Run via ``make test-workflow-contracts``.
 """
 
+import copy
+
 import pytest
 from ci_coverage_wiring_invariants import (
     GENERATE_COVERAGE_ACTION,
@@ -34,6 +36,7 @@ from codescene_credential_invariants import (
     CREDENTIAL_ENVIRONMENT_KEY,
     CREDENTIAL_INPUT,
 )
+from codescene_report_validation_invariants import REPORT_VALIDATION_STEP
 from codescene_upload_invariants import (
     CHECKSUM_INPUTS,
     CODESCENE_UPLOAD_STEP,
@@ -41,7 +44,6 @@ from codescene_upload_invariants import (
     COVERAGE_STEP,
     OUTPUT_PATH_INPUT,
     PUBLICATION_OPT_OUT_INPUT,
-    REPORT_VALIDATION_STEP,
     UPLOAD_PATH_INPUT,
     upload_contract_offenders,
 )
@@ -79,6 +81,31 @@ def test_the_detectors_report_a_lane_whose_steps_are_renamed(step_name: str) -> 
     step_of(steps, step_name)["name"] = f"{step_name} (renamed)"
     assert upload_contract_offenders(steps), (
         f"renaming {step_name!r} must be reported as a missing step"
+    )
+
+
+@pytest.mark.parametrize(
+    "step_name", [COVERAGE_STEP, REPORT_VALIDATION_STEP, CODESCENE_UPLOAD_STEP]
+)
+def test_the_detectors_report_a_lane_that_declares_a_step_twice(
+    step_name: str,
+) -> None:
+    """Fail a lane holding two steps under one name, not just the first.
+
+    GitHub keys nothing on a step's name, so the second step of a repeated name
+    runs whether or not a contract looked at it. A contract that inspected the
+    first match alone would report the lane clean while an unpinned or ungated
+    duplicate executed beside the step it certified — which is what a
+    copy-pasted step produces, since it keeps the original's name.
+    """
+    steps = clean_steps()
+    duplicate = copy.deepcopy(step_of(steps, step_name))
+    duplicate["uses"] = GENERATE_COVERAGE_ACTION
+    steps.append(duplicate)
+    offenders = upload_contract_offenders(steps)
+    assert offenders, (
+        f"a second step named {step_name!r} must be reported: the contract "
+        f"examined only the step it found first"
     )
 
 
@@ -131,6 +158,18 @@ def test_the_detectors_report_a_reordered_lane(step_name: str) -> None:
             ),
             "must copy",
         ),
+        # Moving the report rather than copying it empties the workspace the
+        # upload reads it from, so the validation would pass over a report the
+        # submission could no longer find.
+        (
+            (
+                'staged="$(mktemp --directory)"\n'
+                'mv -- lcov.info "${staged}/lcov.info"\n'
+                "uv run --no-project --python 3.14 "
+                'scripts/validate_coverage_artifact.py --artifact-dir "${staged}"'
+            ),
+            "must copy",
+        ),
     ],
 )
 def test_the_detectors_report_a_validation_step_that_checks_nothing(
@@ -143,7 +182,9 @@ def test_the_detectors_report_a_validation_step_that_checks_nothing(
     rejects — and it would do so in the lane that runs most expensively. The
     same is true of a step that reads the right validator over a directory it
     never put the report into: everything about the invocation looks correct,
-    and none of it touches the artefact.
+    and none of it touches the artefact. So is a step that moves the report
+    into that directory: the check reads the artefact, and leaves the
+    workspace without the copy the upload has yet to make.
     """
     steps = clean_steps()
     step_of(steps, REPORT_VALIDATION_STEP)["run"] = replacement
@@ -246,6 +287,18 @@ def test_the_detectors_report_an_upload_that_cannot_be_gated_on() -> None:
         # evaluated against `env`, so a `secrets.` reference there is not the
         # exported variable and does not prove the step is gated on it.
         ("if", f"${{{{ secrets.{CREDENTIAL_ENVIRONMENT_KEY} != '' }}}}"),
+        # A `secrets.` value that reads the credential off the step's own
+        # environment. It contains `secrets.` while naming no secret: the name
+        # comes from `env`, and the upload would be handed whatever the runner
+        # left there rather than the repository's token.
+        (
+            "env",
+            f"${{{{ env.secrets.{CREDENTIAL_ENVIRONMENT_KEY} }}}}",
+        ),
+        # A credential that is only spelled inside a string literal. The
+        # comparison is a non-empty literal against the empty string, so it is
+        # always true and gates nothing.
+        ("if", f"${{{{ 'env.{CREDENTIAL_ENVIRONMENT_KEY}' != '' }}}}"),
     ]
     for field, replacement in cases:
         assert upload_contract_offenders(mutated(field, replacement)), (

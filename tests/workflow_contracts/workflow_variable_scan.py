@@ -74,6 +74,11 @@ REFERENCE_IDENTIFIER: typ.Final[re.Pattern[str]] = re.compile(
     r"\b(?P<namespace>[A-Za-z_][A-Za-z0-9_]*)\.(?P<name>[A-Za-z_][A-Za-z0-9_]*)"
 )
 
+#: Matches one single-quoted string literal in an expression body, as GitHub
+#: Actions spells them. Double quotes are not string delimiters in that
+#: grammar, so they are deliberately not matched.
+EXPRESSION_STRING: typ.Final[re.Pattern[str]] = re.compile(r"'[^']*'")
+
 #: The one repository variable the workflows legitimately read, and the one
 #: place a `vars.` expression is allowed to appear in the coverage lane: it
 #: selects between the two sccache backends. Every other `vars.` reference is a
@@ -145,7 +150,10 @@ def expression_references(value: str, *, bare: bool = False) -> list[tuple[str, 
     list[tuple[str, str]]
         One pair per identifier, in the order it appears, with repeats kept:
         a caller asking whether a name is *used* is served by membership, and a
-        caller asking how often is served by the length.
+        caller asking how often is served by the length. An identifier inside a
+        quoted string is not enumerated: GitHub's expression grammar only
+        treats a name as a reference when it is written unquoted, so
+        ``${{ 'env.TOKEN' != '' }}`` names no variable and is not a gate.
     """
     bodies = [region.group("body") for region in EXPRESSION_REGION.finditer(value)]
     if bare:
@@ -153,7 +161,7 @@ def expression_references(value: str, *, bare: bool = False) -> list[tuple[str, 
     return [
         (match.group("namespace"), match.group("name"))
         for body in bodies
-        for match in REFERENCE_IDENTIFIER.finditer(body)
+        for match in REFERENCE_IDENTIFIER.finditer(EXPRESSION_STRING.sub("", body))
     ]
 
 

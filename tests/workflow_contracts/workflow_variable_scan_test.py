@@ -9,7 +9,7 @@ Run via ``make test-workflow-contracts``.
 """
 
 import pytest
-from workflow_variable_scan import unbound_variable_references
+from workflow_variable_scan import expression_references, unbound_variable_references
 
 #: A variable this repository has never declared, spelled as a workflow would
 #: write it.
@@ -119,3 +119,53 @@ def test_a_step_with_no_reference_is_clean() -> None:
         "uses": "actions/checkout@abc123",
         "with": {"persist-credentials": "false"},
     }), "a step reading no repository variable must be reported clean"
+
+
+def test_an_identifier_is_read_with_its_namespace() -> None:
+    """Pair each name with the namespace it is addressed through.
+
+    The pair is what a caller compares against a name it expects. A caller
+    asking whether a value *contains* `CS_ACCESS_TOKEN` is asking about the
+    text, and `env.NOT_CS_ACCESS_TOKEN` contains it; asking whether some
+    identifier's name *is* the credential is the question about the reference.
+    """
+    assert expression_references("${{ env.CS_ACCESS_TOKEN }}") == [
+        ("env", "CS_ACCESS_TOKEN")
+    ], "a reference must report its namespace and its name"
+
+
+@pytest.mark.parametrize(
+    ("label", "value"),
+    [
+        # GitHub's expression grammar delimits strings with single quotes and
+        # gives no meaning to double quotes, so only the first is a literal.
+        ("single-quoted", "${{ 'env.CS_ACCESS_TOKEN' != '' }}"),
+        ("quoted operand", "${{ 'x' == 'secrets.TOKEN' }}"),
+    ],
+)
+def test_an_identifier_inside_a_string_literal_is_not_a_reference(
+    label: str, value: str
+) -> None:
+    """Read a quoted name as text rather than as an address.
+
+    GitHub treats a name as a reference only when it is written unquoted, so
+    `${{ 'env.CS_ACCESS_TOKEN' != '' }}` compares a non-empty string literal
+    against the empty string: always true, naming no variable, gating nothing.
+    A caller holding a step to an exact reference has to see that difference,
+    or a gate spelled that way satisfies it while gating nothing at all.
+    """
+    assert not expression_references(value), (
+        f"an identifier inside a {label} string names nothing"
+    )
+
+
+def test_an_identifier_is_read_outside_a_string_literal() -> None:
+    """Keep reading the reference a literal sits beside.
+
+    Stripping quoted text is not the same as refusing a value that holds any.
+    An expression may compare a literal with a real reference, and the
+    reference is still the one the step is gated on.
+    """
+    assert expression_references("${{ env.CS_ACCESS_TOKEN != 'x' }}") == [
+        ("env", "CS_ACCESS_TOKEN")
+    ], "a real reference beside a literal must still be read"
