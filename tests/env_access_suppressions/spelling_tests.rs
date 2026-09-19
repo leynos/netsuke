@@ -2,7 +2,7 @@
 //!
 //! `mask` blanks comments and literals, so what remains is code and the scan can
 //! match an attribute token by token rather than by the shape of the line it
-//! sits on. These tests pin the spellings that matter: `rustc` accepts each of
+//! sits on. These cases pin the spellings that matter: `rustc` accepts each of
 //! them, `#[rustfmt::skip]` freezes several past `make check-fmt`, and every one
 //! of them silences the policy exactly as the canonical spelling does. Each was
 //! measured against a real probe file before it was pinned here, so the set is
@@ -12,180 +12,116 @@
 //! them is gone. Prose that quotes an attribute is still not an attribute — not
 //! because of where the line begins, but because quoted text never reaches the
 //! matcher at all.
+//!
+//! `malformed_input_is_not_a_panic` stays a test of its own: it asserts
+//! something weaker than the rest — that the matcher returns at all — over
+//! inputs that are not shapes so much as the absence of one.
 
+use super::expected_findings;
 use super::scanner::scan_source;
 use anyhow::{Result, ensure};
+use rstest::rstest;
 
-/// The policy lint `"(path, lint)"` pair these tests expect to see reported.
-fn finding(path: &str, lint: &str) -> (String, String) {
-    (String::from(path), String::from(lint))
-}
-
-/// A `#[rustfmt::skip]` freezes the spelling, so the scan must read it anyway.
+/// The evading spellings, and the innocent ones the anchor used to exclude.
 ///
-/// This is the shape that motivated the token-wise match. `rustfmt` would join
-/// the marker to its parenthesis, but the skip attribute tells it not to, and
-/// `make check-fmt` then passes a file whose attribute is split. Measured: the
-/// file compiles, the policy is silenced, and both `clippy` exit codes are 0.
-#[test]
-fn a_skipped_split_attribute_is_reported() -> Result<()> {
-    let source = "#[rustfmt::skip]\n#[allow\n    (clippy::disallowed_methods, reason = \"escape hatch probe\")]\nfn probe() {}\n";
+/// An empty list means the source is not an offence. The raw-identifier rows
+/// are the dangerous group: they need no `#[rustfmt::skip]`, so `rustfmt`
+/// leaves them byte-for-byte and they were reachable on a clean
+/// `make check-fmt` run even while the anchor stood.
+#[rstest]
+// A `#[rustfmt::skip]` freezes the spelling, so the scan must read it anyway.
+// `rustfmt` would join the marker to its parenthesis, but the skip attribute
+// tells it not to, and `make check-fmt` then passes a file whose attribute is
+// split. Measured: the file compiles, the policy is silenced, and both clippy
+// exit codes are 0.
+#[case::skipped_split_attribute(
+    "#[rustfmt::skip]\n#[allow\n    (clippy::disallowed_methods, reason = \"escape hatch probe\")]\nfn probe() {}\n",
+    &["clippy::disallowed_methods"]
+)]
+// A newline between the marker and its parenthesis is the same attribute.
+#[case::newline_inside_the_marker(
+    "#![allow(\nclippy::disallowed_methods, reason = \"escape hatch probe\")]\n",
+    &["clippy::disallowed_methods"]
+)]
+// A newline between the `#` and the `[` is legal, and silences the policy.
+#[case::newline_before_the_bracket(
+    "#\n[allow(warnings, reason = \"escape hatch probe\")]\nfn probe() {}\n",
+    &["warnings"]
+)]
+// A blank line between the marker and its parenthesis is still one attribute.
+// Whitespace between tokens is not limited to a single newline, and a
+// `#[rustfmt::skip]` can hold the gap open however wide it likes.
+#[case::blank_line_before_the_parenthesis(
+    "#[rustfmt::skip]\n#[allow\n\n    (clippy::disallowed_methods, reason = \"escape hatch probe\")]\nfn probe() {}\n",
+    &["clippy::disallowed_methods"]
+)]
+// A raw identifier names the same attribute.
+#[case::raw_identifier_attribute_name(
+    "#![r#allow(clippy::disallowed_methods, reason = \"escape hatch probe\")]\n",
+    &["clippy::disallowed_methods"]
+)]
+// A raw identifier names the same lint path.
+#[case::raw_identifier_lint_path(
+    "#![allow(r#clippy::disallowed_methods, reason = \"escape hatch probe\")]\n",
+    &["clippy::disallowed_methods"]
+)]
+// Whitespace around a path separator does not rename the lint.
+#[case::spaces_around_the_path_separator(
+    "#![allow(clippy :: disallowed_methods, reason = \"escape hatch probe\")]\n",
+    &["clippy::disallowed_methods"]
+)]
+// The deprecated bare name is an alias, and is reported beside its enabler.
+// Measured twice: beside `renamed_and_removed_lints` the bare name silences the
+// policy at clippy exit 0, and without it the same attribute exits 101. So it
+// is the enabler that closes the class and the alias that keeps the pair
+// honest, exactly as with the path-qualified spelling.
+#[case::deprecated_bare_name_with_enabler(
+    "#![allow(renamed_and_removed_lints, disallowed_methods, reason = \"escape hatch probe\")]\n",
+    &["renamed_and_removed_lints", "disallowed_methods"]
+)]
+// `unknown_lints` cannot suppress the policy, so it is not banned. It looks as
+// though it belongs in the set — it hides the report that a name does not exist
+// — but measurement says a misspelled name is a no-op either way, so allowing
+// the report silences nothing. A rule the code cannot justify is worse than an
+// absent one; this row is what keeps the entry from being added back on the
+// strength of a plausible-sounding rationale.
+#[case::unknown_lints_enabler_alone(
+    "#![allow(unknown_lints, reason = \"escape hatch probe\")]\n",
+    &[]
+)]
+// An attribute quoted inside a line comment is prose, not code. The line anchor
+// used to be what excluded this; the masked text excludes it now, which is what
+// lets the matcher read attributes split across lines.
+#[case::attribute_in_a_line_comment(
+    "let probe = 1; // #[allow(warnings, reason = \"quoted example\")]\n",
+    &[]
+)]
+// A `cfg_attr` whose wrapped body holds the `allow` is read whole.
+#[case::wrapped_cfg_attr_allow(
+    "#[cfg_attr(\n    all(),\n    allow(clippy::disallowed_methods, reason = \"escape hatch probe\"),\n)]\nfn probe() {}\n",
+    &["clippy::disallowed_methods"]
+)]
+// An `#[expect]` carrying the policy lint is the sanctioned form, not an
+// offence. The seam taxonomy asks for an `expect` with a reason precisely so
+// that the suppression is tied to a site that still exists. The scan must not
+// read it as an `allow`, and `.expect(...)` method calls must not be read at
+// all.
+#[case::expect_carrying_the_policy_lint(
+    "#![expect(clippy::disallowed_methods, reason = \"sanctioned site\")]\n\
+     fn probe() {\n\
+     \x20   let value = std::env::var(\"X\");\n\
+     \x20   assert!(value.is_err());\n\
+     }\n",
+    &[]
+)]
+fn the_scan_reads_each_spelling_the_same_way(
+    #[case] source: &str,
+    #[case] expected_lints: &[&str],
+) -> Result<()> {
     let findings = scan_source("src/lib.rs", source);
-
     ensure!(
-        findings == [finding("src/lib.rs", "clippy::disallowed_methods")],
-        "expected the split attribute to be reported, got {findings:?}"
-    );
-    Ok(())
-}
-
-/// A newline between the marker and its parenthesis is the same attribute.
-#[test]
-fn a_newline_inside_the_marker_is_reported() -> Result<()> {
-    let source = "#![allow(\nclippy::disallowed_methods, reason = \"escape hatch probe\")]\n";
-    let findings = scan_source("src/lib.rs", source);
-
-    ensure!(
-        findings == [finding("src/lib.rs", "clippy::disallowed_methods")],
-        "expected the newline inside the marker to be read through, got {findings:?}"
-    );
-    Ok(())
-}
-
-/// A newline between the `#` and the `[` is legal, and silences the policy.
-#[test]
-fn a_newline_between_the_hash_and_the_bracket_is_reported() -> Result<()> {
-    let source = "#\n[allow(warnings, reason = \"escape hatch probe\")]\nfn probe() {}\n";
-    let findings = scan_source("src/lib.rs", source);
-
-    ensure!(
-        findings == [finding("src/lib.rs", "warnings")],
-        "expected the split marker to be reported, got {findings:?}"
-    );
-    Ok(())
-}
-
-/// A raw identifier names the same attribute.
-#[test]
-fn a_raw_identifier_attribute_name_is_reported() -> Result<()> {
-    let source = "#![r#allow(clippy::disallowed_methods, reason = \"escape hatch probe\")]\n";
-    let findings = scan_source("src/lib.rs", source);
-
-    ensure!(
-        findings == [finding("src/lib.rs", "clippy::disallowed_methods")],
-        "expected the raw-identifier attribute to be reported, got {findings:?}"
-    );
-    Ok(())
-}
-
-/// A raw identifier names the same lint path.
-#[test]
-fn a_raw_identifier_lint_path_is_reported() -> Result<()> {
-    let source = "#![allow(r#clippy::disallowed_methods, reason = \"escape hatch probe\")]\n";
-    let findings = scan_source("src/lib.rs", source);
-
-    ensure!(
-        findings == [finding("src/lib.rs", "clippy::disallowed_methods")],
-        "expected the raw-identifier lint path to be reported, got {findings:?}"
-    );
-    Ok(())
-}
-
-/// Whitespace around a path separator does not rename the lint.
-#[test]
-fn spaces_around_the_path_separator_are_reported() -> Result<()> {
-    let source = "#![allow(clippy :: disallowed_methods, reason = \"escape hatch probe\")]\n";
-    let findings = scan_source("src/lib.rs", source);
-
-    ensure!(
-        findings == [finding("src/lib.rs", "clippy::disallowed_methods")],
-        "expected the spaced lint path to be reported, got {findings:?}"
-    );
-    Ok(())
-}
-
-/// The deprecated bare name is an alias, and is reported beside its enabler.
-///
-/// Measured twice: beside `renamed_and_removed_lints` the bare name silences
-/// the policy at `clippy` exit 0, and without it the same attribute exits 101.
-/// So it is the enabler that closes the class and the alias that keeps the pair
-/// honest, exactly as with the path-qualified spelling.
-#[test]
-fn the_deprecated_bare_name_is_reported_with_its_enabler() -> Result<()> {
-    let source = "#![allow(renamed_and_removed_lints, disallowed_methods, reason = \"escape hatch probe\")]\n";
-    let findings = scan_source("src/lib.rs", source);
-
-    ensure!(
-        findings
-            == [
-                finding("src/lib.rs", "renamed_and_removed_lints"),
-                finding("src/lib.rs", "disallowed_methods")
-            ],
-        "expected both the enabler and the bare name to be reported, got {findings:?}"
-    );
-    Ok(())
-}
-
-/// `unknown_lints` cannot suppress the policy, so it is not banned.
-///
-/// It looks as though it belongs in the set — it hides the report that a name
-/// does not exist — but measurement says a misspelled name is a no-op either
-/// way, so allowing the report silences nothing. A rule the code cannot justify
-/// is worse than an absent one; this test is what keeps the entry from being
-/// added back on the strength of a plausible-sounding rationale.
-#[test]
-fn the_unknown_lint_enabler_is_not_a_finding_on_its_own() -> Result<()> {
-    let source = "#![allow(unknown_lints, reason = \"escape hatch probe\")]\n";
-    let findings = scan_source("src/lib.rs", source);
-
-    ensure!(
-        findings.is_empty(),
-        "expected the unknown-lint enabler to pass on its own, got {findings:?}"
-    );
-    Ok(())
-}
-
-/// An attribute quoted inside a line comment is prose, not code.
-///
-/// The line anchor used to be what excluded this; the masked text excludes it
-/// now, which is what lets the matcher read attributes split across lines.
-#[test]
-fn an_attribute_quoted_in_a_line_comment_is_not_reported() -> Result<()> {
-    let source = "let probe = 1; // #[allow(warnings, reason = \"quoted example\")]\n";
-    let findings = scan_source("src/lib.rs", source);
-
-    ensure!(
-        findings.is_empty(),
-        "expected a commented-out attribute to pass, got {findings:?}"
-    );
-    Ok(())
-}
-
-/// A blank line between the marker and its parenthesis is still one attribute.
-///
-/// Whitespace between tokens is not limited to a single newline, and a
-/// `#[rustfmt::skip]` can hold the gap open however wide it likes.
-#[test]
-fn a_blank_line_before_the_parenthesis_is_reported() -> Result<()> {
-    let source = "#[rustfmt::skip]\n#[allow\n\n    (clippy::disallowed_methods, reason = \"escape hatch probe\")]\nfn probe() {}\n";
-    let findings = scan_source("src/lib.rs", source);
-
-    ensure!(
-        findings == [finding("src/lib.rs", "clippy::disallowed_methods")],
-        "expected the widely split attribute to be reported, got {findings:?}"
-    );
-    Ok(())
-}
-
-/// A `cfg_attr` whose wrapped body holds the `allow` is read whole.
-#[test]
-fn a_wrapped_cfg_attr_allow_is_reported() -> Result<()> {
-    let source = "#[cfg_attr(\n    all(),\n    allow(clippy::disallowed_methods, reason = \"escape hatch probe\"),\n)]\nfn probe() {}\n";
-    let findings = scan_source("src/lib.rs", source);
-
-    ensure!(
-        findings == [finding("src/lib.rs", "clippy::disallowed_methods")],
-        "expected the wrapped cfg_attr allow to be reported, got {findings:?}"
+        findings == expected_findings("src/lib.rs", expected_lints),
+        "expected {expected_lints:?}, got {findings:?} for {source:?}"
     );
     Ok(())
 }
@@ -229,26 +165,5 @@ fn malformed_input_is_not_a_panic() -> Result<()> {
             "a finding should name a path and a lint, got {findings:?} for {case:?}"
         );
     }
-    Ok(())
-}
-
-/// An `#[expect]` carrying the policy lint is the sanctioned form, not an offence.
-///
-/// The seam taxonomy asks for an `expect` with a reason precisely so that the
-/// suppression is tied to a site that still exists. The scan must not read it as
-/// an `allow`, and `.expect(...)` method calls must not be read at all.
-#[test]
-fn an_expect_carrying_the_policy_lint_is_not_reported() -> Result<()> {
-    let source = "#![expect(clippy::disallowed_methods, reason = \"sanctioned site\")]\n\
-                  fn probe() {\n\
-                  \x20   let value = std::env::var(\"X\");\n\
-                  \x20   assert!(value.is_err());\n\
-                  }\n";
-    let findings = scan_source("src/lib.rs", source);
-
-    ensure!(
-        findings.is_empty(),
-        "expected the sanctioned expect form to pass, got {findings:?}"
-    );
     Ok(())
 }
