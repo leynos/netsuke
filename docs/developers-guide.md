@@ -6898,13 +6898,15 @@ paths, configuration values, or error text as metric labels.
 Four independent timers can end a test run. The canonical statement of the
 ordering between them lives in `leynos/shared-actions`' users' guide, under
 "Test timeouts: four tiers, outermost last"
-([`docs/users-guide.md`](https://github.com/leynos/shared-actions/blob/main/docs/users-guide.md#test-timeouts-four-tiers-outermost-last)),
-and the `generate-coverage` README's guidance points there rather than
-restating it, so that a second copy cannot drift from the contract that
-enforces it. That guide does not yet carry the report-phase term or the second
-watchdog window a `doctests: 'true'` step arms, so for the coverage contract
-the arithmetic below is the statement of record, and it is the one to read
-until both readings are fed back upstream.
+([`docs/users-guide.md`][shared-actions-users-guide]), and the
+`generate-coverage` README's guidance points there rather than restating it, so
+that a second copy cannot drift from the contract that enforces it. That guide
+does not yet carry the report-phase term or the second watchdog window a
+`doctests: 'true'` step arms, so for the coverage contract the arithmetic below
+is the statement of record, and it is the one to read until both readings are
+fed back upstream.
+
+[shared-actions-users-guide]: https://github.com/leynos/shared-actions/blob/main/docs/users-guide.md#test-timeouts-four-tiers-outermost-last
 
 All four tiers are set here.
 

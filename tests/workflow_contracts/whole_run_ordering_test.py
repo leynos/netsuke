@@ -111,6 +111,25 @@ def test_the_required_watchdog_carries_all_four_terms() -> None:
     )
 
 
+def test_the_report_phase_allowance_is_the_value_the_guide_states() -> None:
+    """The term the guide states in seconds, pinned by value.
+
+    The ordering case above builds its expectation from this constant, so
+    it fails when the term is dropped from ``watchdog_required_for`` but
+    agrees with any value the constant happens to hold.
+    ``whole_run_value_test`` pins tier two the same way, and for the
+    same reason: a term nothing states is a term nothing chose.
+
+    Proved by mutation: changing the constant to any other duration fails
+    this case while the ordering case still passes.
+    """
+    assert fractions.Fraction(5 * 60) == REPORT_PHASE_ALLOWANCE_SECONDS, (
+        "the report-phase allowance is 300 s, the worst measured phase plus "
+        "headroom; the arithmetic in the developers' guide is stated against "
+        "that value, so a change here has to reach it"
+    )
+
+
 def test_a_whole_run_below_the_per_test_allowance_is_a_fault() -> None:
     """The run would end before the slowest test could use its budget.
 

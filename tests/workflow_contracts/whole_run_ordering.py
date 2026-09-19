@@ -27,15 +27,31 @@ if typ.TYPE_CHECKING:
 
 
 def watchdog_required_for(config_text: str) -> fractions.Fraction | None:
-    """Return the watchdog a configured whole-run budget demands, or None."""
-    # Four terms. The whole-run budget is what nextest may spend once
-    # tests begin; the termination allowance is what it may spend
-    # stopping them; the cold-build allowance is what `cargo` spends
-    # before nextest's clock starts at all, which the watchdog covers
-    # and the whole-run budget does not; and the report-phase allowance
-    # is what `cargo llvm-cov` spends after nextest's clock stops
-    # merging profile data and writing `lcov.info`, which the watchdog
-    # likewise covers and the whole-run budget does not.
+    """Return the watchdog a configured whole-run budget demands, or None.
+
+    Four terms. The whole-run budget is what nextest may spend once tests
+    begin; the termination allowance is what it may spend stopping them;
+    the cold-build allowance is what ``cargo`` spends before nextest's
+    clock starts at all, which the watchdog covers and the whole-run
+    budget does not; and the report-phase allowance is what ``cargo
+    llvm-cov`` spends after nextest's clock stops merging profile data and
+    writing ``lcov.info``, which the watchdog likewise covers and the
+    whole-run budget does not.
+
+    Parameters
+    ----------
+    config_text : str
+        The text of a nextest configuration file.
+
+    Returns
+    -------
+    fractions.Fraction | None
+        The watchdog those four terms require, exactly, or ``None`` when
+        the configuration sets no ``global-timeout`` -- there is then no
+        whole-run budget to derive a requirement from, and the ordering
+        rule says nothing about a file that is incomplete rather than
+        wrong.
+    """
     whole_run = global_timeout(config_text)
     if whole_run is None:
         return None
