@@ -137,9 +137,11 @@ fn a_machine_local_name_is_skipped_at_any_depth() -> Result<()> {
 /// switched off for the same reason. A contributor with a global ignore file
 /// listing a name here would otherwise see the test pass while the repository
 /// says nothing about that name, which is the original defect wearing a
-/// different hat. `core.excludesFile=/dev/null` empties the configured path and
-/// an empty `core.excludesPath` suppresses the default `~/.config/git/ignore`,
-/// which needs both because git consults one or the other.
+/// different hat. Setting `core.excludesFile` to `/dev/null` covers both
+/// spellings a global ignore can take: it overrides a configured path, and it
+/// also suppresses the default `~/.config/git/ignore`, measured with the
+/// default present and no path configured — a bare path-setting flag is not
+/// needed for the second, and had been written here as though it were.
 ///
 /// `.git` is the one legitimate exception: git refuses to track anything
 /// beneath it whatever the ignore files say, so the appeal still holds even
@@ -190,11 +192,10 @@ fn every_skipped_name_is_one_git_would_not_track() -> Result<()> {
 /// Return whether the repository at `root` ignores a source under `name`.
 ///
 /// The machine's global ignore file is disabled first, so the answer comes from
-/// the repository copied into `root` and from nothing else. Both spellings are
-/// needed: `core.excludesFile` overrides the configured path, and an empty
-/// `core.excludesPath` suppresses the default `~/.config/git/ignore`, which git
-/// falls back to when no path is configured — a contributor who has the second
-/// but not the first would otherwise get a pass the repository does not justify.
+/// the repository copied into `root` and from nothing else. `core.excludesFile`
+/// is the only key that needs setting: `/dev/null` overrides a configured path
+/// and equally suppresses the default `~/.config/git/ignore`, so one flag covers
+/// both ways a contributor's machine can answer for the repository.
 ///
 /// `check-ignore -q` reports by exit status: 0 ignored, 1 not ignored. Every
 /// other status is a real failure and propagates, so "git could not answer" is
@@ -204,8 +205,6 @@ fn is_ignored(root: &Utf8Path, name: &str) -> Result<bool> {
         .args([
             "-c",
             "core.excludesFile=/dev/null",
-            "-c",
-            "core.excludesPath=",
             "check-ignore",
             "-q",
             &format!("{name}/probe.rs"),
