@@ -170,7 +170,7 @@ operator, user, and contributor references are easier to find.
 - [ADR-026](adr-026-manifest-environment-access-policy.md):
   Exact-name manifest environment policy evaluated before the reader, with
   project allow entries quarantined below the operator ceiling.
-- [ADR-026](adr-026-windows-reparse-point-same-handle-open.md): Windows final
+- [ADR-027](adr-027-windows-reparse-point-same-handle-open.md): Windows final
   component validation through a same-handle reparse-point open.
 
 ## Proposals
