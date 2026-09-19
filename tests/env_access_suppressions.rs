@@ -145,13 +145,22 @@ fn is_rust_source(name: &str) -> bool {
 /// comparing the whole workspace-relative path against a list of root
 /// directories. That is the rule `.gitignore` already states — its patterns
 /// carry no leading slash, so `target/`, `memories/`, and `__pycache__/` are
-/// ignored at every level, and this list is derived from them. Matching by name
+/// ignored at every level, and the list is drawn from them. Matching by name
 /// keeps the two in step: a name git will not track is not a name a compiled
 /// source can live under without `git add -f`, which is deliberate
 /// circumvention rather than an accident this invariant is shaped to catch.
 /// Verified both ways: `git ls-files` finds no tracked path beneath any of the
 /// fifteen names at any depth, and every nested occurrence in the tree sits
 /// inside another skipped directory or a cache.
+///
+/// That appeal to `.gitignore` is only sound while it holds for every name, so
+/// it is enforced rather than trusted. It did not hold once: `.netsuke` is
+/// netsuke's own runtime state, but it was skipped while `git check-ignore`
+/// declined it — every sibling tool cache is listed, and it was missed — so a
+/// `.rs` file placed there would have been tracked, compiled, skipped by the
+/// walk, and reported by nobody. The name is now in `.gitignore` like its
+/// siblings, and the walk's self-test requires each skipped name to be one git
+/// would not track, with `.git` as the single named exception.
 ///
 /// The list is named rather than "anything dot-prefixed", and that distinction
 /// is the point. A dot-directory is not evidence of a cache: `.config`,

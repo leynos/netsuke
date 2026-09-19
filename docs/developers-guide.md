@@ -4461,6 +4461,18 @@ the two rules could disagree, the tie breaks towards reporting: an entry
 missing from the list costs a false failure naming a real file, while an entry
 present but wrong hides a source.
 
+The skip is justified by an appeal to `.gitignore` — a name git will not track
+is not one a compiled source can live under — and that appeal is enforced
+rather than trusted, because it stopped being true once. `.netsuke` is
+netsuke's own runtime state, but it was skipped while `git check-ignore`
+declined it; every sibling tool cache is listed and it had been missed. A `.rs`
+file placed there would have been tracked, compiled, skipped by the walk, and
+reported by nobody, which is the failure the invariant exists to catch arriving
+through the list rather than the walk. The name is now in `.gitignore`, as
+`git check-ignore` confirms, and the walk's self-test requires each skipped
+name to be one git would not track. `.git` is the single named exception: git
+refuses to track anything beneath it whatever the ignore files say.
+
 It reads the attribute as source text, because that is what an attribute is:
 there is no execution to model, and the assertion is exactly "this text does
 not appear in an `allow` attribute". An attribute nested in a `cfg_attr` is
@@ -4508,21 +4520,21 @@ and it is not shown what a skip attribute covers — so the matcher tolerates
 whitespace between tokens and reads the raw prefix instead of trusting a gate
 to have removed them.
 
-The banned set follows the lint hierarchy rather than spelling one name.
-`disallowed_methods` is declared in Clippy's `style` group, so allowing that
-group silences the policy just as naming the lint does, and `clippy::all` sits
-above it; both were measured at exit 0 under the gate's own flags. `warnings`
-is banned as well, but not because it sits above them — it does not. The
-`warnings` group is the set of lints *currently at* `warn`, and Cargo passes
-`[workspace.lints]` as command-line denies, so the policy lint is at `deny` and
-outside the group: `#![allow(warnings)]` alone leaves it firing, measured at
-exit 101 bare and gated. It stays in the set because it silences every
-warn-level lint under the gate, because it silences
-`unfulfilled_lint_expectations` — the self-removal mechanism `clippy.toml`
-relies on when it says the backlog "removes itself instead of rotting" — and
-because it is half of the only measured way past the gate's flags. The two
-guard lints are included because silencing the reporter is the one suppression
-nothing else would report.
+The banned set names lints rather than spelling one form, and it follows the
+lint hierarchy where the hierarchy applies. `disallowed_methods` is declared in
+Clippy's `style` group, so allowing that group silences the policy just as
+naming the lint does, and `clippy::all` sits above it; both were measured at
+exit 0 under the gate's own flags. `warnings` is banned as well, but not
+because it sits above them — it does not. The `warnings` group is the set of
+lints *currently at* `warn`, and Cargo passes `[workspace.lints]` as
+command-line denies, so the policy lint is at `deny` and outside the group:
+`#![allow(warnings)]` alone leaves it firing, measured at exit 101 bare and
+gated. It stays in the set because it silences every warn-level lint under the
+gate, because it silences `unfulfilled_lint_expectations` — the self-removal
+mechanism `clippy.toml` relies on when it says the backlog "removes itself
+instead of rotting" — and because it is half of the only measured way past the
+gate's flags. The two guard lints are included because silencing the reporter
+is the one suppression nothing else would report.
 
 A `warn` attribute is deliberately *not* matched, and the reason is measured
 rather than assumed, because it is the obvious next question. A `warn` of the

@@ -9,6 +9,7 @@ memories/
 vtcode.toml
 .memdb/
 .grepai/
+.netsuke/
 build.ninja
 *:Zone.Identifier
 /graph.dot
