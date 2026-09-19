@@ -141,6 +141,56 @@ def inputs_of(step: dict[str, object]) -> dict[str, object]:
     return with_ if isinstance(with_, dict) else {}
 
 
+#: The three steps the report-delivery contract is about, in the order the
+#: lane must declare them.
+REPORT_STEP_NAMES: typ.Final[tuple[str, ...]] = (
+    COVERAGE_STEP,
+    REPORT_VALIDATION_STEP,
+    CODESCENE_UPLOAD_STEP,
+)
+
+
+def report_steps(
+    steps: cabc.Sequence[dict[str, object]],
+) -> tuple[dict[str, object], dict[str, object], dict[str, object]] | None:
+    """Return the generation, validation and upload steps, or None.
+
+    A lane missing any one of the three is not worth reporting faults against,
+    so absence is answered once, here, and the caller guards on a single value.
+    The lookup loops over one name at a time rather than joining three
+    ``is None`` tests: a three-operand boolean is rejected by `PLR0916`, and a
+    predicate over a tuple of optionals is rejected by the type checker, which
+    cannot narrow the individual names through it. Appending the narrowed step
+    is what leaves the returned tuple non-optional.
+
+    Parameters
+    ----------
+    steps
+        Parsed workflow steps in declaration order.
+
+    Returns
+    -------
+    tuple of three dicts, or None
+        The three steps, in the order above, or None when the lane is missing
+        one of them.
+    """
+    found: list[dict[str, object]] = []
+    for name in REPORT_STEP_NAMES:
+        step = step_named(steps, name)
+        if step is None:
+            return None
+        found.append(step)
+    coverage, validation, upload = found
+    return coverage, validation, upload
+
+
+def _missing_steps(
+    steps: cabc.Sequence[dict[str, object]],
+) -> list[str]:
+    """Return the names of the report-delivery steps the lane does not declare."""
+    return [name for name in REPORT_STEP_NAMES if step_named(steps, name) is None]
+
+
 def upload_contract_offenders(
     steps: cabc.Sequence[dict[str, object]],
 ) -> list[str]:
@@ -158,23 +208,10 @@ def upload_contract_offenders(
         descriptions name the fault rather than the expected value, so a
         failure says what to change.
     """
-    coverage = step_named(steps, COVERAGE_STEP)
-    validation = step_named(steps, REPORT_VALIDATION_STEP)
-    upload = step_named(steps, CODESCENE_UPLOAD_STEP)
-    # Spelled as three separate tests rather than `any(step is None ...)`: the
-    # guard has to narrow each name to a step for the calls below, which a
-    # predicate over a tuple cannot do.
-    if coverage is None or validation is None or upload is None:
-        missing = [
-            name
-            for name, step in (
-                (COVERAGE_STEP, coverage),
-                (REPORT_VALIDATION_STEP, validation),
-                (CODESCENE_UPLOAD_STEP, upload),
-            )
-            if step is None
-        ]
-        return [f"the trunk lane is missing the step(s) {missing!r}"]
+    found = report_steps(steps)
+    if found is None:
+        return [f"the trunk lane is missing the step(s) {_missing_steps(steps)!r}"]
+    coverage, validation, upload = found
 
     offenders: list[str] = []
     if steps.index(coverage) >= steps.index(validation):
