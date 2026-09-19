@@ -2,10 +2,11 @@
 //! metrics.
 //!
 //! The recorder accepts configuration-load, CLI path-validation, recipe-shell
-//! resolution, Bash preflight, complete legacy-recipe runner, and stdlib
-//! file-read filter series. The `observability` composition module installs it
-//! at the process boundary; fixed metric names and label vocabularies prevent
-//! manifest- or process-controlled data from entering the retained snapshot.
+//! resolution, Bash preflight, complete legacy-recipe runner, `which` resolver,
+//! and stdlib file-read filter series. The `observability` composition module
+//! installs it at the process boundary; fixed metric names and label
+//! vocabularies prevent manifest- or process-controlled data from entering the
+//! retained snapshot.
 
 use super::{
     CONFIG_LOAD_COUNTER, CONFIG_LOAD_DURATION, DIAG_MODE_PHASE, MERGE_PHASE,
@@ -25,7 +26,12 @@ use netsuke::{
         BASH_PREFLIGHT_TOTAL, LEGACY_RECIPE_EXECUTION_DURATION, LEGACY_RECIPE_EXECUTIONS_TOTAL,
         NINJA_STATUS_OVERSIZED_LINES_TOTAL, RECIPE_SHELL_RESOLUTIONS_TOTAL,
     },
-    stdlib::{FILE_READ_FILTER_VALUES, FILE_READ_OUTCOME_VALUES, FILE_READ_TOTAL},
+    stdlib::{
+        FILE_READ_FILTER_VALUES, FILE_READ_OUTCOME_VALUES, FILE_READ_TOTAL,
+        RESOLVE_ERROR_CATEGORY_VALUES, WHICH_CACHE_OUTCOME_VALUES, WHICH_CACHE_TOTAL,
+        WHICH_CWD_MODE_VALUES, WHICH_RESOLUTION_FAILURE_OUTCOME_VALUES,
+        WHICH_RESOLUTION_SUCCESS_OUTCOME_VALUES, WHICH_RESOLUTION_TOTAL,
+    },
 };
 
 /// Counter emitted by the library for bounded timing-summary sink outcomes.
@@ -56,6 +62,11 @@ const BASH_PREFLIGHT_OUTCOMES: [&str; 2] = ["success", "error"];
 /// Bounded probe results emitted by Bash compatibility preflight.
 const BASH_PREFLIGHT_PROBE_OUTCOMES: [&str; 4] =
     ["success", "not_found", "launch_failed", "non_zero_exit"];
+
+/// Label key naming the `which` search domain on every resolver series.
+const CWD_MODE_LABEL: &str = "cwd_mode";
+/// Label key naming the bounded error category on failed resolver series.
+const CATEGORY_LABEL: &str = "category";
 
 /// Counter recording filtered manifest targets during normal manifest loading.
 const FILTERED_TARGETS_TOTAL: &str = "netsuke_manifest_filtered_targets_total";
@@ -127,6 +138,8 @@ impl ConfigMetricsRecorder {
                 | OMITTED_FILTERED_ENTRIES_TOTAL
                 | FILE_READ_TOTAL
                 | ENV_LOOKUP_TOTAL
+                | WHICH_CACHE_TOTAL
+                | WHICH_RESOLUTION_TOTAL
                 | MANIFEST_STRUCTURES_TOTAL
                 | NINJA_STATUS_OVERSIZED_LINES_TOTAL
         )
@@ -192,6 +205,7 @@ impl ConfigMetricsRecorder {
                 ],
             ),
             ENV_LOOKUP_TOTAL => exact_labels(key, &[(OUTCOME_LABEL, &ENV_LOOKUP_OUTCOME_VALUES)]),
+            WHICH_CACHE_TOTAL | WHICH_RESOLUTION_TOTAL => accepts_which_registration(key),
             _ => false,
         }
     }
@@ -243,6 +257,56 @@ impl ConfigMetricsRecorder {
             reject()
         }
     }
+}
+
+/// Whether `key` is one of the bounded `which` resolver counter series.
+///
+/// Split from the name match above to keep each predicate within the
+/// repository's function-length bound. The resolution counter is admitted
+/// under two shapes because a failure carries an `error_category` and a
+/// success does not, so the counter's series are not all one shape. Each
+/// shape names its own outcome set — the success vocabulary and the failure
+/// vocabulary are disjoint complements — so neither admits the other's
+/// outcomes: a `found` series carrying a category and a failure recorded
+/// without one are both refused rather than exported, because no call site
+/// can produce either.
+fn accepts_which_registration(key: &Key) -> bool {
+    match key.name() {
+        WHICH_CACHE_TOTAL => exact_labels(
+            key,
+            &[
+                (CWD_MODE_LABEL, &WHICH_CWD_MODE_VALUES),
+                (OUTCOME_LABEL, &WHICH_CACHE_OUTCOME_VALUES),
+            ],
+        ),
+        WHICH_RESOLUTION_TOTAL => any_exact_labels(
+            key,
+            &[
+                &[
+                    (CWD_MODE_LABEL, &WHICH_CWD_MODE_VALUES),
+                    (OUTCOME_LABEL, &WHICH_RESOLUTION_SUCCESS_OUTCOME_VALUES),
+                ],
+                &[
+                    (CWD_MODE_LABEL, &WHICH_CWD_MODE_VALUES),
+                    (OUTCOME_LABEL, &WHICH_RESOLUTION_FAILURE_OUTCOME_VALUES),
+                    (CATEGORY_LABEL, &RESOLVE_ERROR_CATEGORY_VALUES),
+                ],
+            ],
+        ),
+        _ => false,
+    }
+}
+
+/// Whether `key`'s label set matches any of the `expected` shapes exactly.
+///
+/// One counter may be recorded under more than one bounded label shape: the
+/// `which` resolution counter carries an `error_category` only when it fails,
+/// so its success series have two labels and its failure series three. Each
+/// shape is admitted independently and a series matching none is still
+/// rejected, so the alternation widens the vocabulary without letting an
+/// unreviewed label set through.
+fn any_exact_labels(key: &Key, expected: &[&[(&str, &[&str])]]) -> bool {
+    expected.iter().any(|shape| exact_labels(key, shape))
 }
 
 /// Whether `key`'s label set matches `expected` exactly.

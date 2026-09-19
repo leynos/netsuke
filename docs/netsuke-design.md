@@ -1623,6 +1623,15 @@ overcommitting memory, and can be tuned via
 `StdlibConfig::with_which_cache_capacity` for hosts with unusually large or
 tiny search paths. Zero is rejected to keep the cache usable.
 
+Resolver telemetry is bounded. `netsuke_stdlib_which_cache_total` and
+`netsuke_stdlib_which_resolution_total` both carry a `cwd_mode` label from the
+closed set `auto`, `always`, `never`, and `workspace_recursive`; `cwd_mode` is
+the telemetry spelling, so the recursive mode is `workspace_recursive` there
+while the template value keeps its hyphen as `workspace-recursive`. The cache
+counter carries `hit`, `miss`, or `bypass`, and the resolution counter `found`,
+`not_found`, or `error`, with a bounded `category` added only on failure. No
+command name, path, workspace name, or `PATH`/`PATHEXT` value is recorded.
+
 Errors follow the design’s actionable diagnostic model. Missing executables
 raise `netsuke::jinja::which::not_found` with context on how many `PATH`
 entries were inspected, a shortened preview of the path list, and a hint to use

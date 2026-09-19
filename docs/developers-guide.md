@@ -1407,15 +1407,26 @@ Run these commands before finalizing any change:
 - `make doc-coverage`
 - `make test`
 
-When the change touches the standalone coverage artefact validators under
-`scripts/`, also run:
+`make test` runs the Rust suite only, and `make lint` lints the Python sources
+without executing them, so neither gate runs the suites in
+`tests/workflow_contracts/` or under `scripts/tests/`. Two further targets
+cover them, and neither runs the other:
 
-- `make test-coverage-artifact`
-- `make validate-coverage-artifact`
+- `make test-workflow-contracts` — when the change touches a workflow or a
+  workflow-contract suite. It holds the workflows under `.github/` to the
+  contracts the repository depends on and is the only gate that runs those
+  suites. It passes `--doctest-modules`, so the examples in those modules are
+  executed rather than read.
+- `make test-coverage-artifact` — when the change touches the coverage artefact
+  validators under `scripts/`. It is the pytest module under `scripts/tests/`,
+  so a validator change is untested unless it runs.
 
-This suite is the pytest module under `scripts/tests/`; `make test` runs only
-the Rust suite and never executes it, so a validator change is untested unless
-these commands run. Two entry points form the boundary.
+`make validate-coverage-artifact` is separate from both, and is not a test: it
+is the operator-run entry point for validating a downloaded artefact, and it
+needs `COVERAGE_ARTIFACT_DIR` to name an existing directory. Run it when
+inspecting an artefact by hand, not as part of the commit set.
+
+Two entry points form the coverage-artefact boundary.
 `scripts/validate_coverage_artifact.py` owns the outer-directory checks and the
 recognized-LCOV text contract, and exposes its own narrow command line.
 `scripts/validate_coverage_archive.py` is the composition entry point; it runs
@@ -1487,13 +1498,33 @@ this repository. A main upload can appear in CodeScene only after the service
 analyses that commit; re-running a pull-request workflow is neither a baseline
 refresh nor a substitute for that analysis.
 
+The trunk lane validates the report as data before it uploads it.
+`coverage-main.yml` stages `lcov.info` into a directory of its own and runs
+`scripts/validate_coverage_artifact.py` over that directory, because the
+generation action reports success for an empty report and the upload checks
+only that the file exists. Naming the directory is not enough on its own: the
+step must also copy the report into it, because a directory that is staged and
+never filled holds nothing the validator can read. The step must sit after the
+report is written and before the upload that sends it. It must also sit before
+`Show sccache statistics`: `tests/workflow_contracts/sccache_contract_test.py`
+requires that step to follow every compile step in the lane, so a check parked
+between the last compile and the statistics report would break the
+compiler-cache observability contract rather than merely reorder the lane.
+`make test-coverage-artifact` covers the validator directly;
+`tests/workflow_contracts/codescene_upload_contract_test.py` covers the lane
+that runs it.
+
 Workflow contract tests keep the boundary explicit: the pull-request coverage
 step must retain ratchet mode and pass the publication opt-out, the artefact
 upload and privileged submission workflow must remain absent, and the main
 workflow must upload the report generated earlier in its job without setting
-that opt-out. The standalone hostile-artefact validators under `scripts/`
-remain available for maintenance use, but no active workflow downloads
-pull-request coverage.
+that opt-out. They also hold the upload's `if` gate to naming the credential as
+an identifier — read from the `env` namespace the condition is evaluated
+against, so a longer unset name such as `NOT_CS_ACCESS_TOKEN` cannot satisfy it
+by containment. The hostile-artefact validators under `scripts/` remain
+available for maintenance use, and the trunk lane now runs the outer one over
+the report it generated itself; no active workflow downloads pull-request
+coverage.
 
 `make test` runs the non-doctest suite through
 [cargo-nextest](https://nexte.st/) and the doctests separately. CI pins the
@@ -5110,6 +5141,67 @@ domains with different trust boundaries cannot collide. The complete contract
 is recorded in
 [ADR-024](adr-024-require-explicit-recursive-workspace-which-search.md) and the
 [executable-discovery design](netsuke-design.md#executable-discovery-filter-which).
+
+`src/stdlib/which/telemetry.rs` is the single owner of both counter names and
+every label vocabulary the resolver emits. `netsuke_stdlib_which_cache_total`
+counts cache outcomes, and `netsuke_stdlib_which_resolution_total` counts
+resolution outcomes; both carry the same `cwd_mode` label, drawn from the
+closed set `auto`, `always`, `never`, and `workspace_recursive`. The set is
+exposed as `WHICH_CWD_MODE_VALUES` and re-exported through `netsuke::stdlib`.
+It is a telemetry vocabulary rather than the template spelling: a manifest
+writes `workspace-recursive`, and the label is `workspace_recursive`. The
+mapping is total over `CwdMode`, so no series can be created outside the set,
+and that is what lets an operator tell whether recursive lookup contributed to
+a resolution.
+
+The cache counter's `outcome` is drawn from `hit`, `miss`, and `bypass`
+(`WHICH_CACHE_OUTCOME_VALUES`). The resolution counter's `outcome` is drawn from
+`found`, `not_found`, and `error` (`WHICH_RESOLUTION_OUTCOME_VALUES`), where
+`not_found` covers a search or direct-path miss and `error` every other
+failure, so "nothing was found" and "something went wrong" stay separable. A
+non-success resolution additionally carries `category`, one of the ten values in
+`RESOLVE_ERROR_CATEGORY_VALUES`, one per `ResolveError` variant, so the label
+set is fixed by the error type rather than by the failure a host happened to
+encounter. `category()` in `resolve_error.rs` returns those constants,
+single-sourcing the vocabulary.
+
+That makes the resolution counter the one series whose label count is not
+fixed: two labels on success, three on failure.
+`WHICH_RESOLUTION_FAILURE_OUTCOME_VALUES` names the two outcomes that
+legitimately carry a category, and `WHICH_RESOLUTION_SUCCESS_OUTCOME_VALUES`
+names the one that legitimately does not, so the application recorder admits
+each shape exactly. The two vocabularies are disjoint complements rather than
+one being a subset of the other, and that is deliberate: a `found` series
+carrying a category and a failure recorded without one are both refused rather
+than exported, because no call site can produce either. Naming the full outcome
+set on the success shape would have admitted the second of those, since a
+two-label `not_found` series would then match it.
+
+The resolver records the same bounded facts on the `stdlib.which.resolve` span
+and emits one debug event when a resolution fails. No command name, no
+filesystem path, no workspace name, and no `PATH` or `PATHEXT` value reaches a
+span field, an event, or a metric label, so a series can be exported without
+disclosing what a manifest asked for or where it matched. The tracing tests
+assert that the command name and the workspace root are absent from every
+captured event and span field.
+
+The counter descriptions are registered once per process behind a `Once`. Both
+counter names are listed in the application recorder's `accepts_name` and
+matched in `accepts_counter_registration` against their exact label shapes, so
+the series survive into the process snapshot rather than being discarded as
+noop handles, while any other label name, label count, or out-of-vocabulary
+value is rejected. This is the same allowlist that gates the configuration,
+runner, manifest-filtering, file-read, and environment-lookup series.
+
+Tests sit beside the module: `src/stdlib/which/telemetry_tests.rs` drives the
+real `WhichResolver` against a local debugging recorder and asserts that each
+search domain is attributed to its own series, that every `ResolveError`
+variant reports a declared category, and that nothing outside the closed
+vocabularies is emitted. `src/observability_recorder_which_tests.rs`, which
+`src/observability_recorder_tests.rs` registers, proves the production recorder
+retains each bounded shape and rejects an out-of-vocabulary `cwd_mode`, an
+undeclared extra label, a missing label, and the failure `category` on a
+success series.
 
 Tests that inject `EnvSnapshot::capture_with_env` must use
 `env::mock_env_for_capture`. The strict builder declares every documented read:

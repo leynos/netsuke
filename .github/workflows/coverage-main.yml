@@ -221,6 +221,45 @@ jobs:
           # its default and archives the report this lane uploads to CodeScene.
           # Setting it here, as the pull-request lane does, would leave
           # CodeScene with no report to read.
+      - name: Validate the report before submitting it
+        # The upload asserts only that the file exists, not that it holds a
+        # usable report. A report that is empty, truncated, or otherwise
+        # malformed therefore reaches CodeScene and is refused there, hours
+        # later and in another system: the check run reports "No valid coverage
+        # report found in the build pipeline" against a commit whose logs say
+        # every step passed, which names neither the step nor the file at
+        # fault. This narrows that to the run that produced it.
+        #
+        # `scripts/validate_coverage_artifact.py` already owns the LCOV
+        # contract for hostile reports and is exercised by
+        # `make test-coverage-artifact`; this gives it the live subject it was
+        # built for. It reads the report as data, executes nothing in it, and
+        # requires the artefact directory to hold exactly one `lcov.info`, so
+        # the report is staged into a directory of its own.
+        #
+        # Position matters. The report is read from the workspace, so this
+        # must follow the step that writes it and precede the upload that
+        # sends it; and it must precede `Show sccache statistics`, which
+        # tests/workflow_contracts/sccache_contract_test.py requires to follow
+        # every compile step.
+        run: |
+          set -euo pipefail
+          # Read the baseline rather than copying the number, the way
+          # AGENTS.md does for NEXTEST_VERSION. This lane declares no
+          # PYTHON_BASELINE of its own, and the one source is the Makefile.
+          baseline="$(
+            sed -n 's/^PYTHON_BASELINE[[:space:]]*?=[[:space:]]*\([^[:space:]]*\).*/\1/p' \
+              Makefile | head -n 1
+          )"
+          test -n "${baseline}"
+          staged="$(mktemp --directory)"
+          cp -- lcov.info "${staged}/lcov.info"
+          # `uv` is on PATH because the generation action installs it: its
+          # first steps run `astral-sh/setup-uv` and then `uv run` throughout.
+          # `uv` fetches the baseline interpreter on demand, so no separate
+          # setup-python step is needed here.
+          uv run --no-project --python "${baseline}" \
+            scripts/validate_coverage_artifact.py --artifact-dir "${staged}"
       - name: Show sccache statistics
         # Zero compile requests here would mean the instrumented build never
         # reached the compiler cache, which is a failed integration rather
@@ -259,4 +298,14 @@ jobs:
           path: lcov.info
           format: lcov
           access-token: ${{ env.CS_ACCESS_TOKEN }}
-          installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
+          # The checksum input is deliberately unset. Its former value was
+          # `${{ vars.CODESCENE_CLI_SHA256 }}`, and this repository defines no
+          # variables at all, so it resolved to the empty string and verified
+          # nothing while reading as though it did. The option is not merely
+          # inert: the action's current revision renames it to
+          # `archive-checksum` and *rejects* a non-empty `installer-checksum`
+          # outright, so a Dependabot bump to that revision would fail this
+          # step on the value that is there today. Settle the pin and the
+          # checksum policy together rather than carrying an input that can
+          # only mislead. tests/workflow_contracts/codescene_upload_contract_test.py
+          # holds this input unset and the report path bounded.
