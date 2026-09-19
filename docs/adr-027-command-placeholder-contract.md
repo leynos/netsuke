@@ -111,13 +111,21 @@ substitution. The single exception is that `quote_double_quoted_path`
 (`src/ir/cmd_interpolate/mod.rs:154-163`) backslash-escapes a backtick that
 falls inside a *Netsuke-substituted path* landing in a double-quoted context.
 
-**Route and recipe-kind scope.** PowerShell is outside both mechanisms, because
-a backtick is its escape character rather than a command-substitution delimiter;
+**Route and recipe-kind scope.** PowerShell sits outside the backtick half of
+the invariant, because a backtick is its escape character rather than a
+command-substitution delimiter, and outside the parity check entirely:
 `is_valid_command_for_shell` returns `true` unconditionally for
-`RecipeShell::PowerShell` (`src/ir/cmd_interpolate/mod.rs:227-228`). The parity
-check is also `command:`-only: a `script:` recipe gets the marker invariant but
-no parity check, because scripts may legitimately contain heredocs and other
-text that `shlex` cannot model.
+`RecipeShell::PowerShell` (`src/ir/cmd_interpolate/mod.rs:227-228`). It is
+**inside** the `$( … )` half. The PowerShell traversal treats a marker inside a
+command substitution, or inside any quoted region, as protected and rejects it
+(`power_shell_marker_protection`,
+`src/ir/cmd_interpolate/substitution.rs:174-179`) — the same outcome as POSIX,
+by a different rule, pinned by
+`power_shell_rejects_markers_without_a_context_safe_encoder`
+(`src/ir/cmd_interpolate_power_shell_tests.rs:9-22`). The parity check is also
+`command:`-only: a `script:` recipe gets the marker invariant but no parity
+check, because scripts may legitimately contain heredocs and other text that
+`shlex` cannot model.
 
 ### The `shlex` guard is part of the acceptance contract, not a stability commitment
 

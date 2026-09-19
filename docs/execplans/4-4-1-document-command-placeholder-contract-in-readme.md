@@ -134,12 +134,20 @@ property test `dollar_prefixed_shell_variables_are_preserved`
   backtick characters in the whole string**. That is a parity count. It is not
   quoting-aware, so a backtick inside single quotes counts, and two balanced
   but unrelated backticks do not.
-- PowerShell is exempt from both. `is_valid_command_for_shell` returns `true`
-  unconditionally for `RecipeShell::PowerShell`
-  (`src/ir/cmd_interpolate/mod.rs:226-228`), because PowerShell uses a backtick
-  as its escape character rather than as command substitution. Confirmed by
+- PowerShell is outside the backtick half of the first check and outside the
+  second check entirely, but **inside** the `$( … )` half of the first.
+  `is_valid_command_for_shell` returns `true` unconditionally for
+  `RecipeShell::PowerShell` (`src/ir/cmd_interpolate/mod.rs:226-228`), because
+  PowerShell uses a backtick as its escape character rather than as command
+  substitution; confirmed by
   `power_shell_bindings_preserve_literal_backticks_in_paths`
-  (`src/ir/cmd_interpolate_tests.rs:337-345`).
+  (`src/ir/cmd_interpolate_tests.rs:337-345`). A marker inside `$( … )` is
+  still rejected on the PowerShell route, by a different rule:
+  `power_shell_marker_protection`
+  (`src/ir/cmd_interpolate/substitution.rs:174-179`) treats any quoted region
+  or active command substitution as protected. Confirmed by
+  `power_shell_rejects_markers_without_a_context_safe_encoder`, case
+  `command_substitution` (`src/ir/cmd_interpolate_power_shell_tests.rs:9-22`).
 - Neither check sanitizes author-written shell text. A balanced backtick pair
   containing text the author typed reaches the shell and is executed as command
   substitution. The only exception is that `quote_double_quoted_path`
@@ -894,10 +902,16 @@ ADR-027 must say.
   - **Not a guarantee at all.** Netsuke does not inspect backticks the author
     wrote. A balanced pair is passed to the shell and executed as command
     substitution.
-  - **Route scope.** PowerShell is outside both, because its backtick is an
-    escape character. The parity check is also `command:`-only; a `script:`
-    recipe gets the marker invariant but no parity check. State this, because
-    a reader who moves a recipe to `script:` otherwise loses a check silently.
+  - **Route scope.** PowerShell is outside the backtick half of the invariant
+    and outside the parity check, because its backtick is an escape character,
+    but it is **inside** the `$( … )` half: PowerShell rejects a marker in a
+    command substitution just as POSIX does, by a different rule. The parity
+    check is also `command:`-only; a `script:` recipe gets the marker invariant
+    but no parity check. State both axes, because a reader who moves a recipe
+    to `script:` otherwise loses a check silently, and a reader who switches
+    backends needs to know that `$( … )` protection survives the switch. The
+    README's `D2` prose must not say PowerShell is exempt from the marker
+    invariant *tout court*.
 
 - **`D3` (answers `FV-CPC-Q3`).** `shlex::split` **is** part of the acceptance
   contract in the observable sense: a `command:` recipe on the POSIX or Bash
@@ -1840,6 +1854,38 @@ it is the canonical wording the other three converge on.
   - *Two findings requesting the ADR date change to 18 September 2026.* Already
     rejected at EP-M1 as factually wrong, and re-verified now: `date -u` reports
     2026-09-19. Not re-litigated.
+
+  The re-review of `24197456`, run to confirm the two fixes landed, returned
+  one finding. It is **new** — not a re-raise — and it is correct, so it is
+  recorded as `D-CODERABBIT-EP-M2-RECHECK`:
+
+  - Finding: `docs/adr-027-command-placeholder-contract.md` §*Route and
+    recipe-kind scope* said "PowerShell is outside both mechanisms", which
+    conflates the two halves of the promised invariant. The invariant is
+    "never substituted inside a backtick region **or** a `$( … )` command
+    substitution". PowerShell is outside the backtick half, because a backtick
+    is its escape character, but it is **inside** the `$( … )` half:
+    `power_shell_marker_protection`
+    (`src/ir/cmd_interpolate/substitution.rs:174-179`) treats any active
+    command substitution as protected and rejects the marker, pinned by
+    `power_shell_rejects_markers_without_a_context_safe_encoder`, case
+    `command_substitution` (`src/ir/cmd_interpolate_power_shell_tests.rs:9-22`).
+    Verified against the code before accepting. It is a genuine
+    document-disagrees-with-document defect too:
+    `docs/users-guide.md:1963-1967` already states the correct position.
+
+    The same conflation appears twice in this plan's own `D2` narrative —
+    `Fact B` bullet 3 and the `D2` design statement's *Route scope* bullet —
+    so all three were fixed together. The `D2` *Route scope* bullet additionally
+    now carries an explicit instruction to EP-M3: the README's `D2` prose must
+    not say PowerShell is exempt from the marker invariant *tout court*.
+
+    Provenance: the ADR paragraph dates from `3594b568` and was not touched by
+    `efb5ea17` or `24197456`, so this is pre-existing, first surfaced by the
+    re-review. That it took a second pass to surface is itself a lesson: the EP-M1
+    pass reviewed the ADR and did not catch it, because the pass was read against
+    the *recipe-kind* axis the plan had been talking about, and this finding is
+    on the *route* axis.
 
   Date/Author: 2026-09-19, implementing agent.
 
