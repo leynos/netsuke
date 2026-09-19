@@ -14,15 +14,15 @@ new named execution contexts, and a universal strict mode are not prerequisites.
 
 ## Contract ownership and integration boundaries
 
-- [RFC 0013](rfcs/0013-managed-states-and-probes.md) owns states, built-in and
+- [RFC 0021](rfcs/0021-managed-states-and-probes.md) owns states, built-in and
   external probes, preparation evidence, and operation semantics.
-- [RFC 0014](rfcs/0014-typed-task-inputs.md) owns optional root inputs and
+- [RFC 0022](rfcs/0022-typed-task-inputs.md) owns optional root inputs and
   shares parameter validation with RFC 0003, rather than duplicating it.
-- [RFC 0015](rfcs/0015-artefact-ownership-and-scoped-cleanup.md) owns declared
+- [RFC 0023](rfcs/0023-artefact-ownership-and-scoped-cleanup.md) owns declared
   artefact scope and standardized cleanup.
-- [RFC 0016](rfcs/0016-named-contention-classes.md) owns public contention
+- [RFC 0024](rfcs/0024-named-contention-classes.md) owns public contention
   declarations lowered to Ninja pools.
-- [RFC 0017](rfcs/0017-progressive-enhancement-and-maturity-policies.md) owns
+- [RFC 0025](rfcs/0025-progressive-enhancement-and-maturity-policies.md) owns
   shallow-end compatibility and opt-in policy composition.
 
 RFC 0001 and phases 12 to 14 retain ownership of command parsing, argv,
@@ -34,8 +34,8 @@ metadata, redaction, and result machinery. The semantic linter tracked by issue
 duplicate those implementations merely to avoid an explicit integration
 dependency.
 
-New public grammar is proposed, not shipped: RFC 0014 proposes
-`--input NAME=VALUE` on manifest-compiling commands; RFC 0015 proposes
+New public grammar is proposed, not shipped: RFC 0022 proposes
+`--input NAME=VALUE` on manifest-compiling commands; RFC 0023 proposes
 `clean --artefact NAME`. Register both with the canonical vocabulary and
 metadata before delivery. Use existing `check`, `context --json`, `--dry-run`,
 `--force`, and `--no-input` contracts. Do not introduce an unreviewed `explain`
@@ -59,12 +59,12 @@ Outcome: a release can demonstrate unchanged basic behaviour rather than merely
 assert it. The fixtures expose whether later syntax has become contagious.
 
 - [ ] 20.1.1. Ratify the progressive-enhancement contracts and version gates.
-  - [ ] Review RFCs 0013 to 0017, resolve their outstanding schema decisions,
+  - [ ] Review RFCs 0021 to 0025, resolve their outstanding schema decisions,
     and record accepted decisions through the normal ADR process.
   - [ ] Coordinate manifest and persisted-plan version allocation with 12.1.1,
     16.1.1, and 17.1.1 without requiring bundle implementation first.
   - [ ] Record operation-union ownership, feature-specific capability reporting,
-    and rejection of unsupported syntax. See RFC 0017 sections 2 and 3.
+    and rejection of unsupported syntax. See RFC 0025 sections 2 and 3.
 - [ ] 20.1.2. Add unchanged-basic-workflow acceptance fixtures. Requires 20.1.1.
   - [ ] Preserve the exact quickstart manifest, scalar shell recipes, ordinary
     variables, and the list-of-mappings action/target structure.
@@ -122,7 +122,7 @@ with errors local to the responsible declaration or source.
   - [ ] Test Boolean/integer distinction, overflow, collection bounds, duplicate
     keys, choices, empty values, and path capability non-authority.
   - [ ] Share a conformance corpus with bundle work without requiring bundle
-    loading. See RFC 0014 sections 4 and 7.
+    loading. See RFC 0022 sections 4 and 7.
 - [ ] 21.1.2. Add optional root input declarations and immutable resolution.
   Requires 21.1.1 and 20.1.2.
   - [ ] Parse `inputs`, preserve ordinary `vars`, detect namespace collisions,
@@ -130,7 +130,7 @@ with errors local to the responsible declaration or source.
   - [ ] Support one-value promotion without implicit aliases or executable
     defaults. Retain declaration and reference spans.
   - [ ] Property-test normalization stability and run the unchanged-basic
-    fixture. See RFC 0014 sections 3, 4, and 8.
+    fixture. See RFC 0022 sections 3, 4, and 8.
 
 ### 21.2. Bind explicit callers and profiles to the same interface
 
@@ -144,7 +144,7 @@ new configuration stack. Precedence cases decide whether the contract is clear.
   - [ ] Integrate existing configuration/profile provenance and ratify overlay
     order with phase 5; apply operator constraints after source selection.
   - [ ] Test every source precedence pair and default redaction in errors,
-    verbose output, and JSON. See RFC 0014 sections 5 and 7.
+    verbose output, and JSON. See RFC 0022 sections 5 and 7.
 - [ ] 21.2.2. Preserve resolved inputs through graph and plan generation.
   Requires 21.2.1 and 12.3.1 for structured-plan integration.
   - [ ] Add used values to existing fingerprints and preserve argv splicing
@@ -181,7 +181,7 @@ pool machinery, with no hidden overlapping-resource scheduler.
   - [ ] Implement positive integer capacities, one scalar action/target class,
     operator ceilings, reserved names, and source-local errors.
   - [ ] Reject aggregate annotations, multiple classes, and unsupported
-    rule-default forms. See RFC 0016 sections 3 and 4.
+    rule-default forms. See RFC 0024 sections 3 and 4.
   - [ ] Add a legacy-command fixture; typed input support is optional and
     integrates only after 21.1.2.
 - [ ] 22.1.2. Lower resolved classes into Ninja pool definitions. Requires
@@ -191,7 +191,7 @@ pool machinery, with no hidden overlapping-resource scheduler.
   - [ ] Include complete action sequences and persisted scheduling metadata;
     integrate with 12.3.1 rather than reimplementing the codec.
   - [ ] Property-test declaration-order independence and unannotated-output
-    compatibility. See RFC 0016 section 5.
+    compatibility. See RFC 0024 section 5.
 
 ### 22.2. Verify concurrency and communicate its limits
 
@@ -204,7 +204,7 @@ the guarantee and exposes its invocation-only boundary.
   - [ ] Exercise multi-command edges, failure, cancellation, and console
     rejection without relying solely on sleeps.
   - [ ] Demonstrate that separate Ninja invocations do not share the limit. See
-    RFC 0016 sections 6 and 8.
+    RFC 0024 sections 6 and 8.
 - [ ] 22.2.2. Publish class inspection and the native-build canary. Requires
   22.2.1 and 20.2.2.
   - [ ] Show requested/effective capacity, source, and invocation-only scope.
@@ -225,11 +225,11 @@ before process execution or durable records complicate the implementation.
 - [ ] 23.1.1. Implement state definitions and the readiness algebra. Requires
   20.1.1 and 20.2.1.
   - [ ] Model kinds, declared identity inputs, optional preparation, all four
-    outcomes, and the three operations in RFC 0013 sections 3 to 5.
+    outcomes, and the three operations in RFC 0021 sections 3 to 5.
   - [ ] Property-test that unknown never authorizes repair, degraded requires
     explicit acceptance, and ensure performs at most one preparation attempt.
   - [ ] Reject unsupported incremental-target state checks instead of letting
-    Ninja skip readiness verification. See RFC 0013 section 8.
+    Ninja skip readiness verification. See RFC 0021 section 8.
 - [ ] 23.1.2. Implement default built-in probes through existing seams. Requires
   23.1.1 and 12.2.3 where interpreter execution is needed.
   - [ ] Deliver directory, file, and precisely specified Python-environment
@@ -250,7 +250,7 @@ stale success records or a second scheduling loop.
     never probe during check, graph generation, help, or dry-run.
   - [ ] Preserve resolved argv, environment, cwd, provenance, and typed result
     mapping. Do not add state-private command execution.
-  - [ ] Reject unsupported replay versions. See RFC 0013 sections 5 and 7.
+  - [ ] Reject unsupported replay versions. See RFC 0021 sections 5 and 7.
 - [ ] 23.2.2. Implement bounded integrity leases and atomic state records.
   Requires 23.2.1 and 20.2.3.
   - [ ] Hold canonically ordered resource leases through each action's state
@@ -258,7 +258,7 @@ stale success records or a second scheduling loop.
   - [ ] Publish success only after post-verification and invalidate observations
     across mutation. Bound retention, acquisition, and interrupted recovery.
   - [ ] Test separate processes, damaged records, replacement races, and
-    interruption before publication. See RFC 0013 sections 4 and 8.
+    interruption before publication. See RFC 0021 sections 4 and 8.
 
 ### 23.3. Admit external functional checks without implicit repair
 
@@ -267,7 +267,7 @@ without requiring a provider implementation or a Nagios service.
 
 - [ ] 23.3.1. Implement the optional Nagios-style protocol adapter. Requires
   23.2.1.
-  - [ ] Map exits 0 to 3 exactly as RFC 0013 section 6 specifies and preserve
+  - [ ] Map exits 0 to 3 exactly as RFC 0021 section 6 specifies and preserve
     distinct spawn, signal, timeout, protocol, and output-limit reasons.
   - [ ] Combine built-in and external evidence without allowing stdout to forge
     identity or override a failing result.
@@ -316,7 +316,7 @@ silently create caching or overlapping output producers.
 - [ ] 24.1.1. Implement exact-path artefact definitions and producer references.
   Requires 20.1.1 and 20.2.1.
   - [ ] Add file/directory kind, descriptive roles, optional parent creation,
-    and `produces` metadata. See RFC 0015 sections 3 and 4.
+    and `produces` metadata. See RFC 0023 sections 3 and 4.
   - [ ] Reject overlapping/case-equivalent ownership and duplicate producers;
     reconcile explicit declarations with existing target outputs.
   - [ ] Test missing outputs, retained partial outputs, and always-run reports.
@@ -325,7 +325,7 @@ silently create caching or overlapping output producers.
     runtime paths, and enumerate complete bounded scope without deletion.
   - [ ] Make directory-subtree ownership and pre-existing contents visible;
     reject invalid, over-budget, or incomplete previews.
-  - [ ] Property-test path normalization and scope uniqueness. See RFC 0015
+  - [ ] Property-test path normalization and scope uniqueness. See RFC 0023
     sections 5 and 6.
 
 ### 24.2. Delete only validated scope through one implementation
@@ -362,7 +362,7 @@ has removed, and ordinary workflows retain their independent cleanup choices.
   - [ ] Reject simultaneous cleanup and declared production/consumption of the
     same resource; a pool must not be treated as semantic ordering.
   - [ ] Keep dyndep and command-private temporary cleanup under their existing
-    owners. See RFC 0015 section 7.
+    owners. See RFC 0023 section 7.
 - [ ] 24.3.2. Publish exact-path cleanup examples and a Cuprum canary. Requires
   24.2.2 and 20.2.2; state examples also require 24.3.1.
   - [ ] Migrate disjoint output roots without demanding an artefact for every
@@ -386,7 +386,7 @@ findings, with no command-text guessing or competing parser.
   - [ ] Retain resolved recipe units, references, ownership, and provenance;
     distinguish policy coverage from schema/runtime correctness.
   - [ ] Implement pure rule/subject selection without executing probes or user
-    actions. See RFC 0017 sections 3 to 6.
+    actions. See RFC 0025 sections 3 to 6.
   - [ ] Add fixtures proving an unrelated selected target does not inherit
     another action's coverage requirements.
 - [ ] 25.1.2. Implement the initial rules as independently gated checks.
@@ -395,7 +395,7 @@ findings, with no command-text guessing or competing parser.
     contention after 22.1.2, states after 23.2.1, and cleanup after 24.2.2.
   - [ ] Reject unknown/unsupported rule IDs rather than claim incomplete
     enforcement. No rule waits for an unrelated feature.
-  - [ ] Test exact coverage semantics and remedies from RFC 0017 section 5; do
+  - [ ] Test exact coverage semantics and remedies from RFC 0025 section 5; do
     not certify hermeticity from declaration presence.
 
 ### 25.2. Compose enforcement without weakening trusted constraints
@@ -410,7 +410,7 @@ replace an operator error or hide a rule through scope rewriting.
   - [ ] Integrate profiles through phase 5's owner, with no automatic promotion,
     blanket bypass, or new configuration loader.
   - [ ] Property-test overlap, order independence, scope normalization, and
-    inability to weaken operator policy. See RFC 0017 section 7.
+    inability to weaken operator policy. See RFC 0025 section 7.
 - [ ] 25.2.2. Wire preflight and existing human/JSON reporting. Requires 25.1.2
   and 25.2.1.
   - [ ] Evaluate applicable errors before execution, keep warnings nonblocking,
@@ -418,7 +418,7 @@ replace an operator error or hide a rule through scope rewriting.
   - [ ] Use `check`, `context --json`, shared exit classes, localization, and
     redaction; introduce no separate `explain` command.
   - [ ] Test selected-closure versus whole-manifest checks and persisted plans
-    under applicable trusted policy. See RFC 0017 section 8.
+    under applicable trusted policy. See RFC 0025 section 8.
 
 ### 25.3. Prove progressive enhancement end to end
 

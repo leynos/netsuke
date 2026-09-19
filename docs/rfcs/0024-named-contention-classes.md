@@ -1,8 +1,8 @@
-# RFC 0016: Named contention classes
+# RFC 0024: Named contention classes
 
 ## Preamble
 
-- **RFC number:** 0016
+- **RFC number:** 0024
 - **Status:** Proposed
 - **Created:** 2026-09-19
 - **Scope:** Optional concurrency limits lowered to Ninja pools
@@ -62,7 +62,7 @@ worker-count calculation or platform-detection preamble.
 `contention_classes` maps names to definitions containing `capacity`. An
 executable action or target may set one scalar `contention` reference. Literal
 capacities work independently; typed input expressions may be added through
-[RFC 0014][inputs] without making that feature a prerequisite.
+[RFC 0022][inputs] without making that feature a prerequisite.
 
 Reject zero, negative, fractional, Boolean, unbounded, and out-of-range
 capacities. Unknown fields, duplicate declarations, missing references, and
@@ -190,7 +190,7 @@ class per executable edge and explicit scope. Keep dependencies, internal
 worker counts, and cross-invocation integrity locks separate.
 
 [roadmap]: ../roadmap-progressive-enhancement.md#22-named-contention-without-a-second-scheduler
-[inputs]: 0014-typed-task-inputs.md
-[states]: 0013-managed-states-and-probes.md
-[maturity]: 0017-progressive-enhancement-and-maturity-policies.md
+[inputs]: 0022-typed-task-inputs.md
+[states]: 0021-managed-states-and-probes.md
+[maturity]: 0025-progressive-enhancement-and-maturity-policies.md
 [^1]: [Ninja manual: pools](https://ninja-build.org/manual.html#ref_pool).

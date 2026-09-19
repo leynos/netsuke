@@ -1,8 +1,8 @@
-# RFC 0014: Optional typed task inputs
+# RFC 0022: Optional typed task inputs
 
 ## Preamble
 
-- **RFC number:** 0014
+- **RFC number:** 0022
 - **Status:** Proposed
 - **Created:** 2026-09-19
 - **Scope:** Public task configuration with gradual adoption
@@ -232,4 +232,4 @@ internal variables untyped unless their author chooses otherwise.
 
 [roadmap]: ../roadmap-progressive-enhancement.md#21-typed-inputs-with-one-parameter-contract
 [bundles]: 0003-versioned-local-bundles.md#6-parameter-model
-[maturity]: 0017-progressive-enhancement-and-maturity-policies.md
+[maturity]: 0025-progressive-enhancement-and-maturity-policies.md

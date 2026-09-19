@@ -1,8 +1,8 @@
-# RFC 0015: Artefact ownership and scoped cleanup
+# RFC 0023: Artefact ownership and scoped cleanup
 
 ## Preamble
 
-- **RFC number:** 0015
+- **RFC number:** 0023
 - **Status:** Proposed
 - **Created:** 2026-09-19
 - **Scope:** Optional owned-output declarations and bounded deletion
@@ -18,7 +18,7 @@ commands, existing targets, and existing `clean` behaviour remain supported.
 Ownership is an assertion by the manifest author, not proof that a directory
 contains no valuable files. The implementation must make the scope inspectable
 and enforce its boundaries without claiming to sandbox arbitrary recipes.
-[RFC 0017][maturity] makes this an opt-in improvement rather than an onboarding
+[RFC 0025][maturity] makes this an opt-in improvement rather than an onboarding
 prerequisite.
 
 ## 2. Problem and existing boundaries
@@ -255,5 +255,5 @@ cleanup implementation, and transparent scope. Preserve ordinary recipes and
 existing cleaning while giving annotated outputs stronger, testable guarantees.
 
 [roadmap]: ../roadmap-progressive-enhancement.md#24-owned-artefacts-and-bounded-cleanup
-[maturity]: 0017-progressive-enhancement-and-maturity-policies.md
-[states]: 0013-managed-states-and-probes.md
+[maturity]: 0025-progressive-enhancement-and-maturity-policies.md
+[states]: 0021-managed-states-and-probes.md
