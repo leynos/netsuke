@@ -245,9 +245,12 @@ easy to read them as CI-verified when they are not.
 
 The `Windows / build-test-windows` job halts on an unrelated pre-existing
 failure — a network-fixture race tracked as issue 743 — before the nextest run
-reaches `stdlib::path`. On the run examined for this record it ended at
-1078/2901 tests, and the strings `windows_reparse` and `junction` appeared
-**zero** times in the whole job log. So no case described in this section has
+reaches `stdlib::path`. On commit `2d8e5305` the run ended at 1078/2901 tests
+(1077 passed, 1 failed, 2 skipped), dying on
+`stdlib::network::redirect::error_tests::protocol_failures_are_classified_from_a_live_response`,
+and the strings `windows_reparse` and `junction` appeared **zero** times in
+the whole job log. The figure is cited with its commit because it is the one
+claim here most likely to age. So no case described in this section has
 executed in continuous integration, and a green Windows *test* lane would not
 yet be evidence about their behaviour.
 
