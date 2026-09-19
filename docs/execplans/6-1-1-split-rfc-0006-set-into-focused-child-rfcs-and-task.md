@@ -276,6 +276,20 @@ Hard invariants. Violating one requires escalation, not a workaround.
   `Status` in a column whose every other row records a merge state — the merge
   claim was accurate, and the row now states the merge like its neighbours,
   with a sentence under the table separating the two facts.
+- [x] (2026-09-19) `EP-M1` third pass: clear the three `lint-clippy` errors and
+  settle the template against the parser. All three were in `markdown.rs` — two
+  `doc_markdown` backticks and a `missing_const_for_fn` on `is_closing_run`.
+  The last cascaded: making it `const` made its caller `Delimiter::closes`
+  eligible in the same run, so the second `make lint` failed one frame further
+  up. Fixed both in one pass and confirmed the cascade stops at `mark`, which is
+  `&mut self` and calls the non-const `Delimiter::opening`. The cheap check
+  (`cargo clippy --test rfc_stdlib_coverage_tests`) is enough to find the next
+  frame without spending a full gate cycle on it. Separately, and more
+  importantly: the skeleton `EP-M2` is told to copy literally **failed the
+  parser `EP-M1` shipped**, on both the registry heading and the manifest-query
+  cell vocabulary; see `Surprises & discoveries`. Both are fixed in the
+  skeleton now, before `EP-M3` could spend the go/no-go on a document written
+  to the wrong contract.
 - [ ] `EP-M2` Write the literal child-RFC template and one worked section 5.
 - [ ] `EP-M3` RFC 0013, structured data interchange (step 6.2). **Go/no-go.**
 - [ ] `EP-M4` RFC 0014, mapping and sequence transforms (step 6.3).
@@ -443,7 +457,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
 - Observation: `make fmt` cannot be pointed at one file, and `mdtablefix` has
   no check-only mode. Evidence: `check-markdown-format.sh` stages copies and
   compares, precisely because the tool always writes; `MD_FILES_FIND` in the
-  Makefile covers the whole corpus. Impact: after a hand-written prose edit the
+  Makefile covers the whole corpus. Impact: after an editorial prose edit the
   scoped invocation is
   `mdtablefix --in-place --wrap --renumber --breaks --ellipsis --fences <file>…`,
   with the flags copied from `mdformat-all` and the checker. Running
@@ -451,6 +465,29 @@ Hard invariants. Violating one requires escalation, not a workaround.
   diff. Both files edited at `EP-M1`'s second review were pure paragraph
   rewrapping — zero table-pipe changes — which the checker's failure message
   alone does not tell you.
+
+- Observation: the skeleton this plan tells `EP-M2` to "copy literally" **does
+  not satisfy the parser `EP-M1` already shipped**, in two independent places.
+  Evidence: the skeleton's registry heading read
+  `### 5.1. Purity and manifest-query registry` against `REGISTRY_HEADING`'s
+  `### 5.1. Registry` (`registries.rs:20`), and its manifest-query cell
+  vocabulary was `Available`/`Stub` against `check_manifest_query`'s `yes`/`no`
+  (`registries.rs:229-237`). Impact: both are hard failures on the first row
+  read, and both would have fired only at `EP-M3` — after the go/no-go had
+  already been spent on a document written to the wrong contract. Neither was
+  caught by `EP-M1` because no child RFC exists yet, so every check that reads
+  a registry is vacuously green; the template was prose the parser had never
+  been pointed at. Two readings were available for each — change the template
+  or change the parser — and the template gave way in both, because in both the
+  parser already agrees with the parent document. RFC 0006 table 2's own column
+  is headed "Available in manifest queries" with cells `Yes` and `No`, so
+  `Available`/`Stub` was a second vocabulary for a fact the parent already
+  spells; and `### 5.1. Registry` also matches RFC 0006's own section 14.13
+  wording, "carries the group's registry". The fix is to the skeleton plus a
+  note at each site naming the constant that reads it, so the next editor knows
+  the heading is parsed rather than prose. The general lesson: a template
+  committed in prose is untested code, and the milestone that first consumes it
+  is the wrong place to discover that.
 
 ### `EP-M0` audit results (2026-09-11)
 
@@ -980,9 +1017,12 @@ RFC 0006 section 8.N. This section does not restate the contract.>
 
 ## 5. Cross-cutting contract conformance
 
-### 5.1. Purity and manifest-query registry
+### 5.1. Registry
 
-<The five-column table. Mandatory.>
+<The five-column table. Mandatory. The heading is parsed literally by
+`registries.rs`, which matches `### 5.1. Registry`; a child that retitles it
+fails with "has no registry table at ### 5.1. Registry" before any row is
+read.>
 
 ### 5.2. Manifest-query availability
 
@@ -1042,16 +1082,23 @@ example is RFC 0017's, and is the worked example `EP-M2` must produce in full:
 
 | Helper      | Namespace | Registration | Purity class | Manifest query |
 | ----------- | --------- | ------------ | ------------ | -------------- |
-| `path_join` | Filter    | New          | Pure         | Available      |
-| `abs`       | Test      | New          | Pure         | Available      |
-| `basename`  | Filter    | Option added | Pure         | Available      |
+| `path_join` | Filter    | New          | Pure         | Yes            |
+| `abs`       | Test      | New          | Pure         | Yes            |
+| `basename`  | Filter    | Option added | Pure         | Yes            |
 
 *Table 2: The registry row shape.*
 
 `Registration` is `New` or `Option added`, distinguishing the 57 new helpers
 from the 3 existing helpers gaining a behaviour-preserving option.
 `Purity class` is one of the six values in RFC 0006 table 2. `Manifest query` is
-`Available` or `Stub`. The coverage test parses exactly these cells.
+`Yes` or `No`, matching the column of the same name in RFC 0006 table 2 rather
+than introducing a second vocabulary for the same fact. The coverage test
+parses exactly these cells, and it cross-checks the manifest-query cell against
+the purity class: `Yes` is admissible only for a pure helper, because clause
+6.2 admits only pure helpers to the manifest-query environment and the non-pure
+ones are registered there as always-failing stubs rather than being absent. So
+a non-pure row reads `No` and still resolves in both environments; the `No` is
+the stub's disposition, not its absence.
 
 ## Conformance basis
 

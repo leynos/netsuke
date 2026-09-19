@@ -59,7 +59,7 @@ pub(super) fn is_separator(cells: &[String]) -> bool {
 /// Only the two Markdown fence styles are tracked. The delimiter is remembered
 /// rather than just the open/closed state, so a `~~~` block containing a line of
 /// backticks does not close early, and a much longer closing run than the one
-/// that opened the block is accepted, as CommonMark requires.
+/// that opened the block is accepted, as `CommonMark` requires.
 #[derive(Default)]
 pub(super) struct Fences {
     /// The delimiter that opened the current block, while one is open.
@@ -102,7 +102,7 @@ impl Delimiter {
     /// Read `line` as a fence delimiter, if it is one.
     ///
     /// `None` also covers a backtick fence whose info string itself contains a
-    /// backtick, which CommonMark forbids — that shape is an inline code span
+    /// backtick, which `CommonMark` forbids — that shape is an inline code span
     /// opening a line, not a fence.
     fn opening(line: &str) -> Option<Self> {
         let trimmed = line.trim_start();
@@ -122,7 +122,7 @@ impl Delimiter {
     }
 
     /// Whether this delimiter closes a block that `opened` opened.
-    fn closes(self, opened: Self) -> bool {
+    const fn closes(self, opened: Self) -> bool {
         self.character == opened.character && self.is_closing_run(opened.run)
     }
 
@@ -131,7 +131,7 @@ impl Delimiter {
     /// Split from [`Delimiter::closes`] so each predicate holds one conjunction,
     /// which is what keeps the guard in [`Fences::mark`] within the branch limit
     /// Whitaker's `conditional_max_n_branches` sets.
-    fn is_closing_run(self, opened_run: usize) -> bool {
+    const fn is_closing_run(self, opened_run: usize) -> bool {
         self.run >= opened_run && !self.info
     }
 }
