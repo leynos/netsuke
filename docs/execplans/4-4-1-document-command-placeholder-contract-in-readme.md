@@ -52,7 +52,7 @@ After this change:
   qualifying it to command recipes, that literal `$in` and `$out` are left
   alone. In a `script:` recipe they are not.
 
-You can see it working by running `NETSUKE_REQUIRE_NINJA=1 make test` and
+The change is observable by running `NETSUKE_REQUIRE_NINJA=1 make test` and
 observing the new cases
 `readme_security_tests::placeholder_rewriting_differs_by_recipe_kind`,
 `readme_security_tests::netsuke_owned_path_substitutions_are_quoted`, and
@@ -150,7 +150,7 @@ property test `dollar_prefixed_shell_variables_are_preserved`
 `is_valid_command_for_shell` calls `shlex::split(command).is_some()` on the
 fully substituted text (`src/ir/cmd_interpolate/mod.rs:230`). Failure produces
 `IrGenError::InvalidCommand`, surfaced through the Fluent message
-`ir.invalid_command` — in `locales/en-GB/messages.ftl:179`,
+`ir.invalid_command` — in `locales/en-GB/messages.ftl:188`,
 `Invalid command interpolation: { $snippet }.` The gate applies to `command:`
 recipes on the POSIX and Bash routes. It is **not** applied to `script:`
 recipes (see the doc comment on `interpolate_script_with_bindings`,
@@ -646,7 +646,7 @@ boundary.**
 - Evidence: `cargo nextest run --test readme_security_tests`. Red before the
   README section exists, for the same missing-identifier reason. Discharged
   when all three pass and the diagnostic text matches
-  `locales/en-GB/messages.ftl:179`.
+  `locales/en-GB/messages.ftl:188`.
 - Non-vacuity: the two control cases are the whole point. A test suite that
   only checked rejection would pass equally well against an implementation that
   rejected *every* backtick, which is not what the README will claim. The
@@ -959,10 +959,10 @@ placeholder table second and the backtick hazard fifth, so a reader who stopped
 halfway came away with a capability list and no warning. The live hazards now
 come first.
 
-1. **Framing.** A `Netsukefile` executes commands, so treat it as you would a
-   `Makefile`. Netsuke narrows some quoting mistakes but is not a sandbox. This
-   paragraph must contain the sentence "a backtick pair you wrote is executed
-   by the shell", and it must appear above the first fence.
+1. **Framing.** A `Netsukefile` executes commands, so it warrants the same care
+   as a `Makefile`. Netsuke narrows some quoting mistakes but is not a sandbox.
+   This paragraph must contain the sentence "a backtick pair you wrote is
+   executed by the shell", and it must appear above the first fence.
 2. **What Netsuke does not protect you from.** Author-written backticks and
    `$( … )`; and, under its own bold label, **"Values you template in are not
    quoted"** — arbitrary Jinja output, `raw` blocks, and handwritten shell
@@ -1044,12 +1044,17 @@ Run everything from the repository root,
    ls docs/adr-*.md | sed 's/.*adr-0*\([0-9]*\).*/\1/' | sort -n | tail -1
    ```
 
-   Expect `20`. If it is higher, use the next number and update every reference
-   in this plan.
+   This was `20` in revision 2. On the rebased tree it is `26`; PR 621, an
+   unmerged and stale branch, also holds a file named
+   `docs/adr-021-manifest-linting-under-netsuke-check.md`, so 021 would collide
+   on merge even though main has nothing at that number. The ADR is therefore
+   **027**, and every reference in this plan was updated. Step 4 is complete;
+   re-running this step now would find `27` and must not mint a second record.
 
 4. Write `docs/adr-027-command-placeholder-contract.md`, add its entry to
-   `docs/contents.md` under `## Decision records` immediately above the ADR-020
-   entry, and add the design-document reference. Commit as EP-M1.
+   `docs/contents.md` under `## Decision records` immediately below the ADR-026
+   entry, and add the design-document reference. Commit as EP-M1. **Done** as
+   `3594b568`.
 
    ```sh
    make check-fmt 2>&1 | tee /tmp/check-fmt-netsuke-$(git branch --show-current).out
@@ -1176,7 +1181,7 @@ Run everything from the repository root,
     make check-fmt 2>&1 | tee /tmp/check-fmt-netsuke-$(git branch --show-current).out
     make typecheck 2>&1 | tee /tmp/typecheck-netsuke-$(git branch --show-current).out
     PATH="$HOME/go/bin:$PATH" make lint 2>&1 | tee /tmp/lint-netsuke-$(git branch --show-current).out
-    make test 2>&1 | tee /tmp/test-netsuke-$(git branch --show-current).out
+    NETSUKE_REQUIRE_NINJA=1 make test 2>&1 | tee /tmp/test-netsuke-$(git branch --show-current).out
     make markdownlint 2>&1 | tee /tmp/markdownlint-netsuke-$(git branch --show-current).out
     make nixie 2>&1 | tee /tmp/nixie-netsuke-$(git branch --show-current).out
     ```
@@ -1199,17 +1204,26 @@ A reader can verify the outcome without reading any test:
 
 Quality criteria — what "done" means:
 
-- Tests: `make test` passes. The five new cases in
+- Tests: `NETSUKE_REQUIRE_NINJA=1 make test` passes. All seven cases in
   `tests/readme_security_tests.rs` pass, and each failed before the README
-  section existed.
-- Verification: `OBL-PLACEHOLDERS`, `OBL-BACKTICK-REJECT`, and
-  `OBL-SHLEX-SCOPE` are discharged with both negative-control transcripts
-  recorded. `OBL-STRUCTURAL-PARITY` is discharged by the step-10 output.
+  section existed: `documented_safe_placeholder_manifest_builds`,
+  `placeholder_rewriting_differs_by_recipe_kind`,
+  `netsuke_owned_path_substitutions_are_quoted`,
+  `documented_backtick_manifest_is_rejected`,
+  `balanced_author_backticks_are_accepted`,
+  `odd_backtick_count_without_markers_is_rejected`, and
+  `shlex_gate_applies_to_commands_not_scripts`.
+- Verification: all five obligations are discharged —
+  `OBL-PLACEHOLDERS`, `OBL-RECIPE-KIND`, `OBL-QUOTING`, `OBL-BACKTICK-REJECT`,
+  and `OBL-SHLEX-SCOPE` — with the three negative-control transcripts from
+  `Concrete steps` step 8 recorded. `OBL-STRUCTURAL-PARITY` is discharged by
+  the step-9 output.
 - Lint and typecheck: `make check-fmt`, `make typecheck`, `make lint`,
   `make markdownlint`, and `make nixie` all pass. If `actionlint` is missing,
   say so explicitly rather than reporting `make lint` clean.
-- Performance: no threshold. The new tests add one Ninja-dependent case, which
-  skips when `ninja` is absent.
+- Performance: no threshold. The new tests add one Ninja-dependent case; with
+  `NETSUKE_REQUIRE_NINJA=1` set, an absent `ninja` is a failure rather than a
+  silent skip.
 - Security: the README section must not claim any protection the code does not
   provide. This is checked by the Stage A design review and re-checked at the
   EP-M3 conformance check.
@@ -1474,6 +1488,22 @@ the record:
   but a header value outside that set would not be caught by a test on this
   revision.
 
+- Observation: the module doc comment on `src/ir/cmd_interpolate/mod.rs:3` links
+  to `[`interpolate_command`]`, and no such item exists — the public entry
+  points are `interpolate_command_with_bindings` and
+  `interpolate_script_with_bindings` (`:189`, `:207`). Evidence:
+  `RUSTDOCFLAGS="--cfg docsrs -D warnings" cargo doc --workspace --no-deps`
+  passes, but adding `--document-private-items` fails with an unresolved-link
+  error naming that item at `mod.rs:36` of the log, one of nineteen such
+  errors. The `lint-clippy` target runs `cargo doc` *without*
+  `--document-private-items`, so `broken_intra_doc_links` — which
+  `[workspace.lints.rustdoc]` sets to `deny` (`Cargo.toml:267`) — never sees
+  it. Impact: EP-M2 corrects this doc comment anyway for its Fact A wording, so
+  the dead link is fixed as a side effect; no new work is created. Recorded
+  because a comment edit that only fixed the prose would leave a latent
+  `deny`-level violation behind, and because the nineteen errors show the
+  private-items path is not otherwise gate-covered on this revision.
+
 ## Decision log
 
 - Decision `D1`: the supported placeholder set is `{{ ins }}` and `{{ outs }}`
@@ -1636,14 +1666,64 @@ the record:
   item's completion record from this branch would obscure history. Date/Author:
   2026-09-09, planning agent.
 
+- Decision `D-CODERABBIT-EP-M1`: the milestone CodeRabbit pass returned twelve
+  findings over the whole branch delta, not just the two EP-M1 commits. Six
+  were accepted and fixed; six were rejected with reasons. No finding required
+  a behaviour change. The accepted set:
+
+  - The stale `locales/en-GB/messages.ftl:179` citations in `Progress` and in
+    the `OBL-BACKTICK-REJECT` evidence became `:188`, the current line.
+  - The ADR ceiling in `Concrete steps` step 3 now records that it was `20` at
+    revision 2 and is `26` on the rebased tree, that step 4 is already done, and
+    that re-running the step must not mint a second record.
+  - `docs/netsuke-design.md` now qualifies the `shlex` and backtick rejection
+    to `command:` recipes on the POSIX and Bash routes, excluding `script:` and
+    PowerShell. The paragraph as written stated a guard that
+    `is_valid_command_for_shell` (`src/ir/cmd_interpolate/mod.rs:226-231`)
+    applies to one recipe kind and one pair of routes as though it applied to
+    both.
+  - The ADR no longer describes the README section as existing. `Status`,
+    `Rationale`, `Consequences`, and `Implementation references` now say the
+    section is established by this change set, not already published, because
+    at EP-M1 the README contains no such section.
+  - The artefact checklist in `Artefacts and notes` cited off-by-one step
+    numbers; it now names steps 6, 7, 8, 9, and 10.
+  - The acceptance inventory in `Validation and acceptance` named five test
+    cases and three obligations. It now names all seven cases and all five
+    obligations, plus the three negative controls the step-8 block defines.
+
+  The rejected set, with reasons:
+
+  - *"Change the ADR date to 18 September 2026."* Rejected as factually wrong.
+    Both `date -u` and GitHub's HTTP `Date` header report 2026-09-19, and
+    `3594b568` is dated 2026-09-19T01:52:11+02:00. The ADR date is correct.
+  - *"Set `NETSUKE_REQUIRE_NINJA=1` on the step-10 `make test`."* Accepted, and
+    the related "skips when `ninja` is absent" claim in the performance
+    criterion was corrected to match.
+  - *"`today's rejects` → `rejected today`."* Accepted as a readability fix.
+  - *"`both documents` → `all three documents`."* Accepted; three documents are
+    named in the surrounding text.
+  - *"Remove the second-person pronoun at line 55."* Accepted. The style guide
+    bars first and second person outside `README.md`
+    (`docs/documentation-style-guide.md:39`). The same fix was applied to the
+    Stage C framing bullet, which had the same defect, and to the two quoted
+    README sentences that prescribe the second person — those quotes describe
+    README prose, where the style guide permits it, so only the framing around
+    them changed.
+  - *"Reconcile findings 6 and 12."* Both target the same step-3 location with
+    contradictory numbers (expect 26, versus ceiling 27). Resolved in favour of
+    recording the historical `20`, the observed `26`, and the resulting `027`.
+
+  Date/Author: 2026-09-19, implementing agent.
+
 ## Outcomes & retrospective
 
 Not yet started. To be completed at EP-M5.
 
 Before setting this plan to `COMPLETE`, reconcile each entry in
 `Surprises & discoveries` against the artefacts in `Conformance basis`: confirm
-that EP-M2 corrected the Fact A misstatements in both documents and the `[^8]`
-footnote, that `docs/formal-verification-methods-in-netsuke.md` records
+that EP-M2 corrected the Fact A misstatements in all three documents and the
+`[^8]` footnote, that `docs/formal-verification-methods-in-netsuke.md` records
 `FV-CPC-Q1` through `FV-CPC-Q3` as answered with a pointer to ADR-027, and that
 the 4.2.3 status discrepancy is either resolved elsewhere or recorded as
 knowingly deferred.
@@ -1652,12 +1732,12 @@ knowingly deferred.
 
 To be populated during implementation. At minimum, retain:
 
-- the red transcript from `Concrete steps` step 5, showing both
+- the red transcript from `Concrete steps` step 6, showing both
   missing-identifier failures and the registry-drift failure;
-- the green transcript from step 6;
-- both negative-control transcripts from step 7;
-- the parity output from step 10;
-- the gate summary from step 11, naming any gate that did not run.
+- the green transcript from step 7;
+- the three negative-control transcripts from step 8;
+- the parity output from step 9;
+- the gate summary from step 10, naming any gate that did not run.
 
 Reference material gathered during planning, for the writer's use:
 
