@@ -137,11 +137,15 @@ fn a_machine_local_name_is_skipped_at_any_depth() -> Result<()> {
 /// switched off for the same reason. A contributor with a global ignore file
 /// listing a name here would otherwise see the test pass while the repository
 /// says nothing about that name, which is the original defect wearing a
-/// different hat. Setting `core.excludesFile` to `/dev/null` covers both
-/// spellings a global ignore can take: it overrides a configured path, and it
-/// also suppresses the default `~/.config/git/ignore`, measured with the
-/// default present and no path configured — a bare path-setting flag is not
-/// needed for the second, and had been written here as though it were.
+/// different hat. An empty `core.excludesFile` covers both spellings a global
+/// ignore can take: it overrides a configured path, and it also suppresses the
+/// default `~/.config/git/ignore`, measured against both. One flag, and a bare
+/// path-setting flag for the second case is not needed — it had been written
+/// here as though it were, and the flag that was supposed to be the second turn
+/// turned out not to exist as a git key at all.
+///
+/// A template directory is a fourth, and it is closed at `git init` above
+/// rather than here, because the file it seeds is written before this runs.
 ///
 /// `.git` is the one legitimate exception: git refuses to track anything
 /// beneath it whatever the ignore files say, so the appeal still holds even
@@ -163,8 +167,19 @@ fn every_skipped_name_is_one_git_would_not_track() -> Result<()> {
     scratch_root
         .write(".gitignore", ignore_rules)
         .context("copy the repository's `.gitignore` into the scratch repository")?;
+    // `--template=` is what makes the scratch repository answer from the
+    // `.gitignore` alone. A template directory can hold an `info/exclude`, and
+    // git writes it into the new repository, where `check-ignore` reads it;
+    // measured at a false pass once seeded. An empty value suppresses the
+    // template, and it is the only form that does: `GIT_TEMPLATE_DIR` outranks
+    // a `-c init.templateDir=` given to the same command, measured, so a
+    // contributor with that variable set would otherwise see the false pass
+    // survive. The flag belongs here rather than on `check-ignore`, because the
+    // file is written at init time, and because a template can seed
+    // `.git/config` as well — which is also why this and not a config pin is
+    // the thing that closes it.
     let init = std::process::Command::new("git")
-        .args(["init", "--quiet"])
+        .args(["init", "--quiet", "--template="])
         .current_dir(scratch_path)
         .status()
         .context("run git init in the scratch repository")?;
@@ -193,9 +208,13 @@ fn every_skipped_name_is_one_git_would_not_track() -> Result<()> {
 ///
 /// The machine's global ignore file is disabled first, so the answer comes from
 /// the repository copied into `root` and from nothing else. `core.excludesFile`
-/// is the only key that needs setting: `/dev/null` overrides a configured path
-/// and equally suppresses the default `~/.config/git/ignore`, so one flag covers
-/// both ways a contributor's machine can answer for the repository.
+/// is the only key that needs setting: an empty value overrides a configured
+/// path and equally suppresses the default `~/.config/git/ignore`, so one flag
+/// covers both ways a contributor's machine can answer for the repository.
+/// Measured against both configurations. The value is empty rather than
+/// `/dev/null` because a device path is a Unix spelling and this test runs on
+/// the Windows lane too; the empty form needs no filesystem path and was
+/// measured to behave identically.
 ///
 /// `check-ignore -q` reports by exit status: 0 ignored, 1 not ignored. Every
 /// other status is a real failure and propagates, so "git could not answer" is
@@ -204,7 +223,7 @@ fn is_ignored(root: &Utf8Path, name: &str) -> Result<bool> {
     let status = std::process::Command::new("git")
         .args([
             "-c",
-            "core.excludesFile=/dev/null",
+            "core.excludesFile=",
             "check-ignore",
             "-q",
             &format!("{name}/probe.rs"),

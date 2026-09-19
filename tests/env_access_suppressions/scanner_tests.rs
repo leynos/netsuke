@@ -44,6 +44,17 @@ use rstest::rstest;
     "#![allow(clippy::style, reason = \"escape hatch probe\")]\n",
     &["clippy::style"]
 )]
+// `clippy::restriction` is banned for a different reason than the groups above:
+// it does not reach the policy lint at all. It is the group of the two guard
+// lints, so one crate-level attribute silences the reporter and an item-level
+// bare `allow` further down then passes unreported. Measured: exit 101 with no
+// crate attribute, exit 0 with this one. This row pins the entry, which a
+// reader measuring only against the policy lint would otherwise remove.
+#[case::guard_lint_group(
+    "src/lib.rs",
+    "#![allow(clippy::restriction, reason = \"escape hatch probe\")]\n",
+    &["clippy::restriction"]
+)]
 // A wrapped attribute is read whole, as `rustfmt` writes a long one.
 #[case::wrapped(
     "src/lib.rs",

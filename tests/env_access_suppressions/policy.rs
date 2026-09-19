@@ -43,6 +43,25 @@
 /// sits, but nothing else reports a crate that has silenced the reporter. See
 /// "Enforcing the environment mandate" in the developers' guide.
 ///
+/// That second job is why `clippy::restriction` is banned even though it cannot
+/// reach the policy lint. It is the *group* of both guard lints — measured from
+/// `cargo clippy -- -W help`, which lists `clippy::allow-attributes` and
+/// `clippy::allow-attributes-without-reason` as its members — so one crate-level
+/// `#![allow(clippy::restriction, reason = "...")]` silences them together, and
+/// an item-level bare `allow` further down then passes unreported. Measured on a
+/// file whose only offence is that item-level `allow`: exit 101 with no crate
+/// attribute, exit 0 with one. The `allow_attributes` entry above does not do
+/// this — it leaves both diagnostics firing, exit 101 — because
+/// `allow_attributes` does not fire on the *inner* form, which is the whole
+/// reason this module reads source text. `blanket_clippy_restriction_lints` is
+/// denied in the workspace but does not cover the attribute route either: it
+/// fires on a group-level `-W clippy::restriction`, and reports nothing for an
+/// attribute naming the group, measured at zero diagnostics.
+///
+/// The criterion for membership is therefore "can suppress something this
+/// module exists to protect", not "can suppress the policy lint", and the two
+/// are different sets. Membership is decided by measurement, per name.
+///
 /// The last three entries close a second way in, measured rather than assumed.
 /// Clippy keeps the old spelling of a renamed lint, and a renamed name still
 /// selects the lint it was renamed to, so `clippy::disallowed_method` — an
@@ -68,10 +87,20 @@
 /// suppress anything would be a rule the code cannot justify. The workspace
 /// still denies `unknown_lints`, so a misspelled name remains an error at the
 /// lint level, which is where that concern belongs.
-const FORBIDDEN_ALLOW_LINTS: [&str; 9] = [
+///
+/// The test is applied to the name, not to the category it belongs to. An
+/// earlier reading of this paragraph took "cannot suppress anything" to excuse
+/// every name that leaves the policy lint firing, which would also excuse
+/// `clippy::allow_attributes` and `clippy::allow_attributes_without_reason`
+/// above — both in the set, both unable to reach the policy lint. What
+/// distinguishes `unknown_lints` is that no measurement shows it silencing
+/// *anything*; the guard lints can be silenced, and `clippy::restriction` does
+/// it. So each name here is measured against what it can actually reach.
+const FORBIDDEN_ALLOW_LINTS: [&str; 10] = [
     "clippy::disallowed_methods",
     "clippy::style",
     "clippy::all",
+    "clippy::restriction",
     "warnings",
     "clippy::allow_attributes",
     "clippy::allow_attributes_without_reason",
