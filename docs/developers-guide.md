@@ -4401,9 +4401,9 @@ passed the anchored scan, and every one is pinned by a test in
   but a skip attribute is a request to be shown nothing, so the gate passes a
   spelling it never inspected.
 - `r#allow(...)` and `r#clippy::disallowed_methods`, raw identifiers denoting
-  exactly what the unprefixed names denote. These need no skip attribute at
-  all: `rustfmt` leaves them byte-for-byte as written, so they were reachable
-  on a clean `make check-fmt` run and are the more dangerous of the two groups.
+  exactly what the unprefixed names denote. These need no skip attribute at all:
+  `rustfmt` leaves them byte-for-byte as written, so they were reachable on a
+  clean `make check-fmt` run and are the more dangerous of the two groups.
 - the deprecated bare `disallowed_methods` beside its enabler, likewise
   untouched by `rustfmt`.
 
