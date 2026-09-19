@@ -166,17 +166,11 @@ non-blocking, so a FIFO cannot wedge the render worker first. A symlink final
 component is refused on both platforms, but not with the same diagnostic: on
 Unix the default open declines to follow it, so the failure comes from the open
 itself and names the path together with the platform's symbolic-link detail,
-while on Windows the open declines to traverse the reparse point and the
-refusal then comes from the opened handle, which reuses the not-a-regular-file
-diagnostic. That Windows refusal covers every reparse point, not only symlinks:
-junctions, volume mount points, and other tags such as deduplication or cloud
-placeholders are rejected alike, and `follow_symlinks=true` waives the refusal
-for all of them. That opt-in does not extend to the capability that anchors the
-read in the workspace: a link whose target is written as an absolute path is
-still refused as an escape attempt even when the target lies inside the
-workspace, so relative-target links are the supported case. A junction always
-records an absolute target, so the opt-in cannot follow one. Two optional
-keyword arguments narrow a call without touching the operator ceiling:
+while on Windows the open declines to traverse the reparse point, so the
+refusal comes from the opened handle and reuses the not-a-regular-file
+diagnostic. That Windows refusal covers every reparse tag, not only symlinks,
+and a relative-target link is the supported opt-in case. Two optional keyword
+arguments narrow a call:
 
 - `max_bytes` lowers the budget for one call (a value above the configured
   budget is clamped to it). Example:
@@ -184,8 +178,9 @@ keyword arguments narrow a call without touching the operator ceiling:
 - `follow_symlinks=true` permits the final component to be a symlink. Example:
   `{{ 'link/version.txt' | contents(follow_symlinks=true) }}`.
 
-See the users' guide section on file reading limits for the defaults, the
-symlink policy, and the trust model these limits assume.
+See
+[Configure file reading limits](users-guide.md#configure-file-reading-limits)
+for the defaults, the full policy, and the trust model.
 
 MD5 and SHA-1 are available only in builds compiled with Cargo feature
 `legacy-digests`. Without that feature, `hash('md5')`, `hash('sha1')`, and their
