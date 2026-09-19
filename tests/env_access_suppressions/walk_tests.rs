@@ -133,6 +133,14 @@ fn a_machine_local_name_is_skipped_at_any_depth() -> Result<()> {
 /// checkout at all, which is also why no `git rev-parse` guard is needed for the
 /// copies cargo-mutants makes: this test brings its own repository.
 ///
+/// The machine's own git configuration is a third source of answers and is
+/// switched off for the same reason. A contributor with a global ignore file
+/// listing a name here would otherwise see the test pass while the repository
+/// says nothing about that name, which is the original defect wearing a
+/// different hat. `core.excludesFile=/dev/null` empties the configured path and
+/// an empty `core.excludesPath` suppresses the default `~/.config/git/ignore`,
+/// which needs both because git consults one or the other.
+///
 /// `.git` is the one legitimate exception: git refuses to track anything
 /// beneath it whatever the ignore files say, so the appeal still holds even
 /// though `check-ignore` reports it as unignored. It is named here rather than
@@ -181,12 +189,27 @@ fn every_skipped_name_is_one_git_would_not_track() -> Result<()> {
 
 /// Return whether the repository at `root` ignores a source under `name`.
 ///
+/// The machine's global ignore file is disabled first, so the answer comes from
+/// the repository copied into `root` and from nothing else. Both spellings are
+/// needed: `core.excludesFile` overrides the configured path, and an empty
+/// `core.excludesPath` suppresses the default `~/.config/git/ignore`, which git
+/// falls back to when no path is configured — a contributor who has the second
+/// but not the first would otherwise get a pass the repository does not justify.
+///
 /// `check-ignore -q` reports by exit status: 0 ignored, 1 not ignored. Every
 /// other status is a real failure and propagates, so "git could not answer" is
 /// never read as "git would track this".
 fn is_ignored(root: &Utf8Path, name: &str) -> Result<bool> {
     let status = std::process::Command::new("git")
-        .args(["check-ignore", "-q", &format!("{name}/probe.rs")])
+        .args([
+            "-c",
+            "core.excludesFile=/dev/null",
+            "-c",
+            "core.excludesPath=",
+            "check-ignore",
+            "-q",
+            &format!("{name}/probe.rs"),
+        ])
         .current_dir(root)
         .status()
         .context("run git check-ignore")?;

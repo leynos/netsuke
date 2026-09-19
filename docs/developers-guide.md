@@ -4487,6 +4487,15 @@ has to hold on every checkout, before any tool runs, and `.ruff_cache` is now in
 `.gitignore` beside its siblings. Asking its own repository also means the
 test needs no guard for the copies cargo-mutants makes, since it brings one.
 
+The machine's git configuration is a third place an answer can come from, and
+it is switched off for the same reason. A global ignore file naming one of
+these directories would make the test pass while the repository said nothing
+about the name — the original defect wearing a different hat, and just as
+invisible. Both spellings are disabled, `core.excludesFile` and
+`core.excludesPath`, because git consults one or the other; measured, a global
+file listing `.ruff_cache` turns a correct refusal into a pass without the pair
+and leaves it a refusal with them.
+
 It reads the attribute as source text, because that is what an attribute is:
 there is no execution to model, and the assertion is exactly "this text does
 not appear in an `allow` attribute". An attribute nested in a `cfg_attr` is
