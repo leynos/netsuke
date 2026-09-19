@@ -266,9 +266,10 @@ def test_the_termination_allowance_is_the_grace_period_plus_the_margin() -> None
     A single floor over the grace period and the margin would absorb
     every grace period below the margin, so adding one of thirty seconds
     to this configuration would demand nothing more of the watchdog above
-    it. The ordering assertion that uses this reading has 230 s of slack
-    against the real tree, so it would pass on either reading; the test
-    of the reading itself is what stands behind the two terms.
+    it. The ordering assertion that uses this reading has 50 s of slack
+    against the real tree -- the 1,800 s watchdog against a 1,750 s
+    requirement -- so it would pass on either reading; the test of the
+    reading itself is what stands behind the two terms.
     """
     assert termination_allowance("") == pytest.approx(
         NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS + TERMINATION_SAFETY_MARGIN_SECONDS
