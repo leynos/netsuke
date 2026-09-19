@@ -41,18 +41,20 @@ Four failures motivate the shape rather than any particular spelling of it:
 
 These predicates read parsed workflow values rather than files, so
 ``codescene_upload_contract_test`` can hold the repository's own trunk lane to
-the contract and drive shapes the repository does not have. Three of the rules
+the contract and drive shapes the repository does not have. Four of the rules
 they rest on describe no particular lane, so they live apart: the scan for
 ``vars.`` references the last bullet depends on is general to any step
 (``workflow_variable_scan``), finding a named step and checking that it calls
 the right action at an immutable pin is what every lane contract does first
-(``lane_steps``), and the credential the upload is handed is a rule about the
-secret rather than about the report (``codescene_credential_invariants``).
+(``lane_steps``), the credential the upload is handed is a rule about the
+secret rather than about the report (``codescene_credential_invariants``), and
+the third bullet's whole remedy — reading the report as data before sending it
+— is stated over the validating step alone
+(``codescene_report_validation_invariants``).
 
 Run via ``make test-workflow-contracts``.
 """
 
-import re
 import typing as typ
 
 from ci_coverage_wiring_invariants import (
@@ -62,7 +64,16 @@ from ci_coverage_wiring_invariants import (
     UPLOAD_COVERAGE_ACTION,
 )
 from codescene_credential_invariants import credential_offenders
-from lane_steps import action_reference_of, inputs_of, step_named
+from codescene_report_validation_invariants import (
+    REPORT_VALIDATION_STEP,
+    validation_offenders,
+)
+from lane_steps import (
+    action_reference_of,
+    inputs_of,
+    step_named,
+    step_names_declared_twice,
+)
 from workflow_variable_scan import unbound_variable_references
 
 if typ.TYPE_CHECKING:
@@ -70,17 +81,6 @@ if typ.TYPE_CHECKING:
 
 #: The step name that generates the report this lane publishes.
 COVERAGE_STEP: typ.Final[str] = "Test and Measure Coverage"
-
-#: The step name that reads the generated report as data before it is sent.
-#: A report the generation action calls successful can still be empty or
-#: truncated, and the upload asserts only that the file exists, so this is the
-#: only place in the lane where a malformed report is caught before the
-#: instrumented build is over.
-REPORT_VALIDATION_STEP: typ.Final[str] = "Validate the report before submitting it"
-
-#: The standalone hostile-data validator the lane runs. It owns the LCOV
-#: contract and is exercised by `make test-coverage-artifact`.
-REPORT_VALIDATOR_SCRIPT: typ.Final[str] = "scripts/validate_coverage_artifact.py"
 
 #: The step name that submits the report to CodeScene.
 CODESCENE_UPLOAD_STEP: typ.Final[str] = "Upload coverage data to CodeScene"
@@ -123,12 +123,15 @@ def report_steps(
     """Return the generation, validation and upload steps, or None.
 
     A lane missing any one of the three is not worth reporting faults against,
-    so absence is answered once, here, and the caller guards on a single value.
-    The lookup loops over one name at a time rather than joining three
-    ``is None`` tests: a three-operand boolean is rejected by `PLR0916`, and a
-    predicate over a tuple of optionals is rejected by the type checker, which
-    cannot narrow the individual names through it. Appending the narrowed step
-    is what leaves the returned tuple non-optional.
+    and neither is one that declares a name twice: the steps this contract can
+    examine would be an arbitrary member of the pair, so every fault reported
+    below would be a claim about a step the lane is not necessarily running.
+    Both are answered once, here, and the caller guards on a single value. The
+    lookup loops over one name at a time rather than joining three ``is None``
+    tests: a three-operand boolean is rejected by `PLR0916`, and a predicate
+    over a tuple of optionals is rejected by the type checker, which cannot
+    narrow the individual names through it. Appending the narrowed step is what
+    leaves the returned tuple non-optional.
 
     Parameters
     ----------
@@ -139,8 +142,10 @@ def report_steps(
     -------
     tuple of three dicts, or None
         The three steps, in the order above, or None when the lane is missing
-        one of them.
+        one of them or declares one of them more than once.
     """
+    if any(name in step_names_declared_twice(steps) for name in REPORT_STEP_NAMES):
+        return None
     found: list[dict[str, object]] = []
     for name in REPORT_STEP_NAMES:
         step = step_named(steps, name)
@@ -151,11 +156,29 @@ def report_steps(
     return coverage, validation, upload
 
 
-def _missing_steps(
+def _absent_steps(
     steps: cabc.Sequence[dict[str, object]],
 ) -> list[str]:
-    """Return the names of the report-delivery steps the lane does not declare."""
-    return [name for name in REPORT_STEP_NAMES if step_named(steps, name) is None]
+    """Return the report-delivery steps the lane does not declare exactly once.
+
+    A name the lane carries twice is reported alongside a name it does not
+    carry at all, because both leave the lane without a single step this
+    contract can make a claim about. Which of the two a repeated name is would
+    not be visible from the lookup alone, so the repetition is reported here
+    rather than silently resolved to whichever step was declared first.
+
+    Returns
+    -------
+    list[str]
+        One entry per name the lane is missing or has declared more than once,
+        in the order the contract lists them.
+    """
+    repeated = step_names_declared_twice(steps)
+    return [
+        name
+        for name in REPORT_STEP_NAMES
+        if step_named(steps, name) is None or name in repeated
+    ]
 
 
 def upload_contract_offenders(
@@ -177,7 +200,13 @@ def upload_contract_offenders(
     """
     found = report_steps(steps)
     if found is None:
-        return [f"the trunk lane is missing the step(s) {_missing_steps(steps)!r}"]
+        absent = _absent_steps(steps)
+        return [
+            (
+                f"the trunk lane must declare each of the report-delivery steps "
+                f"exactly once; {absent!r} is missing or repeated"
+            )
+        ]
     coverage, validation, upload = found
 
     offenders: list[str] = []
@@ -200,112 +229,12 @@ def upload_contract_offenders(
         if pin is not None:
             offenders.append(pin)
 
-    offenders.extend(_validation_offenders(validation))
+    offenders.extend(validation_offenders(validation))
     offenders.extend(_path_offenders(coverage, upload))
     offenders.extend(_checksum_offenders(upload))
     offenders.extend(credential_offenders(upload, inputs_of(upload)))
     offenders.extend(_archive_offenders(coverage, upload))
     return offenders
-
-
-def _validation_offenders(validation: dict[str, object]) -> list[str]:
-    """Return faults in the step that reads the report as data.
-
-    The step must run the checked-in validator over a directory built at run
-    time, and must have put the report into that directory. All three parts
-    matter, and the third is the one a script can omit while still reading as
-    correct. A step that merely asserts the file exists would not reject the
-    empty report the generation action can call a success, which is the fault
-    the uploader cannot see. A step that staged the report into a directory
-    committed to the tree, or read the report from wherever it was written,
-    would be validating something other than the artefact about to be sent.
-    And a step that names a staged directory without copying the report into it
-    validates whatever that directory happens to hold, which on a runner is
-    nothing at all — the validator then fails, or passes over an empty set,
-    without ever having read the report this lane is about.
-
-    Returns
-    -------
-    list[str]
-        One entry per fault in the step, empty when it reads the report through
-        the checked-in validator.
-    """
-    script = str(validation.get("run", ""))
-    offenders: list[str] = []
-    if REPORT_VALIDATOR_SCRIPT not in script:
-        offenders.append(
-            f"{REPORT_VALIDATION_STEP!r} must run {REPORT_VALIDATOR_SCRIPT}, "
-            f"which owns the LCOV contract for a hostile report"
-        )
-        # Nothing below can be established about a script that does not run the
-        # validator, and reporting it twice would read as two faults in a step
-        # that has one.
-        return offenders
-    staged = _staged_directory(script)
-    if staged is None:
-        offenders.append(
-            f"{REPORT_VALIDATION_STEP!r} must pass --artifact-dir a directory "
-            f"built at run time; the validator reads a directory holding "
-            f"exactly one {COVERAGE_REPORT_PATH!r}, so a script that hands it "
-            f"the workspace either validates the wrong artefact or refuses it "
-            f"for holding more than one"
-        )
-        return offenders
-    if not _copies_report_into(script, staged):
-        offenders.append(
-            f"{REPORT_VALIDATION_STEP!r} must copy {COVERAGE_REPORT_PATH!r} "
-            f"into the {staged!r} directory it passes --artifact-dir; a script "
-            f"that names a directory but never fills it validates whatever "
-            f"else is there"
-        )
-    return offenders
-
-
-def _staged_directory(script: str) -> str | None:
-    """Return the directory the script passes to ``--artifact-dir``.
-
-    The flag takes the directory as its argument, so the pair is read together:
-    a script that mentions the flag but supplies no directory, or supplies one
-    it never created, is not staging anything.
-
-    Returns
-    -------
-    str | None
-        The argument as written, or `None` when the flag is absent or bare.
-    """
-    match = re.search(
-        r"--artifact-dir[=\s]+(?P<directory>\S+)",
-        script,
-    )
-    if match is None:
-        return None
-    # A `"${staged}"` argument names the same directory as `${staged}`.
-    return match.group("directory").strip("\"'${}")
-
-
-def _copies_report_into(script: str, directory: str) -> bool:
-    """Return whether the script copies the report into ``directory``.
-
-    The copy is what binds the validated artefact to the submitted one: the
-    generation action writes the report into the workspace, and the upload
-    reads it from there, so a staged directory only means something if the
-    report was put into it. An empty staged directory would make the validator
-    fail for the wrong reason on a report that was fine.
-
-    Returns
-    -------
-    bool
-        Whether one line of the script names both the report and the
-        directory in a copying command.
-    """
-    return any(
-        re.search(
-            rf"\b(?:cp|install|mv)\b[^\n]*{re.escape(COVERAGE_REPORT_PATH)}[^\n]*"
-            rf"{re.escape(directory)}",
-            line,
-        )
-        for line in script.splitlines()
-    )
 
 
 def _path_offenders(

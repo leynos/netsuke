@@ -29,17 +29,19 @@ from codescene_credential_invariants import (
     CREDENTIAL_ENVIRONMENT_KEY,
     CREDENTIAL_INPUT,
 )
+from codescene_report_validation_invariants import (
+    REPORT_VALIDATION_STEP,
+    REPORT_VALIDATOR_SCRIPT,
+)
 from codescene_upload_invariants import (
     CODESCENE_UPLOAD_STEP,
     COVERAGE_FORMAT_INPUT,
     COVERAGE_FORMAT_VALUE,
     COVERAGE_STEP,
     OUTPUT_PATH_INPUT,
-    REPORT_VALIDATION_STEP,
-    REPORT_VALIDATOR_SCRIPT,
     UPLOAD_PATH_INPUT,
 )
-from lane_steps import step_named
+from lane_steps import step_named, step_names_declared_twice
 from workflow_loading import (
     COVERAGE_MAIN_WORKFLOW_PATH,
     job_steps,
@@ -122,7 +124,22 @@ def inputs_of(step: dict[str, object]) -> dict[str, object]:
 
 
 def step_of(steps: cabc.Sequence[dict[str, object]], name: str) -> dict[str, object]:
-    """Return the uniquely named step of a lane, which the clean lane has."""
+    """Return the uniquely named step of a lane, which the clean lane has.
+
+    The uniqueness assertion is this accessor's, not the lookup's, and it is
+    load-bearing: a case that varied a field on the first of two same-named
+    steps would assert against a lane the contract is not inspecting, because
+    the step it edited is not the one the contract read.
+
+    Returns
+    -------
+    dict[str, object]
+        The step carrying ``name``.
+    """
+    assert name not in step_names_declared_twice(steps), (
+        f"the lane must declare {name!r} once; "
+        "the step a case varies has to be the step the contract reads"
+    )
     found = step_named(steps, name)
     assert found is not None, f"the lane must declare {name!r}"
     return found

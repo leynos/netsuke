@@ -77,24 +77,44 @@ impl Workspace {
         Ok(())
     }
 
-    /// Build a resolver whose PATH is exactly the supplied override.
+    /// Build a resolver whose PATH and PATHEXT are exactly the overrides given.
     ///
     /// Every case passes an explicit `PATH`, so no fixture's outcome depends
-    /// on the ambient environment. Arrangement can fail, so this is fallible
-    /// rather than asserting: the cache capacity is non-zero by construction
-    /// of the literal, and a caller propagates the error instead of unwrapping
-    /// a value the type system has not established.
+    /// on the ambient environment. `PATHEXT` needs the same treatment for a
+    /// different reason: on Windows the fixture executable is written as
+    /// `<command>.cmd`, and a host whose `PATHEXT` omits `.CMD` would not
+    /// consider it executable, so the hit cases would fail on a correct
+    /// resolver. The override is inert off Windows — the snapshot records no
+    /// extension list there and nothing consults one — so pinning it
+    /// unconditionally costs nothing and keeps the two platforms on one
+    /// fixture.
+    ///
+    /// Arrangement can fail, so this is fallible rather than asserting: the
+    /// cache capacity is non-zero by construction of the literal, and a caller
+    /// propagates the error instead of unwrapping a value the type system has
+    /// not established.
     fn resolver(&self, path: Option<OsString>) -> Result<WhichResolver> {
         let cache_capacity =
             NonZeroUsize::new(8).context("the fixture cache capacity literal must be non-zero")?;
-        Ok(WhichResolver::new(WhichConfig::new(
-            Some(Arc::new(self.root.clone())),
-            path,
-            WorkspaceSkipList::default(),
-            cache_capacity,
-        )))
+        Ok(WhichResolver::new(
+            WhichConfig::new(
+                Some(Arc::new(self.root.clone())),
+                path,
+                WorkspaceSkipList::default(),
+                cache_capacity,
+            )
+            .with_pathext_override(Some(OsString::from(FIXTURE_PATHEXT))),
+        ))
     }
 }
+
+/// The `PATHEXT` the fixture pins, so a `.cmd` executable resolves on Windows.
+///
+/// Named rather than inlined because the value is a claim about the fixture
+/// executable's filename, and the two have to agree: `tool_filename` appends
+/// `.cmd` on Windows, and the extension has to be in this list for the
+/// resolver to accept it. `.EXE` leads the list as the host default does.
+const FIXTURE_PATHEXT: &str = ".COM;.EXE;.BAT;.CMD";
 
 /// The filename the fixture executable must carry on this platform.
 fn tool_filename(command: &str) -> String {
