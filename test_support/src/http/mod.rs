@@ -183,10 +183,16 @@ pub fn spawn_http_server_expecting_no_requests(
 /// the client then reports an aborted connection in place of the fault the
 /// payload was written to provoke.
 ///
-/// The fixture still reads a complete request before it answers, so the client's
-/// request bytes are consumed rather than left to force a reset. The request
-/// counter is returned so a case can assert the malformed response was actually
-/// solicited.
+/// The fixture reads the request's header block before it answers, so the
+/// client's request bytes are consumed rather than left to force a reset. The
+/// request counter is returned so a case can assert the malformed response was
+/// actually solicited.
+///
+/// A request *body* is deliberately not consumed: the fixture answers on the
+/// header block alone, so it is for bodyless requests, which is what every
+/// fixture case sends. Give a request a body and the fixture's write-side
+/// shutdown would race the client's remaining bytes exactly as a bare listener
+/// does, for the reason above.
 ///
 /// # Configuration
 /// Timeouts are loaded from the environment via
