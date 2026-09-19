@@ -1485,6 +1485,35 @@ above, which are disposable.
   measures the base branch rather than this pull request: the ruleset
   `main-required-checks` requires only `build-test`, `kani-smoke`,
   `netsukefile` and `release / metadata`, and all four pass.
+- [x] Post-completion: the second review round's verified findings disposed of.
+  The CodeScene duplication thread was valid — three near-identical "snippet
+  mirrors the doctest" tests in `tests/documentation_examples_tests.rs` — and
+  was repaired by extracting `assert_snippet_names`, which keeps every needle
+  assertion and only removes the repetition; all 32 tests in that target still
+  pass. The ADR-008 link naming `src/stdlib/config/mod.rs` as the `with_clock`
+  injection point was genuinely stale, a consequence of this branch's own split
+  of the seam into `config/clock.rs`. A third set of edits corrected the plan
+  itself: duplicated import lines in the implementation sketch, D4's rationale
+  (now recording that the first review upheld a User-Facing Documentation
+  warning because `with_clock` is a public *Rust* API and not only a
+  manifest-author concern), and the recovery instructions, which had described
+  `git reset --hard` and `git checkout --` as though either were scoped to the
+  mutation when both discard uncommitted work more broadly. Landed as
+  `dbd90956`.
+- [x] Post-completion: `Windows / build-test-windows` fails at `dbd90956` **and
+  on `main`**, so this is an estate-wide breakage and not a defect of the clock
+  seam. Evidence: the failing case is
+  `stdlib::network::redirect::error_tests::protocol_failures_are_classified_from_a_live_response`,
+  which lives at `src/stdlib/network/redirect_error_tests.rs:79` on
+  `origin/main` (from #667); this branch's diff against its merge base
+  `a273fad3` adds **zero bytes** to `src/stdlib/network/`. The error is
+  `WSAECONNABORTED` reported as `os error 10053` on a connection the host
+  software aborted: a Windows socket race against the test's own loopback
+  listener, which writes a malformed status line and races the client's read.
+  The job passed at 09:38Z on `36e03c7f` and has failed on every branch since
+  10:09Z, `main` (`ef7ed760`, 10:24Z) included. The required `build-test` check
+  is a *different* job and passes, as do `kani-smoke`, `netsukefile` and
+  `release / metadata`.
 
 ## Surprises & discoveries
 
