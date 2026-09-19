@@ -23,8 +23,8 @@ mod server;
 
 use self::accept::{AcceptWait, accept_connection};
 pub use self::request::RequestLog;
-pub use self::response::HttpResponse;
-use self::server::{FixtureLedger, run_http_server};
+pub use self::response::{HttpResponse, RawHttpResponse};
+use self::server::{DriveStrategy, FixtureLedger, RawResponses, StructuredResponses};
 
 /// Override for the timeout in milliseconds within which a client must connect.
 pub(crate) const ENV_HTTP_ACCEPT_TIMEOUT_MS: &str = "NETSUKE_TEST_HTTP_ACCEPT_TIMEOUT_MS";
@@ -279,6 +279,57 @@ pub fn spawn_http_server_expecting_no_requests(
     Ok((url, log, server))
 }
 
+/// Spawn an HTTP server that emits each raw response in sequence.
+///
+/// # Raw responses
+///
+/// The bytes in `responses` are written to the client verbatim, so a caller
+/// can emit a status line no HTTP client should accept. This exists because
+/// the structured fixtures cannot: [`HttpResponse::new`] takes a status code,
+/// so a response whose status line is malformed is not expressible at all,
+/// and a test about a client's failure to parse one has to own the bytes.
+///
+/// The returned URL carries `redirect-user:redirect-secret` credentials, so a
+/// test can drive a credentialed fetch — whose URL redaction is asserted
+/// elsewhere — against malformed bytes rather than against a live host.
+///
+/// Every raw response is sent over the same fixture machinery as a structured
+/// one: the same bounded accept, the same bounded request read, the same
+/// accounting and shutdown. The request is drained before the bytes go out,
+/// and the write half is then shut down rather than the socket closed, so the
+/// response is delivered whole instead of racing a platform-dependent
+/// transport abort. See `server::serve_raw_response` for the full reasoning.
+///
+/// # Errors
+///
+/// Returns an [`io::Error`] if the listener cannot be bound, switched to
+/// non-blocking mode, queried for its local address, or if the fixture thread
+/// fails to spawn. As with the structured fixtures, later I/O failures inside
+/// the fixture thread panic it rather than returning.
+pub fn spawn_http_server_raw_responses(
+    responses: impl IntoIterator<Item = RawHttpResponse>,
+) -> io::Result<(String, RequestLog, HttpServer)> {
+    let (url, _requests, log, server) = spawn_raw_fixture_server(
+        responses,
+        HttpServerConfig::from_env().accepting_until_shutdown(),
+    )?;
+    Ok((url, log, server))
+}
+
+/// Spawn an HTTP server that emits one raw response.
+///
+/// The singular form of [`spawn_http_server_raw_responses`], for the common
+/// case of a test that drives exactly one hop against malformed bytes.
+///
+/// # Errors
+///
+/// Propagates failures while starting the fixture server.
+pub fn spawn_http_server_raw_response(
+    response: RawHttpResponse,
+) -> io::Result<(String, RequestLog, HttpServer)> {
+    spawn_http_server_raw_responses([response])
+}
+
 /// Spawn an HTTP server using `config`, emitting responses in sequence.
 ///
 /// Returns the bound URL, the shared request count, the request log, and the
@@ -289,10 +340,41 @@ fn spawn_fixture_server(
     config: HttpServerConfig,
 ) -> io::Result<(String, Arc<AtomicUsize>, RequestLog, HttpServer)> {
     let response_sequence = responses.into_iter().collect::<Vec<_>>();
+    spawn_fixture_thread(
+        Box::new(StructuredResponses::new(response_sequence)),
+        config,
+    )
+}
+
+/// Spawn an HTTP server using `config`, emitting raw responses in sequence.
+///
+/// The raw counterpart of [`spawn_fixture_server`], and the only place the two
+/// shapes diverge: both hand a [`DriveStrategy`] to
+/// [`spawn_fixture_thread`], which owns binding, accounting, and the thread.
+fn spawn_raw_fixture_server(
+    responses: impl IntoIterator<Item = RawHttpResponse>,
+    config: HttpServerConfig,
+) -> io::Result<(String, Arc<AtomicUsize>, RequestLog, HttpServer)> {
+    let response_sequence = responses.into_iter().collect::<Vec<_>>();
+    spawn_fixture_thread(Box::new(RawResponses::new(response_sequence)), config)
+}
+
+/// Serve `strategy` on a fresh listener, returning its URL and shared state.
+///
+/// This is the one implementation behind every fixture the module exposes. A
+/// [`DriveStrategy`] supplies what to emit and how to advertise it; everything
+/// else — binding a loopback port, the request counter and log shared with the
+/// caller, the shutdown flag, the named thread, and the handle that joins or
+/// signals them — is common, so no fixture shape can drift from another's
+/// acceptance, accounting, or shutdown behaviour.
+fn spawn_fixture_thread(
+    strategy: Box<dyn DriveStrategy + Send>,
+    config: HttpServerConfig,
+) -> io::Result<(String, Arc<AtomicUsize>, RequestLog, HttpServer)> {
     let listener = TcpListener::bind(("127.0.0.1", 0))?;
     listener.set_nonblocking(true)?;
     let addr = listener.local_addr()?;
-    let url = format!("http://{addr}");
+    let url = strategy.advertise(addr);
     let requests = Arc::new(AtomicUsize::new(0));
     let server_requests = Arc::clone(&requests);
     let log = RequestLog::default();
@@ -302,9 +384,8 @@ fn spawn_fixture_server(
     let handle = thread::Builder::new()
         .name("netsuke-http-fixture".into())
         .spawn(move || {
-            run_http_server(
+            strategy.drive(
                 &listener,
-                &response_sequence,
                 &config,
                 &FixtureLedger::new(&server_requests, &server_log, &server_shutdown),
             );

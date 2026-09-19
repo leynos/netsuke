@@ -7,11 +7,11 @@
 //! renames or adds a variant is caught here rather than by a silent fallback to
 //! `other`.
 
-use std::io::Write as _;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail, ensure};
 use rstest::rstest;
+use test_support::http::{self, RawHttpResponse};
 
 use super::*;
 
@@ -92,33 +92,29 @@ fn protocol_failures_are_classified_from_a_live_response() -> Result<()> {
 
 /// Drive a hop against a server whose status line cannot be parsed.
 ///
-/// The fixture writes well-formed responses, so this stands a bare listener in
-/// its place and answers with a status line no HTTP client accepts.
+/// The structured fixture renders only responses a real server could send, so
+/// the raw-response fixture supplies the bytes instead. Its URL carries the
+/// credentials this hop redacts, and its fixture drains the request before
+/// writing and then half-closes, so the malformed bytes are received whole
+/// rather than the read failing first.
 ///
 /// # Errors
 ///
-/// Returns an error when the listener cannot be bound or read, the malformed
-/// response cannot be delivered, or the hop unexpectedly succeeds.
+/// Returns an error when the fixture cannot be started or joined, the test URL
+/// cannot be parsed, or the hop unexpectedly succeeds.
 fn malformed_status_line_failure() -> Result<ureq::Error> {
-    let listener = std::net::TcpListener::bind(("127.0.0.1", 0))
-        .context("bind a malformed-response server")?;
-    let port = listener
-        .local_addr()
-        .context("read the malformed-response server address")?
-        .port();
-    let server = std::thread::spawn(move || -> std::io::Result<()> {
-        let (mut stream, _addr) = listener.accept()?;
-        stream.write_all(b"HTTP/1.1 banana OK\r\nContent-Length: 0\r\n\r\n")
-    });
+    let (raw, _log, server) = http::spawn_http_server_raw_response(RawHttpResponse::new(
+        b"HTTP/1.1 banana OK\r\nContent-Length: 0\r\n\r\n".as_slice(),
+    ))
+    .context("spawn a malformed-response server")?;
 
-    let raw = format!("http://redirect-user:redirect-secret@127.0.0.1:{port}/start");
-    let url = Url::parse(&raw).with_context(|| format!("test URL should parse: {raw}"))?;
+    let url = Url::parse(&format!("{raw}/start"))
+        .with_context(|| format!("test URL should parse: {raw}"))?;
     let agent = build_redirect_agent();
     let outcome = request_hop(&agent, &url, Duration::from_secs(5));
     server
         .join()
-        .map_err(|_panic| anyhow::anyhow!("malformed-response server panicked"))?
-        .context("write the malformed status line")?;
+        .map_err(|_panic| anyhow::anyhow!("malformed-response server panicked"))?;
     let Err(err) = outcome else {
         bail!("a malformed status line must fail the hop");
     };
