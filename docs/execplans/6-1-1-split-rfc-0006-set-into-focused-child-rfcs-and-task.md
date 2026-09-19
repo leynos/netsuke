@@ -934,6 +934,18 @@ RFC 0006 section 8.N. This section does not restate the contract.>
 
 ### 5.11. Documentation and testing obligations
 
+### Clause discharge
+
+<The two-column discharge table: one row per clause of RFC 0006 section 6, the
+clause id in backticks, and how this group meets it. It closes section 5,
+after the eleven clause subsections, because it resolves all eleven rather than
+adding a twelfth.>
+
+| Clause | Discharge |
+| ------ | --------- |
+| `6.1`  | <...>     |
+| `6.11` | <...>     |
+
 ## 6. Dependencies
 
 <Crates from RFC 0006 section 13.4, and the child RFCs this one requires.>
@@ -948,7 +960,12 @@ RFC 0006 section 8.N. This section does not restate the contract.>
 unresolved.>
 
 ## 9. Recommendation
-```text
+
+<One paragraph: why this group's helpers belong in the v0.1.x line.>
+```
+
+The fence above closes the template. Everything from here on is this plan's
+prose, not template text.
 
 The registry at section 5.1 has exactly these columns and this row shape. The
 example is RFC 0017's, and is the worked example `EP-M2` must produce in full:
@@ -1240,6 +1257,26 @@ row so failures name a location.
   makes. This is the substantive product of the task and it rests on review,
   bounded by `D6`'s anti-vacuity rule and by the `EP-M3` go/no-go. Do not claim
   otherwise in the pull request.
+- **Amendment (2026-09-19).** The discharge is checked as a two-column
+  `Clause | Discharge` table under a `### Clause discharge` subsection, which
+  closes section 5 after the eleven clause subsections. It was first specified
+  as `### 5.6. Clause discharge`, which CodeRabbit showed collides with the
+  template's own fourth bullet: 5.6 is "Type and error contract", the title RFC
+  0006 clause 6.6 carries, so a table row reading `6.6` sat under a heading
+  reading "Type and error contract" and implied the two were the same thing.
+  Two readings were available — keep the template's 5.6 title and move the
+  table elsewhere, or keep the table and duplicate the id — and the first is
+  smaller and contradicts nothing already written, so the subsection lost its
+  number rather than gaining a rival. `CLAUSES_HEADING` and the new
+  `TABLE_HEADING` follow it, matching on the heading directly above the table
+  rather than on the subsection's first table, so a table placed under one of
+  the eleven clause subsections cannot be mistaken for the discharge. The
+  `EP-M2` worked example fixes the exact placement before any child RFC is
+  written from it, which is why this is settled now: eight documents would
+  otherwise inherit the ambiguity. Restating the eleven clause titles under
+  section 5 is the third option, and it is rejected — `D6` already argues that
+  literal restatement across eight documents is a vacuity generator, and the
+  ids, not the titles, are what the table matches on.
 
 ### Control transcripts (2026-09-11)
 
@@ -1488,7 +1525,9 @@ each child:
 2. Write section 4 as a list of the group's helpers with one-line purposes and
    links into RFC 0006 section 8.N. Do not restate a contract.
 3. Write section 5.1's registry, then 5.6, 5.7, 5.8, and 5.9. Apply the
-   anti-vacuity rule to 5.2 through 5.5, 5.10, and 5.11.
+   anti-vacuity rule to 5.2 through 5.5, 5.10, and 5.11. Close section 5 with
+   the clause-discharge table, and complete it rather than copying it forward:
+   it is the one place a reader sees all eleven clauses resolved.
 4. Flip the child's row in the coverage map from unwritten to the new number.
 5. Add the `docs/contents.md` entry, phrased like the RFC 0009 to 0011 entries.
 6. Add a `See RFC 00NN` sub-bullet to roadmap step `6.S`, and the same to each

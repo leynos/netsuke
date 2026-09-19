@@ -6,11 +6,13 @@
 //! each `### 6.N.` subsection is a clause — and each child RFC must discharge
 //! every one of them.
 //!
-//! The discharge is recorded in a child's section 5.6 as a two-column table,
+//! The discharge is recorded in a child's section 5 as a two-column table,
 //! `Clause | Discharge`, whose clause column holds the clause id in backticks.
 //! The set of ids must equal section 6's subsection ids exactly. That is the
 //! smallest contract that makes "discharges every clause" checkable without
-//! pretending a test can read prose.
+//! pretending a test can read prose, and it is deliberately not a subsection
+//! apiece: the eleven clause subsections record the group's own contract, and
+//! the table records how each clause is met.
 
 use std::collections::BTreeSet;
 
@@ -18,13 +20,27 @@ use anyhow::{Context, Result, ensure};
 
 use super::{RFC_0006, Repo, Section, strip_backticks};
 
-/// The heading of a child RFC's clause-discharge table.
-const CLAUSES_HEADING: &str = "### 5.6. Clause discharge";
+/// The heading of a child RFC's clause-discharge subsection.
+///
+/// Unnumbered on purpose. The table resolves all eleven clause subsections, and
+/// numbering it `5.6` collided with the clause's own subsection title, "Type and
+/// error contract" — the same title RFC 0006 clause 6.6 carries — leaving a
+/// reader to reconcile a subsection titled one way with a table row reading
+/// `6.6`. It closes section 5 as `### Clause discharge`.
+const CLAUSES_HEADING: &str = "### Clause discharge";
+
+/// The same heading as `tables()` reports it, without its `###`.
+///
+/// The parser resolves the table by the heading directly above it rather than
+/// taking the subsection's first table, so a child that places a table under
+/// one of the eleven clause subsections cannot have it mistaken for the
+/// discharge table.
+const TABLE_HEADING: &str = "Clause discharge";
 
 /// RFC 0006 section 6's clause ids, in document order.
 pub(super) fn clause_ids(repo: &Repo) -> Result<Vec<String>> {
     let text = repo.read(RFC_0006)?;
-    let document = Section::whole(&text, RFC_0006);
+    let document = Section::whole(&text);
     let section = document
         .subsection("## 6. Cross-cutting contract")
         .context("RFC 0006 has no section 6")?;
@@ -48,14 +64,18 @@ pub(super) fn clause_ids(repo: &Repo) -> Result<Vec<String>> {
 /// The clause ids a child RFC discharges.
 pub(super) fn discharged(repo: &Repo, file: &str) -> Result<BTreeSet<String>> {
     let text = repo.read(file)?;
-    let document = Section::whole(&text, file);
+    let document = Section::whole(&text);
     let section = document
         .subsection(CLAUSES_HEADING)
         .with_context(|| format!("{file} has no clause-discharge table at {CLAUSES_HEADING}"))?;
+    // Matched on the heading text rather than by taking the first table found:
+    // the subsection is located by its own heading, and pairing the table with
+    // the heading directly above it is what distinguishes it from any table a
+    // child places under one of the eleven clause subsections above.
     let Some((_, rows)) = section
         .tables()
         .into_iter()
-        .find(|(heading, rows)| heading.starts_with("5.6.") && !rows.is_empty())
+        .find(|(heading, rows)| !rows.is_empty() && heading == TABLE_HEADING)
     else {
         return Err(anyhow::anyhow!(
             "the clause-discharge subsection of {file} contains no table"

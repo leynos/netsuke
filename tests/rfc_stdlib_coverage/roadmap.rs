@@ -78,7 +78,7 @@ impl Steps {
 /// Read the roadmap's capability steps.
 pub(super) fn parse(repo: &Repo) -> Result<Steps> {
     let text = repo.read(ROADMAP)?;
-    let document = Section::whole(&text, ROADMAP);
+    let document = Section::whole(&text);
     let section_6 = document
         .subsection("## 6. Template standard-library expansion")
         .context("docs/roadmap.md has no section 6")?;
@@ -90,22 +90,10 @@ pub(super) fn parse(repo: &Repo) -> Result<Steps> {
 
     for line in &section_6.lines {
         if let Some(heading) = line.strip_prefix("### ") {
-            let number = heading.split('.').take(2).collect::<Vec<_>>().join(".");
-            if heading.starts_with(FIRST_STEP) {
-                in_range = true;
-            } else if heading.starts_with(LAST_STEP) {
-                in_range = false;
-            }
-            if in_range {
-                ensure!(
-                    number.starts_with("6."),
-                    "roadmap step heading {heading:?} is not numbered under phase 6"
-                );
-                order.push(number.clone());
-                names.entry(number.clone()).or_default();
-                current = Some(number);
-            } else {
-                current = None;
+            current = step_of(heading, &mut in_range)?;
+            if let Some(step) = &current {
+                order.push(step.clone());
+                names.entry(step.clone()).or_default();
             }
             continue;
         }
@@ -134,4 +122,33 @@ pub(super) fn parse(repo: &Repo) -> Result<Steps> {
          nothing and every helper would look unscheduled"
     );
     Ok(Steps { names, order })
+}
+
+/// Read one `### ` heading, updating the capability-range latch.
+///
+/// Returns the step number when the heading falls inside the range and `None`
+/// when it falls outside it, in which case the latch is set so the bullets that
+/// follow are ignored. `in_range` is threaded rather than returned so the
+/// caller can go on recording bullets per step without re-deriving the range.
+///
+/// The latch opens at [`FIRST_STEP`] and closes at [`LAST_STEP`]. A heading
+/// between them that is not numbered under phase 6 is rejected here, which is
+/// what makes the phase-6 prefix and the step-number derivation agree: the
+/// prefix alone would admit a heading whose number is read back as something
+/// else.
+fn step_of(heading: &str, in_range: &mut bool) -> Result<Option<String>> {
+    let number = heading.split('.').take(2).collect::<Vec<_>>().join(".");
+    if heading.starts_with(FIRST_STEP) {
+        *in_range = true;
+    } else if heading.starts_with(LAST_STEP) {
+        *in_range = false;
+    }
+    if !*in_range {
+        return Ok(None);
+    }
+    ensure!(
+        number.starts_with("6."),
+        "roadmap step heading {heading:?} is not numbered under phase 6"
+    );
+    Ok(Some(number))
 }

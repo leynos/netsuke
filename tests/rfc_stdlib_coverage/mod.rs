@@ -172,8 +172,6 @@ impl Repo {
 /// Line numbers are preserved through subscripting so that a parse of a nested
 /// subsection can still report where in the file a row came from.
 pub(super) struct Section<'a> {
-    /// Repository-relative path of the file the lines came from.
-    file: String,
     /// One-indexed line number of the first element of `lines`.
     first_line: usize,
     /// The section's lines, with line terminators removed.
@@ -182,9 +180,12 @@ pub(super) struct Section<'a> {
 
 impl<'a> Section<'a> {
     /// Treat a whole document as one section.
-    fn whole(text: &'a str, file: &str) -> Self {
+    ///
+    /// The document's own path is not retained: every caller holds the `&str`
+    /// it read the text from, and takes its diagnostics from that. Carrying a
+    /// copy here would be state nothing reads.
+    fn whole(text: &'a str) -> Self {
         Self {
-            file: file.to_owned(),
             first_line: 1,
             lines: text.lines().collect(),
         }
@@ -211,7 +212,6 @@ impl<'a> Section<'a> {
             .position(|line| heading_depth(line).is_some_and(|d| d <= depth))
             .map_or(rest.len(), |offset| offset + 1);
         Some(Self {
-            file: self.file.clone(),
             first_line: self.first_line + start,
             lines: rest.get(..end)?.to_vec(),
         })

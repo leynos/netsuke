@@ -14,7 +14,7 @@
 
 use std::collections::BTreeSet;
 
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 
 use super::{Repo, clauses, links, map, registries, roadmap, survey};
 
@@ -42,6 +42,7 @@ impl World {
             .map(|(section, names)| (section.clone(), names.iter().cloned().collect()))
             .collect();
         let parsed = map::parse(repo, &sections)?;
+        let reserved: Vec<String> = parsed.rows.iter().map(|row| row.number.clone()).collect();
         let child_paths = parsed
             .rows
             .iter()
@@ -54,7 +55,7 @@ impl World {
         Ok(Self {
             survey,
             map: parsed,
-            registries: registries::parse_all(repo)?,
+            registries: registries::parse_all(repo, &reserved)?,
             roadmap: roadmap::parse(repo)?,
             child_paths,
         })
@@ -219,7 +220,13 @@ pub fn coverage_map_status_is_reported(repo: &Repo) -> Result<()> {
     // that a written row carries a link; here the link is resolved.
     for row in &world.map.rows {
         if let Some(target) = &world.child_paths.get(&row.number) {
-            let path = links::resolve(super::RFC_DIR, target);
+            let path = links::resolve(super::RFC_DIR, target).with_context(|| {
+                format!(
+                    "coverage map row for RFC {} links to {target}, which climbs above the \
+                     repository root",
+                    row.number
+                )
+            })?;
             ensure!(
                 repo.exists(&path)?,
                 "coverage map row for RFC {} is marked written and links to {target}, which \

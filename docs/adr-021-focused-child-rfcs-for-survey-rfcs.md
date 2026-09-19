@@ -32,7 +32,7 @@ that its accepted set is fully allocated. Nothing in the build would notice a
 helper that the survey accepted, no child RFC owns, and no roadmap task
 schedules.
 
-## Decision Drivers
+## Decision drivers
 
 - **Reviewability.** A reviewer should be able to hold one capability group's
   obligations in mind at once, without the rest of the catalogue competing for
