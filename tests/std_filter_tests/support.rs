@@ -180,7 +180,7 @@ pub(crate) mod fallible {
     ///
     /// `Ok(None)` means this host has no `cmd.exe`, so the fixture cannot be
     /// created at all. That is the only environmental unavailability this
-    /// fixture recognises. Every other failure — including a non-zero `mklink`
+    /// fixture recognizes. Every other failure — including a non-zero `mklink`
     /// exit — is a setup fault and propagates, because junction creation needs
     /// no privilege and reparse points are supported on every filesystem this
     /// suite runs on: skipping there would report green over a policy that went
