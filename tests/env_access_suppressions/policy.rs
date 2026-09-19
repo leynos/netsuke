@@ -33,10 +33,12 @@
 /// class of alias evasions, since no alias suppresses anything while the rename
 /// that names it is still reported; banning each alias too keeps the pair
 /// honest if a future Clippy stops reporting renames. `unknown_lints` is banned
-/// for the same reason from the other direction: `rustc` reports an unknown
-/// lint name, and allowing `unknown_lints` hides the report, so an `allow` of a
-/// misspelled or removed name stops being a visible error. None of the four is
-/// in the scoped exemption, which covers only the two guard lints.
+/// for the same reason from the other direction: it is denied in
+/// `[workspace.lints.rust]`, so an unrecognized name in an attribute is an
+/// error rather than a silent no-op, and allowing `unknown_lints` hides that
+/// report — which is what an `allow` of a misspelled or removed name would need
+/// in order to pass unnoticed. None of the four is in the scoped exemption,
+/// which covers only the two guard lints.
 const FORBIDDEN_ALLOW_LINTS: [&str; 10] = [
     "clippy::disallowed_methods",
     "clippy::style",
