@@ -62,6 +62,20 @@ def test_a_reference_is_found_anywhere_inside_an_expression(
     )
 
 
+def test_a_reference_is_found_across_a_newline() -> None:
+    """Read a reference in an expression a step breaks across lines.
+
+    A YAML literal block keeps its newlines after parsing, so this is the shape
+    a long condition takes once it is wrapped. A scan whose `.` stopped at the
+    newline would never close the region and would report the reference as
+    absent while the empty value did its work.
+    """
+    value = "${{ on_push &&\n    vars.SECRET != '' }}"
+    assert unbound_variable_references({"run": value}) == [value], (
+        "a reference after a newline must be found"
+    )
+
+
 def test_reference_text_outside_an_expression_is_ignored() -> None:
     """Do not report a ``vars.`` spelling that is only literal text.
 

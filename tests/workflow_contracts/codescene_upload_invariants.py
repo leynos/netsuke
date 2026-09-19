@@ -50,6 +50,7 @@ that it calls the right action at an immutable pin (``lane_steps``).
 Run via ``make test-workflow-contracts``.
 """
 
+import re
 import typing as typ
 
 from ci_coverage_wiring_invariants import (
@@ -59,7 +60,7 @@ from ci_coverage_wiring_invariants import (
     UPLOAD_COVERAGE_ACTION,
 )
 from lane_steps import action_reference_of, inputs_of, step_named
-from workflow_variable_scan import unbound_variable_references
+from workflow_variable_scan import expression_references, unbound_variable_references
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -102,6 +103,12 @@ CREDENTIAL_INPUT: typ.Final[str] = "access-token"
 #: prefix rather than the whole expression keeps the check independent of the
 #: credential's name and of the whitespace inside the braces.
 CREDENTIAL_SOURCE_PREFIX: typ.Final[str] = "secrets."
+
+#: The namespace the upload's `if` gate must read the credential from. The
+#: condition is evaluated against `env`, so this is the namespace that proves
+#: the step is gated on the variable it exported rather than on any same-named
+#: value from elsewhere.
+CREDENTIAL_GATE_NAMESPACE: typ.Final[str] = "env"
 
 #: Checksum inputs the pinned upload action accepts, and the input name a
 #: future revision renames them to. Every one of them is listed so a
@@ -217,13 +224,18 @@ def upload_contract_offenders(
 def _validation_offenders(validation: dict[str, object]) -> list[str]:
     """Return faults in the step that reads the report as data.
 
-    The step must run the checked-in validator, over a directory built at run
-    time. Both parts matter. A step that merely asserts the file exists would
-    not reject the empty report the generation action can call a success, which
-    is the fault the uploader cannot see. A step that staged the report into a
-    directory committed to the tree, or read the report from wherever it was
-    written, would be validating something other than the artefact about to be
-    sent.
+    The step must run the checked-in validator over a directory built at run
+    time, and must have put the report into that directory. All three parts
+    matter, and the third is the one a script can omit while still reading as
+    correct. A step that merely asserts the file exists would not reject the
+    empty report the generation action can call a success, which is the fault
+    the uploader cannot see. A step that staged the report into a directory
+    committed to the tree, or read the report from wherever it was written,
+    would be validating something other than the artefact about to be sent.
+    And a step that names a staged directory without copying the report into it
+    validates whatever that directory happens to hold, which on a runner is
+    nothing at all — the validator then fails, or passes over an empty set,
+    without ever having read the report this lane is about.
 
     Returns
     -------
@@ -238,12 +250,69 @@ def _validation_offenders(validation: dict[str, object]) -> list[str]:
             f"{REPORT_VALIDATION_STEP!r} must run {REPORT_VALIDATOR_SCRIPT}, "
             f"which owns the LCOV contract for a hostile report"
         )
-    if "--artifact-dir" not in script:
+        # Nothing below can be established about a script that does not run the
+        # validator, and reporting it twice would read as two faults in a step
+        # that has one.
+        return offenders
+    staged = _staged_directory(script)
+    if staged is None:
         offenders.append(
-            f"{REPORT_VALIDATION_STEP!r} must pass --artifact-dir; the validator "
-            f"reads a directory holding exactly one {COVERAGE_REPORT_PATH!r}"
+            f"{REPORT_VALIDATION_STEP!r} must pass --artifact-dir a directory "
+            f"built at run time; the validator reads a directory holding "
+            f"exactly one {COVERAGE_REPORT_PATH!r}, so a script that hands it "
+            f"the workspace either validates the wrong artefact or refuses it "
+            f"for holding more than one"
+        )
+        return offenders
+    if not _copies_report_into(script, staged):
+        offenders.append(
+            f"{REPORT_VALIDATION_STEP!r} must copy {COVERAGE_REPORT_PATH!r} "
+            f"into the {staged!r} directory it passes --artifact-dir; a script "
+            f"that names a directory but never fills it validates whatever "
+            f"else is there"
         )
     return offenders
+
+
+def _staged_directory(script: str) -> str | None:
+    """Return the directory the script passes to ``--artifact-dir``.
+
+    The flag takes the directory as its argument, so the pair is read together:
+    a script that mentions the flag but supplies no directory, or supplies one
+    it never created, is not staging anything.
+
+    Returns
+    -------
+    str | None
+        The argument as written, or `None` when the flag is absent or bare.
+    """
+    match = re.search(
+        rf"--artifact-dir[=\s]+(?P<directory>\S+)",
+        script,
+    )
+    if match is None:
+        return None
+    # A `"${staged}"` argument names the same directory as `${staged}`.
+    return match.group("directory").strip("\"'${}")
+
+
+def _copies_report_into(script: str, directory: str) -> bool:
+    """Return whether the script copies the report into ``directory``.
+
+    The copy is what binds the validated artefact to the submitted one: the
+    generation action writes the report into the workspace, and the upload
+    reads it from there, so a staged directory only means something if the
+    report was put into it. An empty staged directory would make the validator
+    fail for the wrong reason on a report that was fine.
+    """
+    return any(
+        re.search(
+            rf"\b(?:cp|install|mv)\b[^\n]*{re.escape(COVERAGE_REPORT_PATH)}[^\n]*"
+            rf"{re.escape(directory)}",
+            line,
+        )
+        for line in script.splitlines()
+    )
 
 
 def _path_offenders(
@@ -332,18 +401,58 @@ def _credential_offenders(upload: dict[str, object]) -> list[str]:
             f"env.{CREDENTIAL_ENVIRONMENT_KEY} from a github secret, got "
             f"{declared!r}"
         )
-    if not (isinstance(token, str) and CREDENTIAL_ENVIRONMENT_KEY in token):
+    if not _names_credential(token):
         offenders.append(
             f"{CODESCENE_UPLOAD_STEP!r} must pass {CREDENTIAL_INPUT} the "
             f"{CREDENTIAL_ENVIRONMENT_KEY} it gated on, got {token!r}"
         )
-    if not (isinstance(condition, str) and CREDENTIAL_ENVIRONMENT_KEY in condition):
+    if not _names_credential(condition, namespace=CREDENTIAL_GATE_NAMESPACE, bare=True):
         offenders.append(
             f"{CODESCENE_UPLOAD_STEP!r} must be conditional on "
             f"{CREDENTIAL_ENVIRONMENT_KEY} being present, got {condition!r}; an "
             f"ungated step fails the trunk run over a missing optional secret"
         )
     return offenders
+
+
+def _names_credential(
+    value: object, namespace: str | None = None, *, bare: bool = False
+) -> bool:
+    """Return whether ``value`` names the credential in an expression.
+
+    The credential is named by an identifier, not by a substring of the text
+    around it. A check for containment accepts ``${{ env.NOT_CS_ACCESS_TOKEN }}``,
+    whose value is empty in exactly the way the missing secret is: the gate
+    would then compare ``'' != ''``, the step would not run, and the contract
+    would have passed over a lane that never submits anything.
+
+    Parameters
+    ----------
+    value
+        The candidate, which is a ``str`` only when the step declared one.
+    namespace
+        The namespace the reference must use, or `None` to accept any. A gate
+        is evaluated against ``env``, so requiring that namespace keeps the
+        step conditional on the environment variable it actually exported
+        rather than on some same-named value from another namespace.
+    bare
+        Whether the value is itself an expression. Passed through to
+        `expression_references`; a step's ``if`` is evaluated as an expression
+        without the delimiters, so its value is scanned whole.
+
+    Returns
+    -------
+    bool
+        `True` when some identifier in the value is the credential under an
+        accepted namespace.
+    """
+    if not isinstance(value, str):
+        return False
+    return any(
+        name == CREDENTIAL_ENVIRONMENT_KEY
+        and (namespace is None or reference_namespace == namespace)
+        for reference_namespace, name in expression_references(value, bare=bare)
+    )
 
 
 def _archive_offenders(

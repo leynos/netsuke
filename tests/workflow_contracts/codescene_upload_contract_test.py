@@ -83,8 +83,10 @@ jobs:
           {COVERAGE_FORMAT_INPUT}: {COVERAGE_FORMAT_VALUE}
       - name: {REPORT_VALIDATION_STEP}
         run: |
+          staged="$(mktemp --directory)"
+          cp -- {COVERAGE_REPORT_PATH} "${{staged}}/{COVERAGE_REPORT_PATH}"
           uv run --no-project --python 3.14 \
-            {REPORT_VALIDATOR_SCRIPT} --artifact-dir "$staged"
+            {REPORT_VALIDATOR_SCRIPT} --artifact-dir "${{staged}}"
       - name: {CODESCENE_UPLOAD_STEP}
         if: env.{CREDENTIAL_ENVIRONMENT_KEY} != ''
         env:
@@ -195,10 +197,20 @@ def test_the_detectors_report_a_reordered_lane(step_name: str) -> None:
     [
         # A step that only looks at the filesystem does not read the report.
         ("test -s lcov.info", "validate_coverage_artifact.py"),
-        # A validator run over the wrong directory validates another artefact.
+        # A validator run over the report in place validates the workspace,
+        # which holds more than the one report the validator accepts.
         (
             "python scripts/validate_coverage_artifact.py lcov.info",
             "--artifact-dir",
+        ),
+        # A staged directory that is never filled validates nothing. The
+        # validator would refuse the empty directory and the lane would fail
+        # for the wrong reason, having read no part of the report.
+        (
+            'staged="$(mktemp --directory)"\n'
+            "uv run --no-project --python 3.14 "
+            'scripts/validate_coverage_artifact.py --artifact-dir "$staged"',
+            "must copy",
         ),
     ],
 )
@@ -209,7 +221,10 @@ def test_the_detectors_report_a_validation_step_that_checks_nothing(
 
     The generation action reports success for an empty report, so a step that
     only asserts the file exists would pass on exactly the artefact CodeScene
-    rejects — and it would do so in the lane that runs most expensively.
+    rejects — and it would do so in the lane that runs most expensively. The
+    same is true of a step that reads the right validator over a directory it
+    never put the report into: everything about the invocation looks correct,
+    and none of it touches the artefact.
     """
     steps = clean_steps()
     _step(steps, REPORT_VALIDATION_STEP)["run"] = replacement
@@ -299,6 +314,19 @@ def test_the_detectors_report_an_upload_that_cannot_be_gated_on() -> None:
         ("if", "github.event_name == 'push'"),
         # A gate with no condition is not a gate.
         ("if", ""),
+        # A name that merely contains the credential's is a different secret,
+        # and an unset one: the gate would compare '' against '' and never
+        # open, so the lane would read as gated while submitting nothing.
+        ("if", f"${{{{ env.NOT_{CREDENTIAL_ENVIRONMENT_KEY} != '' }}}}"),
+        # The same containment trap on the value handed to the action.
+        (
+            "token",
+            f"${{{{ env.NOT_{CREDENTIAL_ENVIRONMENT_KEY} }}}}",
+        ),
+        # A gate on the credential read from the wrong namespace. The `if` is
+        # evaluated against `env`, so a `secrets.` reference there is not the
+        # exported variable and does not prove the step is gated on it.
+        ("if", f"${{{{ secrets.{CREDENTIAL_ENVIRONMENT_KEY} != '' }}}}"),
     ]
     for field, replacement in cases:
         assert upload_contract_offenders(mutated(field, replacement)), (

@@ -1,4 +1,4 @@
-"""Find ``vars.`` references a workflow cannot actually resolve.
+"""Find the expression references a workflow's steps actually name.
 
 A GitHub Actions expression naming a repository variable that the repository
 has not declared does not fail. It interpolates to the empty string and the
@@ -15,6 +15,13 @@ the most consequential place one can appear, and an ``env`` entry is where a
 credential would be bound. It is also not restricted to the start of an
 expression, because a compound condition or a function argument names a
 variable just as directly as a bare one — see `VARIABLE_REFERENCE`.
+
+`expression_references` is the mechanism underneath, and is general to any
+name: it enumerates the dotted identifiers an expression names, so a caller
+holding a step to an exact reference — a credential, say — asks about the
+identifier rather than about a substring of the text around it. Text that
+merely spells a name, in a value that is not an expression at all, is not a
+reference and is not enumerated.
 
 They read parsed values rather than files, so the callers can hold the
 repository's own workflows to the contract and drive shapes the repository does
@@ -33,7 +40,14 @@ if typ.TYPE_CHECKING:
 #: reference is only meaningful inside one of these, so the regions are located
 #: first and scanned second: matching `${{` and `vars.` as one pattern would
 #: only ever find a reference that immediately follows the opening delimiter.
-EXPRESSION_REGION: typ.Final[re.Pattern[str]] = re.compile(r"\$\{\{(?P<body>.*?)\}\}")
+#:
+#: `DOTALL` is required rather than cosmetic. A YAML literal block (`|`) keeps
+#: its newlines after parsing, so an expression a step breaks across two lines
+#: is scanned as text containing a newline; without the flag `.` stops at it,
+#: the region never closes, and the reference inside goes unreported.
+EXPRESSION_REGION: typ.Final[re.Pattern[str]] = re.compile(
+    r"\$\{\{(?P<body>.*?)\}\}", re.DOTALL
+)
 
 #: Matches a `vars.` reference anywhere within an expression body. The
 #: repository declares no variables, so every one of them resolves to the empty
@@ -46,6 +60,19 @@ EXPRESSION_REGION: typ.Final[re.Pattern[str]] = re.compile(r"\$\{\{(?P<body>.*?)
 #: version of this scan matched only the position immediately after `${{`, so
 #: it reported nothing for either.
 VARIABLE_REFERENCE: typ.Final[re.Pattern[str]] = re.compile(r"\bvars\.")
+
+#: Matches one dotted identifier in an expression body, capturing its
+#: namespace and its name. A GitHub Actions expression addresses a value as
+#: `<namespace>.<name>` — `env.CI`, `secrets.TOKEN`, `vars.FOO`, `github.ref` —
+#: so the pair is the unit a caller can compare against a name it expects.
+#:
+#: The namespace is part of the match, not decoration. Asking whether a value
+#: merely contains `CS_ACCESS_TOKEN` answers a question about the text, and
+#: `env.NOT_CS_ACCESS_TOKEN` contains it; asking whether some identifier's name
+#: *is* `CS_ACCESS_TOKEN` answers the question about the reference.
+REFERENCE_IDENTIFIER: typ.Final[re.Pattern[str]] = re.compile(
+    r"\b(?P<namespace>[A-Za-z_][A-Za-z0-9_]*)\.(?P<name>[A-Za-z_][A-Za-z0-9_]*)"
+)
 
 #: The one repository variable the workflows legitimately read, and the one
 #: place a `vars.` expression is allowed to appear in the coverage lane: it
@@ -92,6 +119,42 @@ def _names_an_unpermitted_variable(value: str) -> bool:
         for region in EXPRESSION_REGION.finditer(value)
         for match in VARIABLE_REFERENCE.finditer(region.group("body"))
     )
+
+
+def expression_references(value: str, *, bare: bool = False) -> list[tuple[str, str]]:
+    """Return the ``(namespace, name)`` pairs an expression names.
+
+    Only text inside a ``${{ ... }}`` region is scanned by default, so a value
+    that spells a name as literal text — a message, a comparison against a
+    string — names nothing and returns an empty list.
+
+    Parameters
+    ----------
+    value
+        One string from a parsed workflow step.
+    bare
+        Whether the value is itself an expression, in addition to any regions
+        it holds. GitHub evaluates a step's ``if`` as an expression whether or
+        not it is written with the delimiters, so a caller holding a gate to an
+        exact reference must scan the whole value: the delimited form is what
+        the rest of the workflow uses, and the bare form is what the gate
+        happens to be written with.
+
+    Returns
+    -------
+    list[tuple[str, str]]
+        One pair per identifier, in the order it appears, with repeats kept:
+        a caller asking whether a name is *used* is served by membership, and a
+        caller asking how often is served by the length.
+    """
+    bodies = [region.group("body") for region in EXPRESSION_REGION.finditer(value)]
+    if bare:
+        bodies.append(value)
+    return [
+        (match.group("namespace"), match.group("name"))
+        for body in bodies
+        for match in REFERENCE_IDENTIFIER.finditer(body)
+    ]
 
 
 def _variable_name(body: str, start: int) -> str:
