@@ -6,8 +6,8 @@
 
 use mockable::{DefaultEnv, Env};
 use std::{
-    fmt, io,
-    net::{SocketAddr, TcpListener, TcpStream},
+    io,
+    net::{SocketAddr, TcpStream},
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -17,14 +17,17 @@ use std::{
 };
 
 mod accept;
+mod env;
 mod request;
 mod response;
 mod server;
+mod spawn;
 
 use self::accept::{AcceptWait, accept_connection};
+use self::env::duration_from_env;
 pub use self::request::RequestLog;
 pub use self::response::{HttpResponse, RawHttpResponse};
-use self::server::{DriveStrategy, FixtureLedger, RawResponses, StructuredResponses};
+use self::spawn::{spawn_fixture_server, spawn_raw_fixture_server};
 
 /// Override for the timeout in milliseconds within which a client must connect.
 pub(crate) const ENV_HTTP_ACCEPT_TIMEOUT_MS: &str = "NETSUKE_TEST_HTTP_ACCEPT_TIMEOUT_MS";
@@ -32,14 +35,6 @@ pub(crate) const ENV_HTTP_ACCEPT_TIMEOUT_MS: &str = "NETSUKE_TEST_HTTP_ACCEPT_TI
 pub(crate) const ENV_HTTP_READ_TIMEOUT_MS: &str = "NETSUKE_TEST_HTTP_READ_TIMEOUT_MS";
 /// Override for the polling interval in milliseconds used while waiting.
 pub(crate) const ENV_HTTP_POLL_INTERVAL_MS: &str = "NETSUKE_TEST_HTTP_POLL_INTERVAL_MS";
-
-#[cfg(test)]
-use std::{cell::RefCell, thread_local};
-
-#[cfg(test)]
-thread_local! {
-    static DURATION_WARNINGS: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
-}
 
 /// Configuration for HTTP fixtures, including timeouts used during polling.
 #[derive(Debug, Clone)]
@@ -328,129 +323,6 @@ pub fn spawn_http_server_raw_response(
     response: RawHttpResponse,
 ) -> io::Result<(String, RequestLog, HttpServer)> {
     spawn_http_server_raw_responses([response])
-}
-
-/// Spawn an HTTP server using `config`, emitting responses in sequence.
-///
-/// Returns the bound URL, the shared request count, the request log, and the
-/// server handle. The public wrappers above reshape this tuple for their
-/// callers, so every fixture shares one server implementation.
-fn spawn_fixture_server(
-    responses: impl IntoIterator<Item = HttpResponse>,
-    config: HttpServerConfig,
-) -> io::Result<(String, Arc<AtomicUsize>, RequestLog, HttpServer)> {
-    let response_sequence = responses.into_iter().collect::<Vec<_>>();
-    spawn_fixture_thread(
-        Box::new(StructuredResponses::new(response_sequence)),
-        config,
-    )
-}
-
-/// Spawn an HTTP server using `config`, emitting raw responses in sequence.
-///
-/// The raw counterpart of [`spawn_fixture_server`], and the only place the two
-/// shapes diverge: both hand a [`DriveStrategy`] to
-/// [`spawn_fixture_thread`], which owns binding, accounting, and the thread.
-fn spawn_raw_fixture_server(
-    responses: impl IntoIterator<Item = RawHttpResponse>,
-    config: HttpServerConfig,
-) -> io::Result<(String, Arc<AtomicUsize>, RequestLog, HttpServer)> {
-    let response_sequence = responses.into_iter().collect::<Vec<_>>();
-    spawn_fixture_thread(Box::new(RawResponses::new(response_sequence)), config)
-}
-
-/// Serve `strategy` on a fresh listener, returning its URL and shared state.
-///
-/// This is the one implementation behind every fixture the module exposes. A
-/// [`DriveStrategy`] supplies what to emit and how to advertise it; everything
-/// else — binding a loopback port, the request counter and log shared with the
-/// caller, the shutdown flag, the named thread, and the handle that joins or
-/// signals them — is common, so no fixture shape can drift from another's
-/// acceptance, accounting, or shutdown behaviour.
-fn spawn_fixture_thread(
-    strategy: Box<dyn DriveStrategy + Send>,
-    config: HttpServerConfig,
-) -> io::Result<(String, Arc<AtomicUsize>, RequestLog, HttpServer)> {
-    let listener = TcpListener::bind(("127.0.0.1", 0))?;
-    listener.set_nonblocking(true)?;
-    let addr = listener.local_addr()?;
-    let url = strategy.advertise(addr);
-    let requests = Arc::new(AtomicUsize::new(0));
-    let server_requests = Arc::clone(&requests);
-    let log = RequestLog::default();
-    let server_log = log.clone();
-    let shutdown = Arc::new(AtomicBool::new(false));
-    let server_shutdown = Arc::clone(&shutdown);
-    let handle = thread::Builder::new()
-        .name("netsuke-http-fixture".into())
-        .spawn(move || {
-            strategy.drive(
-                &listener,
-                &config,
-                &FixtureLedger::new(&server_requests, &server_log, &server_shutdown),
-            );
-        })?;
-    Ok((
-        url,
-        requests,
-        log,
-        HttpServer {
-            handle: Some(handle),
-            addr,
-            shutdown,
-        },
-    ))
-}
-
-/// Read `var` as whole milliseconds, falling back to `default` when unset or
-/// unparsable.
-fn duration_from_env(env: &impl Env, var: &str, default: Duration) -> Duration {
-    env.raw(var).map_or(default, |value| {
-        let trimmed = value.trim();
-        match trimmed.parse::<u64>() {
-            Ok(ms) => Duration::from_millis(ms),
-            Err(err) => {
-                log_duration_parse_error(var, trimmed.len(), &err);
-                default
-            }
-        }
-    })
-}
-
-/// Report an unparsable duration override without echoing its value.
-///
-/// The value is redacted: an environment variable's contents are outside this
-/// crate's control, and logging them verbatim would put whatever the caller
-/// exported into the log. `err` already names the bounded parse failure, and
-/// `value_len` distinguishes an empty override from a malformed one, which is
-/// all the diagnosis this fixture needs.
-fn log_duration_parse_error(var: &str, value_len: usize, err: &dyn fmt::Display) {
-    #[cfg(test)]
-    {
-        record_duration_warning(format!(
-            "ignoring invalid {var}: {err} (value redacted, {value_len} bytes)"
-        ));
-    }
-
-    #[cfg(not(test))]
-    {
-        tracing::warn!(
-            variable = var,
-            value_len,
-            error = %err,
-            "ignoring invalid fixture duration"
-        );
-    }
-}
-
-#[cfg(test)]
-fn record_duration_warning(message: String) {
-    DURATION_WARNINGS.with(|warnings| warnings.borrow_mut().push(message));
-}
-
-#[cfg(test)]
-fn take_duration_warnings() -> Vec<String> {
-    DURATION_WARNINGS.with(|warnings| warnings.borrow_mut().drain(..).collect())
 }
 
 #[cfg(test)]

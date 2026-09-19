@@ -6,7 +6,8 @@
 
 use super::{
     ENV_HTTP_ACCEPT_TIMEOUT_MS, ENV_HTTP_POLL_INTERVAL_MS, ENV_HTTP_READ_TIMEOUT_MS,
-    HttpServerConfig, duration_from_env, take_duration_warnings,
+    HttpServerConfig,
+    env::{duration_from_env, take_duration_warnings},
 };
 
 use mockable::MockEnv;
