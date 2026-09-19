@@ -33,7 +33,8 @@ pub(crate) use register::{is_manifest_query_disabled_error, register_manifest_qu
 pub use register::{register, register_with_config, value_from_bytes};
 pub use which::{
     RESOLVE_ERROR_CATEGORY_VALUES, WHICH_CACHE_OUTCOME_VALUES, WHICH_CACHE_TOTAL,
-    WHICH_CWD_MODE_VALUES, WHICH_RESOLUTION_OUTCOME_VALUES, WHICH_RESOLUTION_TOTAL,
+    WHICH_CWD_MODE_VALUES, WHICH_RESOLUTION_FAILURE_OUTCOME_VALUES,
+    WHICH_RESOLUTION_OUTCOME_VALUES, WHICH_RESOLUTION_TOTAL,
 };
 
 use std::{
