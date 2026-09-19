@@ -165,6 +165,14 @@ relies on, where `O_NOFOLLOW` is a property of the one `open` call.
   junctioned parent directory is resolved when the parent handle is opened by
   `parent_dir`, which is the pre-existing behaviour on both platforms and is
   not changed here.
+- A junction cannot be *traversed* through a capability at all, under either
+  policy. `mklink /J` records an absolute target, and `cap_std`'s resolver
+  refuses to follow a reparse point whose destination leaves the capability,
+  reporting `escape_attempt()` as `PermissionDenied`. The opt-in policy's
+  follow is therefore exercised by the file-symlink opt-in test, which uses a
+  relative target; the default policy's refusal of a junction needs no
+  traversal, because `FILE_FLAG_OPEN_REPARSE_POINT` returns the reparse point
+  itself.
 - The Unix path is untouched. `apply_unix_open_flags` and `restore_blocking`
   keep their current behaviour byte for byte.
 
@@ -185,11 +193,26 @@ lint exemption to permit it.
 
 ## Verification
 
-A Windows-only regression test asserts that a junction fixture — created with
+Two tests carry the guarantee, one per layer.
+
+The integration test asserts that a junction fixture — created with
 `mklink /J`, which needs no privilege — is rejected by all four filters under
 the default policy. The fixture follows the repository's "create the requested
 file type or skip because that file type is unavailable" rule: the test asserts
 the entry really carries `FILE_ATTRIBUTE_REPARSE_POINT` before rendering, so it
-cannot pass against a plain directory. The existing symlink test continues to
-cover the file-symlink reparse case, and the `follow_symlinks` opt-in test
-covers the retained `open_with` path.
+cannot pass against a plain directory.
+
+The unit test covers the property the integration layer cannot see. `std`
+reports a junction as a symlink, so `metadata.is_file()` would refuse the
+directory even if the flag were never passed. Only the handle distinguishes
+them, so the unit test opens the junction and asserts its attributes carry
+`FILE_ATTRIBUTE_REPARSE_POINT` — the one check that fails when
+`FILE_FLAG_OPEN_REPARSE_POINT` stops being applied — and then asserts the
+policy refuses it, with the ordinary target directory as a control so the
+refusal is shown to be about the link rather than about directories generally.
+Because the capability resolver cannot reach the junction's absolute target,
+that handle is taken through the ambient authority.
+
+The existing symlink test continues to cover the file-symlink reparse case, and
+the `follow_symlinks` opt-in test covers the retained follow path with a
+relative-target symlink.
