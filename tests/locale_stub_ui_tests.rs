@@ -96,8 +96,10 @@ fn stub_env_builders_compile_under_the_same_harness(
 ///
 /// This test is a member of the `nested-cargo-builds` nextest group, so on
 /// Windows it holds that group's single slot: every other build-capable test
-/// waits for it, and a trim would return its whole occupancy rather than only
-/// the tail it finishes on. The group's measurements are in the same
+/// waits for it, so a trim returns its whole occupancy rather than only the
+/// tail it finishes on, whenever the shortened group chain still bounds the
+/// run. It returns less when unrelated work becomes the run's next binding
+/// constraint once the slot frees. The group's measurements are in the same
 /// developers' guide section.
 ///
 /// It is also what keeps the Windows response-file path exercised. The long
