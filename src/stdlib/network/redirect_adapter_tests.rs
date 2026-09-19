@@ -340,7 +340,7 @@ fn failed_dispatch_reports_a_bounded_category(en_localizer: EnLocalizer) -> Resu
     let agent = build_redirect_agent();
 
     let (events, dispatch) = with_test_subscriber(LevelFilter::DEBUG, |captured| {
-        // `ureq::Response` has no `Debug`, so the outcome is rendered here
+        // The response carries no `Debug`, so the outcome is rendered here
         // rather than unwrapped with `expect_err`.
         let dispatch = dispatch_hop(&agent, &unreachable, Duration::from_secs(5))
             .map(|_response| ())

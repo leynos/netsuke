@@ -186,13 +186,8 @@ fn fetch_remote(
     context: &FetchContext,
     impure: &Arc<AtomicBool>,
 ) -> Result<Vec<u8>, Error> {
-    let response = dispatch_request(url, context.policy(), impure)?;
-    read_response(
-        url,
-        response.into_reader(),
-        context.max_response_bytes(),
-        None,
-    )
+    let body = dispatch_request(url, context.policy(), impure)?;
+    read_response(url, body, context.max_response_bytes(), None)
 }
 
 /// Fetch a URL, streaming the response into the cache entry.
@@ -209,10 +204,10 @@ fn fetch_remote_with_cache(
     impure: &Arc<AtomicBool>,
     cache: &CacheEntry<'_>,
 ) -> Result<Vec<u8>, Error> {
-    let response = dispatch_request(url, context.policy(), impure)?;
+    let body = dispatch_request(url, context.policy(), impure)?;
     let limit = context.max_response_bytes();
     let mut file = cache.open_writer()?;
-    match read_response(url, response.into_reader(), limit, Some(&mut file)) {
+    match read_response(url, body, limit, Some(&mut file)) {
         Ok(bytes) => {
             file.sync_all()
                 .map_err(|err| io_error(keys::STDLIB_FETCH_ACTION_SYNC_CACHE, cache.path(), err))?;
