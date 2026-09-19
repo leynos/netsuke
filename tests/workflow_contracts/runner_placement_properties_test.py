@@ -12,7 +12,7 @@ import pytest
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
 from runner_placement_invariants import (
-    NINJA_ACTION,
+    NINJA_ACTION_REPOSITORY,
     UBICLOUD_ASSIGNMENT_KEYS,
     WINDOWS_PACKAGE_ACTION,
     WINDOWS_PATH_FRAGMENTS,
@@ -30,6 +30,10 @@ from runner_placement_mutations import (
     mutate_worker_flags,
 )
 
+#: A synthetic full commit SHA. The properties exercise the shape of a pin,
+#: never its value, so a fixed non-release SHA keeps them independent of
+#: whichever revision Dependabot last wrote into the workflows.
+NINJA_ACTION = f"{NINJA_ACTION_REPOSITORY}0123456789abcdef0123456789abcdef01234567"
 NINJA_CONSUMER = "Consume Ninja"
 IRRELEVANT_STEP_NAMES = ("Checkout", "Setup Rust", "Upload artefact")
 SEQUENCE_MUTATIONS = ("valid", "missing", "duplicate", "after-consumer")

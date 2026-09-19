@@ -12,10 +12,9 @@ delayed-comment, and administrative jobs are API-bound and gain nothing from a
 build shape.
 """
 
+from action_references import FULL_COMMIT_SHA_PATTERN
+
 NINJA_ACTION_REPOSITORY = "seanmiddleditch/gha-setup-ninja@"
-NINJA_ACTION = (
-    "seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67"
-)
 WINDOWS_PATH_STEP_NAME = "Expose Windows global tool path"
 WINDOWS_PACKAGE_ACTION = "leynos/shared-actions/.github/actions/windows-package@"
 CALLER_SELECTED_RUNNER = "${{ inputs.runner }}"
@@ -151,12 +150,37 @@ def is_valid_ninja_sequence(
     consumer_indices = [
         index for index, step in enumerate(steps) if step.get("name") == first_consumer
     ]
+    # The pin's value belongs to Dependabot and is never asserted; what this
+    # structural rule needs is that the installer reference is pinned at all,
+    # so a mutable tag or branch cannot stand in for a revision whose contents
+    # nobody reviewed.
     return bool(
         len(setup_indices) == 1
-        and steps[setup_indices[0]].get("uses") == NINJA_ACTION
+        and is_pinned_ninja_action(steps[setup_indices[0]].get("uses"))
         and consumer_indices
         and setup_indices[0] < min(consumer_indices)
     )
+
+
+def is_pinned_ninja_action(uses: object) -> bool:
+    """Return whether a ``uses`` value pins the Ninja installer action.
+
+    Parameters
+    ----------
+    uses
+        A workflow step's ``uses`` value, which may be absent or not a string.
+
+    Returns
+    -------
+    bool
+        ``True`` when ``uses`` names the Ninja installer action and carries a
+        full 40-character lowercase hexadecimal commit SHA.
+    """
+    reference = str(uses or "")
+    path, separator, pin = reference.rpartition("@")
+    if not separator or f"{path}@" != NINJA_ACTION_REPOSITORY:
+        return False
+    return FULL_COMMIT_SHA_PATTERN.match(pin) is not None
 
 
 def is_valid_windows_tool_path_sequence(
