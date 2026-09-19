@@ -190,9 +190,9 @@ resolution entirely rather than setting the variable for a child to read.
   (manifest `env()` Jinja helper)
 - Clock seam: [`src/stdlib/time/clock.rs`](../src/stdlib/time/clock.rs)
   (`ClockProvider`, `system_clock`, `fixed_clock`); `StdlibConfig::with_clock`
-  in [`src/stdlib/config/mod.rs`](../src/stdlib/config/mod.rs) is the injection
-  point, and [`src/stdlib/register.rs`](../src/stdlib/register.rs) captures the
-  provider when it registers `now()`
+  in [`src/stdlib/config/clock.rs`](../src/stdlib/config/clock.rs) is the
+  injection point, and [`src/stdlib/register.rs`](../src/stdlib/register.rs)
+  captures the provider when it registers `now()`
 - Child-environment composition:
   [`test_support/src/netsuke.rs`](../test_support/src/netsuke.rs)
   (`run_netsuke_in_with_env`) and `tests/bdd/steps/manifest_command_helpers.rs`
