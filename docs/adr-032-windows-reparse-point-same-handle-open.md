@@ -237,3 +237,31 @@ that handle is taken through the ambient authority.
 The existing symlink test continues to cover the file-symlink reparse case, and
 the `follow_symlinks` opt-in test covers the retained follow path with a
 relative-target symlink.
+
+### How far this evidence actually extends
+
+Stated plainly, because the two tests above are Windows-only and it would be
+easy to read them as CI-verified when they are not.
+
+The `Windows / build-test-windows` job halts on an unrelated pre-existing
+failure — a network-fixture race tracked as issue 743 — before the nextest run
+reaches `stdlib::path`. On the run examined for this record it ended at
+1078/2901 tests, and the strings `windows_reparse` and `junction` appeared
+**zero** times in the whole job log. So no case described in this section has
+executed in continuous integration, and a green Windows lane would not yet be
+evidence about them.
+
+What *is* verified on this change, and by what: the Windows-gated source is
+compiled and linted against `x86_64-pc-windows-msvc` by a local probe crate
+that mirrors the module tree (the main crate cannot be cross-compiled here —
+`ring` needs MSVC's `lib.exe`). Two tools are needed and neither subsumes the
+other — `cargo dylint` runs `cargo check`, so it applies the Whitaker lints and
+no clippy lint, while `cargo clippy` applies no Whitaker lint. Each was shown
+to be live by injecting a defect it should catch and confirming a non-zero
+exit, then reverting. That establishes the code compiles, is lint-clean, and
+that the tests *compile*; it does not establish that they *pass* on Windows.
+
+Until issue 743 is fixed and this branch rebuilt, the runtime behaviour of the
+policy is argued from the handle semantics in "Why the race is closed by
+construction" plus the Linux-side mechanism evidence above, not demonstrated on
+the platform it governs. That is the honest limit of this record.
