@@ -62,9 +62,15 @@ impl Row {
                 .unwrap_or_default()
                 .to_owned(),
         };
+        // `sparc64` is a placeholder for an architecture this repository never
+        // publishes for, not a claim about the host. The row's one constraint
+        // is that it must not name the artefact under verification, and with
+        // the released artefact now architecture-aware a name that merely
+        // looked plausible would collide with it wherever the architectures
+        // agree.
         let name = match self.named {
             Named::ThisArtefact => artefact,
-            Named::Other => "mold-0.0.0-x86_64-linux.tar.gz",
+            Named::Other => "mold-0.0.0-sparc64-linux.tar.gz",
         };
         if self.padded {
             format!("   {digest}   {name}   \n")

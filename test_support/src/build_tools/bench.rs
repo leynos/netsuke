@@ -31,13 +31,16 @@ pub const MOLD_THREADS_SLUG: &str = "mold-threads";
 /// but not shared host state. Position here means nothing.
 pub const BENCH_SLUGS: [&str; 3] = [DEFAULT_SLUG, MOLD_SLUG, MOLD_THREADS_SLUG];
 
-/// How many times the benchmark measures each variant unless `BENCH_REPEATS`
-/// overrides it.
+/// How many times the benchmark measures each variant, as `bench-build.sh`
+/// defaults it.
 ///
 /// Mirrored here so the tests can assert on the default run's shape without
-/// restating the number in two places. A run that overrides the variable
-/// measures more, never fewer, so an assertion built on this is a floor rather
-/// than an equality — see the count check in the benchmark’s own tests.
+/// restating the number in two places. Every test asserts *equality* against
+/// this value — the invocation count and the reported row count are both exact
+/// multiples of it — and none overrides the environment variable the script
+/// reads. A test that did override it would have to compute its own expected
+/// count, because the shared assertions here would no longer describe the run
+/// it had asked for.
 pub const BENCH_REPEATS: usize = 2;
 
 /// Create the touch file with [`BASELINE_MTIME`], returning that timestamp.

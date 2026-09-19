@@ -142,7 +142,7 @@ mod tests {
     use crate::tracing_capture::with_test_subscriber;
     use mockable::MockEnv;
     use proptest::prelude::*;
-    use proptest::test_runner::TestCaseError;
+    use proptest::test_runner::{FileFailurePersistence, TestCaseError};
     use tracing_subscriber::filter::LevelFilter;
 
     /// Stands in for a secret embedded in a host path; it must never reach a
@@ -304,6 +304,21 @@ mod tests {
     }
 
     proptest! {
+        #![proptest_config(ProptestConfig {
+            cases: 16,
+            // Name the file explicitly. The default `SourceParallel` policy
+            // looks for a `lib.rs` or `main.rs` beside the source, and this
+            // module is pulled in as `sandbox::utilities`, so the walk up from
+            // `sandbox/` finds neither. proptest says so on stderr and falls
+            // back to `WithSource`, which resolves against the crate root
+            // instead — so a recorded seed was written to a path nobody reads
+            // and replayed against nothing.
+            failure_persistence: Some(Box::new(FileFailurePersistence::Direct(
+                "test_support/src/build_tools/sandbox/utilities.proptest-regressions",
+            ))),
+            ..ProptestConfig::default()
+        })]
+
         #[test]
         fn relative_path_lookup_returns_the_first_generated_match(
             (directory_count, first_match) in (1usize..5)

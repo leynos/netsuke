@@ -90,8 +90,8 @@ install_mold() {
   tar --extract --gzip --strip-components=1 --directory "$BUILD_TOOLS_PREFIX" --file "$workdir/$name" ||
     fail "failed to unpack $name into $BUILD_TOOLS_PREFIX"
   note "installed mold $version into $BUILD_TOOLS_PREFIX"
-  # The `make dev-*` recipes prepend this prefix to PATH themselves; the hint
-  # matters only when the scripts are invoked directly.
+  # The Makefile prepends this prefix to PATH for every target; the hint
+  # matters only when the script is invoked directly.
   note "put $BUILD_TOOLS_PREFIX/bin first on PATH when not using the make targets"
 }
 

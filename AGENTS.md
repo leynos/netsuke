@@ -197,6 +197,7 @@ directive anywhere.
     RUSTDOCFLAGS="--cfg docsrs -D warnings" cargo doc --workspace --no-deps
     RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold" \
     cargo clippy --workspace --all-targets --all-features -- -D warnings
+    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold" \
     whitaker --all -- --all-targets --all-features
     yamllint --config-file .yamllint.yml .github/workflows
     actionlint

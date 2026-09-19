@@ -15,6 +15,21 @@ use std::process::Command;
 use super::Sandbox;
 use crate::fs;
 
+/// The architecture the fake release is published for, named as the pinned
+/// release names it.
+///
+/// The sandbox symlinks the host's `uname` into its `bin`, so the installer
+/// asks the host which architecture it is on and `mold_arch` answers in this
+/// spelling. Publishing a hard-coded `x86_64` would then match the installer's
+/// request only for as long as the host is x86-64 — on an `aarch64` host the
+/// installer would request a name the fixture never published, and the suite
+/// would report the publication as faulty rather than the fixture.
+#[cfg(target_arch = "aarch64")]
+const RELEASE_ARCH: &str = "aarch64";
+/// The architecture the fake release is published for; see the `aarch64` case.
+#[cfg(not(target_arch = "aarch64"))]
+const RELEASE_ARCH: &str = "x86_64";
+
 /// A published fake release, ready for the installer to fetch.
 pub struct FakeRelease {
     /// The version the release is published under.
@@ -36,7 +51,7 @@ impl FakeRelease {
     /// Returns an error if the release fixture cannot be published into the sandbox.
     pub fn publish(sandbox: &Sandbox, version: &str) -> Result<Self> {
         let directory = sandbox.home().join("releases");
-        let root = format!("mold-{version}-x86_64-linux");
+        let root = format!("mold-{version}-{RELEASE_ARCH}-linux");
         let name = format!("{root}.tar.gz");
 
         stage_release_tree(&directory.join(&root))?;
@@ -99,6 +114,9 @@ impl FakeRelease {
     ///
     /// Returns an error if the checksum fixture cannot be written.
     pub fn write_checksums_omitting_this_artefact(&self, sandbox: &Sandbox) -> Result<Utf8PathBuf> {
+        // `x86_64` is a placeholder, not a claim about the host: the row has to
+        // name a different artefact, and the version `0.0.0` already makes it
+        // one whether or not the architecture matches.
         let other = format!("{}  mold-0.0.0-x86_64-linux.tar.gz\n", self.sha256);
         Self::write_checksum_file(sandbox, &other)
     }

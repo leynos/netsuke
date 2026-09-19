@@ -1,4 +1,4 @@
-//! Behavioural tests for the build-tools installer and benchmark scripts.
+//! Behavioural tests for the build-tools installer script.
 //!
 //! The installer's security-relevant behaviour is that it refuses to unpack an
 //! artefact it cannot verify, so these tests serve a locally built tarball over
@@ -6,18 +6,17 @@
 //!
 //! `make install-build-tools` is covered here too, because it is the installer's
 //! own entry point; the build and gate recipes live in
-//! `build_tools_make_target_tests.rs`.
+//! `build_tools_make_target_tests.rs`, and the benchmark in
+//! `build_tools_bench_tests.rs`.
 
 #![cfg(all(unix, target_os = "linux"))]
 
 use anyhow::{Result, ensure};
 use camino::Utf8PathBuf;
-use proptest::prelude::*;
-use proptest::proptest;
 use rstest::rstest;
 use test_support::build_tools::{
-    BENCH_REPEATS, FakeRelease, InstallerFixture, InstallerScenario, MakeInvocation, PinOverrides,
-    Sandbox, TEST_MOLD_VERSION, WRONG_SHA256, combined, pinned_mold_version, pinned_toolchain,
+    FakeRelease, InstallerFixture, InstallerScenario, MakeInvocation, PinOverrides, Sandbox,
+    TEST_MOLD_VERSION, WRONG_SHA256, combined, pinned_mold_version, pinned_toolchain,
 };
 
 /// Inputs whose checksum file fails verification in the given way.
@@ -264,101 +263,6 @@ fn an_unreadable_pin_aborts_before_any_download() -> Result<()> {
         !text.contains("downloading"),
         "must not attempt a download with an empty version, got `{text}`"
     );
-    Ok(())
-}
-
-/// A cell holding a one-decimal duration, as `bench-build` formats them.
-/// Timings are inherently unstable, so tests assert on shape, not value.
-fn is_timing(cell: &str) -> bool {
-    // Exactly one point, with digits either side. A looser check accepts `.`,
-    // `..`, and `1.2.3`, none of which the benchmark can emit.
-    let Some((whole, fraction)) = cell.split_once('.') else {
-        return false;
-    };
-    !whole.is_empty()
-        && !fraction.is_empty()
-        && whole.chars().all(|c| c.is_ascii_digit())
-        && fraction.chars().all(|c| c.is_ascii_digit())
-}
-
-proptest! {
-    /// A timing cell is exactly `<digits>.<digits>`. Generating around that
-    /// shape covers the malformed neighbours — bare dots, multiple points, a
-    /// missing side — that a hand-picked example list tends to miss.
-    #[test]
-    fn is_timing_accepts_exactly_one_point_between_digits(
-        cell in r"[0-9.]{0,6}"
-    ) {
-        let expected = {
-            let mut parts = cell.split('.');
-            let whole = parts.next().unwrap_or_default();
-            let fraction = parts.next().unwrap_or_default();
-            parts.next().is_none()
-                && cell.contains('.')
-                && !whole.is_empty()
-                && !fraction.is_empty()
-        };
-        prop_assert_eq!(is_timing(&cell), expected, "cell `{}`", cell);
-    }
-
-    /// Whatever the digits, a well-formed one-decimal timing is accepted.
-    #[test]
-    fn is_timing_accepts_any_one_decimal_duration(whole in 0u32..100_000, fraction in 0u32..10) {
-        let cell = format!("{whole}.{fraction}");
-        prop_assert!(is_timing(&cell), "cell `{}`", cell);
-    }
-}
-
-#[test]
-fn benchmark_emits_a_markdown_table_for_every_variant() -> Result<()> {
-    let sandbox = Sandbox::new()?;
-    sandbox.write_mold(&sandbox.prefix().join("bin"), &pinned_mold_version()?)?;
-    sandbox.write_rustup(&pinned_toolchain()?)?;
-    let cargo = sandbox.write_fake(&sandbox.bin(), "cargo", "exit 0")?;
-    let touch_file = sandbox.home().join("bench-touch");
-    sandbox.write_file(&touch_file, "")?;
-
-    let output = sandbox.script(
-        "bench-build.sh",
-        &[
-            ("CARGO", cargo.to_string()),
-            ("BENCH_ROOT", sandbox.home().join("bench").to_string()),
-            ("BENCH_TOUCH_FILE", touch_file.to_string()),
-        ],
-    )?;
-    let stdout = String::from_utf8_lossy(&output.stdout);
-
-    ensure!(
-        output.status.success(),
-        "benchmark should succeed, got `{}`",
-        combined(&output)
-    );
-    ensure!(
-        stdout.contains("| Variant | Clean build (s) | Incremental build (s) |"),
-        "should emit the table header, got `{stdout}`"
-    );
-    let rows: Vec<&str> = stdout
-        .lines()
-        .filter(|line| line.starts_with("| Default") || line.starts_with("| `mold`"))
-        .collect();
-    // One row per variant *per repeat*: the benchmark measures every variant
-    // `BENCH_REPEATS` times in a freshly shuffled order so that page-cache
-    // warmth spreads across the variants instead of pinning to whichever ran
-    // first, and each measurement is reported rather than folded into the last.
-    // Asserting a bare `3` would pass only until the repeat count changed, and
-    // would then be asserting the old count rather than the invariant.
-    let expected_rows = 3 * BENCH_REPEATS;
-    ensure!(
-        rows.len() == expected_rows,
-        "should report {expected_rows} rows, one per variant per repeat, got `{stdout}`"
-    );
-    for row in rows {
-        let measurements = row.split('|').map(str::trim).filter(|cell| is_timing(cell));
-        ensure!(
-            measurements.count() == 2,
-            "row should carry two decimal timings, got `{row}`"
-        );
-    }
     Ok(())
 }
 

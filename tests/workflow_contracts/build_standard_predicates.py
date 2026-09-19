@@ -291,12 +291,13 @@ def compiles(step: dict[str, object], gated: frozenset[str]) -> bool:
     """
     if uses_coverage_action(step):
         return True
-    script = step.get("run")
-    if not isinstance(script, str):
-        return False
-    if invoked_make_targets(script) & gated:
-        return True
-    return any(driver_builds(line) for line in logical_lines(script))
+    match step.get("run"):
+        case str() as script:
+            if invoked_make_targets(script) & gated:
+                return True
+            return any(driver_builds(line) for line in logical_lines(script))
+        case _:
+            return False
 
 
 def step_name(step: dict[str, object]) -> str:

@@ -9,9 +9,9 @@
 set -euo pipefail
 
 # Locate the repository from this file rather than from the working directory,
-# so the entry points run correctly when invoked directly and not only through
-# the `make dev-*` recipes that used to supply every pin path. `BASH_SOURCE[0]`
-# is this file even when sourced, which is what makes the derivation reliable.
+# so the entry points run correctly when invoked directly as well as through the
+# `install-build-tools` and `check-build-tools` targets. `BASH_SOURCE[0]` is this
+# file even when sourced, which is what makes the derivation reliable.
 BUILD_TOOLS_HELPER_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 BUILD_TOOLS_REPO_ROOT=$(cd -- "$BUILD_TOOLS_HELPER_DIR/.." && pwd)
 
@@ -23,11 +23,11 @@ MOLD_VERSION_FILE="${MOLD_VERSION_FILE:-$BUILD_TOOLS_REPO_ROOT/tools/mold/VERSIO
 MOLD_SHA256SUMS_FILE="${MOLD_SHA256SUMS_FILE:-$BUILD_TOOLS_REPO_ROOT/tools/mold/SHA256SUMS}"
 RUST_TOOLCHAIN_FILE="${RUST_TOOLCHAIN_FILE:-$BUILD_TOOLS_REPO_ROOT/rust-toolchain.toml}"
 
-# Prefix for the mold installation tree. The `dev-*` recipes prepend this
-# prefix's `bin/` to PATH -- this exact prefix, not a hard-coded ~/.local -- so
-# an overridden BUILD_TOOLS_PREFIX is the one that wins PATH resolution for both
-# `check-build-tools` and `-fuse-ld=mold`. Invoking these scripts outside `make`
-# means arranging that PATH order separately.
+# Prefix for the mold installation tree. The Makefile prepends this prefix's
+# `bin/` to PATH for every target -- this exact prefix, not a hard-coded
+# ~/.local -- so an overridden BUILD_TOOLS_PREFIX is the one that wins PATH
+# resolution for both `check-build-tools` and `-fuse-ld=mold`. Invoking these
+# scripts outside `make` means arranging that PATH order separately.
 BUILD_TOOLS_PREFIX="${BUILD_TOOLS_PREFIX:-$HOME/.local}"
 
 # Emit a diagnostic. Always stderr, so a caller may capture a helper's stdout

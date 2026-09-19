@@ -111,12 +111,13 @@ standard: the parallel `rustc` frontend, and on Linux the `mold` linker. A
   gates additionally check the version against `tools/mold/VERSION`.
 
 The linker is named explicitly rather than left to gcc's default, so a Linux
-host without `mold` fails the link rather than quietly falling back. Build on
-macOS or Windows, or remove `.cargo/config.toml` before installing, if you want
-the platform linker instead. A registry install —
-`cargo install netsuke-build` — builds from packaged source, where neither the
-configuration file nor `rust-toolchain.toml` applies, so it needs neither
-prerequisite; see the crates.io command earlier in this section.
+host without `mold` fails the link rather than quietly falling back. The
+platform default linker is used instead on macOS and Windows — where the
+configuration names no linker — or when `.cargo/config.toml` has been removed
+before installing. A registry install — `cargo install netsuke-build` — builds
+from packaged source, where neither the configuration file nor
+`rust-toolchain.toml` applies, so it needs neither prerequisite; see the
+crates.io command earlier in this section.
 
 ### Complete Windows setup
 
