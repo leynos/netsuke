@@ -4365,6 +4365,19 @@ or misspelled, or a target location added later, reports itself instead of
 quietly excusing its sources. Extending the roots stays safe: the invariant is
 what says the set is complete, rather than a reviewer re-deriving it.
 
+A root is a directory, and every directory name beneath it comes along, so a
+cache can sit inside a scanned root: `tests/.uv-cache` is under `tests`. The
+scan therefore skips the same machine-local names the workspace walk skips, at
+any depth, rather than reading a cache as though it were repository content. It
+did not always, and the gap was worth closing for a reason other than tidiness:
+a vendored source under a scanned root that carried the banned `allow` failed
+the gate on a machine where the tool had run and passed on a fresh clone. A
+verdict that depends on a machine is worse than no verdict, and this one would
+have been near-impossible to diagnose, because the name is git-ignored and so
+appears in no diff and in no `git status`. Both walks skip by name now, and a
+self-test pins that they agree on what is governed, since the coverage
+invariant only means something while they do.
+
 The skip list is named rather than "anything dot-prefixed", and the difference
 matters. A dot-directory is not evidence of a cache: `.config`, `.github`, and
 `.rules` are tracked repository content, and Cargo compiles a target declared
