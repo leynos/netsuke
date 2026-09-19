@@ -1,11 +1,11 @@
 //! Deliberately raw response payloads for the local HTTP fixture.
 //!
-//! [`HttpResponse`](super::HttpResponse) guarantees a well-formed response, which
-//! is what most fixtures want and why its status, headers, and body stay private.
-//! A test of a client's *parse* failures needs the opposite: bytes no client
-//! accepts, emitted verbatim. This module holds that payload and the completion
-//! helper that delivers it, kept separate so the guarantee
-//! [`HttpResponse`](super::HttpResponse) makes is never quietly weakened.
+//! [`HttpResponse`](super::HttpResponse) composes a response — a status line, a
+//! terminating header block, and a matching `Content-Length` — which is what
+//! most fixtures want. A test of a client's *parse* failures needs the opposite:
+//! bytes no client accepts, emitted verbatim. This module holds that payload and
+//! the completion helper that delivers it, kept separate so a case cannot
+//! express malformed bytes through the type the ordinary fixtures build.
 
 use std::{
     io::{self, Write as _},

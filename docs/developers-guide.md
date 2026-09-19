@@ -3535,16 +3535,20 @@ only. Keep fixture assertions here and production test-helper behaviour in
 
 ### `test_support/src/http/raw.rs`
 
-The raw-response payload for the local HTTP fixture. `HttpResponse` guarantees
-a well-formed response, which is why its status, headers, and body stay private;
-`RawHttpResponse` is the opposite guarantee, emitting bytes verbatim so a case
-can present a status line, header block, or framing no client accepts. The two
-are separate types rather than one type with an escape hatch, so the checked
-guarantee holds by construction. Both implement the crate-private
-`FinishResponse` trait, which carries the bytes, and `finish_response` performs
-the write and the write-side shutdown for either. That trait exists so the two
-payloads share one completion contract; it is not an extension point, and
-`raw`'s surface is crate-private except for `RawHttpResponse` itself.
+The raw-response payload for the local HTTP fixture. `HttpResponse` composes a
+response: a status line, a header block ending in a blank line, and a
+`Content-Length` that matches the body it carries. It does not validate the
+status or header values a caller supplies, so it is not a guard against a
+status that is not three digits or a value containing a line break.
+`RawHttpResponse` is the stronger separation: it emits bytes verbatim, so a
+case can present a status line, header block, or framing no client accepts. The
+two are separate types rather than one type with an escape hatch, so a case
+that means to send malformed bytes cannot reach the composed path by accident.
+Both implement the crate-private `FinishResponse` trait, which carries the
+bytes, and `finish_response` performs the write and the write-side shutdown for
+either. That trait exists so the two payloads share one completion contract; it
+is not an extension point, and `raw`'s surface is crate-private except for
+`RawHttpResponse` itself.
 
 Completion is the reason this module exists. `finish_response` writes the whole
 payload and then calls `shutdown(Shutdown::Write)`. Dropping the stream instead
@@ -3558,9 +3562,11 @@ drain the request, so the client sees exactly the configured bytes. This is
 also why a test must not stand a bare `TcpListener` in place of the fixture:
 such a listener closes without that shutdown and races the client, which is how
 `stdlib::network::redirect::error_tests::protocol_failures_are_classified_from_a_live_response`
-came to fail on Windows after the `ureq` 3 bump. The fixture still reads a
-complete request before it answers, so the request bytes are consumed rather
-than left to force a reset.
+came to fail on Windows after the `ureq` 3 bump. The fixture still reads the
+request's header block before it answers, so the request bytes are consumed
+rather than left to force a reset. A request *body* is deliberately not
+consumed: the fixture answers on the header block alone, so it is for bodyless
+requests, which is what every fixture case sends.
 
 The `#[cfg(test)] rendered_exchange` helper drives one request through the same
 completion path a real client sees and returns both the client's bytes and the
