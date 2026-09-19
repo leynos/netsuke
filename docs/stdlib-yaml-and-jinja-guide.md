@@ -166,8 +166,12 @@ non-blocking, so a FIFO cannot wedge the render worker first. A symlink final
 component is refused on both platforms, but not with the same diagnostic: on
 Unix the default open declines to follow it, so the failure comes from the open
 itself and names the path together with the platform's symbolic-link detail,
-while on Windows a check made before the open reuses the not-a-regular-file
-diagnostic. Two optional keyword arguments narrow a call without touching the
+while on Windows the open declines to traverse the reparse point and the
+refusal then comes from the opened handle, which reuses the not-a-regular-file
+diagnostic. That Windows refusal covers every reparse point, not only symlinks:
+junctions, volume mount points, and other tags such as deduplication or cloud
+placeholders are rejected alike, and `follow_symlinks=true` is the opt-in for
+all of them. Two optional keyword arguments narrow a call without touching the
 operator ceiling:
 
 - `max_bytes` lowers the budget for one call (a value above the configured

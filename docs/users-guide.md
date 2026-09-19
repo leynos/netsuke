@@ -1838,8 +1838,12 @@ library.
 The reading filters also refuse to follow a symlink as the final path component
 and reject anything that is not a regular file once opened, including FIFOs and
 device nodes. A symlinked directory used *inside* a path is unaffected; only
-the final entry is checked. Templates that deliberately read through a final
-symlink can pass `follow_symlinks=true` to accept the link:
+the final entry is checked. On Windows the same refusal covers every reparse
+point, not only symlinks: junctions, volume mount points, and other tags such
+as deduplication or cloud placeholders are all rejected, including tags Windows
+may add later. Templates that deliberately read through a final symlink — or,
+on Windows, through any of those reparse points — can pass
+`follow_symlinks=true` to accept it:
 
 <!-- tested-example: guide-file-follow-symlinks-expression -->
 
