@@ -3502,6 +3502,29 @@ lookup modules retain their existing access through `which::env`'s narrow
 `pub(super)` re-exports. The split is purely to keep the environment snapshot
 adapter below the 400-line cap, not a new resolution boundary.
 
+### `src/stdlib/network/redirect_support.rs`
+
+Localized diagnostics for failed and refused fetch hops, owned by
+`src/stdlib/network/redirect.rs`, which declares it through a `#[path]`
+attribute. It owns `fetch_failed_error`, `location_failure_error`,
+`rejection_error`, and the `redacted_url` helper every diagnostic renders
+through. Only `redirect` imports it. The split is purely to keep the redirect
+adapter — the HTTP client, the chain budget, the bounded telemetry, and the
+`Location` header parse — below the 400-line cap, not a new boundary: nothing
+in it decides anything, and it must never grow a helper that inspects a header,
+a status, or a chain, because those are the adapter's concerns.
+
+### `src/stdlib/network/redirect_location_tests.rs`
+
+Unit tests for the adapter's `Location` header parse and its diagnostics,
+declared by `src/stdlib/network/redirect_adapter_tests.rs` through a `#[path]`
+attribute. It pins the resolver, the closed `redirect_failure` reason each
+header failure is counted under, the localized message it renders, and the four
+bounded trace fields the refusal logs. The snapshot-producing cases stay in the
+parent module: insta derives a snapshot's filename from the module path that
+asserted it, and the files under `src/snapshots/network_redirect/` keep stable
+names.
+
 ### `test_support/src/check_ninja_tests.rs`
 
 Unix-only unit coverage for the fake-Ninja factories, owned by
@@ -5340,17 +5363,30 @@ is a transport-independent state machine holding every pure decision: hop
 accounting, loop detection, cross-origin credential stripping, and per-hop
 network-policy evaluation. It performs no I/O and builds no user-facing text.
 [`src/stdlib/network/redirect.rs`](../src/stdlib/network/redirect.rs) is the
-thin adapter that owns the HTTP client, the bounded telemetry, and the
-localized diagnostics, and applies the chain's decisions. A new redirect rule
-belongs in the chain module; a new transport, metric, or message belongs in the
-adapter.
+thin adapter that owns the HTTP client, the bounded telemetry, the `Location`
+header parse, and the localized diagnostics, and applies the chain's decisions.
+A new redirect rule belongs in the chain module; a new transport, metric, or
+message belongs in the adapter.
+
+That boundary decides where a redirect fails. A `Location` header is an HTTP
+response fact, so the adapter reads and resolves it and owns the "absent" and
+"present but unparsable" diagnostics; the chain never sees a raw header, only
+an already-resolved `Url`. Reading a header is transport work, and a chain that
+parsed one would have to name a transport failure in its own vocabulary. So
+`RedirectRejection` holds only the four redirect *decisions* the chain makes —
+`CredentialsNotRemovable`, `LimitExceeded`, `Loop`, and `Policy` — while
+`location_missing` and `location_invalid` are `redirect_failure` reasons the
+adapter records. Both reasons stay in the closed vocabulary of
+[`src/stdlib/network/telemetry.rs`](../src/stdlib/network/telemetry.rs) because
+the adapter still emits them.
 
 The per-hop ordering is the security-relevant part. The adapter dispatches a
-GET, classifies the status, and only then asks the chain to resolve the
-`Location` value. The chain applies to the resolved target, in order, the hop
-limit, cross-origin credential removal, the loop check, and finally the policy
-evaluation, so the target is checked against the configured `NetworkPolicy`
-before any request is sent to it.
+GET, classifies the status, resolves the `Location` value against the URL whose
+request produced the response, and only then asks the chain to judge the
+resolved target. The chain applies, in order, the hop limit, cross-origin
+credential removal, the loop check, and finally the policy evaluation, so the
+target is checked against the configured `NetworkPolicy` before any request is
+sent to it.
 
 One `fetch` accepts at most five redirects (`FETCH_REDIRECT_LIMIT`); the
 initial request is not a hop, and a target already requested in the same chain
@@ -5377,10 +5413,12 @@ carries `operation`, an outcome, a closed reason, and `hop`, and never a
 location, URL, host, or userinfo. Those four fields are the bound that ADR-023
 sets for redirect decisions. Policy refusals emit `policy_outcome="rejected"`
 with a `policy_reason` from `scheme_not_allowed`, `missing_host`,
-`host_not_allowlisted`, and `host_blocked`. Every other refusal emits
-`redirect_outcome="rejected"` with a `redirect_failure` drawn from
-`location_missing`, `location_invalid`, `credentials_not_removable`,
-`limit_exceeded`, and `loop`.
+`host_not_allowlisted`, and `host_blocked`. Every other refusal — a chain
+decision or an unusable `Location` header — emits `redirect_outcome="rejected"`
+with a `redirect_failure` drawn from `location_missing`, `location_invalid`,
+`credentials_not_removable`, `limit_exceeded`, and `loop`. Both refusal paths
+share one logging helper, so they are the same shape and differ only by that
+closed reason.
 
 [ADR-023](adr-023-revalidate-fetch-redirects.md) records the rationale for
 revalidating every redirect against the policy.

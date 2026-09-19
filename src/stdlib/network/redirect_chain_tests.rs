@@ -38,6 +38,23 @@ fn initial_url() -> Result<Url> {
     Url::parse(INITIAL_URL).context("initial URL should parse")
 }
 
+/// Resolve one raw location against the chain's current URL.
+///
+/// Reading the `Location` header and resolving it is the adapter's job, so the
+/// chain only ever sees a resolved target. These cases build their targets the
+/// same way, which keeps the tests honest about the boundary: nothing below
+/// asks the chain to parse a header it no longer receives.
+///
+/// # Errors
+///
+/// Returns an error when `location` cannot be joined to the current URL.
+fn resolve_against(chain: &RedirectChain<'_>, location: &str) -> Result<Url> {
+    chain
+        .current_url()
+        .join(location)
+        .with_context(|| format!("test location should resolve: {location}"))
+}
+
 /// Generate bounded absolute and relative redirect locations.
 fn generated_locations() -> impl Strategy<Value = Vec<String>> {
     prop::collection::vec(
@@ -113,7 +130,8 @@ fn bounded_chain_matches_an_independent_dispatch_record(
     ];
 
     for location in locations {
-        let Ok(transition) = chain.advance(Some(location)) else {
+        let target = resolve_against(&chain, location)?;
+        let Ok(transition) = chain.advance(target) else {
             continue;
         };
         accepted += 1;
@@ -153,9 +171,9 @@ fn distinct_chain_stops_at_the_redirect_limit(chain_setup: Result<ChainSetup>) -
     let mut chain = RedirectChain::new(&base, &policy);
 
     for hop in 0..FETCH_REDIRECT_LIMIT {
-        let location = format!("/hop/{hop}");
+        let target = resolve_against(&chain, &format!("/hop/{hop}"))?;
         let transition = chain
-            .advance(Some(&location))
+            .advance(target)
             .expect("a distinct hop within the limit should be accepted");
         ensure!(
             transition.hop == hop + 1,
@@ -165,8 +183,9 @@ fn distinct_chain_stops_at_the_redirect_limit(chain_setup: Result<ChainSetup>) -
         );
     }
 
+    let overflow = resolve_against(&chain, "/hop/overflow")?;
     let refused = chain
-        .advance(Some("/hop/overflow"))
+        .advance(overflow)
         .expect_err("the hop after the limit must be refused");
     ensure!(
         matches!(
@@ -184,11 +203,13 @@ fn revisited_target_is_refused_as_a_loop(chain_setup: Result<ChainSetup>) -> Res
     let ChainSetup { base, policy } = chain_setup?;
     let mut chain = RedirectChain::new(&base, &policy);
 
+    let first = resolve_against(&chain, "/once")?;
     chain
-        .advance(Some("/once"))
+        .advance(first)
         .expect("the first hop should be accepted");
+    let repeat = resolve_against(&chain, "/once")?;
     let refused = chain
-        .advance(Some("/once"))
+        .advance(repeat)
         .expect_err("revisiting a target must be refused");
     ensure!(
         matches!(refused, RedirectRejection::Loop { .. }),
@@ -216,8 +237,9 @@ fn fragment_only_redirect_is_refused_as_a_loop(chain_setup: Result<ChainSetup>) 
     );
     let mut chain = RedirectChain::new(&base, &policy);
 
+    let first = resolve_against(&chain, "/once#a")?;
     let accepted = chain
-        .advance(Some("/once#a"))
+        .advance(first)
         .expect("the first fragment-bearing hop should be accepted");
     ensure!(
         accepted.next_url.fragment() == Some("a"),
@@ -225,8 +247,9 @@ fn fragment_only_redirect_is_refused_as_a_loop(chain_setup: Result<ChainSetup>) 
         accepted.next_url,
     );
 
+    let second = resolve_against(&chain, "/once#b")?;
     let refused = chain
-        .advance(Some("/once#b"))
+        .advance(second)
         .expect_err("a fragment-only change must be refused as a loop");
     ensure!(
         matches!(refused, RedirectRejection::Loop { .. }),
@@ -244,35 +267,6 @@ fn fragment_only_redirect_is_refused_as_a_loop(chain_setup: Result<ChainSetup>) 
     Ok(())
 }
 
-/// Verify missing and unresolvable locations are refused before any request.
-#[rstest]
-#[case(None, "missing")]
-#[case(Some("http://[::1"), "invalid")]
-fn unusable_locations_are_refused(
-    chain_setup: Result<ChainSetup>,
-    #[case] location: Option<&str>,
-    #[case] expected: &str,
-) -> Result<()> {
-    let ChainSetup { base, policy } = chain_setup?;
-    let mut chain = RedirectChain::new(&base, &policy);
-
-    let refused = chain
-        .advance(location)
-        .expect_err("an unusable location must be refused");
-    let matched = matches!(
-        (&refused, expected),
-        (RedirectRejection::LocationMissing { .. }, "missing")
-            | (RedirectRejection::LocationInvalid { .. }, "invalid")
-    );
-    ensure!(matched, "unexpected rejection: {refused:?}");
-    ensure!(
-        chain.hops() == 0,
-        "an unusable location must not advance the chain, hops = {}",
-        chain.hops(),
-    );
-    Ok(())
-}
-
 proptest! {
     /// Verify the hop limit and dispatch record hold for generated locations.
     #[test]
@@ -284,7 +278,10 @@ proptest! {
         let mut accepted = 0_usize;
 
         for location in &locations {
-            let Ok(transition) = chain.advance(Some(location)) else {
+            let Ok(target) = chain.current_url().join(location) else {
+                continue;
+            };
+            let Ok(transition) = chain.advance(target) else {
                 continue;
             };
             accepted += 1;
@@ -313,8 +310,11 @@ proptest! {
             .expect("blocked.example should be a valid pattern");
         let mut chain = RedirectChain::new(&base, &policy);
 
-        for target in &targets {
-            match chain.advance(Some(target)) {
+        for raw in &targets {
+            let Ok(target) = Url::parse(raw) else {
+                continue;
+            };
+            match chain.advance(target) {
                 Ok(transition) => {
                     prop_assert!(
                         policy.evaluate(&transition.next_url).is_ok(),
@@ -347,8 +347,9 @@ proptest! {
         let mut chain = RedirectChain::new(&current, &policy);
         let location = format!("http://{user}:{secret}@{host}/next");
 
+        let target = Url::parse(&location).expect("generated credentialed URL should parse");
         let transition = chain
-            .advance(Some(&location))
+            .advance(target)
             .expect("both generated hosts are allowlisted");
         if transition.next_url.origin() == current.origin() {
             prop_assert_eq!(transition.next_url.username(), user.as_str());

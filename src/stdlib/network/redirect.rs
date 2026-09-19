@@ -1,10 +1,12 @@
 //! Policy-aware HTTP redirect handling for the fetch adapter.
 //!
 //! The adapter owns the HTTP client, the chain budget, the bounded telemetry,
-//! and the localized diagnostics. Every decision it makes comes from
-//! [`super::redirect_chain`], so the redirect state machine is testable without
-//! a socket and this module stays a thin composition of transport, metrics, and
-//! user-facing text.
+//! and the localized diagnostics. It also owns the `Location` header parse:
+//! reading a response header is transport work, so an absent or unparsable
+//! header is diagnosed here rather than inside the chain. Every *decision*
+//! about the resolved target comes from [`super::redirect_chain`], so the
+//! redirect state machine is testable without a socket and this module stays a
+//! thin composition of transport, metrics, and user-facing text.
 
 use std::{
     error::Error as _,
@@ -15,13 +17,20 @@ use std::{
     time::{Duration, Instant},
 };
 
-use minijinja::{Error, ErrorKind};
+use minijinja::Error;
 use url::Url;
 
 use super::redirect_chain::{RedirectChain, RedirectRejection};
 use super::telemetry;
 use super::{NetworkPolicy, network_policy_rejection_reason};
-use crate::localization::{self, keys};
+
+/// Keep the localized diagnostics and their shared redaction below the cap.
+#[path = "redirect_support.rs"]
+mod support;
+
+#[cfg(test)]
+use support::redacted_url;
+use support::{fetch_failed_error, location_failure_error, rejection_error};
 
 /// Wall-clock budget for one whole redirect chain, shared by every hop.
 ///
@@ -30,15 +39,27 @@ use crate::localization::{self, keys};
 /// only the time still left in the chain.
 const FETCH_CHAIN_BUDGET: Duration = Duration::from_secs(60);
 
+/// Why a redirect response named no usable target.
+///
+/// Both cases describe the HTTP response rather than a redirect decision, so
+/// this type stays local to the adapter and never reaches the chain.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LocationFailure {
+    /// The redirect response carried no `Location` header.
+    Missing,
+    /// The `Location` value could not be resolved against the current URL.
+    Unparsable,
+}
+
 /// Dispatch a policy-checked GET request with bounded redirects and timeouts.
 ///
 /// # Errors
 ///
-/// Returns an error when a redirect is malformed, loops, exceeds the limit, or
-/// violates `policy`, when the chain exhausts [`FETCH_CHAIN_BUDGET`], or when
-/// `ureq` cannot connect to the server, send the request, receive the response,
-/// or complete within one of the configured timeouts, including unsuccessful
-/// HTTP responses.
+/// Returns an error when a redirect carries no usable `Location`, loops,
+/// exceeds the limit, or violates `policy`, when the chain exhausts
+/// [`FETCH_CHAIN_BUDGET`], or when `ureq` cannot connect to the server, send the
+/// request, receive the response, or complete within one of the configured
+/// timeouts, including unsuccessful HTTP responses.
 pub(super) fn dispatch_request(
     url: &Url,
     policy: &NetworkPolicy,
@@ -57,12 +78,68 @@ pub(super) fn dispatch_request(
             return Ok(response);
         }
 
-        match chain.advance(response.header("Location")) {
-            Ok(transition) => record_followed_redirect(transition.hop),
-            Err(rejection) => {
-                let refused_hop = chain.hops().saturating_add(1);
-                return Err(report_refused_redirect(&rejection, refused_hop));
-            }
+        let hop = follow_redirect(&mut chain, &response)?;
+        record_followed_redirect(hop);
+    }
+}
+
+/// Resolve one redirect response and judge it, recording any refusal.
+///
+/// The two ways a redirect can fail — a header the adapter cannot resolve and a
+/// target the chain refuses — both end here, so the dispatch loop has a single
+/// failure path and every refusal is reported in the same shape. An absent
+/// header and an unresolvable value are distinct failures only in the reason
+/// and message they carry.
+///
+/// # Errors
+///
+/// Returns the localized diagnostic for an unusable `Location` header, or for
+/// the refusal the chain reported, after recording each in telemetry and the
+/// log.
+fn follow_redirect(
+    chain: &mut RedirectChain<'_>,
+    response: &ureq::Response,
+) -> Result<usize, Error> {
+    let target = resolve_location(chain, response.header("Location")).map_err(|failure| {
+        report_location_failure(chain, failure, chain.hops().saturating_add(1))
+    })?;
+    chain
+        .advance(target)
+        .map(|transition| transition.hop)
+        .map_err(|rejection| report_refused_redirect(&rejection, chain.hops().saturating_add(1)))
+}
+
+/// Resolve the raw `Location` header into the target the chain will judge.
+///
+/// Relative values resolve against the URL whose request produced the response,
+/// which is the chain's current URL. An absent header and an unresolvable value
+/// are distinct failures, because each has its own bounded reason and its own
+/// localized message.
+///
+/// # Errors
+///
+/// Returns [`LocationFailure::Missing`] when `location` is `None`, and
+/// [`LocationFailure::Unparsable`] when the value cannot be joined to the
+/// current URL.
+fn resolve_location(
+    chain: &RedirectChain<'_>,
+    location: Option<&str>,
+) -> Result<Url, LocationFailure> {
+    let Some(raw_location) = location else {
+        return Err(LocationFailure::Missing);
+    };
+    chain
+        .current_url()
+        .join(raw_location)
+        .map_err(|_err| LocationFailure::Unparsable)
+}
+
+impl LocationFailure {
+    /// Return the closed telemetry category for this failure.
+    const fn reason(self) -> &'static str {
+        match self {
+            Self::Missing => "location_missing",
+            Self::Unparsable => "location_invalid",
         }
     }
 }
@@ -107,12 +184,9 @@ fn remaining_budget(deadline: Instant, url: &Url) -> Result<Duration, Error> {
                 host = url.host_str().unwrap_or(""),
                 "fetch redirect chain exhausted its budget"
             );
-            Err(Error::new(
-                ErrorKind::InvalidOperation,
-                localization::message(keys::STDLIB_FETCH_FAILED)
-                    .with_arg("url", redacted_url(url))
-                    .with_arg("details", "Redirect chain exceeded its deadline")
-                    .to_string(),
+            Err(fetch_failed_error(
+                url,
+                "Redirect chain exceeded its deadline",
             ))
         }
     }
@@ -137,13 +211,7 @@ fn dispatch_hop(
                 error_category = ureq_failure_category(&err),
                 "fetch request failed"
             );
-            Error::new(
-                ErrorKind::InvalidOperation,
-                localization::message(keys::STDLIB_FETCH_FAILED)
-                    .with_arg("url", redacted_url(url))
-                    .with_arg("details", "HTTP request failed")
-                    .to_string(),
-            )
+            fetch_failed_error(url, "HTTP request failed")
         })
 }
 
@@ -223,94 +291,50 @@ fn report_refused_redirect(rejection: &RedirectRejection, hop: usize) -> Error {
             "network policy rejected fetch redirect"
         );
     } else {
-        tracing::warn!(
-            operation = "fetch",
-            redirect_outcome = "rejected",
-            redirect_failure = refusal,
-            hop,
-            "fetch redirect refused"
-        );
+        warn_refused_redirect(hop, refusal);
     }
     rejection_error(rejection)
+}
+
+/// Record one unusable `Location` header and build its localized diagnostic.
+///
+/// This is the adapter's counterpart to [`report_refused_redirect`] for the two
+/// failures the chain can no longer report. It emits the same four bounded
+/// fields with the same closed vocabulary, so a header failure and a redirect
+/// refusal are indistinguishable in shape and differ only by `redirect_failure`.
+fn report_location_failure(
+    chain: &RedirectChain<'_>,
+    failure: LocationFailure,
+    hop: usize,
+) -> Error {
+    let reason = failure.reason();
+    telemetry::record_redirect_refused(reason);
+    warn_refused_redirect(hop, reason);
+    location_failure_error(chain.current_url(), failure)
+}
+
+/// Log one refused redirect with its four bounded fields.
+///
+/// Both refusal paths — an unusable header and a chain decision — share this
+/// event, so every refusal logs the same shape and they differ only by the
+/// closed `redirect_failure` reason they carry.
+fn warn_refused_redirect(hop: usize, reason: &'static str) {
+    tracing::warn!(
+        operation = "fetch",
+        redirect_outcome = "rejected",
+        redirect_failure = reason,
+        hop,
+        "fetch redirect refused"
+    );
 }
 
 /// Return the closed telemetry category for a refused redirect.
 const fn failure_category(rejection: &RedirectRejection) -> &'static str {
     match rejection {
-        RedirectRejection::LocationMissing { .. } => "location_missing",
-        RedirectRejection::LocationInvalid { .. } => "location_invalid",
         RedirectRejection::CredentialsNotRemovable { .. } => "credentials_not_removable",
         RedirectRejection::LimitExceeded { .. } => "limit_exceeded",
         RedirectRejection::Loop { .. } => "loop",
         RedirectRejection::Policy { .. } => "policy_rejected",
-    }
-}
-
-/// Build the localized diagnostic for a refused redirect.
-///
-/// Credential removal has no dedicated message; it reuses the invalid-location
-/// diagnostic with a redacted location and a reason that names the failure.
-fn rejection_error(rejection: &RedirectRejection) -> Error {
-    match rejection {
-        RedirectRejection::LocationMissing { current_url } => Error::new(
-            ErrorKind::InvalidOperation,
-            localization::message(keys::STDLIB_FETCH_REDIRECT_LOCATION_MISSING)
-                .with_arg("url", redacted_url(current_url))
-                .to_string(),
-        ),
-        RedirectRejection::LocationInvalid { current_url } => {
-            redirect_location_invalid_error(current_url)
-        }
-        RedirectRejection::CredentialsNotRemovable { current_url } => Error::new(
-            ErrorKind::InvalidOperation,
-            localization::message(keys::STDLIB_FETCH_REDIRECT_LOCATION_INVALID)
-                .with_arg("url", redacted_url(current_url))
-                .with_arg("location", "<redacted>")
-                .with_arg("details", "Credentials could not be removed")
-                .to_string(),
-        ),
-        RedirectRejection::LimitExceeded { target, limit } => Error::new(
-            ErrorKind::InvalidOperation,
-            localization::message(keys::STDLIB_FETCH_REDIRECT_LIMIT_EXCEEDED)
-                .with_arg("url", redacted_url(target))
-                .with_arg("limit", *limit)
-                .to_string(),
-        ),
-        RedirectRejection::Loop { target } => Error::new(
-            ErrorKind::InvalidOperation,
-            localization::message(keys::STDLIB_FETCH_REDIRECT_LOOP)
-                .with_arg("url", redacted_url(target))
-                .to_string(),
-        ),
-        RedirectRejection::Policy { target, violation } => Error::new(
-            ErrorKind::InvalidOperation,
-            localization::message(keys::STDLIB_FETCH_REDIRECT_DISALLOWED)
-                .with_arg("url", redacted_url(target))
-                .with_arg("details", violation.to_string())
-                .to_string(),
-        ),
-    }
-}
-
-/// Construct a redacted invalid-redirect-location error.
-fn redirect_location_invalid_error(current_url: &Url) -> Error {
-    Error::new(
-        ErrorKind::InvalidOperation,
-        localization::message(keys::STDLIB_FETCH_REDIRECT_LOCATION_INVALID)
-            .with_arg("url", redacted_url(current_url))
-            .with_arg("location", "<redacted>")
-            .with_arg("details", "Location could not be resolved")
-            .to_string(),
-    )
-}
-
-/// Render `url` without userinfo for diagnostics.
-fn redacted_url(url: &Url) -> String {
-    let mut redacted = url.clone();
-    if redacted.set_username("").is_ok() && redacted.set_password(None).is_ok() {
-        redacted.to_string()
-    } else {
-        String::from("<redacted URL>")
     }
 }
 
