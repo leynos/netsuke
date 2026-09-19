@@ -49,7 +49,7 @@ const CWD_MODE_WORKSPACE_RECURSIVE: &str = "workspace_recursive";
 
 /// The closed `cwd_mode` vocabulary admitted on both resolver counters.
 ///
-/// Four values, one per [`CwdMode`] variant. The label set is what lets an
+/// Four values, one per `CwdMode` variant. The label set is what lets an
 /// operator attribute a resolution to a search domain; it is not the template
 /// spelling, which uses a hyphen for the recursive mode.
 pub const WHICH_CWD_MODE_VALUES: [&str; 4] = [
@@ -116,7 +116,7 @@ pub const CATEGORY_CWD_NON_UTF8: &str = "cwd_non_utf8";
 
 /// The closed `category` vocabulary admitted on [`WHICH_RESOLUTION_TOTAL`].
 ///
-/// One value per [`ResolveError`] variant, so the label set is fixed by the
+/// One value per `ResolveError` variant, so the label set is fixed by the
 /// error type rather than by the failure a host happened to encounter.
 pub const RESOLVE_ERROR_CATEGORY_VALUES: [&str; 10] = [
     CATEGORY_NOT_FOUND,
