@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = Lakukan escape pada garis miring terbalik atau hapus
 manifest.env.missing = Variabel lingkungan wajib belum disetel.
 manifest.env.invalid_utf8 = Variabel lingkungan memuat UTF-8 yang tidak sah.
 manifest.env.blocked = Akses ke variabel lingkungan diblokir.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = default pada env harus berupa untai, menerima { $kind }.
 manifest.vars.not_object = `vars` pada manifes harus berupa pemetaan atau objek.
 manifest.vars.reserved_name = Kunci `vars` '{ $name }' pada manifes dicadangkan untuk fungsi bantu templat bawaan; ganti nama variabel tersebut.
 manifest.read_failed = Manifes di { $path } tidak dapat dibaca.
@@ -340,6 +342,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Algoritme hash tidak didukung: "
 
 # Diagnostik pembantu koleksi.
 stdlib.collections.flatten.expected_sequence = flatten mengharapkan butir urutan tetapi menemukan { $kind }.
+stdlib.collections.compact.not_sequence = compact mengharapkan urutan tetapi menemukan { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by memerlukan atribut yang tidak kosong.
 stdlib.collections.group_by.unresolved = group_by tidak dapat menemukan "{ $attr }" pada butir bertipe { $kind }.
 

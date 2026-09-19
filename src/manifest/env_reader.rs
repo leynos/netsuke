@@ -118,7 +118,12 @@ pub(super) fn disabled_env_reader() -> EnvReader {
     Arc::new(|_| Err(EnvReadError::NotPresent))
 }
 
-/// Resolve `name` through `read_env`, mapping failures to Jinja errors.
+/// Resolve `name` through `read_env`, substituting `fallback` for absence.
+///
+/// The access policy is evaluated before the reader, so a blocked name fails
+/// here whatever `fallback` holds: supplying a default must not turn a policy
+/// refusal into a successful read. Note the asymmetry with `NotUnicode` below,
+/// which the fallback does not rescue either.
 ///
 /// Failures are traced with only a bounded `failure_kind`, and the localized
 /// diagnostics carry fixed text. The variable name is deliberately absent from
@@ -129,10 +134,20 @@ pub(super) fn disabled_env_reader() -> EnvReader {
 /// Every lookup is also counted once through
 /// [`env_telemetry::record_env_lookup`], so an operator can measure the
 /// blocked rate the access policy produces. The counter carries only the
-/// bounded outcome, never the name or the value.
-pub(super) fn env_var_with(
+/// bounded outcome, never the name or the value. A substituted fallback is
+/// *not* a fifth outcome: the lookup genuinely succeeded, so it is counted as
+/// one and recorded separately by the `fallback_used` event below.
+///
+/// # Errors
+///
+/// Returns an `UndefinedError` when the variable is absent and `fallback` is
+/// `None`, and an `InvalidOperation` error when the value is not valid UTF-8 —
+/// the latter regardless of `fallback`, because a present-but-undecodable
+/// value is a configuration fault rather than an absence.
+pub(super) fn env_var_with_default(
     name: &str,
     policy: &EnvAccessPolicy,
+    fallback: Option<String>,
     read_env: impl FnOnce(&str) -> Result<String, EnvReadError>,
 ) -> Result<String, Error> {
     if policy.evaluate(name).is_err() {
@@ -148,16 +163,7 @@ pub(super) fn env_var_with(
 
     match read_env(name) {
         Ok(value) => record_env_lookup(env_telemetry::OUTCOME_SUCCESS, Ok(value)),
-        Err(EnvReadError::NotPresent) => {
-            tracing::debug!(failure_kind = "not_present", "manifest env lookup failed");
-            record_env_lookup(
-                env_telemetry::OUTCOME_NOT_PRESENT,
-                Err(Error::new(
-                    ErrorKind::UndefinedError,
-                    localization::message(keys::MANIFEST_ENV_MISSING).to_string(),
-                )),
-            )
-        }
+        Err(EnvReadError::NotPresent) => substitute_fallback(fallback),
         Err(EnvReadError::NotUnicode) => {
             tracing::debug!(failure_kind = "not_unicode", "manifest env lookup failed");
             record_env_lookup(
@@ -169,6 +175,34 @@ pub(super) fn env_var_with(
             )
         }
     }
+}
+
+/// Resolve an absent variable against the supplied `fallback`.
+///
+/// A fallback present means the lookup succeeded — the manifests asked for a
+/// substitution and got one — so it is counted as `success` and marked by a
+/// `fallback_used` event, giving an operator a way to see that an exported
+/// variable stopped propagating. Its absence is the pre-existing failure.
+fn substitute_fallback(fallback: Option<String>) -> Result<String, Error> {
+    fallback.map_or_else(
+        || {
+            tracing::debug!(failure_kind = "not_present", "manifest env lookup failed");
+            record_env_lookup(
+                env_telemetry::OUTCOME_NOT_PRESENT,
+                Err(Error::new(
+                    ErrorKind::UndefinedError,
+                    localization::message(keys::MANIFEST_ENV_MISSING).to_string(),
+                )),
+            )
+        },
+        |value| {
+            tracing::debug!(
+                fallback_used = true,
+                "manifest env lookup substituted default"
+            );
+            record_env_lookup(env_telemetry::OUTCOME_SUCCESS, Ok(value))
+        },
+    )
 }
 
 #[cfg(test)]
@@ -194,8 +228,10 @@ mod tests {
         #[case] failure_kind: &str,
     ) {
         let events = with_test_subscriber(LevelFilter::DEBUG, |captured| {
-            env_var_with(SENTINEL, &EnvAccessPolicy::default(), |_| Err(failure))
-                .expect_err("the injected reader must fail");
+            env_var_with_default(SENTINEL, &EnvAccessPolicy::default(), None, |_| {
+                Err(failure)
+            })
+            .expect_err("the injected reader must fail");
             captured.snapshot()
         });
 
@@ -221,8 +257,10 @@ mod tests {
         #[case] failure: EnvReadError,
         #[case] expected_kind: ErrorKind,
     ) {
-        let error = env_var_with(SENTINEL, &EnvAccessPolicy::default(), |_| Err(failure))
-            .expect_err("the injected reader must fail");
+        let error = env_var_with_default(SENTINEL, &EnvAccessPolicy::default(), None, |_| {
+            Err(failure)
+        })
+        .expect_err("the injected reader must fail");
 
         assert_eq!(
             error.kind(),
@@ -241,7 +279,7 @@ mod tests {
         let policy = EnvAccessPolicy::default().block_var(SENTINEL);
         let mut reader_was_called = false;
         let (error, events) = with_test_subscriber(LevelFilter::DEBUG, |captured| {
-            let error = env_var_with(SENTINEL, &policy, |_| {
+            let error = env_var_with_default(SENTINEL, &policy, None, |_| {
                 reader_was_called = true;
                 Ok(String::from(SENTINEL_VALUE))
             })

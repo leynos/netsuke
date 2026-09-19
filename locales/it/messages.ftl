@@ -140,6 +140,8 @@ manifest.yaml.hint.escape = Usa l'escape per le barre rovesciate o rimuovi le se
 manifest.env.missing = Una variabile d'ambiente richiesta non è impostata.
 manifest.env.invalid_utf8 = Una variabile d'ambiente contiene UTF-8 non valido.
 manifest.env.blocked = L’accesso a una variabile d’ambiente è bloccato.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Il default di env deve essere una stringa, ricevuto { $kind }.
 manifest.vars.not_object = `vars` del manifest deve essere una mappa o un oggetto.
 manifest.vars.reserved_name = La chiave `vars` '{ $name }' del manifest è riservata a una funzione di supporto per i template integrata; rinomina la variabile.
 manifest.read_failed = Impossibile leggere il manifest in { $path }.
@@ -341,6 +343,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Algoritmo di hash non supportato
 
 # Diagnostica degli helper per le collezioni.
 stdlib.collections.flatten.expected_sequence = flatten si aspettava elementi di sequenza ma ha trovato { $kind }.
+stdlib.collections.compact.not_sequence = compact si aspettava una sequenza ma ha trovato { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by richiede un attributo non vuoto.
 stdlib.collections.group_by.unresolved = group_by non ha potuto risolvere «{ $attr }» su un elemento di tipo { $kind }.
 

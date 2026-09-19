@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = Escapujte zpětná lomítka nebo odstraňte neplatn�
 manifest.env.missing = Povinná proměnná prostředí není nastavena.
 manifest.env.invalid_utf8 = Proměnná prostředí obsahuje neplatné UTF-8.
 manifest.env.blocked = Přístup k proměnné prostředí je zablokován.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Hodnota default v env musí být řetězec, obdrženo { $kind }.
 manifest.vars.not_object = Položka `vars` manifestu musí být mapování nebo objekt.
 manifest.vars.reserved_name = Klíč `vars` '{ $name }' v manifestu je vyhrazen pro vestavěného pomocníka šablon; přejmenujte proměnnou.
 manifest.read_failed = Manifest v { $path } se nepodařilo přečíst.
@@ -340,6 +342,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Nepodporovaný hashovací algori
 
 # Diagnostika pomocníků pro kolekce.
 stdlib.collections.flatten.expected_sequence = flatten očekával prvky posloupnosti, ale nalezl { $kind }.
+stdlib.collections.compact.not_sequence = compact očekává posloupnost, ale obdržel { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by vyžaduje neprázdný atribut.
 stdlib.collections.group_by.unresolved = group_by nedokázal najít „{ $attr }“ u prvku typu { $kind }.
 

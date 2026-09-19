@@ -1,11 +1,11 @@
 //! Telemetry coverage for the manifest `env()` lookup boundary.
 //!
-//! These drive `env_var_with` under a local recorder, so they pin that every
-//! lookup outcome — including the blocked refusal the access policy produces —
-//! reaches the bounded counter exactly once, and that nothing a manifest
-//! supplies reaches a label.
+//! These drive `env_var_with_default` under a local recorder, so they pin that
+//! every lookup outcome — including the blocked refusal the access policy
+//! produces — reaches the bounded counter exactly once, and that nothing a
+//! manifest supplies reaches a label.
 
-use crate::manifest::{EnvAccessPolicy, EnvReadError, env_reader::env_var_with};
+use crate::manifest::{EnvAccessPolicy, EnvReadError, env_reader::env_var_with_default};
 use metrics::SharedString;
 use metrics_util::{
     CompositeKey, MetricKind,
@@ -39,8 +39,9 @@ fn recorded(
 ) -> (Result<String, minijinja::Error>, Snapshot) {
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
-    let result =
-        metrics::with_local_recorder(&recorder, || env_var_with(SENTINEL, policy, |_| read()));
+    let result = metrics::with_local_recorder(&recorder, || {
+        env_var_with_default(SENTINEL, policy, None, |_| read())
+    });
     (result, snapshotter.snapshot().into_vec())
 }
 
@@ -117,7 +118,7 @@ fn blocked_lookup_increments_only_the_blocked_series() {
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
     let error = metrics::with_local_recorder(&recorder, || {
-        env_var_with(SENTINEL, &policy, |_| {
+        env_var_with_default(SENTINEL, &policy, None, |_| {
             reader_was_called = true;
             Ok(String::from(SENTINEL_VALUE))
         })
