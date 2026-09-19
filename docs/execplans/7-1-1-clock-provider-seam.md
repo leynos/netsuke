@@ -1961,13 +1961,17 @@ Recorded during planning; extend during implementation.
   | `3348cc0a` / `02caf3ee` | 23    | 3,127     | 133       | 2,994 | 708            |
   | `3348cc0a` / `e401f4d7` | 23    | 3,172     | 133       | 3,039 | 708            |
   | `a273fad3` / `25960909` | 24    | 3,369     | 133       | 3,236 | 716            |
+  | `a273fad3` / `ed674fc9` | 27    | 3,491     | 133       | 3,358 | 802            |
 
   Both limbs fire at every head: more than 20 files, and net far above 600 —
-  with 716 net across 23 files even if this living exec plan (2,520 lines) is
-  excluded entirely. The non-plan remainder moved from 696 to 708 at the
-  `configure_stdlib` extraction (+12 net of real code) and to 716 with the
-  clock-seam extraction into `config/clock.rs` (+42 added, with nothing removed
-  elsewhere because the move relocated code rather than deleting it);
+  with 802 net across 26 files besides the plan even if this living exec plan
+  (2,556 lines) is excluded entirely. The non-plan remainder moved from 696 to
+  708 at the `configure_stdlib` extraction (+12 net of real code), to 716 with
+  the clock-seam extraction into `config/clock.rs` (+42 added, with nothing
+  removed elsewhere because the move relocated code rather than deleting it),
+  and to 802 with the documentation fix the first CodeRabbit pass asked for
+  (+86: the users'-guide section, the migration-guide row and section, and the
+  registry entry plus pinning test that hold the guide fence to the doctest);
   plan-maintenance commits leave it untouched, so the non-plan figure is the
   one to quote when the plan's own growth is held to one side. The totals rise
   with each such commit because the plan is inside the diff.
@@ -1992,18 +1996,25 @@ Recorded during planning; extend during implementation.
   because the reflog names them, but a pruning `git gc` would drop them, so
   they are not a citation a later reader can rely on — only the figures are.
 
-  *Attribution of the 3,236 net lines at the current head* (so a later reader
-  can audit rather than take this on trust): exec plan 2,520; production `src/`
-  480 net (547 added, 67 removed), which is `clock.rs` 150, `clock_tests.rs`
-  260 and `config/clock.rs` 42 as new files, the `tests.rs`/`tests_support.rs`
-  split 10 net after a 58-line move, and the 18-line balance from the `mod.rs`
-  files and `register.rs`; tests 163 net (177 added, 14 removed); governing
-  docs 62 net outside the plan; the recorded `proptest` regression seed 11. The
+  *Attribution of the 3,358 net lines measured at `ed674fc9`* (so a later
+  reader can audit rather than take this on trust): exec plan 2,556; production
+  `src/` 480 net (547 added, 67 removed), which is `clock.rs` 150,
+  `clock_tests.rs` 260 and `config/clock.rs` 42 as new files, the `tests.rs`/
+  `tests_support.rs` split 10 net after a 58-line move, and the 18-line balance
+  from the `mod.rs` files and `register.rs`; tests 184 net (198 added, 14
+  removed); governing docs 127 net outside the plan, of which the guide and
+  migration-guide pairs are 65; the recorded `proptest` regression seed 11. The
   pre-rebase attribution of 3,039 was exec plan 2,331, `src/` 472, tests 163,
   docs 62 and the seed 11; the shift is the extraction (`config/clock.rs` plus
-  the re-export) and the plan's own growth. Every row above is a snapshot: each
-  plan-maintenance commit raises the total by its own length, so a later reader
-  should re-measure rather than re-quote these figures.
+  the re-export), the required documentation, and the plan's own growth. Every
+  row above is a snapshot, and the snapshots are not interchangeable: each
+  plan-maintenance commit raises the total by its own length while leaving the
+  non-plan remainder fixed, so the remainder is the durable quantity and every
+  total is a lower bound that grows as this section is maintained. A later
+  reader should re-measure rather than re-quote; the conclusion does not move,
+  because the non-plan remainder alone exceeds the 600-line limb by more than a
+  third (802 against 600) with the file count likewise over (26 against 20)
+  even excluding this plan entirely.
 
   *Assessment against the tolerance's own reasoning.* The tolerance says a
   substantial overrun "means the design was wrong". That inference does not
@@ -2093,13 +2104,14 @@ Upstream changes and deviations, all recorded above or in
 `Surprises & discoveries`:
 
 - **Conformance exception — scope (D14).** The pull request exceeds both limbs
-  of this plan's scope tolerance: 23 changed files against a limit of 20, and
-  3,039 net added lines against a limit of 600 (708 net even with this exec
-  plan's 2,331 lines excluded). Escalated and accepted by the maintainer on
-  2026-09-19; the full attribution and assessment are in D14. This delivery is
-  therefore **not fully conformant to this plan**: every other tolerance held,
-  but this one did not, and it is recorded as an accepted deviation rather than
-  a waiver.
+  of this plan's scope tolerance. It did so from its earliest measured head,
+  and it still does at the head that carries this record: 27 changed files
+  against a limit of 20, and 3,358 net added lines against a limit of 600 (802
+  net even with this exec plan's 2,556 lines excluded). Escalated and accepted
+  by the maintainer on 2026-09-19; the full attribution and assessment are in
+  D14. This delivery is therefore **not fully conformant to this plan**: every
+  other tolerance held, but this one did not, and it is recorded as an accepted
+  deviation rather than a waiver.
 - The ADR-008 addendum is dated 2026-09-11 rather than the plan's
   `2026-09-08`, matching the file's convention of dating each entry when it is
   written.
@@ -2494,12 +2506,13 @@ To be populated during implementation. Required entries:
     git diff --numstat 3348cc0a..HEAD
     ```
 
-    The figure that survives the most favourable reading is **708 net across 22
-    files**, with this plan's own lines excluded — the net-lines limb fired at
-    this plan's first commit (`9042fe66`, 1,581 net), the file-count limb at
-    `3fdd8260` (21 files); neither was caught then, because the tolerance was
-    written to bound a code change and its largest consumer proved to be the
-    record of that change.
+    The figure that survives the most favourable reading was **708 net across
+    22 files** when the escalation was raised, and is **802 net across 26
+    files** at the head carrying this record, with this plan's own lines
+    excluded in both — the net-lines limb fired at this plan's first commit
+    (`9042fe66`, 1,581 net), the file-count limb at `3fdd8260` (21 files);
+    neither was caught then, because the tolerance was written to bound a code
+    change and its largest consumer proved to be the record of that change.
 
     The escalation was raised by the maintainer rather than by the gates, which
     is the durable point: nothing in `make check-fmt`, `make test`,
