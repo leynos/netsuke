@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, ensure};
 
-use super::{Row, Section, heading_depth};
+use super::{Fences, Row, Section, heading_depth};
 
 /// Assert every accepted helper is named in the section 8 subsection it cites.
 pub(super) fn check_section_8(
@@ -54,6 +54,10 @@ pub(super) fn check_section_8(
 }
 
 /// The lines of the section 8 subsection headed `### N.N. …`.
+///
+/// The end scan is fence-aware for the same reason the section-6 clause scan is:
+/// a `#` line inside a fenced example would otherwise read as a depth-1 heading
+/// and truncate the subsection, dropping every helper specified below it.
 fn subsection_lines<'a>(section_8: &Section<'a>, number: &str) -> Option<Vec<&'a str>> {
     let prefix = format!("### {number}.");
     let start = section_8
@@ -64,7 +68,11 @@ fn subsection_lines<'a>(section_8: &Section<'a>, number: &str) -> Option<Vec<&'a
     let rest = section_8.lines.get(start + 1..)?;
     let end = rest
         .iter()
-        .position(|line| heading_depth(line).is_some_and(|d| d <= depth))
+        .scan(Fences::default(), |fences, line| {
+            let fenced = fences.mark(line);
+            Some((fenced, line))
+        })
+        .position(|(fenced, line)| !fenced && heading_depth(line).is_some_and(|d| d <= depth))
         .unwrap_or(rest.len());
     rest.get(..end).map(<[&str]>::to_vec)
 }

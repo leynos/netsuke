@@ -1,6 +1,6 @@
 //! The cross-cutting contract clauses and their discharge in child RFCs.
 //!
-//! RFC 0006 section 6 is normative and says so: "A child issue that does not
+//! RFC 0006 section 6 is normative and says so: "A child RFC that does not
 //! satisfy every clause below for every helper it adds is not complete." The
 //! clause list is therefore derived from the document rather than transcribed —
 //! each `### 6.N.` subsection is a clause — and each child RFC must discharge
