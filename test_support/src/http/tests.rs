@@ -261,6 +261,42 @@ fn raw_response_fixture_delivers_the_exact_bytes_it_was_given() -> anyhow::Resul
     Ok(())
 }
 
+/// The raw fixture tolerates exactly one shutdown failure: the peer's absence.
+///
+/// Pinned as a predicate rather than through a live reset, because the window
+/// between the fixture writing its response and shutting down its write half
+/// cannot be lost on purpose from the test side without a sleep, and a
+/// sleep-based assertion here would reintroduce the very platform-dependent
+/// race this fixture exists to remove. The predicate is the whole of the
+/// decision — which transport outcomes the fixture may absorb silently — so
+/// asserting it directly is asserting the behaviour.
+///
+/// The negative cases matter as much as the positive ones: widening this set
+/// would let a fixture that genuinely failed to frame a response report success,
+/// which is the silent failure the half-close contract guards against.
+#[test]
+fn only_a_departed_peer_is_tolerated_when_framing_a_raw_response() {
+    use std::io::{Error, ErrorKind};
+
+    for kind in [
+        ErrorKind::NotConnected,
+        ErrorKind::ConnectionReset,
+        ErrorKind::ConnectionAborted,
+    ] {
+        assert!(
+            super::server::peer_is_gone(&Error::from(kind)),
+            "{kind:?} is the peer having left, and must not fail the fixture",
+        );
+    }
+
+    for kind in [ErrorKind::BrokenPipe, ErrorKind::TimedOut, ErrorKind::Other] {
+        assert!(
+            !super::server::peer_is_gone(&Error::from(kind)),
+            "{kind:?} is not the peer having left, and must still fail the fixture",
+        );
+    }
+}
+
 /// Send one minimal HTTP request and read the response back to EOF.
 ///
 /// Unlike [`send_request`], this returns the bytes rather than asserting a

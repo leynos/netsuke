@@ -3,7 +3,7 @@
 //! Every fixture the module exposes is built here, and every one of them is
 //! built the same way: bind a loopback port, share a request counter, a request
 //! log, and a shutdown flag with the caller, then move a
-//! [`DriveStrategy`] into a named thread that serves the responses. What the
+//! [`FixtureResponses`] into a named thread that serves the responses. What the
 //! fixture emits is the only thing a caller varies.
 
 use std::{
@@ -18,7 +18,7 @@ use std::{
 
 use super::{
     HttpResponse, HttpServer, HttpServerConfig, RawHttpResponse, RequestLog,
-    server::{DriveStrategy, FixtureLedger, RawResponses, StructuredResponses},
+    server::{FixtureLedger, FixtureResponses, FixtureServe},
 };
 
 /// Spawn an HTTP server using `config`, emitting responses in sequence.
@@ -32,7 +32,7 @@ pub(super) fn spawn_fixture_server(
 ) -> io::Result<(String, Arc<AtomicUsize>, RequestLog, HttpServer)> {
     let response_sequence = responses.into_iter().collect::<Vec<_>>();
     spawn_fixture_thread(
-        Box::new(StructuredResponses::new(response_sequence)),
+        Box::new(FixtureResponses::structured(response_sequence)),
         config,
     )
 }
@@ -40,26 +40,26 @@ pub(super) fn spawn_fixture_server(
 /// Spawn an HTTP server using `config`, emitting raw responses in sequence.
 ///
 /// The raw counterpart of [`spawn_fixture_server`], and the only place the two
-/// shapes diverge: both hand a [`DriveStrategy`] to [`spawn_fixture_thread`],
+/// shapes diverge: both hand a [`FixtureResponses`] to [`spawn_fixture_thread`],
 /// which owns binding, accounting, and the thread.
 pub(super) fn spawn_raw_fixture_server(
     responses: impl IntoIterator<Item = RawHttpResponse>,
     config: HttpServerConfig,
 ) -> io::Result<(String, Arc<AtomicUsize>, RequestLog, HttpServer)> {
     let response_sequence = responses.into_iter().collect::<Vec<_>>();
-    spawn_fixture_thread(Box::new(RawResponses::new(response_sequence)), config)
+    spawn_fixture_thread(Box::new(FixtureResponses::raw(response_sequence)), config)
 }
 
 /// Serve `strategy` on a fresh listener, returning its URL and shared state.
 ///
 /// This is the one implementation behind every fixture the module exposes. A
-/// [`DriveStrategy`] supplies what to emit and how to advertise it; everything
+/// [`FixtureResponses`] supplies what to emit and how to advertise it; everything
 /// else — binding a loopback port, the request counter and log shared with the
 /// caller, the shutdown flag, the named thread, and the handle that joins or
 /// signals them — is common, so no fixture shape can drift from another's
 /// acceptance, accounting, or shutdown behaviour.
 fn spawn_fixture_thread(
-    strategy: Box<dyn DriveStrategy + Send>,
+    strategy: Box<dyn FixtureServe + Send>,
     config: HttpServerConfig,
 ) -> io::Result<(String, Arc<AtomicUsize>, RequestLog, HttpServer)> {
     let listener = TcpListener::bind(("127.0.0.1", 0))?;

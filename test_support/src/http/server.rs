@@ -10,6 +10,13 @@ use super::{
     request::read_request_line, response,
 };
 
+/// Credentials the raw fixture advertises, and the structured one omits.
+///
+/// A test of a credentialed fetch needs userinfo in the URL it drives, and the
+/// raw shape is the one such a test reaches for, so the fixture supplies it
+/// rather than making every caller paste the same userinfo into its own request.
+const RAW_FIXTURE_USERINFO: &str = "redirect-user:redirect-secret";
+
 /// What one fixture run records about the requests it answers, and the state it
 /// shares with the test that owns it.
 ///
@@ -44,7 +51,7 @@ impl<'run> FixtureLedger<'run> {
 
 /// Report whether the fixture should keep serving configured responses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum FixtureProgress {
+pub(super) enum FixtureProgress {
     /// The client sent a request and the next response may be served.
     Continue,
     /// No further connection is accepted, because either the client
@@ -52,159 +59,157 @@ enum FixtureProgress {
     Shutdown,
 }
 
-/// What a fixture emits, and how it marks the end of what it emits.
+/// One accepted client connection, and the response it is owed.
 ///
-/// This is the whole of the difference between the two public shapes the
-/// fixture serves: a valid structured response, and bytes the caller supplies.
-/// Both are driven by the one loop below, so each shape inherits the same
-/// bounded accept, the same bounded request read, the same accounting, and the
-/// same shutdown behaviour, rather than reimplementing them.
+/// The stream and the index travel together because the index is only known
+/// once the request has been read: a client that connects and sends nothing
+/// must not advance the sequence, so the two cannot be carried separately
+/// without inviting a response for a request that never arrived.
+#[derive(Debug)]
+struct FixtureRequest {
+    /// The accepted client connection.
+    stream: TcpStream,
+    /// Zero-based index, within the configured sequence, of the response owed.
+    request: usize,
+}
+
+/// What a fixture emits, and how it is driven.
+///
+/// This is the whole of the difference between the two shapes the fixture
+/// serves: a valid structured response, and bytes the caller supplies. Both are
+/// driven by the one loop in [`FixtureServe::drive`], so each shape inherits
+/// the same bounded accept, the same bounded request read, the same accounting,
+/// and the same shutdown behaviour, rather than reimplementing them.
 ///
 /// Implementors belong only to the local HTTP fixture, and are moved into the
 /// thread that drives them; no production call site may depend on the
 /// panic-oriented test failure contract.
-pub(super) trait DriveStrategy {
-    /// Serve the sequence in request order until one response is not requested.
-    fn drive(&self, listener: &TcpListener, config: &HttpServerConfig, ledger: &FixtureLedger<'_>);
+pub(super) trait FixtureServe {
+    /// Serve one response after a client sends a request.
+    #[must_use]
+    fn serve_one(
+        &self,
+        listener: &TcpListener,
+        config: &HttpServerConfig,
+        ledger: &FixtureLedger<'_>,
+    ) -> FixtureProgress;
 
     /// Form the fixture URL for a bound loopback address.
+    #[must_use]
     fn advertise(&self, addr: SocketAddr) -> String;
-}
 
-/// Serve `responses` in request order, as valid structured HTTP responses.
-#[derive(Debug)]
-pub(super) struct StructuredResponses {
-    /// The responses to emit, in arrival order.
-    responses: Vec<HttpResponse>,
-}
-
-impl StructuredResponses {
-    /// Serve `responses` in request order.
-    #[must_use]
-    pub(super) const fn new(responses: Vec<HttpResponse>) -> Self {
-        Self { responses }
-    }
-}
-
-impl DriveStrategy for StructuredResponses {
+    /// Serve responses in request order until one response is not requested.
+    ///
+    /// The single drive loop behind every fixture shape the module exposes.
+    /// It is defined here, once, rather than in each implementor, so a new
+    /// shape cannot arrive with its own copy of the run's control flow.
     fn drive(&self, listener: &TcpListener, config: &HttpServerConfig, ledger: &FixtureLedger<'_>) {
-        for response in &self.responses {
-            if serve_fixture_response(listener, response, config, ledger)
-                == FixtureProgress::Shutdown
-            {
+        loop {
+            if self.serve_one(listener, config, ledger) == FixtureProgress::Shutdown {
                 return;
             }
         }
     }
+}
+
+/// The response shape a fixture emits, and the URL it advertises.
+///
+/// The shapes differ in exactly two ways — the bytes written, and whether the
+/// advertised URL carries credentials — so both are one enum, and the one
+/// [`FixtureServe`] implementation below dispatches between them.
+#[derive(Debug)]
+pub(super) enum FixtureResponses {
+    /// Valid structured responses, advertised without credentials.
+    Structured(Vec<HttpResponse>),
+    /// Bytes written to the client verbatim, advertised with credentials.
+    Raw(Vec<RawHttpResponse>),
+}
+
+impl FixtureResponses {
+    /// Emit `responses` in request order as valid structured HTTP responses.
+    #[must_use]
+    pub(super) const fn structured(responses: Vec<HttpResponse>) -> Self {
+        Self::Structured(responses)
+    }
+
+    /// Emit `responses` in request order as raw bytes.
+    #[must_use]
+    pub(super) const fn raw(responses: Vec<RawHttpResponse>) -> Self {
+        Self::Raw(responses)
+    }
+}
+
+impl FixtureServe for FixtureResponses {
+    fn serve_one(
+        &self,
+        listener: &TcpListener,
+        config: &HttpServerConfig,
+        ledger: &FixtureLedger<'_>,
+    ) -> FixtureProgress {
+        let Some(mut request) = accept_request(listener, config, ledger) else {
+            return FixtureProgress::Shutdown;
+        };
+        match self {
+            Self::Structured(responses) => match responses.get(request.request) {
+                Some(response) => write_fixture_response(&mut request.stream, response),
+                // The sequence holds fewer responses than the requests made
+                // against it, so there is nothing left to send. Ending the run
+                // keeps the caller's log honest about how far the exchange got.
+                None => return FixtureProgress::Shutdown,
+            },
+            Self::Raw(responses) => match responses.get(request.request) {
+                Some(response) => {
+                    write_raw_response(&mut request.stream, response);
+                    finish_raw_response(&request.stream);
+                }
+                None => return FixtureProgress::Shutdown,
+            },
+        }
+        FixtureProgress::Continue
+    }
 
     fn advertise(&self, addr: SocketAddr) -> String {
-        format!("http://{addr}")
-    }
-}
-
-/// Serve `responses` in request order, as raw bytes.
-///
-/// The advertised URL carries the credentials the structured shape omits. A
-/// test of a credentialed fetch needs userinfo in the URL it drives, and this
-/// is the shape such a test reaches for, so the fixture supplies it rather
-/// than making every caller paste the same userinfo into its own request.
-#[derive(Debug)]
-pub(super) struct RawResponses {
-    /// The responses to emit, in arrival order.
-    responses: Vec<RawHttpResponse>,
-}
-
-impl RawResponses {
-    /// Serve `responses` in request order.
-    #[must_use]
-    pub(super) const fn new(responses: Vec<RawHttpResponse>) -> Self {
-        Self { responses }
-    }
-}
-
-impl DriveStrategy for RawResponses {
-    fn drive(&self, listener: &TcpListener, config: &HttpServerConfig, ledger: &FixtureLedger<'_>) {
-        for response in &self.responses {
-            if serve_raw_response(listener, response, config, ledger) == FixtureProgress::Shutdown {
-                return;
-            }
+        match self {
+            Self::Structured(_) => format!("http://{addr}"),
+            Self::Raw(_) => format!("http://{RAW_FIXTURE_USERINFO}@{addr}"),
         }
     }
-
-    fn advertise(&self, addr: SocketAddr) -> String {
-        format!("http://redirect-user:redirect-secret@{addr}")
-    }
 }
 
-/// Serve one structured fixture response after a client sends a request.
+/// Accept one client connection and read the request it sent.
 ///
-/// Returns [`FixtureProgress::Shutdown`] when the client disconnects before
-/// sending a request, so an abandoned chain cannot leave later responses
-/// waiting on a connection that will never arrive, and likewise when the test
-/// shuts the fixture down before any client connects.
+/// Returns `None` on the same two conditions as the helpers it composes: no
+/// client connected before the test shut the fixture down, or the client
+/// disconnected before sending a request. The latter is how an abandoned chain
+/// is detected, so a later response cannot wait on a connection that will never
+/// arrive.
 ///
-/// This helper belongs only to the local HTTP fixture: the drive loop
-/// composes it once for every configured response, and no production call site
-/// may depend on its panic-oriented test failure contract.
-#[must_use]
-fn serve_fixture_response(
+/// The request is read to a non-empty line *before* any response goes out. That
+/// ordering matters, and exists to keep a transport abort from being mistaken
+/// for a protocol verdict: a fixture that closes a socket without draining the
+/// request can have its close turned into a connection abort by the peer's
+/// stack — Windows does exactly this — which the client reports as an I/O
+/// failure before it has parsed a status line no parser accepts. The test
+/// asserting a parse failure would then be asserting whatever the platform's
+/// close semantics happened to do. Draining first removes the unread data, so
+/// the bytes are received whole and parsed. A well-formed status line sent this
+/// way still arrives; only a malformed one fails, which is the failure under
+/// test.
+fn accept_request(
     listener: &TcpListener,
-    response: &HttpResponse,
     config: &HttpServerConfig,
     ledger: &FixtureLedger<'_>,
-) -> FixtureProgress {
-    let Some(mut stream) = accept_fixture_connection(listener, config, ledger.shutdown) else {
-        return FixtureProgress::Shutdown;
-    };
+) -> Option<FixtureRequest> {
+    let mut stream = accept_fixture_connection(listener, config, ledger.shutdown)?;
     configure_fixture_stream(&stream);
-    let Some(line) = read_request_line(&mut stream, config.read_deadline(), config.poll_interval)
-    else {
-        return FixtureProgress::Shutdown;
-    };
+    let line = read_request_line(&mut stream, config.read_deadline(), config.poll_interval)?;
+    // Exactly one request line is recorded per accepted connection, and the
+    // fixture serves one connection at a time, so the log's length before this
+    // line is recorded is the index of the response this request is owed.
+    let request = ledger.log.len();
     ledger.log.record(line);
     ledger.requests.fetch_add(1, Ordering::Relaxed);
-    write_fixture_response(&mut stream, response);
-    FixtureProgress::Continue
-}
-
-/// Serve one raw fixture response after a client sends a request.
-///
-/// Returns [`FixtureProgress::Shutdown`] on the same two conditions as
-/// [`serve_fixture_response`], reached by the same two helpers, so the two
-/// shapes differ only in what they write.
-///
-/// The request is read to a non-empty line *before* the bytes go out, and the
-/// write half is then shut down. Both matter, and both exist to keep a
-/// transport abort from being mistaken for a protocol verdict: a fixture that
-/// closes a socket without draining the request can have its close turned into
-/// a connection abort by the peer's stack — Windows does exactly this — which
-/// the client reports as an I/O failure before it has parsed a status line no
-/// parser accepts. The test asserting a parse failure would then be asserting
-/// whatever the platform's close semantics happened to do. Draining first
-/// removes the unread data, and the half-close tells the client the response
-/// ended while leaving the read path intact, so the bytes are received whole
-/// and parsed. A well-formed status line sent this way still arrives; only a
-/// malformed one fails, which is the failure under test.
-#[must_use]
-fn serve_raw_response(
-    listener: &TcpListener,
-    response: &RawHttpResponse,
-    config: &HttpServerConfig,
-    ledger: &FixtureLedger<'_>,
-) -> FixtureProgress {
-    let Some(mut stream) = accept_fixture_connection(listener, config, ledger.shutdown) else {
-        return FixtureProgress::Shutdown;
-    };
-    configure_fixture_stream(&stream);
-    let Some(line) = read_request_line(&mut stream, config.read_deadline(), config.poll_interval)
-    else {
-        return FixtureProgress::Shutdown;
-    };
-    ledger.log.record(line);
-    ledger.requests.fetch_add(1, Ordering::Relaxed);
-    write_raw_response(&mut stream, response);
-    finish_raw_response(&stream);
-    FixtureProgress::Continue
+    Some(FixtureRequest { stream, request })
 }
 
 /// Accept one client connection using the fixture configuration.
@@ -259,17 +264,40 @@ fn write_raw_response(stream: &mut TcpStream, response: &RawHttpResponse) {
 
 /// Mark the end of a raw response by shutting down the stream's write half.
 ///
-/// A shutdown, not a close: the read half stays open, so the client still has
-/// a usable socket to parse from. See [`serve_raw_response`] for why the
-/// fixture needs this at all, and why a failure here is fatal rather than
-/// ignored — a fixture that did not half-close is the only other reason the
-/// client could see a short response, and it should fail loudly.
-#[expect(
-    clippy::panic,
-    reason = "test HTTP helper should fail fast when the response cannot be framed"
-)]
+/// A shutdown, not a close: the read half stays open, so the client still has a
+/// usable socket to parse from, and the bytes already written are delivered
+/// rather than abandoned to whatever a close does to a socket still holding
+/// unread peer data.
+///
+/// A failure is fatal for every cause except the peer having gone, which is not
+/// the fixture's doing and not a verdict on the bytes it sent. A client that
+/// has already reset the connection — an abandoned redirect hop, a test that
+/// stopped reading — leaves nothing to half-close, and the platform reports
+/// that as a transport error (`WSAECONNABORTED` or `ENOTCONN` on Windows, a
+/// reset or a disconnection on Unix). Panicking there would turn the client's
+/// own departure into a fixture failure, which is the same conflation of
+/// transport outcome with protocol verdict this fixture exists to remove. Any
+/// other failure means the fixture could not frame what it wrote — the one
+/// other reason a client could see a short response — so it still panics.
 fn finish_raw_response(stream: &TcpStream) {
     if let Err(err) = stream.shutdown(Shutdown::Write) {
-        panic!("failed to shut down the raw fixture response: {err}");
+        assert!(
+            peer_is_gone(&err),
+            "failed to shut down the raw fixture response: {err}"
+        );
     }
+}
+
+/// Report whether `err` is the peer having already left the connection.
+///
+/// Deliberately narrow. `BrokenPipe` is excluded: a peer that closed its read
+/// half is still there to be answered, so a broken write is the fixture failing
+/// to deliver, not the client departing, and must stay fatal.
+pub(super) fn peer_is_gone(err: &std::io::Error) -> bool {
+    use std::io::ErrorKind;
+
+    matches!(
+        err.kind(),
+        ErrorKind::NotConnected | ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted
+    )
 }
