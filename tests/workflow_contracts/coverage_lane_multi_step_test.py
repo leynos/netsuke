@@ -345,10 +345,10 @@ def test_two_windows_from_one_doctests_step_reach_the_ceiling_arithmetic() -> No
     """The ceiling of the job holding such a step must cover both.
 
     Two windows of the same 1,800 s watchdog, the measured work outside
-    them and the margin above that sum is 5,400 s, so the ninety-minute
-    ceiling this repository sets has 3,600 s of slack and the sixty
-    minutes it used to set, falling short of the required. A contract
-    reading one window would have called the sixty minutes sufficient.
+    them and the margin above that sum is 5,400 s, which is exactly the
+    ninety-minute ceiling this repository now sets and exactly one whole
+    window above the sixty minutes it used to set. A contract reading
+    one window would have called those sixty minutes sufficient.
     """
     lanes = coverage_lanes_of({"ci.yml": _doctests_workflow("true")})
 
@@ -358,7 +358,9 @@ def test_two_windows_from_one_doctests_step_reach_the_ceiling_arithmetic() -> No
         f"{list(grouped)}"
     )
     budgets = [
-        lane.watchdog for lane in grouped["ci.yml", "build-test"] if lane.watchdog
+        lane.watchdog
+        for lane in grouped["ci.yml", "build-test"]
+        if lane.watchdog is not None
     ]
     required = required_ceiling(budgets)
 
