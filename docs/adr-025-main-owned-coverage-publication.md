@@ -63,8 +63,9 @@ modelled by repository workflows.
   `build-test` job.
 - A failed main coverage upload can leave CodeScene without current data, but
   it cannot give a pull request a verdict derived from the wrong commit.
-- The historical hostile-artefact validators remain standalone maintenance
-  tools; no active workflow downloads pull-request coverage.
+- The historical hostile-artefact validators remain available for maintenance
+  use, and the trunk lane now runs the outer one over the report it generated
+  itself; no active workflow downloads pull-request coverage.
 - The report the shared action generates is not archived on a pull request,
   because that lane passes `publish-artefact: 'false'`. Had it been archived,
   it would be readable by any step in the pull-request job that can read the
@@ -93,3 +94,27 @@ detector fails any coverage call that omits it or supplies a value the action
 does not compare against. A further test holds the two lanes apart, requiring
 the pull-request lane to decline the archive and forbidding the main workflow
 from passing the input that would suppress the upload CodeScene reads.
+
+The main lane also reads the report as data before it submits it. The shared
+generation action reports success for a report it wrote nothing into, and the
+upload asserts only that the file exists, so existence is not evidence that the
+report is usable: a malformed report previously reached CodeScene and was
+refused there, in another system and later, without naming the step or the file
+at fault. The lane therefore stages `lcov.info` into a directory of its own and
+runs `scripts/validate_coverage_artifact.py` over it — the validator that
+already owns the LCOV contract for a hostile report, is exercised by
+`make test-coverage-artifact`, and executes nothing in the file it reads. The
+step's position is part of the contract: it must follow the step that writes
+the report, precede the upload that sends it, and precede
+`Show sccache statistics`, which
+`tests/workflow_contracts/sccache_contract_test.py` requires to follow every
+compile step in the lane. A named workflow contract test,
+`tests/workflow_contracts/codescene_upload_contract_test.py`, backed by the
+predicates in `tests/workflow_contracts/codescene_upload_invariants.py`, holds
+the lane to that ordering, to the input names the generator and the upload
+agree on, to the format they agree on, to the credential being both carried and
+gated on, and to any checksum input staying unset. It drives those predicates
+against synthetic workflow text as well as the repository file, so a detector
+that stopped matching cannot pass by finding nothing. The upload reads the
+workspace rather than an archive, so the three steps it depends on are matched
+by their structure rather than by the file they happen to share.

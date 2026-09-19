@@ -1487,13 +1487,24 @@ this repository. A main upload can appear in CodeScene only after the service
 analyses that commit; re-running a pull-request workflow is neither a baseline
 refresh nor a substitute for that analysis.
 
+The trunk lane validates the report as data before it uploads it.
+`coverage-main.yml` stages `lcov.info` into a directory of its own and runs
+`scripts/validate_coverage_artifact.py` over that directory, because the
+generation action reports success for an empty report and the upload checks
+only that the file exists. The step must sit after the report is written,
+before the upload that sends it, and before `Show sccache statistics`, which
+`tests/workflow_contracts/sccache_contract_test.py` requires to follow every
+compile step in the lane. `make test-coverage-artifact` covers the validator
+directly; `tests/workflow_contracts/codescene_upload_contract_test.py` covers
+the lane that runs it.
+
 Workflow contract tests keep the boundary explicit: the pull-request coverage
 step must retain ratchet mode and pass the publication opt-out, the artefact
 upload and privileged submission workflow must remain absent, and the main
 workflow must upload the report generated earlier in its job without setting
-that opt-out. The standalone hostile-artefact validators under `scripts/`
-remain available for maintenance use, but no active workflow downloads
-pull-request coverage.
+that opt-out. The hostile-artefact validators under `scripts/` remain available
+for maintenance use, and the trunk lane now runs the outer one over the report
+it generated itself; no active workflow downloads pull-request coverage.
 
 `make test` runs the non-doctest suite through
 [cargo-nextest](https://nexte.st/) and the doctests separately. CI pins the
@@ -5110,6 +5121,62 @@ domains with different trust boundaries cannot collide. The complete contract
 is recorded in
 [ADR-024](adr-024-require-explicit-recursive-workspace-which-search.md) and the
 [executable-discovery design](netsuke-design.md#executable-discovery-filter-which).
+
+`src/stdlib/which/telemetry.rs` is the single owner of both counter names and
+every label vocabulary the resolver emits. `netsuke_stdlib_which_cache_total`
+counts cache outcomes, and `netsuke_stdlib_which_resolution_total` counts
+resolution outcomes; both carry the same `cwd_mode` label, drawn from the
+closed set `auto`, `always`, `never`, and `workspace_recursive`. The set is
+exposed as `WHICH_CWD_MODE_VALUES` and re-exported through `netsuke::stdlib`.
+It is a telemetry vocabulary rather than the template spelling: a manifest
+writes `workspace-recursive`, and the label is `workspace_recursive`. The
+mapping is total over `CwdMode`, so no series can be created outside the set,
+and that is what lets an operator tell whether recursive lookup contributed to
+a resolution.
+
+The cache counter's `outcome` is drawn from `hit`, `miss`, and `bypass`
+(`WHICH_CACHE_OUTCOME_VALUES`). The resolution counter's `outcome` is drawn from
+`found`, `not_found`, and `error` (`WHICH_RESOLUTION_OUTCOME_VALUES`), where
+`not_found` covers a search or direct-path miss and `error` every other
+failure, so "nothing was found" and "something went wrong" stay separable. A
+non-success resolution additionally carries `category`, one of the ten values in
+`RESOLVE_ERROR_CATEGORY_VALUES`, one per `ResolveError` variant, so the label
+set is fixed by the error type rather than by the failure a host happened to
+encounter. `category()` in `resolve_error.rs` returns those constants,
+single-sourcing the vocabulary.
+
+That makes the resolution counter the one series whose label count is not
+fixed: two labels on success, three on failure.
+`WHICH_RESOLUTION_FAILURE_OUTCOME_VALUES` names the two outcomes that
+legitimately carry a category, so the application recorder admits each shape
+exactly; a `found` series carrying a category is refused rather than exported,
+because no call site can produce one.
+
+The resolver records the same bounded facts on the `stdlib.which.resolve` span
+and emits one debug event when a resolution fails. No command name, no
+filesystem path, no workspace name, and no `PATH` or `PATHEXT` value reaches a
+span field, an event, or a metric label, so a series can be exported without
+disclosing what a manifest asked for or where it matched. The tracing tests
+assert that the command name and the workspace root are absent from every
+captured event and span field.
+
+The counter descriptions are registered once per process behind a `Once`. Both
+counter names are listed in the application recorder's `accepts_name` and
+matched in `accepts_counter_registration` against their exact label shapes, so
+the series survive into the process snapshot rather than being discarded as
+noop handles, while any other label name, label count, or out-of-vocabulary
+value is rejected. This is the same allowlist that gates the configuration,
+runner, manifest-filtering, file-read, and environment-lookup series.
+
+Tests sit beside the module: `src/stdlib/which/telemetry_tests.rs` drives the
+real `WhichResolver` against a local debugging recorder and asserts that each
+search domain is attributed to its own series, that every `ResolveError`
+variant reports a declared category, and that nothing outside the closed
+vocabularies is emitted. `src/observability_recorder_which_tests.rs`, which
+`src/observability_recorder_tests.rs` registers, proves the production recorder
+retains each bounded shape and rejects an out-of-vocabulary `cwd_mode`, an
+undeclared extra label, a missing label, and the failure `category` on a
+success series.
 
 Tests that inject `EnvSnapshot::capture_with_env` must use
 `env::mock_env_for_capture`. The strict builder declares every documented read:
