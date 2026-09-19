@@ -23,11 +23,17 @@ use minijinja::{
 use rstest::fixture;
 use tempfile::tempdir;
 use test_support::fs;
+use url::Url;
 
 use super::telemetry::FETCH_DURATION;
 use super::{FetchContext, NetworkConfig, NetworkPolicy, fetch, open_cache_dir};
 use crate::localization;
 use crate::stdlib::{DEFAULT_FETCH_CACHE_DIR, DEFAULT_FETCH_MAX_RESPONSE_BYTES};
+
+/// Username the network tests place in a fixture URL's userinfo.
+pub(super) const REDIRECT_USER: &str = "redirect-user";
+/// Password the network tests place in a fixture URL's userinfo.
+pub(super) const REDIRECT_SECRET: &str = "redirect-secret";
 
 pub(super) type CacheWorkspace = (tempfile::TempDir, Arc<Dir>, Utf8PathBuf);
 
@@ -42,6 +48,32 @@ pub(super) fn cache_workspace() -> Result<CacheWorkspace> {
     let dir = Dir::open_ambient_dir(temp_path.as_path(), ambient_authority())
         .context("open cache workspace")?;
     Ok((temp, Arc::new(dir), temp_path))
+}
+
+/// Build a credentialed URL for the loopback fixture at `fixture_url`.
+///
+/// Every network case is driven against a local fixture, and each one needs the
+/// hop to carry userinfo so the redaction contract is exercised. Deriving the
+/// credentialed URL from the fixture's own URL keeps the host and the ephemeral
+/// port in one place: a helper that formats `127.0.0.1:{port}` itself has to
+/// track whatever the fixture actually bound, and drifts from it silently.
+///
+/// The credentials are the same pair `SECRETS` names, so a diagnostic that
+/// discloses either is caught wherever this helper is used.
+///
+/// # Errors
+///
+/// Returns an error when `fixture_url` is not a well-formed URL or does not name
+/// a host.
+pub(super) fn credentialed_loopback_url(fixture_url: &str) -> Result<Url> {
+    let mut url = Url::parse(fixture_url)
+        .with_context(|| format!("fixture URL should parse: {fixture_url}"))?;
+    url.set_username(REDIRECT_USER)
+        .map_err(|()| anyhow!("fixture URL should accept a username: {fixture_url}"))?;
+    url.set_password(Some(REDIRECT_SECRET))
+        .map_err(|()| anyhow!("fixture URL should accept a password: {fixture_url}"))?;
+    url.set_path("/start");
+    Ok(url)
 }
 
 /// Builds a test `FetchContext` with the provided cache root and default policy.

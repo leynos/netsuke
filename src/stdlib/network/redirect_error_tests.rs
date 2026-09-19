@@ -7,13 +7,21 @@
 //! renames or adds a variant is caught here rather than by a silent fallback to
 //! `other`.
 
-use std::io::Write as _;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail, ensure};
 use rstest::rstest;
+use test_support::http::{self, RawHttpResponse};
 
+use super::super::tests_support::credentialed_loopback_url;
 use super::*;
+
+/// A status line no HTTP client accepts, followed by a well-formed end of head.
+///
+/// The header block is complete so a client that reaches the parser fails on the
+/// status code itself rather than on a truncated response, which keeps the case
+/// about classification instead of framing.
+const MALFORMED_STATUS_LINE: &str = "HTTP/1.1 banana OK\r\nContent-Length: 0\r\n\r\n";
 
 /// Every `ureq` failure maps into the closed `error_category` vocabulary.
 ///
@@ -92,33 +100,29 @@ fn protocol_failures_are_classified_from_a_live_response() -> Result<()> {
 
 /// Drive a hop against a server whose status line cannot be parsed.
 ///
-/// The fixture writes well-formed responses, so this stands a bare listener in
-/// its place and answers with a status line no HTTP client accepts.
+/// The raw-response fixture emits the malformed bytes and then completes the
+/// response with a write-side shutdown, so the client reads exactly this payload
+/// instead of racing the fixture's teardown. A bare listener that closed instead
+/// raced the client: on Windows the close reset the connection and the client
+/// reported an aborted connection in place of the parse failure, which is the
+/// defect this case exists to catch. Nothing here is platform-gated, because
+/// with the response completed properly both platforms reach the parser.
 ///
 /// # Errors
 ///
-/// Returns an error when the listener cannot be bound or read, the malformed
-/// response cannot be delivered, or the hop unexpectedly succeeds.
+/// Returns an error when the fixture cannot be started or joined, when the test
+/// URL cannot be built, or when the hop unexpectedly succeeds.
 fn malformed_status_line_failure() -> Result<ureq::Error> {
-    let listener = std::net::TcpListener::bind(("127.0.0.1", 0))
-        .context("bind a malformed-response server")?;
-    let port = listener
-        .local_addr()
-        .context("read the malformed-response server address")?
-        .port();
-    let server = std::thread::spawn(move || -> std::io::Result<()> {
-        let (mut stream, _addr) = listener.accept()?;
-        stream.write_all(b"HTTP/1.1 banana OK\r\nContent-Length: 0\r\n\r\n")
-    });
-
-    let raw = format!("http://redirect-user:redirect-secret@127.0.0.1:{port}/start");
-    let url = Url::parse(&raw).with_context(|| format!("test URL should parse: {raw}"))?;
+    let (fixture_url, _requests, server) =
+        http::spawn_raw_http_server(RawHttpResponse::text(MALFORMED_STATUS_LINE))
+            .context("spawn a malformed-response fixture")?;
+    let url = credentialed_loopback_url(&fixture_url)?;
     let agent = build_redirect_agent();
+
     let outcome = request_hop(&agent, &url, Duration::from_secs(5));
     server
         .join()
-        .map_err(|_panic| anyhow::anyhow!("malformed-response server panicked"))?
-        .context("write the malformed status line")?;
+        .map_err(|_panic| anyhow::anyhow!("malformed-response fixture panicked"))?;
     let Err(err) = outcome else {
         bail!("a malformed status line must fail the hop");
     };

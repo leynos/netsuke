@@ -22,8 +22,10 @@ use tracing_subscriber::filter::LevelFilter;
 use super::super::redirect_chain::FETCH_REDIRECT_LIMIT;
 use super::*;
 
+use super::super::tests_support::{REDIRECT_SECRET, REDIRECT_USER, credentialed_loopback_url};
 /// Re-exported for [`location`], which reaches the recorder helpers this way.
 pub(super) use super::super::tests_support::{collect_samples, counter_totals};
+
 use crate::snapshot_test_support::snapshot_settings;
 use minijinja::ErrorKind;
 
@@ -32,7 +34,7 @@ const CREDENTIALED_CURRENT: &str = "http://redirect-user:redirect-secret@allowed
 /// Credentialed URL used as the refused target of a redirect.
 const CREDENTIALED_TARGET: &str = "http://redirect-user:redirect-secret@blocked.example/next";
 /// Userinfo fragments no diagnostic may disclose.
-const SECRETS: [&str; 2] = ["redirect-user", "redirect-secret"];
+const SECRETS: [&str; 2] = [REDIRECT_USER, REDIRECT_SECRET];
 
 /// One rejection paired with the localized fragment its diagnostic must carry.
 type RejectionCase = (RedirectRejection, String);
@@ -311,11 +313,14 @@ fn chain_deadline_diagnostic_is_snapshotted(en_localizer: EnLocalizer) -> Result
 ///
 /// Binding and then releasing the port gives the dispatch a connection the
 /// kernel refuses at once, so the failure is deterministic and needs no
-/// network or DNS.
+/// network or DNS. The port is handed to the shared helper rather than
+/// formatted into a URL here, so this case and the fixture-backed ones cannot
+/// disagree about how a credentialed loopback URL is built.
 ///
 /// # Errors
 ///
-/// Returns an error when the probe listener cannot be bound or queried.
+/// Returns an error when the probe listener cannot be bound or queried, or when
+/// the probe URL cannot be credentialed.
 fn closed_loopback_url() -> Result<Url> {
     let listener = std::net::TcpListener::bind(("127.0.0.1", 0))
         .context("bind a probe listener for an unused port")?;
@@ -324,9 +329,7 @@ fn closed_loopback_url() -> Result<Url> {
         .context("read the probe listener address")?
         .port();
     drop(listener);
-    parse_url(&format!(
-        "http://redirect-user:redirect-secret@127.0.0.1:{port}/start"
-    ))
+    credentialed_loopback_url(&format!("http://127.0.0.1:{port}/"))
 }
 
 /// A hop that cannot connect logs a bounded category and redacts the URL.
