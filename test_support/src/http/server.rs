@@ -6,7 +6,7 @@ use std::{
 };
 
 use super::{
-    HttpServerConfig, RequestLog, accept_connection, request::read_request_line,
+    HttpServerConfig, RequestLog, accept::accept_connection, request::read_request_line,
     response::FixtureResponse,
 };
 

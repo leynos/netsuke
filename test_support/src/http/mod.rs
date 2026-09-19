@@ -4,138 +4,29 @@
 //! body. The listener is configured in non-blocking mode and guarded by a
 //! deadline so hung clients cannot stall the test suite.
 
-use mockable::{DefaultEnv, Env};
 use std::{
-    fmt, io,
+    io,
     net::{SocketAddr, TcpListener, TcpStream},
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     thread,
-    time::{Duration, Instant},
 };
 
 mod accept;
+mod config;
 mod raw;
 mod request;
 mod response;
 mod server;
 
-use self::accept::{AcceptWait, accept_connection};
+pub use self::config::HttpServerConfig;
 pub use self::raw::RawHttpResponse;
 pub use self::request::RequestLog;
 use self::response::FixtureResponse;
 pub use self::response::HttpResponse;
 use self::server::{FixtureLedger, run_http_server};
-
-/// Override for the timeout in milliseconds within which a client must connect.
-pub(crate) const ENV_HTTP_ACCEPT_TIMEOUT_MS: &str = "NETSUKE_TEST_HTTP_ACCEPT_TIMEOUT_MS";
-/// Override for the timeout in milliseconds within which the request must arrive.
-pub(crate) const ENV_HTTP_READ_TIMEOUT_MS: &str = "NETSUKE_TEST_HTTP_READ_TIMEOUT_MS";
-/// Override for the polling interval in milliseconds used while waiting.
-pub(crate) const ENV_HTTP_POLL_INTERVAL_MS: &str = "NETSUKE_TEST_HTTP_POLL_INTERVAL_MS";
-
-#[cfg(test)]
-use std::{cell::RefCell, thread_local};
-
-#[cfg(test)]
-thread_local! {
-    static DURATION_WARNINGS: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
-}
-
-/// Configuration for HTTP fixtures, including timeouts used during polling.
-#[derive(Debug, Clone)]
-pub struct HttpServerConfig {
-    /// Deadline for a client to connect.
-    accept_timeout: Duration,
-    /// Deadline for the request to finish arriving.
-    read_timeout: Duration,
-    /// Interval between readiness polls.
-    poll_interval: Duration,
-    /// Whether the accept loop waits for a client without a deadline.
-    ///
-    /// Set by fixtures that expect no request: nothing but a shutdown ends
-    /// their wait, so a deadline there would fail a slow machine rather than a
-    /// wrong test.
-    accept_without_deadline: bool,
-}
-
-impl HttpServerConfig {
-    /// Load configuration from environment variables, falling back to defaults.
-    ///
-    /// The following environment variables are honoured when present:
-    ///
-    /// * `NETSUKE_TEST_HTTP_ACCEPT_TIMEOUT_MS` – deadline for accepting a
-    ///   connection in milliseconds.
-    /// * `NETSUKE_TEST_HTTP_READ_TIMEOUT_MS` – deadline for reading the request
-    ///   body in milliseconds.
-    /// * `NETSUKE_TEST_HTTP_POLL_INTERVAL_MS` – polling interval used when
-    ///   waiting for readiness in milliseconds.
-    ///
-    /// Notes:
-    /// Polling interval overrides are clamped to a minimum of 1 ms to avoid
-    /// busy-spinning when the environment provides `0`.
-    #[must_use]
-    pub fn from_env() -> Self {
-        Self::from_env_provider(&DefaultEnv)
-    }
-
-    /// Load the configuration from `env`, clamping the poll interval to 1 ms.
-    fn from_env_provider(env: &impl Env) -> Self {
-        let mut config = Self::default();
-        config.accept_timeout =
-            duration_from_env(env, ENV_HTTP_ACCEPT_TIMEOUT_MS, config.accept_timeout);
-        config.read_timeout = duration_from_env(env, ENV_HTTP_READ_TIMEOUT_MS, config.read_timeout);
-        // Prevent busy-spin when overrides specify a zero-millisecond poll
-        // interval. Tests only need millisecond precision, so clamp to at
-        // least 1 ms.
-        config.poll_interval =
-            duration_from_env(env, ENV_HTTP_POLL_INTERVAL_MS, config.poll_interval)
-                .max(Duration::from_millis(1));
-        config
-    }
-
-    /// Return the instant by which a client must connect.
-    fn accept_deadline(&self) -> Instant {
-        Instant::now() + self.accept_timeout
-    }
-
-    /// Return a copy of this configuration that accepts without a deadline.
-    #[must_use]
-    const fn accepting_until_shutdown(mut self) -> Self {
-        self.accept_without_deadline = true;
-        self
-    }
-
-    /// Return what the accept loop should wait for.
-    ///
-    /// An unbounded wait is given `shutdown` so the loop can stop on the
-    /// signal alone, without depending on the wake-up connection a join sends.
-    fn accept_wait<'a>(&self, shutdown: &'a AtomicBool) -> AcceptWait<'a> {
-        if self.accept_without_deadline {
-            AcceptWait::UntilShutdown(shutdown)
-        } else {
-            AcceptWait::Until(self.accept_deadline())
-        }
-    }
-
-    /// Return the instant by which the request must be read.
-    fn read_deadline(&self) -> Instant {
-        Instant::now() + self.read_timeout
-    }
-}
-
-impl Default for HttpServerConfig {
-    fn default() -> Self {
-        Self {
-            accept_timeout: Duration::from_secs(10),
-            read_timeout: Duration::from_secs(5),
-            poll_interval: Duration::from_millis(10),
-            accept_without_deadline: false,
-        }
-    }
-}
 
 /// Join handle for a spawned HTTP fixture.
 ///
@@ -358,59 +249,6 @@ fn spawn_fixture_server(
     ))
 }
 
-/// Read `var` as whole milliseconds, falling back to `default` when unset or
-/// unparsable.
-fn duration_from_env(env: &impl Env, var: &str, default: Duration) -> Duration {
-    env.raw(var).map_or(default, |value| {
-        let trimmed = value.trim();
-        match trimmed.parse::<u64>() {
-            Ok(ms) => Duration::from_millis(ms),
-            Err(err) => {
-                log_duration_parse_error(var, trimmed.len(), &err);
-                default
-            }
-        }
-    })
-}
-
-/// Report an unparsable duration override without echoing its value.
-///
-/// The value is redacted: an environment variable's contents are outside this
-/// crate's control, and logging them verbatim would put whatever the caller
-/// exported into the log. `err` already names the bounded parse failure, and
-/// `value_len` distinguishes an empty override from a malformed one, which is
-/// all the diagnosis this fixture needs.
-fn log_duration_parse_error(var: &str, value_len: usize, err: &dyn fmt::Display) {
-    #[cfg(test)]
-    {
-        record_duration_warning(format!(
-            "ignoring invalid {var}: {err} (value redacted, {value_len} bytes)"
-        ));
-    }
-
-    #[cfg(not(test))]
-    {
-        tracing::warn!(
-            variable = var,
-            value_len,
-            error = %err,
-            "ignoring invalid fixture duration"
-        );
-    }
-}
-
-#[cfg(test)]
-fn record_duration_warning(message: String) {
-    DURATION_WARNINGS.with(|warnings| warnings.borrow_mut().push(message));
-}
-
-#[cfg(test)]
-fn take_duration_warnings() -> Vec<String> {
-    DURATION_WARNINGS.with(|warnings| warnings.borrow_mut().drain(..).collect())
-}
-
-#[cfg(test)]
-mod config_tests;
 #[cfg(test)]
 #[path = "raw_tests.rs"]
 mod raw_tests;

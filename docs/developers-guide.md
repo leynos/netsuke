@@ -3589,6 +3589,17 @@ declares it `mod accept;`, and its surface is `pub(super)`, so nothing outside
 the fixture can reach it. The wait policy stays in `HttpServerConfig`; this
 module only carries the wait out.
 
+### `test_support/src/http/config.rs`
+
+Timeout configuration for the local HTTP fixture, split out of
+`test_support/src/http/mod.rs` for the same 400-line reason as `accept.rs`. It
+owns `HttpServerConfig`, the three `NETSUKE_TEST_HTTP_*` override names, and
+the duration parse that reads them. Its accessors are `pub(super)`, so the
+fixture's own loops can ask it for a deadline or a poll interval while nothing
+outside the fixture can configure one. `config_tests.rs` is its `#[path]` child
+and stays declared here rather than in `mod.rs`, exactly as `raw_tests.rs`
+belongs to `raw.rs`.
+
 ### `src/ir/cmd_interpolate_property_support.rs`
 
 This test-only sibling module is owned by the command-interpolation property
