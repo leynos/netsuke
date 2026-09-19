@@ -1472,6 +1472,17 @@ above, which are disposable.
   drift from the executable one. Landed as `c422727d`; all five gates green on
   that commit, with the anchor doctest on `StdlibConfig::with_clock` and the
   new pinning test both observed passing in the `make test` log.
+- [x] Post-completion: D14 re-anchored once more after the documentation fix,
+  and its self-reference removed — recording a total changes it, so the
+  retrospective now quotes only the two durable figures (changed-file count and
+  the non-plan remainder) and the table carries head-labelled totals. CI
+  verified on the resulting head: every substantive check `SUCCESS`, including
+  `Windows / lint-windows` and `Windows / build-test-windows`, with
+  `mergeStateStatus: UNSTABLE` and `reviewDecision: APPROVED`. The single
+  failure is the non-required `CodeScene Code Health Review (main)`, which
+  measures the base branch rather than this pull request: the ruleset
+  `main-required-checks` requires only `build-test`, `kani-smoke`,
+  `netsukefile` and `release / metadata`, and all four pass.
 
 ## Surprises & discoveries
 
