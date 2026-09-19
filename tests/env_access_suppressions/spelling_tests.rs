@@ -142,6 +142,77 @@ fn an_attribute_quoted_in_a_line_comment_is_not_reported() -> Result<()> {
     Ok(())
 }
 
+/// A blank line between the marker and its parenthesis is still one attribute.
+///
+/// Whitespace between tokens is not limited to a single newline, and a
+/// `#[rustfmt::skip]` can hold the gap open however wide it likes.
+#[test]
+fn a_blank_line_before_the_parenthesis_is_reported() -> Result<()> {
+    let source = "#[rustfmt::skip]\n#[allow\n\n    (clippy::disallowed_methods, reason = \"escape hatch probe\")]\nfn probe() {}\n";
+    let findings = scan_source("src/lib.rs", source);
+
+    ensure!(
+        findings == [finding("src/lib.rs", "clippy::disallowed_methods")],
+        "expected the widely split attribute to be reported, got {findings:?}"
+    );
+    Ok(())
+}
+
+/// A `cfg_attr` whose wrapped body holds the `allow` is read whole.
+#[test]
+fn a_wrapped_cfg_attr_allow_is_reported() -> Result<()> {
+    let source = "#[cfg_attr(\n    all(),\n    allow(clippy::disallowed_methods, reason = \"escape hatch probe\"),\n)]\nfn probe() {}\n";
+    let findings = scan_source("src/lib.rs", source);
+
+    ensure!(
+        findings == [finding("src/lib.rs", "clippy::disallowed_methods")],
+        "expected the wrapped cfg_attr allow to be reported, got {findings:?}"
+    );
+    Ok(())
+}
+
+/// Malformed input yields findings or silence, never a panic.
+///
+/// The matcher reads bytes and slices at the offsets it derives from them, so
+/// the shapes that could send it out of bounds — a `#` with nothing behind it,
+/// a marker that never closes, a stray byte that is not a character boundary —
+/// are pinned here. A panic would be a worse failure than a finding: it would
+/// take the gate down rather than report it.
+#[test]
+fn malformed_input_is_not_a_panic() -> Result<()> {
+    let cases = [
+        "#",
+        "#!",
+        "#[",
+        "#![]",
+        "#[]",
+        "#(",
+        "#!(",
+        "#[allow(",
+        "#[allow(warnings",
+        "#![allow(clippy::disallowed_methods",
+        "#[cfg_attr(all(),",
+        "#[cfg_attr(all(), allow(cfg_attr_allow_is_unterminated",
+        "const C: &str = \"unterminated",
+        "/* unterminated comment\n#[allow(warnings, reason = \"x\")]",
+        "let \u{00e9} = 1; #[allow(warnings, reason = \"non-ascii before\")]",
+        "#\u{00e9}[allow(warnings, reason = \"non-ascii after\")]",
+        "#[allow(warnings, reason = \"\u{1f600}\")]",
+    ];
+    for case in cases {
+        // The assertion is that this returns at all; each case is malformed or
+        // harmless, so any finding is acceptable and a panic is not.
+        let findings = scan_source("src/lib.rs", case);
+        ensure!(
+            findings
+                .iter()
+                .all(|(path, lint)| path == "src/lib.rs" && !lint.is_empty()),
+            "a finding should name a path and a lint, got {findings:?} for {case:?}"
+        );
+    }
+    Ok(())
+}
+
 /// An `#[expect]` carrying the policy lint is the sanctioned form, not an offence.
 ///
 /// The seam taxonomy asks for an `expect` with a reason precisely so that the
