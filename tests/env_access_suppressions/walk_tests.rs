@@ -13,9 +13,7 @@
 //! the repository's rules — nested tools write ignore files of their own — so
 //! asking it would make the answer depend on which tools had run.
 
-use super::{
-    MACHINE_LOCAL_DIRECTORIES, collect_all_sources, collect_rust_sources, is_scanned,
-};
+use super::{MACHINE_LOCAL_DIRECTORIES, collect_all_sources, collect_rust_sources, is_scanned};
 use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
@@ -247,10 +245,10 @@ fn a_cache_inside_a_scanned_root_is_skipped_by_the_scan() -> Result<()> {
     root.write("tests/kept.rs", b"fn kept() {}\n")
         .context("write the kept source")?;
 
-    let mut scanned = Vec::new();
-    collect_rust_sources(&root, "tests", &mut scanned)?;
-    let mut scanned: Vec<&str> = scanned.iter().map(|(path, _)| path.as_str()).collect();
-    scanned.sort();
+    let mut read = Vec::new();
+    collect_rust_sources(&root, "tests", &mut read)?;
+    let mut scanned: Vec<&str> = read.iter().map(|(path, _)| path.as_str()).collect();
+    scanned.sort_unstable();
 
     let mut walked = Vec::new();
     collect_all_sources(&root, ".", &mut walked)?;

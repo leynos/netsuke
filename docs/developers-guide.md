@@ -4425,9 +4425,12 @@ device path, since the test also runs on the Windows lane.
 
 A template directory is a fourth, and it is closed at `git init` instead:
 `--template=` keeps a template from seeding the scratch repository's
-`info/exclude`, which `check-ignore` would otherwise read. The flag has to be
-there rather than on the `check-ignore` call, because the file is written at
-init time, and because a template can seed `.git/config` as well. Note that
+`info/exclude`, which `check-ignore` would otherwise read. That is the whole of
+its job, and it is worth stating narrowly: a template can seed `.git/config`
+too, but the empty `core.excludesFile` above already neutralizes an ignore file
+configured there, measured with a template seeding only that. The flag has to
+be on `git init` rather than on the `check-ignore` call, because `info/exclude`
+is written at init time and no later call could unpin it. Note that
 `-c init.templateDir=` on the same command does *not* close it:
 `GIT_TEMPLATE_DIR` outranks it, measured, so the empty `--template` argument is
 the form that works for a contributor with that variable set.
