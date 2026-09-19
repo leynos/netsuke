@@ -5929,7 +5929,7 @@ rejects every reparse point, including tags `std` does not report as symlinks:
 or cloud placeholder would slip past a symlink-shaped check and be followed.
 Because the judgement and the read share one handle, there is no
 check-then-open window between them; see
-[ADR-027](adr-027-windows-reparse-point-same-handle-open.md).
+[ADR-032](adr-032-windows-reparse-point-same-handle-open.md).
 
 Two diagnostics come out of the boundary. `bounded_read.rs` raises
 `file_too_large_error`, which quotes the path and the limit that was exceeded;

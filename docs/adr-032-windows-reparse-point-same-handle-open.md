@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 027: Validate the Windows final component through a same-handle reparse-point open
+# Architectural decision record (ADR) 032: Validate the Windows final component through a same-handle reparse-point open
 
 ## Status
 
