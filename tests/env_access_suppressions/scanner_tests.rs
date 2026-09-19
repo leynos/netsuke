@@ -236,6 +236,47 @@ fn the_rename_enabler_is_reported_alongside_the_alias() -> Result<()> {
     Ok(())
 }
 
+/// An inner attribute `rustfmt` moved onto its own line is read, wherever it sits.
+///
+/// This is the shape a macro definition body takes, and the one a reviewer
+/// asking whether mid-line attributes are missed is really asking about: the
+/// attribute is legal inside the macro, and `make check-fmt` keeps it on a line
+/// of its own, so the anchor reads it.
+#[test]
+fn an_inner_attribute_inside_a_macro_body_is_reported() -> Result<()> {
+    let source = "macro_rules! probe_macro {\n    () => {\n        #![allow(clippy::disallowed_methods, reason = \"escape hatch probe\")]\n    };\n}\n";
+    let findings = scan_source("src/lib.rs", source);
+
+    ensure!(
+        findings
+            == [(
+                String::from("src/lib.rs"),
+                String::from("clippy::disallowed_methods")
+            )],
+        "expected the inner attribute inside the macro body to be reported, got {findings:?}"
+    );
+    Ok(())
+}
+
+/// A name reached through the path `allow` is not the `allow` attribute.
+#[test]
+fn a_path_segment_named_allow_is_not_read_as_an_attribute() -> Result<()> {
+    // `clippy::allow` is not a real lint path; it stands in for any identifier
+    // a scan might mistake for the attribute marker itself.
+    let source = "#![allow(clippy::allow_attributes, reason = \"escape hatch probe\")]\n";
+    let findings = scan_source("src/lib.rs", source);
+
+    ensure!(
+        findings
+            == [(
+                String::from("src/lib.rs"),
+                String::from("clippy::allow_attributes")
+            )],
+        "expected the guard lint to be reported and no phantom finding beyond it, got {findings:?}"
+    );
+    Ok(())
+}
+
 /// A lifetime is not an unterminated char literal that blanks the code after it.
 #[test]
 fn a_lifetime_does_not_blank_the_attribute_that_follows() -> Result<()> {
