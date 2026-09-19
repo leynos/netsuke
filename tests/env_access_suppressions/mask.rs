@@ -1,15 +1,18 @@
 //! Blanking of comments and literals before the suppression scan reads text.
 //!
-//! The scan recognizes an attribute by the line it starts, so text that merely
-//! quotes one must not be read as a real suppression. Comments and string and
-//! character literals are where quoted text lives, so their contents are
-//! replaced with spaces first; a line then begins with the attribute only when
-//! the attribute is really there.
+//! The scan reads tokens rather than lines, so it cannot tell from its own
+//! position whether text is code. This module is what tells it: comments and
+//! string and character literals are where quoted text lives, so their contents
+//! are replaced with spaces first, and something that looks like an attribute
+//! is then one only when it is really in code. That is the whole mechanism
+//! keeping prose — a doc comment quoting an attribute, a fixture snapshot — out
+//! of the findings, and it is a stronger one than the line anchor it replaced,
+//! which a `#[rustfmt::skip]` could hold open across lines.
 //!
 //! Blanking preserves byte offsets and newlines, so the masked text indexes
 //! exactly as the source does, and only bytes belonging to a comment or literal
 //! are replaced, so the result is valid UTF-8 whenever the input is. That is
-//! what lets the line-anchored scan run over the masked text unchanged.
+//! what lets the scan run over the masked text unchanged.
 
 /// Return `source` with every comment and string or char literal blanked.
 pub(super) fn mask_non_code(source: &str) -> String {

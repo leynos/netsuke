@@ -19,20 +19,25 @@
 /// sits, but nothing else reports a crate that has silenced the reporter. See
 /// "Enforcing the environment mandate" in the developers' guide.
 ///
-/// The last two entries close a second way in, measured rather than assumed.
+/// The last four entries close a second way in, measured rather than assumed.
 /// Clippy keeps the old spelling of a renamed lint, and a renamed name still
 /// selects the lint it was renamed to, so `clippy::disallowed_method` — an
 /// alias of the policy lint — silences the policy exactly as the current name
-/// does. Ordinarily that is harmless, because the rename is reported and
-/// `renamed_and_removed_lints` is denied, so the alias is an error rather than
-/// a suppression. Allowing that lint as well hides the rename, and the alias
-/// then silences the policy in silence: measured at exit 0 where the same file
-/// without the attribute exits 101. Banning the enabler closes the whole class
-/// of alias evasions, since no alias suppresses anything while the rename that
-/// names it is still reported; banning the alias too keeps the pair honest if
-/// a future Clippy stops reporting renames. Neither name is in the scoped
-/// exemption, which covers only the two guard lints.
-const FORBIDDEN_ALLOW_LINTS: [&str; 8] = [
+/// does. The same is true of the bare `disallowed_methods`, the name the lint
+/// carried in a set of toolchain versions and still accepts with the rename
+/// report allowed. Ordinarily this is harmless, because the rename is reported
+/// and `renamed_and_removed_lints` is denied, so an alias is an error rather
+/// than a suppression. Allowing that lint as well hides the rename, and the
+/// alias then silences the policy in silence: measured at exit 0 where the same
+/// file without the attribute exits 101. Banning the enabler closes the whole
+/// class of alias evasions, since no alias suppresses anything while the rename
+/// that names it is still reported; banning each alias too keeps the pair
+/// honest if a future Clippy stops reporting renames. `unknown_lints` is banned
+/// for the same reason from the other direction: `rustc` reports an unknown
+/// lint name, and allowing `unknown_lints` hides the report, so an `allow` of a
+/// misspelled or removed name stops being a visible error. None of the four is
+/// in the scoped exemption, which covers only the two guard lints.
+const FORBIDDEN_ALLOW_LINTS: [&str; 10] = [
     "clippy::disallowed_methods",
     "clippy::style",
     "clippy::all",
@@ -41,6 +46,8 @@ const FORBIDDEN_ALLOW_LINTS: [&str; 8] = [
     "clippy::allow_attributes_without_reason",
     "clippy::disallowed_method",
     "renamed_and_removed_lints",
+    "unknown_lints",
+    "disallowed_methods",
 ];
 
 /// Paths permitted to suppress the two guard lints, and which of those they may.
@@ -132,12 +139,34 @@ fn split_clauses(body: &str) -> Vec<String> {
     clauses
 }
 
+/// Return `name` with the spellings that do not change what it denotes removed.
+///
+/// Two spellings reach the compiler without reaching a reader's eye, and both
+/// were measured to silence the policy outright while passing the scan:
+/// `r#clippy::disallowed_methods`, where a raw identifier denotes whatever the
+/// name without the prefix denotes, and `clippy :: disallowed_methods`, where
+/// whitespace separates the segments of one path. Comparing the normalized name
+/// rather than the written one is what makes the ban a statement about which
+/// lints are named instead of about how they are spelled.
+fn canonical_lint(name: &str) -> String {
+    name.replace("r#", "")
+        .chars()
+        .filter(|character| !character.is_whitespace())
+        .collect()
+}
+
 /// Return the lint names an attribute body carries, excluding its reason.
+///
+/// Each name is normalized by [`canonical_lint`], so a spelling that means the
+/// same lint is compared as that lint. The reason clause is recognized on the
+/// written text, before normalization, since it is the `reason` token that
+/// identifies it rather than any lint it names.
 pub(super) fn named_lints(body: &str) -> Vec<String> {
     split_clauses(body)
         .into_iter()
         .map(|clause| clause.trim().to_owned())
         .filter(|clause| !clause.is_empty() && !is_reason_clause(clause))
+        .map(|clause| canonical_lint(&clause))
         .collect()
 }
 
