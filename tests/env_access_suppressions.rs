@@ -47,16 +47,30 @@ use scanner::scan_source;
 /// policy for the whole test binary. Measured: with an integration target that
 /// reads the environment, the target fails to compile without the attribute and
 /// compiles clean with it. Leaving `tests` out would hand the evasion a second
-/// home. `benches` is included for the same reason: a benchmark target is
-/// compiled and linted like any other, so its own environment reads are
-/// governed by the same policy.
-const COMPILED_SOURCE_ROOTS: [&str; 5] = [
+/// home. `benches` and `examples` are included for the same reason: Cargo
+/// discovers targets in both, and a benchmark or example target is compiled and
+/// linted like any other, so its own environment reads are governed by the same
+/// policy. `examples` holds no Rust source today; it is listed because the
+/// directory Cargo discovers is governed whether or not it is currently
+/// occupied, and the coverage assertion below is what makes that safe to say —
+/// it fails if any Rust source anywhere in the workspace is outside these
+/// roots, so a root that is misspelled, or a target location nobody predicted,
+/// is caught rather than silently excusing its sources.
+const COMPILED_SOURCE_ROOTS: [&str; 6] = [
     "src",
     "build_l10n_audit",
     "test_support/src",
     "tests",
     "benches",
+    "examples",
 ];
+
+/// The fewest Rust sources the workspace can hold while the walk still works.
+///
+/// Well below the count a healthy tree carries, so ordinary growth and pruning
+/// never trip it; a walk that descended nowhere, or stopped after one directory,
+/// would.
+const MINIMUM_WORKSPACE_SOURCES: usize = 100;
 
 /// Compiled sources that sit outside every [`COMPILED_SOURCE_ROOTS`] root.
 ///
@@ -100,6 +114,60 @@ fn collect_rust_sources(
 /// Return whether an entry name is a Rust source.
 fn is_rust_source(name: &str) -> bool {
     Utf8Path::new(name).extension().is_some_and(|it| it == "rs")
+}
+
+/// Append every Rust source the coverage invariant governs, in no set order.
+///
+/// The walk descends everything except two kinds of entry, and neither is
+/// hand-written source: `target`, which the compiler writes rather than reads,
+/// and dot-prefixed names, which hold tooling state and machine-local caches.
+/// Skipping the caches is not just economy — a gate that read them would turn
+/// on what a cache happens to contain on one machine, and this one must not.
+fn collect_all_sources(root: &Dir, directory: &str, found: &mut Vec<String>) -> Result<()> {
+    for entry_result in root
+        .read_dir(directory)
+        .with_context(|| format!("read `{directory}`"))?
+    {
+        let entry = entry_result.with_context(|| format!("read an entry of `{directory}`"))?;
+        let name = entry
+            .file_name()
+            .with_context(|| format!("read an entry name in `{directory}`"))?;
+        if name == "target" || name.starts_with('.') {
+            continue;
+        }
+        let path = join_path(directory, &name);
+        let file_type = entry
+            .file_type()
+            .with_context(|| format!("read the file type of `{path}`"))?;
+        if file_type.is_dir() {
+            collect_all_sources(root, &path, found)?;
+        } else if is_rust_source(&name) {
+            found.push(path);
+        }
+    }
+    Ok(())
+}
+
+/// Join a directory and an entry name, keeping the walk root's paths bare.
+fn join_path(directory: &str, name: &str) -> String {
+    match directory {
+        "." => name.to_owned(),
+        _ => format!("{directory}/{name}"),
+    }
+}
+
+/// Return whether `path` is one of the sources [`compiled_sources`] reads.
+///
+/// A source counts as covered when it sits beneath a scanned root or is one of
+/// the standalone sources. Coverage is what makes the scan's silence mean
+/// something: a source outside this set is not "clean", it is unread, and the
+/// difference is the whole point of the invariant that calls this.
+fn is_scanned(path: &str) -> bool {
+    STANDALONE_COMPILED_SOURCES.contains(&path)
+        || COMPILED_SOURCE_ROOTS.iter().any(|root| {
+            path.strip_prefix(root)
+                .is_some_and(|rest| rest.starts_with('/'))
+        })
 }
 
 /// Read every compiled source the scan governs, with its workspace-relative path.
@@ -155,6 +223,59 @@ fn compiled_sources_never_suppress_the_environment_policy() -> Result<()> {
         .collect();
 
     ensure!(findings.is_empty(), "{}", build_error_message(&findings));
+    Ok(())
+}
+
+/// Fail if any Rust source in the workspace falls outside the scanned roots.
+///
+/// The scan above can only be as good as the roots it lists, and a root list
+/// is exactly the kind of thing that ages badly: Cargo discovers targets in
+/// `src/bin`, `examples`, `tests`, and `benches`, a contributor can add a
+/// fourth location, and a root that is renamed or misspelled silently excuses
+/// its sources rather than reporting itself. So the roots are not trusted on
+/// their own. This walk enumerates every Rust source the workspace holds and
+/// fails when one of them is not scanned, which turns the silent failure into a
+/// named one and makes the root list safe to extend rather than something a
+/// reviewer has to keep re-deriving.
+///
+/// Caches and `target` are skipped, not because their sources do not matter,
+/// but because they are generated or vendored rather than written here, and a
+/// gate that read them would depend on what a cache happened to hold. Writes
+/// under `target/` are the compiler's, and the `.uv-cache` and friends are
+/// tooling state; neither is a place a contributor edits.
+#[test]
+fn every_rust_source_in_the_workspace_is_scanned() -> Result<()> {
+    let crate_root = Dir::open_ambient_dir(env!("CARGO_MANIFEST_DIR"), ambient_authority())
+        .context("open the workspace root")?;
+    let mut present = Vec::new();
+    collect_all_sources(&crate_root, ".", &mut present)?;
+
+    // A walk that silently found nothing would pass while inspecting nothing.
+    ensure!(
+        !present.is_empty(),
+        "the workspace walk should find at least one Rust source"
+    );
+    ensure!(
+        present.len() >= MINIMUM_WORKSPACE_SOURCES,
+        "the workspace walk found {} Rust sources, fewer than the {} the workspace \
+         holds; the walk is probably not descending",
+        present.len(),
+        MINIMUM_WORKSPACE_SOURCES
+    );
+
+    let mut unscanned: Vec<&String> = present.iter().filter(|path| !is_scanned(path)).collect();
+    unscanned.sort();
+    ensure!(
+        unscanned.is_empty(),
+        "these Rust sources would not be scanned for policy suppressions; add each \
+         source's root to `COMPILED_SOURCE_ROOTS` (or `STANDALONE_COMPILED_SOURCES` \
+         if it is a file), so that the suppression contract covers it:\n- {}",
+        unscanned
+            .iter()
+            .map(|path| path.as_str())
+            .collect::<Vec<_>>()
+            .join("\n- ")
+    );
     Ok(())
 }
 
