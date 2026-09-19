@@ -153,21 +153,29 @@ fn the_configuration_names_no_codegen_backend() -> Result<()> {
 /// document and this does not look for; a backend named that deep would be
 /// invisible to Cargo too.
 fn first_profile_codegen_backend(config: &toml::Value) -> Option<String> {
-    let profiles = config.get("profile")?.as_table()?;
-    for (name, table) in profiles {
-        if table.get("codegen-backend").is_some() {
-            return Some(name.clone());
-        }
-        let Some(overrides) = table.get("package").and_then(toml::Value::as_table) else {
-            continue;
-        };
-        for (spec, override_table) in overrides {
-            if override_table.get("codegen-backend").is_some() {
-                return Some(format!("{name}.package.{spec}"));
-            }
-        }
+    config
+        .get("profile")?
+        .as_table()?
+        .iter()
+        .find_map(|(name, table)| first_backend_in_profile(name, table))
+}
+
+/// Return the first backend named by one profile, or by an override beneath it.
+///
+/// Kept separate from the loop above so each function holds one idea: which
+/// profiles exist, and which keys inside a profile can name a backend. The
+/// nested search would otherwise put two levels of `if` inside a `for` inside
+/// a `find_map`, which is past the nesting the code-health gate allows.
+fn first_backend_in_profile(name: &str, table: &toml::Value) -> Option<String> {
+    if table.get("codegen-backend").is_some() {
+        return Some(name.to_owned());
     }
-    None
+    table
+        .get("package")
+        .and_then(toml::Value::as_table)?
+        .iter()
+        .find(|(_, override_table)| override_table.get("codegen-backend").is_some())
+        .map(|(spec, _)| format!("{name}.package.{spec}"))
 }
 
 /// Neither route a backend can be named by is closed while the other is open.

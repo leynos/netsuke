@@ -249,15 +249,17 @@ def test_coverage_steps_assign_their_own_rustflags(path: Path, job: str) -> None
     assert steps, f"{path.name} job {job} should run the shared coverage action"
     for step in steps:
         env = require_mapping(step.get("env"), f"{path.name} coverage step env")
-        rustflags = env.get("RUSTFLAGS")
-        assert isinstance(rustflags, str), (
-            f"{path.name} job {job} must assign RUSTFLAGS at the coverage step, "
-            f"got {rustflags!r}"
-        )
-        assert "-D warnings" in rustflags, (
-            f"{path.name} job {job} must keep warnings denied while measuring, "
-            f"got {rustflags!r}"
-        )
+        match env.get("RUSTFLAGS"):
+            case str() as rustflags:
+                assert "-D warnings" in rustflags, (
+                    f"{path.name} job {job} must keep warnings denied while "
+                    f"measuring, got {rustflags!r}"
+                )
+            case other:
+                pytest.fail(
+                    f"{path.name} job {job} must assign RUSTFLAGS at the coverage "
+                    f"step, got {other!r}"
+                )
 
 
 @pytest.mark.parametrize(("path", "job"), COVERAGE_STEPS, ids=str)

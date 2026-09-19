@@ -2920,7 +2920,7 @@ for each draw and `order measured:` for the run as a whole, because a shuffle
 is not reconstructible after the fact — without the record, a table disagreeing
 with an earlier one cannot be told apart from a run that measured the variants
 in a different order, which is the exact confusion the shuffle exists to
-remove. Paste that record with any table you record, so the next reader can
+remove. Paste that record with any table recorded here, so the next reader can
 tell which it was.
 
 No table is recorded here yet, and the reason is worth keeping. The figures
