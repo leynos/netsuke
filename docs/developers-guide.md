@@ -3114,10 +3114,10 @@ Table: the harness test as a serialized group member, after the group landed.
 The rightmost column is the whole-run saving: the run's own end, less whichever
 of the trimmed group chain and the last non-group test finishes later. Read it
 against the mechanism rather than as a distribution, because the mechanism is
-what generalizes past the sample. The harness is never the last test to finish
-— the group's cheap tail members trail it by under seven seconds in every run —
-but a trim returns its occupancy rather than its exclusive tail, because the
-tail cannot start until the slot frees.
+what generalizes past the sample. The harness is never the last test to finish:
+the group's cheap tail members cannot start until it frees the slot, so they
+necessarily finish after it. But a trim returns its occupancy rather than its
+exclusive tail, because that same tail cannot start until the slot frees.
 
 That gives the figure its ceiling and its shape. **A trim can never return more
 than the test's own duration**, because the duration *is* the occupancy it
