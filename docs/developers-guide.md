@@ -1409,31 +1409,33 @@ Run these commands before finalizing any change:
 
 `make test` runs the Rust suite only, and `make lint` lints the Python sources
 without executing them, so neither gate runs the suites in
-`tests/workflow_contracts/` or under `scripts/tests/`. When the change touches
-a workflow, a workflow-contract suite, or the coverage artefact validators under
-`scripts/`, also run:
+`tests/workflow_contracts/` or under `scripts/tests/`. Two further targets
+cover them, and neither runs the other:
 
-- `make test-workflow-contracts`
-- `make test-coverage-artifact`
-- `make validate-coverage-artifact`
+- `make test-workflow-contracts` — when the change touches a workflow or a
+  workflow-contract suite. It holds the workflows under `.github/` to the
+  contracts the repository depends on and is the only gate that runs those
+  suites. It passes `--doctest-modules`, so the examples in those modules are
+  executed rather than read.
+- `make test-coverage-artifact` — when the change touches the coverage artefact
+  validators under `scripts/`. It is the pytest module under `scripts/tests/`,
+  so a validator change is untested unless it runs.
 
-`make test-workflow-contracts` holds the workflows under `.github/` to the
-contracts the repository depends on and is the only gate that runs those
-suites. It passes `--doctest-modules`, so the examples in those modules are
-executed rather than read.
+`make validate-coverage-artifact` is separate from both, and is not a test: it
+is the operator-run entry point for validating a downloaded artefact, and it
+needs `COVERAGE_ARTIFACT_DIR` to name an existing directory. Run it when
+inspecting an artefact by hand, not as part of the commit set.
 
-The coverage artefact suite is the pytest module under `scripts/tests/`, so a
-validator change is untested unless the commands above run. Two entry points
-form the boundary. `scripts/validate_coverage_artifact.py` owns the
-outer-directory checks and the recognized-LCOV text contract, and exposes its
-own narrow command line. `scripts/validate_coverage_archive.py` is the
-composition entry point; it runs those outer checks and then validates ZIP
-metadata before materializing the sole `lcov.info` member.
-`make validate-coverage-artifact` runs that composition entry point over the
-raw ZIP under inspection, with `COVERAGE_ARTIFACT_DIR` selecting the input
-directory and `validated-coverage` receiving the output. It treats the archive
-as hostile data and does not execute, import, or resolve paths recorded in the
-report.
+Two entry points form the coverage-artefact boundary.
+`scripts/validate_coverage_artifact.py` owns the outer-directory checks and the
+recognized-LCOV text contract, and exposes its own narrow command line.
+`scripts/validate_coverage_archive.py` is the composition entry point; it runs
+those outer checks and then validates ZIP metadata before materializing the sole
+`lcov.info` member. `make validate-coverage-artifact` runs that composition
+entry point over the raw ZIP under inspection, with `COVERAGE_ARTIFACT_DIR`
+selecting the input directory and `validated-coverage` receiving the output. It
+treats the archive as hostile data and does not execute, import, or resolve
+paths recorded in the report.
 
 When the change touches any Markdown file — documentation, ADRs, execplans, or
 the README — also run:
@@ -1500,12 +1502,15 @@ The trunk lane validates the report as data before it uploads it.
 `coverage-main.yml` stages `lcov.info` into a directory of its own and runs
 `scripts/validate_coverage_artifact.py` over that directory, because the
 generation action reports success for an empty report and the upload checks
-only that the file exists. The step must sit after the report is written,
-before the upload that sends it, and before `Show sccache statistics`, which
-`tests/workflow_contracts/sccache_contract_test.py` requires to follow every
-compile step in the lane. `make test-coverage-artifact` covers the validator
-directly; `tests/workflow_contracts/codescene_upload_contract_test.py` covers
-the lane that runs it.
+only that the file exists. The step must sit after the report is written and
+before the upload that sends it. It must also sit before
+`Show sccache statistics`: `tests/workflow_contracts/sccache_contract_test.py`
+requires that step to follow every compile step in the lane, so a check parked
+between the last compile and the statistics report would break the
+compiler-cache observability contract rather than merely reorder the lane.
+`make test-coverage-artifact` covers the validator directly;
+`tests/workflow_contracts/codescene_upload_contract_test.py` covers the lane
+that runs it.
 
 Workflow contract tests keep the boundary explicit: the pull-request coverage
 step must retain ratchet mode and pass the publication opt-out, the artefact
