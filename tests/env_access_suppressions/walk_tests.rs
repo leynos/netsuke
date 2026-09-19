@@ -6,9 +6,15 @@
 //! against the repository: a shape the repository does not happen to contain
 //! today is exactly the shape that would go unnoticed if the test read the real
 //! tree.
+//!
+//! The same reasoning governs the skip list's own justification, which is
+//! checked against a scratch repository holding the repository's `.gitignore`
+//! rather than against the working tree. A working tree answers with more than
+//! the repository's rules — nested tools write ignore files of their own — so
+//! asking it would make the answer depend on which tools had run.
 
 use super::{MACHINE_LOCAL_DIRECTORIES, collect_all_sources, is_scanned};
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use tempfile::tempdir;
@@ -103,7 +109,7 @@ fn a_machine_local_name_is_skipped_at_any_depth() -> Result<()> {
     Ok(())
 }
 
-/// Fail if the walk skips a name git would happily track.
+/// Fail if a skipped name is ignored only by a cache's own ignore file.
 ///
 /// The skip is justified by an appeal to `.gitignore`: a name git will not
 /// track is not one a compiled source can live under, so skipping it cannot
@@ -114,31 +120,79 @@ fn a_machine_local_name_is_skipped_at_any_depth() -> Result<()> {
 /// non-coverage this invariant exists to prevent, and it arrived through the
 /// list rather than through the walk.
 ///
+/// The question is asked of the *repository's* rules rather than of the working
+/// tree, because a working tree answers with more than those: `git check-ignore`
+/// also reads ignore files that nested tools write. Ruff drops a `.gitignore`
+/// holding `*` into `.ruff_cache` as a side effect of running, so asking the
+/// live tree made `.ruff_cache` pass on a machine where ruff had run and fail on
+/// a fresh clone — and `make test` can precede `make lint`, so the answer would
+/// have depended on the gate order. The rule has to hold on every checkout, so
+/// the repository's `.gitignore` is copied into a scratch repository and the
+/// question is put there. Nothing under the workspace is touched, and the answer
+/// no longer depends on which tools have run or on whether the sources are a
+/// checkout at all, which is also why no `git rev-parse` guard is needed for the
+/// copies cargo-mutants makes: this test brings its own repository.
+///
 /// `.git` is the one legitimate exception: git refuses to track anything
 /// beneath it whatever the ignore files say, so the appeal still holds even
 /// though `check-ignore` reports it as unignored. It is named here rather than
 /// excluded by a pattern, so a future name added to the list without an ignore
 /// rule is caught rather than grandfathered in.
 #[test]
-fn every_skipped_name_is_one_git_would_not_track() {
-    let root = std::env::var("CARGO_MANIFEST_DIR").expect("the manifest directory should be set");
-    let not_tracked = |name: &str| {
-        let status = std::process::Command::new("git")
-            .args(["check-ignore", "-q", &format!("{name}/probe.rs")])
-            .current_dir(&root)
-            .status()
-            .expect("git check-ignore should run");
-        status.success()
-    };
-    let unexplained: Vec<&str> = MACHINE_LOCAL_DIRECTORIES
-        .iter()
-        .copied()
-        .filter(|name| *name != ".git" && !not_tracked(name))
-        .collect();
-    assert!(
+fn every_skipped_name_is_one_git_would_not_track() -> Result<()> {
+    let root = Dir::open_ambient_dir(env!("CARGO_MANIFEST_DIR"), ambient_authority())
+        .context("open the workspace root")?;
+    let scratch = tempdir().context("create a scratch repository")?;
+    let scratch_path = Utf8Path::from_path(scratch.path())
+        .context("a temporary directory path should be valid UTF-8")?;
+    let scratch_root = Dir::open_ambient_dir(scratch_path, ambient_authority())
+        .context("open the scratch directory")?;
+    let ignore_rules = root
+        .read(".gitignore")
+        .context("read the repository's `.gitignore`")?;
+    scratch_root
+        .write(".gitignore", ignore_rules)
+        .context("copy the repository's `.gitignore` into the scratch repository")?;
+    let init = std::process::Command::new("git")
+        .args(["init", "--quiet"])
+        .current_dir(scratch_path)
+        .status()
+        .context("run git init in the scratch repository")?;
+    ensure!(init.success(), "git init failed in the scratch repository");
+
+    let mut unexplained = Vec::new();
+    for name in MACHINE_LOCAL_DIRECTORIES {
+        if name == ".git" {
+            continue;
+        }
+        if !is_ignored(scratch_path, name)? {
+            unexplained.push(name);
+        }
+    }
+    ensure!(
         unexplained.is_empty(),
-        "these names are skipped by the walk but git would track a source under them, \
-         so the walk would hide it rather than report it; add each to `.gitignore` (its \
-         sibling caches are already there) or reconsider the skip: {unexplained:?}"
+        "these names are skipped by the walk, but the repository's own `.gitignore` does \
+         not ignore them, so git would track a source under them and the walk would hide \
+         it rather than report it; add each to `.gitignore` beside its sibling caches, or \
+         reconsider the skip: {unexplained:?}"
     );
+    Ok(())
+}
+
+/// Return whether the repository at `root` ignores a source under `name`.
+///
+/// `check-ignore -q` reports by exit status: 0 ignored, 1 not ignored. Every
+/// other status is a real failure and propagates, so "git could not answer" is
+/// never read as "git would track this".
+fn is_ignored(root: &Utf8Path, name: &str) -> Result<bool> {
+    let status = std::process::Command::new("git")
+        .args(["check-ignore", "-q", &format!("{name}/probe.rs")])
+        .current_dir(root)
+        .status()
+        .context("run git check-ignore")?;
+    match status.code() {
+        Some(0) => Ok(true),
+        Some(1) => Ok(false),
+        _ => bail!("git check-ignore failed ({status})"),
+    }
 }

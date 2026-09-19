@@ -154,13 +154,14 @@ fn is_rust_source(name: &str) -> bool {
 /// inside another skipped directory or a cache.
 ///
 /// That appeal to `.gitignore` is only sound while it holds for every name, so
-/// it is enforced rather than trusted. It did not hold once: `.netsuke` is
-/// netsuke's own runtime state, but it was skipped while `git check-ignore`
-/// declined it — every sibling tool cache is listed, and it was missed — so a
-/// `.rs` file placed there would have been tracked, compiled, skipped by the
-/// walk, and reported by nobody. The name is now in `.gitignore` like its
-/// siblings, and the walk's self-test requires each skipped name to be one git
-/// would not track, with `.git` as the single named exception.
+/// it is enforced rather than trusted. It did not hold twice: `.netsuke` is
+/// netsuke's own runtime state, and `.ruff_cache` a tool cache, but both were
+/// skipped while the repository's `.gitignore` declined them — every sibling
+/// cache is listed, and they were missed — so a `.rs` file placed under either
+/// would have been tracked, compiled, skipped by the walk, and reported by
+/// nobody. Both names are now in `.gitignore` like their siblings, and the
+/// walk's self-test requires each skipped name to be one the repository's own
+/// rules ignore, with `.git` as the single named exception.
 ///
 /// The list is named rather than "anything dot-prefixed", and that distinction
 /// is the point. A dot-directory is not evidence of a cache: `.config`,
