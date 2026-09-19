@@ -1514,13 +1514,41 @@ above, which are disposable.
   10:09Z, `main` (`ef7ed760`, 10:24Z) included. The required `build-test` check
   is a *different* job and passes, as do `kani-smoke`, `netsukefile` and
   `release / metadata`.
-- [ ] Post-completion: a full review requested on `bb1d7f9b` and **pending** as
-  queue entry `cfcb03b5`, quoted at roughly 22 minutes. The branch is under
-  CodeRabbit's auto-pause ("active development"), and the walkthrough states
-  that `@coderabbitai review` triggers a single review despite the pause, which
-  is the command queued. This is a posted *request*, not a completed review:
-  the commit CodeRabbit actually inspects must be read back afterwards, because
-  the comment body does not pin a revision.
+- [x] Post-completion: the full review requested as queue entry `cfcb03b5`
+  **completed**. The request was posted against `bb1d7f9b` — a pre-rebase twin
+  of `b75575b9` — but the read-back shows CodeRabbit inspected `8de3c963`, the
+  remote head at the time it ran, returning `CHANGES_REQUESTED` at 14:03:48 and
+  re-editing the walkthrough to re-anchor both its `change_assessment_commit`
+  and its `final_review_risk_coverage` to `8de3c963`. The read-back is the
+  point: the queued comment body pins no revision, so only the review object's
+  own `commit_id` says what was actually inspected. This closes the first of
+  this branch's two outstanding review surfaces; the dispositions below close
+  the other.
+- [x] Post-completion: both of that review's findings disposed of, each
+  verified against the current source before any edit. The inline finding —
+  that both guides wrongly say the provider is read "rather than captured at
+  registration" — is **valid**: `register_functions` moves a `WallClock` into
+  the registered closure, so the clock *is* captured while the *instant* is not.
+  `src/stdlib/time/mod.rs:44-48`, `clock.rs:84`, ADR-008 and the technical
+  design all state this correctly, leaving the two guides as the outliers; both
+  now say registration captures the adapter and each call invokes it afresh.
+  The Observability pre-merge warning — a new one, absent from the first pass,
+  and not the User-Facing Documentation warning that the previous round
+  resolved — is also **valid**: it asks for a bounded debug field at the
+  clock-registration decision point, and PR #669 added exactly such an event
+  for the file filters one line below. `WallClock::source_label` now names the
+  provenance from a closed set, `register_with_config` records `clock_source`
+  alongside `registered stdlib time helpers`, and `Debug` reuses the same
+  accessor so the label has one definition.
+  `registration_reports_the_clock_source` covers both provenances and asserts
+  the event never carries a provider's instant; it lives in the integration
+  suite because `register_with_config` is public and emits the event there, not
+  in `time::register_functions`. The first attempt put it in `clock_tests.rs`,
+  where it could not see the event at all and failed with
+  `expected one registration event but captured []` — a reminder that the unit
+  module is the wrong side of the publicity boundary for a public entrypoint's
+  behaviour. Mutating `source_label` to report `system` for both turns the
+  injected case red, so the assertion has teeth rather than merely passing.
 - [x] Post-completion: re-targeted onto the current `origin/main` tip
   (`79545e12`, the 19-update GitHub-actions group bump) after the first rebase
   had landed at `07248a34`. The boundary for this re-target is the merge base
@@ -2655,6 +2683,42 @@ To be populated during implementation. Required entries:
     to copy the command out of `Makefile:314` rather than reconstruct it from
     memory. This is the same class of error as the stale-evidence lesson
     recorded below: a green reading that was never the reading the gate takes.
+
+19. `make check-fmt` is two gates behind one name, and passing the Markdown half
+    says nothing about the Rust half. The review-disposition commit was
+    canonicalized with `mdtablefix` and checked with `make markdownlint` and
+    `make spelling` — all green — and then failed `make check-fmt` anyway:
+
+    ```plaintext
+    cargo fmt --all -- --check
+    Diff in .../src/stdlib/time/clock.rs:125:
+    -        if self.is_system() { "system" } else { "injected" }
+    +        if self.is_system() {
+    +            "system"
+    +        } else {
+    +            "injected"
+    +        }
+    ```
+
+    Two spots, both handwritten one-liners that `rustfmt` would have split. The
+    same commit's new integration test hit the identical trap with an over-long
+    `assert!`. `Makefile:312` runs `cargo fmt --all -- --check` and then
+    `mdtablefix --check`, so a Rust change needs `cargo fmt --all` in the same
+    breath as the Markdown canonicalization; running either alone leaves the
+    other half unverified. The fix is one command, `cargo fmt --all`, and it
+    cost a full gate cycle to discover — the third re-run this branch has spent
+    on a check that was available locally and not run.
+
+20. The re-target boundary is the *current* merge base, not the one an earlier
+    rebase recorded. `git merge-base 8de3c963 origin/main` is `a273fad3`, which
+    is why the first rebase used that boundary; by the time of the re-target
+    `merge-base 99f242de origin/main` had moved to `07248a34`, and
+    `a273fad3..99f242de` counted 44 commits rather than the 40 the branch owns,
+    because four inherited `main` commits had entered the range in between.
+    Counting commits in a range is therefore not a way to size a branch: the
+    count is only the branch's when the lower bound is the exclusive replay
+    boundary. Recomputing `merge-base` before each replay, rather than reusing
+    the previous boundary, is what keeps the two from drifting.
 
 One lesson about evidence discipline, recorded because it cost a re-run: gate
 logs are named per branch, so a second run over the same branch silently
