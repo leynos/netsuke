@@ -1407,24 +1407,33 @@ Run these commands before finalizing any change:
 - `make doc-coverage`
 - `make test`
 
-When the change touches the standalone coverage artefact validators under
+`make test` runs the Rust suite only, and `make lint` lints the Python sources
+without executing them, so neither gate runs the suites in
+`tests/workflow_contracts/` or under `scripts/tests/`. When the change touches
+a workflow, a workflow-contract suite, or the coverage artefact validators under
 `scripts/`, also run:
 
+- `make test-workflow-contracts`
 - `make test-coverage-artifact`
 - `make validate-coverage-artifact`
 
-This suite is the pytest module under `scripts/tests/`; `make test` runs only
-the Rust suite and never executes it, so a validator change is untested unless
-these commands run. Two entry points form the boundary.
-`scripts/validate_coverage_artifact.py` owns the outer-directory checks and the
-recognized-LCOV text contract, and exposes its own narrow command line.
-`scripts/validate_coverage_archive.py` is the composition entry point; it runs
-those outer checks and then validates ZIP metadata before materializing the sole
-`lcov.info` member. `make validate-coverage-artifact` runs that composition
-entry point over the raw ZIP under inspection, with `COVERAGE_ARTIFACT_DIR`
-selecting the input directory and `validated-coverage` receiving the output. It
-treats the archive as hostile data and does not execute, import, or resolve
-paths recorded in the report.
+`make test-workflow-contracts` holds the workflows under `.github/` to the
+contracts the repository depends on and is the only gate that runs those
+suites. It passes `--doctest-modules`, so the examples in those modules are
+executed rather than read.
+
+The coverage artefact suite is the pytest module under `scripts/tests/`, so a
+validator change is untested unless the commands above run. Two entry points
+form the boundary. `scripts/validate_coverage_artifact.py` owns the
+outer-directory checks and the recognized-LCOV text contract, and exposes its
+own narrow command line. `scripts/validate_coverage_archive.py` is the
+composition entry point; it runs those outer checks and then validates ZIP
+metadata before materializing the sole `lcov.info` member.
+`make validate-coverage-artifact` runs that composition entry point over the
+raw ZIP under inspection, with `COVERAGE_ARTIFACT_DIR` selecting the input
+directory and `validated-coverage` receiving the output. It treats the archive
+as hostile data and does not execute, import, or resolve paths recorded in the
+report.
 
 When the change touches any Markdown file — documentation, ADRs, execplans, or
 the README — also run:
