@@ -46,9 +46,9 @@ from codescene_upload_invariants import (
     REPORT_VALIDATION_STEP,
     REPORT_VALIDATOR_SCRIPT,
     UPLOAD_PATH_INPUT,
-    step_named,
     upload_contract_offenders,
 )
+from lane_steps import step_named
 from workflow_loading import (
     COVERAGE_MAIN_WORKFLOW_PATH,
     job_steps,
@@ -61,6 +61,12 @@ if typ.TYPE_CHECKING:
 
 TRUNK_JOB = "coverage-upload"
 
+#: A full 40-character lowercase commit SHA, standing in for whatever
+#: revision the dependency updater last pinned. The contract checks the
+#: reference's identity and the pin's *shape*, never the revision, so any
+#: value of that shape exercises the rule the repository actually enforces.
+FIXTURE_PIN = "0" * 40
+
 #: A lane satisfying every clause of the contract. The negative cases below
 #: load it, vary one field, and assert the offender that results; a template
 #: that was itself non-compliant would make each of them pass for the wrong
@@ -70,7 +76,7 @@ jobs:
   {TRUNK_JOB}:
     steps:
       - name: {COVERAGE_STEP}
-        uses: {GENERATE_COVERAGE_ACTION}@abc123
+        uses: {GENERATE_COVERAGE_ACTION}@{FIXTURE_PIN}
         with:
           language: rust
           {OUTPUT_PATH_INPUT}: {COVERAGE_REPORT_PATH}
@@ -83,7 +89,7 @@ jobs:
         if: env.{CREDENTIAL_ENVIRONMENT_KEY} != ''
         env:
           {CREDENTIAL_ENVIRONMENT_KEY}: ${{{{ secrets.{CREDENTIAL_ENVIRONMENT_KEY} }}}}
-        uses: {UPLOAD_COVERAGE_ACTION}@abc123
+        uses: {UPLOAD_COVERAGE_ACTION}@{FIXTURE_PIN}
         with:
           {UPLOAD_PATH_INPUT}: {COVERAGE_REPORT_PATH}
           {COVERAGE_FORMAT_INPUT}: {COVERAGE_FORMAT_VALUE}
@@ -331,4 +337,37 @@ def test_the_detectors_report_a_variable_the_repository_does_not_declare() -> No
     assert upload_contract_offenders(steps), (
         "a gate on an undeclared repository variable must be reported; it "
         "would never open"
+    )
+
+
+@pytest.mark.parametrize("step_name", [COVERAGE_STEP, CODESCENE_UPLOAD_STEP])
+@pytest.mark.parametrize(
+    ("pin", "fault"),
+    [
+        ("v1.2.3", "a tag"),
+        ("main", "a branch"),
+        ("a576501", "an abbreviated SHA"),
+        ("A5765019912A8AB6882B12DB049C7CDE635F3A85", "an uppercase SHA"),
+        ("", "no pin at all"),
+    ],
+)
+def test_the_detectors_report_an_unpinned_action_reference(
+    step_name: str, pin: str, fault: str
+) -> None:
+    """Fail a reference that names the action at anything but a full commit SHA.
+
+    A tag or branch resolves to whatever its owner publishes next, so a
+    reviewed pin can be replaced without a commit here. The revision itself is
+    not asserted — that belongs to the dependency updater — so each case
+    varies only the pin's shape.
+    """
+    steps = clean_steps()
+    action = (
+        GENERATE_COVERAGE_ACTION
+        if step_name == COVERAGE_STEP
+        else UPLOAD_COVERAGE_ACTION
+    )
+    _step(steps, step_name)["uses"] = f"{action}@{pin}" if pin else action
+    assert upload_contract_offenders(steps), (
+        f"{step_name!r} pinned to {fault} must be reported"
     )
