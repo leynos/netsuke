@@ -287,7 +287,7 @@ def _staged_directory(script: str) -> str | None:
         The argument as written, or `None` when the flag is absent or bare.
     """
     match = re.search(
-        rf"--artifact-dir[=\s]+(?P<directory>\S+)",
+        r"--artifact-dir[=\s]+(?P<directory>\S+)",
         script,
     )
     if match is None:
@@ -304,6 +304,12 @@ def _copies_report_into(script: str, directory: str) -> bool:
     reads it from there, so a staged directory only means something if the
     report was put into it. An empty staged directory would make the validator
     fail for the wrong reason on a report that was fine.
+
+    Returns
+    -------
+    bool
+        Whether one line of the script names both the report and the
+        directory in a copying command.
     """
     return any(
         re.search(

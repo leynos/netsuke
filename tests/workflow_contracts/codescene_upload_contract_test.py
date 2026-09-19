@@ -207,9 +207,11 @@ def test_the_detectors_report_a_reordered_lane(step_name: str) -> None:
         # validator would refuse the empty directory and the lane would fail
         # for the wrong reason, having read no part of the report.
         (
-            'staged="$(mktemp --directory)"\n'
-            "uv run --no-project --python 3.14 "
-            'scripts/validate_coverage_artifact.py --artifact-dir "$staged"',
+            (
+                'staged="$(mktemp --directory)"\n'
+                "uv run --no-project --python 3.14 "
+                'scripts/validate_coverage_artifact.py --artifact-dir "$staged"'
+            ),
             "must copy",
         ),
     ],
