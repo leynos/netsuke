@@ -8,7 +8,10 @@ cache ownership, and oversubscribed worker counts.
 Run via ``make test-workflow-contracts``.
 """
 
+import typing as typ
+
 import pytest
+from fork_fallback import FORK_FALLBACK_KEYS, fork_fallback_offences
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
 from runner_placement_invariants import (
@@ -25,6 +28,7 @@ from runner_placement_invariants import (
     is_valid_windows_tool_path_sequence,
 )
 from runner_placement_mutations import (
+    mutate_fork_fallback_declarations,
     mutate_runner_assignments,
     mutate_save_condition,
     mutate_worker_flags,
@@ -39,6 +43,27 @@ RUNNER_MUTATIONS = (
     "wrong-ubicloud-image",
     "swapped-platforms",
     "intel-macos-replaced",
+)
+#: The lane each mutation makes invalid, where that is not the selected one.
+#: Both of these rewrite a lane of their own rather than the one under test:
+#: the coverage lane is the only one no fork can reach, and `netsukefile` is
+#: the only one whose fork arm is pinned to an image rather than to
+#: `ubuntu-latest`.
+_MUTATION_TARGETS: typ.Final[dict[str, str]] = {
+    "arm-where-no-fork-reaches": "coverage-main.coverage-upload",
+    "wrong-fork-image": "netsukefile-test.netsukefile",
+}
+
+FORK_FALLBACK_MUTATIONS = (
+    "valid",
+    "arm-dropped",
+    "guard-swapped",
+    "arms-swapped",
+    "wrong-fork-runner",
+    "hosted-on-both-arms",
+    "arm-where-no-fork-reaches",
+    "wrong-fork-image",
+    "line-break",
 )
 SEQUENCE_KINDS = ("ninja", "windows")
 CACHE_MUTATIONS = ("valid", "duplicate-path")
@@ -327,3 +352,39 @@ def test_disjunctive_save_conditions_are_rejected(condition: str) -> None:
     `||` at all.
     """
     assert is_trunk_only_save(condition) is False, f"condition={condition!r}"
+
+
+@settings(max_examples=32, derandomize=True, deadline=None)
+@example(mutation="guard-swapped", selected=0)
+@example(mutation="line-break", selected=0)
+@given(
+    mutation=st.sampled_from(FORK_FALLBACK_MUTATIONS),
+    selected=st.integers(min_value=0, max_value=len(FORK_FALLBACK_KEYS) - 1),
+)
+def test_generated_placements_reject_every_wrong_fork_arm(
+    mutation: str, selected: int
+) -> None:
+    """Accept a placement only when every lane declares the arm it should.
+
+    Six ways to get it wrong, and each has to fail. A dropped arm leaves the
+    lane unreachable from a fork. A swapped guard branches on a sibling field
+    that parses and evaluates, so the declaration still looks right. Swapped
+    arms send the fork to the runner it cannot obtain, and a hosted runner of
+    the wrong platform sends it somewhere it can reach but cannot build on. A
+    hosted runner on both
+    arms takes the lane off Ubicloud entirely while still looking like a
+    fallback. An arm on the push-only coverage lane is a branch nothing takes.
+    A line break inside the expression is evaluated by GitHub regardless, so no
+    run would report it.
+    """
+    key = FORK_FALLBACK_KEYS[selected]
+    declarations = mutate_fork_fallback_declarations(mutation, key)
+    offences = fork_fallback_offences(declarations)
+    # The exact set, not merely a non-empty one. A reading that reported some
+    # other lane would satisfy "an invalid mutation is refused" while saying
+    # nothing true about the lane the mutation touched, and a fix aimed at the
+    # reported lane would leave the real one wrong.
+    expected = [] if mutation == "valid" else [_MUTATION_TARGETS.get(mutation, key)]
+    assert offences == expected, (
+        f"mutation={mutation!r}, key={key!r}: expected {expected!r}, got {offences!r}"
+    )

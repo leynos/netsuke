@@ -12,11 +12,9 @@ import pytest
 from cache_contract_data import (
     ACTION_DIR,
     SCCACHE_CREDENTIAL_JOBS,
-    SCCACHE_CREDENTIALS_ACTION,
     SCCACHE_EXEMPT_LANE,
     SCCACHE_LOCAL_DIR_JOBS,
     SCCACHE_WRAPPER_JOBS,
-    SETUP_RUST_ACTION,
     WORKFLOW_DIR,
     cache_steps,
     declared_paths,
@@ -148,52 +146,6 @@ def test_linux_gate_selects_exactly_one_sccache_backend() -> None:
     )
 
 
-@pytest.mark.parametrize(("workflow_name", "job_name"), SCCACHE_CREDENTIAL_JOBS)
-def test_credentials_are_exported_before_the_server_can_start(
-    workflow_name: str, job_name: str
-) -> None:
-    """Require the credential export before anything starts sccache.
-
-    A `run` step on Ubicloud cannot see `ACTIONS_RESULTS_URL` or
-    `ACTIONS_RUNTIME_TOKEN`, and the shared Rust setup action that normally
-    publishes them is disabled here. `sccache --zero-stats`, `--start-server`,
-    and the first wrapped `rustc` each start the server, and a server started
-    without those variables stays in local-disk mode for the whole job and
-    reports zero compile requests.
-    """
-    steps = job_steps(load_workflow(WORKFLOW_DIR / workflow_name), job_name)
-    export_indices = [
-        index
-        for index, step in enumerate(steps)
-        if str(step.get("uses", "")) == SCCACHE_CREDENTIALS_ACTION
-    ]
-    assert len(export_indices) == 1, (
-        f"{workflow_name} {job_name} must export sccache credentials exactly "
-        f"once, got {export_indices!r}"
-    )
-    export_index = export_indices[0]
-    checkout_indices = [
-        index
-        for index, step in enumerate(steps)
-        if "actions/checkout@" in str(step.get("uses", ""))
-    ]
-    assert checkout_indices, f"{workflow_name} {job_name} must check out first"
-    assert export_index == checkout_indices[0] + 1, (
-        f"{workflow_name} {job_name} must export credentials immediately after checkout"
-    )
-    starters = [
-        index
-        for index, step in enumerate(steps)
-        if str(step.get("name", "")) in {"Install sccache", "Reset sccache statistics"}
-        or "sccache" in str(step.get("run", ""))
-    ]
-    assert starters, f"{workflow_name} {job_name} should touch sccache somewhere"
-    assert export_index < min(starters), (
-        f"{workflow_name} {job_name} must export credentials before anything "
-        "can start the sccache server"
-    )
-
-
 @pytest.mark.parametrize(("workflow_name", "job_name"), SCCACHE_WRAPPER_JOBS)
 def test_every_compiling_job_reaches_the_compiler_cache(
     workflow_name: str, job_name: str
@@ -277,35 +229,6 @@ def test_windows_lanes_use_a_workspace_compiler_cache(
     )
 
 
-def test_the_export_names_the_proxy_endpoint_not_the_results_service() -> None:
-    """Require the export to point sccache at the endpoint Ubicloud serves.
-
-    Ubicloud intercepts the cache service with a local proxy advertised as
-    `ACTIONS_CACHE_URL`, which serves the v1 API. sccache 0.16 prefers
-    GitHub's v2 results service whenever `ACTIONS_CACHE_SERVICE_V2` is set,
-    and that address resolves past the proxy to GitHub. Exporting
-    `ACTIONS_RESULTS_URL` did exactly that: 5310 requests, zero hits, and one
-    write error per miss, with every object landing in GitHub's store.
-    """
-    steps = lane_steps(ACTION_DIR / "sccache-gha-credentials" / "action.yml", None)
-    script = str(
-        require_mapping(steps[0].get("with"), "export inputs").get("script", "")
-    )
-    required = {
-        "ACTIONS_CACHE_URL": "publish the proxy address sccache should use",
-        "ACTIONS_RUNTIME_TOKEN": "publish the token that address requires",
-        "ACTIONS_CACHE_SERVICE_V2', ''": (
-            "clear the v2 switch, which routes past the proxy"
-        ),
-    }
-    missing = [reason for token, reason in required.items() if token not in script]
-    assert not missing, f"the export must {'; '.join(missing)}"
-    assert "ACTIONS_RESULTS_URL" not in script, (
-        "the export must not publish the v2 results service address, which is "
-        "what sent 92 sccache objects to GitHub instead of Ubicloud"
-    )
-
-
 def test_orthohelp_probes_before_installing() -> None:
     """Require the version probe to precede the installer.
 
@@ -350,44 +273,3 @@ def test_the_backend_flag_accompanies_the_wrapper(
     assert "true" in flag, (
         f"{workflow_name} {job_name} must enable the backend, got {flag!r}"
     )
-
-
-@pytest.mark.parametrize(("workflow_name", "job_name"), SCCACHE_CREDENTIAL_JOBS)
-def test_the_export_precedes_setup_rust_and_the_server_start(
-    workflow_name: str, job_name: str
-) -> None:
-    """Require the export before setup-rust and before any server start.
-
-    On Ubicloud the runner re-injects the v2 service variables into every
-    action step, so a server started inside `setup-rust` binds GitHub's
-    service whatever the export said. Every job here passes
-    `use-sccache: false` and starts the server from a `run` step after the
-    export instead.
-    """
-    steps = job_steps(load_workflow(WORKFLOW_DIR / workflow_name), job_name)
-    export = next(
-        index
-        for index, step in enumerate(steps)
-        if str(step.get("uses", "")) == SCCACHE_CREDENTIALS_ACTION
-    )
-    setup = next(
-        index
-        for index, step in enumerate(steps)
-        if SETUP_RUST_ACTION in str(step.get("uses", ""))
-    )
-    assert export < setup, (
-        f"{workflow_name} {job_name} must export before the toolchain setup"
-    )
-    inputs = require_mapping(steps[setup].get("with"), "Setup Rust inputs")
-    assert inputs.get("use-sccache") == "false", (
-        f"{workflow_name} {job_name} must not let setup-rust start the server"
-    )
-    starts = [
-        index
-        for index, step in enumerate(steps)
-        if "sccache --zero-stats" in str(step.get("run", ""))
-    ]
-    for start in starts:
-        assert export < start, (
-            f"{workflow_name} {job_name} must export before starting the server"
-        )

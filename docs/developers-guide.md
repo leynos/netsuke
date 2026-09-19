@@ -748,6 +748,69 @@ Table: CI lane runner shapes and concurrency settings.
 | `ci-windows.yml` `lint-windows`       | `windows-latest`                  | `BUILD_JOBS=-j 4`, `NEXTEST_BUILD_JOBS=--build-jobs 4`, `NEXTEST_TEST_JOBS=-j 4` |
 | `ci-windows.yml` `build-test-windows` | `windows-latest`                  | `BUILD_JOBS=-j 4`, `NEXTEST_BUILD_JOBS=--build-jobs 4`, `NEXTEST_TEST_JOBS=-j 4` |
 
+#### The fork arm on the pull-request lanes
+
+A pull request from a fork cannot obtain a Ubicloud runner, so the three lanes
+that serve pull requests, `build-test`, `kani-smoke`, and `netsukefile`, name
+their runner through an expression rather than a label:
+
+```yaml
+runs-on: >-
+  ${{ github.event.pull_request.head.repo.fork
+  && 'ubuntu-latest' || 'ubicloud-standard-4-ubuntu-2404' }}
+```
+
+Without the arm the lane never starts on a fork's pull request, and the branch
+ruleset waits on a required check that will not report. It presents as a pull
+request stuck on a pending check rather than as a placement fault.
+
+Two of those lanes also serve `push`. No second condition is needed: on a push
+the pull-request context is null, so the expression takes the Ubicloud arm.
+
+The fork arm is pinned per lane rather than shared, and `FORK_FALLBACK_RUNNERS`
+in `tests/workflow_contracts/fork_fallback.py` records which label each takes.
+`build-test` and `kani-smoke` fall back to `ubuntu-latest`; `netsukefile` falls
+back to `ubuntu-22.04`, because that lane exists for Ubuntu 22.04's older glibc
+and keeps `NETSUKE_RUNNER_IMAGE: ubuntu2204`. A fork's pull request sent to
+`ubuntu-latest` would run on a newer image, so the one regression the lane
+exists to catch would pass the required check and appear only after merge. The
+mapping is proved by a mutation that sends `netsukefile` to `ubuntu-latest`:
+hosted, Linux, and the right answer for every other lane, so nothing but a
+per-lane expectation separates it.
+
+The sccache credential export is guarded on the same arm. The action at
+`.github/actions/sccache-gha-credentials` clears sccache's v2 switch and
+publishes Ubicloud's proxy address, which is correct only on a Ubicloud runner.
+On a fork's GitHub-hosted run that address is GitHub's own or empty, and the
+action's own verification step then fails the job, because
+`SCCACHE_GHA_ENABLED` is `true`. Both lanes that carry the export and a fork
+arm declare `if: github.event.pull_request.head.repo.fork != true`;
+`coverage-upload` carries the export and no fork arm, so its export is
+unconditional and the contract asserts that too. A guard there would switch the
+export off on the only runs the lane has.
+`test_the_credential_export_runs_on_the_owned_arm_alone` reads both cases, and
+asserts the guard is satisfiable as well as present: `== true` in place of
+`!= true` disables the export on this repository's own branches while every
+other assertion about it goes on passing.
+
+Every other Ubicloud lane keeps its plain label, and the contract asserts that
+too, so the expression does not spread by imitation. `coverage-upload` is push
+and dispatch only. Both jobs in `coverage-pr-submit.yml` trigger on
+`workflow_run`, which runs in this repository's context whatever the
+originating pull request was, so no fork ever selects their runner.
+`release.yml` `build-linux` is called rather than triggered.
+
+The table above records the runner this repository's own branches get. Every
+rule that sizes a lane reads that arm, through `owned_runner` in
+`tests/workflow_contracts/fork_fallback.py`: a fork's run is a GitHub-hosted
+fallback whose shape the worker bounds deliberately do not govern.
+
+Keep the continuation at the same indent as the first line. A more-indented
+line inside a folded scalar keeps its break, so the expression arrives with a
+newline inside it. GitHub evaluates it anyway and the lane runs, which is why a
+green run is not evidence that the declaration is well-formed;
+`test_no_runs_on_declaration_carries_a_line_break` is what reads it.
+
 `build-test` and `coverage-upload` are the two instrumented lanes and both run
 on `ubicloud-standard-4-ubuntu-2404`, declaring `LINUX_LANE_VCPUS: '4'`. The
 merge gate sets `BUILD_JOBS: -j 4`, `CARGO_BUILD_JOBS: '4'` and
@@ -7060,6 +7123,27 @@ override bounds the tests its filter matches and the profile's own bounds the
 rest, so deleting the base allowance while leaving the Windows override behind
 would still report a 420 s largest budget while every test the override does
 not match ran with no bound at all.
+
+### Trybuild targets, and the list that rots apart
+
+A per-test `terminate-after` and a name-based override list are a pair that
+drifts. The list is written once against the names of the day and is never
+re-derived, and neither a passing run nor a green gate notices a target that
+has fallen out of it, because the cost only appears on a cold cache. A trybuild
+target builds a scratch crate against this workspace's dependency graph, so it
+is the cost that overruns first.
+
+`tests/workflow_contracts/trybuild_override_test.py` discovers the targets from
+the tree rather than listing them, and requires each to be named in an
+override. This repository has none today, and the contract pins that: an empty
+set is not a reason to omit the rule, it is the state the rule must notice
+leaving. A harness added tomorrow inherits the 300 s base allowance, which is
+sized for a test that compiles nothing.
+
+The discovery reads what a file constructs, not what it mentions.
+`tests/sha2_migration_guard_tests.rs` documents at length why a trybuild
+harness was removed during the Polonius migration, and a text match would
+report it as a target that exists.
 
 The lane reading takes its documents as a parameter, defaulting to the
 repository's own workflows. Reading the filesystem happens at one named

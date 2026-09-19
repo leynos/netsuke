@@ -13,6 +13,12 @@ module so `runner_placement_properties_test.py` stays within the
 repository's 400-line file cap. It contains no tests of its own.
 """
 
+from fork_fallback import (
+    FORK_FALLBACK_KEYS,
+    FORK_FALLBACK_RUNNER,
+    FORK_FALLBACK_RUNNERS,
+    FORK_GUARD,
+)
 from runner_placement_invariants import (
     REQUIRED_RUNNER_ASSIGNMENTS,
     UBICLOUD_COMPAT_LABEL,
@@ -192,3 +198,138 @@ def mutate_save_condition(mutation: str) -> str:
                 "github.event_name == 'push' && github.ref == 'refs/heads/main' "
                 "&& steps.caches.outputs.registry-hit != 'true'"
             )
+
+
+def _declaration(guard: str, fork: str, owned: str) -> str:
+    """Render a placement expression from its guard and two arms."""
+    return f"${{{{ {guard} && '{fork}' || '{owned}' }}}}"
+
+
+def valid_fork_fallback_declarations() -> dict[str, str]:
+    """Return the `runs-on` every lane should declare, as written.
+
+    A pull-request lane gets the expression over the runner the assignment
+    table records for it; every other lane gets that runner outright.
+
+    Returns
+    -------
+    dict[str, str]
+        Assignment key to the declaration that lane should carry.
+    """
+    return {
+        key: (
+            _declaration(FORK_GUARD, FORK_FALLBACK_RUNNERS[key], runner)
+            if key in FORK_FALLBACK_KEYS
+            else runner
+        )
+        for key, runner in REQUIRED_RUNNER_ASSIGNMENTS.items()
+    }
+
+
+def _apply_arm_dropped_mutation(declarations: dict[str, str], key: str) -> None:
+    """Replace a pull-request lane's expression with its owned arm alone."""
+    declarations[key] = REQUIRED_RUNNER_ASSIGNMENTS[key]
+
+
+def _apply_guard_swapped_mutation(declarations: dict[str, str], key: str) -> None:
+    """Branch on a sibling field that parses and evaluates just as well."""
+    sibling = FORK_GUARD.rsplit(".", 1)[0] + ".private"
+    declarations[key] = _declaration(
+        sibling, FORK_FALLBACK_RUNNERS[key], REQUIRED_RUNNER_ASSIGNMENTS[key]
+    )
+
+
+def _apply_arms_swapped_mutation(declarations: dict[str, str], key: str) -> None:
+    """Send the fork to Ubicloud, which is the runner it cannot obtain."""
+    declarations[key] = _declaration(
+        FORK_GUARD, REQUIRED_RUNNER_ASSIGNMENTS[key], FORK_FALLBACK_RUNNERS[key]
+    )
+
+
+def _apply_wrong_fork_runner_mutation(declarations: dict[str, str], key: str) -> None:
+    """Send the fork to a hosted runner of the wrong platform.
+
+    The owned arm stays correct, so only the fork arm is wrong. Without this
+    the fork-arm check is dead: swapping the arms or hosting both of them is
+    caught by the owned arm instead, and dropping the check changes nothing any
+    case can see.
+    """
+    declarations[key] = _declaration(
+        FORK_GUARD, "windows-latest", REQUIRED_RUNNER_ASSIGNMENTS[key]
+    )
+
+
+def _apply_hosted_on_both_arms_mutation(declarations: dict[str, str], key: str) -> None:
+    """Fall back on both arms, so the lane quietly stops using Ubicloud."""
+    declarations[key] = _declaration(
+        FORK_GUARD, FORK_FALLBACK_RUNNERS[key], FORK_FALLBACK_RUNNERS[key]
+    )
+
+
+def _apply_arm_where_no_fork_reaches_mutation(
+    declarations: dict[str, str], key: str
+) -> None:
+    """Give the coverage upload lane an arm no event can ever take."""
+    target = "coverage-main.coverage-upload"
+    declarations[target] = _declaration(
+        FORK_GUARD, FORK_FALLBACK_RUNNER, REQUIRED_RUNNER_ASSIGNMENTS[target]
+    )
+
+
+def _apply_wrong_fork_image_mutation(declarations: dict[str, str], key: str) -> None:
+    """Send the compatibility lane's fork to the current hosted image.
+
+    `ubuntu-latest` is hosted, is Linux, and is the right answer for every
+    other lane, so the platform check and the owned-arm check both pass. Only a
+    per-lane expectation separates it from `ubuntu-22.04`. Without this case
+    the mapping is dead: one shared constant reads identically over every lane
+    the repository actually declares.
+    """
+    target = "netsukefile-test.netsukefile"
+    declarations[target] = _declaration(
+        FORK_GUARD, FORK_FALLBACK_RUNNER, REQUIRED_RUNNER_ASSIGNMENTS[target]
+    )
+
+
+def _apply_line_break_mutation(declarations: dict[str, str], key: str) -> None:
+    """Indent the continuation deeper, which keeps the break in the value."""
+    declarations[key] = _declaration(
+        FORK_GUARD, FORK_FALLBACK_RUNNERS[key], REQUIRED_RUNNER_ASSIGNMENTS[key]
+    ).replace(" && ", "\n&& ", 1)
+
+
+#: Maps each non-identity fork-fallback mutation to the helper that applies it.
+_FORK_FALLBACK_MUTATIONS = {
+    "arm-dropped": _apply_arm_dropped_mutation,
+    "guard-swapped": _apply_guard_swapped_mutation,
+    "arms-swapped": _apply_arms_swapped_mutation,
+    "wrong-fork-runner": _apply_wrong_fork_runner_mutation,
+    "hosted-on-both-arms": _apply_hosted_on_both_arms_mutation,
+    "arm-where-no-fork-reaches": _apply_arm_where_no_fork_reaches_mutation,
+    "wrong-fork-image": _apply_wrong_fork_image_mutation,
+    "line-break": _apply_line_break_mutation,
+}
+
+
+def mutate_fork_fallback_declarations(mutation: str, key: str) -> dict[str, str]:
+    """Apply one bounded fork-fallback mutation to the valid declarations.
+
+    Parameters
+    ----------
+    mutation
+        The mutation name, or ``"valid"`` for no change.
+    key
+        The pull-request lane the mutation targets. Ignored by mutations that
+        always target a fixed lane.
+
+    Returns
+    -------
+    dict[str, str]
+        Assignment key to the job's ``runs-on`` as written, with the named
+        mutation applied.
+    """
+    declarations = valid_fork_fallback_declarations()
+    apply_mutation = _FORK_FALLBACK_MUTATIONS.get(mutation)
+    if apply_mutation is not None:
+        apply_mutation(declarations, key)
+    return declarations
