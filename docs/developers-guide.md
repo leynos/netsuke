@@ -4468,6 +4468,16 @@ whole rather than truncated. The scanner lives beside the contract in
 its self-tests in `scanner_tests.rs` pin each shape it must report and each
 innocent source it must not.
 
+The line anchor is deliberate, and the shapes it declines to read are the ones
+nothing needs it to read. An attribute written mid-line after a `;` cannot
+suppress anything there: `mod inner; #![allow(...)]` on one line is rejected as
+"an inner attribute is not permitted in this context", so it is an error rather
+than a hole. The mid-line *outer* form does compile, and is covered twice over —
+`rustfmt` moves it onto its own line, which `make check-fmt` enforces, and
+`clippy::allow_attributes` rejects it whether or not it has been moved. Reading
+only at the start of a line therefore misses no reachable suppression, and it
+is what keeps the scan off prose that quotes an attribute without being one.
+
 The banned set follows the lint hierarchy rather than spelling one name.
 `disallowed_methods` is declared in Clippy's `style` group, so allowing that
 group silences the policy just as naming the lint does; `clippy::all` sits

@@ -14,6 +14,18 @@
 //! An `allow` nested in a `cfg_attr` is read too. It is the same suppression
 //! written one token differently, and `clippy::allow_attributes` does not fire
 //! on the inner form, so nothing else reports it.
+//!
+//! The line anchor is deliberate, and the attributes it declines to read are
+//! the ones nothing needs it to. An attribute written mid-line after a `;` is
+//! not legal where it would have to be to suppress anything: measured, `mod
+//! inner; #![allow(...)]` on one line is rejected as "an inner attribute is
+//! not permitted in this context", so it cannot silence the policy whatever
+//! the scan does with it. The mid-line *outer* form is legal, and is covered
+//! twice over — `rustfmt` moves it to its own line, which `make check-fmt`
+//! enforces, and `clippy::allow_attributes` rejects it outright whether or not
+//! it has been moved. So no reachable suppression is missed by anchoring at
+//! the start of a line, while the anchor is what keeps the scan off prose that
+//! quotes an attribute without being one.
 
 use super::mask::mask_non_code;
 use super::policy::{is_offence, named_lints};
