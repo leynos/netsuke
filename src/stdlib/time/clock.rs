@@ -125,7 +125,11 @@ impl WallClock {
     /// telemetry field: registration can report which clock it installed
     /// without revealing the provider behind it.
     pub(crate) const fn source_label(&self) -> &'static str {
-        if self.is_system() { "system" } else { "injected" }
+        if self.is_system() {
+            "system"
+        } else {
+            "injected"
+        }
     }
 }
 

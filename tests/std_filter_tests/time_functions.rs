@@ -129,7 +129,10 @@ fn registration_reports_the_clock_source(
         } else {
             fallible::stdlib_env()
         };
-        assert!(installed.is_ok(), "registration should succeed: {installed:?}");
+        assert!(
+            installed.is_ok(),
+            "registration should succeed: {installed:?}"
+        );
         events.snapshot()
     });
 
