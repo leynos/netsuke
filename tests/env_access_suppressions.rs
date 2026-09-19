@@ -129,14 +129,59 @@ fn is_rust_source(name: &str) -> bool {
     Utf8Path::new(name).extension().is_some_and(|it| it == "rs")
 }
 
+/// Directories the coverage walk does not descend into.
+///
+/// These are the machine-local directories the repository declares in
+/// `.gitignore`, plus the compiler's output and the caches of the tools this
+/// repository runs. Each belongs to a machine rather than to the repository, so
+/// each may hold a Rust source that is not a source here: `target` holds
+/// generated and vendored output, and a package cache holds the extracted
+/// sources of third-party crates — a Python distribution with a Rust extension
+/// ships `.rs` files with it. Descending into one would make the gate turn on
+/// what a cache happened to contain on one machine, which is the thing it must
+/// not do.
+///
+/// The list is named rather than "anything dot-prefixed", and that distinction
+/// is the point. A dot-directory is not evidence of a cache: `.config`,
+/// `.github`, and `.rules` are tracked repository content, and Cargo will
+/// compile a target declared under any directory at all, hidden or not. A walk
+/// that skipped every dot-prefixed name would therefore neither scan nor report
+/// a target sitting in one, which is precisely the silent non-coverage this
+/// invariant exists to prevent. Walking them instead turns that into a loud
+/// failure that names the source. Where the two rules disagree, the tie breaks
+/// towards reporting: an entry that should have been here but is missing costs
+/// a false failure that names a real file, while an entry that should not be
+/// here hides a source.
+const MACHINE_LOCAL_DIRECTORIES: [&str; 15] = [
+    "__pycache__",
+    ".claude",
+    ".crush",
+    ".git",
+    ".grepai",
+    ".hypothesis",
+    ".memdb",
+    ".netsuke",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".uv-cache",
+    ".uv-tools",
+    ".vtcode",
+    "memories",
+    "target",
+];
+
 /// Append every Rust source the coverage invariant governs, in no set order.
 ///
-/// The walk descends everything except two kinds of entry, and neither is
-/// handwritten source: `target`, which the compiler writes rather than reads,
-/// and dot-prefixed names, which hold tooling state and machine-local caches.
-/// Skipping the caches is not just economy — a gate that read them would turn
-/// on what a cache happens to contain on one machine, and this one must not.
-fn collect_all_sources(root: &Dir, directory: &str, found: &mut Vec<String>) -> Result<()> {
+/// The walk descends everything but [`MACHINE_LOCAL_DIRECTORIES`], which is
+/// where the generated output and the third-party sources live. Everything
+/// else is repository content until proven otherwise — including a
+/// dot-directory — so a compiled source anywhere in the workspace is found and
+/// named rather than passed over.
+pub(crate) fn collect_all_sources(
+    root: &Dir,
+    directory: &str,
+    found: &mut Vec<String>,
+) -> Result<()> {
     for entry_result in root
         .read_dir(directory)
         .with_context(|| format!("read `{directory}`"))?
@@ -145,7 +190,7 @@ fn collect_all_sources(root: &Dir, directory: &str, found: &mut Vec<String>) -> 
         let name = entry
             .file_name()
             .with_context(|| format!("read an entry name in `{directory}`"))?;
-        if name == "target" || name.starts_with('.') {
+        if MACHINE_LOCAL_DIRECTORIES.contains(&name.as_str()) {
             continue;
         }
         let path = join_path(directory, &name);
@@ -175,7 +220,7 @@ fn join_path(directory: &str, name: &str) -> String {
 /// the standalone sources. Coverage is what makes the scan's silence mean
 /// something: a source outside this set is not "clean", it is unread, and the
 /// difference is the whole point of the invariant that calls this.
-fn is_scanned(path: &str) -> bool {
+pub(crate) fn is_scanned(path: &str) -> bool {
     STANDALONE_COMPILED_SOURCES.contains(&path)
         || COMPILED_SOURCE_ROOTS.iter().any(|root| {
             path.strip_prefix(root)
@@ -311,3 +356,6 @@ mod scanner_tests;
 
 #[path = "env_access_suppressions/spelling_tests.rs"]
 mod spelling_tests;
+
+#[path = "env_access_suppressions/walk_tests.rs"]
+mod walk_tests;
