@@ -3,9 +3,10 @@
 ## Status
 
 Accepted. The command placeholder set, the backtick handling boundary, and the
-scope of the `shlex` guard are fixed as stated below. Roadmap item 4.4.1 and
-the same change set carry them to users in a new `README.md` section, *Security
-and command interpolation*, in every translated README.
+scope of the `shlex` guard are fixed as stated below. Roadmap item 4.4.1 will
+carry them to users in a new `README.md` section, *Security and command
+interpolation*, in every translated README; that section is planned work, not
+yet published, and this record is authoritative until it lands.
 
 ## Date
 

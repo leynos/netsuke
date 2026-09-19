@@ -1786,6 +1786,63 @@ it is the canonical wording the other three converge on.
 
   Date/Author: 2026-09-19, implementing agent.
 
+- Decision `D-CODERABBIT-EP-M2`: the milestone CodeRabbit pass over `efb5ea17`
+  returned five findings, all severity *minor*, two of them duplicates of each
+  other. Two were accepted as real; three were rejected as already
+  dispositioned or as self-defeating.
+
+  The accepted set:
+
+  - The `**Settled.**` paragraph in
+    `docs/formal-verification-methods-in-netsuke.md:275` claimed in the present
+    tense that the contract "is documented for users in the README under
+    *Security and command interpolation*". That section does not exist yet:
+    EP-M3 creates it. This was a genuine factual error **introduced by
+    `efb5ea17`**, which is the sharper form of the irony — the commit exists to
+    remove a two-documents-disagree window and it opened a
+    document-claims-something-untrue window instead. Fixed by moving the claim
+    to future tense: "Roadmap item 4.4.1 will document this contract for users
+    in the README under *Security and command interpolation*, and it is decided
+    in ADR-027." The same review finding was raised against ADR-027's `Status`
+    line, where `5f13b35c` had already reworded it once; that wording was still
+    ambiguous, so it now reads "will carry them to users … that section is
+    planned work, not yet published, and this record is authoritative until it
+    lands."
+  - `docs/formal-verification-methods-in-netsuke.md` §*Kani for command
+    interpolation* and §*Command placeholder contract*, and
+    `docs/developers-guide.md`'s scanner paragraph, all read as though the
+    unmatched-backtick parity check and the `shlex` guard applied to both recipe
+    kinds. They apply to `command:` only. Verified against the code before
+    accepting: `is_valid_command_for_shell`
+    (`src/ir/cmd_interpolate/mod.rs:227-231`) is called only from
+    `interpolate_command_with_bindings` (`:195`), while
+    `interpolate_script_with_bindings` (`:208`) routes to `substitute_script`,
+    which never calls it. The marker-in-backticks invariant *is* shared —
+    `append_substitution_or_character`
+    (`src/ir/cmd_interpolate/script_substitution.rs:222-243`) rejects it too —
+    so the fix separates the invariant from the two follow-on checks rather
+    than demoting both. Note this is a **pre-existing** over-broad sentence in
+    the formal-verification document, carried unchanged into the rewritten
+    paragraph; only the developers-guide paragraph is a new claim.
+
+  The rejected set, with reasons:
+
+  - *"Change the plan's README section label at
+    `docs/execplans/4-4-1-….md:966` from `What Netsuke does not protect you
+    from` to ... `manifest authors`, while leaving the README wording
+    unchanged."* Rejected. Line 966 prescribes a literal bold label **for
+    `README.md`**, where `docs/documentation-style-guide.md:39` permits second
+    person; the finding's own carve-out concedes this. Following it would make
+    the plan prescribe a label that deliberately does not match the artefact
+    it describes. This is the same class of finding `D-CODERABBIT-EP-M1`
+    already reasoned through; the plan's framing around the quote was fixed
+    then, and the quote itself stays.
+  - *Two findings requesting the ADR date change to 18 September 2026.* Already
+    rejected at EP-M1 as factually wrong, and re-verified now: `date -u` reports
+    2026-09-19. Not re-litigated.
+
+  Date/Author: 2026-09-19, implementing agent.
+
 ## Outcomes & retrospective
 
 Not yet started. To be completed at EP-M5.

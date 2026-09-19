@@ -66,10 +66,11 @@ compact, load-bearing, and security-sensitive. It recognizes the internal
 `INS_TOKEN` and `OUTS_TOKEN` markers emitted by manifest rendering in both
 recipe kinds, and additionally the short forms `$in` and `$out` in `script:`
 recipes; in a `command:` those two are literal shell variables, as `$ins` and
-`$outs` always are. POSIX-compatible routes reject markers inside backticks and
-reject commands when backticks are unmatched or the interpolated result fails
-the current `shlex` guard. PowerShell treats backticks as native escapes rather
-than protected regions.[^8]
+`$outs` always are. On POSIX-compatible routes both recipe kinds reject markers
+inside backticks; `command:` text additionally rejects unmatched backticks and
+a substituted result that fails the current `shlex` guard, while scripts are
+exempt from those two checks. PowerShell treats backticks as native escapes
+rather than protected regions.[^8]
 
 Kani proves two allocation-free kernels. An eight-character symbolic window
 with a symbolic offset proves that literal `$in` and `$out` prefixes never
@@ -268,12 +269,14 @@ The interpolation layer recognizes the internal `INS_TOKEN` and `OUTS_TOKEN`
 markers emitted by manifest rendering in both recipe kinds, and additionally
 the short forms `$in` and `$out` in `script:` recipes. In a `command:` recipe
 those two are literal shell variables, and `$ins` and `$outs` are literal in
-both. On POSIX-compatible routes, markers inside backticks are rejected, as are
-commands with unmatched backticks or a substituted result that fails the current
-`shlex` guard.[^8] PowerShell treats a backtick as an escape.
+both. On POSIX-compatible routes, markers inside backticks are rejected in both
+recipe kinds. The two further checks — unmatched backticks and a substituted
+result that fails the current `shlex` guard — run only on `command:` text;
+scripts may legitimately contain heredocs and other syntax `shlex` cannot
+model.[^8] PowerShell treats a backtick as an escape.
 
-**Settled.** This contract is documented for users in the README under
-*Security and command interpolation*, and decided in
+**Settled.** Roadmap item 4.4.1 will document this contract for users in the
+README under *Security and command interpolation*, and it is decided in
 [ADR-027](adr-027-command-placeholder-contract.md). The three questions this
 section raised are now answered:
 
