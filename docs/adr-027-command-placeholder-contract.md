@@ -3,8 +3,9 @@
 ## Status
 
 Accepted. The command placeholder set, the backtick handling boundary, and the
-scope of the `shlex` guard are fixed as stated below, and documented for users
-in `README.md` under *Security and command interpolation*.
+scope of the `shlex` guard are fixed as stated below. Roadmap item 4.4.1 and
+the same change set carry them to users in a new `README.md` section, *Security
+and command interpolation*, in every translated README.
 
 ## Date
 
@@ -67,8 +68,9 @@ for `command:` recipes and `find_script_substitution` for `script:` recipes
 
 The `script:`-only forms are **retained legacy behaviour, not a blessed
 feature**. New manifests should use `{{ ins }}` and `{{ outs }}`, and the
-README steers authors accordingly. Two consequences are stated wherever the
-contract is documented, because neither is predictable from the rule:
+README section this record establishes steers authors accordingly. Two
+consequences are stated wherever the contract is documented, because neither is
+predictable from the rule:
 
 - A script that writes its own shell variable named `in` or `out`, such as
   `in=foo; echo $in`, has that variable rewritten to input paths with no
@@ -135,9 +137,9 @@ acceptance sets.
 
 The two drift directions are named separately because they are not symmetric:
 
-- A `shlex` release that accepts text today's rejects means previously rejected
+- A `shlex` release that accepts text rejected today means previously rejected
   manifests begin to build. Not treated as a breaking change.
-- A `shlex` release that rejects text today's accepts means a working manifest
+- A `shlex` release that rejects text accepted today means a working manifest
   stops building. That is a defect, not a policy change, and is recorded in the
   changelog.
 
@@ -191,11 +193,12 @@ A second, `debug_assert!`-only use exists in `assert_shell_command`
 
 ## Rationale
 
-- **The contract is stated where it can be falsified.** Each of the three
-  decisions is backed by an executable example in the README section and by
-  parameters of `src/ir/cmd_interpolate/`'s existing test suite, so a later
-  change that breaks the documented behaviour fails a test rather than silently
-  invalidating prose.
+- **The contract is stated where it can be falsified.** The existing tests and
+  property tests under `src/ir/cmd_interpolate/` already pin this behaviour,
+  and the README section this record establishes carries a marked, executable
+  example for each of the three decisions. A later change that breaks the
+  documented behaviour therefore fails a test rather than silently invalidating
+  prose.
 - **Legacy behaviour is documented as legacy.** The `script:`-only `$in` and
   `$out` forms are load-bearing for existing manifests, so removing them is not
   this decision's to make; describing them as retained legacy with a warning
@@ -211,10 +214,10 @@ A second, `debug_assert!`-only use exists in `assert_shell_command`
 ## Consequences
 
 Manifest authors who use `script:` recipes and write their own `in` or `out`
-shell variables will have those variables rewritten with no diagnostic. This is
-now documented rather than silent, and the README recommends `{{ ins }}` and
-`{{ outs }}`; a diagnostic for the shadowing case is follow-up work if the
-legacy forms are retained indefinitely.
+shell variables will have those variables rewritten with no diagnostic. This
+becomes documented rather than silent, and the README will recommend
+`{{ ins }}` and `{{ outs }}`; a diagnostic for the shadowing case is follow-up
+work if the legacy forms are retained indefinitely.
 
 Authors can rely on the marker invariant and on the rejection diagnostic.
 Authors cannot rely on the accepted set across `shlex` versions, and cannot
@@ -244,8 +247,9 @@ published interface.
   [`src/ir/cmd_interpolate_property_tests.rs`](../src/ir/cmd_interpolate_property_tests.rs).
 - Diagnostic text: [`locales/en-GB/messages.ftl`](../locales/en-GB/messages.ftl)
   (`ir.invalid_command`).
-- User-facing statement of this contract: [`README.md`](../README.md), section
-  *Security and command interpolation*; detailed shell-route mechanics remain in
+- User-facing statement of this contract: the `README.md` section *Security and
+  command interpolation* added under roadmap item 4.4.1; detailed shell-route
+  mechanics remain in
   [`users-guide.md`](users-guide.md#review-the-safety-boundary).
 - Upstream requirement: `docs/formal-verification-methods-in-netsuke.md`,
   sections *Kani for command interpolation* and *Command placeholder contract*.
