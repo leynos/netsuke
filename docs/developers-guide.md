@@ -4382,10 +4382,24 @@ netsuke's own runtime state, but it was skipped while `git check-ignore`
 declined it; every sibling tool cache is listed and it had been missed. A `.rs`
 file placed there would have been tracked, compiled, skipped by the walk, and
 reported by nobody, which is the failure the invariant exists to catch arriving
-through the list rather than the walk. The name is now in `.gitignore`, as
-`git check-ignore` confirms, and the walk's self-test requires each skipped
-name to be one git would not track. `.git` is the single named exception: git
-refuses to track anything beneath it whatever the ignore files say.
+through the list rather than the walk. The name is now in `.gitignore`, and the
+walk's self-test requires each skipped name to be one git would not track.
+`.git` is the single named exception: git refuses to track anything beneath it
+whatever the ignore files say.
+
+That self-test asks the *repository's* rules rather than the working tree,
+because a working tree answers with more than those. Ruff writes a `.gitignore`
+holding `*` into `.ruff_cache` as a side effect of running, so
+`git check-ignore` in the live tree agreed that `.ruff_cache` was ignored while
+the repository's own `.gitignore` said nothing about it — every sibling cache
+has an entry and this one had been missed, the same defect as `.netsuke`
+arriving one level down. A fresh clone, or a `coverage-main` lane that runs
+`make test` without `make lint` first, has no such file, so the answer would
+have depended on which tools had already run. The test therefore copies
+`.gitignore` into a scratch repository and puts the question there: the rule
+has to hold on every checkout, before any tool runs, and `.ruff_cache` is now in
+`.gitignore` beside its siblings. Asking its own repository also means the
+test needs no guard for the copies cargo-mutants makes, since it brings one.
 
 It reads the attribute as source text, because that is what an attribute is:
 there is no execution to model, and the assertion is exactly "this text does
