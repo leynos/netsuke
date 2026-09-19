@@ -62,12 +62,15 @@ stronger proof obligations become worthwhile.[^7]
 ### Kani for command interpolation
 
 `src/ir/cmd_interpolate/mod.rs` is another high-value target because it is
-compact, load-bearing, and security-sensitive. It recognizes only the internal
-`INS_TOKEN` and `OUTS_TOKEN` markers emitted by manifest rendering; literal
-`$in` and `$out` remain shell variables. POSIX-compatible routes reject markers
-inside backticks and reject commands when backticks are unmatched or the
-interpolated result fails the current `shlex` guard. PowerShell treats
-backticks as native escapes rather than protected regions.[^8]
+compact, load-bearing, and security-sensitive. It recognizes the internal
+`INS_TOKEN` and `OUTS_TOKEN` markers emitted by manifest rendering in both
+recipe kinds, and additionally the short forms `$in` and `$out` in `script:`
+recipes; in a `command:` those two are literal shell variables, as `$ins` and
+`$outs` always are. On POSIX-compatible routes both recipe kinds reject markers
+inside backticks; `command:` text additionally rejects unmatched backticks and
+a substituted result that fails the current `shlex` guard, while scripts are
+exempt from those two checks. PowerShell treats backticks as native escapes
+rather than protected regions.[^8]
 
 Kani proves two allocation-free kernels. An eight-character symbolic window
 with a symbolic offset proves that literal `$in` and `$out` prefixes never
@@ -262,20 +265,34 @@ Three contracts should be documented before proofs become gating checks.
 
 ### Command placeholder contract
 
-The interpolation layer currently recognizes only the internal `INS_TOKEN` and
-`OUTS_TOKEN` markers emitted by manifest rendering. Literal `$in` and `$out`
-remain shell variables. On POSIX-compatible routes, markers inside backticks
-are rejected, as are commands with unmatched backticks or a substituted result
-that fails the current `shlex` guard.[^8] PowerShell treats a backtick as an
-escape. This contract should be documented in the README under a new "Security
-and command interpolation" section, as it is a user-facing guarantee that
-affects manifest authoring. The project documentation should state whether:
+The interpolation layer recognizes the internal `INS_TOKEN` and `OUTS_TOKEN`
+markers emitted by manifest rendering in both recipe kinds, and additionally
+the short forms `$in` and `$out` in `script:` recipes. In a `command:` recipe
+those two are literal shell variables, and `$ins` and `$outs` are literal in
+both. On POSIX-compatible routes, markers inside backticks are rejected in both
+recipe kinds. The two further checks — unmatched backticks and a substituted
+result that fails the current `shlex` guard — run only on `command:` text;
+scripts may legitimately contain heredocs and other syntax `shlex` cannot
+model.[^8] PowerShell treats a backtick as an escape.
 
-- those are the only supported placeholders,
-- POSIX backtick rejection and PowerShell escape handling are the full contract
-  or a temporary subset of shell command-substitution handling, and
-- `shlex::split` is part of the semantic acceptance contract or only a guard
-  against obviously malformed commands.
+**Settled.** Roadmap item 4.4.1 will document this contract for users in the
+README under *Security and command interpolation*, and it is decided in
+[ADR-027](adr-027-command-placeholder-contract.md). The three questions this
+section raised are now answered:
+
+- The supported placeholder set is `{{ ins }}` and `{{ outs }}` in both recipe
+  kinds, plus `$in` and `$out` in `script:` recipes only; the short forms are
+  retained legacy behaviour, not a blessed feature.
+- Backtick handling is two mechanisms at two strengths. Rejecting a marker
+  inside a backtick or `$( … )` region is a promised invariant. Rejecting a
+  `command:` whose substituted text contains an odd backtick count is a
+  conservative whole-string parity check that is *not* promised and may widen
+  without a breaking change. Netsuke makes no guarantee about backticks the
+  author wrote, which the shell will execute.
+- `shlex::split` is part of the acceptance contract — its rejection is stable
+  and localized — but **not** a stability commitment about the precise accepted
+  set, because `Cargo.toml` carries a caret requirement rather than a version
+  pin.
 
 ### Cycle-participation contract
 
@@ -329,8 +346,8 @@ into a proof-first shape that its current architecture does not need.
   default targets to keep emitted Ninja text deterministic.
 [^7]: [`src/ir/cycle.rs`](../src/ir/cycle.rs) defines cycle analysis and
   `canonicalize_cycle`.
-[^8]: [`src/ir/cmd_interpolate.rs`](../src/ir/cmd_interpolate.rs) defines
-  placeholder substitution and command validation.
+[^8]: [`src/ir/cmd_interpolate/mod.rs`](../src/ir/cmd_interpolate/mod.rs)
+  defines placeholder substitution and command validation.
 [^9]: [`src/manifest/mod.rs`](../src/manifest/mod.rs) describes the YAML-first
   manifest pipeline and re-exports expansion and rendering helpers.
 [^10]: [`src/runner/mod.rs`](../src/runner/mod.rs) generates the Ninja manifest

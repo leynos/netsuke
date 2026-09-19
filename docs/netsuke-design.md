@@ -2810,10 +2810,18 @@ markers. The private `script_substitution` module owns this script-only lexical
 traversal; command recipes continue to use `substitution`, and both consume the
 shared bindings without composing their traversal states. Longer identifiers
 such as `$input` and `$output`, and non-placeholder text inside backticks,
-remain unchanged. Unbalanced backticks or command text that `shlex` cannot
-parse produce an IR error before an action is hashed. Ninja generation then
-receives fully expanded command text and is responsible only for preserving the
-scalar form or constructing the list-entry shell boundaries.
+remain unchanged. In `command:` recipes on the POSIX and Bash routes,
+unbalanced backticks or command text that `shlex` cannot parse produce an IR
+error before an action is hashed; `script:` recipes and the PowerShell route
+are outside that check. Ninja generation then receives fully expanded command
+text and is responsible only for preserving the scalar form or constructing the
+list-entry shell boundaries.
+
+[ADR-027](adr-027-command-placeholder-contract.md) settles which parts of this
+behaviour are promises: the marker invariant is contractual, the odd-backtick
+parity check is a conservative check that may widen without that being a
+breaking change, and the `shlex` accepted set is not a stability commitment. The
+`script:`-only `$in` and `$out` forms are retained legacy behaviour.
 
 ### 6.4 Automatic Security as a "Friendliness" Feature
 

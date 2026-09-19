@@ -1950,14 +1950,21 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
 - Write shell dollar expressions normally. `$PATH`, `$RUSTFLAGS`, `$ins`, and
   `$outs` are literal shell variables; PowerShell routes use `$name` or
   `$env:NAME`. Netsuke escapes those dollars as `$$` only in generated Ninja so
-  the shell receives them unchanged. `{{ ins }}` and `{{ outs }}` are the only
-  Netsuke markers for input and output paths. On POSIX and Bash routes, Netsuke
-  encodes a marker for its unquoted, single-quoted, or double-quoted shell
-  context, and rejects one in a command substitution or backticks. In
-  PowerShell, use markers unquoted; Netsuke rejects quoted and
-  command-substitution marker sites rather than risking a context escape.
-  PowerShell uses backticks as its native escape syntax, so they do not
-  suppress marker interpolation.
+  the shell receives them unchanged.
+- `{{ ins }}` and `{{ outs }}` are the Netsuke markers for input and output
+  paths in both `command:` and `script:` recipes. The short forms `$in` and
+  `$out` are **also** markers, but only in a `script:`; in a `command:` they
+  are ordinary shell variables. A script that assigns its own `in` or `out`
+  variable, such as `in=build; echo $in`, therefore has that variable rewritten
+  to input paths with no diagnostic. Prefer `{{ ins }}` and `{{ outs }}`, which
+  behave identically in both recipe kinds. See
+  [ADR-027](adr-027-command-placeholder-contract.md) for the full contract.
+- On POSIX and Bash routes, Netsuke encodes a marker for its unquoted,
+  single-quoted, or double-quoted shell context, and rejects one in a command
+  substitution or backticks. In PowerShell, use markers unquoted; Netsuke
+  rejects quoted and command-substitution marker sites rather than risking a
+  context escape. PowerShell uses backticks as its native escape syntax, so
+  they do not suppress marker interpolation.
 - Build and default-target paths escape a literal space as a `$` followed by a
   space, Ninja's own path escape. They reject `|` and control characters, which
   Ninja's path grammar cannot represent, and also reject `$` and colon, which
@@ -1976,8 +1983,10 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   PowerShell interprets `$$` as its automatic variable containing the last
   token received by the session. Keeping the extra dollar can therefore change
   the command's result. Replace any former `$in` or `$out` path placeholder with
-  `{{ ins }}` or `{{ outs }}` respectively; literal `$ins` and `$outs` remain
-  shell variables.
+  `{{ ins }}` or `{{ outs }}` respectively. Those short forms still resolve
+  inside `script:` recipes, but they do nothing in a `command:`; the
+  `{{ ins }}` and `{{ outs }}` markers work in both. Literal `$ins` and `$outs`
+  remain shell variables.
 
 Do not run an untrusted `Netsukefile`. Prefer explicit inputs, avoid embedding
 secrets in commands or URLs, and pin dependencies used by recipes.

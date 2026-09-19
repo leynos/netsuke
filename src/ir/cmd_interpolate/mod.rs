@@ -1,9 +1,10 @@
 //! Command interpolation utilities for IR actions.
 //!
-//! Provides [`interpolate_command`], which substitutes the internal markers
-//! emitted for `{{ ins }}` and `{{ outs }}` in recipe command strings. Script
-//! recipes additionally support `$in` and `$out`; literal shell variables
-//! remain unchanged in command recipes.
+//! [`interpolate_command_with_bindings`] substitutes the internal markers
+//! emitted for `{{ ins }}` and `{{ outs }}` in recipe command strings.
+//! [`interpolate_script_with_bindings`] additionally supports the short forms
+//! `$in` and `$out`; in a command recipe those two, and `$ins` and `$outs` in
+//! both, are literal shell variables.
 //! POSIX-compatible routes track shell quoting so path text is encoded for its
 //! insertion context. Called by [`super::from_manifest`] during IR lowering.
 
