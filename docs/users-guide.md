@@ -1849,8 +1849,8 @@ whose target is written as an absolute path is still refused with a diagnostic
 reporting that a path led outside the filesystem — even when the target is in
 fact inside the workspace. Relativity of the *link target*, not containment of
 the resolved path, is what the resolver tests. A template that reads through a
-relative-target link is the supported case; on Windows a junction cannot be one,
-because `mklink` records an absolute target and so is always refused under
+relative-target link is the supported case; on Windows a junction cannot be
+one, because `mklink` records an absolute target and so is always refused under
 either policy. Templates that deliberately read through a final symlink can
 pass the opt-in to accept it:
 
