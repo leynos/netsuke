@@ -248,18 +248,37 @@ failure — a network-fixture race tracked as issue 743 — before the nextest r
 reaches `stdlib::path`. On the run examined for this record it ended at
 1078/2901 tests, and the strings `windows_reparse` and `junction` appeared
 **zero** times in the whole job log. So no case described in this section has
-executed in continuous integration, and a green Windows lane would not yet be
-evidence about them.
+executed in continuous integration, and a green Windows *test* lane would not
+yet be evidence about their behaviour.
 
-What *is* verified on this change, and by what: the Windows-gated source is
-compiled and linted against `x86_64-pc-windows-msvc` by a local probe crate
-that mirrors the module tree (the main crate cannot be cross-compiled here —
-`ring` needs MSVC's `lib.exe`). Two tools are needed and neither subsumes the
-other — `cargo dylint` runs `cargo check`, so it applies the Whitaker lints and
-no clippy lint, while `cargo clippy` applies no Whitaker lint. Each was shown
-to be live by injecting a defect it should catch and confirming a non-zero
-exit, then reverting. That establishes the code compiles, is lint-clean, and
-that the tests *compile*; it does not establish that they *pass* on Windows.
+What *is* verified on this change, and by what. Two routes, and the boundary
+they share is stated at the end.
+
+**Native Windows CI compiles and lints every Windows-gated line, tests
+included.** `Windows / lint-windows` runs `make lint-clippy`, which expands to
+`cargo clippy --workspace --all-targets --all-features -- -D warnings`, and then
+Whitaker's dylint suite over the same target and feature selection.
+`--all-targets` pulls in the library's `cfg(test)` module and the integration
+test targets, so `windows_reparse.rs`, `windows_reparse_tests.rs`, and the
+junction fixture in `file_type_tests.rs` are all compiled on Windows itself,
+under `-D warnings`. That job is green on this head. This is the widest
+compile-and-lint evidence in the record, and it comes from the platform's own
+toolchain rather than an approximation of it.
+
+**A local probe crate covers the development loop.** The main crate cannot be
+cross-compiled on this host — `ring` needs MSVC's `lib.exe` — so Windows-gated
+edits were iterated against a throwaway crate mirroring the module tree. Two
+tools are needed there and neither subsumes the other: `cargo dylint` runs
+`cargo check`, so it applies the Whitaker lints and no clippy lint, while
+`cargo clippy` applies no Whitaker lint. Each was shown to be live by injecting
+a defect it should catch, confirming a non-zero exit, and reverting. This is
+what made the intermediate commits CI-worthwhile; it is a convenience, not the
+guarantee.
+
+**What neither route shows is the tests running.** Compilation under
+`-D warnings` is a strong statement about the code and a weak one about its
+behaviour: the first route compiles the junction tests without executing them,
+and on this head the lane that would execute them stops 1800 tests short.
 
 Until issue 743 is fixed and this branch rebuilt, the runtime behaviour of the
 policy is argued from the handle semantics in "Why the race is closed by
