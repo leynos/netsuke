@@ -61,7 +61,7 @@ jobs:
       CARGO_BUILD_JOBS: '4'
       NEXTEST_TEST_THREADS: '4'
       # Selects [profile.ci] in .config/nextest.toml, which carries the
-      # 900s whole-run budget. The shared coverage action takes no profile
+      # 780s whole-run budget. The shared coverage action takes no profile
       # input, so this variable is the only lever; the default profile is
       # deliberately uncapped for local runs on contended hosts.
       NEXTEST_PROFILE: ci

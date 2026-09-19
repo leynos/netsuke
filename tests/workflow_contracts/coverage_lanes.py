@@ -133,45 +133,23 @@ def _coverage_steps(job: dict[str, typ.Any]) -> list[dict[str, typ.Any]]:
 
 
 def _watchdog_windows(step: dict[str, typ.Any]) -> int:
-    """Return how many cargo watchdog windows one coverage step arms.
-
-    The shared action runs `cargo llvm-cov nextest` and, when its
-    `doctests` input asks for it, an uninstrumented `cargo test --doc`
-    after that. Each invocation arms the watchdog separately, so such a
-    step can spend the whole budget twice where a step setting no input
-    spends it once. Counting one window for both would leave the second
-    uncounted in the ceiling arithmetic below, which is the sizing fault
-    issue 715 records.
-
-    The input is compared to the one spelling this repository writes,
-    ``'true'``, which is also the value the input pin in
-    ``test_execution_coverage_test`` holds both coverage producers to.
-    The action's own reader accepts more spellings than that -- ``1``,
-    ``yes`` and ``on`` are truthy to it as well -- so a step written
-    with one of those would run the doctest pass and read here as a
-    single window. That is a gap this reading accepts rather than paper
-    over, because widening it would make the count depend on a boolean
-    grammar the pin does not enforce; a producer adding a coverage step
-    in another spelling fails that pin first.
-
-    The input is read defensively, as every environment scope is: a
-    workflow that spells `with` as something other than a mapping, or
-    omits it, arms the single window the action always runs.
-
-    Parameters
-    ----------
-    step : dict[str, typ.Any]
-        The coverage step.
-
-    Returns
-    -------
-    int
-        One window, or two when the step asks for the doctest pass.
-    """
-    inputs = step.get("with")
-    if not isinstance(inputs, dict):
-        return 1
-    return 2 if inputs.get("doctests") == "true" else 1
+    """Return how many cargo watchdog windows one coverage step arms."""
+    # The rationale lives where it is asserted, so that it is stated once:
+    # `test_a_doctests_step_arms_the_watchdog_twice` for the two windows,
+    # its declining counterpart for the spellings read as one, and "Test
+    # timeouts: the tiers this repository sets" in `docs/developers-guide.md`
+    # for the measurement behind both.
+    #
+    # A class pattern rather than ``case {"doctests": "true"}``: mapping
+    # patterns test ``PyMapping_Check``, which a non-`dict` mapping passes,
+    # so the literal form reads such a step as two windows where the
+    # `isinstance` guard it replaced read one. ``dict()`` accepts exactly
+    # the subject that guard did.
+    match step.get("with"):
+        case dict() as inputs if inputs.get("doctests") == "true":
+            return 2
+        case _:
+            return 1
 
 
 def _lanes_in_job(
@@ -291,7 +269,9 @@ def coverage_lanes_of(
     Returns
     -------
     tuple[CoverageLane, ...]
-        One entry per coverage step.
+        One entry per watchdog window a coverage step arms: two for a
+        step asking the action for the doctest pass, one otherwise. The
+        two entries are one step and share every field.
     """
     if documents is None:
         documents = workflow_documents()

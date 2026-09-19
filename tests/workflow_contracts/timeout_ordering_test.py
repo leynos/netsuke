@@ -105,7 +105,9 @@ def coverage_lanes() -> tuple[CoverageLane, ...]:
     Returns
     -------
     tuple[CoverageLane, ...]
-        One entry per coverage step.
+        One entry per watchdog window a coverage step arms. A step
+        asking the action for the doctest pass yields two, which is what
+        the ceiling arithmetic above has to contain.
     """
     return coverage_lanes_of()
 
