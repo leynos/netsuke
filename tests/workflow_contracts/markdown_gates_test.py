@@ -13,15 +13,30 @@ same ``.markdownlint-cli2.jsonc`` as ``make markdownlint``.
 Run via ``make test-workflow-contracts``.
 """
 
+import json
 import re
 
 from workflow_loading import (
     MAKEFILE_PATH,
+    REPO_ROOT,
     job_steps,
     load_workflow,
     require_mapping,
     step_runs,
 )
+
+#: The linter configuration both `make markdownlint` and the CI action read.
+MARKDOWNLINT_CONFIG = REPO_ROOT / ".markdownlint-cli2.jsonc"
+
+#: A `//` line comment, which JSONC allows and `json` does not. Only a comment
+#: occupying a whole line is removed: a `//` inside a glob would otherwise be
+#: cut out with it, and every value in this file is a glob.
+_LINE_COMMENT = re.compile(r"^\s*//.*$", re.MULTILINE)
+
+
+def _without_comments(text: str) -> str:
+    """Return JSONC text as JSON, with whole-line comments removed."""
+    return _LINE_COMMENT.sub("", text)
 
 
 def _makefile_recipe(target: str) -> tuple[list[str], str]:
@@ -198,4 +213,49 @@ def test_build_job_lints_markdown_through_the_upstream_action() -> None:
     )
     assert "make markdownlint" not in step_runs(steps), (
         "build-test must not also install and run markdownlint-cli2 itself"
+    )
+
+
+#: Every ignore glob the estate's canonical `.markdownlint-cli2.jsonc` lists,
+#: copied verbatim from `platform-standards/canon/lint/markdown/` in the
+#: concordat repository. Written out here rather than fetched, because a
+#: contract that read the canon over the network would be a gate on somebody
+#: else's availability; the cost is that a canon change needs this list
+#: changed with it, which is the point at which somebody decides to adopt it.
+#:
+#: The baseline is a floor rather than the whole list. A repository may ignore
+#: more, and this one does. `.uv-cache/**` was the entry it had lost: it
+#: carried `**/.uv-cache/**`, which matches a cache directory at any depth but
+#: not, under every glob implementation the linter has shipped, one at the
+#: repository root, where `uv` actually puts it.
+BASELINE_IGNORES = (
+    "**/.venv/**",
+    ".vtcode/**",
+    "**/node_modules/**",
+    "**/target/**",
+    ".terraform/**",
+    ".uv-cache/**",
+    "memories/**",
+    "CRUSH.md",
+)
+
+
+def test_the_linter_configuration_keeps_every_baseline_ignore() -> None:
+    """PD-005: each baseline glob is present verbatim, not merely in spirit.
+
+    A near-miss is the failure this catches. `**/.uv-cache/**` reads as the
+    same intent as `.uv-cache/**` and covers a different set, so a repository
+    can pass every gate while linting a directory the baseline excludes, and
+    the drift is invisible to a reader comparing the two files by eye.
+
+    Extra ignores are allowed and this repository has several. Only the
+    absence of a baseline entry is an offence.
+    """
+    text = MARKDOWNLINT_CONFIG.read_text(encoding="utf-8")
+    declared = json.loads(_without_comments(text)).get("ignores", [])
+    missing = [glob for glob in BASELINE_IGNORES if glob not in declared]
+    assert not missing, (
+        f"{MARKDOWNLINT_CONFIG.name} must list every baseline ignore glob "
+        f"verbatim; it is missing {missing}. A glob that reads as equivalent "
+        f"is not the same glob"
     )
