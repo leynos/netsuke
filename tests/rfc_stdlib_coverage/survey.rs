@@ -99,7 +99,7 @@ pub(super) fn derive_and_check(repo: &Repo) -> Result<Survey> {
 /// Read RFC 0006 and derive the sets and totals the coverage checks assert.
 pub(super) fn derive(repo: &Repo) -> Result<Survey> {
     let text = repo.read(RFC_0006)?;
-    let document = Section::whole(&text, RFC_0006);
+    let document = Section::whole(&text);
     let section_7 = document
         .subsection("## 7. Candidate matrix")
         .context("RFC 0006 has no section 7")?;

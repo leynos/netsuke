@@ -99,7 +99,7 @@ fn claim(row: &MapRow, owners: &mut BTreeMap<String, String>) -> Result<()> {
 /// Read the coverage map from RFC 0006.
 pub(super) fn parse(repo: &Repo, sections: &BTreeMap<String, Vec<String>>) -> Result<Map> {
     let text = repo.read(RFC_0006)?;
-    let document = Section::whole(&text, RFC_0006);
+    let document = Section::whole(&text);
     let map = document.subsection(MAP_HEADING).with_context(|| {
         format!(
             "RFC 0006 section 14 contains no coverage map table at {MAP_HEADING}; \

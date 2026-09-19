@@ -114,7 +114,7 @@ impl Registry {
 /// Read one child RFC's registry.
 pub(super) fn parse(repo: &Repo, file: &str) -> Result<Registry> {
     let text = repo.read(file)?;
-    let document = Section::whole(&text, file);
+    let document = Section::whole(&text);
     let number = rfc_number(file).with_context(|| {
         format!("{file} is not named as an RFC; expected a leading four-digit number")
     })?;
@@ -241,14 +241,20 @@ pub(super) fn rfc_number(file: &str) -> Option<String> {
     (digits.len() == 4).then_some(digits)
 }
 
-/// Every child RFC that exists, sorted by number.
-pub(super) fn parse_all(repo: &Repo) -> Result<Vec<Registry>> {
+/// Every child RFC the coverage map reserves, sorted by number.
+///
+/// The number range is taken from the map's rows rather than from "every file
+/// numbered 0013 or later". The corpus is open-ended — RFC 0021 and beyond are
+/// a question of when, not whether — and a future RFC that happens to carry a
+/// five-column table under a `5.1.` heading is not a child of this survey. The
+/// map is where the reservation is recorded, so it is what decides.
+pub(super) fn parse_all(repo: &Repo, children: &[String]) -> Result<Vec<Registry>> {
     let mut found = Vec::new();
     for file in repo.markdown_files(super::RFC_DIR)? {
         let Some(number) = rfc_number(&file) else {
             continue;
         };
-        if number.as_str() >= "0013" && repo.exists(&file)? {
+        if children.contains(&number) {
             found.push(parse(repo, &file)?);
         }
     }
