@@ -68,14 +68,19 @@ fn path_of(target: &str) -> &str {
 
 /// Resolve a relative target against the directory holding `file`.
 ///
-/// Only `..` segments are collapsed, which is all the RFC corpus uses. A target
-/// that escapes the repository root is returned unchanged and will simply fail
-/// to resolve, which is the right outcome for a link that points outside.
+/// Only `..` segments are collapsed, which is all the RFC corpus uses.
+///
+/// Returns `None` when the traversal climbs above the repository root, rather
+/// than dropping the surplus `..` segments and handing back a path that looks
+/// ordinary. `../../../etc/passwd` and `etc/passwd` are not the same link, and
+/// a resolver that silently reported the second as resolvable would give the
+/// caller a path it never asked about — resolvable or not, the link itself
+/// points outside the repository.
 ///
 /// A `#fragment` selects a heading inside the target document, so only the path
 /// before it names a file. Fragments are stripped and not validated: the anchor
 /// slugs are a renderer's business, and every renderer spells them differently.
-pub(super) fn resolve(file: &str, target: &str) -> String {
+pub(super) fn resolve(file: &str, target: &str) -> Option<String> {
     let path = path_of(target);
     let mut segments: Vec<&str> = file.split('/').collect();
     segments.pop();
@@ -83,12 +88,14 @@ pub(super) fn resolve(file: &str, target: &str) -> String {
         match segment {
             "" | "." => {}
             ".." => {
-                segments.pop();
+                // Popping the last segment of an empty path would climb past
+                // the repository root.
+                segments.pop()?;
             }
             other => segments.push(other),
         }
     }
-    segments.join("/")
+    Some(segments.join("/"))
 }
 
 /// Every dangling relative link in `file`.
@@ -99,16 +106,25 @@ pub(super) fn dangling_in(repo: &Repo, file: &str) -> Result<Vec<String>> {
     let text = repo.read(file)?;
     let mut failures = Vec::new();
     for target in targets(&text) {
-        let path = resolve(file, &target.target);
-        if !repo
-            .exists(&path)
-            .with_context(|| format!("resolve {}:{} -> {path}", file, target.line))?
-        {
-            failures.push(format!(
-                "{file}:{} links to {} which resolves to {path}, and no such file exists",
+        let failure = match resolve(file, &target.target) {
+            Some(path) => {
+                if repo
+                    .exists(&path)
+                    .with_context(|| format!("resolve {}:{} -> {path}", file, target.line))?
+                {
+                    continue;
+                }
+                format!(
+                    "{file}:{} links to {} which resolves to {path}, and no such file exists",
+                    target.line, target.target
+                )
+            }
+            None => format!(
+                "{file}:{} links to {}, which climbs above the repository root",
                 target.line, target.target
-            ));
-        }
+            ),
+        };
+        failures.push(failure);
     }
     Ok(failures)
 }

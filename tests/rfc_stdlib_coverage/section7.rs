@@ -264,6 +264,11 @@ pub(super) fn registered_names(disposition: &str, names: &[String]) -> Vec<Strin
 
 /// The first `§N.N` reference in `text`, normalised to `N.N`.
 ///
+/// A sentence-final citation reads `§8.9.`, and the period ends the sentence
+/// rather than extending the number: the digits-and-dots scan cannot tell the
+/// two apart, so trailing dots are trimmed before the result is checked for
+/// emptiness. `§.` therefore yields `None`, as does a citation that is absent.
+///
 /// Returns `None` when the cell cites no section, which for an accept row is an
 /// error: every accepted helper must be specified somewhere in section 8.
 pub(super) fn section_ref(text: &str) -> Option<String> {
@@ -271,7 +276,9 @@ pub(super) fn section_ref(text: &str) -> Option<String> {
     let end = rest
         .find(|ch: char| !(ch.is_ascii_digit() || ch == '.'))
         .unwrap_or(rest.len());
-    rest.get(..end)
-        .filter(|found| !found.is_empty())
-        .map(ToOwned::to_owned)
+    let found = rest.get(..end)?.trim_end_matches('.');
+    if found.is_empty() {
+        return None;
+    }
+    Some(found.to_owned())
 }
