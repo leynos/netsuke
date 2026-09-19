@@ -56,7 +56,8 @@ impl HttpServerConfig {
     /// * `NETSUKE_TEST_HTTP_ACCEPT_TIMEOUT_MS` – deadline for accepting a
     ///   connection in milliseconds.
     /// * `NETSUKE_TEST_HTTP_READ_TIMEOUT_MS` – deadline for reading the request
-    ///   body in milliseconds.
+    ///   header block in milliseconds. The fixture answers once it has the
+    ///   header block, so a request body is outside this deadline.
     /// * `NETSUKE_TEST_HTTP_POLL_INTERVAL_MS` – polling interval used when
     ///   waiting for readiness in milliseconds.
     ///
@@ -126,6 +127,11 @@ impl Default for HttpServerConfig {
 
 /// Read `var` as whole milliseconds, falling back to `default` when unset or
 /// unparsable.
+///
+/// An override is taken at face value, however large, and `Instant::now() +
+/// duration` saturates rather than panicking at the far end of `u64`
+/// milliseconds, so no overflow check is needed on the way to a deadline. The
+/// fixture is also reachable only from tests, which set these to milliseconds.
 pub(super) fn duration_from_env(env: &impl Env, var: &str, default: Duration) -> Duration {
     env.raw(var).map_or(default, |value| {
         let trimmed = value.trim();
