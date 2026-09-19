@@ -13,7 +13,8 @@
 //! the repository's rules — nested tools write ignore files of their own — so
 //! asking it would make the answer depend on which tools had run.
 
-use super::{MACHINE_LOCAL_DIRECTORIES, collect_all_sources, collect_rust_sources, is_scanned};
+use super::is_scanned;
+use super::roots::{MACHINE_LOCAL_DIRECTORIES, collect_all_sources, collect_rust_sources};
 use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
@@ -139,10 +140,9 @@ fn a_machine_local_name_is_skipped_at_any_depth() -> Result<()> {
 /// says nothing about that name, which is the original defect wearing a
 /// different hat. An empty `core.excludesFile` covers both spellings a global
 /// ignore can take: it overrides a configured path, and it also suppresses the
-/// default `~/.config/git/ignore`, measured against both. One flag, and a bare
-/// path-setting flag for the second case is not needed — it had been written
-/// here as though it were, and the flag that was supposed to be the second turn
-/// turned out not to exist as a git key at all.
+/// default `~/.config/git/ignore`, measured against both. One flag is enough:
+/// an earlier version of this comment named a second key for the default path,
+/// and that key does not exist in git.
 ///
 /// A template directory is a fourth, and it is closed at `git init` above
 /// rather than here, because the `info/exclude` it seeds is written before this
