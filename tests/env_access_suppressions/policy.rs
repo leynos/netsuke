@@ -1,7 +1,7 @@
 //! What counts as a suppression of the environment-access policy.
 //!
 //! [`scanner`](super::scanner) finds the `allow` attributes; this module
-//! decides which of the names they carry are an offence, given the path the
+//! decides which carried names constitute an offence, given the path the
 //! attribute sits in.
 
 /// Lint names an `allow` attribute may not carry in a compiled source.

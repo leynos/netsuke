@@ -4376,8 +4376,8 @@ an escaped quote and blank the code after it; it then recognizes an attribute
 only where a line begins with one, so prose that quotes the attribute —
 including this section, and the mutation records that quote the form they
 prohibit — is not a finding. It reads the attribute to its matching
-parenthesis, so one `rustfmt` has wrapped across several lines is read whole
-rather than truncated. The scanner lives beside the contract in
+parenthesis, so one that `rustfmt` has wrapped across several lines is read
+whole rather than truncated. The scanner lives beside the contract in
 `tests/env_access_suppressions/` (`scanner.rs`, `mask.rs`, `policy.rs`), and
 its self-tests in `scanner_tests.rs` pin each shape it must report and each
 innocent source it must not.
