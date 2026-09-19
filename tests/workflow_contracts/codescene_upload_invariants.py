@@ -41,9 +41,11 @@ Four failures motivate the shape rather than any particular spelling of it:
 
 These predicates read parsed workflow values rather than files, so
 ``codescene_upload_contract_test`` can hold the repository's own trunk lane to
-the contract and drive shapes the repository does not have. The scan for
-``vars.`` references the last bullet depends on is general to any step rather
-than particular to this lane, so it lives in ``workflow_variable_scan``.
+the contract and drive shapes the repository does not have. Two of the rules
+they rest on describe no particular lane, so they live apart: the scan for
+``vars.`` references the last bullet depends on is general to any step
+(``workflow_variable_scan``), and so are finding a named step and checking
+that it calls the right action at an immutable pin (``lane_steps``).
 
 Run via ``make test-workflow-contracts``.
 """
@@ -55,8 +57,8 @@ from ci_coverage_wiring_invariants import (
     GENERATE_COVERAGE_ACTION,
     PUBLICATION_OPT_OUT_INPUT,
     UPLOAD_COVERAGE_ACTION,
-    action_of,
 )
+from lane_steps import action_reference_of, inputs_of, step_named
 from workflow_variable_scan import unbound_variable_references
 
 if typ.TYPE_CHECKING:
@@ -110,35 +112,6 @@ CHECKSUM_INPUTS: typ.Final[tuple[str, ...]] = (
     "installer-checksum",
     "archive-checksum",
 )
-
-
-def step_named(
-    steps: cabc.Sequence[dict[str, object]], name: str
-) -> dict[str, object] | None:
-    """Return the single step called ``name``, or None when there is none.
-
-    Parameters
-    ----------
-    steps
-        Parsed workflow steps in declaration order.
-    name
-        The step name to find.
-
-    Returns
-    -------
-    dict[str, object] or None
-        The matching step, or None when no step carries that name. A duplicated
-        name returns the first match; the caller's ordering assertion is what
-        makes a second one matter, and the repository assertion below pins the
-        count.
-    """
-    return next((step for step in steps if step.get("name") == name), None)
-
-
-def inputs_of(step: dict[str, object]) -> dict[str, object]:
-    """Return a step's ``with`` block, or an empty mapping when it has none."""
-    with_ = step.get("with")
-    return with_ if isinstance(with_, dict) else {}
 
 
 #: The three steps the report-delivery contract is about, in the order the
@@ -225,12 +198,13 @@ def upload_contract_offenders(
             f"a report sent before it is checked is sent unchecked"
         )
 
-    if action_of(upload) != UPLOAD_COVERAGE_ACTION:
-        offenders.append(
-            f"{CODESCENE_UPLOAD_STEP!r} must invoke {UPLOAD_COVERAGE_ACTION}"
-        )
-    if action_of(coverage) != GENERATE_COVERAGE_ACTION:
-        offenders.append(f"{COVERAGE_STEP!r} must invoke {GENERATE_COVERAGE_ACTION}")
+    for step, name, action in (
+        (upload, CODESCENE_UPLOAD_STEP, UPLOAD_COVERAGE_ACTION),
+        (coverage, COVERAGE_STEP, GENERATE_COVERAGE_ACTION),
+    ):
+        pin = action_reference_of(step, name, action)
+        if pin is not None:
+            offenders.append(pin)
 
     offenders.extend(_validation_offenders(validation))
     offenders.extend(_path_offenders(coverage, upload))
