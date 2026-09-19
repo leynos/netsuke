@@ -8,6 +8,7 @@ the single variable this repository does declare is not reported.
 Run via ``make test-workflow-contracts``.
 """
 
+import pytest
 from workflow_variable_scan import unbound_variable_references
 
 #: A variable this repository has never declared, spelled as a workflow would
@@ -31,6 +32,59 @@ def test_a_reference_is_found_in_every_field_a_step_can_hold_one() -> None:
         assert unbound_variable_references(step) == [UNDECLARED], (
             f"a reference in `{field}` must be found"
         )
+
+
+@pytest.mark.parametrize(
+    ("label", "expression"),
+    [
+        # A condition that names a variable in its second operand. The empty
+        # value collapses the whole conjunction, so the step silently stops
+        # running exactly as it would from a bare reference.
+        ("conjunction", "${{ github.event_name == 'push' && vars.SECRET != '' }}"),
+        # A function argument, where the variable is not adjacent to `${{`.
+        ("function call", "${{ contains(vars.FOO, 'x') }}"),
+        # A reference in the second of two expressions in one value.
+        ("later expression", "${{ github.ref }} then ${{ vars.NOPE }}"),
+    ],
+)
+def test_a_reference_is_found_anywhere_inside_an_expression(
+    label: str, expression: str
+) -> None:
+    """Read a reference that does not sit immediately after the delimiter.
+
+    An earlier scan matched only the position right after ``${{``, so every
+    expression here reported clean while resolving to the empty string — the
+    exact failure the scan exists to prevent, in the shape most likely to be
+    written by hand.
+    """
+    assert unbound_variable_references({"if": expression}) == [expression], (
+        f"a reference in a {label} must be found"
+    )
+
+
+def test_reference_text_outside_an_expression_is_ignored() -> None:
+    """Do not report a ``vars.`` spelling that is only literal text.
+
+    The scan locates expression regions before looking for references, so a
+    value that merely prints or compares the spelling is not a reference and
+    must not be reported as one.
+    """
+    for literal in ["echo 'vars.FOO'", "assert 'vars.' not in text"]:
+        assert not unbound_variable_references({"run": literal}), (
+            f"`{literal}` is text, not a reference"
+        )
+
+
+def test_a_value_naming_several_variables_is_reported_once() -> None:
+    """Report the value, not each name, when one value reads several.
+
+    The caller reports which values to look at; repeating a value per name
+    would read as several faults in a step that has one.
+    """
+    value = "${{ vars.A != '' || vars.B != '' }}"
+    assert unbound_variable_references({"if": value}) == [value], (
+        "one offending value must be reported once"
+    )
 
 
 def test_the_permitted_variable_is_not_reported() -> None:

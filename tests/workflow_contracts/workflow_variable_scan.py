@@ -12,7 +12,9 @@ These predicates answer the question for one parsed step, over every string it
 holds. The scan is deliberately not restricted to the ``with`` block: an ``if``
 condition decides whether a step runs at all, so a ``vars.`` reference there is
 the most consequential place one can appear, and an ``env`` entry is where a
-credential would be bound.
+credential would be bound. It is also not restricted to the start of an
+expression, because a compound condition or a function argument names a
+variable just as directly as a bare one — see `VARIABLE_REFERENCE`.
 
 They read parsed values rather than files, so the callers can hold the
 repository's own workflows to the contract and drive shapes the repository does
@@ -27,12 +29,23 @@ import typing as typ
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
-#: Matches any `vars.<NAME>` expression, wherever it appears in a value. The
+#: Matches one `${{ ... }}` expression and captures its body. A `vars.`
+#: reference is only meaningful inside one of these, so the regions are located
+#: first and scanned second: matching `${{` and `vars.` as one pattern would
+#: only ever find a reference that immediately follows the opening delimiter.
+EXPRESSION_REGION: typ.Final[re.Pattern[str]] = re.compile(r"\$\{\{(?P<body>.*?)\}\}")
+
+#: Matches a `vars.` reference anywhere within an expression body. The
 #: repository declares no variables, so every one of them resolves to the empty
 #: string.
-REPOSITORY_VARIABLE_EXPRESSION: typ.Final[re.Pattern[str]] = re.compile(
-    r"\$\{\{\s*vars\."
-)
+#:
+#: This is deliberately anchored to neither end of the body. A compound
+#: condition such as `github.event_name == 'push' && vars.SECRET != ''`, or a
+#: call such as `contains(vars.FOO, 'x')`, names a variable exactly as the bare
+#: form does, and resolves to the empty string just the same; an earlier
+#: version of this scan matched only the position immediately after `${{`, so
+#: it reported nothing for either.
+VARIABLE_REFERENCE: typ.Final[re.Pattern[str]] = re.compile(r"\bvars\.")
 
 #: The one repository variable the workflows legitimately read, and the one
 #: place a `vars.` expression is allowed to appear in the coverage lane: it
@@ -43,6 +56,11 @@ PERMITTED_VARIABLE_NAME: typ.Final[str] = "NETSUKE_SCCACHE_LOCAL_DIR"
 
 def unbound_variable_references(step: cabc.Mapping[str, object]) -> list[str]:
     """Return every ``vars.`` reference in a step but the permitted one.
+
+    Each ``${{ ... }}`` region is located first and then scanned for references,
+    so a reference is found anywhere inside an expression — a bare condition, a
+    compound one, or a function argument — while text that merely spells
+    ``vars.`` outside an expression is ignored.
 
     Parameters
     ----------
@@ -58,20 +76,27 @@ def unbound_variable_references(step: cabc.Mapping[str, object]) -> list[str]:
     -------
     list[str]
         One entry per offending value, empty when the step reads no repository
-        variable or reads only the one this repository defines.
+        variable or reads only the one this repository defines. A value
+        carrying several references is reported once, since the caller needs to
+        know which values to look at rather than how many names each holds.
     """
-    offending: list[str] = []
-    for value in _iter_strings(step):
-        for match in REPOSITORY_VARIABLE_EXPRESSION.finditer(value):
-            name = _variable_name(value, match.end())
-            if name != PERMITTED_VARIABLE_NAME:
-                offending.append(value)
-    return offending
+    return [
+        value for value in _iter_strings(step) if _names_an_unpermitted_variable(value)
+    ]
 
 
-def _variable_name(value: str, start: int) -> str:
-    """Return the variable name beginning at ``start`` in an expression."""
-    match = re.match(r"[A-Za-z_][A-Za-z0-9_]*", value[start:])
+def _names_an_unpermitted_variable(value: str) -> bool:
+    """Return whether ``value`` reads an unpermitted repository variable."""
+    return any(
+        _variable_name(region.group("body"), match.end()) != PERMITTED_VARIABLE_NAME
+        for region in EXPRESSION_REGION.finditer(value)
+        for match in VARIABLE_REFERENCE.finditer(region.group("body"))
+    )
+
+
+def _variable_name(body: str, start: int) -> str:
+    """Return the variable name beginning at ``start`` in an expression body."""
+    match = re.match(r"[A-Za-z_][A-Za-z0-9_]*", body[start:])
     return match.group(0) if match else ""
 
 
