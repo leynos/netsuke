@@ -86,14 +86,16 @@ success-output = "immediate"
 # That figure has since moved. This test is a member of `nested-cargo-builds`
 # above, which serializes it with the other build-capable child Cargo tests, so
 # it holds the group's single slot and every member behind it waits. Trimming
-# it therefore returns its group occupancy rather than its exclusive tail:
-# 95s to 152s across the Windows runs sampled on 2026-09-18, against the 85s
-# above, which was measured before it, and at the low end of that range only
-# because a trim there leaves non-group work as the run's next binding
-# constraint. The repository has still decided not to spend the fidelity risk
-# yet, and the trim remains a candidate for tightening or deletion at the
-# ten-run revisit gate that the developers' guide defines under "Deferring the
-# split-build-dir harness trim"; that section carries the serialized
+# it therefore returns its group occupancy rather than its exclusive tail, and
+# the test's own duration caps that figure, because the duration is the
+# occupancy it gives back. The trim returns exactly the duration whenever the
+# shortened group chain still bounds the run. The Windows runs sampled on
+# 2026-09-18 put the figure between 95s and 163s, against the 85s above, which
+# was the exclusive tail under an uncontended lane that no longer exists. The
+# repository has still decided not to spend the fidelity risk yet, and the trim
+# remains a candidate for tightening or deletion at the ten-run revisit gate
+# that the developers' guide defines under "Deferring the split-build-dir
+# harness trim"; that section carries the serialized
 # measurements, the alternatives already measured and rejected — `cargo check`
 # for `cargo build`, warming the compiler cache, and sharing a target
 # directory — and the constraints a fixture-crate replacement would have to

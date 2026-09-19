@@ -3095,7 +3095,9 @@ chain cannot finish until it releases it. Removing it therefore returns its
 whole group occupancy, not just its exclusive tail.
 
 Measured from the same `build-test-windows` job logs, over the Windows runs
-available on 2026-09-18:
+available on 2026-09-18. The rows are a snapshot of those runs, not a running
+total; what generalizes past them is the mechanism below, which is why the
+figure is stated as a rule with the sample as its evidence:
 
 Table: the harness test as a serialized group member, after the group landed.
 
@@ -3106,17 +3108,28 @@ Table: the harness test as a serialized group member, after the group landed.
 | 35272793454 | 124.7s        | 134.9s                        | 113.4s       |
 | 35400200137 | 115.7s        | 154.1s                        | 95.0s        |
 | 35403273264 | 141.6s        | 154.4s                        | 136.3s       |
+| 35405043577 | 141.9s        | 167.1s                        | 141.9s       |
+| 35407132087 | 162.9s        | 174.6s                        | 162.9s       |
 
 The rightmost column is the whole-run saving: the run's own end, less whichever
-of the trimmed group chain and the last non-group test finishes later. Across
-the sample it is 95s to 152s, against the 85s the uncontended reading gave. The
-harness is never the last test to finish — the group's cheap tail members trail
-it by under seven seconds in every run — but a trim returns its occupancy
-rather than its exclusive tail, because the tail cannot start until the slot
-frees. Where the figure matches that occupancy exactly, the shortened chain is
-still what bounds the run. Where it falls short — 113s against 125s, 95s
-against 116s, and 136s against 142s — unrelated non-group work becomes the
-run's next binding constraint once the harness is gone.
+of the trimmed group chain and the last non-group test finishes later. Read it
+against the mechanism rather than as a distribution, because the mechanism is
+what generalizes past the sample. The harness is never the last test to finish
+— the group's cheap tail members trail it by under seven seconds in every run —
+but a trim returns its occupancy rather than its exclusive tail, because the
+tail cannot start until the slot frees.
+
+That gives the figure its ceiling and its shape. **A trim can never return more
+than the test's own duration**, because the duration *is* the occupancy it
+gives back; and it returns exactly that whenever the shortened group chain is
+still what bounds the run, which is the common case — four of the seven runs
+above. It returns less only when unrelated non-group work becomes the run's
+next binding constraint once the harness is gone: 113s against 125s, 95s
+against 116s, and 136s against 142s. So the figure tracks the test's own cost
+and moves with it, which is why the sample's durations span 115.7s to 162.9s
+while its savings span 95s to 163s. The 85s reading is not a floor this settles
+back to — it was the exclusive tail under an uncontended lane that no longer
+exists.
 
 The decision recorded above still stands, and this is a change to the evidence
 for it, not to the decision: the trim remains deferred, and it remains a
@@ -3125,11 +3138,11 @@ number is again large enough to be worth arguing about, so the revisit gate
 below is now the thing that settles it rather than a formality. Two cautions
 belong with the table. The sample is small and it is not a uniform one: it
 mixes trunk pushes with pull-request lanes, which start from different tree
-states. It is also a snapshot rather than a running total — it names the runs
-it was taken from and does not claim to be current, and later runs belong to
-the revisit gate below. And the group's own scheduling, not the test alone,
-produces the chain ends, so the figures above are readings of a serialized
-system rather than isolated measurements of the test.
+states. So read the rule rather than the spread — the spread is what the rule
+predicts, and later runs belong to the revisit gate below rather than to this
+table. And the group's own scheduling, not the test alone, produces the chain
+ends, so the figures above are readings of a serialized system rather than
+isolated measurements of the test.
 
 Anything that removes this test from the lane also removes the group's heaviest
 member, which shortens the chain for every other member behind it. A
