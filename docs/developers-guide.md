@@ -4433,23 +4433,34 @@ target still runs across the workspace. Each of those asserts a true statement
 about a different thing, and none observes that a source has opted out.
 
 `tests/env_access_suppressions.rs` closes that gap. It reads the compiled
-sources — `src`, `build_l10n_audit`, `test_support/src`, `tests`, `benches`, and
-`build.rs` — and fails when an `#[allow(...)]` or `#![allow(...)]` attribute
-names a lint that carries the policy. The roots are the ones the workspace
-lints rather than the ones a convention calls source. `tests` and `benches` are
-in scope because `--all-targets` compiles and lints test and benchmark targets,
-and the modules they wire in, exactly as it lints the library, so an inner
-attribute there silences the policy for a whole test or benchmark binary just
-the same. It reads the attribute as source text, because that is what an
-attribute is: there is no execution to model, and the assertion is exactly
-"this text does not appear in an `allow` attribute". An attribute nested in a
-`cfg_attr` is read too, since that is the same suppression written one token
-differently. The scan first blanks comments and string and character literals,
-because that is where quoted text lives — a byte or C string escapes like any
-other, so its body ends at an unescaped quote, and reading one as raw would end
-it early at an escaped quote and blank the code after it; it then recognizes an
-attribute only where a line begins with one, so prose that quotes the attribute
-— including this section, and the mutation records that quote the form they
+sources — `src`, `build_l10n_audit`, `test_support/src`, `tests`, `benches`,
+`examples`, and `build.rs` — and fails when an `#[allow(...)]` or
+`#![allow(...)]` attribute names a lint that carries the policy. The roots are
+the ones the workspace lints rather than the ones a convention calls source.
+`tests`, `benches`, and `examples` are in scope because Cargo discovers targets
+in all three and `--all-targets` compiles and lints them, and the modules they
+wire in, exactly as it lints the library, so an inner attribute there silences
+the policy for a whole test, benchmark, or example binary just the same.
+
+The root list is not trusted to stay complete on its own, because that is how a
+scan silently stops covering something. A second test walks every Rust source
+in the workspace — skipping `target` and dot-prefixed caches, which are
+generated or machine-local rather than edited here — and fails when one of them
+is not in the scanned roots, naming each. So a root that is renamed or
+misspelled, or a target location added later, reports itself instead of quietly
+excusing its sources. Extending the roots stays safe: the invariant is what
+says the set is complete, rather than a reviewer re-deriving it.
+
+It reads the attribute as source text, because that is what an attribute is:
+there is no execution to model, and the assertion is exactly "this text does
+not appear in an `allow` attribute". An attribute nested in a `cfg_attr` is
+read too, since that is the same suppression written one token differently. The
+scan first blanks comments and string and character literals, because that is
+where quoted text lives — a byte or C string escapes like any other, so its
+body ends at an unescaped quote, and reading one as raw would end it early at
+an escaped quote and blank the code after it; it then recognizes an attribute
+only where a line begins with one, so prose that quotes the attribute —
+including this section, and the mutation records that quote the form they
 prohibit — is not a finding. It reads the attribute to its matching
 parenthesis, so one `rustfmt` has wrapped across several lines is read whole
 rather than truncated. The scanner lives beside the contract in
