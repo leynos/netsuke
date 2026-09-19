@@ -15,9 +15,11 @@
 use anyhow::{Context, Result, ensure};
 use netsuke::stdlib::fixed_clock;
 use rstest::rstest;
+use test_support::tracing_capture::with_test_subscriber;
 use time::{
     Duration, OffsetDateTime, UtcOffset, format_description::well_known::Iso8601, macros::datetime,
 };
+use tracing_subscriber::filter::LevelFilter;
 
 use super::support::fallible;
 
@@ -102,6 +104,54 @@ fn now_applies_offset_to_the_configured_clock(
     ensure!(
         parsed.unix_timestamp() == instant.unix_timestamp(),
         "offset `{offset_spec}` moved the instant: `{rendered}`"
+    );
+    Ok(())
+}
+
+/// Registration reports which clock it installed, by provenance and nothing
+/// else.
+///
+/// A wrongly wired clock is otherwise invisible: an injected clock that never
+/// reached registration renders exactly as an ambient one would, so a test
+/// asserting a pinned instant fails without saying why. The closed set is what
+/// makes the label safe to record — it names the clock's source, never the
+/// instant that clock would report.
+#[rstest]
+#[case::system(false, "system")]
+#[case::injected(true, "injected")]
+fn registration_reports_the_clock_source(
+    #[case] inject: bool,
+    #[case] expected: &str,
+) -> Result<()> {
+    let captured = with_test_subscriber(LevelFilter::DEBUG, |events| {
+        let installed = if inject {
+            fallible::stdlib_env_with_clock(fixed_clock(datetime!(2026-06-08 12:00:00 UTC)))
+        } else {
+            fallible::stdlib_env()
+        };
+        assert!(installed.is_ok(), "registration should succeed: {installed:?}");
+        events.snapshot()
+    });
+
+    let registration_events: Vec<&String> = captured
+        .iter()
+        .filter(|event| event.contains("registered stdlib time helpers"))
+        .collect();
+    ensure!(
+        registration_events.len() == 1,
+        "expected one registration event but captured {registration_events:?}"
+    );
+    let event = registration_events
+        .first()
+        .copied()
+        .context("the length check above leaves one event")?;
+    ensure!(
+        event.contains(&format!("clock_source=\"{expected}\"")),
+        "the event should label the {expected} clock: {event}"
+    );
+    ensure!(
+        !event.contains("2026-06-08"),
+        "the event must not carry the instant a provider would report: {event}"
     );
     Ok(())
 }

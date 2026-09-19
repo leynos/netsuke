@@ -118,6 +118,15 @@ impl WallClock {
     pub(crate) const fn is_system(&self) -> bool {
         self.is_system
     }
+
+    /// Name the clock's provenance for logs and `Debug` output.
+    ///
+    /// The result is drawn from a closed set, so it is safe to record in a
+    /// telemetry field: registration can report which clock it installed
+    /// without revealing the provider behind it.
+    pub(crate) const fn source_label(&self) -> &'static str {
+        if self.is_system() { "system" } else { "injected" }
+    }
 }
 
 impl Default for WallClock {
@@ -137,14 +146,7 @@ impl Default for WallClock {
 impl fmt::Debug for WallClock {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("WallClock")
-            .field(
-                "source",
-                &if self.is_system() {
-                    "system"
-                } else {
-                    "injected"
-                },
-            )
+            .field("source", &self.source_label())
             .finish_non_exhaustive()
     }
 }

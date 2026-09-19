@@ -105,7 +105,12 @@ pub fn register_with_config(
     register_legacy_boolean_formatter(env);
     let state = StdlibState::default();
     register_read_only_helpers(env, &config);
-    time::register_functions(env, config.clock().clone());
+    let clock = config.clock().clone();
+    tracing::debug!(
+        clock_source = clock.source_label(),
+        "registered stdlib time helpers"
+    );
+    time::register_functions(env, clock);
     let impure = state.impure_flag();
     let (network_config, file_config, command_config) = config.into_components();
     network::register_functions(env, Arc::clone(&impure), network_config);
