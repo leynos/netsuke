@@ -3148,8 +3148,10 @@ Anything that removes this test from the lane also removes the group's heaviest
 member, which shortens the chain for every other member behind it. A
 replacement that is cheap but still build-capable would return most of the
 figure; one that stops spawning a child Cargo build at all would be lighter
-still, and would lose the [response-file pressure][fixture-constraints] that
-makes the group entry necessary in the first place.
+still, but it would owe the [response-file pressure][fixture-constraints] this
+build supplies, which is a coverage requirement rather than the group's
+rationale. The group exists because concurrent child Cargo builds contend for
+the runner, and a build-capable replacement does not change that.
 
 **Revisit gate.** This defers the trim; it does not close it. Wait until ten
 runs of the split Windows lane exist under the serialization group, so the
