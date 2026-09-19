@@ -1520,7 +1520,7 @@ Implementation notes:
   `FILE_ATTRIBUTE_REPARSE_POINT`; that refuses symlinks, junctions, volume
   mount points, and every other tag alike, because the test is on the attribute
   bit rather than on the tag value. The judgement and the read share one
-  handle. See [ADR-026](adr-026-windows-reparse-point-same-handle-open.md).
+  handle. See [ADR-027](adr-027-windows-reparse-point-same-handle-open.md).
 - An over-budget read fails with `stdlib.path.contents.file_too_large`, which
   quotes the path and the byte limit. An opened object that is not a regular
   file (a FIFO, a device, or a Windows reparse point refused on the opened

@@ -173,7 +173,7 @@ operator, user, and contributor references are easier to find.
 - [ADR-028](adr-028-defer-split-build-dir-harness-trim.md): Deferred trim of
   the split-build-dir harness test, with the serialized-lane measurements that
   made the figure unstable and the ten-run gate that reopens the question.
-- [ADR-026](adr-026-windows-reparse-point-same-handle-open.md): Windows final
+- [ADR-027](adr-027-windows-reparse-point-same-handle-open.md): Windows final
   component validation through a same-handle reparse-point open.
 
 ## Proposals
