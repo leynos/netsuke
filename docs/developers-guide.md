@@ -4444,12 +4444,22 @@ the policy for a whole test, benchmark, or example binary just the same.
 
 The root list is not trusted to stay complete on its own, because that is how a
 scan silently stops covering something. A second test walks every Rust source
-in the workspace — skipping `target` and dot-prefixed caches, which are
-generated or machine-local rather than edited here — and fails when one of them
-is not in the scanned roots, naming each. So a root that is renamed or
-misspelled, or a target location added later, reports itself instead of quietly
-excusing its sources. Extending the roots stays safe: the invariant is what
-says the set is complete, rather than a reviewer re-deriving it.
+in the workspace, skipping only the named machine-local directories — `target`,
+the tool caches, and the other entries `.gitignore` declares — and fails when
+one of them is not in the scanned roots, naming each. So a root that is renamed
+or misspelled, or a target location added later, reports itself instead of
+quietly excusing its sources. Extending the roots stays safe: the invariant is
+what says the set is complete, rather than a reviewer re-deriving it.
+
+The skip list is named rather than "anything dot-prefixed", and the difference
+matters. A dot-directory is not evidence of a cache: `.config`, `.github`, and
+`.rules` are tracked repository content, and Cargo compiles a target declared
+under any directory at all, hidden or not. A walk that skipped every
+dot-prefixed name would neither scan a target sitting in one nor report it,
+which is exactly the silent non-coverage the invariant exists to prevent. Where
+the two rules could disagree, the tie breaks towards reporting: an entry
+missing from the list costs a false failure naming a real file, while an entry
+present but wrong hides a source.
 
 It reads the attribute as source text, because that is what an attribute is:
 there is no execution to model, and the assertion is exactly "this text does
