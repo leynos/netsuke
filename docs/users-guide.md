@@ -1838,8 +1838,21 @@ library.
 The reading filters also refuse to follow a symlink as the final path component
 and reject anything that is not a regular file once opened, including FIFOs and
 device nodes. A symlinked directory used *inside* a path is unaffected; only
-the final entry is checked. Templates that deliberately read through a final
-symlink can pass `follow_symlinks=true` to accept the link:
+the final entry is checked. On Windows the same refusal covers every reparse
+point, not only symlinks: junctions, volume mount points, and other tags such
+as deduplication or cloud placeholders are all rejected, including tags Windows
+may add later.
+
+`follow_symlinks=true` waives that final-component refusal, and only that. The
+capability that anchors every read in the workspace is unaffected, so a link
+whose target is written as an absolute path is still refused with a diagnostic
+reporting that a path led outside the filesystem — even when the target is in
+fact inside the workspace. Relativity of the *link target*, not containment of
+the resolved path, is what the resolver tests. A template that reads through a
+relative-target link is the supported case; on Windows a junction cannot be
+one, because `mklink` records an absolute target and so is always refused under
+either policy. Templates that deliberately read through a final symlink can
+pass the opt-in to accept it:
 
 <!-- tested-example: guide-file-follow-symlinks-expression -->
 

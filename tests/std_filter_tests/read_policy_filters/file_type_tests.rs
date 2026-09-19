@@ -13,6 +13,8 @@ use test_support::fluent::normalize_fluent_isolates;
 #[cfg(unix)]
 use super::create_fifo;
 use super::fallible;
+#[cfg(windows)]
+use super::require_real_junction;
 use super::{
     CONTENTS, DIGEST, FilterCase, HASH, LINECOUNT, ReadTarget, rejection, render_case,
     require_real_symlink,
@@ -32,6 +34,24 @@ use super::{
 fn skip_without_symlink_support(case: FilterCase) {
     eprintln!(
         "skipped: {} — this host cannot create a symlink fixture",
+        case.name
+    );
+}
+
+/// Report that this host cannot provide the junction fixture, then end the case.
+///
+/// A junction needs no privilege, so `Ok(None)` here means only that `cmd.exe`
+/// is absent. The case says so rather than passing silently: a suite that
+/// reports green while quietly skipping its subject would hide the same
+/// regression on a host that can create the fixture.
+#[cfg(windows)]
+#[expect(
+    clippy::print_stderr,
+    reason = "test harness: an unavailable fixture must be visible in the captured test output instead of passing silently"
+)]
+fn skip_without_junction_support(case: FilterCase) {
+    eprintln!(
+        "skipped: {} — this host cannot create a junction fixture",
         case.name
     );
 }
@@ -99,6 +119,55 @@ fn follow_symlinks_opt_in_reads_the_link_target(#[case] case: FilterCase) -> Res
         "{}: expected the opt-in to follow the link and render {} but rendered {rendered}",
         case.name,
         case.followed
+    );
+    Ok(())
+}
+
+/// The Windows default policy must refuse a junction through the same open
+/// that yields the handle.
+///
+/// A junction is a directory-shaped reparse point: reading it back as text
+/// renders the target's file names, so a policy that let the open traverse it
+/// would silently expose a directory the caller never asked for. This case is
+/// the Windows half of the same-handle guarantee, where the decision comes
+/// from the opened handle's reparse-point attribute rather than from a
+/// pre-open `symlink_metadata` lookup that a concurrent replace could defeat.
+#[cfg(windows)]
+#[rstest]
+#[case::contents(CONTENTS)]
+#[case::linecount(LINECOUNT)]
+#[case::hash(HASH)]
+#[case::digest(DIGEST)]
+fn reading_filters_reject_a_junction(#[case] case: FilterCase) -> Result<()> {
+    let (_temp, root) = fallible::filter_workspace()?;
+    let Some(junction) = fallible::junction_fixture(&root)? else {
+        skip_without_junction_support(case);
+        return Ok(());
+    };
+    require_real_junction(&root, &junction)?;
+    let err = rejection(
+        case,
+        render_case(
+            case,
+            "junction",
+            ReadTarget::new(&root, &junction, 1024),
+            &case.template(),
+        )?,
+    )?;
+    ensure!(
+        err.kind() == ErrorKind::InvalidOperation,
+        "{}: should report InvalidOperation for a junction but was {:?}",
+        case.name,
+        err.kind()
+    );
+    let message = normalize_fluent_isolates(&err.to_string());
+    // The refusal happens on the opened handle, so it surfaces as the
+    // regular-file diagnostic; a traversal would have rendered the target
+    // directory's entries instead of erroring at all.
+    ensure!(
+        message.contains("not a regular file"),
+        "{}: error should explain the rejection: {message}",
+        case.name
     );
     Ok(())
 }

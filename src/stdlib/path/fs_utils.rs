@@ -20,6 +20,8 @@ use rustix::fs::OFlags;
 use crate::localization::{self, keys};
 
 use super::path_utils::normalise_parent;
+#[cfg(windows)]
+use super::windows_reparse;
 use crate::stdlib::io_helpers::io_to_error;
 
 /// An ambient handle to a path's parent directory and the entry name within it.
@@ -53,20 +55,25 @@ pub(crate) fn not_regular_file_error(path: &Utf8Path) -> Error {
 
 /// Open `path` for reading under the file-reading safety policy.
 ///
-/// On Unix the open is non-blocking, so a FIFO or device final component
+/// The default policy opens the final path component without following a link
+/// on either platform, and the decision is taken from the handle the caller
+/// then reads: Unix asks for that in the open itself with `O_NOFOLLOW`, and
+/// Windows asks the open not to traverse a reparse point and then judges the
+/// returned handle's attributes (see `windows_reparse`). Neither platform
+/// consults a separate path lookup, so a concurrent replace of the final
+/// component cannot make the decision and the read disagree.
+///
+/// On Unix the open is also non-blocking, so a FIFO or device final component
 /// cannot wedge the render worker inside `open` even when the caller opted
 /// into following symlinks; blocking mode is restored once the opened object
-/// is confirmed to be a regular file. The final path component is opened
-/// without following symlinks unless `limits.follow_symlinks` opts in, and the
-/// opened object must be a regular file, checked on the opened handle so
-/// devices and FIFOs are rejected race-free.
+/// is confirmed to be a regular file.
 ///
 /// # Errors
 ///
 /// Returns a template error when the parent directory cannot be opened, the
-/// target cannot be opened, the final component is a symlink while following
-/// is disabled, the opened object is not a regular file, or blocking mode
-/// cannot be restored.
+/// target cannot be opened, the final component is a link while following is
+/// disabled, the opened object is not a regular file, or blocking mode cannot
+/// be restored.
 pub(crate) fn open_file_checked(path: &Utf8Path, limits: &FileReadLimits) -> Result<File, Error> {
     let parent = open_parent_dir(path)?;
     let mut options = OpenOptions::new();
@@ -76,10 +83,11 @@ pub(crate) fn open_file_checked(path: &Utf8Path, limits: &FileReadLimits) -> Res
     // default policy, which rejects a symlink final component.
     #[cfg(unix)]
     apply_unix_open_flags(&mut options, limits.follow_symlinks, path)?;
+    // On Windows directory opens must stay permitted under both policies so
+    // the shared regular-file check below reports the documented rejection
+    // rather than the open failing.
     #[cfg(windows)]
-    if !limits.follow_symlinks {
-        reject_windows_symlink(&parent, path)?;
-    }
+    windows_reparse::apply_open_flags(&mut options, limits.follow_symlinks);
     let file = parent
         .handle
         .open_with(Utf8Path::new(&parent.entry), &options)
@@ -97,6 +105,12 @@ pub(crate) fn open_file_checked(path: &Utf8Path, limits: &FileReadLimits) -> Res
             err,
         )
     })?;
+    // Judged from the handle just opened, never from the path, so the policy
+    // decision and the read cannot diverge.
+    #[cfg(windows)]
+    if !limits.follow_symlinks {
+        windows_reparse::reject_reparse_point(&metadata, path)?;
+    }
     if !metadata.is_file() {
         return Err(not_regular_file_error(path));
     }
@@ -132,33 +146,6 @@ fn apply_unix_open_flags(
         )
     })?;
     options.custom_flags(bits);
-    Ok(())
-}
-
-/// Reject a symlink final component ahead of an open on Windows.
-///
-/// Windows exposes no `O_NOFOLLOW` through cap-std, so the pre-open
-/// `symlink_metadata` check is the platform's best available guard.
-///
-/// # Errors
-///
-/// Returns a template error when the metadata cannot be read or names a
-/// symlink.
-#[cfg(windows)]
-fn reject_windows_symlink(parent: &ParentDir, path: &Utf8Path) -> Result<(), Error> {
-    let metadata = parent
-        .handle
-        .symlink_metadata(Utf8Path::new(&parent.entry))
-        .map_err(|err| {
-            io_to_error(
-                path,
-                &localization::message(keys::STDLIB_PATH_ACTION_STAT),
-                err,
-            )
-        })?;
-    if metadata.file_type().is_symlink() {
-        return Err(not_regular_file_error(path));
-    }
     Ok(())
 }
 
