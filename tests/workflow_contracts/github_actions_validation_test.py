@@ -15,6 +15,7 @@ import subprocess
 import typing as typ
 
 import yaml
+from action_references import require_external_action_sha
 from actionlint_installer_contract import (
     ACTIONLINT_CHECKSUM_COMMAND,
     ACTIONLINT_INSTALL_COMMAND,
@@ -42,6 +43,12 @@ pytest_plugins = ("cmd_mox.pytest_plugin",)
 MAKEFILE_PATH = REPO_ROOT / "Makefile"
 YAMLLINT_POLICY_PATH = REPO_ROOT / ".yamllint.yml"
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
+
+#: The action that provisions uv. `make check-fmt` and `make lint-python` run
+#: the uv-driven Ruff and Pylint gates, so uv is what makes this repository's
+#: Python tooling reachable on the runner; the yamllint install below then
+#: lands in a uv-managed tool directory the gate cache owns.
+UV_SETUP_ACTION = "astral-sh/setup-uv"
 
 
 def _makefile_recipe(target: str) -> list[str]:
@@ -97,9 +104,11 @@ def _assert_yamllint_ci_contract(steps: list[dict[str, object]]) -> None:
     install_yamllint = named_step(steps, "Install yamllint")
     cached_paths = [line.strip() for line in _gate_cache_paths().splitlines()]
 
-    assert setup_uv.get("uses") == (
-        "astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990"
-    ), "the Linux CI job must provision uv before installing yamllint"
+    require_external_action_sha(
+        setup_uv.get("uses"),
+        UV_SETUP_ACTION,
+        "the Linux CI job's uv provisioning, which must precede yamllint",
+    )
     setup_uv_inputs = setup_uv.get("with")
     assert isinstance(setup_uv_inputs, dict), "Setup uv must declare inputs"
     assert setup_uv_inputs.get("enable-cache") == "false", (

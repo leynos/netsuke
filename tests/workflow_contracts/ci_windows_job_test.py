@@ -17,8 +17,6 @@ import pytest
 from workflow_loading import (
     CI_WINDOWS_WORKFLOW_PATH,
     CI_WORKFLOW_PATH,
-    PACKAGE_WORKFLOW_PATH,
-    REPO_ROOT,
     job_steps,
     load_workflow,
     named_step,
@@ -155,50 +153,6 @@ def test_windows_setup_rust_keeps_warnings(
         f"#[cfg(windows)] tree compiles under warnings-as-errors, "
         f"got {with_.get('rustflags')!r}"
     )
-
-
-def test_windows_msi_job_exercises_the_release_authoring_and_upgrade_path() -> None:
-    """Build and install custom authoring through the dedicated MSI merge gate.
-
-    XML parsing cannot reject authoring WiX no longer supports, and compilation
-    cannot prove Windows Installer's replacement behaviour. The local action
-    therefore builds the same custom WXS with the release packaging action and
-    executes the beta-to-beta, beta-to-final, and downgrade transition suite.
-    """
-    workflow = load_workflow(CI_WINDOWS_WORKFLOW_PATH)
-    msi_steps = job_steps(workflow, MSI_JOB)
-    validation_step = named_step(msi_steps, "Validate Windows MSI upgrade paths")
-    release_steps = job_steps(load_workflow(PACKAGE_WORKFLOW_PATH), "build")
-    release_step = named_step(release_steps, "Build Windows installer package")
-    release_action = str(release_step.get("uses", ""))
-    assert (
-        validation_step.get("uses")
-        == "./.github/actions/windows-msi-upgrade-validation"
-    ), (
-        "the MSI merge gate must invoke the repository-owned integration action, "
-        f"got {validation_step.get('uses')!r}"
-    )
-    action_contents = (
-        REPO_ROOT
-        / ".github"
-        / "actions"
-        / "windows-msi-upgrade-validation"
-        / "action.yml"
-    ).read_text(encoding="utf-8")
-    for expected in (
-        release_action,
-        "wxs-path: installer/Package.wxs",
-        "wix-extension-version: '7'",
-        "version: 1.2.3-beta1",
-        "version: 1.2.3-beta2",
-        "version: 1.2.3",
-        "windows-msi-upgrade-validation.ps1",
-        "windows-msi-upgrade-cleanup.ps1",
-    ):
-        assert expected in action_contents, (
-            "Windows MSI integration must preserve the release authoring "
-            f"contract and test every transition, missing {expected!r}"
-        )
 
 
 def test_windows_lane_runs_check_fmt_lint_and_test(

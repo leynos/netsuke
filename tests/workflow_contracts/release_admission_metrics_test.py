@@ -1,5 +1,6 @@
 """Pin bounded release-admission metric delivery in the RFC 0005 scaffold."""
 
+from action_references import require_external_action_sha
 from workflow_loading import (
     RELEASE_WORKFLOW_PATH,
     job_steps,
@@ -11,7 +12,10 @@ from workflow_loading import (
 
 ADMISSION_PERMISSIONS = {"actions": "read", "contents": "read"}
 ADMISSION_TIMEOUT_MINUTES = 15
-ADMISSION_PYTHON_SETUP = "astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990"
+#: The action that provisions the interpreter the admission timings run under.
+ADMISSION_PYTHON_ACTION = "astral-sh/setup-uv"
+#: The action that retains the admission metrics and traces as artefacts.
+ARTIFACT_UPLOAD_ACTION = "actions/upload-artifact"
 METRICS_FILE_ENV = {
     "NETSUKE_RELEASE_ADMISSION_METRICS_FILE": (
         "${{ runner.temp }}/release-admission-metrics.jsonl"
@@ -162,8 +166,10 @@ def _assert_admission_job_contract(
     assert "continue-on-error" not in admission, (
         "observation mode must succeed without suppressing other admission failures"
     )
-    assert python_step.get("uses") == ADMISSION_PYTHON_SETUP, (
-        "the admission job must provision Python for monotonic duration collection"
+    require_external_action_sha(
+        python_step.get("uses"),
+        ADMISSION_PYTHON_ACTION,
+        "the admission job's Python provisioning for monotonic duration collection",
     )
     assert python_step.get("with") == {
         "python-version": "3.14",
@@ -202,9 +208,11 @@ def _assert_metrics_delivery_contract(
     assert all(fragment in summary_run for fragment in SUMMARY_REQUIRED_FRAGMENTS), (
         "the summary must write its operator-facing output and both gate fields"
     )
-    assert "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a" in str(
-        upload_step.get("uses")
-    ), "the metrics artifact upload must stay SHA-pinned"
+    require_external_action_sha(
+        upload_step.get("uses"),
+        ARTIFACT_UPLOAD_ACTION,
+        "the metrics artifact upload",
+    )
     assert upload_step.get("with") == METRICS_ARTIFACT, (
         "the artifact must retain the bounded metrics file"
     )

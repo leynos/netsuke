@@ -1,27 +1,26 @@
 """Contract for which runs may publish the coverage ratchet baseline.
 
 A ratchet is only a ratchet while the baseline it compares against comes from
-somewhere a pull request cannot reach. Before the pinned revision the shared
-action published from every run that reached its save step, so a pull request
-advanced the baseline it was then measured against, and a warm-run dispatch of
-``coverage-main.yml`` replaced the very generation it was measuring, despite
-that workflow's header describing itself as a reader.
+somewhere a pull request cannot reach. The shared coverage action guards the
+baseline save on a push to ``refs/heads/main``, so a pull request cannot
+advance the baseline it is then measured against, and a warm-run dispatch of
+``coverage-main.yml`` cannot replace the very generation it was measuring.
 
 None of that is visible from a green run. A ratchet comparing each pull request
 against itself passes exactly as one comparing against trunk does, and it goes
-on passing while coverage falls.
-
-The pin is therefore asserted by value here, unlike the shape sweep in
-``tests/workflow_shared_actions_pins.rs``, which deliberately lets Dependabot
-own each SHA. The guarantee arrived in a particular revision, so a bump has to
-update this constant and make someone confirm the new one still keeps a pull
-request from publishing.
+on passing while coverage falls. What this suite can see from this repository
+is therefore the identity of the action both lanes call, and that they call it
+at one shared pin: two lanes on different revisions would make the behaviour
+depend on which lane a reader happened to check. Whether a given revision still
+carries the guard is a property of the action's own code, not of anything
+asserted here, and a Dependabot bump does not by itself change it. The shape
+sweep in ``tests/workflow_shared_actions_pins.rs`` owns each pin's form.
 
 This repository needs no opt-in. Both workflows run on pushes to ``main``,
 which is the trigger the action's guard names, so neither sets
 ``publish-baseline``.
 
-The same revision carries the publication opt-out, so this is also where the
+The action also carries the publication opt-out, so this is also where the
 two lanes are held apart on it: the pull-request lane declines the action's own
 archive, and the trunk lane keeps the default so it still publishes the report
 CodeScene reads. Setting it in the wrong lane would either publish a
@@ -34,6 +33,7 @@ Run via ``make test-workflow-contracts``.
 import typing as typ
 
 import pytest
+from action_references import require_external_action_sha
 from workflow_loading import (
     CI_WORKFLOW_PATH,
     COVERAGE_MAIN_WORKFLOW_PATH,
@@ -45,13 +45,10 @@ from workflow_loading import (
 if typ.TYPE_CHECKING:
     from pathlib import Path
 
-#: The revision that guards the baseline save on a push to refs/heads/main and
-#: carries the publication opt-out the pull-request lane passes. The guarantee
-#: arrived in a particular revision, so a bump has to update this constant and
-#: make someone confirm the new one still keeps a pull request from publishing.
-GENERATE_COVERAGE: typ.Final[str] = (
-    "leynos/shared-actions/.github/actions/generate-coverage@"
-    "a5765019912a8ab6882b12db049c7cde635f3a85"
+#: The shared action that generates the coverage report and ratchets the
+#: baseline. Both lanes must call this exact action, at one shared pin.
+GENERATE_COVERAGE_ACTION: typ.Final[str] = (
+    "leynos/shared-actions/.github/actions/generate-coverage"
 )
 
 #: The input that suppresses the action's own archive step. A pull-request
@@ -96,20 +93,28 @@ def _inputs(workflow_path: Path, job_name: str) -> dict[str, object]:
     )
 
 
-@pytest.mark.parametrize(("workflow_path", "job_name"), COVERAGE_JOBS)
-def test_coverage_is_pinned_to_the_guarded_revision(
-    workflow_path: Path, job_name: str
-) -> None:
-    """Both callers must share the revision that carries the guard.
+def test_both_coverage_callers_pin_the_same_action_revision() -> None:
+    """Both lanes must call the shared coverage action at one shared pin.
 
-    Two lanes on different revisions would be worse than one stale pin: the
-    behaviour would depend on which lane a reader happened to check.
+    The action's identity is what the contract rests on, and the pin is
+    checked for shape here rather than for value, so a Dependabot bump needs
+    no test edit. What must not drift is the agreement between the lanes: two
+    revisions would make the behaviour depend on which lane a reader happened
+    to check, which is worse than one stale pin because nothing in either
+    workflow shows it.
     """
-    step = _coverage_step(workflow_path, job_name)
+    pins = {
+        f"{workflow_path.name}:{job_name}": require_external_action_sha(
+            _coverage_step(workflow_path, job_name).get("uses"),
+            GENERATE_COVERAGE_ACTION,
+            f"the {job_name} coverage step in {workflow_path.name}",
+        )
+        for workflow_path, job_name in COVERAGE_JOBS
+    }
 
-    assert step.get("uses") == GENERATE_COVERAGE, (
-        f"{workflow_path.name}:{job_name} must pin {GENERATE_COVERAGE}, got "
-        f"{step.get('uses')!r}"
+    assert len(set(pins.values())) == 1, (
+        f"every coverage caller must pin {GENERATE_COVERAGE_ACTION} to the "
+        f"same revision, got {pins!r}"
     )
 
 

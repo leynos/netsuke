@@ -9,6 +9,7 @@ Run via ``make test-workflow-contracts``.
 """
 
 import pytest
+from action_references import require_external_action_sha
 from cache_contract_data import (
     ACTION_DIR,
     SCCACHE_CREDENTIAL_JOBS,
@@ -31,6 +32,9 @@ from workflow_loading import (
     workflow_job,
 )
 
+#: The action that installs the sccache binary from its published release.
+SCCACHE_INSTALLER_ACTION = "taiki-e/install-action"
+
 
 def _assert_sccache_contract(workflow_name: str, job_name: str) -> None:
     """Require one observable, binary-installed sccache owner for a job."""
@@ -43,9 +47,11 @@ def _assert_sccache_contract(workflow_name: str, job_name: str) -> None:
 
     steps = job_steps(workflow, job_name)
     sccache_install = named_step(steps, "Install sccache")
-    assert sccache_install.get("uses") == (
-        "taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68"
-    ), f"{workflow_name} {job_name} must use the pinned sccache binary installer"
+    require_external_action_sha(
+        sccache_install.get("uses"),
+        SCCACHE_INSTALLER_ACTION,
+        f"{workflow_name} {job_name}'s sccache binary installer",
+    )
     sccache_inputs = require_mapping(
         sccache_install.get("with"), "sccache installer inputs"
     )

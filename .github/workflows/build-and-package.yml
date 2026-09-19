@@ -110,7 +110,7 @@ jobs:
       # over when this revision does.
       # tests/workflow_contracts/cache_ownership_test.py holds this value
       # equal to the `uses:` pin below.
-      RUST_BUILD_RELEASE_PIN: e041cb75c35c3524201a32d5e57c87408fbd5874
+      RUST_BUILD_RELEASE_PIN: a5765019912a8ab6882b12db049c7cde635f3a85
       # rust-build-release-v1 still nests a Node 20 setup-uv action, and the
       # promoted Node 24 runtime aborts inside libuv on Windows. The escape
       # hatch predates the move to GitHub-hosted Windows runners and is
@@ -129,13 +129,12 @@ jobs:
 
       - name: Install uv
         if: inputs.platform != 'linux'
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
-        # v8.3.2
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
         with:
           python-version: ${{ inputs['python-version'] }}
 
       - name: Build release binary
-        uses: leynos/shared-actions/.github/actions/rust-build-release@e041cb75c35c3524201a32d5e57c87408fbd5874
+        uses: leynos/shared-actions/.github/actions/rust-build-release@a5765019912a8ab6882b12db049c7cde635f3a85
         with:
           target: ${{ inputs.target }}
           bin-name: ${{ env.BIN_NAME }}
@@ -252,7 +251,7 @@ jobs:
 
       - name: Stage artefacts
         id: stage
-        uses: leynos/shared-actions/.github/actions/stage-release-artefacts@e041cb75c35c3524201a32d5e57c87408fbd5874
+        uses: leynos/shared-actions/.github/actions/stage-release-artefacts@a5765019912a8ab6882b12db049c7cde635f3a85
         with:
           config-file: .github/release-staging.toml
           target: ${{ inputs['stage-target'] }}
@@ -294,7 +293,7 @@ jobs:
 
       - name: Package Linux artefacts with dependencies
         if: inputs.platform == 'linux'
-        uses: leynos/shared-actions/.github/actions/linux-packages@e041cb75c35c3524201a32d5e57c87408fbd5874
+        uses: leynos/shared-actions/.github/actions/linux-packages@a5765019912a8ab6882b12db049c7cde635f3a85
         with:
           project-dir: .
           package-name: ${{ inputs['bin-name'] }}
@@ -315,7 +314,7 @@ jobs:
       - name: Build Windows installer package
         if: inputs.platform == 'windows'
         id: package_windows
-        uses: leynos/shared-actions/.github/actions/windows-package@e041cb75c35c3524201a32d5e57c87408fbd5874
+        uses: leynos/shared-actions/.github/actions/windows-package@a5765019912a8ab6882b12db049c7cde635f3a85
         with:
           wxs-path: installer/Package.wxs
           product-name: ${{ inputs['bin-name'] }}
@@ -334,7 +333,7 @@ jobs:
       - name: Build macOS installer package
         if: inputs.platform == 'macos'
         id: package_macos
-        uses: leynos/shared-actions/.github/actions/macos-package@e041cb75c35c3524201a32d5e57c87408fbd5874
+        uses: leynos/shared-actions/.github/actions/macos-package@a5765019912a8ab6882b12db049c7cde635f3a85
         with:
           name: ${{ inputs['bin-name'] }}
           identifier: com.leynos.${{ inputs['bin-name'] }}

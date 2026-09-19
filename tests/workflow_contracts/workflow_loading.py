@@ -32,6 +32,12 @@ MUTATION_TESTING_WORKFLOW_PATH = (
 PACKAGE_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "build-and-package.yml"
 RELEASE_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "release.yml"
 MAKEFILE_PATH = REPO_ROOT / "Makefile"
+#: The composite action the Windows MSI merge gate delegates to. Its steps are
+#: parsed as YAML by `windows_msi_gate_test.py`, so the path is shared here
+#: rather than spelled out at each call site.
+MSI_VALIDATION_ACTION_PATH = (
+    REPO_ROOT / ".github" / "actions" / "windows-msi-upgrade-validation" / "action.yml"
+)
 
 #: The jobs that call the shared `setup-rust` action directly, paired with the
 #: workflow that declares each. Several suites assert against all of them. The
