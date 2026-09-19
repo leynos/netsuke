@@ -82,15 +82,28 @@ const MINIMUM_WORKSPACE_SOURCES: usize = 100;
 const STANDALONE_COMPILED_SOURCES: [&str; 1] = ["build.rs"];
 
 /// Append every `.rs` source beneath `directory`, with its contents, in order.
+///
+/// An absent directory is an empty one rather than an error. A root that does
+/// not exist holds no sources, so there is nothing here to miss, and the
+/// coverage invariant is what keeps that from becoming a hole: the walk below
+/// finds every Rust source in the workspace and fails on any that is not
+/// scanned, so a root whose sources moved elsewhere — renamed, misspelled,
+/// deleted — is reported there by name. Failing here instead would mean
+/// reporting the same fact twice, in the less useful form of an I/O error that
+/// does not say which source went uncovered. Every other I/O error still
+/// propagates: an unreadable directory is a real failure, and the distinction
+/// between "holds nothing" and "could not be read" is worth keeping.
 fn collect_rust_sources(
     root: &Dir,
     directory: &str,
     sources: &mut Vec<(String, String)>,
 ) -> Result<()> {
-    for entry_result in root
-        .read_dir(directory)
-        .with_context(|| format!("read `{directory}`"))?
-    {
+    let entries = match root.read_dir(directory) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error).with_context(|| format!("read `{directory}`")),
+    };
+    for entry_result in entries {
         let entry = entry_result.with_context(|| format!("read an entry of `{directory}`"))?;
         let name = entry
             .file_name()
@@ -206,6 +219,20 @@ fn build_error_message(findings: &[(String, String)]) -> String {
          remove the `allow` and state the site as `#[expect(..., reason = \"...\")]`, \
          or route the access through a seam:\n- {listed}"
     )
+}
+
+/// Render the `(path, lint)` pairs a table case expects the scan to report.
+///
+/// Every finding for one source carries that source's path, so a case states
+/// the lints and the path once and the pairs are assembled here. That keeps a
+/// row down to the three things that distinguish it — the source, where it
+/// sits, and what must be found — rather than repeating the pair shape at every
+/// row.
+fn expected_findings(path: &str, lints: &[&str]) -> Vec<(String, String)> {
+    lints
+        .iter()
+        .map(|lint| (path.to_owned(), (*lint).to_owned()))
+        .collect()
 }
 
 /// Fail if any compiled source suppresses the environment-access policy.
