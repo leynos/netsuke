@@ -4461,6 +4461,286 @@ Three dispositions are in use:
 Scope an expectation as tightly as the site allows — a function where one call
 is involved, a module only where the whole file is pending migration.
 
+#### The suppression contract that backs the rule
+
+`expect`-not-`allow` is a convention the compiler enforces only on the outer
+form. `clippy::allow_attributes` does not fire on an *inner* attribute, so
+
+```rust
+#![allow(clippy::disallowed_methods, reason = "escape hatch probe")]
+```
+
+at the top of a file switches the environment-access policy off for everything
+below it and passes `make lint` with every other contract green: `clippy.toml`
+still lists the methods, the workspace still denies the lint, and the lint
+target still runs across the workspace. Each of those asserts a true statement
+about a different thing, and none observes that a source has opted out.
+
+`tests/env_access_suppressions.rs` closes that gap. It reads the compiled
+sources — `src`, `build_l10n_audit`, `test_support/src`, `tests`, `benches`,
+`examples`, and `build.rs` — and fails when an `#[allow(...)]` or
+`#![allow(...)]` attribute names a lint that carries the policy. The roots are
+the ones the workspace lints rather than the ones a convention calls source.
+`tests`, `benches`, and `examples` are in scope because Cargo discovers targets
+in all three and `--all-targets` compiles and lints them, and the modules they
+wire in, exactly as it lints the library, so an inner attribute there silences
+the policy for a whole test, benchmark, or example binary just the same.
+
+Within a root the scan reads every file that is not dot-prefixed, rather than
+only the `*.rs` files, because a `.rs` name is not something the compiler
+requires. A module is read from whatever `#[path = "..."]` names —
+`#[path = "suppressed.inc"] mod suppressed;` compiles — and such a file may
+open with the innermost form of the policy suppression, which
+`allow_attributes` does not report. Naming the compiled sources by an extension
+the language does not require is therefore a filter the one reader who cares
+about it would rather have on. The breadth errs towards reading too much on
+purpose: a file read but never compiled costs a failure message naming a real
+file, while a file compiled but not read hides a suppression. A file that will
+not decode is declined rather than fatal, since Rust source is UTF-8 by
+definition; every other read error still propagates, and that half is the
+load-bearing one, because a file that is text and could not be read is a source
+that went unscanned. A dot-file under a source root stays out, being tooling
+state — `.gitignore`, `.editorconfig`, `.rustfmt.toml` — rather than anything a
+`#[path]` names.
+
+The root list is not trusted to stay complete on its own, because that is how a
+scan silently stops covering something. A second test walks every Rust source
+in the workspace, skipping only the named machine-local directories — `target`,
+the tool caches, and the other entries `.gitignore` declares — and fails when
+one of them is not in the scanned roots, naming each. So a root that is renamed
+or misspelled, or a target location added later, reports itself instead of
+quietly excusing its sources. Extending the roots stays safe: the invariant is
+what says the set is complete, rather than a reviewer re-deriving it.
+
+A root is a directory, and every directory name beneath it comes along, so a
+cache can sit inside a scanned root: `tests/.uv-cache` is under `tests`. The
+scan therefore skips the same machine-local names the workspace walk skips, at
+any depth, rather than reading a cache as though it were repository content. It
+did not always, and the gap was worth closing for a reason other than tidiness:
+a vendored source under a scanned root that carried the banned `allow` failed
+the gate on a machine where the tool had run and passed on a fresh clone. A
+verdict that depends on a machine is worse than no verdict, and this one would
+have been near-impossible to diagnose, because the name is git-ignored and so
+appears in no diff and in no `git status`. Both walks skip by name now, and a
+self-test pins that they agree on what is governed, since the coverage
+invariant only means something while they do.
+
+The skip list is named rather than "anything dot-prefixed", and the difference
+matters. A dot-directory is not evidence of a cache: `.config`, `.github`, and
+`.rules` are tracked repository content, and Cargo compiles a target declared
+under any directory at all, hidden or not. A walk that skipped every
+dot-prefixed name would neither scan a target sitting in one nor report it,
+which is exactly the silent non-coverage the invariant exists to prevent. Where
+the two rules could disagree, the tie breaks towards reporting: an entry
+missing from the list costs a false failure naming a real file, while an entry
+present but wrong hides a source.
+
+The skip is justified by an appeal to `.gitignore` — a name git will not track
+is not one a compiled source can live under — and that appeal is enforced
+rather than trusted, because it stopped being true once. `.netsuke` is
+netsuke's own runtime state, but it was skipped while `git check-ignore`
+declined it; every sibling tool cache is listed and it had been missed. A `.rs`
+file placed there would have been tracked, compiled, skipped by the walk, and
+reported by nobody, which is the failure the invariant exists to catch arriving
+through the list rather than the walk. The name is now in `.gitignore`, and the
+walk's self-test requires each skipped name to be one git would not track.
+`.git` is the single named exception: git refuses to track anything beneath it
+whatever the ignore files say.
+
+That self-test asks the *repository's* rules rather than the working tree,
+because a working tree answers with more than those. Ruff writes a `.gitignore`
+holding `*` into `.ruff_cache` as a side effect of running, so
+`git check-ignore` in the live tree agreed that `.ruff_cache` was ignored while
+the repository's own `.gitignore` said nothing about it — every sibling cache
+has an entry and this one had been missed, the same defect as `.netsuke`
+arriving one level down. A fresh clone, or a `coverage-main` lane that runs
+`make test` without `make lint` first, has no such file, so the answer would
+have depended on which tools had already run. The test therefore copies
+`.gitignore` into a scratch repository and puts the question there: the rule
+has to hold on every checkout, before any tool runs, and `.ruff_cache` is now in
+`.gitignore` beside its siblings. Asking its own repository also means the
+test needs no guard for the copies cargo-mutants makes, since it brings one.
+
+The machine's git configuration is a third place an answer can come from, and
+it is switched off for the same reason. A global ignore file naming one of
+these directories would make the test pass while the repository said nothing
+about the name — the original defect wearing a different hat, and just as
+invisible. An empty `core.excludesFile` covers both spellings a global ignore
+can take: it overrides a configured path and also suppresses the default
+`~/.config/git/ignore`, measured against both. The value is empty rather than a
+device path, since the test also runs on the Windows lane.
+
+A template directory is a fourth, and it is closed at `git init` instead:
+`--template=` keeps a template from seeding the scratch repository's
+`info/exclude`, which `check-ignore` would otherwise read. That is the whole of
+its job, and it is worth stating narrowly: a template can seed `.git/config`
+too, but the empty `core.excludesFile` above already neutralizes an ignore file
+configured there, measured with a template seeding only that. The flag has to
+be on `git init` rather than on the `check-ignore` call, because `info/exclude`
+is written at init time and no later call could unpin it. Note that
+`-c init.templateDir=` on the same command does *not* close it:
+`GIT_TEMPLATE_DIR` outranks it, measured, so the empty `--template` argument is
+the form that works for a contributor with that variable set.
+
+A fifth route does not go through a file at all: `GIT_DIR` repoints git at
+another repository's metadata, so `check-ignore` answers from there. Measured
+at a false pass, with the hostile repository's `info/exclude` holding `*` while
+the honest answer for an unignored name was "not ignored". Both `git` calls
+clear `GIT_DIR`, `GIT_WORK_TREE`, and `GIT_COMMON_DIR`. This one needed a
+mutation to verify rather than a green suite, because a false pass is also a
+pass: a name absent from `.gitignore` is added to the skip list, and the test
+must fail naming it even under that environment, which it does only with the
+pin in place.
+
+It reads the attribute as source text, because that is what an attribute is:
+there is no execution to model, and the assertion is exactly "this text does
+not appear in an `allow` attribute". An attribute nested in a `cfg_attr` is
+read too, since that is the same suppression written one token differently. The
+scan first blanks comments and string and character literals, because that is
+where quoted text lives — a byte or C string escapes like any other, so its
+body ends at an unescaped quote, and reading one as raw would end it early at
+an escaped quote and blank the code after it. Masking is what keeps the scan
+off prose that quotes an attribute, including this section and the mutation
+records that quote the form they prohibit: a quoted attribute never reaches the
+matcher at all, whatever line it sits on. It then matches an attribute by its
+tokens — `#`, an optional `!`, `[`, a name, `(` — with whitespace permitted
+between them, and reads it to its matching parenthesis, so one that `rustfmt`
+has wrapped across several lines is read whole rather than truncated. The
+scanner lives beside the contract in `tests/env_access_suppressions/`
+(`scanner.rs`, `mask.rs`, `policy.rs`), and its self-tests in
+`scanner_tests.rs` and `spelling_tests.rs` pin each shape it must report and
+each innocent source it must not.
+
+Matching tokens rather than lines is the one design decision here that was
+reached the hard way, and it is worth recording why the obvious alternative
+fails. The scan once anchored at the start of a line, reasoning that `rustfmt`
+normalizes an attribute's spelling and `make check-fmt` enforces that, so a
+spelling the anchor declined to read could not reach the compiler. **That
+reasoning is false.** Each of these compiles, silences the policy outright
+(`clippy` exits 0 where the same file without the attribute exits 101), and
+passed the anchored scan, and every one is pinned by a test in
+`spelling_tests.rs` against a real probe file:
+
+- `#[rustfmt::skip]` freezing a split marker: `#[allow` with its `(` on a later
+  line, a newline between `#[allow(` and the lint list, a newline between the
+  `#` and the `[`, or spaces around the `::` of the path. `rustfmt` would
+  normally join or normalize all of these, which is the premise that failed —
+  but a skip attribute is a request to be shown nothing, so the gate passes a
+  spelling it never inspected.
+- `r#allow(...)` and `r#clippy::disallowed_methods`, raw identifiers denoting
+  exactly what the unprefixed names denote. These need no skip attribute at all:
+  `rustfmt` leaves them byte-for-byte as written, so they were reachable on a
+  clean `make check-fmt` run and are the more dangerous of the two groups.
+- the deprecated bare `disallowed_methods` beside its enabler, likewise
+  untouched by `rustfmt`.
+
+A layout gate is not a proof about spelling — it normalizes what it is shown,
+and it is not shown what a skip attribute covers — so the matcher tolerates
+whitespace between tokens and reads the raw prefix instead of trusting a gate
+to have removed them.
+
+The banned set names lints rather than spelling one form, and it follows the
+lint hierarchy where the hierarchy applies. `disallowed_methods` is declared in
+Clippy's `style` group, so allowing that group silences the policy just as
+naming the lint does, and `clippy::all` sits above it; both were measured at
+exit 0 under the gate's own flags. `warnings` is banned as well, but not
+because it sits above them — it does not. The `warnings` group is the set of
+lints *currently at* `warn`, and Cargo passes `[workspace.lints]` as
+command-line denies, so the policy lint is at `deny` and outside the group:
+`#![allow(warnings)]` alone leaves it firing, measured at exit 101 bare and
+gated. It stays in the set because it silences every warn-level lint under the
+gate, because it silences `unfulfilled_lint_expectations` — the self-removal
+mechanism `clippy.toml` relies on when it says the backlog "removes itself
+instead of rotting" — and because it is half of the only measured way past the
+gate's flags. The two guard lints are included because silencing the reporter
+is the one suppression nothing else would report.
+
+That second job sets the membership rule, and it is not "can this reach the
+policy lint". `clippy::restriction` is in the set although it cannot reach the
+policy lint at all — `disallowed_methods` sits in `all` and `style`, and
+allowing `restriction` leaves the policy lint firing at exit 101. It is in the
+set because it is the *group* of both guard lints, so a single crate-level
+`#![allow(clippy::restriction, reason = "…")]` silences them together and an
+item-level bare `allow` further down then passes unreported: measured at exit 0
+where the same file without the crate attribute exits 101. That is the escape
+hatch this module exists to close, since `allow_attributes` does not fire on
+the inner form, and `blanket_clippy_restriction_lints` — denied in the
+workspace — does not cover the attribute route either, firing only on a
+group-level `-W clippy::restriction` and reporting nothing for an attribute
+naming the group. So the rule is: a name is banned when a measurement shows it
+silencing something this module protects, and that is decided per name.
+
+A `warn` attribute is deliberately *not* matched, and the reason is measured
+rather than assumed, because it is the obvious next question. A `warn` of the
+policy lint does lower it — bare `cargo clippy` exits 0 where the same file
+exits 101 — so it is a real suppression and not a no-op. It is not a *silent*
+one: every lint and test target passes `-D warnings`, which re-promotes the
+lint to an error and exits 101. Twelve spellings were probed (inner and outer,
+`cfg_attr`-wrapped, group and alias names, the guard-lint forms) and every one
+is caught by the gate while the bare run silences the same file. Reporting a
+shape that cannot pass a gate would be a rule the code cannot justify, which is
+the reasoning that also leaves `unknown_lints` out.
+
+The one exception is the shape that pairs the two, and it is worth stating
+because it is what makes the `warnings` entry load-bearing rather than
+decorative. `#![warn(clippy::disallowed_methods)]` lowers the policy lint to
+`warn`, which is precisely what puts it *into* the `warnings` group;
+`#![allow(warnings)]` then suppresses that group. Measured at exit 0 under
+`RUSTFLAGS=-D warnings`, in either order, where neither half escapes alone. The
+scan catches it on the `allow` half, because that is the only half it matches.
+Should the lint target ever stop passing `-D warnings`, re-measure the `warn`
+family before trusting this reasoning: the re-promotion is the only thing
+holding that side of the pair.
+
+The set also bans a second route in, which is worth stating because it is not
+obvious. Clippy keeps the old spelling of a renamed lint, and a renamed name
+still selects the lint it was renamed to, so `clippy::disallowed_method` — the
+alias of the policy lint — silences the policy exactly as the current name
+does. On its own that is harmless: `renamed_and_removed_lints` is denied in
+`[workspace.lints.rust]`, so the rename is reported and the alias is an error
+rather than a suppression. Allow that lint as well and the rename goes
+unreported, and the alias suppresses the policy in silence — measured at exit
+0, where the same file without the attribute exits 101. The deprecated bare
+`disallowed_methods` is the same alias under its shorter name, and measurement
+says it behaves identically: it silences the policy beside the enabler, and
+errors without it. Three entries close the class: `renamed_and_removed_lints`,
+because no alias suppresses anything while the rename naming it is still
+reported, plus `clippy::disallowed_method` and the bare `disallowed_methods`,
+so the pair stays honest if a future Clippy stops reporting renames.
+
+`unknown_lints` is deliberately *not* banned, though it looks as if it should
+be: it hides the report that a name does not exist, which reads like the rename
+mechanism above. It was measured and it is not one. A misspelled lint name is a
+no-op whether or not the report is allowed, so suppressing `unknown_lints`
+cannot silence the policy — `#![allow(unknown_lints, disallowed_methods)]`
+without the rename enabler still exits 101 — and banning a name that cannot
+suppress anything would be a rule the code cannot justify. The workspace denies
+`unknown_lints` anyway, which is where that concern belongs. The lesson is the
+one this section keeps relearning: measure the mechanism before writing the
+rule, and do not add a name because it looks like it belongs.
+
+The measurement has to be applied to the name and not to the category, or the
+rule cuts the other way and takes out entries it should keep. "Cannot suppress
+anything" is the test — not "cannot suppress the policy lint", which would also
+excuse the two guard lints and `clippy::restriction`, all three of which
+silence something. Reading the rule as the second form is what kept
+`restriction` out of the set for a round of review, and it would have been a
+real hole: it is the group of the guard lints, and nothing else reports a crate
+that has silenced the reporter.
+
+Three files are exempt, and only for those two guard lints:
+`src/runner/error.rs`, `src/manifest/diagnostics/mod.rs`, and
+`src/manifest/diagnostics/yaml.rs`. Each isolates `thiserror`/`miette` derive
+expansions where `unused_assignments` fires on some Rust versions and not
+others. `#[expect]` fails when the lint does not fire and
+`unfulfilled_lint_expectations` cannot itself be expected, so the module must
+carry an `allow` — which the guard lints then reject, leaving the module no way
+to state the suppression they require it to state. The exemption is scoped to
+those lints on those paths: an `allow` of `clippy::disallowed_methods`,
+`clippy::style`, or `warnings` is a finding there too. Remove an entry from
+`SCOPED_ALLOWLIST` when its workaround goes, or the exemption outlives its
+reason. See <https://github.com/rust-lang/rust/issues/130021>.
+
 ### `LocaleLocalizer`
 
 `test_support::localizer::locale_localizer` installs a test locale under
