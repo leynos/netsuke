@@ -57,7 +57,14 @@ pub(super) const MINIMUM_WORKSPACE_SOURCES: usize = 100;
 /// and this is a file.
 pub(super) const STANDALONE_COMPILED_SOURCES: [&str; 1] = ["build.rs"];
 
-/// Append every `.rs` source beneath `directory`, with its contents, in order.
+/// Append every source the scan reads beneath `directory`, with its contents.
+///
+/// The order is the directory's, not this function's: `read_dir` reports
+/// entries as the filesystem lists them and std promises nothing about that
+/// order. Nothing here depends on it — the assertion over the result is about
+/// the set of findings, and each source is read in full — so no caller should
+/// either. The failure message sorts its findings for the same reason; see
+/// [`build_error_message`](super::build_error_message).
 ///
 /// [`MACHINE_LOCAL_DIRECTORIES`] is skipped by name, at whatever depth it
 /// appears, exactly as the coverage walk below skips it. A scanned root is a
@@ -109,11 +116,10 @@ pub(super) fn collect_rust_sources(
             .with_context(|| format!("read the file type of `{path}`"))?;
         if file_type.is_dir() {
             collect_rust_sources(root, &path, sources)?;
-        } else if is_rust_source(&name) {
-            let contents = root
-                .read_to_string(&path)
-                .with_context(|| format!("read {path}"))?;
-            sources.push((path, contents));
+        } else if is_readable_source(&name) {
+            if let Some(contents) = read_source(root, &path)? {
+                sources.push((path, contents));
+            }
         }
     }
     Ok(())
@@ -122,6 +128,86 @@ pub(super) fn collect_rust_sources(
 /// Return whether an entry name is a Rust source.
 pub(super) fn is_rust_source(name: &str) -> bool {
     Utf8Path::new(name).extension().is_some_and(|it| it == "rs")
+}
+
+/// Read one source, returning `None` when the file is not text at all.
+///
+/// The wider read set admits files whose being Rust is not something this walk
+/// can see — anything named by a `#[path]` — and a directory under a scanned
+/// root may hold a binary that no `#[path]` names. Rust source is UTF-8 by
+/// definition, so a file that will not decode cannot be a module the compiler
+/// reads, and skipping it is the honest classification rather than a failure.
+///
+/// Every other error propagates, and that half is the load-bearing one: a file
+/// that *is* text but could not be read is a source that went unscanned, which
+/// is the silent non-coverage this whole contract exists to prevent, so it must
+/// fail rather than be passed over. The two cases are distinguished by
+/// [`is_not_text`] rather than by a catch-all, and the distinction is pinned by
+/// a test — a filter that swallowed every error would be indistinguishable from
+/// this one on the walk the suite actually performs, so it is measured against
+/// an unreadable path directly.
+pub(super) fn read_source(root: &Dir, path: &str) -> Result<Option<String>> {
+    match root.read_to_string(path) {
+        Ok(contents) => Ok(Some(contents)),
+        Err(error) if is_not_text(error.kind()) => Ok(None),
+        Err(error) => Err(error).with_context(|| format!("read {path}")),
+    }
+}
+
+/// Return whether an I/O error means the file is not text this walk can read.
+///
+/// `InvalidData` is what a decode failure reports, and `NotFound` is the file
+/// that was listed at the start of the walk and is gone by the time it is read
+/// — a concurrent build writing under a scanned root, or a lint run that
+/// deleted a fixture. Both mean "there is no source text here", which is a
+/// classification rather than a failure. Anything else means the file is there
+/// and could not be read, which is a source this gate did not scan, and that
+/// must fail. The list is a function of its own so the error filter is a named
+/// rule rather than a pattern inside a `match`, and so it can be exercised
+/// directly by a test: a catch-all here would look identical from the walk the
+/// suite performs, since every path that walk touches is readable.
+pub(super) fn is_not_text(kind: std::io::ErrorKind) -> bool {
+    matches!(
+        kind,
+        std::io::ErrorKind::InvalidData | std::io::ErrorKind::NotFound
+    )
+}
+
+/// Return whether an entry name is one the scan reads.
+///
+/// A `.rs` file is read by name, and so is every other file that is not
+/// dot-prefixed — because a module's file need not be named `.rs`. Rust reads
+/// a module from whatever `#[path = "..."]` names, with no extension test of
+/// its own: `#[path = "suppressed.inc"] mod suppressed;` compiles, the module
+/// may open with `#![allow(clippy::disallowed_methods)]`, and that inner form
+/// is exactly what `clippy::allow_attributes` does not report. Measured on a
+/// probe crate: the module compiles where the same file without the attribute
+/// exits 101, so an extension filter names the compiled sources by a spelling
+/// the language does not require, and the one reader who cares about that
+/// filter is the one who would rather the source went unread.
+///
+/// Reading every file is the safer direction because the two mistakes are not
+/// symmetric: a file read but never compiled costs a failure message naming a
+/// real file, while a file compiled but not read hides a suppression, which is
+/// the failure this contract exists to prevent. The file's other rule breaks
+/// the same way for the same reason — see [`MACHINE_LOCAL_DIRECTORIES`].
+///
+/// The breadth is bounded rather than open-ended. The walk is already confined
+/// to [the scanned roots](COMPILED_SOURCE_ROOTS), the skip list still removes
+/// the caches and `target`, and a name beginning with a dot stays out because a
+/// dot-file under a source root is tooling state — `.gitignore`,
+/// `.editorconfig`, `.rustfmt.toml` — rather than anything a `#[path]` names.
+/// A `.rs` file is read whatever its name, so the dot rule can only ever narrow
+/// the files that were never Rust sources to begin with.
+///
+/// Measured against the tree this was written on: 216 files across the scanned
+/// roots are read by the wider rule, and the scan finds nothing in any of them.
+/// The scan is token-wise over source text, so prose that quotes an attribute
+/// in a comment, a string, or a snapshot of either is blanked before the
+/// matcher sees it; only a file that really opens with the attribute would be
+/// reported, and such a file is one `#[path]` away from being compiled.
+pub(super) fn is_readable_source(name: &str) -> bool {
+    is_rust_source(name) || !name.starts_with('.')
 }
 
 /// Directories the coverage walk does not descend into.
