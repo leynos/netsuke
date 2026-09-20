@@ -139,6 +139,13 @@ in this directory; `$ACTION` is the `make` target name and `<branch>` is this
 branch, `issue-738-reconcile-roadmap-4-2-3-with-execplan-completion-evidence`.
 The Kani log's pattern omits the `netsuke-` infix.
 
+CI independently corroborates the local gates on the pull request's final head
+(`3d22f884`, PR #755): the `CI` workflow's `build-test`, `kani-smoke`,
+`Windows / build-test-windows`, `Windows / lint-windows`, and
+`Windows / windows-msi-upgrade` jobs all concluded `success`, as did every job
+in the `Release Dry Run` workflow other than the release step itself, which is
+skipped by design on a non-release branch.
+
 ### Acceptance criterion: trace links
 
 **Met.** All five trace-link targets resolve to a single live definition each:
