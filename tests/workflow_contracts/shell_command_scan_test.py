@@ -22,6 +22,7 @@ from shell_command_scan import (
     command_operands,
     command_segments,
     names_a_component,
+    script_operands,
 )
 
 #: A command segment that runs `cp`, spelled the way the trunk lane writes it.
@@ -286,4 +287,75 @@ def test_a_name_is_read_as_a_path_component(
     """
     assert names_a_component(operand, name, prefix=prefix) is expected, (
         f"{operand!r} vs {name!r} (prefix={prefix})"
+    )
+
+
+@pytest.mark.parametrize(
+    ("label", "segment", "runner"),
+    [
+        # The plain spelling: the script is the runner's own operand.
+        ("python", "python script.py arg", "python"),
+        ("python3", "python3 script.py", "python3"),
+        # The multiplexer's subcommand, with and without its own options.
+        ("uv run", "uv run script.py", "uv"),
+        ("uv run with options", "uv run --no-project --python 3.14 script.py", "uv"),
+        ("uv options before run", "uv --no-project run script.py", "uv"),
+        # Named through a path, which is how a lane pins an executable.
+        ("absolute path", "/usr/bin/python script.py", "python"),
+    ],
+)
+def test_a_script_is_read_from_the_runner_it_is_handed_to(
+    label: str, segment: str, runner: str
+) -> None:
+    """Read the script from the command that executes it, not from the segment.
+
+    The runner is the command that *runs* the script, so a path recorded for a
+    different command would be that command's argument rather than an
+    invocation. Each case here runs the script through the named runner and
+    must yield the script among its operands.
+    """
+    assert "script.py" in script_operands(segment, runner), (
+        f"the {label} form runs the script through {runner}"
+    )
+
+
+def test_a_bare_path_to_the_multiplexer_is_not_a_script_it_ran() -> None:
+    """Refuse the multiplexer's direct-operand spelling, which it rejects too.
+
+    `uv` is a command multiplexer whose usage line reads `uv [OPTIONS]
+    <COMMAND>`, so the word after it is read as a *subcommand name*: `uv
+    script.py` is refused by `uv` itself as an unrecognized subcommand. A
+    reader that looked for the path among `uv`'s own operands would certify a
+    script that never ran, which is the false accept this reading exists to
+    close.
+    """
+    assert not script_operands("uv script.py --artifact-dir d", "uv"), (
+        "a path handed straight to the multiplexer names a subcommand, not a "
+        "script it ran"
+    )
+
+
+@pytest.mark.parametrize(
+    ("label", "segment", "runner"),
+    [
+        # The subcommand alone runs no script: there is nothing after it.
+        ("subcommand only", "uv run", "uv"),
+        ("the multiplexer alone", "uv", "uv"),
+        # A mention is not an invocation, and a script named to a command the
+        # reading does not cover must not be credited to one it does.
+        ("printed", "echo uv run script.py", "uv"),
+        # The command reached through a wrapper is not the command running.
+        ("wrapped", "sudo uv run script.py", "uv"),
+    ],
+)
+def test_no_script_is_read_where_none_is_run(
+    label: str, segment: str, runner: str
+) -> None:
+    """Yield no operands where the runner runs nothing.
+
+    Each case here either runs no script at all or only names one, so an
+    operand list holding a script would credit a run that never happened.
+    """
+    assert "script.py" not in script_operands(segment, runner), (
+        f"the {label} form runs no script to read"
     )

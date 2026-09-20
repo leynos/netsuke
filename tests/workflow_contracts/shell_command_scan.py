@@ -76,6 +76,18 @@ COMMAND_PREFIX: typ.Final[str] = (
 #: read as that script being run, when the shell only ever passes it to `echo`.
 LINE_CONTINUATION: typ.Final[re.Pattern[str]] = re.compile(r"\\\n")
 
+#: The command multiplexer whose usage line is `<command> [OPTIONS] <COMMAND>`.
+#: It is named here rather than in a caller because what makes it special is a
+#: fact about the command, not about any one script: the word after it names a
+#: subcommand, so a following path is an operand of the subcommand rather than
+#: of this command, and the command refuses a path in that position.
+MULTIPLEXER_COMMAND: typ.Final[str] = "uv"
+
+#: The subcommand of [`MULTIPLEXER_COMMAND`] that runs a script. A script is run
+#: through it rather than handed to the multiplexer, which reads a bare path as
+#: a subcommand name and refuses it.
+MULTIPLEXER_RUN_COMMAND: typ.Final[str] = "run"
+
 
 def command_segments(script: str) -> list[str]:
     """Return the script's commands, one segment per simple shell command.
@@ -163,6 +175,41 @@ def command_operands(segment: str, command: str) -> list[str]:
     return [
         word for word in match.group("operands").split() if not word.startswith("-")
     ]
+
+
+def script_operands(segment: str, runner: str) -> list[str]:
+    """Return the words ``runner`` hands the script it runs.
+
+    A script is run by being *handed* to the command that executes it, so the
+    operands are read from that command. For `python` and `python3` the script
+    is one of their own operands. `uv` is the exception, and it is the reason
+    this is not just :func:`command_operands`: `uv` is a command multiplexer
+    whose usage line reads `uv [OPTIONS] <COMMAND>`, so the path handed to it is
+    read as a *subcommand name*. `uv scripts/validate_coverage_artifact.py` is
+    therefore refused by `uv` itself, and a reader looking for the path among
+    `uv`'s operands would report a script as run that `uv` never ran.
+
+    Parameters
+    ----------
+    segment
+        One command segment, as :func:`command_segments` returns them.
+    runner
+        The command whose operands are wanted, without its path.
+
+    Returns
+    -------
+    list[str]
+        The operands the script may appear among, empty when the segment does
+        not run a script through ``runner`` at all.
+    """
+    operands = command_operands(segment, runner)
+    if runner != MULTIPLEXER_COMMAND:
+        return operands
+    # The subcommand is read from the front of the operands. An empty list is
+    # not a `run`, which the slice comparison gives for free: `[] != ["run"]`.
+    if operands[:1] != [MULTIPLEXER_RUN_COMMAND]:
+        return []
+    return operands[1:]
 
 
 def assigned_from(segment: str, command: str) -> set[str]:
