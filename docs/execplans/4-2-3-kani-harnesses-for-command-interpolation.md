@@ -64,10 +64,13 @@ cannot silently rot.
 Issue #738 recorded this plan as `Status: IN PROGRESS` on the strength of
 Revision 2.24, which noted that the documented `LD_LIBRARY_PATH`-capped full
 Kani run exited 124 before the suite completed. That premise is out of date.
-Revision 2.27 had already moved the header to `COMPLETE` on 2026-09-16, under
-the authority order that the `Progress` and `Outcomes` sections and the roadmap
-checkbox outrank the header. This section re-derives the verdict from fresh
-evidence rather than deferring to either revision.
+Revision 2.27 had already moved the header to `COMPLETE` in commit `d30b33eb`
+(PR #586, merged 2026-09-18), under the authority order that the `Progress` and
+`Outcomes` sections and the roadmap checkbox outrank the header. That note
+dates itself 2026-09-16; the commit's own timestamp is 2026-09-18, and the
+commit is cited here so the claim does not rest on either date. This section
+re-derives the verdict from fresh evidence rather than deferring to either
+revision.
 
 ### Acceptance criterion: the capped full `make kani-ir` run
 
