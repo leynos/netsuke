@@ -53,6 +53,10 @@ from codescene_upload_lane_data import (
     step_of,
     trunk_steps,
 )
+from codescene_validation_step_data import (
+    CHECKS_NOTHING_CASES,
+    COMMAND_SCOPED_CASES,
+)
 
 
 def test_the_clean_lane_template_produces_no_offenders() -> None:
@@ -136,42 +140,7 @@ def test_the_detectors_report_a_reordered_lane(step_name: str) -> None:
     )
 
 
-@pytest.mark.parametrize(
-    ("replacement", "expected"),
-    [
-        # A step that only looks at the filesystem does not read the report.
-        ("test -s lcov.info", "validate_coverage_artifact.py"),
-        # A validator run over the report in place validates the workspace,
-        # which holds more than the one report the validator accepts.
-        (
-            "python scripts/validate_coverage_artifact.py lcov.info",
-            "--artifact-dir",
-        ),
-        # A staged directory that is never filled validates nothing. The
-        # validator would refuse the empty directory and the lane would fail
-        # for the wrong reason, having read no part of the report.
-        (
-            (
-                'staged="$(mktemp --directory)"\n'
-                "uv run --no-project --python 3.14 "
-                'scripts/validate_coverage_artifact.py --artifact-dir "$staged"'
-            ),
-            "must copy",
-        ),
-        # Moving the report rather than copying it empties the workspace the
-        # upload reads it from, so the validation would pass over a report the
-        # submission could no longer find.
-        (
-            (
-                'staged="$(mktemp --directory)"\n'
-                'mv -- lcov.info "${staged}/lcov.info"\n'
-                "uv run --no-project --python 3.14 "
-                'scripts/validate_coverage_artifact.py --artifact-dir "${staged}"'
-            ),
-            "must copy",
-        ),
-    ],
-)
+@pytest.mark.parametrize(("replacement", "expected"), CHECKS_NOTHING_CASES)
 def test_the_detectors_report_a_validation_step_that_checks_nothing(
     replacement: str, expected: str
 ) -> None:
@@ -184,7 +153,11 @@ def test_the_detectors_report_a_validation_step_that_checks_nothing(
     never put the report into: everything about the invocation looks correct,
     and none of it touches the artefact. So is a step that moves the report
     into that directory: the check reads the artefact, and leaves the
-    workspace without the copy the upload has yet to make.
+    workspace without the copy the upload has yet to make. So is a step that
+    names a directory it never created: the validator is pointed at a path
+    that either is not there or holds another run's leavings. And so is a step
+    that fills no directory at all while reading one: the validator refuses
+    the empty set on a report nothing was wrong with.
     """
     steps = clean_steps()
     step_of(steps, REPORT_VALIDATION_STEP)["run"] = replacement
@@ -196,6 +169,36 @@ def test_the_detectors_report_a_validation_step_that_checks_nothing(
     assert offenders, (
         f"a validation step running {replacement!r} must be reported for "
         f"omitting {expected}"
+    )
+
+
+@pytest.mark.parametrize(("replacement", "expected"), COMMAND_SCOPED_CASES)
+def test_the_detectors_read_the_report_copy_as_one_command(
+    replacement: str, expected: str | None
+) -> None:
+    """Judge the copy per command, not per line.
+
+    A shell line is not a command. A step written as a one-liner joining its
+    commands with `&&` or `;` would satisfy a line-wide scan with a copy that
+    put something else into some other directory: the match would begin at that
+    `cp` and finish at the later command naming the staged directory, and the
+    contract would certify a staged directory the report never reached. So the
+    scan is scoped to a command segment, and the control case is what keeps it
+    from being scoped so finely that a correct one-liner is rejected.
+    """
+    steps = clean_steps()
+    step_of(steps, REPORT_VALIDATION_STEP)["run"] = replacement
+    offenders = upload_contract_offenders(steps)
+    if expected is None:
+        assert not offenders, (
+            f"a one-liner staging the report with {replacement!r} satisfies "
+            f"the contract; it was reported as {offenders}"
+        )
+        return
+    matching = [offender for offender in offenders if expected in offender]
+    assert matching, (
+        f"a line naming the report and the staged directory in different "
+        f"commands must be reported for omitting {expected}: {offenders}"
     )
 
 
