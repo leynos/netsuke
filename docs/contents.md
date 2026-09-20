@@ -182,6 +182,8 @@ operator, user, and contributor references are easier to find.
 - [ADR-033](adr-033-record-split-build-cargo-messages.md): Recorded Cargo
   messages for split-build artefact discovery, preserving parser coverage
   without an always-cold nested workspace build.
+- [ADR-034](adr-034-preserve-script-in-out-as-shell-variables.md): Script
+  `$in` and `$out` shell-variable semantics and marker-token separation.
 
 ## Proposals
 

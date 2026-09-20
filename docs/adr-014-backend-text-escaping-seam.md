@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted.
+Superseded by [ADR-034](adr-034-preserve-script-in-out-as-shell-variables.md).
 
 ## Date
 
@@ -12,14 +12,15 @@ Accepted.
 
 Netsuke compiles manifest recipes into a backend-neutral intermediate
 representation (IR), then writes a `build.ninja` file. Ninja treats `$` as its
-own escape and variable marker, whereas recipes use `$` for ordinary shell
+own escape and variable syntax, whereas recipes use `$` for ordinary shell
 variables such as `$PATH` and `${CARGO:-cargo}`. Emitting IR command text
 verbatim caused Ninja either to erase a shell variable or reject the file.
 
-Netsuke's `$in`, `$out`, `{{ ins }}`, and `{{ outs }}` placeholders have a
-different meaning. They must be resolved while lowering the manifest into the
-IR; the backend must never reinterpret them. Applying Ninja escaping earlier
-would prevent that lowering, while applying it twice changes the shell text.
+Netsuke markers `{{ ins }}` and `{{ outs }}` have a different meaning from
+shell variables. Markers are lowered through internal tokens while generating
+the IR; the backend must never reinterpret them. `$in` and `$out`, like
+`$PATH`, are shell variables. Applying Ninja escaping earlier would prevent
+marker lowering, while applying it twice changes the shell text.
 
 Paths are not shell text. Ninja's path grammar also gives special meaning to
 dollars, spaces, colons, pipes, and control characters. Escaping only recipe
@@ -67,9 +68,9 @@ Netsuke uses a private typed conversion at the Ninja writer boundary:
 - Existing manifests that wrote the former workaround `$$PATH` must change to
   `$PATH`; otherwise the shell receives `$$PATH`, whose first two dollars are
   its process identifier.
-- Script actions that use `$in` or `$out` now lower those tokens before their
-  action hash is calculated. Their generated rule IDs change once, so Ninja may
-  rebuild them once.
+- The former script-only `$in` and `$out` lowering decision is superseded by
+  ADR-034. Scripts now retain those shell variables, whose dollars are doubled
+  at the Ninja boundary.
 - A path using a literal space remains valid because Ninja has a dedicated
   escape for it. Other Ninja-special characters are rejected rather than
   supported by partial escaping; expanding the accepted path grammar is
@@ -94,8 +95,8 @@ Netsuke uses a private typed conversion at the Ninja writer boundary:
   includes braced expansions, substitutions, positional variables, and literal
   dollars; the backend must preserve all residual dollars uniformly.
 - **Continue to use Ninja's `$in` and `$out` variables for scripts.** Rejected
-  because backend escaping would turn them into literal shell text and diverge
-  from command-recipe lowering.
+  by ADR-034. The backend escapes their dollars, so they are shell variables,
+  not Ninja input or output markers.
 - **Escape Ninja-special paths opportunistically.** Rejected because paths and
   shell text have different grammars; partial path escaping risks a Ninja graph
   that names different files than the command uses.
@@ -129,3 +130,12 @@ superseded. The same entry records why each rejected character is rejected:
 Ninja's path grammar cannot represent a pipe, newline, carriage return, or NUL
 at all, whereas it can escape a dollar and a colon, which Netsuke rejects as a
 deliberate limit of the path grammar it accepts.
+
+2026-09-20 — ADR-034 reverses this record's script-only `$in` and `$out`
+lowering decision. That decision made shell-variable spelling depend on recipe
+form and conflated Netsuke markers, internal tokens, and shell variables. The
+alternative rejected here, preserving Ninja's `$in` and `$out` in scripts, is
+also reversed: after the `ShellText` to `NinjaValue` conversion doubles their
+dollars, those names correctly reach the shell as variables. The `ShellText` /
+`NinjaValue` seam and the `{{ ins }}` / `{{ outs }}` marker contract remain
+unchanged.

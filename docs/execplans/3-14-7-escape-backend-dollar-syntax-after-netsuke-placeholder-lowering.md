@@ -295,6 +295,12 @@ Stop and escalate rather than improvising when any of these is reached.
 
 ## Decision log
 
+- 2026-09-20 —
+  [ADR-034](../adr-034-preserve-script-in-out-as-shell-variables.md) supersedes
+  EP-M1's script `$in` / `$out` lowering decision. The backend escaping seam
+  and marker lowering remain in force; scripts now preserve `$in` and `$out` as
+  shell variables.
+
 - Decision: separate the backend's shell-text construction from its Ninja
   syntax emission with two newtypes, `ShellText` and `NinjaValue`, in a new
   module `src/ninja_gen_escape.rs`. Rationale: the escaping bug class is a
