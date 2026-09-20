@@ -74,12 +74,6 @@ CREDENTIAL_SOURCE_NAMESPACE: typ.Final[str] = "secrets"
 #: value from elsewhere.
 CREDENTIAL_GATE_NAMESPACE: typ.Final[str] = "env"
 
-#: Stands in for a string literal that is not the empty one, so a name quoted
-#: as text cannot be read as a reference. It is a bare word rather than a
-#: literal because the only literal this module reads is `''`, which a
-#: replacement must not be confused with.
-NON_EMPTY_LITERAL: typ.Final[str] = "_literal"
-
 #: Matches the comparison *after* a reference: `!= ''`, with nothing but space
 #: allowed between the operator and the literal, and the reference itself left
 #: out of the pattern entirely.
