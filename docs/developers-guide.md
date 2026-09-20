@@ -3533,7 +3533,7 @@ through `#[path = "tests_support.rs"]`. It owns the shared `REDIRECT_USER` and
 `credentialed_url` preserves the caller's path; the current and target helpers,
 `credentialed_current_url` and `credentialed_target_url`, use `/start` and
 `/next`, respectively. `credentialed_loopback_url` preserves the fixture's host
-and port but normalises its path to `/start` so fixture-backed diagnostics
+and port but normalizes its path to `/start` so fixture-backed diagnostics
 remain stable. Use `credentialed_url` when a loopback case needs a different
 path. These helpers return errors for malformed URLs or URLs that do not accept
 userinfo; redirect tests should use them instead of duplicating credential
