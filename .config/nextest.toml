@@ -25,20 +25,27 @@ slow-timeout = { period = "60s", terminate-after = 5 }
 # only build-capable child Cargo tests, retaining normal-suite parallelism.
 max-threads = 1
 
+# Filters use an anchored regex rather than `test(=NAME)`. Nextest's `=` form
+# compares the whole test name, but a parameterised `#[rstest]` is identified by
+# its instances, `name::case_1_…`, `name::case_2_…`, so `test(=NAME)` matches
+# none of them and the test silently escapes this group. `^NAME($|::)` matches
+# the plain name and every case suffix alike. Nextest's `~` substring form is
+# deliberately avoided: it is unanchored, so `~domains` would match every test
+# whose name contains that fragment.
 [[profile.default.overrides]]
 # These tests spawn isolated Cargo builds. Serializing them prevents four
 # Nextest workers from each starting a four-job Cargo build on four vCPUs.
-filter = 'test(=cli_configuration_fixture_compiles) | test(=packaged_manifest_retains_build_script_sources)'
+filter = 'test(/^cli_configuration_fixture_compiles($|::)/) | test(/^packaged_manifest_retains_build_script_sources($|::)/)'
 test-group = "nested-cargo-builds"
 success-output = "immediate"
 
 [[profile.default.overrides]]
-filter = 'test(=command_env_embedder_fixture_compiles) | test(=manifest_environment_embedder_fixture_compiles) | test(=policy_from_str_embedder_fixture_compiles_without_clap) | test(=command_list_public_api_fixture_compiles) | test(=ir_gen_error_public_api_fixture_compiles) | test(=legacy_recipe_telemetry_public_api_fixture_compiles) | test(=config_cached_discovery_embedder_fixture_compiles) | test(=verbose_timing_reporter_embedder_fixture_compiles)'
+filter = 'test(/^command_env_embedder_fixture_compiles($|::)/) | test(/^manifest_environment_embedder_fixture_compiles($|::)/) | test(/^policy_from_str_embedder_fixture_compiles_without_clap($|::)/) | test(/^command_list_public_api_fixture_compiles($|::)/) | test(/^ir_gen_error_public_api_fixture_compiles($|::)/) | test(/^legacy_recipe_telemetry_public_api_fixture_compiles($|::)/) | test(/^config_cached_discovery_embedder_fixture_compiles($|::)/) | test(/^verbose_timing_reporter_embedder_fixture_compiles($|::)/)'
 test-group = "nested-cargo-builds"
 success-output = "immediate"
 
 [[profile.default.overrides]]
-filter = 'test(=production_build_module_slice_has_expected_boundary) | test(=stub_env_default_does_not_compile) | test(=stub_env_builders_compile_under_the_same_harness) | test(=split_build_fixture_compiles_through_the_direct_rustc_harness) | test(=text_domains_cannot_be_swapped) | test(=document_and_needle_compile_together)'
+filter = 'test(/^production_build_module_slice_has_expected_boundary($|::)/) | test(/^stub_env_default_does_not_compile($|::)/) | test(/^stub_env_builders_compile_under_the_same_harness($|::)/) | test(/^split_build_fixture_compiles_through_the_direct_rustc_harness($|::)/) | test(/^text_domains_cannot_be_swapped($|::)/) | test(/^document_and_needle_compile_together($|::)/)'
 test-group = "nested-cargo-builds"
 success-output = "immediate"
 
