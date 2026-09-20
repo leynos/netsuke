@@ -226,15 +226,13 @@ fn read_attribute_body(source: &str, open: usize) -> Option<String> {
     for (offset, byte) in source.as_bytes().iter().enumerate().skip(open + 1) {
         let (next_state, consumed) = string_state.consume(*byte);
         string_state = next_state;
-        if consumed {
-            continue;
-        }
-        match byte {
-            b'(' => depth += 1,
-            b')' if depth == 1 => {
-                return source.get(open + 1..offset).map(str::to_owned);
-            }
-            b')' => depth = depth.checked_sub(1)?,
+        // A byte the string state consumed is not code, so naming that flag in
+        // each pattern leaves the loop one decision rather than a branch that
+        // screens a second one.
+        match (*byte, consumed) {
+            (b'(', false) => depth += 1,
+            (b')', false) if depth == 1 => return source.get(open + 1..offset).map(str::to_owned),
+            (b')', false) => depth = depth.checked_sub(1)?,
             _ => {}
         }
     }
