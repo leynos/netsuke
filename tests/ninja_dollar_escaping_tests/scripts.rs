@@ -2,39 +2,45 @@
 
 use super::*;
 
-/// Verify that script placeholders run against their real input and output paths.
-#[cfg(unix)]
+/// Verify script `$in` and `$out` become literal shell variables in Ninja.
 #[rstest]
-fn script_placeholders_execute_against_real_paths() -> Result<()> {
-    assert_script_output(
-        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: in\n    script: \"printf '%s' $in > $out\"\n",
-        ("in", "script input"),
+fn script_dollar_in_out_are_doubled_as_shell_variables() -> Result<()> {
+    let ninja = generate_posix(&graph(
+        Recipe::Script {
+            script: "printf '%s' $in > $out".into(),
+        },
         "in",
-        "expected script to write the lowered input path \"in\", got",
+        "out",
+    )?)?;
+
+    ensure!(
+        ninja.contains("\\$$in") && ninja.contains("\\$$out"),
+        "script shell variables must be doubled for Ninja:\n{ninja}"
+    );
+    Ok(())
+}
+
+/// Verify double-quoted script markers keep shell punctuation inert.
+#[cfg(unix)]
+#[rstest]
+fn script_double_quoted_markers_quote_shell_punctuation() -> Result<()> {
+    assert_script_output(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: 'foo;id'\n    script: \"printf '%s' \\\"{{ ins }}\\\" > {{ outs }}\"\n",
+        ("foo;id", "script input"),
+        "foo;id",
+        "double-quoted script markers must not execute shell punctuation",
     )
 }
 
-/// Verify double-quoted script placeholders keep shell punctuation inert.
+/// Verify single-quoted script markers keep shell punctuation inert.
 #[cfg(unix)]
 #[rstest]
-fn script_double_quoted_placeholders_quote_shell_punctuation() -> Result<()> {
+fn script_single_quoted_markers_quote_shell_punctuation() -> Result<()> {
     assert_script_output(
-        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: 'foo;id'\n    script: \"printf '%s' \\\"$in\\\" > $out\"\n",
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: 'foo;id'\n    script: \"printf '%s' '{{ ins }}' > '{{ outs }}'\"\n",
         ("foo;id", "script input"),
         "foo;id",
-        "double-quoted script interpolation must not execute shell punctuation",
-    )
-}
-
-/// Verify single-quoted script placeholders keep shell punctuation inert.
-#[cfg(unix)]
-#[rstest]
-fn script_single_quoted_placeholders_quote_shell_punctuation() -> Result<()> {
-    assert_script_output(
-        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: 'foo;id'\n    script: \"printf '%s' '$in' > '$out'\"\n",
-        ("foo;id", "script input"),
-        "foo;id",
-        "single-quoted script interpolation must not execute shell punctuation",
+        "single-quoted script markers must not execute shell punctuation",
     )
 }
 

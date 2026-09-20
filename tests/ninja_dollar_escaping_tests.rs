@@ -204,25 +204,33 @@ fn assert_script_output(
 )]
 #[case::multiple_shell_variables("echo $RUSTFLAGS-$PATH", "echo $$RUSTFLAGS-$$PATH")]
 #[case::unrelated_identifier("echo $input", "echo $$input")]
-#[case::legacy_marker_aliases("echo $in $out", "echo $$in $$out")]
-#[case::marker_like_shell_variables("echo $ins $outs", "echo $$ins $$outs")]
+#[case::ninja_marker_like_shell_variables("echo $in $out", "echo $$in $$out")]
+#[case::long_shell_variables("echo $ins $outs", "echo $$ins $$outs")]
 #[case::literal_dollars("echo $$", "echo $$$$")]
 fn backend_doubles_every_residual_shell_dollar(
     #[case] command: &str,
     #[case] expected: &str,
 ) -> Result<()> {
-    let ninja = generate_posix(&graph(
-        Recipe::Command {
-            command: command.into(),
-        },
-        "in",
-        "out",
-    )?)?;
-
-    ensure!(
-        ninja.contains(expected),
-        "expected Ninja-safe command {expected:?}, got:\n{ninja}"
-    );
+    for (recipe, expected_ninja) in [
+        (
+            Recipe::Command {
+                command: command.into(),
+            },
+            expected.into(),
+        ),
+        (
+            Recipe::Script {
+                script: command.into(),
+            },
+            expected.replace("$$", "\\$$"),
+        ),
+    ] {
+        let ninja = generate_posix(&graph(recipe, "in", "out")?)?;
+        ensure!(
+            ninja.contains(&expected_ninja),
+            "expected Ninja-safe recipe {expected_ninja:?}, got:\n{ninja}"
+        );
+    }
     Ok(())
 }
 

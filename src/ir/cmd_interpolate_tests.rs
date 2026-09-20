@@ -48,6 +48,19 @@ fn interpolate_command_preserves_dollar_prefixed_shell_variables() {
             .expect("literal shell variables must remain valid");
     assert_eq!(error, "echo $in $out $ins $outs");
 }
+
+/// Verify script interpolation preserves dollar-prefixed shell variables.
+#[test]
+fn interpolate_script_preserves_dollar_prefixed_shell_variables() {
+    let bindings = CommandBindings::new(
+        &[Utf8PathBuf::from("src")],
+        &[Utf8PathBuf::from("out")],
+        RecipeShell::Posix,
+    );
+    let script = interpolate_script_with_bindings("echo $in $out $ins $outs", &bindings)
+        .expect("literal shell variables must remain valid");
+    assert_eq!(script, "echo $in $out $ins $outs");
+}
 /// Verify POSIX interpolation rejects template placeholders inside backticks.
 #[test]
 fn interpolate_command_rejects_template_placeholders_in_backticks() {
