@@ -50,12 +50,13 @@ def _string_end(text: str, start: int) -> int:
     """
     index = start + 1
     while index < len(text):
-        if text[index] == "\\":
-            index += 2
-        elif text[index] == '"':
-            return index + 1
-        else:
-            index += 1
+        match text[index]:
+            case "\\":
+                index += 2
+            case '"':
+                return index + 1
+            case _:
+                index += 1
     return len(text)
 
 
