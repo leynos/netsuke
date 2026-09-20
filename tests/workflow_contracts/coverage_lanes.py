@@ -132,6 +132,26 @@ def _coverage_steps(job: dict[str, typ.Any]) -> list[dict[str, typ.Any]]:
     ]
 
 
+def _watchdog_windows(step: dict[str, typ.Any]) -> int:
+    """Return how many cargo watchdog windows one coverage step arms."""
+    # The rationale lives where it is asserted, so that it is stated once:
+    # `test_a_doctests_step_arms_the_watchdog_twice` for the two windows,
+    # its declining counterpart for the spellings read as one, and "Test
+    # timeouts: the tiers this repository sets" in `docs/developers-guide.md`
+    # for the measurement behind both.
+    #
+    # A class pattern rather than ``case {"doctests": "true"}``: mapping
+    # patterns test ``PyMapping_Check``, which a non-`dict` mapping passes,
+    # so the literal form reads such a step as two windows where the
+    # `isinstance` guard it replaced read one. ``dict()`` accepts exactly
+    # the subject that guard did.
+    match step.get("with"):
+        case dict() as inputs if inputs.get("doctests") == "true":
+            return 2
+        case _:
+            return 1
+
+
 def _lanes_in_job(
     workflow: str,
     document: dict[str, typ.Any],
@@ -154,7 +174,11 @@ def _lanes_in_job(
     Returns
     -------
     list[CoverageLane]
-        One entry per coverage step in the job.
+        One entry per watchdog window a coverage step arms: two for a
+        step asking the action for the doctest pass, one otherwise. The
+        two entries share every field, because they are one step; what
+        differs is the second `cargo` invocation the job's ceiling has
+        to contain.
 
     Raises
     ------
@@ -188,6 +212,9 @@ def _lanes_in_job(
             nextest_profile=nextest_profile_of(document, job, step),
         )
         for index, step in enumerate(steps)
+        # Repeated rather than built twice: the windows of one step are
+        # that step's single coordinate, one per `cargo` invocation.
+        for _ in range(_watchdog_windows(step))
     ]
 
 
@@ -242,7 +269,9 @@ def coverage_lanes_of(
     Returns
     -------
     tuple[CoverageLane, ...]
-        One entry per coverage step.
+        One entry per watchdog window a coverage step arms: two for a
+        step asking the action for the doctest pass, one otherwise. The
+        two entries are one step and share every field.
     """
     if documents is None:
         documents = workflow_documents()

@@ -1,7 +1,7 @@
 """The whole-run budget's value, pinned to the figure the guide states.
 
 The ordering assertions in ``timeout_ordering_test`` hold for every
-budget between the 420 s largest per-test allowance and the 1,130 s the
+budget between the 420 s largest per-test allowance and the 830 s the
 1,800 s watchdog can cover, so the budget can drift to a value nobody
 chose while each of them still passes. The guide records one value and
 the arithmetic that produced it, and this is what makes changing the
@@ -24,7 +24,11 @@ from timeout_budgets import CAPPED_PROFILE, NEXTEST_CONFIG
 #: longest measured nextest run and the watchdog above it; the guide
 #: holds the sample and the arithmetic. It belongs to the profile CI
 #: selects, not to `default`, which local runs use uncapped.
-STATED_WHOLE_RUN_BUDGET_SECONDS: typ.Final[float] = 15 * 60.0
+#:
+#: Thirteen minutes rather than fifteen. The watchdog requirement the
+#: ordering asserts grew a report-phase term, and at 900s the budget no
+#: longer fitted inside the 1,800s watchdog it has to sit below.
+STATED_WHOLE_RUN_BUDGET_SECONDS: typ.Final[float] = 13 * 60.0
 
 
 def test_the_whole_run_budget_is_the_value_the_guide_states() -> None:

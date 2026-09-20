@@ -8,6 +8,12 @@
   an `EdgeId`; `BuildGraph::targets` is no longer public, so Rust callers must
   resolve outputs through the graph accessors
   ([#652](https://github.com/leynos/netsuke/issues/652))
+- Size the coverage timeout tiers against the doctest pass: a coverage step
+  passing `doctests: 'true'` arms the cargo watchdog twice, so the watchdog's
+  requirement gains a report-phase term and both coverage job ceilings rise
+  from sixty to ninety minutes, while `[profile.ci]`'s `global-timeout` falls
+  from fifteen to thirteen minutes
+  ([#715](https://github.com/leynos/netsuke/issues/715))
 
 ### Fixed
 
