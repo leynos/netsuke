@@ -27,6 +27,14 @@ from codescene_report_validation_invariants import REPORT_VALIDATOR_SCRIPT
 STAGED_DIRECTORY: typ.Final[str] = "staging"
 
 
+#: The validator's invocation up to and including the flag, so a case supplies
+#: only what the flag is handed. A case with nothing to hand it ends the line
+#: there, which is the shape a missing argument takes.
+VALIDATOR_INVOCATION: typ.Final[str] = (
+    f"uv run --no-project --python 3.14 {REPORT_VALIDATOR_SCRIPT} --artifact-dir"
+)
+
+
 def validator_reads(directory: str) -> str:
     """Return the command that reads ``directory`` through the validator.
 
@@ -34,15 +42,19 @@ def validator_reads(directory: str) -> str:
     stated once. What a case varies is the argument, and a case varying nothing
     else reads as the one command it is.
 
+    Parameters
+    ----------
+    directory
+        The argument the flag is handed, spelled as the case needs it: a
+        quoted or bare variable, or a literal path. An empty string leaves the
+        flag with no argument, ending the command at the flag.
+
     Returns
     -------
     str
         A single shell command, naming no trailing newline.
     """
-    return (
-        "uv run --no-project --python 3.14 "
-        f"{REPORT_VALIDATOR_SCRIPT} --artifact-dir {directory}"
-    )
+    return " ".join(part for part in (VALIDATOR_INVOCATION, directory) if part)
 
 
 #: Statements that read as a check on the report and establish nothing.
@@ -119,6 +131,59 @@ COMMAND_SCOPED_CASES: typ.Final[list[tuple[str, str | None]]] = [
     (
         'staged="$(mktemp --directory)" && '
         f'cp -- {COVERAGE_REPORT_PATH} "${{staged}}/{COVERAGE_REPORT_PATH}" && '
+        + validator_reads('"$staged"'),
+        None,
+    ),
+    # The flag left bare at the end of a line, with the command that would
+    # create a directory on the next. An argument read across the newline is
+    # the *next* command's first word, which names a directory nothing staged
+    # the report into — and the invocation the validator is handed has no
+    # directory argument at all.
+    (
+        validator_reads("") + "\nmkdir staged\n"
+        f'cp -- {COVERAGE_REPORT_PATH} "staged/{COVERAGE_REPORT_PATH}"',
+        "--artifact-dir",
+    ),
+]
+
+#: Directions the copy can be written in. `cp` takes the source first, so a
+#: command naming the staged path as its source is taking the report *out* of
+#: the directory this contract exists to put it into.
+COPY_DIRECTION_CASES: typ.Final[list[tuple[str, str | None]]] = [
+    # The staged path as the source and the workspace as the destination. The
+    # validator is then handed a directory the report has just left.
+    (
+        'staged="$(mktemp --directory)"\n'
+        f'cp -- "${{staged}}/{COVERAGE_REPORT_PATH}" {COVERAGE_REPORT_PATH}\n'
+        + validator_reads('"${staged}"'),
+        "must copy",
+    ),
+    # The control: the same command with its operands the right way round.
+    (
+        'staged="$(mktemp --directory)"\n'
+        f'cp -- {COVERAGE_REPORT_PATH} "${{staged}}/{COVERAGE_REPORT_PATH}"\n'
+        + validator_reads('"${staged}"'),
+        None,
+    ),
+]
+
+#: How a directory can be created for a name that did not receive it. A
+#: segment-wide reading of the assignments records every name on the line as
+#: made, so a staged directory that is a bare literal passes the creation
+#: check on the strength of a neighbour command that made something else.
+CREATION_BINDING_CASES: typ.Final[list[tuple[str, str | None]]] = [
+    # `mktemp` creates a directory for `scratch`, which `staged` is not.
+    (
+        f'staged={STAGED_DIRECTORY} scratch="$(mktemp -d)"\n'
+        f'cp -- {COVERAGE_REPORT_PATH} "$staged/{COVERAGE_REPORT_PATH}"\n'
+        + validator_reads('"$staged"'),
+        "must create",
+    ),
+    # Only the name holding the command counts, so the same shape with
+    # `mktemp` assigned to the staged name is accepted.
+    (
+        f'staged="$(mktemp -d)" scratch={STAGED_DIRECTORY}\n'
+        f'cp -- {COVERAGE_REPORT_PATH} "$staged/{COVERAGE_REPORT_PATH}"\n'
         + validator_reads('"$staged"'),
         None,
     ),

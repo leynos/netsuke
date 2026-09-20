@@ -1616,8 +1616,10 @@ requires that step to follow every compile step in the lane, so a check parked
 between the last compile and the statistics report would break the
 compiler-cache observability contract rather than merely reorder the lane.
 `make test-coverage-artifact` covers the validator directly;
+`tests/workflow_contracts/codescene_validation_step_test.py` covers the script
+the lane runs it through, and
 `tests/workflow_contracts/codescene_upload_contract_test.py` covers the lane
-that runs it.
+that step sits in.
 
 Workflow contract tests keep the boundary explicit: the pull-request coverage
 step must retain ratchet mode and pass the publication opt-out, the artefact

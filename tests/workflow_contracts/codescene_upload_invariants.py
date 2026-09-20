@@ -39,17 +39,17 @@ Four failures motivate the shape rather than any particular spelling of it:
   failure can be diagnosed from, and the upload reads the workspace rather than
   the archive, so the loss would not appear as a failure at all.
 
-These predicates read parsed workflow values rather than files, so
-``codescene_upload_contract_test`` can hold the repository's own trunk lane to
-the contract and drive shapes the repository does not have. Four of the rules
-they rest on describe no particular lane, so they live apart: the scan for
-``vars.`` references the last bullet depends on is general to any step
-(``workflow_variable_scan``), finding a named step and checking that it calls
-the right action at an immutable pin is what every lane contract does first
-(``lane_steps``), the credential the upload is handed is a rule about the
-secret rather than about the report (``codescene_credential_invariants``), and
-the third bullet's whole remedy — reading the report as data before sending it
-— is stated over the validating step alone
+These predicates read parsed workflow values rather than files, so the contract
+tests can hold the repository's own trunk lane to the contract and drive shapes
+the repository does not have. Four of the rules they rest on describe no
+particular lane, so they live apart: the scan for ``vars.`` references the last
+bullet depends on is general to any step (``workflow_variable_scan``), finding
+a named step and checking that it calls the right action at an immutable pin is
+what every lane contract does first (``lane_steps``), the credential the upload
+is handed is a rule about the secret rather than about the report
+(``codescene_credential_invariants``), and the third bullet's whole remedy —
+reading the report as data before sending it — is stated over the validating
+step alone
 (``codescene_report_validation_invariants``).
 
 Run via ``make test-workflow-contracts``.

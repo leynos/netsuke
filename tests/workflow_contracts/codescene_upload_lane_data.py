@@ -1,11 +1,11 @@
-"""The synthetic lane `codescene_upload_contract_test.py` drives its cases on.
+"""The synthetic lane the CodeScene contract tests drive their cases on.
 
 A contract test has to be shown a lane that satisfies it before it can vary one
 field and assert the offender that results; otherwise a broken template makes
 every negative case pass for the wrong reason. That template, the fixtures it
 interpolates, and the accessors the cases read it back through are data and
 mechanics rather than contracts, so they live here rather than growing the test
-file past the repository's 400-line file limit. This module holds no tests of
+modules past the repository's 400-line file limit. This module holds no tests of
 its own.
 
 The template is parsed from workflow text through the shared loader rather than
