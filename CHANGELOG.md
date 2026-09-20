@@ -4,6 +4,10 @@
 
 ### Changed
 
+- Raise the declared MiniJinja baseline to 2.24.0, retaining the `fuel` and
+  `loader` features. Its 100 MB string-repetition guard is independent of
+  Netsuke's output budgets and does not resolve internal macro/capture buffering
+  ([#719](https://github.com/leynos/netsuke/issues/719)).
 - **Breaking:** store each logical build edge once, indexed by output alias to
   an `EdgeId`; `BuildGraph::targets` is no longer public, so Rust callers must
   resolve outputs through the graph accessors

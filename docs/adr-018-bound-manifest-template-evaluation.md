@@ -151,7 +151,11 @@ string-repetition guard with a 100 MB threshold. That guard limits one
 operation; it is not Netsuke's configurable per-value quota and does not repair
 aggregate output or internal macro and capture buffering. The compatible
 version requirement in `Cargo.toml` is not evidence of the currently resolved
-version, and #719 is not recorded here as already implemented.
+version. Netsuke now declares
+`minijinja = { version = "2.24.0", features = ["fuel", "loader"] }`, and its
+validated lockfile resolves 2.24.0. The upgrade preserves manifest rendering
+and budget behaviour, but does not close the internal macro/capture allocation
+gap.
 
 The engine patch and 3.x migration in
 [#720](https://github.com/leynos/netsuke/issues/720) remain deferred until the
