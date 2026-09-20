@@ -19,7 +19,7 @@ pub(crate) mod cargo_artifacts;
 #[path = "cargo_features.rs"]
 mod cargo_features;
 #[path = "rustc_response_file.rs"]
-mod rustc_response_file;
+pub(crate) mod rustc_response_file;
 
 use std::{
     io,

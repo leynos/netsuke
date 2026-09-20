@@ -35,6 +35,7 @@ NESTED_CARGO_BUILD_TESTS = (
     "production_build_module_slice_has_expected_boundary",
     "stub_env_default_does_not_compile",
     "stub_env_builders_compile_under_the_same_harness",
+    "split_build_fixture_compiles_through_the_direct_rustc_harness",
     "text_domains_cannot_be_swapped",
     "document_and_needle_compile_together",
     "packaged_manifest_retains_build_script_sources",

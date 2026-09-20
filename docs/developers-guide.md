@@ -2919,6 +2919,7 @@ Linux runner. Both platforms still assert the packaged file list. See
 [windows-test-budget]: #historical-windows-budget-for-the-isolated-cargo-build-tests
 [fixture-constraints]: #historical-fixture-crate-replacement-constraints
 [adr-028-trim]: adr-028-defer-split-build-dir-harness-trim.md
+[adr-033-split-build]: adr-033-record-split-build-cargo-messages.md
 
 `tests/workflow_contracts/test_execution_coverage_test.py` holds all of this:
 the coverage inputs, the denied warnings, the doctest pass and its position,
@@ -2956,10 +2957,13 @@ governs the non-doctest pass only, and deliberately stays small:
   warning periods) so a hung test surfaces without failing the legitimately
   slow documentation end-to-end suites, which shell out to real Ninja.
 - **Scoped subprocess timings.** Packaging smoke tests emit their Cargo
-  subprocess durations after each Cargo subprocess returns. The split-build
-  locale harness instead reads recorded Cargo JSON, so it has no child Cargo
-  build, is not in `nested-cargo-builds`, and uses the default slow timeout on
-  every platform.
+  subprocess durations after each Cargo subprocess returns. The
+  `harness_compiles_under_a_split_build_dir` parser test reads recorded Cargo
+  JSON, so it has no child Cargo build, is not in `nested-cargo-builds`, and
+  uses the default slow timeout on every platform. Its companion,
+  `split_build_fixture_compiles_through_the_direct_rustc_harness`, runs a small
+  isolated split-build Cargo and direct-`rustc` integration test and is grouped
+  with the other child-Cargo tests.
 
 #### Historical Windows budget for the isolated-Cargo-build tests
 
@@ -2995,10 +2999,17 @@ missed. Three facts shaped the response:
   `cargo package --list`, the assertion the test is named for, still runs
   everywhere. That returns it to the default budget.
 
-Issue 732 replaced `harness_compiles_under_a_split_build_dir`'s live build with
-recorded Cargo JSON. The test continues to prove that dependency directories
-span the split build directory and that `test_support` remains uplifted under
-the target directory, without a child Cargo build or a 420s budget.
+Issue 732 replaced `harness_compiles_under_a_split_build_dir`'s full live build
+with recorded Cargo JSON. That parser test continues to prove that dependency
+directories span the split build directory and that `test_support` remains
+uplifted under the target directory, without a child Cargo build or a
+platform-specific timeout budget. The companion
+`split_build_fixture_compiles_through_the_direct_rustc_harness` supplies the
+end-to-end boundary with a small temporary two-crate workspace: it runs Cargo
+under private split roots, collects the reported artefacts, and compiles a
+fixture through the direct-`rustc` response-file harness.
+[ADR-033][adr-033-split-build] records the replacement decision and these two
+complementary coverage boundaries.
 
 Removing the second Cargo build sped this one up as well. The two used to run
 concurrently, each with four compile jobs on a four-vCPU runner, so each
@@ -3014,10 +3025,12 @@ Table: Windows durations before and after the verification build moved.
 | nextest run phase                                | 365s            | 185.5s          | 258.0s          | 253.8s          |
 | `Test` step                                      | 471s            | 260s            | 368s            | 358s            |
 
-The 420s budget is therefore sized against the older, contended distribution
-and is deliberately conservative while the new shape has three samples. It is a
-candidate for tightening, or for deletion, once the [ADR-028][adr-028-trim]
-revisit gate is met.
+The historical 420s budget was therefore sized against the older, contended
+distribution and was deliberately conservative while the previous shape had
+three samples. Issue 732 removed that platform-specific budget when it replaced
+the live build; the current test uses the five-period, 300s default described
+above. [ADR-028][adr-028-trim] remains the historical record of that former
+budget and its revisit gate.
 
 Those three samples predate the serialization group described below, which
 lands the harness test in a group of one-at-a-time build-capable tests. Under
@@ -3027,8 +3040,10 @@ is worth more than the 85s this table supports.
 #### Superseded split-build-dir harness decision
 
 The decision below describes the pre-issue-732 live-build harness. Issue 732
-superseded it by driving the Cargo-message parser over recorded split-layout
-JSON, preserving the regression without the private build or its timeout.
+superseded its full workspace build by driving the Cargo-message parser over
+recorded split-layout JSON. The parser preserves the message-reading regression
+without that expensive private build; the companion fixture test keeps a small
+end-to-end split-layout Cargo and direct-`rustc` check.
 
 A later change to `.config/nextest.toml` — `nested-cargo-builds`, a
 `[test-groups]` entry with `max-threads = 1` — put this test in a group with
@@ -3051,13 +3066,13 @@ contrast, is one-directional: the coverage a fixture crate would drop is
 exactly the coverage that fails only on Windows, where it is least likely to be
 noticed.
 
-[ADR-028][adr-028-trim] holds the decision itself: the measurements, the rule
-that a trim can never return more than the test's own duration, the
+[ADR-028][adr-028-trim] holds the historical decision: the measurements, the
+rule that a trim can never return more than the test's own duration, the
 alternatives already measured and rejected (`cargo check` for `cargo build`,
 warming the compiler cache, and sharing a target directory), and the ten-run
-revisit gate. Read it before reopening the question or changing the Windows
-shape of this lane. Any replacement built after that gate inherits the
-constraints in
+revisit gate. [ADR-033][adr-033-split-build] records the replacement decision:
+the live build was removed in favour of recorded Cargo JSON, while the parser
+boundary remains covered. Any future replacement inherits the constraints in
 [what a fixture-crate replacement would have to preserve][fixture-constraints]
 below.
 
@@ -4582,13 +4597,21 @@ quoting, and its unit tests retain every source, `--extern`, dependency-search,
 and output argument while rejecting newlines. This is mandatory because the
 failure is Windows-specific and cannot be reproduced on most local hosts.
 
-`harness_compiles_under_a_split_build_dir` is the regression test for this. It
-feeds a recorded Cargo JSON fixture through the shared artefact parser and
-asserts that dependency directories span the recorded split build directory
+`harness_compiles_under_a_split_build_dir` is the parser regression test for
+this. It feeds a recorded Cargo JSON fixture through the shared artefact parser
+and asserts that dependency directories span the recorded split build directory
 while the `test_support` artefact remains uplifted under the recorded target
-directory. The regression is in interpreting Cargo messages, not running Cargo,
-so it pays no live build, is not a `nested-cargo-builds` member, and uses the
-default slow timeout on Windows.
+directory. The parser regression is in interpreting Cargo messages, not running
+Cargo, so this test pays no live build, is not a `nested-cargo-builds` member,
+and uses the default slow timeout on every platform.
+
+`split_build_fixture_compiles_through_the_direct_rustc_harness` is the
+complementary integration test. It creates a temporary two-crate workspace,
+runs Cargo with private split target and build roots, selects the
+Cargo-reported fixture-support artefact, passes every discovered dependency
+directory through a response file, and compiles a fixture with direct `rustc`.
+It remains in `nested-cargo-builds` because it intentionally exercises that
+live subprocess boundary.
 
 #### Historical fixture-crate replacement constraints
 
@@ -7045,8 +7068,12 @@ apply under it.
 `default` is what every local `make test` runs under, and a developer's host is
 contended in a way a CI runner is not. The packaging smoke test still spawns
 Cargo, so its nested invocation can queue behind the package-cache lock of
-other builds on the machine. The split-build locale harness no longer does: it
-reads recorded Cargo JSON and pays no nested-build cost.
+other builds on the machine. The `harness_compiles_under_a_split_build_dir`
+parser test no longer does: it reads recorded Cargo JSON and pays no
+nested-build cost. The companion
+`split_build_fixture_compiles_through_the_direct_rustc_harness` intentionally
+retains a small isolated nested build to cover the complete Cargo-to-rustc
+boundary and is serialized with the other child-Cargo tests.
 
 A whole-run cap in `default` would have ended such a run against a figure read
 from CI logs, which have nothing to say about local contention, and the figure
@@ -7563,7 +7590,7 @@ accepting an override or a bare duration.
 
 `tests/workflow_contracts/whole_run_value_test.py` pins the budget's value as
 well as its place in the order. The ordering holds for everything between the
-420 s largest per-test allowance and the 830 s the watchdog can cover, so the
+300 s largest per-test allowance and the 830 s the watchdog can cover, so the
 budget could drift to a value nobody chose with every comparison still passing,
 and the sample above would then describe a figure the file no longer sets.
 

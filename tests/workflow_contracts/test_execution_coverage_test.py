@@ -11,6 +11,8 @@ Run via ``make test-workflow-contracts``.
 """
 
 import re
+import tomllib
+import typing as typ
 
 import pytest
 from cache_contract_data import WORKFLOW_DIR
@@ -23,6 +25,9 @@ from workflow_loading import (
     require_mapping,
     workflow_job,
 )
+
+if typ.TYPE_CHECKING:
+    from pathlib import Path
 
 #: Inputs that make the coverage run as broad as `make test` was. Without
 #: `all-features` the `legacy-digests` tests in `src/stdlib/path/hash_utils.rs`
@@ -37,8 +42,9 @@ REQUIRED_COVERAGE_INPUTS = {
 
 #: Ambient-target UI harness builds must share the gate's feature fingerprint.
 #: Isolated fixture and packaging builds intentionally retain shipped defaults.
-GATE_FEATURES_MODULE = REPO_ROOT / "tests" / "support" / "cargo_features.rs"
-AMBIENT_TARGET_NESTED_BUILD_SOURCES = (
+GATE_FEATURES_MODULE: Path = REPO_ROOT / "tests" / "support" / "cargo_features.rs"
+TEST_SUPPORT_MANIFEST: Path = REPO_ROOT / "test_support" / "Cargo.toml"
+AMBIENT_TARGET_NESTED_BUILD_SOURCES: tuple[Path, ...] = (
     REPO_ROOT / "tests" / "support" / "test_support_rlib.rs",
     REPO_ROOT / "tests" / "command_env_ui_tests.rs",
     REPO_ROOT / "tests" / "build_module_slice_ui_tests.rs",
@@ -199,6 +205,13 @@ def test_ambient_target_harnesses_match_the_gate_feature_selection() -> None:
             f"{source.relative_to(REPO_ROOT)} must use the shared gate feature "
             "selection"
         )
+    manifest = tomllib.loads(TEST_SUPPORT_MANIFEST.read_text(encoding="utf-8"))
+    features = manifest.get("features")
+    assert isinstance(features, dict), "test_support must declare its features"
+    assert features.get("default") == [], "test_support defaults must stay empty"
+    assert features.get("legacy-digests") == ["netsuke/legacy-digests"], (
+        "test_support must forward legacy-digests exactly to netsuke-build"
+    )
 
 
 @pytest.mark.parametrize(

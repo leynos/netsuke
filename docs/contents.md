@@ -175,6 +175,9 @@ operator, user, and contributor references are easier to find.
   made the figure unstable and the ten-run gate that reopens the question.
 - [ADR-032](adr-032-windows-reparse-point-same-handle-open.md): Windows final
   component validation through a same-handle reparse-point open.
+- [ADR-033](adr-033-record-split-build-cargo-messages.md): Recorded Cargo
+  messages for split-build artefact discovery, preserving parser coverage
+  without an always-cold nested workspace build.
 
 ## Proposals
 

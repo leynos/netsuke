@@ -38,7 +38,7 @@ test-group = "nested-cargo-builds"
 success-output = "immediate"
 
 [[profile.default.overrides]]
-filter = 'test(=production_build_module_slice_has_expected_boundary) | test(=stub_env_default_does_not_compile) | test(=stub_env_builders_compile_under_the_same_harness) | test(=text_domains_cannot_be_swapped) | test(=document_and_needle_compile_together)'
+filter = 'test(=production_build_module_slice_has_expected_boundary) | test(=stub_env_default_does_not_compile) | test(=stub_env_builders_compile_under_the_same_harness) | test(=split_build_fixture_compiles_through_the_direct_rustc_harness) | test(=text_domains_cannot_be_swapped) | test(=document_and_needle_compile_together)'
 test-group = "nested-cargo-builds"
 success-output = "immediate"
 
