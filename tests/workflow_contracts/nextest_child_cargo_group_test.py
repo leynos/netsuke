@@ -102,10 +102,7 @@ def test_group_filter_form_matches_parameterised_test_instances() -> None:
     """
     filters = " | ".join(group_filter_text(nextest_config()))
     parameterised = set().union(
-        *(
-            parameterised_test_names(source)
-            for source in rust_test_sources().values()
-        )
+        *(parameterised_test_names(source) for source in rust_test_sources().values())
     )
     named_by_legacy = set(LEGACY_EXACT_FILTER.findall(filters)) & parameterised
     assert not named_by_legacy, (

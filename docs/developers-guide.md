@@ -3239,6 +3239,21 @@ governs the non-doctest pass only, and deliberately stays small:
 - **A conservative slow timeout** (warn after 60s, terminate after five
   warning periods) so a hung test surfaces without failing the legitimately
   slow documentation end-to-end suites, which shell out to real Ninja.
+- **One serialized child-Cargo group.** Tests that spawn their own Cargo build
+  join `nested-cargo-builds`, whose `max-threads = 1` stops four Nextest
+  workers from each starting a four-job build on four vCPUs. Membership is
+  decided by Nextest evaluating each override's filter against real test names,
+  so a filter can fail silently: a name no test has, or a form that cannot
+  match how a test is named at run time, selects nothing and leaves the test
+  running unserialized while the group still looks healthy. Every filter
+  therefore uses `test(/^NAME($|::)/)`, not `test(=NAME)`. An `#[rstest]` with
+  `#[case]` attributes compiles to one test per case, named `name::case_1_…`,
+  and the `=` form compares the whole name, so it matches none of them; the
+  anchored regex form matches the plain name and every case suffix alike.
+  Nextest's `~` substring form is unanchored and over-matches, so it is not
+  used. `tests/workflow_contracts/nextest_child_cargo_group_test.py` holds
+  these contracts, including that every filtered name resolves to a declared
+  test.
 - **Scoped subprocess timings.** Packaging smoke tests emit their Cargo
   subprocess durations after each Cargo subprocess returns. The
   `harness_compiles_under_a_split_build_dir` parser test reads recorded Cargo
