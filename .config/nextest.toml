@@ -39,10 +39,11 @@ max-threads = 1
 # which are not parameterized and so match either way. It is about the edit
 # that comes later: adding a `#[case]` attribute to a filtered test must not
 # silently unhook it from its policy, whichever override carries that policy.
-# A guard scoped to the group's own filters was tried first and was too narrow:
-# an override that widens a timeout instead of granting a group slot names its
-# test through the same field and had the same defect, and reading only the
-# group's filters could not see it at all.
+# A guard scoped to the group's own filters was tried first and was too narrow.
+# The field decides which tests an override touches, not the group: until
+# issue 732 removed it, a Windows-only override widened one test's timeout
+# through `filter` and no `test-group`, the same field carrying the same defect,
+# and a guard reading only the group's filters could not see it.
 [[profile.default.overrides]]
 # These tests spawn isolated Cargo builds. Serializing them prevents four
 # Nextest workers from each starting a four-job Cargo build on four vCPUs.
