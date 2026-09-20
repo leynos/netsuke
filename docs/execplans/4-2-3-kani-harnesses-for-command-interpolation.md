@@ -179,7 +179,9 @@ patched tree *compiles*. Each therefore now contributes zero mutation evidence
 while appearing healthy. This is the same blind spot this plan's `OBL-PATCHES`
 was created to close, one level deeper. The cheapest systemic fix is to widen
 that contract test to `cargo check` each patched tree under `-D warnings`; that
-is a repository-wide change and belongs in its own issue rather than here.
+is a repository-wide change, so it was filed as issue #756 rather than made
+here. That issue carries the exact compiler errors for all three patches above,
+reproduced against a clean tree at `adce1949`.
 
 ## Context and orientation
 
@@ -2074,5 +2076,7 @@ Both were regenerated in `3a282018` and re-verified against their named checks;
 the other three were re-verified unchanged. Three further patches broken by the
 same mechanism belong to roadmap 4.2.1 and 4.2.2 and are raised here rather
 than fixed, because this plan's own `OBL-PATCHES` says to escalate rather than
-silently absorb neighbouring roadmaps' work. The completion state is unchanged:
-header `COMPLETE`, roadmap `[x]`, no roadmap correction required.
+silently absorb neighbouring roadmaps' work; they are filed as issue #756,
+which also proposes closing the contract test's apply-only blind spot. The
+completion state is unchanged: header `COMPLETE`, roadmap `[x]`, no roadmap
+correction required.
