@@ -35,7 +35,6 @@ NESTED_CARGO_BUILD_TESTS = (
     "production_build_module_slice_has_expected_boundary",
     "stub_env_default_does_not_compile",
     "stub_env_builders_compile_under_the_same_harness",
-    "harness_compiles_under_a_split_build_dir",
     "text_domains_cannot_be_swapped",
     "document_and_needle_compile_together",
     "packaged_manifest_retains_build_script_sources",
@@ -254,9 +253,8 @@ def test_nested_cargo_group_serializes_build_capable_tests() -> None:
     )
     assert {
         "cli_configuration_fixture_compiles",
-        "harness_compiles_under_a_split_build_dir",
         "packaged_manifest_retains_build_script_sources",
-    } <= grouped, "the three known contended nested Cargo tests must be serialized"
+    } <= grouped, "the two isolated nested Cargo tests must be serialized"
     immediate = [
         override
         for override in _default_overrides(config)

@@ -2,11 +2,19 @@
 
 ## Status
 
-Accepted.
+Superseded by issue 732.
 
 ## Date
 
 2026-09-19
+
+## Supersession
+
+Issue 732 replaced the private live Cargo build with recorded split-layout
+Cargo JSON. The current test preserves the parser regression by asserting that
+the collected dependency directories include the split build directory and the
+`test_support` artefact remains uplifted under the target directory. It no
+longer joins `nested-cargo-builds` or needs the Windows 420s timeout.
 
 ## Context and problem statement
 

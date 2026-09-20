@@ -28,7 +28,7 @@ max-threads = 1
 [[profile.default.overrides]]
 # These tests spawn isolated Cargo builds. Serializing them prevents four
 # Nextest workers from each starting a four-job Cargo build on four vCPUs.
-filter = 'test(=cli_configuration_fixture_compiles) | test(=harness_compiles_under_a_split_build_dir) | test(=packaged_manifest_retains_build_script_sources)'
+filter = 'test(=cli_configuration_fixture_compiles) | test(=packaged_manifest_retains_build_script_sources)'
 test-group = "nested-cargo-builds"
 success-output = "immediate"
 
@@ -41,72 +41,6 @@ success-output = "immediate"
 filter = 'test(=production_build_module_slice_has_expected_boundary) | test(=stub_env_default_does_not_compile) | test(=stub_env_builders_compile_under_the_same_harness) | test(=text_domains_cannot_be_swapped) | test(=document_and_needle_compile_together)'
 test-group = "nested-cargo-builds"
 success-output = "immediate"
-
-[[profile.default.overrides]]
-# `harness_compiles_under_a_split_build_dir` on Windows: seven warning periods
-# (420s) instead of the default five (300s).
-#
-# Measured rather than guessed, per the policy above. Across the 58 Windows
-# gate runs from the #664 merge (run 33890685806) to run 34064668331 this test
-# ran a median of 274.7s and a maximum of 312.9s, the maximum being run
-# 33891104448, whose sccache key missed. One run in 58 exceeded the 300s
-# default. 420s clears the measured worst case by 34 percent.
-#
-# The cost is the spawned Cargo build, 98.8 percent of the test's wall time in
-# the median: `test_support` depends on `netsuke-build`, so the build compiles
-# that crate and roughly 350 dependencies into the private directories the test
-# needs for E0460 isolation. The lane's compiler cache does reach that child
-# process, because `ci-windows.yml` sets `RUSTC_WRAPPER` at job scope and the
-# test adds to the environment rather than clearing it, and it is worth about 3
-# percent: 281.0s on the cold run against a 271.9s warm median. There is no
-# artefact reuse left to claim.
-#
-# `packaged_manifest_retains_build_script_sources` is deliberately absent. It
-# skips the packaging verification build on Windows and runs it on the Linux
-# lane instead (see tests/packaging_smoke_tests.rs), which returns it to the
-# default budget with room to spare: 4.2s and 7.6s on runs 34075197897 and
-# 34079222917, against a 244.0s median before.
-#
-# Removing that second Cargo build also unblocked this one. Contention had been
-# increasing each test's elapsed time: the two ran concurrently, each with four
-# compile jobs on a four-vCPU runner, and each roughly halved the other. With
-# the second build gone from the Windows lane, this test took 125.3s, 170.6s
-# and 170.7s on runs 34075197897, 34079222917 and 34080385050, rather than the
-# 274.7s median above. 420s is therefore sized against the older, contended
-# distribution and is deliberately conservative while the new shape has three
-# samples.
-#
-# Trimming the test is worth about 85s, not the 156s that figure implied
-# before the second build left, on the uncontended reading those three runs
-# support: what a trim returns there is the test's exclusive tail, the period
-# after every other test has reported, measured at 62.3s, 87.2s and 85.5s,
-# where 156s was the implied value of trimming both tests while they
-# contended. The lane fell from a 1468s median to about 848s across the three
-# changes, so 85s is roughly ten percent of what remains.
-#
-# That figure has since moved. This test is a member of `nested-cargo-builds`
-# above, which serializes it with the other build-capable child Cargo tests, so
-# it holds the group's single slot and every member behind it waits. Trimming
-# it therefore returns its group occupancy rather than its exclusive tail, and
-# the test's own duration caps that figure, because the duration is the
-# occupancy it gives back. The trim returns exactly the duration whenever the
-# shortened group chain still bounds the run. The Windows runs sampled on
-# 2026-09-18 put the figure between 95s and 163s, against the 85s above, which
-# was the exclusive tail under an uncontended lane that no longer exists. The
-# repository has still decided not to spend the fidelity risk yet, and the trim
-# remains a candidate for tightening or deletion at the ten-run revisit gate
-# that ADR-028 defines; that record carries the serialized measurements, the
-# alternatives already measured and rejected — `cargo check` for `cargo
-# build`, warming the compiler cache, and sharing a target directory — and the
-# ten-run gate. The developers' guide carries the constraints a fixture-crate
-# replacement would have to preserve.
-#
-# Windows only. On Ubicloud both tests finish in a fraction of the budget, and
-# widening the timeout there would blunt the hang detection this file exists to
-# provide.
-platform = 'cfg(target_os = "windows")'
-filter = 'test(=harness_compiles_under_a_split_build_dir)'
-slow-timeout = { period = "60s", terminate-after = 7 }
 
 [profile.ci]
 # The CI-only profile. It exists solely to carry the whole-run budget, and
@@ -134,7 +68,7 @@ slow-timeout = { period = "60s", terminate-after = 7 }
 # pass the coverage action runs after it is not a nextest run, so nothing in
 # this file bounds it and its own cargo watchdog does.
 #
-# It also has to sit between its neighbours. It is above the 420s largest
+# It also has to sit between its neighbours. It is above the 300s largest
 # per-test allowance below it, and the 1,800s cargo watchdog above it covers
 # it with 50s to spare: 780s + 70s of termination + a 600s cold build + 300s
 # of report phase is 1,750s. The report phase is the term that moved this
@@ -144,13 +78,9 @@ slow-timeout = { period = "60s", terminate-after = 7 }
 # that does.
 #
 # Deliberately not in `[profile.default]`, which every local `make test` uses.
-# A developer's host is shared and contended in a way CI's is not: measured on
-# 2026-09-15, a single `harness_compiles_under_a_split_build_dir` spent 688.6s
-# inside its nested `cargo build` waiting on the package-cache lock behind
-# other work, where the same test costs seconds unloaded. A whole-run cap in
-# `default` would end such a run against a figure sized from CI logs, and the
-# figure would be blamed rather than the contention. Local runs keep the
-# per-test allowance and no whole-run cap.
+# A developer's host is shared and contended in a way CI's is not, so a
+# whole-run cap sized from CI logs would diagnose the budget rather than local
+# contention. Local runs keep the per-test allowance and no whole-run cap.
 #
 # See "Test timeouts: the tiers this repository sets" in
 # docs/developers-guide.md, which holds the arithmetic and the sample.

@@ -15,7 +15,7 @@
 //! need it.
 
 #[path = "cargo_artifacts.rs"]
-mod cargo_artifacts;
+pub(crate) mod cargo_artifacts;
 #[path = "cargo_features.rs"]
 mod cargo_features;
 #[path = "rustc_response_file.rs"]
@@ -39,14 +39,6 @@ pub struct TestSupportRlib {
 impl TestSupportRlib {
     /// Build `test_support` with Cargo and locate the resulting rlib.
     pub fn build() -> io::Result<Self> {
-        Self::build_with(&[])
-    }
-
-    /// Build `test_support` with additional environment variables applied.
-    ///
-    /// The split-layout regression test uses this to force Cargo's
-    /// `build.build-dir` into a separate directory.
-    pub fn build_with(env: &[(&str, &Path)]) -> io::Result<Self> {
         let mut command = Command::new(cargo());
         command
             .arg("build")
@@ -54,9 +46,6 @@ impl TestSupportRlib {
             .arg(manifest_dir().join("test_support/Cargo.toml"))
             .arg("--message-format=json")
             .args(cargo_features::GATE_FEATURE_ARGUMENTS);
-        for (key, value) in env {
-            command.env(key, value);
-        }
         let started_at = Instant::now();
         let output = command.output()?;
         tracing::info!(

@@ -20,7 +20,7 @@
 mod test_support_rlib;
 
 use rstest::{fixture, rstest};
-use std::io;
+use std::{io, path::Path};
 
 /// One `test_support` build shared by both tests.
 ///
@@ -79,71 +79,42 @@ fn stub_env_builders_compile_under_the_same_harness(
     Ok(())
 }
 
-/// Forcing a split `build.build-dir` must still yield a working harness:
-/// the dependency rlibs land apart from the uplifted `test_support` rlib, so
-/// the collected `-L dependency=` set has to span the split for the control
-/// fixture to compile. This pins the regression where a single derived
-/// directory missed the dependencies entirely.
+/// Verify Cargo JSON preserves split-build dependency directories.
 ///
-/// The subject is the real `test_support` build, not a fixture crate, and that
-/// is deliberate: it is what carries both the dependency artefacts and the
-/// uplifted one that the split-directory derivation has to tell apart. The
-/// cost of building it here is recorded in
-/// docs/developers-guide.md, and the decision to defer trimming it, the gate
-/// that reopens the question, and the fidelity argument any fixture-crate
-/// replacement would owe are in ADR-028
-/// (docs/adr-028-defer-split-build-dir-harness-trim.md).
-///
-/// This test is a member of the `nested-cargo-builds` nextest group, so on
-/// Windows it holds that group's single slot: every other build-capable test
-/// waits for it, so a trim returns its whole occupancy rather than only the
-/// tail it finishes on, whenever the shortened group chain still bounds the
-/// run. It returns less when unrelated work becomes the run's next binding
-/// constraint once the slot frees. The group's measurements are in the same
-/// developers' guide section.
-///
-/// It is also what keeps the Windows response-file path exercised. The long
-/// `-L dependency=` set this build produces, plus the long temporary roots the
-/// test adds, is why `TestSupportRlib::compile` sends its arguments through a
-/// `rustc` response file at all rather than a command line. A fixture crate
-/// with one dependency would produce far fewer directories and stop
-/// exercising that, so any replacement must either generate enough search
-/// paths to keep the pressure or move the response-file contract into its own
-/// dedicated test.
+/// This parser regression uses a recorded split layout because its contract is
+/// the `compiler-artifact` message interpretation, not Cargo's own build. A
+/// live private build recompiles the workspace and races the shared fixture's
+/// uplifted rlibs (`E0460`) if it uses the ambient target directory.
 #[rstest]
 fn harness_compiles_under_a_split_build_dir() -> io::Result<()> {
-    let subscriber = tracing_subscriber::fmt().with_test_writer().finish();
-    tracing::subscriber::with_default(subscriber, || {
-        // Both roots are private to this test: sharing the ambient target dir
-        // with the concurrently building `#[once]` fixture races on the
-        // uplifted rlibs and fails with version-skew errors (E0460).
-        let target_dir = tempfile::tempdir()?;
-        let build_dir = tempfile::tempdir()?;
-        let harness = test_support_rlib::TestSupportRlib::build_with(&[
-            ("CARGO_TARGET_DIR", target_dir.path()),
-            ("CARGO_BUILD_BUILD_DIR", build_dir.path()),
-        ])?;
+    const SPLIT_BUILD_DIR: &str = "/recorded/split-build";
+    const UPLIFTED_TARGET_DIR: &str = "/recorded/uplifted-target";
 
-        let spans_split_dir = harness
-            .deps_dirs
-            .iter()
-            .any(|dir| dir.starts_with(build_dir.path()));
-        if !spans_split_dir {
-            return Err(io::Error::other(format!(
-                "the dependency directories should include the split build dir {}; found {:?}",
-                build_dir.path().display(),
-                harness.deps_dirs,
-            )));
-        }
+    let messages = include_str!("ui/split_build_dir_cargo_messages.jsonl");
+    let dependency_dirs = messages
+        .lines()
+        .flat_map(test_support_rlib::cargo_artifacts::dependency_dirs_in_message)
+        .collect::<Vec<_>>();
+    if !dependency_dirs
+        .iter()
+        .any(|directory| directory.starts_with(Path::new(SPLIT_BUILD_DIR)))
+    {
+        return Err(io::Error::other(format!(
+            "the dependency directories should include {SPLIT_BUILD_DIR}; found {dependency_dirs:?}",
+        )));
+    }
 
-        let output = harness.compile("tests/ui/stub_env_strict_compile_pass.rs")?;
-        if !output.status.success() {
-            return Err(io::Error::other(format!(
-                "the control fixture should compile under a split build dir:
-{}",
-                test_support_rlib::stderr(&output),
-            )));
-        }
-        Ok(())
-    })
+    let test_support = messages
+        .lines()
+        .filter_map(|message| {
+            test_support_rlib::cargo_artifacts::library_path_in_message(message, "test_support")
+        })
+        .next_back()
+        .ok_or_else(|| io::Error::other("recorded Cargo JSON has no test_support artefact"))?;
+    if !test_support.starts_with(Path::new(UPLIFTED_TARGET_DIR)) {
+        return Err(io::Error::other(format!(
+            "the test_support artefact should remain uplifted under {UPLIFTED_TARGET_DIR}; found {test_support:?}",
+        )));
+    }
+    Ok(())
 }
