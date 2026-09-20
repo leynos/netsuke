@@ -3525,6 +3525,20 @@ parent module: insta derives a snapshot's filename from the module path that
 asserted it, and the files under `src/snapshots/network_redirect/` keep stable
 names.
 
+### `src/stdlib/network/tests_support.rs`
+
+Shared support for the network tests, declared by `src/stdlib/network/mod.rs`
+through `#[path = "tests_support.rs"]`. It owns the shared `REDIRECT_USER` and
+`REDIRECT_SECRET` constants and the URL helpers that apply them.
+`credentialed_url` preserves the caller's path; the current and target helpers,
+`credentialed_current_url` and `credentialed_target_url`, use `/start` and
+`/next`, respectively. `credentialed_loopback_url` preserves the fixture's host
+and port but normalises its path to `/start` so fixture-backed diagnostics
+remain stable. Use `credentialed_url` when a loopback case needs a different
+path. These helpers return errors for malformed URLs or URLs that do not accept
+userinfo; redirect tests should use them instead of duplicating credential
+literals.
+
 ### `test_support/src/check_ninja_tests.rs`
 
 Unix-only unit coverage for the fake-Ninja factories, owned by
@@ -3603,9 +3617,7 @@ owns `HttpServerConfig`, the three `NETSUKE_TEST_HTTP_*` override names, and
 the duration parse that reads them. Its accessors are `pub(super)`, so the
 fixture's own loops can ask it for a deadline or a poll interval while nothing
 outside the fixture can configure one. `config_tests.rs` is its `#[path]`
-child, declared here beside the code it covers. `raw_tests.rs` is declared by
-`mod.rs` instead because it covers both response paths rather than a single
-sibling module.
+child, declared by `config.rs`. `raw_tests.rs` is declared by `mod.rs`.
 
 ### `src/ir/cmd_interpolate_property_support.rs`
 
