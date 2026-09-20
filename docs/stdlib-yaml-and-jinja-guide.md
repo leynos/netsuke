@@ -166,18 +166,21 @@ non-blocking, so a FIFO cannot wedge the render worker first. A symlink final
 component is refused on both platforms, but not with the same diagnostic: on
 Unix the default open declines to follow it, so the failure comes from the open
 itself and names the path together with the platform's symbolic-link detail,
-while on Windows a check made before the open reuses the not-a-regular-file
-diagnostic. Two optional keyword arguments narrow a call without touching the
-operator ceiling:
+while on Windows the open declines to traverse the reparse point, so the
+refusal comes from the opened handle and reuses the not-a-regular-file
+diagnostic. That Windows refusal covers every reparse tag, not only symlinks,
+and a relative-target link is the supported opt-in case. Two optional keyword
+arguments narrow a call:
 
 - `max_bytes` lowers the budget for one call (a value above the configured
   budget is clamped to it). Example:
   `{{ 'fixtures/big.bin' | contents(max_bytes=1024) }}`.
-- `follow_symlinks=true` permits the final component to be a symlink. Example:
+- `follow_symlinks=true` waives that final-component refusal. Example:
   `{{ 'link/version.txt' | contents(follow_symlinks=true) }}`.
 
-See the users' guide section on file reading limits for the defaults, the
-symlink policy, and the trust model these limits assume.
+See
+[Configure file reading limits](users-guide.md#configure-file-reading-limits)
+for the defaults, the full policy, and the trust model.
 
 MD5 and SHA-1 are available only in builds compiled with Cargo feature
 `legacy-digests`. Without that feature, `hash('md5')`, `hash('sha1')`, and their

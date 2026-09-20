@@ -8,6 +8,8 @@ mod fs_utils;
 mod hash_utils;
 mod path_utils;
 mod read_telemetry;
+#[cfg(windows)]
+mod windows_reparse;
 
 #[cfg(test)]
 mod home_metrics_tests;
