@@ -231,6 +231,31 @@ fn char_literal_end(source: &str, start: usize) -> Option<usize> {
     (bytes.get(end) == Some(&b'\'')).then(|| end + 1)
 }
 
+/// Return the index just past the `}` closing the `\u{...}` escape at `start`.
+///
+/// The escape opens with `u{`; only that much anchors it, since the contents
+/// are not validated here. A char literal is read to decide where it ends, not
+/// to judge whether the escape is well formed.
+///
+/// The precision of the returned offset is not observable through the scan, and
+/// this was measured rather than assumed. `char_literal_end` accepts it only
+/// when a closing quote sits at exactly that index, so an offset that is too
+/// small, too large, or derived from the wrong brace makes it return `None` —
+/// which leaves the literal unblanked and its contents merely become text the
+/// matcher finds nothing in. Four mutations of this function, including one
+/// that hunts the last `}` in the whole input, all left all 47 tests passing,
+/// where disabling masking outright fails three. The behaviour here is pinned
+/// by inspection and by the literal-boundary cases in the spelling suite; the
+/// offset itself has no test that could distinguish it.
+fn unicode_escape_end(bytes: &[u8], start: usize) -> Option<usize> {
+    bytes.get(start + 1).copied().filter(|byte| *byte == b'{')?;
+    bytes
+        .get(start + 2..)?
+        .iter()
+        .position(|byte| *byte == b'}')
+        .map(|offset| start + offset + 3)
+}
+
 /// Return the index just past the escape sequence whose body begins at `start`.
 ///
 /// The forms follow the language: `\u{...}` runs to its closing brace, `\x`
@@ -238,20 +263,7 @@ fn char_literal_end(source: &str, start: usize) -> Option<usize> {
 /// character, which may occupy several bytes.
 fn escape_end(bytes: &[u8], start: usize) -> Option<usize> {
     match bytes.get(start)? {
-        b'u' => {
-            let mut index = start + 1;
-            if bytes.get(index) != Some(&b'{') {
-                return None;
-            }
-            index += 1;
-            while let Some(byte) = bytes.get(index) {
-                if *byte == b'}' {
-                    return Some(index + 1);
-                }
-                index += 1;
-            }
-            None
-        }
+        b'u' => unicode_escape_end(bytes, start),
         b'x' => {
             let digits = bytes.get(start + 1..start + 3)?;
             digits

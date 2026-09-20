@@ -180,6 +180,10 @@ fn malformed_input_is_not_a_panic() -> Result<()> {
         "#[cfg_attr(all(),",
         "#[cfg_attr(all(), allow(cfg_attr_allow_is_unterminated",
         "const C: &str = \"unterminated",
+        // An escape that opens a char literal and never closes it: the escape
+        // reader looks for a `}` that never comes, and must return nothing
+        // rather than run off the end.
+        "const C: char = '\\u{61",
         "/* unterminated comment\n#[allow(warnings, reason = \"x\")]",
         "let \u{00e9} = 1; #[allow(warnings, reason = \"non-ascii before\")]",
         "#\u{00e9}[allow(warnings, reason = \"non-ascii after\")]",

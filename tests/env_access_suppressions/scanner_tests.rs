@@ -111,6 +111,30 @@ use rstest::rstest;
     "fn probe<'a>(value: &'a str) {}\n#[allow(warnings, reason = \"escape hatch probe\")]\n",
     &["warnings"]
 )]
+// A `\u{...}` escape opens a char literal that the masker must not overrun.
+// The offset the escape reader returns is only accepted when a closing quote
+// sits exactly there, so an overrun makes the literal unread and leaves its
+// contents in code; the attribute below is what fails if the reader walks past
+// the literal's end into it. Measured: the behaviour this pins is the literal
+// boundary, not the escape offset, which no row can distinguish.
+#[case::attribute_after_a_unicode_escape(
+    "src/lib.rs",
+    r#"const LETTER: char = '\u{61}';
+#[allow(clippy::disallowed_methods, reason = "escape hatch probe")]
+fn probe() {}
+"#,
+    &["clippy::disallowed_methods"]
+)]
+// A `\x` escape takes its hex digits and no more, so the literal after it
+// closes where the language says and the attribute below stays code.
+#[case::attribute_after_a_hex_escape(
+    "src/lib.rs",
+    r#"const LETTER: char = '\x61';
+#[allow(clippy::disallowed_methods, reason = "escape hatch probe")]
+fn probe() {}
+"#,
+    &["clippy::disallowed_methods"]
+)]
 // Suppression in general is not the offence: an unrelated lint still passes.
 #[case::unrelated_allow(
     "test_support/src/lib.rs",
