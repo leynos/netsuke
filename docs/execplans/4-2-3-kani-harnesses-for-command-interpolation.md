@@ -1,13 +1,14 @@
 # Add Kani harnesses for command interpolation (roadmap 4.2.3)
 
 This ExecPlan (execution plan) is a living document. The sections `Constraints`,
-`Tolerances`, `Risks`, `Progress`, `Surprises & discoveries`, `Decision log`,
+`Tolerances`, `Risks`, `Reconciliation against acceptance criteria`,
+`Progress`, `Surprises & discoveries`, `Decision log`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
 Status: COMPLETE
 
-Revision 2.26. See `Revision note` at the foot of this document.
+Revision 2.28. See `Revision note` at the foot of this document.
 
 ## Purpose / big picture
 
@@ -57,6 +58,125 @@ contract and updates its Proptest oracle accordingly. PowerShell keeps its
 native backtick-escape semantics. The maintainer-facing change remains two more
 verified harnesses, guide inventory rows, and a mutation-evidence contract that
 cannot silently rot.
+
+## Reconciliation against acceptance criteria (2026-09-20, issue #738)
+
+Issue #738 recorded this plan as `Status: IN PROGRESS` on the strength of
+Revision 2.24, which noted that the documented `LD_LIBRARY_PATH`-capped full
+Kani run exited 124 before the suite completed. That premise is out of date.
+Revision 2.27 had already moved the header to `COMPLETE` on 2026-09-16, under
+the authority order that the `Progress` and `Outcomes` sections and the roadmap
+checkbox outrank the header. This section re-derives the verdict from fresh
+evidence rather than deferring to either revision.
+
+### Acceptance criterion: the capped full `make kani-ir` run
+
+**Met.** On 2026-09-20 the documented `LD_LIBRARY_PATH`-capped wrapper was run
+against `61a944fb` with `KANI_FLAGS="--jobs 4 --output-format terse"`:
+
+```plaintext
+Complete - 15 successfully verified harnesses, 0 failures, 15 total.
+```
+
+The run completed in 5m03s wall-clock including a cold crate compile, inside
+the eight-minute local tolerance. All 15 harnesses reported
+`VERIFICATION:- SUCCESSFUL`, with zero `FAILED` lines. This resolves the
+Revision 2.24 exit-124 shortfall: the earlier failure was a five-minute cap
+under sequential scheduling, not a working-tree defect, and the supported
+`--jobs 4 --output-format terse` pair clears it. Log:
+`/tmp/kani-full-issue-738-reconcile-roadmap-4-2-3-with-execplan-completion-evidence.out`.
+
+The two command-interpolation proofs and their covers were confirmed
+individually in the same run: `shell_variable_prefix_does_not_match` satisfied
+3 of 3 covers, and `marker_token_match_is_exact` satisfied 4 of 4.
+
+### Acceptance criterion: mutation evidence
+
+**Met after repair.** Four of the five commits' mutation patches already
+produced their named counterexamples. Two did not: `-D warnings` entered the
+`kani-full` recipe on 2026-09-18 (#714), and both patches seed their fault by
+leaving a binding unused. That was a warning when the patches were written and
+became a hard compile error, so the patched tree failed to build and yielded no
+mutation evidence at all. Both were regenerated in commit `3a282018` and
+re-verified:
+
+- `marker_token_match_is_exact` fails on
+  `Failed Checks: marker match agrees with exact text`, then passes after
+  restoration.
+- `scanner_agrees_with_independent_specification` fails on
+  `template = "__NETSUKE_OUTS_PLACEHOLDER__", ins = "", outs = "a"`, then
+  passes after restoration.
+- `shell_variable_prefix_does_not_match` fails on
+  `Failed Checks: literal shell-variable prefixes are not Netsuke markers`,
+  then passes after restoration.
+- `substituted_odd_backticks_are_rejected` fails on
+
+  ```plaintext
+  Test failed: odd substituted command was accepted: Ok("`")
+  minimal failing input: template = "`", ins = "", outs = ""
+  ```
+
+  then passes after restoration.
+- `guard_uses_the_substituted_command` fails on
+  `Test failed: guard accepted an invalid substituted command`, then passes
+  after restoration.
+
+All five are therefore load-bearing. `tests/kani_mutation_evidence_tests.rs`
+passes with 3 of 3 tests.
+
+### Acceptance criterion: deterministic and documentation gates
+
+**Met.** Run against the tree at this revision: `make check-fmt`, `make lint`,
+`make test` (3,284 nextest tests passed, 5 skipped, plus 122 doctests across
+three targets), `make typecheck`, `make doc-coverage` (98.80%),
+`make markdownlint` (143 files, 0 errors), and `make nixie` all exited zero.
+Logs are under
+`/tmp/{check-fmt,lint,test,typecheck,doc-coverage,markdownlint,nixie}-netsuke-issue-738-reconcile-roadmap-4-2-3-with-execplan-completion-evidence.out`.
+
+### Acceptance criterion: trace links
+
+**Met.** All five trace-link targets resolve to a single live definition each:
+`shell_variable_prefix_does_not_match`, `marker_token_match_is_exact`,
+`scanner_agrees_with_independent_specification`,
+`substituted_odd_backticks_are_rejected`, and
+`guard_uses_the_substituted_command`. `ADR-004` and
+`docs/formal-verification-methods-in-netsuke.md` both exist and state the
+achieved bounds and the Proptest hand-off.
+
+### Acceptance criterion: review evidence
+
+**Met.** `coderabbit review --agent` returned zero findings for the patch
+repair in commit `3a282018`. The `Progress` section records zero findings at
+EP-M2, EP-M5, and EP-M6 as well.
+
+### Verdict
+
+Every acceptance criterion passes, so the header stays `COMPLETE` and
+`docs/roadmap.md` keeps its `[x]` marks. **No roadmap correction is required.**
+The one substantive change this issue produced is the repair of the two
+mutation patches, which is a defect in this plan's own non-vacuity evidence
+rather than a change to its completion state.
+
+### Raised, not fixed: three further patches broken by the same change
+
+The `-D warnings` change broke five patches in total. Three lie outside this
+plan and were left alone, per this document's own instruction to raise roadmap
+4.2.1 and 4.2.2 concerns rather than silently fix them:
+
+- `ir__from_manifest__verification__empty_rule_shape_is_rejected`
+  (`unused function: empty_rule_error`, `empty_rule_message`);
+- `ir__from_manifest__verification__multiple_rule_shape_is_rejected`
+  (`unused function: sort_strings`, `string_cmp`; also a redundant `mut`);
+- `ir__cycle__verification__canonicalize_two_node_cycle_is_canonical`
+  (a redundant `mut`, surfacing as `variable does not need to be mutable`).
+
+All three still pass `git apply --check`, so the contract test reports nothing:
+its `every_patch_applies_cleanly` check proves a patch *applies*, not that the
+patched tree *compiles*. Each therefore now contributes zero mutation evidence
+while appearing healthy. This is the same blind spot this plan's `OBL-PATCHES`
+was created to close, one level deeper. The cheapest systemic fix is to widen
+that contract test to `cargo check` each patched tree under `-D warnings`; that
+is a repository-wide change and belongs in its own issue rather than here.
 
 ## Context and orientation
 
@@ -1340,6 +1460,17 @@ outside this local completion boundary and must be reported separately by CI.
   command-interpolation proofs, then reached the existing five-minute cap at
   `ir::from_manifest::verification::missing_rule_shape_is_rejected` (exit 124);
   the full suite is not recorded as passed.
+- [x] (2026-09-20, issue #738) Reconciliation against every acceptance
+  criterion, recorded in `Reconciliation against acceptance criteria` above.
+  The capped full suite now passes: 15 of 15 harnesses, 0 failures, all covers
+  satisfied, 5m03s including a cold compile. Two of the five mutation patches
+  had been silently disabled by `-D warnings` entering `make kani-full` (#714);
+  both were regenerated in `3a282018` and re-verified, and the other three were
+  re-verified unchanged. All seven deterministic and documentation gates pass,
+  every trace link resolves, and `coderabbit review --agent` returned zero
+  findings. The header stays `COMPLETE`; the roadmap needs no correction. Three
+  further patches broken by the same change lie in roadmap 4.2.1 and 4.2.2 and
+  are raised rather than fixed here.
 
 ## Surprises & discoveries
 
@@ -1924,3 +2055,21 @@ flipped roadmap 4.2.3 to `[x]`, so the work was already delivered when Revision
 Under the authority order in the documentation style guide the roadmap checkbox
 and this plan's `Progress` and Outcomes sections outrank the header, so the
 stale artefact was the header, not the roadmap.
+
+**Revision 2.28 (2026-09-20, issue #738).** Issue #738 raised this plan as
+`IN PROGRESS` on the strength of Revision 2.24's exit-124 full-suite run, which
+Revision 2.27 had already superseded. Rather than re-litigate the header, the
+acceptance criteria were re-derived from fresh evidence; the assessment is
+recorded in `Reconciliation against acceptance criteria` and summarized in
+`Progress`. The capped suite now completes 15 of 15 harnesses with zero
+failures in 5m03s, so the outstanding full-suite requirement is discharged. In
+doing so, two of the five mutation patches were found to have been disabled by
+`-D warnings` entering `make kani-full` (#714) on 2026-09-18: both seeded their
+fault by leaving a binding unused, which that change promoted from warning to
+compile error, so the patched tree failed to build and yielded no evidence.
+Both were regenerated in `3a282018` and re-verified against their named checks;
+the other three were re-verified unchanged. Three further patches broken by the
+same mechanism belong to roadmap 4.2.1 and 4.2.2 and are raised here rather
+than fixed, because this plan's own `OBL-PATCHES` says to escalate rather than
+silently absorb neighbouring roadmaps' work. The completion state is unchanged:
+header `COMPLETE`, roadmap `[x]`, no roadmap correction required.
