@@ -46,10 +46,12 @@ import typing as typ
 
 from ci_coverage_wiring_invariants import COVERAGE_REPORT_PATH
 from shell_command_scan import (
+    MULTIPLEXER_COMMAND,
     assigned_from,
     command_operands,
     command_segments,
     names_a_component,
+    script_operands,
 )
 
 #: How `mktemp` is asked for a directory rather than a file. Both spellings are
@@ -68,25 +70,20 @@ REPORT_VALIDATION_STEP: typ.Final[str] = "Validate the report before submitting 
 #: contract and is exercised by `make test-coverage-artifact`.
 REPORT_VALIDATOR_SCRIPT: typ.Final[str] = "scripts/validate_coverage_artifact.py"
 
-#: The command multiplexer among [`INTERPRETERS`]. It needs naming separately
-#: because it is the one that does not execute its operand directly.
-UV_COMMAND: typ.Final[str] = "uv"
-
-#: The subcommand `uv` executes a script through, taken from its own usage
-#: line: `uv [OPTIONS] <COMMAND>`. `uv` is a command multiplexer, so the script
-#: path after it is an operand of the *subcommand*, not of `uv` itself —
-#: `uv scripts/validate_coverage_artifact.py` is rejected as an unrecognized
-#: subcommand. Only `uv` needs this: `python` and `python3` take the script as
-#: their own operand.
-UV_RUN_COMMAND: typ.Final[str] = "run"
+#: The commands that put a file somewhere while leaving it where it was. Only
+#: these count as staging the report: `mv` would put the report in the staged
+#: directory and take it out of the workspace, so the upload, which has yet to
+#: read the workspace, would find nothing — the validation passing and the
+#: submission failing, which is the ordering this contract exists to prevent.
+COPYING_COMMANDS: typ.Final[tuple[str, ...]] = ("cp", "install")
 
 #: The commands that execute a script handed to them as an operand. The
-#: validator is a Python program, so it runs when an interpreter is given it as
-#: a file to run — `uv run ... script.py`, or `python script.py`. The list is
+#: validator is a Python program, so it runs when one of these is given it as a
+#: file to run — `uv run ... script.py`, or `python script.py`. The list is
 #: deliberately short and stated rather than inferred: a script named to any
 #: other command is an argument that command may print, test, or ignore, which
 #: is the difference between running the validator and naming it.
-INTERPRETERS: typ.Final[tuple[str, ...]] = (UV_COMMAND, "python", "python3")
+INTERPRETERS: typ.Final[tuple[str, ...]] = (MULTIPLEXER_COMMAND, "python", "python3")
 
 
 def validation_offenders(validation: dict[str, object]) -> list[str]:
@@ -179,52 +176,26 @@ def _runs_validator(script: str) -> bool:
     bool
         Whether one command in the script runs the validator.
     """
-    for segment in command_segments(script):
-        for interpreter in INTERPRETERS:
-            if any(
-                operand.strip("\"'") == REPORT_VALIDATOR_SCRIPT
-                for operand in _script_operands(segment, interpreter)
-            ):
-                return True
-    return False
+    return any(_runs_validator_in(segment) for segment in command_segments(script))
 
 
-def _script_operands(segment: str, interpreter: str) -> list[str]:
-    """Return the words ``interpreter`` hands the script it runs.
+def _runs_validator_in(segment: str) -> bool:
+    """Return whether one command segment hands the validator to an interpreter.
 
-    The script is an operand of the command that *executes* it, and for `uv`
-    that is not `uv` itself. `uv` is a command multiplexer whose own usage line
-    reads `uv [OPTIONS] <COMMAND>`, so the script path belongs to the
-    subcommand: `uv scripts/validate_coverage_artifact.py --artifact-dir d` is
-    refused by `uv` as an unrecognized subcommand, yet a reading that just
-    looks for the path among `uv`'s operands accepts it. With the copy and the
-    staging commands otherwise in place, the lane would then report clean while
-    the validator never ran, which is the same false accept the interpreter
-    requirement was added to close.
-
-    `uv` therefore has to name the subcommand that runs a script, and the
-    script is read from the operands *after* it. `python` and `python3` execute
-    their operand directly and need no such step.
-
-    Parameters
-    ----------
-    segment
-        One command segment, as :func:`command_segments` returns them.
-    interpreter
-        The command whose operands are wanted, one of [`INTERPRETERS`].
+    Asked of one segment so no reading spans two commands: a clause stated over
+    the whole script could be satisfied by one command naming the validator and
+    another naming the report, which is not a script that ran anything.
 
     Returns
     -------
-    list[str]
-        The operands the script may appear among, empty when the segment does
-        not run a script through ``interpreter`` at all.
+    bool
+        Whether this segment runs the validator.
     """
-    operands = command_operands(segment, interpreter)
-    if interpreter != UV_COMMAND:
-        return operands
-    if not operands or operands[0] != UV_RUN_COMMAND:
-        return []
-    return operands[1:]
+    return any(
+        operand.strip("\"'") == REPORT_VALIDATOR_SCRIPT
+        for interpreter in INTERPRETERS
+        for operand in script_operands(segment, interpreter)
+    )
 
 
 def _created_directories(script: str) -> set[str]:
@@ -252,17 +223,48 @@ def _created_directories(script: str) -> set[str]:
     """
     created: set[str] = set()
     for segment in command_segments(script):
-        # `$(mktemp --directory)` and `$(mktemp -d)` each carry the flag; a
-        # plain `mktemp` names a file, which is not a directory to stage.
-        if re.search(r"\bmktemp\b", segment) and re.search(
-            MKTEMP_DIRECTORY_FLAG, segment
-        ):
-            created |= assigned_from(segment, "mktemp")
-        if re.search(r"\bmkdir\b", segment):
-            created |= {
-                name.strip("\"'${}") for name in command_operands(segment, "mkdir")
-            }
+        created |= _directories_made_in(segment)
     return created
+
+
+def _directories_made_in(segment: str) -> set[str]:
+    """Return the names one command segment gives to directories it creates.
+
+    Both spellings are read from the same segment, so a variable is never
+    credited with a directory a neighbouring command made: the assignment that
+    holds `mktemp` and the `mkdir` that names a directory are each read where
+    they appear, and nothing is carried between segments.
+
+    Returns
+    -------
+    set[str]
+        The names this segment's own commands create.
+    """
+    created: set[str] = set()
+    # `$(mktemp --directory)` and `$(mktemp -d)` each carry the flag; a plain
+    # `mktemp` names a file, which is not a directory to stage.
+    if _makes_directory_with_mktemp(segment):
+        created |= assigned_from(segment, "mktemp")
+    if re.search(r"\bmkdir\b", segment):
+        created |= {name.strip("\"'${}") for name in command_operands(segment, "mkdir")}
+    return created
+
+
+def _makes_directory_with_mktemp(segment: str) -> bool:
+    """Return whether the segment asks `mktemp` for a directory, not a file.
+
+    Both spellings of the flag are accepted — `--directory` and `-d` — because
+    which one a script uses is style, and recognising only one would report a
+    script that did create its directory.
+
+    Returns
+    -------
+    bool
+        Whether `mktemp` runs in this segment with the directory flag.
+    """
+    return bool(
+        re.search(r"\bmktemp\b", segment) and re.search(MKTEMP_DIRECTORY_FLAG, segment)
+    )
 
 
 def _staged_directory(script: str) -> str | None:
@@ -356,19 +358,32 @@ def _copies_from_into(segment: str, source: str, directory: str) -> bool:
         Whether the segment is a copying command from ``source`` into a path
         under ``directory``.
     """
-    for command in ("cp", "install"):
-        operands = command_operands(segment, command)
-        if len(operands) < 2:
-            continue
-        # The report is the *first* operand, and it is one of the sources. A
-        # later operand naming it is not what this asks: the copy has to take
-        # the report as its input.
-        if not names_a_component(operands[0], source):
-            continue
-        # The GNU `-t` spelling puts the destination before the sources, so it
-        # fails this ordering and is reported. That is the safe direction: the
-        # spelling this repository uses is the ordinary one, and a script that
-        # switched to `-t` would be told to stage the report the usual way.
-        if names_a_component(operands[-1], directory, prefix=True):
-            return True
-    return False
+    return any(
+        _copies_in_order(command_operands(segment, command), source, directory)
+        for command in COPYING_COMMANDS
+    )
+
+
+def _copies_in_order(operands: list[str], source: str, directory: str) -> bool:
+    """Whether one copying command's operands carry ``source`` into ``directory``.
+
+    A command with fewer than two operands copies nothing: `cp x` is missing its
+    destination entirely.
+
+    Returns
+    -------
+    bool
+        Whether these operands are a copy of ``source`` into ``directory``.
+    """
+    if len(operands) < 2:
+        return False
+    # The report is the *first* operand, and it is one of the sources. A later
+    # operand naming it is not what this asks: the copy has to take the report
+    # as its input.
+    if not names_a_component(operands[0], source):
+        return False
+    # The GNU `-t` spelling puts the destination before the sources, so it fails
+    # this ordering and is reported. That is the safe direction: the spelling
+    # this repository uses is the ordinary one, and a script that switched to
+    # `-t` would be told to stage the report the usual way.
+    return names_a_component(operands[-1], directory, prefix=True)
