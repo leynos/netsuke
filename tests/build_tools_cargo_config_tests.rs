@@ -231,6 +231,52 @@ fn unit_a_named_codegen_backend_is_detected_by_either_route() -> Result<()> {
     Ok(())
 }
 
+/// Every `rustflags` table Cargo reads is a route to naming a backend.
+///
+/// The committed file happens to name only two tables, so a helper that read
+/// only those two would pass this suite while leaving a third table — a
+/// Windows or custom target — free to select a backend. The synthetic
+/// documents below are therefore the specification: one carries the flag in a
+/// table the repository does not currently declare, and one carries the word in
+/// a table Cargo does not read as target flags.
+#[test]
+fn unit_a_backend_is_found_in_any_target_table_but_not_beyond_them() -> Result<()> {
+    let windows: toml::Value =
+        toml::from_str("[target.'cfg(windows)']\nrustflags = [\"-Zcodegen-backend=cranelift\"]\n")?;
+    let found = rustflags_carrying_backend(&windows);
+    ensure!(
+        found.len() == 1,
+        "a Windows table is a route Cargo reads, got {found:?}"
+    );
+    let (source, _) = found.first().context("the Windows table was reported")?;
+    // `target.cfg(windows)`, not `target.'cfg(windows)'`: the reported name
+    // drops the TOML quoting, because the key is quoted only so that a `cfg`
+    // expression can be used where a bare key is expected.
+    ensure!(
+        source == "target.cfg(windows)",
+        "the reported source should name the table it came from, got {source:?}"
+    );
+
+    let triple: toml::Value = toml::from_str(
+        "[target.x86_64-unknown-linux-gnu]\nrustflags = [\"-Zcodegen-backend=cranelift\"]\n",
+    )?;
+    ensure!(
+        rustflags_carrying_backend(&triple).len() == 1,
+        "an explicit-triple table is read the same way as a cfg table"
+    );
+
+    // `[target.<triple>.<links>]` holds build-script overrides, and a
+    // `rustflags` key there is not a target flag. Only direct children count.
+    let decoy: toml::Value = toml::from_str(
+        "[target.'cfg(unix)'.foo]\nrustflags = [\"-Zcodegen-backend=cranelift\"]\n",
+    )?;
+    ensure!(
+        rustflags_carrying_backend(&decoy).is_empty(),
+        "a nested table beneath a target table is not a target flag source"
+    );
+    Ok(())
+}
+
 /// A profile key is reported only where Cargo documents it.
 ///
 /// The word is not reserved: a `[features]` entry or an unrelated nested table
@@ -256,18 +302,24 @@ fn unit_an_unrelated_codegen_backend_key_is_not_reported() -> Result<()> {
 /// A backend can be selected without a profile key at all, by putting
 /// `-Zcodegen-backend=` into the flags every build already applies — which is
 /// exactly where the standard's own flags live, so the check has to reach
-/// there. Both sources are inspected: the Linux table and `[build]`, since
-/// whichever matches is the one Cargo uses on that platform.
+/// there. Cargo reads `rustflags` from `[build]` and from every
+/// `[target.<triple>]` and `[target.'cfg(...)']` table, so all of those are
+/// inspected: a table naming a platform this repository does not build on
+/// today applies on that platform tomorrow, and whichever table matches is the
+/// one Cargo uses there.
+///
+/// Direct children only. Recursing through arbitrary configuration tables
+/// would report a key that merely happens to be called `rustflags`, which
+/// Cargo does not read as target flags.
 fn rustflags_carrying_backend(config: &toml::Value) -> Vec<(String, String)> {
-    let sources = [
-        ("build".to_owned(), config.get("build")),
-        (
-            r#"target.cfg(target_os = "linux")"#.to_owned(),
-            config
-                .get("target")
-                .and_then(|table| table.get(r#"cfg(target_os = "linux")"#)),
-        ),
-    ];
+    let mut sources = vec![("build".to_owned(), config.get("build"))];
+    if let Some(target) = config.get("target").and_then(toml::Value::as_table) {
+        sources.extend(
+            target
+                .iter()
+                .map(|(name, table)| (format!("target.{name}"), Some(table))),
+        );
+    }
     let mut offenders = Vec::new();
     for (name, table) in sources {
         // The closure binding is distinct from the loop's `table` on purpose:

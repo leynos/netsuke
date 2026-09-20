@@ -113,10 +113,13 @@ cargo install --path .
 Because that install runs inside the checkout, it inherits the repository's
 build standard: the parallel `rustc` frontend, and on Linux the `mold` linker.
 The pinned nightly comes from `rust-toolchain.toml`, which `rustup` provisions
-automatically; on Linux, `mold` must also be reachable (install the pinned
-release with `make install-build-tools`). On macOS and Windows the linker flag
-is not set, so no extra prerequisite applies. Build on another platform, or
-remove `.cargo/config.toml` first, to use the platform linker instead. The
+automatically; on Linux, `mold` must also be reachable through `PATH` or gcc's
+own search directories. `make install-build-tools` unpacks the pinned release
+into `~/.local/bin` and does not edit your shell profile, and the make targets
+add that directory to `PATH` for themselves only, so a direct `cargo install`
+needs it added first. On macOS and Windows the linker flag is not set, so no
+extra prerequisite applies. Build on another platform, or remove
+`.cargo/config.toml` first, to use the platform linker instead. The
 [user's guide](docs/users-guide.md#install-netsuke) covers the same ground in
 more detail.
 

@@ -108,7 +108,11 @@ standard: the parallel `rustc` frontend, and on Linux the `mold` linker. A
 - `mold`, on Linux only, reachable through `PATH` or gcc's own search
   directories. `make install-build-tools` installs the pinned release; a
   distribution `mold` also works for a local install, though the development
-  gates additionally check the version against `tools/mold/VERSION`.
+  gates additionally check the version against `tools/mold/VERSION`. The
+  installer unpacks into `$(BUILD_TOOLS_PREFIX)/bin`, `~/.local/bin` by
+  default, and does not edit your shell profile; the make targets add that
+  directory to `PATH` for their own recipes only, so add it yourself before
+  installing from a shell the make targets do not drive.
 
 The linker is named explicitly rather than left to gcc's default, so a Linux
 host without `mold` fails the link rather than quietly falling back. The

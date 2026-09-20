@@ -135,6 +135,25 @@ def test_the_install_predicate_requires_the_exact_goal() -> None:
     assert not installs_build_standard({"name": "calls an action instead"}), (
         "a step with no run script installs nothing this contract can see"
     )
+    # The exact-goal test reads the *set* of goals, so a script that compiles
+    # and then installs is still recognised as the install step. That is the
+    # shape the ordering assertion has to reject by its second check, so the two
+    # predicates are shown here to agree on it rather than fight over it. The
+    # gated set omits the install goal, as the Makefile's does: the install
+    # declares no prerequisite on the capability check.
+    gated = frozenset({"typecheck", "build"})
+    together = _step(f"cargo build\nmake {INSTALL_TARGET}")
+    assert installs_build_standard(together), (
+        "command order is not this predicate's business; it reads goals"
+    )
+    assert compiles(together, gated), (
+        "the same step must still be reported as one that compiles, which is "
+        "what the ordering assertion rejects it for"
+    )
+    assert not compiles(_step(f"make {INSTALL_TARGET}"), gated), (
+        "the install step on its own compiles nothing, so a lane that keeps "
+        "the two apart passes"
+    )
 
 
 def test_the_compiling_predicate_separates_builds_from_queries() -> None:
@@ -249,6 +268,16 @@ def test_mold_linked_jobs_install_the_build_standard(path: Path, job: str) -> No
         f"{path.name} job {job} compiles before `make {INSTALL_TARGET}` at step "
         f"{install_index}, so those builds link with the distribution linker: "
         f"{late!r}"
+    )
+    # The scan above is ordered, so it cannot see a step that compiles and then
+    # installs within itself: that step *is* the install, and its own build runs
+    # first. `installs_build_standard` reads the set of make goals rather than
+    # their order, so such a script satisfies it; this is the check that closes
+    # the gap.
+    assert not compiles(steps[install_index], gated), (
+        f"{path.name} job {job} installs the build standard in the same step "
+        f"that compiles, and the compile runs first; keep `make "
+        f"{INSTALL_TARGET}` in a step of its own, ahead of every build"
     )
 
 
