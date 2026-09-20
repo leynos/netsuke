@@ -263,7 +263,7 @@ impl ConfigMetricsRecorder {
 ///
 /// Split from the name match above to keep each predicate within the
 /// repository's function-length bound. The resolution counter is admitted
-/// under two shapes because a failure carries an `error_category` and a
+/// under two shapes because a failure carries a `category` label and a
 /// success does not, so the counter's series are not all one shape. Each
 /// shape names its own outcome set — the success vocabulary and the failure
 /// vocabulary are disjoint complements — so neither admits the other's
@@ -300,7 +300,7 @@ fn accepts_which_registration(key: &Key) -> bool {
 /// Whether `key`'s label set matches any of the `expected` shapes exactly.
 ///
 /// One counter may be recorded under more than one bounded label shape: the
-/// `which` resolution counter carries an `error_category` only when it fails,
+/// `which` resolution counter carries a `category` label only when it fails,
 /// so its success series have two labels and its failure series three. Each
 /// shape is admitted independently and a series matching none is still
 /// rejected, so the alternation widens the vocabulary without letting an
