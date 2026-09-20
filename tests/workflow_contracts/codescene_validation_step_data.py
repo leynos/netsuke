@@ -142,6 +142,19 @@ CHECKS_NOTHING_CASES: typ.Final[list[tuple[str, str]]] = [
         + validator_reads('"$staged"'),
         "must create",
     ),
+    # `uv` without its `run` subcommand names the validator among `uv`'s own
+    # operands, and `uv` refuses it: its usage line is `uv [OPTIONS]
+    # <COMMAND>`, so the path is read as a subcommand name. Everything else in
+    # the script is correct, so a reading that looked only for the path beside
+    # `uv` would accept an invocation the runner rejects outright.
+    (
+        (
+            'staged="$(mktemp --directory)"\n'
+            f'cp -- {COVERAGE_REPORT_PATH} "${{staged}}/{COVERAGE_REPORT_PATH}"\n'
+            f'uv {REPORT_VALIDATOR_SCRIPT} --artifact-dir "${{staged}}"'
+        ),
+        REPORT_VALIDATOR_SCRIPT,
+    ),
 ]
 
 #: One-liners, where a line carries several commands. Each is paired with the
