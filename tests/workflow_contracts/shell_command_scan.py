@@ -21,6 +21,12 @@ two things appear in one command is only ever made *harder* to satisfy by
 cutting more finely, so a script misjudged by the split is reported rather
 than passed, and its author moves the two things into the same command.
 
+A line continuation is the other direction, and is joined instead: the shell
+removes the trailing backslash and the newline after it before parsing the
+command, so the two lines *are* one command. Reading them apart would let the
+continued line pass for a command of its own, and an `echo` continued into a
+line naming a script would then read as the script being run.
+
 Separated from ``codescene_report_validation_invariants`` so neither module
 outgrows the 400-line limit the Python lint gate enforces.
 
@@ -42,6 +48,15 @@ ASSIGNMENT: typ.Final[re.Pattern[str]] = re.compile(
     r"(?:^|\s)(?P<name>[A-Za-z_]\w*)=(?P<value>\"[^\"]*\"|'[^']*'|\S*)"
 )
 
+#: The run of `VAR=value` words at the head of a segment, before the command it
+#: prefixes. The shell reads an assignment as such only there: past the command
+#: word a word of the same shape is an ordinary argument, so
+#: `echo staged="$(mktemp -d)"` assigns nothing and creates nothing, and reading
+#: its argument as an assignment would record a directory the script never made.
+HEAD_ASSIGNMENTS: typ.Final[re.Pattern[str]] = re.compile(
+    r"\s*(?:[A-Za-z_]\w*=(?:\"[^\"]*\"|'[^']*'|\S*)\s*)*"
+)
+
 #: What may stand between the start of a segment and the command it runs:
 #: leading whitespace, `VAR=value` assignments, and the path the executable was
 #: named through. A command is read from here rather than searched for in the
@@ -53,6 +68,13 @@ COMMAND_PREFIX: typ.Final[str] = (
     r"(?:[A-Za-z_]\w*=(?:\"[^\"]*\"|'[^']*'|\S*)\s+)*"
     r"(?:\S*/)?"
 )
+
+#: A backslash at the end of a line, which the shell removes along with the
+#: newline before it parses the command. The two lines are therefore one
+#: command, and reading them apart would let the continued fragment pass for a
+#: command of its own: `echo hello \` followed by a line naming a script would
+#: read as that script being run, when the shell only ever passes it to `echo`.
+LINE_CONTINUATION: typ.Final[re.Pattern[str]] = re.compile(r"\\\n")
 
 
 def command_segments(script: str) -> list[str]:
@@ -73,6 +95,13 @@ def command_segments(script: str) -> list[str]:
     reported rather than passed, and its author moves the report path and the
     directory into the same command.
 
+    A line continuation is joined rather than split, because the shell joins
+    it: the backslash and the newline after it are removed before the command
+    is parsed, so the two lines are one command. Reading them apart would be
+    the *unsafe* direction — the continued line would pass for a command in its
+    own right, and a fragment naming a script would read as that script being
+    run.
+
     Returns
     -------
     list[str]
@@ -80,7 +109,7 @@ def command_segments(script: str) -> list[str]:
     """
     return [
         segment
-        for line in script.splitlines()
+        for line in LINE_CONTINUATION.sub("", script).splitlines()
         for segment in COMMAND_SEPARATOR.split(line)
     ]
 
@@ -151,6 +180,13 @@ def assigned_from(segment: str, command: str) -> set[str]:
     `staged="mktemp -d"` — assigns a string and creates nothing, and reading
     that spelling as a capture would record a directory the script never made.
 
+    Only the assignments *before* the command count. The shell reads a
+    `name=value` word as an assignment exactly there; past the command word the
+    same shape is an ordinary argument, so the `staged="$(mktemp -d)"` in
+    `echo staged="$(mktemp -d)"` assigns nothing and creates nothing — while
+    reading it as a capture would credit a directory the script never made, on
+    the strength of a command that only printed the words.
+
     Parameters
     ----------
     segment
@@ -165,9 +201,16 @@ def assigned_from(segment: str, command: str) -> set[str]:
         the name its output is captured in.
     """
     inside_substitution = re.compile(rf"\$\([^)]*\b{re.escape(command)}\b")
+    # The pattern admits the empty match, so a segment with no leading
+    # assignment at all still matches and `None` is unreachable. Read as the
+    # whole segment it would be the accepting direction — every `name=value`
+    # anywhere in the segment would count — so the absent case is read as no
+    # assignments, which reports a script rather than passing one.
+    head_match = HEAD_ASSIGNMENTS.match(segment)
+    head = segment[: head_match.end()] if head_match is not None else ""
     return {
         match.group("name")
-        for match in ASSIGNMENT.finditer(segment)
+        for match in ASSIGNMENT.finditer(head)
         if inside_substitution.search(match.group("value"))
     }
 

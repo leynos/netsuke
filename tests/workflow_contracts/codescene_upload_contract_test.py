@@ -225,6 +225,14 @@ def test_the_detectors_report_an_upload_that_cannot_be_gated_on() -> None:
             "token",
             f"${{{{ env.NOT_{CREDENTIAL_ENVIRONMENT_KEY} }}}}",
         ),
+        # The credential read from a namespace the gate did not compare. The
+        # names match, so a check that reads only the name accepts this; the
+        # value does not, and the action would be handed whatever that
+        # namespace holds rather than the secret the gate opened on.
+        (
+            "token",
+            f"${{{{ github.{CREDENTIAL_ENVIRONMENT_KEY} }}}}",
+        ),
         # A gate on the credential read from the wrong namespace. The `if` is
         # evaluated against `env`, so a `secrets.` reference there is not the
         # exported variable and does not prove the step is gated on it.

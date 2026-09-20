@@ -109,6 +109,39 @@ CHECKS_NOTHING_CASES: typ.Final[list[tuple[str, str]]] = [
         + validator_reads('"$staged"'),
         "must create",
     ),
+    # The invocation *printed* rather than run. Everything else in the script
+    # is correct — the directory is made, the report is staged — so the only
+    # thing wrong is that the validator never executed, and a reading that
+    # found the validator's name in the text would accept it. The step would
+    # then submit the very report it exists to reject.
+    (
+        (
+            'staged="$(mktemp --directory)"\n'
+            f'cp -- {COVERAGE_REPORT_PATH} "${{staged}}/{COVERAGE_REPORT_PATH}"\n'
+            f'echo "{VALIDATOR_INVOCATION} ${{staged}}"'
+        ),
+        REPORT_VALIDATOR_SCRIPT,
+    ),
+    # The same name in a comment, which the shell also runs as nothing.
+    (
+        (
+            'staged="$(mktemp --directory)"\n'
+            f'cp -- {COVERAGE_REPORT_PATH} "${{staged}}/{COVERAGE_REPORT_PATH}"\n'
+            f"# {VALIDATOR_INVOCATION} ${{staged}}"
+        ),
+        REPORT_VALIDATOR_SCRIPT,
+    ),
+    # An assignment whose value only *spells* the command that would create a
+    # directory. The shell reads `name=value` as an assignment before the
+    # command word and as an ordinary argument after it, so this creates
+    # nothing — and a reading that credited the argument would record a
+    # directory the script never made, then accept the copy into it.
+    (
+        'echo staged="$(mktemp --directory)"\n'
+        f'cp -- {COVERAGE_REPORT_PATH} "$staged/{COVERAGE_REPORT_PATH}"\n'
+        + validator_reads('"$staged"'),
+        "must create",
+    ),
 ]
 
 #: One-liners, where a line carries several commands. Each is paired with the
@@ -168,6 +201,24 @@ COPY_DIRECTION_CASES: typ.Final[list[tuple[str, str | None]]] = [
     (
         'staged="$(mktemp --directory)"\n'
         f'cp -- {COVERAGE_REPORT_PATH} "${{staged}}/{COVERAGE_REPORT_PATH}"\n'
+        + validator_reads('"${staged}"'),
+        None,
+    ),
+    # Three sources, one directory: the report is the first operand and the
+    # directory is the *last*, so the destination is not the second. Reading
+    # the second as the destination would accept a command that copies the
+    # report into a path the validator is never handed.
+    (
+        'staged="$(mktemp --directory)"\n'
+        f'cp -- {COVERAGE_REPORT_PATH} "${{staged}}/other" extra\n'
+        + validator_reads('"${staged}"'),
+        "must copy",
+    ),
+    # The control: the same three-operand form with the directory last, which
+    # is the shape that does put the report under it.
+    (
+        'staged="$(mktemp --directory)"\n'
+        f'cp -- {COVERAGE_REPORT_PATH} extra "${{staged}}/{COVERAGE_REPORT_PATH}"\n'
         + validator_reads('"${staged}"'),
         None,
     ),

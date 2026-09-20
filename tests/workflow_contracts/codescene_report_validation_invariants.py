@@ -68,6 +68,14 @@ REPORT_VALIDATION_STEP: typ.Final[str] = "Validate the report before submitting 
 #: contract and is exercised by `make test-coverage-artifact`.
 REPORT_VALIDATOR_SCRIPT: typ.Final[str] = "scripts/validate_coverage_artifact.py"
 
+#: The commands that execute a script handed to them as an operand. The
+#: validator is a Python program, so it runs when an interpreter is given it as
+#: a file to run — `uv run ... script.py`, or `python script.py`. The list is
+#: deliberately short and stated rather than inferred: a script named to any
+#: other command is an argument that command may print, test, or ignore, which
+#: is the difference between running the validator and naming it.
+INTERPRETERS: typ.Final[tuple[str, ...]] = ("uv", "python", "python3")
+
 
 def validation_offenders(validation: dict[str, object]) -> list[str]:
     """Return faults in the step that reads the report as data.
@@ -100,7 +108,7 @@ def validation_offenders(validation: dict[str, object]) -> list[str]:
     """
     script = str(validation.get("run", ""))
     offenders: list[str] = []
-    if REPORT_VALIDATOR_SCRIPT not in script:
+    if not _runs_validator(script):
         offenders.append(
             f"{REPORT_VALIDATION_STEP!r} must run {REPORT_VALIDATOR_SCRIPT}, "
             f"which owns the LCOV contract for a hostile report"
@@ -135,6 +143,38 @@ def validation_offenders(validation: dict[str, object]) -> list[str]:
             f"else is there"
         )
     return offenders
+
+
+def _runs_validator(script: str) -> bool:
+    """Return whether ``script`` runs the validator rather than naming it.
+
+    A substring search is answered by a script that only *names* the validator:
+    `echo "scripts/validate_coverage_artifact.py --artifact-dir ${staged}"`
+    contains it and runs nothing, and a comment does the same. Since the step
+    exists to read the report as data before it is sent, a script that read as
+    correct while executing no part of the validator would pass over exactly
+    the malformed report the step was added for.
+
+    The validator is a Python program, so running it means handing it to an
+    interpreter as the file to execute. The script is read as command segments,
+    and the segment has to invoke an interpreter whose operands name the
+    validator — `uv run --no-project --python X script.py` and `python script.py`
+    alike. Anything else is a mention: another command's argument, a comment, or
+    text inside a quoted string.
+
+    Returns
+    -------
+    bool
+        Whether one command in the script runs the validator.
+    """
+    for segment in command_segments(script):
+        for interpreter in INTERPRETERS:
+            if any(
+                operand.strip("\"'") == REPORT_VALIDATOR_SCRIPT
+                for operand in command_operands(segment, interpreter)
+            ):
+                return True
+    return False
 
 
 def _created_directories(script: str) -> set[str]:
@@ -255,6 +295,11 @@ def _copies_from_into(segment: str, source: str, directory: str) -> bool:
     the file lands inside it. A destination naming it as a later component does
     not: the file would land somewhere else entirely.
 
+    The destination is the *last* operand, not the second. `cp a b c dir` copies
+    three sources into one directory, and the second operand is then another
+    source; reading it as the destination would satisfy the contract on a
+    command whose report never reaches ``directory`` at all.
+
     Returns
     -------
     bool
@@ -265,12 +310,15 @@ def _copies_from_into(segment: str, source: str, directory: str) -> bool:
         operands = command_operands(segment, command)
         if len(operands) < 2:
             continue
+        # The report is the *first* operand, and it is one of the sources. A
+        # later operand naming it is not what this asks: the copy has to take
+        # the report as its input.
         if not names_a_component(operands[0], source):
             continue
-        # The GNU `-t` spelling puts the destination before the source, so it
+        # The GNU `-t` spelling puts the destination before the sources, so it
         # fails this ordering and is reported. That is the safe direction: the
         # spelling this repository uses is the ordinary one, and a script that
         # switched to `-t` would be told to stage the report the usual way.
-        if names_a_component(operands[1], directory, prefix=True):
+        if names_a_component(operands[-1], directory, prefix=True):
             return True
     return False
