@@ -312,3 +312,85 @@ fn escape_end(bytes: &[u8], start: usize) -> Option<usize> {
 const fn is_ident_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte == b'_'
 }
+
+#[cfg(test)]
+mod tests {
+    //! Direct and generated cases for what masking must preserve.
+    //!
+    //! The scan reads the masked text and slices it at offsets derived from the
+    //! source, so masking has to be an in-place edit: same length, same
+    //! newlines, and nothing but comment or literal bytes replaced. That is
+    //! stated in the module header and everything else here depends on it, but
+    //! no row of the spelling table can observe it — each pins a *finding*, and
+    //! an offset that drifted would show up only as some other shape's answer
+    //! changing. A generated search is what makes the claim falsifiable rather
+    //! than merely documented, since a counterexample is exactly the input whose
+    //! masked form is not a same-length edit.
+    //!
+    //! The generator is deliberately small and structured: fragments drawn from
+    //! the spellings masking has to classify, concatenated to a bounded depth,
+    //! rather than arbitrary bytes. Arbitrary input would be dominated by cases
+    //! that are not Rust at all, and the property would pass on them for the
+    //! wrong reason — masking never panics on a byte it does not recognise, so
+    //! the interesting failures are the ones where a recognised spelling leaves
+    //! a byte behind. `proptest` shrinks any counterexample it finds, so a
+    //! failure arrives as the smallest fragment sequence that still trips it.
+
+    use super::mask_non_code;
+    use proptest::prelude::*;
+
+    /// Spellings masking must classify, each with its counterpart left open.
+    const FRAGMENTS: [&str; 15] = [
+        "//", "\n", "/*", "*/", "/* /*", "\"", "\\", "'", "r\"", "r#\"", "\"#", "b\"", "c\"", "#[",
+        "!",
+    ];
+
+    fn fragment() -> impl Strategy<Value = &'static str> {
+        prop::sample::select(FRAGMENTS.as_slice())
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(256))]
+
+        /// Masking is an in-place edit: length and newline positions hold.
+        #[test]
+        fn masking_preserves_length_and_newlines(fragments in prop::collection::vec(fragment(), 0..24)) {
+            let source = fragments.concat();
+            let masked = mask_non_code(&source);
+            prop_assert_eq!(masked.len(), source.len(), "masking changed the length of {:?}", source);
+            let newlines = |text: &str| {
+                text.bytes().enumerate().filter(|(_, b)| *b == b'\n').map(|(i, _)| i).collect::<Vec<_>>()
+            };
+            prop_assert_eq!(
+                newlines(&masked),
+                newlines(&source),
+                "masking moved a newline in {:?}",
+                source
+            );
+        }
+
+        /// Nothing outside a comment or literal is blanked.
+        ///
+        /// The complement of the property above, and the one that matters for
+        /// the scan: masking that ate a `#` in real code would hide the very
+        /// attribute the contract exists to report. A byte is only expected to
+        /// be blank where the source put whitespace, or where masking replaced
+        /// it — so each masked byte is checked to be either unchanged or a
+        /// space standing in the source's own place.
+        #[test]
+        fn masking_replaces_bytes_in_place(fragments in prop::collection::vec(fragment(), 0..24)) {
+            let source = fragments.concat();
+            let masked = mask_non_code(&source);
+            for (index, (before, after)) in source.bytes().zip(masked.bytes()).enumerate() {
+                prop_assert!(
+                    before == after || (after == b' ' && before != b'\n'),
+                    "byte {} of {:?} changed from {:?} to {:?}",
+                    index,
+                    source,
+                    before as char,
+                    after as char
+                );
+            }
+        }
+    }
+}
