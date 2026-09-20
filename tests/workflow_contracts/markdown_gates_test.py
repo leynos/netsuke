@@ -317,10 +317,11 @@ BASELINE_IGNORES: tuple[str, ...] = (
 def test_the_linter_configuration_keeps_every_baseline_ignore() -> None:
     """PD-005: each baseline glob is present verbatim, not merely in spirit.
 
-    A near-miss is the failure this catches. `**/.uv-cache/**` reads as the
-    same intent as `.uv-cache/**` and covers a different set, so a repository
-    can pass every gate while linting a directory the baseline excludes, and
-    the drift is invisible to a reader comparing the two files by eye.
+    A missing entry is the failure this catches, and the check is of presence
+    rather than of effect: the baseline entry may be redundant with an extra
+    glob the repository already lists, as `.uv-cache/**` is here, and it is
+    still required. A canon entry that silently stops being listed is drift a
+    reader comparing the two files by eye would have to notice.
 
     Extra ignores are allowed and this repository has several. Only the
     absence of a baseline entry is an offence.
