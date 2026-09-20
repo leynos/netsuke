@@ -95,13 +95,13 @@ individually in the same run: `shell_variable_prefix_does_not_match` satisfied
 
 ### Acceptance criterion: mutation evidence
 
-**Met after repair.** Four of the five commits' mutation patches already
-produced their named counterexamples. Two did not: `-D warnings` entered the
-`kani-full` recipe on 2026-09-18 (#714), and both patches seed their fault by
-leaving a binding unused. That was a warning when the patches were written and
-became a hard compile error, so the patched tree failed to build and yielded no
-mutation evidence at all. Both were regenerated in commit `3a282018` and
-re-verified:
+**Met after repair.** Three of the five command-interpolation mutation patches
+already produced their named counterexamples. Two did not: `-D warnings`
+entered the `kani-full` recipe on 2026-09-18 (#714), and both of the broken
+patches seed their fault by leaving a binding unused. That was a warning when
+the patches were written and became a hard compile error, so the patched tree
+failed to build and yielded no mutation evidence at all. Both were regenerated
+in commit `3a282018` and re-verified:
 
 - `marker_token_match_is_exact` fails on
   `Failed Checks: marker match agrees with exact text`, then passes after
