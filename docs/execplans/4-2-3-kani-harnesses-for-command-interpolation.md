@@ -87,7 +87,8 @@ the eight-minute local tolerance. All 15 harnesses reported
 Revision 2.24 exit-124 shortfall: the earlier failure was a five-minute cap
 under sequential scheduling, not a working-tree defect, and the supported
 `--jobs 4 --output-format terse` pair clears it. Log:
-`/tmp/kani-full-issue-738-reconcile-roadmap-4-2-3-with-execplan-completion-evidence.out`.
+`/tmp/kani-full-<branch>.out`, where `<branch>` is the current branch name as
+reported by `git branch --show-current`.
 
 The two command-interpolation proofs and their covers were confirmed
 individually in the same run: `shell_variable_prefix_does_not_match` satisfied
@@ -133,8 +134,10 @@ passes with 3 of 3 tests.
 `make test` (3,284 nextest tests passed, 5 skipped, plus 122 doctests across
 three targets), `make typecheck`, `make doc-coverage` (98.80%),
 `make markdownlint` (143 files, 0 errors), and `make nixie` all exited zero.
-Logs are under
-`/tmp/{check-fmt,lint,test,typecheck,doc-coverage,markdownlint,nixie}-netsuke-issue-738-reconcile-roadmap-4-2-3-with-execplan-completion-evidence.out`.
+Gate logs follow the `/tmp/$ACTION-netsuke-<branch>.out` pattern used elsewhere
+in this directory; `$ACTION` is the `make` target name and `<branch>` is this
+branch, `issue-738-reconcile-roadmap-4-2-3-with-execplan-completion-evidence`.
+The Kani log's pattern omits the `netsuke-` infix.
 
 ### Acceptance criterion: trace links
 
