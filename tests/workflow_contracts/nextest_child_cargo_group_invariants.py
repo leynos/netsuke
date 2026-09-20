@@ -75,8 +75,15 @@ def nextest_config() -> dict[str, object]:
     return tomllib.loads(NEXTEST_CONFIG.read_text(encoding="utf-8"))
 
 
-def _default_overrides(config: dict[str, object]) -> list[dict[str, object]]:
-    """Return the default profile's parsed override tables."""
+def default_overrides(config: dict[str, object]) -> list[dict[str, object]]:
+    """Return the default profile's parsed override tables.
+
+    Returns
+    -------
+    list[dict[str, object]]
+        Each override table in `[profile.default.overrides]`, narrowed from the
+        parsed document so callers can read fields without re-narrowing.
+    """
     profile = require_mapping(config.get("profile"), "nextest profile table")
     default = require_mapping(profile.get("default"), "nextest default profile")
     overrides = require_list(
@@ -89,7 +96,7 @@ def group_filter_text(config: dict[str, object]) -> list[str]:
     """Return every filter assigned to the nested-Cargo test group."""
     return [
         str(override.get("filter", ""))
-        for override in _default_overrides(config)
+        for override in default_overrides(config)
         if override.get("test-group") == CHILD_CARGO_GROUP
     ]
 
@@ -100,10 +107,16 @@ def all_filter_text(config: dict[str, object]) -> list[str]:
     Serialization is not the only policy a filter carries: a `slow-timeout`
     override selects its test the same way, so the same naming-form mistake
     silently withdraws a widened budget instead of withdrawing a group slot.
+
+    Returns
+    -------
+    list[str]
+        The filter expression of every override that carries one, whether or
+        not that override also assigns a test group.
     """
     return [
         str(override["filter"])
-        for override in _default_overrides(config)
+        for override in default_overrides(config)
         if "filter" in override
     ]
 

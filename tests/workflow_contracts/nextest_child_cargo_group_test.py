@@ -22,6 +22,7 @@ from nextest_child_cargo_group_invariants import (
     all_filter_text,
     build_capable_test_names,
     declared_test_names,
+    default_overrides,
     filter_test_names,
     grouped_test_names,
     nextest_config,
@@ -55,7 +56,7 @@ def test_nested_cargo_group_serializes_build_capable_tests() -> None:
     } <= grouped, "the two isolated nested Cargo tests must be serialized"
     immediate = [
         override
-        for override in config["profile"]["default"]["overrides"]
+        for override in default_overrides(config)
         if override.get("test-group") == CHILD_CARGO_GROUP
     ]
     assert immediate, "nested Cargo build tests must have explicit overrides"
