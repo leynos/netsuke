@@ -26,6 +26,46 @@ const LINK: &str = "junc";
 #[cfg(windows)]
 const TARGET: &str = "junction_target";
 
+// Compile-time half of the policy contract.
+//
+// The runtime tests in this file only run on a Windows host, and the Windows
+// test lane has been known to stop short of `stdlib::path` (see ADR-032). A
+// `const` assertion has no such dependency: rustc evaluates it whenever this
+// module is compiled, and `Windows / lint-windows` compiles it on every push
+// through `cargo clippy --all-targets`. A regression in either policy branch
+// therefore fails the Windows build, not just a test run.
+//
+// `open_flags` must ask the default open not to traverse a reparse point
+// while either policy keeps a directory openable, and
+// `is_prohibited_reparse_point` must test the attribute bit rather than the
+// tag value.
+const _: () = {
+    assert!(
+        open_flags(false) & FILE_FLAG_OPEN_REPARSE_POINT != 0,
+        "the default policy must not traverse a reparse point",
+    );
+    assert!(
+        open_flags(true) & FILE_FLAG_OPEN_REPARSE_POINT == 0,
+        "the opt-in policy must let the open resolve the link",
+    );
+    assert!(
+        open_flags(false) & FILE_FLAG_BACKUP_SEMANTICS != 0,
+        "the default policy must still permit opening a directory",
+    );
+    assert!(
+        open_flags(true) & FILE_FLAG_BACKUP_SEMANTICS != 0,
+        "the opt-in policy must still permit opening a directory",
+    );
+    assert!(
+        is_prohibited_reparse_point(FILE_ATTRIBUTE_REPARSE_POINT),
+        "an entry carrying FILE_ATTRIBUTE_REPARSE_POINT must be refused",
+    );
+    assert!(
+        !is_prohibited_reparse_point(0),
+        "an entry without the attribute must not be refused",
+    );
+};
+
 /// The default policy must ask the open not to traverse a reparse point,
 /// and both policies must permit a directory open so the shared
 /// regular-file check can report the documented rejection.
