@@ -20,7 +20,11 @@
 mod test_support_rlib;
 
 use rstest::{fixture, rstest};
-use std::{io, path::Path, process::Command};
+use std::{
+    io,
+    path::{Path, PathBuf},
+    process::Command,
+};
 use test_support::fs as test_fs;
 
 /// One `test_support` build shared by both tests.
@@ -120,13 +124,23 @@ fn harness_compiles_under_a_split_build_dir() -> io::Result<()> {
     Ok(())
 }
 
-#[rstest]
-fn split_build_fixture_compiles_through_the_direct_rustc_harness() -> io::Result<()> {
+/// Hold the artefacts Cargo reported for the split-build fixture.
+struct SplitBuildArtefacts {
+    /// The fixture-support metadata artefact passed through `--extern`.
+    support: PathBuf,
+    /// The directories passed to rustc through `-L dependency=`.
+    dependency_dirs: Vec<PathBuf>,
+}
+
+/// Create the private two-crate workspace used by the split-build boundary test.
+///
+/// The workspace declaration prevents Cargo from discovering Netsuke's parent
+/// workspace, so the fixture isolates the Cargo-to-rustc boundary from the
+/// production graph.
+fn create_split_build_workspace() -> io::Result<tempfile::TempDir> {
     let workspace = tempfile::tempdir()?;
     let dependency = workspace.path().join("fixture_dependency");
     let support = workspace.path().join("fixture_support");
-    let target_dir = workspace.path().join("target");
-    let build_dir = workspace.path().join("build");
     test_fs::create_dir_all(dependency.join("src"))?;
     test_fs::create_dir_all(support.join("src"))?;
     test_fs::write(
@@ -165,12 +179,18 @@ fn split_build_fixture_compiles_through_the_direct_rustc_harness() -> io::Result
         support.join("src/lib.rs"),
         "pub fn answer() -> u8 { fixture_dependency::answer() }\n",
     )?;
+    Ok(workspace)
+}
 
+/// Build the fixture under separate Cargo target and build roots.
+fn build_split_fixture(root: &Path) -> io::Result<String> {
+    let target_dir = root.join("target");
+    let build_dir = root.join("build");
     let cargo = Command::new(test_support_rlib::cargo())
-        .current_dir(workspace.path())
+        .current_dir(root)
         .arg("build")
         .arg("--manifest-path")
-        .arg(support.join("Cargo.toml"))
+        .arg(root.join("fixture_support/Cargo.toml"))
         .arg("--message-format=json")
         .env("CARGO_TARGET_DIR", &target_dir)
         .env("CARGO_BUILD_BUILD_DIR", &build_dir)
@@ -181,8 +201,14 @@ fn split_build_fixture_compiles_through_the_direct_rustc_harness() -> io::Result
             test_support_rlib::stderr(&cargo),
         )));
     }
+    Ok(String::from_utf8_lossy(&cargo.stdout).into_owned())
+}
 
-    let messages = String::from_utf8_lossy(&cargo.stdout);
+/// Collect the direct-rustc inputs from the fixture's Cargo message stream.
+fn collect_split_build_artefacts(
+    messages: &str,
+    build_dir: &Path,
+) -> io::Result<SplitBuildArtefacts> {
     let support_artefact = messages
         .lines()
         .filter_map(|message| {
@@ -201,15 +227,22 @@ fn split_build_fixture_compiles_through_the_direct_rustc_harness() -> io::Result
     }
     if !dependency_dirs
         .iter()
-        .any(|directory| directory.starts_with(&build_dir))
+        .any(|directory| directory.starts_with(build_dir))
     {
         return Err(io::Error::other(format!(
             "the dependency directories should include {}; found {dependency_dirs:?}",
             build_dir.display(),
         )));
     }
+    Ok(SplitBuildArtefacts {
+        support: support_artefact,
+        dependency_dirs,
+    })
+}
 
-    let source = workspace.path().join("main.rs");
+/// Compile the fixture against Cargo's selected artefact through a response file.
+fn compile_split_fixture(root: &Path, artefacts: &SplitBuildArtefacts) -> io::Result<()> {
+    let source = root.join("main.rs");
     test_fs::write(
         &source,
         "fn main() { assert_eq!(fixture_support::answer(), 42); }\n",
@@ -220,9 +253,9 @@ fn split_build_fixture_compiles_through_the_direct_rustc_harness() -> io::Result
         String::from("--emit=metadata"),
         source.to_string_lossy().into_owned(),
         String::from("--extern"),
-        format!("fixture_support={}", support_artefact.display()),
+        format!("fixture_support={}", artefacts.support.display()),
     ];
-    args.extend(dependency_dirs.iter().flat_map(|directory| {
+    args.extend(artefacts.dependency_dirs.iter().flat_map(|directory| {
         [
             String::from("-L"),
             format!("dependency={}", directory.display()),
@@ -230,19 +263,14 @@ fn split_build_fixture_compiles_through_the_direct_rustc_harness() -> io::Result
     }));
     args.push(String::from("-o"));
     args.push(
-        workspace
-            .path()
-            .join("split-build-fixture.rmeta")
+        root.join("split-build-fixture.rmeta")
             .to_string_lossy()
             .into_owned(),
     );
-    let response = test_support_rlib::rustc_response_file::write(
-        workspace.path(),
-        "split-build-fixture.args",
-        &args,
-    )?;
+    let response =
+        test_support_rlib::rustc_response_file::write(root, "split-build-fixture.args", &args)?;
     let rustc = Command::new(test_support_rlib::rustc())
-        .current_dir(workspace.path())
+        .current_dir(root)
         .arg(response)
         .output()?;
     if !rustc.status.success() {
@@ -252,4 +280,13 @@ fn split_build_fixture_compiles_through_the_direct_rustc_harness() -> io::Result
         )));
     }
     Ok(())
+}
+
+#[rstest]
+fn split_build_fixture_compiles_through_the_direct_rustc_harness() -> io::Result<()> {
+    let workspace = create_split_build_workspace()?;
+    let root = workspace.path();
+    let messages = build_split_fixture(root)?;
+    let artefacts = collect_split_build_artefacts(&messages, &root.join("build"))?;
+    compile_split_fixture(root, &artefacts)
 }
