@@ -65,6 +65,13 @@ FIXTURE_PIN = "0" * 40
 #: vary one field, and assert the offender that results; a template that was
 #: itself non-compliant would make each of them pass for the wrong reason, so
 #: the test module holds it to the contract before varying anything.
+#:
+#: The `uv` invocation is continued across two lines, as the repository file
+#: writes it, which is why its backslash is doubled below: a single one would
+#: be Python's own line continuation, consumed at parse time along with the
+#: newline, and the fixture generated from this text would then be a shape the
+#: real lane does not have. Doubling it leaves the shell the continuation it
+#: is meant to read.
 CLEAN_LANE = f"""
 jobs:
   {TRUNK_JOB}:
@@ -79,7 +86,7 @@ jobs:
         run: |
           staged="$(mktemp --directory)"
           cp -- {COVERAGE_REPORT_PATH} "${{staged}}/{COVERAGE_REPORT_PATH}"
-          uv run --no-project \
+          uv run --no-project \\
             {REPORT_VALIDATOR_SCRIPT} --artifact-dir "${{staged}}"
       - name: {CODESCENE_UPLOAD_STEP}
         if: env.{CREDENTIAL_ENVIRONMENT_KEY} != ''
