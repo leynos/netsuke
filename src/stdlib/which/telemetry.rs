@@ -84,7 +84,7 @@ pub const WHICH_RESOLUTION_OUTCOME_VALUES: [&str; 3] = [
     RESOLUTION_OUTCOME_ERROR,
 ];
 
-/// The outcome that carries no `error_category`, and so takes two labels.
+/// The outcome that carries no `category` label, and so takes two labels.
 ///
 /// The complement of [`WHICH_RESOLUTION_FAILURE_OUTCOME_VALUES`]. Declaring it
 /// as a vocabulary of its own rather than reusing
@@ -94,7 +94,7 @@ pub const WHICH_RESOLUTION_OUTCOME_VALUES: [&str; 3] = [
 /// would admit exactly that.
 pub const WHICH_RESOLUTION_SUCCESS_OUTCOME_VALUES: [&str; 1] = [RESOLUTION_OUTCOME_FOUND];
 
-/// The outcomes that carry an `error_category`, and so take three labels.
+/// The outcomes that carry a `category` label, and so take three labels.
 ///
 /// A resolution records a category only when it fails, so the three-label
 /// series are exactly these two outcomes. Declaring the subset lets the
