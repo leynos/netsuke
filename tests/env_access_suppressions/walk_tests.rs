@@ -15,7 +15,6 @@
 
 use super::is_scanned;
 use super::roots::{MACHINE_LOCAL_DIRECTORIES, collect_all_sources, collect_rust_sources};
-use super::scanner::scan_source;
 use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
@@ -285,121 +284,6 @@ fn a_cache_inside_a_scanned_root_is_skipped_by_the_scan() -> Result<()> {
          coverage invariant excuses a source the scan reads or reports one it \
          does not; scan {scanned:?}, walk {walked:?}"
     );
-    Ok(())
-}
-
-/// Fail if the scan reads only the files a `.rs` name points at.
-///
-/// The compiler reaches a module through whatever `#[path = "..."]` names, with
-/// no extension test of its own: `#[path = "suppressed.inc"] mod suppressed;`
-/// compiles, and the module may open with
-/// `#![allow(clippy::disallowed_methods)]`, which `clippy::allow_attributes`
-/// does not report because it does not fire on the inner form. An extension
-/// filter therefore names the compiled sources by a spelling the language does
-/// not require, and the shape is invisible to every other test here: the file
-/// is under a scanned root, so [`is_scanned`] would say it is governed, and it
-/// is simply never asked because the walk filtered it out first.
-///
-/// The tree is synthetic for the usual reason — the repository holds no such
-/// file today, which is exactly the shape that would go unnoticed. The binary
-/// is here too, because the wider read set is what admits it and a walk that
-/// failed on it would report an I/O error rather than a suppression.
-#[test]
-fn a_source_without_an_rs_extension_is_still_read() -> Result<()> {
-    let scratch = tempdir().context("create a scratch directory for the walk")?;
-    let scratch_path = Utf8Path::from_path(scratch.path())
-        .context("a temporary directory path should be valid UTF-8")?;
-    let root = Dir::open_ambient_dir(scratch_path, ambient_authority())
-        .context("open the scratch directory")?;
-    for directory in ["src"] {
-        root.create_dir_all(directory)
-            .with_context(|| format!("create `{directory}`"))?;
-    }
-    root.write(
-        "src/suppressed.inc",
-        b"#![allow(clippy::disallowed_methods)]\n",
-    )
-    .context("write the module reached by `#[path]`")?;
-    root.write("src/kept.rs", b"fn kept() {}\n")
-        .context("write the kept source")?;
-    // Not UTF-8, so not a module: the walk must pass over it rather than fail
-    // on a read it cannot decode.
-    root.write("src/blob.bin", b"\xff\xfe\x00\x01")
-        .context("write the binary")?;
-    // A dot-file is tooling state rather than a module, and stays out.
-    root.write("src/.hidden", b"#![allow(clippy::disallowed_methods)]\n")
-        .context("write the dot-file")?;
-
-    let mut read = Vec::new();
-    collect_rust_sources(&root, "src", &mut read)?;
-    let mut names: Vec<&str> = read.iter().map(|(path, _)| path.as_str()).collect();
-    names.sort_unstable();
-
-    ensure!(
-        names == ["src/kept.rs", "src/suppressed.inc"],
-        "the scan must read a source the compiler reaches through `#[path]`, \
-         whatever the file is named, and must pass over a file that is not text \
-         and a name a `#[path]` cannot be written as; got {names:?}"
-    );
-    // Reading it is only half of it: the file the compiler compiles must be one
-    // the scan reports on, which is what turns the read into a finding.
-    let findings: Vec<String> = read
-        .iter()
-        .flat_map(|(path, contents)| scan_source(path, contents))
-        .map(|(path, lint)| format!("{path}: {lint}"))
-        .collect();
-    ensure!(
-        findings == ["src/suppressed.inc: clippy::disallowed_methods"],
-        "the module the compiler reaches through `#[path]` carries the policy \
-         suppression, so the scan must report it; got {findings:?}"
-    );
-    Ok(())
-}
-
-/// Fail if the walk treats a source it could not read as one that is absent.
-///
-/// The walk's wider read set is what makes the distinction matter: it now reads
-/// files whose being Rust this walk cannot see, so a file that will not decode
-/// has to be declined rather than fatal. But declining has to stay the narrow
-/// case. A file that *is* text and could not be read is a source the gate did
-/// not scan, which is the silent non-coverage the contract exists to prevent,
-/// and calling that "nothing to see" is that same silence wearing an
-/// error-handling hat.
-///
-/// The two are indistinguishable from the walk the suite performs, since every
-/// path it touches is readable — so a filter that swallowed *every* error would
-/// leave the whole suite green, measured exactly that way. The rule is
-/// therefore asserted directly, against the one error that must not be
-/// swallowed. A permissions test would pin it end to end and was rejected: it
-/// fails spuriously when the suite runs as root, which is how a container lane
-/// runs it, and the mode bits it relies on are Unix-only.
-#[test]
-fn only_a_file_that_is_not_text_may_be_passed_over() -> Result<()> {
-    use super::roots::is_not_text;
-
-    for kind in [
-        std::io::ErrorKind::InvalidData,
-        std::io::ErrorKind::NotFound,
-    ] {
-        ensure!(
-            is_not_text(kind),
-            "{kind:?} means there is no source text to read, so the walk may pass it over"
-        );
-    }
-    // The load-bearing half: a file that is there and could not be read is a
-    // source that went unscanned, and must fail the gate rather than be
-    // reported as absent.
-    for kind in [
-        std::io::ErrorKind::PermissionDenied,
-        std::io::ErrorKind::IsADirectory,
-        std::io::ErrorKind::Other,
-    ] {
-        ensure!(
-            !is_not_text(kind),
-            "{kind:?} does not mean the file is not text, so the walk must report \
-             it rather than let a source go silently unread"
-        );
-    }
     Ok(())
 }
 

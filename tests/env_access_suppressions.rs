@@ -58,9 +58,9 @@ use scanner::scan_source;
 /// The coverage invariant sorts its own list for the same reason; see
 /// [`every_rust_source_in_the_workspace_is_scanned`].
 fn build_error_message(findings: &[(String, String)]) -> String {
-    let mut findings = findings.to_vec();
-    findings.sort();
-    let listed = findings
+    let mut ordered = findings.to_vec();
+    ordered.sort();
+    let listed = ordered
         .iter()
         .map(|(path, lint)| format!("{path}: {lint}"))
         .collect::<Vec<_>>()
@@ -189,7 +189,8 @@ fn the_scan_reads_every_governed_source() -> Result<()> {
     let mut present = Vec::new();
     collect_all_sources(&crate_root, ".", &mut present)?;
 
-    let read: std::collections::BTreeMap<String, String> = compiled_sources()?.into_iter().collect();
+    let read: std::collections::BTreeMap<String, String> =
+        compiled_sources()?.into_iter().collect();
 
     let mut omitted: Vec<&String> = present
         .iter()
@@ -225,7 +226,9 @@ fn the_scan_reads_every_governed_source() -> Result<()> {
         .iter()
         .filter(|path| {
             read.get(*path).is_some_and(|contents| {
-                crate_root.read_to_string(path).map_or(true, |on_disk| on_disk != *contents)
+                crate_root
+                    .read_to_string(path)
+                    .map_or(true, |on_disk| on_disk != *contents)
             })
         })
         .collect();
@@ -244,6 +247,9 @@ fn the_scan_reads_every_governed_source() -> Result<()> {
 
 #[path = "env_access_suppressions/scanner_tests.rs"]
 mod scanner_tests;
+
+#[path = "env_access_suppressions/read_tests.rs"]
+mod read_tests;
 
 #[path = "env_access_suppressions/spelling_tests.rs"]
 mod spelling_tests;

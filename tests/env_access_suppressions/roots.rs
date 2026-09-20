@@ -117,9 +117,7 @@ pub(super) fn collect_rust_sources(
         if file_type.is_dir() {
             collect_rust_sources(root, &path, sources)?;
         } else if is_readable_source(&name) {
-            if let Some(contents) = read_source(root, &path)? {
-                sources.push((path, contents));
-            }
+            sources.extend(read_source(root, &path)?.map(|text| (path, text)));
         }
     }
     Ok(())
@@ -166,7 +164,7 @@ pub(super) fn read_source(root: &Dir, path: &str) -> Result<Option<String>> {
 /// rule rather than a pattern inside a `match`, and so it can be exercised
 /// directly by a test: a catch-all here would look identical from the walk the
 /// suite performs, since every path that walk touches is readable.
-pub(super) fn is_not_text(kind: std::io::ErrorKind) -> bool {
+pub(super) const fn is_not_text(kind: std::io::ErrorKind) -> bool {
     matches!(
         kind,
         std::io::ErrorKind::InvalidData | std::io::ErrorKind::NotFound
