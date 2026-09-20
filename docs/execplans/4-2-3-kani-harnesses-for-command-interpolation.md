@@ -112,7 +112,7 @@ in commit `3a282018` and re-verified:
 - `shell_variable_prefix_does_not_match` fails on
   `Failed Checks: literal shell-variable prefixes are not Netsuke markers`,
   then passes after restoration.
-- `substituted_odd_backticks_are_rejected` fails on
+- `substituted_odd_backticks_are_rejected` fails with:
 
   ```plaintext
   Test failed: odd substituted command was accepted: Ok("`")
