@@ -65,27 +65,37 @@ fn blank_line_comment(bytes: &[u8], masked: &mut [u8], start: usize) -> usize {
 /// Blank a `/* */` comment, returning the index just past its terminator.
 ///
 /// Rust block comments nest, so the terminator is the one matching the opening
-/// delimiter rather than the first one seen.
+/// delimiter rather than the first one seen. The opening delimiter is known and
+/// blanked before the scan starts, which leaves the loop one job: decide whether
+/// each byte opens a nested comment, closes the innermost one, or is content.
+/// The depth therefore starts at one and cannot go below it, since the loop
+/// stops the moment it reaches zero — an empty `/**/` is blanked and closed by
+/// the same path as any other comment.
 fn blank_block_comment(bytes: &[u8], masked: &mut [u8], start: usize) -> usize {
-    let mut depth = 0_usize;
-    let mut index = start;
-    while let Some(byte) = bytes.get(index) {
+    blank_span(masked, start, start + 2);
+    let mut depth = 1_usize;
+    let mut index = start + 2;
+    while depth != 0 {
+        let Some(byte) = bytes.get(index) else {
+            return index;
+        };
         let next = bytes.get(index + 1).copied();
-        if *byte == b'/' && next == Some(b'*') {
-            depth += 1;
-            blank_span(masked, index, index + 2);
-            index += 2;
-        } else if *byte == b'*' && next == Some(b'/') {
-            depth = depth.saturating_sub(1);
-            blank_span(masked, index, index + 2);
-            index += 2;
-            if depth == 0 {
-                return index;
+        index = match (*byte, next) {
+            (b'/', Some(b'*')) => {
+                depth += 1;
+                blank_span(masked, index, index + 2);
+                index + 2
             }
-        } else {
-            blank_byte(masked, index);
-            index += 1;
-        }
+            (b'*', Some(b'/')) => {
+                depth -= 1;
+                blank_span(masked, index, index + 2);
+                index + 2
+            }
+            _ => {
+                blank_byte(masked, index);
+                index + 1
+            }
+        };
     }
     index
 }

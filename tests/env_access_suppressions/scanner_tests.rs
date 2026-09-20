@@ -156,6 +156,16 @@ fn probe() {}
         "clippy::allow_attributes_without_reason"
     ]
 )]
+// An empty block comment is the shortest comment there is: `/**/` is its own
+// opening and closing delimiter, so it must be blanked and closed by the same
+// path as any other comment rather than leaving a `*/` in code or reading on to
+// a terminator that never comes. The attribute behind it is what fails if the
+// comment swallows text past its end.
+#[case::attribute_after_an_empty_block_comment(
+    "src/lib.rs",
+    "/**/#[allow(clippy::disallowed_methods, reason = \"escape hatch probe\")]\nfn probe() {}\n",
+    &["clippy::disallowed_methods"]
+)]
 // An attribute-looking line inside a block comment suppresses nothing.
 #[case::attribute_in_a_block_comment(
     "src/lib.rs",
