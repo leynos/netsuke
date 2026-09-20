@@ -2052,6 +2052,50 @@ manages the pin alongside the other actions. It reads
 globs as the Makefile, so the local and CI gates agree on rules and coverage.
 Spelling stays in `make spelling`, which CI runs as its own step.
 
+### Markdown lint ignore baseline
+
+`.markdownlint-cli2.jsonc` is JSONC, and it is the single configuration both
+`make markdownlint` and the SHA-pinned `DavidAnson/markdownlint-cli2-action`
+step read, so the two agree on rules and ignores. Its `ignores` list must
+retain eight baseline globs, present verbatim:
+
+```text
+**/.venv/**
+.vtcode/**
+**/node_modules/**
+**/target/**
+.terraform/**
+.uv-cache/**
+memories/**
+CRUSH.md
+```
+
+Those globs mirror the estate's canonical baseline,
+`platform-standards/canon/lint/markdown/.markdownlint-cli2.jsonc` in the
+`leynos/concordat` repository. The baseline is a floor rather than the whole
+list: a repository may ignore more, and this one does. Only the absence of a
+baseline entry is a failure; an extra entry is not.
+
+`make test-workflow-contracts` enforces the floor:
+`test_the_linter_configuration_keeps_every_baseline_ignore` in
+`tests/workflow_contracts/markdown_gates_test.py` fails when any baseline glob
+is missing.
+
+The list is written out in the test rather than fetched, because a contract
+that read the canon over the network would be a gate on somebody else's
+availability. The cost is that a canon change needs this list changed with it,
+and that cost is the point at which somebody decides whether to adopt the
+change.
+
+`.uv-cache/**` is the entry this repository had narrowed rather than lost: it
+carried `**/.uv-cache/**` alone, and the canon form was simply absent. The two
+forms differ in scope, and the doubled-star form is the wider of them, since
+`**/` matches zero directories as readily as several and so also covers a cache
+at the repository root. Restoring the canon entry is therefore a conformance
+fix, not a coverage fix: dropping it again changes nothing about which files
+`markdownlint-cli2` lints, as verified against markdownlint-cli2 0.22.1 by
+measuring the linted file set with each form in place.
+
 markdownlint's `MD060` (table-column-style) checks that table pipes align using
 a display-width model that treats CJK characters and emoji as double-width.
 That model disagrees with `mdtablefix`'s padding for right-to-left scripts,
