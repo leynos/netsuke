@@ -6,7 +6,8 @@ use super::{
     options::WhichOptions,
     resolve_error::ResolveError,
     telemetry::{
-        cwd_mode_label, record_cache_outcome, record_resolution_error, record_resolution_found,
+        CACHE_OUTCOME_BYPASS, CACHE_OUTCOME_HIT, CACHE_OUTCOME_MISS, cwd_mode_label,
+        record_cache_outcome, record_resolution_error, record_resolution_found,
     },
 };
 use camino::Utf8PathBuf;
@@ -88,13 +89,13 @@ impl WhichResolver {
         };
         let key = CacheKey::new(command, &env, options, &self.workspace_skips);
         if options.fresh {
-            record_cache_outcome(&span, cwd_mode, "bypass");
+            record_cache_outcome(&span, cwd_mode, CACHE_OUTCOME_BYPASS);
         } else if let Some(cached) = self.try_cache(&key) {
-            record_cache_outcome(&span, cwd_mode, "hit");
+            record_cache_outcome(&span, cwd_mode, CACHE_OUTCOME_HIT);
             record_resolution_found(&span, cwd_mode);
             return Ok(cached);
         } else {
-            record_cache_outcome(&span, cwd_mode, "miss");
+            record_cache_outcome(&span, cwd_mode, CACHE_OUTCOME_MISS);
         }
         let matches = match lookup(command, &env, options, &self.workspace_skips) {
             Ok(matches) => matches,

@@ -79,7 +79,7 @@ jobs:
         run: |
           staged="$(mktemp --directory)"
           cp -- {COVERAGE_REPORT_PATH} "${{staged}}/{COVERAGE_REPORT_PATH}"
-          uv run --no-project --python 3.14 \
+          uv run --no-project \
             {REPORT_VALIDATOR_SCRIPT} --artifact-dir "${{staged}}"
       - name: {CODESCENE_UPLOAD_STEP}
         if: env.{CREDENTIAL_ENVIRONMENT_KEY} != ''
