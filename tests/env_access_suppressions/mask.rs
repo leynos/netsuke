@@ -123,8 +123,15 @@ fn blank_string_or_advance(bytes: &[u8], masked: &mut [u8], start: usize) -> usi
 ///
 /// The two spellings end differently, so each is read by its own scan: a raw
 /// string ends at the first `"` followed by as many `#` as opened it, while any
-/// other string honours a backslash escape. The closing delimiter is left in
-/// place either way, since only the contents are quoted text.
+/// other string honours a backslash escape.
+///
+/// What is blanked differs between them, and the difference is not cosmetic. An
+/// escaped string's contents are blanked and its closing `"` is left, because a
+/// `"` cannot begin anything the scan reads. A raw string's closing `"` and its
+/// hashes are blanked with its body: those hashes are a delimiter the language
+/// wrote, but to a reader of the masked text they are a `#` sitting directly
+/// before a `[`, which is the opening of an attribute. See
+/// [`blank_raw_string`].
 fn blank_string(bytes: &[u8], masked: &mut [u8], quote: usize, raw: Option<usize>) -> usize {
     match raw {
         Some(hashes) => blank_raw_string(bytes, masked, quote, hashes),
@@ -132,11 +139,27 @@ fn blank_string(bytes: &[u8], masked: &mut [u8], quote: usize, raw: Option<usize
     }
 }
 
-/// Blank a raw string's body, returning the index just past its terminator.
+/// Blank a raw string's body and closing delimiter, returning the index past it.
+///
+/// A raw string's hashes are part of its delimiter rather than its contents,
+/// and they are blanked with it. Leaving them would let the closing `#` of
+/// `r#"abc"#` stand as the marker of an attribute when the literal is indexed —
+/// `&r#"abc"#[allow(warnings)]` is `r#"abc"#` indexed by a call to a function
+/// named `allow`, and it compiles and runs. Left in place, that `#` plus the
+/// `[` behind it is token-for-token the opening of an `allow` attribute, so
+/// harmless code was reported as a suppression. Measured on this shape before
+/// the delimiter was blanked, at one false finding.
+///
+/// The escaped form needs no equivalent change, and the asymmetry is the
+/// reason it is worth stating: a `#` there would have to sit in the body, which
+/// is already blanked, and the closing `"` that remains cannot open a marker on
+/// its own. A raw string is the only spelling that leaves a `#` in the text
+/// after the contents are removed.
 fn blank_raw_string(bytes: &[u8], masked: &mut [u8], quote: usize, hashes: usize) -> usize {
     let mut index = quote + 1;
     while let Some(byte) = bytes.get(index) {
         if *byte == b'"' && closes_raw_string(bytes, index, hashes) {
+            blank_span(masked, index, index + hashes + 1);
             return index + hashes + 1;
         }
         blank_byte(masked, index);

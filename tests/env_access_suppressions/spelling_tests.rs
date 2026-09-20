@@ -98,6 +98,32 @@ use rstest::rstest;
     "let probe = 1; // #[allow(warnings, reason = \"quoted example\")]\n",
     &[]
 )]
+// A raw string's closing hashes are part of its delimiter rather than a `#` in
+// code, but masking is what has to say so. Indexing the literal puts those
+// hashes directly before a `[`, and that pair is token-for-token the opening of
+// an attribute: `&r#"abc"#[allow(warnings)]` is the literal `r#"abc"#` indexed
+// by a call to a function named `allow`, and it compiles and runs with `allow`
+// and `warnings` in scope as ordinary items. Measured at one false finding
+// before the closing delimiter was blanked with the body.
+#[case::raw_string_closing_hashes_before_an_index(
+    "fn probe() { let s: &str = &r#\"abc\"#[allow(warnings)]; }\n",
+    &[]
+)]
+// The escaped form carries no equivalent hazard, and the asymmetry is measured
+// rather than assumed: a `#` there can only sit inside the body, which is
+// already blanked, and the closing `"` left in place cannot open a marker.
+#[case::escaped_string_before_an_index(
+    "fn probe() { let s: &str = &\"abc\"[allow(warnings)]; }\n",
+    &[]
+)]
+// The blanking is the delimiter and not the code behind it, so a real inner
+// attribute after a raw string is still read. Blanking one token too many would
+// make this row pass while the contract went blind, which is why the pair is
+// asserted together.
+#[case::real_attribute_after_a_raw_string(
+    "fn probe() { let s = r#\"abc\"#; }\n#[allow(warnings, reason = \"escape hatch probe\")]\nfn other() {}\n",
+    &["warnings"]
+)]
 // A `cfg_attr` whose wrapped body holds the `allow` is read whole.
 #[case::wrapped_cfg_attr_allow(
     "#[cfg_attr(\n    all(),\n    allow(clippy::disallowed_methods, reason = \"escape hatch probe\"),\n)]\nfn probe() {}\n",
