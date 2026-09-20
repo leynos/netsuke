@@ -256,10 +256,17 @@ def build_capable_test_names(source: str) -> set[str]:
 
 
 def parameterised_test_names(source: str) -> set[str]:
-    """Return tests whose `#[case]` attributes multiply them into instances.
+    """Return the parameterised tests declared in a Rust source.
 
-    Such a test is named `name::case_1_…` at run time, so a filter must match
-    the case suffix; the exact `test(=NAME)` form would select nothing.
+    A test with `#[case]` attributes is named `name::case_1_…` at run time, so a
+    filter must match the case suffix; the exact `test(=NAME)` form would select
+    nothing.
+
+    Returns
+    -------
+    set[str]
+        The names of tests whose `#[case]` attributes multiply them into
+        instances.
     """
     executable_source = mask_non_code(source, RETAINED_RUST_LITERALS)
     return {
