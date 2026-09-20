@@ -117,15 +117,18 @@ compiler-cache observability contract rather than merely reorder the lane. A
 named workflow contract test,
 `tests/workflow_contracts/codescene_upload_contract_test.py`, backed by the
 predicates in `tests/workflow_contracts/codescene_upload_invariants.py`, holds
-the lane to that ordering, to the validator being run over a directory the step
-also filled with the report, to the input names the generator and the upload
+the lane to that ordering, to the input names the generator and the upload
 agree on, to the format they agree on, to the credential being both carried and
 gated on — by name, as an identifier in the namespace the `if` is evaluated
 against, rather than by a substring that a longer, unset name would satisfy —
-and to any checksum input staying unset. It drives those predicates against
-synthetic workflow text as well as the repository file, so a detector that
-stopped matching cannot pass by finding nothing. The upload reads the workspace
-rather than an archive, so the three steps it depends on are matched by their
+and to any checksum input staying unset. A second test module,
+`tests/workflow_contracts/codescene_validation_step_test.py`, backed by
+`tests/workflow_contracts/codescene_report_validation_invariants.py`, holds the
+validating step's script to the validator being run over a directory the step
+also filled with the report. Both drive their predicates against synthetic
+workflow text as well as the repository file, so a detector that stopped
+matching cannot pass by finding nothing. The upload reads the workspace rather
+than an archive, so the three steps it depends on are matched by their
 structure rather than by the file they happen to share.
 
 ## Addendum, 2026-09-23: the dispatch upload and the pull-request closure

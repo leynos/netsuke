@@ -22,6 +22,11 @@ Following the sibling suites, the detectors are also driven against synthetic
 workflow text: a detector that stopped matching would otherwise let the
 repository assertion pass by finding nothing to object to.
 
+What the *validating step's script* must read as is a subject of its own, so
+those cases live in ``codescene_validation_step_test.py``. This module holds
+the lane's structure — which steps exist, where they sit, and how the upload
+is configured.
+
 Run via ``make test-workflow-contracts``.
 """
 
@@ -52,10 +57,6 @@ from codescene_upload_lane_data import (
     inputs_of,
     step_of,
     trunk_steps,
-)
-from codescene_validation_step_data import (
-    CHECKS_NOTHING_CASES,
-    COMMAND_SCOPED_CASES,
 )
 
 
@@ -137,68 +138,6 @@ def test_the_detectors_report_a_reordered_lane(step_name: str) -> None:
             steps.append(moved)
     assert upload_contract_offenders(steps), (
         f"misordering {step_name!r} must be reported"
-    )
-
-
-@pytest.mark.parametrize(("replacement", "expected"), CHECKS_NOTHING_CASES)
-def test_the_detectors_report_a_validation_step_that_checks_nothing(
-    replacement: str, expected: str
-) -> None:
-    """Fail a check that does not read the report the upload will send.
-
-    The generation action reports success for an empty report, so a step that
-    only asserts the file exists would pass on exactly the artefact CodeScene
-    rejects — and it would do so in the lane that runs most expensively. The
-    same is true of a step that reads the right validator over a directory it
-    never put the report into: everything about the invocation looks correct,
-    and none of it touches the artefact. So is a step that moves the report
-    into that directory: the check reads the artefact, and leaves the
-    workspace without the copy the upload has yet to make. So is a step that
-    names a directory it never created: the validator is pointed at a path
-    that either is not there or holds another run's leavings. And so is a step
-    that fills no directory at all while reading one: the validator refuses
-    the empty set on a report nothing was wrong with.
-    """
-    steps = clean_steps()
-    step_of(steps, REPORT_VALIDATION_STEP)["run"] = replacement
-    offenders = [
-        offender
-        for offender in upload_contract_offenders(steps)
-        if expected in offender
-    ]
-    assert offenders, (
-        f"a validation step running {replacement!r} must be reported for "
-        f"omitting {expected}"
-    )
-
-
-@pytest.mark.parametrize(("replacement", "expected"), COMMAND_SCOPED_CASES)
-def test_the_detectors_read_the_report_copy_as_one_command(
-    replacement: str, expected: str | None
-) -> None:
-    """Judge the copy per command, not per line.
-
-    A shell line is not a command. A step written as a one-liner joining its
-    commands with `&&` or `;` would satisfy a line-wide scan with a copy that
-    put something else into some other directory: the match would begin at that
-    `cp` and finish at the later command naming the staged directory, and the
-    contract would certify a staged directory the report never reached. So the
-    scan is scoped to a command segment, and the control case is what keeps it
-    from being scoped so finely that a correct one-liner is rejected.
-    """
-    steps = clean_steps()
-    step_of(steps, REPORT_VALIDATION_STEP)["run"] = replacement
-    offenders = upload_contract_offenders(steps)
-    if expected is None:
-        assert not offenders, (
-            f"a one-liner staging the report with {replacement!r} satisfies "
-            f"the contract; it was reported as {offenders}"
-        )
-        return
-    matching = [offender for offender in offenders if expected in offender]
-    assert matching, (
-        f"a line naming the report and the staged directory in different "
-        f"commands must be reported for omitting {expected}: {offenders}"
     )
 
 

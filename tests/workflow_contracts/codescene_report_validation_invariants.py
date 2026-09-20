@@ -27,13 +27,13 @@ in substance:
   directory the report is *moved* into leaves the workspace holding no copy for
   the upload that has yet to read it.
 
-Every clause is a statement about a *command*, and a shell script is not a list
-of lines. A `run: |` block happens to put one command per line, but a one-liner
-joining several with `&&` does not, and a scan that ran line-wide would let a
-match begin in the command that copies something and finish in the command that
-names the staged directory — reporting a report that never went in. So the
-predicates are stated over command segments, and a segment is where each of
-them starts and stops.
+Every clause is a statement about a *command*, and a shell script is not a
+list of lines: a `run: |` block happens to put one command per line, but a
+one-liner joining several with `&&` does not. So each clause is asked of
+command segments rather than of lines. What a script's commands are, which
+words one of them is handed, and which names capture a command's output are
+questions about shell text rather than about this lane, so they live in
+``shell_command_scan``.
 
 Separated from ``codescene_upload_invariants`` so neither module outgrows the
 400-line limit the Python lint gate enforces.
@@ -45,11 +45,12 @@ import re
 import typing as typ
 
 from ci_coverage_wiring_invariants import COVERAGE_REPORT_PATH
-
-#: Matches one shell separator, splitting a line into the simple commands it
-#: runs. `&&` and `||` are matched before the single-character class so each is
-#: consumed whole rather than as its first character followed by another.
-COMMAND_SEPARATOR: typ.Final[re.Pattern[str]] = re.compile(r"&&|\|\||[;|]")
+from shell_command_scan import (
+    assigned_from,
+    command_operands,
+    command_segments,
+    names_a_component,
+)
 
 #: How `mktemp` is asked for a directory rather than a file. Both spellings are
 #: accepted: which one a script uses is style, and recognising only one would
@@ -136,36 +137,6 @@ def validation_offenders(validation: dict[str, object]) -> list[str]:
     return offenders
 
 
-def _command_segments(script: str) -> list[str]:
-    """Return the script's commands, one segment per simple shell command.
-
-    A shell script is not a list of lines. A `run: |` block happens to put one
-    command per line, but the same shell accepts a one-liner joining several
-    with `&&`, and a predicate stated over lines would read such a line as a
-    single command: a match could begin in the command that copies a file and
-    finish in the command that names the staged directory, reporting a report
-    that was never put into it.
-
-    Splitting on the separators is a deliberate over-approximation. A `;` or a
-    `|` inside a quoted string is not a separator, and cutting there can
-    therefore divide a command in two — which is the safe direction. A rule
-    asserting that two things appear in one command is only ever made *harder*
-    to satisfy by cutting more finely, so a script misjudged by the split is
-    reported rather than passed, and its author moves the report path and the
-    directory into the same command.
-
-    Returns
-    -------
-    list[str]
-        The segments, in order, including any that are blank.
-    """
-    return [
-        segment
-        for line in script.splitlines()
-        for segment in COMMAND_SEPARATOR.split(line)
-    ]
-
-
 def _created_directories(script: str) -> set[str]:
     """Return the names ``script`` gives to directories it creates.
 
@@ -190,47 +161,18 @@ def _created_directories(script: str) -> set[str]:
         holding either can ask whether the script created it.
     """
     created: set[str] = set()
-    for segment in _command_segments(script):
-        if re.search(r"\bmktemp\b", segment):
-            # `$(mktemp --directory)` and `$(mktemp -d)` each carry the flag; a
-            # plain `mktemp` names a file, which is not a directory to stage.
-            if re.search(MKTEMP_DIRECTORY_FLAG, segment):
-                created |= _assigned_variables(segment)
-            continue
+    for segment in command_segments(script):
+        # `$(mktemp --directory)` and `$(mktemp -d)` each carry the flag; a
+        # plain `mktemp` names a file, which is not a directory to stage.
+        if re.search(r"\bmktemp\b", segment) and re.search(
+            MKTEMP_DIRECTORY_FLAG, segment
+        ):
+            created |= assigned_from(segment, "mktemp")
         if re.search(r"\bmkdir\b", segment):
             created |= {
-                name.strip("\"'${}") for name in _command_operands(segment, "mkdir")
+                name.strip("\"'${}") for name in command_operands(segment, "mkdir")
             }
     return created
-
-
-def _assigned_variables(segment: str) -> set[str]:
-    """Return the names a command segment assigns to."""
-    return set(re.findall(r"(?:^|[;&|]\s*|\s)([A-Za-z_]\w*)=", segment))
-
-
-def _command_operands(segment: str, command: str) -> set[str]:
-    """Return the words a command segment hands to ``command``.
-
-    Flags are dropped, so `mkdir --parents -- x` yields `x` rather than the
-    options that precede it. A word that names a directory and begins with a
-    hyphen is not recognised, which costs nothing here: neither the staged
-    directory nor any directory this repository stages is named that way.
-
-    Returns
-    -------
-    set[str]
-        The operand words, empty when the segment does not run ``command``.
-    """
-    match = re.search(
-        rf"\b{re.escape(command)}\b(?P<operands>[^\n]*)",
-        segment,
-    )
-    if match is None:
-        return set()
-    return {
-        word for word in match.group("operands").split() if not word.startswith("-")
-    }
 
 
 def _staged_directory(script: str) -> str | None:
@@ -249,8 +191,13 @@ def _staged_directory(script: str) -> str | None:
         The argument as written, with any quoting and variable syntax stripped,
         or `None` when the flag is absent or bare.
     """
+    # The value is taken from the same line. `\s` here would match a newline,
+    # and a flag left bare at the end of a line would then take the first word
+    # of the *next* command as its argument — reading a directory named
+    # `mkdir` out of `mkdir mkdir`, and certifying an invocation the validator
+    # was handed no directory for at all.
     match = re.search(
-        r"--artifact-dir[=\s]+(?P<directory>\S+)",
+        r"--artifact-dir[=\t ]+(?P<directory>\S+)",
         script,
     )
     if match is None:
@@ -288,10 +235,42 @@ def _copies_report_into(script: str, directory: str) -> bool:
         directory in a copying command.
     """
     return any(
-        re.search(
-            rf"\b(?:cp|install)\b(?=[^\n]*{re.escape(COVERAGE_REPORT_PATH)})"
-            rf"(?=[^\n]*{re.escape(directory)})[^\n]*",
-            segment,
-        )
-        for segment in _command_segments(script)
+        _copies_from_into(segment, COVERAGE_REPORT_PATH, directory)
+        for segment in command_segments(script)
     )
+
+
+def _copies_from_into(segment: str, source: str, directory: str) -> bool:
+    """Whether one segment copies named ``source`` into named ``directory``.
+
+    Both names must appear, the source must come *first*, and the destination
+    operand must name the directory: `cp` and `install` take the source then the
+    destination, so a command naming both in the other order reads the report
+    out of the staged directory rather than putting it in. Order is what makes
+    that difference visible, and a match indifferent to it would certify the
+    wrong direction as the one this contract asks for.
+
+    A destination naming the directory as a *prefix* counts — `"${staged}/x"` is
+    the ordinary spelling, where the operand is a path under the directory and
+    the file lands inside it. A destination naming it as a later component does
+    not: the file would land somewhere else entirely.
+
+    Returns
+    -------
+    bool
+        Whether the segment is a copying command from ``source`` into a path
+        under ``directory``.
+    """
+    for command in ("cp", "install"):
+        operands = command_operands(segment, command)
+        if len(operands) < 2:
+            continue
+        if not names_a_component(operands[0], source):
+            continue
+        # The GNU `-t` spelling puts the destination before the source, so it
+        # fails this ordering and is reported. That is the safe direction: the
+        # spelling this repository uses is the ordinary one, and a script that
+        # switched to `-t` would be told to stage the report the usual way.
+        if names_a_component(operands[1], directory, prefix=True):
+            return True
+    return False
