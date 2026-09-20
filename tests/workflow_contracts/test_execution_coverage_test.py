@@ -16,6 +16,7 @@ import pytest
 from cache_contract_data import WORKFLOW_DIR
 from workflow_loading import (
     MAKEFILE_PATH,
+    REPO_ROOT,
     job_steps,
     load_workflow,
     named_step,
@@ -33,6 +34,15 @@ REQUIRED_COVERAGE_INPUTS = {
     "all-targets": "true",
     "doctests": "true",
 }
+
+#: Ambient-target UI harness builds must share the gate's feature fingerprint.
+#: Isolated fixture and packaging builds intentionally retain shipped defaults.
+GATE_FEATURES_MODULE = REPO_ROOT / "tests" / "support" / "cargo_features.rs"
+AMBIENT_TARGET_NESTED_BUILD_SOURCES = (
+    REPO_ROOT / "tests" / "support" / "test_support_rlib.rs",
+    REPO_ROOT / "tests" / "command_env_ui_tests.rs",
+    REPO_ROOT / "tests" / "build_module_slice_ui_tests.rs",
+)
 
 #: Every job that measures coverage, and the event it is restricted to. Two
 #: coverage runs against one commit pay twice and give the ratchet baseline
@@ -169,6 +179,26 @@ def test_the_local_test_target_still_runs_both_passes() -> None:
         assert flag in doctest, f"the local doctest pass must pass {flag}"
     for recipe, label in ((nextest, "nextest"), (doctest, "doctest")):
         assert "-D warnings" in recipe, f"the local {label} pass must deny warnings"
+
+
+def test_ambient_target_harnesses_match_the_gate_feature_selection() -> None:
+    """Require ambient nested Cargo builds to reuse the gate's artefacts.
+
+    The direct-rustc UI harnesses build `test_support` or `netsuke-build` in
+    the workspace target directory. Their Cargo feature selection must match
+    `make test-nextest`; otherwise Cargo gives `netsuke-build` a distinct
+    fingerprint and recompiles its graph for each harness.
+    """
+    module = GATE_FEATURES_MODULE.read_text(encoding="utf-8")
+    assert (
+        'pub const GATE_FEATURE_ARGUMENTS: &[&str] = &["--all-features"];' in module
+    ), "the shared Cargo feature module must define the gate's --all-features argument"
+    for source in AMBIENT_TARGET_NESTED_BUILD_SOURCES:
+        text = source.read_text(encoding="utf-8")
+        assert "cargo_features::GATE_FEATURE_ARGUMENTS" in text, (
+            f"{source.relative_to(REPO_ROOT)} must use the shared gate feature "
+            "selection"
+        )
 
 
 @pytest.mark.parametrize(

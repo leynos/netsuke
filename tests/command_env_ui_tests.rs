@@ -27,6 +27,8 @@
 
 #[path = "support/cargo_artifacts.rs"]
 mod cargo_artifacts;
+#[path = "support/cargo_features.rs"]
+mod cargo_features;
 #[path = "support/rustc_response_file.rs"]
 mod rustc_response_file;
 
@@ -190,6 +192,7 @@ impl NetsukeRlib {
             .arg("--manifest-path")
             .arg(manifest_dir().join("Cargo.toml"))
             .arg("--message-format=json")
+            .args(cargo_features::GATE_FEATURE_ARGUMENTS)
             .output()?;
         if !output.status.success() {
             return Err(io::Error::other(format!(

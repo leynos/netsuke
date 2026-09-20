@@ -2871,10 +2871,15 @@ which would have retired real tests, so both coverage callers pass
 `all-features` and `all-targets`. Without the first, the `legacy-digests` tests
 in `src/stdlib/path/hash_utils.rs` and `tests/std_filter_tests/hash_filters.rs`
 stop running; without the second, the two `benches/` targets stop compiling.
-`-D warnings` is not set as `env.RUSTFLAGS`, which
-`tests/polonius_toolchain_contract.rs` forbids; `setup-rust` exports it from its
-`rustflags` input and `cargo llvm-cov` appends its instrumentation to whatever
-it finds, so warnings stay denied.
+The ambient-target direct-`rustc` UI harness builds use the same
+`--all-features` selection, through `tests/support/cargo_features.rs`, so Cargo
+can reuse the gate's `netsuke-build` artefacts. `test_support` forwards
+`legacy-digests` to `netsuke-build` for that purpose. Isolated fixture and
+packaging builds retain default features because they validate the shipped
+package rather than the gate's feature set. `-D warnings` is not set as
+`env.RUSTFLAGS`, which `tests/polonius_toolchain_contract.rs` forbids;
+`setup-rust` exports it from its `rustflags` input and `cargo llvm-cov` appends
+its instrumentation to whatever it finds, so warnings stay denied.
 
 Doctests are the one thing the instrumented run cannot do at all, so
 `build-test` runs `make doctest` immediately afterwards, on every event.
@@ -4530,13 +4535,15 @@ when a fixture must compile against `test_support`; a harness for the
 production crate, or one needing no crate, must use its own narrow support code.
 
 `TestSupportRlib::build` builds `test_support` with
-`cargo build --message-format=json`; `build_with` does the same with narrowly
-scoped Cargo environment overrides for the split-build regression. Both parse
-Cargo's `compiler-artifact` messages, locating the uplifted metadata artefact
-and every dependency directory from the paths Cargo actually reports. This
-avoids assuming dependencies live beside the final `test_support` rlib when
-Cargo's `build.build-dir` setting separates intermediate artefacts, or when the
-Cargo shipped with the 1.99 nightlies gives each crate its own directory.
+`cargo build --message-format=json --all-features`. The shared feature
+arguments in `tests/support/cargo_features.rs` match `make test-nextest`;
+`test_support` forwards `legacy-digests` to `netsuke-build`, allowing Cargo to
+reuse the gate's matching artefacts. It parses Cargo's `compiler-artifact`
+messages, locating the uplifted metadata artefact and every dependency
+directory from the paths Cargo actually reports. This avoids assuming
+dependencies live beside the final `test_support` rlib when Cargo's
+`build.build-dir` setting separates intermediate artefacts, or when the Cargo
+shipped with the 1.99 nightlies gives each crate its own directory.
 
 `TestSupportRlib::compile` then invokes the workspace `rustc` directly with the
 discovered artefact as `--extern test_support=…`, every discovered
