@@ -108,4 +108,3 @@ installed_mold_version() {
   output=$(mold --version 2>/dev/null) || return 1
   printf '%s' "$output" | awk 'NR == 1 { print $2 }'
 }
-
