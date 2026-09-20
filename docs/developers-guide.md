@@ -4442,6 +4442,23 @@ in all three and `--all-targets` compiles and lints them, and the modules they
 wire in, exactly as it lints the library, so an inner attribute there silences
 the policy for a whole test, benchmark, or example binary just the same.
 
+Within a root the scan reads every file that is not dot-prefixed, rather than
+only the `*.rs` files, because a `.rs` name is not something the compiler
+requires. A module is read from whatever `#[path = "..."]` names —
+`#[path = "suppressed.inc"] mod suppressed;` compiles — and such a file may
+open with the innermost form of the policy suppression, which
+`allow_attributes` does not report. Naming the compiled sources by an extension
+the language does not require is therefore a filter the one reader who cares
+about it would rather have on. The breadth errs towards reading too much on
+purpose: a file read but never compiled costs a failure message naming a real
+file, while a file compiled but not read hides a suppression. A file that will
+not decode is declined rather than fatal, since Rust source is UTF-8 by
+definition; every other read error still propagates, and that half is the
+load-bearing one, because a file that is text and could not be read is a source
+that went unscanned. A dot-file under a source root stays out, being tooling
+state — `.gitignore`, `.editorconfig`, `.rustfmt.toml` — rather than anything a
+`#[path]` names.
+
 The root list is not trusted to stay complete on its own, because that is how a
 scan silently stops covering something. A second test walks every Rust source
 in the workspace, skipping only the named machine-local directories — `target`,
