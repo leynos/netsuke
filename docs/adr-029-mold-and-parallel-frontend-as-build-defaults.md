@@ -29,7 +29,7 @@ A third looks obvious and is not: the Cranelift codegen backend, which promises
 a much larger win because it replaces LLVM entirely, and which is unusable here
 for a reason that a shallow probe does not reveal.
 
-Choosing a default also means choosing what the default must *not* reach. Two
+Choosing a default also means choosing what the default must _not_ reach. Two
 build shapes are not development builds: a release or packaging build, whose
 output is shipped, and a coverage build, whose output is a measurement. An
 acceleration reaching either would change what is shipped or compared.
@@ -87,7 +87,7 @@ nothing to indicate the difference. Auto-discovery is what makes this a default
 rather than an opt-in, and it is why the file must be treated as applying to
 everything, including the shapes that must be excluded.
 
-**Why the flags are restated.** Documented under *Decision*. This is the single
+**Why the flags are restated.** Documented under _Decision_. This is the single
 most surprising property of the mechanism: the composition that makes the gates
 work is what would silently disable the standard if the flags were not
 repeated. Keeping the two sources equal is therefore a testable contract rather
@@ -141,7 +141,7 @@ should be justified by the benchmark rather than by this record.
   `check-build-tools` name what they do, and the build targets are the build
   targets.
 - A Linux contributor who has not run `make install-build-tools` gets a
-  *failure* at link time, not a silent fallback: gcc is passed `-fuse-ld=mold`
+  _failure_ at link time, not a silent fallback: gcc is passed `-fuse-ld=mold`
   explicitly, and with no `mold` reachable it reports that it cannot find the
   linker and stops. The gate targets report this earlier and more clearly, as a
   missing prerequisite.
