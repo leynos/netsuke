@@ -146,7 +146,12 @@ def credential_offenders(
             f"env.{CREDENTIAL_ENVIRONMENT_KEY} from a github secret, got "
             f"{declared!r}"
         )
-    if not names_credential(token):
+    # The value handed to the action has to be the one the gate compared, and
+    # the gate reads `env`. A reference from another namespace — `github.`, or
+    # `vars.`, which this repository declares no variables in — names a
+    # same-named value from elsewhere, which resolves to the empty string and
+    # leaves the action unauthenticated while the step reads as configured.
+    if not names_credential(token, namespace=CREDENTIAL_GATE_NAMESPACE):
         offenders.append(
             f"the upload step must pass {CREDENTIAL_INPUT} the "
             f"{CREDENTIAL_ENVIRONMENT_KEY} it gated on, got {token!r}"

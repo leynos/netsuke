@@ -115,6 +115,30 @@ def test_an_unrecognised_form_is_not_silently_accepted(
 @pytest.mark.parametrize(
     ("label", "segment"),
     [
+        # An assignment-shaped *argument* to a command that runs nothing. The
+        # shell reads `name=value` as an assignment before the command word and
+        # as an ordinary argument after it, so the directory is never created —
+        # and crediting it records one the script never made.
+        ("after a command word", 'echo staged="$(mktemp -d)"'),
+        ("as a later argument", 'printf %s staged="$(mktemp -d)"'),
+    ],
+)
+def test_only_a_leading_assignment_counts(label: str, segment: str) -> None:
+    """Read an assignment as such only where the shell does.
+
+    Past the command word a `name=value` word is an ordinary argument, and
+    nothing is assigned. Crediting it would record a directory the script never
+    made, and a staged directory nothing created is one the validator is handed
+    empty — on a runner — or holding another run's leavings.
+    """
+    assert not assigned_from(segment, "mktemp"), (
+        f"an assignment-shaped {label} assigns nothing"
+    )
+
+
+@pytest.mark.parametrize(
+    ("label", "segment"),
+    [
         # A string that merely spells the command. Nothing is run, so no
         # output is captured.
         ("quoted spelling", 'staged="mktemp -d"'),
@@ -166,6 +190,35 @@ def test_a_captured_command_is_bound_to_its_own_name(
     """
     assert assigned_from(segment, "mktemp") == expected, (
         f"only the {label} name holding the command may be credited"
+    )
+
+
+def test_a_continued_line_is_joined_into_the_command_it_completes() -> None:
+    """Join a line continuation, because the shell joins it.
+
+    The backslash and the newline after it are removed before the command is
+    parsed, so the two lines are one command. Read apart, the continued
+    fragment would pass for a command of its own: an `echo` continued into a
+    line naming a script would read as that script being run, which is the
+    opposite of what the shell does with it.
+    """
+    script = "echo hello \\\n  scripts/validate_coverage_artifact.py"
+    assert command_segments(script) == [
+        "echo hello   scripts/validate_coverage_artifact.py"
+    ], "the continuation is removed and the two lines are one command"
+
+
+def test_a_continuation_inside_a_quoted_string_is_still_joined() -> None:
+    """Join it wherever it appears, which is also what the shell does.
+
+    The shell removes a trailing backslash before it reads quotes at all, so
+    the join is not conditional on being outside one. Joining is the safe
+    direction here as everywhere: it can only merge two segments into one,
+    which makes a rule asking after a single command harder to satisfy.
+    """
+    script = 'echo "one \\\n  two"'
+    assert command_segments(script) == ['echo "one   two"'], (
+        "the shell removes the backslash and newline before parsing quotes"
     )
 
 
