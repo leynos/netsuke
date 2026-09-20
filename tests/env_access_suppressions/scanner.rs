@@ -166,6 +166,47 @@ fn identifier(text: &str) -> Option<(&str, &str)> {
     (end > 0).then(|| body.split_at(end))
 }
 
+/// Whether the byte being read sits inside a double-quoted string.
+#[derive(Clone, Copy)]
+enum StringState {
+    /// Reading code, outside every string.
+    Outside,
+    /// Reading a string's body, tracking whether the last byte escaped the next.
+    Quoted {
+        /// Whether the previous byte was an unescaped `\`.
+        escaped: bool,
+    },
+}
+
+impl StringState {
+    /// Consume one byte, returning the next state and whether it was string text.
+    ///
+    /// The flag is what lets the caller skip its own handling: every byte of a
+    /// string, its opening and closing quotes included, is consumed here, so a
+    /// parenthesis counter downstream never sees a `)` the string quoted. A
+    /// backslash escapes the byte after it and is cleared by whatever it
+    /// escaped, which keeps an escaped quote from closing the string and an
+    /// escaped backslash from opening an escape.
+    const fn consume(self, byte: u8) -> (Self, bool) {
+        match (self, byte) {
+            // A backslash in a string escapes whatever follows it.
+            (Self::Quoted { escaped: false }, b'\\') => (Self::Quoted { escaped: true }, true),
+            // An unescaped quote is the only byte that closes the string.
+            (Self::Quoted { escaped: false }, b'"') => (Self::Outside, true),
+            // Every other quoted byte is content, and so is the quote that
+            // opens a string from code: both leave a string being read with no
+            // escape pending. An escaped byte clears the escape it was the
+            // target of, and a quote behind an escape is content rather than a
+            // close, which is why the two share an arm.
+            (Self::Quoted { .. }, _) | (Self::Outside, b'"') => {
+                (Self::Quoted { escaped: false }, true)
+            }
+            // Anything else is code, and the caller must handle it.
+            (Self::Outside, _) => (Self::Outside, false),
+        }
+    }
+}
+
 /// Read the parenthesized body of the attribute whose `(` sits at `open`.
 ///
 /// Scanning tracks parenthesis depth so an attribute that `rustfmt` has wrapped
@@ -179,29 +220,21 @@ fn identifier(text: &str) -> Option<(&str, &str)> {
 /// malformed attribute unread rather than reporting the remainder of the file
 /// as its body.
 fn read_attribute_body(source: &str, open: usize) -> Option<String> {
-    let mut depth = 0_usize;
-    let mut in_string = false;
-    let mut escaped = false;
-    for (offset, byte) in source.as_bytes().iter().enumerate().skip(open) {
-        if in_string {
-            if escaped {
-                escaped = false;
-            } else if *byte == b'\\' {
-                escaped = true;
-            } else if *byte == b'"' {
-                in_string = false;
-            }
+    // `open` is the known opening parenthesis, so the body starts inside it.
+    let mut depth = 1_usize;
+    let mut string_state = StringState::Outside;
+    for (offset, byte) in source.as_bytes().iter().enumerate().skip(open + 1) {
+        let (next_state, consumed) = string_state.consume(*byte);
+        string_state = next_state;
+        if consumed {
             continue;
         }
         match byte {
-            b'"' => in_string = true,
             b'(' => depth += 1,
-            b')' => {
-                depth = depth.checked_sub(1)?;
-                if depth == 0 {
-                    return source.get(open + 1..offset).map(str::to_owned);
-                }
+            b')' if depth == 1 => {
+                return source.get(open + 1..offset).map(str::to_owned);
             }
+            b')' => depth = depth.checked_sub(1)?,
             _ => {}
         }
     }
@@ -281,4 +314,72 @@ pub(super) fn scan_source(path: &str, source: &str) -> Vec<(String, String)> {
 /// Return whether `character` continues a Rust identifier.
 fn is_identifier_char(character: char) -> bool {
     character.is_alphanumeric() || character == '_'
+}
+
+#[cfg(test)]
+mod tests {
+    //! Direct cases for the reading that masking hides from the scan.
+    //!
+    //! Masking blanks a literal's contents before the scan sees them, so the
+    //! quoted-string tracking in [`read_attribute_body`] is unreachable through
+    //! [`scan_source`] and no table row can pin it: measured, the masked form of
+    //! `reason = "before \" after"` is `reason = "               "`, with the
+    //! escaped quote and both its neighbours replaced by spaces. The function
+    //! still documents and preserves standalone correctness, so its contract is
+    //! asserted here, where the raw text reaches it.
+
+    use super::read_attribute_body;
+    use anyhow::{Result, ensure};
+
+    /// The attribute body is read past a parenthesis the string merely quotes.
+    #[test]
+    fn a_parenthesis_inside_a_string_does_not_close_the_body() -> Result<()> {
+        let source = r#"(reason = "closing ) paren", flag)"#;
+        ensure!(
+            read_attribute_body(source, 0).as_deref()
+                == Some(r#"reason = "closing ) paren", flag"#),
+            "a `)` inside a string must not close the body"
+        );
+        Ok(())
+    }
+
+    /// An escaped quote does not close the string that quotes it.
+    ///
+    /// This is the case the mask makes unreachable through the scan, and the one
+    /// a reader is most likely to think is untested. Without the escape bit the
+    /// `\"` would close the string early, the following `)` would close the
+    /// body, and the body would be truncated — which is exactly what the
+    /// mutation of that bit measures.
+    #[test]
+    fn an_escaped_quote_does_not_close_the_string() -> Result<()> {
+        let source = r#"(reason = "before \" after ) still inside", tail)"#;
+        ensure!(
+            read_attribute_body(source, 0).as_deref()
+                == Some(r#"reason = "before \" after ) still inside", tail"#),
+            "an escaped quote must not close the string, nor let its `)` close the body"
+        );
+        Ok(())
+    }
+
+    /// Nested parentheses are counted rather than treated as the body's end.
+    #[test]
+    fn nested_parentheses_are_counted() -> Result<()> {
+        let source = "(cfg_attr(all(), allow(warnings)), tail)";
+        ensure!(
+            read_attribute_body(source, 0).as_deref()
+                == Some("cfg_attr(all(), allow(warnings)), tail"),
+            "the body ends at the parenthesis matching the one that opened it"
+        );
+        Ok(())
+    }
+
+    /// An unterminated body is unread rather than the rest of the file.
+    #[test]
+    fn an_unterminated_body_is_none() -> Result<()> {
+        ensure!(
+            read_attribute_body("(allow(warnings)", 0).is_none(),
+            "a body that never closes must not be returned"
+        );
+        Ok(())
+    }
 }
