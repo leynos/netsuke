@@ -45,7 +45,7 @@ NESTED_CARGO_BUILD_TESTS = (
     "document_and_needle_compile_together",
     "packaged_manifest_retains_build_script_sources",
 )
-# Nextest names a parameterised `#[rstest]` by its instances, `name::case_1_…`.
+# Nextest names a parameterized `#[rstest]` by its instances, `name::case_1_…`.
 # `test(=NAME)` compares the whole name, so it matches none of them and the test
 # silently leaves the group; `test(/^NAME($|::)/)` matches the plain name and
 # every case suffix alike. The `~` substring form is unanchored and over-matches.
@@ -278,8 +278,8 @@ def build_capable_test_names(source: str) -> set[str]:
     }
 
 
-def parameterised_test_names(source: str) -> set[str]:
-    """Return the parameterised tests declared in a Rust source.
+def parameterized_test_names(source: str) -> set[str]:
+    """Return the parameterized tests declared in a Rust source.
 
     A test with `#[case]` attributes is named `name::case_1_…` at run time, so a
     filter must match the case suffix; the exact `test(=NAME)` form would select

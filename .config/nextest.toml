@@ -28,7 +28,7 @@ max-threads = 1
 # Every filter in this file uses an anchored regex rather than `test(=NAME)`,
 # because a filter selects its test the same way whether it grants a group slot
 # or widens a timeout. Nextest's `=` form compares the whole test name, but a
-# parameterised `#[rstest]` is identified by its instances, `name::case_1_…`,
+# parameterized `#[rstest]` is identified by its instances, `name::case_1_…`,
 # `name::case_2_…`, so `test(=NAME)` matches none of them and the test silently
 # keeps whatever the default policy gives it. `^NAME($|::)` matches the plain
 # name and every case suffix alike. Nextest's `~` substring form is deliberately
@@ -36,7 +36,7 @@ max-threads = 1
 # contains that fragment.
 #
 # Applying the anchored form throughout is not about today's tests, most of
-# which are not parameterised and so match either way. It is about the edit
+# which are not parameterized and so match either way. It is about the edit
 # that comes later: adding a `#[case]` attribute to a filtered test must not
 # silently unhook it from its policy, whichever override carries that policy.
 # A guard scoped to the group's own filters was tried first and was too narrow:

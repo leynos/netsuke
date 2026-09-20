@@ -25,7 +25,7 @@ from nextest_child_cargo_group_invariants import (
     filter_test_names,
     grouped_test_names,
     nextest_config,
-    parameterised_test_names,
+    parameterized_test_names,
     rust_test_sources,
 )
 from workflow_loading import (
@@ -94,8 +94,8 @@ def test_filters_match_every_declared_test_they_name() -> None:
     )
 
 
-def test_filters_match_parameterised_test_instances() -> None:
-    """A parameterised test cannot be selected by the exact-name filter form.
+def test_filters_match_parameterized_test_instances() -> None:
+    """A parameterized test cannot be selected by the exact-name filter form.
 
     `#[rstest]` with `#[case]` attributes compiles to one test per case, named
     `name::case_1_…`. Nextest's `test(=NAME)` matches the whole name only, so it
@@ -104,17 +104,17 @@ def test_filters_match_parameterised_test_instances() -> None:
     case suffix. The legacy form is rejected so that escape cannot return.
     """
     filters = " | ".join(all_filter_text(nextest_config()))
-    parameterised = set().union(
-        *(parameterised_test_names(source) for source in rust_test_sources().values())
+    parameterized = set().union(
+        *(parameterized_test_names(source) for source in rust_test_sources().values())
     )
-    named_by_legacy = set(LEGACY_EXACT_FILTER.findall(filters)) & parameterised
+    named_by_legacy = set(LEGACY_EXACT_FILTER.findall(filters)) & parameterized
     assert not named_by_legacy, (
-        f"parameterised tests cannot be selected with the exact-name form, which "
+        f"parameterized tests cannot be selected with the exact-name form, which "
         f"matches none of their cases: {sorted(named_by_legacy)!r}"
     )
-    named_by_group = set(GROUP_FILTER.findall(filters)) & parameterised
+    named_by_group = set(GROUP_FILTER.findall(filters)) & parameterized
     assert named_by_group, (
-        "the parameterised build-capable test must be named by a case-matching "
+        "the parameterized build-capable test must be named by a case-matching "
         "filter, so its instances are serialized"
     )
 
@@ -123,7 +123,7 @@ def test_no_filter_uses_the_exact_name_form() -> None:
     """Every filter uses the anchored case-matching form.
 
     Scoped to all filters rather than the group's alone. A filter that names a
-    test which is not parameterised today matches under either form, so the
+    test which is not parameterized today matches under either form, so the
     distinction is invisible until someone adds a `#[case]` attribute; applying
     one form throughout means that later edit cannot silently unhook the test
     from the policy, whichever override carries it.
@@ -135,7 +135,7 @@ def test_no_filter_uses_the_exact_name_form() -> None:
     }
     assert not legacy, (
         f"filters must use 'test(/^NAME($|::)/)', which matches a "
-        f"parameterised test's cases as well as its plain name; found the "
+        f"parameterized test's cases as well as its plain name; found the "
         f"exact-name form for: {sorted(legacy)!r}"
     )
 
@@ -215,8 +215,8 @@ fn launch_build() {
     )
 
 
-def test_parameterised_discovery_sees_case_attributes() -> None:
-    """A `#[case]`-parameterised test is recognised as multiply-instantiated."""
+def test_parameterized_discovery_sees_case_attributes() -> None:
+    """A `#[case]`-parameterized test is recognized as multiply-instantiated."""
     source = """
 #[rstest]
 #[case::first(1)]
@@ -225,8 +225,8 @@ fn case_fixture_compiles(#[case] value: u32) {
     Command::new(cargo()).arg("build");
 }
 """
-    assert parameterised_test_names(source) == {"case_fixture_compiles"}, (
-        "case attributes must mark a test as parameterised"
+    assert parameterized_test_names(source) == {"case_fixture_compiles"}, (
+        "case attributes must mark a test as parameterized"
     )
 
 
