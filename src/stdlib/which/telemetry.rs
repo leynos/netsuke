@@ -104,25 +104,25 @@ pub const WHICH_RESOLUTION_FAILURE_OUTCOME_VALUES: [&str; 2] =
     [RESOLUTION_OUTCOME_NOT_FOUND, RESOLUTION_OUTCOME_ERROR];
 
 /// The bounded `category` recorded for a PATH search miss.
-pub const CATEGORY_NOT_FOUND: &str = "not_found";
+pub(super) const CATEGORY_NOT_FOUND: &str = "not_found";
 /// The bounded `category` recorded for a direct-path lookup miss.
-pub const CATEGORY_DIRECT_NOT_FOUND: &str = "direct_not_found";
+pub(super) const CATEGORY_DIRECT_NOT_FOUND: &str = "direct_not_found";
 /// The bounded `category` recorded for an invalid argument or option value.
-pub const CATEGORY_ARGS: &str = "args";
+pub(super) const CATEGORY_ARGS: &str = "args";
 /// The bounded `category` recorded when canonicalization failed.
-pub const CATEGORY_CANONICALIZE: &str = "canonicalize";
+pub(super) const CATEGORY_CANONICALIZE: &str = "canonicalize";
 /// The bounded `category` recorded when an executable probe failed.
-pub const CATEGORY_IS_EXECUTABLE: &str = "is_executable";
+pub(super) const CATEGORY_IS_EXECUTABLE: &str = "is_executable";
 /// The bounded `category` recorded for a non-UTF-8 canonical path.
-pub const CATEGORY_CANONICALIZE_NON_UTF8: &str = "canonicalize_non_utf8";
+pub(super) const CATEGORY_CANONICALIZE_NON_UTF8: &str = "canonicalize_non_utf8";
 /// The bounded `category` recorded for a non-UTF-8 workspace path.
-pub const CATEGORY_WORKSPACE_NON_UTF8: &str = "workspace_non_utf8";
+pub(super) const CATEGORY_WORKSPACE_NON_UTF8: &str = "workspace_non_utf8";
 /// The bounded `category` recorded for a workspace traversal failure.
-pub const CATEGORY_WALKDIR: &str = "walkdir";
+pub(super) const CATEGORY_WALKDIR: &str = "walkdir";
 /// The bounded `category` recorded when the working directory could not be read.
-pub const CATEGORY_CWD_RESOLVE: &str = "cwd_resolve";
+pub(super) const CATEGORY_CWD_RESOLVE: &str = "cwd_resolve";
 /// The bounded `category` recorded for a non-UTF-8 working directory.
-pub const CATEGORY_CWD_NON_UTF8: &str = "cwd_non_utf8";
+pub(super) const CATEGORY_CWD_NON_UTF8: &str = "cwd_non_utf8";
 
 /// The closed `category` vocabulary admitted on [`WHICH_RESOLUTION_TOTAL`].
 ///

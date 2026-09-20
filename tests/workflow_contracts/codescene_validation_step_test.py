@@ -24,7 +24,7 @@ Run via ``make test-workflow-contracts``.
 import pytest
 from codescene_report_validation_invariants import REPORT_VALIDATION_STEP
 from codescene_upload_invariants import upload_contract_offenders
-from codescene_upload_lane_data import clean_steps, step_of
+from codescene_upload_lane_data import clean_steps, step_of, trunk_steps
 from codescene_validation_step_data import (
     CHECKS_NOTHING_CASES,
     COMMAND_SCOPED_CASES,
@@ -177,4 +177,27 @@ def test_the_detectors_bind_a_created_directory_to_its_own_name(
     assert _matching(offenders, expected), (
         f"a directory created for another name must not satisfy the creation "
         f"check: {offenders}"
+    )
+
+
+def test_the_staged_script_keeps_the_continuation_it_is_written_with() -> None:
+    """Keep the fixture's script the *shape* the lane's script is.
+
+    The fixture is built as an f-string, where a lone backslash before a newline
+    is Python's own line continuation: it is consumed at parse time along with
+    the newline, so the text the cases are driven with would silently lose the
+    shell's continuation and join two lines into one. The scripts would still
+    satisfy the contract — a joined command is still one command — and the
+    cases would go on passing while testing a shape the lane never has.
+
+    The generated script is therefore compared against the lane's own on the
+    property that matters here, not by string equality: both continued the
+    invocation, or neither did.
+    """
+    real = str(step_of(trunk_steps(), REPORT_VALIDATION_STEP).get("run", ""))
+    fixture = str(step_of(clean_steps(), REPORT_VALIDATION_STEP).get("run", ""))
+    continuation = "\\\n"
+    assert (continuation in fixture) == (continuation in real), (
+        "the fixture must continue its validator invocation the way the lane "
+        f"does: fixture {continuation in fixture}, lane {continuation in real}"
     )
