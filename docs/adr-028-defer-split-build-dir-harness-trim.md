@@ -2,7 +2,7 @@
 
 ## Status
 
-Superseded by issue 732.
+Superseded.
 
 ## Date
 
