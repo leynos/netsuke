@@ -214,7 +214,19 @@ lint exemption to permit it.
 
 ## Verification
 
-Two tests carry the guarantee, one per layer.
+The guarantee is carried at three layers: a compile-time assertion, a unit
+test, and an integration test.
+
+The compile-time layer is a `const _: () = { ... }` block in
+`windows_reparse_tests.rs`. Runtime tests in that file execute only on a
+Windows host, so a regression could reach a merge on the strength of a green
+Linux run; a `const` assertion has no such dependency, because rustc evaluates
+it whenever the module is compiled, and `Windows / lint-windows` compiles it on
+every push through `cargo clippy --all-targets`. It pins both branches of
+`open_flags` and both outcomes of `is_prohibited_reparse_point`, so a change to
+either policy fails the Windows build rather than only a test run. (Before
+issue 743 was fixed this layer mattered most, because the test lane did not
+reach the module at all; it remains the layer that fails fastest.)
 
 The integration test asserts that a junction fixture — created with
 `mklink /J`, which needs no privilege — is rejected by all four filters under
@@ -238,24 +250,70 @@ The existing symlink test continues to cover the file-symlink reparse case, and
 the `follow_symlinks` opt-in test covers the retained follow path with a
 relative-target symlink.
 
+The compile-time assertions duplicate four decisions the unit test also makes,
+which is deliberate rather than redundancy: the unit test decides them on a
+Windows host, and the assertions decide them on the way to a Windows build.
+
 ### How far this evidence actually extends
 
-Stated plainly, because the two tests above are Windows-only and it would be
-easy to read them as CI-verified when they are not.
+Stated plainly, because the tests above are Windows-only, and because this
+section previously recorded the opposite conclusion.
 
-The `Windows / build-test-windows` job halts on an unrelated pre-existing
-failure — a network-fixture race tracked as issue 743 — before the nextest run
-reaches `stdlib::path`. On commit `2d8e5305` the run ended at 1078/2901 tests
-(1077 passed, 1 failed, 2 skipped), dying on
+`Windows / build-test-windows` was red repository-wide until `061182b1` landed
+on `main` with the write-side shutdown fix for the network-fixture race tracked
+as issue 743. Before that, and on every head of this branch, the lane halted
+inside `stdlib::network` before the nextest run reached `stdlib::path`: on
+commit `2d8e5305` the run ended at 1078/2901 tests (1077 passed, 1 failed, 2
+skipped), dying on
 `stdlib::network::redirect::error_tests::protocol_failures_are_classified_from_a_live_response`,
-and the strings `windows_reparse` and `junction` appeared **zero** times in
-the whole job log. The figure is cited with its commit because it is the one
-claim here most likely to age. So no case described in this section has
-executed in continuous integration, and a green Windows *test* lane would not
-yet be evidence about their behaviour.
+with the strings `windows_reparse` and `junction` appearing **zero** times in
+the whole job log. So no case described in this section had ever executed in
+continuous integration.
 
-What *is* verified on this change, and by what. Two routes, and the boundary
-they share is stated at the end.
+**That is no longer true, and the tests now run.** This branch was rebased onto
+`061182b1`, and on head `5d2dab68` the lane completes:
+`Summary [ 341.726s] 2906 tests run: 2906 passed (1 slow), 2 skipped`. That
+total is 2898 plus this branch's 8 — four unit tests and four
+`reading_filters_reject_a_junction` cases.
+`the_default_handle_is_the_junction_not_its_target` passes, as do all four
+junction cases, and `windows_reparse` appears four times where it previously
+appeared zero. The figure is cited with its commit because it is the claim here
+most likely to age.
+
+A Windows-only test can pass without testing anything, by skipping its own
+fixture, and this repository's skip convention returns `Ok(())` — so a skipped
+fixture is recorded as a **pass**, not as a skip. Neither the skip total nor
+the pass total can therefore distinguish "asserted against a junction" from
+"quietly did nothing". Two things can.
+
+First, the fixtures have exactly one quiet arm, and it is narrow. Both
+`junction_fixture` variants return `None` only on `ErrorKind::NotFound` from
+`Command::new("cmd")`. Every other outcome is a failure: a `mklink` that exits
+non-zero trips an `ensure!` quoting its stderr, and a spawn that fails for any
+other reason propagates. So on a host where `cmd.exe` can be spawned, the only
+ways to finish are "the junction was created" or "the test failed" — there is
+no third way to pass. `cmd.exe` ships with the `windows-latest` image, which is
+what makes that arm unreachable here.
+
+Second, a junction that was created is checked before it is used.
+`require_real_junction` reads the entry's attributes *without following the
+link* and fails unless `FILE_ATTRIBUTE_REPARSE_POINT` is set, precisely so that
+a plain directory cannot stand in for a reparse point. A fixture that succeeded
+but produced an ordinary directory fails the test rather than silently
+inverting the assertions.
+
+The residual uncertainty is that the first step reasons about the runner image
+rather than measuring it: the log does not record that `cmd` was spawnable,
+because nextest hides the captured output of passing tests and the CI lane
+passes no `--success-output`. (The `success-output = "immediate"` entries in
+`.config/nextest.toml` cover three unrelated test groups.) So the absence of
+the fixtures' skip lines proves nothing on its own, and is not relied on here.
+What the run count does establish is that the cases ran at all: `main` reports
+2898 tests and this head 2906, the difference being exactly the eight new
+cases, all of which appear as `PASS`.
+
+What *is* verified on this change, and by what. Native CI and a local probe,
+and the boundary between them is stated at the end.
 
 **Native Windows CI compiles and lints every Windows-gated line, tests
 included.** `Windows / lint-windows` runs `make lint-clippy`, which expands to
@@ -264,9 +322,9 @@ then Whitaker's dylint suite over the same target and feature selection.
 `--all-targets` pulls in the library's `cfg(test)` module and the integration
 test targets, so `windows_reparse.rs`, `windows_reparse_tests.rs`, and the
 junction fixture in `file_type_tests.rs` are all compiled on Windows itself,
-under `-D warnings`. That job is green on this head. This is the widest
-compile-and-lint evidence in the record, and it comes from the platform's own
-toolchain rather than an approximation of it.
+under `-D warnings`. That job is green on this head. It is the only route that
+compiles the Windows-gated lines with the platform's own toolchain rather than
+an approximation of it.
 
 **A local probe crate covers the development loop.** The main crate cannot be
 cross-compiled on this host — `ring` needs MSVC's `lib.exe` — so Windows-gated
@@ -278,12 +336,14 @@ a defect it should catch, confirming a non-zero exit, and reverting. This is
 what made the intermediate commits CI-worthwhile; it is a convenience, not the
 guarantee.
 
-**What neither route shows is the tests running.** Compilation under
+**What the Windows lane shows, and what it does not.** Compilation under
 `-D warnings` is a strong statement about the code and a weak one about its
-behaviour: the first route compiles the junction tests without executing them,
-and on this head the lane that would execute them stops 1800 tests short.
-
-Until issue 743 is fixed and this branch rebuilt, the runtime behaviour of the
-policy is argued from the handle semantics in "Why the race is closed by
-construction" plus the Linux-side mechanism evidence above, not demonstrated on
-the platform it governs. That is the honest limit of this record.
+behaviour, so the two lanes are described separately above rather than as one
+result: the lint lane compiles the junction tests, and the test lane executes
+them. What no test covers is the adversarial case the race analysis turns on. A
+test cannot force a rename to land between two filesystem calls, because the
+change removed the second call: the policy decision is read from the handle the
+read uses, and this section is written as a construction argument for exactly
+that reason. The runtime behaviour is now demonstrated on the platform it
+governs; the *absence* of a window between the decision and the read remains an
+argument from handle semantics rather than something a test could schedule.

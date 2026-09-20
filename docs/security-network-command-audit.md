@@ -150,9 +150,9 @@ introduces, and concrete remediation tasks that would harden the helpers.
     `StdlibConfig::with_file_max_read_bytes` (default 8 MiB). `linecount`
     counts terminators incrementally instead of materializing the file.
     Per-call `max_bytes` may narrow the ceiling and a named
-    `follow_symlinks=true` opt-in permits link following; budget rejections
-    name the path and the applicable limit, file-type rejections name only the
-    path, and neither discloses file contents.
+    `follow_symlinks=true` opt-in waives that final-component refusal; budget
+    rejections name the path and the applicable limit, and file-type
+    rejections name only the path; neither discloses file contents.
 
 ## Next steps
 

@@ -175,7 +175,7 @@ arguments narrow a call:
 - `max_bytes` lowers the budget for one call (a value above the configured
   budget is clamped to it). Example:
   `{{ 'fixtures/big.bin' | contents(max_bytes=1024) }}`.
-- `follow_symlinks=true` permits the final component to be a symlink. Example:
+- `follow_symlinks=true` waives that final-component refusal. Example:
   `{{ 'link/version.txt' | contents(follow_symlinks=true) }}`.
 
 See
