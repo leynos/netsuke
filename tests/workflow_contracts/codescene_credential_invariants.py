@@ -12,12 +12,21 @@ and each fails differently:
 - The step is conditional on the credential being present. An ungated upload
   runs with an empty token whenever the secret is absent — which is every run
   from a fork, and every run from a repository that has not set it — turning a
-  missing optional secret into a failed trunk run.
+  missing optional secret into a failed trunk run. Naming the variable does not
+  make the condition a gate: `env.CS_ACCESS_TOKEN == ''` and
+  `!env.CS_ACCESS_TOKEN` both name it and both open on that same run, so the
+  condition has to compare it for inequality with the empty string.
 
 All three ask the same question — is this value the credential, read from the
 namespace that makes it one — and all three are answered by enumerating the
-``(namespace, name)`` pairs an expression names rather than by searching its
-text. A substring check gets each one wrong in its own way:
+references an expression names rather than by searching its text. The third adds
+an operator to that question: a condition naming the credential is not yet gated
+on it, so the comparison *beside* the reference is read, and it is read from
+where the reference was found rather than from an operand captured as text. A
+pattern deciding what an operand is before it knows where one ends has to fix a
+spelling, and the two spellings differ: `env['X'] != ''` closes its bracket
+against the quote, `env[ 'X' ] != ''` against a space. A substring check gets
+each of these wrong in its own way:
 
 - `CS_ACCESS_TOKEN` is a substring of `NOT_CS_ACCESS_TOKEN`, so a gate on
   `env.NOT_CS_ACCESS_TOKEN != ''` satisfied it. That name is unset, so the
@@ -43,9 +52,10 @@ Separated from ``codescene_upload_invariants`` so neither module outgrows the
 Run via ``make test-workflow-contracts``.
 """
 
+import re
 import typing as typ
 
-from workflow_variable_scan import expression_references
+from workflow_variable_scan import expression_references, reference_occurrences
 
 #: The credential the upload reads. The step must be gated on it rather than
 #: running with an empty value, and the value must come from a secret.
@@ -63,6 +73,33 @@ CREDENTIAL_SOURCE_NAMESPACE: typ.Final[str] = "secrets"
 #: the step is gated on the variable it exported rather than on any same-named
 #: value from elsewhere.
 CREDENTIAL_GATE_NAMESPACE: typ.Final[str] = "env"
+
+#: Stands in for a string literal that is not the empty one, so a name quoted
+#: as text cannot be read as a reference. It is a bare word rather than a
+#: literal because the only literal this module reads is `''`, which a
+#: replacement must not be confused with.
+NON_EMPTY_LITERAL: typ.Final[str] = "_literal"
+
+#: Matches the comparison *after* a reference: `!= ''`, with nothing but space
+#: allowed between the operator and the literal, and the reference itself left
+#: out of the pattern entirely.
+#:
+#: Neither pattern reads a name. The name, the namespace, and the distinction
+#: between a reference and a quoted run are all decided by
+#: `reference_occurrences`, so what remains here is only the operator and the
+#: literal — the text the reference's own span does not cover. For the pattern
+#: to read a name as well would be a second, weaker reading of the same
+#: grammar, and the two readings would have to agree about quoting: growth in
+#: either would let `'env.X' != ''` satisfy a check whose reference reader had
+#: already called it a literal.
+PRESENT_COMPARISON: typ.Final[re.Pattern[str]] = re.compile(r"\s*!=\s*''")
+
+#: The same comparison with the operand on the right, so that `'' != env.X`
+#: counts. Applied to the text *before* the reference, anchored at its right
+#: end, which is what keeps it from matching a comparison further up the
+#: condition. Both orders are accepted because a gate is not wrong for reading
+#: more naturally one way round than the other.
+PRESENT_COMPARISON_REVERSED: typ.Final[re.Pattern[str]] = re.compile(r"''\s*!=\s*$")
 
 
 def names_credential(
@@ -103,6 +140,88 @@ def names_credential(
         and (namespace is None or reference_namespace == namespace)
         for reference_namespace, name in expression_references(value, bare=bare)
     )
+
+
+def gates_on_credential(value: object) -> bool:
+    """Return whether ``value`` gates on the credential being non-empty.
+
+    Naming the credential is not gating on it. Every condition below names it
+    and none of them waits for it to be present:
+
+    - `env.CS_ACCESS_TOKEN == ''` runs the step *precisely* when the secret is
+      absent, and skips every authenticated upload — the inverse of a gate.
+    - `!env.CS_ACCESS_TOKEN` is true on the same run, since the empty string is
+      falsy.
+    - `env.CS_ACCESS_TOKEN` alone is the variable itself rather than a
+      comparison, and a non-empty token coerces to `true` while an absent one
+      coerces to `false` — so it gates on presence by accident, through
+      coercion, rather than by the comparison the lane means.
+
+    Read as an identifier check alone, each of these satisfies the contract
+    while leaving the trunk run to fail over an optional secret. So the
+    comparison is read: the text immediately after the credential has to be the
+    `!= ''` the lane means, with the credential on the left. The mirror
+    spelling — `'' != env.X` — is read by the same test with the positions
+    swapped, so neither order is favoured.
+
+    The comparison is read from the *reference's position* rather than from an
+    operand captured as text. An operand pattern has to decide where an operand
+    ends before it knows what the operand is, and the two spellings of an index
+    end differently: `env['X'] != ''` has no space inside the brackets and
+    `env[ 'X' ] != ''` does, so a pattern reading a run of non-space characters
+    captured `]` as the operand and reported a real gate as though it gated on
+    nothing. Reading forward from where the reference was found asks the
+    question the contract actually means — is this comparison against the
+    empty string — of either spelling alike.
+
+    Parameters
+    ----------
+    value
+        The candidate condition, which is a ``str`` only when the step declared
+        one. A step's ``if`` is an expression without the delimiters, so it is
+        scanned whole.
+
+    Returns
+    -------
+    bool
+        Whether some comparison in the condition puts the credential on one
+        side of a `!= ''`.
+    """
+    if not isinstance(value, str):
+        return False
+    return any(
+        namespace == CREDENTIAL_GATE_NAMESPACE
+        and name == CREDENTIAL_ENVIRONMENT_KEY
+        and _compares_present(value, start, end)
+        for namespace, name, start, end in reference_occurrences(value, bare=True)
+    )
+
+
+def _compares_present(value: str, start: int, end: int) -> bool:
+    """Whether the comparison around a reference tests it against `''`.
+
+    The reference occupying ``start:end`` is on one side of an inequality with
+    the empty string literal, and nothing but space may come between the
+    reference and the operator — so the reference has to *be* the operand, not
+    a term somewhere earlier in a longer condition. Either order counts, so
+    `env.X != ''` and `'' != env.X` are read alike.
+
+    Reading the operator from the reference's own span is what keeps a
+    neighbouring comparison from being read as this one. A pattern capturing an
+    operand as a run of text has the opposite problem: to admit the spaced
+    index spelling `env[ 'X' ] != ''` it has to let an operand contain a space,
+    and it then reads `env.X == '' && y != ''` as one operand spanning
+    `env.X == ''` — accepting a condition whose credential comparison is the
+    *inverted* one.
+
+    Returns
+    -------
+    bool
+        Whether the reference is compared against the empty string.
+    """
+    if PRESENT_COMPARISON.match(value[end:]) is not None:
+        return True
+    return PRESENT_COMPARISON_REVERSED.search(value[:start]) is not None
 
 
 def credential_offenders(
@@ -156,10 +275,13 @@ def credential_offenders(
             f"the upload step must pass {CREDENTIAL_INPUT} the "
             f"{CREDENTIAL_ENVIRONMENT_KEY} it gated on, got {token!r}"
         )
-    if not names_credential(condition, namespace=CREDENTIAL_GATE_NAMESPACE, bare=True):
+    if not gates_on_credential(condition):
         offenders.append(
             f"the upload step must be conditional on "
             f"{CREDENTIAL_ENVIRONMENT_KEY} being present, got {condition!r}; an "
-            f"ungated step fails the trunk run over a missing optional secret"
+            f"ungated step fails the trunk run over a missing optional secret, "
+            f"and a condition naming the credential without comparing it "
+            f"against non-emptiness opens on exactly the run the gate exists "
+            f"to skip"
         )
     return offenders

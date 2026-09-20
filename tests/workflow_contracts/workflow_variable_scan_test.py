@@ -9,7 +9,11 @@ Run via ``make test-workflow-contracts``.
 """
 
 import pytest
-from workflow_variable_scan import expression_references, unbound_variable_references
+from workflow_variable_scan import (
+    expression_references,
+    reference_occurrences,
+    unbound_variable_references,
+)
 
 #: A variable this repository has never declared, spelled as a workflow would
 #: write it.
@@ -169,3 +173,98 @@ def test_an_identifier_is_read_outside_a_string_literal() -> None:
     assert expression_references("${{ env.CS_ACCESS_TOKEN != 'x' }}") == [
         ("env", "CS_ACCESS_TOKEN")
     ], "a real reference beside a literal must still be read"
+
+
+@pytest.mark.parametrize(
+    ("label", "value"),
+    [
+        ("no inner space", "${{ vars['CODESCENE_CLI_SHA256'] }}"),
+        ("inner spaces", "${{ vars[ 'CODESCENE_CLI_SHA256' ] }}"),
+        ("in a condition", "${{ vars['CODESCENE_CLI_SHA256'] != '' }}"),
+        (
+            "in a function call",
+            "${{ contains(vars['CODESCENE_CLI_SHA256'], 'x') }}",
+        ),
+    ],
+)
+def test_an_index_reference_is_read_as_a_reference(label: str, value: str) -> None:
+    """Read the index syntax as the reference it is.
+
+    GitHub's contexts reference gives an expression two ways to address a value:
+    property de-reference, `vars.FOO`, and index, `vars['FOO']`. They name the
+    same variable, so an undeclared one resolves to the empty string either way
+    — and a scan that read only the dotted form reported this spelling clean
+    while the empty value did its work. That is the failure this module exists
+    to prevent, arriving in the spelling a `.`-only pattern cannot see.
+    """
+    assert unbound_variable_references({"if": value}) == [value], (
+        f"an index reference ({label}) must be reported"
+    )
+
+
+def test_the_index_spelling_of_the_permitted_variable_is_not_reported() -> None:
+    """Permit the declared variable however it is addressed.
+
+    The permission is a statement about which variable is read, not about the
+    punctuation used to reach it, so the bracketed spelling has to be permitted
+    exactly as the dotted one is.
+    """
+    assert not unbound_variable_references({
+        "if": "${{ vars['NETSUKE_SCCACHE_LOCAL_DIR'] == 'true' }}"
+    }), "the one variable this repository defines must be permitted in either syntax"
+
+
+def test_an_index_reference_is_read_with_its_namespace() -> None:
+    """Pair an index reference with the namespace before its bracket.
+
+    The namespace is not inside the brackets, so it has to be read from the
+    identifier to their left — the word the index is applied to. Reading the
+    quoted name alone would lose which context the step addressed, and a caller
+    holding a step to a credential in `env` would then accept the same name
+    reached through `secrets`.
+    """
+    assert expression_references("${{ env['CS_ACCESS_TOKEN'] }}") == [
+        ("env", "CS_ACCESS_TOKEN")
+    ], "an index reference must report the namespace it is addressed through"
+
+
+@pytest.mark.parametrize(
+    ("label", "value"),
+    [
+        # A quoted run that is not an index's delimiters names nothing. The
+        # quotes here are the string literal's, and the name inside is text.
+        ("quoted index spelling", "${{ 'env[\\'CS_ACCESS_TOKEN\\']' != '' }}"),
+        # An index whose bracket holds no quoted name states no name to compare
+        # against a declared one: `vars[name]` is addressed by a value only the
+        # runner can reach.
+        ("non-literal index", "${{ vars[name] }}"),
+        # The empty name, which would otherwise be read as a reference named ''.
+        ("empty index name", "${{ vars[''] }}"),
+    ],
+)
+def test_text_that_addresses_no_name_is_not_a_reference(label: str, value: str) -> None:
+    """Decline the spellings that name nothing, and say which they are.
+
+    Each of these sits close enough to a reference to be read as one by a
+    looser pattern, and each resolves to nothing that could be held against a
+    declared name — so reporting them would be a false accusation, and reading
+    them as references would let a caller believe a gate addressed a value the
+    condition never mentions.
+    """
+    assert not expression_references(value), f"a {label} names nothing"
+
+
+def test_an_occurrence_reports_where_the_reference_was_read() -> None:
+    """Report each reference's span into the value it came from.
+
+    A caller asking about the text beside a reference — is this the comparison
+    the lane means — has to slice the value it passed, so the offsets must be
+    into that value rather than into the body of the region the reference was
+    found in. An expression's delimiters and the text before them would
+    otherwise offset every position by a fixed amount, and a caller reading its
+    own slices would be reading the wrong characters by exactly that much.
+    """
+    value = "${{ env.CS_ACCESS_TOKEN != '' }}"
+    assert reference_occurrences(value) == [
+        ("env", "CS_ACCESS_TOKEN", value.index("env"), value.index("env") + 19)
+    ], "an occurrence must locate its reference within the value scanned"

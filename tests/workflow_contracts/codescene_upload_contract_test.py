@@ -249,10 +249,57 @@ def test_the_detectors_report_an_upload_that_cannot_be_gated_on() -> None:
         # comparison is a non-empty literal against the empty string, so it is
         # always true and gates nothing.
         ("if", f"${{{{ 'env.{CREDENTIAL_ENVIRONMENT_KEY}' != '' }}}}"),
+        # The gate's polarity inverted. The name is the credential's, read from
+        # the namespace the gate can see, so a check that asks only whether the
+        # credential is *named* accepts it — and the condition then opens on
+        # precisely the run the gate exists to skip: the one where the optional
+        # secret is absent and the token is empty.
+        ("if", f"env.{CREDENTIAL_ENVIRONMENT_KEY} == ''"),
+        # The same inversion through truthiness. The empty string is falsy, so
+        # `!` of the credential is true whenever it is missing, which is the
+        # mirror image of what the gate has to mean.
+        ("if", f"!env.{CREDENTIAL_ENVIRONMENT_KEY}"),
+        # The credential as a bare condition: no comparison at all. It happens
+        # to behave as a gate through truthiness coercion, but it states an
+        # intent the contract cannot read, and the lane's own spelling is the
+        # explicit comparison.
+        ("if", f"env.{CREDENTIAL_ENVIRONMENT_KEY}"),
+        # The inversion through the other addressing syntax. GitHub's contexts
+        # reference gives an expression two ways to reach a value, so a gate
+        # rejected in the dotted spelling has to be rejected in the index one
+        # too — a check reading only `env.NAME` would accept this, and the lane
+        # would open on exactly the run the gate exists to skip.
+        ("if", f"env['{CREDENTIAL_ENVIRONMENT_KEY}'] == ''"),
+        # The same, with the spaces an index may carry inside its brackets.
+        ("if", f"env[ '{CREDENTIAL_ENVIRONMENT_KEY}' ] == ''"),
     ]
     for field, replacement in cases:
         assert upload_contract_offenders(mutated(field, replacement)), (
             f"{field}={replacement!r} must be reported on the upload step"
+        )
+
+
+def test_the_detectors_accept_a_gate_written_in_either_syntax() -> None:
+    """Accept a real gate however it addresses the credential.
+
+    The contract is about the comparison the step is gated on, not about the
+    punctuation used to reach the value. GitHub's contexts reference gives an
+    expression two equivalent ways to address one, so a lane written with the
+    index syntax is a lane that gates correctly — and a check that accepted
+    only the dotted form would fail a correct workflow, which is the failure
+    mode that gets a contract deleted rather than fixed.
+    """
+    for condition in [
+        f"${{{{ env.{CREDENTIAL_ENVIRONMENT_KEY} != '' }}}}",
+        f"${{{{ env['{CREDENTIAL_ENVIRONMENT_KEY}'] != '' }}}}",
+        f"${{{{ env[ '{CREDENTIAL_ENVIRONMENT_KEY}' ] != '' }}}}",
+        f"${{{{ '' != env['{CREDENTIAL_ENVIRONMENT_KEY}'] }}}}",
+    ]:
+        steps = clean_steps()
+        step_of(steps, CODESCENE_UPLOAD_STEP)["if"] = condition
+        assert not upload_contract_offenders(steps), (
+            f"a gate written {condition!r} tests the credential against "
+            f"non-emptiness and must be accepted"
         )
 
 
