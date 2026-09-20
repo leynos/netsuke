@@ -3245,15 +3245,18 @@ governs the non-doctest pass only, and deliberately stays small:
   decided by Nextest evaluating each override's filter against real test names,
   so a filter can fail silently: a name no test has, or a form that cannot
   match how a test is named at run time, selects nothing and leaves the test
-  running unserialized while the group still looks healthy. Every filter
-  therefore uses `test(/^NAME($|::)/)`, not `test(=NAME)`. An `#[rstest]` with
-  `#[case]` attributes compiles to one test per case, named `name::case_1_…`,
-  and the `=` form compares the whole name, so it matches none of them; the
-  anchored regex form matches the plain name and every case suffix alike.
-  Nextest's `~` substring form is unanchored and over-matches, so it is not
-  used. `tests/workflow_contracts/nextest_child_cargo_group_test.py` holds
-  these contracts, including that every filtered name resolves to a declared
-  test.
+  running unserialized while the group still looks healthy. Every filter — for
+  a group slot or for a widened timeout alike — therefore uses
+  `test(/^NAME($|::)/)`, not `test(=NAME)`. An `#[rstest]` with `#[case]`
+  attributes compiles to one test per case, named `name::case_1_…`, and the `=`
+  form compares the whole name, so it matches none of them; the anchored regex
+  form matches the plain name and every case suffix alike. Nextest's `~`
+  substring form is unanchored and over-matches, so it is not used.
+  `tests/workflow_contracts/nextest_child_cargo_group_test.py` holds these
+  contracts, including that every filtered name resolves to a declared test.
+  The rule is applied to every filter, not only this group's, because the same
+  edit that unhooks a test from its policy is invisible until someone adds a
+  `#[case]` attribute.
 - **Scoped subprocess timings.** Packaging smoke tests emit their Cargo
   subprocess durations after each Cargo subprocess returns. The
   `harness_compiles_under_a_split_build_dir` parser test reads recorded Cargo

@@ -1,12 +1,12 @@
 """Classify the tests that spawn build-capable child Cargo commands.
 
-`cargo-nextest` serializes the tests in its ``nested-cargo-builds`` group so
-that child Cargo builds never contend for the build budget. Membership is
-decided by Nextest evaluating each override's filter against real test names,
-which makes two failures silent: a filter naming a test that does not exist
-selects nothing, and a filter written in a form that cannot match the test as
-it is named at run time selects nothing. Both parse cleanly and leave the
-group looking healthy while the test runs unserialized.
+`cargo-nextest` applies a policy to a test by evaluating an override's filter
+against real test names: the ``nested-cargo-builds`` group serializes child
+Cargo builds, and other overrides widen a single test's timeout. A filter
+naming a test that does not exist selects nothing, and so does a filter written
+in a form that cannot match the test as it is named at run time. Both parse
+cleanly and leave the policy looking enforced while the test runs under the
+defaults.
 
 This module holds the discovery half — reading the Nextest configuration and
 classifying the Rust integration tests — so the contract tests in
@@ -92,6 +92,29 @@ def group_filter_text(config: dict[str, object]) -> list[str]:
         for override in _default_overrides(config)
         if override.get("test-group") == CHILD_CARGO_GROUP
     ]
+
+
+def all_filter_text(config: dict[str, object]) -> list[str]:
+    """Return every filter in the default profile, grouped or not.
+
+    Serialization is not the only policy a filter carries: a `slow-timeout`
+    override selects its test the same way, so the same naming-form mistake
+    silently withdraws a widened budget instead of withdrawing a group slot.
+    """
+    return [
+        str(override["filter"])
+        for override in _default_overrides(config)
+        if "filter" in override
+    ]
+
+
+def filter_test_names(config: dict[str, object]) -> set[str]:
+    """Return every test name named by any default-profile filter."""
+    return {
+        name
+        for filter_ in all_filter_text(config)
+        for name in GROUP_FILTER.findall(filter_) + LEGACY_EXACT_FILTER.findall(filter_)
+    }
 
 
 def grouped_test_names(config: dict[str, object]) -> set[str]:

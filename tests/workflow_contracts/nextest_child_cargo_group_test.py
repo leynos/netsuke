@@ -1,11 +1,11 @@
 """Keep nested Cargo builds serialized without reducing suite parallelism.
 
-`cargo-nextest` serializes the tests in its ``nested-cargo-builds`` group so
-that child Cargo builds never contend for the build budget. Membership is
-decided by Nextest evaluating each override's filter against real test names,
-so a filter that names a nonexistent test, or names one in a form that cannot
-match how it is named at run time, silently selects nothing and leaves the
-test running unserialized while the group still looks healthy.
+`cargo-nextest` applies a policy to a test by evaluating an override's filter
+against real test names: the ``nested-cargo-builds`` group serializes child
+Cargo builds, and other overrides widen a single test's timeout. A filter that
+names a nonexistent test, or names one in a form that cannot match how it is
+named at run time, silently selects nothing and leaves the test running under
+the defaults while the policy still looks enforced.
 
 The discovery half — reading the configuration and classifying the Rust
 sources — lives in ``nextest_child_cargo_group_invariants``.
@@ -19,9 +19,10 @@ from nextest_child_cargo_group_invariants import (
     GROUP_FILTER,
     LEGACY_EXACT_FILTER,
     NESTED_CARGO_BUILD_TESTS,
+    all_filter_text,
     build_capable_test_names,
     declared_test_names,
-    group_filter_text,
+    filter_test_names,
     grouped_test_names,
     nextest_config,
     parameterised_test_names,
@@ -75,38 +76,40 @@ def test_nested_cargo_group_covers_discovered_build_commands() -> None:
     )
 
 
-def test_group_filters_match_every_declared_test_they_name() -> None:
-    """A grouped name must resolve to a declared test.
+def test_filters_match_every_declared_test_they_name() -> None:
+    """A filtered name must resolve to a declared test.
 
     A filter naming a test that no Rust source declares selects nothing, yet
-    parses cleanly, so the group looks healthy while the test it was meant to
-    serialize runs alongside everything else.
+    parses cleanly, so the policy it carries looks enforced while the test it
+    was meant to cover runs under the defaults. Every filter is checked, not
+    only the group's, because a `slow-timeout` override selects its test the
+    same way and fails the same way.
     """
-    grouped = grouped_test_names(nextest_config())
+    named = filter_test_names(nextest_config())
     declared = declared_test_names()
-    unresolved = sorted(grouped - declared.keys())
+    unresolved = sorted(named - declared.keys())
     assert not unresolved, (
-        f"group filters name tests that no Rust source declares: {unresolved!r}; "
+        f"filters name tests that no Rust source declares: {unresolved!r}; "
         "a filter naming a nonexistent test silently selects nothing"
     )
 
 
-def test_group_filter_form_matches_parameterised_test_instances() -> None:
+def test_filters_match_parameterised_test_instances() -> None:
     """A parameterised test cannot be selected by the exact-name filter form.
 
     `#[rstest]` with `#[case]` attributes compiles to one test per case, named
     `name::case_1_…`. Nextest's `test(=NAME)` matches the whole name only, so it
-    selects none of those instances and the test escapes serialization; the
-    anchored `test(/^NAME($|::)/)` form matches the plain name and every case
-    suffix. The legacy form is rejected so that escape cannot return.
+    selects none of those instances and the test leaves whatever policy named
+    it; the anchored `test(/^NAME($|::)/)` form matches the plain name and every
+    case suffix. The legacy form is rejected so that escape cannot return.
     """
-    filters = " | ".join(group_filter_text(nextest_config()))
+    filters = " | ".join(all_filter_text(nextest_config()))
     parameterised = set().union(
         *(parameterised_test_names(source) for source in rust_test_sources().values())
     )
     named_by_legacy = set(LEGACY_EXACT_FILTER.findall(filters)) & parameterised
     assert not named_by_legacy, (
-        f"parameterised tests cannot be grouped with the exact-name form, which "
+        f"parameterised tests cannot be selected with the exact-name form, which "
         f"matches none of their cases: {sorted(named_by_legacy)!r}"
     )
     named_by_group = set(GROUP_FILTER.findall(filters)) & parameterised
@@ -116,15 +119,22 @@ def test_group_filter_form_matches_parameterised_test_instances() -> None:
     )
 
 
-def test_no_group_filter_uses_the_exact_name_form() -> None:
-    """Every group filter uses the anchored case-matching form."""
-    filters = group_filter_text(nextest_config())
-    assert filters, "the nested Cargo test group must carry at least one filter"
+def test_no_filter_uses_the_exact_name_form() -> None:
+    """Every filter uses the anchored case-matching form.
+
+    Scoped to all filters rather than the group's alone. A filter that names a
+    test which is not parameterised today matches under either form, so the
+    distinction is invisible until someone adds a `#[case]` attribute; applying
+    one form throughout means that later edit cannot silently unhook the test
+    from the policy, whichever override carries it.
+    """
+    filters = all_filter_text(nextest_config())
+    assert filters, "the default profile must carry at least one filter"
     legacy = {
         name for filter_ in filters for name in LEGACY_EXACT_FILTER.findall(filter_)
     }
     assert not legacy, (
-        f"group filters must use 'test(/^NAME($|::)/)', which matches a "
+        f"filters must use 'test(/^NAME($|::)/)', which matches a "
         f"parameterised test's cases as well as its plain name; found the "
         f"exact-name form for: {sorted(legacy)!r}"
     )

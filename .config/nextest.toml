@@ -25,13 +25,24 @@ slow-timeout = { period = "60s", terminate-after = 5 }
 # only build-capable child Cargo tests, retaining normal-suite parallelism.
 max-threads = 1
 
-# Filters use an anchored regex rather than `test(=NAME)`. Nextest's `=` form
-# compares the whole test name, but a parameterised `#[rstest]` is identified by
-# its instances, `name::case_1_…`, `name::case_2_…`, so `test(=NAME)` matches
-# none of them and the test silently escapes this group. `^NAME($|::)` matches
-# the plain name and every case suffix alike. Nextest's `~` substring form is
-# deliberately avoided: it is unanchored, so `~domains` would match every test
-# whose name contains that fragment.
+# Every filter in this file uses an anchored regex rather than `test(=NAME)`,
+# because a filter selects its test the same way whether it grants a group slot
+# or widens a timeout. Nextest's `=` form compares the whole test name, but a
+# parameterised `#[rstest]` is identified by its instances, `name::case_1_…`,
+# `name::case_2_…`, so `test(=NAME)` matches none of them and the test silently
+# keeps whatever the default policy gives it. `^NAME($|::)` matches the plain
+# name and every case suffix alike. Nextest's `~` substring form is deliberately
+# avoided: it is unanchored, so `~domains` would match every test whose name
+# contains that fragment.
+#
+# Applying the anchored form throughout is not about today's tests, most of
+# which are not parameterised and so match either way. It is about the edit
+# that comes later: adding a `#[case]` attribute to a filtered test must not
+# silently unhook it from its policy, whichever override carries that policy.
+# A guard scoped to the group's own filters was tried first and was too narrow:
+# an override that widens a timeout instead of granting a group slot names its
+# test through the same field and had the same defect, and reading only the
+# group's filters could not see it at all.
 [[profile.default.overrides]]
 # These tests spawn isolated Cargo builds. Serializing them prevents four
 # Nextest workers from each starting a four-job Cargo build on four vCPUs.
@@ -48,6 +59,7 @@ success-output = "immediate"
 filter = 'test(/^production_build_module_slice_has_expected_boundary($|::)/) | test(/^stub_env_default_does_not_compile($|::)/) | test(/^stub_env_builders_compile_under_the_same_harness($|::)/) | test(/^split_build_fixture_compiles_through_the_direct_rustc_harness($|::)/) | test(/^text_domains_cannot_be_swapped($|::)/) | test(/^document_and_needle_compile_together($|::)/)'
 test-group = "nested-cargo-builds"
 success-output = "immediate"
+
 
 [profile.ci]
 # The CI-only profile. It exists solely to carry the whole-run budget, and
