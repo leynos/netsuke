@@ -5,23 +5,25 @@
 //! they share — what a recorded pass must look like, and what a run of them
 //! must satisfy. The per-variant contract lives in [`variant`].
 //!
-//! Only one property stages a run of its own, through the same hermetic fixture
-//! the crate root uses; the rest are checkable against synthetic input.
+//! The properties stated over a range of starting states live in [`properties`],
+//! because they are a different kind of claim from the ones here: these are
+//! about what a particular run did, and those are about what every run must do.
 
+#[path = "checks/order.rs"]
+mod order;
+#[path = "checks/properties.rs"]
+mod properties;
 #[path = "checks/variant.rs"]
 mod variant;
 
-use anyhow::{Context, Result, ensure};
-use camino::Utf8Path;
-use proptest::prelude::*;
-use proptest::proptest;
-use proptest::test_runner::{FileFailurePersistence, TestCaseError};
+use anyhow::{Context, Result, bail, ensure};
 use test_support::build_tools::{
-    BENCH_REPEATS, BENCH_SLUGS, BuildScenario, CargoInvocation, DEFAULT_SLUG, MOLD_SLUG,
-    MOLD_THREADS_SLUG, MakeInvocation, Sandbox, TargetState, combined, pinned_toolchain,
-    write_with_old_mtime,
+    BENCH_REPEATS, BENCH_SLUGS, CargoInvocation, DEFAULT_SLUG, MOLD_SLUG, MOLD_THREADS_SLUG,
+    pinned_toolchain,
 };
 use variant::BenchVariant;
+
+pub use order::{measured_slugs, order_records, order_varies_across_samples};
 
 /// A cell holding a one-decimal duration, as `bench-build` formats them.
 /// Timings are inherently unstable, so tests assert on shape, not value.
@@ -45,6 +47,84 @@ pub const VARIANT_FLAGS: [(&str, &[&str]); 3] = [
         &["-Zthreads=8", "-Clink-arg=-fuse-ld=mold"],
     ),
 ];
+
+/// The rows a run off Linux must report, where `mold` does not exist.
+///
+/// The linker row goes entirely: there is no platform linker to compare `mold`
+/// against, so a row for it would either be empty — a second measurement of the
+/// baseline under a caption claiming otherwise — or would fail outright. The
+/// threaded row survives and loses only the linker flag, which is why its
+/// caption names the frontend as what it varies.
+///
+/// The baseline is the same row on both platforms, so it is written once.
+pub const NON_LINUX_VARIANT_FLAGS: [(&str, &[&str]); 2] =
+    [(DEFAULT_SLUG, &[]), (MOLD_THREADS_SLUG, &["-Zthreads=8"])];
+
+/// The captions a run off Linux must print, in table order.
+pub const NON_LINUX_CAPTIONS: [&str; 2] = [
+    "| Default (platform linker) |",
+    "| Platform linker, parallel frontend |",
+];
+
+/// Hold every recorded pass to a variant table: each slug measured the right
+/// number of times, each pass passing exactly that variant's flags.
+///
+/// The table is a parameter rather than [`VARIANT_FLAGS`] read directly, because
+/// the two platforms do not share one. Linux measures three rows and every other
+/// host measures two, so a check that could only consult the Linux table could
+/// not describe a run off Linux at all.
+///
+/// # Errors
+///
+/// Returns an error if a pass runs outside a variant directory, if a slug is not
+/// in the table, if a variant is measured the wrong number of times, or if a
+/// pass's `RUSTFLAGS` are not exactly that variant's.
+pub fn check_variant_flags(
+    invocations: &[CargoInvocation],
+    expected_slugs: &[&str],
+    table: &[(&str, &[&str])],
+) -> Result<()> {
+    let (pairs, rest) = invocations.as_chunks::<2>();
+    ensure!(
+        rest.is_empty(),
+        "passes should come in pairs, got {} spare",
+        rest.len()
+    );
+
+    let toolchain = pinned_toolchain()?;
+    let mut counts: Vec<(&str, usize)> = expected_slugs.iter().map(|slug| (*slug, 0)).collect();
+    for pair in pairs {
+        let (_, slug) = pair[0].target_dir().rsplit_once('/').with_context(|| {
+            format!(
+                "pass should run in a variant directory, got `{}`",
+                pair[0].target_dir()
+            )
+        })?;
+        let Some(entry) = counts.iter_mut().find(|(known, _)| *known == slug) else {
+            bail!("`{slug}` is not a variant this platform measures");
+        };
+        entry.1 += 1;
+
+        let (label, flags) = table
+            .iter()
+            .find(|(known, _)| *known == slug)
+            .with_context(|| format!("`{slug}` is missing from the variant table"))?;
+        // The whole per-variant contract, not just the flags. A row is only
+        // comparable with its neighbours if it also built the same binary under
+        // the same toolchain with both wrappers cleared, and only the flags
+        // differ between the tables, so the descriptor is reused rather than
+        // restated here.
+        BenchVariant::from_pair(label, pair, flags).check(&toolchain)?;
+    }
+
+    for (slug, seen) in counts {
+        ensure!(
+            seen == BENCH_REPEATS,
+            "`{slug}` should be measured {BENCH_REPEATS} time(s), found {seen}"
+        );
+    }
+    Ok(())
+}
 
 /// Check the recorded passes: their membership and pairing, each variant's own
 /// contract, that variants measured separately, and where each pass sits
@@ -138,6 +218,26 @@ pub fn check_benchmark_invocations(
     check_touch_ordering(first, invocations, baseline_mtime)
 }
 
+/// Everything a whole recorded run must satisfy: the passes themselves, and the
+/// order records it printed about them.
+///
+/// One entry point rather than two calls at each site, because the order check
+/// reads the pairing this one establishes — it steps through the passes two at
+/// a time. Splitting them across call sites invites a caller that does one and
+/// not the other, which is exactly how the records went unchecked.
+///
+/// # Errors
+///
+/// Returns an error if any part of the recorded run departs from its contract.
+pub fn check_recorded_run(
+    stdout: &str,
+    invocations: &[CargoInvocation],
+    baseline_mtime: i64,
+) -> Result<()> {
+    check_benchmark_invocations(invocations, baseline_mtime)?;
+    order::check_order_records(stdout, invocations, &BENCH_SLUGS)
+}
+
 /// Only the first pass of the whole run precedes any touch; the benchmark
 /// touches the file between every variant's two passes, so every later pass
 /// must see a newer timestamp. Comparing against a backdated baseline rather
@@ -164,142 +264,4 @@ fn check_touch_ordering(
         );
     }
     Ok(())
-}
-
-/// What a variant's target directory holds before the benchmark starts.
-#[derive(Copy, Clone, Debug)]
-enum PreState {
-    /// Nothing there, as on a first run.
-    Absent,
-    /// The directory exists but is empty.
-    Empty,
-    /// The directory exists and holds an artefact from an earlier run.
-    Populated,
-}
-
-impl PreState {
-    fn stage(self, sandbox: &Sandbox, dir: &Utf8Path) -> Result<()> {
-        match self {
-            Self::Absent => Ok(()),
-            Self::Empty => sandbox.create_dir(dir),
-            Self::Populated => sandbox.write_file(&dir.join("stale-artefact"), "stale"),
-        }
-    }
-}
-
-fn pre_state_strategy() -> impl Strategy<Value = PreState> {
-    prop_oneof![
-        Just(PreState::Absent),
-        Just(PreState::Empty),
-        Just(PreState::Populated),
-    ]
-}
-
-proptest! {
-    // Sixteen draws. The matrix case runs a whole benchmark against a fake
-    // Cargo, which is cheap but not free; the timing-shape properties below
-    // draw short strings and cost almost nothing.
-    #![proptest_config(ProptestConfig {
-        cases: 16,
-        // Name the file explicitly. The default `SourceParallel` policy
-        // looks for a `lib.rs` or `main.rs` beside the source and gives up
-        // in an integration-test crate, so recorded seeds were neither
-        // written nor replayed — the file on disk was inert.
-        failure_persistence: Some(Box::new(FileFailurePersistence::Direct(
-            "tests/build_tools_bench_tests/checks.proptest-regressions",
-        ))),
-        ..ProptestConfig::default()
-    })]
-
-    /// Whatever each variant's target directory held beforehand, every variant
-    /// must record a clean pass then an incremental one.
-    ///
-    /// This is the invariant the `rm -rf` exists to provide: the benchmark's
-    /// first measurement must not inherit a previous run's artefacts, or the
-    /// "clean build" column measures something else entirely. Ranging over the
-    /// prior states shows the wipe erases history rather than merely working on
-    /// an empty sandbox.
-    #[test]
-    fn the_benchmark_wipes_whatever_each_variant_started_from(
-        default_pre in pre_state_strategy(),
-        mold_pre in pre_state_strategy(),
-    ) {
-        let fail = |error: anyhow::Error| TestCaseError::fail(error.to_string());
-        let scenario = BuildScenario::prepare().map_err(fail)?;
-        let sandbox = scenario.sandbox();
-
-        let touch_file = sandbox.home().join("bench-touch");
-        write_with_old_mtime(sandbox, &touch_file).map_err(fail)?;
-        let bench_root = sandbox.home().join("bench");
-        for (slug, pre) in BENCH_SLUGS.into_iter().zip([default_pre, mold_pre, mold_pre]) {
-            pre.stage(sandbox, &bench_root.join(slug)).map_err(fail)?;
-        }
-
-        let invocation = MakeInvocation::new("bench-build")
-            .variable("CARGO", scenario.cargo().executable())
-            .environment("BENCH_ROOT", &bench_root)
-            .environment("BENCH_TOUCH_FILE", &touch_file);
-        let output = sandbox.run_make(&invocation).map_err(fail)?;
-        prop_assert!(
-            output.status.success(),
-            "bench-build should succeed from {:?}/{:?}, got `{}`",
-            default_pre,
-            mold_pre,
-            combined(&output)
-        );
-
-        let invocations = scenario.cargo().invocations().map_err(fail)?;
-        // Every pass after a variant's clean one must find its directory in
-        // place. Asserted as a property of the sequence rather than against a
-        // fixed list, because the benchmark shuffles the variants per sample
-        // and the order is not the contract — the clean/incremental pairing is.
-        // A pair's members share a directory, so their states must differ.
-        let states: Vec<TargetState> = invocations
-            .iter()
-            .map(CargoInvocation::target_state)
-            .collect();
-        for (index, pair) in states.as_chunks::<2>().0.iter().enumerate() {
-            prop_assert_eq!(
-                *pair,
-                [TargetState::Absent, TargetState::Present],
-                "pair {} should be a clean pass then an incremental one, from {:?}/{:?}",
-                index,
-                default_pre,
-                mold_pre
-            );
-        }
-        prop_assert_eq!(
-            states.len(),
-            2 * BENCH_SLUGS.len() * BENCH_REPEATS,
-            "every variant should be measured in every sample, from {:?}/{:?}",
-            default_pre,
-            mold_pre
-        );
-    }
-
-    /// A timing cell is exactly `<digits>.<digits>`. Generating around that
-    /// shape covers the malformed neighbours — bare dots, multiple points, a
-    /// missing side — that a hand-picked example list tends to miss.
-    #[test]
-    fn is_timing_accepts_exactly_one_point_between_digits(
-        cell in r"[0-9.]{0,6}"
-    ) {
-        let expected = {
-            let mut parts = cell.split('.');
-            let whole = parts.next().unwrap_or_default();
-            let fraction = parts.next().unwrap_or_default();
-            parts.next().is_none()
-                && cell.contains('.')
-                && !whole.is_empty()
-                && !fraction.is_empty()
-        };
-        prop_assert_eq!(is_timing(&cell), expected, "cell `{}`", cell);
-    }
-
-    /// Whatever the digits, a well-formed one-decimal timing is accepted.
-    #[test]
-    fn is_timing_accepts_any_one_decimal_duration(whole in 0u32..100_000, fraction in 0u32..10) {
-        let cell = format!("{whole}.{fraction}");
-        prop_assert!(is_timing(&cell), "cell `{}`", cell);
-    }
 }
