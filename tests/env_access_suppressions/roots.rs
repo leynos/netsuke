@@ -94,7 +94,7 @@ pub(super) const STANDALONE_COMPILED_SOURCES: [&str; 1] = ["build.rs"];
 /// between "holds nothing" and "could not be read" is worth keeping.
 pub(super) fn collect_rust_sources(
     root: &Dir,
-    directory: &str,
+    directory: &Utf8Path,
     sources: &mut Vec<(String, String)>,
 ) -> Result<()> {
     let entries = match root.read_dir(directory) {
@@ -115,7 +115,7 @@ pub(super) fn collect_rust_sources(
             .file_type()
             .with_context(|| format!("read the file type of `{path}`"))?;
         if file_type.is_dir() {
-            collect_rust_sources(root, &path, sources)?;
+            collect_rust_sources(root, Utf8Path::new(&path), sources)?;
         } else if is_readable_source(&name) {
             sources.extend(read_source(root, &path)?.map(|text| (path, text)));
         }
@@ -280,7 +280,7 @@ pub(super) const MACHINE_LOCAL_DIRECTORIES: [&str; 15] = [
 /// named rather than passed over.
 pub(super) fn collect_all_sources(
     root: &Dir,
-    directory: &str,
+    directory: &Utf8Path,
     found: &mut Vec<String>,
 ) -> Result<()> {
     for entry_result in root
@@ -302,7 +302,7 @@ pub(super) fn collect_all_sources(
 /// its entries here.
 fn collect_source_entry(
     root: &Dir,
-    directory: &str,
+    directory: &Utf8Path,
     found: &mut Vec<String>,
     entry: &cap_std::fs_utf8::DirEntry,
 ) -> Result<()> {
@@ -317,7 +317,7 @@ fn collect_source_entry(
         .file_type()
         .with_context(|| format!("read the file type of `{path}`"))?;
     if file_type.is_dir() {
-        return collect_all_sources(root, &path, found);
+        return collect_all_sources(root, Utf8Path::new(&path), found);
     }
     if is_rust_source(&name) {
         found.push(path);
@@ -326,8 +326,8 @@ fn collect_source_entry(
 }
 
 /// Join a directory and an entry name, keeping the walk root's paths bare.
-pub(super) fn join_path(directory: &str, name: &str) -> String {
-    match directory {
+pub(super) fn join_path(directory: &Utf8Path, name: &str) -> String {
+    match directory.as_str() {
         "." => name.to_owned(),
         _ => format!("{directory}/{name}"),
     }
@@ -353,7 +353,7 @@ pub(super) fn compiled_sources() -> Result<Vec<(String, String)>> {
         .context("open the workspace root")?;
     let mut sources = Vec::new();
     for root_path in COMPILED_SOURCE_ROOTS {
-        collect_rust_sources(&crate_root, root_path, &mut sources)
+        collect_rust_sources(&crate_root, Utf8Path::new(root_path), &mut sources)
             .with_context(|| format!("walk the `{root_path}` source root"))?;
     }
     for path in STANDALONE_COMPILED_SOURCES {

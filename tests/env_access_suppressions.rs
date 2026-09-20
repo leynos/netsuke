@@ -26,6 +26,7 @@
 //! developers' guide for the sanctioned forms and the scoped exemption.
 
 use anyhow::{Context, Result, ensure};
+use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 
 #[path = "env_access_suppressions/mask.rs"]
@@ -126,7 +127,7 @@ fn every_rust_source_in_the_workspace_is_scanned() -> Result<()> {
     let crate_root = Dir::open_ambient_dir(env!("CARGO_MANIFEST_DIR"), ambient_authority())
         .context("open the workspace root")?;
     let mut present = Vec::new();
-    collect_all_sources(&crate_root, ".", &mut present)?;
+    collect_all_sources(&crate_root, Utf8Path::new("."), &mut present)?;
 
     // A walk that silently found nothing would pass while inspecting nothing.
     ensure!(
@@ -187,7 +188,7 @@ fn the_scan_reads_every_governed_source() -> Result<()> {
     let crate_root = Dir::open_ambient_dir(env!("CARGO_MANIFEST_DIR"), ambient_authority())
         .context("open the workspace root")?;
     let mut present = Vec::new();
-    collect_all_sources(&crate_root, ".", &mut present)?;
+    collect_all_sources(&crate_root, Utf8Path::new("."), &mut present)?;
 
     let read: std::collections::BTreeMap<String, String> =
         compiled_sources()?.into_iter().collect();

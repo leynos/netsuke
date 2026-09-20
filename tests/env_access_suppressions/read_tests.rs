@@ -59,7 +59,7 @@ fn a_source_without_an_rs_extension_is_still_read() -> Result<()> {
         .context("write the dot-file")?;
 
     let mut read = Vec::new();
-    collect_rust_sources(&root, "src", &mut read)?;
+    collect_rust_sources(&root, Utf8Path::new("src"), &mut read)?;
     let mut names: Vec<&str> = read.iter().map(|(path, _)| path.as_str()).collect();
     names.sort_unstable();
 

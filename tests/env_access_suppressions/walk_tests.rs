@@ -52,7 +52,7 @@ fn a_source_under_a_dot_directory_is_walked_and_reported() -> Result<()> {
         .context("write the generated source")?;
 
     let mut found = Vec::new();
-    collect_all_sources(&root, ".", &mut found)?;
+    collect_all_sources(&root, Utf8Path::new("."), &mut found)?;
     found.sort();
 
     ensure!(
@@ -99,7 +99,7 @@ fn a_machine_local_name_is_skipped_at_any_depth() -> Result<()> {
         .context("write the kept source")?;
 
     let mut found = Vec::new();
-    collect_all_sources(&root, ".", &mut found)?;
+    collect_all_sources(&root, Utf8Path::new("."), &mut found)?;
     found.sort();
 
     ensure!(
@@ -257,12 +257,12 @@ fn a_cache_inside_a_scanned_root_is_skipped_by_the_scan() -> Result<()> {
         .context("write the kept source")?;
 
     let mut read = Vec::new();
-    collect_rust_sources(&root, "tests", &mut read)?;
+    collect_rust_sources(&root, Utf8Path::new("tests"), &mut read)?;
     let mut scanned: Vec<&str> = read.iter().map(|(path, _)| path.as_str()).collect();
     scanned.sort_unstable();
 
     let mut walked = Vec::new();
-    collect_all_sources(&root, ".", &mut walked)?;
+    collect_all_sources(&root, Utf8Path::new("."), &mut walked)?;
     walked.sort();
 
     // `collect_rust_sources` is the function the scan actually reads through, so
