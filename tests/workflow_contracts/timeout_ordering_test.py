@@ -17,8 +17,9 @@ because a commented-out key is what a presence assertion catches and an
 ordering assertion does not.
 
 The per-test allowance is ``period`` multiplied by ``terminate-after``,
-not ``period`` alone. Reading the period as the budget would understate
-the largest allowance here fivefold on Linux and sevenfold on Windows.
+not ``period`` alone. Every platform uses five 60-second periods here,
+so the largest allowance is 300 s; reading the period as the budget would
+understate it fivefold.
 
 See "Test timeouts: the tiers this repository sets" in
 ``docs/developers-guide.md``, and the canonical wording in

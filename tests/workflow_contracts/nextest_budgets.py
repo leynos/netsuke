@@ -234,9 +234,9 @@ def largest_test_allowance(config_text: str) -> fractions.Fraction:
 
     nextest warns once per ``period`` and terminates after
     ``terminate-after`` of them, so the budget is their product. This
-    repository sets five on Linux and seven on Windows against a 60 s
-    period, so reading the period alone would understate the largest
-    allowance sevenfold.
+    repository sets five 60 s periods on every platform, so the largest
+    per-test allowance is 300 s. Reading the period alone would understate
+    that allowance fivefold.
 
     Parameters
     ----------
