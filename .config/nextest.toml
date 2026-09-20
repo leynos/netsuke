@@ -68,14 +68,12 @@ success-output = "immediate"
 # pass the coverage action runs after it is not a nextest run, so nothing in
 # this file bounds it and its own cargo watchdog does.
 #
-# It also has to sit between its neighbours. It is above the 300s largest
-# per-test allowance below it, and the 1,800s cargo watchdog above it covers
-# it with 50s to spare: 780s + 70s of termination + a 600s cold build + 300s
-# of report phase is 1,750s. The report phase is the term that moved this
-# value: `cargo llvm-cov` merges its profile data and writes `lcov.info` after
-# nextest's clock stops, measured at 274s on run 34914144521, so the earlier
-# 900s budget no longer fitted and 780s is the largest whole number of minutes
-# that does.
+# The 13-minute global timeout is above the 300s largest per-test allowance.
+# The 1,800s cargo watchdog covers the full nextest termination, cold-build,
+# and report window with 50s to spare: 780s + 70s + 600s + 300s is 1,750s.
+# The report phase is the term that moved this value: `cargo llvm-cov` merges
+# profile data and writes `lcov.info` after nextest's clock stops, measured at
+# 274s on run 34914144521, so the earlier 900s budget no longer fitted.
 #
 # Deliberately not in `[profile.default]`, which every local `make test` uses.
 # A developer's host is shared and contended in a way CI's is not, so a

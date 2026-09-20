@@ -7005,12 +7005,12 @@ fed back upstream.
 
 All four tiers are set here.
 
-| Tier                     | What it bounds                     | Where it is set                               | Current value                                              |
-| ------------------------ | ---------------------------------- | --------------------------------------------- | ---------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s (60 s x 5); 420 s (60 s x 7) for one test on Windows |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 780 s (13 m) in CI; unset locally                          |
-| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,800 s (30 m), armed twice per coverage step              |
-| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 90 m                                                       |
+| Tier                     | What it bounds                     | Where it is set                               | Current value                                 |
+| ------------------------ | ---------------------------------- | --------------------------------------------- | --------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s (60 s x 5)                              |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 780 s (13 m) in CI; unset locally             |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,800 s (30 m), armed twice per coverage step |
+| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 90 m                                          |
 
 *Table: the timers that can end a run, innermost first. The watchdog is one
 tier but not one window: the coverage step here passes `doctests: 'true'`, so
@@ -7024,10 +7024,9 @@ and the watchdog's 1,800 s keep the values they already had.*
 
 `terminate-after` counts warning periods, so the budget a test actually gets is
 `period` multiplied by it. Every period here is 60 s, so reading the period
-alone would report a 60 s allowance where the real figure is 300 s on Linux and
-420 s for the Windows override. Any comparison against the tiers above rests on
-that reading, and the contract asserts it explicitly rather than leaving it
-implied.
+alone would report a 60 s allowance where the real figure is 300 s. Any
+comparison against the tiers above rests on that reading, and the contract
+asserts it explicitly rather than leaving it implied.
 
 ### The whole-run budget, and how 13 minutes was arrived at
 
@@ -7102,7 +7101,7 @@ has to sit between its neighbours, and does:
 
 ```text
 global-timeout > largest per-test allowance
-780 s          > 420 s
+780 s          > 300 s
 
 watchdog      >= global-timeout + termination + cold build + report
 1,800 s       >= 780 s + 70 s + 600 s + 300 s = 1,750 s
@@ -7283,9 +7282,9 @@ explicitly, so no value here changes.
 
 The profile's own `slow-timeout` is asserted separately from its overrides. An
 override bounds the tests its filter matches and the profile's own bounds the
-rest, so deleting the base allowance while leaving the Windows override behind
-would still report a 420 s largest budget while every test the override does
-not match ran with no bound at all.
+rest, so deleting the base allowance while leaving an override behind would
+still report a bounded subset while every test the override does not match ran
+with no bound at all.
 
 The lane reading takes its documents as a parameter, defaulting to the
 repository's own workflows. Reading the filesystem happens at one named

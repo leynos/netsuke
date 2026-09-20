@@ -249,7 +249,7 @@ def test_the_largest_per_test_allowance_counts_the_multiplier(
     This is the reading that decides every comparison above, and it is
     the one easy to get wrong: the periods here are all 60 s, so a
     contract reading the period alone would report a 60 s largest
-    allowance where the real figure is 420 s.
+    allowance where the real figure is 300 s.
     """
     largest = largest_test_allowance(nextest_config)
     periods = [

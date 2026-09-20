@@ -9,7 +9,7 @@ The reading that matters most is the per-test one. nextest warns once
 per ``period`` and terminates after ``terminate-after`` of them, so the
 budget is their product. Every period in this repository is 60 s, so a
 reader taking the period alone would report a 60 s allowance where the
-real figure is 300 s, or 420 s for the Windows override. A
+real figure is 300 s. A
 ``slow-timeout`` naming no ``terminate-after`` terminates nothing at
 all, so that form is refused rather than read as a single period.
 
