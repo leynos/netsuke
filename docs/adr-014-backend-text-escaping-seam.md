@@ -2,7 +2,10 @@
 
 ## Status
 
-Superseded by [ADR-034](adr-034-preserve-script-in-out-as-shell-variables.md).
+Superseded.
+
+[ADR-034](adr-034-preserve-script-in-out-as-shell-variables.md) supersedes this
+record's script `$in` and `$out` decision.
 
 ## Date
 
