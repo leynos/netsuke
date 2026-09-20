@@ -30,17 +30,23 @@ STAGED_DIRECTORY: typ.Final[str] = "staging"
 #: The validator's invocation up to and including the flag, so a case supplies
 #: only what the flag is handed. A case with nothing to hand it ends the line
 #: there, which is the shape a missing argument takes.
+#:
+#: The invocation names no interpreter: the contract reads which script is run
+#: and which directory it is handed, and says nothing about the version `uv`
+#: resolves. A literal here would be a number no test owns — the lane itself
+#: reads the baseline from the Makefile — and would sit in the fixture reading
+#: as though something held it to the repository's pin.
 VALIDATOR_INVOCATION: typ.Final[str] = (
-    f"uv run --no-project --python 3.14 {REPORT_VALIDATOR_SCRIPT} --artifact-dir"
+    f"uv run --no-project {REPORT_VALIDATOR_SCRIPT} --artifact-dir"
 )
 
 
 def validator_reads(directory: str) -> str:
     """Return the command that reads ``directory`` through the validator.
 
-    The interpreter and the module path are the same in every case, so they are
-    stated once. What a case varies is the argument, and a case varying nothing
-    else reads as the one command it is.
+    The module path is the same in every case, so it is stated once. What a
+    case varies is the argument, and a case varying nothing else reads as the
+    one command it is.
 
     Parameters
     ----------

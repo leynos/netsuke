@@ -27,7 +27,7 @@ use super::super::{
 use super::{Workspace, options, path_override};
 
 /// One counter sample, flattened to the bounded labels that produced it.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct Sample {
     /// The `cwd_mode` label.
     cwd_mode: String,
@@ -134,12 +134,7 @@ impl Samples {
         self.counters
             .iter()
             .filter(|(name, _sample)| *name == metric)
-            .map(|(_name, sample)| Sample {
-                cwd_mode: sample.cwd_mode.clone(),
-                outcome: sample.outcome.clone(),
-                category: sample.category.clone(),
-                count: sample.count,
-            })
+            .map(|(_name, sample)| sample.clone())
             .collect()
     }
 }

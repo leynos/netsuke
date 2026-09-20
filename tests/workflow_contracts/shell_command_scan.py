@@ -42,6 +42,18 @@ ASSIGNMENT: typ.Final[re.Pattern[str]] = re.compile(
     r"(?:^|\s)(?P<name>[A-Za-z_]\w*)=(?P<value>\"[^\"]*\"|'[^']*'|\S*)"
 )
 
+#: What may stand between the start of a segment and the command it runs:
+#: leading whitespace, `VAR=value` assignments, and the path the executable was
+#: named through. A command is read from here rather than searched for in the
+#: segment, because a *mention* of a command is not an invocation of it:
+#: `echo "cp a b"` names `cp` and runs it not at all, and a rule reading that
+#: mention would certify work the script never did.
+COMMAND_PREFIX: typ.Final[str] = (
+    r"\s*"
+    r"(?:[A-Za-z_]\w*=(?:\"[^\"]*\"|'[^']*'|\S*)\s+)*"
+    r"(?:\S*/)?"
+)
+
 
 def command_segments(script: str) -> list[str]:
     """Return the script's commands, one segment per simple shell command.
@@ -82,6 +94,19 @@ def command_operands(segment: str, command: str) -> list[str]:
     contract that cannot tell them apart certifies a file taken *out* of a
     directory as one put into it.
 
+    The name is read where a command *runs*, not wherever it appears. A
+    segment that prints, quotes, or comments the words of a command mentions it
+    and runs it not at all, and a rule reading the mention would certify work
+    the script never did — `echo "cp src dest"` would satisfy a rule asking
+    that the file be copied. So the name is matched after the segment's leading
+    whitespace, any `VAR=value` assignments before it, and the path it was
+    named through, and not after another word: `echo cp`, and `/bin/echo cp`,
+    are a different command being handed this one as an argument. A form this
+    does not recognise — `sudo cp`, `xargs cp`, `else cp` — is reported rather
+    than accepted, which is the safe direction: the spelling these rules are
+    written for is the ordinary one, and the author moves the command into the
+    position a command is read from.
+
     Flags are dropped, so `mkdir --parents -- x` yields `x` rather than the
     options that precede it. A word that names a directory and begins with a
     hyphen is not recognised, which costs nothing where these are used: a
@@ -100,8 +125,8 @@ def command_operands(segment: str, command: str) -> list[str]:
         The operand words in the order written, empty when the segment does not
         run ``command``.
     """
-    match = re.search(
-        rf"\b{re.escape(command)}\b(?P<operands>[^\n]*)",
+    match = re.match(
+        COMMAND_PREFIX + rf"{re.escape(command)}\b(?P<operands>[^\n]*)",
         segment,
     )
     if match is None:
@@ -121,6 +146,11 @@ def assigned_from(segment: str, command: str) -> set[str]:
     would then pass a creation check on the strength of the neighbour
     assignment that made something else.
 
+    The command has to be *run* for its output to be captured, so it is read
+    inside a command substitution. A value that merely spells the command —
+    `staged="mktemp -d"` — assigns a string and creates nothing, and reading
+    that spelling as a capture would record a directory the script never made.
+
     Parameters
     ----------
     segment
@@ -131,13 +161,14 @@ def assigned_from(segment: str, command: str) -> set[str]:
     Returns
     -------
     set[str]
-        The assigned names whose value contains the command, which is the name
-        its output is captured in.
+        The assigned names whose value captures the command's output, which is
+        the name its output is captured in.
     """
+    inside_substitution = re.compile(rf"\$\([^)]*\b{re.escape(command)}\b")
     return {
         match.group("name")
         for match in ASSIGNMENT.finditer(segment)
-        if re.search(rf"\b{re.escape(command)}\b", match.group("value"))
+        if inside_substitution.search(match.group("value"))
     }
 
 
@@ -149,8 +180,13 @@ def names_a_component(operand: str, name: str, *, prefix: bool = False) -> bool:
     around a component — `"${staged}/x"`, `$staged/x`, or the unquoted form —
     is stripped first, so the three spellings of one directory compare equal.
 
-    With ``prefix`` set, a component the name *starts* is matched too, which is
-    how a directory is named as the head of a longer path.
+    With ``prefix`` set, the name has to be the operand's *leading* component,
+    which is how a path names something inside a directory: `"${staged}/x"` is
+    under the named directory and `staged` alone *is* it. Equality is what
+    makes the difference, not a string prefix — `"${staged}-old/x"` is a
+    sibling directory whose name merely begins with this one's, and the file
+    copied there lands nowhere the caller is about to read. A name in a later
+    component is a different location entirely.
 
     Parameters
     ----------
@@ -159,29 +195,17 @@ def names_a_component(operand: str, name: str, *, prefix: bool = False) -> bool:
     name
         The path component to look for.
     prefix
-        Whether a component merely beginning with ``name`` counts.
+        Whether the name must be the operand's leading component.
 
     Returns
     -------
     bool
-        Whether one of the operand's components is ``name``.
+        Whether one of the operand's components is ``name``, or — when
+        ``prefix`` is set — whether the first one is.
     """
-    return any(
-        _matches_component(component, name, prefix=prefix)
-        for component in operand.strip("\"'").split("/")
-    )
-
-
-def _matches_component(component: str, name: str, *, prefix: bool) -> bool:
-    """Whether one path component names ``name``.
-
-    Returns
-    -------
-    bool
-        Whether ``component`` equals ``name``, or begins with it when
-        ``prefix`` is set.
-    """
-    cleaned = component.strip("\"'${}")
+    components = [
+        component.strip("\"'${}") for component in operand.strip("\"'").split("/")
+    ]
     if prefix:
-        return cleaned.startswith(name)
-    return cleaned == name
+        return bool(components) and components[0] == name
+    return name in components
