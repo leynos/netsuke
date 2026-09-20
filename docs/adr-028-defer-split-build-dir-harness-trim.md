@@ -2,11 +2,21 @@
 
 ## Status
 
-Accepted.
+Superseded.
 
 ## Date
 
 2026-09-19
+
+## Supersession
+
+On 2026-09-20, [ADR-033: Record split-build Cargo messages][adr-033] superseded
+this decision. Issue 732 replaced the full workspace build in the parser
+regression with recorded split-layout Cargo JSON. A separate small fixture
+workspace still builds under private split roots, parses the real Cargo
+messages, and compiles through the direct-`rustc` response-file boundary. The
+parser test no longer joins `nested-cargo-builds` or needs the Windows 420s
+timeout.
 
 ## Context and problem statement
 
@@ -254,4 +264,5 @@ is not worth the fidelity risk and the work closes without it.
 
 [adr-011]: adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md
 [adr-025]: adr-025-main-owned-coverage-publication.md
+[adr-033]: adr-033-record-split-build-cargo-messages.md
 [dev-guide]: developers-guide.md#what-a-fixture-crate-replacement-would-have-to-preserve

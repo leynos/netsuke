@@ -2871,10 +2871,15 @@ which would have retired real tests, so both coverage callers pass
 `all-features` and `all-targets`. Without the first, the `legacy-digests` tests
 in `src/stdlib/path/hash_utils.rs` and `tests/std_filter_tests/hash_filters.rs`
 stop running; without the second, the two `benches/` targets stop compiling.
-`-D warnings` is not set as `env.RUSTFLAGS`, which
-`tests/polonius_toolchain_contract.rs` forbids; `setup-rust` exports it from its
-`rustflags` input and `cargo llvm-cov` appends its instrumentation to whatever
-it finds, so warnings stay denied.
+The ambient-target direct-`rustc` UI harness builds use the same
+`--all-features` selection, through `tests/support/cargo_features.rs`, so Cargo
+can reuse the gate's `netsuke-build` artefacts. `test_support` forwards
+`legacy-digests` to `netsuke-build` for that purpose. Isolated fixture and
+packaging builds retain default features because they validate the shipped
+package rather than the gate's feature set. `-D warnings` is not set as
+`env.RUSTFLAGS`, which `tests/polonius_toolchain_contract.rs` forbids;
+`setup-rust` exports it from its `rustflags` input and `cargo llvm-cov` appends
+its instrumentation to whatever it finds, so warnings stay denied.
 
 Doctests are the one thing the instrumented run cannot do at all, so
 `build-test` runs `make doctest` immediately afterwards, on every event.
@@ -2911,9 +2916,10 @@ costs a median of 240.8s on `windows-latest` against about 25s on the cached
 Linux runner. Both platforms still assert the packaged file list. See
 [Windows budget for the isolated-Cargo-build tests][windows-test-budget].
 
-[windows-test-budget]: #windows-budget-for-the-isolated-cargo-build-tests
-[fixture-constraints]: #what-a-fixture-crate-replacement-would-have-to-preserve
+[windows-test-budget]: #historical-windows-budget-for-the-isolated-cargo-build-tests
+[fixture-constraints]: #historical-fixture-crate-replacement-constraints
 [adr-028-trim]: adr-028-defer-split-build-dir-harness-trim.md
+[adr-033-split-build]: adr-033-record-split-build-cargo-messages.md
 
 `tests/workflow_contracts/test_execution_coverage_test.py` holds all of this:
 the coverage inputs, the denied warnings, the doctest pass and its position,
@@ -2950,23 +2956,21 @@ governs the non-doctest pass only, and deliberately stays small:
 - **A conservative slow timeout** (warn after 60s, terminate after five
   warning periods) so a hung test surfaces without failing the legitimately
   slow documentation end-to-end suites, which shell out to real Ninja.
-- **Scoped subprocess timings.** The split-build locale harness and packaging
-  smoke test emit their Cargo subprocess durations after each Cargo subprocess
-  returns. They intentionally use private Cargo directories to preserve
-  isolation and publication-boundary coverage; their diagnostics distinguish
-  that work from future regressions without raising the slow-test threshold.
-- **One measured platform override.** `harness_compiles_under_a_split_build_dir`
-  gets seven warning periods (420s) instead of five on Windows alone. See
-  [Windows budget for the isolated-Cargo-build tests][windows-test-budget] for
-  the measurement behind that number. Any future override carries the same
-  obligation: a written rationale citing runs, not an estimate.
+- **Scoped subprocess timings.** Packaging smoke tests emit their Cargo
+  subprocess durations after each Cargo subprocess returns. The
+  `harness_compiles_under_a_split_build_dir` parser test reads recorded Cargo
+  JSON, so it has no child Cargo build, is not in `nested-cargo-builds`, and
+  uses the default slow timeout on every platform. Its companion,
+  `split_build_fixture_compiles_through_the_direct_rustc_harness`, runs a small
+  isolated split-build Cargo and direct-`rustc` integration test and is grouped
+  with the other child-Cargo tests.
 
-#### Windows budget for the isolated-Cargo-build tests
+#### Historical Windows budget for the isolated-Cargo-build tests
 
-Two tests spawn a complete isolated Cargo build, and on the four-vCPU
-GitHub-hosted `windows-latest` gate that build is 98.8% of each test's wall
-time. Measured across the 58 Windows gate runs between run 33890685806, the
-merge of pull request 664, and run 34064668331:
+Before issue 732, two tests spawned a complete isolated Cargo build, and on the
+four-vCPU GitHub-hosted `windows-latest` gate that build is 98.8% of each
+test's wall time. Measured across the 58 Windows gate runs between run
+33890685806, the merge of pull request 664, and run 34064668331:
 
 Table: measured Windows durations for the isolated-Cargo-build tests.
 
@@ -2995,9 +2999,17 @@ missed. Three facts shaped the response:
   `cargo package --list`, the assertion the test is named for, still runs
   everywhere. That returns it to the default budget.
 
-`harness_compiles_under_a_split_build_dir` cannot be relocated: the response
-file it exercises exists for a Windows command-line limit. It keeps a 420s
-budget, which clears the measured 312.9s worst case by 34%.
+Issue 732 replaced `harness_compiles_under_a_split_build_dir`'s full live build
+with recorded Cargo JSON. That parser test continues to prove that dependency
+directories span the split build directory and that `test_support` remains
+uplifted under the target directory, without a child Cargo build or a
+platform-specific timeout budget. The companion
+`split_build_fixture_compiles_through_the_direct_rustc_harness` supplies the
+end-to-end boundary with a small temporary two-crate workspace: it runs Cargo
+under private split roots, collects the reported artefacts, and compiles a
+fixture through the direct-`rustc` response-file harness.
+[ADR-033][adr-033-split-build] records the replacement decision and these two
+complementary coverage boundaries.
 
 Removing the second Cargo build sped this one up as well. The two used to run
 concurrently, each with four compile jobs on a four-vCPU runner, so each
@@ -3013,21 +3025,25 @@ Table: Windows durations before and after the verification build moved.
 | nextest run phase                                | 365s            | 185.5s          | 258.0s          | 253.8s          |
 | `Test` step                                      | 471s            | 260s            | 368s            | 358s            |
 
-The 420s budget is therefore sized against the older, contended distribution
-and is deliberately conservative while the new shape has three samples. It is a
-candidate for tightening, or for deletion, once the [ADR-028][adr-028-trim]
-revisit gate is met.
+The historical 420s budget was therefore sized against the older, contended
+distribution and was deliberately conservative while the previous shape had
+three samples. Issue 732 removed that platform-specific budget when it replaced
+the live build; the current test uses the five-period, 300s default described
+above. [ADR-028][adr-028-trim] remains the historical record of that former
+budget and its revisit gate.
 
 Those three samples predate the serialization group described below, which
 lands the harness test in a group of one-at-a-time build-capable tests. Under
 that group the test is a serial link rather than a slow finisher, and the trim
 is worth more than the 85s this table supports.
 
-#### Deferring the split-build-dir harness trim
+#### Superseded split-build-dir harness decision
 
-The repository has decided **not** to trim
-`harness_compiles_under_a_split_build_dir` yet. The test keeps its real
-`test_support` subject and its 420s budget.
+The decision below describes the pre-issue-732 live-build harness. Issue 732
+superseded its full workspace build by driving the Cargo-message parser over
+recorded split-layout JSON. The parser preserves the message-reading regression
+without that expensive private build; the companion fixture test keeps a small
+end-to-end split-layout Cargo and direct-`rustc` check.
 
 A later change to `.config/nextest.toml` — `nested-cargo-builds`, a
 `[test-groups]` entry with `max-threads = 1` — put this test in a group with
@@ -3050,13 +3066,13 @@ contrast, is one-directional: the coverage a fixture crate would drop is
 exactly the coverage that fails only on Windows, where it is least likely to be
 noticed.
 
-[ADR-028][adr-028-trim] holds the decision itself: the measurements, the rule
-that a trim can never return more than the test's own duration, the
+[ADR-028][adr-028-trim] holds the historical decision: the measurements, the
+rule that a trim can never return more than the test's own duration, the
 alternatives already measured and rejected (`cargo check` for `cargo build`,
 warming the compiler cache, and sharing a target directory), and the ten-run
-revisit gate. Read it before reopening the question or changing the Windows
-shape of this lane. Any replacement built after that gate inherits the
-constraints in
+revisit gate. [ADR-033][adr-033-split-build] records the replacement decision:
+the live build was removed in favour of recorded Cargo JSON, while the parser
+boundary remains covered. Any future replacement inherits the constraints in
 [what a fixture-crate replacement would have to preserve][fixture-constraints]
 below.
 
@@ -4810,13 +4826,15 @@ when a fixture must compile against `test_support`; a harness for the
 production crate, or one needing no crate, must use its own narrow support code.
 
 `TestSupportRlib::build` builds `test_support` with
-`cargo build --message-format=json`; `build_with` does the same with narrowly
-scoped Cargo environment overrides for the split-build regression. Both parse
-Cargo's `compiler-artifact` messages, locating the uplifted metadata artefact
-and every dependency directory from the paths Cargo actually reports. This
-avoids assuming dependencies live beside the final `test_support` rlib when
-Cargo's `build.build-dir` setting separates intermediate artefacts, or when the
-Cargo shipped with the 1.99 nightlies gives each crate its own directory.
+`cargo build --message-format=json --all-features`. The shared feature
+arguments in `tests/support/cargo_features.rs` match `make test-nextest`;
+`test_support` forwards `legacy-digests` to `netsuke-build`, allowing Cargo to
+reuse the gate's matching artefacts. It parses Cargo's `compiler-artifact`
+messages, locating the uplifted metadata artefact and every dependency
+directory from the paths Cargo actually reports. This avoids assuming
+dependencies live beside the final `test_support` rlib when Cargo's
+`build.build-dir` setting separates intermediate artefacts, or when the Cargo
+shipped with the 1.99 nightlies gives each crate its own directory.
 
 `TestSupportRlib::compile` then invokes the workspace `rustc` directly with the
 discovered artefact as `--extern test_support=…`, every discovered
@@ -4844,9 +4862,8 @@ UI harnesses retain their case assertions, while the shared support code owns
 the Cargo build, artefact discovery, and direct-`rustc` invocation workflow.
 
 Those arguments reach `rustc` through a **response file**, not the command
-line. One `-L dependency=` pair per crate, over the long unique roots the
-split-build test creates, pushed the Windows `CreateProcessW` command line past
-its 32,767-character limit; the spawn then failed with
+line. One `-L dependency=` pair per crate can push the Windows `CreateProcessW`
+command line past its 32,767-character limit; the spawn then failed with
 `Os { code: 206, kind: InvalidFilename }` before `rustc` ran at all. Every
 directory is required to avoid `E0463`, so the list had to move off the command
 line rather than be shortened or deduplicated further. `rustc` reads arguments
@@ -4860,30 +4877,27 @@ quoting, and its unit tests retain every source, `--extern`, dependency-search,
 and output argument while rejecting newlines. This is mandatory because the
 failure is Windows-specific and cannot be reproduced on most local hosts.
 
-`harness_compiles_under_a_split_build_dir` is the regression test for this: it
-forces a split layout with its own private `CARGO_TARGET_DIR` and
-`CARGO_BUILD_BUILD_DIR` roots, confirms the collected dependency directories
-span the split, and then compiles a fixture against them. The roots are private
-to the test rather than the ambient target directory because the `#[once]`
-`test_support_rlib` fixture builds concurrently for
-`stub_env_default_does_not_compile` and
-`stub_env_builders_compile_under_the_same_harness`. Sharing a target directory
-would make `harness_compiles_under_a_split_build_dir` race that build on the
-uplifted rlibs and fail with version-skew errors (`E0460`).
+`harness_compiles_under_a_split_build_dir` is the parser regression test for
+this. It feeds a recorded Cargo JSON fixture through the shared artefact parser
+and asserts that dependency directories span the recorded split build directory
+while the `test_support` artefact remains uplifted under the recorded target
+directory. The parser regression is in interpreting Cargo messages, not running
+Cargo, so this test pays no live build, is not a `nested-cargo-builds` member,
+and uses the default slow timeout on every platform.
 
-That private build is why this test is the most expensive one on the Windows
-gate: `test_support` depends on `netsuke-build`, so a private root means
-compiling that crate and roughly 350 dependencies from scratch. Its measured
-budget is recorded in
-[Windows budget for the isolated-Cargo-build tests][windows-test-budget]. The
-[decision to defer a trim][adr-028-trim] and the gate at which it is revisited
-are recorded in ADR-028.
+`split_build_fixture_compiles_through_the_direct_rustc_harness` is the
+complementary integration test. It creates a temporary two-crate workspace,
+runs Cargo with private split target and build roots, selects the
+Cargo-reported fixture-support artefact, passes every discovered dependency
+directory through a response file, and compiles a fixture with direct `rustc`.
+It remains in `nested-cargo-builds` because it intentionally exercises that
+live subprocess boundary.
 
-#### What a fixture-crate replacement would have to preserve
+#### Historical fixture-crate replacement constraints
 
-This section is the constraint list for a future attempt, not a plan. The
-decision to defer, and the gate that reopens it, are in [ADR-028][adr-028-trim]
-; nothing here is built while the trim is deferred.
+This section records the constraints considered before issue 732 replaced the
+live build with recorded Cargo JSON. It remains as historical context for the
+response-file boundary; it is not a current implementation plan.
 
 If the trim is taken up after that gate, the obvious shape is a minimal fixture
 crate built under the split layout in place of `test_support`. It needs at
@@ -7294,12 +7308,12 @@ fed back upstream.
 
 All four tiers are set here.
 
-| Tier                     | What it bounds                     | Where it is set                               | Current value                                              |
-| ------------------------ | ---------------------------------- | --------------------------------------------- | ---------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s (60 s x 5); 420 s (60 s x 7) for one test on Windows |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 780 s (13 m) in CI; unset locally                          |
-| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,800 s (30 m), armed twice per coverage step              |
-| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 90 m                                                       |
+| Tier                     | What it bounds                     | Where it is set                               | Current value                                 |
+| ------------------------ | ---------------------------------- | --------------------------------------------- | --------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s (60 s x 5)                              |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 780 s (13 m) in CI; unset locally             |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,800 s (30 m), armed twice per coverage step |
+| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 90 m                                          |
 
 *Table: the timers that can end a run, innermost first. The watchdog is one
 tier but not one window: the coverage step here passes `doctests: 'true'`, so
@@ -7313,10 +7327,9 @@ and the watchdog's 1,800 s keep the values they already had.*
 
 `terminate-after` counts warning periods, so the budget a test actually gets is
 `period` multiplied by it. Every period here is 60 s, so reading the period
-alone would report a 60 s allowance where the real figure is 300 s on Linux and
-420 s for the Windows override. Any comparison against the tiers above rests on
-that reading, and the contract asserts it explicitly rather than leaving it
-implied.
+alone would report a 60 s allowance where the real figure is 300 s. Any
+comparison against the tiers above rests on that reading, and the contract
+asserts it explicitly rather than leaving it implied.
 
 ### The whole-run budget, and how 13 minutes was arrived at
 
@@ -7333,14 +7346,14 @@ apply under it.
 #### Why the budget is not in `[profile.default]`
 
 `default` is what every local `make test` runs under, and a developer's host is
-contended in a way a CI runner is not. Both
-`harness_compiles_under_a_split_build_dir` and
-`packaged_manifest_retains_build_script_sources` spawn their own `cargo`, and
-those nested invocations queue behind the package-cache lock of every other
-build on the machine. Measured on 2026-09-15, with several concurrent Rust
-gates on one host, the first of those tests spent 688.6 s inside its nested
-`cargo build`, a step that costs seconds unloaded, and the run as a whole
-crossed twenty minutes.
+contended in a way a CI runner is not. The packaging smoke test still spawns
+Cargo, so its nested invocation can queue behind the package-cache lock of
+other builds on the machine. The `harness_compiles_under_a_split_build_dir`
+parser test no longer does: it reads recorded Cargo JSON and pays no
+nested-build cost. The companion
+`split_build_fixture_compiles_through_the_direct_rustc_harness` intentionally
+retains a small isolated nested build to cover the complete Cargo-to-rustc
+boundary and is serialized with the other child-Cargo tests.
 
 A whole-run cap in `default` would have ended such a run against a figure read
 from CI logs, which have nothing to say about local contention, and the figure
@@ -7395,7 +7408,7 @@ has to sit between its neighbours, and does:
 
 ```text
 global-timeout > largest per-test allowance
-780 s          > 420 s
+780 s          > 300 s
 
 watchdog      >= global-timeout + termination + cold build + report
 1,800 s       >= 780 s + 70 s + 600 s + 300 s = 1,750 s
@@ -7576,9 +7589,9 @@ explicitly, so no value here changes.
 
 The profile's own `slow-timeout` is asserted separately from its overrides. An
 override bounds the tests its filter matches and the profile's own bounds the
-rest, so deleting the base allowance while leaving the Windows override behind
-would still report a 420 s largest budget while every test the override does
-not match ran with no bound at all.
+rest, so deleting the base allowance while leaving an override behind would
+still report a bounded subset while every test the override does not match ran
+with no bound at all.
 
 The lane reading takes its documents as a parameter, defaulting to the
 repository's own workflows. Reading the filesystem happens at one named
@@ -7857,7 +7870,7 @@ accepting an override or a bare duration.
 
 `tests/workflow_contracts/whole_run_value_test.py` pins the budget's value as
 well as its place in the order. The ordering holds for everything between the
-420 s largest per-test allowance and the 830 s the watchdog can cover, so the
+300 s largest per-test allowance and the 830 s the watchdog can cover, so the
 budget could drift to a value nobody chose with every comparison still passing,
 and the sample above would then describe a figure the file no longer sets.
 

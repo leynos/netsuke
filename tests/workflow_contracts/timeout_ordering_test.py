@@ -17,8 +17,9 @@ because a commented-out key is what a presence assertion catches and an
 ordering assertion does not.
 
 The per-test allowance is ``period`` multiplied by ``terminate-after``,
-not ``period`` alone. Reading the period as the budget would understate
-the largest allowance here fivefold on Linux and sevenfold on Windows.
+not ``period`` alone. Every platform uses five 60-second periods here,
+so the largest allowance is 300 s; reading the period as the budget would
+understate it fivefold.
 
 See "Test timeouts: the tiers this repository sets" in
 ``docs/developers-guide.md``, and the canonical wording in
@@ -249,7 +250,7 @@ def test_the_largest_per_test_allowance_counts_the_multiplier(
     This is the reading that decides every comparison above, and it is
     the one easy to get wrong: the periods here are all 60 s, so a
     contract reading the period alone would report a 60 s largest
-    allowance where the real figure is 420 s.
+    allowance where the real figure is 300 s.
     """
     largest = largest_test_allowance(nextest_config)
     periods = [

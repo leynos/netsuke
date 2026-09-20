@@ -7,6 +7,11 @@ publish = false
 
 [lints]
 workspace = true
+
+[features]
+default = []
+legacy-digests = ["netsuke/legacy-digests"]
+
 [dependencies]
 tempfile = "3.8.0"
 # Decoding PowerShell `-EncodedCommand` payloads in the shared Ninja-semantics

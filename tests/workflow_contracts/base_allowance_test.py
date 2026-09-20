@@ -27,10 +27,10 @@ def test_the_default_profile_bounds_a_test_it_matches_no_override_for(
     """An override bounds its filter's tests; the profile bounds the rest.
 
     ``largest_test_allowance`` reports the largest budget anywhere in
-    the file, so deleting the profile's own ``slow-timeout`` and leaving
-    the Windows override behind still reports 420 s while every test the
-    override does not match runs with no bound at all. That is the state
-    this assertion exists to detect, and nothing else here would.
+    the file, so deleting the profile's own ``slow-timeout`` while leaving an
+    override behind can still report a bounded subset while every unmatched
+    test runs with no bound at all. That is the state this assertion exists to
+    detect, and nothing else here would.
 
     Proved by mutation: commenting out ``[profile.default]``'s own
     ``slow-timeout`` fails this test and nothing else.
