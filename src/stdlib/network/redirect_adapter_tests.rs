@@ -22,29 +22,29 @@ use tracing_subscriber::filter::LevelFilter;
 use super::super::redirect_chain::FETCH_REDIRECT_LIMIT;
 use super::*;
 
+use super::super::tests_support::{
+    REDIRECT_SECRET, REDIRECT_USER, credentialed_current_url, credentialed_loopback_url,
+    credentialed_target_url, credentialed_url,
+};
 /// Re-exported for [`location`], which reaches the recorder helpers this way.
 pub(super) use super::super::tests_support::{collect_samples, counter_totals};
+
 use crate::snapshot_test_support::snapshot_settings;
 use minijinja::ErrorKind;
 
-/// Credentialed URL used as the current URL of a refused redirect.
-const CREDENTIALED_CURRENT: &str = "http://redirect-user:redirect-secret@allowed.example/start";
-/// Credentialed URL used as the refused target of a redirect.
-const CREDENTIALED_TARGET: &str = "http://redirect-user:redirect-secret@blocked.example/next";
+/// The two credentialed URLs, redacted, as the strings the diagnostics carry.
+///
+/// The credentials live in [`SECRETS`]; only the redacted form is pinned here,
+/// because that is the text a diagnostic is allowed to disclose.
+const REDACTED_CURRENT: &str = "http://allowed.example/start";
+/// Redacted form of the refused target.
+const REDACTED_TARGET: &str = "http://blocked.example/next";
+
 /// Userinfo fragments no diagnostic may disclose.
-const SECRETS: [&str; 2] = ["redirect-user", "redirect-secret"];
+const SECRETS: [&str; 2] = [REDIRECT_USER, REDIRECT_SECRET];
 
 /// One rejection paired with the localized fragment its diagnostic must carry.
 type RejectionCase = (RedirectRejection, String);
-
-/// Parse one test URL.
-///
-/// # Errors
-///
-/// Returns an error when `raw` is not a well-formed URL.
-fn parse_url(raw: &str) -> Result<Url> {
-    Url::parse(raw).with_context(|| format!("test URL should parse: {raw}"))
-}
 
 /// Build every chain rejection variant from credentialed URLs.
 ///
@@ -59,10 +59,10 @@ fn parse_url(raw: &str) -> Result<Url> {
 /// Returns an error when a test URL is malformed or when the default policy
 /// unexpectedly permits the target that has to carry a violation.
 fn every_rejection() -> Result<Vec<RejectionCase>> {
-    let current = parse_url(CREDENTIALED_CURRENT)?;
-    let target = parse_url(CREDENTIALED_TARGET)?;
+    let current = credentialed_current_url()?;
+    let target = credentialed_target_url()?;
     let Err(violation) = NetworkPolicy::default().evaluate(&target) else {
-        bail!("the default policy should refuse {CREDENTIALED_TARGET}");
+        bail!("the default policy should refuse {REDACTED_TARGET}");
     };
     let limit = format!("Redirect limit of {FETCH_REDIRECT_LIMIT} exceeded");
 
@@ -147,28 +147,28 @@ fn every_rejection_renders_a_redacted_diagnostic() -> Result<()> {
 #[rstest]
 fn redacted_urls_keep_only_the_location() -> Result<()> {
     let cases = [
-        (CREDENTIALED_CURRENT, "http://allowed.example/start"),
+        (credentialed_current_url()?, REDACTED_CURRENT),
         (
-            "http://redirect-user:redirect-secret@allowed.example/start?token=abc123",
-            "http://allowed.example/start",
+            credentialed_url("allowed.example", "/start?token=abc123")?,
+            REDACTED_CURRENT,
         ),
         (
-            "http://redirect-user:redirect-secret@allowed.example/start#frag",
-            "http://allowed.example/start",
+            credentialed_url("allowed.example", "/start#frag")?,
+            REDACTED_CURRENT,
         ),
         (
-            "http://redirect-user:redirect-secret@allowed.example/start?token=abc123#frag",
-            "http://allowed.example/start",
+            credentialed_url("allowed.example", "/start?token=abc123#frag")?,
+            REDACTED_CURRENT,
         ),
     ];
 
-    for (raw, expected) in cases {
-        let redacted = redacted_url(&parse_url(raw)?);
+    for (url, expected) in cases {
+        let redacted = redacted_url(&url);
         ensure!(
             redacted == expected,
-            "redaction should keep only the location, got {redacted} for {raw}",
+            "redaction should keep only the location, got {redacted} for {url}",
         );
-        for leaked in ["redirect-user", "redirect-secret", "token=abc123", "#frag"] {
+        for leaked in SECRETS.into_iter().chain(["token=abc123", "#frag"]) {
             ensure!(
                 !redacted.contains(leaked),
                 "redaction must not disclose {leaked}: {redacted}",
@@ -181,7 +181,7 @@ fn redacted_urls_keep_only_the_location() -> Result<()> {
 /// An unexpired budget yields the time left, not a fresh per-hop timeout.
 #[rstest]
 fn remaining_budget_shrinks_towards_the_chain_deadline() -> Result<()> {
-    let url = parse_url(CREDENTIALED_CURRENT)?;
+    let url = credentialed_current_url()?;
     let deadline = Instant::now() + Duration::from_secs(30);
     let remaining = remaining_budget(deadline, &url)
         .context("an unexpired chain budget should yield the time remaining")?;
@@ -195,7 +195,7 @@ fn remaining_budget_shrinks_towards_the_chain_deadline() -> Result<()> {
 /// An expired budget refuses the next hop instead of granting it more time.
 #[rstest]
 fn exhausted_budget_refuses_the_next_hop() -> Result<()> {
-    let url = parse_url(CREDENTIALED_CURRENT)?;
+    let url = credentialed_current_url()?;
     let Err(err) = remaining_budget(Instant::now(), &url) else {
         bail!("an expired chain budget must refuse the next hop");
     };
@@ -277,7 +277,7 @@ mod location;
 #[rstest]
 fn location_failure_diagnostics_are_snapshotted(en_localizer: EnLocalizer) -> Result<()> {
     let _localizer = en_localizer;
-    let current = parse_url(CREDENTIALED_CURRENT)?;
+    let current = credentialed_current_url()?;
     let policy = NetworkPolicy::default();
     let chain = RedirectChain::new(&current, &policy);
 
@@ -295,7 +295,7 @@ fn location_failure_diagnostics_are_snapshotted(en_localizer: EnLocalizer) -> Re
 #[rstest]
 fn chain_deadline_diagnostic_is_snapshotted(en_localizer: EnLocalizer) -> Result<()> {
     let _localizer = en_localizer;
-    let url = parse_url(CREDENTIALED_CURRENT)?;
+    let url = credentialed_current_url()?;
 
     let Err(err) = remaining_budget(Instant::now(), &url) else {
         bail!("an expired chain budget must refuse the next hop");
@@ -311,11 +311,14 @@ fn chain_deadline_diagnostic_is_snapshotted(en_localizer: EnLocalizer) -> Result
 ///
 /// Binding and then releasing the port gives the dispatch a connection the
 /// kernel refuses at once, so the failure is deterministic and needs no
-/// network or DNS.
+/// network or DNS. The port is handed to the shared helper rather than
+/// formatted into a URL here, so this case and the fixture-backed ones cannot
+/// disagree about how a credentialed loopback URL is built.
 ///
 /// # Errors
 ///
-/// Returns an error when the probe listener cannot be bound or queried.
+/// Returns an error when the probe listener cannot be bound or queried, or when
+/// the probe URL cannot be credentialed.
 fn closed_loopback_url() -> Result<Url> {
     let listener = std::net::TcpListener::bind(("127.0.0.1", 0))
         .context("bind a probe listener for an unused port")?;
@@ -324,9 +327,7 @@ fn closed_loopback_url() -> Result<Url> {
         .context("read the probe listener address")?
         .port();
     drop(listener);
-    parse_url(&format!(
-        "http://redirect-user:redirect-secret@127.0.0.1:{port}/start"
-    ))
+    credentialed_loopback_url(&format!("http://127.0.0.1:{port}/"))
 }
 
 /// A hop that cannot connect logs a bounded category and redacts the URL.
