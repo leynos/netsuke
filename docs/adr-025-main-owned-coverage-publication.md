@@ -119,9 +119,21 @@ named workflow contract test,
 predicates in `tests/workflow_contracts/codescene_upload_invariants.py`, holds
 the lane to that ordering, to the input names the generator and the upload
 agree on, to the format they agree on, to the credential being both carried and
-gated on — by name, as an identifier in the namespace the `if` is evaluated
-against, rather than by a substring that a longer, unset name would satisfy —
-and to any checksum input staying unset. A second test module,
+gated on, and to any checksum input staying unset. Both halves of that gate are
+required. The credential has to be an *identifier* in the namespace the `if` is
+evaluated against, rather than a substring a longer, unset name would satisfy —
+`env.NOT_CS_ACCESS_TOKEN != ''` compares `''` with `''` and never opens. And
+the condition has to *compare* that identifier against the empty string:
+`env.CS_ACCESS_TOKEN == ''` and `!env.CS_ACCESS_TOKEN` both name the credential
+and both open on precisely the run the gate exists to skip, so naming it is not
+gating on it. The comparison is read from the reference's own position rather
+than from an operand captured as text. An operand pattern has to decide where
+an operand ends before it knows what the operand is, and an index may carry
+spaces inside its brackets: read as a run of characters containing no space,
+the operand of `env[ 'CS_ACCESS_TOKEN' ] != ''` is `]`, so a real gate is
+reported as gating on nothing — while widening the pattern to admit a space lets
+`env.X == '' && y != ''` read as one operand, which accepts a condition whose
+credential comparison is the *inverted* one. A second test module,
 `tests/workflow_contracts/codescene_validation_step_test.py`, backed by
 `tests/workflow_contracts/codescene_report_validation_invariants.py`, holds the
 validating step's script to the validator being run over a directory the step
