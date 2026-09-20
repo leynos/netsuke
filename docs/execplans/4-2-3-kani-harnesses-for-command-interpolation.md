@@ -2075,7 +2075,7 @@ compile error, so the patched tree failed to build and yielded no evidence.
 Both were regenerated in `3a282018` and re-verified against their named checks;
 the other three were re-verified unchanged. Three further patches broken by the
 same mechanism belong to roadmap 4.2.1 and 4.2.2 and are raised here rather
-than fixed, because this plan's own `OBL-PATCHES` says to escalate rather than
+than fixed because this plan's own `OBL-PATCHES` says to escalate rather than
 silently absorb neighbouring roadmaps' work; they are filed as issue #756,
 which also proposes closing the contract test's apply-only blind spot. The
 completion state is unchanged: header `COMPLETE`, roadmap `[x]`, no roadmap
