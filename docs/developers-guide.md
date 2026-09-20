@@ -2610,6 +2610,8 @@ cargo test --lib -- --nocapture --test-threads=1
 | `catch_unwind`            | does not catch; test fails | passes       |
 | Panic on a spawned thread | aborts the process         | passes       |
 
+Table: panic behaviour under the Cranelift backend and under LLVM.
+
 The control is the same crate and the same flags with the backend key removed;
 it passes all three, so the backend is the cause and neither the linker nor the
 parallel frontend is.

@@ -80,13 +80,31 @@ fn the_touched_file_is_restored_however_the_run_ends(#[case] succeeds: bool) -> 
     let fixture = BenchFixture::prepare(&scenario)?;
 
     if !succeeds {
-        // Fail the first accelerated variant, after the baseline has already
-        // touched the file. A non-empty RUSTFLAGS is what distinguishes an
-        // accelerated variant from the baseline, which assigns it empty.
+        // Fail an accelerated variant, and only once the baseline has passed.
+        //
+        // A non-empty `RUSTFLAGS` is what identifies an accelerated variant:
+        // the baseline assigns it empty. Failing on that alone is not enough,
+        // because the variants are shuffled and the first one measured may be
+        // accelerated. That variant would abort on its clean pass, before the
+        // script had touched the file, and the assertion below would then pass
+        // for a reason with nothing to do with restoring anything: with nothing
+        // touched, `BENCH_TOUCH_STAMP` stays empty and the restore never runs.
+        //
+        // So the baseline's clean pass writes a marker, and an accelerated
+        // variant fails only when it finds one. Nothing can fail before that
+        // marker exists, so the run always reaches the touch — including when
+        // the draw leads with an accelerated variant, whose clean pass now
+        // succeeds and is followed by the touch its incremental pass needs. The
+        // abort then always finds a touched file to put back.
+        let marker = sandbox.home().join("baseline-built");
         sandbox.write_fake(
             &sandbox.bin(),
             "cargo",
-            "[ -z \"${RUSTFLAGS:-}\" ] || exit 1\nexit 0",
+            &format!(
+                "[ -z \"${{RUSTFLAGS:-}}\" ] && {{ : >'{marker}'; exit 0; }}\n\
+                 [ -e '{marker}' ] || exit 0\n\
+                 exit 1"
+            ),
         )?;
     }
 

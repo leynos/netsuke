@@ -258,6 +258,15 @@ def driver_builds(line: str) -> bool:
     ]
     for index in commands:
         follows = tokens[index + 1 :]
+        # Arguments after the separator belong to the *program*, not to Cargo.
+        # `cargo test -- --list` compiles the test binaries and then asks the
+        # harness to list them, so reading `--list` as Cargo's own flag reports
+        # a build as a query. The same mistake hides `cargo run -- --version`.
+        # Both are one `--` away from a real query, and this is the predicate
+        # whose whole job is to catch a lane that compiled before installing
+        # the linker.
+        if "--" in follows:
+            follows = follows[: follows.index("--")]
         if any(token in QUERY_FLAGS for token in follows):
             continue
         # Options before the subcommand are still options (`cargo

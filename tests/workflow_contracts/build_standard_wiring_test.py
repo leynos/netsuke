@@ -166,6 +166,21 @@ def test_the_compiling_predicate_separates_builds_from_queries() -> None:
     assert not compiles(_step("cargo tree"), gated), (
         "a query that lists dependencies is not a build"
     )
+    # Arguments after `--` belong to the compiled program, so a query flag
+    # among them says nothing about what Cargo was asked to do. A detector that
+    # read the whole line would report these two as queries — the first is a
+    # build by any measure, and the second compiles the binary before running
+    # it. Both are one `--` from a genuine query, which is what makes the
+    # separator, rather than the flag, the thing under test.
+    assert compiles(_step("cargo test -- --list"), gated), (
+        "listing the test binaries still compiles them first"
+    )
+    assert compiles(_step("cargo run -- --version"), gated), (
+        "the version printed is the built program's, and building it compiles"
+    )
+    assert not compiles(_step("cargo fmt -- --check"), gated), (
+        "the separator must not make every line carrying one a build"
+    )
     assert not compiles(_step("cargo kani --version"), gated), (
         "a query is still a query when an option precedes the flag"
     )

@@ -105,6 +105,8 @@ standard's flags:
 | `catch_unwind`            | does not catch; test fails | passes       |
 | Panic on a spawned thread | aborts the process         | passes       |
 
+_Table 1: Panic behaviour under the Cranelift backend and under LLVM._
+
 The `#[should_panic]` row is why the refusal has to be justified on this
 specific evidence rather than on a general claim that "panics do not unwind".
 That case passes, because libtest's outermost handler is the panic's own
