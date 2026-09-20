@@ -204,21 +204,39 @@ pub(super) fn collect_all_sources(
         .with_context(|| format!("read `{directory}`"))?
     {
         let entry = entry_result.with_context(|| format!("read an entry of `{directory}`"))?;
-        let name = entry
-            .file_name()
-            .with_context(|| format!("read an entry name in `{directory}`"))?;
-        if MACHINE_LOCAL_DIRECTORIES.contains(&name.as_str()) {
-            continue;
-        }
-        let path = join_path(directory, &name);
-        let file_type = entry
-            .file_type()
-            .with_context(|| format!("read the file type of `{path}`"))?;
-        if file_type.is_dir() {
-            collect_all_sources(root, &path, found)?;
-        } else if is_rust_source(&name) {
-            found.push(path);
-        }
+        collect_source_entry(root, directory, found, &entry)?;
+    }
+    Ok(())
+}
+
+/// Classify one entry of `directory`, recursing where the walk must descend.
+///
+/// The early returns are the whole classification: a machine-local name is
+/// skipped, a directory is descended, a Rust source is kept, and anything else
+/// is passed over. Only the last two touch `found`, and only a directory
+/// recurses, so the caller above does nothing but open the directory and hand
+/// its entries here.
+fn collect_source_entry(
+    root: &Dir,
+    directory: &str,
+    found: &mut Vec<String>,
+    entry: &cap_std::fs_utf8::DirEntry,
+) -> Result<()> {
+    let name = entry
+        .file_name()
+        .with_context(|| format!("read an entry name in `{directory}`"))?;
+    if MACHINE_LOCAL_DIRECTORIES.contains(&name.as_str()) {
+        return Ok(());
+    }
+    let path = join_path(directory, &name);
+    let file_type = entry
+        .file_type()
+        .with_context(|| format!("read the file type of `{path}`"))?;
+    if file_type.is_dir() {
+        return collect_all_sources(root, &path, found);
+    }
+    if is_rust_source(&name) {
+        found.push(path);
     }
     Ok(())
 }
