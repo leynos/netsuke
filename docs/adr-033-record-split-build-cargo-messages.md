@@ -168,7 +168,7 @@ race-prone setup.
   must preserve both path assertions and should be based on current Cargo
   output.
 - The fixture contains representative paths rather than a complete workspace
-  transcript, so it does not guarantee that every future compiler-artifact
+  transcript, so it does not guarantee that every future compiler-artefact
   variant is accepted. New variants belong in focused parser tests when they
   become relevant.
 - The two-crate boundary fixture does not reproduce the former workspace's
@@ -194,7 +194,7 @@ race-prone setup.
 - [ADR-028: Defer replacing the split-build-dir harness test][adr-028]
   records the superseded live-build decision and its measurements.
 - [ADR-025: Local pull-request coverage ratcheting][adr-025] records the
-  coverage-lane ownership that motivated the former nested-build serialisation.
+  coverage-lane ownership that motivated the former nested-build serialization.
 
 [adr-025]: adr-025-main-owned-coverage-publication.md
 [adr-028]: adr-028-defer-split-build-dir-harness-trim.md
