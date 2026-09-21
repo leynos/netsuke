@@ -41,6 +41,32 @@ BENCH_LOCK_DIR=${BENCH_LOCK_DIR:-$BENCH_ROOT.lock}
 # from the host, and shared state that no target directory isolates — page-cache
 # warmth, other load — is exactly what the ordering bias lives in.
 BENCH_REPEATS=${BENCH_REPEATS:-2}
+# Refused rather than clamped. A run with nought repeats prints an empty table
+# and exits nought, and a run with one prints a table that looks exactly like a
+# valid one while carrying the single-sample bias this script exists to remove.
+# Both are worse than a named failure, because neither is visible in the output
+# a reader pastes into the guide.
+#
+# The empty string is not among the refusals: `:-` above has already replaced it
+# with the default, as it does for every other `BENCH_` variable, so a pattern
+# for it here could never match and would read as a guard that holds.
+case $BENCH_REPEATS in
+  *[!0-9]*) fail "BENCH_REPEATS must be a whole number of at least 2; got '$BENCH_REPEATS'" ;;
+esac
+[ "$BENCH_REPEATS" -ge 2 ] ||
+  fail "BENCH_REPEATS must be a whole number of at least 2; got '$BENCH_REPEATS'"
+
+# The seed the variant order is drawn from.
+#
+# The shuffle is part of the measurement, so the draw is an input rather than
+# ambient state: a table that cannot be reproduced cannot be checked, and a
+# script reading Bash's global `$RANDOM` directly offers no way to pin the
+# order it produced. An unset seed draws one and prints it, so a run is
+# reproducible after the fact by passing that value back.
+BENCH_SEED=${BENCH_SEED:-$RANDOM}
+case $BENCH_SEED in
+  *[!0-9]*) fail "BENCH_SEED must be a whole number; got '$BENCH_SEED'" ;;
+esac
 
 # Populated as "<label>|<clean seconds>|<incremental seconds>" rows, in the
 # order the samples were measured.
@@ -250,21 +276,50 @@ report() {
 # spreads that bias across the variants instead of pinning it to one, and
 # repeating makes it visible as spread rather than hidden in a single number.
 #
-# A Fisher-Yates draw from `$RANDOM`, which is fine here and would not be for
-# anything security-relevant. `shuf` is not portable to macOS, where this
-# benchmark is reachable because the capability check tolerates a non-Linux
-# host; bash is already required for `EPOCHREALTIME`.
+# A Fisher-Yates draw, which is fine here and would not be for anything
+# security-relevant. `shuf` is not portable to macOS, where this benchmark is
+# reachable because the capability check tolerates a non-Linux host; bash is
+# already required for `EPOCHREALTIME`.
+#
+# The draw comes from `bench_random` rather than from `$RANDOM` directly. That
+# one function is the whole of this script's dependency on randomness, so it is
+# the only thing a caller has to pin to reproduce a table: seeding it from
+# `BENCH_SEED` makes an order replayable, and a test can compare two runs of the
+# same seed without reaching inside the shuffle.
+#
+# The permutation lands in `BENCH_ORDER` rather than on standard output,
+# because a caller reading it back through `$(...)` would fork, and Bash
+# reseeds `$RANDOM` in a subshell. Every sample would then draw from a fresh
+# sequence: the orders would still look perfectly shuffled, the run would still
+# print a seed, and that seed would decide nothing. This was the actual
+# behaviour until the fork was removed.
 permuted_slugs() {
-  local -a order=("$@")
+  BENCH_ORDER=("$@")
   local index swap pick
-  for ((index = ${#order[@]} - 1; index > 0; index--)); do
-    pick=$((RANDOM % (index + 1)))
-    swap=${order[index]}
-    order[index]=${order[pick]}
-    order[pick]=$swap
+  for ((index = ${#BENCH_ORDER[@]} - 1; index > 0; index--)); do
+    bench_random
+    pick=$((BENCH_RANDOM_VALUE % (index + 1)))
+    swap=${BENCH_ORDER[index]}
+    BENCH_ORDER[index]=${BENCH_ORDER[pick]}
+    BENCH_ORDER[pick]=$swap
   done
-  printf '%s ' "${order[@]}"
 }
+
+# The single source of randomness, seeded by `seed_bench_random` below.
+#
+# Bash's `$RANDOM` is a sequence rather than a fresh draw each time, and
+# assigning to it sets the sequence's starting point, which is what makes a
+# seeded run reproducible.
+#
+# The draw lands in a variable rather than on standard output because reading
+# it back through a command substitution would fork, and Bash reseeds `$RANDOM`
+# in a subshell. Every draw would then come from a fresh sequence, the seed
+# would decide nothing, and the reproducibility this boundary exists for would
+# be quietly absent.
+bench_random() { BENCH_RANDOM_VALUE=$RANDOM; }
+
+# Pin the sequence `bench_random` walks.
+seed_bench_random() { RANDOM=$1; }
 
 # Measure every variant `BENCH_REPEATS` times, in a freshly shuffled order each
 # time, and print the table followed by the record of what was actually run.
@@ -274,10 +329,15 @@ permuted_slugs() {
 # an earlier run cannot be told apart from one whose variant order differed —
 # which is the exact confusion this rework exists to remove.
 main() {
-  local slug sample selection
+  local slug sample
   local -a measured=() slugs=()
   local toolchain
   toolchain=$(pinned_toolchain)
+
+  # Printed before anything is measured, so an aborted run still says which
+  # seed produced the order it had reached.
+  seed_bench_random "$BENCH_SEED"
+  printf 'order seed: %s\n' "$BENCH_SEED"
 
   # A non-Linux host loses the linker row entirely and keeps the other two, so
   # the threaded row's caption names the frontend as what it varies.
@@ -305,9 +365,9 @@ main() {
   acquire_bench_lock
 
   for ((sample = 0; sample < BENCH_REPEATS; sample++)); do
-    selection=$(permuted_slugs "${slugs[@]}")
-    printf 'order sample %s: %s\n' "$((sample + 1))" "$selection"
-    for slug in $selection; do
+    permuted_slugs "${slugs[@]}"
+    printf 'order sample %s: %s\n' "$((sample + 1))" "${BENCH_ORDER[*]}"
+    for slug in "${BENCH_ORDER[@]}"; do
       measure_variant "$slug" "$toolchain"
       measured+=("$slug")
     done

@@ -11,25 +11,25 @@
 //! hermetic: no network, and no real mold, rustup, or Cargo.
 //!
 //! The checks a recorded run is held to — the variant table, the variant
-//! descriptor, and the pass-by-pass contract — live in [`checks`](checks),
-//! which keeps this file to the observable-behaviour cases.
+//! descriptor, and the pass-by-pass contract — live in [`checks`](checks), and
+//! the cases about the *order* the variants ran in, with what decides it, live
+//! in [`order_cases`](order_cases). This file holds the rest of the
+//! observable-behaviour cases.
 
 #![cfg(all(unix, target_os = "linux"))]
 
 #[path = "build_tools_bench_tests/checks.rs"]
 mod checks;
+#[path = "build_tools_bench_tests/order_cases.rs"]
+mod order_cases;
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Result, ensure};
 use rstest::rstest;
 use test_support::build_tools::{
-    BENCH_REPEATS, BENCH_SLUGS, BenchFixture, BuildScenario, MOLD_SLUG, MakeInvocation, combined,
-    real_utility,
+    BENCH_REPEATS, BENCH_SLUGS, BenchFixture, BuildScenario, MakeInvocation, combined, real_utility,
 };
 
-use checks::{
-    NON_LINUX_CAPTIONS, NON_LINUX_VARIANT_FLAGS, check_recorded_run, check_variant_flags,
-    is_timing, measured_slugs, order_records, order_varies_across_samples,
-};
+use checks::{check_recorded_run, is_timing};
 
 /// A clean pass is only clean if Cargo's intermediates live under the directory
 /// the harness removed.
@@ -307,114 +307,4 @@ fn the_table_reports_one_row_per_variant_per_repeat() -> Result<()> {
         );
     }
     Ok(())
-}
-
-/// The variants really are shuffled, not merely printed as though they were.
-///
-/// Nothing else in this suite can tell those two apart. Every structural
-/// assertion holds just as well for a fixed order, so a script that quietly
-/// walked its variant list straight through would pass the lot while
-/// re-introducing the defect the shuffle exists to remove — a table whose rows
-/// are confounded with whoever else was on the host when each one ran.
-///
-/// Detecting it needs samples that disagree, which accumulates only with
-/// samples: two draws of three variants coincide half the time under a true
-/// shuffle. Twenty samples all agreeing is `6^-20`, about one run in 3.7
-/// quadrillion, so the assertion is not one a correct implementation can trip.
-///
-/// Raising the repeat count is what buys the samples. Each one is a pair of
-/// builds against a fake `cargo`, so the cost is process spawns rather than
-/// compiles, and the whole case still finishes in well under a second.
-#[test]
-fn the_variant_order_is_actually_shuffled() -> Result<()> {
-    // Small enough to stay cheap, large enough that agreement is implausible.
-    // The bound is `permutations(BENCH_SLUGS.len()) ^ samples`, which is why
-    // the count is asserted against the draw rather than left implicit.
-    const SAMPLES: &str = "20";
-
-    let scenario = BuildScenario::prepare()?;
-    let fixture = BenchFixture::prepare(&scenario)?;
-    let invocation = MakeInvocation::new("bench-build")
-        .variable("CARGO", scenario.cargo().executable())
-        .environment("BENCH_ROOT", &fixture.root)
-        .environment("BENCH_TOUCH_FILE", &fixture.touch_file)
-        .environment("BENCH_REPEATS", SAMPLES);
-    let output = scenario.sandbox().run_make(&invocation)?;
-
-    ensure!(
-        output.status.success(),
-        "make bench-build should succeed, got `{}`",
-        combined(&output)
-    );
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let records = order_records(&stdout)?;
-    let expected: usize = SAMPLES.parse().context("the repeat count is a number")?;
-    ensure!(
-        records.samples.len() == expected,
-        "the run should print one record per sample, got {} for {expected}",
-        records.samples.len()
-    );
-
-    order_varies_across_samples(&records)
-}
-
-/// Off Linux the linker row is gone, and the threaded row varies only the
-/// frontend.
-///
-/// `mold` ships for Linux alone, so the three platforms do not share one
-/// variant table and the two-row shape is the promise that the other two are
-/// honoured. Faking `uname` is what makes it checkable from Linux — the branch
-/// is reachable on hardware CI does not have, which is exactly where an
-/// untested fallback rots. The scripts' own `is_linux` reads the same command,
-/// so the fake reaches both the Makefile's `STANDARD_RUSTFLAGS` and the
-/// script's variant selection.
-///
-/// The table is where this is observable: a `mold` row here would either
-/// measure the baseline a second time under a caption claiming otherwise, or
-/// fail outright for want of a linker that does not exist. Either way the run
-/// would satisfy the Linux expectations while reporting a row that means
-/// nothing.
-#[test]
-fn a_non_linux_host_reports_two_rows_and_varies_only_the_frontend() -> Result<()> {
-    let scenario = BuildScenario::prepare()?;
-    let sandbox = scenario.sandbox();
-    let fixture = BenchFixture::prepare(&scenario)?;
-    sandbox.write_fake(&sandbox.bin(), "uname", "echo Darwin")?;
-
-    let invocation = MakeInvocation::new("bench-build")
-        .variable("CARGO", scenario.cargo().executable())
-        .environment("BENCH_ROOT", &fixture.root)
-        .environment("BENCH_TOUCH_FILE", &fixture.touch_file);
-    let output = sandbox.run_make(&invocation)?;
-    let stdout = String::from_utf8_lossy(&output.stdout);
-
-    ensure!(
-        output.status.success(),
-        "make bench-build should succeed off Linux, got `{}`",
-        combined(&output)
-    );
-    for caption in NON_LINUX_CAPTIONS {
-        ensure!(
-            stdout.contains(caption),
-            "the table should carry the `{caption}` row, got `{stdout}`"
-        );
-    }
-    ensure!(
-        !stdout.contains("| `mold` |"),
-        "a host without mold should report no linker row, got `{stdout}`"
-    );
-
-    // The invocations are the sharper check: a table can print any caption,
-    // and what distinguishes the rows is the flags that reached Cargo.
-    let invocations = scenario.cargo().invocations()?;
-    let measured = measured_slugs(&invocations)?;
-    ensure!(
-        !measured.iter().any(|slug| slug == MOLD_SLUG),
-        "the linker row should not be measured off Linux, got `{measured:?}`"
-    );
-    let expected: Vec<&str> = NON_LINUX_VARIANT_FLAGS
-        .iter()
-        .map(|(slug, _)| *slug)
-        .collect();
-    check_variant_flags(&invocations, &expected, &NON_LINUX_VARIANT_FLAGS)
 }
