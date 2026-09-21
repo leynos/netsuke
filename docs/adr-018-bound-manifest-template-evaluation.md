@@ -151,11 +151,7 @@ string-repetition guard with a 100 MB threshold. That guard limits one
 operation; it is not Netsuke's configurable per-value quota and does not repair
 aggregate output or internal macro and capture buffering. The compatible
 version requirement in `Cargo.toml` is not evidence of the currently resolved
-version. Netsuke now declares
-`minijinja = { version = "2.24.0", features = ["fuel", "loader"] }`, and its
-validated lockfile resolves 2.24.0. The upgrade preserves manifest rendering
-and budget behaviour, but does not close the internal macro/capture allocation
-gap.
+version, and #719 is not recorded here as already implemented.
 
 The engine patch and 3.x migration in
 [#720](https://github.com/leynos/netsuke/issues/720) remain deferred until the
@@ -225,6 +221,20 @@ therefore stands unchanged. This addendum reinforces Addenda A and B rather
 than contradicting them, and does not claim the guarantee is satisfied. It also
 cannot confirm from local evidence that MiniJinja 3.0.0-alpha.1 repairs the
 gap: the local registry cache holds only 2.19.0, 2.21.0, and 2.24.0 sources.
+
+## Addendum D: Implemented MiniJinja 2.24.0 baseline (2026-09-21)
+
+[#719](https://github.com/leynos/netsuke/issues/719) now declares
+`minijinja = { version = "2.24.0", features = ["fuel", "loader"] }`. The
+validated `Cargo.lock` resolves MiniJinja 2.24.0. The `fuel` and `loader`
+features remain enabled for manifest evaluation.
+
+MiniJinja's 100 MB repeated-string guard rejects that one operation before
+Netsuke's rendered-value or aggregate rendered-output limits receive a
+completed value. It narrows an allocation hazard but does not bound aggregate
+macro output or internal macro and capture buffering. Addendum B's deferred
+remediation and its MiniJinja 3.0.0-final release condition therefore remain
+unchanged.
 
 ## References
 
