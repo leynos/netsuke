@@ -9,7 +9,7 @@ use test_support::ninja_gen::paths_strategy;
 
 use super::{
     INS_TOKEN, IrGenError, OUTS_TOKEN, RecipeShell, interpolate_command_with_bindings,
-    interpolate_command_with_shell,
+    interpolate_command_with_shell, interpolate_script_with_bindings,
 };
 
 use support::{
@@ -63,6 +63,18 @@ proptest! {
         .expect("literal shell variables should remain valid");
 
         prop_assert_eq!(command, "echo $in then $out then $ins then $outs");
+    }
+
+    #[test]
+    fn script_dollar_prefixed_shell_variables_are_preserved(inputs in paths_strategy("in", 1..10), outputs in paths_strategy("out", 1..10)) {
+        let bindings = super::CommandBindings::new(&inputs, &outputs, RecipeShell::Posix);
+        let script = interpolate_script_with_bindings(
+            "echo $in then $out then $ins then $outs",
+            &bindings,
+        )
+        .expect("literal script shell variables should remain valid");
+
+        prop_assert_eq!(script, "echo $in then $out then $ins then $outs");
     }
 
     /// Quote apostrophe-bearing PowerShell paths as single literals.

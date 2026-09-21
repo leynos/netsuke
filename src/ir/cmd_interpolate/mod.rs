@@ -1,9 +1,8 @@
 //! Command interpolation utilities for IR actions.
 //!
-//! Provides [`interpolate_command`], which substitutes the internal markers
-//! emitted for `{{ ins }}` and `{{ outs }}` in recipe command strings. Script
-//! recipes additionally support `$in` and `$out`; literal shell variables
-//! remain unchanged in command recipes.
+//! Provides [`interpolate_command`], which substitutes the internal tokens
+//! emitted for `{{ ins }}` and `{{ outs }}` markers in recipe command strings.
+//! Shell variables such as `$in` and `$out` remain unchanged in every recipe.
 //! POSIX-compatible routes track shell quoting so path text is encoded for its
 //! insertion context. Called by [`super::from_manifest`] during IR lowering.
 
@@ -43,7 +42,7 @@ pub(crate) struct CommandBindings {
 /// Retain path text encoded for each POSIX shell quote context.
 #[derive(Debug, Clone)]
 struct PathSubstitutions {
-    /// Use when the marker is not enclosed by shell quotes.
+    /// Use when the Netsuke marker is not enclosed by shell quotes.
     unquoted: String,
     /// Use between an existing pair of POSIX single quotes.
     single_quoted: String,
@@ -63,7 +62,7 @@ impl CommandBindings {
         }
     }
 
-    /// Select a binding encoded for the marker's shell quote context.
+    /// Select a binding encoded for the Netsuke marker's shell quote context.
     fn substitution(&self, placeholder: Placeholder, context: QuoteContext) -> &str {
         let paths = match placeholder {
             Placeholder::Inputs => &self.ins,
@@ -78,7 +77,7 @@ impl CommandBindings {
 }
 
 impl PathSubstitutions {
-    /// Encode paths for each POSIX quote context used during marker lowering.
+    /// Encode paths for each POSIX quote context used during Netsuke marker lowering.
     fn new(paths: &[Utf8PathBuf], shell: RecipeShell) -> Self {
         let unquoted = quote_paths(paths, shell).join(" ");
         if shell == RecipeShell::PowerShell {
@@ -230,7 +229,7 @@ fn is_valid_command_for_shell(command: &str, shell: RecipeShell) -> bool {
     !has_unmatched_backticks(command) && shlex::split(command).is_some()
 }
 
-/// Identifies the private marker emitted for a Netsuke recipe placeholder.
+/// Identifies the private token emitted for a Netsuke recipe marker.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Placeholder {
     /// Select the input-path binding.
@@ -239,18 +238,18 @@ pub(super) enum Placeholder {
     Outputs,
 }
 
-/// Records the POSIX quote context surrounding a recipe marker.
+/// Records the POSIX quote context surrounding a Netsuke recipe marker.
 #[derive(Debug, Clone, Copy)]
 pub(super) enum QuoteContext {
-    /// The marker is outside shell quotes.
+    /// The Netsuke marker is outside shell quotes.
     Unquoted,
-    /// The marker is inside POSIX single quotes.
+    /// The Netsuke marker is inside POSIX single quotes.
     Single,
-    /// The marker is inside POSIX double quotes.
+    /// The Netsuke marker is inside POSIX double quotes.
     Double,
 }
 
-/// Find an internal recipe placeholder at `pos`.
+/// Find an internal recipe token at `pos`.
 ///
 /// # Examples
 /// ```rust,ignore
@@ -265,35 +264,9 @@ pub(super) fn find_substitution(chars: &[char], pos: usize) -> Option<(Placehold
     })
 }
 
-/// Find an internal or short-form script placeholder at `pos`.
+/// Find an internal token at `pos` while traversing a script.
 pub(super) fn find_script_substitution(chars: &[char], pos: usize) -> Option<(Placeholder, usize)> {
-    try_match_dollar_placeholder(chars, pos, &['i', 'n'], Placeholder::Inputs)
-        .or_else(|| {
-            try_match_dollar_placeholder(chars, pos, &['o', 'u', 't'], Placeholder::Outputs)
-        })
-        .or_else(|| find_substitution(chars, pos))
-}
-
-/// Match one standalone dollar-prefixed placeholder at `pos`.
-fn try_match_dollar_placeholder(
-    chars: &[char],
-    pos: usize,
-    name: &[char],
-    placeholder: Placeholder,
-) -> Option<(Placeholder, usize)> {
-    let name_length = name.len();
-    let matches_name = chars.get(pos) == Some(&'$')
-        && name
-            .iter()
-            .enumerate()
-            .all(|(offset, character)| chars.get(pos + offset + 1) == Some(character));
-    let has_boundaries = chars
-        .get(pos.wrapping_sub(1))
-        .is_none_or(|character| !character.is_ascii_alphanumeric() && *character != '_')
-        && chars
-            .get(pos + name_length + 1)
-            .is_none_or(|character| !character.is_ascii_alphanumeric() && *character != '_');
-    (matches_name && has_boundaries).then_some((placeholder, name_length + 1))
+    find_substitution(chars, pos)
 }
 
 /// Return the replacement and matched length when `token` starts at `pos`.
@@ -347,18 +320,18 @@ fn substitute_script(template: &str, bindings: &CommandBindings) -> Result<Strin
     }
     Ok(traversal.finish())
 }
-/// Internal marker emitted for `{{ ins }}` during manifest rendering and
+/// Internal token emitted for the `{{ ins }}` marker during manifest rendering and
 /// consumed during command interpolation; it is not general template syntax.
 pub const INS_TOKEN: &str = "__NETSUKE_INS_PLACEHOLDER__";
 
-/// Internal marker emitted for `{{ outs }}` during manifest rendering and
+/// Internal token emitted for the `{{ outs }}` marker during manifest rendering and
 /// consumed during command interpolation; it is not general template syntax.
 pub const OUTS_TOKEN: &str = "__NETSUKE_OUTS_PLACEHOLDER__";
 
 const _: () = assert!(
     matches!(INS_TOKEN.as_bytes().first(), Some(b'_'))
         && matches!(OUTS_TOKEN.as_bytes().first(), Some(b'_')),
-    "the marker fallback in find_substitution only runs at underscore positions",
+    "the token matcher in find_substitution only runs at underscore positions",
 );
 
 #[cfg(test)]

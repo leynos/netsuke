@@ -99,10 +99,10 @@ shell variables, environment changes, and working-directory changes carry
 between entries.
 
 The current renderer delays `{{ ins }}` and `{{ outs }}` through opaque
-internal markers, then lowers them to space-separated, shell-quoted paths.
-Standalone `$in` and `$out` receive similar late substitution. This is already
-a limited instance of the parse-or-classify-before-substitution principle
-proposed here.
+internal tokens, then lowers them to space-separated, shell-quoted paths. `$in`,
+`$out`, `$ins`, and `$outs` remain literal shell variables; Netsuke leaves
+them unchanged for the selected shell. This is already a limited instance of
+the parse-or-classify-before-substitution principle proposed here.
 
 Netsuke compiles its intermediate representation (IR) to Ninja. Ninja remains
 responsible for dependency scheduling and invokes the generated command text.
@@ -424,8 +424,9 @@ recognition, or pathname expansion. For example, `$HOME`, `%TEMP%`, `*.rs`,
 `$(date)`, backticks, and `#` are literal data unless Jinja itself produces a
 value for an expression.
 
-Standalone `$in` and `$out` are not supported in direct mode. Netsuke must emit
-a targeted diagnostic recommending `{{ ins }}` or `{{ outs }}` instead.
+Standalone `$in` and `$out` are not supported in direct mode because it has no
+shell-variable expansion. Netsuke must emit a targeted diagnostic recommending
+`{{ ins }}` or `{{ outs }}` instead.
 
 ### 7.5 Empty and malformed templates
 
@@ -1261,8 +1262,11 @@ The proposal is additive:
 - scalar command strings retain their current shell semantics;
 - all-string command lists retain their current one-shell, fail-fast semantics;
 - recipe-level `script:` and `rule:` forms remain valid;
-- existing `{{ ins }}`, `{{ outs }}`, `$in`, and `$out` behaviour remains for
-  legacy and shell-mode commands; and
+- `{{ ins }}` and `{{ outs }}` remain the only Netsuke markers for input and
+  output paths in legacy and shell-mode recipes; and
+- ADR-034 supersedes any earlier script-specific `$in` and `$out` lowering:
+  `$in`, `$out`, `$ins`, and `$outs` remain literal shell variables in legacy
+  and shell-mode recipes; and
 - no existing manifest is automatically converted to direct invocation.
 
 The named selector is additive syntax. An absent field and both Boolean values
