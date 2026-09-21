@@ -3256,7 +3256,16 @@ governs the non-doctest pass only, and deliberately stays small:
   contracts, including that every filtered name resolves to a declared test.
   The rule is applied to every filter, not only this group's, because the same
   edit that unhooks a test from its policy is invisible until someone adds a
-  `#[case]` attribute.
+  `#[case]` attribute. Two test-only modules sit behind that contract, split by
+  what they read.
+  `tests/workflow_contracts/nextest_child_cargo_group_invariants.py` reads the
+  Nextest configuration and constrains the accepted selector grammar;
+  `tests/workflow_contracts/nextest_rust_test_discovery.py` classifies the Rust
+  integration tests as declared, parameterized (those carrying `#[case]`
+  attributes), or build-capable (reaching a child Cargo build directly or
+  through helper and fixture layers).
+  `tests/workflow_contracts/nextest_child_cargo_syntax_test.py` consumes the
+  discovery helper too, and production code must not import any of them.
 - **Scoped subprocess timings.** Packaging smoke tests emit their Cargo
   subprocess durations after each Cargo subprocess returns. The
   `harness_compiles_under_a_split_build_dir` parser test reads recorded Cargo

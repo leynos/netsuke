@@ -1,4 +1,4 @@
-"""Classify the tests that spawn build-capable child Cargo commands.
+"""Read the Nextest filters that decide which tests carry the child-Cargo policy.
 
 `cargo-nextest` applies a policy to a test by evaluating an override's filter
 against real test names: the ``nested-cargo-builds`` group serializes child
@@ -8,9 +8,12 @@ in a form that cannot match the test as it is named at run time. Both parse
 cleanly and leave the policy looking enforced while the test runs under the
 defaults.
 
-This module holds the discovery half — reading the Nextest configuration and
-classifying the Rust integration tests — so the contract tests in
-``nextest_child_cargo_group_test`` can assert on it.
+This is the configuration half, reading `.config/nextest.toml` and constraining
+the selector grammar. The Rust-source half — which tests are declared, which are
+parameterized, and which reach a child Cargo build — lives in
+``nextest_rust_test_discovery`` and is re-exported here.
+
+Both halves are test-only: production code must not import either one.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -19,14 +22,29 @@ import re
 import tomllib
 import typing as typ
 
-from rust_source_scan import mask_non_code
-from workflow_loading import REPO_ROOT, require_list, require_mapping
+from nextest_rust_test_discovery import (
+    build_capable_test_names as build_capable_test_names,
+)
+from nextest_rust_test_discovery import (
+    declared_test_names as declared_test_names,
+)
+from nextest_rust_test_discovery import (
+    parameterized_test_names as parameterized_test_names,
+)
+from nextest_rust_test_discovery import (
+    rust_test_sources as rust_test_sources,
+)
+from workflow_loading import (
+    REPO_ROOT,
+    WorkflowReadError,
+    require_list,
+    require_mapping,
+)
 
-if typ.TYPE_CHECKING:
+if typ.TYPE_CHECKING:  # pragma: no cover - imported for annotations only
     from pathlib import Path
 
 NEXTEST_CONFIG = REPO_ROOT / ".config" / "nextest.toml"
-BUILD_CAPABLE_SUBCOMMANDS = ("build", "check", "package", "publish")
 CHILD_CARGO_GROUP = "nested-cargo-builds"
 NESTED_CARGO_BUILD_TESTS = (
     "command_env_embedder_fixture_compiles",
@@ -51,58 +69,100 @@ NESTED_CARGO_BUILD_TESTS = (
 # every case suffix alike. The `~` substring form is unanchored and over-matches.
 GROUP_FILTER = re.compile(r"test\(/\^([a-z0-9_]+)\(\$\|::\)/\)")
 LEGACY_EXACT_FILTER = re.compile(r"test\(=([a-z0-9_]+)\)")
-CASE_ATTRIBUTE = re.compile(r"#\[case(?:::[a-z0-9_]+)?[\(\[]")
-RUST_FUNCTION = re.compile(
-    r"(?ms)^(?P<indent>[ \t]*)"
-    r"(?P<attributes>(?:(?P=indent)#\[[^\n]*\]\s*|"
-    r"(?P=indent)#\[[\s\S]*?^(?P=indent)[^\n]*\]\s*)*)"
-    r"(?P<signature>(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?"
-    r"fn\s+(?P<name>[a-z0-9_]+)\b[^\{]*)\{"
+# A second deny-list entry beside `LEGACY_EXACT_FILTER` would only ever see the
+# spellings it happens to list, so the constraint is the accepted grammar
+# instead: every `test(...)` argument is one of the named anchors. `test(=NAME)`
+# compares the whole name and misses every case instance, `test(~NAME)` and the
+# bare `test(NAME)` that means it are unanchored and over-match, and any other
+# argument is a form this file has not reviewed. Scanning each occurrence of
+# the `test` keyword lets a filter be reported when it holds an accepted
+# selector beside an unanchored one.
+TEST_SELECTOR = re.compile(r"\btest\(")
+ACCEPTED_TEST_SELECTOR = re.compile(
+    r"^/\^[a-z0-9_]+\(\$\|::\)/$"  # `test(/^NAME($|::)/)`, the form used here
+    r"|^/\^[a-z0-9_]+\(::\|\$\)/$"  # the same set with the branches transposed
+    r"|^=\^[a-z0-9_]+\(::\|\$\)/$"  # `test(=^NAME(::|$)/)`, nextest's own spelling
 )
-CARGO_COMMAND = re.compile(r"Command::new\([^)]*cargo\w*[^)]*\)", re.IGNORECASE)
-CARGO_OPERATION = re.compile(
-    rf'\.(?:arg|args)\(\s*(?:\[\s*)?"(?:{"|".join(BUILD_CAPABLE_SUBCOMMANDS)})"'
-)
-RETAINED_RUST_LITERALS = {
-    *(f'"{operation}"' for operation in BUILD_CAPABLE_SUBCOMMANDS),
-    '"cargo"',
-}
-type RustFunction = tuple[str, str, str, str]
 
 
-def nextest_config() -> dict[str, object]:
-    """Return the parsed Nextest configuration."""
-    return tomllib.loads(NEXTEST_CONFIG.read_text(encoding="utf-8"))
+def nextest_config(source: Path | None = None) -> dict[str, object]:
+    """Return the parsed Nextest configuration, or raise.
+
+    Parameters
+    ----------
+    source
+        The configuration to read; the repository's `.config/nextest.toml` by
+        default. Naming another lets a probe confirm how each read failure is
+        reported without provoking one in the shared configuration.
+
+    Returns
+    -------
+    dict[str, object]
+        The parsed document.
+
+    Raises
+    ------
+    WorkflowReadError
+        If the configuration is missing, does not decode as UTF-8, or is not
+        TOML. Reading it is fallible in three ways that look nothing alike from
+        the caller, and the contract several frames away explains itself better
+        when all three arrive as one error naming the path.
+    """
+    config_path = NEXTEST_CONFIG if source is None else source
+    try:
+        text = config_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        message = f"{config_path} could not be read: {error}"
+        raise WorkflowReadError(message) from error
+    try:
+        return tomllib.loads(text)
+    except tomllib.TOMLDecodeError as error:
+        message = f"{config_path} is not valid TOML: {error}"
+        raise WorkflowReadError(message) from error
 
 
-def default_overrides(config: dict[str, object]) -> list[dict[str, object]]:
-    """Return the default profile's parsed override tables.
+def all_overrides(config: dict[str, object]) -> list[dict[str, object]]:
+    """Return the parsed override tables of every Nextest profile.
+
+    A non-default profile inherits the default table and appends its own
+    overrides, so the policies a test can end up carrying are the union across
+    profiles rather than the default profile's alone. Reading only `default`
+    would leave a filter that silently selects nothing in another profile
+    invisible to every contract below.
 
     Returns
     -------
     list[dict[str, object]]
-        Each override table in `[profile.default.overrides]`, narrowed from the
-        parsed document so callers can read fields without re-narrowing.
+        Every override table declared under any `[profile.*.overrides]`, in
+        profile-name order, narrowed from the parsed document so callers can
+        read fields without re-narrowing.
     """
-    profile = require_mapping(config.get("profile"), "nextest profile table")
-    default = require_mapping(profile.get("default"), "nextest default profile")
-    overrides = require_list(
-        default.get("overrides"), "default Nextest profile must define overrides"
-    )
-    return [require_mapping(override, "nextest override") for override in overrides]
+    profiles = require_mapping(config.get("profile"), "nextest profile table")
+    overrides: list[dict[str, object]] = []
+    for raw_name in sorted(profiles):
+        name = str(raw_name)
+        profile = require_mapping(profiles[raw_name], f"nextest {name} profile")
+        declared = profile.get("overrides")
+        if declared is None:
+            continue
+        overrides.extend(
+            require_mapping(override, "nextest override")
+            for override in require_list(declared, f"nextest {name} profile overrides")
+        )
+    return overrides
 
 
 def group_filter_text(config: dict[str, object]) -> list[str]:
     """Return every filter assigned to the nested-Cargo test group."""
     return [
         str(override.get("filter", ""))
-        for override in default_overrides(config)
+        for override in all_overrides(config)
         if override.get("test-group") == CHILD_CARGO_GROUP
     ]
 
 
 def all_filter_text(config: dict[str, object]) -> list[str]:
-    """Return every filter in the default profile, grouped or not.
+    """Return every filter in every profile, grouped or not.
 
     Serialization is not the only policy a filter carries: a `slow-timeout`
     override selects its test the same way, so the same naming-form mistake
@@ -116,13 +176,13 @@ def all_filter_text(config: dict[str, object]) -> list[str]:
     """
     return [
         str(override["filter"])
-        for override in default_overrides(config)
+        for override in all_overrides(config)
         if "filter" in override
     ]
 
 
 def filter_test_names(config: dict[str, object]) -> set[str]:
-    """Return every test name named by any default-profile filter."""
+    """Return every test name named by any filter in any profile."""
     return {
         name
         for filter_ in all_filter_text(config)
@@ -130,194 +190,91 @@ def filter_test_names(config: dict[str, object]) -> set[str]:
     }
 
 
+def _test_selector_arguments(filter_: str) -> list[str]:
+    """Return the argument of every `test(...)` selector in a filter.
+
+    The parentheses are tracked rather than split on: an accepted argument
+    contains `($|::)`, so the first `)` in the filter ends neither the
+    argument nor the selector.
+
+    Returns
+    -------
+    list[str]
+        Each selector's argument, in the order the selectors appear, so a
+        filter holding several can be judged one selector at a time.
+    """
+    arguments: list[str] = []
+    for match in TEST_SELECTOR.finditer(filter_):
+        depth = 1
+        index = match.end()
+        while index < len(filter_) and depth:
+            depth += {"(": 1, ")": -1}.get(filter_[index], 0)
+            index += 1
+        # An unbalanced argument runs to the end of the filter, and the
+        # remainder is reported whole rather than losing its last character.
+        arguments.append(filter_[match.end() : index if depth else index - 1])
+    return arguments
+
+
+def _unnamed_test_selectors(filter_: str) -> list[str]:
+    """Return the argument of every `test(...)` selector that is not accepted.
+
+    A selector the exact-name pattern already reads a name out of is left to
+    that pattern, so each defect keeps one message: the legacy form is reported
+    by name, and every other unaccepted form by its whole argument, because
+    there is no name in it to report.
+
+    Returns
+    -------
+    list[str]
+        Each unaccepted argument, in the order the selectors appear.
+    """
+    unaccepted: list[str] = []
+    for argument in _test_selector_arguments(filter_):
+        if ACCEPTED_TEST_SELECTOR.match(argument):
+            continue
+        if LEGACY_EXACT_FILTER.fullmatch(f"test({argument})"):
+            continue
+        unaccepted.append(argument)
+    return unaccepted
+
+
+def unaccepted_test_selectors(config: dict[str, object]) -> dict[str, list[str]]:
+    """Return every filter's `test(...)` selectors that are not accepted.
+
+    A deny-list of known-bad forms can only reject the spellings it lists, so
+    the contract is the accepted grammar: a filter naming tests must use one of
+    the anchored forms above. Anything else — `test(=NAME)`, `test(~NAME)`, the
+    bare `test(NAME)` that means `test(~NAME)`, a differently anchored regex,
+    or a form not yet reviewed — selects the wrong tests or none at all.
+
+    Returns
+    -------
+    dict[str, list[str]]
+        Filter expression to its unaccepted selector arguments, omitting the
+        filters whose every `test(...)` selector is accepted.
+    """
+    unaccepted = {
+        filter_: _unnamed_test_selectors(filter_) for filter_ in all_filter_text(config)
+    }
+    return {filter_: found for filter_, found in unaccepted.items() if found}
+
+
 def grouped_test_names(config: dict[str, object]) -> set[str]:
-    """Return the test names assigned to the nested-Cargo test group."""
+    """Return the test names assigned to the nested-Cargo test group.
+
+    Every profile is read, not only `default`: the group serializes its
+    members whichever profile carries the override, so a profile-scoped
+    override that left the group would otherwise drop out of the coverage
+    contracts without failing one.
+
+    Returns
+    -------
+    set[str]
+        The names the group's filters select.
+    """
     return {
         name
         for filter_ in group_filter_text(config)
         for name in GROUP_FILTER.findall(filter_)
     }
-
-
-def rust_test_sources() -> dict[Path, str]:
-    """Return every Rust integration-test source keyed by repository path."""
-    return {
-        path: path.read_text(encoding="utf-8")
-        for path in REPO_ROOT.joinpath("tests").rglob("*.rs")
-    }
-
-
-def _rust_functions(source: str) -> list[RustFunction]:
-    """Return attributes, signatures, names, and source slices for Rust functions."""
-    matches = list(RUST_FUNCTION.finditer(source))
-    return [
-        (
-            match.group("attributes"),
-            match.group("signature"),
-            match.group("name"),
-            source[
-                match.end() : matches[index + 1].start()
-                if index + 1 < len(matches)
-                else len(source)
-            ],
-        )
-        for index, match in enumerate(matches)
-    ]
-
-
-def _operation_constants(source: str) -> set[str]:
-    """Return constants whose argument arrays name build-capable Cargo operations."""
-    constants: set[str] = set()
-    pattern = re.compile(
-        r"(?ms)^const\s+(?P<name>[A-Z0-9_]+)\s*:[^=]+="
-        r"(?P<value>.*?);"
-    )
-    for match in pattern.finditer(source):
-        if any(
-            f'"{operation}"' in match.group("value")
-            for operation in BUILD_CAPABLE_SUBCOMMANDS
-        ):
-            constants.add(match.group("name"))
-    return constants
-
-
-def _cargo_wrappers(functions: list[RustFunction]) -> set[str]:
-    """Return helper names that create Cargo `Command` values."""
-    return {
-        name
-        for _, signature, name, body in functions
-        if "-> Command" in signature and CARGO_COMMAND.search(body)
-    }
-
-
-def _has_build_capable_cargo_command(
-    body: str, wrappers: set[str], operation_constants: set[str]
-) -> bool:
-    """Return whether `body` launches a build-capable Cargo command directly."""
-    command_created = bool(CARGO_COMMAND.search(body)) or any(
-        re.search(rf"\b{wrapper}\s*\(", body) for wrapper in wrappers
-    )
-    operation_supplied = bool(CARGO_OPERATION.search(body)) or any(
-        re.search(rf"\b{constant}\b", body) for constant in operation_constants
-    )
-    return command_created and operation_supplied
-
-
-def _calls_build_helper(body: str) -> bool:
-    """Return whether `body` invokes an associated build-capable helper."""
-    return bool(re.search(r"\b[A-Za-z0-9_]+::build(?:_with)?\s*\(", body))
-
-
-def _is_rust_test(attributes: str) -> bool:
-    """Return whether Rust attributes mark a test or parameterized test."""
-    return "#[test]" in attributes or "#[rstest]" in attributes
-
-
-def _initial_build_capable_names(
-    functions: list[RustFunction], wrappers: set[str], operation_constants: set[str]
-) -> set[str]:
-    """Return functions that directly launch Cargo or call an associated helper."""
-    return {
-        name
-        for _, _, name, body in functions
-        if _has_build_capable_cargo_command(body, wrappers, operation_constants)
-        or _calls_build_helper(body)
-    }
-
-
-def _callers_of_build_capable_helpers(
-    functions: list[RustFunction], helper_names: set[str]
-) -> set[str]:
-    """Return functions that call a build-capable helper by its bare name."""
-    return {
-        name
-        for _, _, name, body in functions
-        if any(
-            helper_name != "build" and re.search(rf"\b{helper_name}\s*\(", body)
-            for helper_name in helper_names
-        )
-    }
-
-
-def _fixture_users_of_build_capable_helpers(
-    functions: list[RustFunction], helper_names: set[str]
-) -> set[str]:
-    """Return Rust tests that consume a build-capable fixture helper."""
-    fixtures = {
-        name
-        for attributes, _, name, _ in functions
-        if "#[fixture]" in attributes and name in helper_names
-    }
-    return {
-        name
-        for attributes, signature, name, body in functions
-        if _is_rust_test(attributes)
-        and any(fixture in signature + body for fixture in fixtures)
-    }
-
-
-def _expand_build_capable_names(
-    functions: list[RustFunction], build_capable: set[str]
-) -> set[str]:
-    """Propagate build capability through callers and fixture users to a fixed point."""
-    while True:
-        helper_names = {name for _, _, name, _ in functions if name in build_capable}
-        expanded = (
-            build_capable
-            | _callers_of_build_capable_helpers(functions, helper_names)
-            | _fixture_users_of_build_capable_helpers(functions, helper_names)
-        )
-        if expanded == build_capable:
-            return build_capable
-        build_capable = expanded
-
-
-def build_capable_test_names(source: str) -> set[str]:
-    """Return tests reaching a direct or helper-mediated Cargo build command."""
-    executable_source = mask_non_code(source, RETAINED_RUST_LITERALS)
-    functions = _rust_functions(executable_source)
-    build_capable = _expand_build_capable_names(
-        functions,
-        _initial_build_capable_names(
-            functions,
-            _cargo_wrappers(functions),
-            _operation_constants(executable_source),
-        ),
-    )
-    return {
-        name
-        for attributes, _, name, _ in functions
-        if name in build_capable and _is_rust_test(attributes)
-    }
-
-
-def parameterized_test_names(source: str) -> set[str]:
-    """Return the parameterized tests declared in a Rust source.
-
-    A test with `#[case]` attributes is named `name::case_1_…` at run time, so a
-    filter must match the case suffix; the exact `test(=NAME)` form would select
-    nothing.
-
-    Returns
-    -------
-    set[str]
-        The names of tests whose `#[case]` attributes multiply them into
-        instances.
-    """
-    executable_source = mask_non_code(source, RETAINED_RUST_LITERALS)
-    return {
-        name
-        for attributes, _, name, _ in _rust_functions(executable_source)
-        if _is_rust_test(attributes) and CASE_ATTRIBUTE.search(attributes)
-    }
-
-
-def declared_test_names() -> dict[str, set[str]]:
-    """Return every declared test name mapped to the sources declaring it."""
-    declared: dict[str, set[str]] = {}
-    for path, source in rust_test_sources().items():
-        executable_source = mask_non_code(source, RETAINED_RUST_LITERALS)
-        for attributes, _, name, _ in _rust_functions(executable_source):
-            if _is_rust_test(attributes):
-                declared.setdefault(name, set()).add(str(path))
-    return declared

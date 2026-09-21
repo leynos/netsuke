@@ -7,11 +7,14 @@ names a nonexistent test, or names one in a form that cannot match how it is
 named at run time, silently selects nothing and leaves the test running under
 the defaults while the policy still looks enforced.
 
-The discovery half — reading the configuration and classifying the Rust
-sources — lives in ``nextest_child_cargo_group_invariants``.
+The discovery half is split in two: ``nextest_child_cargo_group_invariants``
+reads the configuration and constrains the selector grammar, and
+``nextest_rust_test_discovery`` classifies the Rust sources. Both are test-only.
 
 Run via ``make test-workflow-contracts``.
 """
+
+import typing as typ
 
 import pytest
 from nextest_child_cargo_group_invariants import (
@@ -20,21 +23,26 @@ from nextest_child_cargo_group_invariants import (
     LEGACY_EXACT_FILTER,
     NESTED_CARGO_BUILD_TESTS,
     all_filter_text,
+    all_overrides,
     build_capable_test_names,
     declared_test_names,
-    default_overrides,
     filter_test_names,
     grouped_test_names,
     nextest_config,
     parameterized_test_names,
     rust_test_sources,
+    unaccepted_test_selectors,
 )
 from workflow_loading import (
     REPO_ROOT,
+    WorkflowReadError,
     load_workflow,
     require_mapping,
     workflow_job,
 )
+
+if typ.TYPE_CHECKING:  # pragma: no cover - typing-only import
+    from pathlib import Path
 
 
 def test_nested_cargo_group_serializes_build_capable_tests() -> None:
@@ -56,7 +64,7 @@ def test_nested_cargo_group_serializes_build_capable_tests() -> None:
     } <= grouped, "the two isolated nested Cargo tests must be serialized"
     immediate = [
         override
-        for override in default_overrides(config)
+        for override in all_overrides(config)
         if override.get("test-group") == CHILD_CARGO_GROUP
     ]
     assert immediate, "nested Cargo build tests must have explicit overrides"
@@ -129,8 +137,9 @@ def test_no_filter_uses_the_exact_name_form() -> None:
     one form throughout means that later edit cannot silently unhook the test
     from the policy, whichever override carries it.
     """
-    filters = all_filter_text(nextest_config())
-    assert filters, "the default profile must carry at least one filter"
+    config = nextest_config()
+    filters = all_filter_text(config)
+    assert filters, "the configuration must carry at least one filter"
     legacy = {
         name for filter_ in filters for name in LEGACY_EXACT_FILTER.findall(filter_)
     }
@@ -138,6 +147,12 @@ def test_no_filter_uses_the_exact_name_form() -> None:
         f"filters must use 'test(/^NAME($|::)/)', which matches a "
         f"parameterized test's cases as well as its plain name; found the "
         f"exact-name form for: {sorted(legacy)!r}"
+    )
+    unaccepted = unaccepted_test_selectors(config)
+    assert not unaccepted, (
+        f"filters must use an accepted anchored 'test(...)' form, because a "
+        f"form outside that grammar either names the wrong tests or none at "
+        f"all; found: {unaccepted!r}"
     )
 
 
@@ -228,6 +243,82 @@ fn case_fixture_compiles(#[case] value: u32) {
 """
     assert parameterized_test_names(source) == {"case_fixture_compiles"}, (
         "case attributes must mark a test as parameterized"
+    )
+
+
+def test_a_directory_without_rust_sources_is_refused(tmp_path: Path) -> None:
+    """A tree that yields no Rust source is refused rather than read as empty.
+
+    `Path.rglob` yields nothing for a directory that is absent or is not a
+    directory, so a reading that trusted the glob would return an empty corpus
+    and let every assertion above it pass having read no test at all.
+    """
+    absent = tmp_path / "absent"
+    a_file = tmp_path / "a-file"
+    a_file.write_text("not a directory", encoding="utf-8")
+    for path in (absent, a_file):
+        with pytest.raises(WorkflowReadError, match="not a directory"):
+            rust_test_sources(path)
+
+
+def test_the_anchored_form_is_the_one_the_contracts_admit(tmp_path: Path) -> None:
+    """The accepted grammar admits the anchored form and rejects the others.
+
+    Every filter in the repository is written to the anchored grammar, so the
+    grammar checks above would pass unchanged if it admitted everything. These
+    cases pin the boundary itself: the form this branch repaired to is admitted,
+    and the two forms it repaired away from — the whole-name `=` form that
+    misses every case instance, and the unanchored `~` form that over-matches —
+    are both rejected.
+    """
+    fixture = tmp_path / "case_fixture.rs"
+    fixture.write_text(
+        "#[rstest]\n"
+        "#[case::first(1)]\n"
+        "#[case::second(2)]\n"
+        "fn scratch_case_fixture(#[case] value: u32) {\n"
+        '    Command::new(cargo()).arg("build");\n'
+        "}\n",
+        encoding="utf-8",
+    )
+    sources = rust_test_sources(tmp_path)
+    assert set(sources) == {fixture}, "the scratch tree must be the tree read"
+    assert parameterized_test_names(sources[fixture]) == {"scratch_case_fixture"}, (
+        "the fixture must be recognized as multiply-instantiated, or the case "
+        "below would pass because no test was seen to be parameterized at all"
+    )
+
+    def config_for(filter_: str) -> dict[str, object]:
+        """Return a one-override configuration carrying ``filter_``."""
+        return {"profile": {"default": {"overrides": [{"filter": filter_}]}}}
+
+    anchored = "test(/^scratch_case_fixture($|::)/)"
+    assert filter_test_names(config_for(anchored)) == {"scratch_case_fixture"}, (
+        "the anchored form must yield the base name its cases are named from"
+    )
+    assert not unaccepted_test_selectors(config_for(anchored)), (
+        "the anchored form must be admitted"
+    )
+    # The whole-name form is rejected too, by the pattern that reads a name out
+    # of it: `test_no_filter_uses_the_exact_name_form` consumes that pattern, so
+    # that form is reported there by name and is deliberately left out of this
+    # one's result rather than being double-reported.
+    legacy = config_for("test(=scratch_case_fixture)")
+    assert LEGACY_EXACT_FILTER.findall(all_filter_text(legacy)[0]) == [
+        "scratch_case_fixture"
+    ], "the whole-name form must be rejected, as it selects no case instance"
+    assert not unaccepted_test_selectors(legacy), (
+        "the whole-name form is the legacy pattern's to report, not this one's"
+    )
+    assert unaccepted_test_selectors(config_for("test(~scratch_case_fixture)")) == {
+        "test(~scratch_case_fixture)": ["~scratch_case_fixture"]
+    }, "the unanchored form must be rejected, as it over-matches"
+    # A filter may hold an accepted selector beside an unanchored one; each is
+    # judged alone, so admitting the first must not excuse the second.
+    assert unaccepted_test_selectors(
+        config_for(f"{anchored} | test(~scratch_case_fixture)")
+    ) == {f"{anchored} | test(~scratch_case_fixture)": ["~scratch_case_fixture"]}, (
+        "an accepted selector must not mask an unanchored one beside it"
     )
 
 
