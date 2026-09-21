@@ -72,14 +72,31 @@ def render(graph: Graph) -> str:
     return "\n".join(lines)
 
 
+def dependants(graph: Graph) -> dict[str, set[str]]:
+    """Return each name to the goals that declare it as a prerequisite.
+
+    The graph read backwards. Order-only prerequisites are ordinary edges
+    here, which is the claim being made about them.
+
+    Returns
+    -------
+    dict[str, set[str]]
+        Prerequisite name to the goals depending on it.
+    """
+    reversed_edges: dict[str, set[str]] = {}
+    for goal, (ordinary, order_only) in graph.items():
+        for prerequisite in (*ordinary, *order_only):
+            reversed_edges.setdefault(prerequisite, set()).add(goal)
+    return reversed_edges
+
+
 def reaches_capability(graph: Graph) -> frozenset[str]:
     """Return the goals from which the capability check is reachable.
 
-    The independent model. Where the predicate under test walks the graph
-    recursively from each goal, this closes over the edges from the check
-    backwards with a worklist, so a defect in one is not a defect in both.
-    Order-only edges are ordinary edges here, which is the claim being made
-    about them.
+    The independent model. Where the predicate under test walks forwards from
+    each goal in turn, asking whether it can get to the check, this walks
+    backwards from the check to everything that depends on it. A defect in one
+    is therefore not a defect in both.
 
     Returns
     -------
@@ -87,25 +104,15 @@ def reaches_capability(graph: Graph) -> frozenset[str]:
         Every declared goal whose prerequisite chain leads to the capability
         check, and the check itself when the file declares it.
     """
-    edges: dict[str, set[str]] = {
-        goal: set(ordinary) | set(order_only)
-        for goal, (ordinary, order_only) in graph.items()
-    }
-    # Only declared goals can be reported: a name that appears solely as a
+    reversed_edges = dependants(graph)
+    # Only a declared goal can be reported: a name appearing solely as a
     # prerequisite has no rule of its own, and the reading is over rules.
-    reaching = {goal for goal in edges if goal == CAPABILITY_TARGET}
-    pending = True
-    while pending:
-        pending = False
-        for goal, prerequisites in edges.items():
-            if goal in reaching:
-                continue
-            if any(
-                prerequisite == CAPABILITY_TARGET or prerequisite in reaching
-                for prerequisite in prerequisites
-            ):
-                reaching.add(goal)
-                pending = True
+    reaching = {CAPABILITY_TARGET} & set(graph)
+    frontier = [CAPABILITY_TARGET]
+    while frontier:
+        found = reversed_edges.get(frontier.pop(), set()) - reaching
+        reaching |= found
+        frontier.extend(found)
     return frozenset(reaching)
 
 
