@@ -74,6 +74,16 @@ annotation evaluation rather than performing it, so the gate stays useful for
 other definition-time failures but not for the one its comment names. That
 comment is stale for the 3.14 baseline and is corrected alongside this record.
 
+The staleness has a precise provenance rather than an incidental one. The same
+module that loads cleanly under 3.14 raises `NameError` from the loader under
+3.12, so the claim was true when it was written and became false when the
+baseline moved. Git puts the baseline change at
+[#616](https://github.com/leynos/netsuke/pull/616) on 2026-08-30 and the
+comment at [#707](https://github.com/leynos/netsuke/pull/707) on 2026-09-14,
+the later of the two — writing the comment eight days after the change it
+depends on. A comment asserting what a gate catches is a claim about the
+toolchain, and this one outlived its toolchain without anyone re-measuring it.
+
 A check that *would* catch it resolves the annotations rather than merely
 loading the module: walk each module's functions and call
 `typing.get_type_hints` on each. That is a different gate, not an extension of
@@ -129,11 +139,18 @@ It also imports names at runtime that no runtime path uses.
 
 ### Option B: Quote the annotations
 
-Write the annotations as string literals. The annotations then resolve without
-the name being bound, so `get_type_hints` works and `TC003` stays satisfied
-with no suppression.
+Write the annotations as string literals. A quoted annotation is not evaluated
+at definition time, so the module needs no runtime binding for the name and
+`get_type_hints` resolves it by evaluating the string against the module
+globals.
 
-The cost is one mechanical edit per annotation — 85 today — and a quoting
+This is not free either. Ruff's `UP037` (`quoted-annotation`) fires on quotes
+that a `py314` target no longer needs, and the repository enables the `UP`
+family, so Option B trades `TC003` for an `UP037` plus a per-site suppression
+-- the same shape as Option A at a larger site count. Measured, not assumed:
+`UP037` reports under `--target-version py314` and passes under `py313`.
+
+The cost beyond that is one edit per annotation — 85 today — and a quoting
 convention that reads as incidental rather than deliberate. A reader has no
 signal that the quotes are load-bearing, and a later contributor who removes
 one as noise silently reintroduces the failure. `TC003` continues to fire on
@@ -162,9 +179,9 @@ test module to a gate whose subject is the trusted workflow helpers.
 | ----------------------------- | ----------------- | --------------------- | --------------------- | ---------------- |
 | Makes `get_type_hints` work   | Yes               | Yes                   | No                    | No               |
 | Sites to change today         | 23                | 85                    | 0                     | 0                |
-| New suppressions              | 23                | 0                     | 0                     | 0                |
+| New suppressions              | 23                | 85                    | 0                     | 0                |
+| Which lint must be suppressed | `TC003`           | `UP037`               | None                  | None             |
 | Cost scales with the idiom    | Yes               | Yes                   | No                    | No               |
-| Keeps `TC003` satisfied       | Only via suppress | Yes                   | Yes                   | Yes              |
 | Catches this class of failure | Yes               | Yes                   | No                    | No               |
 | Reader can tell it was chosen | Yes, suppression  | No, reads as noise    | Yes, this record      | Yes              |
 
@@ -191,8 +208,9 @@ The benefit of Options A and B is hypothetical. Nothing in the repository
 resolves these annotations, so neither option changes any observed behaviour;
 both buy readiness for a consumer that does not exist. The cost, meanwhile, is
 real and scales with the idiom rather than with the benefit: 23 suppressions
-under Option A, 85 mechanical edits under Option B, and one more of whichever
-per module that adopts the pattern.
+under Option A, and under Option B both 85 edits and 85 suppressions, because
+`UP037` refuses the quotes a `py314` target makes unnecessary. Each option
+costs one more suppression per module that adopts the pattern.
 
 That asymmetry is what makes this a documentation decision rather than a code
 change. The failure mode is not that the code is wrong; it is that the code has
@@ -218,8 +236,8 @@ reads `__annotations__`, on a function defined in `tests/workflow_contracts/`
 outside of a test that is explicitly checking this behaviour.
 
 At that point the affected set is known and the choice between Options A and B
-can be made on its merits. Option B is the narrower edit and introduces no
-suppression; Option A is more legible at the site. Both are bounded by the
+can be made on its merits. Neither is free: Option A suppresses `TC003` at each
+module, Option B suppresses `UP037` at each annotation. Both are bounded by the
 sweep recorded here, which a single script re-derives in seconds.
 
 ## Consequences
@@ -258,6 +276,9 @@ sweep recorded here, which a single script re-derives in seconds.
   resolves.
 - [#688](https://github.com/leynos/netsuke/pull/688) introduced the older of
   the two modules first reported.
+- [#616](https://github.com/leynos/netsuke/pull/616) adopted the 3.14 baseline,
+  and [#707](https://github.com/leynos/netsuke/pull/707) added the loader gate
+  and its comment eight days later.
 - [PEP 649](https://peps.python.org/pep-0649/) defines the deferred annotation
   evaluation that makes loading a module insufficient.
 - [`tests/workflow_contracts/python_shell_interpreter_test.py`](../tests/workflow_contracts/python_shell_interpreter_test.py)

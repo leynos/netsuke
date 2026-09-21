@@ -283,10 +283,11 @@ lint-workflow-scripts: ## Load every trusted workflow module under the Python ba
 	# because the workflow runs the default branch's copy.
 	#
 	# Loading does NOT catch an annotation naming a TYPE_CHECKING-only import,
-	# which is the class this gate formerly claimed. Under the 3.14 baseline
-	# PEP 649 defers annotation evaluation, so such a module loads cleanly and
-	# fails only when something resolves the annotation. Catch that by calling
-	# typing.get_type_hints, not by loading; see
+	# which this comment claimed until the baseline moved to 3.14: PEP 649
+	# defers annotation evaluation, so such a module loads cleanly and fails
+	# only when something resolves the annotation. The claim held under 3.12
+	# and no longer does. Catch it by calling typing.get_type_hints, not by
+	# loading; see
 	# docs/adr-034-runtime-annotation-introspection-in-workflow-contracts.md.
 	@for module in .github/scripts/*.py; do \
 		$(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) python -c \

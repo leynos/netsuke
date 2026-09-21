@@ -1895,7 +1895,8 @@ The Python gates run inside the ordinary quality-gate targets:
   `.github/scripts` on the baseline. That loader catches definition-time
   failures, but under PEP 649 it does **not** catch an annotation naming a
   `TYPE_CHECKING`-only import, because deferred evaluation means the annotation
-  is never resolved at load time.
+  is never resolved at load time. The claim that it did held under 3.12 and
+  outlived the baseline change.
 - `make typecheck` runs `make typecheck-python`: the
   [ty](https://github.com/astral-sh/ty) typechecker over the Python sources.
 
