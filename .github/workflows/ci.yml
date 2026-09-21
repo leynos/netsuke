@@ -308,6 +308,19 @@ jobs:
         # `--no-project` because the check is stdlib-only and must not resolve
         # this repository's Python project or write to its lockfile.
         run: uv run --no-project --python 3.14 .github/scripts/verify_nextest_anchored_filters.py
+      - name: Mutation patch compile gate
+        # Applies each patch under docs/verification/mutations/ and compiles the
+        # patched tree under `-D warnings`. `#[ignore]`-gated and run from its
+        # own target: one `cargo check` per patch is too costly for the default
+        # nextest profile, but a patch that applies cleanly yet cannot compile
+        # contributes no mutation evidence while looking healthy.
+        #
+        # Placed after the coverage step so the instrumented tree is still the
+        # one it compiles against. `make test-kani-mutations` is deliberately
+        # named so the forbidden-suite scan in
+        # tests/workflow_contracts/test_execution_coverage_test.py does not read
+        # it as a second workspace-suite execution.
+        run: make test-kani-mutations
       - name: Show sccache statistics
         if: always()
         run: |

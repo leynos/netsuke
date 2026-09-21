@@ -32,16 +32,17 @@ use toml::Value;
 /// Every Make target that invokes `cargo nextest run`, and so shares the
 /// worker-bound contract.
 ///
-/// `test-nextest` is the gate `make test` composes, and the only recipe that
-/// runs the runner. A contributor sets the bounds once and expects them
-/// honoured wherever nextest runs, so the list is a contract rather than a note
-/// of what happens to be true today.
+/// `test-nextest` is the gate `make test` composes, and `test-kani-mutations`
+/// runs the same runner over the `#[ignore]`-gated mutation compile gate, which
+/// is too expensive for the default profile. A contributor sets the bounds once
+/// and expects them honoured wherever nextest runs, so the list is a contract
+/// rather than a note of what happens to be true today.
 ///
 /// The list is not trusted on its own.
 /// [`behavioural_nextest_targets_forward_both_worker_bounds`] discovers the
 /// targets that actually invoke the runner and fails when the two disagree, so
 /// a new recipe joins the contract or breaks the build.
-const NEXTEST_TARGETS: [&str; 1] = ["test-nextest"];
+const NEXTEST_TARGETS: [&str; 2] = ["test-nextest", "test-kani-mutations"];
 
 /// True when `line` is a tab-indented recipe line that invokes the nextest
 /// runner.

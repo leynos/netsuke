@@ -50,9 +50,19 @@ failure mode cannot recur silently.
 - [x] (2026-09-21) Regenerate the three rotted patches; validate each by
       applying, compiling under `-D warnings`, running the owning harness to a
       named failure, reverting, and observing success.
-- [ ] Add the `#[ignore]`-gated compile contract test.
-- [ ] Wire it into `.config/nextest.toml`, the Makefile, and CI.
-- [ ] Update `docs/developers-guide.md`.
+- [x] (2026-09-21) Add the `#[ignore]`-gated compile contract test as
+      `tests/kani_mutation_evidence_tests/compile_guard.rs`, declared from the
+      parent by an explicit `#[path]` (the parent is near the 400-line cap).
+      Liveness proven: on the pre-adoption tree it failed and named exactly the
+      two `#755`-owned patches.
+- [x] (2026-09-21) Adopt PR `#755`'s two repairs verbatim, so the gate is green
+      here without waiting for an unmerged PR and the two branches cannot
+      conflict whichever lands first.
+- [x] (2026-09-21) Wire it into `.config/nextest.toml` (the
+      `nested-cargo-builds` group), the Makefile (`test-kani-mutations`, with
+      both worker bounds, plus `.PHONY` and `NEXTEST_TARGETS`), and CI
+      (`build-test`).
+- [x] (2026-09-21) Update `docs/developers-guide.md`.
 
 ## Surprises & Discoveries
 
@@ -67,6 +77,25 @@ failure mode cannot recur silently.
 - The issue's suggested `_name` / `#[cfg(test)]`-visibility remedy is weaker
   than the in-place idiom the healthy patches already use: rebinding silences a
   warning without seeding a behavioural fault the harness can catch.
+- The Python contract `nextest_child_cargo_group_test.py` does **not** classify
+  the new test as build-capable, contrary to the prediction: `mask_non_code`
+  retains only the literal `"cargo"` as a `CARGO_COMMAND` anchor, and the test
+  locates Cargo with `env!("CARGO")`, whose string is masked. Registration in
+  `.config/nextest.toml` is therefore not contract-forced — but it is still
+  correct, because the test genuinely spawns nested Cargo builds.
+- `test_execution_coverage_test.py`'s `LINUX_TEST_EXEMPTIONS` already exempts
+  `kani-smoke`, but no exemption covers `build-test`. Its forbidden-suite
+  regexes are `\bcargo nextest\b`, `\bcargo test\b`, and
+  `\bmake test(?![\w-])` — the last excludes `-`, so `make test-kani-mutations`
+  is deliberately not read as a second suite execution. Verified by running the
+  regexes directly and then the whole contract suite (595 passed).
+- `mdtablefix` without `--in-place` only *prints* the reformatted document; it
+  never writes. A hash comparison "proved" idempotence while the check still
+  failed. Only `make fmt` (which passes `--in-place`) applies it. `--check` and
+  `--diff` are mutually exclusive, so the diff must be read from `--diff` alone.
+- The gate's `Drop` guard rewrites `src/` files and restores them, which bumps
+  their mtime and makes the editor report them as changed.
+  `git diff --quiet -- src/` is the check that matters: the revert is exact.
 
 ## Decision Log
 
@@ -76,7 +105,19 @@ failure mode cannot recur silently.
   reassigned while the seeded fault is still behavioural.
 - Keep the new test `#[ignore]`-gated: a `cargo check` per patch (~18 today) is
   too expensive for the default nextest profile.
+- Adopt `#755`'s two repairs *verbatim* rather than repairing the same faults
+  independently. Identical content means whichever PR merges second sees a
+  no-op hunk instead of a conflict, and this branch's gate is green on its own.
 
 ## Outcomes & Retrospective
 
-(to be completed)
+Task 1 delivered: the three named patches now seed the same faults without dead
+code, each validated by apply → compile → harness failure → revert → harness
+success. The survey widened the count from three to five, and the two extras
+were adopted from `#755`.
+
+Task 2 delivered: `compile_guard` closes the gap the issue describes. It is
+gated (one `cargo check` per patch), registered in the `nested-cargo-builds`
+group, reachable via `make test-kani-mutations`, run on every pull request from
+`build-test`, and documented in the developer's guide, including the rule that
+regeneration must swap an expression in place rather than delete a statement.

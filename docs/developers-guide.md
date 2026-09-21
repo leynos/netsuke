@@ -3196,7 +3196,7 @@ was validated by applying the patch and watching the harness fail under
 `cargo kani --harness <name>`.
 
 `tests/kani_mutation_evidence_tests.rs` keeps that evidence in lockstep with
-the harnesses as part of `make test`:
+the harnesses. Three of its checks run as part of `make test`:
 
 - every patch must still apply cleanly to the current tree
   (`git apply --check`), catching silent rot when production code near a
@@ -3208,9 +3208,23 @@ the harnesses as part of `make test`:
   named patch, or appear in the test's exemption list with a stated reason; and
 - every patch must correspond to a live harness, catching renames.
 
-When the gate reports a rotted patch, regenerate it against the moved
-production code and re-validate it by applying the patch and running its
-harness under the mutation before committing the regenerated file.
+A fourth check is gated, because it costs one `cargo check` per patch:
+`compile_guard::every_patched_tree_compiles_under_denied_warnings` applies each
+patch, compiles the patched tree under `-D warnings`, and reverts it through a
+`Drop` guard so an assertion failure cannot leave a mutation in the working
+tree. Run it with `make test-kani-mutations`, which drives nextest with
+`--run-ignored ignored-only`; `build-test` runs the same target on every pull
+request. Applying cleanly is not enough on its own: `make kani-full` denies
+warnings, so a patch that seeds its fault by leaving a binding or helper unused
+is a hard compile error, `cargo kani` never reaches the harness, and the patch
+contributes no evidence while still looking healthy to `git apply --check`.
+
+Regenerate a rotted patch *in place*: swap an operator, comparator, index, or
+literal rather than deleting a statement or redirecting a call. Deleting the
+only use of a helper, or the only reassignment of a `mut` binding, is what
+turns the mutation into a compile error under denied warnings. Then re-validate
+the regenerated file by applying the patch, confirming the patched tree
+compiles, and watching the harness fail under the mutation before committing.
 
 ### Kani cfg compile-time checks
 
@@ -3285,6 +3299,7 @@ Table: the executed test set of every job that runs tests.
 | -------------------------- | ------------ | ------------------------------------------ | -------- | ----------- | -------- |
 | `build-test` coverage step | Ubuntu 24.04 | `cargo llvm-cov nextest --workspace`       | all      | all         | denied   |
 | `build-test` doctest step  | Ubuntu 24.04 | `cargo test --doc`                         | all      | doctests    | denied   |
+| `build-test` mutation step | Ubuntu 24.04 | `make test-kani-mutations`                 | all      | library     | denied   |
 | `coverage-upload`          | Ubuntu 24.04 | `cargo llvm-cov nextest --workspace`       | all      | all         | denied   |
 | `netsukefile`              | Ubuntu 22.04 | builds a manifest and runs Ninja           | default  | binary only | allowed  |
 | `kani-smoke`               | Ubuntu 24.04 | `make kani-ir`                             | Kani cfg | harnesses   | allowed  |
