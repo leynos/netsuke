@@ -140,11 +140,11 @@ fn ninja_commands(ninja_file: &str, target: &str) -> Result<String> {
     String::from_utf8(output.stdout).context("Ninja command output was not UTF-8")
 }
 
-/// Run a generated Ninja target and read its shell-produced output.
+/// Run a generated Ninja target with child shell variables and read its output.
 #[cfg(unix)]
 fn ninja_output(
     ninja_file: &str,
-    environment_value: Option<&str>,
+    environment: &[(&str, &str)],
     input: Option<(&str, &str)>,
 ) -> Result<String> {
     let workspace = NinjaWorkspace::create(ninja_file)?;
@@ -161,8 +161,8 @@ fn ninja_output(
         .current_dir(workspace.path.as_std_path())
         .env_clear()
         .env("PATH", host_path()?);
-    if let Some(value) = environment_value {
-        command.env(SENTINEL, value);
+    for (name, value) in environment {
+        command.env(name, value);
     }
     let output = command.output().context("run generated Ninja build")?;
     if !output.status.success() {
@@ -175,6 +175,12 @@ fn ninja_output(
         .directory
         .read_to_string("out")
         .context("read shell output from generated target")
+}
+
+/// Build the optional sentinel variable for an isolated child shell.
+#[cfg(unix)]
+fn sentinel_environment(value: Option<&str>) -> Vec<(&str, &str)> {
+    value.map_or_else(Vec::new, |sentinel_value| vec![(SENTINEL, sentinel_value)])
 }
 
 /// Assert one POSIX script recipe yields its expected output.
@@ -190,7 +196,7 @@ fn assert_script_output(
         &manifest,
         RecipeShell::Posix,
     )?)?;
-    let actual = ninja_output(&ninja, None, Some(input))?;
+    let actual = ninja_output(&ninja, &[], Some(input))?;
 
     ensure!(actual == expected, "{failure_message}: {actual:?}");
     Ok(())
@@ -268,7 +274,8 @@ fn shell_default_reaches_the_child_shell(
         RecipeShell::Posix,
     )?)?;
 
-    let actual = ninja_output(&ninja, environment_value, None)?;
+    let environment = sentinel_environment(environment_value);
+    let actual = ninja_output(&ninja, &environment, None)?;
     ensure!(
         actual == expected,
         "expected child shell output {expected:?}, got {actual:?}"
@@ -293,7 +300,8 @@ fn command_list_default_reaches_the_child_shell(
         RecipeShell::Posix,
     )?)?;
 
-    let actual = ninja_output(&ninja, environment_value, None)?;
+    let environment = sentinel_environment(environment_value);
+    let actual = ninja_output(&ninja, &environment, None)?;
     ensure!(
         actual == expected,
         "expected command-list child shell output {expected:?}, got {actual:?}"
@@ -335,7 +343,7 @@ fn scripts_lower_placeholders_without_command_parser_validation() -> Result<()> 
             && !ninja.contains("__NETSUKE_INS_PLACEHOLDER__"),
         "script placeholders must be lowered before backend escaping:\n{ninja}"
     );
-    let actual = ninja_output(&ninja, None, Some(("in", "script input")))?;
+    let actual = ninja_output(&ninja, &[], Some(("in", "script input")))?;
     ensure!(
         actual == "script inputdone\n",
         "expected script and heredoc output, got {actual:?}"
@@ -360,7 +368,8 @@ fn script_default_reaches_the_child_shell(
         RecipeShell::Posix,
     )?)?;
 
-    let actual = ninja_output(&ninja, environment_value, None)?;
+    let environment = sentinel_environment(environment_value);
+    let actual = ninja_output(&ninja, &environment, None)?;
     ensure!(
         actual == expected,
         "expected script child shell output {expected:?}, got {actual:?}"

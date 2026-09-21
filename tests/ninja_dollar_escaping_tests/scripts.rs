@@ -20,6 +20,30 @@ fn script_dollar_in_out_are_doubled_as_shell_variables() -> Result<()> {
     Ok(())
 }
 
+/// Verify script `$in` and `$out` read child shell variables after Ninja execution.
+#[cfg(unix)]
+#[rstest]
+fn script_dollar_in_out_reach_the_child_shell() -> Result<()> {
+    let manifest = manifest::from_str(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: declared-input\n    script: |\n      printf '%s:%s' \"$in\" \"$out\" > {{ outs }}\n",
+    )?;
+    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
+        &manifest,
+        RecipeShell::Posix,
+    )?)?;
+
+    let actual = ninja_output(
+        &ninja,
+        &[("in", "shell-input"), ("out", "shell-output")],
+        Some(("declared-input", "declared-input-value")),
+    )?;
+    ensure!(
+        actual == "shell-input:shell-output",
+        "script shell variables must not lower to declared paths: {actual:?}"
+    );
+    Ok(())
+}
+
 /// Verify double-quoted script markers keep shell punctuation inert.
 #[cfg(unix)]
 #[rstest]
@@ -60,7 +84,7 @@ fn escaped_script_marker_reaches_the_declared_output() -> Result<()> {
         commands.contains("\\out"),
         "the escaped marker must lower to the declared output path:\n{commands}"
     );
-    let actual = ninja_output(&ninja, None, None)?;
+    let actual = ninja_output(&ninja, &[], None)?;
     ensure!(
         actual == "escaped",
         "expected escaped marker output, got {actual:?}"

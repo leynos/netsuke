@@ -1264,7 +1264,7 @@ The proposal is additive:
 - recipe-level `script:` and `rule:` forms remain valid;
 - `{{ ins }}` and `{{ outs }}` remain the only Netsuke markers for input and
   output paths in legacy and shell-mode recipes; and
-- ADR-033 supersedes any earlier script-specific `$in` and `$out` lowering:
+- ADR-034 supersedes any earlier script-specific `$in` and `$out` lowering:
   `$in`, `$out`, `$ins`, and `$outs` remain literal shell variables in legacy
   and shell-mode recipes; and
 - no existing manifest is automatically converted to direct invocation.
