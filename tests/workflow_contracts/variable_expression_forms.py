@@ -16,8 +16,6 @@ are stated over what the scan should *read* in it.
 Run via ``make test-workflow-contracts``.
 """
 
-from __future__ import annotations
-
 import dataclasses as dc
 
 from hypothesis import strategies as st
@@ -32,7 +30,7 @@ from variable_reference_forms import (
 )
 
 
-@dc.dataclass(frozen=True)
+@dc.dataclass(frozen=True, slots=True)
 class Expression:
     """An expression body, and the references it names.
 
@@ -89,7 +87,7 @@ class Expression:
         )
 
 
-@dc.dataclass(frozen=True)
+@dc.dataclass(frozen=True, slots=True)
 class Value:
     """One string a step holds: prose, and the expression regions written in it.
 

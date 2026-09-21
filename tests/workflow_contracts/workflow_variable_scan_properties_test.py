@@ -168,7 +168,12 @@ def test_each_reference_is_reported_exactly_once(expression: Expression) -> None
         for (namespace, name, start, end), reference in zip(
             occurrences, expression.references, strict=True
         ):
-            assert (namespace, name) == (reference.namespace, reference.name)
+            assert (namespace, name) == (reference.namespace, reference.name), (
+                f"the occurrence at this position must be the reference it "
+                f"came from: {namespace}.{name} is drawn where "
+                f"{reference.namespace}.{reference.name} is expected, "
+                f"in {text!r}"
+            )
             assert text[start:end] == reference.rendered, (
                 f"the span of {namespace}.{name} in {text!r}"
             )

@@ -16,8 +16,6 @@ spelling the repository happens to use fails here rather than passing.
 Run via ``make test-workflow-contracts``.
 """
 
-from __future__ import annotations
-
 import itertools
 import typing as typ
 

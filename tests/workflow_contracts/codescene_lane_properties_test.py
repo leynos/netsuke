@@ -49,17 +49,6 @@ def _is_of_family(family: str, mutation: Mutation) -> bool:
     return mutation.family == family
 
 
-def _lane_steps() -> list[dict[str, object]]:
-    """Return a fresh copy of the clean lane's steps.
-
-    Returns
-    -------
-    list[dict[str, object]]
-        The steps, owned by the caller.
-    """
-    return clean_steps()
-
-
 def test_the_clean_lane_carries_every_condition_the_model_removes() -> None:
     """Hold the fixture to the fields and inputs the model assumes it has.
 
@@ -70,7 +59,7 @@ def test_the_clean_lane_carries_every_condition_the_model_removes() -> None:
     change nothing, and a mutation that changes nothing would let the contract
     pass the removal property without reading anything.
     """
-    steps = _lane_steps()
+    steps = clean_steps()
     for step_name, field_names in REQUIRED_FIELDS.items():
         step = step_of(steps, step_name)
         missing = [field for field in field_names if field not in step]
@@ -109,7 +98,7 @@ def test_the_order_the_model_states_is_the_order_the_lane_has() -> None:
     the step; if the fixture were declared in another order, every one of them
     would be a fault claimed for an edit that repaired the lane instead.
     """
-    steps = _lane_steps()
+    steps = clean_steps()
     positions = {name: steps.index(step_of(steps, name)) for name in REPORT_STEP_NAMES}
     assert list(positions.values()) == sorted(positions.values()), (
         f"the clean lane must declare {REPORT_STEP_NAMES!r} in order; "
@@ -133,7 +122,10 @@ def test_every_family_and_both_verdicts_are_reachable() -> None:
         # generator called it back, which is none of the answer this test wants.
         of_family = functools.partial(_is_of_family, family)
         mutation = find(mutations(), of_family, settings=PROPERTY_SETTINGS)
-        assert mutation.family == family
+        assert mutation.family == family, (
+            f"the generator must report the family it was sought by; seeking "
+            f"{family!r} produced a mutation of {mutation.family!r}"
+        )
         if mutation.reportable:
             assert mutation.named, (
                 f"a reportable edit of family {family!r} must say which names "
@@ -148,11 +140,18 @@ def test_every_family_and_both_verdicts_are_reachable() -> None:
     control = find(
         mutations(), lambda drawn: not drawn.reportable, settings=PROPERTY_SETTINGS
     )
-    assert control.family in FAMILIES
+    assert control.family in FAMILIES, (
+        f"a drawn mutation must belong to a family the model states; "
+        f"{control.description} claims {control.family!r}, which is not in "
+        f"{FAMILIES!r}"
+    )
     fault = find(
         mutations(), lambda drawn: drawn.reportable, settings=PROPERTY_SETTINGS
     )
-    assert fault.reportable
+    assert fault.reportable, (
+        f"the generator must reach a reportable edit; {fault.description} "
+        f"was drawn for one and is not"
+    )
     assert fault.named, "a reportable edit must say what an offender has to name"
 
 
@@ -176,7 +175,7 @@ def test_the_contract_reports_exactly_the_edits_the_model_calls_faults(
     changed, so a rule that fired for an unrelated reason cannot stand in for
     the rule the family is about.
     """
-    steps = _lane_steps()
+    steps = clean_steps()
     mutation.apply(steps)
     offenders = upload_contract_offenders(steps)
 

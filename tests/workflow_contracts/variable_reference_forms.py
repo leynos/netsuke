@@ -24,8 +24,6 @@ are stated over what the scan should *read* in it.
 Run via ``make test-workflow-contracts``.
 """
 
-from __future__ import annotations
-
 import dataclasses as dc
 import typing as typ
 
@@ -105,7 +103,7 @@ PROSE_WORDS: typ.Final[st.SearchStrategy[str]] = st.one_of(
 )
 
 
-@dc.dataclass(frozen=True)
+@dc.dataclass(frozen=True, slots=True)
 class Reference:
     """One reference an expression names, and the text it was written as.
 
@@ -123,7 +121,7 @@ class Reference:
     rendered: str
 
 
-@dc.dataclass(frozen=True)
+@dc.dataclass(frozen=True, slots=True)
 class Fragment:
     """One piece of an expression body, and the references it names."""
 
