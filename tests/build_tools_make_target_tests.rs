@@ -75,7 +75,7 @@ fn gate_targets_deny_warnings_and_apply_the_standard(
 
     for invocation in &recorded {
         ensure!(
-            invocation.rustflags_contain(&["-D", "warnings"]),
+            invocation.rustflags_contain_sequence(&["-D", "warnings"]),
             "`{}` should deny warnings, got `{:?}`",
             target.name,
             invocation.rustflags()
@@ -129,7 +129,7 @@ fn the_debug_build_applies_the_standard_without_denying_warnings(
         invocation.rustflags()
     );
     ensure!(
-        !invocation.rustflags_contain(&["-D", "warnings"]),
+        !invocation.rustflags_contain_sequence(&["-D", "warnings"]),
         "build should not impose the gates' warning policy, got `{:?}`",
         invocation.rustflags()
     );
