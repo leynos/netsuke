@@ -274,8 +274,7 @@ fn every_error_variant() -> Result<[ResolveError; 10]> {
 #[test]
 fn every_resolve_error_variant_reports_a_domain_category() -> Result<()> {
     let errors = every_error_variant()?;
-    let observed: Vec<ResolveErrorCategory> =
-        errors.iter().map(ResolveError::category).collect();
+    let observed: Vec<ResolveErrorCategory> = errors.iter().map(ResolveError::category).collect();
 
     let mut distinct = observed.clone();
     distinct.sort_unstable();
