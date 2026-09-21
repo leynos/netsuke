@@ -20,8 +20,6 @@ real departure.
 Run via ``make test-workflow-contracts``.
 """
 
-from __future__ import annotations
-
 import copy
 import typing as typ
 

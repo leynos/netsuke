@@ -40,8 +40,6 @@ contract.
 Run via ``make test-workflow-contracts``.
 """
 
-from __future__ import annotations
-
 import dataclasses as dc
 import typing as typ
 
@@ -106,7 +104,7 @@ FAMILIES: typ.Final[tuple[str, ...]] = (
 )
 
 
-@dc.dataclass(frozen=True)
+@dc.dataclass(frozen=True, slots=True)
 class Mutation:
     """One bounded edit to a lane, and the contract's verdict on the result."""
 

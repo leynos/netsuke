@@ -24,8 +24,6 @@ something exotic.
 Run via ``make test-workflow-contracts``.
 """
 
-from __future__ import annotations
-
 import dataclasses as dc
 import typing as typ
 
@@ -131,7 +129,7 @@ OPERAND_WORDS: typ.Final[st.SearchStrategy[str]] = st.one_of(
 )
 
 
-@dc.dataclass(frozen=True)
+@dc.dataclass(frozen=True, slots=True)
 class Assignment:
     """One leading `VAR=value` word, and what its value is.
 
@@ -154,7 +152,7 @@ class Assignment:
         return f"{self.name}={self.literal}"
 
 
-@dc.dataclass(frozen=True)
+@dc.dataclass(frozen=True, slots=True)
 class Operands:
     """A command's operand words, as written and as read.
 
@@ -242,7 +240,7 @@ SINGLE_COMMANDS: typ.Final[st.SearchStrategy[Invocation]] = st.builds(
 )
 
 
-@dc.dataclass(frozen=True)
+@dc.dataclass(frozen=True, slots=True)
 class Invocation:
     """One simple command, and everything written around it.
 
@@ -307,7 +305,7 @@ class Invocation:
         return [name for name in COMMAND_NAMES if name != self.command]
 
 
-@dc.dataclass(frozen=True)
+@dc.dataclass(frozen=True, slots=True)
 class Script:
     """Several invocations, and the operators joining them."""
 
