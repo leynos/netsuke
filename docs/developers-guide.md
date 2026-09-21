@@ -2653,10 +2653,13 @@ no code, so `make typecheck` and `make lint` would gain nothing either. That
 leaves `make build` as the only beneficiary — the one artefact that would then
 abort on a panic and so behave differently from the binary the tests exercise.
 
-`tests/build_tools_cargo_config_tests.rs` therefore refuses a `codegen-backend`
-key under any profile, in a profile table and in either form of a `rustflags`
-value. The environment override `CARGO_PROFILE_DEV_CODEGEN_BACKEND` remains
-available for a single scoped experiment.
+`tests/build_tools_cargo_config_tests.rs` therefore refuses a backend by every
+route the configuration file offers: a `codegen-backend` key on a profile or on
+a package override beneath one, the same flag inside either form of a
+`rustflags` value, and the `[unstable] codegen-backend` key that permits the
+profile key in the first place. The environment override
+`CARGO_PROFILE_DEV_CODEGEN_BACKEND` remains available for a single scoped
+experiment, and is the route that needs no edit to a committed file.
 
 #### The suite under Cranelift
 
@@ -2667,6 +2670,22 @@ on the pinned `nightly-2026-08-23`, with the configuration below added to
 and the same command with that fragment removed. Each arm had its own empty
 `CARGO_TARGET_DIR` and `CARGO_BUILD_BUILD_DIR`, so neither warmed the other,
 and the one-minute load stayed between 1 and 12 throughout.
+
+Repeating this on a toolchain bump needs one adjustment, or it can never come
+back clean. Adding the fragment makes
+`the_configuration_names_no_codegen_backend` fail by design, because that
+contract refuses exactly what the fragment adds. Exclude it, so that a green
+run means what it says:
+
+```sh
+RUSTFLAGS="-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold" \
+  cargo nextest run --workspace --all-targets --all-features --no-fail-fast \
+  -E 'not test(the_configuration_names_no_codegen_backend)'
+```
+
+Those `RUSTFLAGS` are the gate's own, composed as the Makefile composes them,
+so the run is the gate's run minus that one contract. `--no-fail-fast` is what
+turns the first abort into a list.
 
 ```toml
 [unstable]
@@ -2696,7 +2715,7 @@ Table: the tests that do not pass under Cranelift, and why.
 | `localizer::tests::en_localizer_recovers_from_a_poisoned_lock`             | SIGABRT   | panic on a spawned thread     |
 | `properties::the_last_declaration_wins_over_any_sequence`                  | fails     | `catch_unwind` does not catch |
 | `http::tests::accept_connection_respects_accept_timeout`                   | fails     | `catch_unwind` does not catch |
-| `repeated_generate_bounds_sidecars_and_keeps_the_latest_manifest_loadable` | times out | slower nested build           |
+| `repeated_generate_bounds_sidecars_and_keeps_the_latest_manifest_loadable` | times out | slower Cranelift-built binary |
 
 Neither `catch_unwind` failure is an incidental use of it. Each of those two
 tests has a panic as its subject: one reads an undeclared key and asserts the
@@ -2707,16 +2726,21 @@ poisons a lock by panicking on a thread it spawned, and a spawned thread has no
 handler above it at all.
 
 The timeout is a different effect and was attributed rather than assumed. That
-test spawns its own Cargo; run alone it passes under both backends, at 109 s on
-LLVM and 140 s on Cranelift, so what crosses the 300 s per-test allowance is
-the slower nested build under the suite's own concurrency. A quieter host might
-not show it. The timing-shaped failure above was checked the same way and is
-not a flake: it fails under Cranelift run alone and passes under LLVM run alone.
+test runs the built `netsuke` binary once per retained sidecar and then a Ninja
+probe; it compiles nothing. Run alone it passes under both backends, at 109 s
+on LLVM and 140 s on Cranelift, so what crosses the 300 s per-test allowance is
+the Cranelift-built binary being slower, under the suite's own concurrency. A
+quieter host might not show it, and the remedy if it ever mattered would be
+about that binary rather than about a build. The timing-shaped failure above
+was checked the same way and is not a flake: it fails under Cranelift run alone
+and passes under LLVM run alone.
 
-A seventh row is not counted among these:
-`the_configuration_names_no_codegen_backend` fails in the Cranelift arm because
-the configuration names a backend, which is what that contract refuses. It is
-evidence the contract works.
+Two counts of six appear above and they are not the same six. The runner's "6
+failed" includes `the_configuration_names_no_codegen_backend`, which fails in
+the Cranelift arm because the configuration names a backend — which is what
+that contract refuses, so it is evidence the contract works rather than
+evidence about the backend. Setting it aside leaves five failures and one
+timeout: the six rows in the table above, all six caused by Cranelift.
 
 None of this says Cranelift is unusable elsewhere, and other repositories on
 this estate do use it. Five of the six failures are tests about a panic

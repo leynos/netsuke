@@ -214,10 +214,10 @@ fragment removed.
 _Table 2: `make test` on 2026-09-21, by codegen backend._
 
 Five of the six failures are the unwind behaviour Table 1 already describes, in
-both of its shapes. The sixth is a nested-cargo test whose build is slower
-under Cranelift and which crosses its per-test allowance under the suite's own
-concurrency; run alone it passes under both backends. The developers' guide
-names each failing test and attributes it.
+both of its shapes. The sixth is a test that runs the built binary repeatedly
+and crosses its per-test allowance because the Cranelift-built binary is
+slower; run alone it passes under both backends. The developers' guide names
+each failing test and attributes it.
 
 Two things follow, and neither changes the decision:
 
