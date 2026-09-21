@@ -115,7 +115,7 @@ build standard: the parallel `rustc` frontend, and on Linux the `mold` linker.
 The pinned nightly comes from `rust-toolchain.toml`, which `rustup` provisions
 automatically; on Linux, `mold` must also be reachable through `PATH` or gcc's
 own search directories. `make install-build-tools` unpacks the pinned release
-into `~/.local/bin` and does not edit your shell profile, and the make targets
+into `~/.local/bin` and does not edit any shell profile, and the make targets
 add that directory to `PATH` for themselves only, so a direct `cargo install`
 needs it added first. On macOS and Windows the linker flag is not set, so no
 extra prerequisite applies. Build on another platform, or remove

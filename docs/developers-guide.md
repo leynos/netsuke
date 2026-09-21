@@ -2749,14 +2749,17 @@ network, and no real `mold`, `rustup`, or Cargo — so they run as part of
   capability check reaches zero Cargo invocations.
 - `tests/build_tools_cargo_config_tests.rs`: the committed `.cargo/config.toml`.
   That both `rustflags` sources repeat the shared flags, that no profile names
-  a codegen backend, and that Cargo itself resolves the keys —
-  `cargo config get` reports Cargo's own view, so a key nested under the wrong
-  table shows up as a missing value rather than parsing cleanly and being
-  ignored.
+  a codegen backend, that no `rustflags` source carries one either — in the
+  array form or the space-separated string form Cargo reads identically — and
+  that Cargo itself resolves the keys — `cargo config get` reports Cargo's own
+  view, so a key nested under the wrong table shows up as a missing value
+  rather than parsing cleanly and being ignored.
 - `tests/build_tools_bench_tests.rs`: `make bench-build`. Per-variant target
   directories, the clean/incremental cycle, all three variant rows, and that
   every pass clears both compiler wrappers so a measurement cannot be a cache
-  read.
+  read. Its `order_cases` module holds the cases about the order the variants
+  ran in: that the draw is shuffled rather than walked straight through, that
+  one seed replays one order, and that a repeat count below two is refused.
 - `tests/build_tools_bench_lock_tests.rs`: the benchmark's exclusion lock. That
   a held lock rejects a second run before it mutates anything, that the lock is
   released however a run ends, and that a later run can take it after an
@@ -2924,6 +2927,16 @@ with an earlier one cannot be told apart from a run that measured the variants
 in a different order, which is the exact confusion the shuffle exists to
 remove. Paste that record with any table recorded here, so the next reader can
 tell which it was.
+
+The draw is an input rather than ambient state. `BENCH_SEED` seeds it, the run
+prints `order seed: N` before it measures anything, and passing that value back
+replays the same order. An unseeded run draws a seed and prints it, so a table
+somebody has already taken can still be replayed. `BENCH_REPEATS` below two is
+refused rather than clamped: nought prints an empty table and exits nought, and
+one prints a table indistinguishable in shape from a valid one while carrying
+exactly the single-sample bias the repeats exist to spread. Neither failure is
+visible in the output a reader pastes here, which is why the script names it
+instead.
 
 No table is recorded here yet, and the reason is worth keeping. The figures
 this section used to carry were taken before the wrapper defect above was

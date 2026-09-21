@@ -110,18 +110,20 @@ standard: the parallel `rustc` frontend, and on Linux the `mold` linker. A
   distribution `mold` also works for a local install, though the development
   gates additionally check the version against `tools/mold/VERSION`. The
   installer unpacks into `$(BUILD_TOOLS_PREFIX)/bin`, `~/.local/bin` by
-  default, and does not edit your shell profile; the make targets add that
-  directory to `PATH` for their own recipes only, so add it yourself before
-  installing from a shell the make targets do not drive.
+  default, and does not edit any shell profile; the make targets add that
+  directory to `PATH` for the recipes they run, so a shell the make targets do
+  not drive needs that directory added before installing.
 
 The linker is named explicitly rather than left to gcc's default, so a Linux
 host without `mold` fails the link rather than quietly falling back. The
 platform default linker is used instead on macOS and Windows — where the
 configuration names no linker — or when `.cargo/config.toml` has been removed
 before installing. A registry install — `cargo install netsuke-build` — builds
-from packaged source, where neither the configuration file nor
-`rust-toolchain.toml` applies, so it needs neither prerequisite; see the
-crates.io command earlier in this section.
+from packaged source, where neither `.cargo/config.toml` nor
+`rust-toolchain.toml` is present, so no linker flag applies and `mold` is not
+needed on any platform. The pinned nightly is still required, and with no
+`rust-toolchain.toml` to supply it the command selects it explicitly: see the
+crates.io commands earlier in this section.
 
 ### Complete Windows setup
 
