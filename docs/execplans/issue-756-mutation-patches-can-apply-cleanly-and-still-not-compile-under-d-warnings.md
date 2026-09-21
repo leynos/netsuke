@@ -153,3 +153,21 @@ passes with 3309 tests and 6 skipped, and `make test-kani-mutations` passes
 over all 18 patches. The CodeRabbit pass returned three findings, all dismissed
 on the measurements above; none changed a tracked file, so the validated tree
 is the reviewed tree.
+
+CI confirms the wiring end to end. On the `ci.yml` run for `028ac566`
+(`build-test`, job `106523333782`, 14m27s, success) the new step is step 32,
+sitting between "Test and Measure Coverage" and "Show sccache statistics"
+exactly as its comment claims, and it executed rather than being skipped:
+
+```text
+PASS [  59.139s] (1/1) netsuke-build::kani_mutation_evidence_tests compile_guard::every_patched_tree_compiles_under_denied_warnings
+Summary [  59.139s] 1 test run: 1 passed, 3 skipped
+```
+
+Two details from that log are worth keeping. The gate ran under the `ci`
+nextest profile, which `build-test` sets job-wide, and still picked up the
+`nested-cargo-builds` registration because `ci` declares no `[[overrides]]` of
+its own and inherits `default`'s. And "3 skipped" is the
+`--run-ignored ignored-only` flag doing exactly its job: one ignored test
+selected, the three fast contract checks left alone. Every other lane was green
+on the same SHA, including `kani-smoke` (6m51s) and the Windows jobs.
