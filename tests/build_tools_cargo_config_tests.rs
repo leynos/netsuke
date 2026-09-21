@@ -265,6 +265,40 @@ fn unit_a_backend_is_found_in_any_target_table_but_not_beyond_them() -> Result<(
         "an explicit-triple table is read the same way as a cfg table"
     );
 
+    // Cargo reads a space-separated string wherever it reads an array, so the
+    // string form is a second route to the same flag. A reader that handled
+    // only the array form would report this document as clean, which is the
+    // one answer this check must never give wrongly.
+    let as_string: toml::Value =
+        toml::from_str("[build]\nrustflags = \"-Zthreads=8 -Zcodegen-backend=cranelift\"\n")?;
+    let from_string = rustflags_carrying_backend(&as_string);
+    ensure!(
+        from_string.len() == 1,
+        "a string-valued rustflags is read by Cargo and must be scanned, got {from_string:?}"
+    );
+    let (string_source, string_flag) = from_string
+        .first()
+        .context("the string form was reported")?;
+    ensure!(
+        string_source == "build" && string_flag == "-Zcodegen-backend=cranelift",
+        "the offending token alone should be reported, got {string_source:?} {string_flag:?}"
+    );
+
+    let string_in_target: toml::Value =
+        toml::from_str("[target.'cfg(windows)']\nrustflags = \"-Zcodegen-backend=cranelift\"\n")?;
+    ensure!(
+        rustflags_carrying_backend(&string_in_target).len() == 1,
+        "the string form is a route in a target table too"
+    );
+
+    // A string with no backend token stays clean, so the string arm is not
+    // reporting merely because it now reads the value at all.
+    let innocent: toml::Value = toml::from_str("[build]\nrustflags = \"-Zthreads=8\"\n")?;
+    ensure!(
+        rustflags_carrying_backend(&innocent).is_empty(),
+        "an ordinary string-valued rustflags is not an offender"
+    );
+
     // `[target.<triple>.<links>]` holds build-script overrides, and a
     // `rustflags` key there is not a target flag. Only direct children count.
     let decoy: toml::Value = toml::from_str(
@@ -324,15 +358,27 @@ fn rustflags_carrying_backend(config: &toml::Value) -> Vec<(String, String)> {
     for (name, table) in sources {
         // The closure binding is distinct from the loop's `table` on purpose:
         // `source` is the whole table, and this closure reaches one level in.
-        let Some(flags) = table
-            .and_then(|source| source.get("rustflags"))
-            .and_then(toml::Value::as_array)
-        else {
+        let Some(value) = table.and_then(|source| source.get("rustflags")) else {
             continue;
         };
-        for flag in flags.iter().filter_map(toml::Value::as_str) {
+        // Cargo accepts `rustflags` as an array of strings or as one
+        // space-separated string, and reads both the same way. Reading only
+        // the array form would let the string form carry a backend straight
+        // past the one check that must not fail open.
+        let flags: Vec<String> = match value {
+            toml::Value::Array(array) => array
+                .iter()
+                .filter_map(toml::Value::as_str)
+                .map(str::to_owned)
+                .collect(),
+            toml::Value::String(text) => text.split_whitespace().map(str::to_owned).collect(),
+            // Any other type is not a value Cargo reads as flags, so there is
+            // nothing here to scan; the configuration parser rejects it.
+            _ => Vec::new(),
+        };
+        for flag in flags {
             if flag.contains("codegen-backend") {
-                offenders.push((name.clone(), flag.to_owned()));
+                offenders.push((name.clone(), flag));
             }
         }
     }
