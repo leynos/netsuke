@@ -14,9 +14,11 @@
 //! from every captured event and every captured span field.
 //!
 //! This file holds the workspace fixture and the label vocabulary, which the
-//! cases share. The cases that read a counter series live in
-//! [`outcome_series`], and the cases that read a span and its event in
-//! [`tracing_capture`]; the split keeps each file to one concern.
+//! cases share — including the two that hold the domain's error taxonomy to
+//! the vocabulary, one from each side of the boundary. The cases that read a
+//! counter series live in [`outcome_series`], and the cases that read a span
+//! and its event in [`tracing_capture`]; the split keeps each file to one
+//! concern.
 
 use std::{ffi::OsString, num::NonZeroUsize, sync::Arc};
 
@@ -264,13 +266,12 @@ fn every_error_variant() -> Result<[ResolveError; 10]> {
 /// telemetry label — is now two properties, because the two are no longer the
 /// same thing. This is the domain half: `category()` returns a
 /// [`ResolveErrorCategory`], the taxonomy is total over the error type, and
-/// every category is reachable. The spelling half lives in
+/// every variant reports a category of its own. The spelling half lives in
 /// [`every_domain_category_maps_to_a_declared_telemetry_label`], and the two
 /// together are what the single assertion used to cover.
 ///
-/// Length equality is the load-bearing part. It fails both when two variants
-/// collide on one category and when a category has no variant behind it, so
-/// the taxonomy cannot drift away from the error type in either direction.
+/// The two length equalities are the load-bearing part: a collision fails the
+/// first, and a taxonomy the vocabulary has no room for fails the second.
 #[test]
 fn every_resolve_error_variant_reports_a_domain_category() -> Result<()> {
     let errors = every_error_variant()?;
@@ -287,8 +288,8 @@ fn every_resolve_error_variant_reports_a_domain_category() -> Result<()> {
         "one category per variant, no more and no fewer: {observed:?}"
     );
     ensure!(
-        distinct.len() == ResolveErrorCategory::ALL_LABELS.len(),
-        "every category must have a variant behind it: {observed:?}"
+        distinct.len() == RESOLVE_ERROR_CATEGORY_VALUES.len(),
+        "every category must have a declared label: {distinct:?}"
     );
     Ok(())
 }
@@ -303,6 +304,10 @@ fn every_resolve_error_variant_reports_a_domain_category() -> Result<()> {
 /// The mapping is also asserted to be total over the taxonomy — every
 /// [`ResolveErrorCategory`] is reachable from a real [`ResolveError`] *and*
 /// spells on the wire — which is what makes the count meaningful.
+///
+/// Note what this does *not* read: the labels come from the boundary's mapping,
+/// so nothing here observes what the domain spells a category. That coupling is
+/// stated separately, in [`the_domain_spells_every_category_as_its_label`].
 #[test]
 fn every_domain_category_maps_to_a_declared_telemetry_label() -> Result<()> {
     let errors = every_error_variant()?;
@@ -346,21 +351,45 @@ fn every_domain_category_maps_to_a_declared_telemetry_label() -> Result<()> {
     Ok(())
 }
 
-/// The domain's own spelling list and the mapped label set are the same words.
+/// The domain spells each category exactly as the boundary labels it.
 ///
-/// The domain carries its own spellings — [`ResolveErrorCategory::ALL_LABELS`]
-/// — and this module carries the label vocabulary. The two are separate
-/// declarations of the same ten words, and this case is what holds them
-/// together: a rename on either side that the other did not follow is caught
-/// here rather than by a reader comparing two lists by eye.
+/// The domain's own spellings are only asserted here. Neither property above
+/// compares them with the labels: the boundary one maps through
+/// `category_label`, so a category respelled in the domain alone would leave it
+/// holding the same words on the wire and passing. What would notice such a
+/// rename is `Display`, which renders the domain's spelling — but only where a
+/// case happens to assert the rendered text, which is not an assertion of the
+/// coupling.
+///
+/// So the coupling is stated outright, one variant at a time, by reaching the
+/// domain's spelling the only way a consumer can: through the error that
+/// reports it.
 #[test]
-fn the_domain_spelling_list_is_the_mapped_label_set() -> Result<()> {
-    ensure!(
-        ResolveErrorCategory::ALL_LABELS == RESOLVE_ERROR_CATEGORY_VALUES,
-        "the domain's spellings and the telemetry labels must agree: \
-         domain {:?}, labels {:?}",
-        ResolveErrorCategory::ALL_LABELS,
-        RESOLVE_ERROR_CATEGORY_VALUES
-    );
+fn the_domain_spells_every_category_as_its_label() -> Result<()> {
+    let errors = every_error_variant()?;
+    for error in &errors {
+        let category = error.category();
+        ensure!(
+            category.label() == category_label(category),
+            "the domain must spell {category:?} as the boundary labels it: \
+             domain {:?}, label {:?}",
+            category.label(),
+            category_label(category)
+        );
+    }
+    // Reached through `Display` as well, because that is the path a reader sees
+    // and the one a rename would otherwise only reach by accident.
+    for error in &errors {
+        if let ResolveError::IsExecutable { .. } = error {
+            // This variant renders its source rather than its category, so it
+            // is the one place the two legitimately differ.
+            continue;
+        }
+        ensure!(
+            error.to_string() == error.category().label(),
+            "the rendered error must be the domain's spelling: {error} vs {:?}",
+            error.category().label()
+        );
+    }
     Ok(())
 }

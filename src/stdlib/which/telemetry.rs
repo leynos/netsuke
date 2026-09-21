@@ -163,14 +163,15 @@ pub(super) const fn category_label(category: ResolveErrorCategory) -> &'static s
 /// One value per domain category, so the label set is fixed by the error type
 /// rather than by the failure a host happened to encounter.
 ///
-/// Spelled as the label constants above, which is what keeps this a separate
-/// declaration from the domain's own list. The two are tied together by test:
-/// `telemetry_tests` asserts that mapping every variant through
-/// [`category_label`] reaches exactly these spellings, and separately that the
-/// domain's [`ResolveErrorCategory::ALL_LABELS`] is this same set of words.
-/// Writing this as an alias of the domain's list instead would make the second
-/// assertion compare a value with itself and would leave the first as the only
-/// thing joining the two taxonomies.
+/// Spelled as the label constants above. The domain declares its own spellings
+/// separately, in `ResolveErrorCategory::label`, and the two are tied together
+/// by test rather than by a shared constant: `telemetry_tests` maps every
+/// variant through the boundary and asserts that the mapped words are exactly
+/// this set, with no duplicates and the whole set reached; the same module also
+/// pins the words themselves. A second assertion naming the domain's spellings
+/// outright is deliberately not made here — an alias or a sentinel would
+/// compare a value with itself, and a public constant cannot link to the
+/// private items such an assertion would read.
 pub const RESOLVE_ERROR_CATEGORY_VALUES: [&str; 10] = [
     CATEGORY_NOT_FOUND,
     CATEGORY_DIRECT_NOT_FOUND,

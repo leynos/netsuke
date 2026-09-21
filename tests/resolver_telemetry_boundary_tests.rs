@@ -139,10 +139,10 @@ fn literal_end(source: &[u8], index: usize) -> Option<usize> {
         return None;
     }
     let mut end = index + 1;
-    while end < source.len() {
-        match source[end] {
+    while let Some(byte) = source.get(end).copied() {
+        match byte {
             b'\\' => end += 2,
-            byte if byte == quote => return Some(end + 1),
+            _ if byte == quote => return Some(end + 1),
             b'\n' if quote == b'\'' => return None,
             _ => end += 1,
         }
@@ -169,8 +169,8 @@ fn raw_string_end(source: &[u8], index: usize) -> Option<usize> {
     let body = start + 2 + hashes;
     // The terminator is a quote followed by as many hashes as opened it.
     let mut end = body;
-    while end < source.len() {
-        if source[end] == b'"'
+    while source.get(end).is_some() {
+        if source.get(end).copied() == Some(b'"')
             && (0..hashes).all(|offset| source.get(end + 1 + offset) == Some(&b'#'))
         {
             return Some(end + 1 + hashes);
@@ -191,6 +191,13 @@ fn non_code_end(source: &[u8], index: usize) -> Option<usize> {
         .or_else(|| literal_end(source, index))
 }
 
+/// Blank `span` in place, keeping its newlines so line structure survives.
+fn blank(span: &mut [u8]) {
+    for byte in span.iter_mut().filter(|byte| **byte != b'\n') {
+        *byte = b' ';
+    }
+}
+
 /// Replace comments and literals with spaces, preserving every byte offset.
 ///
 /// Offsets are preserved so a match's position still maps to the source it came
@@ -201,17 +208,17 @@ fn mask_non_code(source: &str) -> Vec<u8> {
     let mut masked = source.as_bytes().to_vec();
     let mut index = 0;
     while index < source.len() {
-        let end = non_code_end(&masked, index);
-        let Some(end) = end.filter(|end| *end > index) else {
+        let Some(span_end) = non_code_end(&masked, index).filter(|end| *end > index) else {
+            // Not the start of anything masked, so this byte is code and stays.
             index += 1;
             continue;
         };
-        for byte in &mut masked[index..end] {
-            if *byte != b'\n' {
-                *byte = b' ';
-            }
+        // `get_mut` rather than an index, so a range the scan cannot produce
+        // blanks nothing instead of panicking.
+        if let Some(span) = masked.get_mut(index..span_end) {
+            blank(span);
         }
-        index = end;
+        index = span_end;
     }
     masked
 }
@@ -254,25 +261,26 @@ fn names_telemetry_in_a_use(masked: &[u8]) -> bool {
 }
 
 /// Collect every `.rs` source beneath `directory`, as workspace-relative paths.
-fn collect_sources(
-    root: &Dir,
-    directory: &Dir,
-    prefix: &Utf8Path,
-) -> Result<Vec<(String, String)>> {
+///
+/// Each directory is entered from its own handle — the ambient root is opened
+/// once by the caller and never traversed — so the walk carries no capability
+/// it does not use, and `prefix` names the position in the workspace the
+/// resulting paths are reported under.
+fn collect_sources(directory: &Dir, prefix: &Utf8Path) -> Result<Vec<(String, String)>> {
     let mut sources = Vec::new();
     for entry in directory
         .read_dir(".")
         .with_context(|| format!("read {prefix}"))?
     {
-        let entry = entry.with_context(|| format!("read an entry of {prefix}"))?;
-        let name = entry.file_name().context("read entry name")?;
+        let handle = entry.with_context(|| format!("read an entry of {prefix}"))?;
+        let name = handle.file_name().context("read entry name")?;
         let child = prefix.join(&name);
-        let file_type = entry.file_type().context("read entry type")?;
+        let file_type = handle.file_type().context("read entry type")?;
         if file_type.is_dir() {
             let nested = directory
                 .open_dir(&name)
                 .with_context(|| format!("open {child}"))?;
-            sources.extend(collect_sources(root, &nested, &child)?);
+            sources.extend(collect_sources(&nested, &child)?);
         } else if file_type.is_file() && Utf8Path::new(&name).extension() == Some("rs") {
             let text = directory
                 .read_to_string(&name)
@@ -300,7 +308,7 @@ fn only_the_telemetry_boundary_names_telemetry_in_the_resolver_domain() -> Resul
         .open_dir(domain)
         .with_context(|| format!("open {RESOLVER_DOMAIN}"))?;
 
-    let sources = collect_sources(&root, &domain_dir, domain)?;
+    let sources = collect_sources(&domain_dir, domain)?;
     ensure!(
         sources.len() >= MINIMUM_DOMAIN_SOURCES,
         "the walk found {} sources under {RESOLVER_DOMAIN}, fewer than the \
