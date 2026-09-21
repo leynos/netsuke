@@ -1,12 +1,13 @@
-diff --git a/src/ir/from_manifest_support.rs b/src/ir/from_manifest_support.rs
-index 04cc1ec0..c5fab949 100644
---- a/src/ir/from_manifest_support.rs
-+++ b/src/ir/from_manifest_support.rs
-@@ -202,7 +202,6 @@ pub(super) fn resolve_rule(
-             if rules.is_empty() {
-                 Err(empty_rule_error(target_name))
-             } else {
--                sort_utils::sort_strings(&mut rules);
-                 Err(multiple_rules_error(target_name, rules))
-             }
-         },
+diff --git a/src/ir/sort_utils.rs b/src/ir/sort_utils.rs
+index 552c5606..80bc65d9 100644
+--- a/src/ir/sort_utils.rs
++++ b/src/ir/sort_utils.rs
+@@ -44,7 +44,7 @@ where
+ pub(super) fn sort_strings(values: &mut [String]) {
+     // The closure is not redundant: `string_cmp` takes `&str`, and passing
+     // the fn item would not satisfy the `Fn(&String, &String)` bound.
+-    insertion_sort_by(values, |a, b| string_cmp(a, b));
++    insertion_sort_by(values, |a, b| string_cmp(b, a));
+ }
+ 
+ /// Order two strings for deterministic rule-name sorting.
