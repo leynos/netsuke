@@ -6,7 +6,7 @@ Accepted.
 
 ## Date
 
-2026-09-19
+2026-09-19. Addendum 2026-09-21; the decision is unchanged.
 
 ## Context and problem statement
 
@@ -93,18 +93,8 @@ work is what would silently disable the standard if the flags were not
 repeated. Keeping the two sources equal is therefore a testable contract rather
 than a convention, and the guide asks explicitly that they not be consolidated.
 
-**Why Cranelift is excluded.** This repository's own suite does not pass under
-it. `make test` on `main` at `00f48f77`, with
-`[profile.dev] codegen-backend = "cranelift"` added to `.cargo/config.toml` and
-nothing else changed, stops on an abort after 1372 of 3309 tests; run to
-completion it reports 3302 passed, 6 failed and 1 timed out. The same commit
-and command with that fragment removed passes all 3309. Five of the six
-failures are the unwind behaviour below, and the sixth is a nested-cargo test
-that crosses its allowance because the build under Cranelift is slower. The
-developers' guide records the failing tests, the commands and the attribution.
-
-**What fails, stated narrowly.** A Cranelift-compiled panic does not find the
-unwind handler it should. Measured on `nightly-2026-08-23`
+**Why Cranelift is excluded, stated narrowly.** A Cranelift-compiled panic does
+not find the unwind handler it should. Measured on `nightly-2026-08-23`
 (`librustc_codegen_cranelift-1.100.0-nightly.so`) in a crate with no
 dependencies, with `[profile.dev] codegen-backend = "cranelift"` and the
 standard's flags:
@@ -169,10 +159,8 @@ should be justified by the benchmark rather than by this record.
   whose load average went from 0.7 to 117 and reversed its verdict twice. No
   table is recorded here until a run on an otherwise-idle host produces samples
   that agree; the developers' guide states the conditions such a run needs.
-- Re-testing Cranelift on a toolchain bump is a deliberate act, and the test is
-  the suite rather than the probe: the probe explains the mechanism, and only
-  the suite answers the question. The developers' guide carries both, with the
-  configuration fragment and the commands. `CARGO_PROFILE_DEV_CODEGEN_BACKEND`
+- Re-testing Cranelift on a toolchain bump is a deliberate act, and the
+  developers' guide carries the probe. `CARGO_PROFILE_DEV_CODEGEN_BACKEND`
   remains available for a single scoped experiment.
 
 ## Alternatives considered
@@ -185,13 +173,10 @@ should be justified by the benchmark rather than by this record.
   that let the acceleration go unused: an "opt-in fast target" is a target
   nobody runs, and it doubles the CI matrix to prove something the default
   could prove on its own.
-- **Adopt the Cranelift backend.** Rejected on the evidence above, and
-  re-examined on 2026-09-21 by running the whole suite under it rather than a
-  probe. The performance case is real and the correctness case is
-  disqualifying: six tests fail, and a debug binary that aborts at 134 where it
-  should exit 101 is a different program from the one the tests exercise. The
-  rejection is about this repository, whose tests include several whose subject
-  is a panic crossing a boundary; it is not a general verdict on the backend.
+- **Adopt the Cranelift backend.** Rejected on the evidence above. The
+  performance case is real and the correctness case is disqualifying: a debug
+  binary that aborts at 134 where it should exit 101 is a different program
+  from the one the tests exercise.
 - **Scope Cranelift to `make build` only.** Rejected because a profile override
   does not confine the backend to the artefacts the developer intends, and the
   one artefact it does reach would then behave differently from every test.
@@ -202,6 +187,47 @@ should be justified by the benchmark rather than by this record.
 - **Pin `mold` through the toolchain file.** Rejected because `rustup` manages
   compilers, not linkers; the version pin and its checksums live in
   `tools/mold/` and are verified by the installer.
+
+## Addendum, 2026-09-21: the suite under Cranelift
+
+The decision above is unchanged. This records the measurement that was missing
+from it.
+
+The Cranelift exclusion rested on the three-case probe in _Rationale_: a crate
+with no dependencies, written to isolate the unwind behaviour. That probe
+explains a mechanism. It does not answer the question the exclusion turns on,
+which is whether this repository's own suite runs under the backend — and the
+estate prefers Cranelift wherever a repository's suite passes under it.
+
+So the suite was run, on `main` at `00f48f77`, on the pinned
+`nightly-2026-08-23`, with `[profile.dev] codegen-backend = "cranelift"` and
+`[unstable] codegen-backend = true` added to `.cargo/config.toml` and nothing
+else changed. The control is the same commit and the same command with that
+fragment removed.
+
+| Arm                     | Result | Counts                                               |
+| ----------------------- | ------ | ---------------------------------------------------- |
+| LLVM control            | passes | 3309 run, 3309 passed, 5 skipped; 39 doctests passed |
+| Cranelift               | fails  | stops at 1372 of 3309 on the first abort             |
+| Cranelift, no fail-fast | fails  | 3309 run, 3302 passed, 6 failed, 1 timed out         |
+
+_Table 2: `make test` on 2026-09-21, by codegen backend._
+
+Five of the six failures are the unwind behaviour Table 1 already describes, in
+both of its shapes. The sixth is a nested-cargo test whose build is slower
+under Cranelift and which crosses its per-test allowance under the suite's own
+concurrency; run alone it passes under both backends. The developers' guide
+names each failing test and attributes it.
+
+Two things follow, and neither changes the decision:
+
+- The re-test on a toolchain bump is the suite, not the probe. The probe is
+  kept because it explains what fails; only the suite answers whether the
+  backend is usable here.
+- The exclusion is about this repository. Five of the six failures are tests
+  whose subject is a panic crossing a boundary, so a repository without such
+  tests would meet none of them. Other repositories on this estate do use
+  Cranelift, and this record does not argue against that.
 
 ## Implementation references
 
