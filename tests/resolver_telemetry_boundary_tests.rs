@@ -94,7 +94,11 @@ fn matches_at(source: &[u8], index: usize, needle: &[u8]) -> bool {
 
 /// Return the offset of the next `byte` at or after `index`.
 fn find_byte(source: &[u8], byte: u8, index: usize) -> Option<usize> {
-    source.get(index..)?.iter().position(|found| *found == byte).map(|found| index + found)
+    source
+        .get(index..)?
+        .iter()
+        .position(|found| *found == byte)
+        .map(|found| index + found)
 }
 
 /// Return the end of a line comment beginning at `index`, when present.
@@ -166,7 +170,8 @@ fn raw_string_end(source: &[u8], index: usize) -> Option<usize> {
     // The terminator is a quote followed by as many hashes as opened it.
     let mut end = body;
     while end < source.len() {
-        if source[end] == b'"' && (0..hashes).all(|offset| source.get(end + 1 + offset) == Some(&b'#'))
+        if source[end] == b'"'
+            && (0..hashes).all(|offset| source.get(end + 1 + offset) == Some(&b'#'))
         {
             return Some(end + 1 + hashes);
         }
@@ -222,7 +227,8 @@ fn names_token(statement: &[u8], token: &[u8]) -> bool {
                 .and_then(|previous| statement.get(previous))
                 .is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'_');
             let after = statement.get(index + token.len());
-            let after_is_word = after.is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'_');
+            let after_is_word =
+                after.is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'_');
             window == token && !before_is_word && !after_is_word
         })
 }
@@ -248,7 +254,11 @@ fn names_telemetry_in_a_use(masked: &[u8]) -> bool {
 }
 
 /// Collect every `.rs` source beneath `directory`, as workspace-relative paths.
-fn collect_sources(root: &Dir, directory: &Dir, prefix: &Utf8Path) -> Result<Vec<(String, String)>> {
+fn collect_sources(
+    root: &Dir,
+    directory: &Dir,
+    prefix: &Utf8Path,
+) -> Result<Vec<(String, String)>> {
     let mut sources = Vec::new();
     for entry in directory
         .read_dir(".")
@@ -306,7 +316,10 @@ fn only_the_telemetry_boundary_names_telemetry_in_the_resolver_domain() -> Resul
         }
     }
 
-    let unexpected: Vec<&String> = importers.iter().filter(|path| !is_permitted(path)).collect();
+    let unexpected: Vec<&String> = importers
+        .iter()
+        .filter(|path| !is_permitted(path))
+        .collect();
     ensure!(
         unexpected.is_empty(),
         "every module under {RESOLVER_DOMAIN} that names telemetry must be a \
