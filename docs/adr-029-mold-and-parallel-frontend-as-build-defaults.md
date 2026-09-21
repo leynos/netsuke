@@ -6,7 +6,7 @@ Accepted.
 
 ## Date
 
-2026-09-19. Addendum 2026-09-21; the decision is unchanged.
+2026-09-19
 
 ## Context and problem statement
 
