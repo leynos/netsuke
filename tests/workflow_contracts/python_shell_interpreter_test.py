@@ -17,6 +17,15 @@ must be the checked-in interpreter check, which loads anywhere and names the
 mismatch. ``make lint-workflow-scripts`` covers the other half: every trusted
 module must load under the baseline.
 
+Under the 3.14 baseline that load no longer evaluates the annotations. PEP 649
+defers them, so the modules here which annotate with a ``TYPE_CHECKING``-only
+import -- ``Path`` in this file among them -- import cleanly, while resolving
+those annotations with ``typing.get_type_hints`` still raises ``NameError``.
+The repository does not support runtime annotation introspection on these
+modules; `ty` reads them statically and pytest executes them. ADR-034 records
+the decision, its measured scope, and the gate that reopens it. Loading remains
+worth doing for definition-time failures that PEP 649 does not defer.
+
 Run via ``make test-workflow-contracts``.
 """
 

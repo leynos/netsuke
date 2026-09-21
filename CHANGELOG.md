@@ -18,6 +18,12 @@
   from sixty to ninety minutes, while `[profile.ci]`'s `global-timeout` falls
   from fifteen to thirteen minutes
   ([#715](https://github.com/leynos/netsuke/issues/715))
+- Record that runtime annotation introspection is unsupported for the workflow
+  contract tests, and correct the `lint-workflow-scripts` comment, which
+  claimed that loading a module catches an annotation naming a
+  `TYPE_CHECKING`-only import; under the 3.14 baseline PEP 649 defers
+  evaluation, so only resolving the annotation catches it
+  ([#730](https://github.com/leynos/netsuke/issues/730), [ADR-034](docs/adr-034-runtime-annotation-introspection-in-workflow-contracts.md))
 
 ### Fixed
 

@@ -13,6 +13,10 @@ real figure is 300 s. A
 ``slow-timeout`` naming no ``terminate-after`` terminates nothing at
 all, so that form is refused rather than read as a single period.
 
+Read by ``ty`` and run by pytest; runtime annotation introspection is not
+supported here, because these annotations name ``TYPE_CHECKING``-only imports
+and resolving one raises ``NameError``. ADR-034 records the decision.
+
 See "Test timeouts: the tiers this repository sets" in
 ``docs/developers-guide.md``.
 """
