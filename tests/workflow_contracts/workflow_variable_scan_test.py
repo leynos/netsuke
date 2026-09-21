@@ -125,6 +125,75 @@ def test_a_step_with_no_reference_is_clean() -> None:
     }), "a step reading no repository variable must be reported clean"
 
 
+@pytest.mark.parametrize(
+    ("label", "condition"),
+    [
+        # The plain comparison, which is how this repository writes a gate.
+        ("comparison", "vars.CODESCENE_CLI_SHA256 == 'true'"),
+        # A compound condition, where the variable is one operand among several.
+        ("conjunction", "github.event_name == 'push' && vars.SECRET != ''"),
+        # A condition read as a function argument rather than as a comparison.
+        ("function call", "contains(vars.FOO, 'x')"),
+    ],
+)
+def test_a_reference_is_found_in_a_condition_written_without_delimiters(
+    label: str, condition: str
+) -> None:
+    """Read a step's ``if`` whole, because GitHub evaluates it either way.
+
+    A condition is an expression whether or not it carries the ``${{ }}``
+    delimiters, so a ``vars.`` reference written without them resolves to the
+    empty string exactly as a delimited one does — and the undelimited spelling
+    is the one this repository uses. A scan that looked only inside delimiters
+    reported every condition here clean while the empty value decided whether
+    the step ran at all, and the step's own name is the only clue left behind.
+    """
+    assert unbound_variable_references({"if": condition}) == [condition], (
+        f"a {label} naming an undeclared variable must be reported"
+    )
+
+
+def test_the_undelimited_spelling_of_the_permitted_variable_is_not_reported() -> None:
+    """Permit the declared variable however the condition is punctuated.
+
+    The permission is a statement about which variable is read, not about
+    whether the author wrote the delimiters, so the undelimited spelling has to
+    be permitted exactly as the delimited one is. Without this case the fix for
+    the undelimited form could be a scan that reports every ``if`` it is handed.
+    """
+    assert not unbound_variable_references({
+        "if": "vars.NETSUKE_SCCACHE_LOCAL_DIR == 'true'"
+    }), "the one variable this repository defines must be permitted either way"
+
+
+@pytest.mark.parametrize(
+    ("label", "step"),
+    [
+        # A run block is text: the dotted pair here is a command and a
+        # subcommand, not a reference to a context value.
+        ("run block", {"run": "cargo fmt.version --check"}),
+        # A message that happens to spell a dotted pair names nothing either.
+        ("literal message", {"name": "Bump to version 1.2.3"}),
+        # An `env` entry is a value, not a condition, so it is read for
+        # delimiters only — as it was before the condition was read whole.
+        ("env entry", {"env": {"SPEC": "vars.UNDECLARED"}}),
+    ],
+)
+def test_only_a_condition_is_read_as_a_bare_expression(
+    label: str, step: dict[str, object]
+) -> None:
+    """Keep the whole-value reading to the one field GitHub evaluates as one.
+
+    Reading every string as an expression would report ordinary text — a run
+    block naming a subcommand, a release message — as an undeclared variable,
+    and a scan that accuses correct workflows is one its readers learn to
+    ignore. Only a step's ``if`` is an expression in its own right.
+    """
+    assert not unbound_variable_references(step), (
+        f"a {label} is not an expression and must not be read as one"
+    )
+
+
 def test_an_identifier_is_read_with_its_namespace() -> None:
     """Pair each name with the namespace it is addressed through.
 

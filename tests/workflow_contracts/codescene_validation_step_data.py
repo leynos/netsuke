@@ -257,4 +257,24 @@ CREATION_BINDING_CASES: typ.Final[list[tuple[str, str | None]]] = [
         + validator_reads('"$staged"'),
         None,
     ),
+    # `mkdir` is the other spelling the creation check counts, and the lane is
+    # handed the directory as a literal rather than through a variable. This is
+    # the control that keeps a reading of `mkdir` from being tightened until a
+    # script staging somewhere fixed stops being recognised.
+    (
+        f"mkdir -p {STAGED_DIRECTORY}\n"
+        f'cp -- {COVERAGE_REPORT_PATH} "{STAGED_DIRECTORY}/{COVERAGE_REPORT_PATH}"\n'
+        + validator_reads(STAGED_DIRECTORY),
+        None,
+    ),
+    # `mkdir` named in a printed string creates nothing. The shell runs `echo`,
+    # so the directory the contract asks for is never made — and a reading that
+    # credited the mention would accept a staged directory the validator is
+    # handed empty.
+    (
+        f'echo "mkdir {STAGED_DIRECTORY}"\n'
+        f'cp -- {COVERAGE_REPORT_PATH} "{STAGED_DIRECTORY}/{COVERAGE_REPORT_PATH}"\n'
+        + validator_reads(STAGED_DIRECTORY),
+        "must create",
+    ),
 ]

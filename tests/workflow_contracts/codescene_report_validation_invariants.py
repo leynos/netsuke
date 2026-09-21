@@ -207,13 +207,13 @@ def _created_directories(script: str) -> set[str]:
     already exists it validates whatever was left there — an artefact that is
     not this run's, read under a claim that it is.
 
-    Two spellings count. A shell variable set from a command that makes a
-    directory — `staged="$(mktemp --directory)"`, which is what a staged
-    scratch directory normally looks like — and a directory named to `mkdir`,
-    which is how a script that stages somewhere fixed tends to read. Each is
-    recognised in the same command segment as the assignment or the command, so
-    a variable is never associated with a directory made in a neighbour
-    command.
+    Two spellings count, and each is read from one segment at a time, so a
+    variable is never associated with a directory a neighbour command made. A
+    shell variable set from a command that makes a directory —
+    `staged="$(mktemp --directory)"`, which is what a staged scratch directory
+    normally looks like — counts through :func:`_mktemp_directories`; a
+    directory named to `mkdir`, which is how a script that stages somewhere
+    fixed tends to read, counts through :func:`_mkdir_directories`.
 
     Returns
     -------
@@ -223,48 +223,48 @@ def _created_directories(script: str) -> set[str]:
     """
     created: set[str] = set()
     for segment in command_segments(script):
-        created |= _directories_made_in(segment)
+        created |= _mktemp_directories(segment) | _mkdir_directories(segment)
     return created
 
 
-def _directories_made_in(segment: str) -> set[str]:
-    """Return the names one command segment gives to directories it creates.
+def _mktemp_directories(segment: str) -> set[str]:
+    """Return the names a segment captures a directory in, through `mktemp`.
 
-    Both spellings are read from the same segment, so a variable is never
-    credited with a directory a neighbouring command made: the assignment that
-    holds `mktemp` and the `mkdir` that names a directory are each read where
-    they appear, and nothing is carried between segments.
+    A plain `mktemp` names a file, which is not a directory to stage, so the
+    directory flag has to be present: both spellings of it count, since which
+    one a script uses is style. The name credited is the one the capture was
+    assigned to, so a segment assigning two names and capturing one directory
+    credits only the name holding it.
 
     Returns
     -------
     set[str]
-        The names this segment's own commands create.
+        The variable names holding a directory this segment made, empty when it
+        asks `mktemp` for no directory.
     """
-    created: set[str] = set()
-    # `$(mktemp --directory)` and `$(mktemp -d)` each carry the flag; a plain
-    # `mktemp` names a file, which is not a directory to stage.
-    if _makes_directory_with_mktemp(segment):
-        created |= assigned_from(segment, "mktemp")
-    if re.search(r"\bmkdir\b", segment):
-        created |= {name.strip("\"'${}") for name in command_operands(segment, "mkdir")}
-    return created
+    if not re.search(r"\bmktemp\b", segment) or not re.search(
+        MKTEMP_DIRECTORY_FLAG, segment
+    ):
+        return set()
+    return assigned_from(segment, "mktemp")
 
 
-def _makes_directory_with_mktemp(segment: str) -> bool:
-    """Return whether the segment asks `mktemp` for a directory, not a file.
+def _mkdir_directories(segment: str) -> set[str]:
+    """Return the directories a segment names to `mkdir`.
 
-    Both spellings of the flag are accepted — `--directory` and `-d` — because
-    which one a script uses is style, and recognising only one would report a
-    script that did create its directory.
+    `mkdir` is read where a command *runs*, so a segment that only prints the
+    words makes nothing: `echo "mkdir staged"` names a directory and creates
+    none, and crediting it would record one the script never made.
 
     Returns
     -------
-    bool
-        Whether `mktemp` runs in this segment with the directory flag.
+    set[str]
+        The literal directory operands with quoting and variable syntax
+        stripped, empty when the segment runs no `mkdir`.
     """
-    return bool(
-        re.search(r"\bmktemp\b", segment) and re.search(MKTEMP_DIRECTORY_FLAG, segment)
-    )
+    if not re.search(r"\bmkdir\b", segment):
+        return set()
+    return {name.strip("\"'${}") for name in command_operands(segment, "mkdir")}
 
 
 def _staged_directory(script: str) -> str | None:
