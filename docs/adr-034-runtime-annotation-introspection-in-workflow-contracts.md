@@ -202,10 +202,9 @@ cost that grows.
 
 Option D was rejected on measurement rather than on judgement. It is the
 intuitive fix — the existing gate already loads workflow modules and already
-claims to catch this — and the claim is simply no longer accurate under PEP
-
-1. Extending a gate that cannot observe the failure would have added cost and
-a false assurance.
+claims to catch this — and the claim is simply no longer accurate under the
+deferred evaluation PEP 649 introduced. Extending a gate that cannot observe
+the failure would have added cost and a false assurance.
 
 Options A and B are not rejected on merit. Both would work. They are deferred,
 and the record states what each costs, so the work is a known quantity if the
