@@ -20,10 +20,11 @@ Four failures motivate the shape rather than any particular spelling of it:
 - The upload step was handed a checksum input whose value came from
   `vars.CODESCENE_CLI_SHA256`. This repository declares no variables at all, so
   the value interpolated to the empty string: the step read as though it
-  verified the CodeScene CLI installer and in fact verified nothing. The
-  action's current revision renames that input to `archive-checksum` and
-  rejects a non-empty `installer-checksum` outright, so a routine Dependabot
-  bump would fail the trunk upload on a value that was already inert.
+  verified the CodeScene CLI installer and in fact verified nothing. At the
+  pinned revision the two inputs are `installer-checksum`, deprecated, and
+  `archive-checksum`, its replacement, and the action rejects a non-empty
+  `installer-checksum` outright, so this repository's own pin is already the
+  revision that fails on that value rather than merely ignoring it.
 - The report path is written by one step and read by another through two
   independent inputs. A renamed `output-path` with an unrenamed `path` leaves
   the upload reading a file nothing produced.
@@ -97,11 +98,10 @@ UPLOAD_PATH_INPUT: typ.Final[str] = "path"
 COVERAGE_FORMAT_INPUT: typ.Final[str] = "format"
 COVERAGE_FORMAT_VALUE: typ.Final[str] = "lcov"
 
-#: Checksum inputs the pinned upload action accepts, and the input name a
-#: future revision renames them to. Every one of them is listed so a
-#: reintroduction under any spelling is caught: the value this repository can
-#: supply resolves to empty, so the input is either useless or (on the
-#: renaming revision) a hard failure.
+#: Checksum inputs the pinned upload action declares. Both are listed so a
+#: reintroduction under either spelling is caught: `installer-checksum` is
+#: deprecated and rejected when non-empty at this repository's own pin, and
+#: `archive-checksum` is its replacement, which no workflow here binds.
 CHECKSUM_INPUTS: typ.Final[tuple[str, ...]] = (
     "installer-checksum",
     "archive-checksum",
@@ -275,8 +275,7 @@ def _checksum_offenders(upload: dict[str, object]) -> list[str]:
     submitted = inputs_of(upload)
     return [
         f"{CODESCENE_UPLOAD_STEP!r} must not pass {name!r}; this repository "
-        f"defines no variable that could bind it, so it verifies nothing today "
-        f"and the action's renaming revision rejects a non-empty value outright"
+        f"defines no variable that could bind it, so it verifies nothing"
         for name in CHECKSUM_INPUTS
         if name in submitted
     ]

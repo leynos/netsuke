@@ -173,9 +173,9 @@ def test_the_detectors_report_a_reintroduced_checksum_input(
 
     This repository declares no repository variables, so a checksum bound to
     one resolves to the empty string and verifies nothing. The pinned action
-    merely skips the check; the revision that renames the input rejects a
-    non-empty value outright, so carrying it makes a routine Dependabot bump
-    fail the trunk upload.
+    does not merely ignore a checksum it cannot match: carrying either input
+    fails at the action's own validation step, so the input has to stay gone
+    here rather than merely be spelled anew.
     """
     steps = clean_steps()
     inputs_of(step_of(steps, CODESCENE_UPLOAD_STEP))[checksum_input] = "abc123"
