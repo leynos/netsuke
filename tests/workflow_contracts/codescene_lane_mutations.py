@@ -54,6 +54,7 @@ def removed_step(name: str) -> Mutation:
     """Return a mutation deleting the step called ``name``."""
 
     def apply(steps: list[dict[str, object]]) -> None:
+        """Delete the named step from ``steps``."""
         steps.pop(index_of(steps, name))
 
     return Mutation(
@@ -75,6 +76,7 @@ def removed_field(step_name: str, field: str) -> Mutation:
     """
 
     def apply(steps: list[dict[str, object]]) -> None:
+        """Delete ``field`` from the named step."""
         step_of(steps, step_name).pop(field)
 
     return Mutation(
@@ -90,6 +92,7 @@ def removed_input(step_name: str, input_name: str) -> Mutation:
     """Return a mutation deleting the ``input_name`` input of a guarded step."""
 
     def apply(steps: list[dict[str, object]]) -> None:
+        """Delete ``input_name`` from the named step's inputs."""
         inputs_of(step_of(steps, step_name)).pop(input_name)
 
     return Mutation(
@@ -116,6 +119,7 @@ def duplicated_step(name: str) -> Mutation:
     """
 
     def apply(steps: list[dict[str, object]]) -> None:
+        """Append a deep copy of the named step to the lane."""
         steps.append(copy.deepcopy(step_of(steps, name)))
 
     return Mutation(
@@ -143,6 +147,7 @@ def moved_step(name: str, position: int) -> Mutation:
     expected = REPORT_STEP_NAMES.index(name)
 
     def apply(steps: list[dict[str, object]]) -> None:
+        """Lift the named step out and reinsert it at ``position``."""
         moved = steps.pop(index_of(steps, name))
         steps.insert(position, moved)
 
@@ -159,6 +164,7 @@ def swapped_steps(first: str, second: str) -> Mutation:
     """Return a mutation exchanging the positions of two guarded steps."""
 
     def apply(steps: list[dict[str, object]]) -> None:
+        """Exchange the two named steps in place."""
         left, right = index_of(steps, first), index_of(steps, second)
         steps[left], steps[right] = steps[right], steps[left]
 
@@ -175,6 +181,7 @@ def misbound_input(step_name: str, input_name: str, value: str) -> Mutation:
     """Return a mutation rebinding an input to ``value``."""
 
     def apply(steps: list[dict[str, object]]) -> None:
+        """Rebind ``input_name`` on the named step to ``value``."""
         inputs_of(step_of(steps, step_name))[input_name] = value
 
     return Mutation(
@@ -190,6 +197,7 @@ def smuggled_input(step_name: str, input_name: str, value: str) -> Mutation:
     """Return a mutation adding an input the contract requires to be absent."""
 
     def apply(steps: list[dict[str, object]]) -> None:
+        """Supply ``input_name`` on the named step, which must not receive it."""
         inputs_of(step_of(steps, step_name))[input_name] = value
 
     return Mutation(
@@ -205,6 +213,7 @@ def rebound_environment(value: str) -> Mutation:
     """Return a mutation reading the credential from the wrong context."""
 
     def apply(steps: list[dict[str, object]]) -> None:
+        """Point the upload's credential environment entry at ``value``."""
         environment = step_of(steps, CODESCENE_UPLOAD_STEP)["env"]
         if isinstance(environment, dict):
             environment[CREDENTIAL_ENVIRONMENT_KEY] = value
@@ -234,6 +243,7 @@ def ungated_upload(condition: str | None) -> Mutation:
     """
 
     def apply(steps: list[dict[str, object]]) -> None:
+        """Strip the upload's gate, or set it to ``condition``."""
         upload = step_of(steps, CODESCENE_UPLOAD_STEP)
         if condition is None:
             upload.pop("if", None)
@@ -254,6 +264,7 @@ def reversed_gate(condition: str) -> Mutation:
     """Return a mutation whose condition opens on the run the gate must skip."""
 
     def apply(steps: list[dict[str, object]]) -> None:
+        """Set the upload's gate to the reversed ``condition``."""
         step_of(steps, CODESCENE_UPLOAD_STEP)["if"] = condition
 
     return Mutation(
@@ -269,6 +280,7 @@ def weakened_gate(condition: str) -> Mutation:
     """Return a mutation naming the credential without gating on it."""
 
     def apply(steps: list[dict[str, object]]) -> None:
+        """Set the upload's gate to the weakened ``condition``."""
         step_of(steps, CODESCENE_UPLOAD_STEP)["if"] = condition
 
     return Mutation(
@@ -294,6 +306,7 @@ def inserted_step(payload: dict[str, object], position: int) -> Mutation:
     """
 
     def apply(steps: list[dict[str, object]]) -> None:
+        """Insert a deep copy of the unrelated ``payload`` at ``position``."""
         steps.insert(position, copy.deepcopy(payload))
 
     return Mutation(
