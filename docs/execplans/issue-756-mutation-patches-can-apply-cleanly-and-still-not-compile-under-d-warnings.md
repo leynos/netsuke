@@ -96,6 +96,26 @@ failure mode cannot recur silently.
 - The gate's `Drop` guard rewrites `src/` files and restores them, which bumps
   their mtime and makes the editor report them as changed.
   `git diff --quiet -- src/` is the check that matters: the revert is exact.
+- The GitHub CodeRabbit bot does not review draft pull requests. Its own comment
+  on PR `#766` reads "Draft PR not reviewed", so the local
+  `coderabbit review --agent` pass is the only CodeRabbit signal available
+  while the pull request stays a draft. This differs from the pull-request
+  review object, which is a separate mechanism with its own staleness behaviour.
+- `coderabbit review --agent` returned three findings, and measuring each
+  reversed two of them:
+  - The one `major` finding claimed `tests/makefile_test_target.rs` "already
+    extends beyond line 730" and demanded a 400-line split. The file is **299
+    lines**, and was 298 at base: this change adds exactly one. The cited line
+    730 is not a line count this file has ever had, and `AGENTS.md`'s 400-line
+    bar is a contributor guideline with no enforced gate over `tests/`, where
+    seven tracked files already exceed it.
+  - The two `minor` findings asked to delete the comma before `because` in
+    `docs/developers-guide.md` and in this plan. `developers-guide.md` uses the
+    comma form **59** times against **44** without, so the finding would have
+    moved the line away from its own file's majority. Both clauses are
+    non-restrictive: "A fourth check", which is already identified, is gated
+    *for a stated reason*, so the clause is supplementary and the comma is
+    grammatical.
 
 ## Decision Log
 
@@ -108,6 +128,12 @@ failure mode cannot recur silently.
 - Adopt `#755`'s two repairs *verbatim* rather than repairing the same faults
   independently. Identical content means whichever PR merges second sees a
   no-op hunk instead of a conflict, and this branch's gate is green on its own.
+- Dismiss all three CodeRabbit findings rather than apply them, each on measured
+  evidence recorded under Surprises & Discoveries above. The `major` finding
+  rests on a line count the file does not have, so acting on it would split a
+  299-line file for no reason; the two `minor` findings would move prose away
+  from the reviewed file's own prevailing style on a point of discretion with
+  no correctness content.
 
 ## Outcomes & Retrospective
 
@@ -121,3 +147,9 @@ gated (one `cargo check` per patch), registered in the `nested-cargo-builds`
 group, reachable via `make test-kani-mutations`, run on every pull request from
 `build-test`, and documented in the developer's guide, including the rule that
 regeneration must swap an expression in place rather than delete a statement.
+
+Validation closing the task: the eight deterministic gates pass, `make test`
+passes with 3309 tests and 6 skipped, and `make test-kani-mutations` passes
+over all 18 patches. The CodeRabbit pass returned three findings, all dismissed
+on the measurements above; none changed a tracked file, so the validated tree
+is the reviewed tree.
