@@ -2681,11 +2681,17 @@ run means what it says:
 RUSTFLAGS="-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold" \
   cargo nextest run --workspace --all-targets --all-features --no-fail-fast \
   -E 'not test(the_configuration_names_no_codegen_backend)'
+RUSTFLAGS="-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold" \
+  cargo test --workspace --doc --all-features
 ```
 
 Those `RUSTFLAGS` are the gate's own, composed as the Makefile composes them,
-so the run is the gate's run minus that one contract. `--no-fail-fast` is what
-turns the first abort into a list.
+so the pair is the gate's own `make test` minus that one contract.
+`--no-fail-fast` is what turns the first abort into a list. Both commands are
+needed because nextest does not run doctests: `make test` runs them as a
+separate pass, and a nextest run alone would report success while saying
+nothing about the 39 the control passed. The doctest pass needs no filter,
+because the contract that has to be excluded is not a doctest.
 
 ```toml
 [unstable]
