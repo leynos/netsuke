@@ -5,14 +5,98 @@ use std::{fmt, io};
 use camino::{Utf8Path, Utf8PathBuf};
 use walkdir;
 
-use super::{
-    options::CwdMode,
-    telemetry::{
-        CATEGORY_ARGS, CATEGORY_CANONICALIZE, CATEGORY_CANONICALIZE_NON_UTF8,
-        CATEGORY_CWD_NON_UTF8, CATEGORY_CWD_RESOLVE, CATEGORY_DIRECT_NOT_FOUND,
-        CATEGORY_IS_EXECUTABLE, CATEGORY_NOT_FOUND, CATEGORY_WALKDIR, CATEGORY_WORKSPACE_NON_UTF8,
-    },
-};
+use super::options::CwdMode;
+
+/// The bounded failure taxonomy of [`ResolveError`].
+///
+/// The resolver's own vocabulary, kept beside the error type it describes and
+/// independent of how any of it is reported. A consumer that needs to name a
+/// failure names a variant here; the telemetry layer is one such consumer and
+/// spells these for its own label set, so a change to what is *recorded*
+/// cannot change what the resolver *means* by a failure.
+///
+/// The declaration order is the order [`ResolveErrorCategory::ALL_LABELS`]
+/// lists, and it is the order the variants appear in [`ResolveError`]. Nothing
+/// depends on that beyond readability, but keeping the three in step is what
+/// makes the taxonomy legible at a glance.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(super) enum ResolveErrorCategory {
+    /// A PATH search exhausted every candidate directory without a hit.
+    NotFound,
+    /// A direct-path lookup found no executable at the resolved path.
+    DirectNotFound,
+    /// An invalid argument or option value was supplied.
+    Args,
+    /// Canonicalization of a matched path failed.
+    Canonicalize,
+    /// `fs::metadata` failed whilst checking whether a path is executable.
+    IsExecutable,
+    /// A canonical path could not be represented as UTF-8.
+    CanonicalizeNonUtf8,
+    /// A workspace fallback path could not be represented as UTF-8.
+    WorkspaceNonUtf8,
+    /// A `walkdir` traversal error encountered during workspace fallback search.
+    WalkDir,
+    /// The working directory could not be read.
+    CwdResolve,
+    /// The working directory path is not valid UTF-8.
+    CwdNonUtf8,
+}
+
+impl ResolveErrorCategory {
+    /// Every category's spelling, in declaration order.
+    ///
+    /// One entry per variant, each spelled by [`ResolveErrorCategory::label`],
+    /// so this list and the per-variant spellings cannot disagree about a
+    /// *word*: the words are written once, in `label`, and this array calls it.
+    /// It exists so a consumer that needs the whole vocabulary — the telemetry
+    /// boundary, and the tests that hold the label set to it — has one place to
+    /// read it from.
+    ///
+    /// The *set*, though, is a second declaration, and that half is not
+    /// self-maintaining. A variant added with a `label` arm and a `category`
+    /// arm still compiles while this array holds ten entries, because the
+    /// length is part of the type. What stops the omission is the exhaustive
+    /// `match` in `label`, in `category`, and in the boundary's
+    /// `category_label`: the compiler refuses each until the new variant is
+    /// named, and naming it in `label` is what puts its word in reach here.
+    /// Deciding that it belongs in this list is then a deliberate act, held in
+    /// place by the tests rather than by the type.
+    pub(super) const ALL_LABELS: [&'static str; 10] = [
+        Self::NotFound.label(),
+        Self::DirectNotFound.label(),
+        Self::Args.label(),
+        Self::Canonicalize.label(),
+        Self::IsExecutable.label(),
+        Self::CanonicalizeNonUtf8.label(),
+        Self::WorkspaceNonUtf8.label(),
+        Self::WalkDir.label(),
+        Self::CwdResolve.label(),
+        Self::CwdNonUtf8.label(),
+    ];
+
+    /// The lowercase spelling the domain uses for this category.
+    ///
+    /// This is the resolver's own name for the failure, and the string a
+    /// diagnostic carries when it names a category rather than an instance.
+    /// It is deliberately the same spelling the telemetry label uses: the
+    /// label is this taxonomy exported, not a parallel naming of it, and the
+    /// telemetry boundary is where the two are tied together.
+    pub(super) const fn label(self) -> &'static str {
+        match self {
+            Self::NotFound => "not_found",
+            Self::DirectNotFound => "direct_not_found",
+            Self::Args => "args",
+            Self::Canonicalize => "canonicalize",
+            Self::IsExecutable => "is_executable",
+            Self::CanonicalizeNonUtf8 => "canonicalize_non_utf8",
+            Self::WorkspaceNonUtf8 => "workspace_non_utf8",
+            Self::WalkDir => "walkdir",
+            Self::CwdResolve => "cwd_resolve",
+            Self::CwdNonUtf8 => "cwd_non_utf8",
+        }
+    }
+}
 
 /// Typed errors raised while resolving a command with `which`.
 #[derive(Debug)]
@@ -86,25 +170,30 @@ impl ResolveError {
         }
     }
 
-    /// Return the stable low-cardinality category used by logs and metrics.
+    /// Return the domain category this error belongs to.
     ///
-    /// Each arm names a constant in [`super::telemetry`] rather than a string
-    /// literal, so the bounded `category` label vocabulary and the value this
-    /// returns cannot drift apart: the module's
-    /// [`super::telemetry::RESOLVE_ERROR_CATEGORY_VALUES`] is exactly the set
-    /// of values reachable here.
-    pub(super) const fn category(&self) -> &'static str {
+    /// The return type is the resolver's own [`ResolveErrorCategory`] rather
+    /// than a string, so the pairing of variant to category is a fact this
+    /// module states and the type system checks: an arm cannot return a value
+    /// outside the taxonomy, and no consumer can read the taxonomy without
+    /// naming the type it belongs to. Reporting the category — as a label, a
+    /// log field, or a diagnostic — is a separate decision made by whoever
+    /// reports it.
+    ///
+    /// Every variant is listed explicitly rather than caught by a wildcard, so
+    /// adding a variant is a compile error here until its category is decided.
+    pub(super) const fn category(&self) -> ResolveErrorCategory {
         match self {
-            Self::NotFound { .. } => CATEGORY_NOT_FOUND,
-            Self::DirectNotFound { .. } => CATEGORY_DIRECT_NOT_FOUND,
-            Self::Args { .. } => CATEGORY_ARGS,
-            Self::Canonicalize { .. } => CATEGORY_CANONICALIZE,
-            Self::IsExecutable { .. } => CATEGORY_IS_EXECUTABLE,
-            Self::CanonicalizeNonUtf8 => CATEGORY_CANONICALIZE_NON_UTF8,
-            Self::WorkspaceNonUtf8 { .. } => CATEGORY_WORKSPACE_NON_UTF8,
-            Self::WalkDir { .. } => CATEGORY_WALKDIR,
-            Self::CwdResolve { .. } => CATEGORY_CWD_RESOLVE,
-            Self::CwdNonUtf8 => CATEGORY_CWD_NON_UTF8,
+            Self::NotFound { .. } => ResolveErrorCategory::NotFound,
+            Self::DirectNotFound { .. } => ResolveErrorCategory::DirectNotFound,
+            Self::Args { .. } => ResolveErrorCategory::Args,
+            Self::Canonicalize { .. } => ResolveErrorCategory::Canonicalize,
+            Self::IsExecutable { .. } => ResolveErrorCategory::IsExecutable,
+            Self::CanonicalizeNonUtf8 => ResolveErrorCategory::CanonicalizeNonUtf8,
+            Self::WorkspaceNonUtf8 { .. } => ResolveErrorCategory::WorkspaceNonUtf8,
+            Self::WalkDir { .. } => ResolveErrorCategory::WalkDir,
+            Self::CwdResolve { .. } => ResolveErrorCategory::CwdResolve,
+            Self::CwdNonUtf8 => ResolveErrorCategory::CwdNonUtf8,
         }
     }
 }
@@ -118,7 +207,7 @@ impl fmt::Display for ResolveError {
                     "failed to inspect executable path '{path}': {source}"
                 )
             }
-            _ => formatter.write_str(self.category()),
+            _ => formatter.write_str(self.category().label()),
         }
     }
 }

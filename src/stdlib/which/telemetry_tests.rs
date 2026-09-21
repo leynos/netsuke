@@ -29,13 +29,13 @@ use super::{
     WhichConfig, WhichResolver,
     lookup::WorkspaceSkipList,
     options::{CwdMode, WhichOptions},
-    resolve_error::ResolveError,
+    resolve_error::{ResolveError, ResolveErrorCategory},
     telemetry::{
         CATEGORY_ARGS, CATEGORY_CANONICALIZE, CATEGORY_CANONICALIZE_NON_UTF8,
         CATEGORY_CWD_NON_UTF8, CATEGORY_CWD_RESOLVE, CATEGORY_DIRECT_NOT_FOUND,
         CATEGORY_IS_EXECUTABLE, CATEGORY_NOT_FOUND, CATEGORY_WALKDIR, CATEGORY_WORKSPACE_NON_UTF8,
         RESOLVE_ERROR_CATEGORY_VALUES, WHICH_CACHE_OUTCOME_VALUES, WHICH_CWD_MODE_VALUES,
-        WHICH_RESOLUTION_OUTCOME_VALUES, cwd_mode_label,
+        WHICH_RESOLUTION_OUTCOME_VALUES, category_label, cwd_mode_label,
     },
 };
 
@@ -214,18 +214,19 @@ fn walkdir_error() -> Result<walkdir::Error> {
         .context("a missing root must fail the walk")
 }
 
-/// Every error variant reports a declared category, and each is reachable.
+/// One instance of every `ResolveError` variant, in variant order.
 ///
-/// Length equality is the load-bearing half: it fails both when a variant
-/// reports an undeclared value and when the vocabulary declares a value no
-/// variant can produce, so the label set cannot drift away from the error
-/// type. The final assertion pins the spelling, because a rename that keeps
-/// the set closed but changes a label would otherwise pass.
-#[test]
-fn every_resolve_error_variant_reports_a_declared_category() -> Result<()> {
+/// Built through the real constructors where one exists — `args` and the two
+/// free functions — so the fixture cannot describe an error the resolver is
+/// unable to produce. The `walkdir` case has no constructor to use, so it is
+/// reached through a real failing walk instead.
+///
+/// Fallible for that last reason: a helper that arranges state is not a test,
+/// so it returns `Result` and a caller propagates rather than unwrapping.
+fn every_error_variant() -> Result<[ResolveError; 10]> {
     let path = Utf8PathBuf::from("/workspace/tool");
     let io_error = || std::io::Error::new(std::io::ErrorKind::NotFound, "missing");
-    let errors = [
+    Ok([
         ResolveError::NotFound {
             command: "tool".to_owned(),
             dirs: Vec::new(),
@@ -254,30 +255,81 @@ fn every_resolve_error_variant_reports_a_declared_category() -> Result<()> {
         },
         ResolveError::CwdResolve { source: io_error() },
         ResolveError::CwdNonUtf8,
-    ];
+    ])
+}
 
-    let observed: Vec<&str> = errors.iter().map(ResolveError::category).collect();
+/// Every error variant reports a domain category, and each is reachable.
+///
+/// The property this used to assert — that `category()` returns a declared
+/// telemetry label — is now two properties, because the two are no longer the
+/// same thing. This is the domain half: `category()` returns a
+/// [`ResolveErrorCategory`], the taxonomy is total over the error type, and
+/// every category is reachable. The spelling half lives in
+/// [`every_domain_category_maps_to_a_declared_telemetry_label`], and the two
+/// together are what the single assertion used to cover.
+///
+/// Length equality is the load-bearing part. It fails both when two variants
+/// collide on one category and when a category has no variant behind it, so
+/// the taxonomy cannot drift away from the error type in either direction.
+#[test]
+fn every_resolve_error_variant_reports_a_domain_category() -> Result<()> {
+    let errors = every_error_variant()?;
+    let observed: Vec<ResolveErrorCategory> =
+        errors.iter().map(ResolveError::category).collect();
+
+    let mut distinct = observed.clone();
+    distinct.sort_unstable();
+    distinct.dedup();
     // `ensure!` rather than `assert!`: a `Result`-returning test reports a
     // failure by returning it, because the workspace denies
     // `clippy::panic_in_result_fn`.
     ensure!(
-        observed
-            .iter()
-            .all(|category| RESOLVE_ERROR_CATEGORY_VALUES.contains(category)),
-        "every category must be declared: {observed:?}"
+        distinct.len() == observed.len(),
+        "one category per variant, no more and no fewer: {observed:?}"
     );
     ensure!(
-        observed.len() == RESOLVE_ERROR_CATEGORY_VALUES.len(),
-        "one category per variant, no more and no fewer: {observed:?}"
+        distinct.len() == ResolveErrorCategory::ALL_LABELS.len(),
+        "every category must have a variant behind it: {observed:?}"
+    );
+    Ok(())
+}
+
+/// Every domain category maps to exactly one declared telemetry label.
+///
+/// The boundary half of the property above. It pins the mapping in both
+/// directions: the mapped labels are exactly the declared vocabulary, with no
+/// duplicates and nothing missing, and the spellings are pinned as a whole so
+/// a rename that keeps the set closed cannot pass.
+///
+/// The mapping is also asserted to be total over the taxonomy — every
+/// [`ResolveErrorCategory`] is reachable from a real [`ResolveError`] *and*
+/// spells on the wire — which is what makes the count meaningful.
+#[test]
+fn every_domain_category_maps_to_a_declared_telemetry_label() -> Result<()> {
+    let errors = every_error_variant()?;
+    let mapped: Vec<&str> = errors
+        .iter()
+        .map(|error| category_label(error.category()))
+        .collect();
+
+    ensure!(
+        mapped
+            .iter()
+            .all(|label| RESOLVE_ERROR_CATEGORY_VALUES.contains(label)),
+        "every category must map to a declared label: {mapped:?}"
+    );
+    ensure!(
+        mapped.len() == RESOLVE_ERROR_CATEGORY_VALUES.len(),
+        "one label per category, no more and no fewer: {mapped:?}"
     );
     ensure!(
         RESOLVE_ERROR_CATEGORY_VALUES
             .iter()
-            .all(|declared| observed.contains(declared)),
-        "a declared category is unreachable: {observed:?}"
+            .all(|declared| mapped.contains(declared)),
+        "a declared label is unreachable: {mapped:?}"
     );
     ensure!(
-        observed
+        mapped
             == [
                 CATEGORY_NOT_FOUND,
                 CATEGORY_DIRECT_NOT_FOUND,
@@ -290,7 +342,26 @@ fn every_resolve_error_variant_reports_a_declared_category() -> Result<()> {
                 CATEGORY_CWD_RESOLVE,
                 CATEGORY_CWD_NON_UTF8,
             ],
-        "the taxonomy must keep its spellings: {observed:?}"
+        "the label set must keep its spellings: {mapped:?}"
+    );
+    Ok(())
+}
+
+/// The domain's own spelling list and the mapped label set are the same words.
+///
+/// The domain carries its own spellings — [`ResolveErrorCategory::ALL_LABELS`]
+/// — and this module carries the label vocabulary. The two are separate
+/// declarations of the same ten words, and this case is what holds them
+/// together: a rename on either side that the other did not follow is caught
+/// here rather than by a reader comparing two lists by eye.
+#[test]
+fn the_domain_spelling_list_is_the_mapped_label_set() -> Result<()> {
+    ensure!(
+        ResolveErrorCategory::ALL_LABELS == RESOLVE_ERROR_CATEGORY_VALUES,
+        "the domain's spellings and the telemetry labels must agree: \
+         domain {:?}, labels {:?}",
+        ResolveErrorCategory::ALL_LABELS,
+        RESOLVE_ERROR_CATEGORY_VALUES
     );
     Ok(())
 }

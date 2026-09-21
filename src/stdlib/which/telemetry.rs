@@ -24,7 +24,10 @@ use std::sync::Once;
 
 use metrics::{counter, describe_counter};
 
-use super::{options::CwdMode, resolve_error::ResolveError};
+use super::{
+    options::CwdMode,
+    resolve_error::{ResolveError, ResolveErrorCategory},
+};
 
 /// Counts resolver cache outcomes by bounded `cwd_mode` and `outcome`.
 ///
@@ -127,10 +130,47 @@ pub(super) const CATEGORY_CWD_RESOLVE: &str = "cwd_resolve";
 /// The bounded `category` recorded for a non-UTF-8 working directory.
 pub(super) const CATEGORY_CWD_NON_UTF8: &str = "cwd_non_utf8";
 
+/// Spell a domain category for the `category` label.
+///
+/// This function is the boundary the module exists for. The resolver owns the
+/// taxonomy — [`ResolveErrorCategory`] and its variants say what can go wrong —
+/// and this module decides how each of those is spelled as telemetry. Keeping
+/// the mapping here rather than making the domain name its own labels means a
+/// rename in either direction is a local change: the domain can reletter a
+/// variant without touching a metric, and the label set can be respelled
+/// without changing what the resolver means by a failure.
+///
+/// Every variant is matched explicitly, so a new category is a compile error
+/// here until someone decides what to call it on the wire. That is the point:
+/// an unclassified failure must not be able to reach a counter.
+pub(super) const fn category_label(category: ResolveErrorCategory) -> &'static str {
+    match category {
+        ResolveErrorCategory::NotFound => CATEGORY_NOT_FOUND,
+        ResolveErrorCategory::DirectNotFound => CATEGORY_DIRECT_NOT_FOUND,
+        ResolveErrorCategory::Args => CATEGORY_ARGS,
+        ResolveErrorCategory::Canonicalize => CATEGORY_CANONICALIZE,
+        ResolveErrorCategory::IsExecutable => CATEGORY_IS_EXECUTABLE,
+        ResolveErrorCategory::CanonicalizeNonUtf8 => CATEGORY_CANONICALIZE_NON_UTF8,
+        ResolveErrorCategory::WorkspaceNonUtf8 => CATEGORY_WORKSPACE_NON_UTF8,
+        ResolveErrorCategory::WalkDir => CATEGORY_WALKDIR,
+        ResolveErrorCategory::CwdResolve => CATEGORY_CWD_RESOLVE,
+        ResolveErrorCategory::CwdNonUtf8 => CATEGORY_CWD_NON_UTF8,
+    }
+}
+
 /// The closed `category` vocabulary admitted on [`WHICH_RESOLUTION_TOTAL`].
 ///
-/// One value per `ResolveError` variant, so the label set is fixed by the
-/// error type rather than by the failure a host happened to encounter.
+/// One value per domain category, so the label set is fixed by the error type
+/// rather than by the failure a host happened to encounter.
+///
+/// Spelled as the label constants above, which is what keeps this a separate
+/// declaration from the domain's own list. The two are tied together by test:
+/// `telemetry_tests` asserts that mapping every variant through
+/// [`category_label`] reaches exactly these spellings, and separately that the
+/// domain's [`ResolveErrorCategory::ALL_LABELS`] is this same set of words.
+/// Writing this as an alias of the domain's list instead would make the second
+/// assertion compare a value with itself and would leave the first as the only
+/// thing joining the two taxonomies.
 pub const RESOLVE_ERROR_CATEGORY_VALUES: [&str; 10] = [
     CATEGORY_NOT_FOUND,
     CATEGORY_DIRECT_NOT_FOUND,
@@ -221,7 +261,7 @@ pub(super) fn record_resolution_error(
     error: &ResolveError,
 ) {
     describe_which_metrics();
-    let category = error.category();
+    let category = category_label(error.category());
     let outcome = if matches!(
         error,
         ResolveError::NotFound { .. } | ResolveError::DirectNotFound { .. }
