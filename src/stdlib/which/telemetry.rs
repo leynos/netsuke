@@ -1,10 +1,12 @@
 //! Bounded telemetry for the `which` resolver.
 //!
-//! The resolver has four search domains and one cache, and before this module
-//! its counters could not say which domain a resolution used. A
+//! The resolver has four search policies and one cache, and before this module
+//! its counters could not say which one a resolution was requested under. A
 //! `workspace-recursive` miss and an `auto` miss produced the same series, so
-//! an operator could not tell whether recursive lookup contributed to a
-//! resolution, nor whether a manifest had requested it at all.
+//! an operator could not tell whether a manifest had requested the recursive
+//! search at all. The label records that request: it is read from the options
+//! before the cache probe and before the lookup, so it does not indicate
+//! whether recursive workspace lookup ran or produced the result.
 //!
 //! Two counters are owned here. `netsuke_stdlib_which_cache_total` counts
 //! cache outcomes, and `netsuke_stdlib_which_resolution_total` counts
@@ -37,21 +39,22 @@ pub const WHICH_CACHE_TOTAL: &str = "netsuke_stdlib_which_cache_total";
 /// the application recorder admits each by its exact shape.
 pub const WHICH_RESOLUTION_TOTAL: &str = "netsuke_stdlib_which_resolution_total";
 
-/// The bounded `cwd_mode` recorded when the search domain is `auto`.
+/// The bounded `cwd_mode` recorded when the `auto` policy is requested.
 const CWD_MODE_AUTO: &str = "auto";
-/// The bounded `cwd_mode` recorded when the search domain is `always`.
+/// The bounded `cwd_mode` recorded when the `always` policy is requested.
 const CWD_MODE_ALWAYS: &str = "always";
-/// The bounded `cwd_mode` recorded when the search domain is `never`.
+/// The bounded `cwd_mode` recorded when the `never` policy is requested.
 const CWD_MODE_NEVER: &str = "never";
-/// The bounded `cwd_mode` recorded when the search domain is
-/// `workspace-recursive`.
+/// The bounded `cwd_mode` recorded when the `workspace-recursive` policy is
+/// requested.
 const CWD_MODE_WORKSPACE_RECURSIVE: &str = "workspace_recursive";
 
 /// The closed `cwd_mode` vocabulary admitted on both resolver counters.
 ///
 /// Four values, one per `CwdMode` variant. The label set is what lets an
-/// operator attribute a resolution to a search domain; it is not the template
-/// spelling, which uses a hyphen for the recursive mode.
+/// operator see which search policy a resolution was requested under; it does
+/// not show which domain produced a result. It is not the template spelling,
+/// which uses a hyphen for the recursive mode.
 pub const WHICH_CWD_MODE_VALUES: [&str; 4] = [
     CWD_MODE_AUTO,
     CWD_MODE_ALWAYS,
@@ -160,15 +163,16 @@ fn describe_which_metrics() {
     DESCRIBE.call_once(|| {
         describe_counter!(
             WHICH_CACHE_TOTAL,
-            "Counts which resolver cache outcomes labelled by cwd_mode (auto, \
-             always, never, or workspace_recursive) and by outcome (hit, miss, \
-             or bypass)."
+            "Counts which resolver cache outcomes labelled by the requested \
+             cwd_mode (auto, always, never, or workspace_recursive) and by \
+             outcome (hit, miss, or bypass)."
         );
         describe_counter!(
             WHICH_RESOLUTION_TOTAL,
-            "Counts which resolver outcomes labelled by cwd_mode (auto, always, \
-             never, or workspace_recursive) and by outcome (found, not_found, \
-             or error); non-success outcomes also carry a bounded category."
+            "Counts which resolver outcomes labelled by the requested cwd_mode \
+             (auto, always, never, or workspace_recursive) and by outcome \
+             (found, not_found, or error); non-success outcomes also carry a \
+             bounded category."
         );
     });
 }

@@ -1,11 +1,11 @@
 //! Span and event cases for the bounded `which` resolver telemetry.
 //!
-//! A counter series says which domain a resolution used; it cannot say what
-//! else travelled with it. These cases install a temporary subscriber,
-//! resolve a fixture that is guaranteed to miss, and then read the span fields
-//! and the failure event back. The claim under test is the redaction one: the
-//! mode and the bounded outcome are present, and nothing that would name the
-//! command or the workspace root is.
+//! A counter series says which search policy a resolution was requested under;
+//! it cannot say what else travelled with it. These cases install a temporary
+//! subscriber, resolve a fixture that is guaranteed to miss, and then read the
+//! span fields and the failure event back. The claim under test is the
+//! redaction one: the mode and the bounded outcome are present, and nothing
+//! that would name the command or the workspace root is.
 
 use std::ffi::OsString;
 
