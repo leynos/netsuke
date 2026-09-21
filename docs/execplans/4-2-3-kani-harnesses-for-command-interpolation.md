@@ -8,7 +8,7 @@ be kept up to date as work proceeds.
 
 Status: COMPLETE
 
-Revision 2.28. See `Revision note` at the foot of this document.
+Revision 2.29. See `Revision note` at the foot of this document.
 
 ## Purpose / big picture
 
@@ -131,22 +131,28 @@ passes with 3 of 3 tests.
 ### Acceptance criterion: deterministic and documentation gates
 
 **Met.** Run against the tree at this revision: `make check-fmt`, `make lint`,
-`make test` (3,284 nextest tests passed, 5 skipped, plus 122 doctests across
-three targets), `make typecheck`, `make doc-coverage` (98.80%),
-`make markdownlint` (143 files, 0 errors), and `make nixie` all exited zero.
+`make test` (3,309 nextest tests passed, 5 skipped, plus 123 doctests across
+two targets), `make typecheck`, `make doc-coverage` (98.81%),
+`make markdownlint` (145 files, 0 errors), and `make nixie` all exited zero.
 Gate logs follow the `/tmp/$ACTION-netsuke-<branch>.out` pattern used elsewhere
 in this directory; `$ACTION` is the `make` target name and `<branch>` is this
 branch, `issue-738-reconcile-roadmap-4-2-3-with-execplan-completion-evidence`.
 The Kani log's pattern omits the `netsuke-` infix.
 
-CI independently corroborates the local gates at commit `3d22f884` on PR #755:
-the `CI` workflow's `build-test`, `kani-smoke`, `Windows / build-test-windows`,
-`Windows / lint-windows`, and `Windows / windows-msi-upgrade` jobs all concluded
-`success`, as did every job in the `Release Dry Run` workflow other than the
-release step itself, which `release.yml` gates on `should_publish == 'true'`
-and therefore skips on a non-release branch. Commits after `3d22f884` touched
-only Markdown, so that run remains the relevant code-build evidence for this
-branch.
+CI has not yet run against this revision. The runs that corroborated the
+pre-rebase candidate were `35540281807` for `CI` and `35540281742` for
+`Release Dry Run`, both against the commit then identified as `3d22f884`; both
+concluded `success`, every `CI` job and every `Release Dry Run` job passing
+except the release step itself, which `release.yml` gates on
+`should_publish == 'true'` and therefore skips on a non-release branch.
+
+Those runs no longer describe this branch. It has since been rebased onto
+`origin/main` at `00f48f77`, which replays the same ten patches over 87 changed
+target paths; `3d22f884` is the pre-rebase identity of the commit now replayed
+as `6a1e2f7b`, so it is neither an ancestor of the current head nor a
+description of its tree. The local gates above were re-run after the rebase and
+are green at `2c354c7c`; fresh CI on that commit is required before the CI
+evidence for this criterion is current again.
 
 ### Acceptance criterion: trace links
 
@@ -1488,6 +1494,17 @@ outside this local completion boundary and must be reported separately by CI.
   findings. The header stays `COMPLETE`; the roadmap needs no correction. Three
   further patches broken by the same change lie in roadmap 4.2.1 and 4.2.2 and
   are raised rather than fixed here.
+- [x] (2026-09-21, issue #738) Rebased onto `origin/main` at `00f48f77`, which
+  replays the same ten commits over 87 changed target paths. No conflicts: the
+  branch and the target touched disjoint sets of files, so the replay was
+  patch-identical and `range-diff` reports all ten commits `=`. The semantic
+  audit found no unexplained deletion and no new repetition; the two repaired
+  patches still apply cleanly over the new base. All seven gates were re-run on
+  the rebased tree and pass — the nextest count moved from 3,284 to 3,309 and
+  markdownlint from 143 to 145 files, both as a consequence of `main`'s
+  changes, so the figures quoted above are the post-rebase ones. The CI runs
+  that corroborated the pre-rebase candidate no longer describe this branch and
+  the criterion above now says so; fresh CI is required on this head.
 
 ## Surprises & discoveries
 
@@ -2092,3 +2109,16 @@ silently absorb neighbouring roadmaps' work; they are filed as issue #756,
 which also proposes closing the contract test's apply-only blind spot. The
 completion state is unchanged: header `COMPLETE`, roadmap `[x]`, no roadmap
 correction required.
+
+**Revision 2.29 (2026-09-21, issue #738).** The branch was rebased onto
+`origin/main` at `00f48f77` before review. The replay was patch-identical —
+`range-diff` reports all ten commits `=`, and the branch and target touched
+disjoint file sets, so no conflict arose and no resolution was needed. The
+substantive effect is on evidence, not on content: `main`'s 87 changed paths
+moved the deterministic-gate figures, and the CI runs cited by Revision 2.28
+belong to the pre-rebase identities and no longer describe this tree. Both are
+corrected above — the gate figures to the post-rebase values, and the CI
+sentence to say plainly that those runs are superseded and that fresh CI on the
+current head is required. The verdict is unaffected: every acceptance criterion
+still passes on the rebased tree, the header stays `COMPLETE`, and the roadmap
+still needs no correction.
