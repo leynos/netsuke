@@ -808,6 +808,42 @@ Both helpers accept:
 The `env(name)` function reads one required environment variable. Beta3 does
 not accept a default argument; an absent or non-Unicode value is an error.
 
+#### `which` resolver observability
+
+`which` and `command_available` record two bounded counters, both emitted in
+the drained `metrics snapshot` described in
+[Diagnose configuration selection](#diagnose-configuration-selection):
+
+- `netsuke_stdlib_which_cache_total` — a counter with the `cwd_mode` and
+  `outcome` labels that counts cache outcomes. `outcome` is `hit`, `miss`, or
+  `bypass`, where `bypass` is a `fresh=true` lookup.
+- `netsuke_stdlib_which_resolution_total` — a counter with two label shapes
+  that counts resolution outcomes. A success series carries `cwd_mode` and
+  `outcome=found`. A failure series carries `cwd_mode`, an `outcome` of
+  `not_found` or `error`, and a bounded `category`. The `category` label occurs
+  only on failure series, so a query matching on it selects exactly the
+  failures.
+
+The `cwd_mode` label is drawn from a closed vocabulary of `auto`, `always`,
+`never`, and `workspace_recursive`. It records how the current directory was
+asked to contribute to the search: Netsuke reads it from the options before the
+cache probe and before the lookup, so it does not indicate whether recursive
+workspace lookup ran or which search produced the result.
+
+The label's spelling is not the template's. A manifest writes
+`cwd_mode="workspace-recursive"`, with the hyphen. The underscore spelling
+`workspace_recursive` is the label's value and is not a value a template may
+supply.
+
+The `category` label is the resolver's bounded failure taxonomy: `not_found`,
+`direct_not_found`, `args`, `canonicalize`, `is_executable`,
+`canonicalize_non_utf8`, `workspace_non_utf8`, `walkdir`, `cwd_resolve`, or
+`cwd_non_utf8`. Every label on both counters is drawn from a closed set fixed
+by the resolver rather than by manifest content, so a series can be exported
+without disclosing what a manifest asked for or where it was found. Command
+names, filesystem paths, workspace names, and `PATH` or `PATHEXT` values are
+never recorded.
+
 ### Inject the environment reader for tests
 
 `env()` does not read `std::env::var` directly. Manifest parsing goes through

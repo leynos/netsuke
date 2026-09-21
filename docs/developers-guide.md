@@ -5827,6 +5827,22 @@ handle passed into the `with_test_subscriber` closure. `snapshot()` recovers a
 poisoned lock rather than panicking, so a panic on another test thread cannot
 cascade into a snapshot assertion.
 
+`span_fields(span_name)` returns the captured fields of every instance of the
+named span, whether they were set when the span was created or recorded after
+it. A field declared `tracing::field::Empty` and never recorded contributes
+nothing, so an assertion can distinguish a populated field from one the code
+under test never set; a span name with no captured fields returns an empty
+collection rather than an error. `discovery_span_fields()` is the bound
+accessor for the configuration-discovery span. See
+`span_fields_are_captured_by_name_and_recording_point` in
+`src/test_tracing_capture.rs`.
+
+`span_fields` exists on the root-crate helper's `CapturedEvents` only. The
+reusable `test_support::tracing_capture::CapturedEvents` exposes `snapshot()`
+and nothing else, so an integration test under `tests/` can assert on rendered
+events but not on a named span's fields; a span-field assertion belongs in a
+unit test.
+
 Tests that snapshot tracing output with `insta` should normalize
 runtime-dependent fields, such as the bounded `path_hash` correlation
 identifier, to a stable placeholder before asserting the snapshot, and assert
