@@ -1,6 +1,6 @@
 # Add a compile gate to the Kani mutation evidence contract
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 This ExecPlan is a living document. The sections `Progress`,
 `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must
@@ -171,3 +171,12 @@ its own and inherits `default`'s. And "3 skipped" is the
 `--run-ignored ignored-only` flag doing exactly its job: one ignored test
 selected, the three fast contract checks left alone. Every other lane was green
 on the same SHA, including `kani-smoke` (6m51s) and the Windows jobs.
+
+The final SHA `e4f93b93` re-ran the whole matrix (run `35658680354`) and is
+green on every lane: 18 checks pass, none failing, none pending, and GitHub
+reports the pull request `CLEAN` / `MERGEABLE`. The gate's cold run there took
+106.6s, which the 60s `slow-timeout` warning flags as slow and the 300s
+`terminate-after` leaves ample room for — a cold `CARGO_TARGET_DIR` on that
+runner compiles libc and the rest of the dependency graph for the first time.
+Marking the pull request ready for review also triggered Codex, which reviewed
+`e4f93b9` and returned no suggestions.
