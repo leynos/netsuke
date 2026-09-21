@@ -35,15 +35,21 @@ use toml::Value;
 /// `test-nextest` is the gate `make test` composes. `test-kani-scope-wrapper`
 /// is the scope wrapper's own end-to-end suite, which the `kani-smoke` lane
 /// runs on its own because that suite needs a per-user systemd manager rather
-/// than the whole workspace. A contributor sets the bounds once and expects
-/// them honoured wherever nextest runs, so the list is a contract rather than a
+/// than the whole workspace. `test-kani-mutations` runs the same runner over
+/// the `#[ignore]`-gated mutation compile gate, which is too expensive for the
+/// default profile. A contributor sets the bounds once and expects them
+/// honoured wherever nextest runs, so the list is a contract rather than a
 /// note of what happens to be true today.
 ///
 /// The list is not trusted on its own.
 /// [`behavioural_nextest_targets_forward_both_worker_bounds`] discovers the
 /// targets that actually invoke the runner and fails when the two disagree, so
 /// a new recipe joins the contract or breaks the build.
-const NEXTEST_TARGETS: [&str; 2] = ["test-nextest", "test-kani-scope-wrapper"];
+const NEXTEST_TARGETS: [&str; 3] = [
+    "test-kani-mutations",
+    "test-kani-scope-wrapper",
+    "test-nextest",
+];
 
 /// True when `line` is a tab-indented recipe line that invokes the nextest
 /// runner.

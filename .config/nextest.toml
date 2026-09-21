@@ -61,6 +61,13 @@ filter = 'test(/^production_build_module_slice_has_expected_boundary($|::)/) | t
 test-group = "nested-cargo-builds"
 success-output = "immediate"
 
+[[profile.default.overrides]]
+# Compiles one patched tree per mutation patch, so it belongs in the same
+# serialized group as the other child-Cargo tests. It is `#[ignore]`-gated
+# and run by `make test-kani-mutations`, not by the default profile.
+filter = 'test(/^every_patched_tree_compiles_under_denied_warnings($|::)/)'
+test-group = "nested-cargo-builds"
+success-output = "immediate"
 
 [profile.ci]
 # The CI-only profile. It exists solely to carry the whole-run budget, and
