@@ -6772,6 +6772,24 @@ discarded. Keep this monotonic rule at the configuration seam; the manifest
 package consumes the already-resolved `ManifestBudgetLimits` and does not
 decide configuration provenance.
 
+### MiniJinja dependency baseline
+
+Netsuke declares MiniJinja 2.24.0 as its compatible 2.x baseline in
+`Cargo.toml`, with the direct `fuel` and `loader` features retained. `fuel`
+backs manifest evaluation's reservation and refund accounting, and `loader`
+supports the environment setup used for manifest templates and macros.
+
+The compatible requirement alone does not identify the engine Cargo selected.
+Validate dependency changes with the committed `Cargo.lock`,
+`cargo metadata --locked`, and `cargo tree -e features -i minijinja`; the
+current lockfile resolves 2.24.0. Do not introduce a MiniJinja 3 prerelease
+through this path.
+
+MiniJinja's 100 MB repeated-string rejection is an upstream operation guard. It
+can fail before Netsuke's rendered-value and aggregate-rendered-output budgets,
+but does not bound aggregate macro output or internal macro and capture
+buffers. Keep those boundaries and the deferred remediation distinct.
+
 ### Template rendering and macro registration
 
 `manifest::jinja_macros::render_template_with_budget` is the runtime rendering

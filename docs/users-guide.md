@@ -1343,6 +1343,14 @@ macro can allocate above the per-value ceiling before the limit is reported.
 That residual gap and its deferral are recorded in
 [ADR-018](adr-018-bound-manifest-template-evaluation.md).
 
+MiniJinja 2.24.0 also rejects one repeated string above 100 MB with the
+`repeated string is too large` template error. This rejection happens before
+Netsuke can apply `manifest_rendered_value_bytes` or
+`manifest_rendered_manifest_bytes` to a completed value. It guards only that
+engine operation: Netsuke's resource budgets remain the controls for rendered
+output, and the rejection does not close the aggregate macro or capture
+buffering gap.
+
 The configuration keys are `manifest_evaluation_fuel`, `manifest_fuel`,
 `manifest_rendered_value_bytes`, `manifest_rendered_manifest_bytes`,
 `manifest_source_bytes`, `manifest_foreach_cardinality`, and

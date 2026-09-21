@@ -56,6 +56,31 @@ fn rendered_value_one_byte_over_fails_without_output_growth(small_limits: Manife
 }
 
 #[rstest]
+fn upstream_string_repetition_limit_precedes_netsuke_output_budgets(
+    small_limits: ManifestBudgetLimits,
+) {
+    let yaml = concat!(
+        "netsuke_version: 1.0.0\n",
+        "targets:\n",
+        "  - name: repeat\n",
+        "    command: '{{ \"x\" * 100000001 }}'\n",
+    );
+    let limits = ManifestBudgetLimits {
+        rendered_value_bytes: 100_000_001,
+        rendered_manifest_bytes: 100_000_001,
+        ..small_limits
+    };
+
+    let error = from_str_with_limits(yaml, limits)
+        .expect_err("MiniJinja must reject a string larger than its 100 MB repetition limit");
+
+    assert!(
+        format!("{error:#}").contains("repeated string is too large"),
+        "expected the upstream repetition guard, got {error:#}"
+    );
+}
+
+#[rstest]
 fn aggregate_rendered_bytes_allow_the_exact_limit_and_reject_one_more(
     small_limits: ManifestBudgetLimits,
 ) -> Result<()> {
