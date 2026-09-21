@@ -223,7 +223,8 @@ Two things follow, and neither changes the decision:
 
 - The re-test on a toolchain bump is the suite, not the probe. The probe is
   kept because it explains what fails; only the suite answers whether the
-  backend is usable here.
+  backend is usable here. Issue #764 holds the procedure and the counts, and
+  shelves the question until 2027-03-21.
 - The exclusion is about this repository. Five of the six failures are tests
   whose subject is a panic crossing a boundary, so a repository without such
   tests would meet none of them. Other repositories on this estate do use

@@ -2693,6 +2693,13 @@ separate pass, and a nextest run alone would report success while saying
 nothing about the 39 the control passed. The doctest pass needs no filter,
 because the contract that has to be excluded is not a doctest.
 
+The question is shelved rather than settled, and issue #764 is the reminder:
+Cranelift is not revisited here before 2027-03-21, and that issue carries this
+procedure and these counts so a re-test does not have to rediscover them. A
+toolchain bump before then does not oblige anyone to run it; the measurement
+above is simply stale from the moment the pin moves past `nightly-2026-08-23`,
+and says so.
+
 ```toml
 [unstable]
 codegen-backend = true
