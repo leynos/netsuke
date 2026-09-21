@@ -93,8 +93,18 @@ work is what would silently disable the standard if the flags were not
 repeated. Keeping the two sources equal is therefore a testable contract rather
 than a convention, and the guide asks explicitly that they not be consolidated.
 
-**Why Cranelift is excluded, stated narrowly.** A Cranelift-compiled panic does
-not find the unwind handler it should. Measured on `nightly-2026-08-23`
+**Why Cranelift is excluded.** This repository's own suite does not pass under
+it. `make test` on `main` at `00f48f77`, with
+`[profile.dev] codegen-backend = "cranelift"` added to `.cargo/config.toml` and
+nothing else changed, stops on an abort after 1372 of 3309 tests; run to
+completion it reports 3302 passed, 6 failed and 1 timed out. The same commit
+and command with that fragment removed passes all 3309. Five of the six
+failures are the unwind behaviour below, and the sixth is a nested-cargo test
+that crosses its allowance because the build under Cranelift is slower. The
+developers' guide records the failing tests, the commands and the attribution.
+
+**What fails, stated narrowly.** A Cranelift-compiled panic does not find the
+unwind handler it should. Measured on `nightly-2026-08-23`
 (`librustc_codegen_cranelift-1.100.0-nightly.so`) in a crate with no
 dependencies, with `[profile.dev] codegen-backend = "cranelift"` and the
 standard's flags:
@@ -159,8 +169,10 @@ should be justified by the benchmark rather than by this record.
   whose load average went from 0.7 to 117 and reversed its verdict twice. No
   table is recorded here until a run on an otherwise-idle host produces samples
   that agree; the developers' guide states the conditions such a run needs.
-- Re-testing Cranelift on a toolchain bump is a deliberate act, and the
-  developers' guide carries the probe. `CARGO_PROFILE_DEV_CODEGEN_BACKEND`
+- Re-testing Cranelift on a toolchain bump is a deliberate act, and the test is
+  the suite rather than the probe: the probe explains the mechanism, and only
+  the suite answers the question. The developers' guide carries both, with the
+  configuration fragment and the commands. `CARGO_PROFILE_DEV_CODEGEN_BACKEND`
   remains available for a single scoped experiment.
 
 ## Alternatives considered
@@ -173,10 +185,13 @@ should be justified by the benchmark rather than by this record.
   that let the acceleration go unused: an "opt-in fast target" is a target
   nobody runs, and it doubles the CI matrix to prove something the default
   could prove on its own.
-- **Adopt the Cranelift backend.** Rejected on the evidence above. The
-  performance case is real and the correctness case is disqualifying: a debug
-  binary that aborts at 134 where it should exit 101 is a different program
-  from the one the tests exercise.
+- **Adopt the Cranelift backend.** Rejected on the evidence above, and
+  re-examined on 2026-09-21 by running the whole suite under it rather than a
+  probe. The performance case is real and the correctness case is
+  disqualifying: six tests fail, and a debug binary that aborts at 134 where it
+  should exit 101 is a different program from the one the tests exercise. The
+  rejection is about this repository, whose tests include several whose subject
+  is a panic crossing a boundary; it is not a general verdict on the backend.
 - **Scope Cranelift to `make build` only.** Rejected because a profile override
   does not confine the backend to the artefacts the developer intends, and the
   one artefact it does reach would then behave differently from every test.
