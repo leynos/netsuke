@@ -16,6 +16,13 @@ credential would be bound. It is also not restricted to the start of an
 expression, because a compound condition or a function argument names a
 variable just as directly as a bare one — see `REFERENCE_TOKEN`.
 
+An expression is read in the two spellings GitHub accepts for one: inside the
+``${{ ... }}`` delimiters, and — for a step's ``if`` alone — as the whole value
+without them, since GitHub evaluates that condition either way. The second
+spelling is what this repository writes, so reading only the first would report
+a condition clean that silently resolved to the empty string. No other entry is
+read whole: a ``run`` block naming `cargo fmt.version` states no reference.
+
 Reading an expression is one job, and both predicates are stated over the same
 reading of it: `_references_in` enumerates the identifiers a body names, in
 either of the two syntaxes GitHub accepts for addressing one, and each predicate
@@ -117,14 +124,27 @@ REFERENCE_TOKEN: typ.Final[re.Pattern[str]] = re.compile(
 #: value that silently resolves to the empty string.
 PERMITTED_VARIABLE_NAME: typ.Final[str] = "NETSUKE_SCCACHE_LOCAL_DIR"
 
+#: The step entry whose value GitHub evaluates as an expression whether or not
+#: it carries the delimiters. Every other entry is ordinary text by default, so
+#: this is the one key whose value is read whole as well as read for regions.
+CONDITION_KEY: typ.Final[str] = "if"
+
 
 def unbound_variable_references(step: cabc.Mapping[str, object]) -> list[str]:
     """Return every ``vars.`` reference in a step but the permitted one.
 
     Each ``${{ ... }}`` region is located first and then scanned for references,
-    so a reference is found anywhere inside an expression — a bare condition, a
-    compound one, or a function argument — while text that merely spells
-    ``vars.`` outside an expression is ignored.
+    so a reference is found anywhere inside an expression — a compound
+    condition, a function argument, or a reference that does not follow the
+    opening delimiter — while text that merely spells ``vars.`` outside an
+    expression is ignored.
+
+    The step's ``if`` is the exception, and it is scanned whole as well. GitHub
+    evaluates a condition as an expression whether or not it is written with the
+    delimiters, so ``if: vars.FOO == 'true'`` names a variable exactly as
+    ``if: ${{ vars.FOO == 'true' }}`` does — and the undelimited spelling is the
+    one this repository actually uses. Reading only regions reported such a
+    condition clean while its empty value decided whether the step ran at all.
 
     Parameters
     ----------
@@ -145,11 +165,38 @@ def unbound_variable_references(step: cabc.Mapping[str, object]) -> list[str]:
         know which values to look at rather than how many names each holds.
     """
     return [
-        value for value in _iter_strings(step) if _names_an_unpermitted_variable(value)
+        value
+        for value, bare in _step_strings(step)
+        if _names_an_unpermitted_variable(value, bare=bare)
     ]
 
 
-def _names_an_unpermitted_variable(value: str) -> bool:
+def _step_strings(step: cabc.Mapping[str, object]) -> cabc.Iterator[tuple[str, bool]]:
+    """Yield every string a step holds, paired with whether it is an expression.
+
+    Only the [`CONDITION_KEY`] entry is an expression in its own right. Every
+    other string is yielded as text, to be read for the ``${{ ... }}`` regions
+    it holds: an ordinary value that happens to spell a dotted pair — a ``run``
+    block naming `cargo fmt`, a URL in a message — states no reference, and
+    reading it whole would report names the step never addresses.
+
+    Parameters
+    ----------
+    step
+        One parsed workflow step.
+
+    Yields
+    ------
+    tuple[str, bool]
+        One pair per string, in the order the step holds them, with the second
+        entry saying whether that string is an expression in its own right.
+    """
+    for key, item in step.items():
+        yield from ((value, False) for value in _iter_strings(key))
+        yield from ((value, key == CONDITION_KEY) for value in _iter_strings(item))
+
+
+def _names_an_unpermitted_variable(value: str, *, bare: bool = False) -> bool:
     """Return whether ``value`` reads an unpermitted repository variable.
 
     The same reading as [`expression_references`], asked the narrower question:
@@ -159,6 +206,15 @@ def _names_an_unpermitted_variable(value: str) -> bool:
     namespace, and a value that is not this repository's variable at all — from
     being permitted on the strength of its name.
 
+    Parameters
+    ----------
+    value
+        One string from a parsed workflow step.
+    bare
+        Whether ``value`` is itself an expression, in addition to the regions
+        it holds. Set for a step's ``if``, whose condition GitHub evaluates with
+        or without the delimiters.
+
     Returns
     -------
     bool
@@ -166,7 +222,7 @@ def _names_an_unpermitted_variable(value: str) -> bool:
     """
     return any(
         namespace == VARIABLE_NAMESPACE and name != PERMITTED_VARIABLE_NAME
-        for namespace, name, _, _ in reference_occurrences(value)
+        for namespace, name, _, _ in reference_occurrences(value, bare=bare)
     )
 
 
