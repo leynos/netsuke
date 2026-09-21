@@ -284,6 +284,9 @@ sweep recorded here, which a single script re-derives in seconds.
 - [`tests/workflow_contracts/python_shell_interpreter_test.py`](../tests/workflow_contracts/python_shell_interpreter_test.py)
   holds the `shell: python` steps to the same baseline and records the incident
   that motivated the interpreter check.
-- [ADR-028](adr-028-defer-split-build-dir-harness-trim.md) is the repository's
-  other decision to defer work behind a stated revisit gate rather than close
-  it.
+- [ADR-028](adr-028-defer-split-build-dir-harness-trim.md) carries the
+  repository's other `## Revisit gate` section, deferring work behind a stated
+  condition rather than closing it.
+  [ADR-018](adr-018-bound-manifest-template-evaluation.md) defers its engine
+  remediation behind a release condition in the same way without adopting the
+  heading.
