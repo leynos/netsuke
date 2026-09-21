@@ -67,10 +67,12 @@ walker after its flat `PATH` pass misses.
 
 ## Addendum — 2026-09-19: Bounded search-domain telemetry
 
-The resolver now reports which search domain a resolution used. The four modes
-previously produced indistinguishable series, so an operator could not tell
-whether `workspace-recursive` had been requested, or whether recursive lookup
-contributed to an outcome at all.
+The resolver now reports which search policy a resolution was requested under.
+The four modes previously produced indistinguishable series, so an operator
+could not tell whether `workspace-recursive` had been requested at all. The
+label records that request, not what produced a result: it is read from the
+options before any lookup runs, so it does not indicate whether recursive
+workspace lookup ran or contributed to an outcome.
 
 The label is `cwd_mode`, drawn from the closed set `auto`, `always`, `never`,
 and `workspace_recursive`. That vocabulary is a telemetry spelling rather than
@@ -86,9 +88,9 @@ these two counters must be updated.
 
 Redaction rules are unchanged. No command name, path, workspace name, `PATH`
 value, `PATHEXT` value, or other environment value is recorded on any span,
-event, or metric label. Only the mode, the outcome, and the bounded error
-category leave the process. Resolver behaviour and its search semantics are
-unchanged by this addendum, and the four `CwdMode` contracts recorded above
+event, or metric label. Only the requested mode, the outcome, and the bounded
+error category leave the process. Resolver behaviour and its search semantics
+are unchanged by this addendum, and the four `CwdMode` contracts recorded above
 still hold.
 
 The contract lives in `src/stdlib/which/telemetry.rs`, which owns both counter

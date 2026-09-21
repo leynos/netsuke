@@ -60,8 +60,10 @@ impl WhichResolver {
     /// Capture and lookup failures are recorded as metrics before being returned.
     ///
     /// The span and both counters carry the requested `cwd_mode`, so a
-    /// resolution can be attributed to the search domain that produced it
-    /// without recording the command or any path.
+    /// resolution can be attributed to the policy it was requested under
+    /// without recording the command or any path. The label is read from the
+    /// options before the cache probe and before the lookup, so it reports
+    /// what was asked for rather than the domain that produced the match.
     pub(crate) fn resolve(
         &self,
         command: &str,

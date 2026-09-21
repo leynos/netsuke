@@ -1627,7 +1627,10 @@ tiny search paths. Zero is rejected to keep the cache usable.
 
 Resolver telemetry is bounded. `netsuke_stdlib_which_cache_total` and
 `netsuke_stdlib_which_resolution_total` both carry a `cwd_mode` label from the
-closed set `auto`, `always`, `never`, and `workspace_recursive`; `cwd_mode` is
+closed set `auto`, `always`, `never`, and `workspace_recursive`. The label
+records the requested search policy, not the domain that produced a result; it
+is derived from the options before the lookup runs, so it does not indicate
+whether a recursive workspace lookup ran or produced the result. `cwd_mode` is
 the telemetry spelling, so the recursive mode is `workspace_recursive` there
 while the template value keeps its hyphen as `workspace-recursive`. The cache
 counter carries `hit`, `miss`, or `bypass`, and the resolution counter `found`,

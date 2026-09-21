@@ -6282,8 +6282,10 @@ exposed as `WHICH_CWD_MODE_VALUES` and re-exported through `netsuke::stdlib`.
 It is a telemetry vocabulary rather than the template spelling: a manifest
 writes `workspace-recursive`, and the label is `workspace_recursive`. The
 mapping is total over `CwdMode`, so no series can be created outside the set,
-and that is what lets an operator tell whether recursive lookup contributed to
-a resolution.
+and that is what lets an operator tell which search policy a resolution was
+requested under. The label records the request, not the outcome: it is derived
+from the options before the lookup, so it does not show whether recursive
+lookup ran or produced the result.
 
 The cache counter's `outcome` is drawn from `hit`, `miss`, and `bypass`
 (`WHICH_CACHE_OUTCOME_VALUES`). The resolution counter's `outcome` is drawn from

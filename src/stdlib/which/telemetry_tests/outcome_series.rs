@@ -139,11 +139,13 @@ impl Samples {
     }
 }
 
-/// A hit is attributed to the domain that produced it.
+/// A hit is labelled with the search policy that was requested.
 ///
 /// All four cases search one directory and find the same tool, so the only
 /// thing that can separate their series is the `cwd_mode` label — the
-/// distinction the counters previously lacked.
+/// distinction the counters previously lacked. The label is the requested
+/// policy, read before the lookup, so it never means the domain that produced
+/// the hit: every case here resolves through the ordinary `PATH` search.
 #[rstest]
 #[case::auto(CwdMode::Auto, "auto")]
 #[case::always(CwdMode::Always, "always")]
@@ -177,7 +179,10 @@ fn a_hit_is_labelled_with_its_search_domain(
     Ok(())
 }
 
-/// A miss is attributed to the domain that produced it.
+/// A miss is labelled with the search policy that was requested.
+///
+/// The label is read from the options before the lookup, so it reports what
+/// was asked for rather than the domain that produced the miss.
 #[rstest]
 #[case::auto(CwdMode::Auto, "auto")]
 #[case::always(CwdMode::Always, "always")]
