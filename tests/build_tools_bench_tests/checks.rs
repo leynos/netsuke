@@ -66,24 +66,32 @@ pub const NON_LINUX_CAPTIONS: [&str; 2] = [
     "| Platform linker, parallel frontend |",
 ];
 
-/// Hold every recorded pass to a variant table: each slug measured the right
-/// number of times, each pass passing exactly that variant's flags.
+/// Resolve every recorded pair to the variant it measured, hold each to that
+/// variant's contract, and check the repeat counts.
 ///
-/// The table is a parameter rather than [`VARIANT_FLAGS`] read directly, because
-/// the two platforms do not share one. Linux measures three rows and every other
-/// host measures two, so a check that could only consult the Linux table could
-/// not describe a run off Linux at all.
+/// The shared reading behind both entry points below. Both have to pair the
+/// passes, name the variant each pair ran as, look that name up in a table and
+/// check the pair against it, then count how often each variant appeared;
+/// stating that twice invites the two readings to drift, and a drift here is a
+/// check that silently stops describing the run it is given.
+///
+/// The table is a parameter rather than [`VARIANT_FLAGS`] read directly,
+/// because the two platforms do not share one. Linux measures three rows and
+/// every other host measures two, so a reading that could only consult the
+/// Linux table could not describe a run off Linux at all. The table also
+/// supplies the expected slugs, so there is no second list to keep in step
+/// with it.
 ///
 /// # Errors
 ///
-/// Returns an error if a pass runs outside a variant directory, if a slug is not
-/// in the table, if a variant is measured the wrong number of times, or if a
-/// pass's `RUSTFLAGS` are not exactly that variant's.
-pub fn check_variant_flags(
-    invocations: &[CargoInvocation],
-    expected_slugs: &[&str],
-    table: &[(&str, &[&str])],
-) -> Result<()> {
+/// Returns an error if the passes do not pair, if a pass runs outside a
+/// variant directory, if a slug is not in the table, if a pass departs from
+/// its variant's contract, or if a variant is measured the wrong number of
+/// times.
+fn checked_variants<'a>(
+    invocations: &'a [CargoInvocation],
+    table: &'a [(&'a str, &'a [&'a str])],
+) -> Result<Vec<BenchVariant<'a>>> {
     let (pairs, rest) = invocations.as_chunks::<2>();
     ensure!(
         rest.is_empty(),
@@ -92,38 +100,64 @@ pub fn check_variant_flags(
     );
 
     let toolchain = pinned_toolchain()?;
-    let mut counts: Vec<(&str, usize)> = expected_slugs.iter().map(|slug| (*slug, 0)).collect();
-    for pair in pairs {
-        let (_, slug) = pair[0].target_dir().rsplit_once('/').with_context(|| {
-            format!(
-                "pass should run in a variant directory, got `{}`",
-                pair[0].target_dir()
-            )
-        })?;
-        let Some(entry) = counts.iter_mut().find(|(known, _)| *known == slug) else {
-            bail!("`{slug}` is not a variant this platform measures");
-        };
-        entry.1 += 1;
+    let variants: Vec<BenchVariant<'a>> = pairs
+        .iter()
+        .map(|pair| {
+            // Drop the sample index the directory carries, so a variant
+            // measured in two samples is checked against one expectation
+            // rather than needing a row per sample.
+            let (_, slug) = pair[0].target_dir().rsplit_once('/').with_context(|| {
+                format!(
+                    "pass should run in a variant directory, got `{}`",
+                    pair[0].target_dir()
+                )
+            })?;
+            let Some((label, flags)) = table.iter().find(|(known, _)| *known == slug) else {
+                bail!("`{slug}` is not a variant this platform measures");
+            };
+            // The whole per-variant contract, not just the flags. A row is only
+            // comparable with its neighbours if it also built the same binary
+            // under the same toolchain with both wrappers cleared, and only the
+            // flags differ between the tables, so the descriptor is reused
+            // rather than restated here.
+            let variant = BenchVariant::from_pair(label, pair, flags);
+            variant.check(&toolchain)?;
+            Ok(variant)
+        })
+        .collect::<Result<Vec<_>>>()?;
 
-        let (label, flags) = table
+    // Every variant measured the same number of times. Otherwise a shuffle
+    // could drop one from a sample and the table would still look plausible
+    // while comparing unequal evidence.
+    for (slug, _) in table {
+        let seen = variants
             .iter()
-            .find(|(known, _)| *known == slug)
-            .with_context(|| format!("`{slug}` is missing from the variant table"))?;
-        // The whole per-variant contract, not just the flags. A row is only
-        // comparable with its neighbours if it also built the same binary under
-        // the same toolchain with both wrappers cleared, and only the flags
-        // differ between the tables, so the descriptor is reused rather than
-        // restated here.
-        BenchVariant::from_pair(label, pair, flags).check(&toolchain)?;
-    }
-
-    for (slug, seen) in counts {
+            .filter(|variant| variant.label == *slug)
+            .count();
         ensure!(
             seen == BENCH_REPEATS,
             "`{slug}` should be measured {BENCH_REPEATS} time(s), found {seen}"
         );
     }
-    Ok(())
+    Ok(variants)
+}
+
+/// Hold every recorded pass to a variant table: each slug measured the right
+/// number of times, each pass passing exactly that variant's flags.
+///
+/// The entry point for a run whose variant table is not the Linux one — off
+/// Linux there is no `mold` row to measure.
+///
+/// # Errors
+///
+/// Returns an error if a pass runs outside a variant directory, if a slug is
+/// not in the table, if a variant is measured the wrong number of times, or if
+/// a pass's `RUSTFLAGS` are not exactly that variant's.
+pub fn check_variant_flags(
+    invocations: &[CargoInvocation],
+    table: &[(&str, &[&str])],
+) -> Result<()> {
+    checked_variants(invocations, table).map(|_| ())
 }
 
 /// Check the recorded passes: their membership and pairing, each variant's own
@@ -136,6 +170,12 @@ pub fn check_variant_flags(
 /// re-impose the defect the shuffle exists to remove. What must hold instead is
 /// that every slug appears `2 * BENCH_REPEATS` times, and that each appearance
 /// is a clean pass followed by an incremental one.
+///
+/// # Errors
+///
+/// Returns an error if the run measured the wrong number of passes, if a pass
+/// departs from its variant's contract, if two variants shared a target
+/// directory, or if a pass sits on the wrong side of the touch.
 pub fn check_benchmark_invocations(
     invocations: &[CargoInvocation],
     baseline_mtime: i64,
@@ -147,51 +187,7 @@ pub fn check_benchmark_invocations(
         invocations.len()
     );
 
-    let (pairs, rest) = invocations.as_chunks::<2>();
-    ensure!(
-        rest.is_empty(),
-        "passes should come in pairs, got {} spare",
-        rest.len()
-    );
-
-    let toolchain = pinned_toolchain()?;
-    let variants: Vec<BenchVariant<'_>> = pairs
-        .iter()
-        .map(|pair| {
-            // Drop the sample index the slug carries, so a variant measured in
-            // two samples is checked against one expectation rather than
-            // needing a row per sample.
-            let (_, slug) = pair[0].target_dir().rsplit_once('/').with_context(|| {
-                format!(
-                    "pass should run in a variant directory, got `{}`",
-                    pair[0].target_dir()
-                )
-            })?;
-            let (label, flags) = VARIANT_FLAGS
-                .iter()
-                .find(|(known, _)| *known == slug)
-                .with_context(|| format!("`{slug}` is not a benchmarked variant"))?;
-            Ok(BenchVariant::from_pair(label, pair, flags))
-        })
-        .collect::<Result<Vec<_>>>()?;
-
-    for variant in &variants {
-        variant.check(&toolchain)?;
-    }
-
-    // Every variant must be measured the same number of times. Otherwise a
-    // shuffle could drop one from a sample and the table would still look
-    // plausible while comparing unequal evidence.
-    for slug in BENCH_SLUGS {
-        let seen = variants
-            .iter()
-            .filter(|variant| variant.label == slug)
-            .count();
-        ensure!(
-            seen == BENCH_REPEATS,
-            "`{slug}` should be measured {BENCH_REPEATS} time(s), found {seen}"
-        );
-    }
+    let variants = checked_variants(invocations, &VARIANT_FLAGS)?;
 
     // Pairwise rather than against the first alone: two accelerated variants
     // sharing a directory would warm each other's cache and understate the
@@ -212,6 +208,7 @@ pub fn check_benchmark_invocations(
     // `first()` rather than an index: the pair count was asserted above, but an
     // indexing panic here would report a slice bound rather than the missing
     // measurement the assertion is about.
+    let (pairs, _) = invocations.as_chunks::<2>();
     let first = pairs
         .first()
         .context("the run should record at least one pair")?;
