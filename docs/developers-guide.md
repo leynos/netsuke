@@ -553,17 +553,26 @@ that restates it is a build that can silently drop it. A contract test
 every checkout consumer — plain Cargo invocations, rust-analyzer, Clippy, and
 Whitaker — without any Cargo configuration. `cargo kani setup` is a separate
 boundary: Kani 0.67.0 installs and uses its bundled `nightly-2025-11-21`
-toolchain rather than the checkout toolchain. The repository has no
-`.cargo/config.toml`; carrying the flag was that file's only purpose, and it
-was deleted when the pin moved past 2026-08-04.
+toolchain rather than the checkout toolchain. `.cargo/config.toml` carried the
+Polonius flag until the pin moved past 2026-08-04; that file was deleted then
+and has since returned for the build standard alone, so look to *The build
+standard* above for what it holds now.
 
-Makefile recipes still set `RUSTFLAGS`, but only to deny warnings. Each builds
-the value as `RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings"`; the
-`$${RUSTFLAGS:+$$RUSTFLAGS }` expansion prepends any `RUSTFLAGS` already set by
-the caller (for example a CI wrapper), so those flags survive rather than being
-silently discarded. `make kani-full` and the binary-build recipe set no
-`RUSTFLAGS` at all: Kani compiles third-party crates the workspace lint policy
-does not govern, and a plain binary build is not a lint gate.
+Makefile recipes set `RUSTFLAGS` through a small set of named variables rather
+than spelling a value out, and the variable a recipe composes states its policy.
+`GATE_RUSTFLAGS` appends `-D warnings` and the standard's flags, and every
+lint or test gate takes it. `DEBUG_RUSTFLAGS` takes the standard but leaves the
+caller's warning policy alone, so `make build` is not a gate. `KANI_RUSTFLAGS`
+denies warnings but takes none of the standard: Kani drives `rustc` through
+`kani-compiler` on its own bundled toolchain, where neither flag applies.
+`RELEASE_RUSTFLAGS` assigns an empty inherited value, which is what holds the
+config file's `rustflags` tables off a shipped artefact; see *Exclusions* under
+*The build standard*. Every one of them builds its value as
+`RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }…"`, whose `$${RUSTFLAGS:+$$RUSTFLAGS }`
+expansion prepends any `RUSTFLAGS` already set by the caller (for example a CI
+wrapper), so those flags survive rather than being silently discarded.
+`tests/makefile_test_target/rustflags.rs` holds all four to that composition
+and to their individual policies.
 
 [ADR-006](adr-006-adopt-polonius-nightly-toolchain.md) records the policy
 decision, and the [polonius migration notes](polonius.md) track every site
@@ -1078,8 +1087,8 @@ enforces all five callers. For each one it asserts:
 The same test carries the two toolchain-level assertions: that the pinned
 channel is a dated nightly at or after 2026-08-04, the first nightly on which
 Polonius is the default analysis, and that no build configuration — the
-Makefile, a Cargo configuration fragment, a workflow, or a recreated
-`.cargo/config.toml` — passes a `-Zpolonius` directive.
+Makefile, the committed `.cargo/config.toml`, a workflow, or a helper script —
+passes a `-Zpolonius` directive.
 
 Run it with:
 
@@ -1655,9 +1664,10 @@ set -o pipefail
 make test 2>&1 | tee /tmp/netsuke-make-test.log
 ```
 
-These gates always use the repository toolchain and the default codegen
-backend. For a faster inner loop between gate runs, see
-[local build acceleration](#local-build-acceleration).
+These gates run on the repository toolchain and on the codegen backend, linker,
+and frontend the repository has chosen as its defaults; there is no separate
+faster path to switch to. See [the build standard](#the-build-standard) for
+what they apply and why release and coverage builds are held out of it.
 
 For documentation changes, also run `make fmt`, `make markdownlint`, and
 `make nixie`.
@@ -2351,240 +2361,411 @@ contract. Its fixtures compile the production module paths selected by
 negative fixture imports `cli::discovery` and must fail with an unresolved
 module diagnostic. Update the fixtures whenever the build-script slice changes.
 
-## Local build acceleration
+## The build standard
 
-Debug builds and tests can optionally use the [`mold`] linker and the Cranelift
-`rustc` codegen backend to shorten the local edit-compile-test loop. This is a
-developer convenience only. It is opt-in, it is never used for release
-artefacts, and it changes nothing about what CI builds.
+The [`mold`] linker and the parallel `rustc` frontend (`-Zthreads=8`) are the
+**defaults** for development, test, lint, and typecheck builds. They are
+committed to `.cargo/config.toml`, which Cargo auto-discovers, so a bare
+`cargo build` in the repository gets them as well as every Make target. Release
+and coverage builds are excluded, and the exclusions are enforced rather than
+assumed; see *Exclusions* below.
+
+The Cranelift codegen backend is deliberately **not** part of the standard, and
+a contract refuses one. See *Why Cranelift is not part of the standard* below
+for the evidence.
+
+The decision, the exclusions it carries, and the evidence behind the Cranelift
+refusal are recorded in
+[ADR-029](adr-029-mold-and-parallel-frontend-as-build-defaults.md). This
+section is the working reference; that record is why the standard takes this
+shape.
 
 [`mold`]: https://github.com/rui314/mold
 
 The canonical commands are:
 
 ```bash
-make install-dev-fast   # install the pinned mold release and Cranelift backend
-make dev-fast-check     # verify the prerequisites are present
-make dev-build          # debug binary via Cranelift and mold
-make dev-test           # the nextest pass via Cranelift and mold
+make install-build-tools  # install the pinned mold release and the toolchain
+make check-build-tools    # verify the prerequisites are present
+make build                # debug binary on the standard
+make test                 # the full gate on the standard
 ```
 
-`make dev-build` and `make dev-test` both depend on `make dev-fast-check`, so a
-missing tool reports an installation hint before Cargo is invoked rather than
-surfacing as an opaque codegen-backend or linker error.
+`make build`, `make test-nextest`, `make doctest`, `make lint-clippy`,
+`make lint-whitaker`, and `make typecheck` all depend on
+`make check-build-tools`, so a missing tool reports an installation hint before
+Cargo is invoked rather than surfacing as an opaque codegen-backend or linker
+error. There is no separate accelerated target: `make build`, `make test`,
+`make lint`, and `make typecheck` are the build targets, and every one of them
+runs on the standard.
 
-`DEV_FAST_CONFIG` defaults to `tools/dev-fast/config.toml` and may be
-overridden for a local experiment, for example
-`make DEV_FAST_CONFIG=tools/dev-fast/config.local.toml dev-build`. The Makefile
-passes the selected path explicitly with Cargo's `--config` option; keep the
-fragment out of `.cargo/config.toml` so it cannot affect ordinary, release,
-coverage, or verification builds.
+Every lane in continuous integration whose builds take the linker flag runs
+`make install-build-tools` before its first build. The Windows jobs do not:
+`mold` is Linux-only, so the `cfg` gate leaves the flag inert there and an
+install step would provision nothing. A contract test asserts that command lane
+by lane, and names the Windows omission as intended rather than missing.
 
 `CARGO_LOCKED` defaults to empty. Set `CARGO_LOCKED=--locked` to enable
-repository lockfile verification for `dev-build` and `dev-test`, for example
-`make CARGO_LOCKED=--locked dev-test`.
+repository lockfile verification.
+
+### Why the flags are written down twice
+
+Cargo selects a single `rustflags` source rather than merging them. A matching
+`[target.*]` table replaces `[build] rustflags` outright, and an externally set
+`RUSTFLAGS` environment variable replaces both. Every gate recipe assigns
+`RUSTFLAGS` to deny warnings, and CI's `setup-rust` action exports the same
+value for a whole job, so a repository that named the flags only in
+`.cargo/config.toml` would link with the platform linker and a single-threaded
+frontend during exactly the builds it most wanted accelerated — and report
+success while doing it.
+
+The flags are therefore restated in the Makefile, in `STANDARD_THREADS_FLAG` and
+`STANDARD_MOLD_FLAG`, and composed into the `RUSTFLAGS` each gate builds.
+`tests/build_tools_make_target_tests.rs` and
+`tests/build_tools_cargo_config_tests.rs` hold the sources equal in both
+directions: a flag the Makefile passes but the configuration omits fails one
+test, and a flag named in `[build] rustflags` but missing from the Linux table
+fails another. Do not consolidate them.
+
+Whether a build actually linked with `mold` is checkable after the fact, not
+only inferable from the command line:
+
+```console
+$ strings target/debug/netsuke | grep '^mold '
+mold 2.41.0 (7c4c0addcb833120bf41cc3db7b2652694e0d814; compatible with GNU ld)
+```
+
+The linker writes its own version into the artefact, so a build that silently
+fell back to the platform linker carries no such line. That is worth checking
+after any change to how `RUSTFLAGS` is composed, because the fallback is
+otherwise completely silent.
 
 ### Toolchain contract
 
 Two pins fix the linker; the toolchain is not pinned separately. Change the
 pins together, never individually.
 
-The scripts locate these files relative to their own path, so `make dev-*`, a
-direct `scripts/dev-fast-check.sh`, and a run from any working directory all
-resolve the same committed pins. Setting `MOLD_VERSION_FILE`,
+The scripts locate these files relative to their own path, so the Make targets,
+a direct `scripts/check-build-tools.sh`, and a run from any working directory
+all resolve the same committed pins. Setting `MOLD_VERSION_FILE`,
 `MOLD_SHA256SUMS_FILE`, or `RUST_TOOLCHAIN_FILE` overrides the corresponding
 default; the tests use that to point the scripts at fixtures. Either way a
-missing or empty file is reported as `dev-fast: missing version pin: <path>`
+missing or empty file is reported as `build-tools: missing version pin: <path>`
 rather than silently becoming an empty version.
 
-- `rust-toolchain.toml` supplies the toolchain. dev-fast deliberately shares
-  the repository's own dated nightly rather than pinning a second one, keeping
-  the accelerated loop and the gates on the same toolchain. The
-  `make install-dev-fast` target adds `rustc-codegen-cranelift-preview` to that
-  toolchain.
+- `rust-toolchain.toml` supplies the toolchain. The build standard deliberately
+  shares the repository's own dated nightly rather than pinning a second one,
+  keeping the accelerated loop and the gates on the same toolchain.
+  `make install-build-tools` installs that toolchain and adds no component to
+  it: the standard needs none, because it names no codegen backend.
 - `tools/mold/VERSION` holds the `mold` release tag.
 - `tools/mold/SHA256SUMS` holds the SHA-256 checksum of each supported `mold`
-  release artefact. `make install-dev-fast` refuses to install an artefact that
-  is absent from this file or whose checksum does not match.
+  release artefact. `make install-build-tools` refuses to install an artefact
+  that is absent from this file or whose checksum does not match.
 
-`make install-dev-fast` unpacks `mold` under `~/.local` by default; override
-the location with `DEV_FAST_PREFIX`. Every `dev-*` recipe prepends
-`$(DEV_FAST_PREFIX)/bin` to `PATH`, so an overridden prefix is the one actually
-selected — `-fuse-ld=mold` resolves by `PATH` order, and the Makefile otherwise
-puts `~/.local/bin` first unconditionally. Invoking the scripts directly rather
-than through `make` means arranging that `PATH` order manually.
+`make install-build-tools` unpacks `mold` under `~/.local` by default; override
+the location with `BUILD_TOOLS_PREFIX`. The Makefile prepends
+`$(BUILD_TOOLS_PREFIX)/bin` to `PATH`, so an overridden prefix is the one
+actually selected — `-fuse-ld=mold` resolves by `PATH` order, and the Makefile
+otherwise puts `~/.local/bin` first unconditionally. Invoking the scripts
+directly rather than through `make` means arranging that `PATH` order manually.
 
-`make dev-fast-check` prints the resolved `mold` path alongside its version, so
-an unexpected pick is visible. A version that differs from the pin fails the
+`make check-build-tools` prints the resolved `mold` path alongside its version,
+so an unexpected pick is visible. A version that differs from the pin fails the
 check, as does a missing `mold` or one that cannot report its version; run
-`make install-dev-fast` to install the pinned release ahead of any distribution
-`mold` on `PATH`. An advisory pin is not a pin: tolerating drift would let the
-linker actually in use stop matching what the repository claims.
+`make install-build-tools` to install the pinned release ahead of any
+distribution `mold` on `PATH`. An advisory pin is not a pin: tolerating drift
+would let the linker actually in use stop matching what the repository claims.
 
-For screen readers: the following flowchart traces `make install-dev-fast` from
-start to exit. It reads the pinned linker version, then branches on the host
-platform. On Linux it selects the architecture, downloads the release tarball,
-verifies its checksum, unpacks it into the install prefix, and reports the
-`PATH` requirement; on other platforms it skips the linker entirely and falls
-back to the platform default. Both branches then converge on the toolchain
-half, which reads the pinned nightly, fails early if `rustup` is absent, and
-otherwise installs the toolchain and the Cranelift backend component before
-printing a readiness message.
+For screen readers: the following flowchart traces `make install-build-tools`
+from start to exit. It reads the pinned linker version, then branches on the
+host platform. On Linux it selects the architecture, downloads the release
+tarball, verifies its checksum, unpacks it into the install prefix, and reports
+the `PATH` requirement; on other platforms it skips the linker entirely and
+falls back to the platform default. Both branches then converge on the
+toolchain half, which reads the pinned nightly, fails early if `rustup` is
+absent, and otherwise installs the toolchain before printing a readiness
+message.
 
 ```mermaid
 flowchart TD
-  A["Start install-dev-fast.sh"] --> B["Source dev-fast-common.sh"]
+  A["Start install-build-tools.sh"] --> B["Source build-tools-common.sh"]
   B --> C["mold_version"]
   C --> D{"is_linux"}
   D -- No --> E["Skip linker installation<br/>Fall back to platform linker"]
   D -- Yes --> F["mold_arch"]
   F --> G["Download tarball from MOLD_RELEASE_BASE_URL"]
   G --> H["verify_mold_archive"]
-  H --> I["tar extract into DEV_FAST_PREFIX"]
-  I --> J["Report DEV_FAST_PREFIX/bin PATH requirement"]
+  H --> I["tar extract into BUILD_TOOLS_PREFIX"]
+  I --> J["Report BUILD_TOOLS_PREFIX/bin PATH requirement"]
 
-  E --> K["cranelift_toolchain"]
+  E --> K["install_toolchain"]
   J --> K
   K --> L{"rustup on PATH?"}
   L -- No --> M["fail: install rustup"]
   L -- Yes --> N["rustup toolchain install pinned nightly --profile minimal"]
-  N --> O["rustup component add rustc-codegen-cranelift-preview"]
-  O --> P["Print ready; verify with make dev-fast-check"]
+  N --> P["Print ready; verify with make check-build-tools"]
   M --> Q["Exit"]
   P --> Q
 ```
 
-**Figure**: `make install-dev-fast` control flow. The `is_linux` branch is what
-keeps macOS and Windows on the platform linker while still installing
-Cranelift, and `verify_mold_archive` is the point at which an artefact absent
+**Figure**: `make install-build-tools` control flow. The `is_linux` branch is
+what keeps macOS and Windows on the platform linker while still installing the
+toolchain, and `verify_mold_archive` is the point at which an artefact absent
 from `tools/mold/SHA256SUMS`, or one whose checksum does not match, aborts the
 installation. The final node only reports the `PATH` requirement for direct
-script invocation; the `dev-*` recipes prepend `$(DEV_FAST_PREFIX)/bin`
-themselves.
+script invocation; the Makefile prepends `$(BUILD_TOOLS_PREFIX)/bin` itself.
 
 ### Ownership boundary
 
-The accelerated configuration lives in `tools/dev-fast/config.toml`, which is
-deliberately *not* `.cargo/config.toml`. Cargo auto-discovers the latter, so
-placing Cranelift and the Linux-only `mold` linker there would silently apply
-them to every build in the repository, including release, packaging, coverage,
-and formal-verification builds. The fragment is instead passed explicitly with
-`cargo --config tools/dev-fast/config.toml` from the `make dev-*` targets, and
-must not be sourced from any target that CI invokes.
+The configuration lives in `.cargo/config.toml`, the file Cargo auto-discovers.
+That placement is the mechanism: the standard applies to every build in the
+repository whether or not it went through a Make target, which is what makes it
+a default rather than an opt-in.
 
-No repository-root `.cargo/config.toml` exists any more. It once carried the
-Polonius flag, and was deleted when the pinned nightly began enabling the
-analysis by default. The rule is about what would belong in that file if it
-returned, not about whether it may exist: settings needed everywhere may go
-there; settings that are only safe for the accelerated dev loop must not.
+The file carries two settings and nothing else:
 
-The fragment sets the `codegen-backend` unstable flag,
-`codegen-backend = "cranelift"` on the `dev` profile, and a
-`cfg(target_os = "linux")`-gated rustflags list carrying
-`-Clink-arg=-fuse-ld=mold`.
+- `-Zthreads=8` in `[build] rustflags`;
+- the same flag repeated in a `cfg(target_os = "linux")` table, beside
+  `-Clink-arg=-fuse-ld=mold`. The repetition is required, not redundant: see
+  *Why the flags are written down twice* above.
+
+It names no codegen backend, for any profile, and a contract refuses one. That
+is a refusal rather than an omission; see *Why Cranelift is not part of the
+standard* below.
+
+Adding anything else to that file applies it to release and coverage builds
+too. A setting that is only safe for the development loop does not belong
+there; put it in the Makefile's composed `RUSTFLAGS` instead, where a target
+chooses whether to take it.
+
+The file once carried the Polonius flag and was deleted when the pinned nightly
+began enabling the analysis by default. It must not carry one now: the analysis
+still comes from the pin, and `tests/polonius_toolchain_contract.rs` reads this
+file among others to keep the directive from returning.
+
+### Exclusions
+
+Two build shapes are excluded from the standard, and each exclusion works by a
+different mechanism.
+
+**Release and packaging.** A `[target.*]` table applies to every profile, so
+`make release` assigns `RUSTFLAGS` — to the caller's inherited value, or to
+nothing — because *assigning it at all* is what displaces the configuration's
+tables. A recipe that left the variable unset would ship an artefact built with
+the parallel frontend and `mold`. On CI the release lanes are already covered,
+because `setup-rust` exports `RUSTFLAGS` for the whole job.
+
+**Coverage.** A build whose output is a measurement is a reproducibility claim,
+so it takes neither the parallel frontend nor the linker change. Both coverage
+steps assign `RUSTFLAGS` at the step itself rather than inheriting it from the
+toolchain action, so the exclusion is visible where it applies and a contract
+has something to read. `tests/workflow_contracts/build_standard_wiring_test.py`
+asserts the assignment and, separately, that no excluded flag appears; the two
+fail to different edits.
+
+### Why Cranelift is not part of the standard
+
+The Cranelift codegen backend is the obvious third member of this set, and it
+is deliberately absent. A Cranelift-compiled panic does not find the unwind
+handler it should. The wording matters, because a probe that only checks
+whether a panic unwinds at all reads as a pass: what fails is every handler
+other than the outermost one.
+
+Measured on 2026-09-18 on `nightly-2026-08-23`, whose Cranelift is
+`librustc_codegen_cranelift-1.100.0-nightly.so`, in a crate with no
+dependencies at all, with `[profile.dev] codegen-backend = "cranelift"` and the
+standard's `-Zthreads=8` and `mold` flags:
+
+```rust
+/// A panic raised on the main thread, caught by `catch_unwind`.
+#[test]
+fn main_thread_catch_unwind() {
+    let caught = std::panic::catch_unwind(|| panic!("boom"));
+    assert!(caught.is_err(), "catch_unwind should report the panic");
+}
+
+/// A panic raised on a thread this test spawned.
+#[test]
+fn spawned_thread_panic_unwinds() {
+    let handle = std::thread::spawn(|| panic!("boom"));
+    assert!(handle.join().is_err());
+}
+
+/// A panic raised on the test's own thread, caught by libtest.
+#[test]
+#[should_panic(expected = "boom")]
+fn should_panic_attribute() {
+    panic!("boom");
+}
+```
+
+```sh
+cargo test --lib -- --nocapture --test-threads=1
+```
+
+Table: panic behaviour under the Cranelift backend and under LLVM.
+
+| Case                      | Cranelift                  | LLVM control |
+| ------------------------- | -------------------------- | ------------ |
+| `#[should_panic]`         | passes                     | passes       |
+| `catch_unwind`            | does not catch; test fails | passes       |
+| Panic on a spawned thread | aborts the process         | passes       |
+
+The control is the same crate and the same flags with the backend key removed;
+it passes all three, so the backend is the cause and neither the linker nor the
+parallel frontend is.
+
+The `#[should_panic]` row is why the reason has to be stated this narrowly. It
+passes because libtest's own outermost handler catches the panic, and nothing
+between the panic and that handler has to work for it to do so. `catch_unwind`
+sits between, and the unwinder walks straight past it. A spawned thread has no
+handler above it at all, so the unwinder reaches the end of the stack:
+
+```text
+fatal runtime error: failed to initiate panic, error 5, aborting
+```
+
+Error 5 is exactly that, the end of the stack with no handler found, and the
+process leaves on SIGABRT. The reach is therefore every `catch_unwind` in the
+tree, every test that asserts a spawned thread panicked, and a debug binary
+that would abort with 134 where it now exits 101 — but not, on this nightly, a
+bare `#[should_panic]`.
+
+What was ruled out, each by its own run: it is not the linker, because it
+aborts with the platform linker too; not the parallel frontend, because LLVM
+with `-Zthreads=8` passes; not a compiler-cache wrapper, because it aborts with
+`RUSTC_WRAPPER` unset; and not a missing flag, because
+`-Cforce-unwind-tables=yes` and an explicit `-Cpanic=unwind` both still abort.
+It is not the pinned toolchain either: the same crate aborts on the newest
+upstream nightly, where the LLVM control passes.
+
+Scoping it to a profile does not rescue it.
+`[profile.test] codegen-backend = "llvm"` makes the suite pass, but reading the
+compiler invocations of a clean `cargo test` under that setting shows every
+crate built on LLVM, dependencies included. `cargo check` and Clippy generate
+no code, so `make typecheck` and `make lint` would gain nothing either. That
+leaves `make build` as the only beneficiary — the one artefact that would then
+abort on a panic and so behave differently from the binary the tests exercise.
+
+`tests/build_tools_cargo_config_tests.rs` therefore refuses a `codegen-backend`
+key under any profile. Re-test on a toolchain bump with the crate above before
+relaxing it; the environment override `CARGO_PROFILE_DEV_CODEGEN_BACKEND`
+remains available for a single scoped experiment.
 
 ### Composition rules
 
-- **Quality gates.** `make check-fmt`, `make lint`, `make lint-clippy`,
-  `make test`, and `make typecheck` are unchanged and remain on the
-  repository's pinned nightly toolchain from `rust-toolchain.toml` with the
-  default LLVM backend. The `dev-*` targets are not part of `make test`,
-  `make lint`, `make check-fmt`, or `make all`, mirroring the Kani boundary
-  described below. Run the ordinary gates before proposing a change;
-  `make dev-test` is a faster inner-loop proxy, not a substitute.
+- **Quality gates.** `make lint`, `make lint-clippy`, `make lint-whitaker`,
+  `make test`, and `make typecheck` run on the standard, on the repository's
+  pinned nightly from `rust-toolchain.toml`. They are gated on
+  `make check-build-tools`, so they stop with an installation hint rather than
+  a codegen-backend error. `make check-fmt` compiles nothing and is unaffected.
 - **`RUSTFLAGS`.** `make test-nextest`, `make doctest`, `make typecheck`, and
-  the rustdoc stage of `make lint` append `-D warnings` to any flags inherited
-  from the caller. An externally set `RUSTFLAGS` overrides the `[target.*]`
-  `rustflags` in a Cargo configuration file, so the `dev-*` targets
-  deliberately do not set it. Exporting `RUSTFLAGS` in the shell silently
-  disables `mold` for these targets.
+  the rustdoc and Clippy stages of `make lint` append `-D warnings` *and* the
+  standard's flags to whatever the caller set. An externally set `RUSTFLAGS`
+  overrides every `rustflags` table in a Cargo configuration file, which is
+  precisely why the Makefile restates the flags rather than relying on the
+  file. Exporting `RUSTFLAGS` in the shell no longer silences the linker for
+  these targets, because they compose rather than replace; it does still
+  silence it for a bare `cargo build`.
 - **`RUSTDOC_FLAGS`.** Make defaults this caller-overridable variable to
   `--cfg docsrs -D warnings` and exports it as Cargo's supported `RUSTDOCFLAGS`
   environment variable for `make doctest`, the rustdoc stage of
   `make lint-clippy`, and `make doc-coverage`. The unsupported `RUSTDOC_FLAGS`
   name is not exported, so Cargo cannot warn about it. Caller overrides retain
   their literal contents, including quotes in Rust `--cfg` values.
-- **Release and packaging.** `make release` and everything under
-  `.github/workflows/build-and-package.yml` use the release profile, the LLVM
-  backend, and the platform linker. Cranelift is applied to the `dev` profile
-  only, so it cannot reach a shipped artefact even if the fragment were loaded.
-  `make build` produces a debug binary, but through the default backend and
-  linker; `make dev-build` is the accelerated counterpart.
-- **Coverage.** Coverage is generated through LLVM source-based instrumentation
-  in `.github/workflows/ci.yml` and `coverage-main.yml`. Cranelift does not
-  emit that instrumentation. Never combine the `dev-fast` fragment with a
-  coverage run.
+- **Release, packaging, and coverage.** See *Exclusions* above. These are the
+  two shapes the standard must not reach, and each is held out by a different
+  mechanism.
 - **Formal verification.** Kani manages its own supporting nightly toolchain
-  during `cargo kani setup`. That nightly is unrelated to the repository's
-  Polonius nightly and must not be conflated with it; verification must run on
-  Kani's own toolchain and the LLVM backend. The same applies to Verus.
-- **Test runner.** `make dev-test` is the accelerated counterpart of
-  `make test-nextest`, not of `make test`: it runs the same
-  `cargo nextest run --workspace --all-targets --all-features`, and so is
-  governed by the same [`.config/nextest.toml`](#nextest-configuration). It
-  omits the `doctest` pass, because `cargo test --doc` is a separate and
-  comparatively quick runner; run `make test` before proposing a change. The
-  acceleration is applied through `RUSTUP_TOOLCHAIN` and `cargo --config`, both
-  Cargo-level rather than runner-level, which is why they compose with nextest
-  unchanged. Note the target uses `NEXTEST_BUILD_JOBS`, not `BUILD_JOBS`:
-  nextest reserves `-j` for test concurrency, so a Cargo-shaped `-j` would
-  silently become a thread count. It forwards `NEXTEST_TEST_JOBS` as well, so
-  both worker bounds mean the same thing under `make dev-test` as under
-  `make test-nextest`; a bound honoured by one and dropped by the other would
-  make a local run diverge from the gate for no stated reason.
-  `tests/makefile_test_target.rs` holds the two targets to that agreement.
+  during `cargo kani setup`, and drives `rustc` through `kani-compiler`.
+  Reading the compiler invocations a `cargo kani` run produces shows
+  `-Zthreads` never reaching `kani-compiler`, so the harnesses need no override
+  and none is added; CI's `kani-smoke` job runs `make kani-ir` on every pull
+  request, which is where that continues to be checked. Verus drives its own
+  toolchain the same way. If a proof tool ever does inherit a flag it cannot
+  take, the remedy is an override scoped to that one target with the reason
+  recorded, not a change to the shared configuration.
+- **Dylint and Whitaker.** `make lint-whitaker` execs `cargo dylint`, which
+  re-invokes Cargo under Whitaker's own pinned nightly with a driver as
+  `RUSTC_WORKSPACE_WRAPPER`. That older Cargo reads this configuration without
+  complaint, and dylint drives `cargo check`, so nothing here reaches code
+  generation. It would only need revisiting if dylint moved to a
+  codegen-producing command.
+- **Test runner.** The standard is applied at the Cargo level, through
+  `RUSTFLAGS` and the profile, rather than at the runner level, which is why it
+  composes with nextest unchanged; `make test-nextest` is governed by the same
+  [`.config/nextest.toml`](#nextest-configuration) as before. Note the target
+  uses `NEXTEST_BUILD_JOBS`, not `BUILD_JOBS`: nextest reserves `-j` for test
+  concurrency, so a Cargo-shaped `-j` would silently become a thread count.
 - **rust-analyzer.** No rust-analyzer configuration is committed, so the
-  language server uses the repository toolchain and the default backend. Opting
-  rust-analyzer into Cranelift is a personal, machine-local choice; it needs a
-  separate target directory to avoid thrashing the cache shared with
-  `make test`.
-- **Polonius.** The analysis comes from the pinned nightly (ADR-006), and the
-  `dev-*` targets use that same toolchain, so the fragment needs no
-  Polonius-specific cooperation and must not add a `-Zpolonius` directive.
-  Cargo does still pick a single rustflags source rather than merging them, so
-  anything the fragment's `[target.*]` table must carry has to be named there
-  in full.
+  language server picks up `.cargo/config.toml` like any other Cargo caller and
+  takes the standard. Give it a separate target directory to avoid thrashing
+  the cache shared with `make test`.
+- **Polonius.** The analysis comes from the pinned nightly (ADR-006), so the
+  configuration needs no Polonius-specific cooperation and must not add a
+  `-Zpolonius` directive; `tests/polonius_toolchain_contract.rs` reads
+  `.cargo/config.toml` to keep it out.
 
 ### Fallback behaviour
 
 - **Non-Linux hosts.** `mold` ships for Linux only, so on macOS and Windows
-  `make install-dev-fast` skips the linker installation, the
-  `cfg(target_os = "linux")` gate keeps the link argument inert, and
-  `make dev-fast-check` prints the fallback to the platform linker explicitly.
-  Cranelift still applies.
-- **Unsupported architecture.** `make install-dev-fast` fails with a clear
+  `make install-build-tools` skips the linker installation, the
+  `cfg(target_os = "linux")` gate keeps the link argument inert, the Makefile
+  omits it from the composed `RUSTFLAGS`, and `make check-build-tools` prints
+  the fallback to the platform linker explicitly. The parallel frontend still
+  applies on every platform, being a compiler flag rather than a tool that has
+  to be installed.
+- **Unsupported architecture.** `make install-build-tools` fails with a clear
   message rather than guessing when `uname -m` is not one of the architectures
   recorded in `tools/mold/SHA256SUMS`.
-- **Missing tools.** `make dev-fast-check` names the absent component — `mold`,
-  `rustup`, the pinned toolchain, or the Cranelift backend — and points at
-  `make install-dev-fast`. It exits non-zero, so `make dev-build` and
-  `make dev-test` stop before Cargo runs.
+- **Missing tools.** `make check-build-tools` names the absent component —
+  `mold`, `rustup`, or the pinned toolchain — and points at
+  `make install-build-tools`. It exits non-zero, so `make build`, `make test`,
+  `make lint`, and `make typecheck` stop before Cargo runs.
 
 ### Testing the tooling
 
-Six suites cover the tooling's observable behaviour. All are hermetic — no
+Eight suites cover the tooling's observable behaviour. All are hermetic — no
 network, and no real `mold`, `rustup`, or Cargo — so they run as part of
 `make test` on any Linux host.
 
-- `tests/dev_fast_check_tests.rs`: the capability gate. Which diagnostic each
-  failure mode emits, exit status, pin resolution, and refusal of a malformed
-  pin.
-- `tests/dev_fast_install_tests.rs`: the installer's happy path and its
-  refusals, plus the benchmark script's Markdown output.
-- `tests/dev_fast_checksum_tests.rs`: property coverage for checksum
+- `tests/build_tools_check_tests.rs`: the capability gate. Which diagnostic each
+  failure mode emits, exit status, and the non-Linux path, where the linker is
+  skipped and the toolchain half still runs `rustup toolchain install`.
+- `tests/build_tools_pin_tests.rs`: pin resolution. Which file each pin is read
+  from, that boundary whitespace is trimmed, that an explicit override wins,
+  that the committed pins are the fallback rather than an empty string, and
+  that a malformed pin is refused rather than rewritten.
+- `tests/build_tools_install_tests.rs`: the installer's happy path and its
+  refusals, `make install-build-tools` forwarding, and the benchmark script's
+  Markdown output.
+- `tests/build_tools_checksum_tests.rs`: property coverage for checksum
   verification against a model.
-- `tests/dev_fast_make_target_tests.rs`: the Make recipes. Toolchain and
-  fragment selection; that a failed gate reaches zero Cargo invocations
-  (`dev-build` and `dev-test` stop before Cargo runs); the fragment's contents;
-  and `install-dev-fast` forwarding.
-- `tests/dev_fast_bench_tests.rs`: `make bench-build`. Per-variant target
-  directories, the clean/incremental cycle, and both variant rows.
-- `tests/dev_fast_bench_lock_tests.rs`: the benchmark's exclusion lock. That a
-  held lock rejects a second run before it mutates anything, that the lock is
+- `tests/build_tools_make_target_tests.rs`: the Make recipes. That each gate
+  composes the standard's flags *and* the warning policy into `RUSTFLAGS`, that
+  the debug build takes the standard without the warning policy, that the
+  release build assigns `RUSTFLAGS` and carries neither flag, and that a failed
+  capability check reaches zero Cargo invocations.
+- `tests/build_tools_cargo_config_tests.rs`: the committed `.cargo/config.toml`.
+  That both `rustflags` sources repeat the shared flags, that no profile names
+  a codegen backend, that no `rustflags` source carries one either — in the
+  array form or the space-separated string form Cargo reads identically — and
+  that Cargo itself resolves the keys — `cargo config get` reports Cargo's own
+  view, so a key nested under the wrong table shows up as a missing value
+  rather than parsing cleanly and being ignored.
+- `tests/build_tools_bench_tests.rs`: `make bench-build`. Per-variant target
+  directories, the clean/incremental cycle, all three variant rows, and that
+  every pass clears both compiler wrappers so a measurement cannot be a cache
+  read. Its `order_cases` module holds the cases about the order the variants
+  ran in: that the draw is shuffled rather than walked straight through, that
+  one seed replays one order, and that a repeat count below two is refused.
+- `tests/build_tools_bench_lock_tests.rs`: the benchmark's exclusion lock. That
+  a held lock rejects a second run before it mutates anything, that the lock is
   released however a run ends, and that a later run can take it after an
   aborted one.
 
-The fixtures live in `test_support::dev_fast`:
+The fixtures live in `test_support::build_tools`:
 
 - `Sandbox` builds `PATH` from nothing — an explicit allowlist of ordinary
   utilities symlinked into a temporary directory, plus whichever fakes a case
@@ -2606,14 +2787,17 @@ The fixtures live in `test_support::dev_fast`:
   checksum verification, and strip depth. Each release owns its version, so no
   caller threads a version string around.
 - `RecordingCargo` is a fake `cargo` that logs the arguments,
-  `RUSTUP_TOOLCHAIN`, and `PATH` of every invocation, turning a recipe's
-  command line into a checkable fact. It also records the target directory and
-  whether that directory already existed, which makes a benchmark's
-  clean-then-incremental cycle observable: the clean pass sees
-  `TargetState::Absent` because the harness wiped the directory, and the
-  incremental pass that follows sees `Present`. Seed a stale target directory
-  before asserting on that, or the wipe is indistinguishable from doing
-  nothing. It records the benchmark touch file's timestamp too, compared
+  `RUSTUP_TOOLCHAIN`, `PATH`, and `RUSTFLAGS` of every invocation, turning a
+  recipe's command line and environment into checkable facts. It records whether
+  `RUSTFLAGS` was assigned separately from its value, because unset and empty
+  are different facts: an empty assignment still displaces the configuration
+  file's tables, which is exactly what the release exclusion relies on. It also
+  records the target directory and whether that directory already existed,
+  which makes a benchmark's clean-then-incremental cycle observable: the clean
+  pass sees `TargetState::Absent` because the harness wiped the directory, and
+  the incremental pass that follows sees `Present`. Seed a stale target
+  directory before asserting on that, or the wipe is indistinguishable from
+  doing nothing. It records the benchmark touch file's timestamp too, compared
   against a backdated baseline rather than between passes so the assertion does
   not depend on filesystem timestamp granularity.
 - `PinOverrides` selects whether a script run supplies the pin-file variables.
@@ -2622,21 +2806,21 @@ The fixtures live in `test_support::dev_fast`:
   entries are kept apart deliberately: a command-line variable outranks a `?=`
   default, whereas an environment entry is the only channel for a setting a
   script reads without the Makefile naming it.
-- `test_support::dev_fast::scenario` builds on the fixtures above to assemble
-  two starting points. `BuildScenario` is a sandbox where `make dev-fast-check`
-  passes — pinned `mold` on the install prefix, a `rustup` reporting the
-  Cranelift component, and a `RecordingCargo` installed — and is shared by the
-  Make-target and benchmark suites. `BuildScenario::run(target)` returns the
-  single Cargo invocation a target must produce. The scenario is shared by both
-  suites so each can inspect that invocation without relying on process-global
-  state. `InstallerScenario` is a sandbox with a published `FakeRelease` and a
-  usable `rustup`, letting a test concentrate on the linker half of the
-  installer; the installer and checksum suites share it. The module also exports
-  `TEST_MOLD_VERSION`, deliberately not a real `mold` version so a test that
-  accidentally reaches the network fails rather than silently succeeding
-  against an upstream artefact, and `WRONG_SHA256`. `InstallerFixture` groups
-  the installer's pin path, checksum path, and release URL, and renders them via
-  `script_env()`.
+- `test_support::build_tools::scenario` builds on the fixtures above to assemble
+  two starting points. `BuildScenario` is a sandbox where
+  `make check-build-tools` passes — pinned `mold` on the install prefix, a
+  `rustup` reporting the pinned toolchain, and a `RecordingCargo` installed —
+  and is shared by the Make-target and benchmark suites.
+  `BuildScenario::run(target)` returns the single Cargo invocation a target
+  must produce. The scenario is shared by both suites so each can inspect that
+  invocation without relying on process-global state. `InstallerScenario` is a
+  sandbox with a published `FakeRelease` and a usable `rustup`, letting a test
+  concentrate on the linker half of the installer; the installer and checksum
+  suites share it. The module also exports `TEST_MOLD_VERSION`, deliberately
+  not a real `mold` version so a test that accidentally reaches the network
+  fails rather than silently succeeding against an upstream artefact, and
+  `WRONG_SHA256`. `InstallerFixture` groups the installer's pin path, checksum
+  path, and release URL, and renders them via `script_env()`.
 
 A scenario earns its place here once a second suite needs it, and not before;
 suite-specific conveniences stay with their suite — the installer tests keep
@@ -2675,17 +2859,48 @@ the corpus small and the strategy structural.
 `test_support` is a workspace member, so `make test` (whose nextest command uses
 `--workspace`), rustdoc, Clippy, and Whitaker visit its unit tests and library
 code. Keep fixture tests beside the fixture when they exercise a local
-invariant; use the `tests/dev_fast_*.rs` integration crates when the assertion
-spans the application-facing sandbox or Makefile contract.
+invariant; use the `tests/build_tools_*.rs` integration crates when the
+assertion spans the application-facing sandbox or Makefile contract.
 
 ### Benchmark evidence
 
-`make bench-build` measures both paths with one repeatable command. It builds
-the `netsuke` binary from an empty target directory, touches `src/main.rs`, and
-rebuilds. Each variant uses its own target directory under `target/bench/`, so
-neither warms the other's cache nor disturbs the working `target/` tree. The
-timer reads `EPOCHREALTIME`, so this target needs Bash 5.0 or newer; it fails
-with a named prerequisite on older shells rather than reporting zeroes.
+`make bench-build` measures three build shapes with one repeatable command: the
+platform-linker baseline, the repository's `mold` default, and that default
+with the parallel frontend added. The linker and the frontend get a row each
+because they pay off at different points in a build, and one row for both would
+hide which of them is earning its keep. Each variant builds the `netsuke`
+binary from an empty target directory, touches `src/main.rs`, and rebuilds.
+Each uses its own target directory under `target/bench/`, so none warms
+another's cache nor disturbs the working `target/` tree. The timer reads
+`EPOCHREALTIME`, so this target needs Bash 5.0 or newer; it fails with a named
+prerequisite on older shells rather than reporting zeroes.
+
+`mold` is Linux-only, so the benchmark drops its row elsewhere. On a non-Linux
+host the threaded row keeps the parallel frontend and loses the linker flag,
+and its caption reads "Platform linker, parallel frontend" so the table never
+names a linker change it did not make. The capability check tolerates a
+non-Linux host rather than aborting, which is what makes this path reachable.
+
+Every measured build runs with `RUSTC_WRAPPER` and `RUSTC_WORKSPACE_WRAPPER`
+assigned empty. This is not tidiness. A developer shell commonly exports a
+compiler wrapper chaining to `sccache`, and with one in force a variant's first
+clean pass fills the cache while every later pass reads it back, so the table
+times cache retrieval under variant labels and the row order decides the
+winner. The flags are part of the cache key, so the variants warm each other
+unevenly and nothing in the output reveals it. Both variables are named because
+Cargo honours them independently, and both are *assigned* rather than unset,
+because only an assignment displaces an exported value.
+
+`CARGO_ENCODED_RUSTFLAGS` is *removed* instead — `env -u`, not an empty
+assignment. Cargo consults it before `RUSTFLAGS` and uses the first source it
+finds, so an inherited value would leave every variant compiling with the same
+flags while the table still showed three rows, and an empty encoded list is
+still a source that would displace every variant's own `RUSTFLAGS`. Only
+removing the variable leaves `RUSTFLAGS` to decide the build. A developer with
+that variable exported — `cargo nextest` sets it, as do some wrapper setups —
+would otherwise get a table that compares nothing. Removing it is an extension
+to `env` rather than POSIX, but it is present in both GNU coreutils and the BSD
+`env` the benchmark can reach on macOS.
 
 `BENCH_ROOT` and `BENCH_TOUCH_FILE` default to the shared `target/bench`
 directory and the tracked `src/main.rs`, so two runs in one checkout would
@@ -2699,12 +2914,53 @@ run ends, including on interrupt. To benchmark two things at once, override
 `BENCH_ROOT`, so distinct roots do not contend. If a killed run ever leaves the
 directory behind, remove it.
 
-Results below were recorded on a 24-core x86_64 Linux host, with both variants
-on the repository's then-pinned `nightly-2026-06-25` supplying Cranelift
-0.132.0, and `mold` 2.41.0. Regenerate the table verbatim with
-`make bench-build`. Absolute figures move with machine load, so the ratio
-between the two rows is the durable signal, not the seconds; the run below is
-representative of three consecutive runs that agreed to within 0.4 s.
+The variants are measured in a shuffled order, redrawn for each of
+`BENCH_REPEATS` samples (`2` by default). Separate target directories isolate
+build artefacts and nothing else: page-cache warmth and other tenants on a
+shared host are not isolated by any directory, and they are where the ordering
+bias lives. Drawing a fresh order per sample spreads that bias across the
+variants instead of pinning it to whichever ran first, and repeating turns it
+into visible spread rather than one number. The script prints `order sample N:`
+for each draw and `order measured:` for the run as a whole, because a shuffle
+is not reconstructible after the fact — without the record, a table disagreeing
+with an earlier one cannot be told apart from a run that measured the variants
+in a different order, which is the exact confusion the shuffle exists to
+remove. Paste that record with any table recorded here, so the next reader can
+tell which it was.
+
+The draw is an input rather than ambient state. `BENCH_SEED` seeds it, the run
+prints `order seed: N` before it measures anything, and passing that value back
+replays the same order. An unseeded run draws a seed and prints it, so a table
+somebody has already taken can still be replayed. `BENCH_REPEATS` below two is
+refused rather than clamped: nought prints an empty table and exits nought, and
+one prints a table indistinguishable in shape from a valid one while carrying
+exactly the single-sample bias the repeats exist to spread. Neither failure is
+visible in the output a reader pastes here, which is why the script names it
+instead.
+
+No table is recorded here yet, and the reason is worth keeping. The figures
+this section used to carry were taken before the wrapper defect above was
+found, so they timed a mixture of compilation and cache retrieval. The attempt
+to replace them on 2026-09-17 ran on a shared host whose load went from 0.7 to
+117 during the round: across three runs the same variant's clean build ranged
+from 37 s to 154 s, and reversing the row order reversed the verdict twice. A
+number produced under those conditions is not a slower or faster reading of the
+truth; it is a reading of the host.
+
+A run worth recording therefore needs all of: a host doing nothing else, the
+load average quoted beside the table, and samples that agree. Regenerate with
+`make bench-build` and paste the table verbatim. Until then, treat the standard
+as justified by what it does rather than by a figure — `mold` and the parallel
+frontend cost nothing at runtime and are trivially reversible — and measure a
+representative workload before concluding the acceleration is or is not worth
+the setup.
+
+Two limits bound whatever that run reports. The benchmark builds only
+`--bin netsuke`, the smallest useful target, so it under-represents what
+`make test` sees, where every test binary's link is also on the linker. And the
+incremental row rebuilds a single crate and links once, which on any host is a
+couple of seconds dominated by that link, so it discriminates far less between
+variants than the clean row does.
 
 `make bench-glob-expansion` measures `glob_paths("**/*.txt", Some(base))`
 against its equivalent absolute, unbased pattern. Its deterministic fixture is
@@ -2713,23 +2969,6 @@ the benchmark measures expansion rather than fixture construction or an
 optimized-away query. Use it when changing glob-base preparation, path
 rebasing, or separator formatting; compare the two cases on the same machine,
 not their absolute timings across hosts.
-
-| Variant                         | Clean build (s) | Incremental build (s) |
-| ------------------------------- | --------------- | --------------------- |
-| Default (LLVM, platform linker) | 11.6            | 0.8                   |
-| dev-fast (Cranelift, `mold`)    | 10.7            | 0.6                   |
-
-Table: Debug build wall-clock time for the default and accelerated paths.
-
-Be realistic about the size of this: roughly 8% off a clean build and a quarter
-off an incremental one, which on this host is a few hundred milliseconds. Two
-things bound it. Both variants now share one nightly, so the comparison
-isolates Cranelift and `mold` rather than also capturing a toolchain change —
-earlier figures in this document did not, and overstated the gain. And the
-benchmark builds only `--bin netsuke`, the smallest useful target, so it
-under-represents what `make dev-test` sees, where Cranelift has every test
-binary's codegen to save on. Measure the actual workload before concluding the
-acceleration is or is not worth the setup.
 
 ## Formal-verification tooling
 
@@ -4144,19 +4383,19 @@ is not obvious from the name:
   string normalization. Keep this exception in `test_support::fs`; production
   code remains capability-scoped or uses its dedicated normalizer.
 - `copy(from, to) -> io::Result<u64>` forwards to `std::fs::copy`, returning
-  the number of bytes copied and propagating its failure. The `dev_fast`
+  the number of bytes copied and propagating its failure. The `build_tools`
   release fixtures use it to place a built archive under its versioned name.
 - `modified(path) -> io::Result<SystemTime>` returns the file's modification
   time. It propagates both the metadata failure and the platform's failure to
   report a timestamp, so it is `io::Result` rather than an `Option`. The
-  `dev_fast` staging fixtures use it to assert a file was or was not rebuilt.
+  `build_tools` staging fixtures use it to assert a file was or was not rebuilt.
 - `write_with_mtime(path, contents, mtime) -> io::Result<()>` (Unix only)
   creates or truncates `path`, writes `contents`, and sets the modification
   time to `mtime`, propagating whichever step fails. The staging fixtures use
   it to backdate a file so a later build sees it as stale.
 
 `write_with_mtime` is the reason `test_support/dylint.toml` carries no
-`dev_fast` exemption. Backdating a fixture needs one open file for both the
+`build_tools` exemption. Backdating a fixture needs one open file for both the
 write and the timestamp, which reads like an irreducibly ambient operation that
 has to happen at the call site. Taking the timestamp as an argument keeps the
 handle inside this module instead: the caller never sees a `File`, so the
@@ -4486,10 +4725,11 @@ the resulting configuration applies the override only when a child command is
 spawned; callers should configure this through `StdlibConfig` rather than
 constructing the internal value directly.
 
-The `test_support::dev_fast` sandbox reuses `mockable::Env` only while locating
-the host utilities it explicitly links into its hermetic `PATH`.
+The `test_support::build_tools` sandbox reuses `mockable::Env` only while
+locating the host utilities it explicitly links into its hermetic `PATH`.
 `real_utility_with_env` is the test seam for that lookup; it is not a general
-executable-discovery API and must not be used outside dev-fast test scaffolding.
+executable-discovery API and must not be used outside build-tools test
+scaffolding.
 
 #### Annotating a sanctioned site
 

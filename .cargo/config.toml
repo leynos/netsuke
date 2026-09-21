@@ -1,0 +1,33 @@
+# Repository-wide Cargo defaults for the development build standard.
+#
+# The mold linker and the parallel `rustc` frontend are the defaults for every
+# development, test, lint and typecheck build. Cargo auto-discovers this file,
+# so a bare `cargo build` gets them too; there is no opt-in path and no slower
+# alternative to choose.
+#
+# Release and coverage builds are excluded. Both are held out by assigning
+# `RUSTFLAGS`, which displaces every `rustflags` table below; see "The build
+# standard" in docs/developers-guide.md for the mechanism and the contracts.
+#
+# No codegen backend is named here, and none may be. A panic compiled by the
+# Cranelift backend does not find the unwind handler it should: `catch_unwind`
+# fails to catch and a panic on a spawned thread aborts the process, while a
+# bare `#[should_panic]` still passes. That makes the backend unusable for a
+# profile any test or binary runs on. The guide records the measurement and the
+# command; a contract refuses a backend key so that re-adding one has to go
+# through that evidence first.
+
+# Cargo selects a single rustflags source rather than merging them: a matching
+# `[target.*]` table replaces `[build] rustflags` outright, and an externally
+# set `RUSTFLAGS` replaces both. Every flag that must survive therefore has to
+# be repeated in each source, including the `RUSTFLAGS` the Makefile composes
+# for the gate targets. tests/build_tools_cargo_config_tests.rs and
+# tests/makefile_test_target/rustflags.rs hold the sources equal.
+[build]
+rustflags = ["-Zthreads=8"]
+
+# mold ships for Linux only, so the linker flag is gated behind a target `cfg`.
+# macOS and Windows fall through to `[build] rustflags` above and use their
+# platform default linker.
+[target.'cfg(target_os = "linux")']
+rustflags = ["-Zthreads=8", "-Clink-arg=-fuse-ld=mold"]

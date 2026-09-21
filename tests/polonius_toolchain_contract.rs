@@ -19,7 +19,6 @@ use camino::Utf8Path;
 use makefile::{read_repo_file, repo_root};
 use rstest::rstest;
 use serde_yaml::Value as YamlValue;
-use std::io::ErrorKind;
 use toml::Value as TomlValue;
 
 /// The retired directive that must not reappear in build configuration.
@@ -32,14 +31,16 @@ const DENY_WARNINGS_RUSTFLAGS: &str = "-D warnings";
 
 /// Build-configuration surfaces that could reintroduce the retired directive.
 ///
-/// `.cargo/config.toml` is listed even though it no longer exists: it is the
-/// path Cargo auto-discovers, so recreating it to carry the flag is the most
-/// likely regression and a missing file is simply skipped.
-const BUILD_CONFIGURATION_FILES: [&str; 8] = [
+/// `.cargo/config.toml` is the path Cargo auto-discovers, so it is the surface
+/// on which the directive would reach every build at once. It is committed by
+/// the build standard, so it is required like every other path here rather than
+/// skipped when absent: a file that has gone missing would otherwise take its
+/// flags out of this contract silently, which is the regression the contract
+/// exists to catch.
+const BUILD_CONFIGURATION_FILES: [&str; 7] = [
     "Makefile",
     ".cargo/config.toml",
-    "tools/dev-fast/config.toml",
-    "scripts/dev-fast-common.sh",
+    "scripts/build-tools-common.sh",
     ".github/workflows/ci.yml",
     ".github/workflows/netsukefile-test.yml",
     ".github/workflows/coverage-main.yml",
@@ -179,15 +180,9 @@ fn rust_toolchain_pins_a_nightly_that_enables_polonius_by_default() -> Result<()
 fn build_configuration_does_not_restate_the_retired_polonius_flag() -> Result<()> {
     let root = repo_root()?;
     for path in BUILD_CONFIGURATION_FILES {
-        let contents = match root.read_to_string(path) {
-            Ok(contents) => contents,
-            // `.cargo/config.toml` is intentionally absent but remains under
-            // contract because recreating it is the likeliest flag regression.
-            Err(error) if path == ".cargo/config.toml" && error.kind() == ErrorKind::NotFound => {
-                continue;
-            }
-            Err(error) => return Err(error).with_context(|| format!("read {path}")),
-        };
+        let contents = root
+            .read_to_string(path)
+            .with_context(|| format!("read {path}"))?;
         ensure!(
             !contents.contains(POLONIUS_FLAG),
             "{path} passes {POLONIUS_FLAG}; the pinned nightly enables Polonius by default \

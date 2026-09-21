@@ -5,8 +5,8 @@
 //! integration (CI) both run. These tests pin the runner contract it encodes:
 //! non-doctest tests go through cargo-nextest and doctests run separately
 //! because nextest cannot execute them. Every recipe that invokes
-//! `cargo nextest run` shares one worker-bound contract, so the gate and the
-//! accelerated local loop cannot disagree about which bounds a caller set.
+//! `cargo nextest run` shares one worker-bound contract, so no future
+//! accelerated loop can disagree with the gate about which bounds a caller set.
 //!
 //! They also pin the `RUSTFLAGS` contract shared by every recipe that sets the
 //! variable. Each such recipe adds `-D warnings` and prepends any value the
@@ -32,16 +32,16 @@ use toml::Value;
 /// Every Make target that invokes `cargo nextest run`, and so shares the
 /// worker-bound contract.
 ///
-/// `test-nextest` is the gate `make test` composes; `dev-test` is the
-/// accelerated local loop. A contributor sets the bounds once and expects them
-/// honoured wherever nextest runs, so both targets are held to the same rule
-/// rather than only the one CI exercises.
+/// `test-nextest` is the gate `make test` composes, and the only recipe that
+/// runs the runner. A contributor sets the bounds once and expects them
+/// honoured wherever nextest runs, so the list is a contract rather than a note
+/// of what happens to be true today.
 ///
 /// The list is not trusted on its own.
 /// [`behavioural_nextest_targets_forward_both_worker_bounds`] discovers the
 /// targets that actually invoke the runner and fails when the two disagree, so
 /// a new recipe joins the contract or breaks the build.
-const NEXTEST_TARGETS: [&str; 2] = ["test-nextest", "dev-test"];
+const NEXTEST_TARGETS: [&str; 1] = ["test-nextest"];
 
 /// True when `line` is a tab-indented recipe line that invokes the nextest
 /// runner.
@@ -90,9 +90,9 @@ fn nextest_invoking_targets(makefile: &str) -> BTreeSet<String> {
 /// over that string would accept a bound sitting in an unrelated later
 /// command, reading as configured while bounding nothing.
 ///
-/// `dev-test` forwards the bounds only when a caller set them, so the contract
-/// covers the empty default too: the passed-in recipe is a real one, where an
-/// unset variable expands to nothing and nextest sees no bound at all.
+/// `test-nextest` forwards the bounds only when a caller set them, so the
+/// contract covers the empty default too: the passed-in recipe is a real one,
+/// where an unset variable expands to nothing and nextest sees no bound at all.
 fn ensure_worker_bounds_reach_nextest(target: &str, recipe: &str) -> Result<()> {
     let run_command = recipe
         .lines()
@@ -111,9 +111,9 @@ fn ensure_worker_bounds_reach_nextest(target: &str, recipe: &str) -> Result<()> 
 
 /// Verify every nextest-invoking target forwards both worker bounds.
 ///
-/// The agreement between `test-nextest` and `dev-test` is the point: they run
-/// the same runner, so a bound honoured by one and dropped by the other is a
-/// silent divergence for anyone comparing a green gate against a red local run.
+/// The discovered set is the point: every recipe that runs the runner is held
+/// to the same rule, so a future accelerated loop cannot honour a bound the
+/// gate drops, or vice versa, and leave a local run silently divergent from CI.
 ///
 /// [`NEXTEST_TARGETS`] is checked against the targets the file actually
 /// invokes, in both directions, before the bounds are asserted. Checking only
@@ -201,9 +201,11 @@ fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()>
         nextest_recipe.contains("--workspace"),
         "test-nextest should cover the workspace, found {nextest_recipe:?}"
     );
+    // What that value expands to is contracted in the `rustflags` module; here
+    // the point is only that the pass composes it rather than rolling its own.
     ensure!(
-        nextest_recipe.contains(r#"RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings""#),
-        "test-nextest should preserve inherited flags and deny warnings, found {nextest_recipe:?}"
+        nextest_recipe.contains("$(GATE_RUSTFLAGS)"),
+        "test-nextest should compose GATE_RUSTFLAGS, found {nextest_recipe:?}"
     );
 
     ensure_worker_bounds_reach_nextest("test-nextest", &nextest_recipe)?;
@@ -219,8 +221,8 @@ fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()>
         "doctests cannot run under nextest, found {doctest_recipe:?}"
     );
     ensure!(
-        doctest_recipe.contains(r#"RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings""#),
-        "doctest should preserve inherited flags and deny warnings; found {doctest_recipe:?}"
+        doctest_recipe.contains("$(GATE_RUSTFLAGS)"),
+        "doctest should compose GATE_RUSTFLAGS, found {doctest_recipe:?}"
     );
     ensure!(
         doctest_recipe.contains("--workspace"),

@@ -31,6 +31,52 @@ rustup toolchain install nightly-2026-08-23
 cargo +nightly-2026-08-23 install netsuke-build
 ```
 
+## Install the linker the build standard uses
+
+Builds that run inside a checkout now take a committed build standard, because
+`.cargo/config.toml` is auto-discovered rather than opt-in. There is nothing to
+enable for the compiler part: the parallel `rustc` front end applies on every
+platform, and the pinned nightly above supplies the compiler it needs.
+
+Linux is the exception. That configuration also passes `-fuse-ld=mold`, and
+`mold` is a separate program the compiler must be able to find. On Linux,
+install it before the first build:
+
+```sh
+make install-build-tools
+export PATH="${BUILD_TOOLS_PREFIX:-$HOME/.local}/bin:$PATH"
+```
+
+The installer unpacks the pinned release into `$(BUILD_TOOLS_PREFIX)/bin`,
+`~/.local/bin` by default, and does not edit any shell profile; the `PATH`
+export above is therefore a manual step, and one to keep for any later shell.
+The Make targets add that directory for the recipes they run, so a build driven
+by `make` needs no export. A distribution `mold` on `PATH` also works for a
+local install, though the development gates additionally check the version
+against `tools/mold/VERSION`.
+
+Without it the build fails at link time rather than falling back quietly: the
+linker is named explicitly, so gcc reports that it cannot find `mold` and
+stops. macOS and Windows name no linker and need no extra prerequisite; so does
+any platform once `.cargo/config.toml` is removed.
+
+Two build shapes are deliberately excluded and keep the platform linker: a
+release or packaging build, whose output ships, and a coverage build, whose
+output is a measurement. Both assign `RUSTFLAGS` at the point they run, which
+displaces every table in the configuration file.
+
+The opt-in `install-dev-fast` and `dev-fast-check` targets are gone. The
+acceleration is the default now, so there is nothing to opt into:
+`install-build-tools` installs the pinned linker, and `check-build-tools`
+verifies it is present and is the pinned version. Every gate target depends on
+that check, so a missing prerequisite is reported as such rather than surfacing
+later as a linker error.
+
+The [users' guide](users-guide.md#install-netsuke) covers the same ground in
+more detail, and the
+[developers' guide](developers-guide.md#the-build-standard) records the
+standard's rationale and its exclusions.
+
 ## Netsuke is a build tool, not a library
 
 Netsuke is intended to be used as a command-line build tool. The only surfaces

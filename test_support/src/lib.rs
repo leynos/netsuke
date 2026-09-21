@@ -7,18 +7,18 @@
 //!   `LocalizerGuard`, `localizer_test_lock`, `set_en_localizer`)
 //! - computing SHA-256 hashes for cache keys (hash module)
 //! - spawning lightweight HTTP servers for network tests (http module)
-//! - sandboxing PATH and HOME for the dev-fast target tests (`dev_fast` module)
+//! - sandboxing PATH and HOME for the build-tools target tests (`build_tools` module)
 //!
 //! All items are intended for use in tests within this workspace; avoid using
 //! them in production code.
 //!
 //! Platform notes: fake executables are implemented for Unix and Windows.
 
+#[cfg(unix)]
+pub mod build_tools;
 pub mod check_ninja;
 pub mod command_helper;
 pub mod config_metrics;
-#[cfg(unix)]
-pub mod dev_fast;
 pub mod env;
 pub mod exec;
 pub mod fixture;

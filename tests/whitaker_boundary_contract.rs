@@ -215,7 +215,7 @@ fn test_support_carries_its_own_scoped_lint_config() -> Result<()> {
 
     // The exact set, not mere membership. `test_support::fs` is the crate's
     // only sanctioned ambient boundary, and the exemption list is meant to stay
-    // one entry long: the `dev_fast` modules that once looked like they needed
+    // one entry long: the `build_tools` modules that once looked like they needed
     // their own entries were all expressible as wrappers returning plain data
     // (see the rationale in `test_support/dylint.toml`). A second entry is
     // therefore a decision to review, not a routine addition, so it should fail
@@ -226,7 +226,7 @@ fn test_support_carries_its_own_scoped_lint_config() -> Result<()> {
         concat!(
             "test_support/dylint.toml should exempt exactly {boundary} and ",
             "nothing else; adding an entry needs the same scrutiny that ",
-            "removing the dev_fast ones did. Found {paths:?}",
+            "removing the build_tools ones did. Found {paths:?}",
         ),
         boundary = TEST_SUPPORT_BOUNDARY,
         paths = format!("{paths:?}")

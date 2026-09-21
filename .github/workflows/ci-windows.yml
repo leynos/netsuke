@@ -176,7 +176,13 @@ jobs:
         run: |
           $profileHome = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
           $whitaker = Join-Path $profileHome '.local\bin\whitaker.ps1'
-          $env:RUSTFLAGS = "$env:RUSTFLAGS -D warnings"
+          # Assigning RUSTFLAGS displaces every `rustflags` table in
+          # `.cargo/config.toml`, so the value has to carry the standard's
+          # flags as well as the deny. Name `-Zthreads=8` explicitly: mold is
+          # Linux-only so its flag is absent here, but the parallel frontend is
+          # not, and dropping it would lint a differently compiled tree from the
+          # one the other lanes measure.
+          $env:RUSTFLAGS = "$env:RUSTFLAGS -D warnings -Zthreads=8"
           $env:DYLINT_TOML = Get-Content dylint.toml -Raw
           & $whitaker --all --no-deps --package netsuke-build '--' --all-targets --all-features
           if ($LASTEXITCODE -ne 0) {
@@ -320,6 +326,15 @@ jobs:
         # been made.
         shell: pwsh
         run: |
+          # The `setup-rust` action exports its `rustflags` input as
+          # `RUSTFLAGS`, and an externally set `RUSTFLAGS` displaces every
+          # `rustflags` table in `.cargo/config.toml`. This step invokes Cargo
+          # directly rather than through the Makefile, so nothing composes the
+          # standard back in: without this line the binary users get would be
+          # the one build here not compiled with the parallel frontend. mold is
+          # Linux-only, so its flag stays absent. Same assignment, and same
+          # reason, as `Lint (Whitaker)` above.
+          $env:RUSTFLAGS = "$env:RUSTFLAGS -Zthreads=8"
           cargo build --locked --bin netsuke
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE

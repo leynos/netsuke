@@ -190,17 +190,27 @@ directive anywhere.
     CI-pinned version. `--git --include-untracked` selects the tracked and
     untracked Markdown files Git does not ignore, and `--check` exits `1` when
     any of them would be reformatted.
-  - `make lint` executes:
+  - On Linux, `make lint` executes:
 
     ```sh
-    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings" \
+    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold" \
     RUSTDOCFLAGS="--cfg docsrs -D warnings" cargo doc --workspace --no-deps
-    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings" \
+    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold" \
     cargo clippy --workspace --all-targets --all-features -- -D warnings
+    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold" \
     whitaker --all -- --all-targets --all-features
     yamllint --config-file .yamllint.yml .github/workflows
     actionlint
     ```
+
+    The Makefile composes that `RUSTFLAGS` value from one variable.
+    `-Clink-arg=-fuse-ld=mold` is Linux-only, so every sample in this section
+    drops it elsewhere — macOS and Windows use their platform linker and the
+    value ends `-D warnings -Zthreads=8`. Only that one flag is platform-gated;
+    `-Zthreads=8` and `-D warnings` apply everywhere. The flags are restated in
+    the Makefile rather than left to `.cargo/config.toml` because an assigned
+    `RUSTFLAGS` replaces every `rustflags` table in that file; see *Build
+    standard* below.
 
     linting every target with all features enabled, denying all Clippy
     warnings, running the Whitaker Dylint suite (see
@@ -226,14 +236,17 @@ directive anywhere.
     otherwise `$HOME/go/bin`; override `GO_BIN` to point at a different
     directory, or pass `ACTIONLINT=/path/to/actionlint` to name the binary
     directly, as CI does.
-  - `make test` executes:
+  - On Linux, `make test` executes:
 
     ```sh
-    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings" \
+    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold" \
     cargo nextest run --workspace --all-targets --all-features
-    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings" \
+    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold" \
     cargo test --workspace --doc --all-features
     ```
+
+    The platform caveat stated under `make lint` applies unchanged: the linker
+    flag is Linux-only and the rest of the value is not.
 
     running every unit, integration, and behavioural test through
     [cargo-nextest](https://nexte.st/), then the doctests separately because
@@ -551,14 +564,40 @@ The following tooling is available in this environment:
 These practices help maintain a high-quality codebase and facilitate
 collaboration.
 
-## Fast development builds
+## Build standard
 
-`make dev-build` and `make dev-test` compile with the opt-in Cranelift backend
-and the mold linker configured in `tools/dev-fast/config.toml`. Run
-`make install-dev-fast` to install the pinned nightly's
-`rustc-codegen-cranelift-preview` component and, on Linux, the pinned `mold`
-release. `make dev-fast-check` preflights those prerequisites before Cargo is
-invoked. Linux `x86_64` and `aarch64` hosts use `mold`; macOS and Windows use
-their platform linker instead. The fragment is passed explicitly with
-`--config`, so release, coverage, and verification builds are unaffected; never
-copy its contents into `.cargo/config.toml`, which Cargo applies to every build.
+The `mold` linker and the parallel `rustc` frontend (`-Zthreads=8`) are the
+**defaults** for development, test, lint, and typecheck builds. They are
+committed to `.cargo/config.toml`, which Cargo auto-discovers, so a bare
+`cargo build` gets them too. The Cranelift codegen backend is deliberately not
+part of the standard and a contract refuses one; the developers' guide records
+why.
+
+Run `make install-build-tools` to install the pinned nightly and, on Linux, the
+pinned `mold` release. `make check-build-tools` preflights those prerequisites,
+and is a prerequisite of `make build`, `make test`, `make lint`, and
+`make typecheck`, so a missing tool reports an installation hint before Cargo
+runs. Linux hosts use `mold`; macOS and Windows keep their platform linker,
+which the `cfg(target_os = "linux")` gate in the configuration expresses.
+
+Two build shapes are excluded and must stay excluded:
+
+- **Release and packaging.** The release recipe assigns `RUSTFLAGS` so the
+  configuration's `rustflags` tables do not apply. A shipped artefact is built
+  on the platform linker and a single-threaded frontend.
+- **Coverage.** A build whose output is a measurement is a reproducibility
+  claim. The coverage steps assign `RUSTFLAGS` at the step itself and carry
+  neither `-Zthreads` nor the linker flag.
+
+Cargo picks a single `rustflags` source rather than merging them: a matching
+`[target.*]` table replaces `[build] rustflags`, and an externally set
+`RUSTFLAGS` replaces both. Every gate recipe assigns `RUSTFLAGS` to deny
+warnings, so the standard's flags are restated in the Makefile and composed
+into that value. Changing one source without the other fails a contract test;
+do not "simplify" by deleting a restatement.
+
+There is no separate accelerated target. `make build`, `make test`,
+`make lint`, and `make typecheck` are the build targets, and they all run on
+the standard. See "The build standard" in
+[developers' guide](docs/developers-guide.md) for the full ownership boundary,
+the benchmark, and the fallback behaviour.
