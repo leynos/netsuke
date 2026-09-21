@@ -51,9 +51,15 @@ DEPRECATED_INPUT: typ.Final[str] = "installer-checksum"
 DEPRECATED_VARIABLE: typ.Final[str] = "CODESCENE_CLI_SHA256"
 
 #: The ``workflow_dispatch`` that hashed the installer script and wrote the
-#: variable back through the API. Other repositories in the estate carry it;
-#: this contract keeps it from arriving here.
-REFRESH_WORKFLOW: typ.Final[str] = "get-codescene-sha.yml"
+#: variable back through the API, named without an extension. Other
+#: repositories in the estate carry it; this contract keeps it from arriving
+#: here under either GitHub extension.
+REFRESH_WORKFLOW_STEM: typ.Final[str] = "get-codescene-sha"
+
+#: The extensions GitHub accepts for a workflow document. Every reader here
+#: uses this one list, so a contract cannot range over a narrower set than the
+#: one the platform actually runs.
+WORKFLOW_EXTENSIONS: typ.Final[tuple[str, ...]] = (".yml", ".yaml")
 
 
 def workflow_sources() -> dict[str, str]:
@@ -69,8 +75,8 @@ def workflow_sources() -> dict[str, str]:
     """
     paths = sorted(
         path
-        for pattern in ("*.yml", "*.yaml")
-        for path in WORKFLOW_DIRECTORY.glob(pattern)
+        for extension in WORKFLOW_EXTENSIONS
+        for path in WORKFLOW_DIRECTORY.glob(f"*{extension}")
     )
     sources = {path.name: path.read_text(encoding="utf-8") for path in paths}
     assert sources, (
@@ -123,17 +129,23 @@ def test_every_uploader_reference_is_pinned_to_the_approved_revision() -> None:
     The references are checked for content before they are checked for
     compliance. Deleting the upload step would otherwise satisfy this contract
     instead of failing it, and this repository publishes coverage from main.
+
+    Every match is retained as its own ``(workflow, revision)`` pair rather
+    than collapsed into a mapping keyed by workflow. A mapping keeps only the
+    last match per file, so one workflow holding a stale reference followed by
+    an approved one would satisfy a contract whose whole claim is "every
+    reference".
     """
-    references = {
-        name: match.group(1)
+    references = [
+        (name, match.group(1))
         for name, source in workflow_sources().items()
         for match in UPLOADER_REFERENCE.finditer(source)
-    }
+    ]
     assert references, (
         "no upload-codescene-coverage reference was found, so the pin "
         "assertion would pass vacuously; main is expected to publish coverage"
     )
-    wrong = {name: pin for name, pin in references.items() if pin != APPROVED_PIN}
+    wrong = [(name, pin) for name, pin in references if pin != APPROVED_PIN]
     assert not wrong, (
         f"every upload-codescene-coverage reference must be pinned to "
         f"{APPROVED_PIN}; found {wrong}"
@@ -146,10 +158,20 @@ def test_the_checksum_refresh_workflow_is_absent() -> None:
     Asserted against the filesystem rather than the parsed workflows: a
     dispatch-only workflow appears in no job or step list any other contract
     reads, so its absence is the only property that can be stated.
+
+    Both extensions are checked. A real refresh workflow written as ``.yaml``
+    would also fail the variable contract above, because it names the
+    variable, but this clause must not lean on that: a placeholder of that
+    name which references nothing is exactly the shape this clause exists to
+    catch, and under one extension only it would have passed.
     """
-    refresh = WORKFLOW_DIRECTORY / REFRESH_WORKFLOW
-    assert not refresh.exists(), (
-        f"{REFRESH_WORKFLOW} maintains {DEPRECATED_VARIABLE}, which no "
-        "workflow reads; delete it rather than keeping a dispatch that writes "
-        "an unread repository variable"
+    present = [
+        f"{REFRESH_WORKFLOW_STEM}{extension}"
+        for extension in WORKFLOW_EXTENSIONS
+        if (WORKFLOW_DIRECTORY / f"{REFRESH_WORKFLOW_STEM}{extension}").exists()
+    ]
+    assert not present, (
+        f"{present} maintains {DEPRECATED_VARIABLE}, which no workflow reads; "
+        "delete it rather than keeping a dispatch that writes an unread "
+        "repository variable"
     )
