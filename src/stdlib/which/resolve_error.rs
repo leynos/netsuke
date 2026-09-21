@@ -15,10 +15,10 @@ use super::options::CwdMode;
 /// spells these for its own label set, so a change to what is *recorded*
 /// cannot change what the resolver *means* by a failure.
 ///
-/// The declaration order is the order [`ResolveErrorCategory::ALL_LABELS`]
-/// lists, and it is the order the variants appear in [`ResolveError`]. Nothing
-/// depends on that beyond readability, but keeping the three in step is what
-/// makes the taxonomy legible at a glance.
+/// The declaration order is the order [`ResolveErrorCategory::label`] spells,
+/// and it is the order the variants appear in [`ResolveError`]. Nothing depends
+/// on that beyond readability, but keeping the two in step is what makes the
+/// taxonomy legible at a glance.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(super) enum ResolveErrorCategory {
     /// A PATH search exhausted every candidate directory without a hit.
@@ -44,37 +44,6 @@ pub(super) enum ResolveErrorCategory {
 }
 
 impl ResolveErrorCategory {
-    /// Every category's spelling, in declaration order.
-    ///
-    /// One entry per variant, each spelled by [`ResolveErrorCategory::label`],
-    /// so this list and the per-variant spellings cannot disagree about a
-    /// *word*: the words are written once, in `label`, and this array calls it.
-    /// It exists so a consumer that needs the whole vocabulary — the telemetry
-    /// boundary, and the tests that hold the label set to it — has one place to
-    /// read it from.
-    ///
-    /// The *set*, though, is a second declaration, and that half is not
-    /// self-maintaining. A variant added with a `label` arm and a `category`
-    /// arm still compiles while this array holds ten entries, because the
-    /// length is part of the type. What stops the omission is the exhaustive
-    /// `match` in `label`, in `category`, and in the boundary's
-    /// `category_label`: the compiler refuses each until the new variant is
-    /// named, and naming it in `label` is what puts its word in reach here.
-    /// Deciding that it belongs in this list is then a deliberate act, held in
-    /// place by the tests rather than by the type.
-    pub(super) const ALL_LABELS: [&'static str; 10] = [
-        Self::NotFound.label(),
-        Self::DirectNotFound.label(),
-        Self::Args.label(),
-        Self::Canonicalize.label(),
-        Self::IsExecutable.label(),
-        Self::CanonicalizeNonUtf8.label(),
-        Self::WorkspaceNonUtf8.label(),
-        Self::WalkDir.label(),
-        Self::CwdResolve.label(),
-        Self::CwdNonUtf8.label(),
-    ];
-
     /// The lowercase spelling the domain uses for this category.
     ///
     /// This is the resolver's own name for the failure, and the string a
