@@ -6,7 +6,7 @@
 - **Status:** Proposed
 - **Created:** 2026-09-19
 - **Scope:** Internal architecture; no new Netsukefile syntax.
-- **Decision record:** [ADR-029](../adr-029-semantic-compiler-boundaries.md).
+- **Decision record:** [ADR-035](../adr-035-semantic-compiler-boundaries.md).
 - **Delivery:** [Architecture roadmap](../roadmap-hexagonal-hardening.md),
   phases 26 and 27.
 
@@ -247,6 +247,6 @@ fixes their obligations, not an untested Rust signature.
 
 ## Recommendation
 
-Accept the semantic and ownership boundaries in ADR-029, then deliver them in
+Accept the semantic and ownership boundaries in ADR-035, then deliver them in
 small, independently verified changes. Add ports at real external conversations;
 use types for invalid states and functions for pure compilation.

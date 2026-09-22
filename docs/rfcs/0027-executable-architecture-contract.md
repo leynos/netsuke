@@ -7,7 +7,7 @@
 - **Created:** 2026-09-19
 - **Scope:** Repository architecture policy and its enforcement.
 - **Decision record:**
-  [ADR-030](../adr-030-layered-architecture-enforcement.md).
+  [ADR-036](../adr-036-layered-architecture-enforcement.md).
 - **Delivery:** [Architecture roadmap](../roadmap-hexagonal-hardening.md), phase
   28, alongside phases 26 and 27.
 

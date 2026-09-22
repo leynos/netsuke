@@ -1,4 +1,4 @@
-# ADR-030: Enforce architecture through complementary checks
+# ADR-036: Enforce architecture through complementary checks
 
 ## Status
 

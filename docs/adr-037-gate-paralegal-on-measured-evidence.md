@@ -1,4 +1,4 @@
-# ADR-031: Gate Paralegal adoption on measured evidence
+# ADR-037: Gate Paralegal adoption on measured evidence
 
 ## Status
 

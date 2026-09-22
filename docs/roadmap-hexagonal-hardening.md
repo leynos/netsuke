@@ -11,13 +11,16 @@ Existing task identifiers remain unchanged. Phases 16 to 19 belong to the
 [composition roadmap](roadmap-composition.md). [PR #741][progressive-pr]
 reserves phases 20 to 25 and RFCs 0021 to 0025 for progressive orchestration.
 [PR #697][stdlib-pr] reserves RFCs 0013 to 0020. This programme therefore uses
-RFCs 0026 to 0028 and phases 26 to 29. Open ADR allocations through 028 were
-checked before selecting ADR-029 to ADR-031; published identifiers must not be
-silently reused.
+RFCs 0026 to 0028 and phases 26 to 29. Open ADR allocations were re-checked at
+rebase time, after `main` published [ADR-029][main-adr-029] using a number this
+programme had drafted. Every open allocation through 034 was therefore counted
+as taken, whether or not it has merged, and the three decision records here were
+renumbered to [ADR-035][adr-model], [ADR-036][adr-checks], and
+[ADR-037][adr-experiment]. Published identifiers must not be silently reused.
 
 The governing proposals are [RFC 0026][hardening], [RFC 0027][checking], and
-[RFC 0028][experiment], with [ADR-029][adr-model], [ADR-030][adr-checks], and
-[ADR-031][adr-experiment]. Explicit dependencies, not phase numbers, define the
+[RFC 0028][experiment], with [ADR-035][adr-model], [ADR-036][adr-checks], and
+[ADR-037][adr-experiment]. Explicit dependencies, not phase numbers, define the
 implementation order. Phase 29 starts with toolchain compatibility and may stop
 without affecting the other phases. Its preflight does not wait for a refactor.
 
@@ -29,12 +32,13 @@ service is required. All proposed implementation tasks begin unchecked.
 
 [progressive-pr]: https://github.com/leynos/netsuke/pull/741
 [stdlib-pr]: https://github.com/leynos/netsuke/pull/697
+[main-adr-029]: adr-029-mold-and-parallel-frontend-as-build-defaults.md
 [hardening]: rfcs/0026-hexagonal-domain-hardening.md
 [checking]: rfcs/0027-executable-architecture-contract.md
 [experiment]: rfcs/0028-paralegal-architecture-experiment.md
-[adr-model]: adr-029-semantic-compiler-boundaries.md
-[adr-checks]: adr-030-layered-architecture-enforcement.md
-[adr-experiment]: adr-031-gate-paralegal-on-measured-evidence.md
+[adr-model]: adr-035-semantic-compiler-boundaries.md
+[adr-checks]: adr-036-layered-architecture-enforcement.md
+[adr-experiment]: adr-037-gate-paralegal-on-measured-evidence.md
 
 ## Existing work and ownership
 
@@ -59,7 +63,7 @@ service is required. All proposed implementation tasks begin unchecked.
 Hypothesis: model-owned operations and interpreter-bound lowering eliminate
 invalid executable states without changing ordinary manifest behaviour.
 
-Entry: RFC 0026 and ADR-029 have accepted scope. A focused release-critical fix
+Entry: RFC 0026 and ADR-035 have accepted scope. A focused release-critical fix
 may proceed separately; that does not authorize the whole transformation. Exit:
 successful lowering excludes unresolved execution, shell mismatch is
 unrepresentable or rejected, and compatibility/canonical-edge evidence passes.
@@ -159,7 +163,7 @@ not required to close the initial H3/H4 delivery.
     and process request machinery instead of copying `Cli` wholesale.
   - Acceptance: a library caller requests supported build/clean/inspection use
     cases without constructing `Cli`; tests verify operand and option mapping.
-  - Dependencies: 26.1.1 and the approved execution scope in ADR-029.
+  - Dependencies: 26.1.1 and the approved execution scope in ADR-035.
 - [ ] 27.2.2. Implement the execution port and coherent preparation ownership.
   - Add recording/failing and production Ninja implementations. Reuse child
     environments, reporting, clocks, dyndep publication, capabilities, and
@@ -198,7 +202,7 @@ not required to close the initial H3/H4 delivery.
 Hypothesis: explicit coverage, narrow debt, and qualified checks prevent new
 boundary regressions while permitting an incremental transformation.
 
-Entry: accepted RFC 0027 and ADR-030. Exit: the structural/effect policy runs
+Entry: accepted RFC 0027 and ADR-036. Exit: the structural/effect policy runs
 through the real required gate, fails its seeded violations, reports its scope,
 and remains within a measured approved budget. No Paralegal prerequisite
 applies.
@@ -271,7 +275,7 @@ applies.
 Hypothesis: a compatible Paralegal configuration detects useful architectural
 flow regressions beyond the baseline checks at acceptable cost.
 
-Entry: approve only RFC 0028/ADR-031's bounded P0 initially. Exit: a recorded
+Entry: approve only RFC 0028/ADR-037's bounded P0 initially. Exit: a recorded
 retain, defer, or reject outcome, not necessarily a deployed analyser. An
 incompatible or inconclusive P0 prevents later trial work. Completing a task
 that records a failed experiment never means its hypothesis passed. Unreached

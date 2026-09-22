@@ -7,7 +7,7 @@
 - **Created:** 2026-09-19
 - **Scope:** Bounded experiment, not analyser adoption.
 - **Decision record:**
-  [ADR-031](../adr-031-gate-paralegal-on-measured-evidence.md).
+  [ADR-037](../adr-037-gate-paralegal-on-measured-evidence.md).
 - **Delivery:** [Architecture roadmap](../roadmap-hexagonal-hardening.md), phase
   29.
 
