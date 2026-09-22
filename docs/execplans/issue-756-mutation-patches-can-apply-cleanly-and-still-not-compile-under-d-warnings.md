@@ -196,8 +196,9 @@ failure mode cannot recur silently.
   fault inside a Kani-gated arm compiles clean under the gate while
   `cargo kani` rejects the very same tree. `--only-codegen` is a superset (it
   is a full compile under `cfg(kani)`), so it replaces the check rather than
-  joining it, and it is affordable: a measured 172 s for all 18 patches into a
-  fresh shared target directory, 8–13 s per patch once warm.
+  joining it, and it is affordable: the whole gate measured 159.988 s over all
+  18 patches on a warm shared target directory, against 172 s for the same
+  sweep through a fresh one.
 - Run the gate in `kani-smoke` rather than `build-test`. The checker decides the
   host: only the Kani frontend parses `#[cfg(kani)]` code, `build-test` has no
   Kani installed, and adding it there would mean installing the verifier and
