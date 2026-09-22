@@ -86,13 +86,18 @@ failure mode cannot recur silently.
       `cargo nextest` to a toolchain that rejects `GATE_RUSTFLAGS`'s
       nightly-only `-Zthreads=8`. Mechanism reproduced locally before and after.
 - [x] (2026-09-22) Fix the *second* CI run, which failed identically because
-      removing the variable had not been the whole fix: `Setup Rust`'s
-      `toolchain: stable` input writes a `rustup` **directory override** for
-      the workspace, which outranks `rust-toolchain.toml` and outlived the
-      variable's removal. The step now names the nightly pin, matching
-      `build-test`. This also corrected a wrong mechanism recorded in this
-      plan's first diagnosis; see the `RUSTUP_HOME`/directory-override surprise
-      below for how it was disproved.
+      removing the variable had not been the whole fix. The step's `toolchain`
+      input was changed to name the nightly pin, matching `build-test`.
+- [x] (2026-09-23) Fix the *third* and *fourth* CI runs, which failed
+      identically again — the change above had no effect because the name never
+      resolved. `kani-smoke` read `${{ env.NETSUKE_RUST_TOOLCHAIN }}` without
+      declaring the variable, and `env` resolves per job, so it expanded to the
+      empty string: the action took its empty-input arm (`override: false`),
+      and the stale stable entry a restored `.kani-rustup` carries kept
+      selecting stable. The pin is now declared in `kani-smoke`'s own `env`
+      block. The regression guard is new and both of its directions were
+      falsified before being trusted; see the surprise below for the two
+      mechanisms this displaced.
 - [x] (2026-09-22) Rebase onto `origin/main` once `#732` landed, resolving three
       conflicts: the `test(=NAME)` filter this branch registered is converted to
       the anchored grammar `#732` enforces (allow-listed by
@@ -235,36 +240,55 @@ failure mode cannot recur silently.
     scope** here: it gates 11 Makefile targets and every developer path, and a
     false positive there would break all of them at once. The gate's own env
     now documents why a channel value must never be reintroduced.
-- **Removing the variable was necessary but not sufficient, and the first
-  diagnosis of *why* was wrong.** The second CI run (run `35788180077`) failed
-  identically — `rustc` still resolved to
-  `.kani-rustup/toolchains/stable-*/bin/rustc` — so something else was still
-  selecting stable. The first explanation recorded here blamed the redirected
-  `RUSTUP_HOME`: the theory was that rustup looks for `rust-toolchain.toml`'s
-  pin inside that home and, not finding it, falls back. The job log falsifies
-  this on two counts. The pin *was* found there — `check-build-tools` prints
-  `toolchain nightly-2026-08-23 available`, and it greps
-  `rustup toolchain list` under the same redirected home — and
-  `rust-toolchain.toml` is honoured normally under a redirected `RUSTUP_HOME`.
-  - The real mechanism is a **directory override**. `setup-rust` ends by
-    running `rustup override set "$toolchain"` (its `override` input defaults
-    to `true`), and a directory override outranks `rust-toolchain.toml` for the
-    whole workspace. The job log records it verbatim: `info: override toolchain
-    for /home/runner/work/netsuke/netsuke set to
-    stable-x86_64-unknown-linux-gnu`, during the `Setup Rust` step. So with
-    `toolchain: stable` the job was pinned to stable by a route that outlived
-    the env-var removal, and the second run failed exactly as the first had.
-  - The fix is therefore to name the pin in the step's `toolchain` input, which
-    is what `build-test` and the Windows jobs already do. This *reverses* the
-    "remove rather than pin" decision below; the reasoning there was sound only
-    while the variable was the only thing selecting a toolchain.
-  - The lesson is narrower and sharper than "re-measure after a change": the
-    first diagnosis was a *plausible* mechanism that fit the symptom, and it
-    survived into a comment and this plan unchallenged. What killed it was
-    reading the installer's own source, which was sitting in the failing job's
-    log all along — the `if` whose `else` branch calls `rustup override set`.
-    A mechanism that explains the symptom is not yet a mechanism that has been
-    located.
+- **Two diagnoses of this failure were wrong before the third was measured, and
+  the second was written into this plan as settled.** Four CI runs aborted at
+  toolchain selection having compiled nothing, and each repair moved the story
+  without moving the outcome.
+  - The first explanation blamed the redirected `RUSTUP_HOME`: the theory was
+    that rustup looks for `rust-toolchain.toml`'s pin inside that home and, not
+    finding it, falls back. The job log falsifies it twice over. The pin *was*
+    found there — `check-build-tools` prints `toolchain nightly-2026-08-23
+    available`, grepping `rustup toolchain list` under the same redirected home
+    — and a redirected `RUSTUP_HOME` does not disable `rust-toolchain.toml`.
+  - The second blamed a **directory override**. Run `35788180077` logged
+    `info: override toolchain for /home/runner/work/netsuke/netsuke set to
+    stable-x86_64-unknown-linux-gnu` during `Setup Rust`, and the step's
+    `toolchain` input was the literal `stable`, so the envelope fit: `setup-rust`
+    sets an override that outranks `rust-toolchain.toml`, and that was taken to
+    be what selected stable. The step was changed to name the pin instead.
+  - That change made the run *worse in a way that identified the truth*: run
+    `35792995207` logged **no override line at all**. The action has three
+    mutually exclusive arms, and only the one gated on a *non-empty*
+    `toolchain` input passes `override: true`; the others pass `override:
+    false`. No override line therefore means the empty-input arm ran, which
+    means `${{ env.NETSUKE_RUST_TOOLCHAIN }}` expanded to nothing. It does:
+    `env` resolves per job, and the variable was declared in `build-test`'s
+    job-scope block, which `kani-smoke` does not inherit. The rendered step
+    input is empty in the log, the action's `explicit toolchain` arm is
+    `skipped`, and `rustup show active-toolchain` answers
+    `stable-x86_64-unknown-linux-gnu (directory override for '…')`.
+  - So a directory override *was* selecting stable, but not one this job set on
+    that run. `kani-cache` restores `.kani-rustup` wholesale — `settings.toml`
+    and its `[overrides]` table included — and that table was written by an
+    earlier run whose input was the literal `stable`. The cache preserved the
+    toolchain decision across the fix that was meant to revoke it. Naming a
+    non-empty pin is what displaces the entry, because it selects the
+    `override: true` arm.
+  - The fix is therefore to declare the pin in `kani-smoke`'s own `env` block,
+    as every other job on this contract does. The regression guard is the
+    sharper half, and it is new: the existing assertion compared a job's pinned
+    channel against `rust-toolchain.toml`, so it could catch a pin that
+    *disagreed* and never one that nothing read. It now also requires that a job
+    pinning the variable passes it to the action, and that a job passing it pins
+    the variable. Both directions were falsified against the tree before being
+    trusted.
+  - The lesson sharpened twice, and the second version is the one worth keeping.
+    The first was "a mechanism that explains the symptom is not yet a mechanism
+    that has been located". The second is that the *repaired* mechanism was
+    recorded as fact on the strength of one corroborating log line — an
+    `override` line that was genuinely there, and genuinely not on the path that
+    mattered. Reading the action's source, which was also in the log, would have
+    shown three arms where one had been assumed.
 - **The branch's own Nextest filter was written in the spelling `#732` had just
   retired, and the conflict was the least of it.** Rebasing onto `origin/main`
   after `#732` landed replayed eleven commits, three of which conflicted. Two
@@ -319,17 +343,21 @@ failure mode cannot recur silently.
   graph through the Kani frontend into a cold `CARGO_TARGET_DIR`, on top of the
   harness run the ceiling was originally sized for; the old bound would have
   killed the job it now hosts.
-- Remove `kani-smoke`'s `RUSTUP_TOOLCHAIN: stable`, and pin the `Setup Rust`
-  step's `toolchain` input to the nightly instead. The first half of this was
-  originally justified by "unsetting lets the directory override supply it",
-  and CI disproved that; see the `RUSTUP_HOME`/directory-override surprise
-  above. Both halves are now required, and they do different jobs: the variable
-  must stay gone because a *channel* value there is always wrong for the gate,
-  and the step input must name the pin because that input is what writes the
-  `rustup` directory override, which is the thing that actually selects the
-  compiler. The value is `${{ env.NETSUKE_RUST_TOOLCHAIN }}`, the same
-  workflow-scoped expression `build-test` and the Windows jobs use, so the
-  repository still owns the version in exactly one place.
+- Remove `kani-smoke`'s `RUSTUP_TOOLCHAIN: stable`, pin the `Setup Rust` step's
+  `toolchain` input to the nightly, and declare `NETSUKE_RUST_TOOLCHAIN` in the
+  job's own `env` so that expression resolves. Three halves, each doing a
+  different job, and each required: the variable must stay gone because a
+  *channel* value there is always wrong for the gate; the step input must name
+  the pin because a non-empty input is what selects the action's
+  `override: true` arm and displaces the stale stable entry in the cached
+  `RUSTUP_HOME`; and the job must own the declaration because `env` resolves
+  per job, so a reference to another job's variable is the empty string rather
+  than an error. The value is `${{ env.NETSUKE_RUST_TOOLCHAIN }}`, the same
+  expression `build-test` and the Windows jobs use, so the repository still
+  owns the version in exactly one place. The pinning declaration is duplicated
+  across jobs by necessity, not by preference, and
+  `workflows_agree_with_the_pinned_toolchain` holds every copy equal to
+  `rust-toolchain.toml` and to the input that consumes it.
 - Leave `check-build-tools` asserting availability rather than activity, and
   document the gap instead of closing it here. It gates 11 targets and every
   developer path, so widening it is a change with its own blast radius and its
@@ -484,6 +512,16 @@ Kani frontend does.
   first explanation recorded here — that the redirected `RUSTUP_HOME` hid the
   pin from rustup — is **disproved** and was replaced, along with the "remove
   rather than pin" decision it justified. Corrected above.
+- 2026-09-23 — The third and fourth CI runs failed identically again, which
+  **disproved the second explanation too**. The step's `toolchain` input was
+  reading `${{ env.NETSUKE_RUST_TOOLCHAIN }}` from a job that never declared
+  the variable, so it expanded to the empty string; the directory override that
+  selected stable was a *stale entry in the restored `.kani-rustup` cache*, not
+  one this job set. The pin is now declared in `kani-smoke`'s own `env` block,
+  `workflows_agree_with_the_pinned_toolchain` covers the job and both
+  directions of the pin-versus-input invariant, and the Surprises & discoveries
+  entry records why two plausible mechanisms were accepted before the third was
+  measured.
 - 2026-09-22 — Rebased onto `origin/main` after PR `#732` landed, replaying
   eleven commits. Three conflicted. `.config/nextest.toml` conflicted on
   substance: this branch's filter used the `test(=NAME)` grammar `#732` had
