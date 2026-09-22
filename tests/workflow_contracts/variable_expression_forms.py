@@ -30,6 +30,26 @@ from variable_reference_forms import (
 )
 
 
+def _undeclared_references(
+    references: tuple[Reference, ...],
+) -> tuple[Reference, ...]:
+    """Return the undeclared references in their input order.
+
+    The filter keeps what the caller gave it: repeats survive, because a body
+    naming the same undeclared variable twice is two occurrences to report, and
+    so does the order, which is what a caller comparing the result against the
+    text it was read from needs. Both model classes read their undeclared
+    references through here, so an expression and a value cannot come to
+    disagree about which references are the offending ones.
+
+    Returns
+    -------
+    tuple[Reference, ...]
+        The references ``is_undeclared`` accepts, in the order they were given.
+    """
+    return tuple(reference for reference in references if is_undeclared(reference))
+
+
 @dc.dataclass(frozen=True, slots=True)
 class Expression:
     """An expression body, and the references it names.
@@ -82,9 +102,7 @@ class Expression:
         tuple[Reference, ...]
             The offending references, in the order the body names them.
         """
-        return tuple(
-            reference for reference in self.references if is_undeclared(reference)
-        )
+        return _undeclared_references(self.references)
 
 
 @dc.dataclass(frozen=True, slots=True)
@@ -142,9 +160,7 @@ class Value:
         tuple[Reference, ...]
             The offending references, in the order the value names them.
         """
-        return tuple(
-            reference for reference in self.references() if is_undeclared(reference)
-        )
+        return _undeclared_references(self.references())
 
 
 @st.composite
