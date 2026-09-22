@@ -11,11 +11,14 @@ the YAML 1.2 boolean workaround has a single home.
 Run via ``make test-workflow-contracts``.
 """
 
+import collections.abc as cabc
 import re
+import typing as typ
 from pathlib import Path
 
 import pytest
 import yaml
+from yaml.constructor import ConstructorError
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CI_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "ci.yml"
@@ -67,14 +70,47 @@ MDTABLEFIX_JOBS = (
 
 
 class _WorkflowLoader(yaml.SafeLoader):
-    """Loader that resolves booleans the YAML 1.2 way.
+    """Loader that resolves booleans the YAML 1.2 way and refuses repeated keys.
 
     PyYAML implements YAML 1.1, where ``on``, ``yes``, and ``off`` are boolean
     words. That silently turns GitHub Actions' ``on:`` trigger key into
     ``True``. Mapping ``True`` back to ``"on"`` after the fact would conflate it
     with a literal ``yes:`` or ``true:`` key, so the resolver is narrowed to
     YAML 1.2's ``true``/``false`` instead and ``on`` simply stays a string.
+
+    PyYAML also keeps the last of two identical keys without a word, so a job
+    declaring ``runs-on`` twice would read as whichever label came second and a
+    paid label in the first half would escape every placement contract. GitHub
+    rejects such a workflow, so refusing it here costs nothing.
     """
+
+    @typ.override
+    def construct_mapping(
+        self, node: yaml.MappingNode, deep: bool = False
+    ) -> dict[object, object]:
+        """Build a mapping, failing on the first repeated key.
+
+        Returns
+        -------
+        dict[object, object]
+            The constructed mapping.
+
+        Raises
+        ------
+        yaml.constructor.ConstructorError
+            If a key appears twice in one mapping.
+        """
+        seen: set[object] = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=True)
+            # An unhashable key is the base constructor's to refuse.
+            if not isinstance(key, cabc.Hashable):
+                continue
+            if key in seen:
+                message = f"found the key {key!r} twice in one mapping"
+                raise ConstructorError(None, None, message, key_node.start_mark)
+            seen.add(key)
+        return super().construct_mapping(node, deep=deep)
 
 
 # Drop the inherited YAML 1.1 bool resolver, then reinstate the 1.2 word set.

@@ -288,8 +288,26 @@ def is_bounded_worker_count(vcpus: int, flags: dict[str, str]) -> bool:
     )
 
 
-def _contains_unquoted_or(expression: str) -> bool:
-    """Report whether `||` appears anywhere outside a quoted literal."""
+def contains_unquoted_or(expression: str) -> bool:
+    """Report whether `||` appears anywhere outside a quoted literal.
+
+    Shared by every trunk-only guard: the cache save here and the CodeScene
+    upload in ``ci_coverage_wiring_invariants``. `&&` binds tighter than `||`
+    in an Actions expression, so a single disjunct anywhere, at any depth, can
+    authorize the step alone.
+
+    Returns
+    -------
+    bool
+        ``True`` when a ``||`` occurs outside every quoted literal.
+
+    Examples
+    --------
+    >>> contains_unquoted_or("github.ref == 'a' || true")
+    True
+    >>> contains_unquoted_or("github.ref == 'a||b'")
+    False
+    """
     quote: str | None = None
     index = 0
     length = len(expression)
@@ -341,7 +359,7 @@ def is_trunk_only_save(condition: str) -> bool:
     second, subtler thing to get wrong.
     """
     normalized = " ".join(condition.split())
-    if _contains_unquoted_or(normalized):
+    if contains_unquoted_or(normalized):
         return False
     return (
         "github.event_name == 'push'" in normalized

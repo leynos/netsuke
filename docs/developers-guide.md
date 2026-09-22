@@ -1487,8 +1487,25 @@ input unset, so the archive its upload reads is still produced.
 The `coverage-main.yml` workflow owns persistent coverage data. A push to
 `main` runs the same coverage workload, advances the ratchet baseline, and
 uploads that run's LCOV report to CodeScene. The upload therefore describes the
-branch and commit that CodeScene analyses. Manual dispatches remain read-only
-warm-run diagnostics and do not replace the ratchet baseline.
+branch and commit that CodeScene analyses. Manual dispatches are warm-run
+diagnostics: the coverage action saves the ratchet baseline only on a push to
+`refs/heads/main`, and the upload step is guarded on
+`github.ref == 'refs/heads/main'` as well as on the token. So a dispatch from a
+feature branch neither replaces the baseline nor uploads to CodeScene, while a
+dispatch from `main` uploads that commit's report, as a push would. The ref
+clause is not redundant with the push trigger's `branches` list, because that
+list constrains only the push trigger, and the upload action does not check the
+ref itself.
+
+`tests/workflow_contracts/coverage_upload_guard_test.py` holds that guard.
+`is_trunk_only_upload` refuses any unquoted `||`, at any depth, through
+`contains_unquoted_or`, the helper `is_trunk_only_save` uses for cache saves:
+`&&` binds tighter than `||`, so one disjunct authorizes the upload alone
+however complete the rest is. It then splits the condition on `&&` and requires
+each guard clause as a whole conjunct, so a negated clause or one quoted inside
+another does not count. The disjunction cases keep both clauses whole, so only
+the `||` refusal can reject them. That is how the case proves the refusal
+rather than the split.
 
 The CodeScene analysis schedule and the setting that suppresses its coverage
 gate when data is unavailable live in CodeScene's project configuration, not in

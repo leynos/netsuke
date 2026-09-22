@@ -31,6 +31,7 @@ Run via ``make test-workflow-contracts``.
 import typing as typ
 
 from codescene_check_depth_invariants import CODESCENE_COVERAGE_ACTION
+from runner_placement_invariants import contains_unquoted_or
 from timeout_budgets import COVERAGE_ACTION
 from workflow_call_closure import (
     called_workflows,
@@ -69,6 +70,14 @@ CREDENTIAL_ENVIRONMENT_KEY: typ.Final[str] = "CS_ACCESS_TOKEN"
 #: kept apart from the credential check: a step can reach the project API by
 #: curling it, naming neither the action, the client, nor the credential.
 CODESCENE_HOST: typ.Final[str] = "codescene.io"
+
+#: The two conjuncts the CodeScene upload's ``if`` must carry. The token
+#: clause lets a fork's push skip the step; the ref clause keeps a warm-run
+#: dispatch from a feature branch from uploading that branch's report.
+UPLOAD_GUARD_CONJUNCTS: typ.Final[frozenset[str]] = frozenset({
+    f"env.{CREDENTIAL_ENVIRONMENT_KEY} != ''",
+    "github.ref == 'refs/heads/main'",
+})
 
 #: The ``secrets:`` value that forwards every secret the caller holds.
 INHERIT_ALL_SECRETS: typ.Final[str] = "inherit"
@@ -248,6 +257,48 @@ def declines_the_generated_report_archive(step: dict[str, object]) -> bool:
     if not isinstance(with_, dict):
         return False
     return with_.get(PUBLICATION_OPT_OUT_INPUT) == PUBLICATION_OPT_OUT_VALUE
+
+
+def is_trunk_only_upload(condition: object) -> bool:
+    """Return whether an upload condition requires the token and the trunk ref.
+
+    Any unquoted ``||`` is refused first, at any depth. ``&&`` binds tighter
+    than ``||`` in an Actions expression, so in
+    ``github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    && ...`` the first disjunct authorizes the upload alone however complete
+    the rest is. The condition is then split on ``&&``, and every guard clause
+    must be one of the conjuncts, compared whole. A substring test would accept
+    a clause that is present but negated or nested. Further conjuncts are
+    allowed, because without a disjunction they can only narrow the step.
+    Parentheses are not interpreted: a clause wrapped in them does not equal
+    its bare form, so the reading fails closed.
+
+    Parameters
+    ----------
+    condition : object
+        The upload step's ``if`` value, as parsed.
+
+    Returns
+    -------
+    bool
+        True when the condition has no disjunction and carries every guard
+        clause as a conjunct, in any order and spacing.
+
+    Examples
+    --------
+    >>> token, main = "env.CS_ACCESS_TOKEN != ''", "github.ref == 'refs/heads/main'"
+    >>> is_trunk_only_upload(f"{token} && {main}")
+    True
+    >>> is_trunk_only_upload("env.CS_ACCESS_TOKEN != ''")
+    False
+    """
+    if not isinstance(condition, str):
+        return False
+    normalized = " ".join(condition.split())
+    if contains_unquoted_or(normalized):
+        return False
+    conjuncts = {part.strip() for part in normalized.split("&&")}
+    return conjuncts >= UPLOAD_GUARD_CONJUNCTS
 
 
 def forwards_every_secret_elsewhere(document: dict[str, object]) -> list[str]:
