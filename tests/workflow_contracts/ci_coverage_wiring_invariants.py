@@ -366,13 +366,20 @@ def coverage_surface_offenders(
         for index, step in enumerate(steps)
         if action_of(step) == UPLOAD_COVERAGE_ACTION
     )
-    if CREDENTIAL_ENVIRONMENT_KEY in raw_text:
-        offenders.append(f"{name}: raw text references {CREDENTIAL_ENVIRONMENT_KEY}")
-    offenders.extend(
+    return offenders + _reach_offenders(name, document, raw_text)
+
+
+def _reach_offenders(
+    name: str, document: dict[str, object], raw_text: str
+) -> list[str]:
+    """Return the routes to CodeScene that name no action: credential, host, inherit."""
+    offenders = [
         f"{name}: parsed value references {CREDENTIAL_ENVIRONMENT_KEY}"
         for value in _iter_strings(document)
         if CREDENTIAL_ENVIRONMENT_KEY in value
-    )
+    ]
+    if CREDENTIAL_ENVIRONMENT_KEY in raw_text:
+        offenders.insert(0, f"{name}: raw text references {CREDENTIAL_ENVIRONMENT_KEY}")
     if CODESCENE_HOST in raw_text.casefold():
         offenders.append(f"{name}: raw text contacts {CODESCENE_HOST}")
     offenders.extend(
