@@ -81,6 +81,13 @@ failure mode cannot recur silently.
 - [x] (2026-09-22) Update `docs/developers-guide.md` again for the move: the
       cost sentence, the `build-test`-runs-it claim, the executed-test-set
       table row, and a new passage on why the gate needs the Kani frontend.
+- [x] (2026-09-22) Fix the defect CI found on the gate's first real run: drop
+      `kani-smoke`'s `RUSTUP_TOOLCHAIN: stable`, which pinned the gate's
+      `cargo nextest` to a toolchain that rejects `GATE_RUSTFLAGS`'s
+      nightly-only `-Zthreads=8`. Mechanism reproduced locally before and after.
+- [ ] Confirm the gate runs and compiles on CI, and read its real cost and the
+      job's headroom against the 30-minute ceiling. The failed run gives no
+      measurement, because the gate aborted before compiling anything.
 
 ## Surprises & discoveries
 
@@ -186,6 +193,32 @@ failure mode cannot recur silently.
   crate, producing 66 errors. The `kani` crate is in fact not a declared
   dependency at all — it is absent from `Cargo.lock` despite 92 `kani::` usages
   in `src/` — because the frontend supplies it.
+- **CI found a second defect of exactly the same shape as the first: a check
+  that passed while its subject was unmet.** The moved gate failed on its first
+  real run (run `35782659415`, job `106931720330`) at toolchain selection,
+  having compiled nothing, with
+  `error: the option Z is only accepted on the nightly compiler`.
+  `GATE_RUSTFLAGS` unconditionally appends the nightly-only `-Zthreads=8`, and
+  the job's own `RUSTUP_TOOLCHAIN: stable` — inherited from when the job ran
+  only `make kani-ir` and never reached this code — makes rustup's env override
+  beat `rust-toolchain.toml`'s directory override. Reproduced locally in one
+  command: `RUSTUP_TOOLCHAIN=stable rustc --version` reports `1.98.1` stable
+  where the bare invocation reports the pinned `1.100.0-nightly`, and the same
+  `cargo metadata` invocation the gate makes exits 101 under the variable and 0
+  without it.
+  - The trap is that `cargo kani` *does* ignore the variable — it resolves its
+    own bundled toolchain — so the reasoning that once justified `stable` here
+    was sound for the command it was written against and became wrong the moment
+    the gate ran `cargo nextest` instead. A comment can be true of one command
+    and false of the next, and this one was never re-measured for the new one.
+  - `check-build-tools` cannot catch the mismatch: it asserts the pinned
+    toolchain is *installed*, not *active*, so it passed in the same run that
+    the gate aborted. Its own header comment already names the dependency
+    ("the standard's parallel frontend is a nightly-only flag") without checking
+    it. Hardening it to assert the active toolchain is deliberately **out of
+    scope** here: it gates 11 Makefile targets and every developer path, and a
+    false positive there would break all of them at once. The gate's own env
+    now documents why a channel value must never be reintroduced.
 
 ## Decision log
 
@@ -217,6 +250,17 @@ failure mode cannot recur silently.
   graph through the Kani frontend into a cold `CARGO_TARGET_DIR`, on top of the
   harness run the ceiling was originally sized for; the old bound would have
   killed the job it now hosts.
+- Remove `kani-smoke`'s `RUSTUP_TOOLCHAIN: stable` rather than pinning it to the
+  nightly. Pinning would work, but it would restate a version that
+  `rust-toolchain.toml` already owns and that the pin's own ADR requires be
+  bumped in one place; unsetting lets the directory override supply it. The env
+  block now records the reasoning so a channel value is not reintroduced.
+- Leave `check-build-tools` asserting availability rather than activity, and
+  document the gap instead of closing it here. It gates 11 targets and every
+  developer path, so widening it is a change with its own blast radius and its
+  own review; folding it into this issue would put a shared prerequisite check
+  behind a gate-placement fix. Recorded so the next reader does not mistake the
+  green `check-build-tools` line for proof the active toolchain is right.
 - Reseed the one affected patch in `CycleVisitResult::is_cycle` rather than
   re-pointing the gate at it. The old mutation swapped a `cfg(kani)` arm's body
   for `None`, which strands the `Present` variant; the replacement flips
@@ -277,11 +321,16 @@ first pass had no way to question a checker the second pass rejected.
 CI confirmed the original wiring end to end, in `build-test`. That placement is
 superseded by the third finding — the gate needs the Kani frontend, which only
 `kani-smoke` has — so the evidence below is retained as the record of a gate
-that ran, not as a description of where it runs now. On the `ci.yml` run for
-`028ac566` (`build-test`, job `106523333782`, 14m27s, success) the new step is
-step 32, sitting between "Test and Measure Coverage" and "Show sccache
-statistics" exactly as its comment claims, and it executed rather than being
-skipped:
+that ran, not as a description of where it runs now. It is worth keeping for a
+second reason: it is the only run in this plan where the gate both compiled and
+was measured, so it is the only cost figure with CI provenance. The move's own
+first run measured nothing, because the toolchain mismatch described under
+`Surprises & discoveries` aborted it before it compiled a single patch.
+
+On the `ci.yml` run for `028ac566` (`build-test`, job `106523333782`, 14m27s,
+success) the new step is step 32, sitting between "Test and Measure Coverage"
+and "Show sccache statistics" exactly as its comment claims, and it executed
+rather than being skipped:
 
 ```text
 PASS [  59.139s] (1/1) netsuke-build::kani_mutation_evidence_tests compile_guard::every_patched_tree_compiles_under_denied_warnings
@@ -338,3 +387,9 @@ Kani frontend does.
   `docs/documentation-style-guide.md`'s `## Headings` rule. The
   `Surprises & discoveries` and `Decision log` names now match the spellings
   the style guide's own `### ExecPlan` section uses.
+- 2026-09-22 — The moved gate failed on its first real CI run: the job's
+  inherited `RUSTUP_TOOLCHAIN: stable` met `GATE_RUSTFLAGS`'s nightly-only
+  `-Zthreads=8`, and the gate aborted at toolchain selection having compiled
+  nothing. The variable is removed, the mechanism recorded under
+  `Surprises & discoveries`, and a final CI confirmation left open as the last
+  unchecked Progress item.

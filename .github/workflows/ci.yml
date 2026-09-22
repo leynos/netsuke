@@ -373,13 +373,20 @@ jobs:
       contents: read
     env:
       CARGO_TERM_COLOR: always
-      # Left at `stable` deliberately. `cargo kani` resolves its own bundled
-      # toolchain for the codegen it drives, so this variable does not reach the
-      # compile gate at all; measured, `cargo kani --only-codegen` exits 0 on
-      # this tree under both `stable` and the repository's pinned nightly. The
-      # gate's real prerequisite is the pinned nightly being *installed*, which
-      # `make install-build-tools` ensures and `check-build-tools` then verifies.
-      RUSTUP_TOOLCHAIN: stable
+      # Deliberately NOT set here, unlike the value this job carried while it ran
+      # only `make kani-ir`. `cargo kani` resolves its own bundled toolchain for
+      # the codegen it drives, so the variable never reached it; the mutation
+      # compile gate runs `cargo nextest` instead, which honours it and would be
+      # pinned to stable. `GATE_RUSTFLAGS` unconditionally appends the
+      # nightly-only `-Zthreads=8`, so the gate would abort at toolchain
+      # selection having compiled nothing. The repository pins its toolchain in
+      # `rust-toolchain.toml` for Polonius, so the directory override is what
+      # this job wants; `make install-build-tools` installs that pin.
+      #
+      # `check-build-tools` runs ahead of the gate but cannot catch this: it
+      # verifies the pinned nightly is *installed*, not *active*, so it reported
+      # success while the gate was pinned to stable. A `RUSTUP_TOOLCHAIN` value
+      # here would therefore have to be the pin itself, never a channel.
       # The mutation compile gate runs through nextest, so this lane declares a
       # test-process bound like every other nextest lane. Two vCPUs, two test
       # processes.
