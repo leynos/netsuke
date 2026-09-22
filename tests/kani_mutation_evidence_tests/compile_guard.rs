@@ -36,26 +36,56 @@ const SHARED_TARGET_DIR: &str = "target/kani-mutation-compile";
 /// caller's environment changed.
 const DENY_WARNINGS: &str = "-D warnings";
 
-/// Apply `patch`, then revert it on drop.
+/// Apply `patch`, then revert it — explicitly on the normal path, and through
+/// `Drop` when unwinding.
 ///
-/// Reverting through `Drop` rather than at the end of the loop body is what
-/// keeps a panic — or an early return from a failed assertion — from leaving a
-/// mutation in the working tree for every later test to trip over.
+/// Both paths matter and they are not interchangeable. The explicit
+/// [`Self::revert`] makes a failed reverse a test failure, so a run cannot
+/// report success with a seeded mutation left in the working tree; `Drop`
+/// covers the panic — or early return from a failed assertion — that would
+/// otherwise strand a mutation for every later test to trip over.
 struct AppliedPatch<'a> {
     /// Repository-relative path of the patch that was applied.
     patch: &'a Utf8Path,
+    /// True while the patch is still in the working tree.
+    ///
+    /// Cleared by [`Self::revert`] so the `Drop` fallback does not attempt a
+    /// second reverse, which would fail and log a spurious error on every
+    /// successful patch.
+    applied: bool,
 }
 
 impl AppliedPatch<'_> {
     /// Apply `patch` to the repository, failing when it does not apply.
     fn apply(patch: &Utf8Path) -> Result<AppliedPatch<'_>> {
         run_git_apply(["apply", patch.as_str()], patch, "apply")?;
-        Ok(AppliedPatch { patch })
+        Ok(AppliedPatch {
+            patch,
+            applied: true,
+        })
+    }
+
+    /// Revert the patch, propagating a failure to the caller.
+    ///
+    /// Reverting here rather than relying on `Drop` is what stops a failed
+    /// reverse from passing quietly: without it the test returns `Ok(())` and
+    /// the working tree keeps a mutation nothing reports.
+    fn revert(mut self) -> Result<()> {
+        let outcome = run_git_apply(
+            ["apply", "--reverse", self.patch.as_str()],
+            self.patch,
+            "reverse",
+        );
+        self.applied = false;
+        outcome
     }
 }
 
 impl Drop for AppliedPatch<'_> {
     fn drop(&mut self) {
+        if !self.applied {
+            return;
+        }
         if let Err(err) = run_git_apply(
             ["apply", "--reverse", self.patch.as_str()],
             self.patch,
@@ -143,12 +173,24 @@ fn every_patched_tree_compiles_under_denied_warnings() -> Result<()> {
 
     let target_dir = manifest_dir().join(SHARED_TARGET_DIR);
     let mut broken = Vec::new();
+    let mut unreverted = Vec::new();
     for patch in patch_paths()? {
-        let _applied = AppliedPatch::apply(&patch)?;
+        let applied = AppliedPatch::apply(&patch)?;
         if let Some(stderr) = compile_patched_tree(&target_dir)? {
             broken.push(format!("{patch}: {stderr}"));
         }
+        // Reverted through the fallible path, not left to `Drop`: a reverse
+        // that fails must fail the test, or a run reports success while the
+        // working tree still carries the mutation it just seeded.
+        if let Err(err) = applied.revert() {
+            unreverted.push(format!("{patch}: {err}"));
+        }
     }
+    ensure!(
+        unreverted.is_empty(),
+        "mutation patches could not be reverted, so the working tree still \
+         carries seeded faults: {unreverted:#?}",
+    );
     ensure!(
         broken.is_empty(),
         "mutation patches apply but their patched trees do not compile, so \
