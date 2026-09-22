@@ -153,7 +153,19 @@ def all_overrides(config: dict[str, object]) -> list[dict[str, object]]:
 
 
 def group_filter_text(config: dict[str, object]) -> list[str]:
-    """Return every filter assigned to the nested-Cargo test group."""
+    """Return every filter assigned to the nested-Cargo test group.
+
+    The lookup defaults rather than raising, so an override assigned to the
+    group without a `filter` contributes an empty string rather than being
+    filtered out: a member that lost its selector is retained as an empty
+    entry, and an empty entry selects no names.
+
+    Returns
+    -------
+    list[str]
+        The filter expression of every override assigning the group, in
+        profile-name order, empty for a member that carries none.
+    """
     return [
         str(override.get("filter", ""))
         for override in all_overrides(config)
@@ -182,7 +194,19 @@ def all_filter_text(config: dict[str, object]) -> list[str]:
 
 
 def filter_test_names(config: dict[str, object]) -> set[str]:
-    """Return every test name named by any filter in any profile."""
+    """Return every test name named by any filter in any profile.
+
+    Both selector spellings are read: `GROUP_FILTER` reads the anchored
+    `test(/^NAME($|::)/)` form, and `LEGACY_EXACT_FILTER` reads the rejected
+    `test(=NAME)` form. A name written in the rejected form is therefore still
+    held to the contract that a filtered name resolves to a declared test,
+    rather than dropping out of that check.
+
+    Returns
+    -------
+    set[str]
+        Every name either pattern reads out of any profile's filters.
+    """
     return {
         name
         for filter_ in all_filter_text(config)

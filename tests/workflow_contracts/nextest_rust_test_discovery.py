@@ -253,7 +253,18 @@ def _expand_build_capable_names(
 
 
 def build_capable_test_names(source: str) -> set[str]:
-    """Return tests reaching a direct or helper-mediated Cargo build command."""
+    """Return tests reaching a direct or helper-mediated Cargo build command.
+
+    Capability is propagated to a fixed point before the result is narrowed:
+    it reaches callers and fixture users transitively, so a helper that is
+    itself build-capable is not reported unless it is also a test.
+
+    Returns
+    -------
+    set[str]
+        The declared tests whose bodies reach a build-capable Cargo command,
+        directly or through intermediate helpers.
+    """
     executable_source = mask_non_code(source, RETAINED_RUST_LITERALS)
     functions = _rust_functions(executable_source)
     build_capable = _expand_build_capable_names(
