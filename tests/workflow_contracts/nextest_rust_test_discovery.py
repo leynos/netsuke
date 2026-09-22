@@ -259,6 +259,12 @@ def build_capable_test_names(source: str) -> set[str]:
     it reaches callers and fixture users transitively, so a helper that is
     itself build-capable is not reported unless it is also a test.
 
+    Parameters
+    ----------
+    source
+        One Rust integration-test source, read as text. It is masked before
+        parsing, so comments and string literals cannot be mistaken for code.
+
     Returns
     -------
     set[str]

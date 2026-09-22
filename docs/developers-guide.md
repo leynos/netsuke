@@ -3265,7 +3265,20 @@ governs the non-doctest pass only, and deliberately stays small:
   attributes), or build-capable (reaching a child Cargo build directly or
   through helper and fixture layers).
   `tests/workflow_contracts/nextest_child_cargo_syntax_test.py` consumes the
-  discovery helper too, and production code must not import any of them.
+  discovery helper too, and production code must not import any of them. Those
+  contracts read the configuration as text, which is all a static read can do:
+  they hold every filter to the anchored grammar but cannot say which tests a
+  filter selects, because that needs compiled test binaries. The runtime half is
+  `.github/scripts/verify_nextest_anchored_filters.py`, which runs on the
+  coverage lane after `Test and Measure Coverage` and asks Nextest itself. It
+  reads the parameterized tests and their case counts from the Rust sources,
+  then asserts that each anchored filter in the configuration selects exactly
+  those instances and that the whole-name form selects none of them. It reuses
+  the instrumented build tree rather than compiling, by taking the environment
+  `cargo llvm-cov show-env` reports, so it is gated exactly as the coverage
+  step is and must run before `Discard the instrumented build tree`. The
+  contracts for that placement live in
+  `tests/workflow_contracts/nextest_anchored_filter_runtime_test.py`.
 - **Scoped subprocess timings.** Packaging smoke tests emit their Cargo
   subprocess durations after each Cargo subprocess returns. The
   `harness_compiles_under_a_split_build_dir` parser test reads recorded Cargo

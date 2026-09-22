@@ -160,6 +160,12 @@ def group_filter_text(config: dict[str, object]) -> list[str]:
     filtered out: a member that lost its selector is retained as an empty
     entry, and an empty entry selects no names.
 
+    Parameters
+    ----------
+    config
+        The parsed Nextest configuration, as `nextest_config` returns it. Every
+        profile is read, not only `default`.
+
     Returns
     -------
     list[str]
@@ -201,6 +207,12 @@ def filter_test_names(config: dict[str, object]) -> set[str]:
     `test(=NAME)` form. A name written in the rejected form is therefore still
     held to the contract that a filtered name resolves to a declared test,
     rather than dropping out of that check.
+
+    Parameters
+    ----------
+    config
+        The parsed Nextest configuration, as `nextest_config` returns it. Every
+        profile is read, not only `default`.
 
     Returns
     -------
