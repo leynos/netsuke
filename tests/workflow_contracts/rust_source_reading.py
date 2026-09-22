@@ -46,21 +46,10 @@ _BLOCK_DEPTH: typ.Final[dict[str, int]] = {"/*": 1, "*/": -1}
 
 
 def _skip_block_comment(text: str, start: int) -> int:
-    """Return the index just past a `/* */` comment, which may nest.
-
-    Parameters
-    ----------
-    text
-        The whole source.
-    start
-        The index of the opening `/*`.
-
-    Returns
-    -------
-    int
-        The index just past the matching `*/`, or the end of the text when
-        nothing closes the comment.
-    """
+    """Return the index just past a `/* */` comment, which may nest."""
+    # An unterminated comment ends at the end of the text: the rest of the file
+    # is commented out, and reading it as code would report constructions
+    # nobody compiles.
     # The opening delimiter is consumed before the loop, so the depth is never
     # zero inside it and the loop's own condition is the whole answer. Only
     # `_region_end` calls this, and only when `/*` sits at `start`.
@@ -147,26 +136,12 @@ def _identifier_before(text: str, index: int) -> bool:
 
 
 def _region_end(text: str, index: int) -> int | None:
-    """Return the index just past a non-code region opening at `index`.
-
-    The one place the four contexts are told apart, so `code_only` is a walk
-    and this is the grammar. Order matters: a raw string is tried before a bare
-    quote, or `r#"` reads as an identifier followed by a string.
-
-    Parameters
-    ----------
-    text
-        The whole source.
-    index
-        Where to look.
-
-    Returns
-    -------
-    int or None
-        The index just past the region, or None when code begins here. A lone
-        `'` that closes nothing is a lifetime and answers None, so the text
-        after it is read as the code it is.
-    """
+    """Return the index just past a non-code region opening at `index`."""
+    # The one place the four contexts are told apart, so `code_only` is a walk
+    # and this is the grammar. Order matters: a raw string is tried before a
+    # bare quote, or `r#"` reads as an identifier followed by a string. A lone
+    # `'` that closes nothing is a lifetime and answers None, so the text after
+    # it is read as the code it is.
     if text.startswith("//", index):
         return _skip_line_comment(text, index)
     if text.startswith("/*", index):

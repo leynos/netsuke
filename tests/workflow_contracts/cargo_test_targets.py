@@ -33,7 +33,17 @@ TEST_TARGET_KEY = "test"
 
 
 def declared_test_targets() -> list[object]:
-    """Return every `[[test]]` section this workspace's manifests declare."""
+    """Return every `[[test]]` section this workspace's manifests declare.
+
+    Returns
+    -------
+    list[object]
+        One entry per declared section, across the workspace root manifest and
+        each member's. Empty is the expected answer here, and the contract
+        beside this module asserts it: Cargo's auto-discovery is what
+        `target_sources` models, and an explicit section would give a target a
+        name unrelated to its path.
+    """
     declared: list[object] = []
     for manifest in [REPO_ROOT / "Cargo.toml", *REPO_ROOT.glob("*/Cargo.toml")]:
         parsed = tomllib.loads(manifest.read_text(encoding="utf-8"))
@@ -42,7 +52,15 @@ def declared_test_targets() -> list[object]:
 
 
 def target_sources() -> dict[str, list[Path]]:
-    """Return each integration-test target's name and the sources it compiles."""
+    """Return each integration-test target's name and the sources it compiles.
+
+    Returns
+    -------
+    dict[str, list[Path]]
+        Target name to the sources Cargo compiles into it. A
+        `tests/<name>.rs` target has one source; a `tests/<name>/main.rs`
+        target has every `.rs` beneath its directory.
+    """
     # Cargo's auto-discovery, modelled: `tests/<name>.rs` is a target called
     # `<name>`, and `tests/<name>/main.rs` is a target called `<name>` that
     # compiles every module beneath it. Anything else under `tests/` is a
