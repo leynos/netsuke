@@ -5,8 +5,12 @@ Status: IN PROGRESS
 Re-opened on 2026-09-22. The plan was `COMPLETE`; the ready pull request's
 CodeRabbit pass then found that the gate's checker could not see the code the
 mutations touch, which invalidated the gate's design and its CI placement
-together. The status returns to `IN PROGRESS` until the moved gate is validated
-on CI and that review concludes.
+together. Of the two conditions for returning to `COMPLETE`, the first is now
+met: the moved gate is validated on CI (run `35796798133`, the first of five
+runs to reach it, compiling all 18 patches in 361 s). The second is
+outstanding, because the CodeRabbit review has not concluded — its
+`CHANGES_REQUESTED` is pinned to a commit more than twenty revisions old, so a
+fresh pass is required before the concerns can be said to be cleared.
 
 This ExecPlan is a living document. The sections `Progress`,
 `Surprises & discoveries`, `Decision log`, and `Outcomes & retrospective` must
@@ -106,9 +110,17 @@ failure mode cannot recur silently.
       dropping the gate block that the later `1cd39169` relocates to
       `kani-smoke`. All branch-authored files verified byte-identical across the
       replay by whole-tree diff, not ancestry.
-- [ ] Confirm the gate runs and compiles on CI, and read its real cost and the
-      job's headroom against the 30-minute ceiling. The failed run gives no
-      measurement, because the gate aborted before compiling anything.
+- [x] (2026-09-23) Confirm the gate runs and compiles on CI, and read its real
+      cost and the job's headroom against the 30-minute ceiling. Run
+      `35796798133` at `7143648c` is the first to reach the gate: `kani-smoke`
+      concludes `success`, the compile gate runs **361 s**
+      (`23:25:40Z → 23:31:41Z`) and nextest reports
+      `Summary [ 257.703s] 1 test run: 1 passed (1 slow), 3 skipped` — the first
+      nextest summary this job has ever produced, the four earlier runs having
+      aborted before compiling a patch. The job totals **776 s** against its
+      1,800 s ceiling, leaving 1,024 s unspent. The toolchain resolves as
+      intended: `toolchain: nightly-2026-08-23`, the action's `override: true`
+      arm, and `rustc 1.100.0-nightly (c54751567 2026-08-22)`.
 
 ## Surprises & discoveries
 
