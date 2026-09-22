@@ -162,7 +162,11 @@ of decisions that need the user's confirmation.
   `Unknown assignment`, and an unrecognized option with `unrecognized option`,
   in both cases exiting non-zero without starting the payload. That is generic
   command-line behaviour for `systemd-run`, so no explicit version check is
-  needed in the wrapper.
+  needed in the wrapper. The wrapper additionally needs a running per-user
+  systemd manager with delegated cgroup support for user scopes, which a
+  `--user` login session provides on the reference host. Without one the
+  command fails before any unit is created, reporting
+  `Failed to connect to user scope bus via local transport`.
 
   `TimeoutStopSec=20s` preserves the bounded forceful-termination grace period
   that the removed `--kill-after=20s` used to provide: systemd sends `SIGTERM`,
