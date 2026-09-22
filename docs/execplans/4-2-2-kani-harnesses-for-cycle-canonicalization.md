@@ -151,9 +151,14 @@ of decisions that need the user's confirmation.
   signalling the process it supervises, and its `--kill-after=` grace window is
   added to the deadline rather than nested inside it, so a workload that
   ignores the first signal is bounded by the sum of the two rather than by the
-  nominal figure. `RuntimeMaxSec` for scope units requires systemd 244 or later;
-  `systemd-run --version` on the reference host reports 257, and earlier
-  releases silently ignore the property.
+  nominal figure. `RuntimeMaxSec` for scope units requires systemd 244 or
+  later, which `systemd.scope` records as the version that added it for scopes
+  rather than for services; `systemd-run --version` on the reference host
+  reports 257. A host that cannot accept the property fails loudly rather than
+  silently running uncapped: an unsupported transient assignment is rejected and
+  `systemd-run` exits non-zero with `Unknown assignment` without starting the
+  payload. That is a property of transient-unit assignment generally, so no
+  explicit version check is needed in the wrapper.
 
   `TimeoutStopSec=20s` preserves the bounded forceful-termination grace period
   that the removed `--kill-after=20s` used to provide: systemd sends `SIGTERM`,
@@ -161,7 +166,7 @@ of decisions that need the user's confirmation.
   `RuntimeMaxSec` alone stops a cooperative payload, but a scope whose stop
   does not complete within `TimeoutStopSec` is only escalated on that timeout,
   and the scope's own exit status is zero in that case — a workload ignoring
-  the first signal runs on and the wrapper still reports success. Probing
+  the first signal runs on, and the wrapper still reports success. Probing
   `RuntimeMaxSec=3s` without a paired `TimeoutStopSec` against a `SIGTERM`-
   ignoring payload confirmed a zero status with the payload's completion marker
   written six seconds in. With the pair in place the same probe exits 143 at
@@ -773,11 +778,10 @@ of decisions that need the user's confirmation.
   cannot be extended by a signal-ignoring payload. The paired
   `-p TimeoutStopSec=20s` preserves the bounded forceful-termination grace the
   removed `--kill-after=20s` provided, so the total bound stays close to the
-  nominal one. The pipeline is also documented with `set -o pipefail`, because
-  a pipeline's status is otherwise `tee`'s and a failing `make` would be masked
+  nominal one. The pipeline is also documented with `set -o pipefail` because a
+  pipeline's status is otherwise `tee`'s, and a failing `make` would be masked
   by a successful capture. Date/Author: 2026-09-22 / implementation agent for
-  issue
-  #765, raised from the roadmap 4.2.3 reconciliation (#738).
+  issue #765, raised from the roadmap 4.2.3 reconciliation (#738).
 
 - Decision: record honestly that the reported mechanism for #765 did not
   reproduce locally, and that the correction stands on the reasons above.
