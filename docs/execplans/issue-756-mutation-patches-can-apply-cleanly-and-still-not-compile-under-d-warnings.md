@@ -7,10 +7,23 @@ CodeRabbit pass then found that the gate's checker could not see the code the
 mutations touch, which invalidated the gate's design and its CI placement
 together. Of the two conditions for returning to `COMPLETE`, the first is now
 met: the moved gate is validated on CI (run `35796798133`, the first of five
-runs to reach it, compiling all 18 patches in 361 s). The second is
-outstanding, because the CodeRabbit review has not concluded — its
-`CHANGES_REQUESTED` is pinned to a commit more than twenty revisions old, so a
-fresh pass is required before the concerns can be said to be cleared.
+runs to reach it, compiling all 18 patches in 361 s, with all five jobs of that
+workflow green). The second is outstanding, and its shape has since been
+measured rather than assumed.
+
+The GitHub CodeRabbit review has not simply lagged; it has **auto-paused**. Its
+own comment on PR `#766` reads "Reviews paused … this branch is under active
+development", offering `@coderabbitai resume` and `@coderabbitai review` as the
+ways out. So the `CodeRabbit` commit status of `success` posted at 23:19Z on
+`7143648c` is the pause path reporting completion, **not** a review of that
+head: no inline comment on this pull request is newer than `21:47:53Z` on
+2026-09-21, and every one of the three predates the commit that fixed it. The
+lingering `CHANGES_REQUESTED` is correspondingly pinned to `e4f93b93`, which a
+rebase has since made non-ancestral — it describes a revision on a superseded
+history line, so its diff matches no code that exists. Clearing or waiving it
+is a maintainer action, not something this branch can do; what the branch can
+do is re-run the review and leave the record unambiguous. That is the remaining
+work.
 
 This ExecPlan is a living document. The sections `Progress`,
 `Surprises & discoveries`, `Decision log`, and `Outcomes & retrospective` must
@@ -445,11 +458,20 @@ first pass had no way to question a checker the second pass rejected.
 CI confirmed the original wiring end to end, in `build-test`. That placement is
 superseded by the third finding — the gate needs the Kani frontend, which only
 `kani-smoke` has — so the evidence below is retained as the record of a gate
-that ran, not as a description of where it runs now. It is worth keeping for a
-second reason: it is the only run in this plan where the gate both compiled and
-was measured, so it is the only cost figure with CI provenance. The move's own
-first run measured nothing, because the toolchain mismatch described under
-`Surprises & discoveries` aborted it before it compiled a single patch.
+that ran, not as a description of where it runs now. It is worth keeping
+because it is the only `build-test` run in this plan where the gate both
+compiled and was measured.
+
+The moved gate has since been measured in its own home. The move's first four
+runs measured nothing, because the toolchain mismatch described under
+`Surprises & discoveries` aborted each before it compiled a single patch. The
+fifth, run `35796798133`, is the one that ran: `kani-smoke` concludes
+`success`, compiles all 18 patches in **361 s**, and reports the job's first
+nextest summary,
+`Summary [ 257.703s] 1 test run: 1 passed (1 slow), 3 skipped`. The job totals
+**776 s** of its 1,800 s ceiling. Both figures are therefore measured rather
+than inferred from headroom — the 1,024 s unspent confirms the ceiling raised
+alongside the move was sufficient, on the only run that could say so.
 
 On the `ci.yml` run for `028ac566` (`build-test`, job `106523333782`, 14m27s,
 success) the new step is step 32, sitting between "Test and Measure Coverage"
