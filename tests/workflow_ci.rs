@@ -484,9 +484,14 @@ fn behavioural_ci_workflow_wires_kani_smoke_job() -> Result<()> {
          cannot be satisfied by a stale cached binary"
     );
     ensure_kani_archives_are_verified_before_use(install_command)?;
+    // Thirty, not twenty. The job's last step is the mutation compile gate,
+    // which builds the whole dependency graph through the Kani frontend into a
+    // cold `CARGO_TARGET_DIR`; the ceiling has to contain that on top of the
+    // harness run. Measured locally at 3m12s wall for the three tracked patches
+    // once the graph was warm, so the headroom here is for the cold case.
     ensure!(
-        mapping_get(kani_job, YamlKey("timeout-minutes")).and_then(Value::as_u64) == Some(20),
-        "Kani smoke job should enforce the 20-minute cold-run ceiling"
+        mapping_get(kani_job, YamlKey("timeout-minutes")).and_then(Value::as_u64) == Some(30),
+        "Kani smoke job should enforce the 30-minute cold-run ceiling"
     );
     Ok(())
 }
