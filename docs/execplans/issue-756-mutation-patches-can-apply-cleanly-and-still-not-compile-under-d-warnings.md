@@ -116,6 +116,32 @@ failure mode cannot recur silently.
     non-restrictive: "A fourth check", which is already identified, is gated
     *for a stated reason*, so the clause is supplementary and the comma is
     grammatical.
+- **A draft review and a ready review are not the same review, and the second
+  one found real defects.** Marking the pull request ready produced a genuine
+  GitHub CodeRabbit pass (`CHANGES_REQUESTED`, pinned to `e4f93b93`) whose two
+  live findings were both correct and both reproduce — unlike the three above,
+  which came from the local CLI and were dismissed on measurement.
+  Internalizing the first pass's dispositions as "CodeRabbit is unreliable on
+  this PR" would have shipped two real defects. Each was reproduced before
+  being accepted:
+  - **The gate could silently become a no-op.** Deleting
+    `--run-ignored ignored-only` from `test-kani-mutations` made
+    `make test-kani-mutations` **exit 0 while compiling nothing** — nextest
+    reported "3 tests run, 1 skipped" and the ignored compile gate never ran —
+    and all **36** Makefile contract tests still passed. A CI step reporting
+    success while checking nothing is precisely the failure class this task
+    exists to eliminate, so the recipe now has its own contract,
+    `behavioural_kani_mutation_target_selects_the_ignored_compile_gate`, which
+    pins the test binary, `--run-ignored ignored-only`, and `GATE_RUSTFLAGS`
+    against the `nextest run` line. Liveness proven both ways: it fails with the
+    flag removed naming the exact recipe line, and passes with it restored.
+  - **A failed revert could pass unnoticed.** `AppliedPatch::drop` logged and
+    returned `()`, so the test could return `Ok(())` with a seeded mutation
+    still in the working tree. `revert()` is now a fallible method called on the
+    normal path and aggregated into an `unreverted` list, with `Drop` demoted to
+    the unwind fallback it is actually good for and an `applied` flag so the
+    fallback does not double-reverse. Liveness proven by injecting a revert
+    failure: the gate exits 2 and names every patch.
 
 ## Decision Log
 
@@ -123,6 +149,12 @@ failure mode cannot recur silently.
   comparator's operands, an `Ordering` constant) rather than deleting a
   statement, so every helper stays referenced and every `mut` binding stays
   reassigned while the seeded fault is still behavioural.
+- Accept the CodeRabbit GitHub review's two live findings and fix both, after
+  reproducing each rather than reasoning about it. The pass that dismissed the
+  earlier three findings was the local CLI against a draft; marking the PR
+  ready produced a genuine review with different findings, and the difference
+  is the lesson: a draft review and a ready review are not the same review. See
+  Surprises & Discoveries.
 - Keep the new test `#[ignore]`-gated: a `cargo check` per patch (~18 today) is
   too expensive for the default nextest profile.
 - Adopt `#755`'s two repairs *verbatim* rather than repairing the same faults
@@ -180,3 +212,13 @@ reports the pull request `CLEAN` / `MERGEABLE`. The gate's cold run there took
 runner compiles libc and the rest of the dependency graph for the first time.
 Marking the pull request ready for review also triggered Codex, which reviewed
 `e4f93b9` and returned no suggestions.
+
+The retrospective's sharpest lesson is that the two review passes disagreed,
+and the second was right. The local pass against a draft produced three
+findings that measurement dismissed; the GitHub pass against the ready pull
+request produced two findings that measurement confirmed. Treating the first
+pass as the verdict on CodeRabbit's usefulness here would have shipped a CI
+gate that can exit 0 having compiled nothing. The habit that caught it is the
+same one this plan applies to the patches themselves: reproduce the claim
+before believing or rejecting it, and prefer a failing experiment over a
+plausible story.
