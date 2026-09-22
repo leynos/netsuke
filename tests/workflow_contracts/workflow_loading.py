@@ -50,9 +50,8 @@ SETUP_RUST_JOBS = (
 )
 
 #: The jobs that run tests and therefore install cargo-nextest. Windows needs
-#: it on the test job alone; `kani-smoke` needs it for the mutation compile gate
-#: and declares no `Setup Rust` step, because its Rust arrives with the Kani
-#: payloads.
+#: it on the test job alone; `kani-smoke` needs it for the mutation compile
+#: gate, which drives nextest rather than `cargo kani`.
 NEXTEST_JOBS = (
     (CI_WORKFLOW_PATH, "build-test"),
     (CI_WINDOWS_WORKFLOW_PATH, "build-test-windows"),

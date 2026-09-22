@@ -85,6 +85,14 @@ failure mode cannot recur silently.
       `kani-smoke`'s `RUSTUP_TOOLCHAIN: stable`, which pinned the gate's
       `cargo nextest` to a toolchain that rejects `GATE_RUSTFLAGS`'s
       nightly-only `-Zthreads=8`. Mechanism reproduced locally before and after.
+- [x] (2026-09-22) Fix the *second* CI run, which failed identically because
+      removing the variable had not been the whole fix: `Setup Rust`'s
+      `toolchain: stable` input writes a `rustup` **directory override** for
+      the workspace, which outranks `rust-toolchain.toml` and outlived the
+      variable's removal. The step now names the nightly pin, matching
+      `build-test`. This also corrected a wrong mechanism recorded in this
+      plan's first diagnosis; see the `RUSTUP_HOME`/directory-override surprise
+      below for how it was disproved.
 - [x] (2026-09-22) Rebase onto `origin/main` once `#732` landed, resolving three
       conflicts: the `test(=NAME)` filter this branch registered is converted to
       the anchored grammar `#732` enforces (allow-listed by
@@ -227,6 +235,36 @@ failure mode cannot recur silently.
     scope** here: it gates 11 Makefile targets and every developer path, and a
     false positive there would break all of them at once. The gate's own env
     now documents why a channel value must never be reintroduced.
+- **Removing the variable was necessary but not sufficient, and the first
+  diagnosis of *why* was wrong.** The second CI run (run `35788180077`) failed
+  identically — `rustc` still resolved to
+  `.kani-rustup/toolchains/stable-*/bin/rustc` — so something else was still
+  selecting stable. The first explanation recorded here blamed the redirected
+  `RUSTUP_HOME`: the theory was that rustup looks for `rust-toolchain.toml`'s
+  pin inside that home and, not finding it, falls back. The job log falsifies
+  this on two counts. The pin *was* found there — `check-build-tools` prints
+  `toolchain nightly-2026-08-23 available`, and it greps `rustup toolchain list`
+  under the same redirected home — and `rust-toolchain.toml` is honoured
+  normally under a redirected `RUSTUP_HOME`.
+  - The real mechanism is a **directory override**. `setup-rust` ends by
+    running `rustup override set "$toolchain"` (its `override` input defaults
+    to `true`), and a directory override outranks `rust-toolchain.toml` for the
+    whole workspace. The job log records it verbatim: `info: override toolchain
+    for /home/runner/work/netsuke/netsuke set to
+    stable-x86_64-unknown-linux-gnu`, during the `Setup Rust` step. So with
+    `toolchain: stable` the job was pinned to stable by a route that outlived
+    the env-var removal, and the second run failed exactly as the first had.
+  - The fix is therefore to name the pin in the step's `toolchain` input, which
+    is what `build-test` and the Windows jobs already do. This *reverses* the
+    "remove rather than pin" decision below; the reasoning there was sound only
+    while the variable was the only thing selecting a toolchain.
+  - The lesson is narrower and sharper than "re-measure after a change": the
+    first diagnosis was a *plausible* mechanism that fit the symptom, and it
+    survived into a comment and this plan unchallenged. What killed it was
+    reading the installer's own source, which was sitting in the failing job's
+    log all along — the `if` whose `else` branch calls `rustup override set`.
+    A mechanism that explains the symptom is not yet a mechanism that has been
+    located.
 - **The branch's own Nextest filter was written in the spelling `#732` had just
   retired, and the conflict was the least of it.** Rebasing onto `origin/main`
   after `#732` landed replayed eleven commits, three of which conflicted. Two
@@ -281,11 +319,17 @@ failure mode cannot recur silently.
   graph through the Kani frontend into a cold `CARGO_TARGET_DIR`, on top of the
   harness run the ceiling was originally sized for; the old bound would have
   killed the job it now hosts.
-- Remove `kani-smoke`'s `RUSTUP_TOOLCHAIN: stable` rather than pinning it to the
-  nightly. Pinning would work, but it would restate a version that
-  `rust-toolchain.toml` already owns and that the pin's own ADR requires be
-  bumped in one place; unsetting lets the directory override supply it. The env
-  block now records the reasoning so a channel value is not reintroduced.
+- Remove `kani-smoke`'s `RUSTUP_TOOLCHAIN: stable`, and pin the `Setup Rust`
+  step's `toolchain` input to the nightly instead. The first half of this was
+  originally justified by "unsetting lets the directory override supply it",
+  and CI disproved that; see the `RUSTUP_HOME`/directory-override surprise
+  above. Both halves are now required, and they do different jobs: the variable
+  must stay gone because a *channel* value there is always wrong for the gate,
+  and the step input must name the pin because that input is what writes the
+  `rustup` directory override, which is the thing that actually selects the
+  compiler. The value is `${{ env.NETSUKE_RUST_TOOLCHAIN }}`, the same
+  workflow-scoped expression `build-test` and the Windows jobs use, so the
+  repository still owns the version in exactly one place.
 - Leave `check-build-tools` asserting availability rather than activity, and
   document the gap instead of closing it here. It gates 11 targets and every
   developer path, so widening it is a change with its own blast radius and its
@@ -432,6 +476,13 @@ Kani frontend does.
   nothing. The variable is removed, the mechanism recorded under
   `Surprises & discoveries`, and a final CI confirmation left open as the last
   unchecked Progress item.
+- 2026-09-22 — The second CI run failed identically, so the removal had not
+  been the whole fix. `Setup Rust`'s `toolchain: stable` input writes a
+  `rustup` directory override that outranks `rust-toolchain.toml`, and it
+  outlived the variable's removal; the step now names the nightly pin. The
+  first explanation recorded here — that the redirected `RUSTUP_HOME` hid the
+  pin from rustup — is **disproved** and was replaced, along with the
+  "remove rather than pin" decision it justified. Corrected above.
 - 2026-09-22 — Rebased onto `origin/main` after PR `#732` landed, replaying
   eleven commits. Three conflicted. `.config/nextest.toml` conflicted on
   substance: this branch's filter used the `test(=NAME)` grammar `#732` had
