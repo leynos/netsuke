@@ -31,6 +31,7 @@ from ci_coverage_wiring_invariants import (
     coverage_surface_offenders,
     declares_trigger,
     publishes_the_coverage_report,
+    pull_request_lane,
     steps_in_all_jobs,
 )
 from timeout_budgets import WORKFLOWS_DIRECTORY
@@ -57,7 +58,9 @@ def _pull_request_workflows() -> list[tuple[str, dict[str, object], str]]:
     Both pull-request triggers are read. `pull_request_target` runs in the base
     repository's context and can read its secrets, so a coverage step there
     would be the more serious variant of the same violation rather than an
-    unrelated one.
+    unrelated one. The lane is the closure through reusable-workflow calls,
+    not the trigger list: a `workflow_call` workflow a pull-request workflow
+    calls runs on that pull request too.
 
     Returns
     -------
@@ -67,10 +70,8 @@ def _pull_request_workflows() -> list[tuple[str, dict[str, object], str]]:
     """
     documents = all_workflow_documents(WORKFLOWS_DIRECTORY)
     return [
-        (name, document, _workflow_text(name))
-        for name, document in sorted(documents.items())
-        if declares_trigger(document, PULL_REQUEST_TRIGGER)
-        or declares_trigger(document, PULL_REQUEST_TARGET_TRIGGER)
+        (name, documents[name], _workflow_text(name))
+        for name in sorted(pull_request_lane(documents))
     ]
 
 
@@ -131,6 +132,12 @@ def test_no_pull_request_workflow_touches_the_coverage_publication_surface() -> 
         "no pull_request_target workflow was read, so the variant that can read "
         "base-repository secrets would escape this contract"
     )
+    # None of these declares a pull-request trigger; each runs on one because
+    # a pull-request workflow calls it. Missing any means the lane was read as
+    # a trigger list and the closure was lost.
+    called = {"ci-windows.yml", "release.yml", "build-and-package.yml"}
+    read = {name for name, _, _ in workflows}
+    assert called <= read, f"the lane must reach every called workflow: {sorted(read)}"
     offenders = [
         offender
         for name, document, raw_text in workflows

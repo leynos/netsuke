@@ -1504,6 +1504,29 @@ that opt-out. The standalone hostile-artefact validators under `scripts/`
 remain available for maintenance use, but no active workflow downloads
 pull-request coverage.
 
+The workflows those prohibitions read are a closure, not a trigger list. A
+workflow declaring only `workflow_call` runs on a pull request whenever a
+pull-request workflow calls it, and `secrets: inherit` hands it every secret, so
+`pull_request_lane` in
+`tests/workflow_contracts/ci_coverage_wiring_invariants.py` starts from the
+workflows declaring either pull-request trigger and follows job-level `uses:`
+calls transitively. `tests/workflow_contracts/workflow_call_closure.py` owns
+that traversal. It reads a call as local when the reference, less a leading
+`./`, names a file directly under `.github/workflows/`; it matches that shape
+rather than listing spellings, follows no cross-repository call, and fails the
+reading when a local call names a workflow it did not read. Any future contract
+that asks what a pull request runs should take its lane from
+`pull_request_lane` rather than filtering triggers again.
+
+Two clauses exist because a workflow can reach CodeScene without naming the
+action or the credential. Any mention of `codescene.io`, matched
+case-insensitively because DNS names are case-insensitive, is refused, since a
+step can curl the project API directly. And `secrets: inherit` on a call to
+another repository's workflow is refused, because that callee's content is not
+in this tree. The same forwarding to a local workflow is allowed, because the
+closure reads the callee and holds it to every clause; `release-dry-run.yml`
+calls `release.yml` that way.
+
 `make test` runs the non-doctest suite through
 [cargo-nextest](https://nexte.st/) and the doctests separately. CI pins the
 runner version in `NEXTEST_VERSION` in `.github/workflows/ci.yml`. Install that

@@ -12,8 +12,16 @@ the action without the opt-out has published the report whether or not the
 workflow declares an artefacts step. That rule is checked here rather than in
 the workflow, because the action's own step is not the caller's to see.
 
+A pull request reaches CodeScene by more routes than the action. A step can
+curl the service directly, naming neither the action nor the credential, so the
+service's host is refused in its own right. And ``secrets: inherit`` hands a
+called workflow every secret without naming one: to a workflow in this
+repository that is visible, because the closure in ``workflow_call_closure``
+reads the callee too, but to another repository's workflow it is not, so that
+call is refused.
+
 These predicates read parsed workflow values and raw text rather than files, so
-``ci_coverage_wiring_test`` can hold every pull-request-triggered workflow, and
+``ci_coverage_wiring_test`` can hold every workflow a pull request reaches, and
 any ``workflow_run`` consumer, to the boundary, and can drive shapes the
 repository does not have.
 
@@ -24,6 +32,11 @@ import typing as typ
 
 from codescene_check_depth_invariants import CODESCENE_COVERAGE_ACTION
 from timeout_budgets import COVERAGE_ACTION
+from workflow_call_closure import (
+    called_workflows,
+    local_workflow_name,
+    reachable_workflows,
+)
 from workflow_loading import require_mapping
 
 if typ.TYPE_CHECKING:
@@ -51,6 +64,14 @@ PUBLICATION_OPT_OUT_VALUE: typ.Final[str] = "false"
 #: The credential the CodeScene upload reads. It must not appear in a workflow
 #: a pull request can reach, in a parsed value or anywhere in the raw text.
 CREDENTIAL_ENVIRONMENT_KEY: typ.Final[str] = "CS_ACCESS_TOKEN"
+
+#: The service's host. Matched case-insensitively, because DNS names are, and
+#: kept apart from the credential check: a step can reach the project API by
+#: curling it, naming neither the action, the client, nor the credential.
+CODESCENE_HOST: typ.Final[str] = "codescene.io"
+
+#: The ``secrets:`` value that forwards every secret the caller holds.
+INHERIT_ALL_SECRETS: typ.Final[str] = "inherit"
 
 #: The report the coverage action writes, and the one CodeScene is sent.
 COVERAGE_REPORT_PATH: typ.Final[str] = "lcov.info"
@@ -112,6 +133,33 @@ def declares_trigger(document: dict[str, object], trigger: str) -> bool:
             return trigger in mapping
         case _:
             return False
+
+
+def pull_request_lane(
+    documents: cabc.Mapping[str, dict[str, object]],
+) -> frozenset[str]:
+    """Return every workflow a pull request runs, by file name.
+
+    Parameters
+    ----------
+    documents : Mapping[str, dict[str, object]]
+        Every workflow document, keyed by file name.
+
+    Returns
+    -------
+    frozenset[str]
+        The workflows declaring either pull-request trigger, and every
+        workflow they call, transitively. A local call naming a workflow
+        ``documents`` does not hold propagates
+        ``UnresolvedWorkflowCallError`` from the traversal.
+    """
+    entries = [
+        name
+        for name, document in documents.items()
+        if declares_trigger(document, PULL_REQUEST_TRIGGER)
+        or declares_trigger(document, PULL_REQUEST_TARGET_TRIGGER)
+    ]
+    return reachable_workflows(documents, entries)
 
 
 def steps_in_all_jobs(document: dict[str, object]) -> list[dict[str, object]]:
@@ -202,6 +250,31 @@ def declines_the_generated_report_archive(step: dict[str, object]) -> bool:
     return with_.get(PUBLICATION_OPT_OUT_INPUT) == PUBLICATION_OPT_OUT_VALUE
 
 
+def forwards_every_secret_elsewhere(document: dict[str, object]) -> list[str]:
+    """Return the jobs that hand every secret to another repository's workflow.
+
+    Parameters
+    ----------
+    document : dict[str, object]
+        One parsed workflow document.
+
+    Returns
+    -------
+    list[str]
+        The names of jobs whose call is not local and passes
+        ``secrets: inherit``. A local call is not listed: the closure reads its
+        callee, so whatever that workflow does with a secret is checked there.
+    """
+    jobs = require_mapping(document.get("jobs"), "jobs")
+    return [
+        name
+        for name, reference in called_workflows(document)
+        if local_workflow_name(reference) is None
+        and require_mapping(jobs[name], f"job {name}").get("secrets")
+        == INHERIT_ALL_SECRETS
+    ]
+
+
 def coverage_surface_offenders(
     name: str, document: dict[str, object], raw_text: str
 ) -> list[str]:
@@ -214,9 +287,9 @@ def coverage_surface_offenders(
     document : dict[str, object]
         The workflow's parsed document.
     raw_text : str
-        The workflow's raw text. The credential is matched here as well as in
-        the parsed values, so a reference inside a comment or an unparsed
-        shape is still reported.
+        The workflow's raw text. The credential and the service's host are
+        matched here, the credential in the parsed values as well, so a
+        reference inside a comment or an unparsed shape is still reported.
 
     Returns
     -------
@@ -248,5 +321,12 @@ def coverage_surface_offenders(
         f"{name}: parsed value references {CREDENTIAL_ENVIRONMENT_KEY}"
         for value in _iter_strings(document)
         if CREDENTIAL_ENVIRONMENT_KEY in value
+    )
+    if CODESCENE_HOST in raw_text.casefold():
+        offenders.append(f"{name}: raw text contacts {CODESCENE_HOST}")
+    offenders.extend(
+        f"{name}: job {job} forwards every secret to another repository's "
+        f"workflow ({INHERIT_ALL_SECRETS})"
+        for job in forwards_every_secret_elsewhere(document)
     )
     return offenders
