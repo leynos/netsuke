@@ -2756,7 +2756,7 @@ evidence about the backend. Setting it aside leaves five failures and one
 timeout: the six rows in the table above, all six caused by Cranelift.
 
 None of this says Cranelift is unusable elsewhere, and other repositories on
-this estate do use it. Five of the six failures are tests about a panic
+this estate do use it. Five of those six outcomes are tests about a panic
 crossing a boundary, and a repository without such tests would meet none of
 them.
 

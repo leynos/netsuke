@@ -213,11 +213,14 @@ fragment removed.
 
 _Table 2: `make test` on 2026-09-21, by codegen backend._
 
-Five of the six failures are the unwind behaviour Table 1 already describes, in
-both of its shapes. The sixth is a test that runs the built binary repeatedly
-and crosses its per-test allowance because the Cranelift-built binary is
-slower; run alone it passes under both backends. The developers' guide names
-each failing test and attributes it.
+The runner's "6 failed" includes `the_configuration_names_no_codegen_backend`,
+which fails because the added configuration names a backend, exactly what that
+contract refuses. Setting it aside leaves five failures and one timeout, six
+outcomes caused by Cranelift. The five failures are the unwind behaviour of
+Table 1, in both of its shapes. The timeout is a test that runs the built
+binary repeatedly and crosses its per-test allowance because the
+Cranelift-built binary is slower; run alone it passes under both backends. The
+developers' guide names each failing test and attributes it.
 
 Two things follow, and neither changes the decision:
 
@@ -225,7 +228,7 @@ Two things follow, and neither changes the decision:
   kept because it explains what fails; only the suite answers whether the
   backend is usable here. Issue #764 holds the procedure and the counts, and
   shelves the question until 2027-03-21.
-- The exclusion is about this repository. Five of the six failures are tests
+- The exclusion is about this repository. Five of those six outcomes are tests
   whose subject is a panic crossing a boundary, so a repository without such
   tests would meet none of them. Other repositories on this estate do use
   Cranelift, and this record does not argue against that.
