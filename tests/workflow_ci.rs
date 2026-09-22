@@ -487,8 +487,11 @@ fn behavioural_ci_workflow_wires_kani_smoke_job() -> Result<()> {
     // Thirty, not twenty. The job's last step is the mutation compile gate,
     // which builds the whole dependency graph through the Kani frontend into a
     // cold `CARGO_TARGET_DIR`; the ceiling has to contain that on top of the
-    // harness run. Measured locally at 3m12s wall for the three tracked patches
-    // once the graph was warm, so the headroom here is for the cold case.
+    // harness run. Measured locally at 152.952s of gate time over all 18
+    // tracked patches with the graph warm, plus 158s of wall clock for the
+    // recipe; the headroom here is for the cold case, which no CI run has yet
+    // measured, because every run so far aborted at toolchain selection before
+    // compiling a patch.
     ensure!(
         mapping_get(kani_job, YamlKey("timeout-minutes")).and_then(Value::as_u64) == Some(30),
         "Kani smoke job should enforce the 30-minute cold-run ceiling"

@@ -3211,8 +3211,10 @@ the harnesses. Three of its checks run as part of `make test`:
 A fourth check is gated, because it costs one Kani codegen per patch:
 `compile_guard::every_patched_tree_compiles_under_denied_warnings` applies each
 patch, compiles the patched tree under `-D warnings`, and reverts it through a
-`Drop` guard so an assertion failure cannot leave a mutation in the working
-tree. Run it with `make test-kani-mutations`, which drives nextest with
+fallible `revert()` whose failure is aggregated and reported, so a failed
+reverse cannot pass quietly as a green run with a mutation still in the working
+tree. A `Drop` guard remains as the unwind fallback for an assertion failure
+mid-patch. Run it with `make test-kani-mutations`, which drives nextest with
 `--run-ignored ignored-only`; `kani-smoke` runs the same target on every pull
 request. Applying cleanly is not enough on its own: `make kani-full` denies
 warnings, so a patch that seeds its fault by leaving a binding or helper unused
