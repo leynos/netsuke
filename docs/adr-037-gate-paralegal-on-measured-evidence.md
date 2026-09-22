@@ -43,8 +43,8 @@ approval.
 Only a compatible configuration proceeds to at most two qualified policies:
 recipe resolution and redirect transitions. Require independent positive and
 negative controls, hold-out mutations, coverage checks, non-redundant benefit,
-and measured cost. Use non-blocking shadow evaluation before a separate decision
-can authorize a required check. Promotion is never automatic.
+and measured cost. Use non-blocking shadow evaluation before a separate
+decision can authorize a required check. Promotion is never automatic.
 
 Retain types and contract tests for value equality, validation correctness,
 resource lifetime, shell behaviour, and external-file effects. A dependence
@@ -54,9 +54,9 @@ query supplies scoped evidence under its approximations, not a general proof.
 
 Immediate adoption risks making governance depend on an incompatible analyser.
 Downgrading the application sacrifices an accepted design for an optional tool.
-Toy-only analysis cannot establish Netsuke coverage. An open-ended upstream port
-would exceed the experiment. Rejecting the idea without a bounded trial would
-forgo potentially useful evidence; P0 offers a proportionate initial test.
+Toy-only analysis cannot establish Netsuke coverage. An open-ended upstream
+port would exceed the experiment. Rejecting the idea without a bounded trial
+would forgo potentially useful evidence; P0 offers a proportionate initial test.
 
 ## Consequences and migration
 

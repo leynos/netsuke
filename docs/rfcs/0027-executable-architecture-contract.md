@@ -13,31 +13,33 @@
 
 ## Summary
 
-Combine a small Rust dependency checker with type-level restrictions, executable
-port contracts, effect-policy probes, and reviewed migration exceptions. Enforce
-[RFC 0026](0026-hexagonal-domain-hardening.md)'s semantic boundaries rather than
-a prescribed directory tree. Treat semantic flow analysis separately under [RFC
-0028](0028-paralegal-architecture-experiment.md); structural hardening must
-remain useful when that experiment fails.
+Combine a small Rust dependency checker with type-level restrictions,
+executable port contracts, effect-policy probes, and reviewed migration
+exceptions. Enforce [RFC 0026](0026-hexagonal-domain-hardening.md)'s semantic
+boundaries rather than a prescribed directory tree. Treat semantic flow
+analysis separately under
+[RFC 0028](0028-paralegal-architecture-experiment.md); structural hardening
+must remain useful when that experiment fails.
 
 ## Precedents and adaptation
 
 [Wildside's checker][wildside] separates source acquisition from an in-memory
 `syn`-based lint and enforces Rust module dependencies. Borrow that
-decomposition and its executable negative-probe approach. Do not copy Wildside's
-fixed `domain`/`inbound`/`outbound` directory classification or assume syntax
-inspection provides complete Rust symbol resolution.
+decomposition and its executable negative-probe approach. Do not copy
+Wildside's fixed `domain`/`inbound`/`outbound` directory classification or
+assume syntax inspection provides complete Rust symbol resolution.
 
 [Corbusier's contributor policy][corbusier] requires an existing-abstraction
 search and records ownership, permitted callers, reuse, and composition before
 introducing a port. Netsuke already carries that discipline in `AGENTS.md`.
 Apply it to application execution contracts and share behavioural fixtures
-between implementations; do not equate ordinary Clippy checks with architectural
-proof.
+between implementations; do not equate ordinary Clippy checks with
+architectural proof.
 
 [Hecate][hecate] supplies useful declarative groups, deterministic diagnostics,
-and re-export-aware dependency concepts. Its [exception controls][hecate-config]
-and [origin-resolution concerns][hecate-104] motivate visible debt and explicit
+and re-export-aware dependency concepts. Its
+[exception controls][hecate-config] and
+[origin-resolution concerns][hecate-104] motivate visible debt and explicit
 uncertainty. Borrow these concepts, not its Python engine or an assumption of
 complete analysis. A Rust port of Hecate is not a prerequisite.
 
@@ -102,10 +104,10 @@ An empty scan is an error. Newly added source cannot disappear because the
 scanner only walks yesterday's three directories.
 
 The initial dependency analysis may scan syntax across conditional branches.
-Record whether a result describes that conservative union or a specific compiled
-configuration. Do not imply macro-expansion, generated-code, or target coverage
-that the implementation lacks. Exclusions must state what other check owns the
-omitted boundary, or report it as incomplete.
+Record whether a result describes that conservative union or a specific
+compiled configuration. Do not imply macro-expansion, generated-code, or target
+coverage that the implementation lacks. Exclusions must state what other check
+owns the omitted boundary, or report it as incomplete.
 
 ### Bounded origin-aware analysis
 
@@ -139,11 +141,11 @@ structural ownership rules with existing compiler lints; a syntax pass alone
 does not prove that all effectful calls were found.
 
 Diagnostics carry schema version, rule, source item, target origin, location,
-classification, and a useful origin witness where available. Include remediation
-such as moving AST-to-model conversion into lowering, rather than only reporting
-an import. Order results deterministically; paths must not depend on a temporary
-checkout location. Keep human text readable without colour and JSON facts
-independent of localized wording.
+classification, and a useful origin witness where available. Include
+remediation such as moving AST-to-model conversion into lowering, rather than
+only reporting an import. Order results deterministically; paths must not
+depend on a temporary checkout location. Keep human text readable without
+colour and JSON facts independent of localized wording.
 
 ## Migration exceptions and governance
 
@@ -164,19 +166,19 @@ permitted, forbidden, exempted, unclassified, and unresolved facts.
 
 Begin with reviewed existing debt and forbid new violations. Remove the exact
 exception when its remediation lands. Do not allow a newly introduced violation
-into the baseline automatically. Policy, roots, markers, exclusions, exceptions,
-and CI invocation changes are architecture-sensitive review surfaces. Tests
-cannot prevent an authorized contributor from changing both a rule and its
-expected result; review remains part of governance.
+into the baseline automatically. Policy, roots, markers, exclusions,
+exceptions, and CI invocation changes are architecture-sensitive review
+surfaces. Tests cannot prevent an authorized contributor from changing both a
+rule and its expected result; review remains part of governance.
 
 ## Effect and semantic contracts
 
 Retain Netsuke's existing `clippy.toml` environment and current-directory rules
-and ADR-008's proportional seams. Use compiler lint probes for concrete API bans
-and the architecture checker for module ownership. Qualified `#[expect]` sites
-need reasons and coverage; broad suppression or malformed exclusions must fail
-negative probes. Do not claim an unfulfilled-expectation lint judges whether an
-exception's architectural reason is valid.
+and ADR-008's proportional seams. Use compiler lint probes for concrete API
+bans and the architecture checker for module ownership. Qualified `#[expect]`
+sites need reasons and coverage; broad suppression or malformed exclusions must
+fail negative probes. Do not claim an unfulfilled-expectation lint judges
+whether an exception's architectural reason is valid.
 
 Type/API tests enforce unresolved-state and shell-binding restrictions. Port
 contract tests exercise recording/failing and production adapters where the
@@ -186,8 +188,8 @@ failure assertions so unrelated compilation errors cannot satisfy the test.
 
 Keep `make test`'s separate nextest and doctest passes. Doctest compile-fail
 coverage must not disappear because nextest does not execute it. Pure checker
-helpers warrant property tests and, where useful, small existing proof tools; no
-new formal-verification stack is required to bootstrap enforcement.
+helpers warrant property tests and, where useful, small existing proof tools;
+no new formal-verification stack is required to bootstrap enforcement.
 
 ## Gate qualification and operational requirements
 
@@ -199,26 +201,27 @@ broaden an exception, omit a source root, and disable the gate invocation. Each
 must fail the relevant executable contract.
 
 Introduce a named `make lint-architecture` target only with its implementation.
-Wire it into normal linting and the required CI path. Execute probes through the
-actual command and shell to establish non-zero failure propagation; checking
-that a workflow contains a reassuring step name is insufficient. Coordinate
-workflow-policy ownership with RFC 0008 instead of creating another gate policy.
+Wire it into normal linting and the required CI path. Execute probes through
+the actual command and shell to establish non-zero failure propagation;
+checking that a workflow contains a reassuring step name is insufficient.
+Coordinate workflow-policy ownership with RFC 0008 instead of creating another
+gate policy.
 
 Keep non-build analysis within 1 vCPU and 2 GiB. Building the Rust checker may
 use at most 4 vCPU and 8 GiB. Cache every installation/build, prefer vetted
-binaries where available, and run most fixtures in memory. Measure cold and warm
-runtime, peak memory, and billed runner usage before making a gate required. The
-rollout must record the accepted budget; do not quietly increase runners or add
-scheduled jobs. RFC 0028 owns its separate experimental budget.
+binaries where available, and run most fixtures in memory. Measure cold and
+warm runtime, peak memory, and billed runner usage before making a gate
+required. The rollout must record the accepted budget; do not quietly increase
+runners or add scheduled jobs. RFC 0028 owns its separate experimental budget.
 
 ## Compatibility and migration
 
-No runtime behaviour or repository gate changes in this proposal. Phase 28 first
-establishes ownership and a checked baseline, then implements coverage and rule
-checks, and finally qualifies required execution. Phases 26 and 27 retire debt
-incrementally. Their delivery does not wait for a complete generic checker or
-for Paralegal. Preserve the existing release scope and contributor workflow
-until the new gate has passed its own tests.
+No runtime behaviour or repository gate changes in this proposal. Phase 28
+first establishes ownership and a checked baseline, then implements coverage
+and rule checks, and finally qualifies required execution. Phases 26 and 27
+retire debt incrementally. Their delivery does not wait for a complete generic
+checker or for Paralegal. Preserve the existing release scope and contributor
+workflow until the new gate has passed its own tests.
 
 ## Alternatives considered
 

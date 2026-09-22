@@ -30,8 +30,8 @@ silently produces a clean result. [RFC 0027][rfc] defines the proposed checks.
 Combine a repository-local Rust dependency checker, existing effect lints,
 type/API restrictions, shared port contracts, and production integration tests.
 Borrow Wildside's in-memory checker decomposition, Corbusier's ownership and
-contract discipline, and Hecate's declarative policy and explainable exceptions,
-with the adaptations and source references recorded in RFC 0027.
+contract discipline, and Hecate's declarative policy and explainable
+exceptions, with the adaptations and source references recorded in RFC 0027.
 
 Separate source inventory, bounded dependency analysis, policy evaluation, and
 rendering. Classify model and lowering separately. Missing roots, unsupported
@@ -62,14 +62,14 @@ enforcement tool.
 ## Consequences and migration
 
 Phase 28 of the [architecture roadmap](roadmap-hexagonal-hardening.md)
-introduces the policy, debt ledger, checker, executable probes, and qualified CI
-gate. Phases 26 and 27 can retire debt before the full checker is complete. Do
-not block those transformations on optional semantic analysis.
+introduces the policy, debt ledger, checker, executable probes, and qualified
+CI gate. Phases 26 and 27 can retire debt before the full checker is complete.
+Do not block those transformations on optional semantic analysis.
 
 Build/cache installation follows existing runner limits: at most 4 vCPU and 8
 GiB for builds and 1 vCPU and 2 GiB for non-build checks. Record measured cold
-and warm cost before required CI adoption; do not add recurring work or silently
-increase runner size. Documentation acceptance alone installs no gate.
+and warm cost before required CI adoption; do not add recurring work or
+silently increase runner size. Documentation acceptance alone installs no gate.
 
 ## Known risks and limitations
 

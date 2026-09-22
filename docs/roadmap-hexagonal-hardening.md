@@ -1,22 +1,23 @@
 # Netsuke hexagonal hardening and checking roadmap
 
 This proposed continuation of the [main roadmap](roadmap.md) owns phases 26 to
-29. It covers internal semantic hardening, application boundaries, executable
+29, covering internal semantic hardening, application boundaries, executable
 architecture policy, and a bounded Paralegal experiment. No task is complete
 merely because its RFC or ADR has been written.
 
 ## Allocation and scope
 
 Existing task identifiers remain unchanged. Phases 16 to 19 belong to the
-[composition roadmap](roadmap-composition.md). [PR #741][progressive-pr]
+[composition roadmap](roadmap-composition.md). [PR `#741`][progressive-pr]
 reserves phases 20 to 25 and RFCs 0021 to 0025 for progressive orchestration.
-[PR #697][stdlib-pr] reserves RFCs 0013 to 0020. This programme therefore uses
-RFCs 0026 to 0028 and phases 26 to 29. Open ADR allocations were re-checked at
-rebase time, after `main` published [ADR-029][main-adr-029] using a number this
-programme had drafted. Every open allocation through 034 was therefore counted
-as taken, whether or not it has merged, and the three decision records here were
-renumbered to [ADR-035][adr-model], [ADR-036][adr-checks], and
-[ADR-037][adr-experiment]. Published identifiers must not be silently reused.
+[PR `#697`][stdlib-pr] reserves RFCs 0013 to 0020. This programme therefore
+uses RFCs 0026 to 0028 and phases 26 to 29, with open ADR allocations
+re-checked at rebase time, after `main` published [ADR-029][main-adr-029] using
+a number this programme had drafted. Every open allocation through 034 was
+therefore counted as taken, whether or not it has merged, and the three
+decision records here were renumbered to [ADR-035][adr-model],
+[ADR-036][adr-checks], and [ADR-037][adr-experiment]. Published identifiers
+must not be silently reused.
 
 The governing proposals are [RFC 0026][hardening], [RFC 0027][checking], and
 [RFC 0028][experiment], with [ADR-035][adr-model], [ADR-036][adr-checks], and
@@ -46,17 +47,17 @@ service is required. All proposed implementation tasks begin unchecked.
   binding, application execution, and semantic diagnostics. They are not
   fabricated GitHub issue numbers. Implementation issues should cite these task
   identifiers and their owning RFC rather than duplicate the programme.
-- Issue #652 / PR #714 supplied canonical edges. The inspected baseline already
-  has the arena and output index; new work preserves and tests them.
-- Issue #705 owns the typed redirect boundary. Verify its current disposition;
+- Issue `#652` / PR `#714` supplied canonical edges. The inspected baseline
+  already has the arena and output index; new work preserves and tests them.
+- Issue `#705` owns the typed redirect boundary. Verify its current disposition;
   the experiment must not recreate completed extraction work.
-- H5 is conditional integration with #592/#593 and composition phases 16 to 19.
-  H6 is conditional reuse under the URL-provider work in #590.
-- #591 and RFC 0007 continue to own restricted manifest testing. Initial
+- H5 is conditional integration with `#592`/`#593` and composition phases 16
+  through 19. H6 is conditional reuse under the URL-provider work in `#590`.
+- `#591` and RFC 0007 continue to own restricted manifest testing. Initial
   manifest testing does not acquire action execution as a new prerequisite.
-- RFC 0001 and amendments retain structured-command ownership; #593 and phase 11
-  retain their existing integration scope. #699 owns disputed legacy placeholder
-  decisions. RFC 0008 owns shared workflow-policy machinery.
+- RFC 0001 and amendments retain structured-command ownership; `#593` and phase
+  11 retain their existing integration scope. `#699` owns disputed legacy
+  placeholder decisions. RFC 0008 owns shared workflow-policy machinery.
 
 ## 26. Trustworthy resolved build semantics
 
@@ -73,7 +74,7 @@ unrepresentable or rejected, and compatibility/canonical-edge evidence passes.
 - [ ] 26.1.1. Record a revision-pinned model and consumer inventory.
   - Identify authored types, lowering, graph storage, backend consumers, CLI
     orchestration, diagnostics, and existing seams at the implementation head.
-  - Record landed work and remaining H1 to H4 findings without repeating #652.
+  - Record landed work and remaining H1 to H4 findings without repeating `#652`.
   - Acceptance: every planned change maps to a current item and compatibility
     obligation; the inventory includes every production constructor and mutator.
   - Dependencies: acceptance of RFC 0026; no Paralegal dependency.
@@ -82,7 +83,7 @@ unrepresentable or rejected, and compatibility/canonical-edge evidence passes.
     declaration precedence, dependency-only nodes, and command/script variants.
   - Acceptance: observed and intended behaviour are distinguished, unsupported
     delegation has a reviewed typed-error policy, and disputed placeholder
-    semantics defer to #699 rather than changing incidentally.
+    semantics defer to `#699` rather than changing incidentally.
   - Dependencies: 26.1.1.
 
 ### 26.2. Own resolved operations in the model
@@ -106,7 +107,7 @@ unrepresentable or rejected, and compatibility/canonical-edge evidence passes.
   - Acceptance: golden/property tests and applicable existing Kani harnesses
     pass; changed hashes have an explicit rebuild rationale, not unexplained
     snapshot acceptance. Remove the exact retired H1 exception when present.
-  - Dependencies: 26.2.2; retain the existing #652 implementation.
+  - Dependencies: 26.2.2; retain the existing `#652` implementation.
 
 ### 26.3. Bind interpreter selection to lowering
 
@@ -183,18 +184,21 @@ not required to close the initial H3/H4 delivery.
 ### 27.3. Join existing feature work only when justified
 
 - [ ] 27.3.1. Integrate compiler-owned provenance with composition and linting.
-  - Entry condition: #592/#593 consumers or composition require shared origins.
+  - Entry condition: `#592`/`#593` consumers or composition require shared
+    origins.
   - Acceptance: one compiler-owned mapping handles expansion and included
     sources, ambiguous origins remain explicit, and diagnostic/suppression tests
     cannot select a different declaration by guessing its source location.
   - Dependencies: the applicable composition/linter implementation; no new
     semantic compiler. This conditional task is not an initial hardening gate.
 - [ ] 27.3.2. Reuse acquisition outside MiniJinja for the URL provider.
-  - Entry condition: #590 supplies a second real resource-acquisition consumer.
+  - Entry condition: `#590` supplies a second real resource-acquisition
+    consumer.
   - Acceptance: shared requests/results contain no MiniJinja types; redirect,
     credential, deadline, resource-limit, redaction, and cache-only contracts
     pass. Freshness and metadata import remain separate from byte acquisition.
-  - Dependencies: #590's approved provider scope and current redirect policy. Do
+  - Dependencies: `#590`'s approved provider scope and current redirect policy.
+    Do
     not add this port merely to support helper mocks or Paralegal.
 
 ## 28. Executable architecture policy and governance
@@ -313,7 +317,7 @@ tasks remain unchecked and explicitly deferred/not applicable in the result.
     an explicit statement of initial-hop coverage and stateful-flow limitations.
   - Acceptance: no unnecessary production rewrite to please the analyser; a
     different approved value cannot justify dispatch of an unchecked target.
-  - Dependencies: compatible 29.1.2; inspect #705's current implementation
+  - Dependencies: compatible 29.1.2; inspect `#705`'s current implementation
     first.
 - [ ] 29.2.3. Evaluate independent controls and incremental detection value.
   - For each retained policy, run six seeded violations, three legitimate

@@ -36,21 +36,22 @@ an enforced shell-bound recipe or plan. Keep AST-to-model conversion in the
 compiler, which may depend on both representations. Restrict construction and
 mutation so the backend can trust successful lowering.
 
-Map inbound CLI/configuration state into application-owned requests. Introduce a
-narrow execution port with a production Ninja adapter and a recording/failing
+Map inbound CLI/configuration state into application-owned requests. Introduce
+a narrow execution port with a production Ninja adapter and a recording/failing
 implementation. Preserve temporary artefact and lease ownership through the
 preparation/execution lifecycle. Do not substitute arbitrary filesystem paths
 for capabilities or create a general process framework.
 
-Keep semantic diagnostics as typed facts. Render Fluent and structured output at
-presentation boundaries and classify recipe-validation failures before they
+Keep semantic diagnostics as typed facts. Render Fluent and structured output
+at presentation boundaries and classify recipe-validation failures before they
 become parser display strings. Preserve diagnostic and manifest compatibility.
 
 Continue [ADR-008](adr-008-environment-seam-taxonomy.md)'s proportionate seams,
-[ADR-014](adr-014-backend-text-escaping-seam.md)'s backend escaping ownership,
-and [ADR-006](adr-006-adopt-polonius-nightly-toolchain.md)'s compiler contract.
-No universal effects interface, folder-first rewrite, or broad crate split is
-part of this decision. Pure transformations remain functions.
+[ADR-014](adr-014-backend-text-escaping-seam.md)'
+s backend escaping ownership, and
+[ADR-006](adr-006-adopt-polonius-nightly-toolchain.md)'s compiler contract. No
+universal effects interface, folder-first rewrite, or broad crate split is part
+of this decision. Pure transformations remain functions.
 
 ## Alternatives considered
 
@@ -62,10 +63,10 @@ establishing the missing invariants. Prefer narrow semantic changes.
 ## Consequences and migration
 
 Phases 26 and 27 of the [architecture roadmap](roadmap-hexagonal-hardening.md)
-characterize behaviour, migrate recipes and shell binding, separate diagnostics,
-and expose the application contract. Types, behavioural/property tests, and
-adapter integration tests establish the resulting guarantees. The structural
-checker provides a no-new-violations policy during migration.
+characterize behaviour, migrate recipes and shell binding, separate
+diagnostics, and expose the application contract. Types, behavioural/property
+tests, and adapter integration tests establish the resulting guarantees. The
+structural checker provides a no-new-violations policy during migration.
 
 Provenance and resource-fetching extensions retain the existing composition,
 linter, and URL-provider owners; they are conditional rather than immediate

@@ -13,13 +13,13 @@
 
 ## Summary
 
-Test whether Paralegal provides useful, affordable evidence about semantic flows
-that the structural checker and Rust types do not already enforce. The first
-question is whether it can analyse actual Netsuke production code with Netsuke's
-required Rust toolchain. A failed or inconclusive compatibility check stops the
-pilot. It does not authorize a compiler downgrade or block the hardening in [RFC
-0026](0026-hexagonal-domain-hardening.md) and [RFC
-0027](0027-executable-architecture-contract.md).
+Test whether Paralegal provides useful, affordable evidence about semantic
+flows that the structural checker and Rust types do not already enforce. The
+first question is whether it can analyse actual Netsuke production code with
+Netsuke's required Rust toolchain. A failed or inconclusive compatibility check
+stops the pilot. It does not authorize a compiler downgrade or block the
+hardening in [RFC 0026](0026-hexagonal-domain-hardening.md) and
+[RFC 0027](0027-executable-architecture-contract.md).
 
 No Paralegal dependency, marker, installation, workflow, or mandatory check is
 introduced by this RFC. All thresholds below are proposed experimental decision
@@ -64,9 +64,9 @@ The preflight must perform these steps before designing production policies:
    Resolve the then-current pins again when executing the experiment.
 2. Establish a successful ordinary build/check for the same selected production
    configuration. Preserve the toolchain, Polonius tags, trait-solver contract,
-   dependencies, and production implementation. Do not cure analyser problems by
-   cloning values, replacing borrow-returning APIs, disabling relevant features,
-   or adding old-compiler workarounds.
+   dependencies, and production implementation. Do not cure analyser problems
+   by cloning values, replacing borrow-returning APIs, disabling relevant
+   features, or adding old-compiler workarounds.
 3. Check installation and compiler-driver compatibility, including matching
    compiler-development components. Distinguish the tool's build compiler from
    the compiler that actually analyses Netsuke; a `cargo +...` spelling alone
@@ -80,17 +80,18 @@ The preflight must perform these steps before designing production policies:
 
 A pass is **compatible for the recorded production configuration**, not all
 Netsuke code or platforms. Instrumentation-only annotations may identify the
-path, but the implementation must remain the production implementation. A shared
-production package may support a narrower scoped result; copied, rewritten, or
-behaviourally substituted demonstration code cannot establish Netsuke
-compatibility. Analyse every configuration later claimed by a policy.
+path, but the implementation must remain the production implementation. A
+shared production package may support a narrower scoped result; copied,
+rewritten, or behaviourally substituted demonstration code cannot establish
+Netsuke compatibility. Analyse every configuration later claimed by a policy.
 
 Classify the outcome as compatible, incompatible, or inconclusive. Incompatible
 and inconclusive outcomes stop later gates and retain evidence. Record whether
 an upstream port could address the blocker, but any analyser port needs a
 separate owner, bounded proposal, and approval. Do not make such a port an
-implicit dependency of Netsuke hardening. Never downgrade Netsuke to Paralegal's
-older compiler or accept a substituted analysis compiler as the P0 pass.
+implicit dependency of Netsuke hardening. Never downgrade Netsuke to
+Paralegal's older compiler or accept a substituted analysis compiler as the P0
+pass.
 
 ### P1: Semantic checks must add distinguishable value
 
@@ -137,17 +138,19 @@ unsupported construct, stale graph, or incomplete extraction is not success.
 Compare expected symbols and annotations with the extracted graph. Do not rely
 solely on the analyser's default warning behaviour or a no-violations result.
 
-Hash the analysed source and dependency/configuration inputs. Cached graphs must
-match that identity. Cache keys include analyser and compiler identities,
-lockfile, target, features, policy/marker configuration, and extraction options.
-A policy-only rerun may reuse a graph only when its recorded extraction inputs
-remain valid. Policy or approximation changes require fresh qualification.
+Hash the analysed source and dependency/configuration inputs. Cached graphs
+must match that identity. Cache keys include analyser and compiler identities,
+lockfile, target, features, policy/marker configuration, and extraction
+options. A policy-only rerun may reuse a graph only when its recorded
+extraction inputs remain valid. Policy or approximation changes require fresh
+qualification.
 
 Use proposed ceilings of 4 vCPU and 8 GiB for build/analysis and 1 vCPU and 2
-GiB for non-build report checks. Bound P0 provisioning plus its first extraction
-to 30 minutes of runner wall time; stop with an inconclusive result when the
-budget expires. Separately measure provisioning, compilation, extraction, policy
-evaluation, and report processing. No unbounded retry loop is permitted.
+GiB for non-build report checks. Bound P0 provisioning plus its first
+extraction to 30 minutes of runner wall time; stop with an inconclusive result
+when the budget expires. Separately measure provisioning, compilation,
+extraction, policy evaluation, and report processing. No unbounded retry loop
+is permitted.
 
 For a qualified, provisioned policy suite, target at most 15 minutes cold and 3
 minutes warm per run, within the same memory ceiling. Record one cold run and
@@ -159,10 +162,10 @@ another run; changing a threshold after seeing a failure is not a pass.
 
 Prefer a vetted pinned binary when available. Otherwise provision a cached,
 versioned analyser/toolchain bundle in a separately bounded build, recording
-provenance and integrity. Do not run an unpinned remote installer or rebuild the
-analyser in every pull request. Separate provisioning cost from marginal check
-cost, but include both in the adoption assessment. Add no recurring job or
-larger runner as an incidental experiment change.
+provenance and integrity. Do not run an unpinned remote installer or rebuild
+the analyser in every pull request. Separate provisioning cost from marginal
+check cost, but include both in the adoption assessment. Add no recurring job
+or larger runner as an incidental experiment change.
 
 ### P3: Make an explicit retain, defer, or reject decision
 
@@ -188,12 +191,12 @@ indefinite monitoring obligation.
 
 ## Evidence and governance contract
 
-Each result records the gate and outcome; source, compiler, analyser, and policy
-identities; command and environment/configuration inputs; roots and expected
-symbols; coverage and unsupported cases; fixture and hold-out results; all
-measurements; artefact digests; exceptions; reviewer; and decision rationale.
-Use explicit statuses for satisfied, violated, exempted, not applicable by
-policy, and incomplete. Not applicable requires a reviewed reason.
+Each result records the gate and outcome; source, compiler, analyser, and
+policy identities; command and environment/configuration inputs; roots and
+expected symbols; coverage and unsupported cases; fixture and hold-out results;
+all measurements; artefact digests; exceptions; reviewer; and decision
+rationale. Use explicit statuses for satisfied, violated, exempted, not
+applicable by policy, and incomplete. Not applicable requires a reviewed reason.
 
 Marker meanings, constructors, analysis roots, approximation settings, trusted
 summaries, exclusions, and CI invocation are architectural review surfaces. An

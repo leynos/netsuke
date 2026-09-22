@@ -33,8 +33,8 @@ identifiers H1 to H6 are local finding identifiers, not issue numbers.
 - H1: [`ir::Action`](../../src/ir/graph.rs) still stores `ast::Recipe`.
   Successful lowering should instead yield a domain operation that cannot
   contain unresolved rule references or a dependency-only empty-command
-  sentinel. Lowering may import both representations; model definitions must not
-  depend on the authored representation.
+  sentinel. Lowering may import both representations; model definitions must
+  not depend on the authored representation.
 - H2: shell-specific interpolation and backend shell selection need one enforced
   ownership contract. Retain the interpreter used for lowering rather than
   trusting every caller to repeat the same choice.
@@ -51,9 +51,10 @@ identifiers H1 to H6 are local finding identifiers, not issue numbers.
   the URL dependency provider needs the same acquisition infrastructure.
 
 Canonical edge ownership has already landed: `BuildGraph` stores an edge arena
-and indexes outputs by `EdgeId`. Preserve that result from issue #652 and PR
-#714; do not schedule its implementation again. Similarly, inspect the current
-redirect boundary and issue #705 before planning any further extraction.
+and indexes outputs by `EdgeId`. Preserve that result from issue `#652` and PR
+`#714`; do not schedule its implementation again. Similarly, inspect the
+current redirect boundary and issue `#705` before planning any further
+extraction.
 
 [process-requests]: ../../src/runner/process/request.rs
 
@@ -66,8 +67,8 @@ ordinary quickstart unchanged.
 
 This proposal does not introduce a backend plugin ecosystem, a generic process
 framework, a universal effects service, or a crate split. It does not implement
-the structured-command, bundle, state, or maturity-policy programmes by stealth.
-A trait is not required for a pure transformation or a better sum type.
+the structured-command, bundle, state, or maturity-policy programmes by
+stealth. A trait is not required for a pure transformation or a better sum type.
 
 ## Proposed design
 
@@ -92,9 +93,9 @@ a typed compiler diagnostic. Do not silently change declaration precedence or
 reinterpret malformed recipes during a representation refactor.
 
 A dependency-only operation is not an executable whose command happens to be
-empty. The Ninja adapter owns its encoding. Preserve `phony`, `always`, explicit
-and implicit outputs, dependency ordering, and rebuild semantics independently
-of the executable/dependency-only distinction.
+empty. The Ninja adapter owns its encoding. Preserve `phony`, `always`,
+explicit and implicit outputs, dependency ordering, and rebuild semantics
+independently of the executable/dependency-only distinction.
 
 The canonical edge arena remains authoritative. All aliases identify the same
 edge, insertion remains atomic on duplicate outputs, and graph consumers visit
@@ -111,14 +112,14 @@ masquerading as validated lowering.
 
 Do not add a second quoting pass. Preserve the division between shell quoting
 and Ninja text escaping in [ADR-014][escaping]. Preserve the legacy placeholder
-contract while characterizing it; the separate command-placeholder work in [PR
-#699][placeholder-pr] owns any disputed compatibility decision.
+contract while characterizing it; the separate command-placeholder work in
+[PR `#699`][placeholder-pr] owns any disputed compatibility decision.
 
-The future structured-command representation may separate logical and executable
-plans more completely. Coordinate with RFC 0001, RFC 0011, and ADR-019 without
-requiring their full runner before closing the existing shell selection hole. A
-shared configuration dependency does not prove that two interpreter values are
-equal; types and mismatch tests enforce that invariant.
+The future structured-command representation may separate logical and
+executable plans more completely. Coordinate with RFC 0001, RFC 0011, and
+ADR-019 without requiring their full runner before closing the existing shell
+selection hole. A shared configuration dependency does not prove that two
+interpreter values are equal; types and mismatch tests enforce that invariant.
 
 [escaping]: ../adr-014-backend-text-escaping-seam.md
 [placeholder-pr]: https://github.com/leynos/netsuke/pull/699
@@ -146,11 +147,12 @@ insufficient. Keep the [dyndep retention contract][retention] and
 capability-bearing directories. An unrestricted filesystem repository interface
 would weaken rather than improve the boundary.
 
-Specify success, failure, stream delivery, cancellation where already supported,
-and cleanup behaviour once. Run the shared applicable contract against both
-implementations, with separate real-process and filesystem integration tests for
-production-only effects. The first manifest-testing release remains independent
-of action execution; reuse its existing compiler path rather than broadening it.
+Specify success, failure, stream delivery, cancellation where already
+supported, and cleanup behaviour once. Run the shared applicable contract
+against both implementations, with separate real-process and filesystem
+integration tests for production-only effects. The first manifest-testing
+release remains independent of action execution; reuse its existing compiler
+path rather than broadening it.
 
 [retention]: ../adr-012-bound-dyndep-sidecar-retention.md
 
@@ -158,9 +160,9 @@ of action execution; reuse its existing compiler path rather than broadening it.
 
 Represent compiler failures as typed facts with stable classifications and
 optional source origins. A renderer maps those facts to Fluent messages,
-human-readable diagnostics, and structured output. A variant must not store both
-an authoritative target/rule and an independently supplied message that can
-contradict it.
+human-readable diagnostics, and structured output. A variant must not store
+both an authoritative target/rule and an independently supplied message that
+can contradict it.
 
 Preserve useful underlying syntax errors and causes at the frontend boundary.
 Recognize recipe-validation failures while they remain typed, not by matching a
@@ -170,17 +172,19 @@ exit behaviour, localization, and structured output before changing storage.
 
 ### Conditional extensions with existing owners
 
-H5 joins issues #592 and #593 and composition phases 16 to 19. Return semantic
-results and a compiler-owned origin map together. Expansion and composition must
-retain source identity without duplicating the semantic compiler; unknown
-origins stay explicit. Lexical indexing remains permissible inside the compiler.
+H5 joins issues `#592` and `#593` and composition phases 16 to 19, returning
+semantic results and a compiler-owned origin map together. Expansion and
+composition must retain source identity without duplicating the semantic
+compiler; unknown origins stay explicit. Lexical indexing remains permissible
+inside the compiler.
 
-H6 joins issue #590 only when its second consumer exists. Separate acquisition
-from dependency freshness and metadata import. A shared acquisition service must
-not expose MiniJinja types. Keep redirects, credentials, network policy, limits,
-redaction, and cache-only semantics authoritative on every applicable hop. Reuse
-capabilities and streaming abstractions. Do not create another ambient network
-route or an HTTP port solely for manifest-helper mocking.
+H6 joins issue `#590` only when its second consumer exists. Separate
+acquisition from dependency freshness and metadata import. A shared acquisition
+service must not expose MiniJinja types. Keep redirects, credentials, network
+policy, limits, redaction, and cache-only semantics authoritative on every
+applicable hop. Reuse capabilities and streaming abstractions. Do not create
+another ambient network route or an HTTP port solely for manifest-helper
+mocking.
 
 These extensions have entry criteria in the roadmap, not unconditional initial
 implementation commitments.
@@ -190,8 +194,8 @@ implementation commitments.
 [ADR-008](../adr-008-environment-seam-taxonomy.md) continues to govern
 proportionate environment seams. [ADR-006][toolchain-adr] continues to govern
 the Rust toolchain and borrow-centric implementation. Preserve the
-next-generation trait solver contract in `AGENTS.md`; no analysis tool justifies
-weakening it.
+next-generation trait solver contract in `AGENTS.md`; no analysis tool
+justifies weakening it.
 
 Implementation must characterize manifest acceptance, graph export, generated
 Ninja, diagnostics, and library entry points before extraction. Internal Rust
@@ -201,9 +205,9 @@ ordering, and escaping tests. Explain any necessary hash change and its rebuild
 consequences rather than accepting unexplained snapshot churn.
 
 Keep the quickstart, existing unannotated manifests, and shallow-end onboarding
-unchanged. This programme is not an additional v0.1.0 release gate. A separately
-reproduced release-critical defect may justify a focused fix; the broader
-transformation must not expand the release stabilization scope.
+unchanged. This programme is not an additional v0.1.0 release gate. A
+separately reproduced release-critical defect may justify a focused fix; the
+broader transformation must not expand the release stabilization scope.
 
 [toolchain-adr]: ../adr-006-adopt-polonius-nightly-toolchain.md
 
@@ -248,5 +252,5 @@ fixes their obligations, not an untested Rust signature.
 ## Recommendation
 
 Accept the semantic and ownership boundaries in ADR-035, then deliver them in
-small, independently verified changes. Add ports at real external conversations;
-use types for invalid states and functions for pure compilation.
+small, independently verified changes. Add ports at real external
+conversations; use types for invalid states and functions for pure compilation.

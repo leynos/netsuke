@@ -32,8 +32,8 @@ operator, user, and contributor references are easier to find.
   Phases 20 to 25 for shallow-end compatibility, optional typed inputs,
   contention classes, states and probes, owned cleanup, and maturity policies.
 - [roadmap-hexagonal-hardening.md](roadmap-hexagonal-hardening.md):
-  Proposed phases 26 to 29 for semantic hardening, architecture checking, and
-  a compatibility-gated Paralegal experiment.
+  Proposed phases 26 to 29 for semantic hardening, architecture checking, and a
+  compatibility-gated Paralegal experiment.
 - [archive/roadmap-completed-foundations.md](archive/roadmap-completed-foundations.md):
   Archived completed roadmap foundations with relevance assessments and
   traceability notes.
