@@ -3330,8 +3330,9 @@ verifies the harnesses under the Kani configuration with warnings allowed;
 with warnings denied. They are separate because they answer different
 questions: the first asks whether the harnesses hold, the second whether they
 can still be reached at all. The gate compiles each patch into one shared
-`CARGO_TARGET_DIR` so the eighteen patches reuse a single compiled dependency
-graph rather than rebuilding it apiece.
+`CARGO_TARGET_DIR`, so successive patches reuse a single compiled dependency
+graph rather than rebuilding it apiece: each patch touches one file, so only
+that crate and its dependants recompile.
 
 `netsukefile` and `kani-smoke` differ in platform or in purpose, so neither is
 a candidate for folding. The Windows gate keeps its own `cargo nextest` pass
