@@ -1,7 +1,14 @@
 diff --git a/src/ir/cmd_interpolate/substitution.rs b/src/ir/cmd_interpolate/substitution.rs
+index cae1ab8a..2947088b 100644
 --- a/src/ir/cmd_interpolate/substitution.rs
 +++ b/src/ir/cmd_interpolate/substitution.rs
-@@ -386,7 +386,7 @@ fn append_unprotected_character(
+@@ -381,13 +381,13 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
+         ch: char,
+         substitution: Option<(super::Placeholder, usize)>,
+     ) -> usize {
+-        let Some((placeholder, skip)) = substitution else {
++        let Some((_placeholder, skip)) = substitution else {
+             self.output.push(ch);
              return pos + 1;
          };
          self.output.push_str(

@@ -1,13 +1,14 @@
 # Add Kani harnesses for command interpolation (roadmap 4.2.3)
 
 This ExecPlan (execution plan) is a living document. The sections `Constraints`,
-`Tolerances`, `Risks`, `Progress`, `Surprises & discoveries`, `Decision log`,
+`Tolerances`, `Risks`, `Reconciliation against acceptance criteria`,
+`Progress`, `Surprises & discoveries`, `Decision log`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
 Status: COMPLETE
 
-Revision 2.26. See `Revision note` at the foot of this document.
+Revision 2.30. See `Revision note` at the foot of this document.
 
 ## Purpose / big picture
 
@@ -38,11 +39,13 @@ its bound admits — the two feasible placeholder kernels:
 2. the internal marker tokens match exact text, including when adjacent to
    identifier characters.
 
-The production scanner and guard exceed the five-minute resource cap even at
-small string bounds. Independent Proptest properties therefore cover templates
-up to 256 characters with at most eight placeholders: scanner agreement, POSIX
-protected-placeholder rejection, odd-backtick rejection, and guard placement on
-the substituted command.
+The production scanner and guard exceed a five-minute resource budget even at
+small string bounds; the cap that kills a runaway run is enforced by the
+wrapper above, not by a wall-clock budget chosen for these harnesses.
+Independent Proptest properties therefore cover templates up to 256 characters
+with at most eight placeholders: scanner agreement, POSIX protected-placeholder
+rejection, odd-backtick rejection, and guard placement on the substituted
+command.
 
 "Exhaustively, within a bound" is the important phrase. Kani does not sample.
 For every input inside the bound it either proves the property or produces a
@@ -57,6 +60,151 @@ contract and updates its Proptest oracle accordingly. PowerShell keeps its
 native backtick-escape semantics. The maintainer-facing change remains two more
 verified harnesses, guide inventory rows, and a mutation-evidence contract that
 cannot silently rot.
+
+## Reconciliation against acceptance criteria (2026-09-20, issue #738)
+
+Issue #738 recorded this plan as `Status: IN PROGRESS` on the strength of
+Revision 2.24, which noted that the documented `LD_LIBRARY_PATH`-capped full
+Kani run exited 124 before the suite completed. That premise is out of date.
+Revision 2.27 had already moved the header to `COMPLETE` in commit `d30b33eb`
+(PR #586, merged 2026-09-18), under the authority order that the `Progress` and
+`Outcomes` sections and the roadmap checkbox outrank the header. That note
+dates itself 2026-09-16; the commit's own timestamp is 2026-09-18, and the
+commit is cited here so the claim does not rest on either date. This section
+re-derives the verdict from fresh evidence rather than deferring to either
+revision.
+
+### Acceptance criterion: the capped full `make kani-ir` run
+
+**Met.** On 2026-09-20 the documented `LD_LIBRARY_PATH`-capped wrapper was run
+against `61a944fb` with `KANI_FLAGS="--jobs 4 --output-format terse"`:
+
+```plaintext
+Complete - 15 successfully verified harnesses, 0 failures, 15 total.
+```
+
+The run completed with all 15 harnesses reporting `VERIFICATION:- SUCCESSFUL`
+and zero `FAILED` lines, resolving the Revision 2.24 exit-124 shortfall: the
+earlier failure was the wrapper's five-minute cap under sequential scheduling,
+not a working-tree defect, and the supported `--jobs 4 --output-format terse`
+pair clears it. That cap did not in fact bind. `timeout` signals only its
+direct child, and `--scope` detaches the payload into its own cgroup, so the
+prefix capped the launcher while the suite ran to completion under it. It has
+been replaced by `-p RuntimeMaxSec=` on the scope, which systemd enforces
+against the cgroup and which kills the whole process tree. The two figures to
+cite are therefore the scope's own lifetime, 5m03s, and CI's
+`Run Kani harnesses` step, 5m19s in `CI` run `35647353965` on `99cbdf32`. Log:
+`/tmp/kani-full-<branch>.out`, where `<branch>` is the current branch name as
+reported by `git branch --show-current`.
+
+The two command-interpolation proofs and their covers were confirmed
+individually in the same run: `shell_variable_prefix_does_not_match` satisfied
+3 of 3 covers, and `marker_token_match_is_exact` satisfied 4 of 4.
+
+### Acceptance criterion: mutation evidence
+
+**Met after repair.** Three of the five command-interpolation mutation patches
+already produced their named counterexamples. Two did not: `-D warnings`
+entered the `kani-full` recipe on 2026-09-18 (#714), and both of the broken
+patches seed their fault by leaving a binding unused. That was a warning when
+the patches were written and became a hard compile error, so the patched tree
+failed to build and yielded no mutation evidence at all. Both were regenerated
+in commit `c71984fa` and re-verified:
+
+- `marker_token_match_is_exact` fails on
+  `Failed Checks: marker match agrees with exact text`, then passes after
+  restoration.
+- `scanner_agrees_with_independent_specification` fails on
+  `template = "__NETSUKE_OUTS_PLACEHOLDER__", ins = "", outs = "a"`, then
+  passes after restoration.
+- `shell_variable_prefix_does_not_match` fails on
+  `Failed Checks: literal shell-variable prefixes are not Netsuke markers`,
+  then passes after restoration.
+- `substituted_odd_backticks_are_rejected` fails with:
+
+  ```plaintext
+  Test failed: odd substituted command was accepted: Ok("`")
+  minimal failing input: template = "`", ins = "", outs = ""
+  ```
+
+  then passes after restoration.
+- `guard_uses_the_substituted_command` fails on
+  `Test failed: guard accepted an invalid substituted command`, then passes
+  after restoration.
+
+All five are therefore load-bearing. `tests/kani_mutation_evidence_tests.rs`
+passes with 3 of 3 tests.
+
+### Acceptance criterion: deterministic and documentation gates
+
+**Met.** Run against the tree at this revision: `make check-fmt`, `make lint`,
+`make test` (3,309 nextest tests passed, 5 skipped, plus 123 doctests across
+two targets), `make typecheck`, `make doc-coverage` (98.81%),
+`make markdownlint` (145 files, 0 errors), and `make nixie` all exited zero.
+Gate logs follow the `/tmp/$ACTION-netsuke-<branch>.out` pattern used elsewhere
+in this directory; `$ACTION` is the `make` target name and `<branch>` is this
+branch, `issue-738-reconcile-roadmap-4-2-3-with-execplan-completion-evidence`.
+The Kani log's pattern omits the `netsuke-` infix.
+
+CI ran against `99cbdf32`, the branch head at the time of this reconciliation,
+as `CI` run `35647353965`, `Netsukefile Build Test` run `35647353639`, and
+`Release Dry Run` run `35647369209`. All three concluded `success`: all five
+`CI` jobs (`build-test`, `kani-smoke`, `Windows / build-test-windows`,
+`Windows / lint-windows`, `Windows / windows-msi-upgrade`) and every
+`Release Dry Run` job except the release step itself, which `release.yml` gates
+on `should_publish == 'true'` and therefore skips on a non-release branch.
+
+The earlier corroborating runs, `35540281807` and `35540281742`, are retained
+only as history: they were made against `3d22f884`, which is the pre-rebase
+identity of the commit now replayed as `6a1e2f7b`, so they describe neither an
+ancestor of the current head nor its tree.
+
+### Acceptance criterion: trace links
+
+**Met.** All five trace-link targets resolve to a single live definition each:
+`shell_variable_prefix_does_not_match`, `marker_token_match_is_exact`,
+`scanner_agrees_with_independent_specification`,
+`substituted_odd_backticks_are_rejected`, and
+`guard_uses_the_substituted_command`. `ADR-004` and
+`docs/formal-verification-methods-in-netsuke.md` both exist and state the
+achieved bounds and the Proptest hand-off.
+
+### Acceptance criterion: review evidence
+
+**Met.** `coderabbit review --agent` returned zero findings for the patch
+repair in commit `c71984fa`. The `Progress` section records zero findings at
+EP-M2, EP-M5, and EP-M6 as well.
+
+### Verdict
+
+Every acceptance criterion passes, so the header stays `COMPLETE` and
+`docs/roadmap.md` keeps its `[x]` marks. **No roadmap correction is required.**
+The one substantive change this issue produced is the repair of the two
+mutation patches, which is a defect in this plan's own non-vacuity evidence
+rather than a change to its completion state.
+
+### Raised, not fixed: three further patches broken by the same change
+
+The `-D warnings` change broke five patches in total. Three lie outside this
+plan and were left alone, per this document's own instruction to raise roadmap
+4.2.1 and 4.2.2 concerns rather than silently fix them:
+
+- `ir__from_manifest__verification__empty_rule_shape_is_rejected`
+  (`unused function: empty_rule_error`, `empty_rule_message`);
+- `ir__from_manifest__verification__multiple_rule_shape_is_rejected`
+  (`unused function: sort_strings`, `string_cmp`; also a redundant `mut`);
+- `ir__cycle__verification__canonicalize_two_node_cycle_is_canonical`
+  (a redundant `mut`, surfacing as `variable does not need to be mutable`).
+
+All three still pass `git apply --check`, so the contract test reports nothing:
+its `every_patch_applies_cleanly` check proves a patch *applies*, not that the
+patched tree *compiles*. Each therefore now contributes zero mutation evidence
+while appearing healthy. This is the same blind spot this plan's `OBL-PATCHES`
+was created to close, one level deeper. The cheapest systemic fix is to widen
+that contract test to `cargo check` each patched tree under `-D warnings`; that
+is a repository-wide change, so it was filed as issue #756 rather than made
+here. That issue carries the exact compiler errors for all three patches above,
+reproduced against a clean tree at `f0bff1bc`.
 
 ## Context and orientation
 
@@ -196,10 +344,11 @@ you must follow:
   realistic fault that the harness must reject.
 - **Resource capping.** Roadmap 4.2.2 established that uncapped local Kani runs
   OOM-killed developer machines. Every Kani command runs inside the
-  `timeout`-plus-`systemd-run` wrapper in `Concrete steps`, with the Kani
-  `LD_LIBRARY_PATH` set. Without that `LD_LIBRARY_PATH`, `cargo kani` and Cargo
-  build scripts fail to load `libLLVM` with an opaque linker error. This is the
-  single most likely place to get stuck.
+  `systemd-run` wrapper in `Concrete steps`, whose `RuntimeMaxSec` property is
+  what enforces the cap, with the Kani `LD_LIBRARY_PATH` set. Without that
+  `LD_LIBRARY_PATH`, `cargo kani` and Cargo build scripts fail to load
+  `libLLVM` with an opaque linker error. This is the single most likely place
+  to get stuck.
 
 The pre-existing inventory is thirteen harnesses across
 `src/ir/from_manifest_verification.rs` (four) and
@@ -1044,18 +1193,26 @@ Expect `prover-tools:` diagnostic lines on standard error and exit zero.
 
 ### Running Kani (always capped, always with `LD_LIBRARY_PATH`)
 
-Never run Kani bare. The wrapper below is the one roadmap 4.2.2 settled on
+Never run Kani bare. The wrapper below adapts the one roadmap 4.2.2 settled on
 after uncapped runs OOM-killed the machine. The `LD_LIBRARY_PATH` is not
 optional: without it `cargo kani` and Cargo build scripts fail to load
 `libLLVM` with an opaque linker error, and that is the most common way to lose
 an hour on this task.
 
+The cap is carried by `-p RuntimeMaxSec=`, which systemd enforces against the
+scope's cgroup, so reaching it stops the whole process tree. Do not reintroduce
+a `timeout` prefix: `timeout` signals only its immediate child, and `--scope`
+detaches the payload into its own cgroup, so a prefix caps the launcher while
+the verifier runs on. `set -o pipefail` is needed because a pipeline's status
+is otherwise `tee`'s, which masks a failing `make`.
+
 ```bash
-timeout --kill-after=20s 5m \
-  systemd-run \
+set -o pipefail
+systemd-run \
     --user \
     --scope \
     --expand-environment=no \
+    -p RuntimeMaxSec=8m \
     -p CPUQuota=200% \
     -p MemoryMax=8G \
     -p MemorySwapMax=0 \
@@ -1069,7 +1226,7 @@ timeout --kill-after=20s 5m \
 
 To iterate on a single harness, add
 `KANI_FLAGS="--harness shell_variable_prefix_does_not_match"` to the `make`
-invocation. `KANI_FLAGS` is empty by default (Makefile line 17) and `kani-full`
+invocation. `KANI_FLAGS` is empty by default (Makefile line 44) and `kani-full`
 passes it straight through, so this needs no Makefile edit.
 
 Expected shape of success:
@@ -1340,6 +1497,37 @@ outside this local completion boundary and must be reported separately by CI.
   command-interpolation proofs, then reached the existing five-minute cap at
   `ir::from_manifest::verification::missing_rule_shape_is_rejected` (exit 124);
   the full suite is not recorded as passed.
+- [x] (2026-09-20, issue #738) Reconciliation against every acceptance
+  criterion, recorded in `Reconciliation against acceptance criteria` above.
+  The capped full suite now passes: 15 of 15 harnesses, 0 failures, all covers
+  satisfied, all covers met. Two of the five mutation patches had been silently
+  disabled by `-D warnings` entering `make kani-full` (#714); both were
+  regenerated in `c71984fa` and re-verified, and the other three were
+  re-verified unchanged. All seven deterministic and documentation gates pass,
+  every trace link resolves, and `coderabbit review --agent` returned zero
+  findings. The header stays `COMPLETE`; the roadmap needs no correction. Three
+  further patches broken by the same change lie in roadmap 4.2.1 and 4.2.2 and
+  are raised rather than fixed here.
+- [x] (2026-09-21, issue #738) Rebased onto `origin/main` at `00f48f77`, which
+  replays the same ten commits over 87 changed target paths. No conflicts: the
+  branch and the target touched disjoint sets of files, so the replay was
+  patch-identical and `range-diff` reports all ten commits `=`. The semantic
+  audit found no unexplained deletion and no new repetition; the two repaired
+  patches still apply cleanly over the new base. All seven gates were re-run on
+  the rebased tree and pass — the nextest count moved from 3,284 to 3,309 and
+  markdownlint from 143 to 145 files, both as a consequence of `main`'s
+  changes, so the figures quoted above are the post-rebase ones. The CI runs
+  that corroborated the pre-rebase candidate no longer describe this branch and
+  the criterion above now says so; CI has since run green on `99cbdf32`, which
+  the criteria section records.
+
+- [x] (2026-09-21, issue #738) Review findings verified and negotiated. Three
+  were valid: CI evidence for `99cbdf32` was recorded once the runs completed,
+  two pre-rebase SHAs were replaced by their replayed twins, and the Kani
+  wrapper's cap was made to bind — `-p RuntimeMaxSec=8m` on the scope replaces a
+  `timeout` prefix that capped only the launcher `systemd-run` leaves behind.
+  One finding misattributed the `-D warnings` change to `00f48f77`; `2c030fd1`
+  is correct and the text stands.
 
 ## Surprises & discoveries
 
@@ -1924,3 +2112,75 @@ flipped roadmap 4.2.3 to `[x]`, so the work was already delivered when Revision
 Under the authority order in the documentation style guide the roadmap checkbox
 and this plan's `Progress` and Outcomes sections outrank the header, so the
 stale artefact was the header, not the roadmap.
+
+**Revision 2.28 (2026-09-20, issue #738).** Issue #738 raised this plan as
+`IN PROGRESS` on the strength of Revision 2.24's exit-124 full-suite run, which
+Revision 2.27 had already superseded. Rather than re-litigate the header, the
+acceptance criteria were re-derived from fresh evidence; the assessment is
+recorded in `Reconciliation against acceptance criteria` and summarized in
+`Progress`. The capped suite now completes 15 of 15 harnesses with zero
+failures, so the outstanding full-suite requirement is discharged. In doing so,
+two of the five mutation patches were found to have been disabled by
+`-D warnings` entering `make kani-full` (#714) on 2026-09-18: both seeded their
+fault by leaving a binding unused, which that change promoted from warning to
+compile error, so the patched tree failed to build and yielded no evidence.
+Both were regenerated in `c71984fa` and re-verified against their named checks;
+the other three were re-verified unchanged. Three further patches broken by the
+same mechanism belong to roadmap 4.2.1 and 4.2.2 and are raised here rather
+than fixed because this plan's own `OBL-PATCHES` says to escalate rather than
+silently absorb neighbouring roadmaps' work; they are filed as issue #756,
+which also proposes closing the contract test's apply-only blind spot. The
+completion state is unchanged: header `COMPLETE`, roadmap `[x]`, no roadmap
+correction required.
+
+**Revision 2.29 (2026-09-21, issue #738).** The branch was rebased onto
+`origin/main` at `00f48f77` before review. The replay was patch-identical —
+`range-diff` reports all ten commits `=`, and the branch and target touched
+disjoint file sets, so no conflict arose and no resolution was needed. The
+substantive effect is on evidence, not on content: `main`'s 87 changed paths
+moved the deterministic-gate figures, and the CI runs cited by Revision 2.28
+belong to the pre-rebase identities and no longer describe this tree. Both are
+corrected above — the gate figures to the post-rebase values, and the CI
+sentence to say plainly that those runs are superseded. CI has since run green
+on `99cbdf32`, which the criteria section records; Revision 2.30 below carries
+that measurement. The verdict is unaffected: every acceptance criterion still
+passes on the rebased tree, the header stays `COMPLETE`, and the roadmap still
+needs no correction.
+
+**Revision 2.30 (2026-09-21, issue #738).** Four review findings were verified
+against the repository. Three were valid and are corrected here: the CI
+evidence now records the runs made against `99cbdf32` rather than deferring
+them; two pre-rebase SHAs, `3a282018` and `adce1949`, were replaced by their
+patch-id-identical replayed twins `c71984fa` and `f0bff1bc`, which are
+ancestors of the head and therefore resolvable by a reader; and the Kani
+wrapper's cap now binds. Each of those claims names a commit identity rather
+than a role such as "the current head", because a role goes stale the moment
+this revision is committed — the same drift that produced the CI finding. That
+third finding read the runtime as inconsistent with the documented
+`timeout --kill-after=20s 5m` prefix, and it was right to. The 2026-09-20 run's
+scope recorded a 303-second lifetime (`21:41:15` started, `21:46:18` "Consumed
+7min 53.192s CPU time"), so the suite completed under a nominally 300-second
+cap. The cause is that `timeout` signals only its direct child while `--scope`
+detaches the payload into its own cgroup, so the prefix capped the launcher,
+not the work; the pipeline's status was `tee`'s besides. The wrapper now sets
+`-p RuntimeMaxSec=8m` on the scope, which systemd enforces against the cgroup
+and which kills the whole process tree, and the inert prefix is gone. This
+plan's `5m03s` wall-clock claim is withdrawn in favour of the scope's lifetime
+and CI's directly measured `Run Kani harnesses` step, and a stale
+`Makefile line 17` citation for `KANI_FLAGS` is corrected to line 44.
+`set -o pipefail` is now part of the documented invocation, so a failing `make`
+is no longer masked by the pipeline's `tee`. The same inert wrapper is
+prescribed by
+`docs/execplans/4-2-2-kani-harnesses-for-cycle-canonicalization.md`; it belongs
+to roadmap 4.2.2 and is raised rather than edited, per `OBL-PATCHES`, as #765.
+
+The fourth finding claimed that `-D warnings` entered `kani-full` via
+`00f48f77` rather than `2c030fd1`; that is false and the text is unchanged.
+`git show 2c030fd1 -- Makefile` shows the recipe going from
+`$(KANI) $(KANI_FLAGS)` to
+`RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(KANI) $(KANI_FLAGS)`, and
+`git log -S'D warnings' -- Makefile` returns `2c030fd1` dated 2026-09-18. The
+finding's `-S KANI_RUSTFLAGS` query finds only `00f48f77` because that is when
+the flag was factored into a named variable; the mechanism predates the
+factoring and is behaviourally unchanged by it. The completion state is
+unchanged: header `COMPLETE`, roadmap `[x]`.
