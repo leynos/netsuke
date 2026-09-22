@@ -85,6 +85,14 @@ failure mode cannot recur silently.
       `kani-smoke`'s `RUSTUP_TOOLCHAIN: stable`, which pinned the gate's
       `cargo nextest` to a toolchain that rejects `GATE_RUSTFLAGS`'s
       nightly-only `-Zthreads=8`. Mechanism reproduced locally before and after.
+- [x] (2026-09-22) Rebase onto `origin/main` once `#732` landed, resolving three
+      conflicts: the `test(=NAME)` filter this branch registered is converted to
+      the anchored grammar `#732` enforces (allow-listed by
+      `nextest_child_cargo_group_invariants.py`, which rejects the old form), and
+      `build-test` keeps `#732`'s anchored-filter verification step while
+      dropping the gate block that the later `1cd39169` relocates to
+      `kani-smoke`. All branch-authored files verified byte-identical across the
+      replay by whole-tree diff, not ancestry.
 - [ ] Confirm the gate runs and compiles on CI, and read its real cost and the
       job's headroom against the 30-minute ceiling. The failed run gives no
       measurement, because the gate aborted before compiling anything.
@@ -219,6 +227,29 @@ failure mode cannot recur silently.
     scope** here: it gates 11 Makefile targets and every developer path, and a
     false positive there would break all of them at once. The gate's own env
     now documents why a channel value must never be reintroduced.
+- **The branch's own Nextest filter was written in the spelling `#732` had just
+  retired, and the conflict was the least of it.** Rebasing onto `origin/main`
+  after `#732` landed replayed eleven commits, three of which conflicted. Two
+  were ordinary context drift, but `.config/nextest.toml` conflicted on
+  substance: this branch registered its new test with
+  `filter = 'test(=every_patched_tree_compiles_under_denied_warnings)'`, and
+  `#732` had replaced that grammar file-wide with `test(/^NAME($|::)/)`. The
+  resolution was forced rather than discretionary, and the contract is what
+  proves it: `nextest_child_cargo_group_invariants.py` holds the accepted forms
+  in an **allow-list** regex, and `test(=NAME)` is not among them. Probing that
+  regex directly over the resolved file judges all **17** selectors accepted,
+  **0** legacy, and rejects the old spelling — so the conversion is not a
+  stylistic preference but the only form the contract admits. The same `=`
+  form that silently unhooked parameterized tests from their policy is the one
+  a new, non-parameterized test would have carried happily: it would have
+  worked, which is why nothing would have flagged it.
+- **A rebase whose conflicts are resolved by hand needs a proof that is not
+  ancestry.** `git diff <old-head> <new-head>` over the whole tree showed only
+  files that `origin/main`'s four incoming commits had themselves touched,
+  plus the two conflict files — every file this branch authored came back
+  **byte-identical**, all 18 patches included. That is the check worth having:
+  the eleven replayed commits have new SHAs, so citing the old ones proves
+  nothing, and a green suite after a rebase proves only that the suite passes.
 
 ## Decision log
 
@@ -282,6 +313,14 @@ failure mode cannot recur silently.
 - Keep the new test `#[ignore]`-gated: one Kani codegen per patch (~18 today) is
   far too expensive for the default nextest profile, and costs more since the
   move from `cargo check`.
+- Convert this branch's test filter to `test(/^every_patched_tree_compiles_under_denied_warnings($|::)/)`
+  when rebasing onto `#732`, rather than keeping the `test(=NAME)` form the
+  branch was authored with. The form is contract-enforced: the accepted
+  spellings are an allow-list, so the old one is not a variant the gate
+  tolerates but a selector the contract rejects. Keeping it would have meant
+  weakening a rule `#732` had just established across the file, to spare one
+  line of a filter that names a test which does not need the anchoring. The
+  cheap correction is the correct one here.
 - Adopt `#755`'s two repairs *verbatim* rather than repairing the same faults
   independently. Identical content means whichever PR merges second sees a
   no-op hunk instead of a conflict, and this branch's gate is green on its own.
@@ -393,3 +432,14 @@ Kani frontend does.
   nothing. The variable is removed, the mechanism recorded under
   `Surprises & discoveries`, and a final CI confirmation left open as the last
   unchecked Progress item.
+- 2026-09-22 — Rebased onto `origin/main` after PR `#732` landed, replaying
+  eleven commits. Three conflicted. `.config/nextest.toml` conflicted on
+  substance: this branch's filter used the `test(=NAME)` grammar `#732` had
+  just replaced file-wide with the anchored form, so it was converted rather
+  than preserved. The two `ci.yml` conflicts resolved in opposite directions
+  and for the same underlying reason — `build-test` keeps `#732`'s new
+  anchored-filter verification step while dropping the mutation gate, because
+  the later commit `1cd39169` relocates that gate to `kani-smoke`, which only
+  parses `#[cfg(kani)]` code. Every file this branch authored survived the
+  replay byte-identical; verified by whole-tree diff against the pre-rebase
+  head rather than by ancestry, since a rebase rewrites every SHA.
