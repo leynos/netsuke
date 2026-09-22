@@ -221,85 +221,16 @@ fn render_manifest_parse_diagnostic_omits_yaml_snippet(en_localizer: EnLocalizer
     Ok(())
 }
 
-/// Markers an upstream formatter emits when it annotates an error with a
-/// source excerpt.
+/// The general source-excerpt guard, and the cases that keep it honest.
 ///
-/// Causes are rendered from `Display`, so an upstream presentation change can
-/// leak an excerpt into a field meant to carry a compact reason. Netsuke
-/// reports the failing location through its own `source` and `labels` fields,
-/// so an excerpt in `causes` is a leak whatever produced it.
-///
-/// Neither marker occurs in the localized catalogues or in Netsuke's own
-/// diagnostic prose, so a match means a dependency really embedded an excerpt.
-const SNIPPET_MARKERS: [&str; 2] = ["\n -->", "<input>"];
-
-/// Asserts that no cause in a rendered document carries a source excerpt.
-///
-/// Keyed on the annotation markers rather than on line count: an upstream error
-/// may legitimately span multiple lines for reasons unrelated to source
-/// excerpts, and rejecting those would fail on a factor this contract does not
-/// care about.
-fn ensure_causes_free_of_source_excerpts(document: &str) -> Result<()> {
-    let value = serde_json::from_str::<Value>(document)?;
-    let diagnostic = first_diagnostic(&value)?;
-    let causes = diagnostic
-        .get("causes")
-        .and_then(Value::as_array)
-        .context("causes should be present")?;
-
-    ensure!(
-        !causes.is_empty(),
-        "a parsed document should record at least one cause"
-    );
-    for cause in causes {
-        let cause_text = cause
-            .as_str()
-            .context("each cause should be a JSON string")?;
-        for marker in SNIPPET_MARKERS {
-            ensure!(
-                !cause_text.contains(marker),
-                "cause leaked a source excerpt ({marker:?}): {cause_text}"
-            );
-        }
-    }
-    Ok(())
-}
-
-/// No rendered cause may carry an upstream source excerpt, whichever dependency
-/// produced it.
-///
-/// `serde-saphyr` 1.2.0 began rendering parse errors with an annotated snippet,
-/// which reached `causes` because a cause is serialized from `Display`. The
-/// manifest boundary normalizes that one away, but the hazard is general: any
-/// dependency rendering a source excerpt can reintroduce it. This pins the
-/// contract across both cause-collection paths, over the YAML and structural
-/// parse dependencies and a Netsuke-owned chain.
-#[rstest]
-#[case::yaml_parse("targets:\n\t- name: test\n")]
-#[case::structural_parse("")]
-fn rendered_causes_never_carry_source_excerpts(
-    #[case] yaml: &str,
-    en_localizer: EnLocalizer,
-) -> Result<()> {
-    let _en_localizer = en_localizer;
-    let err = manifest::from_str(yaml).expect_err("invalid manifest should fail to parse");
-    let manifest_err = err
-        .downcast_ref::<manifest::ManifestError>()
-        .context("expected ManifestError")?;
-    ensure_causes_free_of_source_excerpts(&render_diagnostic_json(manifest_err)?)
-}
-
-/// The plain-error path collects causes from a standard-error chain rather than
-/// from a diagnostic source, so it needs the contract pinned separately.
-#[rstest]
-fn rendered_plain_error_causes_never_carry_source_excerpts(
-    en_localizer: EnLocalizer,
-) -> Result<()> {
-    let _en_localizer = en_localizer;
-    let error = anyhow::Error::new(circular_dependency_error())
-        .context(localization::message(keys::RUNNER_CONTEXT_BUILD_GRAPH));
-    ensure_causes_free_of_source_excerpts(&render_error_json(error.as_ref())?)
-}
+/// The guard walks a document's causes, including those of its nested `related`
+/// entries, and the cases plant an excerpt so a green suite cannot mean merely
+/// that the helper agreed with the current dependencies. They live here to keep
+/// this module within the repository's 400-line cap; the child reaches the
+/// helpers above through `super::*`, exactly as this parent does.
+#[path = "diagnostic_json_excerpt_tests.rs"]
+#[cfg(test)]
+mod excerpt_tests;
 
 /// Generates between `min` and `max` distinct single-character node names as
 /// [`Utf8PathBuf`] values, suitable for constructing arbitrary cycle fixtures.

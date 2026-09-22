@@ -3960,6 +3960,18 @@ and URL rendering, and fallback-payload machinery, exposing them as
 call into it. The schema remains defined by the parent module; this file is a
 size split, not a second schema owner.
 
+### `src/diagnostic_json_excerpt_tests.rs`
+
+The general source-excerpt guard over rendered diagnostic documents, declared by
+`src/diagnostic_json_shape_tests.rs` through a `#[path]` attribute. The guard
+walks a document's causes *and* those of its nested `related` entries, because
+the serializer renders a related diagnostic as a full entry of the same shape;
+a top-level-only walk would leave those cause chains unguarded. Its cases plant
+an excerpt at each depth, so a green suite cannot mean merely that the guard
+agreed with the current dependencies. The snapshot-producing cases stay in
+`src/diagnostic_json_tests.rs`: insta derives a snapshot's filename from the
+module path that asserted it.
+
 ### `src/stdlib/command/error_support.rs`
 
 Detail types and message-append helpers for command-failure rendering in
