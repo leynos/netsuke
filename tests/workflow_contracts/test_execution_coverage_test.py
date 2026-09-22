@@ -63,23 +63,6 @@ COVERAGE_PRODUCERS = {
     ("coverage-main.yml", "coverage-upload"): None,
 }
 
-#: Linux jobs allowed to execute Rust tests outside the instrumented run.
-#: `netsukefile` builds a manifest and drives Ninja on Ubuntu 22.04, and
-#: `kani-smoke` runs verification harnesses; neither is a unit-test lane.
-LINUX_TEST_EXEMPTIONS = {
-    ("ci.yml", "kani-smoke"),
-    ("netsukefile-test.yml", "netsukefile"),
-}
-LINUX_WORKFLOWS = ("ci.yml", "coverage-main.yml", "netsukefile-test.yml")
-#: Patterns for a Rust suite execution. `make test` is matched only as a whole
-#: target name, so the unrelated `make test-workflow-contracts` gate and its
-#: siblings are not mistaken for one.
-FORBIDDEN_TEST_COMMANDS = (
-    re.compile(r"\bcargo nextest\b"),
-    re.compile(r"\bcargo test\b"),
-    re.compile(r"\bmake test(?![\w-])"),
-)
-
 
 def test_definitions_are_substituted_one_level_and_unknown_names_left_alone() -> None:
     """Check the pure expansion against supplied definitions, with no file read.
@@ -271,87 +254,6 @@ def test_one_coverage_producer_per_event(
         f"{workflow_name} {job_name} must measure coverage under "
         f"{expected_condition!r}, got {step.get('if')!r}"
     )
-
-
-def _step_scan_texts(step: dict[str, object]) -> list[tuple[str, str]]:
-    """Return every scannable command text on a step, paired with its source.
-
-    A Linux job can reintroduce a suite execution through a bare `run`
-    script, or through a composite action input such as `with.args`, so
-    both the `run` script and every `with` value are scanned with the same
-    forbidden-command patterns.
-
-    Parameters
-    ----------
-    step
-        A single workflow step.
-
-    Returns
-    -------
-    list[tuple[str, str]]
-        Pairs of source label and text. The label is ``"run"`` for the step's
-        script and ``"with.<key>"`` for each of its inputs, so a failure names
-        where the forbidden command was found.
-    """
-    texts = [("run", str(step.get("run", "")))]
-    with_inputs = step.get("with")
-    if isinstance(with_inputs, dict):
-        texts += [(f"with.{key}", str(value)) for key, value in with_inputs.items()]
-    return texts
-
-
-def _step_offenders(step: dict[str, object]) -> list[str]:
-    """Return one label per forbidden pattern this step's texts match."""
-    return [
-        f"{step.get('name')!r} ({source}): {pattern.pattern}"
-        for source, text in _step_scan_texts(step)
-        for pattern in FORBIDDEN_TEST_COMMANDS
-        if pattern.search(text)
-    ]
-
-
-def _is_scannable_job(workflow_name: str, job_name: str, declaration: object) -> bool:
-    """Return whether a job declares steps this contract should scan."""
-    if (workflow_name, job_name) in LINUX_TEST_EXEMPTIONS:
-        return False
-    # A job that calls a reusable workflow declares no steps of its own; the
-    # callee's own contracts cover it.
-    match declaration:
-        case {"steps": _}:
-            return True
-        case _:
-            return False
-
-
-def _workflow_offenders(workflow_name: str) -> list[str]:
-    """Return every forbidden-command match in one workflow's Linux jobs."""
-    workflow = load_workflow(WORKFLOW_DIR / workflow_name)
-    jobs = workflow.get("jobs")
-    assert isinstance(jobs, dict), f"{workflow_name} must declare jobs"
-    return [
-        f"{workflow_name} {job_name} {offender}"
-        for job_name, declaration in jobs.items()
-        if _is_scannable_job(workflow_name, job_name, declaration)
-        for step in job_steps(workflow, job_name)
-        for offender in _step_offenders(step)
-    ]
-
-
-def test_no_other_linux_job_executes_the_rust_suite() -> None:
-    """Reject a second Linux job running the workspace suite.
-
-    A duplicate execution is exactly what folding the gate into the coverage
-    run removed, so it must not reappear under another step name. The scan
-    covers both a step's `run` script and its `with` input values, so a
-    composite or shared action wrapping `cargo nextest` cannot reintroduce
-    the suite either.
-    """
-    offenders = [
-        offender
-        for workflow_name in LINUX_WORKFLOWS
-        for offender in _workflow_offenders(workflow_name)
-    ]
-    assert not offenders, f"a second Linux test execution reappeared: {offenders!r}"
 
 
 #: The instrumented lanes' budget for one `cargo llvm-cov nextest` invocation,

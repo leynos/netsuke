@@ -3351,6 +3351,46 @@ governs the non-doctest pass only, and deliberately stays small:
 - **A conservative slow timeout** (warn after 60s, terminate after five
   warning periods) so a hung test surfaces without failing the legitimately
   slow documentation end-to-end suites, which shell out to real Ninja.
+- **One serialized child-Cargo group.** Tests that spawn their own Cargo build
+  join `nested-cargo-builds`, whose `max-threads = 1` stops four Nextest
+  workers from each starting a four-job build on four vCPUs. Membership is
+  decided by Nextest evaluating each override's filter against real test names,
+  so a filter can fail silently: a name no test has, or a form that cannot
+  match how a test is named at run time, selects nothing and leaves the test
+  running unserialized while the group still looks healthy. Every filter — for
+  a group slot or for a widened timeout alike — therefore uses
+  `test(/^NAME($|::)/)`, not `test(=NAME)`. An `#[rstest]` with `#[case]`
+  attributes compiles to one test per case, named `name::case_1_…`, and the `=`
+  form compares the whole name, so it matches none of them; the anchored regex
+  form matches the plain name and every case suffix alike. Nextest's `~`
+  substring form is unanchored and over-matches, so it is not used.
+  `tests/workflow_contracts/nextest_child_cargo_group_test.py` holds these
+  contracts, including that every filtered name resolves to a declared test.
+  The rule is applied to every filter, not only this group's, because the same
+  edit that unhooks a test from its policy is invisible until someone adds a
+  `#[case]` attribute. Two test-only modules sit behind that contract, split by
+  what they read.
+  `tests/workflow_contracts/nextest_child_cargo_group_invariants.py` reads the
+  Nextest configuration and constrains the accepted selector grammar;
+  `tests/workflow_contracts/nextest_rust_test_discovery.py` classifies the Rust
+  integration tests as declared, parameterized (those carrying `#[case]`
+  attributes), or build-capable (reaching a child Cargo build directly or
+  through helper and fixture layers).
+  `tests/workflow_contracts/nextest_child_cargo_syntax_test.py` consumes the
+  discovery helper too, and production code must not import any of them. Those
+  contracts read the configuration as text, which is all a static read can do:
+  they hold every filter to the anchored grammar but cannot say which tests a
+  filter selects, because that needs compiled test binaries. The runtime half is
+  `.github/scripts/verify_nextest_anchored_filters.py`, which runs on the
+  coverage lane after `Test and Measure Coverage` and asks Nextest itself. It
+  reads the parameterized tests and their case counts from the Rust sources,
+  then asserts that each anchored filter in the configuration selects exactly
+  those instances and that the whole-name form selects none of them. It reuses
+  the instrumented build tree rather than compiling, by taking the environment
+  `cargo llvm-cov show-env` reports, so it is gated exactly as the coverage
+  step is and must run before `Discard the instrumented build tree`. The
+  contracts for that placement live in
+  `tests/workflow_contracts/nextest_anchored_filter_runtime_test.py`.
 - **Scoped subprocess timings.** Packaging smoke tests emit their Cargo
   subprocess durations after each Cargo subprocess returns. The
   `harness_compiles_under_a_split_build_dir` parser test reads recorded Cargo

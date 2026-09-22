@@ -294,6 +294,20 @@ jobs:
           # on the runner for the ratchet and leaves with the instrumented tree
           # below. `coverage-main.yml` keeps the action's default and uploads.
           publish-artefact: 'false'
+      - name: Verify the anchored Nextest filters select their instances
+        # The contract tests can only hold `.config/nextest.toml` to the
+        # anchored grammar; they cannot ask Nextest which tests a filter
+        # selects, because that needs compiled binaries and they run before the
+        # first Rust build. This is the runtime half, and it sits here for two
+        # reasons: the instrumented tree above is the only one with the tests
+        # built, and the discard step below removes it. Pull requests only, for
+        # the same reason as the coverage step -- a non-pull-request run skips
+        # that step, so a standalone list command here would become the lane's
+        # first build on trunk.
+        if: github.event_name == 'pull_request'
+        # `--no-project` because the check is stdlib-only and must not resolve
+        # this repository's Python project or write to its lockfile.
+        run: uv run --no-project --python 3.14 .github/scripts/verify_nextest_anchored_filters.py
       - name: Show sccache statistics
         if: always()
         run: |

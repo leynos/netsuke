@@ -1,7 +1,9 @@
 """Protect nested-Cargo discovery from non-code Rust syntax."""
 
 import pytest
-from nextest_child_cargo_group_test import _build_capable_test_names
+from nextest_child_cargo_group_invariants import (
+    build_capable_test_names as _build_capable_test_names,
+)
 
 
 def test_build_capable_discovery_ignores_block_comment_functions() -> None:
