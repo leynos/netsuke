@@ -127,11 +127,13 @@ of decisions that need the user's confirmation.
 - Run every Kani command under an explicit systemd resource cap. The wrapper is:
 
   ```sh
-  timeout --kill-after=20s 5m \
-    systemd-run \
+  set -o pipefail
+  systemd-run \
       --user \
       --scope \
       --expand-environment=no \
+      -p RuntimeMaxSec=8m \
+      -p TimeoutStopSec=20s \
       -p CPUQuota=200% \
       -p MemoryMax=8G \
       -p MemorySwapMax=0 \
@@ -141,13 +143,36 @@ of decisions that need the user's confirmation.
       <kani-command>
   ```
 
+  The runtime bound is carried by `-p RuntimeMaxSec=`, which systemd enforces
+  against the scope's control group. Reaching it puts the scope into a failure
+  state and stops the whole process tree, so the cap does not depend on a
+  signal propagating through the launcher to reach the verifier. Do not
+  reintroduce a `timeout` prefix in place of it. A prefix bounds only by
+  signalling the process it supervises, and its `--kill-after=` grace window is
+  added to the deadline rather than nested inside it, so a workload that
+  ignores the first signal is bounded by the sum of the two rather than by the
+  nominal figure. `RuntimeMaxSec` for scope units requires systemd 244 or later;
+  `systemd-run --version` on the reference host reports 257, and earlier
+  releases silently ignore the property.
+
+  `TimeoutStopSec=20s` preserves the bounded forceful-termination grace period
+  that the removed `--kill-after=20s` used to provide: systemd sends `SIGTERM`,
+  then escalates to `SIGKILL` when that grace expires. Without it the scope
+  inherits `DefaultTimeoutStopSec`, which is far longer than this plan's
+  tolerances assume.
+
+  `set -o pipefail` is required when the command is piped into `tee`. A
+  pipeline's exit status is otherwise `tee`'s, which is zero whenever the
+  capture succeeded, so a failing verifier would be masked by a successful
+  capture.
+
   Include the known Kani `LD_LIBRARY_PATH` inside `<kani-command>` when invoking
   `cargo kani`, `make kani-ir`, or `make kani-full`. On this host, the
   original root-system scope form required interactive authentication and
   `-p Nice=15` was not accepted as a unit property; the user-scope wrapper
-  above applies the available CPU, memory, swap, task, and I/O caps and runs
-  the verifier process through `nice`. Do not run uncapped Kani, CBMC, or
-  solver commands again.
+  above applies the available runtime, CPU, memory, swap, task, and I/O caps
+  and runs the verifier process through `nice`. Do not run uncapped Kani, CBMC,
+  or solver commands again.
 - Use `coderabbit review --agent` after each major implementation milestone, and
   clear all concerns before moving to the next. Run it only after the
   deterministic gates pass.
@@ -329,15 +354,16 @@ of decisions that need the user's confirmation.
       interrupted run showed symbolic `char`/`String` construction was too
       expensive, so the then-current direct proof helper changed to a symbolic
       selector over concrete one-byte paths. All future Kani commands must use
-      the resource-capped `systemd-run` wrapper recorded in Constraints.
+      the `systemd-run --user --scope` cap with `RuntimeMaxSec` recorded in
+      Constraints.
 - [x] (2026-06-22T22:42:51Z) Stage C focused proof: the two-node
       length-and-closure harness passed under the user-scope resource cap with
       the explicit Kani `LD_LIBRARY_PATH`. Evidence:
       `/tmp/kani-two-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-stage-c-length-selector.out`.
-      The run took 177.3307 seconds, which is under the five-minute timeout but
-      slow enough that three- and four-node harnesses must be tried one at a
-      time and treated as tractability evidence before expanding the property
-      set.
+      The run took 177.3307 seconds, which is under the five-minute solver
+      budget but slow enough that three- and four-node harnesses must be tried
+      one at a time and treated as tractability evidence before expanding the
+      property set.
 - [x] (2026-06-22T22:58:13Z) Stage C tractability finding: the first
       three-node length-and-closure run, still using a four-symbol alphabet,
       reached SAT conversion and then hit the 8G user-scope `MemoryMax`.
@@ -574,15 +600,15 @@ of decisions that need the user's confirmation.
   interrupted Stage C length/closure run became silent during the four-node
   harness after entering the solver, and the user subsequently required
   resource capping. Impact: the solver-runtime tolerance remains, but every
-  Kani invocation is now additionally constrained by `timeout`, a transient
-  `systemd-run --user --scope` with CPU, memory, task, and I/O weight limits,
-  and `/usr/bin/nice -n 15`.
+  Kani invocation is now additionally constrained by an enforced runtime bound
+  (`RuntimeMaxSec` on a transient `systemd-run --user --scope`), CPU, memory,
+  task, and I/O weight limits, and `/usr/bin/nice -n 15`.
 
 - Observation: replacing symbolic `char`/`String` construction with a symbolic
   selector over concrete one-byte paths makes the two-node length-and-closure
   proof complete under the cap, but it still takes 177.3307 seconds. Impact:
   continue Stage C by running N=3 and N=4 independently under the same cap; if
-  either exceeds the five-minute timeout, record that as a bounded-model
+  either exceeds the five-minute solver budget, record that as a bounded-model
   tractability limit before widening or changing the proof model.
 
 - Observation: the first capped three-node length-and-closure run exceeded the
@@ -711,15 +737,57 @@ of decisions that need the user's confirmation.
   production port. Date/Author: 2026-06-22 / implementation agent; helper names
   updated after the 2026-06-23 kernel extraction.
 
-- Decision: execute all future Kani commands through the resource-capped
-  `timeout` and `systemd-run --user --scope` wrapper adapted from the user's
-  required cap. Rationale: bounded model checking can still stress CPU and
-  memory while a single harness remains under the logical runtime tolerance.
-  The root-system scope form requires interactive authentication on this host,
-  and `Nice` is not accepted as a unit property here, so the user-scope command
-  applies the available systemd CPU, memory, swap, task-count, and I/O caps and
-  delegates niceness to `/usr/bin/nice -n 15`. Date/Author: 2026-06-22 /
-  implementation agent.
+- Decision: execute all future Kani commands through the runtime-capped
+  `systemd-run --user --scope` wrapper recorded in Constraints, whose runtime
+  bound is the scope property `-p RuntimeMaxSec=8m`. Rationale: bounded model
+  checking can still stress CPU and memory while a single harness remains under
+  the logical runtime tolerance. The root-system scope form requires
+  interactive authentication on this host, and `Nice` is not accepted as a unit
+  property here, so the user-scope command applies the available systemd
+  runtime, CPU, memory, swap, task-count, and I/O caps and delegates niceness to
+  `/usr/bin/nice -n 15`. Date/Author: 2026-06-22 / implementation agent; scope
+  property corrected 2026-09-22 for issue #765.
+
+- Decision: carry the runtime bound with `-p RuntimeMaxSec=` on the scope rather
+  than with a `timeout` prefix on the whole command. Rationale: the wrapper
+  this plan originally prescribed led with `timeout --kill-after=20s 5m`, and
+  that prefix does not bound the workload the way its nominal figure suggests.
+  `timeout` bounds only by signalling the process it supervises, and its
+  `--kill-after=` window is additive rather than nested: the deadline fires
+  first, the grace period runs afterwards, and a workload that ignores the
+  first signal is therefore bounded by `5m + 20s`, not by `5m`. That arithmetic
+  is what production recorded — the scope for the 2026-09-20 roadmap 4.2.3 run
+  logged a 303-second lifetime under a nominally 300-second cap, on a suite
+  that had legitimately completed. `RuntimeMaxSec` is enforced by systemd
+  against the scope's control group, so it stops the whole process tree without
+  depending on a signal propagating from the launcher to the verifier, and it
+  cannot be extended by a signal-ignoring payload. The paired
+  `-p TimeoutStopSec=20s` preserves the bounded forceful-termination grace the
+  removed `--kill-after=20s` provided, so the total bound stays close to the
+  nominal one. The pipeline is also documented with `set -o pipefail`, because
+  a pipeline's status is otherwise `tee`'s and a failing `make` would be masked
+  by a successful capture. Date/Author: 2026-09-22 / implementation agent for
+  issue
+  #765, raised from the roadmap 4.2.3 reconciliation (#738).
+
+- Decision: record honestly that the reported mechanism for #765 did not
+  reproduce locally, and that the correction stands on the reasons above.
+  Rationale: #765 states that the `timeout` prefix "capped the launcher while
+  the suite ran to completion under it", on the evidence of an edited
+  `systemctl --user show` transcript and a scope whose `Result=success` was
+  read as proof the workload had outlived the cap. That reading is not
+  diagnostic: once a transient scope is collected, `systemctl show` reports
+  default values for any invocation, so `Result=success` appears even for runs
+  in which the payload is directly observed to die at the deadline. Probing the
+  documented wrapper on the reference host (systemd 257) across the plain,
+  property-laden, nested-`make`, and `SIGTERM`-ignoring variants showed the
+  payload stopped every time, and the issue's exact `sleep 30` repro reproduced
+  the quoted `Result=success` while the workload was killed on schedule. The
+  genuine defects are the additive grace window and the masked pipeline status,
+  both of which are reproduced and both of which the new wrapper removes. The
+  fix requested by #765 is correct and is adopted; only its stated mechanism is
+  corrected here rather than repeated. Date/Author: 2026-09-22 / implementation
+  agent for issue #765.
 
 - Decision: replace the direct `Vec<Utf8PathBuf>` proof boundary with a
   private, production-owned generic canonicalization kernel. Rationale: the
@@ -1062,8 +1130,44 @@ make kani-ir   | tee /tmp/kani-ir-netsuke-4-2-2-kani-harnesses-for-cycle-canonic
 ```
 
 Every `cargo kani` and `make kani-ir` command in the block above must be run
-inside the `timeout`/`systemd-run --user --scope` cap from Constraints with the
-explicit Kani `LD_LIBRARY_PATH`. The bare commands show the inner command only.
+inside the `systemd-run --user --scope` cap with `RuntimeMaxSec` from
+Constraints, with the explicit Kani `LD_LIBRARY_PATH`. The bare commands show
+the inner command only.
+
+Composed in full, the cap around `make kani-ir` is a single command:
+
+```bash
+set -o pipefail
+systemd-run \
+    --user \
+    --scope \
+    --expand-environment=no \
+    -p RuntimeMaxSec=8m \
+    -p TimeoutStopSec=20s \
+    -p CPUQuota=200% \
+    -p MemoryMax=8G \
+    -p MemorySwapMax=0 \
+    -p TasksMax=96 \
+    -p IOWeight=20 \
+    /usr/bin/nice -n 15 \
+    env LD_LIBRARY_PATH="$HOME/.kani/kani-0.67.0/toolchain/lib:$HOME/.kani/kani-0.67.0/lib" \
+    make kani-ir \
+  2>&1 | tee /tmp/kani-ir-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization.out
+```
+
+The `tee` sits inside the pipeline but outside the scope, so the captured file
+is the verifier's own output rather than the wrapper's, and `set -o pipefail`
+keeps the pipeline's status equal to the verifier's. Placing `tee` inside the
+scope would also work and would make the cap govern the capture as well; the
+binding requirement is `pipefail`, since without it a failing verifier is
+masked by a successful `tee`.
+
+Expected shape of success:
+
+```plaintext
+VERIFICATION:- SUCCESSFUL
+Complete - 13 successfully verified harnesses, 0 failures, 13 total.
+```
 
 Expected Stage E `make kani-ir` summary: thirteen harnesses verified, zero
 failures (the nine inherited from `4.2.1` plus the three kernel harnesses and
@@ -1215,6 +1319,27 @@ No new external dependency is introduced.
    direct adapter harness and Proptest wrapper coverage.
 
 ## Revision note
+
+- 2026-09-22 (issue #765, raised from the roadmap 4.2.3 reconciliation in #738):
+  The resource-cap wrapper in `Constraints` no longer leads with
+  `timeout --kill-after=20s 5m`. That prefix does not bound the workload by its
+  nominal figure: the `--kill-after=` grace window is added to the deadline
+  rather than nested inside it, so a signal-ignoring workload is bounded by
+  `5m + 20s`. The bound is now the scope property `-p RuntimeMaxSec=8m`, which
+  systemd enforces against the control group, paired with
+  `-p TimeoutStopSec=20s` to keep the forceful-termination grace bounded, and
+  the pipeline is documented with `set -o pipefail` so a failing `make` is not
+  masked by `tee`. Every narrative reference — the Progress log, Surprises &
+  Discoveries, the Decision Log, and the `Concrete steps` caveat — was
+  reconciled to the new form, and one fully composed example command with `tee`
+  was added to `Concrete steps`. Two entries were added to the Decision Log:
+  the wrapper decision restated in `RuntimeMaxSec` terms, and a record that the
+  mechanism reported by #765 did not reproduce on the reference host (systemd
+  257) while the defects the correction removes are both reproducible. The same
+  inert wrapper is prescribed by
+  `docs/execplans/4-2-3-kani-harnesses-for-command-interpolation.md`, where it
+  has already been corrected; the remainder of that reconciliation belongs to
+  roadmap 4.2.3 and is not absorbed here.
 
 - 2026-06-20 (planning agent, after Logisphere community-of-experts review):
   Added a fourth "output is a rotation of the input interior" assertion to each
