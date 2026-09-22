@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 034: Runtime annotation introspection in workflow contracts
+# Architectural decision record (ADR) 038: Runtime annotation introspection in workflow contracts
 
 ## Status
 

@@ -9,7 +9,7 @@ configurations this repository does not have in
 
 Read by ``ty`` and run by pytest; runtime annotation introspection is not
 supported here, because these annotations name ``TYPE_CHECKING``-only imports
-and resolving one raises ``NameError``. ADR-034 records the decision.
+and resolving one raises ``NameError``. ADR-038 records the decision.
 
 Run via ``make test-workflow-contracts``.
 """

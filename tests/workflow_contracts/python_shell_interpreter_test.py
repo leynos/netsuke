@@ -22,7 +22,7 @@ defers them, so the modules here which annotate with a ``TYPE_CHECKING``-only
 import -- ``Path`` in this file among them -- import cleanly, while resolving
 those annotations with ``typing.get_type_hints`` still raises ``NameError``.
 The repository does not support runtime annotation introspection on these
-modules; `ty` reads them statically and pytest executes them. ADR-034 records
+modules; `ty` reads them statically and pytest executes them. ADR-038 records
 the decision, its measured scope, and the gate that reopens it. Loading remains
 worth doing for definition-time failures that PEP 649 does not defer.
 

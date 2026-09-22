@@ -1906,7 +1906,7 @@ Because PEP 649 defers annotation evaluation, the contract modules under
 `NameError`. The repository does not support runtime annotation introspection
 on those modules; `ty` reads them statically and pytest executes them, and
 neither resolves annotations. See
-[ADR-034](adr-034-runtime-annotation-introspection-in-workflow-contracts.md)
+[ADR-038](adr-038-runtime-annotation-introspection-in-workflow-contracts.md)
 for the decision, the measured scope, and the gate that reopens it.
 
 The Makefile's `PYTHON_SOURCES` includes `.github/scripts`, so the normal

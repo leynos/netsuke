@@ -24,7 +24,7 @@
   `TYPE_CHECKING`-only import; the claim held under 3.12, and under the 3.14
   baseline PEP 649 defers evaluation, so only resolving the annotation catches
   it
-  ([#730](https://github.com/leynos/netsuke/issues/730), [ADR-034](docs/adr-034-runtime-annotation-introspection-in-workflow-contracts.md))
+  ([#730](https://github.com/leynos/netsuke/issues/730), [ADR-038](docs/adr-038-runtime-annotation-introspection-in-workflow-contracts.md))
 
 ### Fixed
 
