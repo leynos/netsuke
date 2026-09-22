@@ -43,6 +43,29 @@ if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
 
+def _reportable_mutation(
+    family: str,
+    description: str,
+    apply: cabc.Callable[[list[dict[str, object]]], None],
+    named: tuple[str, ...],
+) -> Mutation:
+    """Return a reportable mutation carrying ``named`` as its visible names.
+
+    Every mutation here that the contract must report is built this way, so the
+    one field they share — that they are reportable — is stated once rather than
+    repeated eleven times. The names are taken ready-made rather than as
+    variadic strings, because the factories that pass through ``visible_names``
+    have already decided them, and a helper that re-derived them would be a
+    second opinion about the same rule.
+
+    Returns
+    -------
+    Mutation
+        The mutation and the verdict the contract must return on it.
+    """
+    return Mutation(family, description, apply, reportable=True, named=named)
+
+
 def index_of(steps: cabc.Sequence[dict[str, object]], name: str) -> int:
     """Return the position of the uniquely named step ``name``."""
     return next(
@@ -57,12 +80,11 @@ def removed_step(name: str) -> Mutation:
         """Delete the named step from ``steps``."""
         steps.pop(index_of(steps, name))
 
-    return Mutation(
+    return _reportable_mutation(
         REMOVAL,
         f"{name!r} removed from the lane",
         apply,
-        reportable=True,
-        named=(name,),
+        (name,),
     )
 
 
@@ -79,12 +101,11 @@ def removed_field(step_name: str, field: str) -> Mutation:
         """Delete ``field`` from the named step."""
         step_of(steps, step_name).pop(field)
 
-    return Mutation(
+    return _reportable_mutation(
         REMOVAL,
         f"{field!r} removed from {step_name!r}",
         apply,
-        reportable=True,
-        named=visible_names(step_name, field),
+        visible_names(step_name, field),
     )
 
 
@@ -95,12 +116,11 @@ def removed_input(step_name: str, input_name: str) -> Mutation:
         """Delete ``input_name`` from the named step's inputs."""
         inputs_of(step_of(steps, step_name)).pop(input_name)
 
-    return Mutation(
+    return _reportable_mutation(
         REMOVAL,
         f"{input_name!r} removed from {step_name!r}",
         apply,
-        reportable=True,
-        named=visible_names(step_name, input_name),
+        visible_names(step_name, input_name),
     )
 
 
@@ -122,12 +142,11 @@ def duplicated_step(name: str) -> Mutation:
         """Append a deep copy of the named step to the lane."""
         steps.append(copy.deepcopy(step_of(steps, name)))
 
-    return Mutation(
+    return _reportable_mutation(
         DUPLICATION,
         f"{name!r} declared a second time",
         apply,
-        reportable=True,
-        named=(name,),
+        (name,),
     )
 
 
@@ -168,12 +187,11 @@ def swapped_steps(first: str, second: str) -> Mutation:
         left, right = index_of(steps, first), index_of(steps, second)
         steps[left], steps[right] = steps[right], steps[left]
 
-    return Mutation(
+    return _reportable_mutation(
         REORDERING,
         f"{first!r} and {second!r} exchanged",
         apply,
-        reportable=True,
-        named=(first, second),
+        (first, second),
     )
 
 
@@ -184,12 +202,11 @@ def misbound_input(step_name: str, input_name: str, value: str) -> Mutation:
         """Rebind ``input_name`` on the named step to ``value``."""
         inputs_of(step_of(steps, step_name))[input_name] = value
 
-    return Mutation(
+    return _reportable_mutation(
         MISBINDING,
         f"{step_name!r} given {input_name}={value!r}",
         apply,
-        reportable=True,
-        named=visible_names(step_name, input_name),
+        visible_names(step_name, input_name),
     )
 
 
@@ -200,12 +217,11 @@ def smuggled_input(step_name: str, input_name: str, value: str) -> Mutation:
         """Supply ``input_name`` on the named step, which must not receive it."""
         inputs_of(step_of(steps, step_name))[input_name] = value
 
-    return Mutation(
+    return _reportable_mutation(
         MISBINDING,
         f"{step_name!r} given {input_name}={value!r}",
         apply,
-        reportable=True,
-        named=visible_names(step_name, input_name),
+        visible_names(step_name, input_name),
     )
 
 
@@ -218,12 +234,11 @@ def rebound_environment(value: str) -> Mutation:
         if isinstance(environment, dict):
             environment[CREDENTIAL_ENVIRONMENT_KEY] = value
 
-    return Mutation(
+    return _reportable_mutation(
         MISBINDING,
         f"the upload reads {CREDENTIAL_ENVIRONMENT_KEY} from {value!r}",
         apply,
-        reportable=True,
-        named=visible_names(CODESCENE_UPLOAD_STEP),
+        visible_names(CODESCENE_UPLOAD_STEP),
     )
 
 
@@ -251,12 +266,11 @@ def ungated_upload(condition: str | None) -> Mutation:
             upload["if"] = condition
 
     described = "<absent>" if condition is None else repr(condition)
-    return Mutation(
+    return _reportable_mutation(
         UNGATING,
         f"the upload's gate set to {described}",
         apply,
-        reportable=True,
-        named=visible_names(CODESCENE_UPLOAD_STEP),
+        visible_names(CODESCENE_UPLOAD_STEP),
     )
 
 
@@ -267,12 +281,11 @@ def reversed_gate(condition: str) -> Mutation:
         """Set the upload's gate to the reversed ``condition``."""
         step_of(steps, CODESCENE_UPLOAD_STEP)["if"] = condition
 
-    return Mutation(
+    return _reportable_mutation(
         REVERSAL,
         f"the upload's gate reversed to {condition!r}",
         apply,
-        reportable=True,
-        named=visible_names(CODESCENE_UPLOAD_STEP),
+        visible_names(CODESCENE_UPLOAD_STEP),
     )
 
 
@@ -283,12 +296,11 @@ def weakened_gate(condition: str) -> Mutation:
         """Set the upload's gate to the weakened ``condition``."""
         step_of(steps, CODESCENE_UPLOAD_STEP)["if"] = condition
 
-    return Mutation(
+    return _reportable_mutation(
         WEAKENING,
         f"the upload's gate weakened to {condition!r}",
         apply,
-        reportable=True,
-        named=visible_names(CODESCENE_UPLOAD_STEP),
+        visible_names(CODESCENE_UPLOAD_STEP),
     )
 
 
