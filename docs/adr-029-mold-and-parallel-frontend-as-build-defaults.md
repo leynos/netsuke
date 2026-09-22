@@ -188,6 +188,51 @@ should be justified by the benchmark rather than by this record.
   compilers, not linkers; the version pin and its checksums live in
   `tools/mold/` and are verified by the installer.
 
+## Addendum, 2026-09-21: the suite under Cranelift
+
+The decision above is unchanged. This records the measurement that was missing
+from it.
+
+The Cranelift exclusion rested on the three-case probe in _Rationale_: a crate
+with no dependencies, written to isolate the unwind behaviour. That probe
+explains a mechanism. It does not answer the question the exclusion turns on,
+which is whether this repository's own suite runs under the backend — and the
+estate prefers Cranelift wherever a repository's suite passes under it.
+
+So the suite was run, on `main` at `00f48f77`, on the pinned
+`nightly-2026-08-23`, with `[profile.dev] codegen-backend = "cranelift"` and
+`[unstable] codegen-backend = true` added to `.cargo/config.toml` and nothing
+else changed. The control is the same commit and the same command with that
+fragment removed.
+
+| Arm                     | Result | Counts                                               |
+| ----------------------- | ------ | ---------------------------------------------------- |
+| LLVM control            | passes | 3309 run, 3309 passed, 5 skipped; 39 doctests passed |
+| Cranelift               | fails  | stops at 1372 of 3309 on the first abort             |
+| Cranelift, no fail-fast | fails  | 3309 run, 3302 passed, 6 failed, 1 timed out         |
+
+_Table 2: `make test` on 2026-09-21, by codegen backend._
+
+The runner's "6 failed" includes `the_configuration_names_no_codegen_backend`,
+which fails because the added configuration names a backend, exactly what that
+contract refuses. Setting it aside leaves five failures and one timeout, six
+outcomes caused by Cranelift. The five failures are the unwind behaviour of
+Table 1, in both of its shapes. The timeout is a test that runs the built
+binary repeatedly and crosses its per-test allowance because the
+Cranelift-built binary is slower; run alone it passes under both backends. The
+developers' guide names each failing test and attributes it.
+
+Two things follow, and neither changes the decision:
+
+- The re-test on a toolchain bump is the suite, not the probe. The probe is
+  kept because it explains what fails; only the suite answers whether the
+  backend is usable here. Issue #764 holds the procedure and the counts, and
+  shelves the question until 2027-03-21.
+- The exclusion is about this repository. Five of those six outcomes are tests
+  whose subject is a panic crossing a boundary, so a repository without such
+  tests would meet none of them. Other repositories on this estate do use
+  Cranelift, and this record does not argue against that.
+
 ## Implementation references
 
 - The standard itself: [`.cargo/config.toml`](../.cargo/config.toml)

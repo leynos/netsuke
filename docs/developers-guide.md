@@ -2567,10 +2567,15 @@ fail to different edits.
 ### Why Cranelift is not part of the standard
 
 The Cranelift codegen backend is the obvious third member of this set, and it
-is deliberately absent. A Cranelift-compiled panic does not find the unwind
-handler it should. The wording matters, because a probe that only checks
-whether a panic unwinds at all reads as a pass: what fails is every handler
-other than the outermost one.
+is deliberately absent. The reason is not a preference: this repository's own
+suite does not pass under it. Six tests fail, and the cause in five of them is
+that a Cranelift-compiled panic does not find the unwind handler it should. The
+wording matters, because a probe that only checks whether a panic unwinds at
+all reads as a pass: what fails is every handler other than the outermost one.
+
+The measurement that decides this is the whole suite rather than a probe, and
+it is the one to re-run on a toolchain bump. It is recorded under *The suite
+under Cranelift* below.
 
 Measured on 2026-09-18 on `nightly-2026-08-23`, whose Cranelift is
 `librustc_codegen_cranelift-1.100.0-nightly.so`, in a crate with no
@@ -2648,10 +2653,117 @@ no code, so `make typecheck` and `make lint` would gain nothing either. That
 leaves `make build` as the only beneficiary — the one artefact that would then
 abort on a panic and so behave differently from the binary the tests exercise.
 
-`tests/build_tools_cargo_config_tests.rs` therefore refuses a `codegen-backend`
-key under any profile. Re-test on a toolchain bump with the crate above before
-relaxing it; the environment override `CARGO_PROFILE_DEV_CODEGEN_BACKEND`
-remains available for a single scoped experiment.
+`tests/build_tools_cargo_config_tests.rs` therefore refuses a backend by every
+route the configuration file offers: a `codegen-backend` key on a profile or on
+a package override beneath one, the same flag inside either form of a
+`rustflags` value, and the `[unstable] codegen-backend` key that permits the
+profile key in the first place. The environment override
+`CARGO_PROFILE_DEV_CODEGEN_BACKEND` remains available for a single scoped
+experiment, and is the route that needs no edit to a committed file.
+
+#### The suite under Cranelift
+
+The probe above explains the mechanism. What decides the question is whether
+netsuke's own suite runs, so it was run: `make test` on `main` at `00f48f77`,
+on the pinned `nightly-2026-08-23`, with the configuration below added to
+`.cargo/config.toml` and nothing else changed. The control is the same commit
+and the same command with that fragment removed. Each arm had its own empty
+`CARGO_TARGET_DIR` and `CARGO_BUILD_BUILD_DIR`, so neither warmed the other,
+and the one-minute load stayed between 1 and 12 throughout.
+
+Repeating this on a toolchain bump needs one adjustment, or it can never come
+back clean. Adding the fragment makes
+`the_configuration_names_no_codegen_backend` fail by design, because that
+contract refuses exactly what the fragment adds. Exclude it, so that a green
+run means what it says. The procedure is for Linux, where the measurement was
+taken:
+
+```sh
+RUSTFLAGS="-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold" \
+  cargo nextest run --workspace --all-targets --all-features --no-fail-fast \
+  -E 'not test(the_configuration_names_no_codegen_backend)'
+RUSTDOCFLAGS="--cfg docsrs -D warnings" \
+RUSTFLAGS="-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold" \
+  cargo test --workspace --doc --all-features
+```
+
+Those `RUSTFLAGS` and `RUSTDOCFLAGS` are the gate's own, composed as the
+Makefile composes them on Linux, so the pair is the gate's own `make test`
+minus that one contract. On macOS or Windows the Makefile drops
+`-Clink-arg=-fuse-ld=mold`, because `mold` ships for Linux only, and a re-test
+there would have to drop it too; it would also be a different measurement from
+the one recorded here. `--no-fail-fast` is what turns the first abort into a
+list. Both commands are needed because nextest does not run doctests:
+`make test` runs them as a separate pass, and a nextest run alone would report
+success while saying nothing about the 39 the control passed. The doctest pass
+needs no filter, because the contract that has to be excluded is not a doctest.
+
+The question is shelved rather than settled, and issue #764 is the reminder:
+Cranelift is not revisited here before 2027-03-21, and that issue carries this
+procedure and these counts so a re-test does not have to rediscover them. A
+toolchain bump before then does not oblige anyone to run it; the measurement
+above is simply stale from the moment the pin moves past `nightly-2026-08-23`,
+and says so.
+
+```toml
+[unstable]
+codegen-backend = true
+
+[profile.dev]
+codegen-backend = "cranelift"
+```
+
+Table: `make test` on 2026-09-21, by backend.
+
+| Arm                     | Result | Counts                                               |
+| ----------------------- | ------ | ---------------------------------------------------- |
+| LLVM control            | passes | 3309 run, 3309 passed, 5 skipped; 39 doctests passed |
+| Cranelift               | fails  | stops at 1372 of 3309 on the first abort             |
+| Cranelift, no fail-fast | fails  | 3309 run, 3302 passed, 6 failed, 1 timed out         |
+
+The gate is the fail-fast run: it stops at the first failure, so the abort
+arrives after 1372 tests. The third row exists only to enumerate the rest.
+
+Table: the tests that do not pass under Cranelift, and why.
+
+| Test                                                                       | Kind      | Cause                         |
+| -------------------------------------------------------------------------- | --------- | ----------------------------- |
+| `test_tracing_capture::tests::snapshot_recovers_from_a_poisoned_lock`      | SIGABRT   | panic on a spawned thread     |
+| the same test in the `netsuke` binary's own target                         | SIGABRT   | panic on a spawned thread     |
+| `localizer::tests::en_localizer_recovers_from_a_poisoned_lock`             | SIGABRT   | panic on a spawned thread     |
+| `properties::the_last_declaration_wins_over_any_sequence`                  | fails     | `catch_unwind` does not catch |
+| `http::tests::accept_connection_respects_accept_timeout`                   | fails     | `catch_unwind` does not catch |
+| `repeated_generate_bounds_sidecars_and_keeps_the_latest_manifest_loadable` | times out | slower Cranelift-built binary |
+
+Neither `catch_unwind` failure is an incidental use of it. Each of those two
+tests has a panic as its subject: one reads an undeclared key and asserts the
+read panicked, the other asserts `accept_connection` panics at its deadline.
+Under Cranelift the panic walks past the handler, so the assertion never runs.
+The three poisoned-lock tests reach the same defect from the other side: each
+poisons a lock by panicking on a thread it spawned, and a spawned thread has no
+handler above it at all.
+
+The timeout is a different effect and was attributed rather than assumed. That
+test runs the built `netsuke` binary once per retained sidecar and then a Ninja
+probe; it compiles nothing. Run alone it passes under both backends, at 109 s
+on LLVM and 140 s on Cranelift, so what crosses the 300 s per-test allowance is
+the Cranelift-built binary being slower, under the suite's own concurrency. A
+quieter host might not show it, and the remedy if it ever mattered would be
+about that binary rather than about a build. The timing-shaped failure above
+was checked the same way and is not a flake: it fails under Cranelift run alone
+and passes under LLVM run alone.
+
+Two counts of six appear above and they are not the same six. The runner's "6
+failed" includes `the_configuration_names_no_codegen_backend`, which fails in
+the Cranelift arm because the configuration names a backend — which is what
+that contract refuses, so it is evidence the contract works rather than
+evidence about the backend. Setting it aside leaves five failures and one
+timeout: the six rows in the table above, all six caused by Cranelift.
+
+None of this says Cranelift is unusable elsewhere, and other repositories on
+this estate do use it. Five of those six outcomes are tests about a panic
+crossing a boundary, and a repository without such tests would meet none of
+them.
 
 ### Composition rules
 
