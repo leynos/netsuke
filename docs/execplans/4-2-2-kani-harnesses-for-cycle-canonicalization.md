@@ -157,14 +157,23 @@ of decisions that need the user's confirmation.
 
   `TimeoutStopSec=20s` preserves the bounded forceful-termination grace period
   that the removed `--kill-after=20s` used to provide: systemd sends `SIGTERM`,
-  then escalates to `SIGKILL` when that grace expires. Without it the scope
-  inherits `DefaultTimeoutStopSec`, which is far longer than this plan's
-  tolerances assume.
+  then escalates to `SIGKILL` when that grace expires. It is not optional.
+  `RuntimeMaxSec` alone stops a cooperative payload, but a scope whose stop
+  does not complete within `TimeoutStopSec` is only escalated on that timeout,
+  and the scope's own exit status is zero in that case — a workload ignoring
+  the first signal runs on and the wrapper still reports success. Probing
+  `RuntimeMaxSec=3s` without a paired `TimeoutStopSec` against a `SIGTERM`-
+  ignoring payload confirmed a zero status with the payload's completion marker
+  written six seconds in. With the pair in place the same probe exits 143 at
+  the deadline with the marker absent, so `TimeoutStopSec` is what makes the
+  bound both real and observable.
 
   `set -o pipefail` is required when the command is piped into `tee`. A
   pipeline's exit status is otherwise `tee`'s, which is zero whenever the
   capture succeeded, so a failing verifier would be masked by a successful
-  capture.
+  capture. When the pipeline is placed inside the scope, `pipefail` must be set
+  in the same shell as the pipeline; see the composed command in
+  `Concrete steps`.
 
   Include the known Kani `LD_LIBRARY_PATH` inside `<kani-command>` when invoking
   `cargo kani`, `make kani-ir`, or `make kani-full`. On this host, the
@@ -1137,7 +1146,6 @@ the inner command only.
 Composed in full, the cap around `make kani-ir` is a single command:
 
 ```bash
-set -o pipefail
 systemd-run \
     --user \
     --scope \
@@ -1150,17 +1158,21 @@ systemd-run \
     -p TasksMax=96 \
     -p IOWeight=20 \
     /usr/bin/nice -n 15 \
-    env LD_LIBRARY_PATH="$HOME/.kani/kani-0.67.0/toolchain/lib:$HOME/.kani/kani-0.67.0/lib" \
-    make kani-ir \
-  2>&1 | tee /tmp/kani-ir-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization.out
+    bash -c 'set -o pipefail; \
+      env LD_LIBRARY_PATH="$HOME/.kani/kani-0.67.0/toolchain/lib:$HOME/.kani/kani-0.67.0/lib" \
+      make kani-ir 2>&1 \
+      | tee /tmp/kani-ir-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization.out'
 ```
 
-The `tee` sits inside the pipeline but outside the scope, so the captured file
-is the verifier's own output rather than the wrapper's, and `set -o pipefail`
-keeps the pipeline's status equal to the verifier's. Placing `tee` inside the
-scope would also work and would make the cap govern the capture as well; the
-binding requirement is `pipefail`, since without it a failing verifier is
-masked by a successful `tee`.
+`tee` is inside the scope, so the captured file is exactly the output the cap
+governs: a run stopped by `RuntimeMaxSec` leaves a capture that ends where the
+budget ran out rather than a capture the scope cannot reach. Wrapping the
+pipeline in `bash -c` is what allows that, and `set -o pipefail` inside the
+same shell keeps the scope's exit status equal to the verifier's — without it
+the status would be `tee`'s, which is zero whenever the capture succeeded, so a
+failing verifier would be masked by a successful `tee`. A pipeline written
+outside the scope cannot carry `pipefail` into it, which is the reason the
+pipeline travels as the scope's payload.
 
 Expected shape of success:
 
@@ -1332,8 +1344,9 @@ No new external dependency is introduced.
   masked by `tee`. Every narrative reference — the Progress log, Surprises &
   Discoveries, the Decision Log, and the `Concrete steps` caveat — was
   reconciled to the new form, and one fully composed example command with `tee`
-  was added to `Concrete steps`. Two entries were added to the Decision Log:
-  the wrapper decision restated in `RuntimeMaxSec` terms, and a record that the
+  inside the scope was added to `Concrete steps`, so the capture matches
+  exactly what the cap governs. Two entries were added to the Decision Log: the
+  wrapper decision restated in `RuntimeMaxSec` terms, and a record that the
   mechanism reported by #765 did not reproduce on the reference host (systemd
   257) while the defects the correction removes are both reproducible. The same
   inert wrapper is prescribed by
