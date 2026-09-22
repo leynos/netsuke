@@ -28,6 +28,13 @@ const POLONIUS_DEFAULT_SINCE: &str = "2026-08-04";
 const SETUP_RUST_ACTION: &str = "leynos/shared-actions/.github/actions/setup-rust";
 const RUST_BUILD_RELEASE_ACTION: &str = "leynos/shared-actions/.github/actions/rust-build-release";
 const DENY_WARNINGS_RUSTFLAGS: &str = "-D warnings";
+/// The expression a job must pass as `Setup Rust`'s `toolchain` input once it
+/// declares the pin in its own `env`.
+///
+/// Held as a literal rather than derived, because the whole defect it guards
+/// against is a reference that silently resolves to nothing: were this built
+/// from the same variable, an empty `env` would satisfy the comparison.
+const ENV_TOOLCHAIN_INPUT: &str = "${{ env.NETSUKE_RUST_TOOLCHAIN }}";
 
 /// Build-configuration surfaces that could reintroduce the retired directive.
 ///
@@ -54,7 +61,14 @@ struct WorkflowExpectation {
     action: &'static str,
     /// The `with.rustflags` input the job must pass, or `None` when it must
     /// pass none at all and inherit the action's default.
+    ///
+    /// `None` is a requirement that the input be absent, not the absence of a
+    /// requirement: this field is compared for equality like the others.
     rustflags: Option<&'static str>,
+    /// Whether the job declares `NETSUKE_RUST_TOOLCHAIN` at job scope.
+    ///
+    /// When it does, the step must also pass [`ENV_TOOLCHAIN_INPUT`]; when it
+    /// does not, the step must not name that expression at all.
     pins_toolchain_env: bool,
 }
 
@@ -63,6 +77,17 @@ const CI_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
     job: "build-test",
     action: SETUP_RUST_ACTION,
     rustflags: Some(DENY_WARNINGS_RUSTFLAGS),
+    pins_toolchain_env: true,
+};
+/// The second `ci.yml` job on the shared-action contract.
+///
+/// It passes no `rustflags`, so `None` here means the action's default is
+/// inherited rather than denied, the same shape as the coverage job.
+const CI_KANI_SMOKE_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
+    path: ".github/workflows/ci.yml",
+    job: "kani-smoke",
+    action: SETUP_RUST_ACTION,
+    rustflags: None,
     pins_toolchain_env: true,
 };
 const CI_WINDOWS_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
@@ -95,8 +120,9 @@ const PACKAGING_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
 };
 
 /// Every workflow under the shared-action toolchain contract.
-const WORKFLOW_EXPECTATIONS: [WorkflowExpectation; 5] = [
+const WORKFLOW_EXPECTATIONS: [WorkflowExpectation; 6] = [
     CI_WORKFLOW,
+    CI_KANI_SMOKE_WORKFLOW,
     CI_WINDOWS_WORKFLOW,
     NETSUKEFILE_WORKFLOW,
     COVERAGE_WORKFLOW,
@@ -194,6 +220,7 @@ fn build_configuration_does_not_restate_the_retired_polonius_flag() -> Result<()
 
 #[rstest]
 #[case::ci(CI_WORKFLOW)]
+#[case::ci_kani_smoke(CI_KANI_SMOKE_WORKFLOW)]
 #[case::ci_windows(CI_WINDOWS_WORKFLOW)]
 #[case::netsukefile(NETSUKEFILE_WORKFLOW)]
 #[case::coverage(COVERAGE_WORKFLOW)]
@@ -231,6 +258,7 @@ fn workflows_agree_with_the_pinned_toolchain(
         "{path} {expected_action} passes {rustflags:?}, expected {expected_rustflags:?}"
     );
     let toolchain_env = yaml_str(&workflow, &["jobs", job, "env", "NETSUKE_RUST_TOOLCHAIN"]);
+    let toolchain_input = yaml_str(shared_action, &["with", "toolchain"]);
     if pins_toolchain_env {
         let expected = pinned_toolchain()?;
         let toolchain = toolchain_env
@@ -239,10 +267,26 @@ fn workflows_agree_with_the_pinned_toolchain(
             toolchain == expected,
             "{path} job {job} pins {toolchain:?}, but rust-toolchain.toml pins {expected:?}"
         );
+        // A pin nothing reads is not a pin. `env` resolves per job, so a step
+        // that names a variable only another job declared expands to the empty
+        // string rather than failing: the job pins the toolchain, the compiler
+        // resolves from ambient state, and the two disagree in silence.
+        ensure!(
+            toolchain_input == Some(ENV_TOOLCHAIN_INPUT),
+            "{path} job {job} pins NETSUKE_RUST_TOOLCHAIN but passes {toolchain_input:?} to \
+             `Setup Rust`, expected {ENV_TOOLCHAIN_INPUT:?}: an empty input selects the \
+             action's rust-toolchain-file arm, which resolves the compiler from ambient \
+             state and ignores the pin"
+        );
     } else {
         ensure!(
             toolchain_env.is_none(),
             "{path} job {job} should not override NETSUKE_RUST_TOOLCHAIN, found {toolchain_env:?}"
+        );
+        ensure!(
+            toolchain_input != Some(ENV_TOOLCHAIN_INPUT),
+            "{path} job {job} reads {ENV_TOOLCHAIN_INPUT} without pinning \
+             NETSUKE_RUST_TOOLCHAIN, so the expression resolves to the empty string"
         );
     }
     Ok(())

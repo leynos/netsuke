@@ -373,45 +373,54 @@ jobs:
       contents: read
     env:
       CARGO_TERM_COLOR: always
-      # No `RUSTUP_TOOLCHAIN` here. The toolchain this job builds with is chosen
-      # by `Setup Rust`'s `toolchain` input, which names the pinned nightly.
-      #
-      # The variable is absent because the obvious value for it is wrong: while
-      # this job ran only `make kani-ir` it set `stable`, and that never reached
-      # `cargo kani`, which resolves its own bundled toolchain for the codegen
-      # it drives. Once the mutation compile gate ran `cargo nextest` — which
-      # does honour the variable — `stable` would abort at toolchain selection,
-      # because `GATE_RUSTFLAGS` unconditionally appends the nightly-only
-      # `-Zthreads=8`. A channel value is therefore always wrong here.
-      #
-      # Removing it was necessary but not sufficient, and the run that proved
-      # that is the useful part. `setup-rust` finishes by running
-      # `rustup override set $toolchain`, a *directory* override for the
-      # workspace, and a directory override outranks `rust-toolchain.toml`.
-      # With `toolchain: stable` it therefore pinned the job to stable by a
-      # route that outlived the env-var removal, and run 35788180077 failed
-      # exactly as the run before it had: `rustc` still resolved to
-      # `.kani-rustup/toolchains/stable-*/bin/rustc`, so the gate aborted having
-      # compiled nothing.
-      #
-      # `check-build-tools` runs ahead of the gate and cannot catch any of this.
-      # It asserts the pin is *installed*, not *active*: in that same run it
-      # reported `toolchain nightly-2026-08-23 available` — truly, the override
-      # had not displaced the installation — one line before the gate aborted
-      # on stable.
-      #
       # The mutation compile gate runs through nextest, so this lane declares a
       # test-process bound like every other nextest lane. Two vCPUs, two test
       # processes.
       LINUX_LANE_VCPUS: '2'
       NEXTEST_TEST_JOBS: -j 2
+      # The toolchain this job builds with. Declared at job scope, like every
+      # other job that hands it to `Setup Rust`, because the `env` context
+      # resolves per job: a job that reads a variable only another job declared
+      # gets the empty string, never an error. `build-test` owns the only other
+      # copy and it does not reach here.
+      #
+      # The absent declaration is the defect this line repairs, found on run
+      # 35792995207. An empty `toolchain` input is not a request for a default:
+      # it makes `setup-rust` take its `rust-toolchain file` arm, which passes
+      # `override: false` and leaves the compiler resolved from ambient state.
+      # The winner there is a *stale directory override* — `kani-cache`
+      # restores `.kani-rustup` wholesale, `settings.toml` and its `[overrides]`
+      # table included, and a directory override outranks `rust-toolchain.toml`.
+      # That table was written while this job's input was the literal `stable`,
+      # so the cached home kept selecting stable and the gate aborted having
+      # compiled nothing.
+      #
+      # Naming the pin is what displaces that entry: a non-empty input selects
+      # `setup-rust`'s `explicit toolchain` arm with `override: true`, which
+      # installs the nightly and rewrites the override to point at it.
+      #
+      # The failure this prevents is an abort, not a silent fallback.
+      # `GATE_RUSTFLAGS` unconditionally appends the nightly-only `-Zthreads=8`
+      # and stable rejects it before a single patch compiles.
+      # `check-build-tools` cannot catch it: it asserts the pin is *installed*,
+      # not *active*, so it can report `toolchain nightly-2026-08-23 available`
+      # one line before the gate aborts on stable.
+      #
+      # With `cargo kani` the value would not matter, because it resolves its
+      # own bundled toolchain. Do not drop it on the grounds that the harnesses
+      # pass without it: the mutation compile gate is the consumer.
+      NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
       CARGO_HOME: ${{ github.workspace }}/.kani-cargo
       KANI_HOME: ${{ github.workspace }}/.kani-home
       # Redirected so the Kani payloads' toolchain state is cached and torn down
-      # with the job. The redirection costs nothing in toolchain selection:
-      # `rust-toolchain.toml` is still honoured (the override `setup-rust` sets
-      # is what outranks it, and that is set from the `toolchain` input below),
-      # and `make install-build-tools` installs the pin into this home.
+      # with the job. `make install-build-tools` installs the pin into this home.
+      #
+      # The redirection is also how a stale toolchain selection survives across
+      # runs: this home holds `settings.toml`, whose `[overrides]` table is what
+      # `rustup override set` writes and `rust-toolchain.toml` loses to, and
+      # `kani-cache` restores the whole directory. A `RUSTUP_HOME` that is cached
+      # is a toolchain decision that is cached, which is why the job must name
+      # the toolchain it wants rather than inherit whatever the last writer left.
       RUSTUP_HOME: ${{ github.workspace }}/.kani-rustup
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -428,17 +437,14 @@ jobs:
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@a5765019912a8ab6882b12db049c7cde635f3a85
         with:
-          # The pinned nightly, not `stable`. This input does double duty: it
-          # installs the toolchain *and* runs `rustup override set` on it, and
-          # the override outranks `rust-toolchain.toml` for the whole workspace.
-          # Passing `stable` therefore did not merely install a spare toolchain
-          # — it actively selected one that rejects `GATE_RUSTFLAGS`'s
-          # nightly-only `-Zthreads=8`, so the mutation compile gate aborted at
-          # toolchain selection having compiled nothing (run 35788180077, and
-          # the run before it). Naming the pin is not the restatement the
-          # ordinary lanes avoid; here it is what the gate builds with.
-          # `make install-build-tools` installs the same pin again below, which
-          # is a no-op once it is present here.
+          # Resolved from the job's own `env`, which declares the pinned
+          # nightly. This input does double duty: a non-empty value selects
+          # `setup-rust`'s `explicit toolchain` arm, which installs the named
+          # toolchain *and* runs `rustup override set` on it. That override is
+          # what outranks `rust-toolchain.toml` for the whole workspace, so it
+          # has to point at the nightly: it is also what displaces the stale
+          # `stable` entry a restored `.kani-rustup` carries in. See the job's
+          # `NETSUKE_RUST_TOOLCHAIN` for what an empty value here costs.
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           cache-provider: external
           # Kani's payloads come from pinned release archives, so this job
