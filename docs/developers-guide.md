@@ -2675,23 +2675,28 @@ Repeating this on a toolchain bump needs one adjustment, or it can never come
 back clean. Adding the fragment makes
 `the_configuration_names_no_codegen_backend` fail by design, because that
 contract refuses exactly what the fragment adds. Exclude it, so that a green
-run means what it says:
+run means what it says. The procedure is for Linux, where the measurement was
+taken:
 
 ```sh
 RUSTFLAGS="-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold" \
   cargo nextest run --workspace --all-targets --all-features --no-fail-fast \
   -E 'not test(the_configuration_names_no_codegen_backend)'
+RUSTDOCFLAGS="--cfg docsrs -D warnings" \
 RUSTFLAGS="-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold" \
   cargo test --workspace --doc --all-features
 ```
 
-Those `RUSTFLAGS` are the gate's own, composed as the Makefile composes them,
-so the pair is the gate's own `make test` minus that one contract.
-`--no-fail-fast` is what turns the first abort into a list. Both commands are
-needed because nextest does not run doctests: `make test` runs them as a
-separate pass, and a nextest run alone would report success while saying
-nothing about the 39 the control passed. The doctest pass needs no filter,
-because the contract that has to be excluded is not a doctest.
+Those `RUSTFLAGS` and `RUSTDOCFLAGS` are the gate's own, composed as the
+Makefile composes them on Linux, so the pair is the gate's own `make test`
+minus that one contract. On macOS or Windows the Makefile drops
+`-Clink-arg=-fuse-ld=mold`, because `mold` ships for Linux only, and a re-test
+there would have to drop it too; it would also be a different measurement from
+the one recorded here. `--no-fail-fast` is what turns the first abort into a
+list. Both commands are needed because nextest does not run doctests:
+`make test` runs them as a separate pass, and a nextest run alone would report
+success while saying nothing about the 39 the control passed. The doctest pass
+needs no filter, because the contract that has to be excluded is not a doctest.
 
 The question is shelved rather than settled, and issue #764 is the reminder:
 Cranelift is not revisited here before 2027-03-21, and that issue carries this
