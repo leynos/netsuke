@@ -234,7 +234,7 @@ test-nextest: check-build-tools ## Run all non-doctest Rust tests through cargo-
 doctest: check-build-tools ## Run doctests, which cargo-nextest cannot execute
 	$(GATE_RUSTFLAGS) $(CARGO) test --workspace --doc --all-features $(BUILD_JOBS)
 
-test-kani-mutations: check-build-tools ## Compile each mutation patch's patched tree under denied warnings
+test-kani-mutations: check-build-tools ## Compile each mutation patch's patched tree under the Kani configuration
 	$(GATE_RUSTFLAGS) $(CARGO) nextest run --test kani_mutation_evidence_tests --all-features --run-ignored ignored-only $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
 
 test-workflow-contracts: ## Validate GitHub Actions workflow contracts

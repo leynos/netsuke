@@ -3208,16 +3208,28 @@ the harnesses. Three of its checks run as part of `make test`:
   named patch, or appear in the test's exemption list with a stated reason; and
 - every patch must correspond to a live harness, catching renames.
 
-A fourth check is gated, because it costs one `cargo check` per patch:
+A fourth check is gated, because it costs one Kani codegen per patch:
 `compile_guard::every_patched_tree_compiles_under_denied_warnings` applies each
 patch, compiles the patched tree under `-D warnings`, and reverts it through a
 `Drop` guard so an assertion failure cannot leave a mutation in the working
 tree. Run it with `make test-kani-mutations`, which drives nextest with
-`--run-ignored ignored-only`; `build-test` runs the same target on every pull
+`--run-ignored ignored-only`; `kani-smoke` runs the same target on every pull
 request. Applying cleanly is not enough on its own: `make kani-full` denies
 warnings, so a patch that seeds its fault by leaving a binding or helper unused
 is a hard compile error, `cargo kani` never reaches the harness, and the patch
 contributes no evidence while still looking healthy to `git apply --check`.
+
+The gate compiles through the Kani frontend (`cargo kani --only-codegen`)
+rather than `cargo check`, and it runs in `kani-smoke` rather than
+`build-test`, for one reason: only Kani parses `#[cfg(kani)]` code.
+`cargo check` leaves that surface unparsed, so a patch that seeds its fault
+inside a Kani-gated item is invisible to it — measured on
+`ir__cycle__verification__self_dependency_reports_cycle`, whose only changed
+line is a `cfg(kani)` match arm, `cargo check --lib --all-features` exits 0 and
+reports the tree healthy while `cargo kani` rejects that same tree with
+`variant Present is never constructed`. `--only-codegen` is a full compile under
+`cfg(kani)` with verification skipped, so it subsumes the check it replaced
+rather than joining it.
 
 Regenerate a rotted patch *in place*: swap an operator, comparator, index, or
 literal rather than deleting a statement or redirecting a call. Deleting the
@@ -3299,10 +3311,10 @@ Table: the executed test set of every job that runs tests.
 | -------------------------- | ------------ | ------------------------------------------ | -------- | ----------- | -------- |
 | `build-test` coverage step | Ubuntu 24.04 | `cargo llvm-cov nextest --workspace`       | all      | all         | denied   |
 | `build-test` doctest step  | Ubuntu 24.04 | `cargo test --doc`                         | all      | doctests    | denied   |
-| `build-test` mutation step | Ubuntu 24.04 | `make test-kani-mutations`                 | all      | library     | denied   |
 | `coverage-upload`          | Ubuntu 24.04 | `cargo llvm-cov nextest --workspace`       | all      | all         | denied   |
 | `netsukefile`              | Ubuntu 22.04 | builds a manifest and runs Ninja           | default  | binary only | allowed  |
 | `kani-smoke`               | Ubuntu 24.04 | `make kani-ir`                             | Kani cfg | harnesses   | allowed  |
+| `kani-smoke` mutation step | Ubuntu 24.04 | `make test-kani-mutations`                 | all      | library     | denied   |
 | `build-test-windows`       | Windows      | `cargo nextest run` and `cargo test --doc` | all      | all         | denied   |
 
 Coverage is measured once per commit. `build-test` measures it only on a pull
@@ -3311,6 +3323,15 @@ request, where the changed-line gate consumes `lcov.info`. On a push to `main`,
 is the sole writer of the ratchet baseline, so the baseline is comparable with
 what the ratchet later checks against. A second instrumented build would pay
 twice and give that baseline two writers.
+
+`kani-smoke` carries two test sets that share only the lane. `make kani-ir`
+verifies the harnesses under the Kani configuration with warnings allowed;
+`make test-kani-mutations` compiles patched trees through the same frontend
+with warnings denied. They are separate because they answer different
+questions: the first asks whether the harnesses hold, the second whether they
+can still be reached at all. The gate compiles each patch into one shared
+`CARGO_TARGET_DIR` so the eighteen patches reuse a single compiled dependency
+graph rather than rebuilding it apiece.
 
 `netsukefile` and `kani-smoke` differ in platform or in purpose, so neither is
 a candidate for folding. The Windows gate keeps its own `cargo nextest` pass

@@ -52,6 +52,12 @@ UBICLOUD_WORKER_BOUNDS = (
         "build-test",
         ("BUILD_JOBS", "CARGO_BUILD_JOBS", "NEXTEST_TEST_THREADS"),
     ),
+    # The Kani lane runs the mutation compile gate through nextest, so it
+    # declares a test-process bound like every other nextest lane. It sets no
+    # cargo build bound: the gate's compilation is `cargo kani`'s, on a shared
+    # `CARGO_TARGET_DIR` serialised by the build queue rather than by a worker
+    # count.
+    ("ci.yml", "kani-smoke", ("NEXTEST_TEST_JOBS",)),
     (
         "coverage-main.yml",
         "coverage-upload",

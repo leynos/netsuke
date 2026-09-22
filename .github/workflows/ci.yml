@@ -308,19 +308,6 @@ jobs:
         # `--no-project` because the check is stdlib-only and must not resolve
         # this repository's Python project or write to its lockfile.
         run: uv run --no-project --python 3.14 .github/scripts/verify_nextest_anchored_filters.py
-      - name: Mutation patch compile gate
-        # Applies each patch under docs/verification/mutations/ and compiles the
-        # patched tree under `-D warnings`. `#[ignore]`-gated and run from its
-        # own target: one `cargo check` per patch is too costly for the default
-        # nextest profile, but a patch that applies cleanly yet cannot compile
-        # contributes no mutation evidence while looking healthy.
-        #
-        # Placed after the coverage step so the instrumented tree is still the
-        # one it compiles against. `make test-kani-mutations` is deliberately
-        # named so the forbidden-suite scan in
-        # tests/workflow_contracts/test_execution_coverage_test.py does not read
-        # it as a second workspace-suite execution.
-        run: make test-kani-mutations
       - name: Show sccache statistics
         if: always()
         run: |
@@ -376,12 +363,28 @@ jobs:
     # generation, since the save gates on a push to `main`, so all it can do
     # here is measure a warm restore, which is the one the exit gate needs.
     runs-on: ubicloud-standard-2-ubuntu-2404
-    timeout-minutes: 20
+    # Thirty minutes, not twenty. The compile gate at the end of this job
+    # builds the whole dependency graph through the Kani frontend, and a cold
+    # `CARGO_TARGET_DIR` plus the frontend's own toolchain download is what the
+    # ceiling has to contain. See "Test timeouts: the tiers this repository
+    # sets" in docs/developers-guide.md.
+    timeout-minutes: 30
     permissions:
       contents: read
     env:
       CARGO_TERM_COLOR: always
+      # Left at `stable` deliberately. `cargo kani` resolves its own bundled
+      # toolchain for the codegen it drives, so this variable does not reach the
+      # compile gate at all; measured, `cargo kani --only-codegen` exits 0 on
+      # this tree under both `stable` and the repository's pinned nightly. The
+      # gate's real prerequisite is the pinned nightly being *installed*, which
+      # `make install-build-tools` ensures and `check-build-tools` then verifies.
       RUSTUP_TOOLCHAIN: stable
+      # The mutation compile gate runs through nextest, so this lane declares a
+      # test-process bound like every other nextest lane. Two vCPUs, two test
+      # processes.
+      LINUX_LANE_VCPUS: '2'
+      NEXTEST_TEST_JOBS: -j 2
       CARGO_HOME: ${{ github.workspace }}/.kani-cargo
       KANI_HOME: ${{ github.workspace }}/.kani-home
       RUSTUP_HOME: ${{ github.workspace }}/.kani-rustup
@@ -451,6 +454,38 @@ jobs:
         run: cargo kani --version | grep --fixed-strings "0.67.0"
       - name: Run Kani harnesses
         run: make kani-ir
+      - name: Install the build standard
+        # The gate below compiles the tree the harnesses are verified in, so it
+        # needs the same prerequisites every other build target declares: the
+        # pinned `mold` linker and the repository's nightly toolchain. This is
+        # the step that puts the pinned nightly on the machine; `cargo kani`
+        # itself drives its own bundled toolchain and is unaffected.
+        run: make install-build-tools
+      - name: Install cargo-nextest
+        # The gate runs through nextest like every other test target. Installed
+        # by the workflow-scoped pin rather than `cargo binstall`, so it matches
+        # the version the other lanes use without needing a binary-install
+        # helper in this job.
+        uses: taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375  # v2.87.12
+        with:
+          tool: nextest@${{ env.NEXTEST_VERSION }}
+      - name: Mutation patch compile gate
+        # Applies each patch under docs/verification/mutations/ and compiles the
+        # patched tree under `-D warnings`. `#[ignore]`-gated and run from its
+        # own target: one Kani codegen per patch is too costly for the default
+        # nextest profile, but a patch that applies cleanly yet cannot compile
+        # contributes no mutation evidence while looking healthy.
+        #
+        # This job, not `build-test`, is where the gate belongs. Only Kani
+        # parses `#[cfg(kani)]` code, so only Kani can reject a patch that seeds
+        # its fault inside a Kani-gated item; `build-test` has no Kani at all.
+        # The gate compiles through the Kani frontend for that reason.
+        #
+        # `make test-kani-mutations` is deliberately named so the
+        # forbidden-suite scan in
+        # tests/workflow_contracts/test_execution_coverage_test.py does not read
+        # it as a second workspace-suite execution.
+        run: make test-kani-mutations
       - name: Save Kani payloads
         # This job owns the Kani key and nothing else; the action restricts
         # the save to a push on `main`.

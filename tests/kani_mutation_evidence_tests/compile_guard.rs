@@ -1,17 +1,35 @@
 //! Compile gate over every mutation patch's patched tree.
 //!
 //! `every_patch_applies_cleanly` in the parent module proves each patch
-//! *applies*; it does not prove the patched tree *compiles*. `make kani-full`
-//! denies warnings (PR #714), so a patch that seeds its fault by leaving a
-//! binding or helper unused is a hard compile error: `cargo kani` never reaches
-//! the harness and the patch contributes no mutation evidence while still
-//! looking healthy to `git apply --check`.
+//! *applies*; it does not prove the patched tree *compiles* under the
+//! configuration the harnesses are verified in. `make kani-full` denies
+//! warnings (PR #714), so a patch that seeds its fault by leaving a binding or
+//! helper unused is a hard compile error: `cargo kani` never reaches the
+//! harness and the patch contributes no mutation evidence while still looking
+//! healthy to `git apply --check`.
 //!
 //! This module closes that gap by applying each patch, compiling the patched
-//! tree under `-D warnings`, and reverting. It is expensive — one `cargo check`
+//! tree under `-D warnings`, and reverting. It is expensive — one Kani codegen
 //! per patch — so the test is `#[ignore]`-gated and runs from its own Make
 //! target on a shared `CARGO_TARGET_DIR`, which keeps successive patches
 //! incremental.
+//!
+//! # Why Kani compiles the tree, not `cargo check`
+//!
+//! `cargo check` leaves `#[cfg(kani)]` code unparsed. A patch that seeds its
+//! fault inside a Kani-gated item is therefore invisible to it: measured on
+//! `ir__cycle__verification__self_dependency_reports_cycle`, whose only
+//! changed line is a `cfg(kani)` match arm, `cargo check --lib --all-features`
+//! exits 0 and reports the tree healthy while `cargo kani` rejects that same
+//! tree with `variant Present is never constructed`. That is precisely the
+//! failure this module exists to catch, so the gate compiles the tree the way
+//! the harnesses are verified — through the Kani frontend.
+//!
+//! `--only-codegen` is a full compile under `cfg(kani)` with verification
+//! skipped, so it subsumes the check it replaces rather than joining it: it
+//! catches both the dead-code faults that motivated this gate and the
+//! `cfg(kani)`-gated ones `cargo check` cannot see. Both were measured, in
+//! both directions, before the swap.
 
 use std::process::Command;
 
@@ -117,14 +135,20 @@ fn run_git_apply<const N: usize>(args: [&str; N], patch: &Utf8Path, action: &str
 /// Compile the patched tree under `-D warnings`, returning its failure output.
 ///
 /// `Ok(None)` means the tree compiled; `Ok(Some(stderr))` means it did not.
+///
+/// Invoked through the Kani frontend rather than `cargo check`, for the reason
+/// the module docs give: only Kani parses `#[cfg(kani)]` code, so only Kani can
+/// reject a patch that seeds its fault inside a Kani-gated item. `--only-codegen`
+/// compiles without verifying, which is all this gate needs — the harnesses
+/// themselves are run by `make kani-full`, not here.
 fn compile_patched_tree(target_dir: &Utf8Path) -> Result<Option<String>> {
     let output = Command::new(env!("CARGO"))
-        .args(["check", "--lib", "--all-features"])
+        .args(["kani", "--only-codegen", "--lib", "--all-features"])
         .current_dir(manifest_dir())
         .env("RUSTFLAGS", DENY_WARNINGS)
         .env("CARGO_TARGET_DIR", target_dir)
         .output()
-        .context("run cargo check over the patched tree")?;
+        .context("run cargo kani over the patched tree")?;
     if output.status.success() {
         return Ok(None);
     }
@@ -156,7 +180,7 @@ fn patch_paths() -> Result<Vec<Utf8PathBuf>> {
 /// never reaches its harness, so the patch can no longer demonstrate that the
 /// harness detects the seeded fault.
 #[test]
-#[ignore = "compiles each patched tree with a real cargo check; run via `make test-kani-mutations`"]
+#[ignore = "compiles each patched tree through the Kani frontend; run via `make test-kani-mutations`"]
 fn every_patched_tree_compiles_under_denied_warnings() -> Result<()> {
     if !is_git_work_tree(manifest_dir())? {
         // cargo-mutants copies omit `.git`, so no patch can be applied there.
@@ -193,11 +217,11 @@ fn every_patched_tree_compiles_under_denied_warnings() -> Result<()> {
     );
     ensure!(
         broken.is_empty(),
-        "mutation patches apply but their patched trees do not compile, so \
-         the Kani harnesses they target never run: {broken:#?}; reseed each \
-         fault in place — swap an expression rather than deleting a statement \
-         — so every helper stays referenced and every `mut` binding is still \
-         reassigned",
+        "mutation patches apply but their patched trees do not compile under \
+         the Kani configuration, so the harnesses they target never run: \
+         {broken:#?}; reseed each fault in place — swap an expression rather \
+         than deleting a statement — so every helper stays referenced and \
+         every `mut` binding is still reassigned",
     );
     Ok(())
 }
