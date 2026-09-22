@@ -151,14 +151,18 @@ of decisions that need the user's confirmation.
   signalling the process it supervises, and its `--kill-after=` grace window is
   added to the deadline rather than nested inside it, so a workload that
   ignores the first signal is bounded by the sum of the two rather than by the
-  nominal figure. `RuntimeMaxSec` for scope units requires systemd 244 or
-  later, which `systemd.scope` records as the version that added it for scopes
-  rather than for services; `systemd-run --version` on the reference host
-  reports 257. A host that cannot accept the property fails loudly rather than
-  silently running uncapped: an unsupported transient assignment is rejected and
-  `systemd-run` exits non-zero with `Unknown assignment` without starting the
-  payload. That is a property of transient-unit assignment generally, so no
-  explicit version check is needed in the wrapper.
+  nominal figure. The wrapper has two systemd floors, and the higher one binds.
+  `RuntimeMaxSec` for scope units requires systemd 244 or later, which
+  `systemd.scope` records as the version that added it for scopes rather than
+  the 229 that `systemd.service` records for services.
+  `--expand-environment=no` requires systemd 254 or later, so that is the
+  wrapper's effective minimum. `systemd-run --version` on the reference host
+  reports 257. A host below the floor fails loudly rather than silently running
+  uncapped: an unsupported transient assignment is rejected with
+  `Unknown assignment`, and an unrecognized option with `unrecognized option`,
+  in both cases exiting non-zero without starting the payload. That is generic
+  command-line behaviour for `systemd-run`, so no explicit version check is
+  needed in the wrapper.
 
   `TimeoutStopSec=20s` preserves the bounded forceful-termination grace period
   that the removed `--kill-after=20s` used to provide: systemd sends `SIGTERM`,
