@@ -243,9 +243,9 @@ failure mode cannot recur silently.
   `RUSTUP_HOME`: the theory was that rustup looks for `rust-toolchain.toml`'s
   pin inside that home and, not finding it, falls back. The job log falsifies
   this on two counts. The pin *was* found there — `check-build-tools` prints
-  `toolchain nightly-2026-08-23 available`, and it greps `rustup toolchain list`
-  under the same redirected home — and `rust-toolchain.toml` is honoured
-  normally under a redirected `RUSTUP_HOME`.
+  `toolchain nightly-2026-08-23 available`, and it greps
+  `rustup toolchain list` under the same redirected home — and
+  `rust-toolchain.toml` is honoured normally under a redirected `RUSTUP_HOME`.
   - The real mechanism is a **directory override**. `setup-rust` ends by
     running `rustup override set "$toolchain"` (its `override` input defaults
     to `true`), and a directory override outranks `rust-toolchain.toml` for the
@@ -277,14 +277,14 @@ failure mode cannot recur silently.
   in an **allow-list** regex, and `test(=NAME)` is not among them. Probing that
   regex directly over the resolved file judges all **17** selectors accepted,
   **0** legacy, and rejects the old spelling — so the conversion is not a
-  stylistic preference but the only form the contract admits. The same `=`
-  form that silently unhooked parameterized tests from their policy is the one
-  a new, non-parameterized test would have carried happily: it would have
-  worked, which is why nothing would have flagged it.
+  stylistic preference but the only form the contract admits. The same `=` form
+  that silently unhooked parameterized tests from their policy is the one a
+  new, non-parameterized test would have carried happily: it would have worked,
+  which is why nothing would have flagged it.
 - **A rebase whose conflicts are resolved by hand needs a proof that is not
   ancestry.** `git diff <old-head> <new-head>` over the whole tree showed only
-  files that `origin/main`'s four incoming commits had themselves touched,
-  plus the two conflict files — every file this branch authored came back
+  files that `origin/main`'s four incoming commits had themselves touched, plus
+  the two conflict files — every file this branch authored came back
   **byte-identical**, all 18 patches included. That is the check worth having:
   the eleven replayed commits have new SHAs, so citing the old ones proves
   nothing, and a green suite after a rebase proves only that the suite passes.
@@ -357,14 +357,15 @@ failure mode cannot recur silently.
 - Keep the new test `#[ignore]`-gated: one Kani codegen per patch (~18 today) is
   far too expensive for the default nextest profile, and costs more since the
   move from `cargo check`.
-- Convert this branch's test filter to `test(/^every_patched_tree_compiles_under_denied_warnings($|::)/)`
-  when rebasing onto `#732`, rather than keeping the `test(=NAME)` form the
-  branch was authored with. The form is contract-enforced: the accepted
-  spellings are an allow-list, so the old one is not a variant the gate
-  tolerates but a selector the contract rejects. Keeping it would have meant
-  weakening a rule `#732` had just established across the file, to spare one
-  line of a filter that names a test which does not need the anchoring. The
-  cheap correction is the correct one here.
+- Convert this branch's test filter to
+  `test(/^every_patched_tree_compiles_under_denied_warnings($|::)/)` when
+  rebasing onto `#732`, rather than keeping the `test(=NAME)` form the branch
+  was authored with. The form is contract-enforced: the accepted spellings are
+  an allow-list, so the old one is not a variant the gate tolerates but a
+  selector the contract rejects. Keeping it would have meant weakening a rule
+  `#732` had just established across the file, to spare one line of a filter
+  that names a test which does not need the anchoring. The cheap correction is
+  the correct one here.
 - Adopt `#755`'s two repairs *verbatim* rather than repairing the same faults
   independently. Identical content means whichever PR merges second sees a
   no-op hunk instead of a conflict, and this branch's gate is green on its own.
@@ -481,8 +482,8 @@ Kani frontend does.
   `rustup` directory override that outranks `rust-toolchain.toml`, and it
   outlived the variable's removal; the step now names the nightly pin. The
   first explanation recorded here — that the redirected `RUSTUP_HOME` hid the
-  pin from rustup — is **disproved** and was replaced, along with the
-  "remove rather than pin" decision it justified. Corrected above.
+  pin from rustup — is **disproved** and was replaced, along with the "remove
+  rather than pin" decision it justified. Corrected above.
 - 2026-09-22 — Rebased onto `origin/main` after PR `#732` landed, replaying
   eleven commits. Three conflicted. `.config/nextest.toml` conflicted on
   substance: this branch's filter used the `test(=NAME)` grammar `#732` had
