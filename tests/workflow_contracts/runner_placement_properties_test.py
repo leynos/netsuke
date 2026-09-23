@@ -58,7 +58,7 @@ _MUTATION_TARGETS: typ.Final[dict[str, str]] = {
     "wrong-fork-image": "netsukefile-test.netsukefile",
 }
 
-FORK_FALLBACK_MUTATIONS = (
+FORK_FALLBACK_MUTATIONS: typ.Final[tuple[str, ...]] = (
     "valid",
     "arm-dropped",
     "guard-swapped",
@@ -370,16 +370,17 @@ def test_generated_placements_reject_every_wrong_fork_arm(
 ) -> None:
     """Accept a placement only when every lane declares the arm it should.
 
-    Six ways to get it wrong, and each has to fail. A dropped arm leaves the
+    Eight ways to get it wrong, and each has to fail. A dropped arm leaves the
     lane unreachable from a fork. A swapped guard branches on a sibling field
     that parses and evaluates, so the declaration still looks right. Swapped
     arms send the fork to the runner it cannot obtain, and a hosted runner of
     the wrong platform sends it somewhere it can reach but cannot build on. A
-    hosted runner on both
-    arms takes the lane off Ubicloud entirely while still looking like a
-    fallback. An arm on the push-only coverage lane is a branch nothing takes.
-    A line break inside the expression is evaluated by GitHub regardless, so no
-    run would report it.
+    hosted runner on both arms takes the lane off Ubicloud entirely while
+    still looking like a fallback. An arm on the push-only coverage lane is a
+    branch nothing takes. A fork arm on the wrong image sends the
+    compatibility lane's fork away from the image it exists for. A line break
+    inside the expression is evaluated by GitHub regardless, so no run would
+    report it.
     """
     key = FORK_FALLBACK_KEYS[selected]
     declarations = mutate_fork_fallback_declarations(mutation, key)

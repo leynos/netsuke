@@ -142,14 +142,32 @@ def _region_end(text: str, index: int) -> int | None:
     # bare quote, or `r#"` reads as an identifier followed by a string. A lone
     # `'` that closes nothing is a lifetime and answers None, so the text after
     # it is read as the code it is.
+    comment = _comment_end(text, index)
+    return comment if comment is not None else _literal_end(text, index)
+
+
+def _comment_end(text: str, index: int) -> int | None:
+    """Return the index just past a comment opening at `index`, if one does."""
     if text.startswith("//", index):
         return _skip_line_comment(text, index)
     if text.startswith("/*", index):
         return _skip_block_comment(text, index)
+    return None
+
+
+def _literal_end(text: str, index: int) -> int | None:
+    """Return the index just past a literal opening at `index`, if one does."""
+    # A raw string is tried first, and only where no identifier runs into it,
+    # or `r#"` reads as a string and `br"` inside `abr"` as a raw one.
     opening = None if _identifier_before(text, index) else _raw_opening(text, index)
     if opening is not None:
         body, hashes = opening
         return _skip_raw(text, body, hashes)
+    return _quoted_end(text, index)
+
+
+def _quoted_end(text: str, index: int) -> int | None:
+    """Return the index just past a quoted string or character literal."""
     if text[index] == '"':
         return _skip_quoted(text, index)
     if text[index] == "'":
