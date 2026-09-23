@@ -1379,6 +1379,38 @@ helpers remain private to this integration target and compose the existing
 manifest, graph, Ninja, workspace, and process APIs; no production abstraction
 or dependency is introduced.
 
+### EP-M3 — implementation and controls complete (2026-09-23)
+
+Committed as `5e22c4e7`. The English README now has thirteen headings, the
+seven planned parts (with a separate templated-value warning), and all three
+marked examples. Seven named test groups expand to 25 cases, including eighteen
+marker/variable matrix cells. The developers' guide records helper ownership.
+No production code or dependency changed. English-only structural divergence is
+the explicitly permitted EP-M3 to EP-M4 window.
+
+All deterministic gates passed before the commit, through `scrutineer`:
+`make check-fmt`, `make typecheck`, `make lint`, `make doc-coverage` (98.81%),
+`NETSUKE_REQUIRE_NINJA=1 make test` (3338 passed, 5 skipped; doctests passed),
+`make markdownlint`, and `make nixie`. An initial Clippy shadowed-binding
+finding was fixed without suppression before the passing run. Local nextest
+0.9.133 matches the CI pin. Logs are recorded in `Artefacts and notes`.
+
+The three post-commit controls are complete and all edits were restored from
+file copies, with clean `git status --porcelain` between mutations:
+
+- Control 1: appended a harmless shell `$in` reference to the accepted example
+  and asserted `$$in` in generated Ninja. The filtered build test passed.
+- Control 2: restored exact bare `$in` recognition in scripts. Only the script
+  `$in` matrix cell failed (24 passed, 1 failed), detecting the ADR-034
+  reversal.
+- Control 3: applied the stored parity mutation. The odd-backtick case failed
+  because the malformed command was accepted; ordinary command cases also
+  failed because even parity was rejected (12 passed, 13 failed).
+
+The five executable obligations are discharged. The structural-parity
+obligation remains for EP-M4. Milestone review is pending; no translation work
+starts until CodeRabbit concerns have been dispositioned.
+
 ### EP-M1 — complete (`3594b568`)
 
 The ADR, its index entry, and the design-document cross-reference are written,
@@ -2020,6 +2052,20 @@ EP-M3 red evidence (2026-09-23):
 - `/tmp/red-readme-security-tests.out`: the follow-up used `pipefail` and
   `--no-fail-fast`; exit 100, 25 tests failed with the expected missing-example
   errors, covering all seven test groups and all three identifiers.
+
+EP-M3 acceptance evidence:
+
+- `/tmp/focused-netsuke-readme-m3-fix1.out`: 56/56 focused tests passed.
+- `/tmp/typecheck-netsuke-readme-m3.out`: typecheck passed.
+- `/tmp/check-fmt-netsuke-readme-m3-fix1.out`,
+  `/tmp/lint-netsuke-readme-m3-fix1.out`,
+  `/tmp/doc-coverage-netsuke-readme-m3-fix1.out`,
+  `/tmp/test-netsuke-readme-m3-fix1.out`,
+  `/tmp/markdownlint-netsuke-readme-m3-fix1.out`, and
+  `/tmp/nixie-netsuke-readme-m3-fix1.out`: all passed on the committed code.
+- `/tmp/control1-netsuke-readme.out`: preservation witness passed.
+- `/tmp/control2-netsuke-readme.out`: only the seeded script `$in` fault failed.
+- `/tmp/control3-netsuke-readme.out`: odd-backtick acceptance detected.
 
 At minimum, retain:
 
