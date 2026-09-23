@@ -1487,8 +1487,25 @@ input unset, so the archive its upload reads is still produced.
 The `coverage-main.yml` workflow owns persistent coverage data. A push to
 `main` runs the same coverage workload, advances the ratchet baseline, and
 uploads that run's LCOV report to CodeScene. The upload therefore describes the
-branch and commit that CodeScene analyses. Manual dispatches remain read-only
-warm-run diagnostics and do not replace the ratchet baseline.
+branch and commit that CodeScene analyses. Manual dispatches are warm-run
+diagnostics: the coverage action saves the ratchet baseline only on a push to
+`refs/heads/main`, and the upload step is guarded on
+`github.ref == 'refs/heads/main'` as well as on the token. So a dispatch from a
+feature branch neither replaces the baseline nor uploads to CodeScene, while a
+dispatch from `main` uploads that commit's report, as a push would. The ref
+clause is not redundant with the push trigger's `branches` list, because that
+list constrains only the push trigger, and the upload action does not check the
+ref itself.
+
+`tests/workflow_contracts/coverage_upload_guard_test.py` holds that guard.
+`is_trunk_only_upload` refuses any unquoted `||`, at any depth, through
+`contains_unquoted_or`, the helper `is_trunk_only_save` uses for cache saves:
+`&&` binds tighter than `||`, so one disjunct authorizes the upload alone
+however complete the rest is. It then splits the condition on `&&` and requires
+each guard clause as a whole conjunct, so a negated clause or one quoted inside
+another does not count. The disjunction cases keep both clauses whole, so only
+the `||` refusal can reject them. That is how the case proves the refusal
+rather than the split.
 
 The CodeScene analysis schedule and the setting that suppresses its coverage
 gate when data is unavailable live in CodeScene's project configuration, not in
@@ -1503,6 +1520,37 @@ workflow must upload the report generated earlier in its job without setting
 that opt-out. The standalone hostile-artefact validators under `scripts/`
 remain available for maintenance use, but no active workflow downloads
 pull-request coverage.
+
+The workflows those prohibitions read are a closure, not a trigger list. A
+workflow declaring only `workflow_call` runs on a pull request whenever a
+pull-request workflow calls it, and `secrets: inherit` hands it every secret, so
+`pull_request_lane` in
+`tests/workflow_contracts/ci_coverage_wiring_invariants.py` starts from the
+workflows declaring either pull-request trigger and follows job-level `uses:`
+calls transitively. `tests/workflow_contracts/workflow_call_closure.py` owns
+that traversal. It reads a call as local when the reference, less one of the
+two same-repository prefixes GitHub documents, `./` or the self-repository `$/`
+that GitHub.com recommends, names a file directly under `.github/workflows/`.
+It refuses a reference naming that directory with neither prefix, follows no
+cross-repository call, and fails the reading when a local call names a workflow
+it did not read. Any future contract that asks what a pull request runs should
+take its lane from `pull_request_lane` rather than filtering triggers again.
+
+Two clauses exist because a workflow can reach CodeScene without naming the
+action or the credential. Any mention of `codescene.io`, matched
+case-insensitively because DNS names are case-insensitive, is refused, since a
+step can curl the project API directly. And `secrets: inherit` on a call to
+another repository's workflow is refused, because that callee's content is not
+in this tree. The same forwarding to a local workflow is allowed, because the
+closure reads the callee and holds it to every clause; `release-dry-run.yml`
+calls `release.yml` that way.
+
+Every contract reads workflows through `_WorkflowLoader` in
+`tests/workflow_contracts/workflow_loading.py`. It refuses a mapping that
+repeats a key, rather than keeping the last value as PyYAML does. A job that
+declared `runs-on` twice would otherwise read as whichever label came second,
+and a paid label in the first half would escape every placement contract.
+GitHub rejects such a workflow anyway, so the refusal costs nothing.
 
 `make test` runs the non-doctest suite through
 [cargo-nextest](https://nexte.st/) and the doctests separately. CI pins the

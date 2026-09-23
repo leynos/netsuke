@@ -13,6 +13,7 @@ build shape.
 """
 
 from action_references import FULL_COMMIT_SHA_PATTERN
+from actions_expressions import contains_unquoted_or
 
 NINJA_ACTION_REPOSITORY = "seanmiddleditch/gha-setup-ninja@"
 WINDOWS_PATH_STEP_NAME = "Expose Windows global tool path"
@@ -288,24 +289,6 @@ def is_bounded_worker_count(vcpus: int, flags: dict[str, str]) -> bool:
     )
 
 
-def _contains_unquoted_or(expression: str) -> bool:
-    """Report whether `||` appears anywhere outside a quoted literal."""
-    quote: str | None = None
-    index = 0
-    length = len(expression)
-    while index < length:
-        char = expression[index]
-        if quote is not None:
-            if char == quote:
-                quote = None
-        elif char in "'\"":
-            quote = char
-        elif expression[index : index + 2] == "||":
-            return True
-        index += 1
-    return False
-
-
 def is_trunk_only_save(condition: str) -> bool:
     """Return whether a cache-save condition is restricted to a trunk push.
 
@@ -341,7 +324,7 @@ def is_trunk_only_save(condition: str) -> bool:
     second, subtler thing to get wrong.
     """
     normalized = " ".join(condition.split())
-    if _contains_unquoted_or(normalized):
+    if contains_unquoted_or(normalized):
         return False
     return (
         "github.event_name == 'push'" in normalized

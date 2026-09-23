@@ -93,3 +93,27 @@ detector fails any coverage call that omits it or supplies a value the action
 does not compare against. A further test holds the two lanes apart, requiring
 the pull-request lane to decline the archive and forbidding the main workflow
 from passing the input that would suppress the upload CodeScene reads.
+
+## Addendum, 2026-09-23: the dispatch upload and the pull-request closure
+
+The decision above is unchanged. Two things it described needed correcting.
+
+_Manual dispatch._ The context above calls the publisher's manual dispatch a
+read-only warm-run diagnostic. That held for the ratchet baseline, which the
+coverage action saves only on a push to `refs/heads/main`. It did not hold for
+the CodeScene upload, whose only guard was the credential, while the push
+trigger's `branches: [main]` filter constrains the push alone. A dispatch from
+a feature branch therefore uploaded that branch's report. The upload step is
+now also guarded on `github.ref == 'refs/heads/main'`. A dispatch from `main`
+uploads that commit's report, as a push would. A dispatch from any other branch
+uploads nothing. The baseline still advances only on a push to `main`.
+
+_The pull-request surface._ The verification above enumerated pull-request
+workflows by trigger. A `workflow_call` workflow that a pull-request workflow
+calls runs on that pull request too, and `secrets: inherit` hands it the
+credential. So the surface is now the closure through local reusable-workflow
+calls. `secrets: inherit` into another repository's workflow is refused, and so
+is any mention of `codescene.io`.
+
+The developers' guide, under _Coverage ratchet and CodeScene publication_,
+records the contracts that hold both.
