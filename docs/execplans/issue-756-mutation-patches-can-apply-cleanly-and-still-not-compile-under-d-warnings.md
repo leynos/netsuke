@@ -134,6 +134,14 @@ failure mode cannot recur silently.
       1,800 s ceiling, leaving 1,024 s unspent. The toolchain resolves as
       intended: `toolchain: nightly-2026-08-23`, the action's `override: true`
       arm, and `rustc 1.100.0-nightly (c54751567 2026-08-22)`.
+- [x] (2026-09-23) Repeat that confirmation on the final head, so the gate's
+      cost is a property of the change rather than of one runner. Run
+      `35800582469` at `2be420d1` is read from the job log, not the job's
+      conclusion: the gate step runs `00:13:02Z → 00:18:43Z` (**341 s**),
+      nextest reports `PASS [ 261.514s] (1/1) … compile_guard::every_patched_tree_compiles_under_denied_warnings`,
+      and the active toolchain prints
+      `nightly-2026-08-23-x86_64-unknown-linux-gnu unchanged - rustc 1.100.0-nightly`.
+      The two runs agree within 6 % on different heads from cold caches.
 
 ## Surprises & discoveries
 
