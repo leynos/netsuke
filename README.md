@@ -210,13 +210,21 @@ dollar forms below, and `$PATH`, remain shell variables in both recipe kinds.
 Netsuke doubles their dollars for Ninja so the selected shell receives them
 unchanged; it does not expose Ninja's own `$in` and `$out` rule variables.
 
-Table 1: Forms rewritten to input or output paths (`yes` means rewritten).
+Table 1: Forms rewritten to input or output paths (`yes` means rewritten in
+active recipe text; see the note below).
 
-| Form                                                | `command:` | `script:` |
-| --------------------------------------------------- | ---------- | --------- |
-| `{{ ins }}`                                         | yes        | yes       |
-| `{{ outs }}`                                        | yes        | yes       |
-| `$in`, `$out`, `$ins`, `$outs`, `$input`, `$output` | no         | no        |
+| Form                                                | `command:`  | `script:`   |
+| --------------------------------------------------- | ----------- | ----------- |
+| `{{ ins }}`                                         | yes[^inert] | yes[^inert] |
+| `{{ outs }}`                                        | yes[^inert] | yes[^inert] |
+| `$in`, `$out`, `$ins`, `$outs`, `$input`, `$output` | no          | no          |
+
+[^inert]: On POSIX and Bash routes, markers in comments and heredoc bodies
+    remain internal tokens instead of becoming paths; markers in heredoc
+    delimiters are expanded. `script:` recipes use the same POSIX-aware scanner,
+    including on PowerShell, while PowerShell `command:` recipes use separate
+    interpolation rules. Keep markers out of comments and heredoc bodies: internal
+    tokens there can remain in the generated recipe.
 
 For example, with an existing `input.txt`, this POSIX manifest copies its
 contents to `output.txt` and checks that the shell's `PATH` is non-empty:

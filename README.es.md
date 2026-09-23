@@ -199,13 +199,21 @@ dólar para Ninja, de modo que el shell elegido los reciba sin cambios; no
 expone las variables de regla propias de Ninja `$in` y `$out`.
 
 Tabla 1: formas reescritas como rutas de entrada o salida (`yes` significa que
-se reescribe).
+se reescribe en el texto activo de la receta; consulta la nota siguiente).
 
-| Forma                                               | `command:` | `script:` |
-| --------------------------------------------------- | ---------- | --------- |
-| `{{ ins }}`                                         | yes        | yes       |
-| `{{ outs }}`                                        | yes        | yes       |
-| `$in`, `$out`, `$ins`, `$outs`, `$input`, `$output` | no         | no        |
+| Forma                                               | `command:`  | `script:`   |
+| --------------------------------------------------- | ----------- | ----------- |
+| `{{ ins }}`                                         | yes[^inert] | yes[^inert] |
+| `{{ outs }}`                                        | yes[^inert] | yes[^inert] |
+| `$in`, `$out`, `$ins`, `$outs`, `$input`, `$output` | no          | no          |
+
+[^inert]: En las rutas POSIX y Bash, Netsuke copia los marcadores de los
+    comentarios y del cuerpo de los heredoc como tokens internos, sin expandirlos;
+    los marcadores de los delimitadores de heredoc sí se expanden. Las recetas
+    `script:` usan el mismo analizador POSIX, también en PowerShell, mientras que
+    las recetas `command:` de PowerShell siguen reglas de interpolación distintas.
+    No pongas marcadores en comentarios ni en cuerpos de heredoc: los tokens
+    internos pueden permanecer en la receta generada.
 
 Si existe `input.txt`, este manifiesto POSIX copia su contenido a `output.txt`
 y comprueba que el `PATH` del shell no esté vacío:

@@ -195,13 +195,21 @@ ausgewählte Shell sie unverändert erhält; Ninjas eigene Regelvariablen `$in` 
 `$out` werden dadurch nicht verfügbar.
 
 Tabelle 1: Zu Eingabe- oder Ausgabepfaden umgeschriebene Formen (`yes`
-bedeutet: wird umgeschrieben).
+bedeutet: wird im aktiven Rezepttext umgeschrieben; siehe Hinweis unten).
 
-| Form                                                | `command:` | `script:` |
-| --------------------------------------------------- | ---------- | --------- |
-| `{{ ins }}`                                         | yes        | yes       |
-| `{{ outs }}`                                        | yes        | yes       |
-| `$in`, `$out`, `$ins`, `$outs`, `$input`, `$output` | no         | no        |
+| Form                                                | `command:`  | `script:`   |
+| --------------------------------------------------- | ----------- | ----------- |
+| `{{ ins }}`                                         | yes[^inert] | yes[^inert] |
+| `{{ outs }}`                                        | yes[^inert] | yes[^inert] |
+| `$in`, `$out`, `$ins`, `$outs`, `$input`, `$output` | no          | no          |
+
+[^inert]: Auf POSIX- und Bash-Routen kopiert Netsuke Marker in Kommentaren und
+    in Heredoc-Körpern als interne Token, statt sie zu expandieren; Marker in
+    Heredoc-Begrenzern werden expandiert. `script:`-Rezepte verwenden denselben
+    POSIX-bewussten Scanner, auch in PowerShell, während PowerShell-`command:`-
+    Rezepte eigenen Interpolationsregeln folgen. Verwenden Sie keine Marker in
+    Kommentaren oder Heredoc-Körpern: Interne Token können dort im generierten
+    Rezept verbleiben.
 
 Mit einer vorhandenen Datei `input.txt` kopiert dieses POSIX-Manifest deren
 Inhalt nach `output.txt` und prüft, ob die `PATH`-Variable der Shell nicht leer

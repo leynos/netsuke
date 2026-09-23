@@ -193,13 +193,21 @@ cifrões para o Ninja, para que o shell selecionado os receba sem alterações;
 isso não expõe as variáveis de regra próprias do Ninja `$in` e `$out`.
 
 Tabela 1: formas reescritas como caminhos de entrada ou saída (`yes` significa
-que a forma é reescrita).
+que a forma é reescrita no texto ativo da receita; consulte a nota abaixo).
 
-| Forma                                               | `command:` | `script:` |
-| --------------------------------------------------- | ---------- | --------- |
-| `{{ ins }}`                                         | yes        | yes       |
-| `{{ outs }}`                                        | yes        | yes       |
-| `$in`, `$out`, `$ins`, `$outs`, `$input`, `$output` | no         | no        |
+| Forma                                               | `command:`  | `script:`   |
+| --------------------------------------------------- | ----------- | ----------- |
+| `{{ ins }}`                                         | yes[^inert] | yes[^inert] |
+| `{{ outs }}`                                        | yes[^inert] | yes[^inert] |
+| `$in`, `$out`, `$ins`, `$outs`, `$input`, `$output` | no          | no          |
+
+[^inert]: Nas rotas POSIX e Bash, o Netsuke copia marcadores em comentários e
+    no corpo de heredocs como tokens internos, sem expandi-los; marcadores nos
+    delimitadores de heredoc são expandidos. Receitas `script:` usam o mesmo
+    analisador compatível com POSIX, inclusive no PowerShell, enquanto receitas
+    `command:` do PowerShell seguem regras de interpolação distintas. Não use
+    marcadores em comentários nem no corpo de heredocs: os tokens internos podem
+    permanecer na receita gerada.
 
 Se `input.txt` existir, este manifesto POSIX copia seu conteúdo para
 `output.txt` e verifica se o `PATH` do shell não está vazio:

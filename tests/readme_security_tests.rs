@@ -4,14 +4,15 @@
 
 mod documentation_examples;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail, ensure};
 use documentation_examples::{assert_success, documented_example, manifest_workspace};
 use googletest::{assert_that, matchers::contains_substring};
 use mockable::{DefaultEnv, Env};
 use netsuke::{
-    ir::BuildGraph,
+    ast::Recipe,
+    ir::{BuildGraph, INS_TOKEN, OUTS_TOKEN},
     manifest,
-    ninja_gen::{RecipeShell, generate_with_shell},
+    ninja_gen::{NinjaGenError, RecipeShell, generate_with_shell},
 };
 use pretty_assertions::assert_eq;
 use rstest::{fixture, rstest};
@@ -26,17 +27,37 @@ fn safe_manifest() -> Result<String> {
     Ok(documented_example("readme-safe-placeholder-manifest")?.body)
 }
 
-/// Compile a manifest through rendering, lowering, and the POSIX Ninja backend.
+/// Return a lowered recipe and graph for the selected shell.
 ///
 /// Keep this helper local: these tests inspect published examples rather than
 /// constructing IR actions that would bypass marker rendering.
 ///
 /// # Errors
+/// Return the original manifest, lowering, or backend error, or report an
+/// unexpected action shape.
+fn lower_recipe_for_shell(source: &str, shell: RecipeShell) -> Result<(String, BuildGraph)> {
+    let manifest = manifest::from_str(source)?;
+    let graph = BuildGraph::from_manifest_for_shell(&manifest, shell)?;
+    let action = graph
+        .actions
+        .values()
+        .next()
+        .context("README action is absent")?;
+    let recipe = match &action.recipe {
+        Recipe::Command { command } => command.to_string_vec().join("\n"),
+        Recipe::Script { script } => script.clone(),
+        Recipe::Rule { .. } => bail!("README action unexpectedly uses a rule"),
+    };
+    Ok((recipe, graph))
+}
+
+/// Compile a manifest through rendering, lowering, and the POSIX Ninja backend.
+///
+/// # Errors
 /// Return the original manifest, lowering, or backend error.
 fn generate_posix(source: &str) -> Result<String> {
-    let manifest = manifest::from_str(source)?;
-    let graph = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::Posix)?;
-    generate_with_shell(&graph, RecipeShell::Posix).map_err(Into::into)
+    let (_, graph) = lower_recipe_for_shell(source, RecipeShell::Posix)?;
+    Ok(generate_with_shell(&graph, RecipeShell::Posix)?)
 }
 
 #[rstest]
@@ -91,6 +112,75 @@ fn dollar_forms_are_shell_variables_in_both_recipe_kinds(
     assert_that!(
         ninja,
         contains_substring(format!("printf %s {encoded_expected}"))
+    );
+    Ok(())
+}
+
+#[rstest]
+#[case::comment(
+    "printf '%s' {{ ins }} > {{ outs }} # {{ ins }} {{ outs }}",
+    format!("printf '%s' input.txt > output.txt # {INS_TOKEN} {OUTS_TOKEN}")
+)]
+#[case::heredoc(
+    "cat <<EOF > {{ outs }}\n{{ ins }} {{ outs }}\nEOF\nprintf '%s' {{ ins }} > /dev/null",
+    format!(
+        "cat <<EOF > output.txt\n{INS_TOKEN} {OUTS_TOKEN}\nEOF\nprintf '%s' input.txt > /dev/null"
+    )
+)]
+fn inert_script_regions_preserve_rendered_markers(
+    #[case] recipe: &str,
+    #[case] expected_lowered: String,
+    #[values("command", "script")] kind: &str,
+    #[values(RecipeShell::Posix, RecipeShell::Bash)] shell: RecipeShell,
+) -> Result<()> {
+    let indented_recipe = recipe.replace('\n', "\n      ");
+    let source = safe_manifest()?.replace(
+        "command: 'cat {{ ins }} > {{ outs }} && test -n \"$PATH\"'",
+        &format!("{kind}: |\n      {indented_recipe}"),
+    );
+    let (lowered, graph) = lower_recipe_for_shell(&source, shell)?;
+    assert_eq!(lowered.trim_end_matches('\n'), expected_lowered);
+    if kind == "command" && recipe.contains('\n') {
+        let error = generate_with_shell(&graph, shell)
+            .expect_err("a multiline command cannot fit one Ninja binding");
+        ensure!(
+            matches!(error, NinjaGenError::UnsafeNinjaValue),
+            "expected unsafe Ninja value, got {error:?}"
+        );
+    } else {
+        let ninja = generate_with_shell(&graph, shell)?;
+        assert_that!(ninja.as_str(), contains_substring(INS_TOKEN));
+        assert_that!(ninja.as_str(), contains_substring(OUTS_TOKEN));
+    }
+    Ok(())
+}
+
+#[rstest]
+fn heredoc_body_marker_remains_literal_when_ninja_runs(
+    safe_manifest: Result<String>,
+) -> Result<()> {
+    let source = safe_manifest?.replace(
+        "command: 'cat {{ ins }} > {{ outs }} && test -n \"$PATH\"'",
+        "script: |\n      cat <<EOF > {{ outs }}\n      {{ ins }}\n      EOF\n      cat {{ ins }} > /dev/null",
+    );
+    let workspace = manifest_workspace("readme-safe-placeholder-manifest")?;
+    test_fs::write(workspace.path().join("Netsukefile"), source)?;
+    test_fs::write(
+        workspace.path().join("input.txt"),
+        "input path must not appear\n",
+    )?;
+    let path = DefaultEnv
+        .string("PATH")
+        .context("host PATH is required for Ninja")?;
+    let run = run_netsuke_in_with_env(
+        workspace.path(),
+        &[],
+        &[("PATH", &path), ("NETSUKE_NINJA", "ninja")],
+    )?;
+    assert_success(&run, "README heredoc body marker")?;
+    assert_eq!(
+        test_fs::read_to_string(workspace.path().join("output.txt"))?,
+        format!("{INS_TOKEN}\n")
     );
     Ok(())
 }

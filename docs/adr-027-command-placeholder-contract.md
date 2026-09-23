@@ -65,25 +65,33 @@ behaviour are promises. This record settles both.
 
 ### The placeholder set is uniform across recipe kinds
 
-`{{ ins }}` and `{{ outs }}` are the only Netsuke markers, and they behave
-identically in `command:` and `script:` recipes. Every dollar-prefixed form —
-`$in`, `$out`, `$ins`, `$outs`, `$input`, `$output`, `$PATH` — is a shell
-variable that Netsuke leaves for the selected shell to interpret, in both
-recipe kinds. The Ninja backend doubles the dollar so the shell receives the
-text unchanged.
+`{{ ins }}` and `{{ outs }}` are the only Netsuke markers, and both recipe
+kinds recognize that same set in active recipe text. On POSIX and Bash routes,
+markers in comments and heredoc bodies are copied as internal tokens instead of
+being expanded; markers in heredoc delimiters are expanded. `script:` recipes
+use the same POSIX-aware scanner, including PowerShell scripts, while PowerShell
+`command:` recipes use separate interpolation rules. Keep markers out of
+comments and heredoc bodies because their internal tokens can remain in the
+generated recipe. Every dollar-prefixed form — `$in`, `$out`, `$ins`, `$outs`,
+`$input`, `$output`, `$PATH` — is a shell variable that Netsuke leaves for the
+selected shell to interpret, in both recipe kinds. The Ninja backend doubles
+the dollar so the shell receives the text unchanged.
 
 Three terms are kept distinct throughout, following
 [ADR-034](adr-034-preserve-script-in-out-as-shell-variables.md):
 
 - a **marker** is the Netsuke-owned `{{ ins }}` or `{{ outs }}` placeholder;
-- an **internal token** is the `INS_TOKEN` or `OUTS_TOKEN` sentinel that exists
-  only between manifest rendering and interpolation;
+- an **internal token** is the `INS_TOKEN` or `OUTS_TOKEN` sentinel created by
+  manifest rendering and normally consumed during interpolation; inert comments
+  and heredoc bodies can carry it into the generated recipe;
 - a **shell variable** is handwritten text such as `$PATH` or `$in` that
   Netsuke does not rewrite.
 
 The recognizer is `find_substitution`, which matches the two internal tokens
 and nothing else. `find_script_substitution` delegates to it, so both recipe
-kinds resolve the same set.
+kinds recognize the same set. POSIX-aware scanning leaves tokens in comments
+and heredoc bodies unchanged, while heredoc delimiters remain eligible for
+substitution.
 
 Netsuke does not expose Ninja's own `$in` and `$out` rule variables. Resolved
 paths are baked into each content-hashed rule, so Ninja never substitutes a
