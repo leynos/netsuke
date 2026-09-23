@@ -6,12 +6,20 @@ from pathlib import Path
 
 from hypothesis import given, settings
 from hypothesis import strategies as st
-from release_admission_test_support import METRICS_VALIDATOR, _run_gate
+from release_admission_test_support import (
+    GITHUB_REPOSITORY,
+    METRICS_VALIDATOR,
+    _run_gate,
+)
 
 IDENTIFIER_TEXT = st.text(
     alphabet=st.characters(blacklist_categories=("Cs",), blacklist_characters="\x00"),
     min_size=1,
     max_size=32,
+)
+GIT_OBJECT_ID = st.one_of(
+    st.text(alphabet="0123456789abcdef", min_size=40, max_size=40),
+    st.text(alphabet="0123456789abcdef", min_size=64, max_size=64),
 )
 
 
@@ -26,21 +34,34 @@ def _assert_diagnostics_cross_boundaries(
     )
 
 
-def _assert_github_requests_cross_boundary(calls: list[dict[str, object]]) -> None:
-    """Verify both bounded GitHub requests reach the fake GitHub boundary."""
+def _assert_github_requests_cross_boundary(
+    calls: list[dict[str, object]],
+    repository: str,
+    revision: str,
+    error_category: str,
+) -> None:
+    """Verify exact GitHub requests reach the fake GitHub boundary."""
+    github_calls = [call for call in calls if call["command"] == "gh"]
     github_arguments = [
-        typ.cast("list[str]", call["arguments"])
-        for call in calls
-        if call["command"] == "gh"
+        typ.cast("list[str]", call["arguments"]) for call in github_calls
     ]
-    assert any(
-        any("/commits/" in argument for argument in arguments)
-        for arguments in github_arguments
-    ), "the commit-resolution request must cross the GitHub boundary"
-    assert any(
-        any("/actions/runs?" in argument for argument in arguments)
-        for arguments in github_arguments
-    ), "the workflow-run request must cross the GitHub boundary"
+    diagnostic = (
+        f"gh call log: {github_calls!r}; final gate error category: {error_category!r}"
+    )
+    assert error_category == "missing_evidence", (
+        f"the request-success path must reach the expected evidence check; {diagnostic}"
+    )
+    assert github_arguments[:1] == [
+        ["api", f"repos/{repository}/commits/{revision}", "--jq", ".sha"]
+    ], f"the exact commit-resolution request must cross the boundary; {diagnostic}"
+    assert github_arguments[1:] == [
+        [
+            "api",
+            f"repos/{repository}/actions/runs?head_sha={revision}&per_page=1",
+            "--jq",
+            ".workflow_runs[0].id // empty",
+        ]
+    ], f"the exact workflow-run request must cross the boundary; {diagnostic}"
 
 
 def _assert_identifiers_are_excluded(
@@ -62,7 +83,7 @@ def _assert_identifiers_are_excluded(
 
 
 @given(
-    revision=IDENTIFIER_TEXT,
+    revision=GIT_OBJECT_ID,
     run_id=IDENTIFIER_TEXT,
     path=IDENTIFIER_TEXT,
     url=IDENTIFIER_TEXT,
@@ -74,28 +95,36 @@ def test_identifiers_never_become_metric_labels(
     path: str,
     url: str,
 ) -> None:
-    """Verify arbitrary candidate identifiers cannot expand metric cardinality.
+    """Verify canonical revisions and arbitrary identifiers stay out of labels.
 
     Parameters
     ----------
-    revision, run_id, path, url
+    revision
+        A canonical 40-character SHA-1 or 64-character SHA-256 object ID.
+    run_id, path, url
         Generated unbounded identifiers that must not become labels.
 
     Notes
     -----
-    The generated values remain outside every emitted label dimension.
+    This property exercises the success path through request construction and
+    lookup with canonical Git object IDs. The gate then reports missing
+    evidence because the fixture supplies no evidence provider. Malformed
+    revisions belong in the failure suite because the SHA-equality check
+    rejects them. Run IDs, paths, and URLs remain arbitrary Unicode
+    cardinality probes because they do not construct requests.
     """
     identifiers = {
-        f"revision-{revision}",
+        revision,
         f"run-{run_id}",
         f"path-{path}",
         f"url-{url}",
     }
     with tempfile.TemporaryDirectory() as directory_name:
-        result, metrics, traces, calls, _ = _run_gate(
+        result, metrics, traces, calls, outputs = _run_gate(
             Path(directory_name),
+            evidence_state="fresh",
             extra_environment={
-                "GITHUB_SHA": f"revision-{revision}",
+                "GITHUB_SHA": revision,
                 "NETSUKE_FAKE_WORKFLOW_RUN_ID": f"run-{run_id}",
                 "NETSUKE_FAKE_PATH": f"path-{path}",
                 "NETSUKE_FAKE_URL": f"url-{url}",
@@ -110,5 +139,10 @@ def test_identifiers_never_become_metric_labels(
         "url": f"url-{url}",
     }
     _assert_diagnostics_cross_boundaries(calls, expected_diagnostics)
-    _assert_github_requests_cross_boundary(calls)
+    _assert_github_requests_cross_boundary(
+        calls,
+        GITHUB_REPOSITORY,
+        revision,
+        outputs["gate-error-category"],
+    )
     _assert_identifiers_are_excluded(metrics, traces, identifiers)
