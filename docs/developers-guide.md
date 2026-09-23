@@ -1544,7 +1544,10 @@ one commit behind until the next push to `main`. A merge made by the Dependabot
 automerge workflow's token fires no push event at all (see
 [shared-actions issue 518](https://github.com/leynos/shared-actions/issues/518)),
 so such a merge reaches neither the upload nor the baseline until the next
-push or a dispatch from `main`.
+push or a dispatch from `main`. This reasoning covers triggered runs, a push or
+a dispatch. A manual "Re-run jobs" on an older `main` run is an operator action
+rather than a trigger: it keeps that run's commit, so it republishes that
+commit's coverage and baseline until the next push supersedes them.
 
 `tests/workflow_contracts/coverage_upload_guard_test.py` holds that guard.
 `is_trunk_only_upload` refuses any unquoted `||`, at any depth, through
