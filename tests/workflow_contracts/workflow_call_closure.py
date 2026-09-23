@@ -8,10 +8,11 @@ built on that enumeration passes over it while it does the forbidden thing.
 The pull-request lane is therefore a closure: the triggered workflows and
 everything they call, transitively.
 
-A call is local when its reference, less a leading ``./``, is a file directly
-under ``.github/workflows/``. That is matched by shape rather than by
-enumerating the spellings GitHub accepts, so a spelling nobody listed is not
-silently read as a call to another repository. A cross-repository call is not
+A call is local when its reference, less one of the two same-repository
+prefixes GitHub documents, is a file directly under ``.github/workflows/``. The
+prefixes are ``./``, which is workspace-relative, and ``$/``, the
+self-repository form GitHub.com recommends. A reader knowing only one drops
+callers written the other way. A cross-repository call is not
 followed, because its content is not in this tree; what may be handed to one
 is ``ci_coverage_wiring_invariants``'s question.
 
@@ -28,6 +29,9 @@ if typ.TYPE_CHECKING:
 #: Where GitHub looks for a same-repository reusable workflow. Reusable
 #: workflows may not live in a subdirectory of it.
 WORKFLOWS_PREFIX: typ.Final[str] = ".github/workflows/"
+
+#: The prefixes GitHub documents for a same-repository call.
+SELF_REPOSITORY_PREFIXES: typ.Final[tuple[str, ...]] = ("./", "$/")
 
 
 class UnresolvedWorkflowCallError(LookupError):
@@ -49,16 +53,26 @@ def local_workflow_name(reference: str) -> str | None:
     Returns
     -------
     str or None
-        The workflow's file name when the reference, less a leading ``./``,
-        names a file directly under ``.github/workflows/``, otherwise None.
+        The workflow's file name when the reference, less a leading ``./`` or
+        ``$/``, names a file directly under ``.github/workflows/``, otherwise
+        None.
 
     Examples
     --------
     >>> local_workflow_name("./.github/workflows/release.yml")
     'release.yml'
+    >>> local_workflow_name("$/.github/workflows/release.yml")
+    'release.yml'
     >>> local_workflow_name("leynos/netsuke/.github/workflows/release.yml@main")
     """
-    path = reference.removeprefix("./")
+    path = next(
+        (
+            reference.removeprefix(prefix)
+            for prefix in SELF_REPOSITORY_PREFIXES
+            if reference.startswith(prefix)
+        ),
+        reference,
+    )
     if not path.startswith(WORKFLOWS_PREFIX):
         return None
     name = path.removeprefix(WORKFLOWS_PREFIX)

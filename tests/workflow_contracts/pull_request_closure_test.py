@@ -89,7 +89,11 @@ def _lane_offenders(texts: dict[str, str]) -> list[str]:
 
 @pytest.mark.parametrize(
     "reference",
-    ["./.github/workflows/probe.yml", ".github/workflows/probe.yml"],
+    [
+        "./.github/workflows/probe.yml",
+        "$/.github/workflows/probe.yml",
+        ".github/workflows/probe.yml",
+    ],
 )
 def test_the_lane_reaches_a_called_workflow(reference: str) -> None:
     """Enumerate a `workflow_call` workflow a pull-request job calls.
@@ -178,6 +182,8 @@ def test_an_unresolved_local_call_fails_the_reading() -> None:
     [
         ("./.github/workflows/release.yml", "release.yml"),
         (".github/workflows/release.yml", "release.yml"),
+        ("$/.github/workflows/release.yml", "release.yml"),
+        ("$/.github/workflows/nested/release.yml", None),
         ("./.github/workflows/nested/release.yml", None),
         ("./.github/actions/memory-sampler", None),
         ("leynos/netsuke/.github/workflows/release.yml@main", None),
