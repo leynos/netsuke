@@ -155,11 +155,10 @@ site count. Measured, not assumed: `UP037` reports under
 `--target-version py314` and passes under `py313`.
 
 The cost beyond that is one edit per annotation — 85 today — and a quoting
-convention that reads as incidental rather than deliberate. A reader has no
-signal that the quotes are deliberate, and nothing is lost if one is removed,
-because the quotes do not deliver the guarantee they were written for. `TC003`
-continues to fire on the underlying import regardless, so the `TYPE_CHECKING`
-block stays.
+convention that reads as noise. A reader has no signal that the quotes carry
+any meaning, and nothing is lost if one is removed, because they do not deliver
+the guarantee they were written for. `TC003` continues to fire on the
+underlying import regardless, so the `TYPE_CHECKING` block stays.
 
 ### Option C: Record that runtime introspection is unsupported (chosen)
 
