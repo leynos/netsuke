@@ -80,14 +80,24 @@ def test_a_disjunction_is_refused_even_beside_both_clauses(condition: str) -> No
         MAIN_CLAUSE,
         f"!({CREDENTIAL_PRESENT}) && {MAIN_CLAUSE}",
         f"{CREDENTIAL_PRESENT} && contains({MAIN_CLAUSE!r}, 'main')",
+        # Both clauses sit inside a quoted literal (the doubled quote is an
+        # escaped quote) within a negated group; the trailing `&& false` makes
+        # the group true for every token and ref. A naive split on `&&` would
+        # read both clauses as conjuncts of the whole.
+        (
+            "true && !('note && env.CS_ACCESS_TOKEN != '' && ' && "
+            "github.ref == 'refs/heads/main' && false)"
+        ),
+        f"true && !({CREDENTIAL_PRESENT} && {MAIN_CLAUSE} && false)",
         None,
     ],
 )
 def test_a_missing_or_disguised_clause_is_refused(condition: object) -> None:
-    """Refuse a clause that is absent, negated, or only quoted inside another.
+    """Refuse a clause that is absent, negated, quoted, or nested in a group.
 
-    The negated and quoted forms contain each clause's text, so a substring
-    test would accept them; the conjuncts are compared whole instead.
+    Every form but the bare ones contains each clause's text, so a substring
+    test would accept them, and the grouped ones defeat a naive split on `&&`
+    too. Only top-level conjuncts, compared whole, count.
     """
     assert not is_trunk_only_upload(condition), f"{condition!r} must be refused"
 

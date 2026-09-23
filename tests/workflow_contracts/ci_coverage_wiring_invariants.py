@@ -30,8 +30,8 @@ Run via ``make test-workflow-contracts``.
 
 import typing as typ
 
+from actions_expressions import contains_unquoted_or, top_level_conjuncts
 from codescene_check_depth_invariants import CODESCENE_COVERAGE_ACTION
-from runner_placement_invariants import contains_unquoted_or
 from timeout_budgets import COVERAGE_ACTION
 from workflow_call_closure import (
     called_workflows,
@@ -266,12 +266,14 @@ def is_trunk_only_upload(condition: object) -> bool:
     than ``||`` in an Actions expression, so in
     ``github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
     && ...`` the first disjunct authorizes the upload alone however complete
-    the rest is. The condition is then split on ``&&``, and every guard clause
-    must be one of the conjuncts, compared whole. A substring test would accept
-    a clause that is present but negated or nested. Further conjuncts are
-    allowed, because without a disjunction they can only narrow the step.
-    Parentheses are not interpreted: a clause wrapped in them does not equal
-    its bare form, so the reading fails closed.
+    the rest is. The condition is then split into its top-level conjuncts,
+    through ``top_level_conjuncts``, and every guard clause must be one of them,
+    compared whole. A ``&&`` inside a string literal or a parenthesized group is
+    not split on, so a clause hidden in either is not a conjunct of the whole. A
+    substring test, or a naive split, would accept a clause that is present but
+    quoted, negated or nested. Further conjuncts are allowed, because without a
+    disjunction they can only narrow the step. A clause wrapped in its own
+    parentheses does not equal its bare form, so the reading fails closed.
 
     Parameters
     ----------
@@ -297,7 +299,7 @@ def is_trunk_only_upload(condition: object) -> bool:
     normalized = " ".join(condition.split())
     if contains_unquoted_or(normalized):
         return False
-    conjuncts = {part.strip() for part in normalized.split("&&")}
+    conjuncts = set(top_level_conjuncts(normalized))
     return conjuncts >= UPLOAD_GUARD_CONJUNCTS
 
 

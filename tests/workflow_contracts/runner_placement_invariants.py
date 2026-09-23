@@ -13,6 +13,7 @@ build shape.
 """
 
 from action_references import FULL_COMMIT_SHA_PATTERN
+from actions_expressions import contains_unquoted_or
 
 NINJA_ACTION_REPOSITORY = "seanmiddleditch/gha-setup-ninja@"
 WINDOWS_PATH_STEP_NAME = "Expose Windows global tool path"
@@ -286,42 +287,6 @@ def is_bounded_worker_count(vcpus: int, flags: dict[str, str]) -> bool:
     return bool(counts) and all(
         count is not None and 0 < count <= vcpus for count in counts
     )
-
-
-def contains_unquoted_or(expression: str) -> bool:
-    """Report whether `||` appears anywhere outside a quoted literal.
-
-    Shared by every trunk-only guard: the cache save here and the CodeScene
-    upload in ``ci_coverage_wiring_invariants``. `&&` binds tighter than `||`
-    in an Actions expression, so a single disjunct anywhere, at any depth, can
-    authorize the step alone.
-
-    Returns
-    -------
-    bool
-        ``True`` when a ``||`` occurs outside every quoted literal.
-
-    Examples
-    --------
-    >>> contains_unquoted_or("github.ref == 'a' || true")
-    True
-    >>> contains_unquoted_or("github.ref == 'a||b'")
-    False
-    """
-    quote: str | None = None
-    index = 0
-    length = len(expression)
-    while index < length:
-        char = expression[index]
-        if quote is not None:
-            if char == quote:
-                quote = None
-        elif char in "'\"":
-            quote = char
-        elif expression[index : index + 2] == "||":
-            return True
-        index += 1
-    return False
 
 
 def is_trunk_only_save(condition: str) -> bool:
