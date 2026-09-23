@@ -54,6 +54,94 @@ def _trace_signature(trace: dict[str, object]) -> tuple[object, ...]:
     )
 
 
+def _assert_malformed_revision_is_a_bounded_mismatch(
+    metrics: list[dict[str, object]],
+    traces: list[dict[str, object]],
+    outputs: dict[str, str],
+    revision: str,
+) -> None:
+    """Assert malformed revisions retain only fixed diagnostic values.
+
+    Parameters
+    ----------
+    metrics
+        Metric records emitted by the gate subprocess.
+    traces
+        Trace records emitted by the gate subprocess.
+    outputs
+        GitHub workflow outputs emitted by the gate subprocess.
+    revision
+        Malformed revision used by the gate subprocess.
+    """
+    METRICS_VALIDATOR.validate_metrics(metrics)
+    METRICS_VALIDATOR.validate_traces(traces)
+
+    operation_metric = operation_records(metrics, "resolve_tag_commit")[-1]
+    assert operation_metric["labels"] == expected_operation_labels(
+        CANARY_BY_OPERATION["resolve_tag_commit"],
+        "resolve_tag_commit",
+        "failure",
+        "mismatch",
+    ), "malformed revisions must use the fixed commit-resolution mismatch labels"
+    gate_labels = metrics[-1]["labels"]
+    assert gate_labels == expected_gate_labels("failure", "mismatch"), (
+        "the gate metric must retain the commit-resolution mismatch category"
+    )
+    assert outputs["gate-outcome"] == "failure", (
+        "malformed revisions must publish a failed gate outcome"
+    )
+    assert (
+        outputs["gate-error-category"]
+        == typ.cast("dict[str, str]", gate_labels)["error_category"]
+        == "mismatch"
+    ), "workflow outputs must retain the gate metric's mismatch category"
+    assert_failure_trace_sequence(traces, "resolve_tag_commit", "mismatch")
+
+    assert all(
+        forbidden_revision not in value
+        for record in metrics
+        for value in typ.cast("dict[str, str]", record["labels"]).values()
+        for forbidden_revision in (revision, revision.rstrip("\n"))
+        if forbidden_revision
+    ), "malformed revisions must never become metric label values"
+
+
+def _assert_malformed_revision_stops_followup_requests(
+    calls: list[dict[str, object]], revision: str
+) -> None:
+    """Assert a malformed revision stops before fetch and workflow lookup.
+
+    Parameters
+    ----------
+    calls
+        Recorded fake-command and GitHub calls from the gate subprocess.
+    revision
+        Malformed revision used by the gate subprocess.
+    """
+    github_calls = [call for call in calls if call["command"] == "gh"]
+    assert len(github_calls) == 1, (
+        f"only commit resolution may cross GitHub; recorded calls: {calls!r}"
+    )
+    assert github_calls[0]["arguments"] == [
+        "api",
+        f"repos/{GITHUB_REPOSITORY}/commits/{revision}",
+        "--jq",
+        ".sha",
+    ], "the sole GitHub call must resolve the malformed revision"
+    assert not any(
+        call["command"] == "git"
+        and typ.cast("list[str]", call["arguments"])[0:1] == ["fetch"]
+        for call in calls
+    ), "a mismatched revision must not start Git fetch"
+    assert not any(
+        any(
+            "/actions/runs?" in argument
+            for argument in typ.cast("list[str]", call["arguments"])
+        )
+        for call in github_calls
+    ), "a mismatched revision must not start workflow-run lookup"
+
+
 @pytest.mark.parametrize(
     ("revision", "mode"),
     [
@@ -93,60 +181,8 @@ def test_malformed_revision_fails_as_mismatch_before_followup_requests(
         "enforcement must reject the malformed revision while observation "
         "retains diagnostics"
     )
-    METRICS_VALIDATOR.validate_metrics(metrics)
-    METRICS_VALIDATOR.validate_traces(traces)
-
-    operation_metric = operation_records(metrics, "resolve_tag_commit")[-1]
-    assert operation_metric["labels"] == expected_operation_labels(
-        CANARY_BY_OPERATION["resolve_tag_commit"],
-        "resolve_tag_commit",
-        "failure",
-        "mismatch",
-    ), "malformed revisions must use the fixed commit-resolution mismatch labels"
-    gate_labels = metrics[-1]["labels"]
-    assert gate_labels == expected_gate_labels("failure", "mismatch"), (
-        "the gate metric must retain the commit-resolution mismatch category"
-    )
-    assert outputs["gate-outcome"] == "failure", (
-        "malformed revisions must publish a failed gate outcome"
-    )
-    assert (
-        outputs["gate-error-category"]
-        == typ.cast("dict[str, str]", gate_labels)["error_category"]
-        == "mismatch"
-    ), "workflow outputs must retain the gate metric's mismatch category"
-    assert_failure_trace_sequence(traces, "resolve_tag_commit", "mismatch")
-
-    assert all(
-        forbidden_revision not in value
-        for record in metrics
-        for value in typ.cast("dict[str, str]", record["labels"]).values()
-        for forbidden_revision in (revision, revision.rstrip("\n"))
-        if forbidden_revision
-    ), "malformed revisions must never become metric label values"
-
-    github_calls = [call for call in calls if call["command"] == "gh"]
-    assert len(github_calls) == 1, (
-        f"only commit resolution may cross GitHub; recorded calls: {calls!r}"
-    )
-    assert github_calls[0]["arguments"] == [
-        "api",
-        f"repos/{GITHUB_REPOSITORY}/commits/{revision}",
-        "--jq",
-        ".sha",
-    ], "the sole GitHub call must resolve the malformed revision"
-    assert not any(
-        call["command"] == "git"
-        and typ.cast("list[str]", call["arguments"])[0:1] == ["fetch"]
-        for call in calls
-    ), "a mismatched revision must not start Git fetch"
-    assert not any(
-        any(
-            "/actions/runs?" in argument
-            for argument in typ.cast("list[str]", call["arguments"])
-        )
-        for call in github_calls
-    ), "a mismatched revision must not start workflow-run lookup"
+    _assert_malformed_revision_is_a_bounded_mismatch(metrics, traces, outputs, revision)
+    _assert_malformed_revision_stops_followup_requests(calls, revision)
 
 
 def test_default_observation_retains_missing_evidence_metrics(tmp_path: Path) -> None:
