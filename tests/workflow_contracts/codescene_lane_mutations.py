@@ -195,32 +195,56 @@ def swapped_steps(first: str, second: str) -> Mutation:
     )
 
 
-def misbound_input(step_name: str, input_name: str, value: str) -> Mutation:
-    """Return a mutation rebinding an input to ``value``."""
+def _assign_input(
+    step_name: str, input_name: str, value: str
+) -> cabc.Callable[[list[dict[str, object]]], None]:
+    """Return an edit writing ``value`` to ``input_name`` on ``step_name``.
+
+    Both spellings of a misbinding are this write, so the closure is written
+    once. Only the closure is shared: each caller states its own family and
+    description, so neither is reduced to forwarding its arguments to the other.
+
+    Returns
+    -------
+    cabc.Callable[[list[dict[str, object]]], None]
+        The edit, writing ``value`` into the named step's inputs.
+    """
 
     def apply(steps: list[dict[str, object]]) -> None:
         """Rebind ``input_name`` on the named step to ``value``."""
         inputs_of(step_of(steps, step_name))[input_name] = value
 
+    return apply
+
+
+def misbound_input(step_name: str, input_name: str, value: str) -> Mutation:
+    """Return a mutation rebinding an input to ``value``."""
     return _reportable_mutation(
         MISBINDING,
         f"{step_name!r} given {input_name}={value!r}",
-        apply,
+        _assign_input(step_name, input_name, value),
         visible_names(step_name, input_name),
     )
 
 
 def smuggled_input(step_name: str, input_name: str, value: str) -> Mutation:
-    """Return a mutation adding an input the contract requires to be absent."""
+    """Return a mutation adding an input the contract requires to be absent.
 
-    def apply(steps: list[dict[str, object]]) -> None:
-        """Supply ``input_name`` on the named step, which must not receive it."""
-        inputs_of(step_of(steps, step_name))[input_name] = value
+    The write is the same one ``misbound_input`` makes; what differs is what
+    the fixture required of that input, which is a fact about the lane rather
+    than about the edit. This one names an input the step must not receive at
+    all, so the contract has to object to its presence rather than to its
+    value.
 
+    Returns
+    -------
+    Mutation
+        The mutation and the verdict the contract must return on it.
+    """
     return _reportable_mutation(
         MISBINDING,
         f"{step_name!r} given {input_name}={value!r}",
-        apply,
+        _assign_input(step_name, input_name, value),
         visible_names(step_name, input_name),
     )
 
@@ -274,32 +298,46 @@ def ungated_upload(condition: str | None) -> Mutation:
     )
 
 
-def reversed_gate(condition: str) -> Mutation:
-    """Return a mutation whose condition opens on the run the gate must skip."""
+def _set_upload_gate(
+    condition: str,
+) -> cabc.Callable[[list[dict[str, object]]], None]:
+    """Return an edit setting the upload's gate to ``condition``.
+
+    Both faults against the gate are this write, so the closure is written once.
+    Only the closure is shared: each caller states its own family and
+    description, which is where the two faults differ — a gate that opens on the
+    run it must skip and one that names the credential without gating on it are
+    told apart by what the condition says, not by how it is written.
+
+    Returns
+    -------
+    cabc.Callable[[list[dict[str, object]]], None]
+        The edit, rewriting the upload step's gate to ``condition``.
+    """
 
     def apply(steps: list[dict[str, object]]) -> None:
-        """Set the upload's gate to the reversed ``condition``."""
+        """Set the upload's gate to ``condition``."""
         step_of(steps, CODESCENE_UPLOAD_STEP)["if"] = condition
 
+    return apply
+
+
+def reversed_gate(condition: str) -> Mutation:
+    """Return a mutation whose condition opens on the run the gate must skip."""
     return _reportable_mutation(
         REVERSAL,
         f"the upload's gate reversed to {condition!r}",
-        apply,
+        _set_upload_gate(condition),
         visible_names(CODESCENE_UPLOAD_STEP),
     )
 
 
 def weakened_gate(condition: str) -> Mutation:
     """Return a mutation naming the credential without gating on it."""
-
-    def apply(steps: list[dict[str, object]]) -> None:
-        """Set the upload's gate to the weakened ``condition``."""
-        step_of(steps, CODESCENE_UPLOAD_STEP)["if"] = condition
-
     return _reportable_mutation(
         WEAKENING,
         f"the upload's gate weakened to {condition!r}",
-        apply,
+        _set_upload_gate(condition),
         visible_names(CODESCENE_UPLOAD_STEP),
     )
 

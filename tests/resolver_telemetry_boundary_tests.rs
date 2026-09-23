@@ -12,26 +12,32 @@
 //! the telemetry boundary maps it — and this crate holds that separation in
 //! place.
 //!
-//! The assertion is about source text, which is normally the wrong shape. An
-//! `use` is source text, there is no execution to model, and "this module does
-//! not reach into that one" is a statement about what the module says. The
-//! other direction — that the two taxonomies still agree on every spelling —
-//! is an executable property and is asserted in `telemetry_tests` instead.
+//! The assertion is about what a module says, so there is no run in which it is
+//! observable: "this module does not reach into that one" is a statement about
+//! the module's imports, and imports are read from the module's syntax. Each
+//! source is parsed and its `use` items are read as the trees they are, so a
+//! comment that discusses the rule, or a string literal that quotes an import,
+//! is not mistaken for one. Text scanning reached the same answer, but only by
+//! masking comments and literals first, and every form of literal it had to
+//! know about was a form it could get wrong.
+//!
+//! The other direction — that the two taxonomies still agree on every spelling
+//! — is an executable property and is asserted in `telemetry_tests` instead.
 //!
 //! The scan is a whole-set equality rather than a deny-list: the modules that
 //! may name telemetry are enumerated, and the set found on disk must equal it.
 //! A deny-list would pass when a *new* domain module reached into telemetry,
 //! which is the failure this exists to catch.
-//!
-//! Read at [`mask_non_code`]'s discretion: a `use` inside a comment or a
-//! literal is not an import, and a scan that read the module's own prose as
-//! code would report the module discussing the rule as breaking it.
 
 use std::collections::BTreeSet;
 
 use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
-use cap_std::{ambient_authority, fs_utf8::Dir};
+use cap_std::{
+    ambient_authority,
+    fs_utf8::{Dir, DirEntry},
+};
+use syn::{File, Item, UseTree};
 
 /// The resolver domain, relative to the workspace root.
 const RESOLVER_DOMAIN: &str = "src/stdlib/which";
@@ -50,6 +56,15 @@ const MINIMUM_DOMAIN_SOURCES: usize = 5;
 /// into. Its own imports point the other way — it names the domain taxonomy, so
 /// that the mapping from category to label lives on this side of the boundary.
 const TELEMETRY_BOUNDARY_SOURCE: &str = "src/stdlib/which/telemetry.rs";
+
+/// The module name a `use` reaches telemetry under.
+///
+/// This is the file stem of [`TELEMETRY_BOUNDARY_SOURCE`], which the test
+/// asserts rather than leaving the two to drift: the name searched for in a
+/// `use` tree and the source the walk must find are statements about one
+/// module, and a rename that moved only one of them would silently stop
+/// matching anything.
+const TELEMETRY_MODULE: &str = "telemetry";
 
 /// Sources that may name the telemetry module, and why.
 ///
@@ -87,177 +102,18 @@ fn is_permitted(path: &str) -> bool {
         || path.starts_with(PERMITTED_TELEMETRY_TEST_DIRECTORY)
 }
 
-/// Return whether `needle` sits at `index` in `source`.
-fn matches_at(source: &[u8], index: usize, needle: &[u8]) -> bool {
-    source.get(index..index + needle.len()) == Some(needle)
-}
-
-/// Return the offset of the next `byte` at or after `index`.
-fn find_byte(source: &[u8], byte: u8, index: usize) -> Option<usize> {
-    source
-        .get(index..)?
-        .iter()
-        .position(|found| *found == byte)
-        .map(|found| index + found)
-}
-
-/// Return the end of a line comment beginning at `index`, when present.
-fn line_comment_end(source: &[u8], index: usize) -> Option<usize> {
-    if !matches_at(source, index, b"//") {
-        return None;
-    }
-    Some(find_byte(source, b'\n', index).unwrap_or(source.len()))
-}
-
-/// Return the end of a possibly nested block comment at `index`, when present.
-fn block_comment_end(source: &[u8], index: usize) -> Option<usize> {
-    if !matches_at(source, index, b"/*") {
-        return None;
-    }
-    let (mut depth, mut end) = (1_usize, index + 2);
-    while depth > 0 && end < source.len() {
-        if matches_at(source, end, b"/*") {
-            depth += 1;
-            end += 2;
-        } else if matches_at(source, end, b"*/") {
-            depth -= 1;
-            end += 2;
-        } else {
-            end += 1;
-        }
-    }
-    Some(end)
-}
-
-/// Return the end of a string or character literal at `index`, when present.
+/// Join `name` to `prefix` with a forward slash.
 ///
-/// A single quote opens a literal only when one closes it on the same line, so
-/// a lifetime (`&'static str`) or a loop label is not read as one.
-fn literal_end(source: &[u8], index: usize) -> Option<usize> {
-    let quote = *source.get(index)?;
-    if quote != b'"' && quote != b'\'' {
-        return None;
-    }
-    let mut end = index + 1;
-    while let Some(byte) = source.get(end).copied() {
-        match byte {
-            b'\\' => end += 2,
-            _ if byte == quote => return Some(end + 1),
-            b'\n' if quote == b'\'' => return None,
-            _ => end += 1,
-        }
-    }
-    Some(end)
-}
-
-/// Return the end of a raw Rust string beginning at `index`, when present.
-fn raw_string_end(source: &[u8], index: usize) -> Option<usize> {
-    let mut start = index;
-    if source.get(start) == Some(&b'b') {
-        start += 1;
-    }
-    if source.get(start) != Some(&b'r') {
-        return None;
-    }
-    let mut hashes = 0;
-    while source.get(start + 1 + hashes) == Some(&b'#') {
-        hashes += 1;
-    }
-    if source.get(start + 1 + hashes) != Some(&b'"') {
-        return None;
-    }
-    let body = start + 2 + hashes;
-    // The terminator is a quote followed by as many hashes as opened it.
-    let mut end = body;
-    while source.get(end).is_some() {
-        if source.get(end).copied() == Some(b'"')
-            && (0..hashes).all(|offset| source.get(end + 1 + offset) == Some(&b'#'))
-        {
-            return Some(end + 1 + hashes);
-        }
-        end += 1;
-    }
-    Some(source.len())
-}
-
-/// Return the end of non-code text beginning at `index`, when present.
-///
-/// Order matters: a raw string may open with `b` or `r`, and a line comment
-/// begins with a byte a literal scan would otherwise treat as ordinary code.
-fn non_code_end(source: &[u8], index: usize) -> Option<usize> {
-    line_comment_end(source, index)
-        .or_else(|| block_comment_end(source, index))
-        .or_else(|| raw_string_end(source, index))
-        .or_else(|| literal_end(source, index))
-}
-
-/// Blank `span` in place, keeping its newlines so line structure survives.
-fn blank(span: &mut [u8]) {
-    for byte in span.iter_mut().filter(|byte| **byte != b'\n') {
-        *byte = b' ';
-    }
-}
-
-/// Replace comments and literals with spaces, preserving every byte offset.
-///
-/// Offsets are preserved so a match's position still maps to the source it came
-/// from, and so the masking can be done on bytes: Rust source carries
-/// multi-byte prose in its doc comments, and a char-wise blanking would shorten
-/// the text and shift every offset after the first em-dash.
-fn mask_non_code(source: &str) -> Vec<u8> {
-    let mut masked = source.as_bytes().to_vec();
-    let mut index = 0;
-    while index < source.len() {
-        let Some(span_end) = non_code_end(&masked, index).filter(|end| *end > index) else {
-            // Not the start of anything masked, so this byte is code and stays.
-            index += 1;
-            continue;
-        };
-        // `get_mut` rather than an index, so a range the scan cannot produce
-        // blanks nothing instead of panicking.
-        if let Some(span) = masked.get_mut(index..span_end) {
-            blank(span);
-        }
-        index = span_end;
-    }
-    masked
-}
-
-/// Return whether `statement` carries `token` as a whole word.
-fn names_token(statement: &[u8], token: &[u8]) -> bool {
-    statement
-        .windows(token.len())
-        .enumerate()
-        .any(|(index, window)| {
-            let before_is_word = index
-                .checked_sub(1)
-                .and_then(|previous| statement.get(previous))
-                .is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'_');
-            let after = statement.get(index + token.len());
-            let after_is_word =
-                after.is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'_');
-            window == token && !before_is_word && !after_is_word
-        })
-}
-
-/// Return whether masked `source` names the telemetry module in a `use`.
-///
-/// The unit examined is a statement rather than a line, because an import that
-/// names telemetry need not be written on the line that opens it — the module
-/// tree here spells most of them as a braced group spanning four lines — and
-/// because `mod.rs` re-exports with `pub use`, which a `use `-prefix test would
-/// miss.
-///
-/// Only `use` is examined, not qualified paths written at a call site. Those
-/// are the same dependency, and the rule is stated over imports, so a module
-/// that names `telemetry` without importing it would slip past; the resolver
-/// therefore imports rather than qualifies, which is the convention this
-/// encodes. It is a convention rather than an invariant because a qualified
-/// path is not distinguishable from any other path expression by text alone.
-fn names_telemetry_in_a_use(masked: &[u8]) -> bool {
-    masked
-        .split(|byte| *byte == b';')
-        .any(|statement| names_token(statement, b"use") && names_token(statement, b"telemetry"))
+/// Every path this module compares against is written with `/`: the domain
+/// constant, the boundary source, and each entry in the permitted list.
+/// [`Utf8Path::join`] would instead insert the platform's separator, so on
+/// Windows the walk would report `src/stdlib/which\cache.rs` and match none of
+/// them — the importer set would report every source as unexpected and every
+/// permission as stale, on the platform where the comparison is least able to
+/// show it. Naming the separator keeps one spelling of a repository path
+/// wherever the walk runs.
+fn contract_path(prefix: &Utf8Path, name: &str) -> String {
+    format!("{prefix}/{name}")
 }
 
 /// Collect every `.rs` source beneath `directory`, as workspace-relative paths.
@@ -272,23 +128,85 @@ fn collect_sources(directory: &Dir, prefix: &Utf8Path) -> Result<Vec<(String, St
         .read_dir(".")
         .with_context(|| format!("read {prefix}"))?
     {
-        let handle = entry.with_context(|| format!("read an entry of {prefix}"))?;
-        let name = handle.file_name().context("read entry name")?;
-        let child = prefix.join(&name);
-        let file_type = handle.file_type().context("read entry type")?;
-        if file_type.is_dir() {
-            let nested = directory
-                .open_dir(&name)
-                .with_context(|| format!("open {child}"))?;
-            sources.extend(collect_sources(&nested, &child)?);
-        } else if file_type.is_file() && Utf8Path::new(&name).extension() == Some("rs") {
-            let text = directory
-                .read_to_string(&name)
-                .with_context(|| format!("read {child}"))?;
-            sources.push((child.to_string(), text));
-        }
+        sources.extend(collect_entry_sources(directory, prefix, &entry?)?);
     }
     Ok(sources)
+}
+
+/// Collect the sources one directory entry contributes, under `prefix`.
+///
+/// A directory contributes whatever the walk finds beneath it, a `.rs` file
+/// contributes itself, and anything else contributes nothing. Splitting the
+/// per-entry decision from the walk keeps each of the two readable: this one
+/// answers what a single entry is, and the caller only has to know that a
+/// walk's result is the concatenation of its entries'.
+fn collect_entry_sources(
+    directory: &Dir,
+    prefix: &Utf8Path,
+    entry: &DirEntry,
+) -> Result<Vec<(String, String)>> {
+    let name = entry.file_name().context("read entry name")?;
+    let path = contract_path(prefix, &name);
+    let file_type = entry.file_type().context("read entry type")?;
+    if file_type.is_dir() {
+        let nested = directory
+            .open_dir(&name)
+            .with_context(|| format!("open {path}"))?;
+        return collect_sources(&nested, Utf8Path::new(&path));
+    }
+    if !file_type.is_file() || Utf8Path::new(&name).extension() != Some("rs") {
+        return Ok(Vec::new());
+    }
+    let text = directory
+        .read_to_string(&name)
+        .with_context(|| format!("read {path}"))?;
+    Ok(vec![(path, text)])
+}
+
+/// Return whether any branch of `tree` is the module called `wanted`.
+///
+/// A `use` item is a tree of paths sharing prefixes, and the module is named by
+/// whichever segment of a branch holds it. Every position matters, because every
+/// position can reach it, and the spellings the domain would actually use are
+/// spread across those positions:
+///
+/// ```text
+/// use crate::stdlib::which::telemetry;           // the last segment
+/// use crate::stdlib::which::{cache, telemetry};  // a branch of a group
+/// use telemetry::counters;                       // the first segment
+/// use crate::stdlib::which::telemetry as alias;  // renamed, still reached
+/// ```
+///
+/// Comparing identifiers against the parse tree is what makes the rule exact:
+/// `telemetry_tests` is a different module rather than a longer spelling of
+/// this one, and a comment or a string holding the same text is not a `use` at
+/// all — neither distinction has to be re-stated as a matching rule here.
+fn names_segment(tree: &UseTree, wanted: &str) -> bool {
+    match tree {
+        UseTree::Path(path) => path.ident == wanted || names_segment(&path.tree, wanted),
+        UseTree::Name(name) => name.ident == wanted,
+        UseTree::Rename(rename) => rename.ident == wanted,
+        UseTree::Glob(_) => false,
+        UseTree::Group(group) => group
+            .items
+            .iter()
+            .any(|branch| names_segment(branch, wanted)),
+    }
+}
+
+/// Return whether `file` imports the telemetry module.
+///
+/// Only `use` items are read, not qualified paths written at a call site. Those
+/// are the same dependency, and the rule is stated over imports, so a module
+/// that names `telemetry` without importing it would slip past; the resolver
+/// therefore imports rather than qualifies, which is the convention this
+/// encodes. It is a convention rather than an invariant because whether a
+/// path's first segment is a crate or a local module is not a fact a single
+/// file carries.
+fn imports_telemetry(file: &File) -> bool {
+    file.items.iter().any(|item| {
+        matches!(item, Item::Use(item_use) if names_segment(&item_use.tree, TELEMETRY_MODULE))
+    })
 }
 
 /// Every module under the resolver domain that names telemetry must be allowed to.
@@ -308,6 +226,12 @@ fn only_the_telemetry_boundary_names_telemetry_in_the_resolver_domain() -> Resul
         .open_dir(domain)
         .with_context(|| format!("open {RESOLVER_DOMAIN}"))?;
 
+    ensure!(
+        Utf8Path::new(TELEMETRY_BOUNDARY_SOURCE).file_stem() == Some(TELEMETRY_MODULE),
+        "{TELEMETRY_MODULE} is the module a `use` reaches {TELEMETRY_BOUNDARY_SOURCE} \
+         under, so the two must name the same module"
+    );
+
     let sources = collect_sources(&domain_dir, domain)?;
     ensure!(
         sources.len() >= MINIMUM_DOMAIN_SOURCES,
@@ -319,7 +243,8 @@ fn only_the_telemetry_boundary_names_telemetry_in_the_resolver_domain() -> Resul
 
     let mut importers = BTreeSet::new();
     for (path, text) in &sources {
-        if path != TELEMETRY_BOUNDARY_SOURCE && names_telemetry_in_a_use(&mask_non_code(text)) {
+        let parsed = syn::parse_file(text).with_context(|| format!("parse {path}"))?;
+        if path != TELEMETRY_BOUNDARY_SOURCE && imports_telemetry(&parsed) {
             importers.insert(path.clone());
         }
     }
@@ -351,6 +276,110 @@ fn only_the_telemetry_boundary_names_telemetry_in_the_resolver_domain() -> Resul
         "these sources are permitted to name telemetry but no longer do: \
          {stale:?}. Drop the permission rather than leaving a rule that \
          describes a tree this is not."
+    );
+    Ok(())
+}
+
+/// The module is named by the last segment of a plain path.
+///
+/// This is the shape the domain would reach the reporting layer with, and the
+/// one the permitted list is written against.
+#[test]
+fn use_tree_names_the_last_segment_of_a_plain_path() -> Result<()> {
+    let tree: UseTree = syn::parse_quote!(crate::stdlib::which::telemetry);
+    ensure!(
+        names_segment(&tree, TELEMETRY_MODULE),
+        "a plain path ending in {TELEMETRY_MODULE} reaches it"
+    );
+    Ok(())
+}
+
+/// The module is named from inside a braced group.
+///
+/// The module tree spells most of its imports this way, because the resolver
+/// domain is re-exported as a group rather than named one path per item.
+#[test]
+fn use_tree_names_a_branch_of_a_braced_group() -> Result<()> {
+    let tree: UseTree = syn::parse_quote!(crate::stdlib::which::{cache, telemetry});
+    ensure!(
+        names_segment(&tree, TELEMETRY_MODULE),
+        "a group naming {TELEMETRY_MODULE} as one of its branches reaches it"
+    );
+    Ok(())
+}
+
+/// The module is named from inside a group nested in a group.
+///
+/// A group's branches are themselves trees, so a branch that opens another
+/// group has to be descended into; a scan that read only the outer group's
+/// own identifiers would stop one level short.
+#[test]
+fn use_tree_names_a_branch_of_a_nested_group() -> Result<()> {
+    let tree: UseTree = syn::parse_quote!(crate::stdlib::which::{cache::{self, key}, telemetry});
+    ensure!(
+        names_segment(&tree, TELEMETRY_MODULE),
+        "nesting a group does not hide the branch beside it"
+    );
+    Ok(())
+}
+
+/// The module is named by the segment that opens the path.
+///
+/// A `use telemetry::counters;` reaches the module from the root position
+/// rather than the leaf, so a rule that read only each branch's final
+/// identifier would miss every import that takes something out of the module
+/// rather than the module itself.
+#[test]
+fn use_tree_names_the_opening_segment_of_a_path() -> Result<()> {
+    let tree: UseTree = syn::parse_quote!(telemetry::counters);
+    ensure!(
+        names_segment(&tree, TELEMETRY_MODULE),
+        "a path opening on {TELEMETRY_MODULE} reaches it"
+    );
+    Ok(())
+}
+
+/// The module is named by a renamed import, which a rename does not change.
+///
+/// `use ...::telemetry as reporting;` binds a local name to the module, so the
+/// path still reaches it. The rename is what the module is called here, not
+/// what it is.
+#[test]
+fn use_tree_names_a_renamed_import() -> Result<()> {
+    let tree: UseTree = syn::parse_quote!(crate::stdlib::which::telemetry as reporting);
+    ensure!(
+        names_segment(&tree, TELEMETRY_MODULE),
+        "renaming the binding does not stop the path reaching {TELEMETRY_MODULE}"
+    );
+    Ok(())
+}
+
+/// A module whose name merely begins with the same text is not the module.
+///
+/// `telemetry_tests` is a sibling of the boundary rather than a spelling of
+/// it, and the resolver's own test modules are exactly the importers this rule
+/// must distinguish. Comparing identifiers is what makes the distinction,
+/// where text matching had to state it as a whole-word condition.
+#[test]
+fn use_tree_does_not_name_a_module_that_only_begins_with_the_text() -> Result<()> {
+    let tree: UseTree = syn::parse_quote!(crate::stdlib::which::telemetry_tests);
+    ensure!(
+        !names_segment(&tree, TELEMETRY_MODULE),
+        "{TELEMETRY_MODULE}_tests is a different module from {TELEMETRY_MODULE}"
+    );
+    Ok(())
+}
+
+/// A group naming only siblings does not name the module.
+///
+/// The negative direction of the group case, so that a rule returning true for
+/// every `use` in the file could not satisfy the pair.
+#[test]
+fn use_tree_does_not_name_the_module_when_no_branch_does() -> Result<()> {
+    let tree: UseTree = syn::parse_quote!(crate::stdlib::which::{cache, resolve_error});
+    ensure!(
+        !names_segment(&tree, TELEMETRY_MODULE),
+        "no branch of this group reaches {TELEMETRY_MODULE}"
     );
     Ok(())
 }

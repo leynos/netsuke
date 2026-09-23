@@ -181,6 +181,11 @@ proptest = "1.11.0"
 googletest = "0.14.3"
 pretty_assertions = "1.4.1"
 regex = "1.12.2"
+# The resolver boundary contract reads a module's `use` items as the trees they
+# are rather than as text, so `telemetry` is matched as an identifier and a
+# comment or a literal quoting the same name is not one. Full syntax, because
+# the items being read are ordinary source files.
+syn = { version = "2", features = ["full"] }
 # Plural-selection tests must pass numeric arguments to Fluent. `ortho_config`
 # exposes `LocalizationArgs` as a map of `FluentValue`, but does not re-export
 # the value type, so the tests need `fluent-bundle` directly. Constrained to

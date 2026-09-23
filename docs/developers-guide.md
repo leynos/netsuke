@@ -6329,10 +6329,11 @@ two-label `not_found` series would then match it.
 The resolver records the same bounded facts on the `stdlib.which.resolve` span
 and emits one debug event when a resolution fails. No command name, no
 filesystem path, no workspace name, and no `PATH` or `PATHEXT` value reaches a
-span field, an event, or a metric label, so a series can be exported without
-disclosing what a manifest asked for or where it matched. The tracing tests
-assert that the command name and the workspace root are absent from every
-captured event and span field.
+span field, an event, or a metric label. The `cwd_mode` label records which
+search policy a manifest requested, as one of the resolver's fixed spellings,
+so a series can be exported without quoting the manifest or saying where it
+matched. The tracing tests assert that the command name and the workspace root
+are absent from every captured event and span field.
 
 The counter descriptions are registered once per process behind a `Once`. Both
 counter names are listed in the application recorder's `accepts_name` and

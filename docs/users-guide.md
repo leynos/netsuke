@@ -839,10 +839,12 @@ The `category` label is the resolver's bounded failure taxonomy: `not_found`,
 `direct_not_found`, `args`, `canonicalize`, `is_executable`,
 `canonicalize_non_utf8`, `workspace_non_utf8`, `walkdir`, `cwd_resolve`, or
 `cwd_non_utf8`. Every label on both counters is drawn from a closed set fixed
-by the resolver rather than by manifest content, so a series can be exported
-without disclosing what a manifest asked for or where it was found. Command
-names, filesystem paths, workspace names, and `PATH` or `PATHEXT` values are
-never recorded.
+by the resolver rather than by manifest content. The `cwd_mode` label does
+record which search policy a manifest requested — that is the fact the
+vocabulary exists to carry — but it names it as one of the fixed spellings
+rather than quoting the template. Nothing else is recorded: command names,
+filesystem paths, workspace names, and `PATH` or `PATHEXT` values never reach a
+label.
 
 ### Inject the environment reader for tests
 
