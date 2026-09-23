@@ -742,6 +742,25 @@ than the behaviour. When a gate's subject is a mutation, the checker must at
 minimum see the code the mutation touches, and for `#[cfg(kani)]` code only the
 Kani frontend does.
 
+The third lesson arrived with the dead override, and it is the same lesson one
+layer up. The gate's funding was a filter that selected nothing, so the policy
+never applied — and every signal stayed green there too. Two contract modules
+passed, because they compared bare names to bare names and the written name
+resolved. The runtime oracle passed, because its scope was filters naming a
+*parameterized* test and this one names a plain test in a submodule. CI passed
+twice, inside the default allowance an inert override predicts. The question
+that broke it open had the same shape as before: not "does the guard pass?" but
+"what does this guard not replay?" The answer was every filter that does not
+name a parameterized test, which is why the repair replays all of them.
+
+The three commits closing this out are gated as one change set: `check-fmt`,
+`lint`, `typecheck`, `markdownlint`, `lint-python`, `test-workflow-contracts`
+(605 passed, 2 discards) and `make test` (3315 passed, 6 skipped, 123
+doctests). The gate's own `make test-kani-mutations` is deliberately outside
+that set — the filter, the grammar, and the runtime replay touch nothing it
+compiles — and the override it funds was proven bound by the three probes
+recorded under `Progress`.
+
 ## Revision note
 
 - 2026-09-21 — Initial ExecPlan for `#756`: regenerate the rotted patches, add
@@ -833,3 +852,26 @@ Kani frontend does.
   were written from the configuration's intent rather than from the runner's
   behaviour, which is the same mistake one layer below the issue this plan
   exists to close.
+- 2026-09-23 — The runtime guard was widened and the three-commit change set
+  pushed. The guard now replays every filter verbatim, and the reading moved
+  into a `_nextest_oracle` package beside the entry script because the file sat
+  at 385 of the 400-line cap. Two corrections landed with it:
+  `--run-ignored all` is load-bearing for the listing (without it an
+  `#[ignore]`-gated test reads as `mismatch` whatever the filterset says, so
+  the gate's own filter would report as selecting nothing), and this file's
+  reading grammar needed the same module-path widening the contracts received,
+  or the qualified filter stays invisible to `configured_names`. The heading
+  above the entry-script reading in the developers-guide gained the package's
+  existence.
+- 2026-09-23 — **A method error worth recording, caught by the gate runner.**
+  Every mdtablefix "convergence check" run while preparing these commits was a
+  dry run: the tool rewrites only under `--in-place`, and without it, it merely
+  reports what it *would* change. So a `cmp` between two consecutive no-op runs
+  compared two identical unmodified files and reported success, and the
+  developers-guide paragraph shipped over-wrapped. `make check-fmt` caught it
+  (scrutineer proved the file canonical at `origin/main`, `HEAD`, and the
+  index, and non-canonical only in the working tree), and the fix is one
+  `--in-place` run. The general form matters more than the flag: a check that
+  cannot fail — here, diffing a file against itself — is not evidence, which is
+  the same lesson as the probe under `Surprises & discoveries` that measured
+  the wrong process.
