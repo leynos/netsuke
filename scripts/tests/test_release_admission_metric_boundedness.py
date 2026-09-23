@@ -1,15 +1,23 @@
-"""Exercise the release-admission metric cardinality invariant."""
+"""Exercise bounded release-admission metric labels and categories."""
 
 import tempfile
 import typing as typ
 from pathlib import Path
 
+import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from release_admission_test_support import (
+    CANARY_BY_OPERATION,
     GITHUB_REPOSITORY,
     METRICS_VALIDATOR,
+    FailureCase,
     _run_gate,
+    assert_failure_trace_sequence,
+    expected_gate_labels,
+    expected_operation_labels,
+    operation_duration,
+    operation_records,
 )
 
 IDENTIFIER_TEXT = st.text(
@@ -79,6 +87,203 @@ def _assert_identifiers_are_excluded(
     for trace in traces:
         assert identifiers.isdisjoint(trace.values()), (
             "generated identifiers must never become trace field values"
+        )
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(
+            FailureCase(
+                "fresh",
+                {"NETSUKE_FAKE_GH_FAILURE": "true"},
+                "resolve_tag_commit",
+                "api_error",
+            ),
+            id="api-error",
+        ),
+        pytest.param(
+            FailureCase(
+                "fresh",
+                {"NETSUKE_FAKE_RESOLVED_REVISION": "b" * 40},
+                "resolve_tag_commit",
+                "mismatch",
+            ),
+            id="candidate-mismatch",
+        ),
+        pytest.param(
+            FailureCase(
+                "fresh",
+                {"NETSUKE_FAKE_GIT_FAILURE": "true"},
+                "fetch_candidate_revision",
+                "fetch_error",
+            ),
+            id="fetch-error",
+        ),
+        pytest.param(
+            FailureCase("stale", {}, "check_scan_freshness", "stale_evidence"),
+            id="stale-evidence",
+        ),
+        pytest.param(
+            FailureCase("missing", {}, "check_scan_freshness", "missing_evidence"),
+            id="missing-evidence",
+        ),
+        pytest.param(
+            FailureCase("unexpected", {}, "check_scan_freshness", "unknown"),
+            id="unknown-evidence",
+        ),
+        pytest.param(
+            FailureCase(
+                "fresh",
+                {},
+                "verify_evidence",
+                "missing_evidence",
+            ),
+            id="enforcement-rejects-environment-freshness",
+        ),
+        pytest.param(
+            FailureCase(
+                "fresh",
+                {
+                    "NETSUKE_FAKE_GH_DELAY_SECONDS": "2",
+                    "NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS": "1",
+                },
+                "resolve_tag_commit",
+                "timeout",
+            ),
+            id="operation-timeout",
+        ),
+        pytest.param(
+            FailureCase(
+                "fresh",
+                {
+                    "NETSUKE_FAKE_GH_IGNORE_TERM": "true",
+                    "NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS": "1",
+                },
+                "resolve_tag_commit",
+                "timeout",
+            ),
+            id="term-ignoring-timeout",
+        ),
+        pytest.param(
+            FailureCase(
+                "fresh",
+                {"NETSUKE_FAKE_WORKFLOW_RUN_ID": ""},
+                "verify_evidence",
+                "missing_evidence",
+                enforce=False,
+            ),
+            id="missing-workflow-run-observation",
+        ),
+        pytest.param(
+            FailureCase(
+                "fresh",
+                {"NETSUKE_FAKE_GH_WORKFLOW_FAILURE": "true"},
+                "fetch_workflow_run",
+                "api_error",
+            ),
+            id="workflow-run-api-error-enforcement",
+        ),
+        pytest.param(
+            FailureCase(
+                "fresh",
+                {"NETSUKE_FAKE_GH_WORKFLOW_FAILURE": "true"},
+                "fetch_workflow_run",
+                "api_error",
+                enforce=False,
+            ),
+            id="workflow-run-api-error-observation",
+        ),
+        pytest.param(
+            FailureCase(
+                "fresh",
+                {
+                    "NETSUKE_FAKE_GH_WORKFLOW_DELAY_SECONDS": "2",
+                    "NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS": "1",
+                },
+                "fetch_workflow_run",
+                "timeout",
+            ),
+            id="workflow-run-timeout-enforcement",
+        ),
+        pytest.param(
+            FailureCase(
+                "fresh",
+                {
+                    "NETSUKE_FAKE_GH_WORKFLOW_DELAY_SECONDS": "2",
+                    "NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS": "1",
+                },
+                "fetch_workflow_run",
+                "timeout",
+                enforce=False,
+            ),
+            id="workflow-run-timeout-observation",
+        ),
+    ],
+)
+def test_gate_emits_fixed_categories_for_failure_paths(
+    tmp_path: Path,
+    case: FailureCase,
+) -> None:
+    """Verify every controlled failure retains a bounded metric category.
+
+    Parameters
+    ----------
+    tmp_path
+        Isolated fake-command and output directory.
+    case
+        One failure input and its documented fixed category.
+
+    Notes
+    -----
+    Every failure must emit operation, gate, and workflow-output results before
+    the admission script exits unsuccessfully.
+    """
+    result, metrics, traces, _, outputs = _run_gate(
+        tmp_path,
+        evidence_state=case.evidence_state,
+        extra_environment={
+            "NETSUKE_RELEASE_ADMISSION_ENFORCE": str(case.enforce).lower(),
+            **case.extra_environment,
+        },
+    )
+
+    assert result.returncode == (1 if case.enforce else 0), (
+        "enforcement must fail closed while observation must retain diagnostics"
+    )
+    METRICS_VALIDATOR.validate_metrics(metrics)
+    METRICS_VALIDATOR.validate_traces(traces)
+    record = operation_records(metrics, case.operation)[-1]
+    assert record["labels"] == expected_operation_labels(
+        CANARY_BY_OPERATION[case.operation],
+        case.operation,
+        "failure",
+        case.error_category,
+    ), f"{case.operation} must retain its fixed error category"
+    assert metrics[-1]["labels"] == expected_gate_labels(
+        "failure", case.error_category
+    ), "the gate must retain the operation's error category"
+    assert outputs["gate-outcome"] == "failure", (
+        "failed operations must reach the workflow summary output"
+    )
+    assert outputs["gate-error-category"] == case.error_category, (
+        "failed operations must retain their bounded category in workflow output"
+    )
+    assert_failure_trace_sequence(traces, case.operation, case.error_category)
+    if (
+        "NETSUKE_FAKE_WORKFLOW_RUN_ID" in case.extra_environment
+        and not case.extra_environment["NETSUKE_FAKE_WORKFLOW_RUN_ID"]
+    ):
+        workflow_run_record = operation_records(metrics, "fetch_workflow_run")[-1]
+        assert workflow_run_record["labels"] == expected_operation_labels(
+            CANARY_BY_OPERATION["fetch_workflow_run"],
+            "fetch_workflow_run",
+            "success",
+            "none",
+        ), "an empty run identifier must reach evidence verification"
+    if case.error_category == "timeout":
+        assert operation_duration(metrics, case.operation) > 0, (
+            "timed-out operations must retain a positive measured duration"
         )
 
 
