@@ -66,6 +66,9 @@ def test_a_conjunction_of_both_clauses_is_accepted(condition: str) -> None:
         f"{DISPATCH} || {MAIN_CLAUSE} && {CREDENTIAL_PRESENT} && {MAIN_CLAUSE}",
         f"{MAIN_CLAUSE} || {DISPATCH} && {CREDENTIAL_PRESENT} && {MAIN_CLAUSE}",
         f"({DISPATCH} || true) && {CREDENTIAL_PRESENT} && {MAIN_CLAUSE}",
+        # The required clauses stay whole and first; the `||` hides in what
+        # reads as one more narrowing conjunct, which the split permits.
+        (f"{CREDENTIAL_PRESENT} && {MAIN_CLAUSE} && github.actor != 'x' || {DISPATCH}"),
     ],
 )
 def test_a_disjunction_is_refused_even_beside_both_clauses(condition: str) -> None:
