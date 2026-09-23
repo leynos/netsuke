@@ -95,13 +95,17 @@ def _assert_identifiers_are_excluded(
     for record in metrics:
         labels = record["labels"]
         assert isinstance(labels, dict), "every emitted metric must retain labels"
-        assert identifiers.isdisjoint(labels.values()), (
-            "generated identifiers must never become metric label values"
-        )
+        assert not any(
+            isinstance(value, str)
+            and any(identifier in value for identifier in identifiers)
+            for value in labels.values()
+        ), "generated identifiers must never become metric label values"
     for trace in traces:
-        assert identifiers.isdisjoint(trace.values()), (
-            "generated identifiers must never become trace field values"
-        )
+        assert not any(
+            isinstance(value, str)
+            and any(identifier in value for identifier in identifiers)
+            for value in trace.values()
+        ), "generated identifiers must never become trace field values"
 
 
 @pytest.mark.parametrize(
