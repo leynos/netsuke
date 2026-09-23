@@ -245,12 +245,14 @@ Formal verification should not be folded into the existing `build-test` job.
 The current `CI` workflow already performs formatting, linting, tests, and
 coverage, and those checks should remain intact.[^3]
 
-The `kani-smoke` job is a dedicated, pull-request-only job (it runs only when
-`github.event_name == 'pull_request'`) that:
+The `kani-smoke` job is a dedicated, required job that runs on every trigger.
+It verifies every harness on each push to `main`, nightly, and on a manual
+dispatch; on a pull request it runs them only when the pull request changes a
+proof input (see [ADR-039](adr-039-change-scoped-kani-gate.md)). When the
+proofs run, it:
 
-- installs `uv` and then installs the pinned Kani toolchain through
-  `make install-kani`,
-- runs `make kani-check` and then the bounded harness suite through
+- installs the pinned, checksummed prebuilt Kani front-end and release bundle,
+- checks the installed version and then runs the bounded harness suite through
   `make kani-ir` (15 harnesses across the manifest, cycle, and
   command-interpolation verification modules),
 - caches tool downloads separately from the ordinary Rust build artefacts, and

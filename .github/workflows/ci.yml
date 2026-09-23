@@ -8,6 +8,11 @@ on:
   # publish, so without this trigger no generation would ever be written.
   push:
     branches: [main]
+  # Nightly at 04:41 UTC, clear of the 03:05 mutation-testing run, so every
+  # Kani harness is verified even on a day with no push to `main`. Only
+  # `kani-smoke` runs on it; see docs/adr-039-change-scoped-kani-gate.md.
+  schedule:
+    - cron: '41 4 * * *'
   workflow_dispatch:
 
 # Start every job from an empty token and let each one opt in. Both jobs
@@ -38,6 +43,8 @@ jobs:
     # measures the peak so the next run either confirms the escalation or
     # returns the job to `-2`.
     runs-on: ubicloud-standard-4-ubuntu-2404
+    # The nightly schedule exists for the Kani proofs alone.
+    if: github.event_name != 'schedule'
     # Ninety minutes, not sixty. The coverage step below passes
     # `doctests: 'true'`, so the shared action runs `cargo llvm-cov nextest`
     # and then an uninstrumented `cargo test --doc`, each arming the 1,800 s
@@ -347,6 +354,8 @@ jobs:
     # inside the repository's 400-line limit. Version pins stay here, so the
     # documented `sed` extraction still finds exactly one of each.
     name: Windows
+    # The nightly schedule exists for the Kani proofs alone.
+    if: github.event_name != 'schedule'
     permissions:
       contents: read
     uses: ./.github/workflows/ci-windows.yml
@@ -359,7 +368,14 @@ jobs:
       python-baseline: '3.14'
 
   kani-smoke:
-    # Runs on every trigger, dispatch included. A dispatch cannot publish a
+    # A required check, so it runs and reports on every trigger; it is never
+    # skipped by a `paths` filter or a job-level `if:`, since a required check
+    # that never reports blocks the pull request. An early step decides
+    # whether the proofs can differ from `main`'s: on a pull request that
+    # changes nothing in tools/kani/proof-scope.toml every later step skips
+    # and the job ends green, saying why in its summary. A push to `main`, the
+    # nightly schedule and a dispatch always run every harness. See
+    # docs/adr-039-change-scoped-kani-gate.md. A dispatch cannot publish a
     # generation, since the save gates on a push to `main`, so all it can do
     # here is measure a warm restore, which is the one the exit gate needs.
     runs-on: ubicloud-standard-2-ubuntu-2404
@@ -376,8 +392,23 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
+          # The pull-request merge commit and its first parent, the base tip,
+          # whose diff is the change set the scope decision reads.
+          fetch-depth: 2
+      - name: Setup uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+        with:
+          python-version: ${{ env.PYTHON_BASELINE }}
+          # Nothing here is worth a cache entry; the job owns only the Kani key.
+          enable-cache: 'false'
+      - name: Decide Kani proof scope
+        id: scope
+        env:
+          INPUT_EVENT_NAME: ${{ github.event_name }}
+        run: uv run --script scripts/kani_proof_scope.py
       - name: Restore Kani payloads
         id: kani_cache
+        if: steps.scope.outputs.run-proofs == 'true'
         # Restored before every installer, so a warm run finds the front-end,
         # bundle and Kani toolchain in place.
         uses: ./.github/actions/kani-cache
@@ -385,6 +416,7 @@ jobs:
           mode: restore
           runner-image: ${{ env.NETSUKE_RUNNER_IMAGE }}
       - name: Setup Rust
+        if: steps.scope.outputs.run-proofs == 'true'
         uses: leynos/shared-actions/.github/actions/setup-rust@a5765019912a8ab6882b12db049c7cde635f3a85
         with:
           toolchain: stable
@@ -394,6 +426,7 @@ jobs:
           install-binstall: 'false'
           use-sccache: 'false'
       - name: Install prebuilt Kani
+        if: steps.scope.outputs.run-proofs == 'true'
         # Two payloads from pinned checksummed archives under
         # version-qualified directories, so a bump cannot reuse a stale one.
         run: |
@@ -435,10 +468,13 @@ jobs:
             cargo kani setup --use-local-bundle "${bundle}"
           fi
       - name: Kani version check
+        if: steps.scope.outputs.run-proofs == 'true'
         run: cargo kani --version | grep --fixed-strings "0.67.0"
       - name: Run Kani harnesses
+        if: steps.scope.outputs.run-proofs == 'true'
         run: make kani-ir
       - name: Save Kani payloads
+        if: steps.scope.outputs.run-proofs == 'true'
         # This job owns the Kani key and nothing else; the action restricts
         # the save to a push on `main`.
         uses: ./.github/actions/kani-cache

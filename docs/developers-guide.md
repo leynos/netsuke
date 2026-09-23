@@ -2947,11 +2947,12 @@ them.
   during `cargo kani setup`, and drives `rustc` through `kani-compiler`.
   Reading the compiler invocations a `cargo kani` run produces shows
   `-Zthreads` never reaching `kani-compiler`, so the harnesses need no override
-  and none is added; CI's `kani-smoke` job runs `make kani-ir` on every pull
-  request, which is where that continues to be checked. Verus drives its own
-  toolchain the same way. If a proof tool ever does inherit a flag it cannot
-  take, the remedy is an override scoped to that one target with the reason
-  recorded, not a change to the shared configuration.
+  and none is added; CI's `kani-smoke` job runs `make kani-ir` on every push to
+  `main`, nightly, and on each pull request that changes a proof input, which
+  is where that continues to be checked. Verus drives its own toolchain the
+  same way. If a proof tool ever does inherit a flag it cannot take, the remedy
+  is an override scoped to that one target with the reason recorded, not a
+  change to the shared configuration.
 - **Dylint and Whitaker.** `make lint-whitaker` execs `cargo dylint`, which
   re-invokes Cargo under Whitaker's own pinned nightly with a driver as
   `RUSTC_WORKSPACE_WRAPPER`. That older Cargo reads this configuration without
@@ -3397,12 +3398,59 @@ long-lived mutable control-plane state. See
 for the design rationale and re-entry criteria.
 
 Pull requests run a dedicated `kani-smoke` CI job alongside the ordinary
-`build-test` job. The job installs the pinned, checksummed `cargo-kani`
-front-end and Kani release bundle, checks the reported version, and then runs
-the bounded harness suite through `make kani-ir` under a 20-minute job timeout;
-it does not run `make verus`, coverage, CodeScene upload, or the normal build
-matrix. Its cache entry owns the job-local Kani Cargo, support-file, and Rust
-toolchain homes separately from ordinary Cargo build artefacts.
+`build-test` job. When the proofs run, the job installs the pinned, checksummed
+`cargo-kani` front-end and Kani release bundle, checks the reported version,
+and then runs the bounded harness suite through `make kani-ir` under a
+20-minute job timeout; it does not run `make verus`, coverage, CodeScene
+upload, or the normal build matrix. Its cache entry owns the job-local Kani
+Cargo, support-file, and Rust toolchain homes separately from ordinary Cargo
+build artefacts.
+
+### Change-scoped Kani proofs
+
+`kani-smoke` is a required check, so it runs and reports on every trigger, but
+on a pull request it runs the harnesses only when the pull request changes a
+proof input. [ADR-039](adr-039-change-scoped-kani-gate.md) records the
+decision; this section is the working reference.
+
+- **The decision.** The job's third step, `Decide Kani proof scope`, runs
+  `uv run --script scripts/kani_proof_scope.py` and writes `run-proofs` to its
+  outputs. Every later step carries
+  `if: steps.scope.outputs.run-proofs == 'true'`. A push to `main`, the nightly
+  `schedule` (04:41 UTC) and a `workflow_dispatch` always run every harness. A
+  pull request runs them when its merge commit's diff against the base tip
+  touches the scope, or when that diff cannot be read. A skipped job is green
+  and says why in its summary.
+- **The scope.** `tools/kani/proof-scope.toml` lists `sources`, the harnesses'
+  module closure, and `infrastructure`, what builds and runs them. Entries
+  ending in `/` cover a directory.
+- **Never skip the job itself.** No `paths` filter on the workflow trigger and
+  no job-level `if:` on `kani-smoke`: a required check that never reports
+  blocks the pull request. `kani_smoke_scope_wiring_test.py` refuses both, and
+  requires the decision condition, exactly, on every step after the decision.
+- **Keeping the scope right.** `kani_proof_scope_test.py` recomputes the
+  closure from the source and fails when the scope misses a reached path or a
+  `#[kani::proof]` file anywhere in the repository, when a `sources` entry
+  covers a compiled file no harness reaches, or when a required infrastructure
+  entry is dropped. Its failure message names the paths; copy them into the
+  scope rather than widening an entry. `rust_module_closure_test.py` drives
+  each closure rule over a synthetic crate.
+- **Adding a harness.** Put it beside the module it verifies, under
+  `#[cfg(kani)] mod verification`, as the existing harnesses are. Run
+  `make test-workflow-contracts`; if the harness reaches code outside the
+  scope, the contract prints what to add.
+- **Local check.** With a pull request's merge commit checked out,
+  `uv run --script scripts/kani_proof_scope.py --event-name pull_request`
+  prints the decision the job would make.
+- **What the pull-request decision does not cover.** Kani compiles the whole
+  crate on its bundled toolchain, so a pull request outside the scope that uses
+  a language feature newer than that toolchain skips the proofs and breaks the
+  next push-to-`main` run instead. That run, and the nightly one, are the
+  backstop.
+
+The decision script's `cuprum` and `cyclopts` pins are repeated in the
+`test-workflow-contracts` and `typecheck-python` recipes, and
+`kani_proof_scope_decision_test.py` holds them equal.
 
 ## Test execution
 
@@ -8487,7 +8535,9 @@ The contract also pins the condition each lane carries. A skipped step runs no
 `if: false` on the step or on its job would leave a lane that looks bounded and
 is not. `ci.yml` also runs on pushes, which the trunk lane covers, so its
 coverage step is conditional on the pull request; that condition is pinned
-rather than tolerated.
+rather than tolerated. Its job also skips on the nightly `schedule`, which
+exists for the Kani proofs alone (see "Change-scoped Kani proofs"); that job
+condition is pinned beside the step's.
 
 The ceiling is judged per job rather than per lane. A lane is one watchdog
 window, and the ceiling belongs to the job, so the job's lanes are summed
