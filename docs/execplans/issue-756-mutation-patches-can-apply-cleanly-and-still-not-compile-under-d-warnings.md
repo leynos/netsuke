@@ -567,3 +567,20 @@ Kani frontend does.
   parses `#[cfg(kani)]` code. Every file this branch authored survived the
   replay byte-identical; verified by whole-tree diff against the pre-rebase
   head rather than by ancestry, since a rebase rewrites every SHA.
+- 2026-09-23 — The fifth CI run (`35796798133`) is the first to reach the gate
+  and compile, which closes the last Progress item: `kani-smoke` succeeds, the
+  gate takes **361 s** over all 18 patches, and the job totals **776 s** of its
+  1,800 s ceiling. All five jobs of that workflow conclude `success`. The
+  `Outcomes & retrospective` section no longer describes the gate's CI cost as
+  unmeasured, and the header splits its conjunction — the CI half of the
+  condition for returning to `COMPLETE` is met, the review half is not.
+- 2026-09-23 — Established that the GitHub CodeRabbit review has **auto-paused**
+  rather than merely lagged. The pull request timeline holds exactly one
+  `coderabbitai` review event, `changes_requested` on `e4f93b93` at
+  `2026-09-21T21:47:54Z`; every head since receives a `success` commit status
+  within about three seconds, which is the pause marking the commit handled.
+  The header now states this, and notes that the pinned `CHANGES_REQUESTED` is
+  non-ancestral after the rebase — verified with
+  `git merge-base --is-ancestor`, not inferred from its age. Recorded because a
+  green `CodeRabbit` status on this pull request means "nothing pending", not
+  "reviewed and passed".
