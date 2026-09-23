@@ -644,6 +644,21 @@ as workflow-level `env`. Each pin is still declared once at workflow scope in
 value. `tests/workflow_contracts/ci_windows_job_test.py` holds the caller's
 literals equal to those pins, so the two copies cannot drift.
 
+### Linux glibc floor
+
+A Linux release binary's highest required GLIBC symbol version is its
+portability floor, and it follows the image the binary was linked on.
+v0.1.0-beta3 measured GLIBC_2.39 for x86_64, which builds natively on Ubuntu
+24.04, and GLIBC_2.18 for aarch64, which builds through `cross`. A native
+aarch64 trial on Ubuntu 24.04 measured GLIBC_2.39 for both targets. The
+`Report the glibc floor` step in `build-and-package.yml` writes each Linux
+binary's floor to the job summary after the build, reading it with
+`readelf --version-info`, which reads the aarch64 binary on the x64 runner
+without a multi-architecture binutils. So a change to either image shows up in
+the release run rather than in a user's bug report.
+`tests/workflow_contracts/release_glibc_floor_test.py` holds the step's Linux
+gate, its place after the build, the binary it reads, and the summary it writes.
+
 ### Windows MSI packaging and upgrade validation
 
 The Windows packaging workflow passes the repository-owned authoring file as

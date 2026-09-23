@@ -148,6 +148,23 @@ jobs:
           # Off on every platform; see the RUSTC_WRAPPER note above.
           use-sccache: 'false'
 
+      - name: Report the glibc floor
+        # The highest GLIBC symbol version a Linux binary requires is its
+        # portability floor, and it follows whichever image the binary was
+        # linked on. v0.1.0-beta3 measured GLIBC_2.39 for x86_64 (native on
+        # Ubuntu 24.04) and GLIBC_2.18 for aarch64 (`cross`). Reporting it on
+        # every run makes a change to either image visible in the summary.
+        # `readelf` rather than `objdump`: it reads a foreign architecture's
+        # ELF without a multi-architecture binutils.
+        if: inputs.platform == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          binary="target/${{ inputs.target }}/release/${BIN_NAME}"
+          floor="$(readelf --version-info "${binary}" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -n 1)"
+          echo "glibc floor for ${{ inputs.target }}: ${floor}"
+          echo "- glibc floor for \`${{ inputs.target }}\`: \`${floor}\`" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Restore cargo-orthohelp
         id: orthohelp_cache
         # Owns the installed tool binary. This lane is reached only by tag
