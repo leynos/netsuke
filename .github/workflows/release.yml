@@ -216,6 +216,16 @@ jobs:
 
   windows-native-recipe-smoke:
     needs: metadata
+    # Skipped on a dry run, and only there. The dry run is a pull request's
+    # release rehearsal, and that pull request's own `ci.yml` already runs this
+    # exact build and smoke in `build-test-windows` (ci-windows.yml). Running
+    # it twice buys no evidence and takes a GitHub-hosted runner from the
+    # account's concurrent pool that the gating Windows job and the dry run's
+    # own Windows and macOS builds queue for. A tagged release has no gate
+    # build to share, so it runs here, and `release` below needs it.
+    # tests/workflow_contracts/release_dry_run_smoke_test.py holds all three
+    # halves.
+    if: needs.metadata.outputs.dry_run != 'true'
     runs-on: windows-latest
     timeout-minutes: 45
     permissions:

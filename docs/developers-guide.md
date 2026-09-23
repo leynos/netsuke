@@ -1164,6 +1164,20 @@ the tagged source itself; the release publication job separately requires both
 this smoke job and the platform package jobs in its `needs` list. Consequently,
 release publication cannot proceed unless the native Windows smoke test passes.
 
+The pull-request dry run (`release-dry-run.yml`, which calls `release.yml` with
+`dry-run: true`) skips this job, and only this job. The same pull request's
+`ci.yml` already runs the identical build and smoke in `build-test-windows`.
+The rerun bought no evidence and cost no money, since GitHub-hosted runners are
+free here. What it did cost was a slot in the account's pool of concurrent
+GitHub-hosted runners. The gating `build-test-windows` queues for that pool
+alongside the dry run's own Windows and macOS builds, and Ubicloud has no
+Windows runners to move either to. Every other dry-run job builds or packages
+release artefacts, which no pull-request lane does.
+`tests/workflow_contracts/release_dry_run_smoke_test.py` holds three things.
+The job is skipped exactly when `dry_run` is true, so a tagged release still
+runs it. `release` still needs it. And the pull-request gate runs the same
+smoke unconditionally, with the same invocation token for token.
+
 ## Release-admission observability
 
 The release workflow runs a read-only release-admission canary scaffold before
