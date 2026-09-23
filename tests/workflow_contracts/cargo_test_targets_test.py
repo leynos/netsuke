@@ -8,7 +8,12 @@ Both are asserted here rather than assumed.
 Run via ``make test-workflow-contracts``.
 """
 
-from cargo_test_targets import TESTS_DIR, declared_test_targets, target_sources
+from cargo_test_targets import (
+    TESTS_DIR,
+    declared_test_targets,
+    manifest_texts,
+    target_sources,
+)
 
 
 def test_no_test_target_is_declared_by_hand() -> None:
@@ -23,7 +28,7 @@ def test_no_test_target_is_declared_by_hand() -> None:
     If this ever fails the derivation needs extending to read the manifests,
     not relaxing.
     """
-    declared = declared_test_targets()
+    declared = declared_test_targets(manifest_texts())
     assert not declared, (
         f"this workspace declares {len(declared)} `[[test]]` target(s), so "
         f"Cargo no longer names every integration test after its path and the "

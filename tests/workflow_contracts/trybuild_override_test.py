@@ -21,12 +21,21 @@ Run via ``make test-workflow-contracts``.
 """
 
 import re
-import tomllib
+import typing as typ
 
 import pytest
-from cargo_test_targets import PACKAGE_NAME, target_sources
+from cargo_test_targets import (
+    PACKAGE_NAME,
+    parse_toml,
+    read_repository_file,
+    target_sources,
+    target_texts,
+)
 from rust_source_reading import code_only
 from workflow_loading import REPO_ROOT
+
+if typ.TYPE_CHECKING:  # pragma: no cover - imported for annotations only
+    import collections.abc as cabc
 
 NEXTEST_CONFIG = REPO_ROOT / ".config" / "nextest.toml"
 
@@ -79,21 +88,35 @@ def _filter_covers(filter_text: str, target: str) -> bool:
     )
 
 
-def _trybuild_targets() -> list[str]:
-    """Return every integration-test target that constructs a trybuild harness."""
+def trybuild_targets_in(texts: cabc.Mapping[str, list[str]]) -> list[str]:
+    """Return every target whose sources construct a trybuild harness.
+
+    A query over source texts already read, so it can be driven with targets
+    this repository does not have.
+
+    Returns
+    -------
+    list[str]
+        The constructing targets' names, sorted.
+    """
     return sorted(
         name
-        for name, sources in target_sources().items()
-        if any(
-            _constructs_trybuild(source.read_text(encoding="utf-8"))
-            for source in sources
-        )
+        for name, sources in texts.items()
+        if any(map(_constructs_trybuild, sources))
     )
 
 
-def _base_terminates() -> bool:
+def uncovered_targets(targets: list[str], filters: list[str]) -> list[str]:
+    """Return the targets no override filter selects exactly."""
+    return [
+        target
+        for target in targets
+        if not any(_filter_covers(filter_text, target) for filter_text in filters)
+    ]
+
+
+def _base_terminates(config: dict[str, typ.Any]) -> bool:
     """Return whether the default profile terminates a test on its allowance."""
-    config = tomllib.loads(NEXTEST_CONFIG.read_text(encoding="utf-8"))
     match config.get("profile", {}).get("default", {}).get("slow-timeout"):
         case {"terminate-after": _}:
             return True
@@ -103,9 +126,8 @@ def _base_terminates() -> bool:
             return False
 
 
-def _override_filters() -> list[str]:
+def _override_filters(config: dict[str, typ.Any]) -> list[str]:
     """Return every override filter declared in any profile."""
-    config = tomllib.loads(NEXTEST_CONFIG.read_text(encoding="utf-8"))
     return [
         str(override.get("filter", ""))
         for profile in config.get("profile", {}).values()
@@ -113,7 +135,19 @@ def _override_filters() -> list[str]:
     ]
 
 
-def test_the_base_allowance_terminates() -> None:
+@pytest.fixture(name="nextest_config", scope="module")
+def nextest_config_fixture() -> dict[str, typ.Any]:
+    """Return the nextest configuration, read and parsed at the boundary."""
+    return parse_toml(read_repository_file(NEXTEST_CONFIG), NEXTEST_CONFIG)
+
+
+@pytest.fixture(name="trybuild_targets", scope="module")
+def trybuild_targets_fixture() -> list[str]:
+    """Return this repository's trybuild targets, read at the boundary."""
+    return trybuild_targets_in(target_texts(target_sources()))
+
+
+def test_the_base_allowance_terminates(nextest_config: dict[str, typ.Any]) -> None:
     """The premise this contract rests on, asserted rather than assumed.
 
     Without `terminate-after` nothing is killed, so an uncovered trybuild
@@ -121,13 +155,15 @@ def test_the_base_allowance_terminates() -> None:
     a hazard that does not exist. If this ever fails, the rule needs rewriting
     rather than relaxing.
     """
-    assert _base_terminates(), (
+    assert _base_terminates(nextest_config), (
         "[profile.default] must declare slow-timeout with terminate-after; "
         "this contract exists because a trybuild target inherits it"
     )
 
 
-def test_every_trybuild_target_has_an_allowance_of_its_own() -> None:
+def test_every_trybuild_target_has_an_allowance_of_its_own(
+    nextest_config: dict[str, typ.Any], trybuild_targets: list[str]
+) -> None:
     """The set is discovered from the tree, and the empty set is pinned too.
 
     Listing the set here would be the same defect one level up: a list written
@@ -140,20 +176,14 @@ def test_every_trybuild_target_has_an_allowance_of_its_own() -> None:
     whether the repository has no trybuild target or the reader has stopped
     finding them.
     """
-    targets = _trybuild_targets()
+    targets = trybuild_targets
     assert targets == [], (
         f"this repository declared no trybuild target when this contract was "
         f"written and now declares {targets}; decide the allowance for each "
         f"and pin the new set here, because a set asserted only through its "
         f"coverage is satisfied by an empty discovery"
     )
-    uncovered = [
-        target
-        for target in targets
-        if not any(
-            _filter_covers(filter_text, target) for filter_text in _override_filters()
-        )
-    ]
+    uncovered = uncovered_targets(targets, _override_filters(nextest_config))
     assert not uncovered, (
         f"these trybuild targets inherit the base allowance: {uncovered}; a "
         f"trybuild target builds a scratch crate against this workspace's "
