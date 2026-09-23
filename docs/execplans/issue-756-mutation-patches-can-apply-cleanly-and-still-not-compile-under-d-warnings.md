@@ -157,6 +157,39 @@ failure mode cannot recur silently.
       developers-guide tier table and arithmetic, and in the `kani-smoke`
       ceiling comment; the ceiling still contains the worst case, 518 s of
       non-gate work plus 600 s against 1,800 s.
+      **Amended 2026-09-23: the override was inert as written.** Its filter
+      named the bare test name, and Nextest matches that regex against the
+      qualified name, so the `^` anchor selected nothing and neither half of
+      the override — the 600 s or the group assignment — ever applied. The
+      value and the reasoning were right; the filter was not. Fixed in a
+      follow-up by adding the `compile_guard::` prefix; the item above is kept
+      as written because the discovery, the arithmetic, and the ceiling
+      argument all still hold, and it is the record of how the fault was found.
+- [x] (2026-09-23) Qualify the gate's filter with its module path and prove the
+      override binds. `.config/nextest.toml` now reads
+      `filter = 'test(/^compile_guard::every_patched_tree_compiles_under_denied_warnings($|::)/)'`.
+      Three proofs replace the reasoning that had been standing in for one:
+      `cargo nextest show-config test-groups` reports **4** overrides for
+      `nested-cargo-builds` where it reported **3** before, naming the gate;
+      `cargo nextest list` with the filter selects exactly that one test; and a
+      deliberate `slow-timeout = { period = "5s", terminate-after = 1 }` probe
+      run through `make test-kani-mutations` reports
+      `TIMEOUT [   5.003s] … compile_guard::every_patched_tree_compiles_under_denied_warnings`,
+      which is the override's own allowance terminating the test. The negative
+      control is the unqualified filter, which under the same probe printed
+      `SLOW [> 60.000s]` — the profile's period, not the override's.
+- [x] (2026-09-23) Widen the accepted filter grammar to admit a module path, in
+      both copies of it. `nextest_child_cargo_group_invariants.py` grew
+      `MODULE_PATH = r"(?:[a-z0-9_]+::)*"` in `GROUP_FILTER`,
+      `LEGACY_EXACT_FILTER`, and `ACCEPTED_TEST_SELECTOR`, and
+      `nextest_child_cargo_group_test.py` pins that the qualified form is
+      admitted *and* that it yields a bare name. The prefix is deliberately
+      non-capturing: every consumer compares the captured name against
+      `declared_test_names`, which computes no module path, so capturing it
+      would report every module-scoped test as unresolved. The runtime copy in
+      `.github/scripts/verify_nextest_anchored_filters.py` followed, together
+      with a new whole-file liveness check described below. `make
+      test-workflow-contracts` stayed at 605 passed, 2 skipped.
 
 ## Surprises & discoveries
 
@@ -387,6 +420,40 @@ failure mode cannot recur silently.
   **byte-identical**, all 18 patches included. That is the check worth having:
   the eleven replayed commits have new SHAs, so citing the old ones proves
   nothing, and a green suite after a rebase proves only that the suite passes.
+- **The issue's own subject recurred in this branch's fix, one layer up.** The
+  whole point of the mutation compile gate is that a patch can apply cleanly
+  and still contribute nothing. The override added to *fund* that gate had
+  exactly that shape: it parsed, it was documented, it was reasoned about in
+  five files, and it applied to no test at all, because Nextest matches a
+  filter's regex against the fully qualified name and the test lives in a
+  submodule. Three independent facts say so, and each was cheap once looked for
+  — of the 17 filter literals in the file it is the only one selecting nothing;
+  `cargo nextest show-config test-groups` reports 3 overrides for a group the
+  file declares 4 for; and a 5 s probe printed `SLOW [> 60.000s]`, the
+  profile's period rather than the override's. The trap generalizes past this
+  file: any filter for a test declared in a submodule needs its `module::`
+  prefix.
+- **Both guards were green, and their scopes were the gap, not their
+  mechanisms.** The static contracts compare filter names to declared names
+  **bare-to-bare**, so a filter naming the right test under the wrong or absent
+  module still resolves and passes. That is not a defect in the comparison —
+  `declared_test_names` computes no module path at all, so capturing the prefix
+  would break it — but it means the static half cannot see this fault by
+  construction. The runtime oracle *does* ask Nextest which tests a filter
+  selects, which is authoritative; it simply only asked about filters naming a
+  parameterized test, and this filter names a plain one. The mechanism was
+  right the whole time and the coverage was one intersection short. The same
+  blind spot was latent in a second place: `_check`'s stray-name assertion
+  anchors at the bare name, so a filtered *parameterized* test moved into a
+  submodule would have reported its own `mod::name::case_1` as a stray.
+- **A negative control is what makes a liveness probe mean anything.** The
+  unqualified filter's `SLOW [> 60.000s]` and the qualified filter's
+  `TIMEOUT [ 5.003s]` under the same deliberately tiny allowance are the two
+  halves of one experiment; either alone proves nothing. The passing CI runs
+  were the misleading half — 257.7 s and 261.5 s both sit inside the 300 s
+  default that an inert override predicts, so they are consistent with the
+  override working and with it doing nothing, and only the pair of probes
+  separates those.
 
 ## Decision log
 
@@ -489,12 +556,31 @@ failure mode cannot recur silently.
   seconds is not a free choice — it is the largest value that keeps
   `global-timeout > largest per-test allowance` — so the two tiers bound each
   other, and the ordering contract is what stops this being raised further
-  without also raising the whole-run budget.
+  without also raising the whole-run budget. **Annotated 2026-09-23: the
+  reasoning was sound and the value was right, but it was reasoned about a
+  filter that bound nothing.** The override's filter omitted the
+  `compile_guard::` module path, so it selected no test and the 600 s was never
+  in force. Nothing in this entry is withdrawn — the cap was real, a re-run
+  would have taught nothing, and the ordering argument is what fixes 600 s —
+  but the decision as *executed* bought no allowance until the qualifier
+  landed. A value can be correct and its delivery inert, and only the binding,
+  not the value, was ever checked here.
+- Qualify the gate's filter with its module path, rather than approximating Rust
+  module naming in a static contract. The static contracts compare bare names
+  to bare names, which is why they passed on a filter that selected nothing:
+  the written name resolves, and only Nextest can say whether the *selector*
+  does. Re-deriving `mod` nesting from source to catch the prefix statically
+  would approximate — `#[path]` attributes, `cfg`-gated modules, and inline
+  `mod` blocks all break a syntactic reading — and would still be a second
+  opinion beside the runner's. So the module prefix is admitted by the grammar
+  but left unverified there, and the whole-filter replay in the runtime oracle
+  closes the gap by asking Nextest directly. The cost is one deliberate hole in
+  the static half; the alternative was a check that could be confidently wrong.
 - Read the per-test cap from `.config/nextest.toml` rather than from the job's
-  `timeout-minutes` or the cargo watchdog. Both outer tiers had ample room
-  (776 s of 1,800 s), which is why the failure read as a mystery until the
-  innermost tier was checked: the tiers are independent, and an outer one
-  having room says nothing about an inner one being exceeded.
+  `timeout-minutes` or the cargo watchdog. Both outer tiers had ample room (776
+  s of 1,800 s), which is why the failure read as a mystery until the innermost
+  tier was checked: the tiers are independent, and an outer one having room
+  says nothing about an inner one being exceeded.
 
 ## Outcomes & retrospective
 
@@ -508,6 +594,11 @@ gated (one Kani codegen per patch), registered in the `nested-cargo-builds`
 group, reachable via `make test-kani-mutations`, run on every pull request from
 `kani-smoke`, and documented in the developer's guide, including the rule that
 regeneration must swap an expression in place rather than delete a statement.
+The group registration is real as of 2026-09-23 and was not before: the
+override's filter named the bare test name, so it selected nothing and neither
+the group slot nor the widened allowance it carried applied. It is registered
+now, and the widened budget is in force — both proved by probe rather than
+argued, and neither claim should be read back onto the earlier runs.
 
 Validation closing the task: the eight deterministic gates pass, `make test`
 passes with 3309 tests and 6 skipped, and `make test-kani-mutations` passes
@@ -548,12 +639,27 @@ Summary [  59.139s] 1 test run: 1 passed, 3 skipped
 ```
 
 Two details from that log are worth keeping. The gate ran under the `ci`
-nextest profile, which `build-test` sets job-wide, and still picked up the
-`nested-cargo-builds` registration because `ci` declares no `[[overrides]]` of
-its own and inherits `default`'s. And "3 skipped" is the
-`--run-ignored ignored-only` flag doing exactly its job: one ignored test
-selected, the three fast contract checks left alone. Every other lane was green
-on the same SHA, including `kani-smoke` (6m51s) and the Windows jobs.
+nextest profile, which `build-test` sets job-wide; `ci` declares no
+`[[overrides]]` of its own and inherits `default`'s, and that inheritance is
+sound. It was **not**, however, carrying the `nested-cargo-builds`
+registration, as this plan first recorded — see the correction below. And "3
+skipped" is the `--run-ignored ignored-only` flag doing exactly its job: one
+ignored test selected, the three fast contract checks left alone. Every other
+lane was green on the same SHA, including `kani-smoke` (6m51s) and the Windows
+jobs.
+
+**Correction (2026-09-23).** The paragraph above originally claimed the gate
+"still picked up the `nested-cargo-builds` registration". It did not, and could
+not have: the override's filter was
+`test(/^every_patched_tree_compiles_under_denied_warnings($|::)/)`, and Nextest
+matches that regex against the fully qualified name, which for this test is
+`compile_guard::every_patched_tree_compiles_under_denied_warnings`. The `^`
+anchor stopped it matching, so the override — both the group assignment and the
+widened `slow-timeout` — applied to nothing. Inheritance was never in question:
+a profile does inherit `default`'s overrides, but there was nothing live to
+inherit. The 59.1s and 106.6s figures above are real; they simply ran under the
+profile's own 300s allowance, not the 600s the override was meant to grant,
+which is why the later 300.008s timeout was possible at all.
 
 The final SHA `e4f93b93` re-ran the whole matrix (run `35658680354`) and is
 green on every lane: 18 checks pass, none failing, none pending, and GitHub
@@ -648,3 +754,30 @@ Kani frontend does.
   `git merge-base --is-ancestor`, not inferred from its age. Recorded because a
   green `CodeRabbit` status on this pull request means "nothing pending", not
   "reviewed and passed".
+- 2026-09-23 — Found that the override funding the gate had never applied, and
+  repaired it. `.config/nextest.toml`'s fourth `[[profile.default.overrides]]`
+  carried both the 600 s allowance and the `nested-cargo-builds` registration,
+  and its filter
+  `test(/^every_patched_tree_compiles_under_denied_warnings($|::)/)` selected
+  no test at all, because Nextest matches that regex against the fully
+  qualified name and the test is declared in `compile_guard`. The filter now
+  carries the module prefix. The accepted filter grammar was widened in both of
+  its copies to admit an optional, **non-capturing** module path, so the
+  captured name stays bare for the consumers that compare it against
+  `declared_test_names`, and the developers-guide entry for this rule gained
+  the third silent-failure cause alongside the two it already listed. The
+  runtime oracle's scope was the real gap — it asked Nextest which tests a
+  filter selects, but only about filters naming a parameterized test — so
+  `verify_nextest_anchored_filters.py` now replays every filter expression
+  verbatim and requires each to select something. Both the Progress item
+  recording the widening and the Decision log entry arguing it are annotated
+  rather than rewritten: the reasoning and the value held, the delivery did not.
+- 2026-09-23 — Corrected two passages this discovery had falsified in place.
+  The Progress narrative claimed the gate "still picked up the
+  `nested-cargo-builds` registration" on the `build-test` run and that profile
+  inheritance was what carried it; it did not, and a profile inheriting
+  `default`'s overrides was never the mechanism at issue. The
+  `Outcomes & retrospective` claim of registration is now time-qualified. Both
+  were written from the configuration's intent rather than from the runner's
+  behaviour, which is the same mistake one layer below the issue this plan
+  exists to close.

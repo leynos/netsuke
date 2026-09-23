@@ -243,16 +243,23 @@ Formal verification should not be folded into the existing `build-test` job.
 The current `CI` workflow already performs formatting, linting, tests, and
 coverage, and those checks should remain intact.[^3]
 
-The `kani-smoke` job is a dedicated, pull-request-only job (it runs only when
-`github.event_name == 'pull_request'`) that:
+The `kani-smoke` job is a dedicated job that runs on every trigger: a pull
+request, a push to `main`, and a manual dispatch. It:
 
-- installs `uv` and then installs the pinned Kani toolchain through
-  `make install-kani`,
-- runs `make kani-check` and then the bounded harness suite through
-  `make kani-ir` (15 harnesses across the manifest, cycle, and
-  command-interpolation verification modules),
+- installs the pinned Kani front-end and release bundle from checksummed
+  archives, then checks the reported version against `tools/kani/VERSION`,
+- runs the bounded harness suite through `make kani-ir` (15 harnesses across
+  the manifest, cycle, and command-interpolation verification modules), then
+  `make install-build-tools` and the mutation patch compile gate through
+  `make test-kani-mutations`,
 - caches tool downloads separately from the ordinary Rust build artefacts, and
-- is bounded by a 20-minute job timeout (`timeout-minutes: 20`).
+- is bounded by a 30-minute job timeout (`timeout-minutes: 30`).
+
+The dispatch trigger exists for the cache: a dispatch cannot publish a
+generation, because the save gates on a push to `main`, so what it measures is
+a warm restore. The compile gate is the reason the ceiling moved from 20
+minutes, since it builds the whole dependency graph through the Kani frontend
+into a `CARGO_TARGET_DIR` no cache restores.
 
 Any later Verus job should be added only after a stable proof kernel exists.
 
