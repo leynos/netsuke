@@ -1,4 +1,18 @@
-"""Exercise bounded release-admission metric labels and categories."""
+r"""Verify release-admission metrics stay bounded.
+
+The fixed failure-category matrix pins operation and category pairs to bounded
+labels. The Hypothesis property uses canonical Git object IDs to reach commit
+and workflow-run requests, then keeps generated identifiers out of metric
+labels and trace fields.
+
+Example (run from the repository root)::
+
+    PYTHONPATH=scripts uv run --no-project --python 3.14 \
+        --with pytest==9.0.2 --with hypothesis==6.151.9 \
+        python -m pytest \
+        scripts/tests/test_release_admission_metric_boundedness.py \
+        -c /dev/null --rootdir=. -p no:cacheprovider
+"""
 
 import tempfile
 import typing as typ
