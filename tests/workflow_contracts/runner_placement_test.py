@@ -143,7 +143,7 @@ def test_main_coverage_requires_real_ninja() -> None:
 @pytest.mark.parametrize(
     ("job_name", "expected_runner"),
     [
-        ("build-linux", UBICLOUD_DEFAULT_LABEL),
+        ("build-linux", "${{ matrix.runner }}"),
         ("build-windows", "windows-latest"),
     ],
 )
@@ -247,10 +247,13 @@ def _checked_in_runner_assignments() -> dict[str, str]:
     }
 
     release = load_workflow(WORKFLOW_DIR / "release.yml")
-    for job_name in ("build-linux", "build-windows"):
-        job = workflow_job(release, job_name)
-        inputs = require_mapping(job.get("with"), f"jobs.{job_name}.with")
-        assignments[f"release.{job_name}"] = str(inputs.get("runner"))
+    windows = workflow_job(release, "build-windows")
+    inputs = require_mapping(windows.get("with"), "jobs.build-windows.with")
+    assignments["release.build-windows"] = str(inputs.get("runner"))
+    assignments.update({
+        f"release.linux.{target}": runner
+        for target, runner in _matrix_runners(release, "build-linux").items()
+    })
 
     build_macos = workflow_job(release, "build-macos")
     strategy = require_mapping(build_macos.get("strategy"), "jobs.build-macos.strategy")
@@ -274,6 +277,45 @@ def _checked_in_runner_assignments() -> dict[str, str]:
         "dependabot-automerge.yml", "automerge"
     )
     return assignments
+
+
+def _matrix_runners(workflow: dict[str, object], job_name: str) -> dict[str, str]:
+    """Return each matrix entry's runner label, keyed by its target."""
+    strategy = require_mapping(
+        workflow_job(workflow, job_name).get("strategy"), f"jobs.{job_name}.strategy"
+    )
+    matrix = require_mapping(strategy.get("matrix"), f"jobs.{job_name}.matrix")
+    includes = matrix.get("include")
+    assert isinstance(includes, list), f"the {job_name} matrix include must be a list"
+    return {
+        str(item["target"]): str(item["runner"])
+        for item in includes
+        if isinstance(item, dict)
+    }
+
+
+def test_each_linux_release_builds_natively() -> None:
+    """Build each Linux target on a runner of its own architecture.
+
+    A target built on the other architecture's runner goes back through
+    `cross`'s container, which neither the compiler cache nor its wrapper
+    reaches. So the aarch64 target must take the arm64 label and the x86_64
+    target the x64 one.
+    """
+    runners = _matrix_runners(
+        load_workflow(WORKFLOW_DIR / "release.yml"), "build-linux"
+    )
+    mismatched = {
+        target: runner
+        for target, runner in runners.items()
+        if target.startswith("aarch64-") != ("-arm-" in runner)
+    }
+    assert set(runners) == {"x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"}, (
+        f"build-linux must build both Linux targets, got {sorted(runners)}"
+    )
+    assert not mismatched, (
+        f"each Linux target must build natively on its own architecture: {mismatched}"
+    )
 
 
 def _external_runner_ownership(workflow_name: str, job_name: str) -> str:

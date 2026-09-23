@@ -133,17 +133,23 @@ jobs:
             artefact: linux-amd64
             package_arch: amd64
             target_key: linux-x86_64
+            runner: ubicloud-standard-2-ubuntu-2404
+          # Built natively on the arm64 shape rather than through `cross`,
+          # so the compiler cache reaches it. The binary then links against
+          # the same Ubuntu 24.04 glibc as the x86_64 release; that raised
+          # floor is accepted before 0.1.0 (see the developers' guide).
           - target: aarch64-unknown-linux-gnu
             artefact: linux-arm64
             package_arch: arm64
             target_key: linux-aarch64
+            runner: ubicloud-standard-2-arm-ubuntu-2404
     uses: ./.github/workflows/build-and-package.yml
     with:
       platform: linux
-      # Both Linux targets cross-compile from the x64 shape, as they did
-      # before. Start at the recipe's default and escalate only with
-      # measurements from three warm runs.
-      runner: ubicloud-standard-2-ubuntu-2404
+      # Each target builds natively on its own architecture's two-vCPU
+      # shape, the recipe's default. Escalate only with measurements from
+      # three warm runs.
+      runner: ${{ matrix.runner }}
       target: ${{ matrix.target }}
       bin-name: ${{ needs.metadata.outputs.bin_name }}
       version: ${{ needs.metadata.outputs.version }}

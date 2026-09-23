@@ -70,7 +70,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     # Bounds every caller-selected shape, including the Ubicloud label
     # `release.build-linux` passes. This lane compiles a release binary
-    # uncached on Windows and cross-packages elsewhere, so it is allowed the
+    # uncached on Windows and packages natively elsewhere, so it is allowed the
     # same ceiling as the Windows merge gate rather than the merge gate's
     # 60 minutes. tests/workflow_contracts/runner_shape_test.py holds it
     # present, so deleting it cannot pass in silence.
@@ -83,33 +83,25 @@ jobs:
     env:
       BIN_NAME: ${{ inputs['bin-name'] }}
       VERSION: ${{ inputs.version }}
-      # No compiler cache in this job's environment. The x86_64 Linux lane
-      # opts in by steps below instead, so no expression here can get a
-      # platform negation backwards. For every other lane, two independent
-      # reasons each suffice.
+      # No compiler cache in this job's environment. The Linux lanes opt in
+      # by steps below instead, so no expression here can get a platform
+      # negation backwards.
       #
-      # On Windows, sccache re-spawns rustc with the aarch64 target's
-      # `--extern` and `-L` list and exceeds the operating system's
-      # command-line limit, which nothing in this repository can shorten.
+      # Windows and macOS stay uncached. On Windows, sccache re-spawns rustc
+      # with the aarch64 target's `--extern` and `-L` list and exceeds the
+      # operating system's command-line limit. The nested `setup-rust`'s own
+      # sccache action would re-export GitHub's results URL and send writes
+      # past Ubicloud's proxy, so it stays off on every lane.
       #
-      # Elsewhere, this lane's sccache server would be started inside the
-      # nested `setup-rust`, whose `mozilla-actions/sccache-action` re-exports
-      # `ACTIONS_CACHE_SERVICE_V2` and GitHub's own results URL as its last
-      # act. On a Ubicloud runner that points the server past Ubicloud's cache
-      # proxy at GitHub, where writes are rate-limited and nothing lands in
-      # the store the merge gate reads. Wiring the proxy export in here would
-      # mean reproducing the gate's whole export, install and run-step start
-      # sequence for a lane that runs on tag pushes and the dry run only.
-      #
-      # The x86_64 Linux lane builds natively (no `cross` container), so it
-      # can take the gate's proxy wiring whole: the `Enable sccache` step and
-      # the three after it, all gated on that one target. Every pull
-      # request's dry run runs it, and 80 of 100 dry runs were a repeat push
-      # on a branch that had already run, whose own cache scope is readable.
-      # The aarch64 lane builds in `cross`'s container, which neither the
-      # wrapper nor sccache reaches, so it stays uncached. See
-      # tests/workflow_contracts/release_lane_sccache_test.py and
-      # cache_contract_data.py's SCCACHE_EXEMPT_LANE.
+      # Both Linux lanes build natively on Ubicloud, each on its own
+      # architecture's runner, so neither goes through a `cross` container
+      # and both can take the gate's proxy wiring: the `Enable sccache` step
+      # and the three after it, all gated on `inputs.platform == 'linux'`.
+      # Every pull request's dry run runs them, and 80 of 100 dry runs were
+      # a repeat push on a branch that had already run, whose own cache
+      # scope is readable. See tests/workflow_contracts/
+      # release_lane_sccache_test.py and cache_contract_data.py's
+      # SCCACHE_EXEMPT_LANE.
       MAN_ARCH: ${{ inputs['package-arch'] != '' && inputs['package-arch'] || 'unknown' }}
       # The pinned `rust-build-release` revision, restated here so the
       # `cargo-orthohelp` cache key can carry it. That action nests the shared
@@ -139,7 +131,7 @@ jobs:
         # Written to GITHUB_ENV rather than the job environment, so the other
         # lanes never see the variables at all. `SCCACHE_GHA_ENABLED` must be
         # set before the export below, whose verification checks it.
-        if: inputs.target == 'x86_64-unknown-linux-gnu'
+        if: inputs.platform == 'linux'
         shell: bash
         run: |
           {
@@ -150,18 +142,18 @@ jobs:
       - name: Export sccache credentials
         # A server started without these stays on local disk all job, and the
         # nested setup action's own export would send it past Ubicloud's proxy.
-        if: inputs.target == 'x86_64-unknown-linux-gnu'
+        if: inputs.platform == 'linux'
         uses: ./.github/actions/sccache-gha-credentials
 
       - name: Install sccache
-        if: inputs.target == 'x86_64-unknown-linux-gnu'
+        if: inputs.platform == 'linux'
         uses: taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375  # v2.87.12
         with:
           tool: sccache@0.16.0
           fallback: none
 
       - name: Reset sccache statistics
-        if: inputs.target == 'x86_64-unknown-linux-gnu'
+        if: inputs.platform == 'linux'
         shell: bash
         run: sccache --zero-stats
 
@@ -185,8 +177,22 @@ jobs:
           cache-provider: external
           # Off on every platform: the nested action's sccache would
           # re-export GitHub's results address and bypass Ubicloud's proxy.
-          # The x86_64 lane's wrapper comes from `Enable sccache` above.
+          # The Linux lanes' wrapper comes from `Enable sccache` above.
           use-sccache: 'false'
+
+      - name: Report the glibc floor
+        # The highest GLIBC symbol version the binary requires is its
+        # portability floor. Both Linux targets now build natively on Ubuntu
+        # 24.04, so the floor follows that image; reporting it on every run
+        # makes a change to the image visible in the summary.
+        if: inputs.platform == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          binary="target/${{ inputs.target }}/release/${BIN_NAME}"
+          floor="$(objdump -T "${binary}" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -n 1)"
+          echo "glibc floor for ${{ inputs.target }}: ${floor}"
+          echo "- glibc floor for \`${{ inputs.target }}\`: \`${floor}\`" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Restore cargo-orthohelp
         id: orthohelp_cache
@@ -290,7 +296,7 @@ jobs:
             "${{ inputs.platform == 'windows' && 'Netsuke' || env.BIN_NAME }}"
 
       - name: Show sccache statistics
-        if: always() && inputs.target == 'x86_64-unknown-linux-gnu'
+        if: always() && inputs.platform == 'linux'
         shell: bash
         run: |
           sccache --show-stats | tee sccache-stats.txt

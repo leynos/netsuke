@@ -237,7 +237,14 @@ def test_generated_setup_sequences_accept_only_valid_order(
     mutation="wrong-ubicloud-image",
     selected_key="netsukefile-test.netsukefile",
 )
-@example(mutation="swapped-platforms", selected_key="release.build-linux")
+@example(
+    mutation="swapped-platforms",
+    selected_key="release.linux.x86_64-unknown-linux-gnu",
+)
+@example(
+    mutation="wrong-ubicloud-image",
+    selected_key="release.linux.aarch64-unknown-linux-gnu",
+)
 @example(mutation="intel-macos-replaced", selected_key="ci.kani-smoke")
 @given(
     mutation=st.sampled_from(RUNNER_MUTATIONS),

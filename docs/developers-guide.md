@@ -879,12 +879,12 @@ directory.
 Two paths are deliberately uncached, and both are recorded here rather than
 left to be rediscovered. The reusable packaging workflow
 [`build-and-package.yml`](../.github/workflows/build-and-package.yml) archives
-no build tree (its x86_64 Linux lane compiles through sccache, described
-below): it builds a release profile for a cross-compiled target, so it shares
-no key family with the debug gate, and making it a second writer of the Cargo
-download store would break the single-owner rule. The coverage job does not
-cache its uv stores, because they live under `~/.local/share`, which the merge
-gate's Whitaker cache owns.
+no build tree (its Linux lanes compile through sccache, described below): it
+builds a release profile for a cross-compiled target, so it shares no key
+family with the debug gate, and making it a second writer of the Cargo download
+store would break the single-owner rule. The coverage job does not cache its uv
+stores, because they live under `~/.local/share`, which the merge gate's
+Whitaker cache owns.
 
 The compiler cache is sccache 0.16.0, installed as a checksum-verified prebuilt
 binary through the pinned `taiki-e/install-action` with `fallback: none`,
@@ -950,25 +950,36 @@ Every merge-gate job that compiles Rust sets `RUSTC_WRAPPER=sccache`, including
 the coverage job and the Netsukefile compatibility build. The release packaging
 job keeps all three variables out of its environment. On Windows, sccache
 re-spawns rustc with the aarch64 target's `--extern` and `-L` list and exceeds
-the operating system's command-line limit. The aarch64 Linux lane builds inside
-`cross`'s container, which neither the wrapper nor the binary reaches.
+the operating system's command-line limit, and macOS runs on GitHub-hosted
+runners that Ubicloud's proxy does not serve.
 `tests/workflow_contracts/sccache_contract_test.py` requires `RUSTC_WRAPPER`,
 `SCCACHE_GHA_ENABLED` and `SCCACHE_DIR` to be absent from that environment, not
 merely empty.
 
-The x86_64 Linux lane is the one exception, because it builds natively on
-Ubicloud and the pull-request dry run runs it on every push. It opts in by
-steps rather than by the environment. `Enable sccache` writes the two variables
-to `GITHUB_ENV`. `Export sccache credentials`, `Install sccache` and
+The two Linux lanes are the exception. Each builds natively on Ubicloud, on its
+own architecture's runner (`ubicloud-standard-2-ubuntu-2404` for x86_64 and
+`ubicloud-standard-2-arm-ubuntu-2404` for aarch64), so neither goes through
+`cross`'s container, and the pull-request dry run runs both on every push. They
+opt in by steps rather than by the environment. `Enable sccache` writes the two
+variables to `GITHUB_ENV`. `Export sccache credentials`, `Install sccache` and
 `Reset sccache statistics` follow, and `Show sccache statistics` reports under
-`always()`. Each step is gated on
-`inputs.target == 'x86_64-unknown-linux-gnu'`, compared whole, and the nested
-action's own sccache stays off, because it would re-export GitHub's results
-address. Nothing on `main` builds a release profile, so a pull request's first
-push compiles cold. A repeat push reads the cache its branch's earlier run
-wrote, and 80 of 100 recent dry runs were repeat pushes.
+`always()`. Each step is gated on `inputs.platform == 'linux'`, compared whole,
+and the nested action's own sccache stays off, because it would re-export
+GitHub's results address. Nothing on `main` builds a release profile, so a pull
+request's first push compiles cold. A repeat push reads the cache its branch's
+earlier run wrote, and 80 of 100 recent dry runs were repeat pushes.
 `tests/workflow_contracts/release_lane_sccache_test.py` holds the gates, their
-order, and a caller that passes the target, so the steps can actually run.
+order, and a caller that passes the platform, so the steps can actually run.
+`runner_placement_test.py` holds each Linux target to a runner of its own
+architecture, so the aarch64 build cannot drift back into `cross`.
+
+Building aarch64 natively raises its glibc floor. The last release built it
+through `cross`, whose image required GLIBC_2.18. It now links against Ubuntu
+24.04's glibc, as the x86_64 release already did (GLIBC_2.39 on v0.1.0-beta3).
+Portability to RHEL 8-era systems is not a goal before 0.1.0, so the higher
+floor is accepted. The `Report the glibc floor` step prints each Linux binary's
+highest required GLIBC version, from `objdump -T`, to the job summary, so a
+change to the image shows up in the release rather than in a user's bug report.
 Every compiling job that does use the compiler cache resets the counters with
 `sccache --zero-stats` before building and emits both human-readable and JSON
 statistics afterwards under `if: always()`; zero compile requests is a failed
@@ -1304,22 +1315,23 @@ shape would buy nothing and Ubicloud has no single-vCPU option to buy it with.
 
 Table: runner placement for every repository-owned job.
 
-| Workflow and job                             | Runner                            | Reason                                  |
-| -------------------------------------------- | --------------------------------- | --------------------------------------- |
-| `ci.yml` `build-test`                        | `ubicloud-standard-4-ubuntu-2404` | Linux merge gate, escalated on evidence |
-| `ci.yml` `kani-smoke`                        | `ubicloud-standard-2-ubuntu-2404` | Linux merge gate                        |
-| `coverage-main.yml` `coverage-upload`        | `ubicloud-standard-4-ubuntu-2404` | Same instrumented workload as the gate  |
-| `netsukefile-test.yml` `netsukefile`         | `ubicloud-standard-2-ubuntu-2204` | Deliberate Ubuntu 22.04 compatibility   |
-| `release.yml` `build-linux`                  | `ubicloud-standard-2-ubuntu-2404` | Linux packaging and the dry-run gate    |
-| `ci-windows.yml` `lint-windows`              | `windows-latest`                  | No Ubicloud Windows image               |
-| `ci-windows.yml` `build-test-windows`        | `windows-latest`                  | No Ubicloud Windows image               |
-| `release.yml` `build-windows`                | `windows-latest`                  | No Ubicloud Windows image               |
-| `release.yml` `windows-native-recipe-smoke`  | `windows-latest`                  | No Ubicloud Windows image               |
-| `release.yml` `build-macos` (x86_64)         | `macos-15-intel`                  | No Ubicloud macOS image                 |
-| `release.yml` `build-macos` (aarch64)        | `macos-15`                        | No Ubicloud macOS image                 |
-| `release.yml` `metadata`                     | `ubuntu-latest`                   | API-bound administrative job            |
-| `release.yml` `release`                      | `ubuntu-latest`                   | API-bound publication job               |
-| `delayed-pr-comment.yml` `delay_and_comment` | `ubuntu-latest`                   | Not developer-blocking                  |
+| Workflow and job                             | Runner                                | Reason                                  |
+| -------------------------------------------- | ------------------------------------- | --------------------------------------- |
+| `ci.yml` `build-test`                        | `ubicloud-standard-4-ubuntu-2404`     | Linux merge gate, escalated on evidence |
+| `ci.yml` `kani-smoke`                        | `ubicloud-standard-2-ubuntu-2404`     | Linux merge gate                        |
+| `coverage-main.yml` `coverage-upload`        | `ubicloud-standard-4-ubuntu-2404`     | Same instrumented workload as the gate  |
+| `netsukefile-test.yml` `netsukefile`         | `ubicloud-standard-2-ubuntu-2204`     | Deliberate Ubuntu 22.04 compatibility   |
+| `release.yml` `build-linux` (x86_64)         | `ubicloud-standard-2-ubuntu-2404`     | Linux packaging and the dry-run gate    |
+| `release.yml` `build-linux` (aarch64)        | `ubicloud-standard-2-arm-ubuntu-2404` | Native arm64 build, no `cross`          |
+| `ci-windows.yml` `lint-windows`              | `windows-latest`                      | No Ubicloud Windows image               |
+| `ci-windows.yml` `build-test-windows`        | `windows-latest`                      | No Ubicloud Windows image               |
+| `release.yml` `build-windows`                | `windows-latest`                      | No Ubicloud Windows image               |
+| `release.yml` `windows-native-recipe-smoke`  | `windows-latest`                      | No Ubicloud Windows image               |
+| `release.yml` `build-macos` (x86_64)         | `macos-15-intel`                      | No Ubicloud macOS image                 |
+| `release.yml` `build-macos` (aarch64)        | `macos-15`                            | No Ubicloud macOS image                 |
+| `release.yml` `metadata`                     | `ubuntu-latest`                       | API-bound administrative job            |
+| `release.yml` `release`                      | `ubuntu-latest`                       | API-bound publication job               |
+| `delayed-pr-comment.yml` `delay_and_comment` | `ubuntu-latest`                       | Not developer-blocking                  |
 
 `ubicloud-standard-2` alone would also select Ubuntu 24.04 today, but naming
 the image keeps a change to Ubicloud's default from silently moving compiled

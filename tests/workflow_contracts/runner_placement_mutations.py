@@ -42,7 +42,7 @@ def _apply_swapped_platforms_mutation(
     assignments: dict[str, str], selected_key: str, expected: str
 ) -> None:
     """Swap the Linux and Windows `build-*` runner assignments."""
-    linux_key = "release.build-linux"
+    linux_key = "release.linux.x86_64-unknown-linux-gnu"
     windows_key = "release.build-windows"
     assignments[linux_key], assignments[windows_key] = (
         assignments[windows_key],

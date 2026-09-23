@@ -14,7 +14,6 @@ import yaml
 from runner_placement_invariants import (
     INSTRUMENTED_BUILD_JOBS,
     LANE_VCPUS,
-    UBICLOUD_DEFAULT_LABEL,
     UBICLOUD_LABELS,
     is_bounded_worker_count,
 )
@@ -88,7 +87,7 @@ def test_release_linux_package_job_declares_a_timeout() -> None:
     """Require the caller-selected Linux package job to bound its runtime.
 
     `release.yml`'s `build-linux` job calls the reusable
-    `build-and-package.yml` workflow and passes `runner: UBICLOUD_DEFAULT_LABEL`
+    `build-and-package.yml` workflow and passes its matrix runner
     as its `runner` input, so the reusable job's `runs-on:
     ${{ inputs.runner }}` resolves to a Ubicloud shape here even though its own
     YAML names no literal label. The parametrised jobs above only enumerate
@@ -100,9 +99,18 @@ def test_release_linux_package_job_declares_a_timeout() -> None:
     release_workflow = load_workflow(WORKFLOW_DIR / "release.yml")
     release_job = workflow_job(release_workflow, "build-linux")
     inputs = require_mapping(release_job.get("with"), "build-linux with")
-    assert inputs.get("runner") == UBICLOUD_DEFAULT_LABEL, (
-        "release.yml build-linux must pass the default Ubicloud label to "
+    assert inputs.get("runner") == "${{ matrix.runner }}", (
+        "release.yml build-linux must pass its matrix runner to "
         f"build-and-package.yml, got {inputs.get('runner')!r}"
+    )
+    strategy = require_mapping(release_job.get("strategy"), "build-linux strategy")
+    matrix = require_mapping(strategy.get("matrix"), "build-linux matrix")
+    runners = {
+        str(require_mapping(entry, "matrix entry").get("runner"))
+        for entry in require_list(matrix.get("include"), "matrix include")
+    }
+    assert runners <= set(UBICLOUD_LABELS), (
+        f"every build-linux runner must be a registered Ubicloud label, got {runners}"
     )
     build_job = workflow_job(
         load_workflow(WORKFLOW_DIR / "build-and-package.yml"), "build"
@@ -110,7 +118,7 @@ def test_release_linux_package_job_declares_a_timeout() -> None:
     timeout = build_job.get("timeout-minutes")
     assert isinstance(timeout, int), (
         "build-and-package.yml build must set timeout-minutes, since "
-        f"release.yml selects it with {UBICLOUD_DEFAULT_LABEL!r}, got {timeout!r}"
+        f"release.yml selects it with {sorted(runners)!r}, got {timeout!r}"
     )
     assert timeout > 0, (
         f"build-and-package.yml build must set a positive timeout, got {timeout!r}"

@@ -44,10 +44,14 @@ INSTRUMENTED_BUILD_JOBS = (
 UBICLOUD_LARGE_LABEL = "ubicloud-standard-4-ubuntu-2404"
 #: The deliberate Ubuntu 22.04 compatibility lane.
 UBICLOUD_COMPAT_LABEL = "ubicloud-standard-2-ubuntu-2204"
+#: The arm64 counterpart of the default shape, on the same image, where the
+#: aarch64 release builds natively instead of through `cross`.
+UBICLOUD_ARM_LABEL = "ubicloud-standard-2-arm-ubuntu-2404"
 UBICLOUD_LABELS = (
     UBICLOUD_DEFAULT_LABEL,
     UBICLOUD_LARGE_LABEL,
     UBICLOUD_COMPAT_LABEL,
+    UBICLOUD_ARM_LABEL,
 )
 
 #: vCPU count of every runner shape the repository selects. Worker bounds are
@@ -56,6 +60,7 @@ LANE_VCPUS = {
     UBICLOUD_DEFAULT_LABEL: 2,
     UBICLOUD_LARGE_LABEL: 4,
     UBICLOUD_COMPAT_LABEL: 2,
+    UBICLOUD_ARM_LABEL: 2,
     "windows-latest": 4,
 }
 
@@ -69,7 +74,8 @@ REQUIRED_RUNNER_ASSIGNMENTS = {
     "delayed-pr-comment.delay_and_comment": "ubuntu-latest",
     "netsukefile-test.netsukefile": UBICLOUD_COMPAT_LABEL,
     "release.metadata": "ubuntu-latest",
-    "release.build-linux": UBICLOUD_DEFAULT_LABEL,
+    "release.linux.x86_64-unknown-linux-gnu": UBICLOUD_DEFAULT_LABEL,
+    "release.linux.aarch64-unknown-linux-gnu": UBICLOUD_ARM_LABEL,
     "release.build-windows": "windows-latest",
     "release.macos.x86_64-apple-darwin": "macos-15-intel",
     "release.macos.aarch64-apple-darwin": "macos-15",
