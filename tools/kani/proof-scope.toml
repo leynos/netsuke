@@ -1,0 +1,49 @@
+# The paths a Kani proof in this repository can depend on.
+#
+# `scripts/kani_proof_scope.py` skips the `kani-smoke` proofs on a pull request
+# that changes none of these paths; every push to `main` and the nightly
+# schedule run them in full. An entry ending in `/` names a directory and
+# covers everything beneath it; any other entry names one file.
+#
+# Do not edit `sources` by guesswork. It is the module closure of the
+# `#[kani::proof]` harnesses, which tests/workflow_contracts/kani_proof_scope_test.py
+# recomputes from the source on every run: the contract fails when a file the
+# harnesses reach is missing here, and when an entry covers a file they cannot
+# reach. When it fails, it prints the files to add or remove. See
+# docs/adr-039-change-scoped-kani-gate.md for the derivation rules.
+
+[scope]
+sources = [
+  "locales/",
+  "src/ast/",
+  "src/cli_localization.rs",
+  "src/hasher.rs",
+  "src/hex.rs",
+  "src/ir/",
+  "src/lib.rs",
+  "src/locale_catalogues.rs",
+  "src/localization/",
+  "src/ninja_gen/",
+  "src/ninja_gen_command_list.rs",
+  "src/ninja_gen_command_list_scanner.rs",
+  "src/ninja_gen_error.rs",
+  "src/ninja_gen_escape.rs",
+  "src/ninja_gen_recipe_shell.rs",
+  "src/ninja_gen_validation.rs",
+  "src/recipe_shell.rs",
+]
+
+# What builds and runs the proofs rather than what they prove. The contract
+# requires each of these, since none can be derived from the Rust source.
+infrastructure = [
+  ".cargo/",
+  ".github/actions/kani-cache/",
+  ".github/workflows/ci.yml",
+  "Cargo.lock",
+  "Cargo.toml",
+  "Makefile",
+  "build.rs",
+  "rust-toolchain.toml",
+  "scripts/kani_proof_scope.py",
+  "tools/kani/",
+]

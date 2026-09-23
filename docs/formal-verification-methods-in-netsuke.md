@@ -245,8 +245,11 @@ Formal verification should not be folded into the existing `build-test` job.
 The current `CI` workflow already performs formatting, linting, tests, and
 coverage, and those checks should remain intact.[^3]
 
-The `kani-smoke` job is a dedicated job that runs on every trigger: a pull
-request, a push to `main`, and a manual dispatch. It:
+The `kani-smoke` job is a dedicated, required job that runs on every trigger.
+It verifies every harness on each push to `main`, nightly, and on a manual
+dispatch; on a pull request it runs them only when the pull request changes a
+proof input (see [ADR-039](adr-039-change-scoped-kani-gate.md)). When the
+proofs run, it:
 
 - installs the pinned Kani front-end and release bundle from checksummed
   archives, then checks the reported version against `tools/kani/VERSION`,

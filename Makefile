@@ -241,7 +241,7 @@ test-kani-mutations: check-build-tools ## Compile each mutation patch's patched 
 	$(GATE_RUSTFLAGS) $(CARGO) nextest run --test kani_mutation_evidence_tests --all-features --run-ignored ignored-only $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
 
 test-workflow-contracts: ## Validate GitHub Actions workflow contracts
-	$(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) --with 'pytest>=8' --with 'pyyaml>=6' --with 'hypothesis>=6' --with 'cmd-mox==0.2.0' pytest tests/workflow_contracts -q --doctest-modules
+	$(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) --with 'pytest>=8' --with 'pyyaml>=6' --with 'hypothesis>=6' --with 'cmd-mox==0.2.0' --with 'cuprum==0.1.0' --with 'cyclopts==4.25.3' pytest tests/workflow_contracts -q --doctest-modules
 
 test-windows-msi-release-rank: ## Validate Windows MSI release-rank parsing
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
@@ -374,6 +374,7 @@ typecheck-python: ## Typecheck the Python sources with ty
 	$(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
 		--from ty==$(TY_VERSION) --with pytest==9.0.2 --with pytest-cov==7.0.0 \
 		--with 'pyyaml>=6' --with 'hypothesis>=6' --with 'cmd-mox==0.2.0' \
+		--with 'cuprum==0.1.0' --with 'cyclopts==4.25.3' \
 		ty check --python-version $(PYTHON_BASELINE) \
 		--extra-search-path scripts --extra-search-path .github/scripts \
 		$(PYTHON_SOURCES)
