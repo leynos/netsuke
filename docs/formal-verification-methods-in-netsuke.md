@@ -274,10 +274,11 @@ that fails the current `shlex` guard — run only on `command:` text; scripts ma
 legitimately contain heredocs and other syntax `shlex` cannot model.[^8]
 PowerShell treats a backtick as an escape.
 
-**Settled.** Roadmap item 4.4.1 will document this contract for users in the
-README under *Security and command interpolation*, and it is decided in
-[ADR-027](adr-027-command-placeholder-contract.md). The three questions this
-section raised are now answered:
+**Settled.** Roadmap item 4.4.1 documents this contract for users in the
+[README](../README.md#security-and-command-interpolation) and all six
+translated editions under *Security and command interpolation*. The decisions
+are recorded in [ADR-027](adr-027-command-placeholder-contract.md). The three
+questions this section raised are now answered:
 
 - The supported placeholder set is `{{ ins }}` and `{{ outs }}`, and nothing
   else, identically in both recipe kinds. Every dollar-prefixed form is a shell

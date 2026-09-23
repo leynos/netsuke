@@ -587,14 +587,17 @@ and test workflow intact. See
 
 ### 4.4. Contract documentation and optional proof kernels
 
-- [ ] 4.4.1. Document the command placeholder contract in the README. Requires
+- [x] 4.4.1. Document the command placeholder contract in the README. Requires
   4.2.3. See
   [formal-verification-methods-in-netsuke.md §Command placeholder contract](formal-verification-methods-in-netsuke.md#command-placeholder-contract).
-  - [ ] Add a "Security and command interpolation" section to the README.
-  - [ ] State the supported placeholders explicitly.
-  - [ ] State the current backtick-handling boundary explicitly.
-  - [ ] State whether `shlex::split` is part of the semantic acceptance
+  - [x] Add a "Security and command interpolation" section to the README.
+  - [x] State the supported placeholders explicitly.
+  - [x] State the current backtick-handling boundary explicitly.
+  - [x] State whether `shlex::split` is part of the semantic acceptance
     contract.
+  Completed: [ADR-027](adr-027-command-placeholder-contract.md) records the
+  contract; the English README and all six translations carry it, with
+  executable examples and regression tests.
 - [ ] 4.4.2. Document which dependency kinds participate in cycle detection in
   the user guide. Requires 4.2.1. See
   [formal-verification-methods-in-netsuke.md §Cycle-participation contract](formal-verification-methods-in-netsuke.md#cycle-participation-contract).

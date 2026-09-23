@@ -1411,7 +1411,7 @@ findings against `24dfc3fe`:
 56/56 before that review; the evidence-only commit `31ed9e68` passed
 formatting, Markdown, and Mermaid checks. EP-M4 may proceed.
 
-### EP-M4 — in progress (2026-09-23)
+### EP-M4 — complete (2026-09-23)
 
 A `scribe` owns only the six translated READMEs, using the approved English
 section through context pack `pk_imhdep7m`. The parent owns the manual parity
@@ -1497,7 +1497,39 @@ immutable-baseline scratch case converted only the German fixture to CRLF; the
 checker incorrectly reported one heading instead of two and exited 1
 (`/tmp/readme-crlf-fence-netsuke-m4.out`). Each line now loses one trailing
 carriage return before indentation, fence, or heading processing. Final gates
-and review remain required before EP-M5.
+and review passed before EP-M5. Full logs use
+`/tmp/*-netsuke-readme-m4-crlf.out` (3338 tests passed, 98.81% coverage), and
+commit `bce3b2a0` carries the fix. The final repair review
+`coderabbit review --agent --committed --base-commit 1799474f` completed with
+zero findings (`/tmp/coderabbit-netsuke-readme-m4-crlf.out`). All EP-M4
+concerns are fixed or dispositioned above.
+
+### EP-M5 — in progress (2026-09-23)
+
+Roadmap item 4.4.1 and its four children are checked, with an ADR-027 and
+translation completion note. `mapsplice replace` was attempted in preview mode
+first, but rejected unrelated pre-existing structure in step 3.14: "task list
+for step `3.14` cannot appear after trailing step content". No roadmap write
+occurred. After inspecting that failure, a bounded replacement of only the
+4.4.1 block preserves all other roadmap content and dependencies. ADR-027 and
+the formal-verification guide now describe the README section as present rather
+than future work.
+
+Every discovery was reconciled with the implementation and current documents:
+ADR-034's uniform marker set governs all editions and tests; the backtick
+parity and command-only `shlex` limits are explicit; JSON diagnostic mode and
+partial path quoting are reflected in the executable examples; the obsolete
+module-file footnote is corrected; marker registration and mutation controls
+are recorded; the ADR numbering and rebase observations are historical. The
+4.2.3 status discrepancy and absent `SECURITY.md` remain explicitly outside
+this task. The historical private Rustdoc link observation also remains unfixed
+upstream: `src/ir/cmd_interpolate/mod.rs` still links to `interpolate_command`.
+The earlier branch correction was reverted with the ADR-034 reconciliation, and
+no production-module change is made here. This pre-existing issue is distinct
+from the public Rustdoc and coverage gates, which pass; it is not claimed as an
+EP-M2 deliverable.
+
+The final full gate sequence and whole-branch CodeRabbit review are pending.
 
 ### EP-M1 — complete (`3594b568`)
 
@@ -1616,16 +1648,15 @@ survivors changed with ADR-034, because a statement that a dollar form is a
 shell variable in *both* recipe kinds is now correct and needs no edit.
 
 - [x] EP-M1 — ADR-027 written, indexed, and referenced from the design
-      document. Landed as `3594b568`. `make check-fmt` and `make markdownlint`
-      pass. Awaiting the milestone CodeRabbit pass.
-- [x] EP-M2 — `docs/developers-guide.md`, `docs/users-guide.md`,
-      `docs/formal-verification-methods-in-netsuke.md`, and any inaccurate doc
-      comment corrected. Precedes the README deliberately. All six gates pass;
-      the step-5 grep returns *no* survivors at all.
+      document; historical milestone evidence is recorded above. Final review
+      covers the full branch.
+- [x] EP-M2 — internal documentation reconciled with ADR-034. The surviving
+      branch edits and upstream-provided corrections are distinguished above;
+      the old pre-rebase gate evidence is superseded by the current full gates.
 
 - [x] EP-M3 — README section and three executable examples; red observed
       before green; three negative controls recorded after the commit.
-- [ ] EP-M4 — six translated READMEs regain structural parity;
+- [x] EP-M4 — six translated READMEs regain structural parity;
       `docs/repository-layout.md` records the recurring obligation.
 - [ ] EP-M5 — roadmap 4.4.1 marked done; full gate sequence green.
 
@@ -2120,7 +2151,18 @@ shell variable in *both* recipe kinds is now correct and needs no edit.
 
 ## Outcomes & retrospective
 
-Not yet started. To be completed at EP-M5.
+EP-M1 through EP-M4 are complete. The README contract is implemented in all
+seven editions, with three executable examples, 25 parameterized security
+cases, three discriminating controls, and a manual parity checker. No
+production behaviour or dependency changed. All six verification obligations
+are discharged. EP-M5 awaits the final full gate sequence and full-branch
+review before the plan is marked complete.
+
+The review loop strengthened the manual checker against older `awk`, nested
+fences, indented headings, and CRLF files. The useful lesson is to validate the
+parser assumptions of even a small documentation aid with discriminating
+fixtures. Direct-address translation suggestions were checked against the
+actual README style exception rather than applied mechanically.
 
 Before setting this plan to `COMPLETE`, reconcile each entry in
 `Surprises & discoveries` against the artefacts in `Conformance basis`: confirm
@@ -2261,6 +2303,6 @@ Revision 1 (2026-09-09). Initial draft. Established the three contract
 decisions from a direct reading of `src/ir/cmd_interpolate/` and scoped the
 work to five milestones.
 
-Remaining work on resumption: EP-M3 through EP-M5. The user explicitly
-authorized continued implementation on 2026-09-23. `D1-LEGACY` is closed by
-ADR-034 and `D1-RESOLVED`.
+Historical remaining work at resumption: EP-M3 through EP-M5. The user
+explicitly authorized continued implementation on 2026-09-23. `D1-LEGACY` is
+closed by ADR-034 and `D1-RESOLVED`.
