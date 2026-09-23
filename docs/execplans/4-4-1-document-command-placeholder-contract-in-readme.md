@@ -1406,7 +1406,7 @@ file copies, with clean `git status --porcelain` between mutations:
 The five executable obligations are discharged. The structural-parity
 obligation remains for EP-M4. The committed EP-M3 review completed with zero
 findings against `24dfc3fe`:
-`coderabbit review --agent --type committed --base-commit 24dfc3fe`, log
+`coderabbit review --agent --committed --base-commit 24dfc3fe`, log
 `/tmp/coderabbit-netsuke-readme-m3.out`. The restored focused suite passed
 56/56 before that review; the evidence-only commit `31ed9e68` passed
 formatting, Markdown, and Mermaid checks. EP-M4 may proceed.
@@ -1451,7 +1451,21 @@ checker matches hashes with `+` and checks their length separately instead of
 relying on interval expressions unsupported by older `awk` implementations. The
 local interpreter is GNU Awk 5.3.0; no older `mawk` is installed, so the
 portability repair removes that dependency without claiming a legacy-runtime
-execution. Gates and a follow-up review must pass before EP-M5.
+execution. The full gate stack then passed again, including 3338 tests and
+98.81% documentation coverage; logs use
+`/tmp/*-netsuke-readme-m4-review-fix.out`. The fixes were committed as
+`2800c8af`.
+
+The next completed review identified a separate fence-tracking defect
+(`/tmp/coderabbit-netsuke-readme-m4-fixed.out`). Scratch fixtures confirmed
+that a shorter fence inside a four-backtick example, or a mismatched tilde
+fence, exposed a fake heading and incorrectly failed parity (both exit 1;
+`/tmp/fence-tracking-red-netsuke-m4.out`). The checker now records the opening
+character and width, permits up to three leading spaces, and requires a
+matching closing fence of sufficient width with no trailing non-whitespace. It
+also rejects backticks in a backtick fence's info string. This repairs the
+existing fenced-example exclusion; it does not add a CI gate or a general
+Markdown validator. Gates and a follow-up review must pass before EP-M5.
 
 ### EP-M1 — complete (`3594b568`)
 

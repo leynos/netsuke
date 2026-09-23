@@ -9,7 +9,28 @@ status=0
 for file in README.md README.de.md README.es.md README.fr.md \
     README.ja.md README.pt-BR.md README.zh-CN.md; do
     structure=$(awk '
-        /^[[:space:]]*(```|~~~)/ { fenced = !fenced; next }
+        {
+            line = $0
+            sub(/^ */, "", line)
+            indentation = length($0) - length(line)
+            if (indentation <= 3 && match(line, /^(```+|~~~+)/)) {
+                delimiter = substr(line, 1, 1)
+                width = RLENGTH
+                suffix = substr(line, width + 1)
+                if (!fenced) {
+                    # Backtick fence info strings cannot contain backticks.
+                    if (delimiter != "`" || index(suffix, "`") == 0) {
+                        fenced = 1
+                        fence_delimiter = delimiter
+                        fence_width = width
+                    }
+                } else if (delimiter == fence_delimiter &&
+                           width >= fence_width && suffix ~ /^[ \t]*$/) {
+                    fenced = 0
+                }
+                next
+            }
+        }
         !fenced && /^#+ / && length($1) <= 6 {
             levels = levels separator $1
             separator = ","
