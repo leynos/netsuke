@@ -330,6 +330,7 @@ def test_identifiers_never_become_metric_labels(
             evidence_state="fresh",
             extra_environment={
                 "GITHUB_SHA": revision,
+                "NETSUKE_RELEASE_ADMISSION_ENFORCE": "false",
                 "NETSUKE_FAKE_WORKFLOW_RUN_ID": f"run-{run_id}",
                 "NETSUKE_FAKE_PATH": f"path-{path}",
                 "NETSUKE_FAKE_URL": f"url-{url}",
