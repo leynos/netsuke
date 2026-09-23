@@ -1173,10 +1173,18 @@ GitHub-hosted runners. The gating `build-test-windows` queues for that pool
 alongside the dry run's own Windows and macOS builds, and Ubicloud has no
 Windows runners to move either to. Every other dry-run job builds or packages
 release artefacts, which no pull-request lane does.
-`tests/workflow_contracts/release_dry_run_smoke_test.py` holds three things.
-The job is skipped exactly when `dry_run` is true, so a tagged release still
-runs it. `release` still needs it. And the pull-request gate runs the same
-smoke unconditionally, with the same invocation token for token.
+
+The skip applies only to events that `ci.yml` also answers. The dry run answers
+`ready_for_review` and `ci.yml` does not, so a draft marked ready after its
+base moved has a new merge ref and no gate run. For that event the smoke runs:
+`if: needs.metadata.outputs.dry_run != 'true' || github.event.action == 'ready_for_review'`.
+The disjunct can only make the job run more often.
+
+`tests/workflow_contracts/release_dry_run_smoke_test.py` holds four things. The
+condition is compared whole, so a tagged release still runs the job. `release`
+still needs it. The pull-request gate runs the same smoke unconditionally, with
+the same invocation token for token. And the dry run's event types outside
+`ci.yml`'s set are exactly the ones the condition exempts.
 
 ## Release-admission observability
 

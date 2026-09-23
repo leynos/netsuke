@@ -225,7 +225,13 @@ jobs:
     # build to share, so it runs here, and `release` below needs it.
     # tests/workflow_contracts/release_dry_run_smoke_test.py holds all three
     # halves.
-    if: needs.metadata.outputs.dry_run != 'true'
+    #
+    # The one dry-run event CI does not also answer is `ready_for_review`:
+    # `ci.yml` runs on opened, synchronize and reopened only. A draft marked
+    # ready after its base moved gets a new merge ref and no CI run, so the
+    # smoke runs for that event rather than be skipped with nothing covering
+    # it.
+    if: needs.metadata.outputs.dry_run != 'true' || github.event.action == 'ready_for_review'
     runs-on: windows-latest
     timeout-minutes: 45
     permissions:

@@ -10,7 +10,8 @@ and nothing else.
 Skipping it is only safe while three things hold, and each is asserted here:
 
 1. The job is skipped on a dry run and on nothing else, so a tagged release
-   still runs it.
+   still runs it, and even a dry run runs it for an event `ci.yml` does not
+   answer (`ready_for_review`), where no gate run would cover it.
 2. `release` still needs it, so publication cannot proceed without it.
 3. The pull request still runs the same smoke: `ci.yml` calls the Windows gate
    unconditionally, `build-test-windows` carries no condition of its own, and
@@ -20,16 +21,23 @@ Run via ``make test-workflow-contracts``.
 """
 
 import shlex
+import typing as typ
 
 from workflow_loading import (
     CI_WINDOWS_WORKFLOW_PATH,
     CI_WORKFLOW_PATH,
     RELEASE_WORKFLOW_PATH,
+    REPO_ROOT,
     job_steps,
     load_workflow,
     named_step,
+    require_list,
+    require_mapping,
     workflow_job,
 )
+
+if typ.TYPE_CHECKING:
+    from pathlib import Path
 
 SMOKE_JOB = "windows-native-recipe-smoke"
 SMOKE_STEP = "Exercise native Windows recipes"
@@ -37,7 +45,14 @@ SMOKE_SCRIPT = "./scripts/windows-recipe-smoke.ps1"
 
 #: The only condition the release smoke job may carry. Compared whole, so an
 #: appended disjunct or a different output name fails rather than passing.
-DRY_RUN_SKIP = "needs.metadata.outputs.dry_run != 'true'"
+DRY_RUN_SKIP = (
+    "needs.metadata.outputs.dry_run != 'true' "
+    "|| github.event.action == 'ready_for_review'"
+)
+
+#: The pull-request event types the dry run answers that `ci.yml` does not.
+#: The smoke must run for each of them, because no gate run covers it.
+UNCOVERED_BY_CI = frozenset({"ready_for_review"})
 
 
 def smoke_invocation(run: object) -> list[str]:
@@ -81,6 +96,35 @@ def test_the_release_smoke_is_skipped_on_a_dry_run_only() -> None:
         f"({DRY_RUN_SKIP!r}); a wider condition would skip it on a tagged "
         f"release too, got {job.get('if')!r}"
     )
+
+
+def _pull_request_types(path: Path) -> frozenset[str]:
+    """Return the pull_request activity types one workflow answers."""
+    workflow = load_workflow(path)
+    triggers = require_mapping(workflow.get("on", workflow.get(True)), "triggers")
+    pull_request = require_mapping(triggers.get("pull_request"), "pull_request")
+    return frozenset(
+        str(kind) for kind in require_list(pull_request.get("types"), "types")
+    )
+
+
+def test_every_skipped_dry_run_event_is_one_ci_also_runs() -> None:
+    """Skip the smoke only for pull-request events the gate also answers.
+
+    A dry run on an event `ci.yml` does not answer has no `build-test-windows`
+    behind it, so the smoke must run there. The events outside CI's set must
+    be exactly the ones the skip condition exempts.
+    """
+    dry_run = _pull_request_types(REPO_ROOT / ".github/workflows/release-dry-run.yml")
+    ci = _pull_request_types(CI_WORKFLOW_PATH)
+    assert dry_run - ci == UNCOVERED_BY_CI, (
+        f"the dry run answers {sorted(dry_run - ci)} that CI does not; the smoke "
+        f"exempts {sorted(UNCOVERED_BY_CI)}"
+    )
+    for kind in UNCOVERED_BY_CI:
+        assert f"github.event.action == '{kind}'" in DRY_RUN_SKIP, (
+            f"the smoke must run for {kind}, which no CI run covers"
+        )
 
 
 def test_publication_still_needs_the_smoke() -> None:
