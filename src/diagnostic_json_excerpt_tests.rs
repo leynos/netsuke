@@ -1,17 +1,26 @@
-//! The general source-excerpt guard over rendered diagnostic documents.
+//! The source-excerpt guard over rendered diagnostic documents.
 //!
-//! A cause is serialized from `Display`, so whatever a dependency's formatter
-//! chooses to render reaches a field the schema documents as a compact reason.
+//! A cause is serialized from an error's `Display`, so a dependency's formatter
+//! decides what reaches a field the schema documents as the error-cause chain.
 //! `serde-saphyr` 1.2.0 made that concrete by annotating its parse errors with a
-//! source excerpt. The manifest boundary normalizes that one case away, but the
-//! hazard is general: any dependency rendering an excerpt can reintroduce it,
-//! and only a guard that walks every diagnostic does anything about the next one.
+//! source excerpt. The manifest boundary normalizes that one case away: Netsuke
+//! reports the failing location through its own `source` and `labels` fields, so
+//! a duplicated excerpt in `causes` adds nothing. That is a deliberate
+//! normalization at a miette-diagnostic boundary, not a general rewriting rule —
+//! see `rendered_plain_error_causes_never_carry_source_excerpts` for why the
+//! plain path cannot copy it.
+//!
+//! If the guard fires on a plain-chain cause, the answer is not a general text
+//! filter: that text is the error's only location report, so dropping it would
+//! make the field say less than the error knows. The fix is to give the failing
+//! error a rendered diagnostic at the boundary Netsuke owns, the way the manifest
+//! parser already does, and let the diagnostic carry `source` and `labels`.
 //!
 //! These cases live here rather than in the parent so the structural tests stay
-//! within the repository's 400-line cap; the parent reaches them by declaring
-//! this module. The `related` recursion is not decoration — the serializer
-//! renders a related diagnostic as a full entry of the same shape, so a guard
-//! that reads only the top-level entry leaves the nested cause chains unguarded.
+//! within the repository's 400-line cap; the parent declares this module. The
+//! `related` recursion is not decoration — the serializer renders a related
+//! diagnostic as a full entry of the same shape, so a guard reading only the
+//! top-level entry would leave the nested cause chains unguarded.
 
 use super::super::circular_dependency_error;
 use super::super::{render_diagnostic_json, render_error_json};
@@ -30,9 +39,9 @@ use test_support::{EnLocalizer, en_localizer};
 /// source excerpt.
 ///
 /// Causes are rendered from `Display`, so an upstream presentation change can
-/// leak an excerpt into a field meant to carry a compact reason. Netsuke
-/// reports the failing location through its own `source` and `labels` fields,
-/// so an excerpt in `causes` is a leak whatever produced it.
+/// add a rendered snippet to a field the schema documents as the error-cause
+/// chain. Netsuke reports a miette diagnostic's failing location through its own
+/// `source` and `labels` fields, so a duplicated excerpt there is noise.
 ///
 /// Neither marker occurs in the localized catalogues or in Netsuke's own
 /// diagnostic prose, so a match means a dependency really embedded an excerpt.
@@ -72,10 +81,11 @@ fn visit_causes(
 
 /// Asserts that no cause in a rendered document carries a source excerpt.
 ///
-/// Keyed on the annotation markers rather than on line count: an upstream error
-/// may legitimately span multiple lines for reasons unrelated to source
-/// excerpts, and rejecting those would fail on a factor this contract does not
-/// care about.
+/// Keyed on the annotation markers rather than on line count: an error may
+/// legitimately span multiple lines for reasons unrelated to source excerpts,
+/// and rejecting those would fail on a factor this contract does not care about.
+/// Multi-line causes are expected, not tolerated — `serde-saphyr` renders a
+/// plain multi-line parse reason on the YAML path today.
 fn ensure_causes_free_of_source_excerpts(document: &str) -> Result<()> {
     let value = serde_json::from_str::<Value>(document)?;
     let diagnostic = first_diagnostic(&value)?;
@@ -97,15 +107,29 @@ fn ensure_causes_free_of_source_excerpts(document: &str) -> Result<()> {
     Ok(())
 }
 
-/// No rendered cause may carry an upstream source excerpt, whichever dependency
-/// produced it.
+/// Asserts the guard rejects a document, and that its failure names the leak.
+///
+/// The two rejection cases plant their excerpt at different depths, but they
+/// agree on what a rejection must look like. Sharing that assertion keeps a
+/// change to the failure message in one place instead of two.
+fn assert_rejected_for_leaking(document: &str, expected: &str) -> Result<()> {
+    let err = ensure_causes_free_of_source_excerpts(document).expect_err(expected);
+    ensure!(
+        err.to_string().contains("leaked a source excerpt"),
+        "the failure should name the leak: {err}"
+    );
+    Ok(())
+}
+
+/// A miette diagnostic's rendered causes may not carry an upstream excerpt.
 ///
 /// `serde-saphyr` 1.2.0 began rendering parse errors with an annotated snippet,
 /// which reached `causes` because a cause is serialized from `Display`. The
-/// manifest boundary normalizes that one away, but the hazard is general: any
-/// dependency rendering a source excerpt can reintroduce it. This pins the
-/// contract across both cause-collection paths, over the YAML and structural
-/// parse dependencies and a Netsuke-owned chain.
+/// manifest boundary normalizes that one away with a miette diagnostic that
+/// carries the failing location in its `source` and `labels` fields instead.
+/// That normalization is what this case holds to account: it pins the contract
+/// over the YAML and structural parse dependencies, so a dependency re-rendering
+/// an excerpt would fail here.
 #[rstest]
 #[case::yaml_parse("targets:\n\t- name: test\n")]
 #[case::structural_parse("")]
@@ -124,12 +148,16 @@ fn rendered_causes_never_carry_source_excerpts(
 /// The plain-error path collects causes from a standard-error chain rather than
 /// from a diagnostic source, so it needs the contract pinned separately.
 ///
-/// The fixture is a Netsuke-owned error, so this case pins that the plain path
-/// is *wired into* the guard and that its own rendering is clean. It cannot
-/// demonstrate the guard's sensitivity to an excerpt: a marker in the fixture
-/// would fail the assertion by construction rather than by a leak.
-/// `ensure_causes_free_of_source_excerpts_rejects_a_leaked_excerpt` carries that
-/// burden instead.
+/// The fixture is a Netsuke-owned error: its chain carries only Netsuke's own
+/// circular-dependency message. That is the scope of this contract on this path.
+/// `causes` is documented as the error-cause chain itself — the only location
+/// channel a plain error has, because `source`, `primary_span`, and `labels` are
+/// all empty here — so an upstream error that renders a source excerpt is
+/// reporting the only location it will ever report. Netsuke therefore passes
+/// that text through rather than substituting a shorter reason, and this case
+/// pins that Netsuke's own causes stay free of excerpts.
+/// `ensure_causes_free_of_source_excerpts_rejects_a_leaked_excerpt` carries the
+/// burden of showing the guard can fail.
 #[rstest]
 fn rendered_plain_error_causes_never_carry_source_excerpts(
     en_localizer: EnLocalizer,
@@ -140,75 +168,18 @@ fn rendered_plain_error_causes_never_carry_source_excerpts(
     ensure_causes_free_of_source_excerpts(&render_error_json(error.as_ref())?)
 }
 
-/// Builds a one-diagnostic document whose causes are supplied by the caller, so
-/// a case can plant a marker at a chosen depth.
-fn document_with_causes(top_level: &[&str], related_level: &[&str]) -> String {
-    let nested = serde_json::json!({
-        "message": "related",
-        "code": null,
-        "severity": "error",
-        "help": null,
-        "url": null,
-        "causes": related_level,
-        "source": null,
-        "primary_span": null,
-        "labels": [],
-        "related": [],
-    });
-    serde_json::json!({
-        "schema_version": 1,
-        "generator": { "name": "netsuke", "version": "0.0.0" },
-        "diagnostics": [{
-            "message": "top level",
-            "code": null,
-            "severity": "error",
-            "help": null,
-            "url": null,
-            "causes": top_level,
-            "source": null,
-            "primary_span": null,
-            "labels": [],
-            "related": [nested],
-        }],
-    })
-    .to_string()
-}
-
 /// The guard must be able to fail, and must name the leak when it does.
 ///
-/// Without this case a green suite says only that the helper agreed with the
-/// current dependencies. It would not distinguish a working guard from one that
-/// inspects nothing — so this plants the very excerpt the guard exists to catch.
+/// Without a case like this a green suite says only that the helper agreed with
+/// the current dependencies; it would not distinguish a working guard from one
+/// that inspects nothing. The document is built by the serializer rather than by
+/// hand so the leak the guard is asked to catch is one the serializer really
+/// emits — `render_error_json` copies a source's `Display` into `causes`, and
+/// this fixture's source carries the excerpt.
 #[rstest]
 fn ensure_causes_free_of_source_excerpts_rejects_a_leaked_excerpt() -> Result<()> {
-    let document = document_with_causes(&["parse failed\n --> <input>:1:1"], &[]);
-    let err = ensure_causes_free_of_source_excerpts(&document)
-        .expect_err("a marker-bearing cause must be rejected");
-    ensure!(
-        err.to_string().contains("leaked a source excerpt"),
-        "the failure should name the leak: {err}"
-    );
-    Ok(())
-}
-
-/// A leak nested in a related diagnostic is still caught.
-///
-/// The serializer renders `related` entries as full diagnostics with their own
-/// cause chains, so a guard reading only the top-level entry would pass this
-/// document. That is the regression this case pins.
-#[rstest]
-fn ensure_causes_free_of_source_excerpts_rejects_a_related_leak() -> Result<()> {
-    let document = document_with_causes(
-        &["tabs disallowed within this context"],
-        &["\n --> <input>"],
-    );
-    let err = ensure_causes_free_of_source_excerpts(&document)
-        .expect_err("a marker-bearing related cause must be rejected");
-    ensure!(
-        err.to_string().contains("leaked a source excerpt"),
-        "the failure should name the leak: {err}"
-    );
-    Ok(())
+    let document = render_error_json(&SnippetSourceError::new())?;
+    assert_rejected_for_leaking(&document, "a marker-bearing cause must be rejected")
 }
 
 /// The excerpt-bearing source a related diagnostic carries as its cause.
@@ -222,6 +193,38 @@ impl fmt::Display for SnippetSource {
 }
 
 impl StdError for SnippetSource {}
+
+/// A plain source error that reports the excerpt-bearing error as its cause.
+///
+/// It implements no miette diagnostic, so `render_error_json` renders it
+/// through the standard-error chain and copies each link's `Display` into
+/// `causes` unchanged. That is the exposure the plain path really has.
+#[derive(Debug)]
+struct SnippetSourceError {
+    /// The excerpt-bearing cause, reached through `Error::source`.
+    cause: SnippetSource,
+}
+
+impl SnippetSourceError {
+    /// Builds the fixture with its excerpt-bearing cause attached.
+    fn new() -> Self {
+        Self {
+            cause: SnippetSource,
+        }
+    }
+}
+
+impl fmt::Display for SnippetSourceError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("outer plain error")
+    }
+}
+
+impl StdError for SnippetSourceError {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        Some(&self.cause)
+    }
+}
 
 /// A related diagnostic whose own cause chain carries the excerpt.
 #[derive(Debug)]
@@ -276,11 +279,13 @@ impl Diagnostic for OuterNetsukeError {
 
 /// The recursion guards a shape the serializer really produces.
 ///
-/// The cases above build their documents by hand, so they would pass even if the
-/// serializer never emitted a `related` entry with a cause chain — the recursion
-/// would be dead code guarding a field shape that does not occur. This case
-/// routes a leak through `render_diagnostic_json` itself, which makes the
-/// serializer's own output the evidence rather than an assumed schema.
+/// The top-level rejection case proves the guard catches a leak at the shallowest
+/// depth. It would still pass if the serializer never emitted a `related` entry
+/// carrying a cause chain, leaving the recursion as dead code for a field shape
+/// that never occurs. This case routes a leak through `render_diagnostic_json`
+/// itself, so the serializer's own output is the evidence that the nested depth
+/// exists and is reached. Breaking `visit_causes`' descent fails this case while
+/// the shallow one still passes.
 #[rstest]
 fn a_leak_reached_through_the_serializer_is_caught(en_localizer: EnLocalizer) -> Result<()> {
     let _en_localizer = en_localizer;
@@ -297,11 +302,8 @@ fn a_leak_reached_through_the_serializer_is_caught(en_localizer: EnLocalizer) ->
         !related.is_empty(),
         "the serializer should render the related diagnostic, not drop it"
     );
-    let err = ensure_causes_free_of_source_excerpts(&document)
-        .expect_err("the serializer's own related leak must be rejected");
-    ensure!(
-        err.to_string().contains("leaked a source excerpt"),
-        "the failure should name the leak: {err}"
-    );
-    Ok(())
+    assert_rejected_for_leaking(
+        &document,
+        "the serializer's own related leak must be rejected",
+    )
 }
