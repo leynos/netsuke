@@ -33,11 +33,14 @@ def assert_identifiers_excluded_from_values(
             ["fixed-label", 17], {"run-7"}, "identifier leaked"
         )
     """
-    assert all(
-        not isinstance(value, str)
-        or all(identifier not in value for identifier in identifiers)
+    matches = [
+        (identifier, value)
         for value in values
-    ), message
+        if isinstance(value, str)
+        for identifier in sorted(identifiers)
+        if identifier in value
+    ]
+    assert not matches, f"{message}; matching identifier/value pairs: {matches!r}"
 
 
 def assert_failure_trace_sequence(
