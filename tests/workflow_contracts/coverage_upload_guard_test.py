@@ -26,7 +26,7 @@ from workflow_loading import (
 )
 
 CODESCENE_UPLOAD_STEP = "Upload coverage data to CodeScene"
-CREDENTIAL_PRESENT = "env.CS_ACCESS_TOKEN != ''"
+CREDENTIAL_PRESENT = "steps.codescene_token.outputs.available == 'true'"
 MAIN_CLAUSE = "github.ref == 'refs/heads/main'"
 DISPATCH = "github.event_name == 'workflow_dispatch'"
 SAME_REPOSITORY = "github.repository == 'leynos/netsuke'"

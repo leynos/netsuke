@@ -128,8 +128,9 @@ class UnsupportedExpressionError(ValueError):
 
 #: One comparison of a context field against a quoted literal.
 _COMPARISON = re.compile(
-    r"^(?P<context>env|github)\.(?P<field>[A-Za-z_][A-Za-z0-9_]*)\s*"
-    r"(?P<operator>==|!=)\s*'(?P<literal>[^']*)'$"
+    r"^(?P<context>env|github|steps)\.(?P<field>"
+    r"(?:[A-Za-z_][A-Za-z0-9_-]*\.outputs\.)?[A-Za-z_][A-Za-z0-9_-]*"
+    r")\s*(?P<operator>==|!=)\s*'(?P<literal>[^']*)'$"
 )
 
 
@@ -139,8 +140,9 @@ def evaluate_conjunction(
     """Evaluate a top-level conjunction of context comparisons.
 
     The grammar is exactly what the trunk-only guards use: clauses joined by
-    ``&&``, each comparing ``env.NAME`` or ``github.FIELD`` with ``==`` or
-    ``!=`` against a single-quoted literal. A field absent from its context
+    ``&&``, each comparing ``env.NAME``, ``github.FIELD`` or
+    ``steps.ID.outputs.NAME`` with ``==`` or ``!=`` against a single-quoted
+    literal. A field absent from its context
     reads as the empty string, as GitHub reads an unset value. Every clause is
     evaluated, so an unsupported one after a false one still refuses, and a
     clause holding a `||` is not a comparison, so a disjunction is refused
@@ -178,6 +180,10 @@ def _compare(clause: str, contexts: cabc.Mapping[str, cabc.Mapping[str, str]]) -
     """Evaluate one comparison clause, refusing anything else."""
     match = _COMPARISON.fullmatch(clause)
     if match is None:
+        raise UnsupportedExpressionError(clause)
+    # A step output is named `<id>.outputs.<name>`, and only a step output is;
+    # an `env` or `github` field with that shape is not a comparison modelled.
+    if (match["context"] == "steps") != (".outputs." in match["field"]):
         raise UnsupportedExpressionError(clause)
     value = contexts.get(match["context"], {}).get(match["field"], "")
     equal = value == match["literal"]

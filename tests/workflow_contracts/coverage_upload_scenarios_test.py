@@ -57,8 +57,11 @@ def test_the_upload_runs_only_where_it_may_publish(
     event: str, ref: str, token: str, outcome: str
 ) -> None:
     """Upload for main with the credential, and in no other case."""
+    # The check step writes `available=${{ secrets.CS_ACCESS_TOKEN != '' }}`,
+    # which renders as the string `true` or `false`.
+    available = "true" if token else "false"
     contexts = {
-        "env": {"CS_ACCESS_TOKEN": token},
+        "steps": {"codescene_token.outputs.available": available},
         "github": {"event_name": event, "ref": ref},
     }
     uploads = evaluate_conjunction(_upload_condition(), contexts)
@@ -74,6 +77,8 @@ def test_the_upload_runs_only_where_it_may_publish(
         "env.CS_ACCESS_TOKEN != '' || github.ref == 'refs/heads/main'",
         "github.ref == 'refs/heads/main' && startsWith(github.ref, 'refs/')",
         "github.ref == 'refs/heads/main' && false",
+        "env.codescene_token.outputs.available == 'true'",
+        "steps.codescene_token == 'true'",
     ],
 )
 def test_the_evaluator_refuses_what_it_does_not_model(condition: str) -> None:

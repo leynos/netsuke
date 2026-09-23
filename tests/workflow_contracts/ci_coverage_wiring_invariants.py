@@ -75,7 +75,7 @@ CODESCENE_HOST: typ.Final[str] = "codescene.io"
 #: clause lets a fork's push skip the step; the ref clause keeps a warm-run
 #: dispatch from a feature branch from uploading that branch's report.
 UPLOAD_GUARD_CONJUNCTS: typ.Final[frozenset[str]] = frozenset({
-    f"env.{CREDENTIAL_ENVIRONMENT_KEY} != ''",
+    "steps.codescene_token.outputs.available == 'true'",
     "github.ref == 'refs/heads/main'",
 })
 
@@ -288,10 +288,11 @@ def is_trunk_only_upload(condition: object) -> bool:
 
     Examples
     --------
-    >>> token, main = "env.CS_ACCESS_TOKEN != ''", "github.ref == 'refs/heads/main'"
+    >>> token = "steps.codescene_token.outputs.available == 'true'"
+    >>> main = "github.ref == 'refs/heads/main'"
     >>> is_trunk_only_upload(f"{token} && {main}")
     True
-    >>> is_trunk_only_upload("env.CS_ACCESS_TOKEN != ''")
+    >>> is_trunk_only_upload(token)
     False
     """
     if not isinstance(condition, str):
