@@ -23,7 +23,8 @@ import tomllib
 import typing as typ
 from itertools import starmap
 
-from nextest_durations import NextestConfigurationError, UnboundedTestError, seconds
+from nextest_durations import NextestConfigurationError, seconds
+from nextest_slow_timeouts import budget_of
 from timeout_budgets import (
     CAPPED_PROFILE,
     NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS,
@@ -34,10 +35,6 @@ if typ.TYPE_CHECKING:
     import fractions
 
 
-#: One value-and-unit pair of a humantime duration. nextest parses its
-#: durations with `humantime` through `humantime_serde`, which reads a
-#: sequence of these and sums them, so `2h 30m` and `1d` are valid and a
-#: parser taking one pair would refuse configuration the runner accepts.
 def _table(value: object) -> dict[str, object]:
     """Return a parsed value as a table, or an empty one.
 
@@ -134,103 +131,6 @@ def _slow_timeouts(config_text: str) -> list[tuple[str, object]]:
     ]
 
 
-def _multiplier_of(path: str, multiplier: object) -> int:
-    """Return a ``terminate-after`` value, refusing what nextest refuses.
-
-    nextest types it as a `NonZeroUsize`, so a zero, a negative, a
-    fraction or a quoted number is a configuration it rejects. Reading
-    any of them as a number here would put a budget on a tier the runner
-    never applies, and zero in particular would make the per-test
-    allowance vanish and every comparison above it pass.
-
-    Booleans are refused before integers because `True` is an `int` in
-    Python and would otherwise read as a multiplier of one.
-
-    Parameters
-    ----------
-    path : str
-        The dotted path of the declaring table, for the message.
-    multiplier : object
-        The value as ``tomllib`` returned it.
-
-    Returns
-    -------
-    int
-        The multiplier.
-
-    Raises
-    ------
-    NextestConfigurationError
-        If the value is not a positive integer.
-    """
-    match multiplier:
-        case bool():
-            pass
-        case int() as count if count > 0:
-            return count
-        case _:
-            pass
-    message = (
-        f"{path}.slow-timeout has terminate-after={multiplier!r}, which "
-        f"nextest refuses: it is typed as a non-zero positive integer, so a "
-        f"zero, a negative, a fraction or a quoted number configures nothing"
-    )
-    raise NextestConfigurationError(message)
-
-
-def _budget_of(path: str, value: object) -> fractions.Fraction:
-    """Return the per-test budget one ``slow-timeout`` declares.
-
-    Parameters
-    ----------
-    path : str
-        The dotted path of the declaring table, for the message.
-    value : object
-        The parsed value, a table or a bare duration.
-
-    Returns
-    -------
-    fractions.Fraction
-        The budget in seconds, exactly.
-
-    Raises
-    ------
-    UnboundedTestError
-        If the value names no ``terminate-after``, in either spelling.
-        nextest then marks the test slow and lets it run on, so there is
-        no per-test tier to compare against.
-    NextestConfigurationError
-        If the value is a table with no ``period``, or is neither a
-        table nor a duration.
-    """
-    match value:
-        case str():
-            message = (
-                f'{path}.slow-timeout = "{value}" sets a warning period with '
-                f"no terminate-after, so nextest reports the test as slow and "
-                f"never stops it"
-            )
-            raise UnboundedTestError(message)
-        case dict():
-            pass
-        case _:
-            message = f"{path}.slow-timeout is neither a table nor a duration"
-            raise NextestConfigurationError(message)
-    period = value.get("period")
-    if not isinstance(period, str):
-        message = f"{path}.slow-timeout names no period: {value!r}"
-        raise NextestConfigurationError(message)
-    multiplier = value.get("terminate-after")
-    if multiplier is None:
-        message = (
-            f"{path}.slow-timeout sets no terminate-after, so nextest marks "
-            f"the test slow and lets it run on; there is no per-test tier to "
-            f"compare against"
-        )
-        raise UnboundedTestError(message)
-    return seconds(period) * _multiplier_of(path, multiplier)
-
-
 def largest_test_allowance(config_text: str) -> fractions.Fraction:
     """Return the longest a single test may run, in seconds.
 
@@ -254,15 +154,16 @@ def largest_test_allowance(config_text: str) -> fractions.Fraction:
         The longest per-test budget, exactly.
 
     A ``slow-timeout`` that names no ``terminate-after`` raises
-    :class:`UnboundedTestError` from :func:`_budget_of` rather than
-    counting as one period, because such a configuration bounds nothing.
+    :class:`nextest_durations.UnboundedTestError` from
+    :func:`nextest_slow_timeouts.budget_of` rather than counting as one
+    period, because such a configuration bounds nothing.
 
     Raises
     ------
     NextestConfigurationError
         If the configuration declares no ``slow-timeout`` at all.
     """
-    budgets = list(starmap(_budget_of, _slow_timeouts(config_text)))
+    budgets = list(starmap(budget_of, _slow_timeouts(config_text)))
     if not budgets:
         message = (
             "the nextest configuration declares no slow-timeout, so no test "
