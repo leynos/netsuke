@@ -1545,6 +1545,13 @@ in this tree. The same forwarding to a local workflow is allowed, because the
 closure reads the callee and holds it to every clause; `release-dry-run.yml`
 calls `release.yml` that way.
 
+Every contract reads workflows through `_WorkflowLoader` in
+`tests/workflow_contracts/workflow_loading.py`. It refuses a mapping that
+repeats a key, rather than keeping the last value as PyYAML does. A job that
+declared `runs-on` twice would otherwise read as whichever label came second,
+and a paid label in the first half would escape every placement contract.
+GitHub rejects such a workflow anyway, so the refusal costs nothing.
+
 `make test` runs the non-doctest suite through
 [cargo-nextest](https://nexte.st/) and the doctests separately. CI pins the
 runner version in `NEXTEST_VERSION` in `.github/workflows/ci.yml`. Install that

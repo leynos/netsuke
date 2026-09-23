@@ -18,6 +18,7 @@ would honour.
 Run via ``make test-workflow-contracts``.
 """
 
+import re
 import typing as typ
 
 if typ.TYPE_CHECKING:
@@ -115,3 +116,69 @@ def top_level_conjuncts(expression: str) -> list[str]:
     ]
     bounds = zip([0, *(cut + 2 for cut in cuts)], [*cuts, len(expression)], strict=True)
     return [expression[start:end].strip() for start, end in bounds]
+
+
+class UnsupportedExpressionError(ValueError):
+    """Raised when an expression leaves the grammar the evaluator models.
+
+    An evaluator that answered False outside its grammar would let a guard it
+    cannot read pass as one that never runs, so it refuses instead.
+    """
+
+
+#: One comparison of a context field against a quoted literal.
+_COMPARISON = re.compile(
+    r"^(?P<context>env|github)\.(?P<field>[A-Za-z_][A-Za-z0-9_]*)\s*"
+    r"(?P<operator>==|!=)\s*'(?P<literal>[^']*)'$"
+)
+
+
+def evaluate_conjunction(
+    expression: str, contexts: cabc.Mapping[str, cabc.Mapping[str, str]]
+) -> bool:
+    """Evaluate a top-level conjunction of context comparisons.
+
+    The grammar is exactly what the trunk-only guards use: clauses joined by
+    ``&&``, each comparing ``env.NAME`` or ``github.FIELD`` with ``==`` or
+    ``!=`` against a single-quoted literal. A field absent from its context
+    reads as the empty string, as GitHub reads an unset value. Every clause is
+    evaluated, so an unsupported one after a false one still refuses, and a
+    clause holding a `||` is not a comparison, so a disjunction is refused
+    too.
+
+    Parameters
+    ----------
+    expression : str
+        An Actions ``if`` expression, without the ``${{ }}`` wrapper.
+    contexts : Mapping[str, Mapping[str, str]]
+        The ``env`` and ``github`` values to evaluate against.
+
+    Returns
+    -------
+    bool
+        Whether the step would run. A disjunction or any clause outside the
+        grammar propagates ``UnsupportedExpressionError`` from the clause
+        reader.
+
+    Examples
+    --------
+    >>> evaluate_conjunction(
+    ...     "env.T != '' && github.ref == 'refs/heads/main'",
+    ...     {"env": {"T": "x"}, "github": {"ref": "refs/heads/main"}},
+    ... )
+    True
+    """
+    # No separate `||` check: a disjunction left in a conjunct is not a
+    # comparison, so the clause grammar below refuses it.
+    results = [_compare(clause, contexts) for clause in top_level_conjuncts(expression)]
+    return all(results)
+
+
+def _compare(clause: str, contexts: cabc.Mapping[str, cabc.Mapping[str, str]]) -> bool:
+    """Evaluate one comparison clause, refusing anything else."""
+    match = _COMPARISON.fullmatch(clause)
+    if match is None:
+        raise UnsupportedExpressionError(clause)
+    value = contexts.get(match["context"], {}).get(match["field"], "")
+    equal = value == match["literal"]
+    return equal if match["operator"] == "==" else not equal
