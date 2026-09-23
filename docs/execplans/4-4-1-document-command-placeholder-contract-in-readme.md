@@ -1465,7 +1465,19 @@ character and width, permits up to three leading spaces, and requires a
 matching closing fence of sufficient width with no trailing non-whitespace. It
 also rejects backticks in a backtick fence's info string. This repairs the
 existing fenced-example exclusion; it does not add a CI gate or a general
-Markdown validator. Gates and a follow-up review must pass before EP-M5.
+Markdown validator. Full gates passed again, including 3338 tests and 98.81%
+coverage, with logs `/tmp/*-netsuke-readme-m4-fences.out`; the repair was
+committed as `a5cf2f03`.
+
+The next review completed with one further heading-recognition concern
+(`/tmp/coderabbit-netsuke-readme-m4-fences.out`). Scratch cases confirmed that
+one, two, or three leading spaces caused a valid heading to disappear from the
+count (`/tmp/readme-heading-indent-netsuke-m4.out`, all incorrectly exited 1).
+The matcher now uses the already-trimmed line and indentation bound. It also
+accepts tab separators and empty hash headings while rejecting seven hashes and
+hash-prefixed words. These are the same ATX heading syntax; no new validation
+responsibility is introduced. Gates and follow-up review remain required before
+EP-M5.
 
 ### EP-M1 — complete (`3594b568`)
 

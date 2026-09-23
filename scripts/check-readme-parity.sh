@@ -31,10 +31,14 @@ for file in README.md README.de.md README.es.md README.fr.md \
                 next
             }
         }
-        !fenced && /^#+ / && length($1) <= 6 {
-            levels = levels separator $1
-            separator = ","
-            count++
+        !fenced && indentation <= 3 && match(line, /^#+/) {
+            heading = substr(line, 1, RLENGTH)
+            suffix = substr(line, RLENGTH + 1)
+            if (length(heading) <= 6 && (suffix == "" || suffix ~ /^[ \t]/)) {
+                levels = levels separator heading
+                separator = ","
+                count++
+            }
         }
         END { printf "%d:%s\n", count, levels }
     ' "$file")
