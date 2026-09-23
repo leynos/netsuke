@@ -975,16 +975,17 @@ architecture, so the aarch64 build cannot drift back into `cross`.
 
 Building aarch64 natively raises its glibc floor. The last release built it
 through `cross`, whose image required GLIBC_2.18. It now links against Ubuntu
-24.04's glibc, as the x86_64 release already did (GLIBC_2.39 on v0.1.0-beta3).
-Portability to RHEL 8-era systems is not a goal before 0.1.0, so the higher
-floor is accepted. The `Report the glibc floor` step prints each Linux binary's
-highest required GLIBC version, from `objdump -T`, to the job summary, so a
-change to the image shows up in the release rather than in a user's bug report.
-Every compiling job that does use the compiler cache resets the counters with
-`sccache --zero-stats` before building and emits both human-readable and JSON
-statistics afterwards under `if: always()`; zero compile requests is a failed
-integration, not a quiet no-op. Kani is the one exception, because its verifier
-bundle ships prebuilt.
+24.04's glibc, as the x86_64 release already did (GLIBC_2.39 on v0.1.0-beta3);
+the first native build measured GLIBC_2.39 for both targets (dry run
+35892484210). Portability to RHEL 8-era systems is not a goal before 0.1.0, so
+the higher floor is accepted. The `Report the glibc floor` step prints each
+Linux binary's highest required GLIBC version, from `objdump -T`, to the job
+summary, so a change to the image shows up in the release rather than in a
+user's bug report. Every compiling job that does use the compiler cache resets
+the counters with `sccache --zero-stats` before building and emits both
+human-readable and JSON statistics afterwards under `if: always()`; zero
+compile requests is a failed integration, not a quiet no-op. Kani is the one
+exception, because its verifier bundle ships prebuilt.
 
 After the first run on `main`, confirm the generation reached Ubicloud rather
 than GitHub with `ubi gh leynos/netsuke list-cache-entries`. That command only
