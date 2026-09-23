@@ -207,7 +207,7 @@ def test_a_script_reads_as_the_commands_it_joins(script: Script) -> None:
 @settings(max_examples=150, derandomize=True, deadline=None)
 @example(
     command=COPY_COMMAND,
-    operands=PLAIN_OPERANDS.example(),
+    operands=["lcov.info", "staging"],
 )
 @given(
     command=st.sampled_from(MENTIONABLE_COMMANDS),

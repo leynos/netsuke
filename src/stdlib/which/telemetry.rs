@@ -15,10 +15,12 @@
 //! than the template spelling: a manifest writes `workspace-recursive`, and
 //! the label is `workspace_recursive`.
 //!
-//! Every label is drawn from a closed set declared in this module, and nothing
-//! else is recorded: no command name, no filesystem path, no workspace name,
-//! and no `PATH` or `PATHEXT` value. A series can therefore be exported
-//! without disclosing what a manifest asked for or where it was found.
+//! Every label is drawn from a closed set declared in this module. The
+//! `cwd_mode` label records the search policy a manifest requested, named as
+//! one of that set's fixed spellings rather than quoted from the template, and
+//! nothing else is recorded: no command name, no filesystem path, no workspace
+//! name, and no `PATH` or `PATHEXT` value. A series can therefore be exported
+//! without quoting the manifest or saying where it was found.
 
 use std::sync::Once;
 

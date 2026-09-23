@@ -234,6 +234,7 @@ def upload_contract_offenders(
     offenders.extend(_checksum_offenders(upload))
     offenders.extend(credential_offenders(upload, inputs_of(upload)))
     offenders.extend(_archive_offenders(coverage, upload))
+    offenders.extend(_variable_offenders(upload))
     return offenders
 
 
@@ -299,11 +300,30 @@ def _archive_offenders(
             f"{CODESCENE_UPLOAD_STEP!r} sets {PUBLICATION_OPT_OUT_INPUT}; that "
             f"input belongs to the generator, not to the upload"
         )
+    return offenders
+
+
+def _variable_offenders(upload: dict[str, object]) -> list[str]:
+    """Return faults for each repository variable the upload reads undeclared.
+
+    The scan is general to any step, and this rule is the first failure the
+    module's own contract was written for: the repository declares no variables
+    at all, so a ``vars.`` reference resolves to the empty string rather than to
+    a value. It is asked of the upload alone, because the upload is where a
+    reference is read as though it had been verified.
+
+    Returns
+    -------
+    list[str]
+        One fault per undefined reference, and nothing when there is none.
+    """
     unbound = unbound_variable_references(upload)
-    if unbound:
-        offenders.append(
+    if not unbound:
+        return []
+    return [
+        (
             f"{CODESCENE_UPLOAD_STEP!r} reads undefined repository "
             f"variable(s) {unbound!r}; the repository declares none, so each "
             f"resolves to the empty string"
         )
-    return offenders
+    ]

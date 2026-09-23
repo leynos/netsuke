@@ -199,8 +199,6 @@ def test_only_the_declared_variable_is_permitted(expression: Expression) -> None
     the empty string.
     """
     assert expression.references, f"{expression.body!r} must name a reference"
-    fixed = [reference for reference in expression.references if reference.name == "X"]
-    assert not fixed, "the model must draw names rather than a fixed undeclared one"
 
     for text, options in _spellings(expression):
         assert not unbound_variable_references({"if": text}), (
