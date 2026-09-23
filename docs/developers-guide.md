@@ -3475,8 +3475,12 @@ governs the non-doctest pass only, and deliberately stays small:
   and requires each to select at least one test, whatever the filter names and
   whichever override carries it. The replay works on the raw filter text rather
   than a name re-synthesized from the grammar, so a form the grammar admits but
-  writes differently still round-trips to the same selector. It reuses the
-  instrumented build tree rather than compiling, by taking the environment
+  writes differently still round-trips to the same selector. The rule for a
+  test's `module::` prefix is written once, as
+  `_nextest_oracle.grammar.MODULE_PATH`, and read from there by every user
+  rather than restated: a second copy stays parseable while it drifts, which is
+  precisely the silent-mismatch shape this script exists to catch. It reuses
+  the instrumented build tree rather than compiling, by taking the environment
   `cargo llvm-cov show-env` reports, so it is gated exactly as the coverage
   step is and must run before `Discard the instrumented build tree`. The
   contracts for that placement live in

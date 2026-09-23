@@ -23,6 +23,13 @@ exists: it only ever examined filters naming a parameterized test, so a filter
 naming a plain test in a submodule -- whose qualified name carries a `module::`
 prefix the `^` anchor stops short of -- was never replayed at all.
 
+That same module-qualification rule is written once, as
+`_nextest_oracle.grammar.MODULE_PATH`, and read from there by every user in
+this file. It was briefly written out a third time here, in the instance
+prefix below, which is the defect this script exists to catch applied to the
+script: a second copy of a rule drifts from the first the moment either
+changes, and the drift is silent because both spellings keep parsing.
+
 It is deliberately not a workflow-contract test. The check needs compiled test
 binaries, and the `Workflow contract tests` lane runs before the first Rust
 build and must remain static. It runs on the coverage lane instead, after `Test
@@ -50,6 +57,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _nextest_oracle import (
     ANCHORED_SELECTOR,
     LEGACY_SELECTOR,
+    MODULE_PATH,
     all_filters,
     configured_names,
     fail,
@@ -74,7 +82,11 @@ def _check(env: dict[str, str], name: str, cases: int) -> None:
     declared in a submodule is named ``module::name::case_1`` at run time, so
     anchoring at the bare name would report such a test's own instances as
     strays -- the same module-qualification blind spot the whole-file replay
-    above exists to catch, in the one place a bare name is still assumed.
+    above exists to catch, in the one place a bare name is still assumed. The
+    path is read from :data:`_nextest_oracle.grammar.MODULE_PATH` rather than
+    written out again: it is the same rule, and a second copy would drift from
+    the first the next time either is widened, which is the failure this whole
+    script exists to catch wearing a third shape.
 
     The legacy form must select nothing: ``test(=NAME)`` compares the whole
     name, so it cannot match ``NAME::case_…`` at all. Its exit status is 0
@@ -83,7 +95,7 @@ def _check(env: dict[str, str], name: str, cases: int) -> None:
     anchored = ANCHORED_SELECTOR.format(name=name)
     matched = selected(env, anchored)
     instance = re.compile(
-        rf"^(?:[a-z0-9_]+::)*{re.escape(name)}::case_(?P<index>\d+)(?:_|$)"
+        rf"^{MODULE_PATH}{re.escape(name)}::case_(?P<index>\d+)(?:_|$)"
     )
     matches = [(found, instance.match(found)) for found in matched]
     stray = sorted(found for found, match in matches if match is None)
