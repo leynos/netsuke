@@ -142,9 +142,51 @@ failure mode cannot recur silently.
       and the active toolchain prints
       `nightly-2026-08-23-x86_64-unknown-linux-gnu unchanged - rustc 1.100.0-nightly`.
       The two runs agree within 6 % on different heads from cold caches.
+- [x] (2026-09-23) Give the gate a per-test allowance sized for its cost, after
+      a third CI run showed the default 300 s was not one. Run `35802301416` at
+      `b787475f` failed `kani-smoke` with
+      `TIMEOUT [ 300.008s] … every_patched_tree_compiles_under_denied_warnings`
+      and `Summary [ 300.009s] 1 test run: 0 passed, 1 timed out, 3 skipped` —
+      a real cap being hit, not a flake, on a head whose only diff was eight
+      lines of Markdown. The override at `.config/nextest.toml` now carries
+      `slow-timeout = { period = "60s", terminate-after = 10 }` (600 s), which
+      is the targeted-override case that file's own policy asks for and the
+      largest value the ordering permits, since `global-timeout` (780 s) must
+      stay strictly above the largest per-test allowance. The figure moved from
+      300 s to 600 s in the four contract modules that state it, in the
+      developers-guide tier table and arithmetic, and in the `kani-smoke`
+      ceiling comment; the ceiling still contains the worst case, 518 s of
+      non-gate work plus 600 s against 1,800 s.
 
 ## Surprises & discoveries
 
+- **A gate that passes twice can still be failing, and the cap is the tell.**
+  `kani-smoke` passed the compile gate at `257.7 s` and `261.5 s` of a `300 s`
+  per-test allowance, then failed at `300.008 s` — on a head whose only diff
+  was eight lines of Markdown. The temptation is to call that a flake, and it
+  is wrong twice over: the delta proves the *code* did not change, not that the
+  failure is intermittent, and reading the job log shows a real cap being hit
+  rather than an error. The gate compiles into `target/kani-mutation-compile`,
+  which no cache restores — `kani-cache` restores the Kani payloads under
+  `.kani-rustup` and `.kani-home`, not a build tree — so each run pays a cold
+  build of the whole dependency graph plus 18 incremental recompiles, and its
+  cost is the host's to decide. A 38 s margin on a 300 s cap is the difference
+  between two runners, not a budget. Local runs pass in `151.5 s`, which is why
+  this only ever appears in CI: the local figure is nearly twice as fast as the
+  CI one, so the local gate says nothing about the CI margin.
+- **The largest per-test allowance is not the profile's own.** Once an override
+  widens a `slow-timeout`, `largest_test_allowance` — which
+  `whole_run_ordering` uses to check `global-timeout > largest` — reads the
+  override, not `[profile.default]`. So widening one test's budget moves the
+  figure the whole-run budget is compared against, and the documented "largest
+  per-test allowance" moves with it: the guide and four contract modules all
+  stated `300 s` and had to restate `600 s`. The two readings are separate
+  concerns and the separation is real —
+  `base_allowance_test.the_default_profile_bounds_a_test_it_matches_no_override_for`
+  exists precisely because deleting the profile's own `slow-timeout` while
+  leaving an override would still report a bounded subset — but the *ordering*
+  reads the maximum. Widening an override without moving that figure would
+  leave the guide stating a number the file no longer has.
 - **A compile survey found five broken patches, not three.** Running
   `RUSTFLAGS="-D warnings" cargo check --lib --all-features` over all 18
   patches at `main` (`00f48f77`) showed `marker_token_match_is_exact` and
@@ -439,6 +481,20 @@ failure mode cannot recur silently.
   than dismissed — see the `--only-codegen` entry above. The distinction is the
   point: two findings died on measurement, and one survived it, and only
   measurement separates them.
+- Widen the gate's `slow-timeout` to ten periods rather than re-running the
+  failed job. A re-run would have cleared the check and taught nothing: the
+  same head would sit within seconds of the same cap, and the next runner to be
+  slightly slower would fail it again. The cost is the host's, so the budget
+  has to absorb a slow host rather than assume a median one. Six hundred
+  seconds is not a free choice — it is the largest value that keeps
+  `global-timeout > largest per-test allowance` — so the two tiers bound each
+  other, and the ordering contract is what stops this being raised further
+  without also raising the whole-run budget.
+- Read the per-test cap from `.config/nextest.toml` rather than from the job's
+  `timeout-minutes` or the cargo watchdog. Both outer tiers had ample room
+  (776 s of 1,800 s), which is why the failure read as a mystery until the
+  innermost tier was checked: the tiers are independent, and an outer one
+  having room says nothing about an inner one being exceeded.
 
 ## Outcomes & retrospective
 

@@ -17,9 +17,12 @@ because a commented-out key is what a presence assertion catches and an
 ordering assertion does not.
 
 The per-test allowance is ``period`` multiplied by ``terminate-after``,
-not ``period`` alone. Every platform uses five 60-second periods here,
-so the largest allowance is 300 s; reading the period as the budget would
-understate it fivefold.
+not ``period`` alone. Every period here is 60 seconds and every platform
+uses the same multipliers, so the profile's own five periods give 300 s
+and the mutation compile gate's override gives 600 s. The largest
+allowance is therefore the gate's, and it is that figure the whole-run
+budget has to clear; reading the period as the budget would understate
+either by its multiplier.
 
 See "Test timeouts: the tiers this repository sets" in
 ``docs/developers-guide.md``, and the canonical wording in
@@ -250,7 +253,7 @@ def test_the_largest_per_test_allowance_counts_the_multiplier(
     This is the reading that decides every comparison above, and it is
     the one easy to get wrong: the periods here are all 60 s, so a
     contract reading the period alone would report a 60 s largest
-    allowance where the real figure is 300 s.
+    allowance where the real figure is 600 s.
     """
     largest = largest_test_allowance(nextest_config)
     periods = [
