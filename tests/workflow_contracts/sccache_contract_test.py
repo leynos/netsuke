@@ -223,7 +223,7 @@ def test_every_compiling_job_reaches_the_compiler_cache(
 
 
 def test_the_packaging_lane_compiles_without_a_wrapper() -> None:
-    """Require the release packaging lane to run with no compiler cache at all.
+    """Keep the compiler cache out of the packaging job's environment.
 
     Two independent reasons, each sufficient on its own. On Windows sccache
     re-spawns rustc with the aarch64 target's whole `--extern` and `-L` list
@@ -247,10 +247,9 @@ def test_the_packaging_lane_compiles_without_a_wrapper() -> None:
             f"{workflow_name} {job_name} runs uncached and must not declare "
             f"{variable}, got {env.get(variable)!r}"
         )
+    # The x86_64 Linux lane opts in through gated steps instead, held by
+    # release_lane_sccache_test.py; the job environment stays clean for all.
     steps = job_steps(load_workflow(WORKFLOW_DIR / workflow_name), job_name)
-    assert not [
-        step for step in steps if str(step.get("name", "")) == "Install sccache"
-    ], "the uncached lane must not install a compiler cache it never uses"
     build = named_step(steps, "Build release binary")
     inputs = require_mapping(build.get("with"), "build inputs")
     assert inputs.get("use-sccache") == "false", (

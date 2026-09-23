@@ -878,12 +878,13 @@ directory.
 
 Two paths are deliberately uncached, and both are recorded here rather than
 left to be rediscovered. The reusable packaging workflow
-[`build-and-package.yml`](../.github/workflows/build-and-package.yml) has no
-cache at all: it builds a release profile for a cross-compiled target, so it
-shares no key family with the debug gate, and making it a second writer of the
-Cargo download store would break the single-owner rule. The coverage job does
-not cache its uv stores, because they live under `~/.local/share`, which the
-merge gate's Whitaker cache owns.
+[`build-and-package.yml`](../.github/workflows/build-and-package.yml) archives
+no build tree (its x86_64 Linux lane compiles through sccache, described
+below): it builds a release profile for a cross-compiled target, so it shares
+no key family with the debug gate, and making it a second writer of the Cargo
+download store would break the single-owner rule. The coverage job does not
+cache its uv stores, because they live under `~/.local/share`, which the merge
+gate's Whitaker cache owns.
 
 The compiler cache is sccache 0.16.0, installed as a checksum-verified prebuilt
 binary through the pinned `taiki-e/install-action` with `fallback: none`,
@@ -947,20 +948,32 @@ is covered without being listed again. The upstream default is reported as
 
 Every merge-gate job that compiles Rust sets `RUSTC_WRAPPER=sccache`, including
 the coverage job and the Netsukefile compatibility build. The release packaging
-lanes are the exception and run uncached, for two independent reasons: on
-Windows sccache re-spawns rustc with the aarch64 target's `--extern` and `-L`
-list and exceeds the operating system's command-line limit, and elsewhere the
-lane's server would be started inside the nested setup action, which is exactly
-the clobber described above. Reproducing the gate's export, install and
-run-step start sequence for a lane that runs only on tag pushes and the dry run
-would not pay back. That lane must therefore stay free of `RUSTC_WRAPPER`,
-`SCCACHE_GHA_ENABLED` and `SCCACHE_DIR` entirely, and
-`tests/workflow_contracts/sccache_contract_test.py` requires all three to be
-absent rather than merely empty. Every compiling job that does use the compiler
-cache resets the counters with `sccache --zero-stats` before building and emits
-both human-readable and JSON statistics afterwards under `if: always()`; zero
-compile requests is a failed integration, not a quiet no-op. Kani is the one
-exception, because its verifier bundle ships prebuilt.
+job keeps all three variables out of its environment. On Windows, sccache
+re-spawns rustc with the aarch64 target's `--extern` and `-L` list and exceeds
+the operating system's command-line limit. The aarch64 Linux lane builds inside
+`cross`'s container, which neither the wrapper nor the binary reaches.
+`tests/workflow_contracts/sccache_contract_test.py` requires `RUSTC_WRAPPER`,
+`SCCACHE_GHA_ENABLED` and `SCCACHE_DIR` to be absent from that environment, not
+merely empty.
+
+The x86_64 Linux lane is the one exception, because it builds natively on
+Ubicloud and the pull-request dry run runs it on every push. It opts in by
+steps rather than by the environment. `Enable sccache` writes the two variables
+to `GITHUB_ENV`. `Export sccache credentials`, `Install sccache` and
+`Reset sccache statistics` follow, and `Show sccache statistics` reports under
+`always()`. Each step is gated on
+`inputs.target == 'x86_64-unknown-linux-gnu'`, compared whole, and the nested
+action's own sccache stays off, because it would re-export GitHub's results
+address. Nothing on `main` builds a release profile, so a pull request's first
+push compiles cold. A repeat push reads the cache its branch's earlier run
+wrote, and 80 of 100 recent dry runs were repeat pushes.
+`tests/workflow_contracts/release_lane_sccache_test.py` holds the gates, their
+order, and a caller that passes the target, so the steps can actually run.
+Every compiling job that does use the compiler cache resets the counters with
+`sccache --zero-stats` before building and emits both human-readable and JSON
+statistics afterwards under `if: always()`; zero compile requests is a failed
+integration, not a quiet no-op. Kani is the one exception, because its verifier
+bundle ships prebuilt.
 
 After the first run on `main`, confirm the generation reached Ubicloud rather
 than GitHub with `ubi gh leynos/netsuke list-cache-entries`. That command only

@@ -83,8 +83,10 @@ jobs:
     env:
       BIN_NAME: ${{ inputs['bin-name'] }}
       VERSION: ${{ inputs.version }}
-      # No compiler cache on any release lane. Two independent reasons, and
-      # each alone is sufficient.
+      # No compiler cache in this job's environment. The x86_64 Linux lane
+      # opts in by steps below instead, so no expression here can get a
+      # platform negation backwards. For every other lane, two independent
+      # reasons each suffice.
       #
       # On Windows, sccache re-spawns rustc with the aarch64 target's
       # `--extern` and `-L` list and exceeds the operating system's
@@ -99,9 +101,15 @@ jobs:
       # mean reproducing the gate's whole export, install and run-step start
       # sequence for a lane that runs on tag pushes and the dry run only.
       #
-      # Release builds are infrequent, so these lanes run uncached rather than
-      # unreliably. The merge gates keep their own caches; see
-      # tests/workflow_contracts/cache_contract_data.py's SCCACHE_EXEMPT_LANE.
+      # The x86_64 Linux lane builds natively (no `cross` container), so it
+      # can take the gate's proxy wiring whole: the `Enable sccache` step and
+      # the three after it, all gated on that one target. Every pull
+      # request's dry run runs it, and 80 of 100 dry runs were a repeat push
+      # on a branch that had already run, whose own cache scope is readable.
+      # The aarch64 lane builds in `cross`'s container, which neither the
+      # wrapper nor sccache reaches, so it stays uncached. See
+      # tests/workflow_contracts/release_lane_sccache_test.py and
+      # cache_contract_data.py's SCCACHE_EXEMPT_LANE.
       MAN_ARCH: ${{ inputs['package-arch'] != '' && inputs['package-arch'] || 'unknown' }}
       # The pinned `rust-build-release` revision, restated here so the
       # `cargo-orthohelp` cache key can carry it. That action nests the shared
@@ -127,6 +135,36 @@ jobs:
           # credential.
           persist-credentials: false
 
+      - name: Enable sccache
+        # Written to GITHUB_ENV rather than the job environment, so the other
+        # lanes never see the variables at all. `SCCACHE_GHA_ENABLED` must be
+        # set before the export below, whose verification checks it.
+        if: inputs.target == 'x86_64-unknown-linux-gnu'
+        shell: bash
+        run: |
+          {
+            echo 'RUSTC_WRAPPER=sccache'
+            echo 'SCCACHE_GHA_ENABLED=true'
+          } >> "$GITHUB_ENV"
+
+      - name: Export sccache credentials
+        # A server started without these stays on local disk all job, and the
+        # nested setup action's own export would send it past Ubicloud's proxy.
+        if: inputs.target == 'x86_64-unknown-linux-gnu'
+        uses: ./.github/actions/sccache-gha-credentials
+
+      - name: Install sccache
+        if: inputs.target == 'x86_64-unknown-linux-gnu'
+        uses: taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375  # v2.87.12
+        with:
+          tool: sccache@0.16.0
+          fallback: none
+
+      - name: Reset sccache statistics
+        if: inputs.target == 'x86_64-unknown-linux-gnu'
+        shell: bash
+        run: sccache --zero-stats
+
       - name: Install uv
         if: inputs.platform != 'linux'
         uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
@@ -145,7 +183,9 @@ jobs:
           # otherwise archive `target/${BUILD_PROFILE}`. No lane in this
           # repository archives a build tree; sccache owns compiler output.
           cache-provider: external
-          # Off on every platform; see the RUSTC_WRAPPER note above.
+          # Off on every platform: the nested action's sccache would
+          # re-export GitHub's results address and bypass Ubicloud's proxy.
+          # The x86_64 lane's wrapper comes from `Enable sccache` above.
           use-sccache: 'false'
 
       - name: Restore cargo-orthohelp
@@ -248,6 +288,18 @@ jobs:
             "${{ env.BIN_NAME }}" \
             "target/orthohelp/${{ inputs.target }}/release" \
             "${{ inputs.platform == 'windows' && 'Netsuke' || env.BIN_NAME }}"
+
+      - name: Show sccache statistics
+        if: always() && inputs.target == 'x86_64-unknown-linux-gnu'
+        shell: bash
+        run: |
+          sccache --show-stats | tee sccache-stats.txt
+          sccache --show-stats --stats-format=json > sccache-stats.json
+          {
+            printf '### sccache\n\n```text\n'
+            cat sccache-stats.txt
+            printf '```\n'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Stage artefacts
         id: stage
