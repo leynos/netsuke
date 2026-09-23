@@ -1,6 +1,10 @@
 """Provide fixed-record assertions shared by release-admission runtime tests."""
 
 import math
+import typing as typ
+
+if typ.TYPE_CHECKING:
+    import collections.abc as cabc
 
 OPERATION_SEQUENCE = (
     "resolve_tag_commit",
@@ -9,6 +13,31 @@ OPERATION_SEQUENCE = (
     "check_scan_freshness",
     "verify_evidence",
 )
+
+
+def assert_identifiers_excluded_from_values(
+    values: cabc.Iterable[object], identifiers: set[str], message: str
+) -> None:
+    """Assert generated identifiers are absent from string values.
+
+    Notes
+    -----
+    Use this helper for one metric-label or trace-field value collection at a
+    time so callers can retain field-specific failure messages.
+
+    Examples
+    --------
+    Ignore non-string values while checking labels and trace fields::
+
+        assert_identifiers_excluded_from_values(
+            ["fixed-label", 17], {"run-7"}, "identifier leaked"
+        )
+    """
+    assert all(
+        not isinstance(value, str)
+        or all(identifier not in value for identifier in identifiers)
+        for value in values
+    ), message
 
 
 def assert_failure_trace_sequence(

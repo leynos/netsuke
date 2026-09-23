@@ -1,4 +1,4 @@
-"""Provide reusable subprocess fakes for release-admission runtime tests."""
+"""Provide shared assertions and subprocess fakes for release-admission tests."""
 
 import dataclasses
 import importlib.util
@@ -11,6 +11,7 @@ from pathlib import Path
 from release_admission_test_fakes import write_fake_commands
 from release_admission_test_records import (
     assert_failure_trace_sequence,
+    assert_identifiers_excluded_from_values,
     operation_duration,
     operation_records,
 )
@@ -24,6 +25,7 @@ __all__ = (
     "FailureCase",
     "_run_gate",
     "assert_failure_trace_sequence",
+    "assert_identifiers_excluded_from_values",
     "expected_gate_labels",
     "expected_operation_labels",
     "operation_duration",
