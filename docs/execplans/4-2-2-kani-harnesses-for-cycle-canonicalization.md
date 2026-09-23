@@ -145,16 +145,25 @@ of decisions that need the user's confirmation.
 
   The runtime bound is carried by `-p RuntimeMaxSec=`, which systemd enforces
   against the scope's control group. Reaching it puts the scope into a failure
-  state and stops the whole process tree, so the cap does not depend on a
-  signal propagating through the launcher to reach the verifier. Do not
-  reintroduce a `timeout` prefix in place of it. A prefix bounds only by
-  signalling the process it supervises, and its `--kill-after=` grace window is
+  state and stops the whole process tree, including descendants that have left
+  the process group. Do not reintroduce a `timeout` prefix in place of it, but
+  for the right reason. GNU `timeout` without `--foreground` signals the
+  supervised command's process *group*, not merely its immediate child, and
+  `systemd-run --scope` execs the payload in the child `timeout` created
+  instead of leaving a separate launcher behind. Probing the topology confirms
+  it: the payload's parent is `timeout` itself and the two share one process
+  group, so the group signal does reach the verifier. Two limits remain, and
+  neither is the one the ticket named. The `--kill-after=` grace window is
   added to the deadline rather than nested inside it, so a workload that
   ignores the first signal is bounded by the sum of the two rather than by the
-  nominal figure. The wrapper has two systemd floors, and the higher one binds.
-  `RuntimeMaxSec` for scope units requires systemd 244 or later, which
-  `systemd.scope` records as the version that added it for scopes rather than
-  the 229 that `systemd.service` records for services.
+  nominal figure. And a descendant that leaves the process group, by `setsid`
+  or a double fork, is beyond any process-group signal at all. Both were probed
+  on the reference host: a `setsid` descendant of the payload survived a plain
+  `timeout` prefix and was stopped by `RuntimeMaxSec`, whose cgroup stop does
+  not depend on signal propagation. The wrapper has two systemd floors, and the
+  higher one binds. `RuntimeMaxSec` for scope units requires systemd 244 or
+  later, which `systemd.scope` records as the version that added it for scopes
+  rather than the 229 that `systemd.service` records for services.
   `--expand-environment=no` requires systemd 254 or later, so that is the
   wrapper's effective minimum. `systemd-run --version` on the reference host
   reports 257. A host below the floor fails loudly rather than silently running
@@ -198,7 +207,7 @@ of decisions that need the user's confirmation.
   payload that does not is `SIGKILL`ed, and the caller sees 137. Under the
   pair, a cooperative payload is `SIGTERM`ed at the deadline with status 143,
   and a non-cooperative one is `SIGKILL`ed at deadline plus 20 seconds with
-  1. So pinning `TimeoutStopSec` both narrows the overshoot from the
+  `137`. So pinning `TimeoutStopSec` both narrows the overshoot from the
   90-second default to 20 seconds and makes the caller's status reflect the
   stop.
 
@@ -795,32 +804,34 @@ of decisions that need the user's confirmation.
   than with a `timeout` prefix on the whole command. Rationale: the wrapper
   this plan originally prescribed led with `timeout --kill-after=20s 5m`, and
   that prefix does not bound the workload the way its nominal figure suggests.
-  `timeout` bounds only by signalling the process it supervises, and its
-  `--kill-after=` window is additive rather than nested: the deadline fires
+  The `--kill-after=` window is additive rather than nested: the deadline fires
   first, the grace period runs afterwards, and a workload that ignores the
   first signal is therefore bounded by `5m + 20s`, not by `5m`. That arithmetic
   was reproduced directly — `timeout --kill-after=20s 3s` against a payload
   ignoring `SIGTERM` was killed at 23 seconds, while plain `timeout 3s` left
-  the same payload running to completion. The production datum is consistent
-  with the same class of leak but does not pin the mechanism: the scope for the
-  2026-09-20 roadmap 4.2.3 run logged a 303-second lifetime under a nominally
-  300-second cap, on a suite that had legitimately completed. That overshoot
-  fits neither `5m` nor `5m + 20s`, so it is recorded as evidence that the old
-  form did not hold its nominal bound, not as proof of which additive term
-  produced the extra seconds. `RuntimeMaxSec` is enforced by systemd against
-  the scope's control group, so it stops the whole process tree without
-  depending on a signal propagating from the launcher to the verifier. The
-  grace arithmetic does not disappear, it is merely carried by systemd rather
-  than by `timeout`, so it must be pinned explicitly: the effective bound is
-  `RuntimeMaxSec` plus `TimeoutStopSec`, and leaving the latter at its
-  90-second host default reproduced a 93-second overshoot on a 3-second cap.
-  The paired `-p TimeoutStopSec=20s` therefore preserves the bounded
-  forceful-termination grace the removed `--kill-after=20s` provided, so the
-  total bound stays close to the nominal one. The pipeline is also documented
-  with `set -o pipefail` because a pipeline's status is otherwise `tee`'s, and
-  a failing `make` would be masked by a successful capture. Date/Author:
-  2026-09-22 / implementation agent for issue #765, raised from the roadmap
-  4.2.3 reconciliation (#738).
+  the same payload running to completion. A second and narrower limit is that
+  `timeout` signals the supervised process group, so a descendant that leaves
+  that group by `setsid` or a double fork escapes it entirely; a `setsid`
+  descendant of the payload survived a plain prefix in probing and was stopped
+  by `RuntimeMaxSec`. The production datum is consistent with the same class of
+  leak but does not pin the mechanism: the scope for the 2026-09-20 roadmap
+  4.2.3 run logged a 303-second lifetime under a nominally 300-second cap, on a
+  suite that had legitimately completed. That overshoot fits neither `5m` nor
+  `5m + 20s`, so it is recorded as evidence that the old form did not hold its
+  nominal bound, not as proof of which additive term produced the extra seconds.
+  `RuntimeMaxSec` is enforced by systemd against the scope's control group, so
+  it stops the whole process tree without depending on a process-group signal
+  reaching every descendant. The grace arithmetic does not disappear, it is
+  merely carried by systemd rather than by `timeout`, so it must be pinned
+  explicitly: the effective bound is `RuntimeMaxSec` plus `TimeoutStopSec`, and
+  leaving the latter at its 90-second host default reproduced a 93-second
+  overshoot on a 3-second cap. The paired `-p TimeoutStopSec=20s` therefore
+  preserves the bounded forceful-termination grace the removed
+  `--kill-after=20s` provided, so the total bound stays close to the nominal
+  one. The pipeline is also documented with `set -o pipefail` because a
+  pipeline's status is otherwise `tee`'s, and a failing `make` would be masked
+  by a successful capture. Date/Author: 2026-09-22 / implementation agent for
+  issue #765, raised from the roadmap 4.2.3 reconciliation (#738).
 
 - Decision: record honestly that the reported mechanism for #765 did not
   reproduce locally, and that the correction stands on the reasons above.
@@ -834,12 +845,16 @@ of decisions that need the user's confirmation.
   documented wrapper on the reference host (systemd 257) across the plain,
   property-laden, nested-`make`, and `SIGTERM`-ignoring variants showed the
   payload stopped every time, and the issue's exact `sleep 30` repro reproduced
-  the quoted `Result=success` while the workload was killed on schedule. The
-  genuine defects are the additive grace window and the masked pipeline status,
-  both of which are reproduced and both of which the new wrapper removes. The
-  fix requested by #765 is correct and is adopted; only its stated mechanism is
-  corrected here rather than repeated. Date/Author: 2026-09-22 / implementation
-  agent for issue #765.
+  the quoted `Result=success` while the workload was killed on schedule. A
+  topology probe explains why: `systemd-run --scope` execs the payload in the
+  child `timeout` created, so the payload is `timeout`'s direct child and
+  shares its process group, and the group signal therefore reaches it. The
+  ticket's "capped the launcher" diagnosis is not the mechanism. The genuine
+  defects are the additive grace window, the process-group escape, and the
+  masked pipeline status, all of which are reproduced and all of which the new
+  wrapper removes. The fix requested by #765 is correct and is adopted; only
+  its stated mechanism is corrected here rather than repeated. Date/Author:
+  2026-09-22 / implementation agent for issue #765.
 
 - Decision: replace the direct `Vec<Utf8PathBuf>` proof boundary with a
   private, production-owned generic canonicalization kernel. Rationale: the
@@ -1380,14 +1395,16 @@ No new external dependency is introduced.
   `timeout --kill-after=20s 5m`. That prefix does not bound the workload by its
   nominal figure: the `--kill-after=` grace window is added to the deadline
   rather than nested inside it, so a signal-ignoring workload is bounded by
-  `5m + 20s`. The bound is now the scope property `-p RuntimeMaxSec=8m`, which
-  systemd enforces against the control group, paired with
-  `-p TimeoutStopSec=20s` to keep the forceful-termination grace bounded, and
-  the pipeline is documented with `set -o pipefail` so a failing `make` is not
-  masked by `tee`. Every narrative reference — the Progress log, Surprises &
-  Discoveries, the Decision Log, and the `Concrete steps` caveat — was
-  reconciled to the new form, and one fully composed example command with `tee`
-  inside the scope was added to `Concrete steps`, so the capture matches
+  `5m + 20s`, and a descendant that leaves the supervised process group by
+  `setsid` or a double fork escapes the prefix's signal entirely while the
+  control group still catches it. The bound is now the scope property
+  `-p RuntimeMaxSec=8m`, which systemd enforces against the control group,
+  paired with `-p TimeoutStopSec=20s` to keep the forceful-termination grace
+  bounded, and the pipeline is documented with `set -o pipefail` so a failing
+  `make` is not masked by `tee`. Every narrative reference — the Progress log,
+  Surprises & Discoveries, the Decision Log, and the `Concrete steps` caveat —
+  was reconciled to the new form, and one fully composed example command with
+  `tee` inside the scope was added to `Concrete steps`, so the capture matches
   exactly what the cap governs. Two entries were added to the Decision Log: the
   wrapper decision restated in `RuntimeMaxSec` terms, and a record that the
   mechanism reported by #765 did not reproduce on the reference host (systemd
@@ -1396,10 +1413,13 @@ No new external dependency is introduced.
   effective bound is `RuntimeMaxSec` plus `TimeoutStopSec`, an unpinned stop
   timeout reproduced a 93-second overshoot on a 3-second cap against the host's
   90-second default, so `TimeoutStopSec=20s` is load-bearing rather than
-  cosmetic. The same inert wrapper is prescribed by
-  `docs/execplans/4-2-3-kani-harnesses-for-command-interpolation.md`, where it
-  has already been corrected; the remainder of that reconciliation belongs to
-  roadmap 4.2.3 and is not absorbed here.
+  cosmetic. The sibling wrapper in
+  `docs/execplans/4-2-3-kani-harnesses-for-command-interpolation.md` was
+  partially reconciled by #755, which removed its `timeout` prefix, but it
+  still omits `TimeoutStopSec` and still leaves `tee` outside the scope, so it
+  carries the unbounded stop grace and the masked pipeline status this revision
+  removes. That residue, and the rest of 4.2.3's reconciliation, belong to
+  roadmap 4.2.3 and are escalated as issue #769 rather than absorbed here.
 
 - 2026-06-20 (planning agent, after Logisphere community-of-experts review):
   Added a fourth "output is a rotation of the input interior" assertion to each
