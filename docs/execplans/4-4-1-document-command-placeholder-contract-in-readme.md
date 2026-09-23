@@ -1423,55 +1423,66 @@ the record:
 - `tests/documentation_examples_tests.rs`: `EXPECTED_EXAMPLE_IDS` `readme-`
   block at :54-58, registry test at :143.
 
-### EP-M2 — complete
+### EP-M2 — complete, then partly superseded on rebase
 
-Four documents corrected, one doc comment fixed, no code touched.
+**Read this section as two layers.** EP-M2 was completed on 2026-09-22 against
+the pre-ADR-034 tree, and most of what it wrote was undone a day later when the
+branch was rebased and reconciled. The original record is kept because the
+milestone genuinely ran and its gate evidence is real; the superseding note
+says what now stands.
 
-The four corrections are the ones `Concrete steps` step 5 names, plus the doc
-comment. `docs/developers-guide.md` gained the per-recipe-kind placeholder set
-and an ADR-027 link in §*Command interpolation contract* (~:3363) and a
-corrected lowering-stages bullet (~:392). `docs/users-guide.md` split the
-"Write shell dollar expressions normally" bullet into three, so `{{ ins }}`,
-`$in`-in-`script:`, and the POSIX quoting context each get their own paragraph
-(~:1950), and the migration bullet now says the short forms resolve only in
-`script:` (~:1983). `docs/formal-verification-methods-in-netsuke.md` corrected
-both the Kani section (~:64) and the contract section (~:265), the latter now
-carrying a **Settled** paragraph that answers `FV-CPC-Q1` through `FV-CPC-Q3`
-and points at ADR-027, plus the `[^8]` path fix to
-`src/ir/cmd_interpolate/mod.rs` (~:346). The doc comment on
-`src/ir/cmd_interpolate/mod.rs` now names `$in`/`$out` as script-only and says
-which forms are literal in which recipe kind.
+Originally: four documents corrected, one doc comment fixed, no code touched.
+`docs/developers-guide.md` gained the per-recipe-kind placeholder set and an
+ADR-027 link in §*Command interpolation contract*, plus a corrected
+lowering-stages bullet. `docs/users-guide.md` split the "Write shell dollar
+expressions normally" bullet into three and reworded the migration bullet.
+`docs/formal-verification-methods-in-netsuke.md` corrected both the Kani
+section and the contract section, the latter gaining a **Settled** paragraph
+answering `FV-CPC-Q1` through `FV-CPC-Q3`, plus the `[^8]` path fix. The doc
+comment on `src/ir/cmd_interpolate/mod.rs` named `$in`/`$out` as script-only.
+`docs/netsuke-design.md` was deliberately not edited, as the canonical wording
+the others converged on.
 
-The step-5 verification grep returns **no survivors at all**, which is stronger
-than the plan predicted. The plan's `Acceptance evidence` anticipated surviving
-hits for `$ins` and `$outs`, on the reasoning that those really are literal
-shell variables in both recipe kinds. The reason they no longer survive is that
-the corrected prose in all three documents now names `$in`/`$out` and the
-recipe kind in the same sentence, and `$ins`/`$outs` alongside them, so the
-multiline `rg -U` pattern `\$in.{0,80}remain\s+shell\s+variables` no longer
-matches — the words are still true, they are just no longer adjacent in that
-order. This is not a weakened check; the pattern is unchanged from the plan.
+**What stands after the 2026-09-23 rebase and ADR-034 reconciliation:**
 
-Gate evidence, run sequentially through `scrutineer` with each gate teed to
-`/tmp/<gate>-<branch>-epm2.out`: `make check-fmt` PASS
-(`143 files left unchanged`), `make markdownlint` PASS (`0 error(s)`, 143
-files, spelling included), `make typecheck` PASS, `make lint` PASS with
-`PATH="$HOME/go/bin:$PATH"` (*cargo doc*, *cargo clippy -D warnings*, both
-Whitaker passes, Python lint, `yamllint`, `actionlint`), `make test` PASS
-(`3188 tests run: 3188 passed, 5 skipped`, plus 82/2/39 doctests), `make nixie`
-PASS. `scrutineer` additionally hashed the five modified files before and after
-the gate run and found them byte-identical, so no gate reformatted the tree.
+- `docs/users-guide.md` — **no branch change at all.** `main` rewrote this
+  section when ADR-034 landed, and its wording is better than the branch's: it
+  carries the three-term marker / internal-token / shell-variable glossary this
+  plan had asked for. The file is byte-identical to `origin/main`.
+- `src/ir/cmd_interpolate/mod.rs` — **no branch change at all**, byte-identical
+  to `origin/main`. The doc comment EP-M2 wrote described the removed asymmetry.
+- `docs/developers-guide.md` — the asymmetry wording is gone; what survives is
+  the still-correct clarification that the backtick-parity and `shlex` guards
+  are `command:`-only, which ADR-034 did not touch, plus an ADR-034 citation.
+- `docs/formal-verification-methods-in-netsuke.md` — the **Settled** paragraph
+  and the `[^8]` path fix survive; the first `FV-CPC-Q1` bullet now states the
+  uniform set and credits ADR-034.
+- `docs/netsuke-design.md` — now *is* edited, minimally, to state the uniform
+  rule and cite ADR-034.
 
-One formatting repair was needed after the first `mdtablefix` pass. The rewrap
-split a bold span across a line break in `docs/developers-guide.md`, rendering
-``**`script:`-only**`` as a stray `**` at end of line followed by
-`` `script:`-only** `` on the next. Reworded to drop the bold entirely rather
-than fight the wrapper. Recorded because it is the second time in this plan that
-`mdtablefix --wrap` has damaged emphasis, and it is the reason the file is
-worth reading back after each automated rewrap rather than trusting exit 0.
+So EP-M2's requirement — that no document contradict another about the
+placeholder contract — holds, but it is satisfied largely by `main`'s work
+rather than the branch's. The milestone stays `[x]`: its obligation was
+consistency, and the tree is consistent.
 
-`docs/netsuke-design.md:290-291` was deliberately **not** edited, per the plan:
-it is the canonical wording the other three converge on.
+Gate evidence for the original EP-M2 run, through `scrutineer`:
+`make check-fmt`, `make markdownlint`, `make typecheck`, `make lint`,
+`make test` (`3188 tests run: 3188 passed, 5 skipped`), and `make nixie` all
+PASS. That evidence is **stale for acceptance** — it was bound to a head that
+no longer exists. The rebased and reconciled head was re-gated on 2026-09-23:
+all six gates PASS, `3313 tests run: 3313 passed, 5 skipped`, with
+`NETSUKE_REQUIRE_NINJA=1`.
+
+One formatting lesson survives both passes: `mdtablefix --wrap` split a bold
+span across a line break in `docs/developers-guide.md`, rendering
+``**`script:`-only**`` as a stray `**` at end of line. Reworded to drop the
+bold rather than fight the wrapper. It is the second time in this plan that the
+rewrapper has damaged emphasis, which is why each file is read back after an
+automated rewrap rather than trusting exit 0.
+
+The step-5 verification grep is recorded in `Concrete steps`; its expected
+survivors changed with ADR-034, because a statement that a dollar form is a
+shell variable in *both* recipe kinds is now correct and needs no edit.
 
 - [x] EP-M1 — ADR-027 written, indexed, and referenced from the design
       document. Landed as `3594b568`. `make check-fmt` and `make markdownlint`
