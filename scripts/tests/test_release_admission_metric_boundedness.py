@@ -34,6 +34,9 @@ from release_admission_test_support import (
     operation_records,
 )
 
+if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
 IDENTIFIER_TEXT = st.text(
     alphabet=st.characters(blacklist_categories=("Cs",), blacklist_characters="\x00"),
     min_size=1,
@@ -86,6 +89,22 @@ def _assert_github_requests_cross_boundary(
     ], f"the exact workflow-run request must cross the boundary; {diagnostic}"
 
 
+def _value_contains_identifier(value: object, identifiers: set[str]) -> bool:
+    """Return whether a string value contains a generated identifier."""
+    return isinstance(value, str) and any(
+        identifier in value for identifier in identifiers
+    )
+
+
+def _assert_values_exclude_identifiers(
+    values: cabc.Iterable[object], identifiers: set[str], message: str
+) -> None:
+    """Verify no string value contains a generated identifier."""
+    assert all(
+        not _value_contains_identifier(value, identifiers) for value in values
+    ), message
+
+
 def _assert_identifiers_are_excluded(
     metrics: list[dict[str, object]],
     traces: list[dict[str, object]],
@@ -95,17 +114,17 @@ def _assert_identifiers_are_excluded(
     for record in metrics:
         labels = record["labels"]
         assert isinstance(labels, dict), "every emitted metric must retain labels"
-        assert not any(
-            isinstance(value, str)
-            and any(identifier in value for identifier in identifiers)
-            for value in labels.values()
-        ), "generated identifiers must never become metric label values"
+        _assert_values_exclude_identifiers(
+            labels.values(),
+            identifiers,
+            "generated identifiers must never become metric label values",
+        )
     for trace in traces:
-        assert not any(
-            isinstance(value, str)
-            and any(identifier in value for identifier in identifiers)
-            for value in trace.values()
-        ), "generated identifiers must never become trace field values"
+        _assert_values_exclude_identifiers(
+            trace.values(),
+            identifiers,
+            "generated identifiers must never become trace field values",
+        )
 
 
 @pytest.mark.parametrize(
