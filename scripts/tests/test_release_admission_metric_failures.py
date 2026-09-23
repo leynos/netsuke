@@ -129,17 +129,9 @@ def _assert_malformed_revision_stops_followup_requests(
         ".sha",
     ], "the sole GitHub call must resolve the malformed revision"
     assert not any(
-        call["command"] == "git"
-        and typ.cast("list[str]", call["arguments"])[0:1] == ["fetch"]
+        call["command"] == "git" and "fetch" in typ.cast("list[str]", call["arguments"])
         for call in calls
     ), "a mismatched revision must not start Git fetch"
-    assert not any(
-        any(
-            "/actions/runs?" in argument
-            for argument in typ.cast("list[str]", call["arguments"])
-        )
-        for call in github_calls
-    ), "a mismatched revision must not start workflow-run lookup"
 
 
 @pytest.mark.parametrize(
