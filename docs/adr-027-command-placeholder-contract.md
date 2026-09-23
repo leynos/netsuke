@@ -20,7 +20,7 @@ against the implementation on the revision date.
 
 ## Date
 
-2026-09-19, revised 2026-09-23
+2026-09-19
 
 ## Context and problem statement
 
@@ -111,9 +111,10 @@ toward the total, and two balanced but unrelated backticks do not. It may
 therefore reject valid shell text. A future release may accept more, and such
 widening is **not** treated as a breaking change.
 
-**Not a guarantee at all.** Netsuke does not inspect backticks the author
-wrote. A balanced pair is passed through to the shell and executed as command
-substitution. The single exception is that `quote_double_quoted_path`
+**Not a guarantee at all.** Netsuke leaves author-written backticks untouched.
+On POSIX routes, active backticks can trigger command substitution; backticks
+inside single quotes remain literal. Path substitution separately protects
+Netsuke-owned values: `quote_double_quoted_path`
 (`src/ir/cmd_interpolate/mod.rs:154-163`) backslash-escapes a backtick that
 falls inside a *Netsuke-substituted path* landing in a double-quoted context.
 

@@ -289,8 +289,9 @@ questions this section raised are now answered:
   inside a backtick or `$( … )` region is a promised invariant. Rejecting a
   `command:` whose substituted text contains an odd backtick count is a
   conservative whole-string parity check that is *not* promised and may widen
-  without a breaking change. Netsuke makes no guarantee about backticks the
-  author wrote, which the shell will execute.
+  without a breaking change. Netsuke leaves author-written backticks untouched.
+  On POSIX routes, active backticks can trigger shell command substitution;
+  backticks inside single quotes remain literal.
 - `shlex::split` is part of the acceptance contract — its rejection is stable
   and localized — but **not** a stability commitment about the precise accepted
   set, because `Cargo.toml` carries a caret requirement rather than a version

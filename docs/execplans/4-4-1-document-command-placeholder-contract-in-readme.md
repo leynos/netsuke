@@ -150,11 +150,13 @@ and `D1-RESOLVED` in `Decision log` for what replaced `D1-LEGACY`.
   or active command substitution as protected. Confirmed by
   `power_shell_rejects_markers_without_a_context_safe_encoder`, case
   `command_substitution` (`src/ir/cmd_interpolate_power_shell_tests.rs:9-22`).
-- Neither check sanitizes author-written shell text. A balanced backtick pair
-  containing text the author typed reaches the shell and is executed as command
-  substitution. The only exception is that `quote_double_quoted_path`
-  (`src/ir/cmd_interpolate/mod.rs:153-163`) backslash-escapes a backtick inside
-  a **Netsuke-substituted path** that lands in a double-quoted context.
+- Neither check sanitizes author-written shell text. Backticks the author
+  typed reach the shell unchanged. On POSIX routes, active backticks can
+  trigger command substitution; backticks inside single quotes remain literal.
+  Path substitution separately protects Netsuke-owned values:
+  `quote_double_quoted_path` (`src/ir/cmd_interpolate/mod.rs:153-163`)
+  backslash-escapes a backtick inside a **Netsuke-substituted path** that lands
+  in a double-quoted context.
 
 **Fact C — `shlex::split` is a rejection gate on one route only.**
 `is_valid_command_for_shell` calls `shlex::split(command).is_some()` on the
@@ -897,9 +899,9 @@ ADR-027 must say.
     inside single quotes too — so it may reject valid shell text such as
     `echo 'a` followed by a backtick and a closing quote. A future release may
     accept more, and such widening is **not** treated as a breaking change.
-  - **Not a guarantee at all.** Netsuke does not inspect backticks the author
-    wrote. A balanced pair is passed to the shell and executed as command
-    substitution.
+  - **Not a guarantee at all.** Netsuke leaves author-written backticks
+    untouched. On POSIX routes, active backticks can trigger command
+    substitution; backticks inside single quotes remain literal.
   - **Route scope.** PowerShell is outside the backtick half of the invariant
     and outside the parity check, because its backtick is an escape character,
     but it is **inside** the `$( … )` half: PowerShell rejects a marker in a
@@ -1075,7 +1077,8 @@ Run everything from the repository root,
    entry, and add the design-document reference. Commit as EP-M1. **Done** as
    `3594b568`.
 
-   ```sh
+   ```bash
+   set -euo pipefail
    make check-fmt 2>&1 | tee /tmp/check-fmt-netsuke-$(git branch --show-current).out
    make markdownlint 2>&1 | tee /tmp/markdownlint-netsuke-$(git branch --show-current).out
    ```
@@ -1121,9 +1124,13 @@ Run everything from the repository root,
 6. Add `tests/readme_security_tests.rs` and the three identifiers to
    `EXPECTED_EXAMPLE_IDS`. Observe red.
 
-   ```sh
-   cargo nextest run --test readme_security_tests --test documentation_examples_tests \
-     2>&1 | tee /tmp/red-netsuke-$(git branch --show-current).out
+   ```bash
+   set -euo pipefail
+   if cargo nextest run --test readme_security_tests --test documentation_examples_tests \
+     2>&1 | tee /tmp/red-netsuke-$(git branch --show-current).out; then
+     printf '%s\n' 'Expected the missing-example tests to fail' >&2
+     exit 1
+   fi
    ```
 
    Expect failures naming `readme-safe-placeholder-manifest`,
@@ -1135,7 +1142,8 @@ Run everything from the repository root,
 7. Write the README section with all three marked fences. Observe green, then
    run the full gates and commit as EP-M3.
 
-   ```sh
+   ```bash
+   set -euo pipefail
    NETSUKE_REQUIRE_NINJA=1 cargo nextest run \
      --test readme_security_tests --test documentation_examples_tests \
      2>&1 | tee /tmp/green-netsuke-$(git branch --show-current).out
@@ -1216,10 +1224,12 @@ Run everything from the repository root,
     Delegate this run to the `scrutineer` sub-agent rather than running it in
     the planning context.
 
-    ```sh
+    ```bash
+    set -euo pipefail
     make check-fmt 2>&1 | tee /tmp/check-fmt-netsuke-$(git branch --show-current).out
     make typecheck 2>&1 | tee /tmp/typecheck-netsuke-$(git branch --show-current).out
     PATH="$HOME/go/bin:$PATH" make lint 2>&1 | tee /tmp/lint-netsuke-$(git branch --show-current).out
+    make doc-coverage 2>&1 | tee /tmp/doc-coverage-netsuke-$(git branch --show-current).out
     NETSUKE_REQUIRE_NINJA=1 make test 2>&1 | tee /tmp/test-netsuke-$(git branch --show-current).out
     make markdownlint 2>&1 | tee /tmp/markdownlint-netsuke-$(git branch --show-current).out
     make nixie 2>&1 | tee /tmp/nixie-netsuke-$(git branch --show-current).out
@@ -1233,9 +1243,10 @@ A reader can verify the outcome without reading any test:
   `## Release and development status` there is a
   `## Security and command interpolation` section. It names `{{ ins }}` and
   `{{ outs }}` as markers, and dollar-prefixed forms as shell variables in both
-  recipe kinds. It says plainly that a backtick pair the author wrote is
-  executed by the shell. It says which recipe kinds and which shells the
-  `shlex` gate covers.
+  recipe kinds. It states that author-written backticks can execute commands
+  when active as POSIX command substitution, without implying that literal
+  backticks inside single quotes execute. It says which recipe kinds and which
+  shells the `shlex` gate covers.
 - Copy the section's rejected example into a `Netsukefile` and run
   `netsuke --json --locale en-GB`. The output contains
   `Invalid command interpolation:` and no build runs.
@@ -1529,7 +1540,24 @@ no production-module change is made here. This pre-existing issue is distinct
 from the public Rustdoc and coverage gates, which pass; it is not claimed as an
 EP-M2 deliverable.
 
-The final full gate sequence and whole-branch CodeRabbit review are pending.
+The final full gate sequence passed on `636bf523`: formatting, typechecking,
+lint, documentation coverage (98.81%), all 3338 Nextest cases (five skipped),
+workspace doctests, Markdown lint, and Mermaid validation. README parity and
+example/table conformance also passed. Logs:
+`/tmp/{parity,conformance,check-fmt,typecheck,lint,doc-coverage,test,markdownlint,nixie}-netsuke-readme-m5.out`.
+
+The whole-branch review against merge base `c31057c1` completed with seven
+findings (`/tmp/coderabbit-netsuke-readme-final.out`). Four repeat the already
+dispositioned README direct-address requests. Three are repaired: the plan's
+Bash pipelines explicitly enable fail-fast and `pipefail` (the expected-red run
+uses an `if` guard and requires inspection of the named failures); the ADR Date
+field contains only its original ISO date, retaining the revision note; and the
+formal guide, ADR, and plan distinguish active POSIX backticks from literal
+backticks inside single quotes. The full gate run already used `pipefail`; the
+correction makes the reproducible plan commands match it. The final gate recipe
+now also lists the documentation-coverage gate actually run throughout this
+task. Only these documentation repairs remain to be gated and reviewed before
+completion.
 
 ### EP-M1 — complete (`3594b568`)
 
