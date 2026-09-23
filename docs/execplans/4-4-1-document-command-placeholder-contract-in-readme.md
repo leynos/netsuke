@@ -299,7 +299,7 @@ Skills to load:
 
 Upstream artefacts, at the revisions current on branch
 `4-4-1-document-command-placeholder-contract-in-readme`, based on `origin/main`
-at commit `81d44f89`:
+at commit `c31057c1` after the 2026-09-23 rebase:
 
 - `docs/roadmap.md`, phase 4, item **4.4.1** (lines 530-537) and its four
   sub-items. Identifier used below: `RM-4.4.1`, with sub-items `RM-4.4.1.a`
@@ -465,13 +465,12 @@ Stop and escalate when any threshold is reached. Do not work around them.
   at Stage A both target this. The existing README already says "it is not a
   sandbox"; keep that framing and strengthen it.
 
-- **Risk: the two new README examples make the test suite slower or flaky.**
-  The e2e harness needs `ninja` on `PATH` and skips when absent
-  (`tests/documentation_examples_e2e_tests.rs:46-50`). Severity: low.
-  Likelihood: low. Mitigation: the rejection example needs no build at all — it
-  fails during IR lowering, before Ninja is invoked — so it can be a plain
-  integration test with no external tool. Only the accepting example touches
-  Ninja, and it reuses the existing skip guard.
+- **Risk: executable examples require external tools.** Severity: low.
+  Likelihood: low. Only the accepted build invokes real Ninja; its isolated
+  child environment receives the host search path through `mockable::Env`.
+  Missing Ninja fails this case rather than skipping it. The quoted-path test
+  inspects generated text, and the rejected example fails during lowering with
+  an intentionally nonexistent Ninja path. EP-M3 verified all three.
 
 - **Risk: translated security prose drifts from the English original.** No
   gate checks it; the `typos` gate explicitly excludes the six files. Severity:
@@ -495,12 +494,9 @@ Stop and escalate when any threshold is reached. Do not work around them.
   genuinely absent, record that `github-actions-lint` did not run and say so in
   the evidence rather than reporting a clean gate.
 
-- **Risk: the ADR number collides.** `docs/` already contains duplicate
-  numbers at 003, 004, and 014. Severity: low. Likelihood: low. Mitigation: the
-  highest existing number is 020
-  (`docs/adr-020-release-admission-observability.md`). Use 021 and re-run
-  `ls docs/adr-*` immediately before creating the file, in case another branch
-  has landed one.
+- **Resolved risk: the ADR number collided before implementation.** The
+  record was allocated as ADR-027 during EP-M1, and the index and references
+  use that number. No further record is allocated by the remaining milestones.
 
 ## Verification plan
 
@@ -1408,8 +1404,44 @@ file copies, with clean `git status --porcelain` between mutations:
   failed because even parity was rejected (12 passed, 13 failed).
 
 The five executable obligations are discharged. The structural-parity
-obligation remains for EP-M4. Milestone review is pending; no translation work
-starts until CodeRabbit concerns have been dispositioned.
+obligation remains for EP-M4. The committed EP-M3 review completed with zero
+findings against `24dfc3fe`:
+`coderabbit review --agent --type committed --base-commit 24dfc3fe`, log
+`/tmp/coderabbit-netsuke-readme-m3.out`. The restored focused suite passed
+56/56 before that review; the evidence-only commit `31ed9e68` passed
+formatting, Markdown, and Mermaid checks. EP-M4 may proceed.
+
+### EP-M4 — in progress (2026-09-23)
+
+A `scribe` owns only the six translated READMEs, using the approved English
+section through context pack `pk_imhdep7m`. The parent owns the manual parity
+script and repository-layout obligation. The script compares heading counts and
+ordered levels outside fenced examples and reports every mismatch; it does not
+claim to verify translated meaning. No existing README parity helper was found
+in `scripts/`. The script remains outside Makefile and CI gates, as
+`D-NO-PARITY-GATE` requires. `scrutineer` validated `bash -n` and ShellCheck,
+then exercised the script in an isolated fixture: identical editions pass, a
+missing heading fails, a changed level fails, and a fenced fake heading is
+ignored. Evidence: `/tmp/parity-checker-netsuke-m4.out` (exit statuses 0, 1, 1,
+0 respectively).
+
+All six translations now carry the same contract. The parent checked the
+localized terminology and qualified backtick use as command substitution, to
+preserve the PowerShell distinction. All seven editions have 13 headings with
+identical levels; three YAML fences and the table data match exactly, and no
+translation has a `tested-example` marker. Evidence:
+`/tmp/readme-parity-conformance-netsuke-m4-final.out`. Early conformance-script
+failures came from incorrect expected heading counts and comparing translated
+table headers; correcting the external checker required no product changes.
+
+The first formatting gate requested one additional Japanese paragraph wrap;
+`make fmt` applied it and the subsequent check passed. Full gates passed:
+`check-fmt`, `typecheck`, `lint`, `doc-coverage` (98.81%),
+`NETSUKE_REQUIRE_NINJA=1 make test` (3338 passed, five skipped; doctests
+passed), `markdownlint`, and `nixie`. Logs:
+`/tmp/{check-fmt,typecheck,lint,doc-coverage,test,markdownlint,nixie}-netsuke-readme-m4-fix1.out`.
+`OBL-STRUCTURAL-PARITY` is discharged. Commit and milestone review follow;
+EP-M5 has not started.
 
 ### EP-M1 — complete (`3594b568`)
 
@@ -1535,7 +1567,7 @@ shell variable in *both* recipe kinds is now correct and needs no edit.
       comment corrected. Precedes the README deliberately. All six gates pass;
       the step-5 grep returns *no* survivors at all.
 
-- [ ] EP-M3 — README section and three executable examples; red observed
+- [x] EP-M3 — README section and three executable examples; red observed
       before green; three negative controls recorded after the commit.
 - [ ] EP-M4 — six translated READMEs regain structural parity;
       `docs/repository-layout.md` records the recurring obligation.

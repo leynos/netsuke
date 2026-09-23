@@ -170,6 +170,121 @@ Rezept auslassen.
 
 ______________________________________________________________________
 
+## Sicherheit und Befehlsinterpolation
+
+Ein `Netsukefile` führt Befehle aus und kann unreine Vorlagen-Helfer verwenden.
+Behandeln Sie es wie ein `Makefile`: Prüfen Sie nicht vertrauenswürdige
+Manifeste vor der Ausführung. Netsuke verringert einige Zitierfehler, ist aber
+keine Sandbox. Auf POSIX-Shell-Routen führt die Shell selbst geschriebene
+Backtick-Paare aus, wenn sie als Befehlssubstitution verwendet werden.
+
+**Wovor Netsuke Sie nicht schützt.** Selbst geschriebene Backticks und `$( … )`
+können Befehle ausführen. Unter Unix übergibt Ninja den Befehlstext an `sh -c`;
+Netsuke bereinigt diesen Text nicht.
+
+**Eingesetzte Werte werden nicht zitiert.** Beliebige Jinja-Werte, `raw`-
+Blöcke und selbst geschriebene Shell-Fragmente werden zu gewöhnlichem
+Rezepttext. Setzen Sie keine nicht vertrauenswürdigen Werte in Shell-Befehle
+ein: Das Zitieren von Pfadplatzhaltern schützt diese Werte nicht.
+
+**Was Netsuke umschreibt.** Nur `{{ ins }}` und `{{ outs }}` sind
+Netsuke-Marker. Diese Menge ist in `command:`- und `script:`-Rezepten
+identisch. Alle Dollarformen unten sowie `$PATH` bleiben in beiden Rezeptarten
+Shell-Variablen. Netsuke verdoppelt ihre Dollarzeichen für Ninja, damit die
+ausgewählte Shell sie unverändert erhält; Ninjas eigene Regelvariablen `$in` und
+`$out` werden dadurch nicht verfügbar.
+
+Tabelle 1: Zu Eingabe- oder Ausgabepfaden umgeschriebene Formen (`yes`
+bedeutet: wird umgeschrieben).
+
+| Form                                                | `command:` | `script:` |
+| --------------------------------------------------- | ---------- | --------- |
+| `{{ ins }}`                                         | yes        | yes       |
+| `{{ outs }}`                                        | yes        | yes       |
+| `$in`, `$out`, `$ins`, `$outs`, `$input`, `$output` | no         | no        |
+
+Mit einer vorhandenen Datei `input.txt` kopiert dieses POSIX-Manifest deren
+Inhalt nach `output.txt` und prüft, ob die `PATH`-Variable der Shell nicht leer
+ist:
+
+```yaml
+netsuke_version: '1.0.0'
+targets:
+  - name: output.txt
+    sources: input.txt
+    command: 'cat {{ ins }} > {{ outs }} && test -n "$PATH"'
+defaults: [output.txt]
+```
+
+**Was Netsuke zitiert.** Automatisches Shell-Quoting erhalten nur Netsukes
+eigene Pfadersetzungen. POSIX und Bash verwenden `shell-quote` und eine
+kontextgerechte Kodierung; PowerShell verwendet eine eigene Literal-Kodierung
+und weist Marker in zitierten Bereichen zurück. Bei einer vorhandenen Datei
+`input file.txt` übergibt dieses POSIX-Beispiel den Pfad als ein Argument und
+erzeugt `output.txt`:
+
+```yaml
+netsuke_version: '1.0.0'
+targets:
+  - name: output.txt
+    sources: input file.txt
+    command: 'cat {{ ins }} > {{ outs }}'
+defaults: [output.txt]
+```
+
+**Backticks und Befehlssubstitution.** Netsuke weist Marker innerhalb von
+Backtick-Befehlssubstitutionen auf POSIX und Bash sowie innerhalb von `$( … )`
+auf allen Shell-Routen zurück, in beiden Rezeptarten. PowerShell verwendet
+Backticks als Escapezeichen und fällt nicht unter die Backtick-Einschränkung,
+weist Marker in `$( … )` aber weiterhin zurück. Diese Markergrenze ist eine
+zugesicherte Invariante.
+
+Unabhängig davon weisen POSIX- und Bash-`command:`-Rezepte derzeit eine
+ungerade Gesamtzahl von Backticks nach der Ersetzung zurück. Die konservative
+Zählung umfasst auch Backticks in einfachen Anführungszeichen; sie ist kein
+Shell-Parser. `script:`-Rezepte und PowerShell führen diese Zählung nicht aus.
+Eine künftige Version kann ohne inkompatible Änderung mehr akzeptieren.
+Ausgewogene, vom Autor geschriebene Befehlssubstitutionen bleiben aktiv.
+
+Dieses POSIX-Manifest wird zurückgewiesen, bevor Ninja ausgeführt wird. Führen
+Sie `netsuke --json --locale en-GB` aus, um die Ursache zu sehen:
+`Invalid command interpolation:`, gefolgt vom problematischen Ausschnitt. Die
+menschenlesbare Standardausgabe zeigt möglicherweise nur den Fehler beim
+Erstellen des Graphen:
+
+```yaml
+netsuke_version: '1.0.0'
+targets:
+  - name: output.txt
+    sources: input.txt
+    command: 'echo `cat {{ ins }}` > {{ outs }}'
+defaults: [output.txt]
+```
+
+**Die `shlex`-Prüfung.** POSIX- und Bash-`command:`-Rezepte müssen nach der
+Ersetzung `shlex::split` bestehen oder erhalten beim Überführen in die
+Zwischendarstellung dieselbe lokalisierte Diagnose. `script:`-Rezepte und
+PowerShell umgehen diese Prüfung. Netsuke führt die zurückgegebenen Tokens
+nicht aus. `shlex` nimmt keine Expansion vor und behandelt Backticks als
+gewöhnliche Zeichen: Das Bestehen macht einen Befehl nicht sicher. Verwenden
+Sie es nicht als Einschleusungsprüfung.
+
+Zurückweisungen gehören zum beobachtbaren Vertrag, doch die genaue Menge
+akzeptierter Eingaben ist keine Stabilitätszusage: Sie hängt von der beim
+Erstellen von Netsuke aufgelösten `shlex`-Version ab. Wenn eine künftige
+Version zuvor zurückgewiesenen Text akzeptiert, ist das keine inkompatible
+Änderung; wenn sie zuvor akzeptierten Text zurückweist, ist das ein im
+Changelog festzuhaltender Fehler, keine Richtlinienänderung.
+
+**Stabilität und weiterführende Informationen.** Netsuke ist vor Version 1.0;
+Schnittstellen können sich noch ändern. Die begrenzten Garantien oben machen
+beliebige Rezepte nicht sicher. Shell-Routen werden in der
+[Sicherheitsgrenze im Benutzerhandbuch](docs/users-guide.md#review-the-safety-boundary)
+erläutert; die Entscheidungen stehen in
+[ADR-027](docs/adr-027-command-placeholder-contract.md).
+
+______________________________________________________________________
+
 ## Release- und Entwicklungsstatus
 
 Das Release v0.1.0-beta3 ist eine nützliche Vorschau für Früheinsteiger, keine
@@ -205,10 +320,10 @@ werden können. Beta2-Manifeste, die wörtliche Shell-Dollar-Ausdrücke verwende
 müssen migriert werden; siehe die
 [Sicherheitsgrenze im Benutzerhandbuch](docs/users-guide.md#review-the-safety-boundary).
 
-Ein `Netsukefile` kann Befehle ausführen und unreine Vorlagen-Helfer verwenden.
-Es sollte mit derselben Sorgfalt behandelt werden wie ein `Makefile`: Prüfen
-Sie nicht vertrauenswürdige Manifeste, bevor Sie sie ausführen. Netsuke
-maskiert unterstützte Pfadersetzungen, ist jedoch keine Sandbox.
+Weitere Einzelheiten finden Sie unter
+[Sicherheit und Befehlsinterpolation](#sicherheit-und-befehlsinterpolation)
+sowie in der
+[Sicherheitsgrenze im Benutzerhandbuch](docs/users-guide.md#review-the-safety-boundary).
 
 ______________________________________________________________________
 

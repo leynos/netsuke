@@ -63,6 +63,11 @@ output and some leaf files so the long-lived structure remains visible.
   overview, linked from the localization menu at the top of each README. They
   follow [the localization glossary](localization-glossary.md) and are exempt
   from the en-GB-oxendict spelling gate via `typos.local.toml`.
+- README maintenance: mirror section changes in all six translated editions,
+  preserving heading order and levels, examples, and safety boundaries. Run
+  `bash scripts/check-readme-parity.sh` to compare heading counts and level
+  sequences; review translated meaning and example content separately. The
+  script is a manual reviewer aid and is not wired into continuous integration.
 - `.cargo/`: Cargo configuration that Cargo auto-discovers. It holds the
   repository's build standard: the `rustflags` every build takes — the parallel
   `rustc` frontend, plus the `mold` linker under a Linux-only `cfg` table. It
