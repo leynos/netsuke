@@ -117,14 +117,13 @@ def test_malformed_revision_fails_as_mismatch_before_followup_requests(
     ), "workflow outputs must retain the gate metric's mismatch category"
     assert_failure_trace_sequence(traces, "resolve_tag_commit", "mismatch")
 
-    metric_label_values = [
-        value
+    assert all(
+        forbidden_revision not in value
         for record in metrics
         for value in typ.cast("dict[str, str]", record["labels"]).values()
-    ]
-    assert all(revision not in value for value in metric_label_values), (
-        "malformed revisions must never become metric label values"
-    )
+        for forbidden_revision in (revision, revision.rstrip("\n"))
+        if forbidden_revision
+    ), "malformed revisions must never become metric label values"
 
     github_calls = [call for call in calls if call["command"] == "gh"]
     assert len(github_calls) == 1, (
