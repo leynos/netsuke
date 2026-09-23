@@ -170,16 +170,37 @@ of decisions that need the user's confirmation.
 
   `TimeoutStopSec=20s` preserves the bounded forceful-termination grace period
   that the removed `--kill-after=20s` used to provide: systemd sends `SIGTERM`,
-  then escalates to `SIGKILL` when that grace expires. It is not optional.
-  `RuntimeMaxSec` alone stops a cooperative payload, but a scope whose stop
-  does not complete within `TimeoutStopSec` is only escalated on that timeout,
-  and the scope's own exit status is zero in that case — a workload ignoring
-  the first signal runs on, and the wrapper still reports success. Probing
-  `RuntimeMaxSec=3s` without a paired `TimeoutStopSec` against a `SIGTERM`-
-  ignoring payload confirmed a zero status with the payload's completion marker
-  written six seconds in. With the pair in place the same probe exits 143 at
-  the deadline with the marker absent, so `TimeoutStopSec` is what makes the
-  bound both real and observable.
+  then escalates to `SIGKILL` when that grace expires. It is not optional,
+  because it governs what happens after the deadline and without it a
+  non-cooperative payload escapes the nominal cap. The distinction that matters
+  is between the scope's state and the status the caller sees. Scope units have
+  no main process, so the exit statuses of the processes inside one are not
+  what defines its failure state, and `systemd-run --scope` runs synchronously
+  and propagates the command's status to the caller. Reaching `RuntimeMaxSec`
+  therefore puts the scope into a failure state (`Result=timeout`) while the
+  status reported to the caller can still be zero.
+
+  Probes on the reference host (systemd 257) show why the pair is not optional.
+  `RuntimeMaxSec` alone does not bound the payload at the nominal figure: the
+  stop timeout applies after the deadline, so the real bound is `RuntimeMaxSec`
+  plus `TimeoutStopSec`. A payload ignoring `SIGTERM` and sleeping 200 seconds
+  under `RuntimeMaxSec=3s` alone was killed at **93 seconds**, not 3 — 3
+  seconds of runtime plus the host's default `TimeoutStopSec` of 90 seconds.
+  That is the same additive-grace arithmetic the removed `--kill-after=` had,
+  merely with a larger default, and it is why the wrapper pins
+  `TimeoutStopSec=20s`: with the pair the same payload is stopped at 23 seconds
+  instead of 93.
+
+  The status the caller sees varies with how the payload ends, which is the
+  second reason to prefer a visible bound. Under `RuntimeMaxSec` alone, a
+  payload that finishes inside the stop-timeout window exits on its own and the
+  caller sees status 0 even though the scope is recorded as `Result=timeout`; a
+  payload that does not is `SIGKILL`ed, and the caller sees 137. Under the
+  pair, a cooperative payload is `SIGTERM`ed at the deadline with status 143,
+  and a non-cooperative one is `SIGKILL`ed at deadline plus 20 seconds with
+  1. So pinning `TimeoutStopSec` both narrows the overshoot from the
+  90-second default to 20 seconds and makes the caller's status reflect the
+  stop.
 
   `set -o pipefail` is required when the command is piped into `tee`. A
   pipeline's exit status is otherwise `tee`'s, which is zero whenever the
@@ -778,18 +799,28 @@ of decisions that need the user's confirmation.
   `--kill-after=` window is additive rather than nested: the deadline fires
   first, the grace period runs afterwards, and a workload that ignores the
   first signal is therefore bounded by `5m + 20s`, not by `5m`. That arithmetic
-  is what production recorded — the scope for the 2026-09-20 roadmap 4.2.3 run
-  logged a 303-second lifetime under a nominally 300-second cap, on a suite
-  that had legitimately completed. `RuntimeMaxSec` is enforced by systemd
-  against the scope's control group, so it stops the whole process tree without
-  depending on a signal propagating from the launcher to the verifier, and it
-  cannot be extended by a signal-ignoring payload. The paired
-  `-p TimeoutStopSec=20s` preserves the bounded forceful-termination grace the
-  removed `--kill-after=20s` provided, so the total bound stays close to the
-  nominal one. The pipeline is also documented with `set -o pipefail` because a
-  pipeline's status is otherwise `tee`'s, and a failing `make` would be masked
-  by a successful capture. Date/Author: 2026-09-22 / implementation agent for
-  issue #765, raised from the roadmap 4.2.3 reconciliation (#738).
+  was reproduced directly — `timeout --kill-after=20s 3s` against a payload
+  ignoring `SIGTERM` was killed at 23 seconds, while plain `timeout 3s` left
+  the same payload running to completion. The production datum is consistent
+  with the same class of leak but does not pin the mechanism: the scope for the
+  2026-09-20 roadmap 4.2.3 run logged a 303-second lifetime under a nominally
+  300-second cap, on a suite that had legitimately completed. That overshoot
+  fits neither `5m` nor `5m + 20s`, so it is recorded as evidence that the old
+  form did not hold its nominal bound, not as proof of which additive term
+  produced the extra seconds. `RuntimeMaxSec` is enforced by systemd against
+  the scope's control group, so it stops the whole process tree without
+  depending on a signal propagating from the launcher to the verifier. The
+  grace arithmetic does not disappear, it is merely carried by systemd rather
+  than by `timeout`, so it must be pinned explicitly: the effective bound is
+  `RuntimeMaxSec` plus `TimeoutStopSec`, and leaving the latter at its
+  90-second host default reproduced a 93-second overshoot on a 3-second cap.
+  The paired `-p TimeoutStopSec=20s` therefore preserves the bounded
+  forceful-termination grace the removed `--kill-after=20s` provided, so the
+  total bound stays close to the nominal one. The pipeline is also documented
+  with `set -o pipefail` because a pipeline's status is otherwise `tee`'s, and
+  a failing `make` would be masked by a successful capture. Date/Author:
+  2026-09-22 / implementation agent for issue #765, raised from the roadmap
+  4.2.3 reconciliation (#738).
 
 - Decision: record honestly that the reported mechanism for #765 did not
   reproduce locally, and that the correction stands on the reasons above.
@@ -1180,11 +1211,11 @@ systemd-run \
 governs: a run stopped by `RuntimeMaxSec` leaves a capture that ends where the
 budget ran out rather than a capture the scope cannot reach. Wrapping the
 pipeline in `bash -c` is what allows that, and `set -o pipefail` inside the
-same shell keeps the scope's exit status equal to the verifier's — without it
-the status would be `tee`'s, which is zero whenever the capture succeeded, so a
-failing verifier would be masked by a successful `tee`. A pipeline written
-outside the scope cannot carry `pipefail` into it, which is the reason the
-pipeline travels as the scope's payload.
+same shell keeps the status reported to the caller equal to the verifier's —
+without it the status would be `tee`'s, which is zero whenever the capture
+succeeded, so a failing verifier would be masked by a successful `tee`. A
+pipeline written outside the scope cannot carry `pipefail` into it, which is
+the reason the pipeline travels as the scope's payload.
 
 Expected shape of success:
 
@@ -1360,8 +1391,12 @@ No new external dependency is introduced.
   exactly what the cap governs. Two entries were added to the Decision Log: the
   wrapper decision restated in `RuntimeMaxSec` terms, and a record that the
   mechanism reported by #765 did not reproduce on the reference host (systemd
-  257) while the defects the correction removes are both reproducible. The same
-  inert wrapper is prescribed by
+  257) while the defects the correction removes are both reproducible. The
+  grace arithmetic migrates with the bound rather than vanishing: because the
+  effective bound is `RuntimeMaxSec` plus `TimeoutStopSec`, an unpinned stop
+  timeout reproduced a 93-second overshoot on a 3-second cap against the host's
+  90-second default, so `TimeoutStopSec=20s` is load-bearing rather than
+  cosmetic. The same inert wrapper is prescribed by
   `docs/execplans/4-2-3-kani-harnesses-for-command-interpolation.md`, where it
   has already been corrected; the remainder of that reconciliation belongs to
   roadmap 4.2.3 and is not absorbed here.
