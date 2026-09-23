@@ -6,7 +6,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 Revision 3. See `Revision note` at the foot of this document. The plan was
 approved and implementation began on 2026-09-19; the branch was first rebased
@@ -1515,7 +1515,7 @@ commit `bce3b2a0` carries the fix. The final repair review
 zero findings (`/tmp/coderabbit-netsuke-readme-m4-crlf.out`). All EP-M4
 concerns are fixed or dispositioned above.
 
-### EP-M5 — in progress (2026-09-23)
+### EP-M5 — complete (2026-09-23)
 
 Roadmap item 4.4.1 and its four children are checked, with an ADR-027 and
 translation completion note. `mapsplice replace` was attempted in preview mode
@@ -1556,8 +1556,27 @@ formal guide, ADR, and plan distinguish active POSIX backticks from literal
 backticks inside single quotes. The full gate run already used `pipefail`; the
 correction makes the reproducible plan commands match it. The final gate recipe
 now also lists the documentation-coverage gate actually run throughout this
-task. Only these documentation repairs remain to be gated and reviewed before
-completion.
+task. The repairs were committed as `cf985eb1` after formatting, Markdown, and
+Mermaid gates passed. All four revised Bash snippets parse, and isolated
+child-shell controls verify failure propagation and the expected-red guard.
+Evidence: `/tmp/*-netsuke-readme-final-doc-fixes.out`, including
+`/tmp/bash-snippets-netsuke-readme-final-doc-fixes.out` and
+`/tmp/pipeline-and-redguard-netsuke-readme-final-doc-fixes.out`.
+
+The repair review against `636bf523` completed with zero findings
+(`/tmp/coderabbit-netsuke-readme-final-doc-fixes.out`). Its first attempt lost
+its WebSocket connection and was retried without a rate limit; the failed
+attempt is preserved at
+`/tmp/coderabbit-netsuke-readme-final-doc-fixes-attempt1.out`. Every valid
+whole-branch finding is fixed; the four repeated README-voice suggestions are
+dispositioned against the applicable style guidance. No concerns remain open.
+
+The final implementation comprises 17 files and fewer than 1400 net added
+lines, excluding this living plan, within the agreed 18-file/1600-line limits.
+Post-commit inspection found no further refactor needed: the security-test
+helpers remain local to their test module and the parity script has one manual
+reviewer responsibility. No production code, dependency, public interface, or
+historical ADR other than the task's ADR-027 changed.
 
 ### EP-M1 — complete (`3594b568`)
 
@@ -1686,7 +1705,8 @@ shell variable in *both* recipe kinds is now correct and needs no edit.
       before green; three negative controls recorded after the commit.
 - [x] EP-M4 — six translated READMEs regain structural parity;
       `docs/repository-layout.md` records the recurring obligation.
-- [ ] EP-M5 — roadmap 4.4.1 marked done; full gate sequence green.
+- [x] EP-M5 — roadmap 4.4.1 marked done; full gate sequence green;
+      whole-branch review findings fixed or dispositioned.
 
 ## Surprises & discoveries
 
@@ -2179,12 +2199,14 @@ shell variable in *both* recipe kinds is now correct and needs no edit.
 
 ## Outcomes & retrospective
 
-EP-M1 through EP-M4 are complete. The README contract is implemented in all
+All five milestones are complete. The README contract is implemented in all
 seven editions, with three executable examples, 25 parameterized security
 cases, three discriminating controls, and a manual parity checker. No
 production behaviour or dependency changed. All six verification obligations
-are discharged. EP-M5 awaits the final full gate sequence and full-branch
-review before the plan is marked complete.
+are discharged, roadmap 4.4.1 and its four criteria are checked, and the full
+gate sequence passed. Whole-branch review findings are fixed or dispositioned;
+the final repair review returned zero findings. The PR title and Lody session
+title match the implemented task without the former `Plan:` prefix.
 
 The review loop strengthened the manual checker against older `awk`, nested
 fences, indented headings, and CRLF files. The useful lesson is to validate the
