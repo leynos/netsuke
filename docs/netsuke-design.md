@@ -2835,8 +2835,10 @@ list-entry shell boundaries.
 [ADR-027](adr-027-command-placeholder-contract.md) settles which parts of this
 behaviour are promises: the marker invariant is contractual, the odd-backtick
 parity check is a conservative check that may widen without that being a
-breaking change, and the `shlex` accepted set is not a stability commitment. The
-`script:`-only `$in` and `$out` forms are retained legacy behaviour.
+breaking change, and the `shlex` accepted set is not a stability commitment.
+`{{ ins }}` and `{{ outs }}` are the only markers, identically in both recipe
+kinds, following
+[ADR-034](adr-034-preserve-script-in-out-as-shell-variables.md).
 
 ### 6.4 Automatic Security as a "Friendliness" Feature
 

@@ -62,13 +62,12 @@ stronger proof obligations become worthwhile.[^7]
 ### Kani for command interpolation
 
 `src/ir/cmd_interpolate/mod.rs` is another high-value target because it is
-compact, load-bearing, and security-sensitive. It recognizes the internal
-`INS_TOKEN` and `OUTS_TOKEN` markers emitted by manifest rendering in both
-recipe kinds, and additionally the short forms `$in` and `$out` in `script:`
-recipes; in a `command:` those two are literal shell variables, as `$ins` and
-`$outs` always are. On POSIX-compatible routes both recipe kinds reject markers
-inside backticks; `command:` text additionally rejects unmatched backticks and
-a substituted result that fails the current `shlex` guard, while scripts are
+compact, load-bearing, and security-sensitive. It recognizes only the internal
+`INS_TOKEN` and `OUTS_TOKEN` tokens emitted by manifest rendering, identically
+in both recipe kinds; `$in`, `$out`, `$ins`, and `$outs` are all literal shell
+variables. On POSIX-compatible routes both recipe kinds reject markers inside
+backticks; `command:` text additionally rejects unmatched backticks and a
+substituted result that fails the current `shlex` guard, while scripts are
 exempt from those two checks. PowerShell treats backticks as native escapes
 rather than protected regions.[^8]
 
@@ -265,24 +264,26 @@ Three contracts should be documented before proofs become gating checks.
 
 ### Command placeholder contract
 
-The interpolation layer recognizes the internal `INS_TOKEN` and `OUTS_TOKEN`
-markers emitted by manifest rendering in both recipe kinds, and additionally
-the short forms `$in` and `$out` in `script:` recipes. In a `command:` recipe
-those two are literal shell variables, and `$ins` and `$outs` are literal in
-both. On POSIX-compatible routes, markers inside backticks are rejected in both
-recipe kinds. The two further checks — unmatched backticks and a substituted
-result that fails the current `shlex` guard — run only on `command:` text;
-scripts may legitimately contain heredocs and other syntax `shlex` cannot
-model.[^8] PowerShell treats a backtick as an escape.
+The interpolation layer recognizes only the internal `INS_TOKEN` and
+`OUTS_TOKEN` tokens emitted by manifest rendering, identically in both recipe
+kinds. `$in`, `$out`, `$ins`, and `$outs` are all literal shell variables,
+following [ADR-034](adr-034-preserve-script-in-out-as-shell-variables.md). On
+POSIX-compatible routes, markers inside backticks are rejected in both recipe
+kinds. The two further checks — unmatched backticks and a substituted result
+that fails the current `shlex` guard — run only on `command:` text; scripts may
+legitimately contain heredocs and other syntax `shlex` cannot model.[^8]
+PowerShell treats a backtick as an escape.
 
 **Settled.** Roadmap item 4.4.1 will document this contract for users in the
 README under *Security and command interpolation*, and it is decided in
 [ADR-027](adr-027-command-placeholder-contract.md). The three questions this
 section raised are now answered:
 
-- The supported placeholder set is `{{ ins }}` and `{{ outs }}` in both recipe
-  kinds, plus `$in` and `$out` in `script:` recipes only; the short forms are
-  retained legacy behaviour, not a blessed feature.
+- The supported placeholder set is `{{ ins }}` and `{{ outs }}`, and nothing
+  else, identically in both recipe kinds. Every dollar-prefixed form is a shell
+  variable. [ADR-034](adr-034-preserve-script-in-out-as-shell-variables.md)
+  settled this by removing the former `script:`-only lowering of `$in` and
+  `$out`; ADR-027 states the resulting contract.
 - Backtick handling is two mechanisms at two strengths. Rejecting a marker
   inside a backtick or `$( … )` region is a promised invariant. Rejecting a
   `command:` whose substituted text contains an odd backtick count is a

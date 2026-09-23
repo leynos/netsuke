@@ -8,9 +8,18 @@ carry them to users in a new `README.md` section, *Security and command
 interpolation*, in every translated README; that section is planned work, not
 yet published, and this record is authoritative until it lands.
 
+Revised on 2026-09-23. The first draft of this record described the placeholder
+set as differing by recipe kind, because `script:` recipes then lowered bare
+`$in` and `$out` to paths.
+[ADR-034](adr-034-preserve-script-in-out-as-shell-variables.md) subsequently
+removed that lowering, so the set is now uniform. ADR-034 owns that decision;
+this record states the resulting contract and is revised to agree with it. The
+backtick and `shlex` decisions below are unaffected and were re-verified
+against the implementation on the revision date.
+
 ## Date
 
-2026-09-19
+2026-09-19, revised 2026-09-23
 
 ## Context and problem statement
 
@@ -53,31 +62,27 @@ behaviour are promises. This record settles both.
 
 ## Decision
 
-### The supported placeholder set differs by recipe kind
+### The placeholder set is uniform across recipe kinds
 
-`{{ ins }}` and `{{ outs }}` are the supported placeholders in both `command:`
-and `script:` recipes. In `script:` recipes Netsuke *additionally* rewrites bare
-`$in` and `$out` at identifier boundaries — a boundary being a position not
-adjacent to an alphanumeric character or an underscore. Every other
-dollar-prefixed form, including `$ins`, `$outs`, `$input`, `$output`, and
-`$PATH`, is literal text for the shell in both recipe kinds.
+`{{ ins }}` and `{{ outs }}` are the only Netsuke markers, and they behave
+identically in `command:` and `script:` recipes. Every dollar-prefixed form —
+`$in`, `$out`, `$ins`, `$outs`, `$input`, `$output`, `$PATH` — is a shell
+variable that Netsuke leaves for the selected shell to interpret, in both
+recipe kinds. The Ninja backend doubles the dollar so the shell receives the
+text unchanged.
 
-The recognizer implementing the two halves of this rule is `find_substitution`
-for `command:` recipes and `find_script_substitution` for `script:` recipes
-(`src/ir/cmd_interpolate/mod.rs:261-297`). Only the latter consults
-`try_match_dollar_placeholder`.
+Three terms are kept distinct throughout, following
+[ADR-034](adr-034-preserve-script-in-out-as-shell-variables.md):
 
-The `script:`-only forms are **retained legacy behaviour, not a blessed
-feature**. New manifests should use `{{ ins }}` and `{{ outs }}`, and the
-README section this record establishes steers authors accordingly. Two
-consequences are stated wherever the contract is documented, because neither is
-predictable from the rule:
+- a **marker** is the Netsuke-owned `{{ ins }}` or `{{ outs }}` placeholder;
+- an **internal token** is the `INS_TOKEN` or `OUTS_TOKEN` sentinel that exists
+  only between manifest rendering and interpolation;
+- a **shell variable** is handwritten text such as `$PATH` or `$in` that
+  Netsuke does not rewrite.
 
-- A script that writes its own shell variable named `in` or `out`, such as
-  `in=foo; echo $in`, has that variable rewritten to input paths with no
-  diagnostic.
-- Moving the same text from a `script:` to a `command:` silently changes its
-  meaning: `$in` there degrades to an ordinary, usually empty, shell variable.
+The recognizer is `find_substitution`, which matches the two internal tokens
+and nothing else. `find_script_substitution` delegates to it, so both recipe
+kinds resolve the same set.
 
 Netsuke does not expose Ninja's own `$in` and `$out` rule variables. Resolved
 paths are baked into each content-hashed rule, so Ninja never substitutes a
@@ -162,18 +167,27 @@ A second, `debug_assert!`-only use exists in `assert_shell_command`
 
 ### The placeholder set
 
-1. **Document the set the implementation actually has** — `{{ ins }}` and
-   `{{ outs }}` everywhere, plus `$in` and `$out` in scripts. Selected.
-2. **Document a uniform set** — declare the two marker forms universal and
-   describe `$in` and `$out` as literal shell variables in both recipe kinds.
-   Rejected: it is false for `script:` recipes, which three documents currently
-   assert. Documenting a contract Netsuke does not honour is worse than
-   documenting an irregular one.
+These options were weighed while `script:` recipes still lowered `$in` and
+`$out`. They are retained because the outcome was decided elsewhere, and the
+reasoning explains why.
+
+1. **Document the recipe-kind asymmetry as retained legacy** — `{{ ins }}` and
+   `{{ outs }}` everywhere, plus `$in` and `$out` in scripts, with a shadowing
+   warning and a migration steer. Selected at first draft, on the ground that
+   documenting a contract Netsuke does not honour is worse than documenting an
+   irregular one.
+2. **Document a uniform set without changing the code** — Rejected: it was
+   false for `script:` recipes at the time.
 3. **Widen the implementation to match** — make `command:` recipes rewrite
-   `$in` and `$out` too, then document the uniform set. Rejected: it is a
-   production behaviour change on a security-sensitive path, and it would
-   silently change the meaning of existing commands that use those names as
-   shell variables.
+   `$in` and `$out` too. Rejected: a production behaviour change on a
+   security-sensitive path that would silently change the meaning of existing
+   commands using those names as shell variables.
+4. **Narrow the implementation instead** — stop lowering `$in` and `$out` in
+   `script:` recipes, making the uniform set true. Not considered here;
+   [ADR-034](adr-034-preserve-script-in-out-as-shell-variables.md) selected it
+   on 2026-09-20 and it is now the implemented behaviour. It carries the same
+   migration risk as option 3 in the opposite direction, which ADR-034 accepted
+   and documented in the migration guide.
 
 ### The backtick boundary
 
@@ -208,11 +222,10 @@ A second, `debug_assert!`-only use exists in `assert_shell_command`
   example for each of the three decisions. A later change that breaks the
   documented behaviour therefore fails a test rather than silently invalidating
   prose.
-- **Legacy behaviour is documented as legacy.** The `script:`-only `$in` and
-  `$out` forms are load-bearing for existing manifests, so removing them is not
-  this decision's to make; describing them as retained legacy with a warning
-  and a migration steer keeps the documentation honest under either future
-  answer.
+- **One decision, one owner.** The placeholder set is ADR-034's decision, not
+  this record's; this record states the contract that follows from it. Keeping
+  the superseded reasoning visible under *Options considered* shows why the
+  asymmetry was tolerable to document before it was removed.
 - **The approximation is labelled as one.** Splitting the backtick behaviour
   into a promised invariant and an unpromised check leaves room to make the
   check quoting-aware later without a breaking change.
@@ -222,11 +235,13 @@ A second, `debug_assert!`-only use exists in `assert_shell_command`
 
 ## Consequences
 
-Manifest authors who use `script:` recipes and write their own `in` or `out`
-shell variables will have those variables rewritten with no diagnostic. This
-becomes documented rather than silent, and the README will recommend
-`{{ ins }}` and `{{ outs }}`; a diagnostic for the shadowing case is follow-up
-work if the legacy forms are retained indefinitely.
+Manifest authors who relied on bare `$in` or `$out` resolving inside a
+`script:` recipe must migrate to `{{ ins }}` and `{{ outs }}`. ADR-034 made
+that change and the migration guide records it; the README section this record
+establishes states the resulting uniform rule rather than repeating the
+migration. The shadowing hazard the first draft warned about — a script
+assigning its own `in` or `out` variable — no longer exists, because those
+names are never rewritten.
 
 Authors can rely on the marker invariant and on the rejection diagnostic.
 Authors cannot rely on the accepted set across `shlex` versions, and cannot
@@ -245,8 +260,7 @@ published interface.
 
 - Placeholder recognition:
   [`src/ir/cmd_interpolate/mod.rs`](../src/ir/cmd_interpolate/mod.rs)
-  (`find_substitution`, `find_script_substitution`,
-  `try_match_dollar_placeholder`).
+  (`find_substitution`, and `find_script_substitution`, which delegates to it).
 - Marker invariant and path quoting: the `substitution` and
   `script_substitution` modules under
   [`src/ir/cmd_interpolate/`](../src/ir/cmd_interpolate/).

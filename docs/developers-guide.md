@@ -392,14 +392,14 @@ The lowering stages have deliberately separate responsibilities:
   one-based entry position.
 - `src/ir/from_manifest_support.rs` prepares one shell-quoted input/output
   binding set for the recipe, then interpolates every scalar or list entry with
-  that set. `{{ ins }}` and `{{ outs }}` are resolved per entry in both recipe
-  kinds; `$in` and `$out` are resolved only in scripts. Literal `$ins` and
-  `$outs` remain shell variables and are escaped for Ninja pass-through. POSIX
-  lowering tracks unquoted, single-quoted, and double-quoted text, and rejects
-  markers within command substitutions because it cannot lower them safely;
-  scripts therefore retain heredocs and comments without accepting an unsafe
-  marker context. The resulting action contains ordinary command text and no
-  Ninja placeholders.
+  that set. Only `{{ ins }}` and `{{ outs }}` markers are resolved per entry,
+  identically in both recipe kinds. Literal `$in`, `$out`, `$ins`, and `$outs`
+  remain shell variables and are escaped for Ninja pass-through. POSIX lowering
+  tracks unquoted, single-quoted, and double-quoted text, and rejects markers
+  within command substitutions because it cannot lower them safely; scripts
+  therefore retain heredocs and comments without accepting an unsafe marker
+  context. The resulting action contains ordinary command text and no Ninja
+  placeholders.
 - `src/ninja_gen/mod.rs` delegates completed recipe text to
   `src/ninja_gen_recipe_shell.rs`. On Unix, and for the explicit Windows Bash
   compatibility route, a scalar remains POSIX shell text. A list puts each
@@ -3887,15 +3887,13 @@ this two-stage recipe pipeline and its direct IR recipe tests.
 
 ### Command interpolation contract
 
-The scanner recognizes only the internal `INS_TOKEN` and `OUTS_TOKEN` markers
-emitted by manifest rendering, plus the legacy `$in` and `$out` short forms in
-`script:` recipes. Literal shell variables such as `$ins` and `$outs`, and
-every other dollar-prefixed form, remain unchanged for the selected backend to
-interpret in both recipe kinds. The `$in` and `$out` short forms are
-`script:`-only, however: in a `command:` recipe they are ordinary shell
-variables and are passed through untouched, so the same text means different
-things depending on the enclosing recipe kind. See
-[ADR-027](adr-027-command-placeholder-contract.md).
+The scanner recognizes only the internal `INS_TOKEN` and `OUTS_TOKEN` tokens
+emitted by manifest rendering, identically in `command:` and `script:` recipes.
+Literal shell variables such as `$in`, `$out`, `$ins`, and `$outs` remain
+unchanged for the selected backend to interpret, in both recipe kinds; see
+[ADR-034](adr-034-preserve-script-in-out-as-shell-variables.md), which removed
+the former `script:`-only lowering of `$in` and `$out`, and
+[ADR-027](adr-027-command-placeholder-contract.md) for the resulting contract.
 
 `INS_TOKEN` and `OUTS_TOKEN` are machine-generated markers. They match exact
 text, so an adjacent identifier character does not suppress a marker

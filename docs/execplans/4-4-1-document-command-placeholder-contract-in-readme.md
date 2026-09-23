@@ -105,19 +105,22 @@ conflating them is a goal of this plan.
 These were established by reading the implementation, not by trusting existing
 prose. Cite them when writing.
 
-**Fact A — the supported placeholder set differs by recipe kind.**
-`find_substitution` (`src/ir/cmd_interpolate/mod.rs:261-266`) matches only
-`INS_TOKEN` and `OUTS_TOKEN`, and is what `command:` recipes use.
-`find_script_substitution` (`src/ir/cmd_interpolate/mod.rs:269-275`) also
-matches `$in` and `$out` via `try_match_dollar_placeholder`
-(`src/ir/cmd_interpolate/mod.rs:277-297`), which requires a non-alphanumeric,
-non-underscore character on each side. So `$in` and `$out` **are** rewritten in
-a `script:`, and **are not** rewritten in a `command:`. `$ins`, `$outs`,
-`$input`, `$output`, and `$PATH` are never rewritten in either. Confirmed by
-`src/ir/cmd_interpolate_tests.rs:42-50`
-(`interpolate_command_preserves_dollar_prefixed_shell_variables`) and the
-property test `dollar_prefixed_shell_variables_are_preserved`
-(`src/ir/cmd_interpolate_property_tests.rs:55-66`).
+**Fact A — the placeholder set is uniform across recipe kinds.**
+`find_substitution` (`src/ir/cmd_interpolate/mod.rs`) matches only `INS_TOKEN`
+and `OUTS_TOKEN`. `find_script_substitution` delegates straight to it, so a
+`script:` recipe resolves exactly the same set as a `command:` recipe. Every
+dollar-prefixed form — `$in`, `$out`, `$ins`, `$outs`, `$input`, `$output`,
+`$PATH` — is a shell variable that Netsuke leaves alone in both recipe kinds,
+and the Ninja backend doubles its dollar so the shell receives it unchanged.
+
+**This fact was reversed upstream during implementation.** Until
+[ADR-034](../adr-034-preserve-script-in-out-as-shell-variables.md) landed on
+`main` on 2026-09-20, `script:` recipes lowered bare `$in` and `$out` to paths
+via a `try_match_dollar_placeholder` helper, and revisions 1 and 2 of this plan
+were built around that asymmetry. ADR-034 removed the helper. The asymmetry,
+the shadowing hazard it created, and the "retained legacy" framing this plan
+proposed for it are all gone. See `Surprises & discoveries` for the discovery
+and `D1-RESOLVED` in `Decision log` for what replaced `D1-LEGACY`.
 
 **Fact B — backtick handling is two narrow checks, not a shell model.**
 
@@ -186,13 +189,12 @@ same Netsuke source can therefore get different acceptance sets. This matters to
   (`docs/formal-verification-methods-in-netsuke.md:332-333`) cites
   `src/ir/cmd_interpolate.rs`, a path that no longer exists; the module was
   split into `src/ir/cmd_interpolate/`.
-- `docs/developers-guide.md:3186-3201`, section **Command interpolation
-  contract**. States "Literal shell variables such as `$in`, `$out`, `$ins`, and
-  `$outs` remain unchanged". True for a `command:`; false for a `script:`
-  (Fact A).
-- `docs/users-guide.md:1649-1718`, section **Review the safety boundary**.
-  User-facing and largely accurate; the README will link to it rather than
-  restate it.
+- `docs/developers-guide.md`, section **Command interpolation contract**.
+  Corrected by this branch to state the uniform set and cite ADR-034.
+- `docs/users-guide.md`, section **Review the safety boundary**. `main` rewrote
+  this when ADR-034 landed, and it now carries the three-term glossary —
+  marker, internal token, shell variable — that this plan had asked for. The
+  README links to it rather than restating it.
 - `docs/netsuke-design.md:290-298` and `docs/netsuke-design.md:2616-2644`, the
   canonical design text.
 - `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md:167-177`, which records
@@ -315,6 +317,10 @@ at commit `81d44f89`:
 - `docs/roadmap.md` item **4.2.3** (lines 490-504), the stated prerequisite.
   All six sub-items are checked. See `Risks` for the status discrepancy with
   its execplan and how it is resolved.
+- [ADR-034](../adr-034-preserve-script-in-out-as-shell-variables.md), accepted
+  on `main` 2026-09-20 — owns the placeholder-set decision this plan's `D1`
+  reports. It postdates revisions 1 and 2 and reverses the asymmetry they
+  described; `D1` and ADR-027 were revised to agree with it.
 - `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md` — constrains what may
   be claimed as *proved* versus *property-tested*.
 - `docs/adr-014-backend-text-escaping-seam.md` — the escaping seam this
@@ -330,9 +336,9 @@ RM-4.4.1.a -> EP-M3 -> README.md "Security and command interpolation"
 RM-4.4.1.b / FV-CPC-Q1 -> D1 -> EP-M1 (ADR-027 §Placeholders) -> EP-M3 -> tests::readme_security::documented_safe_placeholder_manifest_builds
 RM-4.4.1.c / FV-CPC-Q2 -> D2 -> EP-M1 (ADR-027 §Backticks)   -> EP-M3 -> tests::readme_security::documented_backtick_manifest_is_rejected
 RM-4.4.1.d / FV-CPC-Q3 -> D3 -> EP-M1 (ADR-027 §shlex guard) -> EP-M3 -> tests::readme_security::documented_backtick_manifest_is_rejected
-RM-4.4.1.b / Fact A    -> OBL-RECIPE-KIND -> tests::readme_security::placeholder_rewriting_differs_by_recipe_kind
+ADR-034 (upstream) -> D1 -> ADR-027 §Placeholders -> EP-M2 (doc reconciliation)
+RM-4.4.1.b / Fact A    -> OBL-UNIFORM-SET -> tests::readme_security::dollar_forms_are_shell_variables_in_both_recipe_kinds
 Fact A     -> EP-M2 -> docs/developers-guide.md "Command interpolation contract"
-Fact A     -> EP-M2 -> docs/users-guide.md "Review the safety boundary" (:1697, :1713)
 Fact A     -> EP-M2 -> docs/formal-verification-methods-in-netsuke.md FV-CPC
 D2 quoting -> OBL-QUOTING -> tests::readme_security::netsuke_owned_path_substitutions_are_quoted
 RM-4.4.1.a -> EP-M4 -> six translated READMEs
@@ -427,8 +433,8 @@ Stop and escalate when any threshold is reached. Do not work around them.
   wrong translation of a safety boundary is worse than an absent one.
 - **Ambiguity.** Any point where `FV-CPC-Q1`, `FV-CPC-Q2`, or `FV-CPC-Q3`
   could reasonably be settled the other way and the choice changes what the
-  README promises. `D1` carries a known live instance of this: see the
-  `D1-LEGACY` note in `Decision log`.
+  README promises. `D1` carried a live instance of this until ADR-034 settled
+  it upstream; see `D1-RESOLVED` in `Decision log`.
 
 ## Risks
 
@@ -575,38 +581,42 @@ Assumptions relied upon, not verified here:
   recognizing a completely different marker set, so it proves only that
   MiniJinja is strict.
 
-  The discriminating control is to put a literal `$in` in the **`command:`**
-  example and require it to survive into the generated Ninja verbatim, as
-  `$$in`. That fails only if the recipe-kind asymmetry breaks, which is the
+  The discriminating control is to put a literal `$in` in the example and
+  require it to survive into the generated Ninja verbatim, as `$$in`. That
+  fails only if something starts rewriting a dollar-prefixed form, which is the
   claim actually at issue. Run it once by hand, record the transcript in
   `Artefacts and notes`, and do not commit it.
 
-**`OBL-RECIPE-KIND` — the placeholder set really does differ by recipe kind.**
+**`OBL-UNIFORM-SET` — the placeholder set is the same in both recipe kinds.**
 
-- Statement: `$in` and `$out` are rewritten to paths in a `script:` recipe and
-  left as literal shell text in a `command:` recipe; `$ins`, `$outs`, `$input`,
-  and `$output` are left alone in both.
-- Method: parameterized `rstest` over the (placeholder, recipe kind) matrix,
+- Statement: `{{ ins }}` and `{{ outs }}` resolve to paths in both `command:`
+  and `script:` recipes, and `$in`, `$out`, `$ins`, `$outs`, `$input`, and
+  `$output` survive as shell variables in both, reaching the generated Ninja
+  with their dollar doubled.
+- Method: parameterized `rstest` over the (form, recipe kind) matrix,
   asserting on generated Ninja text.
-- Rationale: this is the plan's headline discovery, the reason three documents
-  are wrong today, and the most surprising claim the README will make. Shipping
-  it with no executable counterpart would reproduce exactly the failure mode
-  this section exists to prevent: a documentation claim nobody can falsify.
-  Absent from revision 1; added at design review.
-- Domain: the ten cells formed by `{{ ins }}`, `{{ outs }}`, `$in`, `$out`,
-  and `$ins`, each crossed with `command:` and `script:`.
+- Rationale: this obligation replaces `OBL-RECIPE-KIND`, which asserted the
+  opposite. ADR-034 made the set uniform, and the README's central table now
+  claims that uniformity. A uniform rule is *easier* to state and *easier* to
+  regress silently: reinstating a special case for one form in one recipe kind
+  would pass every existing README example. The matrix is what makes the
+  README's table falsifiable.
+- Domain: the twelve cells formed by `{{ ins }}`, `{{ outs }}`, `$in`, `$out`,
+  `$ins`, and `$input`, each crossed with `command:` and `script:`.
 - Artefact: `tests/readme_security_tests.rs`, case
-  `placeholder_rewriting_differs_by_recipe_kind`.
+  `dollar_forms_are_shell_variables_in_both_recipe_kinds`.
 - Evidence: `cargo nextest run --test readme_security_tests`. Discharged when
   every cell matches the README's table.
-- Non-vacuity: both arms of each row are asserted, so the test fails against an
-  implementation that rewrote `$in` in both recipe kinds **and** against one
-  that rewrote it in neither. A single-arm test would pass against the
-  currently documented — and wrong — uniform behaviour, which is precisely how
-  the existing misstatement survived. As a seeded fault, remove the two
-  `try_match_dollar_placeholder` calls from `find_script_substitution`
-  (`src/ir/cmd_interpolate/mod.rs:269-275`); the `script:` rows must fail.
-  Revert immediately.
+- Non-vacuity: the marker rows and the shell-variable rows are asserted
+  together, so the test fails against an implementation that rewrote nothing
+  **and** against one that rewrote a dollar form in either recipe kind. A
+  shell-variable-only test would pass against an implementation that had
+  stopped resolving the markers too. As a seeded fault, restore a
+  dollar-placeholder match inside `find_script_substitution`
+  (`src/ir/cmd_interpolate/mod.rs`) so `$in` resolves in a script again; the
+  `script:` shell-variable rows must fail. This is the pre-ADR-034 behaviour,
+  so the control also demonstrates that the suite would have caught the
+  reversal. Revert immediately.
 
 **`OBL-QUOTING` — Netsuke's own path substitutions are shell-quoted.**
 
@@ -671,10 +681,13 @@ boundary.**
   `command:` and accepted in a `script:`.
 - Method: parameterized integration test over both recipe kinds with the same
   offending text.
-- Rationale: this asymmetry is `RM-4.4.1.d`'s substance and is currently
-  documented nowhere. A single example per branch is decisive because the two
-  code paths are distinct functions with no shared guard
-  (`src/ir/cmd_interpolate/mod.rs:189-212`).
+- Rationale: this asymmetry is `RM-4.4.1.d`'s substance. Note that it survives
+  ADR-034 untouched: the *placeholder set* became uniform, but the `shlex` and
+  backtick-parity *guards* remain `command:`-only, so this is now the only
+  recipe-kind asymmetry the README must describe. A single example per branch
+  is decisive because the two entry points are distinct functions with no
+  shared guard — `interpolate_script_with_bindings` calls `substitute_script`
+  and nothing else (`src/ir/cmd_interpolate/mod.rs`).
 - Domain: one unterminated single quote, used as a `command:` and as a
   `script:`.
 - Artefact: `tests/readme_security_tests.rs`, case
@@ -771,15 +784,18 @@ contradiction window entirely.
 
 - Requirements advanced: Fact A consistency across the documentation set;
   prerequisite for `RM-4.4.1.a`, because the README will link to
-  `docs/users-guide.md#review-the-safety-boundary`.
+  `docs/users-guide.md#review-the-safety-boundary`. After ADR-034 this
+  milestone also reconciles the branch's own earlier corrections, which had
+  documented the now-removed asymmetry.
 - Acceptance evidence: the scoped grep in `Concrete steps` step 5 returns no
   unqualified claim outside `docs/archive/` and the ADR set. `make check-fmt`,
   `make markdownlint`, `make lint`, and `make test` pass — `make lint` matters
   because a doc-comment edit recompiles.
 - Conformance check: no behaviour changed; `git diff --stat src/` shows only
-  comment lines; the three corrected statements agree with each other and with
-  `docs/netsuke-design.md:290-291`; no historical document (`docs/archive/`, any
-  `docs/adr-0*.md`, any completed execplan) was edited.
+  comment lines; the corrected statements agree with each other, with
+  `docs/users-guide.md` as `main` now writes it, and with ADR-034; no
+  historical document (`docs/archive/`, any `docs/adr-0*.md` other than the
+  branch's own ADR-027, any completed execplan) was edited.
 - Recovery: revert the commit. The edits are independent of every later
   milestone.
 - Remaining gaps: the README still says nothing; six translations lack the
@@ -797,7 +813,7 @@ contradiction window entirely.
   three marked, executable fenced examples.
   `tests/documentation_examples_tests.rs` registers the three new identifiers.
   `tests/readme_security_tests.rs` exists and discharges `OBL-PLACEHOLDERS`,
-  `OBL-RECIPE-KIND`, `OBL-QUOTING`, `OBL-BACKTICK-REJECT`, and
+  `OBL-UNIFORM-SET`, `OBL-QUOTING`, `OBL-BACKTICK-REJECT`, and
   `OBL-SHLEX-SCOPE`. The existing safety paragraph in
   `## Release and development status` (`README.md:203-206`) is reduced to a
   one-line cross-reference that **retains its link** to the users' guide safety
@@ -867,22 +883,22 @@ Then settle the three questions. These answers were revised at the
 `logisphere-design-review` checkpoint; the wording below is what the README and
 ADR-027 must say.
 
-- **`D1` (answers `FV-CPC-Q1`).** `{{ ins }}` and `{{ outs }}` are the
-  supported placeholders, in both `command:` and `script:` recipes. In
-  `script:` recipes Netsuke *additionally* rewrites bare `$in` and `$out`, at
-  identifier boundaries. Everything else — `$ins`, `$outs`, `$input`, `$output`,
-  `$PATH` — is literal text for the shell, in both recipe kinds. Netsuke does
-  not expose Ninja's own `$in` / `$out` rule variables, because it bakes
-  resolved paths into each content-hashed rule.
+- **`D1` (answers `FV-CPC-Q1`).** `{{ ins }}` and `{{ outs }}` are the only
+  Netsuke markers, and they behave identically in `command:` and `script:`
+  recipes. Every dollar-prefixed form — `$in`, `$out`, `$ins`, `$outs`,
+  `$input`, `$output`, `$PATH` — is a shell variable that Netsuke leaves for
+  the selected shell, in both recipe kinds; the Ninja backend doubles its
+  dollar so the shell receives it unchanged. Netsuke does not expose Ninja's own
+  `$in` / `$out` rule variables, because it bakes resolved paths into each
+  content-hashed rule.
 
-  The `script:` forms are documented as **retained legacy behaviour, not a
-  blessed feature**, and the README steers authors to `{{ ins }}` and
-  `{{ outs }}` in new manifests. Two consequences must be stated, because both
-  are foot-guns a reader would not predict: a script that legitimately writes
-  `in=foo; echo $in` has its own shell variable rewritten to input paths with
-  no diagnostic; and moving that text from `script:` to `command:` silently
-  changes its meaning, because `$in` there degrades to an empty shell variable.
-  See `D1-LEGACY` in `Decision log` for the open question this raises.
+  Revisions 1 and 2 answered this question differently, describing a
+  `script:`-only rewriting of `$in` and `$out` as retained legacy behaviour.
+  That asymmetry existed when those revisions were written and was removed
+  upstream by ADR-034 before this plan reached implementation. `D1` now simply
+  states the uniform rule; the shadowing hazard and the migration steer the
+  earlier wording carried are no longer applicable. ADR-034 owns the decision
+  and ADR-027 states the resulting contract.
 
 - **`D2` (answers `FV-CPC-Q2`).** Two separate mechanisms, promised at two
   different strengths. Revision 1 promised both as guarantees; the review
@@ -986,11 +1002,13 @@ come first.
    which reads as a capability list rather than a warning. Give it a label a
    reader cannot skim past.
 3. **What Netsuke rewrites.** The `D1` contract as a compact table: rows for
-   `{{ ins }}`, `{{ outs }}`, `$in`, `$out`, and the inert `$ins`/`$outs`/
+   `{{ ins }}`, `{{ outs }}`, and the inert `$in`/`$out`/`$ins`/`$outs`/
    `$input`/`$output` group; columns for `command:` and `script:`. Cells are
-   code identifiers and yes/no, which is what survives translation intact. Mark
-   the `$in` / `$out` row as retained legacy, with the shadowing caveat from
-   `D1`. The accepting example fence follows.
+   code identifiers and yes/no, which is what survives translation intact.
+   Every cell in the dollar-form row reads "no" in both columns — state that
+   uniformity in a sentence as well as in the table, because a reader scanning
+   only the table may assume a column was omitted by mistake. The accepting
+   example fence follows.
 4. **What Netsuke quotes.** Only its own path substitutions, via
    `shell-quote`, encoded for the surrounding quote context. Nothing else. The
    quoting example fence follows.
@@ -1048,9 +1066,13 @@ Run everything from the repository root,
 
    Expect `has_unmatched_backticks` to be a `rem_euclid(2) != 0` parity test,
    `is_valid_command_for_shell` to return early for `RecipeShell::PowerShell`,
-   `find_script_substitution` to call `try_match_dollar_placeholder`, and the
-   Fluent line
+   `find_script_substitution` to delegate to `find_substitution` with no
+   dollar-form matching of its own, and the Fluent line
    `ir.invalid_command = Invalid command interpolation: { $snippet }.`
+
+   The third expectation changed after ADR-034. If
+   `try_match_dollar_placeholder` reappears, the upstream decision has been
+   reversed again: stop and escalate rather than editing this plan around it.
 
 3. Confirm the next free ADR number.
 
@@ -1097,10 +1119,11 @@ Run everything from the repository root,
    top-level documents, and the trailing filter drops the decision records,
    archived plans, and execplans, none of which this plan may edit. The only
    expected survivors are statements about `$ins` and `$outs`, which really are
-   literal shell variables in both recipe kinds. Every hit about `$in` or
-   `$out` must be qualified by recipe kind, except
-   `docs/netsuke-design.md:290-291`, which already states Fact A correctly and
-   must **not** be changed — it is the canonical wording the others converge on.
+   literal shell variables in both recipe kinds. After ADR-034 the same is true
+   of `$in` and `$out`, so a hit stating that any dollar-prefixed form is a
+   shell variable in both recipe kinds is correct and needs no change. A hit
+   that still qualifies `$in` or `$out` by recipe kind is stale and must be
+   corrected.
 
    For the record, the original wording of this step was
    `grep -rn -e 'only Netsuke markers' -e 'remain unchanged' -e 'remain shell
@@ -1156,8 +1179,9 @@ Run everything from the repository root,
    cargo nextest run --test readme_security_tests
    cp /tmp/readme-control.md README.md
 
-   # Control 2 (OBL-RECIPE-KIND): remove the two try_match_dollar_placeholder
-   # calls from find_script_substitution; the script rows must fail.
+   # Control 2 (OBL-UNIFORM-SET): make find_script_substitution resolve a bare
+   # $in again, reinstating the pre-ADR-034 behaviour; the script rows must
+   # fail.  This also shows the suite would have caught that reversal.
    cp src/ir/cmd_interpolate/mod.rs /tmp/cmd-interpolate-control.rs
    # ...edit, then:
    cargo nextest run --test readme_security_tests
@@ -1246,7 +1270,7 @@ Quality criteria — what "done" means:
   `odd_backtick_count_without_markers_is_rejected`, and
   `shlex_gate_applies_to_commands_not_scripts`.
 - Verification: all five obligations are discharged —
-  `OBL-PLACEHOLDERS`, `OBL-RECIPE-KIND`, `OBL-QUOTING`, `OBL-BACKTICK-REJECT`,
+  `OBL-PLACEHOLDERS`, `OBL-UNIFORM-SET`, `OBL-QUOTING`, `OBL-BACKTICK-REJECT`,
   and `OBL-SHLEX-SCOPE` — with the three negative-control transcripts from
   `Concrete steps` step 8 recorded. `OBL-STRUCTURAL-PARITY` is discharged by
   the step-9 output.
@@ -1378,8 +1402,9 @@ the record:
   `interpolate_command_with_bindings` :189, `interpolate_script_with_bindings`
   :207, `invalid_command_error` :215, `is_valid_command_for_shell` :226-231
   (PowerShell early-return at :227, `shlex::split` at :230),
-  `find_substitution` :261, `find_script_substitution` :269,
-  `try_match_dollar_placeholder` :278.
+  `find_substitution` :261, `find_script_substitution` :269.
+  `try_match_dollar_placeholder` was cited here at :278 in revision 2; ADR-034
+  deleted it.
 - `src/ir/cmd_interpolate/substitution.rs`: `append_protected_character` :364.
 - `src/ir/cmd_interpolate/script_substitution.rs`:
   `append_substitution_or_character` :222, backtick/`$()` rejection at :232.
@@ -1464,8 +1489,39 @@ it is the canonical wording the other three converge on.
 
 ## Surprises & discoveries
 
-- Observation: `$in` and `$out` **are** substituted in `script:` recipes,
-  contradicting a plain reading of both `docs/developers-guide.md:3186-3190` and
+- Observation: `main` reversed Fact A while this branch was mid-implementation.
+  `script:` recipes no longer lower bare `$in` and `$out` to paths; every
+  dollar-prefixed form is now a shell variable in both recipe kinds. Evidence:
+  commit `382395bc` ("Preserve script shell variables (#737) (#753)", merged
+  2026-09-20) and
+  [ADR-034](../adr-034-preserve-script-in-out-as-shell-variables.md). It deleted
+  `try_match_dollar_placeholder` and reduced `find_script_substitution` to a
+  delegation to `find_substitution`. Verified on the rebased tree, not inferred
+  from the commit message.
+
+  Impact: substantial, and mostly subtractive. Fact A inverts; `D1` becomes a
+  uniform rule; `D1-LEGACY` is closed as `D1-RESOLVED`; `OBL-RECIPE-KIND`
+  becomes `OBL-UNIFORM-SET`; ADR-027 is revised rather than shipped
+  born-superseded; and the branch's own EP-M2 corrections to
+  `docs/developers-guide.md` and
+  `docs/formal-verification-methods-in-netsuke.md` had to be partly reverted,
+  because they had just finished documenting the asymmetry accurately.
+  `docs/users-guide.md` and `src/ir/cmd_interpolate/mod.rs` needed no branch
+  edit at all: `main` rewrote both, and its version is better than the branch's
+  — it added the three-term marker / internal-token / shell-variable glossary
+  this plan had been asking for.
+
+  Lesson, recorded because it generalizes: this plan's headline finding was a
+  *defect report about the documentation*, and the project fixed the defect by
+  changing the code instead. A plan whose value rests on an irregularity should
+  expect the irregularity to be removed, and should be written so that its
+  other obligations survive that. Here they did — `D2`, `D3`, `OBL-QUOTING`,
+  `OBL-BACKTICK-REJECT`, and `OBL-SHLEX-SCOPE` were untouched, and
+  `OBL-SHLEX-SCOPE` is now the only recipe-kind asymmetry left to document.
+
+- Observation (**superseded on 2026-09-23 by ADR-034; recorded as found**):
+  `$in` and `$out` **were** substituted in `script:` recipes, contradicting a
+  plain reading of both `docs/developers-guide.md:3186-3190` and
   `docs/formal-verification-methods-in-netsuke.md:265-266`. Evidence:
   `find_script_substitution` and `try_match_dollar_placeholder`
   (`src/ir/cmd_interpolate/mod.rs:269-297`); `substitute_script` is reached from
@@ -1519,10 +1575,12 @@ it is the canonical wording the other three converge on.
   line" would have found test code at the wrong `assert_shell_command` citation
   and could have triggered the contract-disagreement tolerance spuriously.
 
-- Observation: `docs/users-guide.md:1697-1698` and `:1713-1715` also
-  contradict Fact A, and revision 1 neither listed them for correction nor
-  could detect them. Evidence: line 1697 reads "`{{ ins }}` and `{{ outs }}`
-  are the only Netsuke markers for input and output paths"; revision 1's grep
+- Observation (**superseded on 2026-09-23; `main` rewrote this section when
+  ADR-034 landed, and its wording is now correct**):
+  `docs/users-guide.md:1697-1698` and `:1713-1715` also contradicted Fact A,
+  and revision 1 neither listed them for correction nor could detect them.
+  Evidence: line 1697 reads "`{{ ins }}` and `{{ outs }}` are the only Netsuke
+  markers for input and output paths"; revision 1's grep
   (`'literal .\$in\|\$in. and .\$out. remain'`) matches neither, because the
   claim wraps across a line break. Impact: the README's closing pointer sends
   readers to precisely that page. Three reviewers independently flagged this as
@@ -1710,26 +1768,29 @@ it is the canonical wording the other three converge on.
   artefact in the plan would already have been lost. Date/Author: 2026-09-09,
   design review.
 
-- Decision `D1-LEGACY`: the `script:`-only `$in` / `$out` forms are documented
-  as retained legacy behaviour, with an explicit shadowing warning and a steer
-  towards `{{ ins }}` / `{{ outs }}`, rather than as a blessed feature.
-  Rationale: the evidence points both ways and the plan must not silently pick
-  one. *Intended:* three `#[cfg(unix)]` end-to-end cases exercise the quoted
-  contexts (`tests/ninja_dollar_escaping_tests.rs:361-393`). *Vestigial:* the
-  users' guide already tells authors to migrate away
-  (`docs/users-guide.md:1713-1715`); the Ninja-escaping case covering the
-  command-recipe pass-through is named `legacy_marker_aliases`
-  (`tests/ninja_dollar_escaping_tests.rs:207`); and the Kani harness doc
-  comment asserts "Literal `$in` and `$out` must remain shell text"
-  (`src/ir/cmd_interpolate/verification.rs:4`). Documenting current behaviour
-  plus a direction of travel is honest under either reading and commits the
-  project to neither.
+- Decision `D1-RESOLVED` (supersedes `D1-LEGACY`): the question `D1-LEGACY`
+  raised — whether the `script:`-only `$in` / `$out` forms were intended or
+  vestigial — was settled upstream, against the reading this plan had hedged
+  towards. `D1-LEGACY` proposed documenting them as retained legacy with a
+  shadowing warning and a migration steer, and flagged that it needed the
+  owner's confirmation. ADR-034 answered it on `main` on 2026-09-20 by removing
+  the lowering outright, so the forms are now ordinary shell variables in both
+  recipe kinds and there is nothing left to hedge.
 
-  **This decision needs the owner's confirmation.** If the intent is that these
-  forms be withdrawn before 1.0, the README should say so. If they are
-  supported indefinitely, the shadowing hazard deserves a diagnostic rather
-  than a footnote — and that would be a code change outside this item.
-  Date/Author: 2026-09-09, design review. Awaiting approval.
+  Rationale for closing rather than revising: the decision was never this
+  plan's to make. `D1-LEGACY` said so explicitly — "that would be a code change
+  outside this item" — and the code change duly happened elsewhere. The evidence
+  `D1-LEGACY` weighed as *vestigial* (the users' guide migration note, the
+  test named `legacy_marker_aliases`, the Kani doc comment asserting "Literal
+  `$in` and `$out` must remain shell text") turned out to be the stronger
+  signal. Recording that is worth more than the decision itself: when a plan
+  finds evidence pointing both ways on someone else's decision, hedging in the
+  documentation and escalating was the right move, and it cost nothing when the
+  answer arrived.
+
+  Consequence for this plan: `D1` states a uniform rule, `OBL-RECIPE-KIND` is
+  replaced by `OBL-UNIFORM-SET`, and ADR-027 is revised to agree with ADR-034
+  rather than shipping born-superseded. Date/Author: 2026-09-23, on rebase.
 
 - Decision `D-REBASE-FIRST`: the branch was rebased onto `origin/main` at
   `0ba6672f` before implementation began, and the plan's ADR was renumbered
@@ -1933,6 +1994,40 @@ Reference material gathered during planning, for the writer's use:
   accepted set a stability commitment.
 
 ## Revision note
+
+Revision 3 (2026-09-23). Rebased onto `origin/main` at `c31057c1` and
+reconciled with
+[ADR-034](../adr-034-preserve-script-in-out-as-shell-variables.md), which
+landed upstream on 2026-09-20 and reversed this plan's Fact A: `script:`
+recipes no longer lower bare `$in` and `$out`, so the placeholder set is now
+uniform across recipe kinds.
+
+What changed: Fact A inverted and annotated with its own reversal; `D1`
+rewritten as a uniform rule; `D1-LEGACY` closed as `D1-RESOLVED`;
+`OBL-RECIPE-KIND` replaced by `OBL-UNIFORM-SET`, which pins the uniformity the
+README now claims and whose seeded fault is the pre-ADR-034 behaviour;
+`OBL-PLACEHOLDERS`' discriminating control and `Concrete steps` 2, 5, and 8
+updated; the README table specification in Stage C simplified to one inert
+dollar-form row with an instruction to state the uniformity in prose as well,
+since an all-"no" row invites a reader to assume a column was dropped. ADR-027
+was revised rather than left to ship born-superseded: it now cites ADR-034 for
+the set, retains the superseded reasoning under *Options considered* with a
+fourth option recording what ADR-034 actually did, and keeps its backtick and
+`shlex` decisions, which were re-verified unchanged against the rebased tree.
+
+What did not change: `D2`, `D3`, `OBL-QUOTING`, `OBL-BACKTICK-REJECT`, and
+`OBL-SHLEX-SCOPE`. `has_unmatched_backticks` is still a whole-string parity
+check, `is_valid_command_for_shell` still exempts PowerShell and still gates
+`command:` recipes only, and `interpolate_script_with_bindings` still applies
+no guard. `OBL-SHLEX-SCOPE` is therefore now the only recipe-kind asymmetry the
+README must describe.
+
+Rebase record: `OLD_BASE` `0ba6672f`, `OLD_HEAD` `cb177308`, `TARGET`
+`c31057c1`, ten commits replayed, two conflicts. `docs/contents.md` was
+resolved by keeping both sides with ADR-027 in numeric position.
+`docs/users-guide.md` and `src/ir/cmd_interpolate/mod.rs` were resolved to
+`main`'s version in full, because every branch change to them documented the
+removed asymmetry; both are now byte-identical to `origin/main`.
 
 Revision 3 (2026-09-19). Implementation begin. The plan was approved and work
 started under `Status: IN PROGRESS`. Before any implementation the branch was
