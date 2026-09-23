@@ -97,13 +97,22 @@ def _assert_malformed_revision_is_a_bounded_mismatch(
     ), "workflow outputs must retain the gate metric's mismatch category"
     assert_failure_trace_sequence(traces, "resolve_tag_commit", "mismatch")
 
+    forbidden_revisions = {
+        candidate for candidate in (revision, revision.rstrip("\n")) if candidate
+    }
     assert all(
         forbidden_revision not in value
         for record in metrics
         for value in typ.cast("dict[str, str]", record["labels"]).values()
-        for forbidden_revision in (revision, revision.rstrip("\n"))
-        if forbidden_revision
+        for forbidden_revision in forbidden_revisions
     ), "malformed revisions must never become metric label values"
+    assert all(
+        forbidden_revision not in value
+        for trace in traces
+        for value in trace.values()
+        if isinstance(value, str)
+        for forbidden_revision in forbidden_revisions
+    ), "malformed revisions must never become trace field values"
 
 
 def _assert_malformed_revision_stops_followup_requests(
