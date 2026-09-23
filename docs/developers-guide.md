@@ -3696,16 +3696,26 @@ called only by documentation-focused integration or behavioural tests. It
 rejects unmarked fences, duplicate identifiers and unterminated examples.
 
 `tests/documentation_examples_tests.rs` loads the exact fenced text, generates
-Ninja for every manifest fence and each complete manifest linked from the
-user's guide, and checks selected command and output contracts against the
-current binary. On Unix, `tests/documentation_examples_e2e_tests.rs` uses real
-Ninja to execute the documented first-run build and `cat hello.txt`, exercise
-the configured default target, verify the photo-edit and writing outputs, and
-run the standard-library manifests in isolated workspaces with controlled
-fixtures, environment variables, and stub executables. The registered `fetch`
-expression is intentionally checked without execution so this suite never makes
-a network request. `tests/documentation_examples_loader_tests.rs` covers
-concrete malformed-fence and non-YAML failure cases.
+Ninja for the registered accepting manifest cases and each complete manifest
+linked from the user's guide, and checks selected command and output contracts
+against the current binary. On Unix,
+`tests/documentation_examples_e2e_tests.rs` uses real Ninja to execute the
+documented first-run build and `cat hello.txt`, exercise the configured default
+target, verify the photo-edit and writing outputs, and run the standard-library
+manifests in isolated workspaces with controlled fixtures, environment
+variables, and stub executables. The registered `fetch` expression is
+intentionally checked without execution so this suite never makes a network
+request. `tests/documentation_examples_loader_tests.rs` covers concrete
+malformed-fence and non-YAML failure cases.
+
+`tests/readme_security_tests.rs` owns the README security examples, including
+an intentionally rejected manifest. Its private fixture loads the accepted
+example through the shared loader; its private generation helper composes
+manifest rendering, graph lowering, and the POSIX Ninja backend. Both helpers
+stay local to this integration target: other callers reuse the shared loader
+and production APIs directly. The tests inspect shell-variable preservation,
+path quoting, and rejection boundaries, and execute the accepted build with
+real Ninja. JSON mode exposes the rejected example's underlying error cause.
 
 The first-run README and user's guide examples also run through the
 `rstest-bdd` scenarios in `tests/features/documentation_examples.feature`.

@@ -25,11 +25,12 @@ Windows PowerShell untouched. That decision is a security boundary: it is the
 last place Netsuke can reject a command whose shell syntax the substitution
 damaged, and the only place Netsuke promises to quote a path.
 
-Today that boundary is implemented, proved with Kani and Proptest, and
-described in three internal documents — but a person evaluating Netsuke from
-its README cannot find it. The README's only security prose is one paragraph
-buried inside a release-status section. Roadmap item 4.4.1 exists to fix that,
-and to settle three questions the design documents explicitly leave open.
+At planning time that boundary was implemented, with marker-recognizer Kani
+proofs and wider Proptest coverage, and described in three internal documents —
+but a person evaluating Netsuke from its README cannot find it. The README's
+only security prose is one paragraph buried inside a release-status section.
+Roadmap item 4.4.1 exists to fix that, and to settle three questions the design
+documents explicitly leave open.
 
 After this change:
 
@@ -39,22 +40,20 @@ After this change:
   boundary, and states the status of the `shlex::split` guard.
 - The same section exists in all six translated READMEs, so the localized
   editions keep their present section-for-section parity with the English one.
-- Two of the README's claims are executable: a manifest that Netsuke accepts,
-  and a manifest that Netsuke rejects with a named diagnostic. Both run in the
+- Three README examples are executable: accepted placeholders, a quoted path,
+  and a rejected backtick marker with a named diagnostic. All run in the
   repository's documented-example harness, so the README cannot silently drift
   away from the implementation.
 - A new Architectural Decision Record,
   `docs/adr-027-command-placeholder-contract.md`, records the three settled
   contract decisions and their rationale, and the design document points at it.
-- Three documents that currently misstate the contract are corrected —
-  `docs/developers-guide.md`, `docs/users-guide.md`, and
-  `docs/formal-verification-methods-in-netsuke.md`. All three say, without
-  qualifying it to command recipes, that literal `$in` and `$out` are left
-  alone. In a `script:` recipe they are not.
+- The internal documents agree with ADR-034's uniform placeholder set and
+  ADR-027's backtick and guard boundaries. EP-M2's original script-only
+  corrections were superseded upstream before README implementation.
 
 The change is observable by running `NETSUKE_REQUIRE_NINJA=1 make test` and
 observing the new cases
-`readme_security_tests::placeholder_rewriting_differs_by_recipe_kind`,
+`readme_security_tests::dollar_forms_are_shell_variables_in_both_recipe_kinds`,
 `readme_security_tests::netsuke_owned_path_substitutions_are_quoted`, and
 `readme_security_tests::documented_backtick_manifest_is_rejected` pass, and by
 reading `README.md` and finding a section that agrees with what those tests
@@ -93,8 +92,8 @@ multi-line shell script). Netsuke processes these in three stages:
    `$in` / `$out` rule variables; the paths are already baked into the text.
 
 **Term of art — "marker".** In this plan, *marker* means a Netsuke-owned
-placeholder that Netsuke rewrites: `{{ ins }}`, `{{ outs }}`, and (in scripts
-only) `$in` and `$out`. *Internal token* means the `INS_TOKEN` /`OUTS_TOKEN`
+placeholder that Netsuke rewrites: `{{ ins }}`, `{{ outs }}`, and no
+dollar-prefixed forms. *Internal token* means the `INS_TOKEN` /`OUTS_TOKEN`
 sentinel strings that exist only between stages 1 and 2. *Shell variable* means
 text such as `$PATH` or `$ins` that Netsuke deliberately leaves alone. These
 three are distinct and the existing documentation conflates them; not
@@ -401,17 +400,24 @@ workaround.
 
 Stop and escalate when any threshold is reached. Do not work around them.
 
-- **Scope.** More than eighteen files changed, or more than 1200 net added
-  lines across the whole plan. The expected set is sixteen paths: `README.md`;
-  the six translations; `docs/adr-027-command-placeholder-contract.md`;
+- **Scope.** More than eighteen implementation files changed, or more than 1600
+  net added implementation lines, excluding this living plan. The user
+  authorized the remaining three milestones on 2026-09-23 while explicitly
+  identifying the existing 2445-line diff, including 2075 plan lines. That
+  authorization supersedes the earlier whole-plan 1200-line ceiling for the
+  named work. The expected set is sixteen paths: `README.md`; the six
+  translations; `docs/adr-027-command-placeholder-contract.md`;
   `docs/contents.md`; `docs/developers-guide.md`;
   `docs/formal-verification-methods-in-netsuke.md`; `docs/users-guide.md`;
   `docs/repository-layout.md`; `docs/roadmap.md`;
-  `tests/documentation_examples_tests.rs`; and one new test file. This plan
-  document itself is a seventeenth, and `src/ir/cmd_interpolate/mod.rs` a
-  possible eighteenth if its doc comment needs correcting.
+  `tests/documentation_examples_tests.rs`; and one new test file. The remaining
+  work also includes `scripts/check-readme-parity.sh`; the production module
+  requires no edit. The implementation stays within these named
+  responsibilities.
 
-  The line ceiling is deliberately generous because the README section is
+  The revised implementation line ceiling allows the known ADR and tests. The
+  original estimate below omitted executable-fence lines from the translations.
+  The line allowance is deliberately generous because the README section is
   written seven times. A realistic estimate is 70-100 lines of section prose
   per edition (490-700 in total), 150-250 for the ADR, 150-220 for the test
   file, and 30-50 for the index, roadmap, and correction edits: 820-1220. A
@@ -601,8 +607,8 @@ Assumptions relied upon, not verified here:
   regress silently: reinstating a special case for one form in one recipe kind
   would pass every existing README example. The matrix is what makes the
   README's table falsifiable.
-- Domain: the twelve cells formed by `{{ ins }}`, `{{ outs }}`, `$in`, `$out`,
-  `$ins`, and `$input`, each crossed with `command:` and `script:`.
+- Domain: eighteen cells: the two markers, all six dollar forms in the
+  table, and `$PATH`, each crossed with `command:` and `script:`.
 - Artefact: `tests/readme_security_tests.rs`, case
   `dollar_forms_are_shell_variables_in_both_recipe_kinds`.
 - Evidence: `cargo nextest run --test readme_security_tests`. Discharged when
@@ -751,37 +757,17 @@ new evidence.
 
 ### EP-M2 — internal documents corrected
 
-This milestone deliberately precedes the README section. Landing the README
-first would create a plateau at which `README.md` and `docs/users-guide.md`
-state opposite things about `$in` in a `script:`, and `D-SCOPE` already argues
-that such a state is exactly the ambiguity 4.4.1 exists to remove. The two
-milestones are independent, so ordering costs nothing and removes the
-contradiction window entirely.
+This milestone preceded the README so linked documents would agree. Its
+original script-only corrections are historical: ADR-034 removed that behaviour
+before EP-M3. The authoritative post-rebase outcome is recorded in `Progress`:
+the developers' guide, formal-verification document, and design agree with the
+uniform set; the users' guide and production module match main.
 
-- Outcome: three documents state the per-recipe-kind placeholder set
-  correctly.
-  - `docs/developers-guide.md:3187-3190` (§*Command interpolation contract*),
-    which currently says "Literal shell variables such as `$in`, `$out`,
-    `$ins`, and `$outs` remain unchanged" without qualifying it to command
-    recipes.
-  - `docs/users-guide.md:1697-1698`, which says "`{{ ins }}` and `{{ outs }}`
-    are the only Netsuke markers for input and output paths", and
-    `docs/users-guide.md:1713-1715`, which tells authors to replace `$in` and
-    `$out` without saying that the `script:` forms still resolve.
-  - `docs/formal-verification-methods-in-netsuke.md:265-266` (§*Command
-    placeholder contract*) and `:64-66` (§*Kani for command interpolation*),
-    both of which say literal `$in` and `$out` "remain shell variables"
-    unqualified. Also record in §*Command placeholder contract* that
-    `FV-CPC-Q1` through `FV-CPC-Q3` are now answered, pointing at ADR-027, and
-    correct the `[^8]` footnote path from `src/ir/cmd_interpolate.rs` to
-    `src/ir/cmd_interpolate/mod.rs`.
-
-  `docs/netsuke-design.md:290-291` already states this correctly — "standalone
-  `$in` and `$out` resolve only in scripts" — and must **not** be changed. It
-  is the canonical wording the other three should converge on. Where a doc
-  comment in `src/ir/cmd_interpolate/mod.rs` is itself inaccurate about
-  scripts, correct the comment text only; no code.
-
+- Outcome: internal documentation states that only `{{ ins }}` and
+  `{{ outs }}` are markers in both recipe kinds. It distinguishes the shared
+  marker protection from the command-only parity and `shlex` checks. The
+  formal-verification document answers `FV-CPC-Q1` through `FV-CPC-Q3`, cites
+  ADR-027, and corrects the `[^8]` module path.
 - Requirements advanced: Fact A consistency across the documentation set;
   prerequisite for `RM-4.4.1.a`, because the README will link to
   `docs/users-guide.md#review-the-safety-boundary`. After ADR-034 this
@@ -959,8 +945,9 @@ confirm that no sentence could be read as a guarantee Netsuke does not make.
 
 Add `tests/readme_security_tests.rs` with the seven cases named in
 `Verification plan`, referencing the three documented-example identifiers that
-do not yet exist. Its first line must be `mod documentation_examples;` — that
-declaration is load-bearing beyond the import, because
+do not yet exist. It must declare `mod documentation_examples;` after the
+module documentation and any crate attributes — that declaration is
+load-bearing beyond the import, because
 `tests/integration_test_wiring_tests.rs` enforces both that module trees are
 wired to Cargo test targets (`:150`) and that Cargo discovers every top-level
 integration source (`:186`). No `[[test]]` entry is needed: `Cargo.toml` sets no
@@ -1248,12 +1235,14 @@ A reader can verify the outcome without reading any test:
 
 - Open `README.md`. Between `## What works today` and
   `## Release and development status` there is a
-  `## Security and command interpolation` section. It names `{{ ins }}`,
-  `{{ outs }}`, and the script-only `$in` and `$out`. It says plainly that a
-  backtick pair the author wrote is executed by the shell. It says which recipe
-  kinds and which shells the `shlex` gate covers.
-- Copy the section's rejected example into a `Netsukefile` and run `netsuke`.
-  The output contains `Invalid command interpolation:` and no build runs.
+  `## Security and command interpolation` section. It names `{{ ins }}` and
+  `{{ outs }}` as markers, and dollar-prefixed forms as shell variables in both
+  recipe kinds. It says plainly that a backtick pair the author wrote is
+  executed by the shell. It says which recipe kinds and which shells the
+  `shlex` gate covers.
+- Copy the section's rejected example into a `Netsukefile` and run
+  `netsuke --json --locale en-GB`. The output contains
+  `Invalid command interpolation:` and no build runs.
 - Copy the section's accepted example and run `netsuke`. It builds.
 - Open any translated README. The same section is in the same place at the
   same heading level.
@@ -1263,7 +1252,7 @@ Quality criteria — what "done" means:
 - Tests: `NETSUKE_REQUIRE_NINJA=1 make test` passes. All seven cases in
   `tests/readme_security_tests.rs` pass, and each failed before the README
   section existed: `documented_safe_placeholder_manifest_builds`,
-  `placeholder_rewriting_differs_by_recipe_kind`,
+  `dollar_forms_are_shell_variables_in_both_recipe_kinds`,
   `netsuke_owned_path_substitutions_are_quoted`,
   `documented_backtick_manifest_is_rejected`,
   `balanced_author_backticks_are_accepted`,
@@ -1290,7 +1279,7 @@ Quality method: the gate sequence in `Concrete steps` step 10, delegated to
 ## Idempotence and recovery
 
 Every step is re-runnable. The gates are read-only except `make fmt`, which
-rewrites Markdown formatting in place and is safe to repeat. The two negative
+rewrites Markdown formatting in place and is safe to repeat. The three negative
 controls mutate the working tree and each is paired with an explicit revert;
 run them one at a time and confirm `git status` is clean between them.
 
@@ -1316,7 +1305,7 @@ mod documentation_examples;
 use documentation_examples::{documented_example, manifest_workspace};
 ```
 
-Its first line must be `mod documentation_examples;`. That declaration is
+Its module declaration must include `mod documentation_examples;`. That is
 load-bearing beyond the import: `tests/integration_test_wiring_tests.rs`
 enforces both that module trees are wired to Cargo test targets (`:150`) and
 that Cargo discovers every top-level integration source (`:186`). No `[[test]]`
@@ -1326,7 +1315,7 @@ covers the file.
 The cases it must define, by name:
 
 - `documented_safe_placeholder_manifest_builds`
-- `placeholder_rewriting_differs_by_recipe_kind`
+- `dollar_forms_are_shell_variables_in_both_recipe_kinds`
 - `netsuke_owned_path_substitutions_are_quoted`
 - `documented_backtick_manifest_is_rejected`
 - `balanced_author_backticks_are_accepted`
@@ -1367,6 +1356,28 @@ this repository's style guide; use it inside **Decision Outcome** only if it
 reads naturally.
 
 ## Progress
+
+### Resumption — 2026-09-23
+
+The user authorized EP-M3 through EP-M5. The checkout is clean at `24dfc3fe`,
+with no active rebase. PR 699 already has the requested title without `Plan:`;
+`lody session rename --title` successfully reapplied that title.
+
+The implementation sweep re-read ADR-027, ADR-034, the prescribed skills,
+project style, fixture guidance, and the documented-example harness. Leta
+confirmed `find_script_substitution` delegates to the common recognizer and
+`is_valid_command_for_shell` exempts PowerShell. The inherited introductory
+asymmetry claims, obsolete test name, first-line requirement, and stale closing
+approval sentence are reconciled with the revised decisions. The test module
+starts with `//!` and Unix gating, then declares the required harness module.
+
+EP-M3 red stage: added seven named test groups and three registry identifiers;
+`scrutineer` observed 25/25 missing-example failures before README prose was
+written; the registry check separately named exactly the three missing IDs. The
+matrix covers all table dollar forms plus `$PATH` in both recipe kinds. Test
+helpers remain private to this integration target and compose the existing
+manifest, graph, Ninja, workspace, and process APIs; no production abstraction
+or dependency is introduced.
 
 ### EP-M1 — complete (`3594b568`)
 
@@ -1499,6 +1510,17 @@ shell variable in *both* recipe kinds is now correct and needs no edit.
 - [ ] EP-M5 — roadmap 4.4.1 marked done; full gate sequence green.
 
 ## Surprises & discoveries
+
+- Observation (2026-09-23): the first green run passed 47/56 cases. Seven
+  script assertions omitted the outer wrapper's backslash before the doubled
+  dollar; one path assertion expected whole-word quoting instead of
+  `shell-quote`'s valid `input' file.txt'` spelling. Both were test-oracle
+  representation errors, not changes to the placeholder or quoting contract.
+  The default human CLI rendered only the enclosing graph error. JSON mode
+  preserves the underlying interpolation cause, so the executable README
+  instruction and CLI test now use `--json --locale en-GB`. The IR rejection
+  remains unchanged. Evidence: `/tmp/focused-netsuke-readme-m3.out` and the
+  corrected run `/tmp/focused-netsuke-readme-m3-fix1.out` (56/56 passed).
 
 - Observation: `main` reversed Fact A while this branch was mid-implementation.
   `script:` recipes no longer lower bare `$in` and `$out` to paths; every
@@ -1659,13 +1681,28 @@ shell variable in *both* recipe kinds is now correct and needs no edit.
 
 ## Decision log
 
-- Decision `D1`: the supported placeholder set is `{{ ins }}` and `{{ outs }}`
-  in both recipe kinds, plus `$in` and `$out` in `script:` recipes only.
-  Rationale: this is what the code does (Fact A). The alternative — documenting
-  the simpler, uniform set the existing prose implies — would be documenting a
-  contract Netsuke does not honour, which is worse than documenting an
-  irregular one. Answers `FV-CPC-Q1`. Date/Author: 2026-09-09, planning agent.
-  Awaiting approval.
+- Decision `D-DIAGNOSTIC-MODE`: name the existing JSON diagnostic mode when
+  demonstrating the localized interpolation cause. Human output may report only
+  the graph wrapper. This is a presentation clarification of
+  `OBL-BACKTICK-REJECT`, not a changed acceptance contract or production fix.
+  Date: 2026-09-23.
+
+- Decision `D-RESUME-20260923`: continue the explicitly authorized remaining
+  milestones against ADR-034. The user supplied the existing oversized plan
+  diff when requesting continuation, so its known size is accepted; the revised
+  scope allowance excludes the living plan and includes the already-required
+  parity script. No new product scope is added. The module-doc requirement in
+  AGENTS.md takes precedence over the old instruction to put a module
+  declaration on the first line. All mutations remain temporary controls.
+
+- Historical decision `D1` (superseded by `D1-RESOLVED`): the supported
+  placeholder set is `{{ ins }}` and `{{ outs }}` in both recipe kinds, plus
+  `$in` and `$out` in `script:` recipes only. Rationale: this is what the code
+  does (Fact A). The alternative — documenting the simpler, uniform set the
+  existing prose implies — would be documenting a contract Netsuke does not
+  honour, which is worse than documenting an irregular one. Answers
+  `FV-CPC-Q1`. Date/Author: 2026-09-09, planning agent. Approved for
+  implementation; subsequently superseded by ADR-034.
 
 - Decision `D2`: the backtick handling is a deliberate, narrow structural
   guard over Netsuke-owned lowering, not a temporary subset of a
@@ -1675,7 +1712,7 @@ shell variable in *both* recipe kinds is now correct and needs no edit.
   command substitution, which it does not. The honest third option is to scope
   the guarantee precisely to what it covers — markers — and to say explicitly
   what it does not cover. Answers `FV-CPC-Q2`. Date/Author: 2026-09-09,
-  planning agent. Awaiting approval.
+  planning agent. Approved for implementation.
 
 - Decision `D3`: `shlex::split` is part of the observable acceptance contract
   for `command:` recipes on POSIX and Bash routes, but the precise accepted set
@@ -1686,7 +1723,7 @@ shell variable in *both* recipe kinds is now correct and needs no edit.
   future crate versions would be a commitment nobody has agreed to. Splitting
   the answer along the rejection/acceptance axis is more precise than either of
   the two options `FV-CPC-Q3` offers. Answers `FV-CPC-Q3`. Date/Author:
-  2026-09-09, planning agent. Awaiting approval.
+  2026-09-09, planning agent. Approved for implementation.
 
 - Decision `D-SCOPE`: the plan corrects the two inaccurate upstream documents
   and records `D1`–`D3` in a new ADR, rather than writing the README section
@@ -1975,7 +2012,16 @@ knowingly deferred.
 
 ## Artefacts and notes
 
-To be populated during implementation. At minimum, retain:
+EP-M3 red evidence (2026-09-23):
+
+- `/tmp/red-netsuke-readme-contract.out`: registry drift names exactly the
+  three new identifiers; 19 passed, 1 failed, then fail-fast stopped the run.
+  The initial pipeline omitted `pipefail`; its exit status is not evidence.
+- `/tmp/red-readme-security-tests.out`: the follow-up used `pipefail` and
+  `--no-fail-fast`; exit 100, 25 tests failed with the expected missing-example
+  errors, covering all seven test groups and all three identifiers.
+
+At minimum, retain:
 
 - the red transcript from `Concrete steps` step 6, showing both
   missing-identifier failures and the registry-drift failure;
@@ -2081,6 +2127,6 @@ Revision 1 (2026-09-09). Initial draft. Established the three contract
 decisions from a direct reading of `src/ir/cmd_interpolate/` and scoped the
 work to five milestones.
 
-Remaining work: all of it; the plan awaits approval before any implementation
-begins. `D1-LEGACY` additionally awaits the owner's confirmation, though it is
-written so that either answer leaves the documentation honest.
+Remaining work on resumption: EP-M3 through EP-M5. The user explicitly
+authorized continued implementation on 2026-09-23. `D1-LEGACY` is closed by
+ADR-034 and `D1-RESOLVED`.
