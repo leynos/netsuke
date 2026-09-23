@@ -1531,10 +1531,10 @@ calls transitively. `tests/workflow_contracts/workflow_call_closure.py` owns
 that traversal. It reads a call as local when the reference, less one of the
 two same-repository prefixes GitHub documents, `./` or the self-repository `$/`
 that GitHub.com recommends, names a file directly under `.github/workflows/`.
-It follows no cross-repository call, and fails the reading when a local call
-names a workflow it did not read. Any future contract that asks what a pull
-request runs should take its lane from `pull_request_lane` rather than
-filtering triggers again.
+It refuses a reference naming that directory with neither prefix, follows no
+cross-repository call, and fails the reading when a local call names a workflow
+it did not read. Any future contract that asks what a pull request runs should
+take its lane from `pull_request_lane` rather than filtering triggers again.
 
 Two clauses exist because a workflow can reach CodeScene without naming the
 action or the credential. Any mention of `codescene.io`, matched

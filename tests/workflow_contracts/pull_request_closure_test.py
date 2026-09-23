@@ -92,7 +92,6 @@ def _lane_offenders(texts: dict[str, str]) -> list[str]:
     [
         "./.github/workflows/probe.yml",
         "$/.github/workflows/probe.yml",
-        ".github/workflows/probe.yml",
     ],
 )
 def test_the_lane_reaches_a_called_workflow(reference: str) -> None:
@@ -181,7 +180,6 @@ def test_an_unresolved_local_call_fails_the_reading() -> None:
     ("reference", "expected"),
     [
         ("./.github/workflows/release.yml", "release.yml"),
-        (".github/workflows/release.yml", "release.yml"),
         ("$/.github/workflows/release.yml", "release.yml"),
         ("$/.github/workflows/nested/release.yml", None),
         ("./.github/workflows/nested/release.yml", None),
@@ -235,3 +233,14 @@ def test_named_forwarding_into_another_repository_fails_the_boundary() -> None:
     )
     offenders = _lane_offenders({"ci_yml": forwarding})
     assert offenders, "a credential forwarded by name must be reported"
+
+
+def test_an_unprefixed_local_call_is_refused() -> None:
+    """Refuse a workflow-directory reference with neither documented prefix.
+
+    GitHub documents `./` and `$/` for a same-repository call. A bare
+    `.github/workflows/` reference read as another repository's call would
+    drop its callee from the lane in silence, so it fails the reading.
+    """
+    with pytest.raises(UnresolvedWorkflowCallError, match="without"):
+        local_workflow_name(".github/workflows/release.yml")
