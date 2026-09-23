@@ -1890,9 +1890,24 @@ The Python gates run inside the ordinary quality-gate targets:
 - `make lint` runs `make lint-python`: `ruff check`, a Pylint pass, the
   df12 house lints, the `ambrleaks` snapshot scanner, and Interrogate docstring
   coverage. Interrogate runs through `uv tool run --python $(PYTHON_BASELINE)`
-  so local tool environments parse the same supported Python syntax as CI.
+  so local tool environments parse the same supported Python syntax as CI. It
+  also runs `make lint-workflow-scripts`, which loads every trusted module under
+  `.github/scripts` on the baseline. That loader catches definition-time
+  failures, but under PEP 649 it does **not** catch an annotation naming a
+  `TYPE_CHECKING`-only import, because deferred evaluation means the annotation
+  is never resolved at load time. The claim that it did held under 3.12 and
+  outlived the baseline change.
 - `make typecheck` runs `make typecheck-python`: the
   [ty](https://github.com/astral-sh/ty) typechecker over the Python sources.
+
+Because PEP 649 defers annotation evaluation, the contract modules under
+`tests/workflow_contracts/` import cleanly while their annotations still name
+`TYPE_CHECKING`-only imports, and resolving those annotations at runtime raises
+`NameError`. The repository does not support runtime annotation introspection
+on those modules; `ty` reads them statically and pytest executes them, and
+neither resolves annotations. See
+[ADR-038](adr-038-runtime-annotation-introspection-in-workflow-contracts.md)
+for the decision, the measured scope, and the gate that reopens it.
 
 The Makefile's `PYTHON_SOURCES` includes `.github/scripts`, so the normal
 formatting, lint, and type-check targets cover the trusted workflow helpers as

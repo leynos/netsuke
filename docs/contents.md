@@ -184,6 +184,10 @@ operator, user, and contributor references are easier to find.
   without an always-cold nested workspace build.
 - [ADR-034](adr-034-preserve-script-in-out-as-shell-variables.md): Script
   `$in` and `$out` shell-variable semantics and marker-token separation.
+- [ADR-038](adr-038-runtime-annotation-introspection-in-workflow-contracts.md):
+  Runtime annotation introspection declared unsupported for the workflow
+  contract tests, with the loader gate's stale `TYPE_CHECKING` claim corrected
+  and a revisit gate that reopens on a real consumer.
 
 ## Proposals
 

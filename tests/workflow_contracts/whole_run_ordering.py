@@ -7,6 +7,10 @@ its configuration and its lanes as parameters, and is driven with
 configurations this repository does not have in
 ``whole_run_ordering_test``, including one omitting the key entirely.
 
+Read by ``ty`` and run by pytest; runtime annotation introspection is not
+supported here, because these annotations name ``TYPE_CHECKING``-only imports
+and resolving one raises ``NameError``. ADR-038 records the decision.
+
 Run via ``make test-workflow-contracts``.
 """
 

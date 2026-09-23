@@ -277,10 +277,18 @@ lint-python: lint-workflow-scripts ## Run Ruff, Pylint, Interrogate, the df12 ho
 lint-workflow-scripts: ## Load every trusted workflow module under the Python baseline
 	# The trusted coverage workflow runs these through GitHub Actions' `python`
 	# shell, and tests/workflow_contracts/python_shell_interpreter_test.py
-	# holds that shell to the baseline. Ruff and ty read the modules; only
-	# loading them catches a definition-time failure such as an annotation
-	# naming a TYPE_CHECKING-only import, which no pull request can fix once
-	# it is on main because the workflow runs the default branch's copy.
+	# holds that shell to the baseline. Ruff and ty read the modules; loading
+	# them catches a definition-time failure -- a name used at module scope, an
+	# invalid decorator -- which no pull request can fix once it is on main,
+	# because the workflow runs the default branch's copy.
+	#
+	# Loading does NOT catch an annotation naming a TYPE_CHECKING-only import,
+	# which this comment claimed until the baseline moved to 3.14: PEP 649
+	# defers annotation evaluation, so such a module loads cleanly and fails
+	# only when something resolves the annotation. The claim held under 3.12
+	# and no longer does. Catch it by calling typing.get_type_hints, not by
+	# loading; see
+	# docs/adr-038-runtime-annotation-introspection-in-workflow-contracts.md.
 	@for module in .github/scripts/*.py; do \
 		$(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) python -c \
 			'import runpy, sys; runpy.run_path(sys.argv[1], run_name="lint_workflow_scripts")' \
