@@ -190,8 +190,60 @@ failure mode cannot recur silently.
       `.github/scripts/verify_nextest_anchored_filters.py` followed, together
       with a new whole-file liveness check described below. `make
       test-workflow-contracts` stayed at 605 passed, 2 skipped.
+- [x] (2026-09-23) Widen the runtime liveness guard and prove it live. The
+      script gained a whole-file replay — every `filter = '…'` value in the
+      configuration is replayed verbatim through Nextest and must select at
+      least one test — and the reading that carries it was split into a
+      `_nextest_oracle` package beside the entry script, because the file was
+      at 385 of the 400-line cap and inlined checks would have breached it.
+      The package holds the configuration grammar, the listing oracle, and the
+      instrumented-tree environment; the entry script keeps its top-level path,
+      which is how the workflow calls it.
+      Two facts were resolved by measurement rather than reasoning. First,
+      `--run-ignored all` is load-bearing for the listing: without it Nextest
+      reports an `#[ignore]`-gated test as `mismatch` whatever the filterset
+      says, so a selector naming only ignored tests — the mutation compile gate
+      is one — would read as selecting nothing. Probed directly: the gate's
+      filter returns `[]` without the flag and the gate itself with it.
+      Second, the reading grammar had to be widened here too. It still matched
+      a bare `[a-z0-9_]+`, so the qualified gate filter was invisible to
+      `configured_names` — the "unwritable in one place, unreadable in the
+      other" split predicted in the plan, confirmed by probing the old and new
+      patterns against the live filter.
+      Both directions were liveness-checked, because a green exit proves
+      nothing on its own. An in-process probe against a scratch copy of the
+      config with the qualifier removed exits 1 naming that filter; against a
+      scratch copy carrying a module-scoped legacy-form filter exits 1 naming
+      the test. The real configuration exits 0. The first attempt ran the guard
+      as a child process and reported both defects as missed — the child loads
+      the module fresh and reads the real config, so the patch never reached
+      it. An in-process call is the only form of this probe that measures
+      anything.
 
 ## Surprises & discoveries
+
+- **A liveness probe can pass by measuring the wrong process.** The first
+  attempt at liveness-checking the new guard patched
+  `_nextest_oracle.grammar.NEXTEST_CONFIG` in the probe's own interpreter and
+  then ran the script with `subprocess.run`. Both probes reported the defect as
+  *missed*, which reads as a weak guard. The guard was fine; the probe was not.
+  A child process re-imports the module from disk and reads the real
+  configuration, so the patch never reached the code under test. The fix is to
+  load the entry script with `importlib` and call `main([])` in-process, where
+  the patched module is the one the guard actually uses. This is the same class
+  of error as the green exit it was meant to guard against — a probe that
+  cannot fail for the reason you think is not evidence — and it is worth
+  recording that the second, *correct* run reported both defects as caught.
+- **A widening can be correct and still be untested by the suite.** Writing the
+  widened reading grammar in `_nextest_oracle/grammar.py` changed nothing
+  observable in the current configuration, because the only qualified filter it
+  newly reads is one that already passes the whole-file replay. A green run
+  therefore proved nothing about it. Demonstrating the difference needed a
+  probe against a *fictional* filter instead: the old pattern captured nothing
+  for a module-scoped legacy-form filter, the new one captures the bare name
+  and fires the guard. Without that probe the widening would have shipped
+  unverified, and it is exactly the change whose absence the plan predicted as
+  the "unreadable in the other half" failure.
 
 - **A gate that passes twice can still be failing, and the cap is the tell.**
   `kani-smoke` passed the compile gate at `257.7 s` and `261.5 s` of a `300 s`
