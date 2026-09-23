@@ -392,13 +392,16 @@ The lowering stages have deliberately separate responsibilities:
   one-based entry position.
 - `src/ir/from_manifest_support.rs` prepares one shell-quoted input/output
   binding set for the recipe, then interpolates every scalar or list entry with
-  that set. Only `{{ ins }}` and `{{ outs }}` markers are resolved per entry.
-  Literal `$ins` and `$outs` remain shell variables and are escaped for Ninja
+  that set. Both recipe kinds recognize the same `{{ ins }}` and `{{ outs }}`
+  markers; POSIX lexical scanning can preserve their internal tokens in
+  comments and heredoc bodies rather than resolving them. Literal `$in`, `$out`,
+  `$ins`, and `$outs` remain shell variables and are escaped for Ninja
   pass-through. POSIX lowering tracks unquoted, single-quoted, and
   double-quoted text, and rejects markers within command substitutions because
-  it cannot lower them safely; scripts therefore retain heredocs and comments
-  without accepting an unsafe marker context. The resulting action contains
-  ordinary command text and no Ninja placeholders.
+  it cannot lower them safely. Script recipes therefore retain heredocs and
+  comments without accepting an unsafe marker context. The resulting action
+  contains lowered command text and no Ninja rule variables; an inert region
+  may still retain an internal Netsuke marker token.
 - `src/ninja_gen/mod.rs` delegates completed recipe text to
   `src/ninja_gen_recipe_shell.rs`. On Unix, and for the explicit Windows Bash
   compatibility route, a scalar remains POSIX shell text. A list puts each
@@ -3743,16 +3746,38 @@ called only by documentation-focused integration or behavioural tests. It
 rejects unmarked fences, duplicate identifiers and unterminated examples.
 
 `tests/documentation_examples_tests.rs` loads the exact fenced text, generates
-Ninja for every manifest fence and each complete manifest linked from the
-user's guide, and checks selected command and output contracts against the
-current binary. On Unix, `tests/documentation_examples_e2e_tests.rs` uses real
-Ninja to execute the documented first-run build and `cat hello.txt`, exercise
-the configured default target, verify the photo-edit and writing outputs, and
-run the standard-library manifests in isolated workspaces with controlled
-fixtures, environment variables, and stub executables. The registered `fetch`
-expression is intentionally checked without execution so this suite never makes
-a network request. `tests/documentation_examples_loader_tests.rs` covers
-concrete malformed-fence and non-YAML failure cases.
+Ninja for the registered accepting manifest cases and each complete manifest
+linked from the user's guide, and checks selected command and output contracts
+against the current binary. On Unix,
+`tests/documentation_examples_e2e_tests.rs` uses real Ninja to execute the
+documented first-run build and `cat hello.txt`, exercise the configured default
+target, verify the photo-edit and writing outputs, and run the standard-library
+manifests in isolated workspaces with controlled fixtures, environment
+variables, and stub executables. The registered `fetch` expression is
+intentionally checked without execution so this suite never makes a network
+request. `tests/documentation_examples_loader_tests.rs` covers concrete
+malformed-fence and non-YAML failure cases.
+
+`tests/readme_security_tests.rs` owns the README security examples, including
+an intentionally rejected manifest. Its private fixture loads the accepted
+example through the shared loader. Its private
+`lower_recipe_for_shell(source: &str, shell: RecipeShell)` helper returns the
+lowered action recipe and `BuildGraph` after manifest parsing, rendering, and
+lowering; tests call the Ninja backend separately. The POSIX generation helper
+delegates to it. Keep these helpers local to this integration target: other
+callers reuse the shared loader and production APIs directly. The tests inspect
+shell-variable preservation, path quoting, rejection boundaries, and inert
+comment/heredoc markers across POSIX/Bash command and script cases. They assert
+the typed Ninja-generation failure for command heredocs and execute an inert
+script heredoc with real Ninja. JSON mode exposes the rejected example's
+underlying error cause.
+
+`tests/readme_parity_tests.rs` exercises the manual
+`scripts/check-readme-parity.sh` checker against seven isolated README
+fixtures. It covers matching structures, heading-count and level mismatches,
+fence handling, indentation, CRLF input, a missing README, and invocation from
+outside the fixture root. The test copies the actual script into the fixture;
+the checker remains a manual aid and is not added as a separate CI gate.
 
 The first-run README and user's guide examples also run through the
 `rstest-bdd` scenarios in `tests/features/documentation_examples.feature`.
@@ -3918,13 +3943,14 @@ implementation boundary, not a public command-template API.
 
 The private `src/ir/cmd_interpolate/posix_lexical.rs` helper owns the
 single-pass recognition of POSIX comments and heredoc inert regions. It copies
-those comments and heredoc bodies byte-for-byte, leaves markers in them
-literal, and queues declarations FIFO, including quoted delimiters and `<<-`
-tab-stripping delimiters, so their text cannot change the surrounding quote
-context. This is a command-interpolation helper, not a general shell parser,
-and is not intended for reuse outside that boundary. The sibling
-`src/ir/cmd_interpolate/command_substitution.rs` owns the local quote and
-parenthesis state needed to keep protected `$()` bodies isolated.
+those comments and heredoc bodies byte-for-byte, so internal marker tokens in
+them are not expanded and can remain in the generated recipe; markers in
+heredoc delimiters are expanded. It queues declarations FIFO, including quoted
+delimiters and `<<-` tab-stripping delimiters, so their text cannot change the
+surrounding quote context. This is a command-interpolation helper, not a
+general shell parser, and is not intended for reuse outside that boundary. The
+sibling `src/ir/cmd_interpolate/command_substitution.rs` owns the local quote
+and parenthesis state needed to keep protected `$()` bodies isolated.
 
 `src/manifest/render.rs` may emit the internal tokens while rendering the only
 accepted manifest markers, `{{ ins }}` and `{{ outs }}`. Literal shell variables
@@ -3934,17 +3960,28 @@ this two-stage recipe pipeline and its direct IR recipe tests.
 
 ### Command interpolation contract
 
-The scanner recognizes only the internal `INS_TOKEN` and `OUTS_TOKEN` markers
-emitted by manifest rendering. Literal shell variables such as `$in`, `$out`,
-`$ins`, and `$outs` remain unchanged for the selected backend to interpret.
+The scanner recognizes only the internal `INS_TOKEN` and `OUTS_TOKEN` tokens
+emitted by manifest rendering, identically in `command:` and `script:` recipes.
+Literal shell variables such as `$in`, `$out`, `$ins`, and `$outs` remain
+unchanged for the selected backend to interpret, in both recipe kinds; see
+[ADR-034](adr-034-preserve-script-in-out-as-shell-variables.md), which removed
+the former `script:`-only lowering of `$in` and `$out`, and
+[ADR-027](adr-027-command-placeholder-contract.md) for the resulting contract.
 
 `INS_TOKEN` and `OUTS_TOKEN` are machine-generated markers. They match exact
 text, so an adjacent identifier character does not suppress a marker
 substitution. On POSIX-compatible routes, a placeholder inside a
 backtick-delimited region is rejected before it can evade lowering. PowerShell
-uses backticks as escapes and does not enter that protected region. The POSIX
-scanner then validates the substituted command: odd backticks reject the
-command, and the `shlex` guard also evaluates that substituted text. The
+uses backticks as escapes and does not enter that protected region. POSIX and
+Bash scanning also preserves comments and heredoc bodies verbatim; keep markers
+out of those regions, where their internal tokens can remain in generated
+recipe text. Heredoc delimiters are scanned for markers and expand normally.
+`script:` recipes share the POSIX-aware scanner on all shell routes, while
+PowerShell `command:` recipes use separate interpolation rules. For POSIX and
+Bash `command:` recipes, the scanner then validates the substituted text: odd
+backticks reject the command, and the `shlex` guard also evaluates that
+substituted text. `script:` recipes skip both checks, because a script may
+legitimately contain heredocs and other syntax `shlex` cannot model. The
 odd-backtick and guard properties are complementary: one proves rejection of
 odd substituted backtick counts, while the other proves that the guard's
 success or failure and returned command agree with the substituted command.

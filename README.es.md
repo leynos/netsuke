@@ -172,6 +172,128 @@ omitir una receta.
 
 ______________________________________________________________________
 
+## Seguridad e interpolación de comandos
+
+Un `Netsukefile` ejecuta comandos y puede usar auxiliares de plantillas
+impuros. Trátelo con el mismo cuidado que un `Makefile`: revise los manifiestos
+que no sean de confianza antes de ejecutarlos. Netsuke reduce algunos errores
+de entrecomillado, pero no es un entorno aislado. En las rutas POSIX, el shell
+ejecuta los pares de acentos graves escritos por el autor cuando se usan como
+sustitución de comandos.
+
+**De qué no protege Netsuke.** Los acentos graves escritos a mano y `$( … )`
+pueden ejecutar comandos. En Unix, Ninja pasa el texto del comando a `sh -c`;
+Netsuke no sanea ese texto.
+
+**Los valores interpolados no se entrecomillan.** Los valores arbitrarios de
+Jinja, los bloques `raw` y los fragmentos de shell escritos a mano se
+convierten en texto normal de receta. No interpole valores que no sean de
+confianza en comandos de shell: entrecomillar los marcadores de ruta no protege
+esos valores.
+
+**Qué reescribe Netsuke.** Solo `{{ ins }}` y `{{ outs }}` son marcadores de
+Netsuke. El conjunto es idéntico en las recetas `command:` y `script:`. Todas
+las formas con dólar que aparecen abajo, así como `$PATH`, siguen siendo
+variables de shell en ambos tipos de receta. Netsuke duplica sus signos de
+dólar para Ninja, de modo que el shell elegido los reciba sin cambios; no
+expone las variables de regla propias de Ninja `$in` y `$out`.
+
+Tabla 1: formas reescritas como rutas de entrada o salida (`yes` significa que
+se reescribe en el texto activo de la receta; consulta la nota siguiente).
+
+| Forma                                               | `command:`  | `script:`   |
+| --------------------------------------------------- | ----------- | ----------- |
+| `{{ ins }}`                                         | yes[^inert] | yes[^inert] |
+| `{{ outs }}`                                        | yes[^inert] | yes[^inert] |
+| `$in`, `$out`, `$ins`, `$outs`, `$input`, `$output` | no          | no          |
+
+[^inert]: En las rutas POSIX y Bash, Netsuke copia los marcadores de los
+    comentarios y del cuerpo de los heredoc como tokens internos, sin expandirlos;
+    los marcadores de los delimitadores de heredoc sí se expanden. Las recetas
+    `script:` usan el mismo analizador POSIX, también en PowerShell, mientras que
+    las recetas `command:` de PowerShell siguen reglas de interpolación distintas.
+    No pongas marcadores en comentarios ni en cuerpos de heredoc: los tokens
+    internos pueden permanecer en la receta generada.
+
+Si existe `input.txt`, este manifiesto POSIX copia su contenido a `output.txt`
+y comprueba que el `PATH` del shell no esté vacío:
+
+```yaml
+netsuke_version: '1.0.0'
+targets:
+  - name: output.txt
+    sources: input.txt
+    command: 'cat {{ ins }} > {{ outs }} && test -n "$PATH"'
+defaults: [output.txt]
+```
+
+**Qué entrecomilla Netsuke.** Solo las sustituciones de rutas propias de
+Netsuke reciben entrecomillado automático de shell. POSIX y Bash usan
+`shell-quote` y codificación según el contexto; PowerShell usa su propia
+codificación literal y rechaza marcadores en regiones entrecomilladas. Si existe
+`input file.txt`, este ejemplo POSIX pasa la ruta como un solo argumento y
+produce `output.txt`:
+
+```yaml
+netsuke_version: '1.0.0'
+targets:
+  - name: output.txt
+    sources: input file.txt
+    command: 'cat {{ ins }} > {{ outs }}'
+defaults: [output.txt]
+```
+
+**Acentos graves y sustitución de comandos.** Netsuke rechaza marcadores dentro
+de sustituciones con acentos graves en POSIX y Bash, y dentro de `$( … )` en
+todas las rutas de shell, en ambos tipos de receta. PowerShell usa acentos
+graves como caracteres de escape, así que queda fuera de la restricción de
+acentos graves, pero sigue rechazando marcadores en `$( … )`. Este límite de
+los marcadores es un invariante garantizado.
+
+Por separado, las recetas `command:` de POSIX y Bash rechazan actualmente un
+número total impar de acentos graves tras la sustitución. Este recuento
+conservador incluye los acentos graves entre comillas simples; no es un
+analizador de shell. Las recetas `script:` y PowerShell omiten el recuento. Una
+versión futura puede aceptar más casos sin un cambio incompatible. Las
+sustituciones equilibradas escritas por el autor siguen activas.
+
+Este manifiesto POSIX se rechaza antes de ejecutar Ninja. Ejecute
+`netsuke --json --locale en-GB` para ver la causa:
+`Invalid command interpolation:`, seguida del fragmento problemático; la salida
+legible predeterminada quizá muestre solo el fallo general al construir el
+grafo:
+
+```yaml
+netsuke_version: '1.0.0'
+targets:
+  - name: output.txt
+    sources: input.txt
+    command: 'echo `cat {{ ins }}` > {{ outs }}'
+defaults: [output.txt]
+```
+
+**La comprobación de `shlex`.** Las recetas `command:` de POSIX y Bash deben
+superar `shlex::split` tras la sustitución; si no, reciben el mismo diagnóstico
+localizado durante la conversión a la representación intermedia. Las recetas
+`script:` y PowerShell omiten esta comprobación. Netsuke no ejecuta los tokens
+devueltos. `shlex` no realiza expansiones y trata los acentos graves como
+caracteres normales: superar la comprobación no hace seguro un comando. No la
+use como comprobación contra inyecciones.
+
+El rechazo forma parte del contrato observable, pero el conjunto exacto de
+entradas aceptadas no es una garantía de estabilidad: depende de la versión de
+`shlex` resuelta al compilar Netsuke. Que una versión futura acepte texto antes
+rechazado no es un cambio incompatible; que rechace texto antes aceptado es un
+defecto que debe anotarse en el registro de cambios, no un cambio de política.
+
+**Estabilidad y más información.** Netsuke aún es anterior a 1.0; las
+interfaces pueden cambiar. Estas garantías acotadas no hacen seguras las
+recetas arbitrarias. Consulte los mecanismos de las rutas de shell en el
+[límite de seguridad de la guía del usuario](docs/users-guide.md#review-the-safety-boundary)
+y las decisiones en [ADR-027](docs/adr-027-command-placeholder-contract.md).
+
+______________________________________________________________________
+
 ## Estado del lanzamiento y del desarrollo
 
 El lanzamiento v0.1.0-beta3 es una vista previa útil para quienes lo adoptan
@@ -211,10 +333,10 @@ expresiones literales con el signo de dólar de shell requieren migración; véa
 el
 [límite de seguridad de la guía del usuario](docs/users-guide.md#review-the-safety-boundary).
 
-Un `Netsukefile` puede ejecutar comandos y usar ayudantes de plantilla impuros.
-Trátelo con el mismo cuidado que un `Makefile`: revise los manifiestos que no
-sean de confianza antes de ejecutarlos. Netsuke entrecomilla las sustituciones
-de ruta admitidas, pero no es un entorno aislado.
+Consulte
+[seguridad e interpolación de comandos](#seguridad-e-interpolación-de-comandos)
+y el
+[límite de seguridad de la guía del usuario](docs/users-guide.md#review-the-safety-boundary).
 
 ______________________________________________________________________
 
