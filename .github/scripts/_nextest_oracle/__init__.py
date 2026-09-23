@@ -21,6 +21,9 @@ from _nextest_oracle.grammar import (
     LEGACY_SELECTOR as LEGACY_SELECTOR,
 )
 from _nextest_oracle.grammar import (
+    MODULE_PATH as MODULE_PATH,
+)
+from _nextest_oracle.grammar import (
     all_filters as all_filters,
 )
 from _nextest_oracle.grammar import (

@@ -219,9 +219,44 @@ failure mode cannot recur silently.
       the module fresh and reads the real config, so the patch never reached
       it. An in-process call is the only form of this probe that measures
       anything.
+- [x] (2026-09-23) Split the per-declaration `slow-timeout` readers out of
+      `nextest_budgets.py` into `nextest_slow_timeouts.py`, after CI reported
+      `C0302 (404/400)` on the merge result. `_multiplier_of` and `budget_of`
+      are the seam: the whole of the per-declaration reading, with no importer
+      outside the module. The four public functions stay put, so no importer
+      changed. `budget_of` is public in its new home because it is now imported
+      rather than called lexically; the `UnboundedTestError` import left with
+      the code that raised it, and a stranded comment describing a humantime
+      pair — orphaned above `_table` by the earlier `nextest_durations` split —
+      went with it. Verified against the real merge, not the branch:
+      `git merge-tree` with the work staged gives 305 lines with both sides'
+      edits intact.
 
 ## Surprises & discoveries
 
+- **A file at the 400-line cap fails on the merge, not on the branch.** CI went
+  red on `e2987679` at `make lint-python`, and not for anything this branch
+  wrote wrongly:
+
+  ```text
+  tests/workflow_contracts/nextest_budgets.py:1:0: C0302: Too many lines in
+  module (404/400) (too-many-lines)
+  ```
+
+  The arithmetic is entirely positional. The merge base carried 395 lines;
+  `main` added 395→399, a four-line ADR-038 paragraph; this branch added
+  399→400, its 600-second docstring correction. The two edits are in different
+  regions, so Git merges them cleanly, and pylint then refuses the *result*.
+  Nothing local could have caught it: the branch head is exactly 400 and passes
+  bare, and `make lint-python` over the working tree reports success. The
+  failure exists only in the merge that GitHub Actions builds. A file sitting
+  precisely at a per-file cap therefore has zero headroom by construction, and
+  the place its overrun appears is the one place a local gate never looks. The
+  repair is the split that `nextest_durations` and `nextest_totals` were each
+  produced by, for this same cap. Stated generally, and this is the part worth
+  keeping: **a per-file limit is not a property of either side of a merge, so
+  neither side's green run can establish it.** The narrower lesson is to leave
+  headroom when a file approaches the cap, rather than landing exactly on it.
 - **A liveness probe can pass by measuring the wrong process.** The first
   attempt at liveness-checking the new guard patched
   `_nextest_oracle.grammar.NEXTEST_CONFIG` in the probe's own interpreter and
@@ -633,6 +668,35 @@ failure mode cannot recur silently.
   s of 1,800 s), which is why the failure read as a mystery until the innermost
   tier was checked: the tiers are independent, and an outer one having room
   says nothing about an inner one being exceeded.
+- Split the per-declaration `slow-timeout` reading into
+  `nextest_slow_timeouts.py` rather than trimming prose to fit the cap. The
+  module sat at exactly 400 lines and the merge took it to 404, so some line
+  had to go; the question was which. Deleting a docstring paragraph would have
+  recovered four lines and left the file at 400 again with the next commit
+  against it, which is the same failure scheduled rather than repaired. The
+  seam is the one already there — `budget_of` reads a single declaration's two
+  numbers and nothing else in the module calls it except the aggregate — and it
+  is the seam `nextest_durations` and `nextest_totals` were cut along for this
+  same cap. The four public functions stay in `nextest_budgets`, so every
+  importer is untouched and the split is invisible from outside. Rejected:
+  folding the reading back into `nextest_durations`, which is about parsing a
+  duration's text and would have acquired a second responsibility; and raising
+  the cap, which is a repository-wide policy change and not this issue's to
+  make.
+- Read `MODULE_PATH` from `_nextest_oracle.grammar` in
+  `verify_nextest_anchored_filters.py` rather than restating it. The file
+  carried a third copy of the module-qualification rule as a bare literal in
+  its instance prefix. The two copies elsewhere — the contracts' and the
+  oracle's — are deliberate and documented: the two trees cannot share code, so
+  each owns a copy and the comment on each says the other must agree. That
+  rationale does not reach this third one, which sits in a file that already
+  imports from the package holding the constant. A copy that can drift is the
+  defect this script exists to catch, so this is the script's own subject
+  matter turned inward. Probed before and after: the imported pattern is `is`
+  the grammar's, its `pattern` string and `groupindex` are unchanged, and the
+  guard still reports a `compile_guard::neighbour::case_9` stray — so the
+  consolidation is behaviour-preserving and the detector is still live, rather
+  than merely importable.
 
 ## Outcomes & retrospective
 
@@ -761,6 +825,18 @@ that set — the filter, the grammar, and the runtime replay touch nothing it
 compiles — and the override it funds was proven bound by the three probes
 recorded under `Progress`.
 
+One further commit follows, and it is the only one whose subject was chosen by
+CI rather than by this plan: the split of `nextest_slow_timeouts` out of
+`nextest_budgets`, after `C0302 (404/400)` appeared on the merge result. It
+touches two files under the Python lint gate's own subject matter, so unlike
+the change set above it is not exempt from any gate, and the whole set is
+re-run over it. The retrospective's fourth lesson is the one the plan did not
+see coming, and it is a fifth instance of the same shape: the merge base
+passed, the branch head passed, the merge did not, and *no side's green run
+could have said so*, because a per-file limit is not a property of either side.
+The guard that would catch it is a lint run on the merge result, which is
+exactly what CI is.
+
 ## Revision note
 
 - 2026-09-21 — Initial ExecPlan for `#756`: regenerate the rotted patches, add
@@ -875,3 +951,27 @@ recorded under `Progress`.
   cannot fail — here, diffing a file against itself — is not evidence, which is
   the same lesson as the probe under `Surprises & discoveries` that measured
   the wrong process.
+- 2026-09-23 — CI's first verdict on the pushed head was **red**, and the
+  failure was one the branch could not have caught locally: `C0302 (404/400)` on
+  `nextest_budgets.py`, in the merge result only. The branch head is exactly
+  400 lines and passes bare; `main` independently added four more. `kani-smoke`
+  was green in the same run, and the compile gate passed at `269.637 s` under
+  the 600-second override — the first head where that override binds, so the
+  widening this plan is largely about is now confirmed on CI rather than only
+  probed. The split is recorded under `Progress`, its general statement under
+  `Surprises & discoveries`, and both are the same lesson the plan already
+  carries: evidence that looks green on the surface you can see, while the
+  surface that decides is a different one. `make test-kani-mutations` was
+  deliberately not re-run locally; the gate's cost is what the override exists
+  to accommodate, and CI is where it binds.
+- 2026-09-23 — Consolidated the module-qualification rule to one definition.
+  `verify_nextest_anchored_filters.py`'s instance prefix restated `MODULE_PATH`
+  as a bare literal, making three copies of a rule this branch had just widened
+  in two places. The duplication in the contracts and in the oracle is
+  deliberate — the two trees cannot import from each other, and each comment
+  says the other must agree — but the third copy had no such justification,
+  since the file already imports from the package that owns the constant. A
+  rule written twice is a rule that drifts once, silently, which is the exact
+  failure this script was widened to catch. The probe is recorded under the
+  Decision log; a green import would not have been evidence, so liveness was
+  re-established by confirming the guard still reports a stray in a submodule.
