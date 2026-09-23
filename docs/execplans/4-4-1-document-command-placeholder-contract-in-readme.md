@@ -1571,6 +1571,14 @@ attempt is preserved at
 whole-branch finding is fixed; the four repeated README-voice suggestions are
 dispositioned against the applicable style guidance. No concerns remain open.
 
+### Follow-up — 2026-09-24
+
+A review found that the developers' guide did not explicitly scope the
+odd-backtick and `shlex` checks to POSIX and Bash `command:` recipes. The
+wording now states that scope; PowerShell's separate marker-protection boundary
+remains as described above. `check-fmt`, `markdownlint`, and `nixie` passed;
+logs are `/tmp/{check-fmt,markdownlint,nixie}-netsuke-shell-scope-followup.out`.
+
 The final implementation comprises 17 files and fewer than 1400 net added
 lines, excluding this living plan, within the agreed 18-file/1600-line limits.
 Post-commit inspection found no further refactor needed: the security-test

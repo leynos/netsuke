@@ -3909,9 +3909,9 @@ the former `script:`-only lowering of `$in` and `$out`, and
 text, so an adjacent identifier character does not suppress a marker
 substitution. On POSIX-compatible routes, a placeholder inside a
 backtick-delimited region is rejected before it can evade lowering. PowerShell
-uses backticks as escapes and does not enter that protected region. For
-`command:` recipes the POSIX scanner then validates the substituted text: odd
-backticks reject the command, and the `shlex` guard also evaluates that
+uses backticks as escapes and does not enter that protected region. For POSIX
+and Bash `command:` recipes, the scanner then validates the substituted text:
+odd backticks reject the command, and the `shlex` guard also evaluates that
 substituted text. `script:` recipes skip both checks, because a script may
 legitimately contain heredocs and other syntax `shlex` cannot model. The
 odd-backtick and guard properties are complementary: one proves rejection of
