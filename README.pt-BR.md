@@ -266,9 +266,9 @@ verificar injeções.
 
 A rejeição faz parte do contrato observável, mas o conjunto preciso de entradas
 aceitas não é um compromisso de estabilidade: depende da versão de `shlex`
-resolvida ao compilar o Netsuke. Uma versão futura aceitar texto antes
-rejeitado não é alteração incompatível; rejeitar texto antes aceito é defeito a
-registrar no changelog, não uma mudança de política.
+resolvida ao compilar o Netsuke. Se uma versão futura aceitar texto antes
+rejeitado, isso não será uma alteração incompatível; rejeitar texto antes
+aceito é defeito a registrar no changelog, não uma mudança de política.
 
 **Estabilidade e outras leituras.** O Netsuke é pré-1.0; as interfaces ainda
 podem mudar. Essas garantias delimitadas não tornam receitas arbitrárias

@@ -10,7 +10,7 @@ for file in README.md README.de.md README.es.md README.fr.md \
     README.ja.md README.pt-BR.md README.zh-CN.md; do
     structure=$(awk '
         /^[[:space:]]*(```|~~~)/ { fenced = !fenced; next }
-        !fenced && /^#{1,6} / {
+        !fenced && /^#+ / && length($1) <= 6 {
             levels = levels separator $1
             separator = ","
             count++

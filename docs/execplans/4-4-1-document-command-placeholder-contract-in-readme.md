@@ -1443,6 +1443,16 @@ passed), `markdownlint`, and `nixie`. Logs:
 `OBL-STRUCTURAL-PARITY` is discharged. Commit and milestone review follow;
 EP-M5 has not started.
 
+EP-M4 was committed as `cdb98ac8`. The first CodeRabbit attempt failed before
+analysis with a WebSocket closure; the retry completed with two findings
+(`/tmp/coderabbit-netsuke-readme-m4-2.out`). Both are addressed: the Portuguese
+compatibility statement now uses an explicit conditional, and the parity
+checker matches hashes with `+` and checks their length separately instead of
+relying on interval expressions unsupported by older `awk` implementations. The
+local interpreter is GNU Awk 5.3.0; no older `mawk` is installed, so the
+portability repair removes that dependency without claiming a legacy-runtime
+execution. Gates and a follow-up review must pass before EP-M5.
+
 ### EP-M1 — complete (`3594b568`)
 
 The ADR, its index entry, and the design-document cross-reference are written,
