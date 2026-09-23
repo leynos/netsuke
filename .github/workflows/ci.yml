@@ -368,6 +368,15 @@ jobs:
     # `CARGO_TARGET_DIR` plus the frontend's own toolchain download is what the
     # ceiling has to contain. See "Test timeouts: the tiers this repository
     # sets" in docs/developers-guide.md.
+    #
+    # The ceiling also contains that gate's own slow-timeout, which is ten
+    # 60-second periods rather than the profile's five because the default
+    # allowance sits too near the gate's cost for a runner to decide. A job
+    # whose gate burned the whole raised allowance would still land inside the
+    # ceiling: the measured job is 776s with the gate costing 257.7s of it, so
+    # the work outside the gate is 518s, and 518s + 600s is 1,118s against
+    # 1,800s. That is why raising the per-test allowance needed no change here;
+    # a ceiling that no longer contained it would be the fault to check for.
     timeout-minutes: 30
     permissions:
       contents: read

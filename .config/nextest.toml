@@ -18,6 +18,12 @@
 # Surface hangs without failing legitimately slow suites: the documentation
 # end-to-end tests shell out to real Ninja and can take tens of seconds. Warn
 # after 60s; terminate a test that has run for five warning periods (300s).
+#
+# This is the profile's own allowance, and it governs every test no override
+# matches. One override widens it -- the mutation compile gate, at ten
+# periods -- so the largest allowance in the file is 600 s where the profile's
+# own is 300 s. Anything comparing a budget against "the largest per-test
+# allowance" means the 600 s, not this line.
 slow-timeout = { period = "60s", terminate-after = 5 }
 
 [test-groups.nested-cargo-builds]
@@ -68,6 +74,25 @@ success-output = "immediate"
 filter = 'test(/^every_patched_tree_compiles_under_denied_warnings($|::)/)'
 test-group = "nested-cargo-builds"
 success-output = "immediate"
+# Ten warning periods, not the profile's five. This is the targeted override
+# the policy above asks for: the constraint is real and external, and the
+# default allowance is genuinely too small for this test rather than merely
+# tight. It compiles all 18 patched trees through the Kani frontend into
+# `target/kani-mutation-compile`, which is a cold target directory on every
+# run -- `kani-cache` restores the Kani payloads under `.kani-rustup` and
+# `.kani-home`, not a build tree -- so the cost is a cold build of the whole
+# dependency graph plus 18 incremental recompiles, and it is the host's to
+# decide, not the test's.
+#
+# Measured: 151.5 s on a local host, and 257.7 s and 261.5 s on CI in two
+# runs that both passed, against the 300 s default. A third CI run hit
+# 300.008 s and failed. A margin of 38 s on a 300 s cap is not a budget, it
+# is the difference between one runner and another, and the failure names
+# nextest's cap rather than the patch that was slow. 600 s is the largest
+# value the ordering above permits: `global-timeout` must stay strictly
+# above the largest per-test allowance, and 780 > 600. Raising it further
+# would invert the tiers and make the whole-run budget the fault.
+slow-timeout = { period = "60s", terminate-after = 10 }
 
 [profile.ci]
 # The CI-only profile. It exists solely to carry the whole-run budget, and
@@ -95,7 +120,18 @@ success-output = "immediate"
 # pass the coverage action runs after it is not a nextest run, so nothing in
 # this file bounds it and its own cargo watchdog does.
 #
-# The 13-minute global timeout is above the 300s largest per-test allowance.
+# The 13-minute global timeout is above the 600s largest per-test allowance,
+# which is the mutation compile gate's widened budget rather than the 300s
+# `[profile.default]` gives its own tests. Both comparisons hold:
+#
+#   global-timeout > largest per-test allowance
+#   780 s          > 600 s
+#
+# The margin is 180s rather than 480s, and it is not slack to be spent: a
+# per-test allowance above the whole-run budget would make the run end before
+# the test it contains could use its budget, so the ordering is what fixes
+# 600s as the gate's ceiling.
+#
 # The 1,800s cargo watchdog covers the full nextest termination, cold-build,
 # and report window with 50s to spare: 780s + 70s + 600s + 300s is 1,750s.
 # The report phase is the term that moved this value: `cargo llvm-cov` merges

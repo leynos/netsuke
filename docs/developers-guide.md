@@ -3233,6 +3233,21 @@ reports the tree healthy while `cargo kani` rejects that same tree with
 `cfg(kani)` with verification skipped, so it subsumes the check it replaced
 rather than joining it.
 
+It carries its own `slow-timeout` in `.config/nextest.toml`, ten 60-second
+periods rather than the profile's five, because the default allowance is too
+small for it rather than merely tight. The test compiles into
+`target/kani-mutation-compile`, which no cache restores — `kani-cache` holds the
+Kani payloads, not a build tree — so every run pays a cold build of the whole
+dependency graph plus 18 incremental recompiles, and how long that takes is the
+host's to decide. Two CI runs passed at 257.7 s and 261.5 s; a third failed at
+300.008 s on a head whose only difference was eight lines of Markdown. A 38 s
+margin is not a budget but the difference between two runners, and the failure
+then names nextest's cap rather than the patch that was slow. The widened
+allowance is bounded from above by the whole-run budget, not chosen freely:
+600 s is the largest value that keeps `global-timeout` strictly above it, so
+raising it further would invert the two tiers and make the run end before this
+test could use its budget.
+
 Regenerate a rotted patch *in place*: swap an operator, comparator, index, or
 literal rather than deleting a statement or redirecting a call. Deleting the
 only use of a helper, or the only reassignment of a `mut` binding, is what
@@ -7803,7 +7818,7 @@ All four tiers are set here.
 
 | Tier                     | What it bounds                     | Where it is set                               | Current value                                 |
 | ------------------------ | ---------------------------------- | --------------------------------------------- | --------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s (60 s x 5)                              |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s (60 s x 5); 600 s (60 s x 10) for the mutation compile gate |
 | nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 780 s (13 m) in CI; unset locally             |
 | Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,800 s (30 m), armed twice per coverage step |
 | Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 90 m                                          |
@@ -7820,9 +7835,26 @@ and the watchdog's 1,800 s keep the values they already had.*
 
 `terminate-after` counts warning periods, so the budget a test actually gets is
 `period` multiplied by it. Every period here is 60 s, so reading the period
-alone would report a 60 s allowance where the real figure is 300 s. Any
+alone would report a 60 s allowance where the real figure is 600 s. Any
 comparison against the tiers above rests on that reading, and the contract
 asserts it explicitly rather than leaving it implied.
+
+There are two such figures and the larger one governs. `[profile.default]`'s own
+`slow-timeout` gives five periods — 300 s — to every test no override matches,
+which is almost all of them. One override widens it: the mutation compile gate
+takes ten periods, 600 s, because it compiles all 18 patched trees through the
+Kani frontend into a target directory no cache restores. A whole-run budget has
+to sit above the largest allowance in the file, so 600 s is the figure the
+ordering below is written against, not the 300 s most tests get.
+
+That override is the targeted, written-rationale case `.config/nextest.toml`'s
+own policy asks for, and it is worth reading as the worked example of it. The
+gate passed twice at 257.7 s and 261.5 s and then failed at 300.008 s on a head
+whose only diff was eight lines of Markdown. The code was not slow; the cap was
+too near the cost, and a margin of 38 s is the difference between one runner and
+another rather than a budget. The widened allowance is not slack either — 600 s
+is the largest value that keeps `global-timeout > largest per-test allowance`,
+so the two tiers are what bound each other.
 
 ### The whole-run budget, and how 13 minutes was arrived at
 
@@ -7901,7 +7933,7 @@ has to sit between its neighbours, and does:
 
 ```text
 global-timeout > largest per-test allowance
-780 s          > 300 s
+780 s          > 600 s
 
 watchdog      >= global-timeout + termination + cold build + report
 1,800 s       >= 780 s + 70 s + 600 s + 300 s = 1,750 s
@@ -8363,7 +8395,7 @@ accepting an override or a bare duration.
 
 `tests/workflow_contracts/whole_run_value_test.py` pins the budget's value as
 well as its place in the order. The ordering holds for everything between the
-300 s largest per-test allowance and the 830 s the watchdog can cover, so the
+600 s largest per-test allowance and the 830 s the watchdog can cover, so the
 budget could drift to a value nobody chose with every comparison still passing,
 and the sample above would then describe a figure the file no longer sets.
 
