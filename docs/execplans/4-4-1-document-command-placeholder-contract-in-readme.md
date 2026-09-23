@@ -1476,8 +1476,28 @@ count (`/tmp/readme-heading-indent-netsuke-m4.out`, all incorrectly exited 1).
 The matcher now uses the already-trimmed line and indentation bound. It also
 accepts tab separators and empty hash headings while rejecting seven hashes and
 hash-prefixed words. These are the same ATX heading syntax; no new validation
-responsibility is introduced. Gates and follow-up review remain required before
-EP-M5.
+responsibility is introduced. Full gates passed, including 3338 tests and
+98.81% coverage, with logs `/tmp/*-netsuke-readme-m4-headings.out`; the repair
+was committed as `1799474f`.
+
+The subsequent completed review reported eight findings
+(`/tmp/coderabbit-netsuke-readme-m4-headings.out`). Seven wording findings
+(four originals and three duplicate restatements) request impersonal German,
+French, Portuguese, and Chinese README prose. These are not applied:
+`docs/documentation-style-guide.md`, *Punctuation and grammar*, explicitly
+excepts the README from its pronoun restriction, and the translated README
+family follows that same reader-facing voice. The locale glossary prescribes
+formal German `Sie` for direct instructions and each edition already uses
+localized direct address. Retaining those translations preserves both the
+English meaning and the established locale convention; this does not extend the
+exception to internal documentation or diagnostics.
+
+The remaining finding is valid: CRLF closing fences were not recognized. An
+immutable-baseline scratch case converted only the German fixture to CRLF; the
+checker incorrectly reported one heading instead of two and exited 1
+(`/tmp/readme-crlf-fence-netsuke-m4.out`). Each line now loses one trailing
+carriage return before indentation, fence, or heading processing. Final gates
+and review remain required before EP-M5.
 
 ### EP-M1 — complete (`3594b568`)
 

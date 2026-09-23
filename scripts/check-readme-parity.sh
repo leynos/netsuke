@@ -10,6 +10,7 @@ for file in README.md README.de.md README.es.md README.fr.md \
     README.ja.md README.pt-BR.md README.zh-CN.md; do
     structure=$(awk '
         {
+            sub(/\r$/, "", $0)
             line = $0
             sub(/^ */, "", line)
             indentation = length($0) - length(line)
