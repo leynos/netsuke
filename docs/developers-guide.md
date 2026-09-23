@@ -3463,17 +3463,19 @@ governs the non-doctest pass only, and deliberately stays small:
   they hold every filter to the anchored grammar but cannot say which tests a
   filter selects, because that needs compiled test binaries. The runtime half is
   `.github/scripts/verify_nextest_anchored_filters.py`, which runs on the
-  coverage lane after `Test and Measure Coverage` and asks Nextest itself. It
-  reads the parameterized tests and their case counts from the Rust sources,
-  then asserts that each anchored filter in the configuration selects exactly
-  those instances and that the whole-name form selects none of them. That check
-  alone was scoped past the module-qualification case, because it only ever
-  examined filters naming a parameterized test. It therefore also replays every
-  filter expression in the configuration verbatim through Nextest and requires
-  each to select at least one test, whatever the filter names and whichever
-  override carries it. The replay works on the raw filter text rather than a
-  name re-synthesized from the grammar, so a form the grammar admits but writes
-  differently still round-trips to the same selector. It reuses the
+  coverage lane after `Test and Measure Coverage` and asks Nextest itself. The
+  reading lives in the `_nextest_oracle` package beside it, so that every unit
+  stays inside the 400-line cap while the workflow keeps calling the entry
+  script by path. It reads the parameterized tests and their case counts from
+  the Rust sources, then asserts that each anchored filter in the configuration
+  selects exactly those instances and that the whole-name form selects none of
+  them. That check alone was scoped past the module-qualification case, because
+  it only ever examined filters naming a parameterized test. It therefore also
+  replays every filter expression in the configuration verbatim through Nextest
+  and requires each to select at least one test, whatever the filter names and
+  whichever override carries it. The replay works on the raw filter text rather
+  than a name re-synthesized from the grammar, so a form the grammar admits but
+  writes differently still round-trips to the same selector. It reuses the
   instrumented build tree rather than compiling, by taking the environment
   `cargo llvm-cov show-env` reports, so it is gated exactly as the coverage
   step is and must run before `Discard the instrumented build tree`. The
