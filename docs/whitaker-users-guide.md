@@ -171,10 +171,11 @@ libraries = [
 > Netsuke does not pin the lint libraries and carries no
 > `[workspace.metadata.dylint]` block. It installs them at Whitaker HEAD
 > through `whitaker-installer`, deliberately, so the suite's improvements
-> arrive without a version bump. `WHITAKER_INSTALLER_VERSION` in
-> `.github/workflows/ci.yml` pins the installer binary, which is a different
-> artefact from the libraries this section pins — the installer's version says
-> nothing about which lints get staged. `tests/whitaker_boundary_contract.rs`
+> arrive without a version bump. The shared Install Whitaker action's
+> `installer-version` input in `.github/workflows/ci.yml` and
+> `.github/workflows/ci-windows.yml` pins the installer binary, a different
+> artefact from the libraries this section pins — it says nothing about which
+> lints get staged. `tests/whitaker_boundary_contract.rs`
 > asserts the block's absence. Adopting the form above would reverse a standing
 > decision; see "Quality gates" in `docs/developers-guide.md`.
 
