@@ -18,6 +18,7 @@ from release_admission_test_records import (
 __all__ = (
     "BASH_PATH",
     "CANARY_BY_OPERATION",
+    "GITHUB_REPOSITORY",
     "METRICS_VALIDATOR",
     "REVISION",
     "FailureCase",
@@ -38,6 +39,7 @@ METRICS_VALIDATOR_PATH = (
 )
 BASH_PATH = Path("/usr/bin/bash")
 REVISION = "a" * 40
+GITHUB_REPOSITORY = "leynos/netsuke"
 CANARY_BY_OPERATION = {
     "resolve_tag_commit": "none",
     "fetch_candidate_revision": "release_candidate",
@@ -347,7 +349,7 @@ def _gate_environment(
     environment = {
         **os.environ,
         "GITHUB_OUTPUT": str(paths["output"]),
-        "GITHUB_REPOSITORY": "leynos/netsuke",
+        "GITHUB_REPOSITORY": GITHUB_REPOSITORY,
         "GITHUB_SHA": REVISION,
         "BASH_ENV": str(paths["bash_environment"]),
         "NETSUKE_ADMISSION_CALL_LOG": str(paths["call_log"]),
