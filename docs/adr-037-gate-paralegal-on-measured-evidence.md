@@ -6,7 +6,7 @@ Proposed.
 
 ## Date
 
-2026-09-19.
+2026-09-19
 
 ## Context and problem statement
 
@@ -34,9 +34,9 @@ establish that the analyser actually uses Netsuke's required compiler and can
 extract the intended production path. Different declared pins are a risk, not a
 compatibility verdict. Record actual compiler identity and execution evidence.
 
-On incompatibility or an inconclusive bounded run, stop and record a defer or
-reject decision. Do not downgrade Netsuke, rewrite production borrowing for an
-older compiler, remove relevant code/features, or count a stand-in
+On incompatibility or an inconclusive bounded run, stop and record a deferral
+or rejection decision. Do not downgrade Netsuke, rewrite production borrowing
+for an older compiler, remove relevant code/features, or count a stand-in
 implementation as success. A proposed upstream analyser port requires separate
 approval.
 

@@ -121,7 +121,7 @@ gate, rather than a flow query, may detect removed markers. Report which layer
 caught each defect. Compare the same variants with types, structural rules, and
 existing tests: continued investment requires at least one non-redundant,
 reviewer-confirmed architectural regression caught by each retained policy.
-Otherwise record that the simpler mechanisms suffice and stop that policy.
+Otherwise, record that the simpler mechanisms suffice and stop that policy.
 
 Dependency does not prove value equality, correct branch polarity, correct
 validation, or concurrency ordering. A data-path checkpoint must identify the
@@ -160,7 +160,7 @@ billed usage at the rate in force during the trial. These are pilot ceilings,
 not scheduling commitments. A reviewer must approve any revised ceiling before
 another run; changing a threshold after seeing a failure is not a pass.
 
-Prefer a vetted pinned binary when available. Otherwise provision a cached,
+Prefer a vetted pinned binary when available. Otherwise, provision a cached,
 versioned analyser/toolchain bundle in a separately bounded build, recording
 provenance and integrity. Do not run an unpinned remote installer or rebuild
 the analyser in every pull request. Separate provisioning cost from marginal
@@ -176,11 +176,12 @@ Triage every diagnostic against an independently reviewed expected result and
 report exceptions, analysis failures, and maintenance effort. Do not generalize
 the small sample into a universal false-positive rate.
 
-Retain a policy only with complete declared coverage, all negative controls
-caught, no unexplained control-set failures, reproducible execution within the
-approved budget, and demonstrated benefit beyond the other checks. A later,
-separate acceptance decision may make a retained policy blocking for its
-qualified scope. This RFC never makes Paralegal mandatory automatically.
+Retain a policy only with complete declared coverage, all applicable seeded
+violations detected and all legitimate controls accepted, no unexplained
+control-set failures, reproducible execution within the approved budget, and
+demonstrated benefit beyond the other checks. A later, separate acceptance
+decision may make a retained policy blocking for its qualified scope. This RFC
+never makes Paralegal mandatory automatically.
 
 Defer when a bounded upstream/toolchain or precision improvement could justify
 another trial; state a concrete revisit trigger. Reject when the supported

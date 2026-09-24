@@ -219,7 +219,9 @@ applies.
   - Acceptance: every discovered first-party Rust module has an unambiguous role
     or explicit tested exclusion; policy review rejects blanket composition
     privilege and unexpected coverage gaps.
-  - Dependencies: 26.1.1.
+  - Dependencies: 26.1.1; record the ownership and precedence boundary among
+    the architecture checker, compiler/effect lints, Whitaker, Cargo tooling,
+    and repository-local orchestration in RFC 0027.
 - [ ] 28.1.2. Register narrowly scoped existing architectural debt.
   - Add versioned policy and exception schemas with owners, stable identities,
     reasons, limited use sites, issue/task links, and removal conditions.

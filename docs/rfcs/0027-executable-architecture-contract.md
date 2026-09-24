@@ -180,6 +180,30 @@ sites need reasons and coverage; broad suppression or malformed exclusions must
 fail negative probes. Do not claim an unfulfilled-expectation lint judges
 whether an exception's architectural reason is valid.
 
+Five checking mechanisms share this repository, so each needs one owned class
+of defect and no duplicate. The architecture checker owns structural policy:
+which module may depend on which, and where an ambient effect may appear.
+Compiler and effect lints own item-local concerns: concrete API bans and
+effect-policy probes. Whitaker, already enforced by `make lint`, owns the
+repository's local lint conventions, including module size and capability-based
+filesystem access. Cargo tooling owns compilation, type checking, and
+dependency resolution. Repository-local orchestration owns gate invocation and
+failure propagation. NSARCH004, which combines both mechanisms, splits ambient
+effects structurally: the checker owns where an effect may appear, and the
+effect lints decide whether that call is allowed.
+
+Precedence follows ownership, not subject matter: where two mechanisms could
+both observe one fact, the owning mechanism decides the verdict and the other
+suppresses its finding rather than failing the gate a second time. Compilation
+validity outranks every policy verdict, because no structural claim is
+meaningful for a tree that does not build. Orchestration adjudicates nothing:
+it adds a mechanism to the gate set and propagates its exit status. This keeps
+the non-duplication principle [RFC 0008](0008-code-health.md) already applied
+to its registry and documentation checks: a registry is not a second gate
+implementation, and formatting and spelling validation remain their own
+existing gates. [Whitaker User's Guide](../whitaker-users-guide.md) stays the
+reference for the lints it owns and their scoped exclusions.
+
 Type/API tests enforce unresolved-state and shell-binding restrictions. Port
 contract tests exercise recording/failing and production adapters where the
 contract applies. Integration tests retain production-specific process and

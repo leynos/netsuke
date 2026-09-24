@@ -101,6 +101,16 @@ before execution, a critical requirement for compatibility with Ninja.
    aggregate. Circular dependencies and missing inputs are also detected at
    this stage.
 
+   FUTURE:
+
+   The resolved-IR guarantee and the one-executable-recipe check above describe
+   the intended lowering contract rather than the current implementation.
+   Lowering can still place an unresolved `Recipe::Rule` in
+   `ir::Action.recipe`, and only the Ninja backend rejects it.
+   [ADR-035](adr-035-semantic-compiler-boundaries.md) owns this resolution
+   boundary: its requirement that successful compilation exclude unresolved
+   executable states is the gap that backend-only enforcement leaves open.
+
 - Stage 6: Ninja Synthesis & Execution
 
    The final, validated IR is traversed by a code generator. This generator

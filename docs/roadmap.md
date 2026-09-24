@@ -5,14 +5,17 @@ foundations live in
 [`docs/archive/roadmap-completed-foundations.md`](archive/roadmap-completed-foundations.md)
 so the active roadmap can focus on remaining hypotheses without erasing prior
 implementation detail. The [composition roadmap](roadmap-composition.md)
-continues this document with phases 16 to 19 for includes and bundles.
+continues this document with phases 16 to 19 for includes and bundles. The
+[architecture roadmap](roadmap-hexagonal-hardening.md) continues it with phases
+26 to 29 for semantic hardening, application boundaries, architecture policy,
+and a bounded Paralegal experiment.
 
 Task identifiers are globally unique across this document, the composition
-roadmap, and the archive. When a completed task moves to the archive, it keeps
-its original number and is not repeated here. When a historical task is renamed
-under the command-line interface (CLI) redesign, the active task states the
-mapping explicitly. Phase numbers identify work; explicit dependencies, not
-numerical order, determine what must complete first.
+roadmap, the architecture roadmap, and the archive. When a completed task moves
+to the archive, it keeps its original number and is not repeated here. When a
+historical task is renamed under the command-line interface (CLI) redesign, the
+active task states the mapping explicitly. Phase numbers identify work;
+explicit dependencies, not numerical order, determine what must complete first.
 
 ## How to read this roadmap
 
@@ -54,6 +57,9 @@ Each phase validates a product hypothesis:
 - Phase 17 validates reusable local bundles with private interfaces and locks.
 - Phase 18 validates explicit external acquisition and cache-only builds.
 - Phase 19 evaluates composition and provenance extensions from canary evidence.
+- Phases 26 to 28 validate internal semantic hardening, application
+  boundaries, and executable architecture policy.
+- Phase 29 evaluates a bounded, compatibility-gated Paralegal experiment.
 
 Each phase carries one hypothesis, and Phase 6 is the capability track for
 template standard-library work. Phases 3 to 5 predate that separation: each
@@ -65,7 +71,8 @@ hardening belong in Phases 8 and 9, property-based test work belongs in Phase
 own the remaining RFC 0001 implementation; Phase 15 keeps its deferred
 extensions separate from the initial delivery contract. Phases 16 to 19 live in
 the [composition roadmap](roadmap-composition.md), with local includes before
-local bundles and external acquisition only after both local layers.
+local bundles and external acquisition only after both local layers. Phases 26
+to 29 continue in the [architecture roadmap](roadmap-hexagonal-hardening.md).
 
 The roadmap keeps user-facing product grammar separate from implementation
 detail. Public tasks name Netsuke capabilities first. Implementation adapters,
@@ -182,6 +189,16 @@ shared integration work does not duplicate those implementations.
   the codec and basic runner, not completed runtime bindings; 11.3.2 waits for
   the full pipeline and directory facilities it exercises. Task 12.1.1 must
   reconcile RFC 0011 §6.2 and ADR-019 with the other stream-path contracts.
+- [RFC 0026](rfcs/0026-hexagonal-domain-hardening.md): phase 26 in the
+  [architecture roadmap](roadmap-hexagonal-hardening.md) owns trustworthy
+  resolved build semantics, and phase 27 owns the application and diagnostic
+  boundary.
+- [RFC 0027](rfcs/0027-executable-architecture-contract.md): phase 28 owns
+  executable architecture policy and governance, with its checked baseline
+  established before required enforcement.
+- [RFC 0028](rfcs/0028-paralegal-architecture-experiment.md): phase 29 owns
+  the bounded compatibility-gated Paralegal experiment, which may conclude
+  without adoption.
 
 Task 17.4.4 joins the local-composition and structured-execution tracks for the
 combined migration canaries in issue `#598`. Local delivery through 16.3.3 and
@@ -3004,4 +3021,6 @@ capability guarantees before any new execution path can land.
     specified disposition, with no relaxation hidden inside an implementation
     task for phases 12 to 14.
 
-Phases 16 to 19 continue in the [composition roadmap](roadmap-composition.md).
+Phases 16 to 19 continue in the [composition roadmap](roadmap-composition.md),
+and phases 26 to 29 continue in the
+[architecture roadmap](roadmap-hexagonal-hardening.md).
