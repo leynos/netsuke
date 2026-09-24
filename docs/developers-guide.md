@@ -1540,17 +1540,20 @@ for keeping it out of an `env`.
 Publishers queue on the concurrency group `coverage-main-${{ github.ref }}` with
 `cancel-in-progress: false`, asserted whole by the same module. Two runs
 writing at once would race, and cancelling one would abandon its work half
-done. A group holds one pending run, and a newer run replaces it, so a dispatch
-that arrives while a push waits replaces that push. The dispatch uploads, but
-the coverage action saves the baseline only on a push, so the baseline stays
-one commit behind until the next push to `main`. A merge made by the Dependabot
-automerge workflow's token fires no push event at all (see
-[shared-actions issue 518](https://github.com/leynos/shared-actions/issues/518)),
-so such a merge reaches neither the upload nor the baseline until the next
-push or a dispatch from `main`. This reasoning covers triggered runs, a push or
-a dispatch. A manual "Re-run jobs" on an older `main` run is an operator action
-rather than a trigger: it keeps that run's commit, so it republishes that
-commit's coverage and baseline until the next push supersedes them.
+done. Runs in the group never overlap, and a newer trigger replaces an older
+pending run. GitHub does not promise to start runs in trigger order, so the
+workflow makes no commit-order promise either. The coverage action saves the
+ratchet baseline only on a push, under a cache key naming the run. A dispatch
+therefore uploads coverage but leaves the baseline where the last completed
+push left it, and how far that trails `main` depends on how many pushes were
+replaced while runs waited. A merge made by the Dependabot automerge workflow's
+token fires no push event at all (see
+[shared-actions issue 518](https://github.com/leynos/shared-actions/issues/518)).
+A dispatch from `main` uploads that merge's coverage, but does not save a
+baseline for it; only the next push does. A manual "Re-run jobs" on an older
+`main` run keeps its run ID, so it republishes that commit's coverage but
+replaces no baseline already saved under that run's key. Only a later push to
+`main` publishes a newer baseline.
 
 `tests/workflow_contracts/coverage_upload_guard_test.py` holds that guard.
 `is_trunk_only_upload` refuses any unquoted `||`, at any depth, through

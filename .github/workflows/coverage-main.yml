@@ -24,13 +24,15 @@ on:
   workflow_dispatch:
 
 # Publishers queue rather than race or cancel. Two runs writing at once is a
-# lost update, and cancelling one abandons its work half done. A group holds
-# one pending run, and a newer run replaces it: a dispatch that replaces a
-# pending push uploads, but the coverage action saves the baseline only on a
-# push, so the baseline stays one commit behind until the next push. That
-# holds for triggered runs; a manual "Re-run jobs" on an older main run keeps
-# its commit and republishes that commit's coverage and baseline until the
-# next push supersedes them.
+# lost update, and cancelling one abandons its work half done. Runs in the
+# group never overlap, and a newer trigger replaces an older pending run;
+# nothing here promises that runs start in commit order. The coverage action
+# saves the ratchet baseline only on a push, under a key naming the run, so a
+# dispatch uploads coverage but leaves the baseline where the last completed
+# push left it, however many pushes were replaced meanwhile. A manual "Re-run
+# jobs" keeps its run ID: it republishes that commit's coverage, but replaces
+# no baseline already saved under that run's key. Only a later push to main
+# publishes a newer baseline.
 concurrency:
   group: coverage-main-${{ github.ref }}
   cancel-in-progress: false
