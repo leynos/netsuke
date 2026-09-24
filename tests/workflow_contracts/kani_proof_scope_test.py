@@ -130,6 +130,29 @@ def test_scope_covers_the_harness_closure(closure: set[str]) -> None:
     )
 
 
+def _is_beneath(path: str, directories: set[str]) -> bool:
+    """Return whether ``path`` lies inside one of ``directories``."""
+    return any(path.startswith(f"{directory}/") for directory in directories)
+
+
+def _unreached_files(entry: str, allowed: set[str], directories: set[str]) -> list[str]:
+    """Return the files one scope entry covers that no harness reaches.
+
+    A file is reached when ``allowed`` names it or it lies beneath one of the
+    ``directories`` the closure reaches (an include target).
+
+    Returns
+    -------
+    list[str]
+        The covered files outside the closure, repository-relative.
+    """
+    return [
+        path
+        for path in map(_relative, _covered_files(entry))
+        if path not in allowed and not _is_beneath(path, directories)
+    ]
+
+
 def test_scope_reaches_no_further_than_the_closure(
     crate: CrateSource, closure: set[str]
 ) -> None:
@@ -137,32 +160,24 @@ def test_scope_reaches_no_further_than_the_closure(
 
     A test-only module is compiled out under `cargo kani`, so a directory
     entry may cover one harmlessly. Anything else means the entry is broader
-    than what the proofs depend on, and every entry must cover at least one
-    path in the closure, so a stale entry is removed rather than kept.
+    than what the proofs depend on.
     """
     test_only = {_relative(m.file) for m in crate.modules.values() if m.is_test_only}
     directories = {path for path in closure if (REPO_ROOT / path).is_dir()}
-
-    def is_allowed(path: str) -> bool:
-        """Return whether a covered file belongs to the closure."""
-        return (
-            path in closure
-            or path in test_only
-            or any(path.startswith(f"{directory}/") for directory in directories)
-        )
-
     broad = {
         entry: unreached
         for entry in _scope()["sources"]
-        if (
-            unreached := [
-                path
-                for path in map(_relative, _covered_files(entry))
-                if not is_allowed(path)
-            ]
-        )
+        if (unreached := _unreached_files(entry, closure | test_only, directories))
     }
     assert not broad, f"these entries cover files no harness reaches: {broad}"
+
+
+def test_every_scope_entry_covers_the_closure(closure: set[str]) -> None:
+    """Require every source entry to cover at least one path in the closure.
+
+    An entry covering nothing a harness reaches is stale, so it is removed
+    rather than kept.
+    """
     dead = [
         e for e in _scope()["sources"] if not any(_covers(e, path) for path in closure)
     ]

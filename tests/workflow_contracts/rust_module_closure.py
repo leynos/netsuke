@@ -59,20 +59,42 @@ def _rooted_targets(
     """Return the modules the rooted paths in ``code`` name."""
     targets = set()
     for match in ROOTED_PATH.finditer(code):
-        base = module.path if match["head"] in {"self", "super"} else ()
-        if match["head"] == "super":
-            base = base[:-1]
-        index = match.end()
-        # Walk the rest of the path, consuming further `super::` hops and
-        # module names, stopping at a brace group, a glob or an item.
-        while segment := PATH_SEGMENT.match(code, index):
-            base = base[:-1] if segment["name"] == "super" else (*base, segment["name"])
-            index = segment.end()
+        base, index = _walk_path(code, match.end(), _path_base(module, match["head"]))
         prefix = crate.resolve(base)
         targets.add(prefix)
         if group := GROUP_OPEN.match(code, index):
             targets |= _grouped_targets(crate, prefix, code, group.end())
     return targets
+
+
+def _path_base(module: RustModule, head: str) -> tuple[str, ...]:
+    """Return the module a rooted path's ``head`` keyword starts from."""
+    match head:
+        case "self":
+            return module.path
+        case "super":
+            return module.path[:-1]
+        case _:
+            return ()
+
+
+def _walk_path(
+    code: str, index: int, base: tuple[str, ...]
+) -> tuple[tuple[str, ...], int]:
+    """Return the module a path names from ``base``, and where the walk stopped.
+
+    The walk consumes further `super::` hops and module names, stopping at a
+    brace group, a glob or an item.
+
+    Returns
+    -------
+    tuple[tuple[str, ...], int]
+        The named module path and the offset just past its last segment.
+    """
+    while segment := PATH_SEGMENT.match(code, index):
+        base = base[:-1] if segment["name"] == "super" else (*base, segment["name"])
+        index = segment.end()
+    return base, index
 
 
 def _grouped_targets(
@@ -113,31 +135,41 @@ def _include_targets(file: Path, code: str, text: str) -> set[Path]:
     at the same offsets. A literal argument names one file. A `concat!` whose
     first argument is a literal names the directory of that literal, which
     covers every file the assembled path can name there. Any other argument is
-    refused.
+    refused by ``_include_target``.
 
     Returns
     -------
     set[Path]
         The resolved file and directory targets.
+    """
+    return {
+        _include_target(
+            file, text[match.end() : closing_bracket(code, match.end(), "()") - 1]
+        )
+        for match in INCLUDE_CALL.finditer(code)
+    }
+
+
+def _include_target(file: Path, arguments: str) -> Path:
+    """Return the file or directory one include's ``arguments`` name.
+
+    Returns
+    -------
+    Path
+        The resolved target.
 
     Raises
     ------
     ModuleGraphError
-        When an include's path is neither form, so its target is unknown.
+        When the path is neither a literal nor a `concat!` led by one.
     """
-    targets = set()
-    for match in INCLUDE_CALL.finditer(code):
-        end = closing_bracket(code, match.end(), "()")
-        arguments = text[match.end() : end - 1].strip()
-        if whole := STRING_LITERAL.fullmatch(arguments):
-            targets.add((file.parent / whole["value"]).resolve())
-        elif assembled := ASSEMBLED_PATH.match(arguments):
-            directory = assembled["value"].rpartition("/")[0] or "."
-            targets.add((file.parent / directory).resolve())
-        else:
-            msg = f"{file}: an include without a literal path cannot be resolved"
-            raise ModuleGraphError(msg)
-    return targets
+    if whole := STRING_LITERAL.fullmatch(arguments.strip()):
+        return (file.parent / whole["value"]).resolve()
+    if assembled := ASSEMBLED_PATH.match(arguments.strip()):
+        directory = assembled["value"].rpartition("/")[0] or "."
+        return (file.parent / directory).resolve()
+    msg = f"{file}: an include without a literal path cannot be resolved"
+    raise ModuleGraphError(msg)
 
 
 def _defined_names(crate: CrateSource, files: set[Path]) -> set[str]:
@@ -217,17 +249,26 @@ def reachable_files(crate: CrateSource, seeds: set[Path]) -> set[Path]:
         }
         frontier |= _implementing_files(crate, _defined_names(crate, reached))
         pending = frontier - reached
-    ancestors = {
+    ancestors = _declaring_ancestors(crate, reached)
+    return reached | ancestors | _all_includes(crate, reached)
+
+
+def _declaring_ancestors(crate: CrateSource, files: set[Path]) -> set[Path]:
+    """Return the files declaring each module on the way down to ``files``."""
+    return {
         crate.modules[crate.module_of(file).path[:length]].file
-        for file in reached
+        for file in files
         for length in range(len(crate.module_of(file).path))
     }
-    includes = {
+
+
+def _all_includes(crate: CrateSource, files: set[Path]) -> set[Path]:
+    """Return every include target the `include*!` calls in ``files`` read."""
+    return {
         target
-        for file in reached
+        for file in files
         for target in _include_targets(file, crate.code[file], crate.text[file])
     }
-    return reached | ancestors | includes
 
 
 def kani_seeds(crate: CrateSource) -> set[Path]:

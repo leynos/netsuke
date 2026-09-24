@@ -133,6 +133,8 @@ def test_matched_paths_are_named_and_elided() -> None:
         '[scope]\nsources = []\ninfrastructure = ["Cargo.toml"]\n',
         '[scope]\nsources = ["src/ir/", 3]\ninfrastructure = ["Cargo.toml"]\n',
         '[scope]\nsources = ["src/ir/", ""]\ninfrastructure = ["Cargo.toml"]\n',
+        '[scope]\nsources = "src/ir/"\ninfrastructure = ["Cargo.toml"]\n',
+        "scope = 3\n",
     ],
 )
 def test_damaged_scope_is_an_error(tmp_path: Path, text: str) -> None:
