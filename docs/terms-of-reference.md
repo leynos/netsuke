@@ -444,7 +444,9 @@ Each goal is phrased so that an observer can check it.
   schema version (`netsuke_version`) governs compatibility.
 - **Source builds need the pinned nightly Rust toolchain** (ADR-006). Prebuilt
   binaries and installers avoid this for users, but not for contributors or
-  registry installs.
+  registry installs. The constraint is accepted for now; Netsuke intends to
+  move to stable Rust once Polonius stabilizes, as ADR-006's stabilization path
+  anticipates.
 
 ### 8.2 Assumptions
 
@@ -478,7 +480,6 @@ Each goal is phrased so that an observer can check it.
 | Q5  | Is content-hash invalidation in scope for any input class?                                                                                                                                         | Tests assumption A5; affects remote inputs and any future cache.                                                                         | Evidence of missed or spurious rebuilds in real use, or a decision tied to Q4.                 | Spike, then ADR                                                    |
 | Q7  | What plan-generation time budget is acceptable, and on what reference manifest?                                                                                                                    | Needed to turn the operational criterion into a measurable one.                                                                          | A budget and a benchmark manifest exist.                                                       | Spike                                                              |
 | Q9  | Who maintains reusable rule bundles for common ecosystems, and are any shipped with Netsuke?                                                                                                       | Decides whether G3 and G10 are met by the core or by an ecosystem that does not yet exist.                                               | An ownership and distribution decision for bundles.                                            | RFC amendment to RFC 0003                                          |
-| Q10 | Does the nightly toolchain requirement for source installs conflict with serving the accidental build-system authors (a later audience)?                                                           | Affects installation paths and constraint 8.1.                                                                                           | Evidence that binary installers cover the target platforms, or a plan for stable builds.       | Elicitation                                                        |
 | Q12 | How are crates.io downloads from the maintainer's own CI separated from external ones, do GitHub release and installer downloads count, and what thresholds mark success for each adoption signal? | Without a method the first external signal cannot be reported; without thresholds it cannot show success.                                | A documented counting method and a threshold with a date for each signal.                      | Spike, then elicitation                                            |
 
 ### 9.1 Resolved questions
@@ -508,6 +509,12 @@ Each goal is phrased so that an observer can check it.
   interface, with no further breaking changes planned to the Netsukefile format
   or command-line behaviour. The testing framework and linter semantics should
   be stable by then too. See [section 7.3](#73-strategic).
+- **Q10 — Is the nightly toolchain acceptable for source installs?**
+  Resolved 2026-09-25: yes for now, since prebuilt installers serve most users.
+  Netsuke is likely to move to stable Rust when Polonius stabilizes. The pin
+  also enables the next-generation trait solver, which AGENTS.md says the
+  codebase assumes, so that feature's stabilization may gate the move too. See
+  [section 8.1](#81-hard-constraints).
 
 ## 10. Handoff
 
