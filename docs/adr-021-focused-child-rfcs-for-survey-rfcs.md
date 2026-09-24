@@ -354,8 +354,8 @@ with a platform diagnostic, and all five emit LF on every platform.
 
 RFC 0006 section 8.1 specifies the kinds each helper accepts. What follows is
 the conditions under which a kind, a key, or an option value is rejected, each
-carrying a code from section 5.9. Per helper, because the three parsers and two
-serializers do not share a rejection set.
+carrying a code from section 5.9. Per helper, because the three parsing
+helpers and the two serializers do not share a rejection set.
 
 - `from_json` accepts a string. It rejects `wrong_kind`, `syntax`,
   `duplicate_key`, `depth_exceeded`, and `length_exceeded`.
@@ -367,10 +367,14 @@ serializers do not share a rejection set.
 - `from_yaml_all` accepts a string and rejects every `from_yaml` condition,
   except that the input-length and node budgets apply to the whole stream
   rather than to each document.
-- `to_yaml` accepts any value except undefined. It rejects `undefined_input`,
-  `indent_out_of_range`, `unsupported_key`, and `unsupported_kind`.
+- `to_yaml` accepts any value except undefined. It rejects `undefined_input`
+  and `indent_out_of_range` outright, plus `unsupported_key` when
+  `sort_keys=true` meets a mapping key with no canonical JSON form, and
+  `unsupported_kind` for a value that has none.
 - `to_nice_json` accepts any value except undefined, and rejects the same four
-  conditions as `to_yaml`.
+  conditions as `to_yaml`, with the difference that section 8.1 states its key
+  rule directly: integer and boolean keys are rendered in canonical string
+  form and every other key kind is rejected rather than coerced.
 
 Three decisions this group adds:
 
@@ -402,9 +406,11 @@ exclusions this group can meet, and to fix how the round trips are stated.
   clause 6.7's relation applied to a key-ordering decision, and it is why the
   option can promise deterministic output at all.
 - The clause excludes undefined, callables, and the `now()` timestamp object,
-  because none has a canonical JSON form. Only undefined can reach this group
-  in a value being serialized, and clause 6.6 already rejects it on input, so
-  this group names no separate error for the other two.
+  because none has a canonical JSON form. Undefined is already rejected on
+  input by clause 6.6; the other two are rejected on output as
+  `unsupported_kind`, because a manifest can hold a callable or the result of
+  `now()` and pass it to a serializer, and clause 6.7 makes that a typed error
+  naming the value kind rather than a silent rendering.
 - The group defines **no second equality relation** for round-trip testing.
   `value | to_yaml | from_yaml` and `value | to_nice_json | from_json` are
   asserted equal under clause 6.7's relation. A looser relation for tests would
@@ -414,8 +420,8 @@ exclusions this group can meet, and to fix how the round trips are stated.
 ### 5.8. Resource bounds
 
 The bounds are RFC 0006 table 3's, applied through checked comparison before
-allocation. What this group adds is where each one is enforced, because the two
-parsers do not share a code path.
+allocation. What this group adds is where each one is enforced, because the JSON
+and YAML parsers do not share a code path.
 
 | Helper          | Bounds enforced                                      |
 | --------------- | ---------------------------------------------------- |
