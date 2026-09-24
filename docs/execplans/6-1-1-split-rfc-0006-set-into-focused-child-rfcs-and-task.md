@@ -443,7 +443,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
   `coverage_map_status_is_reported` passed in 0.223s, so the diff's assertions
   are exercised and green. **Gap closed the same day**: `make doctest` was run
   separately and passed, exit 0, `81 passed / 2 passed / 32 passed` across its
-  three targets with no failures. So `make test`'s two recognised sub-targets
+  three targets with no failures. So `make test`'s two recognized sub-targets
   are now both accounted for — `test-nextest` red only on the two
   upstream-fixed live-build tests, and `doctest` green in full.
 - [x] (2026-09-24) **`make test` cannot pass on this base, and that is not a
