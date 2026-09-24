@@ -172,8 +172,11 @@ and the two serializers do not share a rejection set.
   `unsupported_key` for a sequence or mapping key, `special_tag`, `merge_key`,
   `alias_budget`, and `document_count` for a stream that is not exactly one
   document.
-- `from_yaml_all` accepts a string and rejects every `from_yaml` condition,
-  except that the input-length and node budgets apply to the whole stream
+- `from_yaml_all` accepts a string and applies every per-document condition from
+  `from_yaml` to each document. `document_count` is the one condition it does
+  **not** inherit: RFC 0006 section 8.1 makes a stream of zero documents an
+  empty sequence, not an error, and multi-document input is the whole point of
+  the helper. The input-length and node budgets apply to the whole stream
   rather than to each document.
 - `to_yaml` accepts any value except undefined. It rejects `undefined_input`
   and `indent_out_of_range` outright, plus `unsupported_key` when
@@ -235,7 +238,8 @@ JSON and YAML parsers do not share a code path.
 | --------------- | ---------------------------------------------------- |
 | `from_json`     | input 8 MiB; nesting depth 128                       |
 | `from_yaml`     | input 8 MiB; depth 128; alias expansion 100000 nodes |
-| `from_yaml_all` | the same three, over the whole stream                |
+| `from_yaml_all` | input 8 MiB; depth 128; alias expansion 100000 nodes |
+|                 | — the same three, applied to the stream as a whole   |
 | `to_yaml`       | none; output is a function of a bounded input        |
 | `to_nice_json`  | none; output is a function of a bounded input        |
 
@@ -300,12 +304,34 @@ scale, and a group with thirteen conditions is the case it names.
 ### 5.10. Naming and alias policy
 
 No additional obligation beyond RFC 0006 section 6.10. The clause registers one
-name per capability and this group adds five, none an alias. One of the
-clause's own examples is still live here rather than settled: `to_nice_yaml` is
-rejected by RFC 0006 section 10.2 as redundant with `to_yaml(indent=...)`, and
-whether that rejection is expressed as outright absence or as a
+name per capability and this group adds five, none an alias. The group does,
+however, put the clause under real pressure in a way no other group does, and a
+reviewer should see why the outcome is still five names rather than six or four.
+
+`to_json` is **rejected** by RFC 0006 section 10.2 as an alias of MiniJinja's
+existing `tojson`, while `to_nice_json` is **accepted** in section 8.1. The
+obvious reading — that `to_nice_json` is the pretty-printer for a helper this
+set does not add — is wrong, and the reason is worth stating once. `tojson` and
+`to_nice_json` differ in *kind*, not in degree: `tojson` is compact and
+whitespace-free by construction, and `to_nice_json(indent=…)` is the same
+serialization with a layout parameter `tojson` does not accept. A parameterless
+`to_json` would therefore be a true alias and is correctly rejected, whereas
+`to_nice_json` carries an argument surface that makes it a distinct capability.
+The near-miss is that `indent=0` *does* reproduce `tojson` exactly, so the two
+overlap at one point of that parameter space. That overlap is deliberate and
+harmless — it is what makes `indent=0` a usable "compact, but reachable through
+the Netsuke helper" path — but it is the reason clause 6.10's one-name-per-
+capability line cannot be read as one-*output*-per-capability.
+
+The clause's other live case is unsettled rather than resolved: `to_nice_yaml`
+is rejected by RFC 0006 section 10.2 as redundant with `to_yaml(indent=...)`,
+and whether that rejection is expressed as outright absence or as a
 diagnostic-raising registration is RFC 0006 section 16 question 1, carried
-unresolved to section 8 and decided at roadmap task 6.2.3.
+unresolved to section 8 and decided at roadmap task 6.2.3. Note that the
+asymmetry with JSON is intended and not an inconsistency: `to_nice_yaml`'s
+redundancy is with `to_yaml`, a helper this standard library *already* adds, so
+the rejection costs a caller nothing it cannot already reach; `to_json`'s
+redundancy is with a MiniJinja builtin that is likewise already reachable.
 
 ### 5.11. Documentation and testing obligations
 
