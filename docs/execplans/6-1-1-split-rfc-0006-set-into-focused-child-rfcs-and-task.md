@@ -360,6 +360,18 @@ Hard invariants. Violating one requires escalation, not a workaround.
   defect — the second pass had already been reviewed twice and passed. This is
   the reason the standing instruction is to make every gate green *before*
   requesting a review rather than to use the review as a gate.
+- [x] Fourth gate run (2026-09-24), at `292bb9b3`. `make check-fmt` passed;
+  `make lint` failed in `lint-whitaker`, which is the third of `make lint`'s
+  five stages, so `lint-python` and `github-actions-lint` never ran. Two
+  findings, both `module_max_lines`: `Module checks spans 461 lines` and
+  `Module rfc_stdlib_coverage spans 448 lines`, against AGENTS.md's 400-line
+  cap. `lint-clippy` — the first stage — passes the same files, which is the
+  third time a targeted Rust gate has been green on a tree that `make lint`
+  rejects. Fixed at `7605c884` by splitting `tests/rfc_stdlib_coverage` into
+  three modules, none over 300 lines: `document` (the document layer, shared by
+  every parser), `partition` (`COV-1`, `COV-2`), and `progress` (`COV-3` to
+  `COV-6`, `CONF-1`). The ten tests pass unchanged and `COV-4` still reports
+  `0 of 8 capability groups written; 8 remaining`.
 - [ ] `EP-M3` RFC 0013, structured data interchange (step 6.2). **Go/no-go.**
 - [ ] `EP-M4` RFC 0014, mapping and sequence transforms (step 6.3).
 - [ ] `EP-M5` RFC 0015, ordered collection algebra and truth predicates (6.4).
@@ -830,6 +842,32 @@ tracked; the derivation it performs is reimplemented in the coverage test at
   gains an override for `coverage_map_status_is_reported` with
   `success-output = "immediate"`. Verified: a green run prints
   `coverage map: 0 of 8 capability groups written; 8 remaining`.
+
+- Observation: the 400-line cap is measured on *code*, not on file length, and
+  the difference defeated the first attempt to verify the fix. Liveness-probing
+  `module_max_lines` by appending 120 `// pad` lines to a 303-line module left
+  Whitaker green, which reads as "the lint is not looking at this file". It is
+  looking; it does not count bare comment lines. Re-probing with 110
+  doc-comment lines plus a function took the same file to 415 and produced
+  `error: Module progress spans 415 lines, exceeding the allowed 400.` Impact:
+  the fix at `7605c884` is confirmed by a live oracle rather than by an absence
+  of output, and every module is now at most 303 lines, so none is near the
+  boundary under either counting rule. This is the second time in this task
+  that a probe's own defect would have been read as a pass had the probe not
+  been run against a case it was expected to fail.
+
+- Observation: the cap's scope is *nested modules*, and the corpus confirms it
+  rather than merely permitting it. Every non-crate-root Rust file in the tree
+  is at most 400 lines, with four (`src/ninja_gen/mod.rs`,
+  `src/manifest/mod.rs`, `src/manifest/render_tests.rs`,
+  `src/manifest/expand_test_cases/condition_cases.rs`) sitting exactly at 400 —
+  a wall, not a coincidence. Eight `tests/*.rs` files exceed it (411 to 660),
+  all of them crate roots, and `dylint.toml` treats `tests/*.rs` targets as a
+  separate compilation unit. Impact: the two files this milestone added were
+  the only nested modules over the cap, so the violation was this task's to fix
+  and not an inherited condition; had the cap applied to crate roots, the same
+  split would have been required of eight pre-existing files and would have
+  been out of scope.
 
 ## Decision log
 
