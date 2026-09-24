@@ -428,7 +428,57 @@ Hard invariants. Violating one requires escalation, not a workaround.
   it worse (four timeouts, not two), which rules out this branch's own test
   load as the cause. Environmental, not a regression: the two files are
   unmodified by this diff, and the full run reached 2815 passed against 2 timed
-  out.
+  out. **Superseded by the eighth entry**: "environmental" was the right
+  verdict and the wrong reason — both tests are over budget on this base by
+  construction, not by load.
+- [x] Eighth gate run (2026-09-24), at `f5300602`. Same shape as the seventh.
+  Five of six targets pass: `make check-fmt`; `make lint` (all five stages plus
+  both Whitaker invocations, 13s on a warm cache); `make typecheck`;
+  `make markdownlint` (135 files, 0 errors; spelling 34 passed, 92.37%
+  coverage); `make nixie`. `make test` fails again on exactly the two
+  live-build tests, both `TIMEOUT` at 300.015s — 2817 run, 2815 passed, 2 timed
+  out, 3 skipped, and **no** assertion failure of any kind. Because `make test`
+  is fail-fast, the `doctest` sub-target never ran at all: that is this run's
+  one evidence gap, and it is a gap the seventh run shared. The branch's own
+  `coverage_map_status_is_reported` passed in 0.223s, so the diff's assertions
+  are exercised and green.
+- [x] (2026-09-24) **`make test` cannot pass on this base, and that is not a
+  load story.** `e2fc2083` and `33a293a7` are on `origin/main` but are *not*
+  ancestors of this branch, so main has already fixed this failure class — and
+  not by widening a budget. It added a `[test-groups.nested-cargo-builds]`
+  group with `max-threads = 1` and **removed**
+  `harness_compiles_under_a_split_build_dir` from the override filter
+  altogether, trading the always-cold nested workspace build for recorded
+  parser coverage. The seventh entry's "environmental, load-dependent" reading
+  was too generous to this host. Measured for the record: the harness test
+  passes in 524.170s under a lifted budget, and
+  `packaged_manifest_retains_build_script_sources` in 270.658s, of which
+  `cargo publish --dry-run` alone is 269.86s — against a 300s cap. The seventh
+  entry read "re-running the two files alone produced four timeouts, not two"
+  as evidence of load; it is better read as evidence that neither can pass here
+  at all, so narrowing the selection only removes the queueing that was hiding
+  it. **The rebase is the fix; no local workaround is warranted.**
+- [x] (2026-09-24) **No CI has ever run on this branch, and CodeRabbit has
+  reviewed nothing.** PR #697 reports `mergeable: CONFLICTING` and
+  `mergeStateStatus: DIRTY` against `origin/main` (55 behind, 23 ahead; the
+  conflicted paths are `.config/nextest.toml` and `docs/contents.md`). GitHub
+  cannot build the `refs/pull/NNN/merge` ref for a conflicted pull request, so
+  *every* `pull_request`-triggered workflow is suppressed — `ci.yml` and
+  `netsukefile-test.yml` among them. The last real CI run on this branch is
+  `3f02ee37`, its opening push on 2026-09-09. CodeRabbit is the sharper case:
+  its status context on the head reads `SUCCESS` while its only comment on the
+  pull request says "Draft PR not reviewed". So `EP-M3`'s "every gate green"
+  criterion could not have been met through CI, and the two controls this
+  milestone was counting on were not watching.
+- [x] (2026-09-24) Our own `.config/nextest.toml` addition from `3a207c13` is
+  stale against main's convention. It uses
+  `filter = 'test(=coverage_map_status_is_reported)'`; main's file now
+  documents at length that the `test(=NAME)` form compares the whole name and
+  so silently matches *none* of a parameterized `#[rstest]`'s instances, and
+  mandates the anchored `test(/^NAME($|::)/)` instead. Ours is correct today
+  only because that test is unparameterized, which is precisely the latent
+  defect main's comment was written to prevent. The rebase should adopt the
+  anchored form.
 - [ ] `EP-M3` RFC 0013, structured data interchange (step 6.2). **Go/no-go.**
 - [ ] `EP-M4` RFC 0014, mapping and sequence transforms (step 6.3).
 - [ ] `EP-M5` RFC 0015, ordered collection algebra and truth predicates (6.4).
@@ -442,6 +492,35 @@ Hard invariants. Violating one requires escalation, not a workaround.
 
 ## Surprises & discoveries
 
+- Observation: **two independent safety nets can both report success while
+  neither is watching.** Evidence: `EP-M3`'s acceptance criterion is "every
+  gate green", and it was pursued through two channels that both silently
+  no-op'd. CodeRabbit's commit status on `f5300602` reads `SUCCESS`, while its
+  only comment on the pull request says "Draft PR not reviewed" — a status that
+  means "did not fail", not "did review". GitHub Actions reports nothing at
+  all: PR #697 is `CONFLICTING`/`DIRTY`, and because GitHub cannot construct the
+  `refs/pull/697/merge` ref for a conflicted pull request, every
+  `pull_request`-triggered workflow is suppressed outright rather than failing.
+  Neither condition produces an error, a red check, or a notification. Impact:
+  the branch's 23 commits have never been CI-validated, and the last CI run on
+  it is `3f02ee37`, its opening push on 2026-09-08. Lesson: a green status is
+  only evidence if it was *earned by a run* — check that the run exists before
+  reading its conclusion, and treat an absent run as a failure, not as silence.
+  The mitigation is structural, not vigilance: keep the pull request mergeable,
+  because a conflict disables the entire CI channel.
+- Observation: **"environmental" can be the right verdict for the wrong
+  reason.** Evidence: the seventh and eighth gate runs both correctly cleared
+  this branch's diff of blame for the two `make test` timeouts, and both
+  reached for host load as the cause. Load was real but not decisive: the two
+  tests are over budget on this base *by construction*. `origin/main` already
+  fixed the class, and not by widening a timeout — it moved
+  `harness_compiles_under_a_split_build_dir` onto recorded parser coverage and
+  serialized the remaining nested Cargo builds into a `max-threads = 1` group.
+  Impact: the load explanation implied "re-run when quiet", which would have
+  burned another 400-second gate run and failed the same way. The decisive
+  check is ancestry, not load: `git merge-base --is-ancestor e2fc2083 HEAD`.
+  Lesson: when local gates disagree with CI, check whether the fix already
+  landed upstream before explaining the discrepancy from the machine.
 - Observation: **a review finding can name a real defect and still prescribe the
   wrong fix**, and the fix is the part that ships. Evidence: the `CONF-1`
   deference finding asked that `as Ansible does` stop being flagged and offered
