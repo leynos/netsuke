@@ -1969,7 +1969,7 @@ changelog entry instead.
 
 The `rust-toolchain` ecosystem block updates the checked-in Rust toolchain
 declaration in `rust-toolchain.toml`. It targets the repository root (`/`),
-runs weekly, permits five open pull requests, and applies the `dependencies` and
+runs daily, permits five open pull requests, and applies the `dependencies` and
 `rust-toolchain` labels. The declaration remains pinned to a dated nightly;
 each Dependabot pull request still requires normal human review and the
 repository quality gates. Kani's separately managed toolchain is outside this
