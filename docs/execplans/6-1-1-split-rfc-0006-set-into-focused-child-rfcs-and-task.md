@@ -175,8 +175,9 @@ Hard invariants. Violating one requires escalation, not a workaround.
   for the rest. The anti-vacuity rule gives a reviewer a one-line test.
   `CONF-1` requires each subsection to name at least one helper the RFC owns
   and to contain no Ansible-deference phrase. And `EP-M3` is a hard go/no-go:
-  if section 5 for the smallest group tells a reviewer nothing they did not
-  already know from RFC 0006 section 6, the remaining seven are not written.
+  if section 5 for the group `EP-M3` delivers — RFC 0013, the first, not the
+  smallest — tells a reviewer nothing they did not already know from RFC 0006
+  section 6, the remaining seven are not written.
 
 - Risk: the split stalls half-finished, and nothing is red because the coverage
   invariant is satisfied by both the finished and the abandoned state.
@@ -290,7 +291,22 @@ Hard invariants. Violating one requires escalation, not a workaround.
   cell vocabulary; see `Surprises & discoveries`. Both are fixed in the
   skeleton now, before `EP-M3` could spend the go/no-go on a document written
   to the wrong contract.
-- [ ] `EP-M2` Write the literal child-RFC template and one worked section 5.
+- [x] (2026-09-24) `EP-M2` the child-RFC template and one worked section 5,
+  both landed in `ADR-021`. The template left this plan for the ADR rather than
+  the developers' guide, and the worked section followed it: a template that a
+  parser reads must live where the child author is already sent, and that is
+  the ADR the convention is stated in. The worked section is RFC 0013's — the
+  group `EP-M3` spends the go/no-go on — filled in rather than described, so a
+  reviewer judges the pattern before eight RFC numbers depend on it. Both
+  parsed artefacts were validated mechanically against the shipped parser: the
+  registry heading matches `REGISTRY_HEADING`, all five rows parse to `New`/
+  `pure`/`yes`, and the discharge table's eleven ids equal section 6's clause
+  list in document order. Two consequences of writing it are recorded in
+  `Surprises & discoveries`: the fenced copy is width-bounded by `MD013` in a
+  way the real child is not, and the first draft's error-condition vocabulary
+  had invented a `non_string_key` where RFC 0006 section 8.1 says sequence and
+  mapping keys are rejected. This milestone's acceptance evidence is a
+  reviewer's, not a test's, and is stated in `EP-M2`'s own entry.
 - [ ] `EP-M3` RFC 0013, structured data interchange (step 6.2). **Go/no-go.**
 - [ ] `EP-M4` RFC 0014, mapping and sequence transforms (step 6.3).
 - [ ] `EP-M5` RFC 0015, ordered collection algebra and truth predicates (6.4).
@@ -465,6 +481,38 @@ Hard invariants. Violating one requires escalation, not a workaround.
   diff. Both files edited at `EP-M1`'s second review were pure paragraph
   rewrapping — zero table-pipe changes — which the checker's failure message
   alone does not tell you.
+
+- Observation: the worked section `EP-M2` commits is a **fenced** copy, so it
+  is subject to a width limit the real child RFC is not, and the first draft
+  was written to the real child's width and failed the gate. Evidence: a
+  208-column fenced row failed `MD013` with
+  `t.md:6:121 error MD013/line-length Line length [Expected: 120; Actual: 208]`,
+  and `.markdownlint-cli2.jsonc` sets `MD013.code_block_line_length` to 120
+  while setting `tables: false`. Impact: a fenced copy must be laid out to 120
+  columns even though `tables: false` means no real table in the corpus is ever
+  measured, so the worked section's tables are narrower than RFC 0013's will be.
+  `mdtablefix` compounds it by leaving fenced content completely alone —
+  probed on a file with a misaligned fenced table and an over-wide fenced
+  paragraph, both of which it reported as "left unchanged" while reflowing the
+  same paragraph outside the fence — so `make check-fmt` will not repair a
+  fenced copy either. The consequence for the remaining children is nil,
+  because a child RFC is real Markdown: its tables are exempt from `MD013` and
+  are reflowed by `mdtablefix` like every other table in the corpus. The
+  consequence for this plan is that the specimen is sized for the fence and
+  says so, rather than being the widest form a child may use.
+
+- Observation: the first draft of the worked section named a `non_string_key`
+  error condition for `from_yaml`, and RFC 0006 section 8.1 rejects the
+  opposite set. Evidence: section 8.1 says "Mapping keys may be strings,
+  integers, or booleans. Sequence and mapping keys are rejected." An integer or
+  boolean key is therefore *accepted* and a sequence or mapping key is
+  rejected, so a condition called `non_string_key` names the wrong predicate in
+  both directions: it would fire on input the document admits and stay silent
+  on input it excludes. Impact: renamed to `unsupported_key`, which states what
+  is rejected without contradicting the accepted kinds. The defect was found by
+  writing the condition list against section 8.1 rather than from memory of it,
+  which is the whole reason the worked section was drafted before `EP-M3`
+  rather than during it.
 
 - Observation: the skeleton this plan tells `EP-M2` to "copy literally" **does
   not satisfy the parser `EP-M1` already shipped**, in two independent places.
@@ -971,134 +1019,18 @@ branch. Both stay in RFC 0006 section 16, and `EP-M1` annotates question 7 with
 a pointer to task 7.1.1 so a phase-6 implementer does not adopt it by accident.
 All seven stay open.
 
-### The child RFC skeleton
+### The child RFC template
 
-Copy this literally. It is the style guide's template, retaining
+The template is committed to
+[ADR-021](../adr-021-focused-child-rfcs-for-survey-rfcs.md), under "The child
+RFC template", together with the registry row shape and each column's accepted
+vocabulary. It is not restated here: two copies of a parsed artefact drift, and
+the copy a child is written from must be the copy the test reads. `EP-M2` moved
+it there from this plan for exactly that reason. The template retains
 `## Current state` and `## Alternatives considered` as conditional-but-expected
 for RFCs 0017 and 0018, which must contrast `relpath` against the existing
 `relative_to` and `splitext` against `with_suffix`, and must carry RFC 0006
 section 15.5's analysis of the rejected Windows-specific filter family.
-
-```markdown
-# RFC 00NN: <title>
-
-## Preamble
-
-- **RFC number:** 00NN
-- **Status:** Proposed
-- **Created:** YYYY-MM-DD
-- **Parent RFC:** RFC 0006, Ansible-inspired template standard-library
-  expansion
-- **Roadmap step:** 6.N
-- **Originating issue:** [#596](https://github.com/leynos/netsuke/issues/596)
-  (closed)
-- **Release target:** v0.1.x or later; must not widen the v0.1.0 hardening
-  release defined by [#594](https://github.com/leynos/netsuke/issues/594)
-
-## 1. Summary
-
-<What this group buys a manifest author, in three or four sentences.>
-
-## 2. Problem
-
-<The subprocess contortion this group removes, from RFC 0006 section 2.>
-
-## 3. Goals and non-goals
-
-- Goals:
-  - <Goal>
-- Non-goals:
-  - <Every deferred or rejected candidate adjacent to this group, named.>
-
-## 4. Capability set
-
-<One entry per helper: name, one-line purpose, and a link to its contract in
-RFC 0006 section 8.N. This section does not restate the contract.>
-
-## 5. Cross-cutting contract conformance
-
-### 5.1. Registry
-
-<The five-column table. Mandatory. The heading is parsed literally by
-`registries.rs`, which matches `### 5.1. Registry`; a child that retitles it
-fails with "has no registry table at ### 5.1. Registry" before any row is
-read.>
-
-### 5.2. Manifest-query availability
-
-### 5.3. Determinism
-
-### 5.4. Capability boundary
-
-### 5.5. Platform contract
-
-### 5.6. Type and error contract
-
-### 5.7. Canonical value equality
-
-### 5.8. Resource bounds
-
-### 5.9. Diagnostics and localization
-
-### 5.10. Naming and alias policy
-
-### 5.11. Documentation and testing obligations
-
-### Clause discharge
-
-<The two-column discharge table: one row per clause of RFC 0006 section 6, the
-clause id in backticks, and how this group meets it. It closes section 5,
-after the eleven clause subsections, because it resolves all eleven rather than
-adding a twelfth.>
-
-| Clause | Discharge |
-| ------ | --------- |
-| `6.1`  | <...>     |
-| `6.11` | <...>     |
-
-## 6. Dependencies
-
-<Crates from RFC 0006 section 13.4, and the child RFCs this one requires.>
-
-## 7. Delivery
-
-<The roadmap tasks that implement this RFC, by number.>
-
-## 8. Open questions
-
-<RFC 0006 section 16 questions assigned to this group, carried over
-unresolved.>
-
-## 9. Recommendation
-
-<One paragraph: why this group's helpers belong in the v0.1.x line.>
-```
-
-The fence above closes the template. Everything from here on is this plan's
-prose, not template text.
-
-The registry at section 5.1 has exactly these columns and this row shape. The
-example is RFC 0017's, and is the worked example `EP-M2` must produce in full:
-
-| Helper      | Namespace | Registration | Purity class | Manifest query |
-| ----------- | --------- | ------------ | ------------ | -------------- |
-| `path_join` | Filter    | New          | Pure         | Yes            |
-| `abs`       | Test      | New          | Pure         | Yes            |
-| `basename`  | Filter    | Option added | Pure         | Yes            |
-
-*Table 2: The registry row shape.*
-
-`Registration` is `New` or `Option added`, distinguishing the 57 new helpers
-from the 3 existing helpers gaining a behaviour-preserving option.
-`Purity class` is one of the six values in RFC 0006 table 2. `Manifest query` is
-`Yes` or `No`, matching the column of the same name in RFC 0006 table 2 rather
-than introducing a second vocabulary for the same fact. The coverage test
-parses exactly these cells, and it cross-checks the manifest-query cell against
-the purity class: `Yes` is admissible only for a pure helper, because clause
-6.2 admits only pure helpers to the manifest-query environment and the non-pure
-ones are registered there as always-failing stubs rather than being absent. So
-a non-pure row reads `No` and still resolves in both environments; the `No` is
-the stub's disposition, not its absence.
 
 ## Conformance basis
 
@@ -1558,9 +1490,31 @@ fallback if nothing else proceeds.
 
 ### `EP-M2` — the template and one worked section 5
 
-- Outcome: the literal skeleton above is committed into `ADR-021` or the
-  developers' guide, and one complete worked section 5 exists for review — RFC
-  0013's, being the smallest group.
+- Outcome: the literal skeleton is committed into `ADR-021` — chosen over the
+  developers' guide because the template is part of the convention the ADR
+  already states in four parts, and the ADR is where a child's author is
+  already sent — and one complete worked section 5 exists for review, for RFC
+  0013, the group `EP-M3` delivers. 0013 is the *first* group, not the
+  smallest: it owns 5 registry rows and 94 lines of section 8 against RFC
+  0020's 2 rows and 80 lines, so "smallest" was wrong in this plan's own risk
+  entry as well. The choice of 0013 stands regardless, because the worked
+  example earns its keep by being the document the go/no-go is spent on, not by
+  being cheap to write.
+- Where it landed: the worked section sits in `ADR-021` under **The worked
+  section**, immediately after the template it fills in, and is a fenced
+  specimen rather than a ninth RFC. It could not be a file under `docs/rfcs/`:
+  `registries::parse_all` scans that directory and takes every file whose
+  number the coverage map reserves, so a specimen named `0013-…` would be
+  parsed as RFC 0013 itself and `every_accepted_helper_has_exactly_one_owner`
+  would accept a document that is not the child. The ADR is the safe home, and
+  it is also the natural one, since the template this completes already lives
+  there and neither can now be edited without the other in view.
+- Mechanical evidence, because the specimen is a copy-source and a wrong one
+  costs eight documents: the registry heading matches `REGISTRY_HEADING`
+  literally, the five rows parse to `new`/`pure`/`yes` under `registries.rs`'s
+  cell vocabularies, and the discharge table yields exactly `6.1` through
+  `6.11` in document order under `clauses.rs`. Checked by extracting the fence
+  and running both parsers over it, not by reading it.
 - Acceptance evidence: a reviewer reads the worked section 5 and can state one
   thing it told them that RFC 0006 section 6 did not.
 - Recovery: revert.
@@ -1587,9 +1541,9 @@ fallback if nothing else proceeds.
 Identical in shape, so stated once. For child `00NN` owning the groups in
 `Table 1` for roadmap step `6.S`:
 
-- Outcome: `docs/rfcs/00NN-<slug>.md` exists per the skeleton; the coverage map
-  names it; `docs/contents.md` lists it; roadmap step `6.S` and each of its
-  tasks cite it.
+- Outcome: `docs/rfcs/00NN-<slug>.md` exists per the template in `ADR-021`; the
+  coverage map names it; `docs/contents.md` lists it; roadmap step `6.S` and
+  each of its tasks cite it.
 - Acceptance evidence: `COV-1` shows exactly that RFC's registry helpers owned
   by it; `CONF-1` green; `COV-4`'s unwritten count decremented; gates green.
 - Conformance check: no disposition changed; `COV-2` proves mechanically that
@@ -1663,7 +1617,7 @@ covering struct fields and enum variants, not merely types.
 `EP-M1` as its own pull request. Then `EP-M2`, then one commit per child. For
 each child:
 
-1. Create `docs/rfcs/00NN-<slug>.md` from the literal skeleton.
+1. Create `docs/rfcs/00NN-<slug>.md` from the literal template in `ADR-021`.
 2. Write section 4 as a list of the group's helpers with one-line purposes and
    links into RFC 0006 section 8.N. Do not restate a contract.
 3. Write section 5.1's registry, then 5.6, 5.7, 5.8, and 5.9. Apply the
