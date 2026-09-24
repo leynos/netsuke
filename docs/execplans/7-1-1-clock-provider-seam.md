@@ -1683,6 +1683,53 @@ above, which are disposable.
   `git range-diff` supplies the remapping, and the replies use the new SHAs
   together with the run identifiers rather than the old ones alone.
 
+- [x] Post-completion: publication, and the disposition of the two checks
+  CodeRabbit declined to call resolved.
+
+  The rebased head `cabb7c63` was published with a force-with-lease bound to
+  the previously recorded remote head `1ef98593`; the lease matched and the
+  remote branch is now `cabb7c63`. The PR base reads `397fb589`, identical to
+  the replay target, so the branch is aligned with the base the PR targets.
+
+  CodeRabbit's freshest confirmation of the Observability warning
+  (`2026-09-24T20:42:22Z`) names `1ef98593`, which the rebase superseded.
+  Rather than let that read as current, the pre-merge row was reconciled
+  against the new head with the byte-identical `patch-id` evidence above. The
+  top-level follow-up is comment `5822412433`; the guides-thread reply is
+  comment `4098582850`.
+
+  That same reply carried a caveat worth recording as a lesson: CodeRabbit
+  stated its assessment "does not treat this observability assessment as a
+  resolution" of a failed Windows build-test or a timed-out CodeScene coverage
+  check. Both were then disposed of independently, and neither disposition is
+  "it was not required".
+
+  - Windows `build-test-windows` failed at `1ef98593` on exactly one test,
+    `stdlib::network::redirect::error_tests::protocol_failures_are_classified_from_a_live_response`,
+    with `os error 10053` — the Windows close-abort fixture defect, where the
+    fixture's naked listener close reset the connection so the client reported
+    an aborted connection instead of the parse failure under test. That is not
+    this branch's code: no commit of ours in `397fb589..HEAD` touches
+    `src/stdlib/network/`. The decisive fact is ancestry, not adjacency:
+    `git merge-base --is-ancestor 061182b1 1ef98593` **fails**, so #749's fix
+    was absent from the head that failed, while the same check against
+    `cabb7c63` **succeeds**, because the rebase now inherits it. The failure is
+    therefore superseded by this rebase rather than argued away.
+  - `CodeScene Code Coverage (main)` timed out at `1ef98593`. It writes
+    trunk-only coverage metrics and is known to time out on pull requests. It is
+    not in the required set, which the ruleset confirms is exactly `build-test`,
+    `kani-smoke`, `netsukefile` and `release / metadata`
+    (`main-required-checks`, id 18427981). The CodeScene check that does grade
+    this branch, `CodeScene Code Health Review (main)`, is `success`.
+
+  One more tooling fact matters for anyone reading a green status here. The
+  `CodeRabbit` commit status on `cabb7c63` reaches `success` about five seconds
+  after the push, but its description reads **"Review paused"**, not "Review
+  completed" as it did on `1ef98593`. CodeRabbit has auto-paused this branch,
+  so that green status is a pause stamp and is not evidence of any review of
+  the new head. This is exactly why the status latency and its description, not
+  the colour alone, are what the record should cite.
+
 ## Surprises & discoveries
 
 Recorded during planning; extend during implementation.
