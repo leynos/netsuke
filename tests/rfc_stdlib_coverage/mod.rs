@@ -254,6 +254,75 @@ impl<'a> Section<'a> {
         })
     }
 
+    /// This section's `###` subsections, in document order.
+    ///
+    /// A subsection runs from its own heading to the next heading of the same or
+    /// a shallower depth, which is [`Section::subsection`]'s rule applied to
+    /// every heading at once. Only depth three is collected, because the sections
+    /// that carry subsections in this corpus are depth two: a `####` inside one is
+    /// body content, and treating it as a sibling would split its parent.
+    ///
+    /// The body is fence-free in the same sense [`Section::tables`] is. A child
+    /// RFC's clause subsections quote Jinja, shell, and diagnostic text, and a
+    /// `#` line inside one of those snippets is a comment rather than a heading;
+    /// reading it as one would truncate the subsection and drop whatever
+    /// followed. Heading lines are not themselves body, so a `####` inside a
+    /// subsection contributes its prose but not its own line.
+    fn subsections(&self) -> Vec<Subsection> {
+        let headings = self.headings();
+        let mut found = Vec::new();
+        for (index, (offset, line)) in headings.iter().enumerate() {
+            let end = headings
+                .iter()
+                .skip(index + 1)
+                .next()
+                .map_or(self.lines.len(), |(next, _)| *next);
+            found.push(Subsection {
+                heading: line.clone(),
+                line: self.first_line + offset,
+                body: self.unfenced_body(offset + 1, end),
+            });
+        }
+        found
+    }
+
+    /// Every unfenced `###` heading, as (offset, text).
+    fn headings(&self) -> Vec<(usize, String)> {
+        let mut fences = Fences::default();
+        let mut found = Vec::new();
+        for (offset, line) in self.lines.iter().enumerate() {
+            if fences.mark(line) {
+                continue;
+            }
+            if heading_depth(line) == Some(3)
+                && let Some(text) = table_heading(line)
+            {
+                found.push((offset, text));
+            }
+        }
+        found
+    }
+
+    /// The unfenced lines in `start..end`, with trailing whitespace removed.
+    ///
+    /// The fence scan starts at the section's first line rather than at `start`,
+    /// so a body that begins inside a block its own heading opened is read as
+    /// fenced. That cannot happen for a heading the scan reached unfenced, but it
+    /// costs nothing to be right about.
+    fn unfenced_body(&self, start: usize, end: usize) -> Vec<String> {
+        let mut fences = Fences::default();
+        let mut body = Vec::new();
+        for (offset, line) in self.lines.iter().enumerate().take(end) {
+            if fences.mark(line) {
+                continue;
+            }
+            if offset >= start {
+                body.push(line.trim_end().to_owned());
+            }
+        }
+        body
+    }
+
     /// Every Markdown table in this section, in document order, paired with the
     /// heading text that precedes it.
     ///
@@ -306,6 +375,16 @@ impl<'a> Section<'a> {
             .filter(|(_, rows)| !rows.is_empty())
             .collect()
     }
+}
+
+/// One `###` subsection of a section, with its body.
+pub(super) struct Subsection {
+    /// The heading text, without its hashes.
+    pub(super) heading: String,
+    /// One-indexed line number of the heading.
+    pub(super) line: usize,
+    /// The subsection's own lines, fences and heading excluded.
+    pub(super) body: Vec<String>,
 }
 
 /// One Markdown table row, with the line it was read from.

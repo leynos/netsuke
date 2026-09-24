@@ -56,7 +56,7 @@ impl Purity {
     }
 
     /// The lowercase label used in failure messages.
-    const fn label(self) -> &'static str {
+    pub(super) const fn label(self) -> &'static str {
         match self {
             Self::Pure => "pure",
             Self::Clock => "clock-observing",

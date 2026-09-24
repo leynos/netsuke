@@ -22,7 +22,7 @@ use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, ensure};
 
-use super::{RFC_0006, Repo, Section, backticked};
+use super::{RFC_0006, Repo, Section, backticked, registries};
 
 /// The heading of the coverage map's subsection in RFC 0006 section 14.
 const MAP_HEADING: &str = "### 14.13. Coverage map";
@@ -150,6 +150,23 @@ pub(super) fn parse(repo: &Repo, sections: &BTreeMap<String, Vec<String>>) -> Re
                 "not a link"
             }
         );
+        // A written row links to a file, and the file's name carries the RFC
+        // number the row reserves. The two are written by hand and nothing else
+        // compares them: without this, row `0013` could link to `0014-….md`, and
+        // every check downstream would resolve the link, find the file, and pass
+        // — while `registries::parse_all` would file that document's helpers
+        // under RFC 0013's name. The link is the only place the mismatch is
+        // visible before the child is parsed.
+        if let Some(target) = &written {
+            let target_number = registries::rfc_number(target);
+            ensure!(
+                target_number.as_deref() == Some(number.as_str()),
+                "coverage map row for RFC {number} at {RFC_0006}:{} links to {target}, whose \
+                 number is {}",
+                row.line,
+                target_number.as_deref().unwrap_or("not an RFC number")
+            );
+        }
         let owns = resolve_owns(row.cell(2, "owns")?, sections, row.line)?;
         let optioned = backticked(row.cell(3, "optioned")?);
         let step = row.cell(4, "roadmap step")?.trim().to_owned();
@@ -172,15 +189,32 @@ pub(super) fn heading_is_map(heading: &str) -> bool {
 }
 
 /// Read a child RFC cell, which is a link once written and a code span before.
+///
+/// Returns the row's RFC number and, when written, the link target. The link
+/// text is the same four-digit number as the bare form and is unwrapped the same
+/// way, so a written row is not merely a differently-shaped cell: both forms
+/// have to yield a number the caller can compare against the map's own row.
+///
+/// The number is required to be exactly four ASCII digits. A cell reading `13`,
+/// `0013b`, or `٠٠١٣` is not a reserved number, and accepting it would let a
+/// link whose text disagrees with its target through the caller's comparison.
 pub(super) fn child_number(cell: &str) -> Option<(String, Option<String>)> {
     let trimmed = cell.trim();
-    if let Some(rest) = trimmed.strip_prefix('[') {
-        let (text, tail) = rest.split_once("](")?;
-        let (target, _) = tail.split_once(')')?;
-        return Some((text.trim().to_owned(), Some(target.trim().to_owned())));
-    }
-    let bare = trimmed.trim_matches('`').trim();
-    (!bare.is_empty()).then(|| (bare.to_owned(), None))
+    let (text, target) = match trimmed.strip_prefix('[') {
+        Some(rest) => {
+            let (text, tail) = rest.split_once("](")?;
+            let (target, _) = tail.split_once(')')?;
+            (text.trim(), Some(target.trim()))
+        }
+        None => (trimmed.trim_matches('`').trim(), None),
+    };
+    let number = text.to_owned();
+    is_rfc_number(&number).then_some((number, target.map(ToOwned::to_owned)))
+}
+
+/// Whether `text` is a four-digit RFC number.
+fn is_rfc_number(text: &str) -> bool {
+    text.len() == 4 && text.chars().all(|ch| ch.is_ascii_digit())
 }
 
 /// Resolve an `Owns` cell into the helper names it claims.
