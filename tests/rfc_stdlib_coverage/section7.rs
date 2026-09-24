@@ -222,11 +222,15 @@ pub(super) fn apply_optioned(read: &mut Read) -> Result<Vec<String>> {
             })?
             .clone();
         read.sections_of.insert(option.name.to_owned(), section);
+        // `or_insert_with` rather than an overwrite: `glob` also reaches
+        // `accepted` as an accept row in its own right, and that row's namespace
+        // is parsed from the document. The record here is the fallback for the
+        // two helpers section 7 does not row-assign a namespace.
         read.accepted
             .entry(option.name.to_owned())
             .or_insert_with(|| Row {
                 name: option.name.to_owned(),
-                namespace: Namespace::Filter,
+                namespace: option.namespace,
             });
         optioned.push(option.name.to_owned());
     }

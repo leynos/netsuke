@@ -107,24 +107,39 @@ pub(super) struct Optioned {
     pub(super) name: &'static str,
     /// The surveyed section 7 row that names it, in either column.
     pub(super) evidence_row: &'static str,
+    /// The namespace RFC 0006 section 3.2 places it in.
+    ///
+    /// The namespace is recorded rather than assumed. Two of the three are
+    /// filters and one is a function, and a hardcoded default is not merely
+    /// inaccurate for the odd one out: the coverage check compares a child
+    /// registry's namespace column against the value derived here, so a wrong
+    /// answer makes a *correct* child RFC fail. `glob` is the one that differs,
+    /// which is exactly the case a default gets wrong.
+    pub(super) namespace: Namespace,
 }
 
 /// The three existing helpers gaining an option, from table 11's count of 3.
 ///
 /// Table 11 gives the count. The names come from three separate places:
 /// `basename` and `dirname` are section 7 row names, and `glob` appears only in
-/// the resolution cell of the `fileglob` row.
+/// the resolution cell of the `fileglob` row. The namespaces are section 3.2's
+/// two lists: `basename` and `dirname` are under Filters, and `glob` is under
+/// Functions. `glob` is the only one of the three that is not a filter, which is
+/// what makes a default wrong here rather than merely redundant.
 pub(super) const OPTIONED: [Optioned; 3] = [
     Optioned {
         name: "basename",
         evidence_row: "basename",
+        namespace: Namespace::Filter,
     },
     Optioned {
         name: "dirname",
         evidence_row: "dirname",
+        namespace: Namespace::Filter,
     },
     Optioned {
         name: "glob",
         evidence_row: "fileglob",
+        namespace: Namespace::Function,
     },
 ];
