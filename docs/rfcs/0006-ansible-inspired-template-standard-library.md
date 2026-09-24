@@ -2052,11 +2052,11 @@ drift from section 8 as it is edited:
 - clauses separated by `;` are unioned.
 
 The `Status` column reads `unwritten` while the child RFC does not exist and
-carries a relative link to it once it does. A repository test asserts that the
-two agree, that the rows partition the accepted set, that no rejected or
-deferred name reaches a child registry, and that no helper in this map is
-missing from the roadmap step that owns it. The convention and its amendment
-procedure are recorded in
+`written` once it does, and the `Child RFC` cell — not `Status` — carries the
+relative link to it. A repository test asserts that the two agree, that the
+rows partition the accepted set, that no rejected or deferred name reaches a
+child registry, and that no helper in this map is missing from the roadmap step
+that owns it. The convention and its amendment procedure are recorded in
 [ADR-021](../adr-021-focused-child-rfcs-for-survey-rfcs.md).
 
 | Child RFC | Title                                           | Owns                                        | Optioned              | Roadmap step | Status    |

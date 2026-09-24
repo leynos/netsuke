@@ -105,6 +105,55 @@ pub fn every_accepted_helper_has_exactly_one_owner(repo: &Repo) -> Result<()> {
              unexpected {unexpected:?}",
             registry.number
         );
+        // A matching name set is not a matching registry. The namespace and the
+        // registration kind are parsed from the child's own row, so without
+        // this comparison a row could move a helper to the wrong namespace or
+        // mark an optioned helper as new and still pass every check — and the
+        // namespace is exactly what `COV-3`'s filter and test totals count.
+        check_rows_agree_with_survey(registry, &world.survey)?;
+    }
+    Ok(())
+}
+
+/// Each registry row's namespace and registration agree with RFC 0006.
+///
+/// The survey is the source of truth on both: its `accepted` rows carry the
+/// namespace section 7 assigns the helper, and `optioned` lists the three names
+/// that gain an option rather than being introduced. Comparing the two makes
+/// the registry columns load-bearing rather than decorative.
+fn check_rows_agree_with_survey(
+    registry: &registries::Registry,
+    survey: &survey::Survey,
+) -> Result<()> {
+    for row in &registry.rows {
+        let name = &row.helper.name;
+        let Some(accepted) = survey.accepted.get(name) else {
+            return Err(anyhow::anyhow!(
+                "{} registers {name}, which RFC 0006 section 7 does not accept",
+                registry.file
+            ));
+        };
+        ensure!(
+            accepted.namespace == row.helper.namespace,
+            "{} gives {name} namespace {}, but RFC 0006 section 7 places it in {}",
+            registry.file,
+            row.helper.namespace.label(),
+            accepted.namespace.label()
+        );
+        let optioned = survey.optioned.contains(name);
+        let expected = if optioned {
+            super::Registration::OptionAdded
+        } else {
+            super::Registration::New
+        };
+        ensure!(
+            row.registration == expected,
+            "{} marks {name} `{}`, but RFC 0006 {} it `{}`",
+            registry.file,
+            row.registration.label(),
+            if optioned { "lists" } else { "introduces" },
+            expected.label()
+        );
     }
     Ok(())
 }
@@ -218,9 +267,15 @@ pub fn coverage_map_status_is_reported(repo: &Repo) -> Result<()> {
     // Every accepted helper the map claims must have an owning row, and every
     // written row must have a child file that exists. `parse` already checked
     // that a written row carries a link; here the link is resolved.
+    //
+    // The base is the map's *own* file rather than its directory: a relative
+    // link is relative to the document containing it, and `resolve` derives the
+    // directory by popping the last segment. Passing `RFC_DIR` would pop into
+    // `docs/`, so every correct `0013-….md` link would resolve to
+    // `docs/0013-….md` and be reported missing.
     for row in &world.map.rows {
         if let Some(target) = &world.child_paths.get(&row.number) {
-            let path = links::resolve(super::RFC_DIR, target).with_context(|| {
+            let path = links::resolve(super::RFC_0006, target).with_context(|| {
                 format!(
                     "coverage map row for RFC {} links to {target}, which climbs above the \
                      repository root",

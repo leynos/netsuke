@@ -15,10 +15,21 @@
 //! helper rather than the code block.
 
 /// The Markdown heading depth of `line`, if it is a heading.
+///
+/// An ATX heading is one to six hashes followed by a space or tab and then
+/// heading text. The separator is required rather than merely assumed, because
+/// the RFC corpus cites issues as bare `#596` and a scan that accepted any
+/// hash-prefixed line would read a citation at the start of a paragraph as a
+/// heading. The damage would be silent: a heading ends the enclosing section,
+/// so the citation would truncate the scan and drop every helper below it.
+///
+/// Seven or more hashes is not a heading of any depth, so the count is bounded
+/// above as well.
 pub(super) fn heading_depth(line: &str) -> Option<usize> {
     let hashes = line.len() - line.trim_start_matches('#').len();
-    let rest = line.get(hashes..)?.trim_start();
-    (hashes > 0 && !rest.is_empty()).then_some(hashes)
+    let rest = line.get(hashes..)?;
+    let separated = rest.starts_with(' ') || rest.starts_with('\t');
+    ((1..=6).contains(&hashes) && separated && !rest.trim().is_empty()).then_some(hashes)
 }
 
 /// The heading text of `line`, if it is a heading.
@@ -145,4 +156,44 @@ fn fence_run(line: &str) -> (char, usize) {
         character,
         line.chars().take_while(|ch| *ch == character).count(),
     )
+}
+
+#[cfg(test)]
+mod heading_tests {
+    use super::heading_depth;
+
+    /// A citation is not a heading, and the two are one space apart.
+    ///
+    /// This is the contract that keeps a bare `#596` in prose from ending the
+    /// enclosing section: accepting it would truncate the scan and drop every
+    /// helper specified below it, and nothing else in the suite would notice,
+    /// because the corpus cites issues only inside linked prose today.
+    #[test]
+    fn citation_is_not_a_heading() {
+        assert_eq!(heading_depth("#596 is the originating issue"), None);
+        assert_eq!(heading_depth("####596"), None);
+        assert_eq!(heading_depth("## comment"), Some(2));
+    }
+
+    /// One to six hashes, a separating space or tab, and text is a heading.
+    #[test]
+    fn separated_hashes_are_headings() {
+        assert_eq!(heading_depth("# Title"), Some(1));
+        assert_eq!(heading_depth("### 5.1. Registry"), Some(3));
+        assert_eq!(heading_depth("###### deep"), Some(6));
+        assert_eq!(heading_depth("#\tTabbed"), Some(1));
+    }
+
+    /// The forms that carry no heading text, or too many hashes, are not
+    /// headings at any depth.
+    #[test]
+    fn degenerate_runs_are_not_headings() {
+        assert_eq!(heading_depth(""), None);
+        assert_eq!(heading_depth("#"), None);
+        assert_eq!(heading_depth("# "), None);
+        assert_eq!(heading_depth("#\t  "), None);
+        assert_eq!(heading_depth("####### seven"), None);
+        assert_eq!(heading_depth("no leading hash"), None);
+        assert_eq!(heading_depth("   # indented above three"), None);
+    }
 }

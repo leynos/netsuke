@@ -2,7 +2,7 @@
 //!
 //! Nothing else in the toolchain checks these. `markdownlint-cli2` is configured
 //! without cross-file link or anchor validation, and `mdtablefix` only
-//! canonicalises tables, so a relative link between two documents can rot
+//! canonicalizes tables, so a relative link between two documents can rot
 //! unnoticed. The RFC corpus is where that matters most: the child RFCs cite
 //! each other, RFC 0006, the roadmap, and the ADRs, and a reader following a
 //! stale path has no fallback.
