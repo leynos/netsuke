@@ -6,6 +6,9 @@ updates:
       github-actions:
         patterns:
           - '*'
+        update-types:
+          - 'minor'
+          - 'patch'
     directories:
       - "/"
       - "/.github/actions/*"
@@ -14,7 +17,7 @@ updates:
       - "dependencies"
       - "github-actions"
     schedule:
-      interval: "weekly"
+      interval: "daily"
     cooldown:
       default-days: 7
 
@@ -40,6 +43,12 @@ updates:
           - "block-buffer"
           - "crypto-common"
           - "hybrid-array"
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
     directories:
       - "/"
       - "/test_support"
@@ -55,9 +64,16 @@ updates:
       semver-major-days: 14
   - package-ecosystem: rust-toolchain
     directory: /
+    groups:
+      minor-and-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
     open-pull-requests-limit: 5
     labels:
       - dependencies
       - rust-toolchain
     schedule:
-      interval: weekly
+      interval: daily
