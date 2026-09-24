@@ -62,11 +62,13 @@ impl<'a> Section<'a> {
     /// The heading must match on its full text, so `14.1. Slice` cannot
     /// accidentally select `14.10. Slice`.
     ///
-    /// Note that `heading` is matched verbatim, so a caller whose heading also
-    /// appears inside a fenced block still lands on the real one: the fences only
-    /// blind the *end* scan, leaving the start anchored where it always was.
+    /// Note that `heading` is matched verbatim, and that the start scan skips
+    /// fenced lines, so a document that quotes the heading inside an example
+    /// still lands on the real one. Both scans are fence-aware for the same
+    /// reason: an example is not structure, and a start scan that stopped on one
+    /// would run to the end of the example's own block instead of the heading's.
     pub(super) fn subsection(&self, heading: &str) -> Option<Self> {
-        let start = self.lines.iter().position(|line| line.trim() == heading)?;
+        let start = self.unfenced_heading(heading)?;
         let depth = heading_depth(self.lines.get(start)?)?;
         let rest = self.lines.get(start..)?;
         let end = rest
@@ -112,6 +114,28 @@ impl<'a> Section<'a> {
             });
         }
         found
+    }
+
+    /// The offset of the first unfenced line whose trimmed text equals
+    /// `heading`.
+    ///
+    /// Shared with [`Section::subsection`] because both scans have to agree
+    /// about which lines are structure: a start scan that matched inside a fence
+    /// would hand the end scan a position the end scan does not consider real.
+    /// The comparison is on the trimmed line, so an indented heading matches
+    /// too — `heading_depth` is what decides whether a line is a heading at all,
+    /// and a caller's `heading` argument already carries its hashes.
+    pub(super) fn unfenced_heading(&self, heading: &str) -> Option<usize> {
+        let mut fences = Fences::default();
+        for (offset, line) in self.lines.iter().enumerate() {
+            if fences.mark(line) {
+                continue;
+            }
+            if line.trim() == heading {
+                return Some(offset);
+            }
+        }
+        None
     }
 
     /// Every unfenced `###` heading, as (offset, text).

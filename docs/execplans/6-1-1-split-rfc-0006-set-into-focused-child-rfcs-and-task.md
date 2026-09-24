@@ -383,6 +383,36 @@ Hard invariants. Violating one requires escalation, not a workaround.
   branch** — all five stages, including `lint-python` and
   `github-actions-lint`, which had never run because the two prior invocations
   both stopped at `lint-whitaker`.
+- [x] Sixth gate run (2026-09-24), at `8852163e`, and the first full six-target
+  run on this branch. All six pass: `make check-fmt`, `make lint` (all five
+  stages), `make typecheck`, `make test` (2813 passed, 3 skipped; doctests 81 +
+  2 + 32), `make markdownlint` (134 files), `make nixie`. The run also
+  confirmed the module split was behaviour-neutral: the
+  `rfc_stdlib_coverage_tests` set is byte-identical at ten tests, and a
+  normalized line-survival sweep of the pre-split `mod.rs` and `checks.rs`
+  found six lines without an exact post-split counterpart, all module-path and
+  import declarations the split necessarily rewrote.
+- [x] (2026-09-24) `EP-M2` CodeRabbit pass at `8852163e`: twelve findings, one
+  major and eleven minor/trivial, all triaged. Seven were applied as stated
+  (`map.rs`'s dead `title` field; `section7.rs`'s silent `or_insert_with`;
+  `assertions.rs`'s half-checked `hash` invariant; `map.rs`'s unvalidated
+  `Owns` arity; the crate doc's "nothing here transcribes an inventory"; the
+  plan's seven-to-ten test count and its two wrong `0014`/`0015` slugs;
+  `ADR-021`'s doubly-listed `duplicate_key`). Two were applied against a *false
+  premise* in the finding: `document.rs`'s start scan was made fence-aware
+  because the doc comment promised a property `position()` could not deliver,
+  not because a live bug existed — no document in the corpus has a heading
+  inside a fence, and every looked-up heading is unique — and `section7.rs`'s
+  optioned comment claimed `glob` "also reaches `accepted` as an accept row",
+  which is false: all three optioned helpers appear only in reject rows. One
+  was applied differently than asked: `section7.rs`'s hardcoded
+  `Namespace::Filter` was replaced by a namespace parsed from the section 7
+  tables, because the `Optioned` doc already argues a hardcoded namespace makes
+  a *correct* child fail. One was **partly refused**: see
+  `Surprises & discoveries` for the deference finding, whose requested
+  behaviour would have deleted the plan's own recorded seeded fault.
+  `clauses.rs` gained four unit tests, taking the binary from ten tests to
+  fourteen.
 - [ ] `EP-M3` RFC 0013, structured data interchange (step 6.2). **Go/no-go.**
 - [ ] `EP-M4` RFC 0014, mapping and sequence transforms (step 6.3).
 - [ ] `EP-M5` RFC 0015, ordered collection algebra and truth predicates (6.4).
@@ -395,6 +425,42 @@ Hard invariants. Violating one requires escalation, not a workaround.
   roadmap 6.1.1 done.
 
 ## Surprises & discoveries
+
+- Observation: **a review finding can name a real defect and still prescribe the
+  wrong fix**, and the fix is the part that ships. Evidence: the `CONF-1`
+  deference finding asked that `as Ansible does` stop being flagged and offered
+  `such as Ansible` as the false positive to fix instead. The first half is
+  wrong: `as Ansible does` is this plan's *own recorded seeded fault*, the
+  transcript at `docs/execplans/…md` showing
+  `justifies a helper by appealing to Ansible ("as Ansible")`, and it is proven
+  to fire. Un-flagging it would have turned a green control into a
+  green-looking empty one — exactly the failure this plan's `CONF-1`
+  observation already records having been bitten by once, when the obligation
+  sat as prose for six days with nothing implementing it. The second half is
+  right: `Unlike Ansible` contains `like Ansible` and means the reverse, and
+  `such as Ansible` is a compound preposition introducing an example. Impact:
+  the leading-boundary fix was adopted and clears `Unlike Ansible`;
+  `such as Ansible` needs a separate exclusion because its `as` is its own
+  word, so the boundary alone cannot reach it. The reviewer's `as Ansible does`
+  example was refused, with the refusal recorded in the code's own doc comment
+  so the next reader does not re-litigate it. Lesson: verify a finding's
+  *examples* as well as its mechanism — the mechanism here was sound and the
+  boundaries it proposed were not.
+
+- Observation: two of this pass's findings asserted a mechanism about the
+  document that the document does not support, which is the same failure mode
+  as a rule whose stated reason is false. Evidence: `section7.rs`'s comment
+  claimed `glob` "also reaches `accepted` as an accept row in its own right";
+  every section 7 row naming `basename`, `dirname`, or `glob` is a `Reject`
+  row, and `glob`'s only row is the `fileglob` reject at RFC 0006:498.
+  `document.rs`'s comment promised that a heading quoted inside a fence "still
+  lands on the real one", which `position()` cannot deliver — though no
+  document in the corpus has such a heading, and each looked-up heading is
+  unique, so nothing was failing. Impact: both were fixed at the source of the
+  false claim, and the `document.rs` fix went further than the finding asked by
+  making the promise true rather than only rewording it. A green suite was no
+  evidence either way here: neither defect could fail, which is what made them
+  survive two prior reviews.
 
 - Observation: a change can pass two CodeRabbit reviews and still fail the
   commit gate, because the two read different things. The second pass's seven
@@ -677,9 +743,9 @@ Hard invariants. Violating one requires escalation, not a workaround.
   naming the codes' subject. The fix names all five helpers alongside the codes
   rather than weakening the check, because the check is right about what a
   reader needs. This is the useful shape of the interaction: a rule written
-  against a document it has not read yet is the only version of the rule that
-  can surprise you, and it is worth reading the two against each other before
-  the rule is relied on rather than after.
+  against a document it has not read yet is the only version that can surprise
+  its author, and it is worth reading the two against each other before the
+  rule is relied on rather than after.
 
 - Observation: two of the three shapes `CONF-1` checks for are already caught
   when the class is written *inconsistently*, and only the third needs the new
@@ -2062,7 +2128,7 @@ lacked. No registry exists yet, so this one has no observed counterpart:
 ```plaintext
 FAIL [   0.012s] (1/7) netsuke-build::rfc_stdlib_coverage_tests every_accepted_helper_has_exactly_one_owner
   Error: helper combine (filter): coverage map designates RFC 0014, registry found in
-    RFC 0015 at docs/rfcs/0015-ordered-collection-algebra.md:73
+    RFC 0015 at docs/rfcs/0015-ordered-collection-algebra-and-truth-predicates.md:73
 ```
 
 Commit messages use `git commit -F`. The per-child template:
@@ -2097,10 +2163,11 @@ Acceptance is behavioural.
    group-specific consequence: a named bound from RFC 0006 table 3, a
    diagnostic code, a named error condition. Nowhere does a justification
    reduce to matching Ansible.
-3. Run `make test` and observe `rfc_stdlib_coverage_tests` pass with seven
-   tests and a line reporting how many capability groups remain unwritten.
-   Delete one row from RFC 0013's section 5.1 registry, re-run, and observe a
-   failure naming that helper and reporting zero owners. Restore the row.
+3. Run `make test` and observe `rfc_stdlib_coverage_tests` pass with fourteen
+   tests — seven obligation checks, three heading tests, four deference tests —
+   and a line reporting how many capability groups remain unwritten. Delete one
+   row from RFC 0013's section 5.1 registry, re-run, and observe a failure
+   naming that helper and reporting zero owners. Restore the row.
 4. Move a registry row from one child to another, re-run, and observe a
    wrong-owner failure naming both the designated and the actual RFC.
 5. Search the registries in `docs/rfcs/` for `shuffle`, `is_dir`, `is_file`,
@@ -2171,7 +2238,7 @@ paths under `/tmp`.
 Files created:
 
 - `docs/rfcs/0013-structured-data-interchange-helpers.md`
-- `docs/rfcs/0014-mapping-and-sequence-transforms.md`
+- `docs/rfcs/0014-mapping-and-sequence-transform-helpers.md`
 - `docs/rfcs/0015-ordered-collection-algebra-and-truth-predicates.md`
 - `docs/rfcs/0016-pattern-and-version-predicates.md`
 - `docs/rfcs/0017-lexical-path-composition.md`

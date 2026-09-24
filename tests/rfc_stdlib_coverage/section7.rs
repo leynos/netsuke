@@ -35,6 +35,13 @@ pub(super) struct Read {
     pub(super) cited: BTreeMap<String, String>,
     /// Every name that appears in a section 7 name cell.
     pub(super) surveyed_names: BTreeSet<String>,
+    /// The namespace each surveyed name's own table places it in.
+    ///
+    /// Recorded rather than assumed, for the reason [`Optioned`]'s namespace
+    /// field gives: the coverage check compares a child registry's namespace
+    /// column against the value derived here, so a hardcoded default makes a
+    /// *correct* child RFC fail the moment a renamed helper is not a filter.
+    pub(super) namespaces: BTreeMap<String, Namespace>,
     /// Names section 9 defers.
     pub(super) deferred: BTreeSet<String>,
     /// Names section 10 rejects.
@@ -55,6 +62,7 @@ pub(super) fn read_section_7(section_7: &Section<'_>) -> Result<Read> {
         sections_of: BTreeMap::new(),
         cited: BTreeMap::new(),
         surveyed_names: BTreeSet::new(),
+        namespaces: BTreeMap::new(),
         deferred: BTreeSet::new(),
         rejected: BTreeSet::new(),
         accept_rows: 0,
@@ -72,6 +80,7 @@ pub(super) fn read_section_7(section_7: &Section<'_>) -> Result<Read> {
         for row in &rows {
             let names = names_in(row.cell(0, "name")?);
             read.surveyed_names.extend(names.iter().cloned());
+            record_namespaces(&mut read, &names, table.namespace)?;
             let disposition = row.cell(table.disposition_column, "disposition")?.trim();
             let resolution = row.cell(table.disposition_column + 1, "resolution")?;
             record_cited(&mut read, resolution, &names);
@@ -105,6 +114,27 @@ pub(super) fn read_section_7(section_7: &Section<'_>) -> Result<Read> {
         }
     }
     Ok(read)
+}
+
+/// Record the namespace each name's table places it in.
+///
+/// A name may be surveyed by more than one table — `win_splitdrive` in the
+/// filters table is the shape the rename exceptions turn on — and the tables
+/// disagree about the namespace when a row is listed in the wrong one. Two
+/// tables agreeing is not an error; two disagreeing is, because the derived
+/// namespace would then depend on table order.
+fn record_namespaces(read: &mut Read, names: &[String], namespace: Namespace) -> Result<()> {
+    for name in names {
+        let displaced = read.namespaces.insert(name.clone(), namespace);
+        ensure!(
+            displaced.is_none_or(|earlier| earlier == namespace),
+            "surveyed name {name} is listed as both {} and {}, so section 7 places it in two \
+             namespaces",
+            displaced.map_or("no namespace", Namespace::label),
+            namespace.label()
+        );
+    }
+    Ok(())
 }
 
 /// Record the section 8 subsection a section 7 row cites, if it cites one.
@@ -185,9 +215,15 @@ pub(super) fn apply_renames(read: &mut Read) -> Result<()> {
             if already { "present" } else { "absent" }
         );
         if !already {
+            let namespace = *read.namespaces.get(rename.surveyed).with_context(|| {
+                format!(
+                    "rename exception {} has no namespace, so section 7's tables place it nowhere",
+                    rename.surveyed
+                )
+            })?;
             let entry = Row {
                 name: rename.registered.to_owned(),
-                namespace: Namespace::Filter,
+                namespace,
             };
             read.accepted
                 .insert(rename.registered.to_owned(), entry.clone());
@@ -222,16 +258,24 @@ pub(super) fn apply_optioned(read: &mut Read) -> Result<Vec<String>> {
             })?
             .clone();
         read.sections_of.insert(option.name.to_owned(), section);
-        // `or_insert_with` rather than an overwrite: `glob` also reaches
-        // `accepted` as an accept row in its own right, and that row's namespace
-        // is parsed from the document. The record here is the fallback for the
-        // two helpers section 7 does not row-assign a namespace.
-        read.accepted
-            .entry(option.name.to_owned())
-            .or_insert_with(|| Row {
+        // A failing insert rather than an overwrite: an optioned helper is named
+        // by a *reject* row in section 7, so it never reaches `accepted` through
+        // `record_accept`, and its namespace cannot come from the document. If
+        // one is already present, section 7 also accepted it under the same
+        // spelling, and the two records disagree about its namespace.
+        let previous = read.accepted.insert(
+            option.name.to_owned(),
+            Row {
                 name: option.name.to_owned(),
                 namespace: option.namespace,
-            });
+            },
+        );
+        ensure!(
+            previous.is_none(),
+            "optioned helper {} is already recorded as accepted, so section 7 both accepts it \
+             and rejects it in favour of an option",
+            option.name
+        );
         optioned.push(option.name.to_owned());
     }
     Ok(optioned)
