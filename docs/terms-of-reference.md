@@ -42,7 +42,7 @@ Each substantive claim has one of three statuses:
 - **Assumed** claims are marked with an assumption identifier, such as
   `(A3)`, which resolves to [section 8.2](#82-assumptions) with its failure
   consequence.
-- **Open** matters are marked with a question identifier, such as `(Q2)`,
+- **Open** matters are marked with a question identifier, such as `(Q4)`,
   which resolves to [section 9](#9-open-questions).
 
 ## 1. Background and motivation
@@ -93,7 +93,7 @@ dependence on shell" and found that the tool did not exist: an assistant asked
 for recommendations invented two of the three it offered. Netsuke's first user
 is its maintainer's own estate of repositories `(A1)`. That is a legitimate
 origin, but it means the external demand described in sections 3 and 4 is
-inferred from the landscape rather than measured `(Q2)`.
+inferred from the landscape rather than measured `(Q12)`.
 
 ## 2. Domain
 
@@ -385,7 +385,11 @@ Each goal is phrased so that an observer can check it.
   (`docs/release-admission-canaries.md`, currently on the branch for PR #780).
   Ergonomic gaps found there become roadmap work. How far each migration must
   go is open `(Q11)`.
-- External adoption: a signal and threshold are not yet defined `(Q2)`.
+- External adoption is measured first as crates.io downloads of
+  `netsuke-build` that do not come from the maintainer's own CI, and later as
+  `Netsukefile`s appearing in other people's GitHub repositories. How to
+  compute the first figure, and what thresholds count as success, are open
+  `(Q12)`.
 
 ### 7.2 Operational
 
@@ -450,17 +454,17 @@ Each goal is phrased so that an observer can check it.
 
 ## 9. Open questions
 
-| ID  | Question                                                                                                                                                            | Why it matters                                                                                                                                   | Resolved when                                                                            | Suggested path            |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- | ------------------------- |
-| Q2  | What signal, beyond dogfooding, shows adoption outside the maintainer's repositories?                                                                               | Without it, the external demand in sections 1, 3, and 4 remains inferred.                                                                        | A named external signal with a threshold and date.                                       | Elicitation               |
-| Q4  | How far does purity extend: to targets that call impure helpers, and to pinned remote inputs used as dependencies? What rebuild policy applies to an impure target? | Determines whether remote inputs become first-class and how G4 and G6 interact.                                                                  | A decision on impure-target rebuild semantics and on remote resources as graph inputs.   | RFC                       |
-| Q5  | Is content-hash invalidation in scope for any input class?                                                                                                          | Tests assumption A5; affects remote inputs and any future cache.                                                                                 | Evidence of missed or spurious rebuilds in real use, or a decision tied to Q4.           | Spike, then ADR           |
-| Q6  | Is a Makefile migration aid (importer or guide) in scope?                                                                                                           | Directly serves the initial reluctant-Make-user group; costs significant effort.                                                                 | A decision recorded as a goal or a non-goal.                                             | Elicitation               |
-| Q7  | What plan-generation time budget is acceptable, and on what reference manifest?                                                                                     | Needed to turn the operational criterion into a measurable one.                                                                                  | A budget and a benchmark manifest exist.                                                 | Spike                     |
-| Q8  | What must be true for 1.0?                                                                                                                                          | Gates the strategic criterion and the end of pre-1.0 latitude.                                                                                   | A written release checklist traced to G1 to G10.                                         | Elicitation, then roadmap |
-| Q9  | Who maintains reusable rule bundles for common ecosystems, and are any shipped with Netsuke?                                                                        | Decides whether G3 and G10 are met by the core or by an ecosystem that does not yet exist.                                                       | An ownership and distribution decision for bundles.                                      | RFC amendment to RFC 0003 |
-| Q10 | Does the nightly toolchain requirement for source installs conflict with serving the accidental build-system authors (a later audience)?                            | Affects installation paths and constraint 8.1.                                                                                                   | Evidence that binary installers cover the target platforms, or a plan for stable builds. | Elicitation               |
-| Q11 | For each dogfooding repository, what migration depth counts as done: selected gates running from a Netsukefile, or the Makefile retired entirely?                   | The release-admission canaries deliberately keep Makefiles for out-of-slice targets; the dogfooding criterion is unmeasurable until this is set. | A per-repository target, or one rule for all six.                                        | Elicitation               |
+| ID  | Question                                                                                                                                                                                           | Why it matters                                                                                                                                   | Resolved when                                                                            | Suggested path            |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- | ------------------------- |
+| Q4  | How far does purity extend: to targets that call impure helpers, and to pinned remote inputs used as dependencies? What rebuild policy applies to an impure target?                                | Determines whether remote inputs become first-class and how G4 and G6 interact.                                                                  | A decision on impure-target rebuild semantics and on remote resources as graph inputs.   | RFC                       |
+| Q5  | Is content-hash invalidation in scope for any input class?                                                                                                                                         | Tests assumption A5; affects remote inputs and any future cache.                                                                                 | Evidence of missed or spurious rebuilds in real use, or a decision tied to Q4.           | Spike, then ADR           |
+| Q6  | Is a Makefile migration aid (importer or guide) in scope?                                                                                                                                          | Directly serves the initial reluctant-Make-user group; costs significant effort.                                                                 | A decision recorded as a goal or a non-goal.                                             | Elicitation               |
+| Q7  | What plan-generation time budget is acceptable, and on what reference manifest?                                                                                                                    | Needed to turn the operational criterion into a measurable one.                                                                                  | A budget and a benchmark manifest exist.                                                 | Spike                     |
+| Q8  | What must be true for 1.0?                                                                                                                                                                         | Gates the strategic criterion and the end of pre-1.0 latitude.                                                                                   | A written release checklist traced to G1 to G10.                                         | Elicitation, then roadmap |
+| Q9  | Who maintains reusable rule bundles for common ecosystems, and are any shipped with Netsuke?                                                                                                       | Decides whether G3 and G10 are met by the core or by an ecosystem that does not yet exist.                                                       | An ownership and distribution decision for bundles.                                      | RFC amendment to RFC 0003 |
+| Q10 | Does the nightly toolchain requirement for source installs conflict with serving the accidental build-system authors (a later audience)?                                                           | Affects installation paths and constraint 8.1.                                                                                                   | Evidence that binary installers cover the target platforms, or a plan for stable builds. | Elicitation               |
+| Q11 | For each dogfooding repository, what migration depth counts as done: selected gates running from a Netsukefile, or the Makefile retired entirely?                                                  | The release-admission canaries deliberately keep Makefiles for out-of-slice targets; the dogfooding criterion is unmeasurable until this is set. | A per-repository target, or one rule for all six.                                        | Elicitation               |
+| Q12 | How are crates.io downloads from the maintainer's own CI separated from external ones, do GitHub release and installer downloads count, and what thresholds mark success for each adoption signal? | Without a method the first external signal cannot be reported; without thresholds it cannot show success.                                        | A documented counting method and a threshold with a date for each signal.                | Spike, then elicitation   |
 
 ### 9.1 Resolved questions
 
@@ -468,10 +472,12 @@ Each goal is phrased so that an observer can check it.
   2026-09-24 by the maintainer: reluctant Make users, who struggle to let go of
   Make because task runners are too limited and Bazel and CMake are too
   complex. See [section 4.1](#41-primary-users).
-- **Q2, in part — How will the maintainer know Netsuke is working?**
-  Resolved 2026-09-25: dogfooding across six named repositories is the initial
-  feedback loop. See [section 7.1](#71-user-facing). The external adoption
-  signal remains open.
+- **Q2 — How will the maintainer know Netsuke is working?** Resolved
+  2026-09-25. Dogfooding across six named repositories is the initial feedback
+  loop. External adoption is measured first by crates.io downloads outside the
+  maintainer's CI, then by `Netsukefile`s in other people's GitHub
+  repositories. See [section 7.1](#71-user-facing); the counting method and
+  thresholds remain open as Q12.
 - **Q3 — Which task-runner conveniences are in scope?** Resolved
   2026-09-24 and 2026-09-25 by the maintainer. Named actions, target listing,
   and per-target descriptions already exist; recipe parameters are planned in
