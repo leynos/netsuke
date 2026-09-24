@@ -121,13 +121,13 @@ regular expressions. Evaluation uses resolved declarations and provenance.
 
 The initial rules have deliberately narrow, checkable meanings:
 
-| Rule                  | Required evidence on selected nodes                                                                                                                                                   |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `structured-commands` | Every resolved executable recipe unit is structured; legacy shell strings fail coverage. Explicit structured shell selection is not a claim of direct-argv safety.                    |
-| `typed-inputs`        | Each explicitly named configuration subject in `subjects` resolves to a typed input contract, not only an untyped variable. Internal variables are not automatically public inputs.   |
-| `owned-cleanup`       | A selected cleanup action contains explicit `clean_owned` operations or nonexecuting aggregation only; arbitrary executable deletion recipes cannot satisfy the declaration contract. |
-| `verified-states`     | Each state named in `subjects` has a `require_state` or `ensure_state` operation before its first non-state command unit; a probe in a different action is insufficient.              |
-| `contention-declared` | Each selected executable edge resolves an explicit valid contention class. Dependency-only aggregates are not executable subjects.                                                    |
+| Rule                  | Required evidence on selected nodes                                                                                                                                                                                                                                        |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `structured-commands` | Every resolved executable recipe unit is structured; legacy shell strings fail coverage. Explicit structured shell selection is not a claim of direct-argv safety.                                                                                                         |
+| `typed-inputs`        | Each explicitly named configuration subject in `subjects` resolves to a typed input contract, not only an untyped variable. Internal variables are not automatically public inputs.                                                                                        |
+| `owned-cleanup`       | Every executable deletion unit in a selected cleanup action is an explicit `clean_owned` operation; a selected action containing only nonexecuting aggregation also satisfies the rule, and arbitrary executable deletion recipes cannot satisfy the declaration contract. |
+| `verified-states`     | Each state named in `subjects` has a `require_state`, `ensure_state`, or `prepare_state` operation before its first non-state command unit; each accepted operation must verify readiness, and a probe in a different action is insufficient.                              |
+| `contention-declared` | Each selected executable edge resolves an explicit valid contention class. Dependency-only aggregates are not executable subjects.                                                                                                                                         |
 
 Table 1: Initial declaration-coverage rules, not whole-program safety proofs.
 
