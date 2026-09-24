@@ -660,8 +660,10 @@ version the binary defines is not one it requires. So a change to either image
 shows up in the release run rather than in a user's bug report.
 `tests/workflow_contracts/release_glibc_floor_test.py` holds the step's Linux
 gate, its place after the build, the binary it reads, and the summary it
-writes. It also runs the step's own script over fixed `readelf` output in
-`tests/data/readelf-version-info.txt` and asserts the reported floor.
+writes. It also runs the step's own script over two fixed `readelf` outputs,
+`tests/data/readelf-version-info.txt` and
+`tests/data/readelf-version-info-aarch64.txt`, whose floors differ, and asserts
+the floor each reports.
 
 ### Windows MSI packaging and upgrade validation
 

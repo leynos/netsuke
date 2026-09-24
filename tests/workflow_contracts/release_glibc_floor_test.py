@@ -17,6 +17,7 @@ Run via ``make test-workflow-contracts``.
 import subprocess
 import typing as typ
 
+import pytest
 from workflow_loading import (
     PACKAGE_WORKFLOW_PATH,
     RELEASE_WORKFLOW_PATH,
@@ -34,11 +35,7 @@ if typ.TYPE_CHECKING:
 FLOOR_STEP = "Report the glibc floor"
 LINUX_GATE = "inputs.platform == 'linux'"
 BINARY = "target/${{ inputs.target }}/release/${BIN_NAME}"
-TARGET = "x86_64-unknown-linux-gnu"
-#: `readelf --version-info` output whose version needs top out at GLIBC_2.34
-#: as versions, though GLIBC_2.9 sorts last as text. The symbol and definition
-#: sections also name a GLIBC_2.99 that the binary defines and does not need.
-READELF_FIXTURE = REPO_ROOT / "tests" / "data" / "readelf-version-info.txt"
+FIXTURES = REPO_ROOT / "tests" / "data"
 
 
 def _steps() -> list[dict[str, object]]:
@@ -100,22 +97,46 @@ def test_a_linux_release_passes_the_platform_the_gate_names() -> None:
     )
 
 
-def test_the_floor_is_the_highest_version_the_binary_needs(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("fixture", "target", "floor"),
+    [
+        # Needs top out at GLIBC_2.34 as versions, though GLIBC_2.9 sorts last
+        # as text; the symbol and definition sections name a GLIBC_2.99.
+        pytest.param(
+            "readelf-version-info.txt",
+            "x86_64-unknown-linux-gnu",
+            "GLIBC_2.34",
+            id="native",
+        ),
+        # A `cross` build's shape: needs top out at GLIBC_2.18, while the
+        # binary defines a GLIBC_2.39 that is no requirement.
+        pytest.param(
+            "readelf-version-info-aarch64.txt",
+            "aarch64-unknown-linux-gnu",
+            "GLIBC_2.18",
+            id="cross",
+        ),
+    ],
+)
+def test_the_floor_is_the_highest_version_the_binary_needs(
+    tmp_path: Path, fixture: str, target: str, floor: str
+) -> None:
     """Run the step's script over fixed `readelf` output and read the summary.
 
     The floor is the greatest GLIBC version in the version-needs section,
-    compared as a version rather than as text. A GLIBC_2.99 that appears only
-    in the symbol and definition sections is no requirement, and reporting it
-    would overstate the floor.
+    compared as a version rather than as text. A higher version that appears
+    only in the symbol and definition sections is no requirement, and
+    reporting it would overstate the floor. Two fixtures with different
+    floors keep a script that prints a constant from passing.
     """
     stubs = tmp_path / "bin"
     stubs.mkdir()
     readelf = stubs / "readelf"
-    readelf.write_text(f'#!/bin/sh\nexec cat "{READELF_FIXTURE}"\n')
+    readelf.write_text(f'#!/bin/sh\nexec cat "{FIXTURES / fixture}"\n')
     readelf.chmod(0o755)
     summary = tmp_path / "summary.md"
     script = str(named_step(_steps(), FLOOR_STEP).get("run")).replace(
-        "${{ inputs.target }}", TARGET
+        "${{ inputs.target }}", target
     )
     # The script is the workflow's own step with the target substituted, and
     # `readelf` resolves to the stub above; no untrusted input reaches it.
@@ -133,7 +154,7 @@ def test_the_floor_is_the_highest_version_the_binary_needs(tmp_path: Path) -> No
     )
     assert result.returncode == 0, f"the floor step failed: {result.stderr!r}"
     reported = summary.read_text()
-    expected = f"- glibc floor for `{TARGET}`: `GLIBC_2.34`\n"
+    expected = f"- glibc floor for `{target}`: `{floor}`\n"
     assert reported == expected, (
         f"the summary must report the highest needed version, got {reported!r}"
     )
