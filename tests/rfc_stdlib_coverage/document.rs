@@ -233,4 +233,3 @@ impl RawRow {
             .with_context(|| format!("row at line {} has no {what} column", self.line))
     }
 }
-
