@@ -3670,7 +3670,11 @@ Netsuke uses a mixed strategy:
   directories, and open pull request limits where applicable. Each ecosystem
   has one trailing catch-all group limited to minor and patch updates, so
   majors arrive one per pull request; `group_policy.rs` under
-  `tests/dependabot_test_support/` owns that check.
+  `tests/dependabot_test_support/` owns that check. The only other groups are
+  the cargo lockstep families listed in `CARGO_LOCKSTEP_GROUPS`, which the
+  contract requires with exactly those patterns and no `update-types` limit.
+  Group options that narrow a group's reach (`exclude-patterns`, `applies-to`,
+  `group-by`) are refused.
 - **Property-based tests** use `proptest` and take two shapes: some live in
   `*_tests.rs` modules adjacent to the code under test, included via
   `#[cfg(test)] #[path = "..."] mod ...;` declarations; others are standalone
