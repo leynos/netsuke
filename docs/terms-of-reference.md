@@ -187,17 +187,26 @@ Bazel and lose. Section 6.2 exists largely to hold that line.
 
 The design conversations identify three primary user groups. They form a
 progression in how much they know about build systems, not three separate
-products. Which group Netsuke serves first is open `(Q1)`.
+products.
 
-| User group                      | Context                                                                                                       | Cares about                                                                           | Ignores or dislikes                                                                   | Current alternative                  |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------ |
-| Bazel-curious, Bazel-repelled   | Engineers who understand why hermeticity, reproducibility, and dependency graphs matter                       | Correctness, determinism, reviewable build changes, explicit inputs                   | Starlark, toolchain ceremony, a new filesystem model, "attaining enlightenment" first | Make or scripts, with private guilt  |
-| Make loyalists with doubts      | Fluent Make users on Unix-like systems who value its small core and inspectability                            | A domain-agnostic graph, transparency, no hidden magic, speed                         | Opinionated frameworks, implicit behaviour, anything that feels like a new religion   | GNU Make                             |
-| Accidental build-system authors | Developers with scripts, a `justfile`, CI YAML, and a load-bearing `build.py`, who deny having a build system | Commands that run, incremental speed without having to think about it, readable files | Build-system theory, long documentation, anything longer than their current script    | Shell scripts, `just`, Task, CI YAML |
+Netsuke initially serves the reluctant Make users: developers who struggle to
+let go of Make because task runners are too limited and Bazel and CMake are too
+complex to justify. The maintainer settled this on 2026-09-24 (Q1, resolved).
+The other two groups are later audiences. The design should not close doors to
+them, but where their needs conflict with the initial group's, the initial
+group takes precedence `(A8)`.
 
-The third group is probably the largest `(A2)`. The first two give Netsuke its
-identity: they recognize what it fixes and are the likeliest early adopters and
-contributors.
+| User group                              | Context                                                                                                       | Cares about                                                                           | Ignores or dislikes                                                                                | Current alternative                  |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| Reluctant Make users (initial)          | Fluent Make users who value its small core and inspectability, and have tried the alternatives                | A domain-agnostic graph with freshness checks, transparency, no hidden magic, speed   | Task runners' missing graph; Bazel's and CMake's ceremony; anything that feels like a new religion | GNU Make                             |
+| Bazel-curious, Bazel-repelled (later)   | Engineers who understand why hermeticity, reproducibility, and dependency graphs matter                       | Correctness, determinism, reviewable build changes, explicit inputs                   | Starlark, toolchain ceremony, a new filesystem model, "attaining enlightenment" first              | Make or scripts, with private guilt  |
+| Accidental build-system authors (later) | Developers with scripts, a `justfile`, CI YAML, and a load-bearing `build.py`, who deny having a build system | Commands that run, incremental speed without having to think about it, readable files | Build-system theory, long documentation, anything longer than their current script                 | Shell scripts, `just`, Task, CI YAML |
+
+The reluctant Make users recognize exactly what Netsuke fixes, because they
+live with the problem daily; they are the likeliest early adopters and
+contributors. The Bazel-curious share their values and follow naturally. The
+accidental build-system authors are probably the largest group in the long run
+`(A2)`, but they are not the group Netsuke is first built for.
 
 ### 4.2 Secondary users
 
@@ -228,7 +237,21 @@ contributors.
 
 ## 5. Jobs to be done
 
-### 5.1 Bazel-curious, Bazel-repelled
+### 5.1 Reluctant Make users (initial primary users)
+
+> When a Makefile has become hard to read, quote, or change safely, and the
+> alternatives they have tried are either too limited (task runners with no
+> dependency graph) or too demanding (Bazel, CMake), a seasoned Make user wants
+> to keep Make's graph semantics while replacing its notation and
+> shell-quoting hazards, so they can finally leave Make without giving up
+> anything it did for them.
+
+- **Functional:** targets, dependencies, phony and always-run nodes, and
+  order-only dependencies, with no loss of generality.
+- **Emotional:** the sense that nothing was taken away.
+- **Social:** no need to defend a trendy tool to other Make users.
+
+### 5.2 Bazel-curious, Bazel-repelled (later)
 
 > When their project has outgrown scripts and they need builds they can trust
 > and review, a correctness-minded engineer wants to describe the build as an
@@ -242,19 +265,7 @@ contributors.
 - **Social:** being the colleague who improved the build rather than the one
   who imposed Bazel.
 
-### 5.2 Make loyalists with doubts
-
-> When a Makefile has become hard to read, quote, or change safely, a
-> seasoned Make user wants to keep Make's graph semantics while replacing its
-> notation and shell-quoting hazards, so they can keep the tool's flexibility
-> without its failure modes.
-
-- **Functional:** targets, dependencies, phony and always-run nodes, and
-  order-only dependencies, with no loss of generality.
-- **Emotional:** the sense that nothing was taken away.
-- **Social:** no need to defend a trendy tool to other Make users.
-
-### 5.3 Accidental build-system authors
+### 5.3 Accidental build-system authors (later)
 
 > When a repository's scripts, CI steps, and task-runner recipes have drifted
 > apart and slow down every change, a developer who "does not need a build
@@ -401,11 +412,12 @@ Each goal is phrased so that an observer can check it.
 | --- | --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | A1  | The maintainer's own repositories are representative of the wider target users.                                                         | Features tuned to the df12 estate (for example Python-and-Rust quality gates) misfire for other users; external research is needed. |
 | A2  | Accidental build-system authors are the largest group, and they will adopt a graph-based tool if its first five minutes match `just`'s. | Adoption stalls outside expert users; onboarding and defaults need rework.                                                          |
-| A3  | Target users accept YAML with Jinja as an authoring format.                                                                             | Make loyalists reject the tool on sight; an alternative surface or stronger justification is needed.                                |
+| A3  | Target users accept YAML with Jinja as an authoring format.                                                                             | Reluctant Make users reject the tool on sight; an alternative surface or stronger justification is needed.                          |
 | A4  | Users can install Ninja, or accept an installer that depends on it.                                                                     | Onboarding fails at the first step on platforms without packaged Ninja; bundling or fetching Ninja becomes necessary.               |
 | A5  | Modification-time freshness is sufficient for local files.                                                                              | Users hit spurious or missed rebuilds; content-hash invalidation moves into scope `(Q5)`.                                           |
 | A6  | Shell-string recipes remain acceptable while structured commands mature.                                                                | Quoting failures on Windows or with unusual filenames erode trust before the safer form ships.                                      |
 | A7  | Agents benefit materially from a static, structured plan compared with an imperative script.                                            | ADR-003's investment in agent-consistent output delivers less value than expected.                                                  |
+| A8  | Serving reluctant Make users first does not preclude serving the other two groups later.                                                | A feature the later groups need is blocked by an early decision; migrating them requires breaking changes.                          |
 
 ### 8.3 Dependencies
 
@@ -419,29 +431,35 @@ Each goal is phrased so that an observer can check it.
 
 ## 9. Open questions
 
-| ID  | Question                                                                                                                                                            | Why it matters                                                                                                | Resolved when                                                                                                  | Suggested path            |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| Q1  | Which primary user group does Netsuke 1.0 serve first?                                                                                                              | Gates onboarding documentation, defaults, error wording, and which features ship before 1.0.                  | The maintainer names one group, recorded in an ADR.                                                            | Elicitation, then ADR     |
-| Q2  | What adoption signal defines success, inside the df12 estate and outside it?                                                                                        | Without it, sections 1, 4, and 7 rest on inference.                                                           | A named signal with a threshold and date, for example repositories using Netsuke as their primary entry point. | Elicitation               |
-| Q3  | Is Netsuke also the task runner for accidental build-system authors, or does it coexist with `just` and Task as the build layer beneath them?                       | Non-goal 6 and the third user group pull in different directions: that group's current tool is a task runner. | The maintainer states the intended relationship and the task-runner features that are in or out.               | Elicitation, then ADR     |
-| Q4  | How far does purity extend: to targets that call impure helpers, and to pinned remote inputs used as dependencies? What rebuild policy applies to an impure target? | Determines whether remote inputs become first-class and how G4 and G6 interact.                               | A decision on impure-target rebuild semantics and on remote resources as graph inputs.                         | RFC                       |
-| Q5  | Is content-hash invalidation in scope for any input class?                                                                                                          | Tests assumption A5; affects remote inputs and any future cache.                                              | Evidence of missed or spurious rebuilds in real use, or a decision tied to Q4.                                 | Spike, then ADR           |
-| Q6  | Is a Makefile migration aid (importer or guide) in scope?                                                                                                           | Directly serves the Make-loyalist group; costs significant effort.                                            | A decision recorded as a goal or a non-goal.                                                                   | Elicitation               |
-| Q7  | What plan-generation time budget is acceptable, and on what reference manifest?                                                                                     | Needed to turn the operational criterion into a measurable one.                                               | A budget and a benchmark manifest exist.                                                                       | Spike                     |
-| Q8  | What must be true for 1.0?                                                                                                                                          | Gates the strategic criterion and the end of pre-1.0 latitude.                                                | A written release checklist traced to G1 to G10.                                                               | Elicitation, then roadmap |
-| Q9  | Who maintains reusable rule bundles for common ecosystems, and are any shipped with Netsuke?                                                                        | Decides whether G3 and G10 are met by the core or by an ecosystem that does not yet exist.                    | An ownership and distribution decision for bundles.                                                            | RFC amendment to RFC 0003 |
-| Q10 | Does the nightly toolchain requirement for source installs conflict with serving users who "need Make but don't know it"?                                           | Affects installation paths and constraint 8.1.                                                                | Evidence that binary installers cover the target platforms, or a plan for stable builds.                       | Elicitation               |
+| ID  | Question                                                                                                                                                                                                                                                   | Why it matters                                                                                                      | Resolved when                                                                                                  | Suggested path            |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| Q2  | What adoption signal defines success, inside the df12 estate and outside it?                                                                                                                                                                               | Without it, sections 1, 4, and 7 rest on inference.                                                                 | A named signal with a threshold and date, for example repositories using Netsuke as their primary entry point. | Elicitation               |
+| Q3  | Reluctant Make users reject task runners as too limited, yet Make also serves them as a task runner. Which task-runner conveniences (recipe parameters, target listing, per-task help) are in scope, and does non-goal 6 (no live development loop) stand? | Sets the boundary with `just` and Task, and decides whether Netsuke replaces every job the initial users give Make. | The maintainer lists the task-runner features that are in or out.                                              | Elicitation, then ADR     |
+| Q4  | How far does purity extend: to targets that call impure helpers, and to pinned remote inputs used as dependencies? What rebuild policy applies to an impure target?                                                                                        | Determines whether remote inputs become first-class and how G4 and G6 interact.                                     | A decision on impure-target rebuild semantics and on remote resources as graph inputs.                         | RFC                       |
+| Q5  | Is content-hash invalidation in scope for any input class?                                                                                                                                                                                                 | Tests assumption A5; affects remote inputs and any future cache.                                                    | Evidence of missed or spurious rebuilds in real use, or a decision tied to Q4.                                 | Spike, then ADR           |
+| Q6  | Is a Makefile migration aid (importer or guide) in scope?                                                                                                                                                                                                  | Directly serves the Make-loyalist group; costs significant effort.                                                  | A decision recorded as a goal or a non-goal.                                                                   | Elicitation               |
+| Q7  | What plan-generation time budget is acceptable, and on what reference manifest?                                                                                                                                                                            | Needed to turn the operational criterion into a measurable one.                                                     | A budget and a benchmark manifest exist.                                                                       | Spike                     |
+| Q8  | What must be true for 1.0?                                                                                                                                                                                                                                 | Gates the strategic criterion and the end of pre-1.0 latitude.                                                      | A written release checklist traced to G1 to G10.                                                               | Elicitation, then roadmap |
+| Q9  | Who maintains reusable rule bundles for common ecosystems, and are any shipped with Netsuke?                                                                                                                                                               | Decides whether G3 and G10 are met by the core or by an ecosystem that does not yet exist.                          | An ownership and distribution decision for bundles.                                                            | RFC amendment to RFC 0003 |
+| Q10 | Does the nightly toolchain requirement for source installs conflict with serving the accidental build-system authors (a later audience)?                                                                                                                   | Affects installation paths and constraint 8.1.                                                                      | Evidence that binary installers cover the target platforms, or a plan for stable builds.                       | Elicitation               |
+
+### 9.1 Resolved questions
+
+- **Q1 — Which primary user group does Netsuke 1.0 serve first?** Resolved
+  2026-09-24 by the maintainer: reluctant Make users, who struggle to let go of
+  Make because task runners are too limited and Bazel and CMake are too
+  complex. See [section 4.1](#41-primary-users).
 
 ## 10. Handoff
 
 - **Downstream readiness.** The design document and roadmap already exist, so
-  this document is a reconciliation rather than a precursor. Q1 and Q3 should
-  be settled before further user-facing design, because they change what the
+  this document is a reconciliation rather than a precursor. Q3 should be
+  settled before further user-facing design, because it changes what the
   shallow end must contain.
-- **ADR candidates.** Primary user segment (Q1); relationship to task runners
-  (Q3); purity semantics for targets and remote inputs (Q4); content-hash
-  invalidation (Q5); hermeticity and remote execution as a permanent non-goal
-  (non-goal 2).
+- **ADR candidates.** Primary user segment (Q1, decided 2026-09-24; the ADR
+  records it); relationship to task runners (Q3); purity semantics for targets
+  and remote inputs (Q4); content-hash invalidation (Q5); hermeticity and
+  remote execution as a permanent non-goal (non-goal 2).
 - **Glossary.** `docs/context.md` does not exist. The terms in
   [appendix B](#appendix-b-glossary) are the proposed first entries.
 - **Design-document candidates.** The following design ideas arose in the
