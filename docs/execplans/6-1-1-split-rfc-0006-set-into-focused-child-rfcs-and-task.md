@@ -526,6 +526,26 @@ Hard invariants. Violating one requires escalation, not a workaround.
   `origin/main..HEAD` is 25, `HEAD..origin/main` is 0, `e2fc2083` and
   `33a293a7` are now ancestors, and the coverage contract passes 14/14 with
   COV-4 still reporting "1 of 8 capability groups written; 7 remaining".
+- [x] (2026-09-25) Second rebase, onto `96aefc9c`, and the branch's own
+  contract test caught a defect the incoming commits brought with them. One
+  conflict, in RFC 0006 section 16 item 7, resolved by keeping both sides after
+  verifying each claim against ADR-008's "2026-09-11: Stdlib clock seam"
+  section and the coverage map's RFC 0020 row for group `8.10` — the clock seam
+  is answered by roadmap item 7.1.1, and RFC 0020 neither needs it nor depends
+  on it, so the two statements are compatible rather than contradictory. Then
+  `inter_document_links_resolve` failed on `96aefc9c`'s own
+  `docs/rfcs/0007-netsukefile-testing-framework.md:62`, which links to
+  `netsuke-test-framework-technical-design.md` without the `../` prefix its
+  line 22 correctly carries. From `docs/rfcs/` that resolves inside that
+  directory, where the file does not exist. Fixed at `64970ba8`. **The link fix
+  then failed `make check-fmt`**, `+5 -4` on that one file: the added `../`
+  pushed a wrapped line past the margin `mdtablefix` enforces, and the file was
+  re-wrapped in place. Re-verified after: check-fmt exit 0 (153 files
+  unchanged), `make markdownlint` exit 0 (0 errors), and the coverage contract
+  14/14. Note the sequence, because it is the whole reason the instruction is
+  to gate locally rather than to trust the review: a link-only edit that a
+  reviewer would read as trivially correct was red on two separate
+  deterministic gates, and no review would have caught either.
 - [ ] `EP-M3` RFC 0013, structured data interchange (step 6.2). **Post-rebase
   gates owed.** The verdict is GO and the content is settled; the remaining
   acceptance item is "every gate green" on the rebased tree, which the 55
@@ -558,6 +578,24 @@ Hard invariants. Violating one requires escalation, not a workaround.
   reading its conclusion, and treat an absent run as a failure, not as silence.
   The mitigation is structural, not vigilance: keep the pull request mergeable,
   because a conflict disables the entire CI channel.
+- Observation: **a corpus-wide invariant test finds defects in files the branch
+  does not own, and a rebase can hand it new ones.** Evidence: the dangling
+  `netsuke-test-framework-technical-design.md` link at `96aefc9c` is on
+  `origin/main`'s tip and is *live there* —
+  `git show origin/main:docs/rfcs/ 0007-…md` line 62 carries the bad form while
+  line 22 of the same file carries the correct `../`. Main's own CI is green on
+  that commit (`build-test`, `Windows / lint-windows`, `kani-smoke`,
+  `netsukefile` all `success`), because `links::dangling` and its
+  `inter_document_links_resolve` caller exist only on this branch:
+  `git ls-tree -r origin/main tests/` has no `rfc_stdlib_coverage*` entry at
+  all. Impact: the invariant is ours to enforce and no upstream gate shares it,
+  so the failure could only ever appear here, and it appeared only because a
+  rebase imported a document neither party was editing in this branch — the RFC
+  0006 split never touches RFC 0007. Lesson: when a branch adds a test that
+  reads the whole corpus rather than its own diff, re-run it after every rebase
+  and expect it to indict the incoming commits, not the branch. The repair
+  belongs in the branch (and rides to main with it) rather than in a separate
+  upstream pull request, because the two are the same edit.
 - Observation: **"environmental" can be the right verdict for the wrong
   reason.** Evidence: the seventh and eighth gate runs both correctly cleared
   this branch's diff of blame for the two `make test` timeouts, and both
