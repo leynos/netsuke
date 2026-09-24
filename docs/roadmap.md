@@ -2124,7 +2124,9 @@ and [§2](rfcs/0012-netsukefile-property-testing.md#2-quantified-assertions).
   - Add the `action`, `actions_for_rule`, and `has_action` helpers, keeping
     the view additive-only and decoupled from internal IR types.
   - Success: every Table 1 field and helper is observable in plan mode, and
-    identical manifests produce byte-identical, canonically ordered views
+    identical manifests produce byte-identical, canonically ordered views under
+    the RFC 8785 canonical JSON contract of
+    [RFC 0006 §6.7](rfcs/0006-ansible-inspired-template-standard-library.md#67-canonical-value-equality),
     regardless of declaration or IR iteration order.
 - [ ] 10.1.3. Implement quantified assertions.
   - Requires 7.5.5 and 10.1.2.
@@ -2132,9 +2134,10 @@ and [§2](rfcs/0012-netsukefile-property-testing.md#2-quantified-assertions).
     MiniJinja engine, reporting the falsifying binding with substituted
     actual values under the established FAIL and ERROR taxonomy.
   - Success: quantified action results follow the canonical projection order,
-    identify the falsifying binding, redact environment keys and values in
-    diagnostics, and preserve the established FAIL versus ERROR outcomes for
-    passing, failing, and erroneous assertions.
+    keep the constructed environment available to assertion evaluation, expose
+    only redacted environment keys and values in diagnostics, rendered action
+    views, and persisted regression artefacts, and preserve the established
+    FAIL versus ERROR outcomes for passing, failing, and erroneous assertions.
 
 ### 10.2. Declarative bounded generation
 
