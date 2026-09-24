@@ -348,6 +348,18 @@ Hard invariants. Violating one requires escalation, not a workaround.
   to roadmap tasks, and a stray `**` in this plan was followed by a newline and
   so rendered literally. Every fix was proven by a probe. See
   `Surprises & discoveries`.
+- [x] (2026-09-24) `EP-M2` third gate run at `4c631e18`, red on `make lint`, and
+  both findings were defects the second pass introduced rather than inherited.
+  `clippy::too_many_lines` rejected `map::parse` at 73 lines against this
+  repository's 70-line ceiling, and `clippy::iter_skip_next` rejected
+  `Section::subsections`'s `.skip(index + 1).next()`. Fixed at `c74a0993` by
+  splitting `parse` into `parse_row` plus one function per rule that carries
+  its own reasoning, and by indexing with `slice::get`. The ten coverage tests
+  pass unchanged. **The gate caught what the review would not have**:
+  CodeRabbit reads the diff's semantics, and neither finding is a semantic
+  defect — the second pass had already been reviewed twice and passed. This is
+  the reason the standing instruction is to make every gate green *before*
+  requesting a review rather than to use the review as a gate.
 - [ ] `EP-M3` RFC 0013, structured data interchange (step 6.2). **Go/no-go.**
 - [ ] `EP-M4` RFC 0014, mapping and sequence transforms (step 6.3).
 - [ ] `EP-M5` RFC 0015, ordered collection algebra and truth predicates (6.4).
@@ -360,6 +372,27 @@ Hard invariants. Violating one requires escalation, not a workaround.
   roadmap 6.1.1 done.
 
 ## Surprises & discoveries
+
+- Observation: a change can pass two CodeRabbit reviews and still fail the
+  commit gate, because the two read different things. The second pass's seven
+  Rust files were reviewed twice and cleared both times; `make lint` then
+  rejected two of them at `4c631e18`, on `too_many_lines` (73/70) and
+  `iter_skip_next`. Evidence: `/tmp/lint-netsuke-<branch>-4c631e18.out:10,20`
+  against the same files at `c7c309d6`, where `clippy` was green. Impact: the
+  gate ran red on a tree CodeRabbit had just approved, which inverts the
+  expected order. The instruction to make every gate green *before* requesting
+  a review is not a formality about sequencing — it is what keeps the review
+  looking for semantics, because a reviewer asked to find style defects finds
+  some, and they are worse ones than `clippy`'s.
+
+- Observation: this repository's `clippy.toml` sets
+  `too-many-lines-threshold = 70`, well below the default 100, so a function
+  split by responsibility can still be rejected for length alone. Evidence:
+  `clippy.toml` against `map::parse`, which grew from 68 to 85 lines when the
+  link-number check was added to it. Impact: adding a check to an existing
+  function is a length risk even when the addition is small, and the remedy is
+  to extract the *reasoning* into named functions rather than to compress
+  statements.
 
 - Observation: RFC 0006 section 8.1 opens "All six helpers in this group are
   pure" but specifies five. Evidence: `docs/rfcs/0006-...md:650` against the
