@@ -39,6 +39,7 @@ from workflow_call_closure import (
     reachable_workflows,
 )
 from workflow_loading import require_mapping
+from yaml_strings import iter_strings
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -194,22 +195,6 @@ def steps_in_all_jobs(document: dict[str, object]) -> list[dict[str, object]]:
         if isinstance(raw_steps, list):
             steps.extend(step for step in raw_steps if isinstance(step, dict))
     return steps
-
-
-def _iter_strings(value: object) -> cabc.Iterator[str]:
-    """Yield every string nested anywhere in a parsed YAML value."""
-    match value:
-        case str() as text:
-            yield text
-        case dict() as mapping:
-            for key, item in mapping.items():
-                yield from _iter_strings(key)
-                yield from _iter_strings(item)
-        case list() as sequence:
-            for item in sequence:
-                yield from _iter_strings(item)
-        case _:
-            return
 
 
 def publishes_the_coverage_report(step: dict[str, object]) -> bool:
@@ -378,7 +363,7 @@ def _reach_offenders(
     """Return the routes to CodeScene that name no action: credential, host, inherit."""
     offenders = [
         f"{name}: parsed value references {CREDENTIAL_ENVIRONMENT_KEY}"
-        for value in _iter_strings(document)
+        for value in iter_strings(document)
         if CREDENTIAL_ENVIRONMENT_KEY in value
     ]
     if CREDENTIAL_ENVIRONMENT_KEY in raw_text:

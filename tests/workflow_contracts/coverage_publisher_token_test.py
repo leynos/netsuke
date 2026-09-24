@@ -27,6 +27,7 @@ from workflow_loading import (
     named_step,
     require_mapping,
 )
+from yaml_strings import iter_strings
 
 JOB = "coverage-upload"
 AVAILABILITY_STEP = "Check CodeScene token availability"
@@ -37,21 +38,6 @@ AVAILABILITY_COMMAND = (
 UPLOAD_STEP = "Upload coverage data to CodeScene"
 UPLOAD_CREDENTIAL_INPUT = "${{ secrets.CS_ACCESS_TOKEN }}"
 PUBLISHER_GROUP = "coverage-main-${{ github.ref }}"
-
-
-def _strings(value: object) -> list[str]:
-    """Return every string in a parsed value, keys included."""
-    match value:
-        case str() as text:
-            return [text]
-        case dict() as items:
-            return [
-                s for pair in items.items() for part in pair for s in _strings(part)
-            ]
-        case list() as sequence:
-            return [s for item in sequence for s in _strings(item)]
-        case _:
-            return []
 
 
 def test_the_check_step_publishes_availability_and_nothing_else() -> None:
@@ -97,7 +83,7 @@ def test_no_environment_on_the_publisher_holds_the_token() -> None:
     holders = [
         env
         for env in envs
-        if any(CREDENTIAL_ENVIRONMENT_KEY in text for text in _strings(env))
+        if any(CREDENTIAL_ENVIRONMENT_KEY in text for text in iter_strings(env))
     ]
     assert holders == [], (
         f"no env on the publisher may name {CREDENTIAL_ENVIRONMENT_KEY}, found "
@@ -110,7 +96,7 @@ def test_the_token_appears_exactly_where_it_is_used() -> None:
     """Name the token in the check's command and the upload's input, only."""
     mentions = sorted(
         text.strip()
-        for text in _strings(load_workflow(COVERAGE_MAIN_WORKFLOW_PATH))
+        for text in iter_strings(load_workflow(COVERAGE_MAIN_WORKFLOW_PATH))
         if CREDENTIAL_ENVIRONMENT_KEY in text
     )
     assert mentions == sorted([AVAILABILITY_COMMAND, UPLOAD_CREDENTIAL_INPUT]), (

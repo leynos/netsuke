@@ -1492,7 +1492,10 @@ The workflow contract suites share the YAML 1.2-aware loader and common
 workflow, job, and step helpers in
 `tests/workflow_contracts/workflow_loading.py`. Each suite keeps its own
 workflow-specific projections and assertions, so parsing and structural
-validation remain consistent across the workflows under test.
+validation remain consistent across the workflows under test. Scans that must
+see every string in a parsed workflow, mapping keys included, share
+`iter_strings` in `tests/workflow_contracts/yaml_strings.py` rather than
+walking the value themselves.
 
 ### Coverage ratchet and CodeScene publication
 
