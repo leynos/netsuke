@@ -77,6 +77,17 @@ pub(super) enum Namespace {
     Function,
 }
 
+impl Namespace {
+    /// The lowercase label RFC 0006's tables spell the namespace with.
+    pub(super) const fn label(self) -> &'static str {
+        match self {
+            Self::Filter => "filter",
+            Self::Test => "test",
+            Self::Function => "function",
+        }
+    }
+}
+
 /// Whether a registry row introduces a helper or adds an option to one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Registration {
@@ -84,6 +95,16 @@ pub(super) enum Registration {
     New,
     /// One of the 3 existing helpers gaining an option.
     OptionAdded,
+}
+
+impl Registration {
+    /// The lowercase label a child RFC's registry spells the kind with.
+    pub(super) const fn label(self) -> &'static str {
+        match self {
+            Self::New => "new",
+            Self::OptionAdded => "option added",
+        }
+    }
 }
 
 /// A surveyed name's disposition, derived from RFC 0006 section 7.

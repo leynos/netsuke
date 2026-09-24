@@ -224,12 +224,13 @@ Hard invariants. Violating one requires escalation, not a workaround.
   rules. Go/no-go. Every derived count was confirmed except the forbidden-set
   size, which the plan gave as 34; that number reconciles only as a row count.
   Both stop conditions were raised and both are resolved: `D10` adopts the
-  complement rule and the deny set is 71, and the note column was shown to
-  discriminate after all, so no edit to RFC 0006 section 7 is needed. Audit
-  results are in `Surprises & discoveries`; the partition and the per-child
-  registry contents are confirmed unchanged, so `EP-M1` is unblocked. One
-  further correction: `D5` rule 2's claim that all three rename rows say
-  `Reject` is wrong for `hash`, whose row reads "Accept as `text_hash`".
+  complement rule and the deny set is 71, and the note column was **not** shown
+  to discriminate — the class split is not derivable and is not asserted, so
+  `D5` rule 3's remedy is deferred rather than needed. Audit results are in
+  `Surprises & discoveries`; the partition and the per-child registry contents
+  are confirmed unchanged, so `EP-M1` is unblocked. One further correction:
+  `D5` rule 2's claim that all three rename rows say `Reject` is wrong for
+  `hash`, whose row reads "Accept as `text_hash`".
 - [x] (2026-09-11) `EP-M1` stage A/B derivation, re-verified against RFC 0006
   before the parser was written. Confirmed: 55 accept rows yielding 55 names
   with no alias groups among them, 6 defer names, 67 reject names, an accepted
@@ -307,6 +308,23 @@ Hard invariants. Violating one requires escalation, not a workaround.
   had invented a `non_string_key` where RFC 0006 section 8.1 says sequence and
   mapping keys are rejected. This milestone's acceptance evidence is a
   reviewer's, not a test's, and is stated in `EP-M2`'s own entry.
+- [x] (2026-09-24) `EP-M2` CodeRabbit pass, ten findings, all actioned. Two were
+  latent defects that would have fired at `EP-M3`, the go/no-go, rather than
+  here: the coverage-map link was resolved against `docs/rfcs` as though it
+  were a file, so `links::resolve` popped into `docs/` and every correct child
+  link would have been reported missing as `docs/0013-….md`; and `COV-1`
+  compared registry name sets only, leaving the namespace and registration
+  columns parsed but never checked, which is exactly what `COV-3`'s filter and
+  test totals count. `heading_depth` accepted a bare `#596` as a depth-1
+  heading, silently truncating any scan over prose that cites an issue at line
+  start; the corpus does not do that today, which is why no test noticed. The
+  remainder were documentation: RFC 0006 section 14.13 said `Status` carries
+  the child link where the parser reads the link from `Child RFC`, the plan's
+  type sketch still showed three reject variants and `Row` fields the shipped
+  code does not have, and three plan passages still asserted the note column
+  discriminates the reject classes, which `D10` had already recorded as
+  falsified. Each fix was proven by a probe rather than by inspection; see
+  `Surprises & discoveries`.
 - [ ] `EP-M3` RFC 0013, structured data interchange (step 6.2). **Go/no-go.**
 - [ ] `EP-M4` RFC 0014, mapping and sequence transforms (step 6.3).
 - [ ] `EP-M5` RFC 0015, ordered collection algebra and truth predicates (6.4).
@@ -480,7 +498,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
   `make fmt` instead would reformat unrelated documents and bury the milestone
   diff. Both files edited at `EP-M1`'s second review were pure paragraph
   rewrapping — zero table-pipe changes — which the checker's failure message
-  alone does not tell you.
+  alone does not distinguish.
 
 - Observation: the worked section `EP-M2` commits is a **fenced** copy, so it
   is subject to a width limit the real child RFC is not, and the first draft
@@ -587,29 +605,44 @@ tracked; the derivation it performs is reimplemented in the coverage test at
   satisfies both the intent (catch `is_file`) and the four-name witness, and
   gives up only the `expanduser` exclusion, which nothing depended on.
 
-- Observation: the resolution-note column **does** discriminate the three
-  reject classes, contrary to `EP-M0`'s first reading, but only under a rule
-  RFC 0006 does not state — and the rule this bullet first recorded does not in
-  fact reproduce the split. That rule was: **alias** if the resolution cell
-  contains the token "alias" or cites §10.2; otherwise **exists** if it begins
-  "Exists" or names a provider in backticks; otherwise **principle**.
-  Re-derived at `EP-M1` it gives **8 alias / 24 exists / 18 principle**. The
-  *principle* count is right and the (correction at `EP-M1`) premise holds —
-  every principle row is backtick-free, so `ternary` ("Jinja conditional
-  expressions") and `mandatory` ("Strict undefined already errors") land there
-  correctly. The error is the 32-row remainder: table 11 counts 10 alias and 22
-  exists, and the two-row difference is exactly `win_splitdrive` and
-  `fileglob`, the rename rows whose resolution cells name a Netsuke call form
-  rather than the word "alias". Recovering 22/10/18 would mean special-casing
-  those two out of *exists* while leaving `now` — a reject row that also names
-  an existing helper in backticked call form — inside it, with nothing in the
-  document to distinguish them. Evidence: `docs/rfcs/0006-...md:468-635`,
-  `:1617-1690`, and `:600-639`. Impact: the split is **not derivable** and is
-  not asserted; `D5` rule 3's prescribed remedy — adding a discriminating
-  column to section 7 — is needed only if the split is ever wanted as a
-  contract, and no normative edit to RFC 0006 is made now. `COV-2` asserts the
-  parseable totals and that table 11's three class counts sum to the reject-row
-  count, so a broken table still fails loudly.
+- Observation: the resolution-note column does **not** discriminate the three
+  reject classes. `EP-M0`'s first reading said it did, and `EP-M1` falsified
+  that; the retraction is recorded here rather than only in `D10`, because the
+  earlier reading is the one a reviewer would otherwise still be working from.
+  The rule that was believed to reproduce the split was: **alias** if the
+  resolution cell contains the token "alias" or cites §10.2; otherwise
+  **exists** if it begins "Exists" or names a provider in backticks; otherwise
+  **principle**. Re-derived at `EP-M1` it gives **8 alias / 24 exists / 18
+  principle**. The *principle* count is right and the (correction at `EP-M1`)
+  premise holds — every principle row is backtick-free, so `ternary` ("Jinja
+  conditional expressions") and `mandatory` ("Strict undefined already errors")
+  land there correctly. The error is the 32-row remainder: table 11 counts 10
+  alias and 22 exists, and the two-row difference is exactly `win_splitdrive`
+  and `fileglob`, the rename rows whose resolution cells name a Netsuke call
+  form rather than the word "alias". Recovering 22/10/18 would mean
+  special-casing those two out of *exists* while leaving `now` — a reject row
+  that also names an existing helper in backticked call form — inside it, with
+  nothing in the document to distinguish them. Evidence:
+  `docs/rfcs/0006-...md:468-635`, `:1617-1690`, and `:600-639`. Impact: the
+  split is **not derivable** and is not asserted; `D5` rule 3's prescribed
+  remedy — adding a discriminating column to section 7 — is needed only if the
+  split is ever wanted as a contract, and no normative edit to RFC 0006 is made
+  now. `COV-2` asserts the parseable totals and that table 11's three class
+  counts sum to the reject-row count, so a broken table still fails loudly.
+
+- Observation: the control schedule below is off by one milestone, and this was
+  found by writing `EP-M2`'s probe rather than by reading. It says the `COV-2`,
+  `COV-3`, and `CONF-1` controls "need something to corrupt and run at `EP-M4`
+  and `EP-M5`, the first milestones with a registry row and a clause body". The
+  first milestone with a registry row and a clause body is `EP-M3`: it delivers
+  RFC 0013, which owns five registry rows and discharges all eleven clauses.
+  `EP-M4` is merely the *second*. Evidence: `EP-M2`'s liveness probe placed the
+  ADR's worked specimen at `docs/rfcs/0013-…md` and flipped RFC 0006's map row
+  to `written`, and `every_child_discharges_every_clause`, `COV-1`, `COV-3`,
+  and the link check all ran non-vacuously against it. Impact: the four
+  controls are runnable at `EP-M3` and are discharged there, not deferred; the
+  schedule was corrected in place rather than left to contradict the milestone
+  it sits above.
 
 - Observation: `COV-3`'s purity aggregate is satisfiable only over rows whose
   `Registration` is `New`. The registries carry all 60 accepted helpers, and
@@ -1419,8 +1452,12 @@ width; nextest wraps them the same way at a terminal.
   restores the document from a backup and verifies its sha256 before and after.
 
 `COV-2`, `COV-3`, and `CONF-1` are green before any child exists, so their
-controls need something to corrupt and run at `EP-M4` and `EP-M5`, the first
-milestones with a registry row and a clause body.
+controls need something to corrupt — a registry row and a clause body. The
+first milestone that supplies both is `EP-M3`, not `EP-M4` as this section
+first said: `EP-M3` delivers RFC 0013, which owns five registry rows and
+discharges all eleven clauses. Those controls therefore run at `EP-M3`, and
+`EP-M2`'s liveness probe already exercised them once against the worked
+specimen.
 
 ### Axioms
 
@@ -1428,9 +1465,13 @@ milestones with a registry row and a clause body.
 - Table 11's totals of 41, 16, and 3, and section 6.1's aggregate of 52, 4, and
   1, are correct. `EP-M0` re-derives both and must agree.
 - `markdownlint-cli2`, `typos`, and `mdtablefix` behave as configured.
-- Section 7's note column reliably discriminates the three reject classes. This
-  is the weakest axiom in the plan; `EP-M0` must confirm it and `D5` rule 3
-  states the remedy if it fails.
+- Section 7's note column **does not** reliably discriminate the three reject
+  classes. This axiom is stated in the negative because `EP-M0` and `EP-M1`
+  falsified the positive form: no rule fitted to the document recovers table
+  11's 22/10/18, and the best attempt yields 8/24/18. `D10` therefore takes the
+  deny set from the complement rule and `COV-2` does not assert the split. `D5`
+  rule 3 states the remedy — a discriminating column — if the split is ever
+  wanted as a contract.
 - Jinja namespaces are separate, so a filter and a test may share a name. No
   name in the accepted set does; `abs` collides only with a pre-existing
   MiniJinja built-in that is not in the inventory. The registry's namespace
@@ -1451,21 +1492,24 @@ first draft made, and it is true.
   the document, with two corrections adopted (`D10`).
 - Acceptance evidence: recorded in `Surprises & discoveries` — the heading
   recount with its four reconciliation adjustments stated explicitly, since the
-  naive count is 58 and never 57; confirmation that section 7's note column
-  discriminates the three reject classes after all, under a rule stated in
-  `D10`; the derived accepted set at 60 and forbidden set at **71** rather than
-  the 34 first written; the purity aggregate at 52, 4, and 1 once scoped to
-  `New` rows; and confirmation that RFC numbers 0013 upward are free on
-  `origin/main` and every active remote branch.
+  naive count is 58 and never 57; the finding that section 7's note column does
+  **not** discriminate the three reject classes, because no rule fitted to the
+  document recovers table 11's 22/10/18, so under `D10` the split is not
+  derived and is not asserted; the derived accepted set at 60 and forbidden set
+  at **71** rather than the 34 first written; the purity aggregate at 52, 4,
+  and 1 once scoped to `New` rows; and confirmation that RFC numbers 0013
+  upward are free on `origin/main` and every active remote branch.
 - Conformance check: no tracked file modified except this plan.
 - Recovery: nothing to revert.
 - Corrections adopted: `D10` (deny set is the complement of the accepted set,
   not a union of reject classes), the `D5` rule 2 rewording for `hash`, the
   `COV-3` purity scoping, and the `COV-2` member assertions — `is_file` is
   forbidden, but by the complement rule rather than by its reject class.
-- **Go/no-go.** Stop if any derived count disagrees, if the note column does
-  not discriminate, or if the reviewer prefers a fallback from
-  `Alternatives considered`.
+- **Go/no-go.** Stop if any derived count disagrees, or if the reviewer prefers
+  a fallback from `Alternatives considered`. The note column not discriminating
+  is **not** a stop condition: `EP-M0` and `EP-M1` established that it does
+  not, and `D10` answers it with the complement rule rather than with prose
+  parsing.
 
 ### `EP-M1` — coverage test, ADR, corrections, roadmap rewrite
 
@@ -1850,22 +1894,16 @@ enum Disposition {
     Accept,
     /// Deferred by section 9.
     Defer,
-    /// Rejected because Netsuke or MiniJinja already provides it.
-    RejectExists,
-    /// Rejected as a redundant alias or on principle.
-    RejectForbidden,
+    /// Rejected by section 10, for any of the three reasons table 11 counts.
+    Reject,
 }
 
-/// One parsed table row, with its source location for failure messages.
+/// One accepted helper, as the document that established it records it.
 struct Row {
     /// Registered helper name, backticks stripped.
     name: String,
     /// Namespace the helper occupies.
     namespace: Namespace,
-    /// Repository-relative path of the file the row came from.
-    file: String,
-    /// One-indexed line number of the row.
-    line: usize,
 }
 ```
 

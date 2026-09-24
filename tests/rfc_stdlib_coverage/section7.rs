@@ -262,7 +262,7 @@ pub(super) fn registered_names(disposition: &str, names: &[String]) -> Vec<Strin
     names.to_vec()
 }
 
-/// The first `§N.N` reference in `text`, normalised to `N.N`.
+/// The first `§N.N` reference in `text`, normalized to `N.N`.
 ///
 /// A sentence-final citation reads `§8.9.`, and the period ends the sentence
 /// rather than extending the number: the digits-and-dots scan cannot tell the
