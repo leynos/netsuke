@@ -336,6 +336,9 @@ Each goal is phrased so that an observer can check it.
     target listing with descriptions (`netsuke help targets`, shipped), and
     validated recipe parameters (RFC 0022, proposed in PR #741). The
     conveniences that stay out are those of non-goal 6.
+12. **G12 — A documented way off Make.** A "Netsuke for Make Diehards" guide,
+    published at <https://df12.studio/netsuke>, maps Make idioms to idiomatic
+    Netsuke rather than to their literal YAML equivalents.
 
 ### 6.2 Non-goals
 
@@ -369,6 +372,9 @@ Each goal is phrased so that an observer can check it.
 10. **C and C++ project conveniences as core features.** Toolchain detection,
     install rules, and IDE export belong to Meson and CMake, or to optional
     rule bundles.
+11. **An automatic Makefile importer.** A mechanical translation is exactly
+    what a finished migration must not be (G10). Users leaving Make should
+    follow the "Netsuke for Make Diehards" guide (G12).
 
 ## 7. Success criteria
 
@@ -464,9 +470,8 @@ Each goal is phrased so that an observer can check it.
 | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------- |
 | Q4  | How far does purity extend: to targets that call impure helpers, and to pinned remote inputs used as dependencies? What rebuild policy applies to an impure target?                                | Determines whether remote inputs become first-class and how G4 and G6 interact.                           | A decision on impure-target rebuild semantics and on remote resources as graph inputs.   | RFC                       |
 | Q5  | Is content-hash invalidation in scope for any input class?                                                                                                                                         | Tests assumption A5; affects remote inputs and any future cache.                                          | Evidence of missed or spurious rebuilds in real use, or a decision tied to Q4.           | Spike, then ADR           |
-| Q6  | Is a Makefile migration aid (importer or guide) in scope?                                                                                                                                          | Directly serves the initial reluctant-Make-user group; costs significant effort.                          | A decision recorded as a goal or a non-goal.                                             | Elicitation               |
 | Q7  | What plan-generation time budget is acceptable, and on what reference manifest?                                                                                                                    | Needed to turn the operational criterion into a measurable one.                                           | A budget and a benchmark manifest exist.                                                 | Spike                     |
-| Q8  | What must be true for 1.0?                                                                                                                                                                         | Gates the strategic criterion and the end of pre-1.0 latitude.                                            | A written release checklist traced to G1 to G10.                                         | Elicitation, then roadmap |
+| Q8  | What must be true for 1.0?                                                                                                                                                                         | Gates the strategic criterion and the end of pre-1.0 latitude.                                            | A written release checklist traced to G1 to G12.                                         | Elicitation, then roadmap |
 | Q9  | Who maintains reusable rule bundles for common ecosystems, and are any shipped with Netsuke?                                                                                                       | Decides whether G3 and G10 are met by the core or by an ecosystem that does not yet exist.                | An ownership and distribution decision for bundles.                                      | RFC amendment to RFC 0003 |
 | Q10 | Does the nightly toolchain requirement for source installs conflict with serving the accidental build-system authors (a later audience)?                                                           | Affects installation paths and constraint 8.1.                                                            | Evidence that binary installers cover the target platforms, or a plan for stable builds. | Elicitation               |
 | Q12 | How are crates.io downloads from the maintainer's own CI separated from external ones, do GitHub release and installer downloads count, and what thresholds mark success for each adoption signal? | Without a method the first external signal cannot be reported; without thresholds it cannot show success. | A documented counting method and a threshold with a date for each signal.                | Spike, then elicitation   |
@@ -492,13 +497,15 @@ Each goal is phrased so that an observer can check it.
   Makefile is retired, and the Netsukefile is idiomatic rather than a
   mechanical translation of Make into YAML and Jinja. See goal G10 and
   [section 7.1](#71-user-facing).
+- **Q6 — Is a Makefile migration aid in scope?** Resolved 2026-09-25: a guide
+  is (G12); an automatic importer is not (non-goal 11).
 
 ## 10. Handoff
 
 - **Downstream readiness.** The design document and roadmap already exist, so
   this document is a reconciliation rather than a precursor. No remaining open
-  question blocks further design. Q6, on a Makefile migration aid, most
-  directly affects the initial users.
+  question blocks further design. Q8, on what must be true for 1.0, is the most
+  consequential of those that remain.
 - **ADR candidates.** Primary user segment (Q1, decided 2026-09-24; the ADR
   records it); purity semantics for targets and remote inputs (Q4);
   content-hash invalidation (Q5); hermeticity and remote execution as a
