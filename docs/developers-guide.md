@@ -1206,8 +1206,11 @@ The disjunct can only make the job run more often.
 
 `tests/workflow_contracts/release_dry_run_smoke_test.py` holds four things. The
 condition is compared whole, so a tagged release still runs the job. `release`
-still needs it. The pull-request gate runs the same smoke unconditionally, with
-the same invocation token for token. And the dry run's event types outside
+still needs it. The pull-request gate runs the same smoke, with the same
+invocation token for token. `ci.yml` calls the Windows gate on every event but
+the nightly Kani schedule (ADR-039), so the contract admits exactly
+`if: github.event_name != 'schedule'` on that call, which is true on every pull
+request, and refuses any other condition. And the dry run's event types outside
 `ci.yml`'s set are exactly the ones the condition exempts.
 
 ## Release-admission observability

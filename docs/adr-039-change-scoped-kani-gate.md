@@ -67,7 +67,8 @@ as a `::notice::` annotation.
 - A nightly `schedule` trigger at 04:41 UTC runs every harness, clear of the
   03:05 UTC mutation-testing run. `build-test` and `windows` carry
   `if: github.event_name != 'schedule'`, so the nightly run is the Kani job
-  alone.
+  alone. The release dry-run smoke contract admits that one condition on the
+  Windows gate, since it is true on every pull request.
 - A manual `workflow_dispatch` runs every harness.
 - On a pull request the change set is the diff between the merge commit
   `actions/checkout` checks out and its first parent, the base branch tip, read
