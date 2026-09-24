@@ -325,8 +325,8 @@ fn dependabot_updates_have_expected_policy() -> Result<()> {
     assert_group_policy("github-actions", &github_actions_update.groups, &[])?;
     let cargo_update = update_for(&config, "cargo")?;
     assert_update_policy(cargo_update, "daily", &["dependencies", "cargo"], 5);
-    // RustCrypto crates share breaking changes, so their majors move as one.
-    assert_group_policy("cargo", &cargo_update.groups, &["rustcrypto"])?;
+    // Each lockstep family shares breaking changes, so its majors move as one.
+    assert_group_policy("cargo", &cargo_update.groups, &["rustcrypto", "rstest-bdd"])?;
     let rust_toolchain_update = update_for(&config, "rust-toolchain")?;
     assert_update_policy(
         rust_toolchain_update,
