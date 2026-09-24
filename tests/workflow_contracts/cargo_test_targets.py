@@ -132,14 +132,24 @@ def target_sources(tests_dir: Path = TESTS_DIR) -> dict[str, list[Path]]:
         message = f"{tests_dir} is not a directory, so no test target was read"
         raise RepositoryFileError(message)
     try:
-        targets = {path.stem: [path] for path in sorted(tests_dir.glob("*.rs"))}
-        for entry in sorted(tests_dir.iterdir()):
-            if entry.is_dir() and (entry / "main.rs").exists():
-                targets[entry.name] = sorted(entry.rglob("*.rs"))
+        return _file_targets(tests_dir) | _directory_targets(tests_dir)
     except OSError as error:
         message = f"cannot list {tests_dir}: {error}"
         raise RepositoryFileError(message) from error
-    return targets
+
+
+def _file_targets(tests_dir: Path) -> dict[str, list[Path]]:
+    """Return each `tests/<name>.rs` target with its one source."""
+    return {path.stem: [path] for path in sorted(tests_dir.glob("*.rs"))}
+
+
+def _directory_targets(tests_dir: Path) -> dict[str, list[Path]]:
+    """Return each `tests/<name>/main.rs` target with every source beneath it."""
+    return {
+        entry.name: sorted(entry.rglob("*.rs"))
+        for entry in sorted(tests_dir.iterdir())
+        if entry.is_dir() and (entry / "main.rs").exists()
+    }
 
 
 def target_texts(targets: cabc.Mapping[str, list[Path]]) -> dict[str, list[str]]:
