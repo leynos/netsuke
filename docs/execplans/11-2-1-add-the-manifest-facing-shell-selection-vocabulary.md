@@ -221,7 +221,7 @@ These are hard invariants. Violating one requires escalation, not a workaround.
   `BuiltInExecutable::{FixedPath, SearchPath}` so 11.2.3 knows whether to
   search the trusted `PATH` without re-deriving ADR-019's "Resolution" column.
   Date/Author: 2026-09-24, planning agent.
-- Decision D4: implement the `ShellName` grammar as a hand-written ASCII byte
+- Decision D4: implement the `ShellName` grammar as a handwritten ASCII byte
   validator; use the `regex` crate only in tests, as an independent oracle.
   Rationale: `regex` is a dev-dependency only, adding it at runtime would
   breach the dependency tolerance, and precedent (`src/host_pattern.rs`)
@@ -272,7 +272,7 @@ These are hard invariants. Violating one requires escalation, not a workaround.
   variants by two hosts, which a table enumerates exhaustively. The grammar is
   a regular language whose best available independent check is a
   regular-expression engine; a Kani harness would compare the validator against
-  a second hand-written predicate, which restates the property rather than
+  a second handwritten predicate, which restates the property rather than
   proving it. The validator has no indexing, arithmetic, or `unsafe` code, so
   bounded model checking adds no memory-safety evidence. No lemma or
   contractual business logic is introduced that needs an unbounded proof, and
@@ -433,19 +433,19 @@ them. Each names why a wrong implementation would fail it.
 
 Axioms (external assumptions, not verified here):
 
-- AX-1: `serde-saphyr` 1.2.0 with default options, when asked for an untyped
+- AXIOM-1: `serde-saphyr` 1.2.0 with default options, when asked for an untyped
   value, returns a Boolean for plain scalars matching `true`, `false`, `y`,
   `yes`, `on`, `n`, `no`, and `off` in any case, and a string for quoted scalars
   (`serde-saphyr` `parse_scalars.rs`, `parse_yaml11_bool`). The parity tests
   exercise this boundary against the real crate rather than assuming it.
-- AX-2: `serde_json::Value`'s `deserialize_any` calls `visit_bool` for
+- AXIOM-2: `serde_json::Value`'s `deserialize_any` calls `visit_bool` for
   Booleans, `visit_str`/`visit_string`/`visit_borrowed_str` for strings,
   `visit_unit` for null, number visitors for numbers, `visit_seq` for arrays,
   and `visit_map` for objects.
-- AX-3: the `regex` crate correctly decides membership of
+- AXIOM-3: the `regex` crate correctly decides membership of
   `\A[a-z][a-z0-9_-]{0,62}\z`.
-- AX-4: `cfg!(windows)` is true exactly when compiling for a Windows target.
-- AX-5: ADR-019 Table 1 is the authoritative registry.
+- AXIOM-4: `cfg!(windows)` is true exactly when compiling for a Windows target.
+- AXIOM-5: ADR-019 Table 1 is the authoritative registry.
 
 Obligations:
 
@@ -568,8 +568,8 @@ Obligations:
   `on` to `PlatformDefault`; `bash`, `dash`, `"true"`, `'yes'`, `"n"` to
   `Named` with the unquoted text; `1`, `~`, `null`, `""`, `[bash]`,
   `{name: bash}`, `Bash`, `/bin/bash`, `"{{ shell }}"` to an error.
-  Non-vacuity: every row is a witness; both paths run the real crates (AX-1,
-  AX-2). Negative control: none needed beyond the rows, because each row
+  Non-vacuity: every row is a witness; both paths run the real crates (AXIOM-1,
+  AXIOM-2). Negative control: none needed beyond the rows, because each row
   asserts a concrete expected value rather than only parity.
 - Obligation O12 (no execution change): no file outside the permitted set in
   `Constraints` changes, and the full existing suite passes. Method:
@@ -961,7 +961,7 @@ pub enum ShellSelection {
     PlatformDefault,
     Named(ShellName),
 }
-// Also: Serialize and a hand-written Deserialize (Decision D6).
+// Also: Serialize and a handwritten Deserialize (Decision D6).
 ```
 
 The `const fn` markings are intended; if Clippy's `missing_const_for_fn`
