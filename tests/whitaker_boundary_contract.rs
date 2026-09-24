@@ -58,10 +58,10 @@ const METADATA_TABLES: [&str; 2] = ["workspace", "package"];
 ///
 /// Netsuke installs the lint libraries at Whitaker HEAD through
 /// `whitaker-installer`, which stages them from the suite's default branch.
-/// `WHITAKER_INSTALLER_VERSION` pins the installer binary — a separate artefact
-/// that says nothing about which lints are staged. A `metadata.dylint` block
-/// would take over library resolution and freeze lint behaviour at whatever
-/// revision it names, which is the opposite of the intended policy.
+/// The shared action's `installer-version` input pins the installer, a separate
+/// artefact that says nothing about which lints are staged. A `metadata.dylint`
+/// block would take over library resolution and freeze lint behaviour at
+/// whatever revision it names, which is the opposite of the intended policy.
 ///
 /// Keyed on the `dylint` entry rather than on `metadata`, because the root
 /// manifest legitimately carries `package.metadata` for other tools.
@@ -83,9 +83,10 @@ fn manifests_do_not_pin_the_lint_libraries(#[case] relative: &str) -> Result<()>
             concat!(
                 "{relative} declares [{table}.metadata.dylint], which would pin ",
                 "the lint libraries to a fixed source. This repository installs ",
-                "them at Whitaker HEAD on purpose; WHITAKER_INSTALLER_VERSION ",
-                "pins the installer, not the libraries. Read the quality-gates ",
-                "section of docs/developers-guide.md before changing this.",
+                "them at Whitaker HEAD on purpose; the shared action's ",
+                "`installer-version` input pins the installer, not the libraries. ",
+                "Read the quality-gates section of docs/developers-guide.md ",
+                "before changing this.",
             ),
             relative = relative,
             table = table
