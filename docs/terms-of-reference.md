@@ -326,8 +326,10 @@ Each goal is phrased so that an observer can check it.
 9. **G9 — Parity across Linux, macOS, and Windows** for the documented manifest
    model, with any platform-specific behaviour stated explicitly.
 10. **G10 — Replace real monster Makefiles.** A migrated manifest for a
-    repository of Cuprum's complexity consists mainly of lines that describe
-    that project, not lines that compensate for the build language.
+    repository of Cuprum's complexity replaces its Makefile entirely and
+    consists mainly of lines that describe that project, not lines that
+    compensate for the build language. A line-for-line translation of Make
+    into YAML and Jinja does not meet this goal, however faithful.
 11. **G11 — Cover Make's task-runner role.** The initial users run
     `make test`, `make lint`, and `make clean` as well as file builds.
     Netsuke covers that role with named phony actions (see `examples/`),
@@ -383,8 +385,11 @@ Each goal is phrased so that an observer can check it.
   `leynos/cuprum`, plus the three release-admission canaries
   `leynos/repovec-appliance`, `leynos/mxd`, and `leynos/ortho-config`
   (`docs/release-admission-canaries.md`, currently on the branch for PR #780).
-  Ergonomic gaps found there become roadmap work. How far each migration must
-  go is open `(Q11)`.
+  Ergonomic gaps found there become roadmap work. A repository's migration is
+  done when its Makefile is retired and its Netsukefile meets G10: it is
+  written in Netsuke's own terms, not a mechanical translation of the Makefile
+  into YAML and Jinja. The v0.1.0 canaries' partial migrations, which keep
+  Makefiles for out-of-slice targets, are waypoints, not the finish line.
 - External adoption is measured first as crates.io downloads of
   `netsuke-build` that do not come from the maintainer's own CI, and later as
   `Netsukefile`s appearing in other people's GitHub repositories. How to
@@ -444,27 +449,27 @@ Each goal is phrased so that an observer can check it.
 
 ### 8.3 Dependencies
 
-| Dependency                                                   | Role                                             | Critical path                               |
-| ------------------------------------------------------------ | ------------------------------------------------ | ------------------------------------------- |
-| Ninja                                                        | Executes every build                             | Yes: every user needs it at run time        |
-| OrthoConfig                                                  | Command, configuration, and schema machinery     | Yes for command-line and configuration work |
-| `minijinja`, `serde-saphyr`                                  | Template evaluation and YAML parsing             | Yes for manifest semantics                  |
-| Pinned nightly Rust (Polonius, next-generation trait solver) | Compiles Netsuke                                 | Yes for contributors and source installs    |
-| The df12 repository estate                                   | Supplies migration benchmarks and first real use | Yes for G10 and the user-facing criteria    |
+| Dependency                                                                            | Role                                                           | Critical path                                |
+| ------------------------------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------- |
+| Ninja                                                                                 | Executes every build                                           | Yes: every user needs it at run time         |
+| OrthoConfig                                                                           | Command, configuration, and schema machinery                   | Yes for command-line and configuration work  |
+| `minijinja`, `serde-saphyr`                                                           | Template evaluation and YAML parsing                           | Yes for manifest semantics                   |
+| Pinned nightly Rust (Polonius, next-generation trait solver)                          | Compiles Netsuke                                               | Yes for contributors and source installs     |
+| The df12 repository estate                                                            | Supplies migration benchmarks and first real use               | Yes for G10 and the user-facing criteria     |
+| Progressive-enhancement RFCs 0021 to 0025 (PR #741), plus file sets and tool contexts | Supply the declared semantics an idiomatic migration relies on | Yes for completing the dogfooding migrations |
 
 ## 9. Open questions
 
-| ID  | Question                                                                                                                                                                                           | Why it matters                                                                                                                                   | Resolved when                                                                            | Suggested path            |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- | ------------------------- |
-| Q4  | How far does purity extend: to targets that call impure helpers, and to pinned remote inputs used as dependencies? What rebuild policy applies to an impure target?                                | Determines whether remote inputs become first-class and how G4 and G6 interact.                                                                  | A decision on impure-target rebuild semantics and on remote resources as graph inputs.   | RFC                       |
-| Q5  | Is content-hash invalidation in scope for any input class?                                                                                                                                         | Tests assumption A5; affects remote inputs and any future cache.                                                                                 | Evidence of missed or spurious rebuilds in real use, or a decision tied to Q4.           | Spike, then ADR           |
-| Q6  | Is a Makefile migration aid (importer or guide) in scope?                                                                                                                                          | Directly serves the initial reluctant-Make-user group; costs significant effort.                                                                 | A decision recorded as a goal or a non-goal.                                             | Elicitation               |
-| Q7  | What plan-generation time budget is acceptable, and on what reference manifest?                                                                                                                    | Needed to turn the operational criterion into a measurable one.                                                                                  | A budget and a benchmark manifest exist.                                                 | Spike                     |
-| Q8  | What must be true for 1.0?                                                                                                                                                                         | Gates the strategic criterion and the end of pre-1.0 latitude.                                                                                   | A written release checklist traced to G1 to G10.                                         | Elicitation, then roadmap |
-| Q9  | Who maintains reusable rule bundles for common ecosystems, and are any shipped with Netsuke?                                                                                                       | Decides whether G3 and G10 are met by the core or by an ecosystem that does not yet exist.                                                       | An ownership and distribution decision for bundles.                                      | RFC amendment to RFC 0003 |
-| Q10 | Does the nightly toolchain requirement for source installs conflict with serving the accidental build-system authors (a later audience)?                                                           | Affects installation paths and constraint 8.1.                                                                                                   | Evidence that binary installers cover the target platforms, or a plan for stable builds. | Elicitation               |
-| Q11 | For each dogfooding repository, what migration depth counts as done: selected gates running from a Netsukefile, or the Makefile retired entirely?                                                  | The release-admission canaries deliberately keep Makefiles for out-of-slice targets; the dogfooding criterion is unmeasurable until this is set. | A per-repository target, or one rule for all six.                                        | Elicitation               |
-| Q12 | How are crates.io downloads from the maintainer's own CI separated from external ones, do GitHub release and installer downloads count, and what thresholds mark success for each adoption signal? | Without a method the first external signal cannot be reported; without thresholds it cannot show success.                                        | A documented counting method and a threshold with a date for each signal.                | Spike, then elicitation   |
+| ID  | Question                                                                                                                                                                                           | Why it matters                                                                                            | Resolved when                                                                            | Suggested path            |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------- |
+| Q4  | How far does purity extend: to targets that call impure helpers, and to pinned remote inputs used as dependencies? What rebuild policy applies to an impure target?                                | Determines whether remote inputs become first-class and how G4 and G6 interact.                           | A decision on impure-target rebuild semantics and on remote resources as graph inputs.   | RFC                       |
+| Q5  | Is content-hash invalidation in scope for any input class?                                                                                                                                         | Tests assumption A5; affects remote inputs and any future cache.                                          | Evidence of missed or spurious rebuilds in real use, or a decision tied to Q4.           | Spike, then ADR           |
+| Q6  | Is a Makefile migration aid (importer or guide) in scope?                                                                                                                                          | Directly serves the initial reluctant-Make-user group; costs significant effort.                          | A decision recorded as a goal or a non-goal.                                             | Elicitation               |
+| Q7  | What plan-generation time budget is acceptable, and on what reference manifest?                                                                                                                    | Needed to turn the operational criterion into a measurable one.                                           | A budget and a benchmark manifest exist.                                                 | Spike                     |
+| Q8  | What must be true for 1.0?                                                                                                                                                                         | Gates the strategic criterion and the end of pre-1.0 latitude.                                            | A written release checklist traced to G1 to G10.                                         | Elicitation, then roadmap |
+| Q9  | Who maintains reusable rule bundles for common ecosystems, and are any shipped with Netsuke?                                                                                                       | Decides whether G3 and G10 are met by the core or by an ecosystem that does not yet exist.                | An ownership and distribution decision for bundles.                                      | RFC amendment to RFC 0003 |
+| Q10 | Does the nightly toolchain requirement for source installs conflict with serving the accidental build-system authors (a later audience)?                                                           | Affects installation paths and constraint 8.1.                                                            | Evidence that binary installers cover the target platforms, or a plan for stable builds. | Elicitation               |
+| Q12 | How are crates.io downloads from the maintainer's own CI separated from external ones, do GitHub release and installer downloads count, and what thresholds mark success for each adoption signal? | Without a method the first external signal cannot be reported; without thresholds it cannot show success. | A documented counting method and a threshold with a date for each signal.                | Spike, then elicitation   |
 
 ### 9.1 Resolved questions
 
@@ -483,6 +488,10 @@ Each goal is phrased so that an observer can check it.
   and per-target descriptions already exist; recipe parameters are planned in
   RFC 0022. Non-goal 6 stands: file watching belongs to `inotifywait` and
   similar tools, which can run Netsuke. See goal G11.
+- **Q11 — What migration depth counts as done?** Resolved 2026-09-25: the
+  Makefile is retired, and the Netsukefile is idiomatic rather than a
+  mechanical translation of Make into YAML and Jinja. See goal G10 and
+  [section 7.1](#71-user-facing).
 
 ## 10. Handoff
 
