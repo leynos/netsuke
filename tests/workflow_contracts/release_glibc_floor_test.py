@@ -13,9 +13,14 @@ without a multi-architecture binutils.
 Run via ``make test-workflow-contracts``.
 """
 
+# ruff: ignore[suspicious-subprocess-import] - the step's own script is under test.
+import subprocess
+import typing as typ
+
 from workflow_loading import (
     PACKAGE_WORKFLOW_PATH,
     RELEASE_WORKFLOW_PATH,
+    REPO_ROOT,
     job_steps,
     load_workflow,
     named_step,
@@ -23,9 +28,17 @@ from workflow_loading import (
     workflow_job,
 )
 
+if typ.TYPE_CHECKING:
+    from pathlib import Path
+
 FLOOR_STEP = "Report the glibc floor"
 LINUX_GATE = "inputs.platform == 'linux'"
 BINARY = "target/${{ inputs.target }}/release/${BIN_NAME}"
+TARGET = "x86_64-unknown-linux-gnu"
+#: `readelf --version-info` output whose version needs top out at GLIBC_2.34
+#: as versions, though GLIBC_2.9 sorts last as text. The symbol and definition
+#: sections also name a GLIBC_2.99 that the binary defines and does not need.
+READELF_FIXTURE = REPO_ROOT / "tests" / "data" / "readelf-version-info.txt"
 
 
 def _steps() -> list[dict[str, object]]:
@@ -84,4 +97,43 @@ def test_a_linux_release_passes_the_platform_the_gate_names() -> None:
     inputs = require_mapping(job.get("with"), "build-linux inputs")
     assert inputs.get("platform") == "linux", (
         f"build-linux must pass platform linux, got {inputs.get('platform')!r}"
+    )
+
+
+def test_the_floor_is_the_highest_version_the_binary_needs(tmp_path: Path) -> None:
+    """Run the step's script over fixed `readelf` output and read the summary.
+
+    The floor is the greatest GLIBC version in the version-needs section,
+    compared as a version rather than as text. A GLIBC_2.99 that appears only
+    in the symbol and definition sections is no requirement, and reporting it
+    would overstate the floor.
+    """
+    stubs = tmp_path / "bin"
+    stubs.mkdir()
+    readelf = stubs / "readelf"
+    readelf.write_text(f'#!/bin/sh\nexec cat "{READELF_FIXTURE}"\n')
+    readelf.chmod(0o755)
+    summary = tmp_path / "summary.md"
+    script = str(named_step(_steps(), FLOOR_STEP).get("run")).replace(
+        "${{ inputs.target }}", TARGET
+    )
+    # The script is the workflow's own step with the target substituted, and
+    # `readelf` resolves to the stub above; no untrusted input reaches it.
+    # ruff: ignore[subprocess-without-shell-equals-true] - shell is False.
+    result = subprocess.run(
+        ["bash", "-c", script],  # ruff: ignore[start-process-with-partial-path] - resolved from the fixed PATH.
+        check=False,
+        env={
+            "PATH": f"{stubs}:/usr/bin:/bin",
+            "BIN_NAME": "netsuke",
+            "GITHUB_STEP_SUMMARY": str(summary),
+        },
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 0, f"the floor step failed: {result.stderr!r}"
+    reported = summary.read_text()
+    expected = f"- glibc floor for `{TARGET}`: `GLIBC_2.34`\n"
+    assert reported == expected, (
+        f"the summary must report the highest needed version, got {reported!r}"
     )

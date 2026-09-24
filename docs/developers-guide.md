@@ -654,10 +654,14 @@ aarch64 trial on Ubuntu 24.04 measured GLIBC_2.39 for both targets. The
 `Report the glibc floor` step in `build-and-package.yml` writes each Linux
 binary's floor to the job summary after the build, reading it with
 `readelf --version-info`, which reads the aarch64 binary on the x64 runner
-without a multi-architecture binutils. So a change to either image shows up in
-the release run rather than in a user's bug report.
+without a multi-architecture binutils. Only the version-needs section counts:
+`--version-info` also prints the symbol and definition sections, and a GLIBC
+version the binary defines is not one it requires. So a change to either image
+shows up in the release run rather than in a user's bug report.
 `tests/workflow_contracts/release_glibc_floor_test.py` holds the step's Linux
-gate, its place after the build, the binary it reads, and the summary it writes.
+gate, its place after the build, the binary it reads, and the summary it
+writes. It also runs the step's own script over fixed `readelf` output in
+`tests/data/readelf-version-info.txt` and asserts the reported floor.
 
 ### Windows MSI packaging and upgrade validation
 

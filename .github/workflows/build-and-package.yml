@@ -155,13 +155,19 @@ jobs:
         # Ubuntu 24.04) and GLIBC_2.18 for aarch64 (`cross`). Reporting it on
         # every run makes a change to either image visible in the summary.
         # `readelf` rather than `objdump`: it reads a foreign architecture's
-        # ELF without a multi-architecture binutils.
+        # ELF without a multi-architecture binutils. Only the version-needs
+        # section is read: `--version-info` also prints the symbol and
+        # definition sections, and a GLIBC_* the binary defines is no floor.
         if: inputs.platform == 'linux'
         shell: bash
         run: |
           set -euo pipefail
           binary="target/${{ inputs.target }}/release/${BIN_NAME}"
-          floor="$(readelf --version-info "${binary}" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -n 1)"
+          floor="$(
+            readelf --version-info "${binary}" |
+              awk '/^Version needs section/ { needs = 1; next } /^Version [a-z]+ section/ { needs = 0 } needs' |
+              grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -n 1
+          )"
           echo "glibc floor for ${{ inputs.target }}: ${floor}"
           echo "- glibc floor for \`${{ inputs.target }}\`: \`${floor}\`" >> "$GITHUB_STEP_SUMMARY"
 
