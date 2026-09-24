@@ -412,7 +412,23 @@ Hard invariants. Violating one requires escalation, not a workaround.
   `Surprises & discoveries` for the deference finding, whose requested
   behaviour would have deleted the plan's own recorded seeded fault.
   `clauses.rs` gained four unit tests, taking the binary from ten tests to
-  fourteen.
+  fourteen. Committed at `65665fcb`.
+- [x] Seventh gate run (2026-09-24), at `65665fcb`. Five of the six targets
+  pass: `make check-fmt`, `make lint` (all nine tool invocations across its
+  five stages, including both Whitaker passes), `make typecheck`,
+  `make markdownlint` (134 files, 0 errors), `make nixie`. `make test` did
+  **not** pass locally, on two tests that this branch's diff does not touch:
+  `locale_stub_ui_tests::harness_compiles_under_a_split_build_dir` and
+  `packaging_smoke_tests::packaged_manifest_retains_build_script_sources`, both
+  nextest `TIMEOUT` at the repo's 300s budget. Both spawn live nested
+  `cargo build`s into private target directories, and six other agents' cargo
+  processes were running against the shared cache at the time. The resolver
+  commits for this historical trap are **not** ancestors of this branch, so the
+  live-build form is still what runs here. Re-running the two files alone made
+  it worse (four timeouts, not two), which rules out this branch's own test
+  load as the cause. Environmental, not a regression: the two files are
+  unmodified by this diff, and the full run reached 2815 passed against 2 timed
+  out.
 - [ ] `EP-M3` RFC 0013, structured data interchange (step 6.2). **Go/no-go.**
 - [ ] `EP-M4` RFC 0014, mapping and sequence transforms (step 6.3).
 - [ ] `EP-M5` RFC 0015, ordered collection algebra and truth predicates (6.4).
