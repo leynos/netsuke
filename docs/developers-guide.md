@@ -1167,6 +1167,28 @@ the tagged source itself; the release publication job separately requires both
 this smoke job and the platform package jobs in its `needs` list. Consequently,
 release publication cannot proceed unless the native Windows smoke test passes.
 
+The pull-request dry run (`release-dry-run.yml`, which calls `release.yml` with
+`dry-run: true`) skips this job, and only this job. The same pull request's
+`ci.yml` already runs the identical build and smoke in `build-test-windows`.
+The rerun bought no evidence and cost no money, since GitHub-hosted runners are
+free here. What it did cost was a slot in the account's pool of concurrent
+GitHub-hosted runners. The gating `build-test-windows` queues for that pool
+alongside the dry run's own Windows and macOS builds, and Ubicloud has no
+Windows runners to move either to. Every other dry-run job builds or packages
+release artefacts, which no pull-request lane does.
+
+The skip applies only to events that `ci.yml` also answers. The dry run answers
+`ready_for_review` and `ci.yml` does not, so a draft marked ready after its
+base moved has a new merge ref and no gate run. For that event the smoke runs:
+`if: needs.metadata.outputs.dry_run != 'true' || github.event.action == 'ready_for_review'`.
+The disjunct can only make the job run more often.
+
+`tests/workflow_contracts/release_dry_run_smoke_test.py` holds four things. The
+condition is compared whole, so a tagged release still runs the job. `release`
+still needs it. The pull-request gate runs the same smoke unconditionally, with
+the same invocation token for token. And the dry run's event types outside
+`ci.yml`'s set are exactly the ones the condition exempts.
+
 ## Release-admission observability
 
 The release workflow runs a read-only release-admission canary scaffold before
