@@ -121,14 +121,37 @@ def read_scope(scope_file: Path) -> tuple[str, ...]:
         msg = f"cannot read the proof scope {scope_file}: {error}"
         raise ScopeFileError(msg) from error
     scope = document.get("scope")
-    entries: list[str] = []
-    for key in SCOPE_KEYS:
-        values = scope.get(key) if isinstance(scope, dict) else None
-        if not values or not all(isinstance(value, str) and value for value in values):
-            msg = f"{scope_file}: [scope] {key} must be a non-empty list of paths"
-            raise ScopeFileError(msg)
-        entries.extend(values)
-    return tuple(entries)
+    table = scope if isinstance(scope, dict) else {}
+    return tuple(
+        path for key in SCOPE_KEYS for path in _scope_paths(table, key, scope_file)
+    )
+
+
+def _scope_paths(table: dict[str, object], key: str, scope_file: Path) -> list[str]:
+    """Return the paths under one key of the `[scope]` table.
+
+    Returns
+    -------
+    list[str]
+        The key's entries, in file order.
+
+    Raises
+    ------
+    ScopeFileError
+        When the key does not hold a non-empty list of non-empty strings.
+    """
+    values = table.get(key)
+    if not _is_path_list(values):
+        msg = f"{scope_file}: [scope] {key} must be a non-empty list of paths"
+        raise ScopeFileError(msg)
+    return typ.cast("list[str]", values)
+
+
+def _is_path_list(values: object) -> bool:
+    """Return whether ``values`` is a non-empty list of non-empty strings."""
+    if not isinstance(values, list) or not values:
+        return False
+    return all(isinstance(value, str) and value for value in values)
 
 
 def is_in_scope(path: str, scope: tuple[str, ...]) -> bool:

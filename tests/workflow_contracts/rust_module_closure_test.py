@@ -28,6 +28,7 @@ mod inherent;
 mod macros;
 mod argument_position;
 mod sibling;
+mod echo;
 #[cfg(test)]
 mod test_only;
 """,
@@ -64,7 +65,11 @@ mod model_tests;
     "src/model/model_tests.rs": "use crate::unrelated::helper;\n",
     # Reached through `super::super::sibling` from inside the model subtree.
     "src/custom/located.rs": "pub fn located() { super::super::sibling::touch(); }\n",
-    "src/sibling.rs": "pub fn touch() {}\n",
+    # Its `self::echo` names its own child, not the crate's `echo`.
+    "src/sibling.rs": "pub mod echo;\npub fn touch() { self::echo::ring(); }\n",
+    "src/sibling/echo.rs": "pub fn ring() {}\n",
+    # Not reached: only a `self::` path inside `sibling` spells its name.
+    "src/echo.rs": "pub fn ring() {}\n",
     # Reached because its `impl` header names `Model`, a type the closure defines.
     "src/inherent.rs": """
 impl crate::model::Model {
@@ -89,6 +94,7 @@ EXPECTED_REACHED = {
     "src/model/nested.rs",
     "src/custom/located.rs",
     "src/sibling.rs",
+    "src/sibling/echo.rs",
     "src/inherent.rs",
     "src/macros.rs",
     "data/fixture.txt",
