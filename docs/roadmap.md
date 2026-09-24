@@ -888,19 +888,22 @@ This step answers whether a manifest can consume compiler metadata, package
 manifests, and generated configuration fragments directly, or whether `jq`,
 `yq`, and a scripting runtime remain unavoidable host assumptions. Its outcome
 determines how much surrounding toolchain a `Netsukefile` still has to assume.
-See RFC 0006 §8.1 and
+See RFC 0006 §8.1, delivered by
+[RFC 0013](rfcs/0013-structured-data-interchange-helpers.md), and
 [adr-001-replace-serde-yml-with-serde-saphyr.md](adr-001-replace-serde-yml-with-serde-saphyr.md).
 
 - [ ] 6.2.1. Add `from_json` with duplicate-key rejection and source offsets.
   Requires 6.1.3 and 6.1.4.
-  - See RFC 0006 §8.1.
+  - See RFC 0006 §8.1 and
+    [RFC 0013](rfcs/0013-structured-data-interchange-helpers.md) §7.
   - Preserve object order and report line, column, and byte offset on failure.
   - Success: a document with a repeated object key fails naming the key and
     the offset of its second occurrence, rather than silently keeping the last
     value.
 - [ ] 6.2.2. Add `from_yaml` and `from_yaml_all` over the existing safe YAML
   stack. Requires 6.2.1.
-  - See RFC 0006 §8.1.
+  - See RFC 0006 §8.1 and
+    [RFC 0013](rfcs/0013-structured-data-interchange-helpers.md) §§5.8 and 7.
   - Reject non-standard tags, duplicate keys, and merge keys, and materialize
     the multi-document result rather than exposing a lazy iterator.
   - Establish whether `serde-saphyr` can bound alias expansion; if it cannot,
@@ -909,7 +912,9 @@ See RFC 0006 §8.1 and
     instead of exhausting memory.
 - [ ] 6.2.3. Add the deterministic `to_yaml` and `to_nice_json` serializers.
   Requires 6.2.2.
-  - See RFC 0006 §§6.3 and 8.1.
+  - See RFC 0006 §§6.3 and 8.1, and
+    [RFC 0013](rfcs/0013-structured-data-interchange-helpers.md) §§5.3, 5.7, and
+    8.
   - Pin key ordering, indentation, scalar quoting, line endings, and
     trailing-newline behaviour, quoting every scalar that could be read back
     as a boolean, null, number, or timestamp.

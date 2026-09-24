@@ -2064,16 +2064,16 @@ child registry, and that no helper in this map is missing from the roadmap step
 that owns it. The convention and its amendment procedure are recorded in
 [ADR-021](../adr-021-focused-child-rfcs-for-survey-rfcs.md).
 
-| Child RFC | Title                                           | Owns                                        | Optioned              | Roadmap step | Status    |
-| --------- | ----------------------------------------------- | ------------------------------------------- | --------------------- | ------------ | --------- |
-| `0013`    | Structured data interchange helpers             | `8.1`                                       | —                     | 6.2          | unwritten |
-| `0014`    | Mapping and sequence transform helpers          | `8.2`                                       | —                     | 6.3          | unwritten |
-| `0015`    | Ordered collection algebra and truth predicates | `8.3`; `8.8`                                | —                     | 6.4          | unwritten |
-| `0016`    | Pattern and version predicates                  | `8.4`; `8.5`                                | —                     | 6.5          | unwritten |
-| `0017`    | Lexical path composition                        | `8.6` except `expandvars`; `8.7` only `abs` | `basename`; `dirname` | 6.6          | unwritten |
-| `0018`    | Host-state predicates and environment expansion | `8.7` except `abs`; `8.6` only `expandvars` | `glob`                | 6.7          | unwritten |
-| `0019`    | Encoding, identity, and formatting helpers      | `8.9`                                       | —                     | 6.8          | unwritten |
-| `0020`    | Date and time conversion helpers                | `8.10`                                      | —                     | 6.9          | unwritten |
+| Child RFC                                           | Title                                           | Owns                                        | Optioned              | Roadmap step | Status    |
+| --------------------------------------------------- | ----------------------------------------------- | ------------------------------------------- | --------------------- | ------------ | --------- |
+| [0013](0013-structured-data-interchange-helpers.md) | Structured data interchange helpers             | `8.1`                                       | —                     | 6.2          | written   |
+| `0014`                                              | Mapping and sequence transform helpers          | `8.2`                                       | —                     | 6.3          | unwritten |
+| `0015`                                              | Ordered collection algebra and truth predicates | `8.3`; `8.8`                                | —                     | 6.4          | unwritten |
+| `0016`                                              | Pattern and version predicates                  | `8.4`; `8.5`                                | —                     | 6.5          | unwritten |
+| `0017`                                              | Lexical path composition                        | `8.6` except `expandvars`; `8.7` only `abs` | `basename`; `dirname` | 6.6          | unwritten |
+| `0018`                                              | Host-state predicates and environment expansion | `8.7` except `abs`; `8.6` only `expandvars` | `glob`                | 6.7          | unwritten |
+| `0019`                                              | Encoding, identity, and formatting helpers      | `8.9`                                       | —                     | 6.8          | unwritten |
+| `0020`                                              | Date and time conversion helpers                | `8.10`                                      | —                     | 6.9          | unwritten |
 
 _Table 16: Allocation of the accepted set to focused child RFCs and roadmap
 steps._
