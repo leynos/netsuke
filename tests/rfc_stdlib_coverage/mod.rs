@@ -43,7 +43,9 @@ mod section8;
 mod survey;
 mod totals;
 
-pub use partition::{every_accepted_helper_has_exactly_one_owner, no_forbidden_helper_is_registered};
+pub use partition::{
+    every_accepted_helper_has_exactly_one_owner, no_forbidden_helper_is_registered,
+};
 pub use progress::{
     coverage_map_status_is_reported, every_capability_has_a_roadmap_task,
     every_child_discharges_every_clause, inter_document_links_resolve,
