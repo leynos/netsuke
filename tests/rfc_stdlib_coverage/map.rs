@@ -22,7 +22,7 @@ use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, ensure};
 
-use super::{RFC_0006, Repo, Section, backticked, registries};
+use super::{RFC_0006, RawRow, Repo, Section, backticked, registries};
 
 /// The heading of the coverage map's subsection in RFC 0006 section 14.
 const MAP_HEADING: &str = "### 14.13. Coverage map";
@@ -121,66 +121,77 @@ pub(super) fn parse(repo: &Repo, sections: &BTreeMap<String, Vec<String>>) -> Re
     );
 
     let mut parsed = Vec::new();
-    for row in rows {
-        let child = row.cell(0, "child RFC")?;
-        let (number, written) = child_number(child).with_context(|| {
-            format!(
-                "coverage map row at {RFC_0006}:{} has an unreadable child RFC cell: {child}",
-                row.line
-            )
-        })?;
-        let status = row.cell(5, "status")?.trim().to_ascii_lowercase();
-        let is_written = match status.as_str() {
-            "written" => true,
-            "unwritten" => false,
-            other => {
-                return Err(anyhow::anyhow!(
-                    "coverage map row for RFC {number} at {RFC_0006}:{} has status {other:?}; \
-                     expected `written` or `unwritten`",
-                    row.line
-                ));
-            }
-        };
-        ensure!(
-            is_written == written.is_some(),
-            "coverage map row for RFC {number} is marked {status} but its child RFC cell is {}",
-            if written.is_some() {
-                "a link"
-            } else {
-                "not a link"
-            }
-        );
-        // A written row links to a file, and the file's name carries the RFC
-        // number the row reserves. The two are written by hand and nothing else
-        // compares them: without this, row `0013` could link to `0014-….md`, and
-        // every check downstream would resolve the link, find the file, and pass
-        // — while `registries::parse_all` would file that document's helpers
-        // under RFC 0013's name. The link is the only place the mismatch is
-        // visible before the child is parsed.
-        if let Some(target) = &written {
-            let target_number = registries::rfc_number(target);
-            ensure!(
-                target_number.as_deref() == Some(number.as_str()),
-                "coverage map row for RFC {number} at {RFC_0006}:{} links to {target}, whose \
-                 number is {}",
-                row.line,
-                target_number.as_deref().unwrap_or("not an RFC number")
-            );
-        }
-        let owns = resolve_owns(row.cell(2, "owns")?, sections, row.line)?;
-        let optioned = backticked(row.cell(3, "optioned")?);
-        let step = row.cell(4, "roadmap step")?.trim().to_owned();
-        parsed.push(MapRow {
-            number,
-            written,
-            title: row.cell(1, "title")?.trim().to_owned(),
-            owns,
-            optioned,
-            step,
-            is_written,
-        });
+    for row in &rows {
+        parsed.push(parse_row(row, sections)?);
     }
     Ok(Map { rows: parsed })
+}
+
+/// Read one coverage-map row.
+fn parse_row(row: &RawRow, sections: &BTreeMap<String, Vec<String>>) -> Result<MapRow> {
+    let child = row.cell(0, "child RFC")?;
+    let (number, written) = child_number(child).with_context(|| {
+        format!(
+            "coverage map row at {RFC_0006}:{} has an unreadable child RFC cell: {child}",
+            row.line
+        )
+    })?;
+    let is_written = parse_status(row, &number, written.is_some())?;
+    // A written row links to a file, and the file's name carries the RFC
+    // number the row reserves. The two are written by hand and nothing else
+    // compares them: without this, row `0013` could link to `0014-….md`, and
+    // every check downstream would resolve the link, find the file, and pass
+    // — while `registries::parse_all` would file that document's helpers
+    // under RFC 0013's name. The link is the only place the mismatch is
+    // visible before the child is parsed.
+    check_link_names_the_row(row, &number, written.as_deref())?;
+    Ok(MapRow {
+        number,
+        written,
+        title: row.cell(1, "title")?.trim().to_owned(),
+        owns: resolve_owns(row.cell(2, "owns")?, sections, row.line)?,
+        optioned: backticked(row.cell(3, "optioned")?),
+        step: row.cell(4, "roadmap step")?.trim().to_owned(),
+        is_written,
+    })
+}
+
+/// Read a row's status cell, checking it agrees with whether it links.
+fn parse_status(row: &RawRow, number: &str, links: bool) -> Result<bool> {
+    let status = row.cell(5, "status")?.trim().to_ascii_lowercase();
+    let is_written = match status.as_str() {
+        "written" => true,
+        "unwritten" => false,
+        other => {
+            return Err(anyhow::anyhow!(
+                "coverage map row for RFC {number} at {RFC_0006}:{} has status {other:?}; \
+                 expected `written` or `unwritten`",
+                row.line
+            ));
+        }
+    };
+    ensure!(
+        is_written == links,
+        "coverage map row for RFC {number} is marked {status} but its child RFC cell is {}",
+        if links { "a link" } else { "not a link" }
+    );
+    Ok(is_written)
+}
+
+/// Assert a written row's link carries the RFC number the row reserves.
+fn check_link_names_the_row(row: &RawRow, number: &str, link: Option<&str>) -> Result<()> {
+    let Some(target) = link else {
+        return Ok(());
+    };
+    let target_number = registries::rfc_number(target);
+    ensure!(
+        target_number.as_deref() == Some(number),
+        "coverage map row for RFC {number} at {RFC_0006}:{} links to {target}, whose \
+         number is {}",
+        row.line,
+        target_number.as_deref().unwrap_or("not an RFC number")
+    );
+    Ok(())
 }
 
 /// Whether a table heading belongs to the coverage map.

@@ -273,9 +273,7 @@ impl<'a> Section<'a> {
         let mut found = Vec::new();
         for (index, (offset, line)) in headings.iter().enumerate() {
             let end = headings
-                .iter()
-                .skip(index + 1)
-                .next()
+                .get(index + 1)
                 .map_or(self.lines.len(), |(next, _)| *next);
             found.push(Subsection {
                 heading: line.clone(),
