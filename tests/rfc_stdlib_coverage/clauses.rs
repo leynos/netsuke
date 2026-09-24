@@ -153,7 +153,53 @@ const NO_ADDITIONAL_OBLIGATION: &str = "No additional obligation beyond RFC 0006
 /// justifies a helper by appealing to Ansible rather than to Netsuke's own
 /// contract has not made a decision, only deferred one. It is a substring
 /// search, so leaving it to review would be indefensible.
+///
+/// Each phrase is matched at a leading word boundary: `Unlike Ansible`
+/// contains `like Ansible` and says the opposite of what this check looks for,
+/// so an unbounded search flags a sentence that argues *against* the appeal it
+/// is meant to catch.
+///
+/// A leading boundary alone does not clear `such as Ansible`, because `as` is
+/// its own word there — the phrase is the tail of the compound preposition —
+/// and the sentence introduces an example rather than a justification. That
+/// shape is excluded by name in [`deference_phrase`]. A trailing boundary is
+/// deliberately *not* required: `as Ansible does` is the shape the check exists
+/// to catch, and it is this plan's own recorded seeded fault, so tightening the
+/// right-hand side would delete a control that has been proven to fire.
 const DEFERENCE_PHRASES: [&str; 2] = ["as Ansible", "like Ansible"];
+
+/// The exemplar idiom that contains `as Ansible` without deferring to it.
+///
+/// `such as Ansible`, `as with Ansible`, and `as in Ansible` name a source of
+/// examples, not a reason to have a helper. Matched immediately before the
+/// phrase so the exclusion cannot swallow a genuine appeal that happens to
+/// follow one of these words elsewhere in the sentence.
+const EXEMPLAR_PREFIXES: [&str; 3] = ["such ", "with ", "in "];
+
+/// Whether `body` justifies a helper by appeal to Ansible.
+///
+/// Returns the phrase that matched, so the diagnostic can quote it.
+fn deference_phrase(body: &str) -> Option<&'static str> {
+    DEFERENCE_PHRASES.into_iter().find(|phrase| {
+        body.match_indices(phrase).any(|(at, _)| {
+            let Some(prefix) = body.get(..at) else {
+                return false;
+            };
+            // A boundary is the start of the text, or a character that cannot
+            // continue a word. `is_alphanumeric` alone would treat the `_` in
+            // `unlike_ansible` as a break, and the underscore is a word
+            // character in every identifier this corpus uses.
+            let bounded = !prefix
+                .chars()
+                .next_back()
+                .is_some_and(|ch| ch.is_alphanumeric() || ch == '_');
+            let exemplar = EXEMPLAR_PREFIXES
+                .iter()
+                .any(|prefix_word| prefix.ends_with(prefix_word));
+            bounded && !exemplar
+        })
+    })
+}
 
 /// Check one child RFC's section 5 against the `CONF-1` obligations.
 ///
@@ -206,14 +252,13 @@ pub(super) fn check_subsections(
             found.heading,
             NO_ADDITIONAL_OBLIGATION
         );
-        for phrase in DEFERENCE_PHRASES {
-            ensure!(
-                !body.contains(phrase),
+        if let Some(phrase) = deference_phrase(&body) {
+            return Err(anyhow::anyhow!(
                 "{file}:{} is subsection {}, which justifies a helper by appealing to Ansible \
                  ({phrase:?}). RFC 0006 surveys Ansible; it does not adopt its choices",
                 found.line,
                 found.heading
-            );
+            ));
         }
     }
     Ok(ids)
@@ -245,4 +290,65 @@ fn names_an_owned_helper(body: &str, owned: &BTreeSet<String>) -> bool {
     backticked(body)
         .iter()
         .any(|name| owned.contains(name.trim()))
+}
+
+#[cfg(test)]
+mod deference_tests {
+    //! Unit tests for [`deference_phrase`](super::deference_phrase).
+    //!
+    //! The predicate is the mechanical half of this plan's own acceptance
+    //! criterion, and it is a lexical search over prose: the two false shapes
+    //! below are sentences a child RFC would plausibly write, and both read as
+    //! the reverse of the appeal it exists to catch.
+
+    use super::deference_phrase;
+
+    /// An appeal to Ansible is caught, and quoted back in the diagnostic.
+    ///
+    /// `as Ansible does` is the recorded seeded fault for `CONF-1`, so it is
+    /// pinned here: a change that stopped catching it would leave that control
+    /// green and empty.
+    #[test]
+    fn an_appeal_is_flagged() {
+        assert_eq!(deference_phrase("as Ansible does"), Some("as Ansible"));
+        assert_eq!(deference_phrase("as Ansible"), Some("as Ansible"));
+        assert_eq!(
+            deference_phrase("like Ansible's fileglob"),
+            Some("like Ansible")
+        );
+        assert_eq!(
+            deference_phrase("This is like Ansible"),
+            Some("like Ansible")
+        );
+    }
+
+    /// A sentence that argues *against* the appeal is not an appeal.
+    ///
+    /// `Unlike Ansible` contains `like Ansible`, and flagging it would fail a
+    /// subsection that has made exactly the decision this check demands.
+    #[test]
+    fn the_reverse_of_an_appeal_is_not_flagged() {
+        assert_eq!(deference_phrase("Unlike Ansible, Netsuke has none"), None);
+        assert_eq!(deference_phrase("unlike_ansible"), None);
+        assert_eq!(deference_phrase("unlikeAnsible"), None);
+    }
+
+    /// Naming Ansible as a source of examples is not deference to it.
+    ///
+    /// `such as Ansible` introduces an instance, and its `as` is its own word,
+    /// so the leading boundary alone does not clear it.
+    #[test]
+    fn an_example_list_is_not_flagged() {
+        assert_eq!(deference_phrase("such as Ansible does today"), None);
+        assert_eq!(deference_phrase("helpers such as Ansible has"), None);
+        assert_eq!(deference_phrase("as with Ansible"), None);
+    }
+
+    /// A sentence mentioning Ansible for another reason is not flagged.
+    #[test]
+    fn an_unrelated_mention_is_not_flagged() {
+        assert_eq!(deference_phrase("because Ansible has one"), None);
+        assert_eq!(deference_phrase("Ansible"), None);
+        assert_eq!(deference_phrase(""), None);
+    }
 }

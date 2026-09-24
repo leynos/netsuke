@@ -33,9 +33,6 @@ pub(super) struct MapRow {
     pub(super) number: String,
     /// Repository-relative path of the child RFC, when it has been written.
     pub(super) written: Option<String>,
-    /// The child RFC's title.
-    #[expect(dead_code, reason = "read when a child's title is cross-checked")]
-    pub(super) title: String,
     /// The helpers this child owns, resolved from the `Owns` clauses.
     pub(super) owns: Vec<String>,
     /// The existing helpers this child adds an option to.
@@ -148,7 +145,6 @@ fn parse_row(row: &RawRow, sections: &BTreeMap<String, Vec<String>>) -> Result<M
     Ok(MapRow {
         number,
         written,
-        title: row.cell(1, "title")?.trim().to_owned(),
         owns: resolve_owns(row.cell(2, "owns")?, sections, row.line)?,
         optioned: backticked(row.cell(3, "optioned")?),
         step: row.cell(4, "roadmap step")?.trim().to_owned(),
@@ -251,6 +247,16 @@ pub(super) fn resolve_owns(
             )
         })?;
         let lower = clause.to_ascii_lowercase();
+        let takes_member = lower.contains(" except ") || lower.contains(" only ");
+        // Both member-taking forms read their member from the second backticked
+        // token, so a clause carrying a third is rejected here rather than read
+        // for its first two and truncated in silence. The bare-section form
+        // checks its own arity in the `else` arm below.
+        ensure!(
+            !takes_member || tokens.len() == 2,
+            "`Owns` clause {clause:?} at {RFC_0006}:{line} takes a section and one member, but \
+             names {tokens:?}"
+        );
         if lower.contains(" except ") {
             let excluded = tokens.get(1).with_context(|| {
                 format!("`Owns` clause {clause:?} at {RFC_0006}:{line} excludes nothing")

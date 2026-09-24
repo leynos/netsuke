@@ -369,8 +369,7 @@ helpers and the two serializers do not share a rejection set.
 
 - `from_json` accepts a string. It rejects `wrong_kind`, `syntax`,
   `duplicate_key`, `depth_exceeded`, and `length_exceeded`.
-- `from_yaml` accepts a string. It rejects `from_json`'s `wrong_kind`,
-  `syntax`, `depth_exceeded`, and `length_exceeded`, and adds `duplicate_key`,
+- `from_yaml` accepts a string. It rejects every `from_json` condition, and adds
   `unsupported_key` for a sequence or mapping key, `special_tag`, `merge_key`,
   `alias_budget`, and `document_count` for a stream that is not exactly one
   document.

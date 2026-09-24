@@ -113,10 +113,24 @@ pub(super) fn check_denied(survey: &Survey) -> Result<()> {
         "the deny set forbids {wrongly_denied:?}, which are accepted helpers the registries must \
          carry"
     );
+    // Both sets, not just `accepted`: `hash` is a *surveyed* spelling whose
+    // registered name is `text_hash`, so it is not in the accepted set by
+    // construction. What the message below claims is that the surveyed spelling
+    // reached neither set, and a future reject row naming `hash` would put it in
+    // `denied` — which is the case a check on `accepted` alone cannot see.
+    let hash_sets = [
+        (survey.accepted.contains_key("hash"), "the accepted set"),
+        (survey.denied.contains("hash"), "the deny set"),
+    ];
+    let present = hash_sets
+        .iter()
+        .filter_map(|(present, name)| present.then_some(*name))
+        .collect::<Vec<_>>();
     ensure!(
-        !survey.accepted.contains_key("hash"),
+        present.is_empty(),
         "`hash` is an existing Netsuke helper that RFC 0006 leaves unchanged, so it must be \
-         neither accepted nor denied"
+         neither accepted nor denied; it is in {}",
+        present.join(" and ")
     );
     Ok(())
 }

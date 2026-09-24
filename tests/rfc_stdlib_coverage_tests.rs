@@ -7,11 +7,15 @@
 //! not reliably partitioned by reading, so this binary derives the sets from
 //! RFC 0006's own tables and asserts the partition.
 //!
-//! Everything is derived from tracked Markdown and checked against tracked
-//! Markdown: nothing here transcribes an inventory that could drift from the
-//! documents. The derivation lives in the [`rfc_stdlib_coverage`] module tree,
-//! one module per source document, so a failure names the obligation it
-//! discharges rather than a line in a helper.
+//! The helper sets are derived from tracked Markdown and checked against
+//! tracked Markdown, so no count of names is carried here that could drift from
+//! the documents. What the derivation rests on are anchors it cannot parse out
+//! of prose — the seven candidate-table headings, the three renames, the three
+//! optioned helpers, and section 6.1's proposed-helper count — and each of those
+//! is transcribed and then witnessed against the document it came from rather
+//! than trusted as written. The derivation lives in the
+//! [`rfc_stdlib_coverage`] module tree, one module per source document, so a
+//! failure names the obligation it discharges rather than a line in a helper.
 //!
 //! Failures name the file and line of the offending row, because the fix is
 //! almost always an edit to a document rather than to this test.

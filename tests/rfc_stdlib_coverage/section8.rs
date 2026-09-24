@@ -58,12 +58,23 @@ pub(super) fn check_section_8(
 /// The end scan is fence-aware for the same reason the section-6 clause scan is:
 /// a `#` line inside a fenced example would otherwise read as a depth-1 heading
 /// and truncate the subsection, dropping every helper specified below it.
+///
+/// The start scan reads the heading as a prefix, because the subsection title
+/// follows the number and is not known in advance. It cannot use
+/// [`Section::unfenced_heading`], which compares whole lines; the fence scan is
+/// therefore folded in here, and the two scans stay consistent because both skip
+/// the same lines.
 fn subsection_lines<'a>(section_8: &Section<'a>, number: &str) -> Option<Vec<&'a str>> {
     let prefix = format!("### {number}.");
-    let start = section_8
-        .lines
-        .iter()
-        .position(|line| line.trim().starts_with(&prefix))?;
+    let start = {
+        let mut fence_state = Fences::default();
+        section_8
+            .lines
+            .iter()
+            .enumerate()
+            .find(|(_, line)| !fence_state.mark(line) && line.trim().starts_with(&prefix))
+            .map(|(offset, _)| offset)?
+    };
     let depth = heading_depth(section_8.lines.get(start)?)?;
     let rest = section_8.lines.get(start + 1..)?;
     let end = rest
