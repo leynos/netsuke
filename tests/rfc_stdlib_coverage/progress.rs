@@ -1,183 +1,25 @@
-//! The seven coverage checks RFC 0006's split is contracted against.
+//! The reported state of the split: totals, coverage status, links, and clauses.
 //!
-//! Each is a test entry point named for the obligation it discharges. They share
-//! one derivation — RFC 0006 section 7 for the accepted and deny sets, section
-//! 14.13 for the coverage map, the child RFCs' registries, the roadmap, and the
-//! link graph — so a single parse bug surfaces in whichever check depends on the
-//! part it corrupts.
+//! These five checks read what the documents *say* about the split rather than
+//! what they claim: the registries' running totals against RFC 0006 section
+//! 6.1's aggregate, the coverage map's own status column, the link graph between
+//! documents, the roadmap steps that schedule each capability, and each child's
+//! discharge of RFC 0006 section 6's clauses.
 //!
-//! Three of the seven are vacuously true until a child RFC exists. That is not a
-//! reason to defer them: their non-vacuity is supplied by the seeded-fault
-//! controls the `ExecPlan` records, which run against scratch copies at each
-//! plateau. A check written only once its subject exists is a check whose parser
-//! has never been exercised.
+//! They are grouped because a half-finished split satisfies every obligation in
+//! `super::partition`: the abandoned state and the finished state are
+//! indistinguishable to a bijection check. What these checks add is the ability
+//! to tell the two apart — `COV-4` prints the count of unwritten groups, and the
+//! totals are asserted over whatever prefix of the split exists.
+//!
+//! Split out of `checks.rs` to keep both modules under Whitaker's 400-line
+//! `module_max_lines` ceiling.
 
 use std::collections::BTreeSet;
 
 use anyhow::{Context, Result, ensure};
 
-use super::{Repo, clauses, links, map, registries, roadmap, survey};
-
-/// Context every check needs, derived once per call.
-struct World {
-    /// The parse of RFC 0006's dispositions and totals.
-    pub(super) survey: survey::Survey,
-    /// The parse of RFC 0006's coverage map.
-    pub(super) map: map::Map,
-    /// Every existing child RFC's registry.
-    pub(super) registries: Vec<registries::Registry>,
-    /// The roadmap's capability steps.
-    pub(super) roadmap: roadmap::Steps,
-    /// The failure path each child RFC's number resolves to, when written.
-    pub(super) child_paths: std::collections::BTreeMap<String, String>,
-}
-
-impl World {
-    /// Derive everything from the working tree.
-    pub(super) fn load(repo: &Repo) -> Result<Self> {
-        let survey = survey::derive_and_check(repo)?;
-        let sections = survey
-            .sections
-            .iter()
-            .map(|(section, names)| (section.clone(), names.iter().cloned().collect()))
-            .collect();
-        let parsed = map::parse(repo, &sections)?;
-        let reserved: Vec<String> = parsed.rows.iter().map(|row| row.number.clone()).collect();
-        let child_paths = parsed
-            .rows
-            .iter()
-            .filter_map(|row| {
-                row.written
-                    .as_ref()
-                    .map(|target| (row.number.clone(), target.clone()))
-            })
-            .collect();
-        Ok(Self {
-            survey,
-            map: parsed,
-            registries: registries::parse_all(repo, &reserved)?,
-            roadmap: roadmap::parse(repo)?,
-            child_paths,
-        })
-    }
-}
-
-/// Every accepted helper has exactly one owning child RFC, and the map's rows
-/// together claim every accepted helper exactly once.
-pub fn every_accepted_helper_has_exactly_one_owner(repo: &Repo) -> Result<()> {
-    let world = World::load(repo)?;
-    let ownership = world.map.ownership()?;
-
-    let accepted: BTreeSet<String> = world.survey.accepted.keys().cloned().collect();
-    let claimed: BTreeSet<String> = ownership.keys().cloned().collect();
-    let unowned: Vec<_> = accepted.difference(&claimed).take(10).cloned().collect();
-    ensure!(
-        unowned.is_empty(),
-        "the coverage map claims no owner for {unowned:?}; every accepted helper needs exactly one"
-    );
-    let extra: Vec<_> = claimed.difference(&accepted).take(10).cloned().collect();
-    ensure!(
-        extra.is_empty(),
-        "the coverage map claims {extra:?}, which RFC 0006 does not accept"
-    );
-
-    // A written child's registry must match the rows that claim it.
-    for registry in &world.registries {
-        let Some(claimed_by_row) = world
-            .map
-            .rows
-            .iter()
-            .find(|row| row.number == registry.number)
-        else {
-            return Err(anyhow::anyhow!(
-                "RFC {} exists at {} but the coverage map has no row for it",
-                registry.number,
-                registry.file
-            ));
-        };
-        let expected: BTreeSet<String> = claimed_by_row.claims().into_iter().collect();
-        let actual = registry.names();
-        let missing: Vec<_> = expected.difference(&actual).take(10).cloned().collect();
-        let unexpected: Vec<_> = actual.difference(&expected).take(10).cloned().collect();
-        ensure!(
-            missing.is_empty() && unexpected.is_empty(),
-            "RFC {}'s registry does not match its coverage map row: missing {missing:?}; \
-             unexpected {unexpected:?}",
-            registry.number
-        );
-        // A matching name set is not a matching registry. The namespace and the
-        // registration kind are parsed from the child's own row, so without
-        // this comparison a row could move a helper to the wrong namespace or
-        // mark an optioned helper as new and still pass every check — and the
-        // namespace is exactly what `COV-3`'s filter and test totals count.
-        check_rows_agree_with_survey(registry, &world.survey)?;
-    }
-    Ok(())
-}
-
-/// Each registry row's namespace and registration agree with RFC 0006.
-///
-/// The survey is the source of truth on both: its `accepted` rows carry the
-/// namespace section 7 assigns the helper, and `optioned` lists the three names
-/// that gain an option rather than being introduced. Comparing the two makes
-/// the registry columns load-bearing rather than decorative.
-fn check_rows_agree_with_survey(
-    registry: &registries::Registry,
-    survey: &survey::Survey,
-) -> Result<()> {
-    for row in &registry.rows {
-        let name = &row.helper.name;
-        let Some(accepted) = survey.accepted.get(name) else {
-            return Err(anyhow::anyhow!(
-                "{} registers {name}, which RFC 0006 section 7 does not accept",
-                registry.file
-            ));
-        };
-        ensure!(
-            accepted.namespace == row.helper.namespace,
-            "{} gives {name} namespace {}, but RFC 0006 section 7 places it in {}",
-            registry.file,
-            row.helper.namespace.label(),
-            accepted.namespace.label()
-        );
-        let optioned = survey.optioned.contains(name);
-        let expected = if optioned {
-            super::Registration::OptionAdded
-        } else {
-            super::Registration::New
-        };
-        ensure!(
-            row.registration == expected,
-            "{} marks {name} `{}`, but RFC 0006 {} it `{}`",
-            registry.file,
-            row.registration.label(),
-            if optioned { "lists" } else { "introduces" },
-            expected.label()
-        );
-    }
-    Ok(())
-}
-
-/// No child RFC registers a name RFC 0006 defers or rejects.
-pub fn no_forbidden_helper_is_registered(repo: &Repo) -> Result<()> {
-    let world = World::load(repo)?;
-    let mut violations = Vec::new();
-    for registry in &world.registries {
-        for name in registry.names() {
-            if world.survey.denied.contains(&name) {
-                violations.push(format!(
-                    "{} registers {name}, which RFC 0006 section 7 or section 9 forbids",
-                    registry.file
-                ));
-            }
-        }
-    }
-    ensure!(
-        violations.is_empty(),
-        "forbidden helpers registered: {violations:?}"
-    );
-    Ok(())
-}
+use super::{Registration, Repo, World, clauses, links, registries};
 
 /// The derived totals and the registries' purity aggregate agree with RFC 0006.
 pub fn totals_and_purity_aggregate_agree(repo: &Repo) -> Result<()> {
@@ -247,7 +89,7 @@ pub fn totals_and_purity_aggregate_agree(repo: &Repo) -> Result<()> {
     let optioned: usize = world
         .registries
         .iter()
-        .map(|registry| registry.with_registration(super::Registration::OptionAdded))
+        .map(|registry| registry.with_registration(Registration::OptionAdded))
         .sum();
     ensure!(
         pure <= want_pure && filesystem <= want_filesystem && environment <= want_environment,
