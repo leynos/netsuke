@@ -160,6 +160,12 @@ fn fence_run(line: &str) -> (char, usize) {
 
 #[cfg(test)]
 mod heading_tests {
+    //! Unit tests for [`heading_depth`](super::heading_depth).
+    //!
+    //! The predicate decides where every scan in this module tree ends, so its
+    //! boundaries are pinned here rather than only exercised through a document:
+    //! a wrong answer truncates a scan silently instead of failing it.
+
     use super::heading_depth;
 
     /// A citation is not a heading, and the two are one space apart.
