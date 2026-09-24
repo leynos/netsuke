@@ -111,7 +111,8 @@ args = ["-c"]
 
 Each `ShellDefinition` contains exactly `name`, `executable`, and `args`:
 
-- `name` must match `[a-z][a-z0-9_-]{0,62}`;
+- `name` must match `[a-z][a-z0-9_-]{0,62}` and must not be a reserved YAML
+  Boolean spelling (see the 2026-09-24 addendum);
 - `name` must not equal a built-in name, and merged names must be unique;
 - `executable` must be non-empty, valid UTF-8, and contain no NUL;
 - `executable` must be either a bare executable name or an absolute path;
@@ -289,10 +290,9 @@ shebang nor changes a script item's interpreter.
 
 ## Addendum
 
-The following same-day corrections amend the accepted decision above. The
-original decision text is retained so that its acceptance history remains
-auditable; the addenda define the currently adopted behaviour where they are
-more specific.
+The following corrections amend the accepted decision above. The original
+decision text is retained so that its acceptance history remains auditable; the
+addenda define the currently adopted behaviour where they are more specific.
 
 ### 2026-09-02: Host eligibility and validation correction
 
@@ -323,3 +323,31 @@ misconfigured outcomes. Finally, it revised lowering to resolve built-in or
 configured names into the execution IR and added the corresponding diagnostic
 outcome without changing the direct, platform-default, or named selection
 intent.
+
+### 2026-09-24: Reserve YAML Boolean spellings as shell names
+
+`ShellName` rejects the eight lower-case YAML 1.1 Boolean spellings, `true`,
+`false`, `yes`, `no`, `y`, `n`, `on`, and `off`, in addition to matching
+`[a-z][a-z0-9_-]{0,62}`. The rule belongs to the name type itself, so it
+applies equally to a Netsukefile `shell` selector and to a configured
+`ShellDefinition` name. Upper-case and mixed-case spellings already fail the
+name grammar.
+
+The manifest front-end parses YAML with YAML 1.1 Boolean inference before any
+typed deserializer runs, so an unquoted `shell: yes` or `shell: on` is the
+Boolean `true` and selects the platform default. Without this reservation, a
+quoted `shell: "on"` would be a registry name, and an operator could define a
+shell called `on`. The same word would then select the platform default when
+unquoted and the configured shell when quoted. Reserving the spellings closes
+that misroute at one boundary instead of relying on configuration validation
+alone, and a quoted Boolean spelling now fails when the manifest or
+configuration loads rather than later as an unknown name.
+
+A reserved word is a name-validation failure with its own typed error class. It
+is reported with the other malformed-name failures, before registry resolution,
+and it is distinct from the unknown, unsupported, unavailable, misconfigured,
+and trusted-environment-misconfiguration outcomes. Diagnostics should direct
+the author to the unquoted Boolean. Whether the manifest front-end should stop
+inferring YAML 1.1 Booleans remains a separate, manifest-wide decision for the
+contract consolidation in roadmap task 12.1.1. None of the built-in names is
+reserved by this rule. The ExecPlan for roadmap task 11.2.1 implements it.
