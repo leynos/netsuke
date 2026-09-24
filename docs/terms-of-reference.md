@@ -1,7 +1,8 @@
 # Netsuke — terms of reference
 
-- **Status:** Draft (v0.1). Reconstructed from existing artefacts; several
-  items await confirmation by the maintainer (see
+- **Status:** Draft (v0.2). Reconstructed from existing artefacts, then
+  reviewed with the maintainer on 2026-09-24 and 2026-09-25. The five remaining
+  open questions are tracked as issues #781 to #785 (see
   [section 9](#9-open-questions)).
 - **Audience:** The maintainer, contributors and reviewers deciding what
   Netsuke should and should not become, and anyone writing a design document,
@@ -15,7 +16,7 @@
   `docs/adr-026-manifest-environment-access-policy.md`, and the RFCs under
   `docs/rfcs/`. There is no `docs/context.md` yet; see
   [appendix B](#appendix-b-glossary).
-- **Last revised:** 2026-09-24.
+- **Last revised:** 2026-09-25.
 
 ## Reading this document
 
@@ -90,10 +91,10 @@ Three conditions make a general-purpose generator worth building now:
 The motivation is also, candidly, personal. The project began when the
 maintainer went looking for "Make, without the painful syntax and the
 dependence on shell" and found that the tool did not exist: an assistant asked
-for recommendations invented two of the three it offered. Netsuke's first user
-is its maintainer's own estate of repositories `(A1)`. That is a legitimate
-origin, but it means the external demand described in sections 3 and 4 is
-inferred from the landscape rather than measured `(Q12)`.
+for recommendations invented two of the three it offered. Netsuke's first users
+are its maintainer's own repositories, the dogfooding set in section 7.1
+`(A1)`. That is a legitimate origin, but it means the external demand described
+in sections 3 and 4 is inferred from the landscape rather than measured `(Q12)`.
 
 ## 2. Domain
 
@@ -139,7 +140,7 @@ Two domain facts shape what a build tool can promise:
 
 Anything that consults the network, the clock, the environment, or a subprocess
 while the plan is being produced makes that plan depend on something outside
-the repository. The domain calls such a plan *impure*. Netsuke already tracks
+the repository. Netsuke calls such a plan *impure*. Netsuke already tracks
 impurity for its template helpers; how far that concept extends to targets and
 remote inputs is open `(Q4)`.
 
@@ -228,7 +229,7 @@ accidental build-system authors are probably the largest group in the long run
 | Stakeholder                       | Interest                                                                                                  |
 | --------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | The maintainer (df12 Productions) | Owns direction; uses Netsuke across their own repositories; funds the work in time.                       |
-| The df12 repository estate        | The dogfooding set in section 7.1: the first real workload and the source of migration benchmarks.        |
+| The dogfooding repositories       | Listed in section 7.1: the first real workload and the source of migration benchmarks.                    |
 | OrthoConfig maintainers           | Netsuke depends on OrthoConfig for command, configuration, and schema machinery (`docs/roadmap.md`).      |
 | Downstream packagers              | Debian, RPM, macOS, and Windows installer consumers who need predictable releases and a Ninja dependency. |
 
@@ -469,7 +470,7 @@ Each goal is phrased so that an observer can check it.
 | OrthoConfig                                                                           | Command, configuration, and schema machinery                   | Yes for command-line and configuration work  |
 | `minijinja`, `serde-saphyr`                                                           | Template evaluation and YAML parsing                           | Yes for manifest semantics                   |
 | Pinned nightly Rust (Polonius, next-generation trait solver)                          | Compiles Netsuke                                               | Yes for contributors and source installs     |
-| The df12 repository estate                                                            | Supplies migration benchmarks and first real use               | Yes for G10 and the user-facing criteria     |
+| The dogfooding repositories                                                           | Supply migration benchmarks and first real use                 | Yes for G10 and the user-facing criteria     |
 | Progressive-enhancement RFCs 0021 to 0025 (PR #741), plus file sets and tool contexts | Supply the declared semantics an idiomatic migration relies on | Yes for completing the dogfooding migrations |
 
 ## 9. Open questions
@@ -477,10 +478,10 @@ Each goal is phrased so that an observer can check it.
 | ID  | Question                                                                                                                                                                                           | Why it matters                                                                                                                           | Resolved when                                                                                  | Suggested path                                                     |
 | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | Q4  | How far does purity extend: to targets that call impure helpers, and to pinned remote inputs used as dependencies? What rebuild policy applies to an impure target?                                | Determines whether remote inputs become first-class and how G4 and G6 interact; any answer that changes the format must land before 1.0. | An accepted RFC deciding impure-target rebuild semantics and remote resources as graph inputs. | RFC, tracked in issue #781 (implementation of remote inputs: #590) |
-| Q5  | Is content-hash invalidation in scope for any input class?                                                                                                                                         | Tests assumption A5; affects remote inputs and any future cache.                                                                         | Evidence of missed or spurious rebuilds in real use, or a decision tied to Q4.                 | Spike, then ADR                                                    |
-| Q7  | What plan-generation time budget is acceptable, and on what reference manifest?                                                                                                                    | Needed to turn the operational criterion into a measurable one.                                                                          | A budget and a benchmark manifest exist.                                                       | Spike                                                              |
-| Q9  | Who maintains reusable rule bundles for common ecosystems, and are any shipped with Netsuke?                                                                                                       | Decides whether G3 and G10 are met by the core or by an ecosystem that does not yet exist.                                               | An ownership and distribution decision for bundles.                                            | RFC amendment to RFC 0003                                          |
-| Q12 | How are crates.io downloads from the maintainer's own CI separated from external ones, do GitHub release and installer downloads count, and what thresholds mark success for each adoption signal? | Without a method the first external signal cannot be reported; without thresholds it cannot show success.                                | A documented counting method and a threshold with a date for each signal.                      | Spike, then elicitation                                            |
+| Q5  | Is content-hash invalidation in scope for any input class?                                                                                                                                         | Tests assumption A5; affects remote inputs and any future cache.                                                                         | Evidence of missed or spurious rebuilds in real use, or a decision tied to Q4.                 | Spike, then ADR; issue #782                                        |
+| Q7  | What plan-generation time budget is acceptable, and on what reference manifest?                                                                                                                    | Needed to turn the operational criterion into a measurable one.                                                                          | A budget and a benchmark manifest exist.                                                       | Spike; issue #783                                                  |
+| Q9  | Who maintains reusable rule bundles for common ecosystems, and are any shipped with Netsuke?                                                                                                       | Decides whether G3 and G10 are met by the core or by an ecosystem that does not yet exist.                                               | An ownership and distribution decision for bundles.                                            | RFC amendment to RFC 0003; issue #784                              |
+| Q12 | How are crates.io downloads from the maintainer's own CI separated from external ones, do GitHub release and installer downloads count, and what thresholds mark success for each adoption signal? | Without a method the first external signal cannot be reported; without thresholds it cannot show success.                                | A documented counting method and a threshold with a date for each signal.                      | Spike, then elicitation; issue #785                                |
 
 ### 9.1 Resolved questions
 
@@ -499,10 +500,6 @@ Each goal is phrased so that an observer can check it.
   and per-target descriptions already exist; recipe parameters are planned in
   RFC 0022. Non-goal 6 stands: file watching belongs to `inotifywait` and
   similar tools, which can run Netsuke. See goal G11.
-- **Q11 — What migration depth counts as done?** Resolved 2026-09-25: the
-  Makefile is retired, and the Netsukefile is idiomatic rather than a
-  mechanical translation of Make into YAML and Jinja. See goal G10 and
-  [section 7.1](#71-user-facing).
 - **Q6 — Is a Makefile migration aid in scope?** Resolved 2026-09-25: a guide
   is (G12); an automatic importer is not (non-goal 11).
 - **Q8 — What must be true for 1.0?** Resolved 2026-09-25: a stable
@@ -515,6 +512,10 @@ Each goal is phrased so that an observer can check it.
   also enables the next-generation trait solver, which AGENTS.md says the
   codebase assumes, so that feature's stabilization may gate the move too. See
   [section 8.1](#81-hard-constraints).
+- **Q11 — What migration depth counts as done?** Resolved 2026-09-25: the
+  Makefile is retired, and the Netsukefile is idiomatic rather than a
+  mechanical translation of Make into YAML and Jinja. See goal G10 and
+  [section 7.1](#71-user-facing).
 
 ## 10. Handoff
 
@@ -524,8 +525,9 @@ Each goal is phrased so that an observer can check it.
   on 1.0, because its answer can still change the Netsukefile format.
 - **ADR candidates.** Primary user segment (Q1, decided 2026-09-24; the ADR
   records it); purity semantics for targets and remote inputs (Q4);
-  content-hash invalidation (Q5); hermeticity and remote execution as a
-  permanent non-goal (non-goal 2).
+  content-hash invalidation (Q5); the 1.0 stability criterion (Q8, decided
+  2026-09-25); hermeticity and remote execution as a permanent non-goal
+  (non-goal 2).
 - **Glossary.** `docs/context.md` does not exist. The terms in
   [appendix B](#appendix-b-glossary) are the proposed first entries.
 - **Design-document candidates.** PR #741 already proposes RFCs for managed
@@ -543,6 +545,9 @@ Each goal is phrased so that an observer can check it.
 - `README.md`, "Security and command interpolation" and "Release and
   development status".
 - ADR-003, ADR-006, ADR-021, and ADR-026 under `docs/`.
+- `docs/release-admission-canaries.md` on the branch for pull request #780.
+- Issues #590 (URL dependency providers), #592 (Netsukefile linter), and #781
+  to #785 (the open questions in section 9).
 - Pull request #741, proposing RFCs 0021 to 0025 on managed states, typed task
   inputs, artefact ownership, contention classes, and progressive enhancement.
 - The `leynos/cuprum` Makefile at revision
@@ -563,6 +568,15 @@ Proposed first entries for `docs/context.md`:
   default.
 - **Recipe:** how a node runs: a rule reference, a command, or a script.
 - **Aggregate:** a node with dependencies and no recipe.
+- **Reluctant Make user:** a Make user held back from leaving it because task
+  runners are too limited and Bazel and CMake are too complex; Netsuke's
+  initial audience.
+- **Dogfooding repositories:** the six maintained repositories whose
+  migrations provide Netsuke's initial feedback loop (section 7.1).
+- **Idiomatic migration:** a migration that retires the Makefile and expresses
+  the build in Netsuke's own terms rather than translating Make line by line.
+- **Stable interface:** the state in which no further breaking change to the
+  Netsukefile format or command-line behaviour is planned; the 1.0 criterion.
 - **Plan:** the static, validated build graph Netsuke produces, and the Ninja
   file generated from it.
 - **Impure:** describes a plan or helper that consults the network, clock,
