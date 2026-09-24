@@ -51,9 +51,13 @@ name: Release Binary
           WiX CLI toolchain
         value: ${{ jobs.metadata.outputs.wix_extension_version }}
 
+# A release never cancels a run in progress: a second push of the same tag
+# would otherwise abandon a half-published release. It queues instead. A
+# superseded dry run is still cancelled, because release-dry-run.yml's own
+# group cancels the whole caller run, this called workflow included.
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   metadata:
