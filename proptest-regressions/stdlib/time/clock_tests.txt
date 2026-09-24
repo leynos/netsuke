@@ -1,0 +1,11 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+# Recorded while mutation-testing the property (applying the offset as an
+# arithmetic shift on the instant instead of re-expressing it), not from a
+# defect in the seam. It pins the smallest non-zero offset, which is the
+# boundary a shift-based implementation trips on first.
+cc 30381cb6b812ccc26d72c16cd14a060a5488890e5171d218053b0739f3269cdf # shrinks to sign = "+", hour = 0, minute = 0, second = 1

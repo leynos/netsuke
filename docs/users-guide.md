@@ -978,6 +978,51 @@ are ignored, matching the existing accessible reporter contract; applications
 can observe them through the bounded timing sink telemetry emitted by their
 configured metrics and tracing backends.
 
+### Inject the clock for deterministic tests
+
+`now()` does not read the host clock directly. It reads through an injectable
+`ClockProvider` seam held by `StdlibConfig`, so tests and other callers can pin
+the instant instead of racing a real clock. The default remains the ambient
+host clock, so existing templates and manifests are unaffected.
+
+- `StdlibConfig::with_clock` accepts a `ClockProvider`, replacing the wall-clock
+  source that `now()` reads.
+- `fixed_clock(instant)` builds a provider that always reports `instant`.
+- `system_clock()` builds the host-backed provider that the default
+  configuration uses.
+- `ClockInstant` re-exports the provider's timestamp type, so a caller can name
+  that type without adding its own `time` dependency.
+
+Registration captures the adapter that holds the provider, and each `now()`
+call invokes it to read the instant afresh, so a provider that yields a
+different instant on each call is observed by successive `now()` evaluations.
+Readings are normalized to UTC, and an explicit `offset=` argument re-expresses
+the same instant in the requested offset rather than changing it.
+
+Manifest-query registration still refuses `now()`, so the seam does not widen
+what a manifest query may evaluate.
+
+<!-- tested-example: guide-clock-snippet -->
+
+```rust
+use minijinja::Environment;
+use netsuke::stdlib::{self, StdlibConfig, fixed_clock};
+use time::macros::datetime;
+
+let instant = datetime!(2026-06-08 12:00:00 UTC);
+let config = StdlibConfig::from_current_dir()
+    .expect("open workspace")
+    .with_clock(fixed_clock(instant));
+
+let mut env = Environment::new();
+stdlib::register_with_config(&mut env, config).expect("register stdlib");
+let rendered = env.render_str("{{ now() }}", ()).expect("render");
+assert_eq!(rendered, "2026-06-08T12:00:00Z");
+```
+
+This snippet mirrors the executable doctest on `with_clock` in the API
+documentation, rather than the YAML-only examples elsewhere in this guide.
+
 ### Use the canonical build graph
 
 `BuildGraph` stores each logical build edge once. Every output alias, explicit

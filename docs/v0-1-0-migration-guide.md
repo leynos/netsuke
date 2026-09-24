@@ -108,6 +108,7 @@ impact
 | Fetch redirects              | Every redirect destination is now evaluated against the network policy before it is requested, so a redirect can no longer reach a host, scheme, or address the policy refuses. Chains stop after five redirects, a repeated destination is refused as a loop, and URL credentials are removed when the origin changes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | [Users' guide](users-guide.md#network-fetch-policy) and [ADR-023](adr-023-revalidate-fetch-redirects.md) |
 | Manifest environment access  | New optional exact-name `env()` allow and block lists. Existing manifests retain default-allow behaviour when neither list is configured; an active allowlist enables default-deny and a block always wins.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | [Users' guide](users-guide.md#control-manifest-environment-access)                                       |
 | File-reading filters         | The `contents`, `linecount`, `hash`, and `digest` filters now read under one 8 MiB default byte budget; a symlink final component is rejected unless `follow_symlinks=true` opts in, while FIFOs and devices are rejected outright, and per-call `max_bytes` can only narrow the budget.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | [Configure file reading limits](users-guide.md#configure-file-reading-limits)                            |
+| Clock provider               | The stdlib `now()` helper reads through an injectable `ClockProvider`; `StdlibConfig::with_clock` pins the instant for tests, while the default remains the ambient system clock.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | [Users' guide](users-guide.md#inject-the-clock-for-deterministic-tests)                                  |
 
 ## Bound manifest evaluation
 
@@ -515,6 +516,25 @@ The `contents` and `linecount` filters require UTF-8 input and report an error
 for other byte sequences; `hash` and `digest` stay byte-oriented and accept any
 content. See the [users' guide](users-guide.md#configure-file-reading-limits)
 for the full policy and its diagnostics.
+
+## Inject the clock for deterministic tests
+
+The stdlib `now()` helper reads the current instant through an injectable
+provider rather than the host clock directly. `StdlibConfig::with_clock`
+accepts a `ClockProvider`, and `fixed_clock(instant)` builds one that always
+reports a given instant, so a render calling `now()` can be asserted exactly
+instead of racing a real clock.
+
+The addition is opt-in. The default remains the ambient host clock, which
+`system_clock()` names explicitly, so existing templates and manifests are
+unaffected. Registration captures the adapter that holds the provider, and each
+`now()` call invokes it to read the instant afresh. Readings are normalized to
+UTC before the helper's `offset=` argument re-expresses the same instant in the
+requested offset. Manifest-query evaluation still refuses `now()`, so the seam
+does not widen what a query may call.
+
+See the [users' guide](users-guide.md#inject-the-clock-for-deterministic-tests)
+for the worked example.
 
 ## Diagnostics
 
