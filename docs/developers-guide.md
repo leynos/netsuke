@@ -3666,8 +3666,11 @@ Netsuke uses a mixed strategy:
 - Behavioural test discovery is defined in `tests/bdd_tests.rs`.
 - Dependabot configuration lives in `.github/dependabot.yml`, with
   `tests/dependabot_config_tests.rs` validating the Cargo, GitHub Actions, and
-  `rust-toolchain` update policies, including their configured schedules,
-  labels, directories, and open pull request limits where applicable.
+  `rust-toolchain` update policies, including their daily schedules, labels,
+  directories, and open pull request limits where applicable. Each ecosystem
+  has one trailing catch-all group limited to minor and patch updates, so
+  majors arrive one per pull request; `group_policy.rs` under
+  `tests/dependabot_test_support/` owns that check.
 - **Property-based tests** use `proptest` and take two shapes: some live in
   `*_tests.rs` modules adjacent to the code under test, included via
   `#[cfg(test)] #[path = "..."] mod ...;` declarations; others are standalone
@@ -6962,10 +6965,12 @@ minimal feature for returning an owned digest.
 Because these crates share their breaking changes, `.github/dependabot.yml`
 collects them into a `rustcrypto` group for the `cargo` ecosystem, so the next
 major arrives as one buildable pull request rather than several that cannot
-compile individually. Add any new RustCrypto crate to that group's `patterns`
-list at the same time as the dependency itself. Never work around a lockstep
-break by pinning one member to an exact version: that blocks the whole family,
-which is what issue #477 had to undo.
+compile individually. It is the one group permitted to take majors, and it is
+listed before the `minor-and-patch` catch-all because Dependabot assigns a
+dependency to the first group that matches it. Add any new RustCrypto crate to
+that group's `patterns` list at the same time as the dependency itself. Never
+work around a lockstep break by pinning one member to an exact version: that
+blocks the whole family, which is what issue #477 had to undo.
 
 Both removals are pinned by `tests/sha2_migration_guard_tests.rs`, which
 asserts at compile time that the digest type does not implement
