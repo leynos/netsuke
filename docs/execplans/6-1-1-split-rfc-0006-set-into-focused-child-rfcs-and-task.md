@@ -483,7 +483,53 @@ Hard invariants. Violating one requires escalation, not a workaround.
   only because that test is unparameterized, which is precisely the latent
   defect main's comment was written to prevent. The rebase should adopt the
   anchored form.
-- [ ] `EP-M3` RFC 0013, structured data interchange (step 6.2). **Go/no-go.**
+- [x] (2026-09-25) **`EP-M3` go/no-go: GO.** RFC 0013 was put to an independent
+  reviewer against the plan's own criterion, applied verbatim. Of the eleven
+  section 5 subsections, ten were judged SUBSTANTIVE and one VACUOUS. The
+  substantive ten are not re-wordings: five of them (5.3, 5.6, 5.7, 5.8, 5.9)
+  force decisions a reader of RFC 0006 section 6 could not have predicted — the
+  `indent` range asymmetry and its rationale, stream-wide budgets with the
+  stream total in the diagnostic, callables and `now()` rejected as
+  `unsupported_kind`, the `interchange` module segment rather than `json`/
+  `yaml`, the trailing-newline asymmetry pinned by a test at each end, and an
+  explicit refusal to invent a looser test relation for `sort_keys`. The three
+  "no bite" clauses (5.4, 5.5, 5.11) satisfy the criterion's own exception by
+  naming the specific clause feature that cannot fire, which is checkable. The
+  reviewer's strongest passage was 5.8's serializer bound: **"The serializers
+  enforce nothing, and that is a decision rather than an omission. Neither
+  allocates proportionally to anything but its input, so a bound would reject
+  documents a parser had already accepted. The row reads 'none' instead of
+  being left blank so that a reviewer sees the absence was chosen."** The seven
+  remaining child RFCs are therefore written.
+- [x] (2026-09-25) **Two defects the go/no-go found, both fixed in `e45c161e`.**
+  The one vacuous subsection was 5.10, which restated clause 6.10 and
+  re-reported an open question section 5.2 already carries; it now records the
+  real naming question this group creates. More seriously, 5.6 claimed
+  `from_yaml_all` "rejects every `from_yaml` condition", which contradicts RFC
+  0006 section 8.1: an empty stream yields an empty sequence and multi-document
+  input is the helper's purpose, so `document_count` does not apply. That is a
+  rejection the implementer would have written and a test would then have had
+  to defeat. The same over-broad phrasing sat in the 5.8 bounds table. Both
+  corrected. **This is the go/no-go earning its keep**: a structural test
+  cannot see this class of error, because `CONF-1` only requires each
+  subsection to name a helper and avoid deference phrasing, and the wrong
+  sentence did both.
+- [x] (2026-09-25) Rebased onto `origin/main` (`397fb589`, 55 commits). Two
+  conflicts, both predicted by `git merge-tree`: `.config/nextest.toml` and
+  `docs/contents.md`. Both were resolved by taking main's version and
+  re-applying this branch's addition, rather than transcribing the conflict
+  hunks — main had reorganized the nextest overrides into `nested-cargo-builds`
+  groups and our hunk was the extraction of the Windows override it removed.
+  Our addition now uses main's mandated anchored filter form,
+  `test(/^coverage_map_status_is_reported($|::)/)`, closing the
+  latent-unhooking defect recorded above. Verified after: `main` is an ancestor,
+  `origin/main..HEAD` is 25, `HEAD..origin/main` is 0, `e2fc2083` and
+  `33a293a7` are now ancestors, and the coverage contract passes 14/14 with
+  COV-4 still reporting "1 of 8 capability groups written; 7 remaining".
+- [ ] `EP-M3` RFC 0013, structured data interchange (step 6.2). **Post-rebase
+  gates owed.** The verdict is GO and the content is settled; the remaining
+  acceptance item is "every gate green" on the rebased tree, which the 55
+  incoming commits make a fresh question rather than a formality.
 - [ ] `EP-M4` RFC 0014, mapping and sequence transforms (step 6.3).
 - [ ] `EP-M5` RFC 0015, ordered collection algebra and truth predicates (6.4).
 - [ ] `EP-M6` RFC 0016, pattern and version predicates (step 6.5).
