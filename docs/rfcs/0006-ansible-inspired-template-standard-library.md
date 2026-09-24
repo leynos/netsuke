@@ -207,7 +207,8 @@ the third has since been closed.
   - A generic plugin or lookup dispatcher. See section 10.5.
   - Any change to the v0.1.0 release scope.
   - Any change to the existing `hash` contract. See section 11.1.
-  - Implementation. This RFC specifies behaviour; child RFCs implement it.
+  - Implementation. This RFC specifies behaviour; child RFCs carry it, and the
+    roadmap tasks in steps 6.2 to 6.9 are what schedule the work.
 
 ## 5. Licensing and provenance boundary
 
@@ -437,7 +438,11 @@ Netsuke registers exactly **one** name per capability.
 
 ### 6.11. Documentation and testing obligations
 
-Each accepted helper requires all of the following before its child RFC closes.
+Each accepted helper requires all of the following before its roadmap task in
+the owning child RFC's step is complete. The obligations attach to the helper,
+not to the child RFC document: a child RFC states each helper's contract and
+enumerates these obligations, while the checklist that tracks them is the
+roadmap task the helper is scheduled under.
 
 1. An entry in `docs/stdlib-yaml-and-jinja-guide.md` giving its signature,
    purity label, prose contract, edge cases, and an example, in the format the

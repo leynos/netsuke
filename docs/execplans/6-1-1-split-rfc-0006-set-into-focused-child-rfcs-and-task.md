@@ -239,8 +239,8 @@ Hard invariants. Violating one requires escalation, not a workaround.
   `lookup`, `win_dirname`, `expanduser` all denied; `basename`, `dirname`,
   `abs`, `glob`, `shell_quote`, `splitdrive`, `text_hash` all permitted), and
   `hash` is correctly neither — it is an existing helper RFC 0006 leaves
-  unchanged, so it leaves scope entirely rather than counting as accepted. **
-  `EP-M0`'s class-split recovery was falsified**: the recorded rule yields 8
+  unchanged, so it leaves scope entirely rather than counting as accepted.
+  `EP-M0`'s class-split recovery was falsified: the recorded rule yields 8
   alias / 24 exists / 18 principle, not table 11's 22/10/18. The *principle*
   third is right and every principle row is backtick-free, but the 32-row
   remainder splits 8/24 against the table's 10/22, the difference being exactly
@@ -324,6 +324,29 @@ Hard invariants. Violating one requires escalation, not a workaround.
   code does not have, and three plan passages still asserted the note column
   discriminates the reject classes, which `D10` had already recorded as
   falsified. Each fix was proven by a probe rather than by inspection; see
+  `Surprises & discoveries`.
+- [x] (2026-09-24) `EP-M2` second CodeRabbit pass, thirteen finding records
+  collapsing to nine themes, all actioned. Three mattered beyond tidying.
+  `section7::apply_optioned` assigned `Namespace::Filter` to all three optioned
+  helpers while RFC 0006 section 3.2 lists `glob` under Functions, and the
+  namespace comparison added in the previous pass reads that value — so `COV-1`
+  would have failed RFC 0018, whose group owns `glob`, for being *correct*.
+  That is a defect this task introduced, not inherited. `CONF-1`'s mechanical
+  half was never implemented: the discharge *table* was parsed and compared,
+  but the section 5 subsections it points at were read by nothing, so the empty
+  stub, the generic discharge, and the Ansible-deference appeal were all
+  unchecked — the plan listed them as obligations and the code did not carry
+  them. And the link-target number was never compared against the reserving
+  row, so row `0013` could link to `0014-….md` and every check would resolve
+  the link, find the file, and pass while the registry filed those helpers
+  under the wrong RFC. The remainder were narrower: duplicate clause ids were
+  absorbed by a `BTreeSet` in two places, `child_number` accepted non-numeric
+  link text, the totals and purity aggregate were gated on all eight groups
+  being written so nothing could contradict them until the split was over,
+  ADR-021 claimed the test "transcribes none of them" when it carries four
+  anchor lists, RFC 0006 tied delivery to child-RFC closure where `D8` ties it
+  to roadmap tasks, and a stray `**` in this plan was followed by a newline and
+  so rendered literally. Every fix was proven by a probe. See
   `Surprises & discoveries`.
 - [ ] `EP-M3` RFC 0013, structured data interchange (step 6.2). **Go/no-go.**
 - [ ] `EP-M4` RFC 0014, mapping and sequence transforms (step 6.3).
@@ -554,6 +577,83 @@ Hard invariants. Violating one requires escalation, not a workaround.
   the heading is parsed rather than prose. The general lesson: a template
   committed in prose is untested code, and the milestone that first consumes it
   is the wrong place to discover that.
+
+- Observation: the cross-check added to catch a *child's* wrong namespace read
+  a value the same task had hardcoded wrong, so the guard would have failed a
+  correct document. Evidence: `section7::apply_optioned` inserted every
+  optioned helper as `Namespace::Filter`, while RFC 0006 section 3.2 lists
+  `glob` under Functions; `check_rows_agree_with_survey` compares the child's
+  namespace cell against that value, so `COV-1` would have failed RFC 0018 —
+  the group that owns `glob` — for being right. Impact: found only because the
+  previous pass's fix was re-derived from the document rather than trusted. A
+  check is a comparison, and a comparison is only as good as its weaker side:
+  hardening the side that reads the untrusted document is pointless while the
+  trusted side is a literal nobody re-reads. `Optioned` now carries its
+  namespace, sourced from section 3.2, and the same reasoning is why the
+  optioned rows' purity is parsed from the child's own cell rather than
+  defaulted.
+
+- Observation: `CONF-1` existed as an obligation in this plan for six days while
+  the code implemented only its table half. Evidence: the plan's `CONF-1` says
+  each subsection must be non-empty, name an owned helper or carry the `D6`
+  escape phrase, and contain no Ansible-deference phrase; `clauses.rs` parsed
+  the `Clause | Discharge` table and compared its id set, and read no
+  subsection body at all. Every subsection check the plan names was unchecked,
+  and every control in `CONF-1`'s non-vacuity list would have passed — because
+  none of them was implemented either. Impact: this is the plan's own principal
+  risk, left unguarded by the very obligation written to guard it, and it was
+  found by review rather than by a failure. The gap was invisible precisely
+  because the check that *did* exist passed: a green suite one obligation short
+  of what the plan claims is indistinguishable from a complete one. The general
+  lesson is that an obligation's prose and its implementation need to be read
+  against each other once, deliberately, and that the plan's non-vacuity
+  controls are the cheapest way to do it — a control that cannot fail is a
+  spec, not a test.
+
+- Observation: the spec of the `CONF-1` check, written *before* it parsed the
+  ADR's worked specimen, turned out to reject that specimen. Evidence:
+  subsection 5.9 of the `EP-M2` worked section named thirteen diagnostic codes
+  and no helper, so `names_an_owned_helper` was false and the `D6` escape
+  phrase was absent — a true positive, not a false one. Impact: the specimen
+  was demonstrating clause 6.9 by enumerating the group's contribution to it,
+  which is exactly the "specific enough to be worth writing" standard the rule
+  is meant to enforce, and the rule's own vocabulary was still satisfied by
+  naming the codes' subject. The fix names all five helpers alongside the codes
+  rather than weakening the check, because the check is right about what a
+  reader needs. This is the useful shape of the interaction: a rule written
+  against a document it has not read yet is the only version of the rule that
+  can surprise you, and it is worth reading the two against each other before
+  the rule is relied on rather than after.
+
+- Observation: two of the three shapes `CONF-1` checks for are already caught
+  when the class is written *inconsistently*, and only the third needs the new
+  check. Evidence: `check_manifest_query` (`registries.rs:240`) already rejects
+  a row whose purity class and manifest-query cell disagree — table 2's own
+  rule — so a probe setting `from_json` to `Subprocess-observing` with the cell
+  left at `Yes` fired that check, not the new one. The new aggregate checks
+  caught it only once the probe was made *consistent* (class
+  `Subprocess-observing`, cell `No`), which is the case nothing else sees: the
+  row is internally coherent and still contradicts section 6.1's "no proposed
+  helper is". Impact: the two checks are complementary rather than redundant,
+  and a probe that proves one is live must be constructed so the other cannot
+  answer first. Worth remembering when adding checks to a suite that already
+  guards adjacent invariants.
+
+- Observation: the two totals checks were gated on all eight capability groups
+  being written, so neither could fire until the split was complete. Evidence:
+  the generator's aggregate was wrapped in `if world.map.unwritten() == 0`,
+  which is true only when no child exists yet or all eight do; the `EP-M3`
+  control writes exactly one child, so the milestone it was written for could
+  not trigger it. Impact: the totals are now asserted partially as well as
+  exactly — an upper bound on each purity class and on the optioned count runs
+  at every prefix, and the exact equality runs only when complete. The bound is
+  sound because section 6.1's three counts are a budget, not a target: a
+  half-written split can spend too much of it but can never spend too little.
+  The forbidden classes (clock, network, subprocess) are asserted as hard zeros
+  at every prefix, because section 6.1 states no proposed helper is any of them
+  and a zero is not a budget. The general shape is worth reusing: a check
+  guarded by a completion condition is a check whose subject is the completion,
+  not the property.
 
 ### `EP-M0` audit results (2026-09-11)
 
@@ -1231,12 +1331,24 @@ row so failures name a location.
 - Domain: three totals and three purity counts.
 - Artefact: as above.
 - Evidence: same command. The purity half is necessarily partial until every
-  child exists; it compares against the aggregate over written children and
-  asserts the full totals only when the coverage map has no unwritten row.
+  child exists, and it is now partial in two forms rather than being deferred
+  whole. An upper bound on each purity class and on the optioned count runs at
+  every prefix of the split, and the exact equality runs only when the coverage
+  map has no unwritten row. The bound is sound because section 6.1's three
+  counts are a budget: a half-written split can spend too much of it but never
+  too little. The classes section 6.1 forbids outright — clock-observing,
+  network-observing, and subprocess-observing — are asserted as hard zeros at
+  every prefix, because "no proposed helper is" is not a budget.
 - Non-vacuity: change one registry row's purity class from pure to
-  filesystem-observing and expect a failure reporting 51 against 52. Change a
-  helper's namespace and expect the filter and test totals to fail. Introduce a
-  purity class not among table 2's six values and expect a vocabulary failure.
+  filesystem-observing and expect a failure reporting 5 filesystem-observing
+  where section 6.1 states 4 in total; observed at `EP-M2`'s second review,
+  firing with one of eight groups written. Change a helper's namespace and
+  expect the filter and test totals to fail. Introduce a purity class not among
+  table 2's six values and expect a vocabulary failure. Set one row to a
+  forbidden class *consistently* — the class and its manifest-query cell
+  changed together — because changing the class alone is caught first by
+  `check_manifest_query`, which is a different and narrower rule; the new
+  aggregate check is only reachable on a row that is internally coherent.
 
 ### Obligation `COV-4`: the coverage map reports progress honestly
 
@@ -1327,13 +1439,35 @@ row so failures name a location.
   are empowered to renumber.
 - Domain: RFCs 0013 to 0020 against section 6's clause list.
 - Artefact: as above.
-- Evidence: same command, scoped to children that exist.
-- Non-vacuity: delete subsection 5.8 from a scratch copy of RFC 0015 and expect
-  a failure naming the missing clause and the file. Replace a subsection body
-  with a comment and expect an empty-body failure. Replace one with prose
-  naming no owned helper and lacking the escape phrase, and expect a
-  generic-discharge failure. Insert the words "as Ansible does" and expect a
-  deference failure.
+- Evidence: same command, scoped to children that exist. Also checked: the two
+  id sets must be equal, so a section 5 subsection with no discharge-table row
+  — or a row with no subsection — fails even though each is well-formed alone.
+- **Amendment (2026-09-24): the mechanical half was implemented at `EP-M2`, six
+  days after it was specified, and until then only the table half existed.**
+  The obligation above was written as prose and the code compared id sets, so
+  the empty stub, the generic discharge, and the deference appeal were
+  unenforced; every non-vacuity control below would have passed, because none
+  was implemented either. See `Surprises & discoveries` for how it was found
+  and why a green suite one obligation short of its plan is indistinguishable
+  from a complete one.
+- Non-vacuity: all four controls were run at `EP-M2`'s second review, against a
+  probe child RFC mounted from the `ADR-021` worked specimen with the coverage
+  map's row `0013` flipped to written. Deleting subsection 5.8's body failed
+  with "is subsection 5.8. Resource bounds of section 5 with an empty body".
+  Replacing 5.7's body with "This group meets the clause by construction"
+  failed as a generic discharge, naming the subsection and quoting the `D6`
+  escape phrase it did not carry. Inserting "as Ansible does" failed with
+  "justifies a helper by appealing to Ansible". A duplicated 5.7 heading and a
+  duplicated `6.7` table row each failed as a second subsection or row for that
+  clause. The probe is the `EP-M3` rehearsal as well: with the specimen mounted
+  and the map row flipped, all ten tests passed, which is the state `EP-M3`
+  must reach.
+- **The specimen itself failed this check, and the check is right.** Subsection
+  5.9 of the `ADR-021` worked section named thirteen diagnostic codes and no
+  helper. It was corrected by naming all five helpers alongside the codes, not
+  by weakening the check; a rule written before the document it grades is the
+  only version that can surprise its author, which is why the two were read
+  against each other here rather than at `EP-M3`.
 - **Residual gap.** Whether section 5.7 genuinely discharges canonical equality
   for `subset`, as opposed to restating clause 6.7, is a judgement no test
   makes. This is the substantive product of the task and it rests on review,
@@ -1455,9 +1589,111 @@ width; nextest wraps them the same way at a terminal.
 controls need something to corrupt — a registry row and a clause body. The
 first milestone that supplies both is `EP-M3`, not `EP-M4` as this section
 first said: `EP-M3` delivers RFC 0013, which owns five registry rows and
-discharges all eleven clauses. Those controls therefore run at `EP-M3`, and
-`EP-M2`'s liveness probe already exercised them once against the worked
-specimen.
+discharges all eleven clauses.
+
+`EP-M2`'s second review ran them ahead of `EP-M3`, by mounting the `ADR-021`
+worked specimen as a probe child RFC and flipping coverage map row `0013` to
+written. All four `CONF-1` controls fired, as did the `COV-3` partial-purity
+bound and both new link-number checks; the transcripts are in
+`Control transcripts (2026-09-24)`. The probe is also the rehearsal for
+`EP-M3`: with the specimen mounted, all ten tests passed, which is the state
+`EP-M3` has to reach with a real child.
+
+### Control transcripts (2026-09-24)
+
+The `EP-M2` review's controls were run through a scratch harness
+(`/tmp/probe.sh`, not tracked) that restores both the survey and the probe
+child from pristine copies, applies one Python mutation, runs
+`cargo nextest run --test rfc_stdlib_coverage_tests`, and prints the distinct
+error lines. Each ran against the probe child, and each failed for its own
+reason. Quoted messages are wrapped for width.
+
+- `CONF-1`, empty body. The body of subsection 5.8 is deleted, leaving the
+  heading:
+
+  ```text
+  Error: docs/rfcs/0013-structured-data-interchange-helpers.md:134 is
+  subsection 5.8. Resource bounds of section 5 with an empty body
+  ```
+
+- `CONF-1`, generic discharge. Subsection 5.7's body is replaced with "This
+  group meets the clause by construction", which names no owned helper and does
+  not carry the `D6` escape phrase:
+
+  ```text
+  Error: docs/rfcs/0013-structured-data-interchange-helpers.md:112 is
+  subsection 5.7. Canonical value equality, whose body names none of the
+  helpers this RFC owns and does not read "No additional obligation beyond RFC
+  0006 section 6.". A reviewer cannot tell it apart from a restatement of the
+  clause it discharges
+  ```
+
+- `CONF-1`, deference. "as Ansible does" is inserted into subsection 5.8:
+
+  ```text
+  Error: docs/rfcs/0013-structured-data-interchange-helpers.md:134 is
+  subsection 5.8. Resource bounds, which justifies a helper by appealing to
+  Ansible ("as Ansible"). RFC 0006 surveys Ansible; it does not adopt its
+  choices
+  ```
+
+- `CONF-1`, duplicate clause. A second `### 5.7.` subsection is inserted before
+  the discharge table, and separately a second `|`6.7`|` row is added to it.
+  The two are distinct checks and each fires alone:
+
+  ```text
+  Error: docs/rfcs/0013-structured-data-interchange-helpers.md:190 is a second
+  section 5 subsection for clause 6.7
+
+  Error: docs/rfcs/0013-structured-data-interchange-helpers.md:233 discharges
+  clause 6.7 a second time
+  ```
+
+- `COV-3`, partial purity bound. All five registry rows are set to
+  filesystem-observing with their manifest-query cells changed to `No`, at one
+  of eight groups written. Changing the class *alone* fires
+  `check_manifest_query` instead, so the probe must keep the row internally
+  coherent to reach the new check:
+
+  ```text
+  Error: the registries already declare 0 pure / 5 filesystem / 0 environment;
+  RFC 0006 section 6.1 states only 52/4/1 in total
+  ```
+
+- `COV-3`, forbidden class as a hard zero. One row is set to
+  subprocess-observing with its cell at `No`:
+
+  ```text
+  Error: the registries declare 1 helper(s) `subprocess-observing`; RFC 0006
+  section 6.1 states no proposed helper is
+  ```
+
+- Link-target number. Row `0013`'s link is retargeted to `0014-….md`, and
+  separately its link *text* is changed to `0014` while the target is
+  unchanged. Both fail, naming the disagreement:
+
+  ```text
+  Error: coverage map row for RFC 0013 at
+  docs/rfcs/0006-ansible-inspired-template-standard-library.md:2070 links to
+  0014-mapping-and-sequence-transform-helpers.md, whose number is 0014
+
+  Error: coverage map row for RFC 0014 at
+  docs/rfcs/0006-ansible-inspired-template-standard-library.md:2070 links to
+  0013-structured-data-interchange-helpers.md, whose number is 0013
+  ```
+
+  Restoring the link but reverting the cell to a bare `` `0013` `` while the
+  status stays `written` fails as "is marked written but its child RFC cell is
+  not a link".
+
+- Green baseline. With the probe child mounted and the map row flipped, and no
+  fault seeded, all ten tests pass and the reported count reads
+  `coverage map: 1 of 8 capability groups written; 7 remaining`. This is the
+  state `EP-M3` must reach.
+
+The harness restored both documents from their pristine copies after every
+probe, and the working tree carried only the nine intended files afterwards;
+`git diff` on the survey showed the two prose edits and nothing else.
 
 ### Axioms
 

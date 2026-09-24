@@ -63,7 +63,17 @@ schedules.
 ### Technical requirements
 
 - The allocation is checked by a repository test that reads the survey RFC,
-  the child RFCs, and the roadmap, and transcribes none of them.
+  the child RFCs, and the roadmap, and derives from them every fact it asserts:
+  the accepted and deny sets, each helper's namespace and registration kind,
+  the table 11 counts, the section 6.1 purity aggregate, section 6's clause
+  list, each child's registry, and the roadmap steps. The test does carry a
+  small number of constants, and they are deliberately not facts about the
+  survey but anchors for reading it — which subsection numbers hold candidate
+  tables, the three renamed helpers, the three optioned helpers, and the
+  proposed-helper count used to cross-check the derived one. An anchor is prose
+  the parser has to be told where to look for; a fact is prose the parser is
+  asked to reproduce. Only the latter can go stale in a way a reviewer would
+  miss, and the amendment procedure below is what keeps the former aligned.
 - The test names the file and line of a violation and states the violated
   obligation.
 - The survey RFC's own disposition sections are not moved, so an abandoned
@@ -482,9 +492,12 @@ Each code's Fluent key is the code's reason in upper snake case under
 
 The module segment is `interchange` rather than `json` or `yaml`, because one
 enum serves both parsers and both serializers and the code names the capability
-group, not the syntax. Every `Error::new` call in the group's leaf functions is
-replaced by a variant of this enum; clause 6.9 rejects ad hoc construction at
-this scale, and a group with thirteen conditions is the case it names.
+group, not the syntax. All five helpers — `from_json`, `from_yaml`,
+`from_yaml_all`, `to_yaml`, and `to_nice_json` — reach their errors through this
+enum: every `Error::new` call in the group's leaf functions is replaced by a
+variant of it, so a caller can tell an interchange failure from a manifest
+diagnostic by the code alone. Clause 6.9 rejects ad hoc construction at this
+scale, and a group with thirteen conditions is the case it names.
 
 ### 5.10. Naming and alias policy
 
@@ -543,7 +556,7 @@ serialization-determinism property it names is the same proposition as section
 When a helper is added, removed, or renamed after the split, edit the
 touchpoints below in this order. The order matters only in that each step's
 subject must exist before the next step can cite it; the coverage test then
-fails until all five agree.
+fails until all of them agree.
 
 1. **The survey's section 7 row** — record or change the disposition, and cite
    the section 8 subsection that specifies the helper.
@@ -556,6 +569,29 @@ fails until all five agree.
    helper, namespace, registration kind, purity class, and manifest query.
 5. **The roadmap task** in the owning step — name or rename the helper there,
    so the capability remains scheduled.
+
+Three further touchpoints are not per-helper, and each is reached by a change
+of a different kind. They are listed separately because a helper edit does not
+touch them and an edit that does is easy to forget:
+
+1. **The survey's section 3.2 namespace lists** — a helper added to a namespace
+   the survey does not already list there belongs in the corresponding list.
+   The test derives each helper's namespace from section 7, so a section 3.2
+   list is not what it reads; the lists are what a _reviewer_ reads, and a
+   helper absent from both is a helper the survey never introduces.
+2. **The survey's section 6.1 purity statement and table 11 counts** — both are
+   prose counts written in number words, and both are derived rather than
+   transcribed by the test. Changing a helper's purity class therefore means
+   editing the sentence that states how many helpers are pure, and adding or
+   removing an accepted helper means editing table 11's totals. The test fails
+   when they disagree, so this step is enforced rather than merely advised.
+3. **The test's own anchors** — the subsection numbers, the renamed and
+   optioned helper lists, and the proposed-helper count named in the technical
+   requirements above. These are the only places a survey fact is written down
+   twice. A change that moves a candidate table to a different subsection, or
+   that changes which helpers are renamed or optioned, must edit the anchor and
+   the survey together; a change that edits only one of them stops the suite
+   reading the survey at all, which is a louder failure than a wrong count.
 
 Removing a helper without removing its registry row fails the ownership check,
 which reports a name the survey no longer accepts. Renaming one moves the old
