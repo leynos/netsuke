@@ -372,6 +372,17 @@ Hard invariants. Violating one requires escalation, not a workaround.
   every parser), `partition` (`COV-1`, `COV-2`), and `progress` (`COV-3` to
   `COV-6`, `CONF-1`). The ten tests pass unchanged and `COV-4` still reports
   `0 of 8 capability groups written; 8 remaining`.
+- [x] Fifth gate run (2026-09-24), at `0ca2cb18`. `make check-fmt` failed on two
+  `cargo fmt` diffs left by hand-writing the new modules — a trailing blank
+  line in `document.rs` and a `pub use` rustfmt breaks across three lines in
+  `mod.rs`. Fixed at `09018769`. The commit that introduced them was verified
+  with clippy, nextest, and Whitaker, but `make check-fmt` was skipped: the
+  first stage of the documented gateway set was the one omitted, and it was
+  omitted because the change was "just a module move". Every gateway now passes
+  on this tree, and `make lint` passes **in full for the first time on this
+  branch** — all five stages, including `lint-python` and
+  `github-actions-lint`, which had never run because the two prior invocations
+  both stopped at `lint-whitaker`.
 - [ ] `EP-M3` RFC 0013, structured data interchange (step 6.2). **Go/no-go.**
 - [ ] `EP-M4` RFC 0014, mapping and sequence transforms (step 6.3).
 - [ ] `EP-M5` RFC 0015, ordered collection algebra and truth predicates (6.4).
@@ -868,6 +879,17 @@ tracked; the derivation it performs is reimplemented in the coverage test at
   and not an inherited condition; had the cap applied to crate roots, the same
   split would have been required of eight pre-existing files and would have
   been out of scope.
+
+- Observation: "just a module move" is exactly the change for which a
+  formatting gate gets skipped, and exactly the change most likely to need one.
+  The split at `7605c884` was verified with three gates — clippy, nextest, and
+  Whitaker — and committed without `make check-fmt`, which then failed on two
+  mechanical diffs in the two files the split had just created by hand. The
+  first stage of the documented gateway set was the one omitted. Impact: the
+  cost was a fifth gate run and a second scrutineer invocation, both of which
+  the first-stage gate would have prevented for the price of one command. Every
+  commit from here runs all five `make` targets as a single command, however
+  mechanical the change looks.
 
 ## Decision log
 
