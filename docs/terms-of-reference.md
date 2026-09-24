@@ -23,6 +23,12 @@ This document states the problem Netsuke addresses, for whom, and within what
 bounds. It does not describe how Netsuke works; `docs/netsuke-design.md` does
 that.
 
+Its purpose is to give Netsuke a coherent vision and a consistent language. New
+RFCs, ADRs, and roadmap phases should trace to the users, goals, and non-goals
+in sections 4 to 6, and should use the terms defined in
+[appendix B](#appendix-b-glossary). A proposal that cannot do either is a
+prompt to revise this document first.
+
 It was written after the design document, the roadmap, and nearly forty
 architectural decision records (ADRs). The usual order is the reverse. The
 document therefore records the premises the existing design already assumes, so
@@ -222,7 +228,7 @@ accidental build-system authors are probably the largest group in the long run
 | Stakeholder                       | Interest                                                                                                  |
 | --------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | The maintainer (df12 Productions) | Owns direction; uses Netsuke across their own repositories; funds the work in time.                       |
-| The df12 repository estate        | The first real workload. Cuprum and sibling repositories supply migration benchmarks.                     |
+| The df12 repository estate        | The dogfooding set in section 7.1: the first real workload and the source of migration benchmarks.        |
 | OrthoConfig maintainers           | Netsuke depends on OrthoConfig for command, configuration, and schema machinery (`docs/roadmap.md`).      |
 | Downstream packagers              | Debian, RPM, macOS, and Windows installer consumers who need predictable releases and a Ninja dependency. |
 
@@ -372,8 +378,13 @@ Each goal is phrased so that an observer can check it.
   deliberate safeguards (restricted extension-test selection, interpreter
   requirements, extension preconditions) and removes repository-authored file
   transport, duplicated tool pins, and hand-coordinated worker flags.
-- The maintainer's own repositories use Netsuke as their primary build entry
-  point. The target count and date are open `(Q2)`.
+- Dogfooding is the initial feedback loop. Six maintained repositories run
+  their gates from Netsukefiles: `leynos/catnap`, `leynos/actix-v2a`, and
+  `leynos/cuprum`, plus the three release-admission canaries
+  `leynos/repovec-appliance`, `leynos/mxd`, and `leynos/ortho-config`
+  (`docs/release-admission-canaries.md`, currently on the branch for PR #780).
+  Ergonomic gaps found there become roadmap work. How far each migration must
+  go is open `(Q11)`.
 - External adoption: a signal and threshold are not yet defined `(Q2)`.
 
 ### 7.2 Operational
@@ -416,16 +427,16 @@ Each goal is phrased so that an observer can check it.
 
 ### 8.2 Assumptions
 
-| ID  | Assumption                                                                                                                              | Consequence if false                                                                                                                |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| A1  | The maintainer's own repositories are representative of the wider target users.                                                         | Features tuned to the df12 estate (for example Python-and-Rust quality gates) misfire for other users; external research is needed. |
-| A2  | Accidental build-system authors are the largest group, and they will adopt a graph-based tool if its first five minutes match `just`'s. | Adoption stalls outside expert users; onboarding and defaults need rework.                                                          |
-| A3  | Target users accept YAML with Jinja as an authoring format.                                                                             | Reluctant Make users reject the tool on sight; an alternative surface or stronger justification is needed.                          |
-| A4  | Users can install Ninja, or accept an installer that depends on it.                                                                     | Onboarding fails at the first step on platforms without packaged Ninja; bundling or fetching Ninja becomes necessary.               |
-| A5  | Modification-time freshness is sufficient for local files.                                                                              | Users hit spurious or missed rebuilds; content-hash invalidation moves into scope `(Q5)`.                                           |
-| A6  | Shell-string recipes remain acceptable while structured commands mature.                                                                | Quoting failures on Windows or with unusual filenames erode trust before the safer form ships.                                      |
-| A7  | Agents benefit materially from a static, structured plan compared with an imperative script.                                            | ADR-003's investment in agent-consistent output delivers less value than expected.                                                  |
-| A8  | Serving reluctant Make users first does not preclude serving the other two groups later.                                                | A feature the later groups need is blocked by an early decision; migrating them requires breaking changes.                          |
+| ID  | Assumption                                                                                                                              | Consequence if false                                                                                                     |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| A1  | The dogfooding repositories are representative of the wider target users.                                                               | Features tuned to them (for example Python-and-Rust quality gates) misfire for other users; external research is needed. |
+| A2  | Accidental build-system authors are the largest group, and they will adopt a graph-based tool if its first five minutes match `just`'s. | Adoption stalls outside expert users; onboarding and defaults need rework.                                               |
+| A3  | Target users accept YAML with Jinja as an authoring format.                                                                             | Reluctant Make users reject the tool on sight; an alternative surface or stronger justification is needed.               |
+| A4  | Users can install Ninja, or accept an installer that depends on it.                                                                     | Onboarding fails at the first step on platforms without packaged Ninja; bundling or fetching Ninja becomes necessary.    |
+| A5  | Modification-time freshness is sufficient for local files.                                                                              | Users hit spurious or missed rebuilds; content-hash invalidation moves into scope `(Q5)`.                                |
+| A6  | Shell-string recipes remain acceptable while structured commands mature.                                                                | Quoting failures on Windows or with unusual filenames erode trust before the safer form ships.                           |
+| A7  | Agents benefit materially from a static, structured plan compared with an imperative script.                                            | ADR-003's investment in agent-consistent output delivers less value than expected.                                       |
+| A8  | Serving reluctant Make users first does not preclude serving the other two groups later.                                                | A feature the later groups need is blocked by an early decision; migrating them requires breaking changes.               |
 
 ### 8.3 Dependencies
 
@@ -439,16 +450,17 @@ Each goal is phrased so that an observer can check it.
 
 ## 9. Open questions
 
-| ID  | Question                                                                                                                                                            | Why it matters                                                                             | Resolved when                                                                                                  | Suggested path            |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| Q2  | What adoption signal defines success, inside the df12 estate and outside it?                                                                                        | Without it, sections 1, 4, and 7 rest on inference.                                        | A named signal with a threshold and date, for example repositories using Netsuke as their primary entry point. | Elicitation               |
-| Q4  | How far does purity extend: to targets that call impure helpers, and to pinned remote inputs used as dependencies? What rebuild policy applies to an impure target? | Determines whether remote inputs become first-class and how G4 and G6 interact.            | A decision on impure-target rebuild semantics and on remote resources as graph inputs.                         | RFC                       |
-| Q5  | Is content-hash invalidation in scope for any input class?                                                                                                          | Tests assumption A5; affects remote inputs and any future cache.                           | Evidence of missed or spurious rebuilds in real use, or a decision tied to Q4.                                 | Spike, then ADR           |
-| Q6  | Is a Makefile migration aid (importer or guide) in scope?                                                                                                           | Directly serves the initial reluctant-Make-user group; costs significant effort.           | A decision recorded as a goal or a non-goal.                                                                   | Elicitation               |
-| Q7  | What plan-generation time budget is acceptable, and on what reference manifest?                                                                                     | Needed to turn the operational criterion into a measurable one.                            | A budget and a benchmark manifest exist.                                                                       | Spike                     |
-| Q8  | What must be true for 1.0?                                                                                                                                          | Gates the strategic criterion and the end of pre-1.0 latitude.                             | A written release checklist traced to G1 to G10.                                                               | Elicitation, then roadmap |
-| Q9  | Who maintains reusable rule bundles for common ecosystems, and are any shipped with Netsuke?                                                                        | Decides whether G3 and G10 are met by the core or by an ecosystem that does not yet exist. | An ownership and distribution decision for bundles.                                                            | RFC amendment to RFC 0003 |
-| Q10 | Does the nightly toolchain requirement for source installs conflict with serving the accidental build-system authors (a later audience)?                            | Affects installation paths and constraint 8.1.                                             | Evidence that binary installers cover the target platforms, or a plan for stable builds.                       | Elicitation               |
+| ID  | Question                                                                                                                                                            | Why it matters                                                                                                                                   | Resolved when                                                                            | Suggested path            |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- | ------------------------- |
+| Q2  | What signal, beyond dogfooding, shows adoption outside the maintainer's repositories?                                                                               | Without it, the external demand in sections 1, 3, and 4 remains inferred.                                                                        | A named external signal with a threshold and date.                                       | Elicitation               |
+| Q4  | How far does purity extend: to targets that call impure helpers, and to pinned remote inputs used as dependencies? What rebuild policy applies to an impure target? | Determines whether remote inputs become first-class and how G4 and G6 interact.                                                                  | A decision on impure-target rebuild semantics and on remote resources as graph inputs.   | RFC                       |
+| Q5  | Is content-hash invalidation in scope for any input class?                                                                                                          | Tests assumption A5; affects remote inputs and any future cache.                                                                                 | Evidence of missed or spurious rebuilds in real use, or a decision tied to Q4.           | Spike, then ADR           |
+| Q6  | Is a Makefile migration aid (importer or guide) in scope?                                                                                                           | Directly serves the initial reluctant-Make-user group; costs significant effort.                                                                 | A decision recorded as a goal or a non-goal.                                             | Elicitation               |
+| Q7  | What plan-generation time budget is acceptable, and on what reference manifest?                                                                                     | Needed to turn the operational criterion into a measurable one.                                                                                  | A budget and a benchmark manifest exist.                                                 | Spike                     |
+| Q8  | What must be true for 1.0?                                                                                                                                          | Gates the strategic criterion and the end of pre-1.0 latitude.                                                                                   | A written release checklist traced to G1 to G10.                                         | Elicitation, then roadmap |
+| Q9  | Who maintains reusable rule bundles for common ecosystems, and are any shipped with Netsuke?                                                                        | Decides whether G3 and G10 are met by the core or by an ecosystem that does not yet exist.                                                       | An ownership and distribution decision for bundles.                                      | RFC amendment to RFC 0003 |
+| Q10 | Does the nightly toolchain requirement for source installs conflict with serving the accidental build-system authors (a later audience)?                            | Affects installation paths and constraint 8.1.                                                                                                   | Evidence that binary installers cover the target platforms, or a plan for stable builds. | Elicitation               |
+| Q11 | For each dogfooding repository, what migration depth counts as done: selected gates running from a Netsukefile, or the Makefile retired entirely?                   | The release-admission canaries deliberately keep Makefiles for out-of-slice targets; the dogfooding criterion is unmeasurable until this is set. | A per-repository target, or one rule for all six.                                        | Elicitation               |
 
 ### 9.1 Resolved questions
 
@@ -456,6 +468,10 @@ Each goal is phrased so that an observer can check it.
   2026-09-24 by the maintainer: reluctant Make users, who struggle to let go of
   Make because task runners are too limited and Bazel and CMake are too
   complex. See [section 4.1](#41-primary-users).
+- **Q2, in part — How will the maintainer know Netsuke is working?**
+  Resolved 2026-09-25: dogfooding across six named repositories is the initial
+  feedback loop. See [section 7.1](#71-user-facing). The external adoption
+  signal remains open.
 - **Q3 — Which task-runner conveniences are in scope?** Resolved
   2026-09-24 and 2026-09-25 by the maintainer. Named actions, target listing,
   and per-target descriptions already exist; recipe parameters are planned in
