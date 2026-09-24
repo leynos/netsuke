@@ -1492,7 +1492,10 @@ The workflow contract suites share the YAML 1.2-aware loader and common
 workflow, job, and step helpers in
 `tests/workflow_contracts/workflow_loading.py`. Each suite keeps its own
 workflow-specific projections and assertions, so parsing and structural
-validation remain consistent across the workflows under test.
+validation remain consistent across the workflows under test. Scans that must
+see every string in a parsed workflow, mapping keys included, share
+`iter_strings` in `tests/workflow_contracts/yaml_strings.py` rather than
+walking the value themselves.
 
 ### Coverage ratchet and CodeScene publication
 
@@ -1521,6 +1524,36 @@ dispatch from `main` uploads that commit's report, as a push would. The ref
 clause is not redundant with the push trigger's `branches` list, because that
 list constrains only the push trigger, and the upload action does not check the
 ref itself.
+
+The token itself never enters an `env` on the publisher job. A
+`Check CodeScene token availability` step (id `codescene_token`) publishes only
+`available=${{ secrets.CS_ACCESS_TOKEN != '' }}` to its outputs. The upload's
+condition reads `steps.codescene_token.outputs.available == 'true'`, and the
+upload takes `access-token: ${{ secrets.CS_ACCESS_TOKEN }}` directly. The
+upload is a composite action, and a composite action's nested steps inherit the
+calling step's environment, so a token in the step's `env` reached every one of
+them. `tests/workflow_contracts/coverage_publisher_token_test.py` holds the
+shape. Its positive half requires the token to be named exactly in the check's
+command and the upload's input, because deleting the token would otherwise pass
+for keeping it out of an `env`.
+
+Publishers queue on the concurrency group `coverage-main-${{ github.ref }}` with
+`cancel-in-progress: false`, asserted whole by the same module. Two runs
+writing at once would race, and cancelling one would abandon its work half
+done. Runs in the group never overlap, and a newer trigger replaces an older
+pending run. GitHub does not promise to start runs in trigger order, so the
+workflow makes no commit-order promise either. The coverage action saves the
+ratchet baseline only on a push, under a cache key naming the run. A dispatch
+therefore uploads coverage but leaves the baseline where the last completed
+push left it, and how far that trails `main` depends on how many pushes were
+replaced while runs waited. A merge made by the Dependabot automerge workflow's
+token fires no push event at all (see
+[shared-actions issue 518](https://github.com/leynos/shared-actions/issues/518)).
+A dispatch from `main` uploads that merge's coverage, but does not save a
+baseline for it; only the next push does. A manual "Re-run jobs" on an older
+`main` run keeps its run ID, so it republishes that commit's coverage but
+replaces no baseline already saved under that run's key. Only a later push to
+`main` publishes a newer baseline.
 
 `tests/workflow_contracts/coverage_upload_guard_test.py` holds that guard.
 `is_trunk_only_upload` refuses any unquoted `||`, at any depth, through

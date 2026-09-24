@@ -39,6 +39,7 @@ from workflow_call_closure import (
     reachable_workflows,
 )
 from workflow_loading import require_mapping
+from yaml_strings import iter_strings
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -75,7 +76,7 @@ CODESCENE_HOST: typ.Final[str] = "codescene.io"
 #: clause lets a fork's push skip the step; the ref clause keeps a warm-run
 #: dispatch from a feature branch from uploading that branch's report.
 UPLOAD_GUARD_CONJUNCTS: typ.Final[frozenset[str]] = frozenset({
-    f"env.{CREDENTIAL_ENVIRONMENT_KEY} != ''",
+    "steps.codescene_token.outputs.available == 'true'",
     "github.ref == 'refs/heads/main'",
 })
 
@@ -196,22 +197,6 @@ def steps_in_all_jobs(document: dict[str, object]) -> list[dict[str, object]]:
     return steps
 
 
-def _iter_strings(value: object) -> cabc.Iterator[str]:
-    """Yield every string nested anywhere in a parsed YAML value."""
-    match value:
-        case str() as text:
-            yield text
-        case dict() as mapping:
-            for key, item in mapping.items():
-                yield from _iter_strings(key)
-                yield from _iter_strings(item)
-        case list() as sequence:
-            for item in sequence:
-                yield from _iter_strings(item)
-        case _:
-            return
-
-
 def publishes_the_coverage_report(step: dict[str, object]) -> bool:
     """Return whether a step publishes the coverage report as an artefact.
 
@@ -288,10 +273,11 @@ def is_trunk_only_upload(condition: object) -> bool:
 
     Examples
     --------
-    >>> token, main = "env.CS_ACCESS_TOKEN != ''", "github.ref == 'refs/heads/main'"
+    >>> token = "steps.codescene_token.outputs.available == 'true'"
+    >>> main = "github.ref == 'refs/heads/main'"
     >>> is_trunk_only_upload(f"{token} && {main}")
     True
-    >>> is_trunk_only_upload("env.CS_ACCESS_TOKEN != ''")
+    >>> is_trunk_only_upload(token)
     False
     """
     if not isinstance(condition, str):
@@ -377,7 +363,7 @@ def _reach_offenders(
     """Return the routes to CodeScene that name no action: credential, host, inherit."""
     offenders = [
         f"{name}: parsed value references {CREDENTIAL_ENVIRONMENT_KEY}"
-        for value in _iter_strings(document)
+        for value in iter_strings(document)
         if CREDENTIAL_ENVIRONMENT_KEY in value
     ]
     if CREDENTIAL_ENVIRONMENT_KEY in raw_text:

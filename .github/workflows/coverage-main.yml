@@ -23,6 +23,20 @@ on:
   # workflow already relies on, so it needs no opt-in.
   workflow_dispatch:
 
+# Publishers queue rather than race or cancel. Two runs writing at once is a
+# lost update, and cancelling one abandons its work half done. Runs in the
+# group never overlap, and a newer trigger replaces an older pending run;
+# nothing here promises that runs start in commit order. The coverage action
+# saves the ratchet baseline only on a push, under a key naming the run, so a
+# dispatch uploads coverage but leaves the baseline where the last completed
+# push left it, however many pushes were replaced meanwhile. A manual "Re-run
+# jobs" keeps its run ID: it republishes that commit's coverage, but replaces
+# no baseline already saved under that run's key. Only a later push to main
+# publishes a newer baseline.
+concurrency:
+  group: coverage-main-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   coverage-upload:
     # Escalated alongside `build-test` on the same evidence: this job runs the
@@ -267,15 +281,21 @@ jobs:
         uses: ./.github/actions/memory-sampler
         with:
           mode: report
+      - name: Check CodeScene token availability
+        # Publishes whether the token exists, and nothing else. The token
+        # stays out of every `env` on this job: the upload is a composite
+        # action, and a composite action's nested steps inherit the calling
+        # step's environment, so a token placed there reaches every one of
+        # them.
+        id: codescene_token
+        run: echo "available=${{ secrets.CS_ACCESS_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
       - name: Upload coverage data to CodeScene
-        env:
-          CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
         # The ref clause is not redundant with the push branch filter: a
         # warm-run dispatch runs from whichever branch started it, and the
         # upload action does not check the ref itself.
-        if: env.CS_ACCESS_TOKEN != '' && github.ref == 'refs/heads/main'
+        if: steps.codescene_token.outputs.available == 'true' && github.ref == 'refs/heads/main'
         uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
         with:
           path: lcov.info
           format: lcov
-          access-token: ${{ env.CS_ACCESS_TOKEN }}
+          access-token: ${{ secrets.CS_ACCESS_TOKEN }}
